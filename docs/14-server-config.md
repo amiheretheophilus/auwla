@@ -28,7 +28,7 @@ export interface ServerTypes {
     user?: string;
   };
   services: ApplicationServices;
-  platform?: Env;        // optional — only if you use createPlatform
+  platform?: Platform;   // optional — the host, fetch options, or createPlatform supply it
 }
 ```
 
@@ -75,7 +75,7 @@ const app = serve({
     requestId: crypto.randomUUID(),
     user: readSession(request.headers.get('cookie')),
   }),
-  createServices,          // lazy — runs once, first time services is read
+  createServices,          // lazy — runs once, on the first handled request
 });
 
 export default app;
@@ -83,6 +83,12 @@ export default app;
 
 `#server/` imports resolve only inside the server root — the same alias
 client code is forbidden from touching.
+
+The platform type follows the selected host and your delegation boundary.
+For a directly exported Worker application, declare
+`platform?: { env: Env; executionCtx: ExecutionContext }` using your Worker
+binding types. Hono can forward that same shape through `app.fetch()`.
+See [10 — serve()](./10-serve.md#the-host-boundary) for the Bun and Node shapes.
 
 Now the types line up end to end: `createServices` returns
 `ApplicationServices`, `ServerTypes.services` declares it, and every

@@ -4,7 +4,8 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import puppeteer, { type Browser } from 'puppeteer-core';
 import { afterEach, describe, expect, it } from 'bun:test';
-import { createServer, type ViteDevServer } from 'vite';
+import { createDevServer } from '../src/dev';
+import type { NativeDevServer } from '../src/dev';
 import memoizedDom from '../src';
 
 const repository = resolve(import.meta.dirname, '../../..');
@@ -35,7 +36,7 @@ function chromeExecutable(): string | null {
   ) ?? null;
 }
 
-let vite: ViteDevServer | undefined;
+let vite: NativeDevServer | undefined;
 let browser: Browser | undefined;
 let fixture: string | undefined;
 
@@ -166,7 +167,7 @@ describe('fullstack browser integration', () => {
       export default app;
     `);
 
-    vite = await createServer({
+    vite = await createDevServer({
       root: fixture,
       configFile: false,
       appType: 'custom',
@@ -192,12 +193,7 @@ describe('fullstack browser integration', () => {
       })],
       server: { host: '127.0.0.1', port: 0 },
     });
-    await vite.listen();
-    const address = vite.httpServer?.address();
-    if (address === null || address === undefined || typeof address === 'string') {
-      throw new Error('Expected a Vite TCP server address');
-    }
-    const origin = `http://127.0.0.1:${address.port}`;
+    const origin = vite.origin;
     const documentResponse = await fetch(`${origin}/?tab=activity`);
     const html = await documentResponse.text();
     expect(documentResponse.status, html).toBe(200);

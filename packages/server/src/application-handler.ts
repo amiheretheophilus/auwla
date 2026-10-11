@@ -17,6 +17,7 @@ import {
   type ServerMiddlewareGroup,
   type ServerRoute,
   type ServerRouter,
+  type ServerDispatchOptions,
 } from './http-router';
 import {
   composeDocumentStream,
@@ -31,6 +32,7 @@ import {
 } from './index';
 import type { RenderSettlement } from './session';
 import { prepareRenderToReadableStream } from './stream';
+import type { ServerIntegration } from './integration';
 
 /**
  * How one SSR root renders and is delivered. Application defaults merge
@@ -100,6 +102,8 @@ export interface ApplicationHandlerOptions<
   ) => SsrTarget | undefined;
   readonly document?: string | URL;
   readonly documentTemplate?: string;
+  readonly resolveDocumentTemplate?: (request: Request) => string | undefined | Promise<string | undefined>;
+  readonly resolveAsset?: ServerIntegration['assets'];
   readonly middleware?: readonly ServerMiddleware<TLocals, TPlatform, TServices>[];
   readonly routes?: readonly ServerRoute<TLocals, TPlatform, TServices>[];
   readonly groups?: readonly ServerMiddlewareGroup<TLocals, TPlatform, TServices>[];
@@ -119,7 +123,7 @@ export interface ApplicationHandlerOptions<
   ) => Response | Promise<Response>;
 }
 
-export type ApplicationHandler = (request: Request) => Promise<Response>;
+export type ApplicationHandler = (request: Request, options?: ServerDispatchOptions<object, unknown, object>) => Promise<Response>;
 
 interface ActiveServerContext {
   readonly context: ServerContext<object, unknown, object>;
@@ -172,7 +176,7 @@ function prepareDocument<
       : undefined;
   if (
     options.resolveApp !== undefined &&
-    template === undefined
+    template === undefined && options.resolveDocumentTemplate === undefined
   ) {
     throw new TypeError(
       'memo-dom: SSR requires a document template',
@@ -293,6 +297,10 @@ async function renderPage<
     });
   }
   const target = options.resolveApp?.(context);
+  if (target !== undefined && options.resolveDocumentTemplate !== undefined) {
+    const source = await options.resolveDocumentTemplate(context.request);
+    if (source !== undefined) template = splitDocumentTemplate(source);
+  }
   if (target === undefined || template === undefined) {
     return new Response('Not Found', { status: 404 });
   }
@@ -417,7 +425,10 @@ export function createApplicationHandler<
     createPlatform: options.createPlatform,
     services: options.services,
     onError: options.onError,
-    fallback: context => renderPage(context, options, router, template),
+    fallback: async context => {
+      const asset = await options.resolveAsset?.(context.request, context.platform);
+      return asset ?? renderPage(context, options, router, template);
+    },
   });
-  return request => router.fetch(request);
+  return (request, dispatchOptions) => router.dispatch(request, dispatchOptions as ServerDispatchOptions<TLocals, TPlatform, TServices>);
 }

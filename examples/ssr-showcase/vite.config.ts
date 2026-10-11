@@ -1,8 +1,8 @@
 /**
  * SSR showcase — fullstack Vite config.
  *
- * One plugin owns the client graph, server graph, SSR request boundary, and
- * HMR while Vite continues serving modules and CSS.
+ * The native launcher owns the public listener and runs the backend in Bun.
+ * Vite supplies compiled modules, CSS, and browser hot updates.
  */
 import { defineConfig } from 'vite';
 import memoizedDom from '@memoized-dom/vite';

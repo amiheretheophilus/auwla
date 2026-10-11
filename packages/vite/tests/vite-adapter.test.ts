@@ -12,6 +12,7 @@ import {
   type ViteDevServer,
 } from 'vite';
 import memoizedDom from '../src';
+import { createDevServer, type NativeDevServer } from '../src/dev';
 import { clientStyleUrls } from '../src/dev-assets';
 import { createServerRouter } from '../../server/src/http-router';
 
@@ -26,6 +27,7 @@ const dataInternal = resolve(import.meta.dirname, '../../data/src/internal.ts');
 const serverRouter = resolve(import.meta.dirname, '../../server/src/http-router.ts');
 const serverIndex = resolve(import.meta.dirname, '../../server/src/index.ts');
 let server: ViteDevServer | undefined;
+let nativeServer: NativeDevServer | undefined;
 let temporaryFixture: string | undefined;
 
 function plugins() {
@@ -37,6 +39,8 @@ function plugins() {
 }
 
 afterEach(async () => {
+  await nativeServer?.close();
+  nativeServer = undefined;
   await server?.close();
   server = undefined;
   if (temporaryFixture !== undefined) {
@@ -810,8 +814,8 @@ describe('Vite 8 adapter', () => {
     expect(send.mock.calls.some(([payload]) => payload.type === 'full-reload'))
       .toBe(false);
   }, 30_000);
-  it('serves Web handlers through first-class fullstack dev middleware', async () => {
-    server = await createServer({
+  it('serves Web handlers through the native fullstack launcher', async () => {
+    nativeServer = await createDevServer({
       root: fixture,
       configFile: false,
       appType: 'custom',
@@ -825,17 +829,13 @@ describe('Vite 8 adapter', () => {
         port: 0,
       },
     });
-    await server.listen();
-    const address = server.httpServer?.address();
-    if (address === null || address === undefined || typeof address === 'string') {
-      throw new Error('Expected Vite TCP server address');
-    }
+    const origin = nativeServer.origin;
 
-    const health = await fetch(`http://127.0.0.1:${address.port}/health`);
+    const health = await fetch(`${origin}/health`);
     expect(health.status).toBe(200);
     await expect(health.json()).resolves.toEqual({ ok: true });
 
-    const document = await fetch(`http://127.0.0.1:${address.port}/`);
+    const document = await fetch(`${origin}/`);
     const documentText = await document.text();
     expect(document.status, documentText).toBe(200);
     expect(document.headers.get('content-type'), documentText)
@@ -860,7 +860,7 @@ describe('Vite 8 adapter', () => {
       export default app;
     `);
 
-    server = await createServer({
+    nativeServer = await createDevServer({
       root,
       configFile: false,
       appType: 'custom',
@@ -881,14 +881,10 @@ describe('Vite 8 adapter', () => {
       })],
       server: { host: '127.0.0.1', port: 0 },
     });
-    await server.listen();
-    const address = server.httpServer?.address();
-    if (address === null || address === undefined || typeof address === 'string') {
-      throw new Error('Expected Vite TCP server address');
-    }
+    const origin = nativeServer.origin;
 
     const response = await fetch(
-      `http://127.0.0.1:${address.port}/_fn/stories/getStory?id=11`,
+      `${origin}/_fn/stories/getStory?id=11`,
     );
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toEqual({
@@ -917,7 +913,7 @@ describe('Vite 8 adapter', () => {
       export default app;
     `);
 
-    server = await createServer({
+    nativeServer = await createDevServer({
       root,
       configFile: false,
       appType: 'custom',
@@ -938,13 +934,9 @@ describe('Vite 8 adapter', () => {
       })],
       server: { host: '127.0.0.1', port: 0 },
     });
-    await server.listen();
-    const address = server.httpServer?.address();
-    if (address === null || address === undefined || typeof address === 'string') {
-      throw new Error('Expected Vite TCP server address');
-    }
+    const origin = nativeServer.origin;
 
-    const response = await fetch(`http://127.0.0.1:${address.port}/health`);
+    const response = await fetch(`${origin}/health`);
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toEqual({
       ok: true,

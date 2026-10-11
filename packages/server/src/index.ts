@@ -29,6 +29,7 @@ import { RenderSession, type RenderSettlement } from './session';
 import type { ServerComponent } from './root-id';
 
 export { serverRootId, type ServerComponent } from './root-id';
+export { integrateApplication, type ServerIntegration } from './integration';
 export type { RenderSettlement } from './session';
 
 export interface RenderPayload {

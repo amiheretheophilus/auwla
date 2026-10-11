@@ -5,6 +5,7 @@ import {
 } from '@memoized-dom/server';
 import { Main } from './src/Main.tsx';
 import { createServices } from '#server/config/services';
+import { Hono } from 'hono';
 
 let sequence = 0;
 
@@ -50,4 +51,7 @@ app.get('/api/admin/stats', context => ({
 }));
 
 app.ssr(Main, { mode: 'stream', nonce: request => request.headers.get('x-csp-nonce') ?? undefined });
-export default app;
+const backend = new Hono();
+backend.get('/api/backend', context => context.json({ backend: 'hono' }));
+backend.all('*', context => app.fetch(context.req.raw, { platform: context.env }));
+export default backend;

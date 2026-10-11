@@ -106,10 +106,20 @@ app.ssr(App);
 export default app;
 ```
 
-`app.fetch(request)` is the portable host boundary. Vite dispatches to it in
-development; other adapters can expose it through Bun, Node, or a worker host.
-The fullstack Vite integration supplies the transformed HTML document used by
-registered SSR roots.
+`app.fetch(request, { platform }?)` is the portable host boundary. Mount it
+inside a backend such as Hono, or export the application directly. The native
+development launcher executes the backend in Bun or Node, and the Cloudflare
+integration executes it in `workerd`; Vite supplies
+transforms, frontend assets, and hot updates. The application build installs
+the production HTML document and client assets automatically. Native request
+bindings passed as `platform` reach middleware, SSR, and server functions.
+
+On Cloudflare, Hono retains its normal Worker export and delegates using
+`app.fetch(c.req.raw, { platform: { env: c.env, executionCtx: c.executionCtx } })`.
+A directly exported application receives that Worker context automatically.
+See the [SSR setup guide](../../docs/09-ssr.md) for runtime configuration,
+development/build commands, and automatic production asset delivery, and the
+[serve() guide](../../docs/10-serve.md) for application options and host context.
 
 HTTP endpoints use `app.get()`, `app.post()`, `app.put()`, `app.patch()`,
 `app.delete()`, `app.head()`, and `app.options()`. Literal paths preserve exact

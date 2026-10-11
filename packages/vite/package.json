@@ -11,11 +11,22 @@
     "dist"
   ],
   "exports": {
+    "./cloudflare": {
+      "types": "./dist/cloudflare.d.ts",
+      "import": "./dist/cloudflare.js"
+    },
+    "./dev": {
+      "types": "./dist/dev.d.ts",
+      "import": "./dist/dev.js"
+    },
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js",
       "default": "./dist/index.js"
     }
+  },
+  "bin": {
+    "memoized-dom": "./dist/cli.js"
   },
   "scripts": {
     "build": "bun run ./scripts/clean.ts && rolldown -c rolldown.config.ts && tsc -p tsconfig.build.json",
@@ -23,12 +34,18 @@
     "bench": "bun run ./bench/run.ts"
   },
   "dependencies": {
+    "@jridgewell/remapping": "^2.3.5",
     "@memoized-dom/adapters": "workspace:*",
-    "@memoized-dom/compiler": "workspace:*"
+    "@memoized-dom/compiler": "workspace:*",
+    "magic-string": "0.30.21"
   },
   "peerDependencies": {
+    "@cloudflare/vite-plugin": "^1.63.1",
     "@memoized-dom/runtime": "workspace:*",
     "vite": "^8.0.0"
+  },
+  "peerDependenciesMeta": {
+    "@cloudflare/vite-plugin": { "optional": true }
   },
   "publishConfig": {
     "access": "public"

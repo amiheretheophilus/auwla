@@ -14,5 +14,6 @@ export default defineConfig({
     clientEntry: 'main.ts',
     serverEntry: 'server.ts',
     server: 'server',
+    runtime: 'bun',
   })],
 });

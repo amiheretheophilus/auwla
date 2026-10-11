@@ -2,7 +2,8 @@ import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { afterEach, describe, expect, it } from 'bun:test';
-import { createServer, type ViteDevServer } from 'vite';
+import { createDevServer } from '../src/dev';
+import type { NativeDevServer } from '../src/dev';
 import memoizedDom from '../src';
 
 const repository = resolve(import.meta.dirname, '../../..');
@@ -17,7 +18,7 @@ const routerInternal = resolve(repository, 'packages/router/src/internal.ts');
 const serverIndex = resolve(repository, 'packages/server/src/index.ts');
 const serverRouter = resolve(repository, 'packages/server/src/http-router.ts');
 
-let vite: ViteDevServer | undefined;
+let vite: NativeDevServer | undefined;
 let fixture: string | undefined;
 
 afterEach(async () => {
@@ -65,7 +66,7 @@ describe('fullstack SSR request isolation', () => {
       export default app;
     `);
 
-    vite = await createServer({
+    vite = await createDevServer({
       root: fixture,
       configFile: false,
       logLevel: 'silent',
@@ -86,12 +87,7 @@ describe('fullstack SSR request isolation', () => {
       plugins: [memoizedDom({ clientEntry: 'main.ts', serverEntry: 'server.ts' })],
       server: { host: '127.0.0.1', port: 0 },
     });
-    await vite.listen();
-    const address = vite.httpServer?.address();
-    if (address === null || address === undefined || typeof address === 'string') {
-      throw new Error('Expected a Vite TCP server address');
-    }
-    const origin = `http://127.0.0.1:${address.port}`;
+    const origin = vite.origin;
     for (let request = 0; request < 3; request++) {
       const response = await fetch(origin);
       const html = await response.text();

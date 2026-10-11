@@ -25,7 +25,12 @@ export async function postVote(id: number) {
 | `params` | Route pattern params (`/api/:id` → `{ id }`) | the matched route |
 | `locals` | Your per-request bag — mutable | `createLocals(request)` + middleware writes |
 | `services` | Shared app dependencies — db, clients | `createServices()`, once per app |
-| `platform` | Host bindings — env, KV, buckets | `createPlatform(request)` / the adapter |
+| `platform` | Native host context or Worker bindings | `app.fetch(request, { platform })` / `createPlatform(request)` |
+
+Direct application exports receive the actual Bun server, Node's
+`{ incoming, outgoing }`, or a Worker's `{ env, executionCtx }` automatically.
+When mounting inside another backend, forward its context through the fetch
+option. See [10 — serve()](./10-serve.md#the-host-boundary).
 
 ## Examples inside server functions
 

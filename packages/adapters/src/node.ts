@@ -1,9 +1,29 @@
 import { Readable } from 'node:stream';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { WebHandler } from './index';
+import { readFile } from 'node:fs/promises';
+import { assetResolver, type AssetOptions } from './assets';
 
 export interface NodeAdapterOptions {
   trustProxy?: boolean;
+}
+
+/** Generated production integration; only build-declared assets are readable. */
+export function createAssetHandler(root: URL, options: AssetOptions) {
+  const resolveAsset = assetResolver(options);
+  return async (request: Request): Promise<Response | undefined> => {
+    const asset = resolveAsset(request);
+    if (asset === undefined) return undefined;
+    if (asset === null) return new Response('Not Found', { status: 404 });
+    let bytes: Uint8Array<ArrayBuffer>;
+    try { bytes = await readFile(new URL(asset.file.split('/').map(encodeURIComponent).join('/'), root)); }
+    catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') return new Response('Not Found', { status: 404 });
+      throw error;
+    }
+    asset.headers.set('content-length', String(bytes.byteLength));
+    return new Response(request.method === 'HEAD' ? null : bytes, { headers: asset.headers });
+  };
 }
 
 function requestOrigin(request: IncomingMessage, trustProxy: boolean): string {

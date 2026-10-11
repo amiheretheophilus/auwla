@@ -6,6 +6,7 @@ export default defineConfig({
     index: './src/index.ts',
     node: './src/node.ts',
     bun: './src/bun.ts',
+    cloudflare: './src/cloudflare.ts',
   },
   platform: 'node',
   transform: { target: 'node24' },

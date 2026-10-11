@@ -16,14 +16,16 @@ export default defineConfig({
     memoizedDom({
       clientEntry: 'src/main.ts',
       serverEntry: 'server.ts',   // one new line
+      runtime: 'bun',
     }),
   ],
 });
 ```
 
-`serverEntry` is the server composition root — a file that default-exports
-a `serve()` application. The plugin switches Vite to `appType: 'custom'`
-itself; this one option is the whole wiring.
+`serverEntry` is the server composition root. Default-export either a `serve()`
+application or a backend with a Web-standard `fetch` handler, such as Hono.
+The native host owns the listener and its APIs; `serve()` owns application
+routes, middleware, and SSR. Vite supplies compilation and hot updates.
 
 SSR also needs an outlet in `index.html`, inside the element passed to
 `mount`:
@@ -52,16 +54,126 @@ app.ssr(App);            // server-render on every page request
 export default app;
 ```
 
-That's the entire setup — `serve()` with no options, one `ssr` call,
-default export. Every GET now returns fully rendered HTML plus a hydration
-payload. `src/main.ts` doesn't change:
+The entry needs `serve()`, one `ssr` call, and a default export. Page requests
+receive rendered HTML plus a hydration payload; generated assets are served
+separately. `src/main.ts` doesn't change:
 
 ```ts
 import { mount } from '@memoized-dom/runtime';
-import { App } from './src/App';
+import { App } from './App';
 
 mount('root', App);   // detects the server markup and hydrates
 ```
+
+## Development and production
+
+For Bun, replace the browser-only scripts with:
+
+```json
+{
+  "scripts": {
+    "dev": "bun run --bun memoized-dom dev",
+    "build": "bun run --bun memoized-dom build",
+    "start": "bun dist/server.js"
+  }
+}
+```
+
+These commands read the normal `vite.config.ts`. Development runs transformed
+server modules inside Bun and starts a native Bun listener. Bun APIs and the
+actual server remain available. A private loopback Vite listener supplies
+frontend modules, styles, and browser HMR. Set `server.port` in `vite.config.ts`
+or pass `--port` to the launcher to change the public port (default 3000).
+
+Backend, SSR component, and server-function edits replace the application
+without restarting the public listener. Browser component HMR updates the
+mounted page; component-local state can reset. On Bun and Node, an optional
+named `dispose()` export releases application services after the old
+generation's response streams finish. Restart after changing native listener
+options or WebSocket callbacks.
+
+The build compiles the client first into `dist/client`, then emits the backend
+in `dist/server.js`. It installs the built HTML document, generated server
+functions, and asset delivery automatically, including when the application
+is mounted inside Hono. API routes take precedence over frontend delivery.
+No static middleware, manifest loading, or authored asset handler is needed.
+You do not import a Bun or Node adapter in `server.ts`: the generated host
+helpers are bundled into the server output. Keep the server and backend
+packages your own entry imports as production dependencies.
+
+For Node, select `runtime: 'node'` and use `memoized-dom dev`,
+`memoized-dom build`, and `node dist/server.js`. The launcher runs in Node
+by default; the package's Node engine requirement applies. Bun/Node development
+uses the launching runtime, while `runtime` selects the production target.
+
+## Using Hono in the same entry
+
+Hono can own backend routes and delegate remaining requests to Memoized DOM:
+
+```ts
+// server.ts (Bun or Node)
+import { Hono } from 'hono';
+import { serve } from '@memoized-dom/server';
+import { App } from './src/App';
+
+const app = serve();
+app.ssr(App);
+const backend = new Hono();
+backend.get('/api/users', c => c.json([]));
+backend.all('*', c => app.fetch(c.req.raw, { platform: c.env }));
+export default backend;
+```
+
+The launcher receives that export and starts the selected native host. The
+entry needs no separate `Bun.serve()` call. Other backends can use the same
+boundary if they expose a Web-standard `fetch` handler and support the runtime.
+
+## Cloudflare Workers
+
+Install `@cloudflare/vite-plugin` and `wrangler` as development dependencies.
+Use the normal `vite.config.ts`:
+
+```ts
+import { defineConfig } from 'vite';
+import memoizedDom from '@memoized-dom/vite';
+import { cloudflare } from '@memoized-dom/vite/cloudflare';
+
+export default defineConfig({
+  plugins: [
+    memoizedDom({
+      clientEntry: 'src/main.ts', serverEntry: 'server.ts', runtime: 'cloudflare',
+    }),
+    cloudflare(),
+  ],
+});
+```
+
+Keep the Worker name, compatibility date, secrets, and bindings in the normal
+Wrangler configuration. `cloudflare()` wraps Cloudflare's official Vite
+integration, runs server modules inside `workerd`, enables Node compatibility
+for request context, and configures the asset binding automatically. The
+configured server entry supplies `main` when Wrangler omits it.
+
+A directly exported `serve()` application receives `{ env, executionCtx }`
+as `context.platform`. Hono retains its normal `export default backend`;
+forward its bindings when delegating:
+
+```ts
+backend.all('*', c => app.fetch(c.req.raw, {
+  platform: { env: c.env, executionCtx: c.executionCtx },
+}));
+export default backend;
+```
+
+Native Worker objects with `fetch(request, env, executionCtx)` also work, and
+their additional Worker handlers remain on the export. Backend dependencies
+must support Workers; Bun APIs are available only on the Bun host.
+
+Run `memoized-dom dev` and `memoized-dom build` with Node. Use `vite preview`
+for the built Worker locally and `wrangler deploy` to deploy it. The same
+backend entry runs in development and production, with automatic SSR and
+client assets. Server, SSR, server-function, and browser hot updates use the
+Worker runtime integration. No special Vite config filename is required.
 
 The hydration runtime is an opt-in bundle feature, so non-SSR applications
 never ship it. The Vite plugin installs it automatically for client entries

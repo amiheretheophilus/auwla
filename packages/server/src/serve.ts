@@ -21,8 +21,10 @@ import type {
   ServerMiddleware,
   ServerMiddlewareGroup,
   ServerRoute,
+  ServerDispatchOptions,
 } from './http-router';
 import type { ServerComponent } from './index';
+import type { ServerIntegration } from './integration';
 
 type ServerMethod =
   | 'GET'
@@ -95,7 +97,7 @@ export interface ServerApplication<
   TPlatform = RegisteredServerPlatform,
   TServices extends object = RegisteredServerServices,
 > {
-  fetch(request: Request): Promise<Response>;
+  fetch(request: Request, options?: ServerDispatchOptions<TLocals, TPlatform, TServices>): Promise<Response>;
 
   use(...middleware: readonly ServerMiddleware<TLocals, TPlatform, TServices>[]): this;
   use(
@@ -171,6 +173,7 @@ interface InstallableServerApplication<
     routes: readonly ServerRoute<TLocals, TPlatform, TServices>[],
   ): void;
   installDocumentTemplate(template: string): void;
+  installIntegration(integration: ServerIntegration): void;
 }
 
 /**
@@ -201,6 +204,7 @@ export function serve<
     TServices
   >[] = [];
   let documentTemplate: string | undefined;
+  let integration: ServerIntegration | undefined;
   let servicesPromise: Promise<TServices> | undefined;
   let current: ApplicationHandler | undefined;
   let dirty = true;
@@ -251,8 +255,10 @@ export function serve<
       dirty = false;
       const services = await resolveServices();
       if (dirty) continue;
-      current = createApplicationHandler({
+      const next = createApplicationHandler({
         ...(documentTemplate === undefined ? {} : { documentTemplate }),
+        resolveDocumentTemplate: integration?.document,
+        resolveAsset: integration?.assets,
         ...(fallback === undefined && ssr.length === 0 ? {} : { resolveApp }),
         middleware,
         groups,
@@ -264,7 +270,8 @@ export function serve<
         render: options.render,
         onRender: options.onRender,
       });
-      return current;
+      current = next;
+      return next;
     }
     return current!;
   };
@@ -304,8 +311,8 @@ export function serve<
     TPlatform,
     TServices
   > = {
-    async fetch(request) {
-      return (await handler())(request);
+    async fetch(request, dispatchOptions) {
+      return (await handler())(request, dispatchOptions);
     },
 
     use(
@@ -435,6 +442,11 @@ export function serve<
     installDocumentTemplate(next) {
       if (next === documentTemplate) return;
       documentTemplate = next;
+      invalidate();
+    },
+
+    installIntegration(next) {
+      integration = next;
       invalidate();
     },
   };

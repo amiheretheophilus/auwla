@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import puppeteer, { type Browser } from 'puppeteer-core';
 import { afterEach, describe, expect, it } from 'bun:test';
-import { createServer, type ViteDevServer } from 'vite';
+import { createDevServer, type NativeDevServer } from '../src/dev';
 import memoizedDom from '../src';
 import { routedApp, routedDetail, routedOpaque, initializeRoutedLifecycles, checkRoutedLifecycles } from './fixtures/routed-lifecycles';
 
@@ -21,7 +21,7 @@ function chromeExecutable(): string | null {
     candidate !== undefined && existsSync(candidate)) ?? null;
 }
 
-let vite: ViteDevServer | undefined;
+let vite: NativeDevServer | undefined;
 let browser: Browser | undefined;
 let fixture: string | undefined;
 
@@ -61,7 +61,7 @@ describe('route-only component chunks', () => {
       '@memoized-dom/server/router': 'server/src/http-router.ts',
       '@memoized-dom/server': 'server/src/index.ts',
     };
-    vite = await createServer({
+    vite = await createDevServer({
       root: fixture, configFile: false, appType: 'custom', logLevel: 'silent',
       resolve: { alias: Object.entries(entries).map(([name, path]) => ({
         find: new RegExp(`^${name}$`), replacement: resolve(repository, 'packages', path),
@@ -69,12 +69,7 @@ describe('route-only component chunks', () => {
       plugins: [memoizedDom({ clientEntry: 'src/main.ts', serverEntry: 'server.ts' })],
       server: { host: '127.0.0.1', port: 0 },
     });
-    await vite.listen();
-    const address = vite.httpServer?.address();
-    if (address === undefined || address === null || typeof address === 'string') {
-      throw new Error('Expected a Vite TCP server address');
-    }
-    const origin = `http://127.0.0.1:${address.port}`;
+    const origin = vite.origin;
     browser = await puppeteer.launch({ headless: true, executablePath });
     const page = await browser.newPage();
     const errors: string[] = [];

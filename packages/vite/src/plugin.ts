@@ -1,8 +1,9 @@
 /**
  * Vite 8 plugin backed by connected compiler graphs and live module HMR.
  */
-import { dirname, join, resolve } from 'node:path';
-import { readFile } from 'node:fs/promises';
+import { dirname, join, relative, resolve } from 'node:path';
+import { readFile, readdir } from 'node:fs/promises';
+import remapping from '@jridgewell/remapping';
 import type { CompilerSourceMap } from '@memoized-dom/compiler';
 import type {
   DevEnvironment,
@@ -29,7 +30,14 @@ import { hydrationBootstrap, hydrationVirtualId, resolvedHydrationVirtualId } fr
 import { applyInitialPage } from './initial-html';
 import { initialBootstrapDescriptor } from '@memoized-dom/runtime/server';
 import { registerClientStyles } from './dev-assets';
-import { configureFullstackServer } from './fullstack';
+import {
+  applicationVirtualId, integrationVirtualId, productionEntryVirtualId,
+  resolvedApplicationVirtualId, resolvedIntegrationVirtualId, resolvedProductionEntryVirtualId,
+  applicationModule, configureDevelopmentDelivery, developmentIntegrationModule,
+  productionIntegrationModule, integratedServerImports, relocateClientRoot,
+  nodeProductionEntry, bunProductionEntry,
+  type FullstackPluginApi, type ProductionDelivery,
+} from './fullstack';
 import {
   generateServerFunctionRoutesModule,
   isServerFunctionFile,
@@ -75,6 +83,24 @@ export function memoizedDom(
     'export const serverFunctionManifest = [];\nexport const serverFunctionRoutes = [];\n';
   let serverFunctionClientBarrelSource = '';
   let serverFunctionBarrelEntries: readonly ServerFunctionBarrelEntry[] = [];
+  let productionDelivery: ProductionDelivery | undefined;
+  const api: FullstackPluginApi = {
+    runtime: options.runtime ?? 'bun',
+    get serverEntry() {
+      return options.serverEntry === undefined || config === undefined ? options.serverEntry : resolve(config.root, options.serverEntry);
+    },
+    nativeDevelopment: false,
+  };
+
+  async function assetFiles(directory: string, prefix = ''): Promise<string[]> {
+    const files: string[] = [];
+    for (const item of await readdir(directory, { withFileTypes: true })) {
+      const name = prefix + item.name;
+      if (item.isDirectory()) files.push(...await assetFiles(join(directory, item.name), name + '/'));
+      else if (item.isFile()) files.push(name);
+    }
+    return files;
+  }
 
   async function refreshServerFunctions(): Promise<readonly string[]> {
     if (config === undefined) return [];
@@ -161,7 +187,7 @@ export function memoizedDom(
         entries,
         options,
         overrides,
-        graphConfig.command === 'serve',
+        graphConfig.command === 'serve' && environmentName !== 'ssr',
         true,
         serverFunctionBarrelEntries,
         environmentName === 'ssr' ? 'server' : 'client',
@@ -203,7 +229,7 @@ export function memoizedDom(
         [entry],
         options,
         overrides,
-        config.command === 'serve',
+        config.command === 'serve' && environmentName !== 'ssr',
         false,
         serverFunctionBarrelEntries,
         environmentName === 'ssr' ? 'server' : 'client',
@@ -298,7 +324,7 @@ export function memoizedDom(
     ) return null;
     const file = cleanViteId(id);
     const state = stateFor(context.environment);
-    const managed = entries.includes(file) || state.files.has(file);
+    let managed = entries.includes(file) || state.files.has(file);
 
     // The SSR environment also loads the application's ordinary server
     // entry and its implementation modules. Plain .ts/.js files outside the
@@ -309,6 +335,11 @@ export function memoizedDom(
       !managed &&
       /\.[jt]s$/.test(file)
     ) return null;
+
+    if (context.environment.name === 'ssr' && config.command === 'serve' && state.output.size === 0) {
+      await refreshGraph(context, state, new Map([[file, code]]), 'ssr');
+      managed = entries.includes(file) || state.files.has(file);
+    }
 
     const cached = managed ? state.output.get(file) : undefined;
     if (cached !== undefined) {
@@ -364,7 +395,7 @@ export function memoizedDom(
         [file],
         options,
         new Map([[file, code]]),
-        config.command === 'serve',
+        config.command === 'serve' && context.environment.name !== 'ssr',
         false,
         serverFunctionBarrelEntries,
         context.environment.name === 'ssr' ? 'server' : 'client',
@@ -389,7 +420,8 @@ export function memoizedDom(
   return {
     name: 'memoized-dom',
     enforce: 'pre',
-    config() {
+    api,
+    config(userConfig) {
       // These packages intentionally share realm/runtime state across public
       // subpath entries (`data` + `data/internal`, and router internals).
       // Prebundling deep imports as independent optimized entries duplicates
@@ -397,8 +429,29 @@ export function memoizedDom(
       // ESM chunks directly so every subpath converges on one module record.
       return {
         ...(options.serverEntry === undefined ? {} : { appType: 'custom' as const }),
+        ...(options.serverEntry === undefined || userConfig.build?.ssr ? {} : {
+          builder: { sharedPlugins: true, ...(options.runtime === 'cloudflare' ? { buildApp: async () => {} } : {}) },
+          environments: {
+            client: { build: { outDir: 'dist/client' } },
+            ...(options.runtime === 'cloudflare' ? {} : {
+              ssr: { resolve: { noExternal: ['@memoized-dom/adapters'] },
+                build: { outDir: 'dist', ssr: true, copyPublicDir: false, emptyOutDir: false,
+                rollupOptions: { input: productionEntryVirtualId, output: { entryFileNames: 'server.js' } } } },
+            }),
+          },
+        }),
         optimizeDeps: {
           exclude: statefulRuntimePackages,
+        },
+      };
+    },
+    configEnvironment(name) {
+      if (name !== 'client' && name !== 'ssr') return;
+      return {
+        optimizeDeps: {
+          exclude: statefulRuntimePackages,
+          // Scan uncompiled JSX without synthesizing a React runtime import.
+          rolldownOptions: { transform: { jsx: 'preserve' as const } },
         },
       };
     },
@@ -410,6 +463,9 @@ export function memoizedDom(
     configResolved(resolved) {
       config = resolved;
       entries = entryFiles(resolved.root, options.entries);
+      if (options.runtime === 'cloudflare' && !resolved.plugins.some(plugin => plugin.name === 'memoized-dom:cloudflare')) {
+        throw new Error('memoized-dom: the Cloudflare target requires cloudflare() from @memoized-dom/vite/cloudflare');
+      }
     },
     configureServer(server) {
       devServer = server;
@@ -418,14 +474,39 @@ export function memoizedDom(
           registerClientStyles(server, state, state.eagerStyles, state.routeStyles, state.routeTree);
         }
       }
-      return options.serverEntry === undefined
-        ? undefined
-        : configureFullstackServer(server, options.serverEntry);
+      if (options.serverEntry !== undefined) configureDevelopmentDelivery(server);
+    },
+    async buildApp(builder) {
+      const client = builder.environments.client;
+      if (!client) throw new Error('memoized-dom: missing client build environment');
+      if (options.serverEntry === undefined) {
+        await builder.build(client);
+        return;
+      }
+      await builder.build(client);
+      const ssr = builder.environments.ssr;
+      if (!ssr) throw new Error('memoized-dom: missing server build environment');
+      const clientDirectory = resolve(client.config.root, client.config.build.outDir);
+      const serverDirectory = resolve(ssr.config.root, ssr.config.build.outDir);
+      productionDelivery = {
+        document: await readFile(join(clientDirectory, 'index.html'), 'utf8'),
+        files: await assetFiles(clientDirectory),
+        base: client.config.base,
+        assetsDir: client.config.build.assetsDir,
+        clientRoot: relative(serverDirectory, clientDirectory).replaceAll('\\', '/'),
+        runtime: options.runtime ?? 'bun',
+        assetsBinding: api.cloudflareAssetsBinding,
+      };
+      await builder.build(ssr);
     },
     async buildStart() {
       for (const file of await refreshServerFunctions()) this.addWatchFile(file);
       const serverConfig = await refreshServerConfig();
       if (serverConfig !== null) this.addWatchFile(serverConfig);
+      // Worker dependency scans start this hook before optimization finishes.
+      // Resolve the SSR component graph when its modules are transformed;
+      // eagerly resolving dependencies here would wait on the same scan.
+      if (config?.command === 'serve' && this.environment.name === 'ssr') return;
       await refreshGraph(
         this as AdapterTransformContext,
         stateFor(this.environment),
@@ -454,6 +535,9 @@ export function memoizedDom(
       },
     },
     async resolveId(id, importer) {
+      if (id === applicationVirtualId) return resolvedApplicationVirtualId;
+      if (id === integrationVirtualId) return resolvedIntegrationVirtualId;
+      if (id === productionEntryVirtualId) return resolvedProductionEntryVirtualId;
       if (id === hydrationVirtualId) return resolvedHydrationVirtualId;
       if (id === serverFunctionsVirtualId) {
         return resolvedServerFunctionsVirtualId;
@@ -491,6 +575,13 @@ export function memoizedDom(
       return null;
     },
     async load(id) {
+      if (id === resolvedApplicationVirtualId) return { code: applicationModule(api.runtime), map: { mappings: '' } };
+      if (id === resolvedIntegrationVirtualId) {
+        return { code: productionDelivery ? productionIntegrationModule(productionDelivery) : developmentIntegrationModule(devServer!, api.runtime, api.cloudflareAssetsBinding), map: { mappings: '' } };
+      }
+      if (id === resolvedProductionEntryVirtualId) {
+        return { code: options.runtime === 'node' ? nodeProductionEntry(api.serverEntry!) : bunProductionEntry(api.serverEntry!), map: { mappings: '' } };
+      }
       if (id === resolvedHydrationVirtualId) {
         return { code: hydrationBootstrap(stateFor(this.environment).hydrationCapabilities), map: { mappings: '' } };
       }
@@ -528,9 +619,18 @@ export function memoizedDom(
     },
     transform: {
       filter: { id: sourceId },
-      handler(code, id) {
-        return transformModule(this, code, id);
+      async handler(code, id) {
+        const compiled = await transformModule(this, code, id);
+        if (this.environment.name !== 'ssr' || (!api.nativeDevelopment && !productionDelivery)) return compiled;
+        const integrated = integratedServerImports(compiled?.code ?? code, id);
+        if (!integrated) return compiled;
+        const map = compiled?.map ? remapping([JSON.parse(integrated.map.toString()), compiled.map], () => null).toString() : integrated.map.toString();
+        return { code: integrated.code, map };
       },
+    },
+    renderChunk(code, chunk) {
+      if (!productionDelivery || this.environment.name !== 'ssr') return null;
+      return relocateClientRoot(code, chunk.fileName, productionDelivery.clientRoot) ?? null;
     },
     async hotUpdate(update) {
       const file = normalizeFile(update.file);

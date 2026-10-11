@@ -9,6 +9,8 @@ export interface MemoizedDomViteOptions
   clientEntry: string;
   /** Server composition root. Omit for browser-only applications. */
   serverEntry?: string;
+  /** Production host target. Bun/Node dev uses the launching runtime; Cloudflare dev uses workerd. */
+  runtime?: 'bun' | 'node' | 'cloudflare';
   /**
    * Additional source paths allowed outside the Vite project root.
    */

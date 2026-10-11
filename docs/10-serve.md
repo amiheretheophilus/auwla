@@ -1,6 +1,10 @@
-# `serve()` — the server configuration
+# `serve()` — application composition
 
-`serve()` creates the application your `serverEntry` file default-exports.
+`serve()` creates an application with routes, middleware, SSR, and a portable
+`fetch` handler. Your `serverEntry` can default-export that application or mount
+it inside a backend such as Hono. It does not open a listener; the selected
+host owns native server APIs, WebSockets, and shutdown.
+
 It takes one optional options object, every key optional:
 
 ```ts
@@ -15,6 +19,35 @@ const app = serve({
 
 export default app;
 ```
+
+## The host boundary
+
+`app.fetch(request, options?)` returns a `Promise<Response>`. Dispatch options
+can supply `platform`, `locals`, and `services` for that request. For example,
+Hono on Bun or Node can delegate after its own routes:
+
+```ts
+backend.all('*', c => app.fetch(c.req.raw, { platform: c.env }));
+export default backend;
+```
+
+Direct exports receive the native host context automatically:
+
+| Host | `context.platform` |
+|---|---|
+| Bun | the actual `Bun.Server` |
+| Node | `{ incoming, outgoing }` native HTTP objects |
+| Cloudflare | `{ env, executionCtx }` Worker bindings and execution context |
+
+For Hono on Cloudflare, delegate with
+`{ platform: { env: c.env, executionCtx: c.executionCtx } }`. The same context
+reaches middleware, SSR, route preparation, and generated server functions.
+
+The fullstack build installs the frontend document, generated functions, and
+asset delivery at `serve()` import sites. Users do not add static middleware
+or import host adapters in the server entry. Native builds bundle those
+generated helpers. See [09 — SSR](./09-ssr.md#development-and-production)
+for the normal `vite.config.ts`, runtime selection, commands, and hot updates.
 
 The **option names are fixed** — they're part of the API. The functions you
 assign can be named anything; `serve({ createLocals: makeSession })` is
@@ -39,7 +72,7 @@ Omit it and `locals` is an empty object.
 
 ## `createServices()` — once per app
 
-Runs **lazily, once**, the first time anything touches `context.services`.
+Runs **lazily, once**, when the application handles its first request.
 The result is cached for the life of the app instance — this is where
 long-lived shared dependencies belong: database handles, API clients,
 caches.
@@ -52,7 +85,7 @@ const app = serve({
 });
 ```
 
-It may be async — the first consumer awaits it. Contrast with `locals`:
+It may be async — dispatch awaits initialization. Contrast with `locals`:
 services are *shared across requests*, locals are *fresh per request*.
 Put a DB pool in services, never in locals; put the current user in
 locals, never in services.
@@ -61,8 +94,9 @@ locals, never in services.
 
 Runs **per request** like `locals`, but it's not your app's data — it's
 the deploy target's bindings. On a platform like Cloudflare Workers this
-is the `env` object (KV namespaces, D1 databases, R2 buckets, secrets);
-another adapter might inject edge/network context.
+is `{ env, executionCtx }`: `env` holds KV namespaces, D1 databases,
+R2 buckets, and secrets, while `executionCtx` provides `waitUntil()` and
+other Worker lifecycle methods. Other hosts provide their native context.
 
 ```ts
 const app = serve({
@@ -75,15 +109,17 @@ const app = serve({
 
 Two ways `platform` gets populated:
 
-- A **host adapter** dispatches requests with `platform` already attached
-  — nothing to configure.
+- A **host or delegated backend** dispatches with `{ platform }` already
+  attached. Direct exports receive it automatically; delegated applications
+  use the fetch option shown above.
 - **`createPlatform`** is the in-config fallback — it receives the raw
   `Request` and derives the bindings itself, which also makes it the seam
   for faking a platform in dev/tests.
 
-Omit it and `context.platform` is `undefined`. Its type comes from the
-optional `platform` key in your `ServerTypes` (`platform?: Env`), so the
-same `Env` shape appears everywhere `context.platform` is read.
+When neither dispatch nor `createPlatform` supplies it, `context.platform`
+is `undefined`. Its type comes from the optional `platform` key in your
+`ServerTypes`, so declare the shape the host or backend supplies. For Workers
+that shape includes both `env` and `executionCtx`.
 
 So the three map to three lifetimes:
 
