@@ -1,106 +1,52 @@
-# The server `config/` folder
+# Server definition and services
 
-The `server/` root holds more than `functions/`. The other conventional
-piece is `config/index.ts` — the file that makes `context.locals`,
-`context.services`, and `context.platform` **typed everywhere** instead of
-`unknown`.
-
-```
-server/
-  config/
-    index.ts       → exports ServerTypes — the app's server contract
-    services.ts    → your service factories (db, clients, caches)
-    db.ts          → …or split further, your call
-  functions/
-```
-
-## `ServerTypes` — one interface, project-wide typing
-
-`config/index.ts` must export an interface literally named `ServerTypes`:
+`server/define.ts` is the central server contract:
 
 ```ts
-// server/config/index.ts
-import type { ApplicationServices } from './services';
+import { createDefine } from '@memoized-dom/server';
 
-export interface ServerTypes {
-  locals: {
-    requestId: string;
-    user?: string;
-  };
-  services: ApplicationServices;
-  platform?: Platform;   // optional — the host, fetch options, or createPlatform supply it
-}
+export const define = createDefine<RequestState, HostPlatform>();
 ```
 
-Three keys, all matching the `serve()` options:
+The Vite integration reads this module and augments server, router, middleware,
+and `$routed` types. No parallel interface needs to mirror the application.
 
-| Key | Types |
-|---|---|
-| `locals` | `context.locals` — what `createLocals` returns per request |
-| `services` | `context.services` — what `createServices` builds once |
-| `platform` | `context.platform` — what `createPlatform`/the host provides |
-
-The plugin finds `config/index.ts` inside the configured `server` root,
-generates a registry augmentation (`.memoized/server-config.d.ts`), and
-from then on every handler, middleware, and server function sees the real
-types — `context.services.database` isn't `unknown`, it's your
-`ApplicationServices`. Exactly **one** `config/index.*` file may exist.
-
-## Splitting it into real files
-
-`index.ts` is the contract — the implementation can live wherever makes
-sense under the root:
+Declare application-scoped services anywhere under the server root:
 
 ```ts
-// server/config/services.ts — initialization lives here
-export interface ApplicationServices {
-  readonly database: Database;
-  readonly mailer: Mailer;
-}
+// server/services/database.ts
+import { define } from '../define';
 
-export async function createServices(): Promise<ApplicationServices> {
-  const database = await connectDatabase(process.env.DATABASE_URL!);
-  const mailer = createMailer(process.env.SMTP_URL!);
-  return { database, mailer };
-}
-```
-
-```ts
-// server.ts — wire the factory into serve()
-import { serve } from '@memoized-dom/server';
-import { createServices } from '#server/config/services';
-
-const app = serve({
-  createLocals: (request) => ({
-    requestId: crypto.randomUUID(),
-    user: readSession(request.headers.get('cookie')),
-  }),
-  createServices,          // lazy — runs once, on the first handled request
+export const database = define.service('database', async () => {
+  return connectDatabase(process.env.DATABASE_URL);
 });
-
-export default app;
 ```
 
-`#server/` imports resolve only inside the server root — the same alias
-client code is forbidden from touching.
+Dependencies are explicit values, so their types and initialization order are
+known without a central assembly function:
 
-The platform type follows the selected host and your delegation boundary.
-For a directly exported Worker application, declare
-`platform?: { env: Env; executionCtx: ExecutionContext }` using your Worker
-binding types. Hono can forward that same shape through `app.fetch()`.
-See [10 — serve()](./10-serve.md#the-host-boundary) for the Bun and Node shapes.
+```ts
+import { database } from './database';
 
-Now the types line up end to end: `createServices` returns
-`ApplicationServices`, `ServerTypes.services` declares it, and every
-`context.services` read — routes, middleware, function files — is checked
-against it. Change the shape in one place and every consumer is covered.
+export const mailer = define.service('mailer', {
+  dependencies: { database },
+  create: ({ database }) => createMailer(database),
+});
+```
 
-## Why bother
+The build discovers exported service declarations, imports their modules into
+the server application, and generates the `services.database` and
+`services.mailer` types. At runtime each service is initialized lazily at most
+once per `serve()` application. Concurrent requests share initialization;
+failed initialization may retry. Duplicate names and dependency cycles fail
+with a diagnostic.
 
-Without `config/index.ts` everything still *runs* — `locals`/`services`
-just type as empty records and you lose autocomplete, refactors, and
-mismatch errors. With it, the server context is as typed as the rest of
-the app — and the same `ServerTypes` also types the server context given
-to `$routed` preparations, which is where this pays off next.
+Factories receive declared service dependencies only. They do not receive
+request `state` or `platform`, because a shared service must not retain data
+from whichever request initialized it. Read request values from handler or
+middleware context instead.
 
-Next: [15 — The server context](./15-server-context.md)
+When using `@memoized-dom/server` without the Vite integration, import service
+modules before calling `serve()` so their declarations register on `define`.
+
+Next: [15 — server context](./15-server-context.md)

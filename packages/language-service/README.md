@@ -31,19 +31,9 @@ remains available for the other packages. To use the plugin in an editor,
 select a TypeScript 6 tsserver; the TypeScript 7 language server does not load
 tsserver plugins.
 
-The plugin also recognizes `@middleware` and `@Input` references on server
-functions. Imports and local bindings used by those annotations count as used,
-and TypeScript checks middleware signatures and schema outputs against the
-function's named parameters. Errors underline the corresponding JSDoc tag.
-The checks run on an in-memory copy; source files and runtime code are unchanged.
-
-Standalone `tsc` does not load language-service plugins and still treats custom
-tag references as comments. Annotation type checks are provided by the editor
-plugin; there is no additional command to run.
-
-If Vite uses a custom server root, set `"server": "backend"` on the plugin
-entry. Set `"serverFunctionAnnotations": false` on the plugin
-entry to disable annotation checks.
+Server functions use the typed `define.function` API. TypeScript therefore
+checks their context, transported parameters, middleware, validation schema,
+and result without a language-service-only annotation overlay.
 
 The first diagnostic suggests `const` for initialized `let` bindings that are
 never reassigned. Its message explains that memoized-dom reactivity follows

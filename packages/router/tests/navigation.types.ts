@@ -30,15 +30,15 @@ runtime.navigate('/docs/*');
 
 runtime.dispose();
 
-const prepared = $routed(({ state, params, url, query, request, signal }) => {
+const prepared = $routed(({ routeState, params, url, query, request, signal }) => {
   void params.reportId;
   void url.pathname;
   void query.get('tab');
   void request.method;
   void signal.aborted;
 
-  state.lastReportId = params.reportId;
-  void state.lastReportId;
+  routeState.lastReportId = params.reportId;
+  void routeState.lastReportId;
 
   return Promise.resolve({ title: 'Prepared report' });
 });

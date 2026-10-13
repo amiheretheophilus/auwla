@@ -117,8 +117,8 @@ type RegisteredRoutedApplication = RoutedTypeRegistry extends {
   ? TApplication
   : Record<string, never>;
 
-export type RegisteredRoutedLocals = RegisteredRoutedApplication extends {
-  locals: infer TLocals extends object;
+export type RegisteredRoutedState = RegisteredRoutedApplication extends {
+  state: infer TLocals extends object;
 }
   ? TLocals
   : Record<string, never>;
@@ -145,17 +145,18 @@ export interface RoutedContext<
   TParams extends Readonly<Record<string, string>> = Readonly<
     Record<string, string>
   >,
-  TLocals extends object = RegisteredRoutedLocals,
+  TLocals extends object = RegisteredRoutedState,
   TPlatform = RegisteredRoutedPlatform,
   TServices extends object = RegisteredRoutedServices,
 > {
-  /** Route-level data cache state; URL and server fields are its siblings. */
-  readonly state: RoutedCacheState;
+  /** Route-level data cache state retained across matching navigations. */
+  readonly routeState: RoutedCacheState;
   readonly params: TParams;
   readonly url: URL;
   readonly query: RouteQuery;
   readonly request: Request;
-  readonly locals: TLocals;
+  /** Application request state. Reading it makes the preparation server-backed. */
+  readonly state: TLocals;
   readonly platform: TPlatform | undefined;
   readonly services: TServices;
   readonly signal: AbortSignal;
@@ -166,7 +167,7 @@ export type RoutedPreparation<
   TParams extends Readonly<Record<string, string>> = Readonly<
     Record<string, string>
   >,
-  TLocals extends object = RegisteredRoutedLocals,
+  TLocals extends object = RegisteredRoutedState,
   TPlatform = RegisteredRoutedPlatform,
   TServices extends object = RegisteredRoutedServices,
 > = (

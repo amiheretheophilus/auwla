@@ -71,7 +71,7 @@ function routedContext(url: string) {
     .__sessionPreparationSignals = preparationSignals;
   return {
     request: new Request(`https://app.test${url}`),
-    locals: {},
+    state: {},
     services: {},
   };
 }

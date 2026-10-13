@@ -4,18 +4,17 @@ import {
   type ExpeditionService,
 } from './expeditions';
 import { createNoteService, type NoteService } from './notes';
+import { define } from '../define';
 
-export interface ApplicationServices {
-  readonly expeditions: ExpeditionService;
-  readonly notes: NoteService;
-}
+/** Declare the service graph once. Dependencies are resolved lazily by serve(). */
+export const store = define.service('store', createStore);
 
-/** Compose the service graph — each service is a small factory taking the
- *  dependencies it needs. Add services here as the app grows. */
-export async function createServices(): Promise<ApplicationServices> {
-  const store = createStore();
-  return {
-    expeditions: createExpeditionService(store),
-    notes: createNoteService(store),
-  };
-}
+export const expeditions = define.service('expeditions', {
+  dependencies: { store },
+  create: ({ store }): ExpeditionService => createExpeditionService(store),
+});
+
+export const notes = define.service('notes', {
+  dependencies: { store },
+  create: ({ store }): NoteService => createNoteService(store),
+});

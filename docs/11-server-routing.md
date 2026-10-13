@@ -3,7 +3,7 @@
 Add HTTP endpoints by calling methods on the `serve()` instance:
 
 ```ts
-const app = serve();
+const app = serve({ define });
 
 app.get('/api/health', () => ({ ok: true }));
 
@@ -32,9 +32,9 @@ produced, plus the request itself:
 | `request` | the incoming `Request` — headers, body, method |
 | `url` | parsed `URL` — `url.searchParams` for the query string |
 | `params` | pattern params — `/api/stories/:id` → `{ id }` |
-| `locals` | per-request data from `createLocals` |
-| `services` | shared dependencies from `createServices` |
-| `platform` | host bindings from `createPlatform` (`undefined` if unset) |
+| `state` | per-request data from `serve({ state })` |
+| `services` | shared dependencies from `define.service()` |
+| `platform` | host bindings from `serve({ platform })` (`undefined` if unset) |
 
 What you return becomes the response:
 

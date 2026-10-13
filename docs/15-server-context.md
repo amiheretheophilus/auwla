@@ -1,104 +1,40 @@
-# The server context
+# Server context
 
-Every request `serve()` handles produces one `context` object. Route
-handlers and middleware receive it as a parameter — but server functions
-don't (their signature is the HTTP contract), so they read it through
-`getServerContext()`:
+Server code receives request context as an argument:
 
 ```ts
-import { getServerContext } from '@memoized-dom/server';
-
-// server/functions/stories.ts
-/** @POST */
-export async function postVote(id: number) {
-  const context = getServerContext();
-  // …the active request's context
-}
+export const createUser = define.function.post(
+  async ({ request, url, params, state, services, platform }, input: Input) => {
+    // ...
+  },
+);
 ```
 
-## What's on it
+The same shape is used by middleware, ordinary routes, server functions, SSR
+preparation, and server-backed `$routed` work:
 
-| Field | What it is | Comes from |
-|---|---|---|
-| `request` | The incoming `Request` — headers, cookies, method, body | the request itself |
-| `url` | Parsed `URL` — `url.searchParams` for the query | the request itself |
-| `params` | Route pattern params (`/api/:id` → `{ id }`) | the matched route |
-| `locals` | Your per-request bag — mutable | `createLocals(request)` + middleware writes |
-| `services` | Shared app dependencies — db, clients | `createServices()`, once per app |
-| `platform` | Native host context or Worker bindings | `app.fetch(request, { platform })` / `createPlatform(request)` |
+| Field | Lifetime and ownership |
+|---|---|
+| `request`, `url`, `params` | Current dispatch |
+| `state` | Mutable; one object for the complete incoming request |
+| `services` | Shared; one resolved service graph per application |
+| `platform` | Current request; host supplied or application fallback |
 
-Direct application exports receive the actual Bun server, Node's
-`{ incoming, outgoing }`, or a Worker's `{ env, executionCtx }` automatically.
-When mounting inside another backend, forward its context through the fetch
-option. See [10 — serve()](./10-serve.md#the-host-boundary).
-
-## Examples inside server functions
-
-**Auth via `locals`** — the session middleware already resolved the user;
-the function just reads it:
+Middleware can progressively enrich `state`:
 
 ```ts
-/** @GET */
-export async function getProfile() {
-  const { locals } = getServerContext();
-  if (locals.user === undefined) throw new Error('Not signed in');
-  return db.users.find(locals.user);
-}
+export const authenticated = define.middleware(async (context, next) => {
+  context.state.user = await context.services.sessions.read(context.request);
+  return next();
+});
 ```
 
-**Dependencies via `services`** — initialized once in
-`server/config/services.ts`, typed by `ServerTypes`:
+A later handler sees the same `context.state.user`. Nested same-origin server
+function dispatch during SSR also reuses the parent state, services, and
+platform, so the request remains isolated without losing middleware work.
 
-```ts
-/** @POST */
-export async function postComment(storyId: number, text: string) {
-  const { services, locals } = getServerContext();
-  return services.database.comments.create({
-    storyId,
-    text,
-    author: locals.user,
-  });
-}
-```
+The runtime still maintains an internal request scope to implement SSR and
+nested dispatch. Application code does not read that scope directly; injected
+arguments are the public contract.
 
-**Headers/cookies via `request`** — for things locals doesn't capture:
-
-```ts
-/** @DELETE */
-export async function deleteStory(id: number) {
-  const { request } = getServerContext();
-  if (request.headers.get('x-admin') !== 'yes') {
-    throw new Error('Admins only');
-  }
-  return db.stories.remove(id);
-}
-```
-
-**Query/platform** — `url.searchParams` for extra input, `platform` for
-host bindings:
-
-```ts
-/** @GET */
-export async function getUsage() {
-  const { url, platform } = getServerContext();
-  const verbose = url.searchParams.has('verbose');
-  return platform?.env.KV.get('usage', { json: verbose });
-}
-```
-
-## Rules
-
-- **Only during request handling.** `getServerContext()` throws outside a
-  `serve()` dispatch — there's no ambient request at module top level or
-  in a stray timer.
-- **It works the same during SSR.** In-memory dispatch (server rendering)
-  and real HTTP populate the same context — code doesn't branch.
-- **It's typed by `ServerTypes`** — `locals`/`services`/`platform` carry
-  the shapes from `server/config/index.ts`; `context.services.database`
-  is checked, not `any`.
-- **`params` is the route's params** — server functions mount under
-  `/_fn/*`, which has no params of its own, so inside a function `params`
-  is empty. Function inputs come through the function's arguments, not
-  `params`.
-
-Next: [16 — `$routed`](./16-routed.md)
+Next: [16 — routed preparation](./16-routed.md)

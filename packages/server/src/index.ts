@@ -161,6 +161,21 @@ export { json, type JsonResponse } from './json';
 export { error, type ErrorResponse } from './error';
 export { getCookie, setCookie, deleteCookie, type CookieOptions } from './cookies';
 export {
+  createDefine,
+  type DefinedServerFunction,
+  type DefinitionPlatform,
+  type DefinitionState,
+  type ServerDefinition,
+  type ServerFunctionArguments,
+  type ServerFunctionDescriptor,
+  type ServerFunctionInputDescriptor,
+  type ServerFunctionMethod,
+  type ServerFunctionResult,
+  type ServiceDefinition,
+  type ServiceDescriptor,
+  type ServiceValue,
+} from './define';
+export {
   composeDocumentStream,
   loadDocumentTemplate,
   splitDocumentTemplate,
@@ -169,7 +184,6 @@ export {
 } from './document';
 export {
   serve,
-  getServerContext,
   type RenderPolicy,
   type RenderReport,
   type ServeOptions,
@@ -179,7 +193,7 @@ export {
   type ServerRouteParams,
 } from './serve';
 export type {
-  RegisteredServerLocals,
+  RegisteredServerState,
   RegisteredServerPlatform,
   RegisteredServerServices,
   ServerContext,

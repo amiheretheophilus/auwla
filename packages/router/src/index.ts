@@ -142,7 +142,7 @@ export type {
   RoutedContext,
   RoutedPreparation,
   RoutedTypeRegistry,
-  RegisteredRoutedLocals,
+  RegisteredRoutedState,
   RegisteredRoutedPlatform,
   RegisteredRoutedServices,
   RouteResolver,

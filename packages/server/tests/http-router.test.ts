@@ -22,25 +22,27 @@ describe('server HTTP router', () => {
         version: 1, vendor: 'test',
         async validate(input) {
           order.push('validation');
-          const value = input as { id: number; label?: string };
-          return value.id > 0
-            ? { value: { id: value.id, label: value.label ?? 'default' } }
+          const value = input as { id: string; label?: string };
+          const id = Number(value.id);
+          return id > 0
+            ? { value: { id, label: value.label ?? 'default' } }
             : { issues: [{ message: 'ID must be positive', path: ['id'] }] };
         },
       },
     };
-    const handler = vi.fn((...args: unknown[]) => {
+    const handler = vi.fn((_context: unknown, ...args: unknown[]) => {
       order.push('handler');
       return { args };
     });
     const router = createServerRouter({ routes: createServerFunctionRoutes([{
       id: 'stories/story', method: 'GET', path: '/_fn/stories/story',
-      parameters: [{ name: 'id', optional: false, queryKind: 'number' }, { name: 'label', optional: true, queryKind: 'string' }],
+      schemaInput: true,
+      parameters: [{ name: 'input', optional: false }],
       middleware: [async (_context, next) => { order.push('middleware'); return next(); }],
       input: schema, handler,
     }]) });
     const response = await router.fetch(new Request('https://app.test/_fn/stories/story?id=42'));
-    expect(await response.json()).toEqual({ args: [42, 'default'] });
+    expect(await response.json()).toEqual({ args: [{ id: 42, label: 'default' }] });
     expect(order).toEqual(['middleware', 'validation', 'handler']);
     const invalid = await router.fetch(new Request('https://app.test/_fn/stories/story?id=-1'));
     expect(invalid.status).toBe(400);
@@ -58,7 +60,8 @@ describe('server HTTP router', () => {
     const handler = vi.fn(() => ({ ok: true }));
     const router = createServerRouter({ routes: createServerFunctionRoutes([{
       id: 'stories/vote', method: 'POST', path: '/_fn/stories/vote',
-      parameters: [{ name: 'id', optional: false }],
+      schemaInput: true,
+      parameters: [{ name: 'input', optional: false }],
       middleware: [(context, next) => context.request.headers.has('authorization')
         ? next() : new Response(null, { status: 401 })],
       input: { '~standard': { version: 1, vendor: 'test', validate } }, handler,
@@ -72,7 +75,7 @@ describe('server HTTP router', () => {
     expect((await router.fetch(request('wrong', true))).status).toBe(400);
     expect(handler).not.toHaveBeenCalled();
     expect((await router.fetch(request(42, true))).status).toBe(200);
-    expect(handler).toHaveBeenCalledWith(42);
+    expect(handler.mock.calls[0]?.slice(1)).toEqual([{ id: 42 }]);
   });
 
   it('keeps native JSON date serialization without reconstructing values', async () => {
@@ -156,12 +159,12 @@ describe('server HTTP router', () => {
       server: true,
       prepare: context => {
         const services = context.services as { report: string };
-        const locals = context.locals as { user: string };
-        context.state.visits = Number(context.state.visits ?? 0) + 1;
-        context.state.serverOnly = () => 'not transported';
+        const state = context.state as { user: string };
+        context.routeState.visits = Number(context.routeState.visits ?? 0) + 1;
+        context.routeState.serverOnly = () => 'not transported';
         return {
           report: services.report,
-          user: locals.user,
+          user: state.user,
           id: context.params.reportId,
           method: context.request.method,
         };
@@ -176,7 +179,7 @@ describe('server HTTP router', () => {
       request: new Request('https://app.test/_memoized/routed', {
         method: 'POST',
       }),
-      locals: { user: 'Ada' },
+      state: { user: 'Ada' },
       services: { report: 'Quarterly' },
     });
 
@@ -209,7 +212,7 @@ describe('server HTTP router', () => {
         { name: 'tags', optional: false, queryKind: 'string[]' },
       ],
       middleware: [routeMiddleware],
-      handler: (...args) => {
+      handler: (_context, ...args) => {
         calls.push(args);
         return { args };
       },
@@ -228,7 +231,7 @@ describe('server HTTP router', () => {
   });
 
   it('decodes mutation bodies and reports malformed endpoint input as 400', async () => {
-    const handler = vi.fn((id: unknown, reason: unknown) => ({ id, reason }));
+    const handler = vi.fn((_context: unknown, id: unknown, reason: unknown) => ({ id, reason }));
     const router = createServerRouter({
       routes: createServerFunctionRoutes([{
         id: 'stories/deleteStory',
@@ -251,7 +254,7 @@ describe('server HTTP router', () => {
       },
     ));
     expect(await json(success)).toEqual({ id: 7 });
-    expect(handler).toHaveBeenCalledWith(7, undefined);
+    expect(handler.mock.calls[0]?.slice(1)).toEqual([7, undefined]);
 
     const malformed = await router.fetch(new Request(
       'https://app.test/_fn/stories/deleteStory',
@@ -365,7 +368,7 @@ describe('server HTTP router', () => {
         return response;
       };
     const router = createServerRouter<Locals>({
-      createLocals: () => ({}),
+      createState: () => ({}),
       middleware: [layer('global')],
       groups: [
         { path: '/api/*', middleware: [layer('api')] },
@@ -373,7 +376,7 @@ describe('server HTTP router', () => {
           path: '/api/admin/*',
           middleware: [
             async (context, next) => {
-              context.locals.user = 'Ada';
+              context.state.user = 'Ada';
               return layer('admin')(context, next);
             },
           ],
@@ -385,7 +388,7 @@ describe('server HTTP router', () => {
         middleware: [layer('route')],
         handler: (context) => {
           events.push('handler');
-          return { id: context.params.id, user: context.locals.user };
+          return { id: context.params.id, user: context.state.user };
         },
       }],
     });
@@ -414,10 +417,10 @@ describe('server HTTP router', () => {
 
   it('runs matching page middleware before the fallback handler', async () => {
     const router = createServerRouter<{ authenticated: boolean }>({
-      createLocals: () => ({ authenticated: false }),
+      createState: () => ({ authenticated: false }),
       groups: [{
         path: '/admin/*',
-        middleware: [async (context, next) => context.locals.authenticated
+        middleware: [async (context, next) => context.state.authenticated
           ? next()
           : new Response('Unauthorized', { status: 401 })],
       }],
@@ -435,17 +438,17 @@ describe('server HTTP router', () => {
     expect(await page.text()).toBe('page:/about');
   });
 
-  it('reuses request locals and platform for derived in-memory dispatch', async () => {
+  it('reuses request state and platform for derived in-memory dispatch', async () => {
     interface Locals { trace: string; }
     interface Platform { region: string; }
     const router = createServerRouter<Locals, Platform>({
-      createLocals: () => ({ trace: 'external' }),
+      createState: () => ({ trace: 'external' }),
       createPlatform: () => ({ region: 'default' }),
       routes: [{
         method: 'GET',
         path: '/context',
         handler: (context) => ({
-          trace: context.locals.trace,
+          trace: context.state.trace,
           region: context.platform?.region,
         }),
       }],
@@ -454,7 +457,7 @@ describe('server HTTP router', () => {
     const response = await router.dispatch(
       new Request('https://app.test/context'),
       {
-        locals: { trace: 'parent-request' },
+        state: { trace: 'parent-request' },
         platform: { region: 'edge' },
       },
     );

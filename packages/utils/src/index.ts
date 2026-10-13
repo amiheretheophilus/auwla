@@ -1,2 +1,2 @@
 export { optimistic } from './optimistic';
-export type { OptimisticOptions } from './optimistic';
+export type { OptimisticCallOptions, OptimisticOptions } from './optimistic';

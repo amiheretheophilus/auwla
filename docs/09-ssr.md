@@ -44,10 +44,11 @@ is a template error.
 
 ```ts
 // server.ts
-import { serve } from '@memoized-dom/server';
+import { createDefine, serve } from '@memoized-dom/server';
 import { App } from './src/App';
 
-const app = serve();
+const define = createDefine();
+const app = serve({ define });
 
 app.ssr(App);            // server-render on every page request
 
@@ -113,10 +114,11 @@ Hono can own backend routes and delegate remaining requests to Memoized DOM:
 ```ts
 // server.ts (Bun or Node)
 import { Hono } from 'hono';
-import { serve } from '@memoized-dom/server';
+import { createDefine, serve } from '@memoized-dom/server';
 import { App } from './src/App';
 
-const app = serve();
+const define = createDefine();
+const app = serve({ define });
 app.ssr(App);
 const backend = new Hono();
 backend.get('/api/users', c => c.json([]));

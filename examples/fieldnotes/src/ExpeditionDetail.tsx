@@ -1,19 +1,37 @@
 import { redirectRoute, blockNavigation } from '@memoized-dom/router';
 import { postNote, deleteNote } from '#server-functions';
+import { optimistic } from '@memoized-dom/utils';
 
 export function ExpeditionDetail() {
   // Server-backed preparation: services never ships to the browser — the
   // compiler strips this body and the server runs it. The returned page is
   // what the component reads.
-  const page = $routed(async ({ params, services, locals }) => {
+  const page = $routed(async ({ params, services, state }) => {
     const expedition = await services.expeditions.find(params.id);
     if (expedition === null) return redirectRoute('/expeditions');
-    return { expedition, viewer: locals.visitor };
+    return { expedition, viewer: state.visitor };
   });
 
   const nodes = { noteInput: null as HTMLInputElement | null };
   let lastPost = null as ReturnType<typeof postNote> | null;
   const deleting = new Set<string>();
+
+  const saveNote = optimistic({
+    action: (text: string) => postNote(page.expedition.id, text),
+    apply(text, operationId) {
+      const notes = page.expedition.notes;
+      notes.push({ id: operationId, text, by: page.viewer });
+      return () => {
+        const index = notes.findIndex(note => note.id === operationId);
+        if (index !== -1) notes.splice(index, 1);
+      };
+    },
+    reconcile(saved, _text, operationId) {
+      const notes = page.expedition.notes;
+      const index = notes.findIndex(note => note.id === operationId);
+      if (index !== -1) notes.splice(index, 1, saved);
+    },
+  });
 
   // Leave-guard: block navigation while the note input holds a draft.
   const stopGuard = blockNavigation(() => {
@@ -29,21 +47,7 @@ export function ExpeditionDetail() {
     const text = input.value;
     input.value = '';
 
-    // Optimistic insert; onSuccess swaps it for the server's note (real id),
-    // onError removes it — the tracker knows which request settled.
-    const optimistic = { id: 'pending', text, by: page.viewer };
-    page.expedition.notes.push(optimistic);
-
-    lastPost = postNote(page.expedition.id, text);
-    const tracker = $track(lastPost);
-    tracker.onSuccess((saved) => {
-      const index = page.expedition.notes.indexOf(optimistic);
-      if (index !== -1) page.expedition.notes.splice(index, 1, saved);
-    });
-    tracker.onError(() => {
-      const index = page.expedition.notes.indexOf(optimistic);
-      if (index !== -1) page.expedition.notes.splice(index, 1);
-    });
+    lastPost = saveNote(text);
   }
 
   function removeNote(noteId: string) {

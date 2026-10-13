@@ -18,11 +18,13 @@ afterEach(async () => { if (fixture) await rm(fixture, { recursive: true, force:
 async function production(name: string, source: string, extras: Record<string, string> = {}, userName: string | Record<string,unknown> = 'Ada', clientOnly = false, renderMode?: 'stream') {
   fixture = await mkdtemp(join(tmpdir(), 'memoized-dom-initial-ssr-'));
   await mkdir(join(fixture, 'src'));
+  await mkdir(join(fixture, 'server'));
   await writeFile(join(fixture, 'index.html'), '<!doctype html><html><head><title>SSR</title></head><body><div id="root"><!--ssr-outlet--></div><script type="module" src="./src/main.ts"></script></body></html>');
   await writeFile(join(fixture, 'src/main.ts'), `import {mount} from '@memoized-dom/runtime';import {App} from './App';mount('root',App);`);
   await writeFile(join(fixture, 'src/App.tsx'), source);
   for (const [file, content] of Object.entries(extras)) await writeFile(join(fixture, file), content);
-  await writeFile(join(fixture, 'server.ts'), `import {serve} from '@memoized-dom/server';import {App} from './src/App';const app=serve();app.get('/api/user',()=>(${JSON.stringify(typeof userName==='string'?{name:userName}:userName)}));app.ssr(App${renderMode ? ','+JSON.stringify({mode:renderMode}) : ''});export default app;`);
+  await writeFile(join(fixture, 'server/define.ts'), `import {createDefine} from '@memoized-dom/server';export const define=createDefine();`);
+  await writeFile(join(fixture, 'server.ts'), `import {serve} from '@memoized-dom/server';import {define} from './server/define';import {App} from './src/App';const app=serve({define});app.get('/api/user',()=>(${JSON.stringify(typeof userName==='string'?{name:userName}:userName)}));app.ssr(App${renderMode ? ','+JSON.stringify({mode:renderMode}) : ''});export default app;`);
   const repository = resolve(import.meta.dirname, '../../..');
   const config = (ssr = false) => ({ root: fixture!, configFile: false as const, logLevel: 'silent' as const,
     resolve: { alias: Object.entries({

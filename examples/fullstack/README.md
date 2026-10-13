@@ -41,13 +41,13 @@ Development and preview execute backend code in `workerd`.
 
 | Concern | Where |
 | :--- | :--- |
-| Application-wide locals contract | `server/config/index.ts` |
+| Application-wide state contract | `server/define.ts` |
 | Lazy app-scoped database/service setup | `server/config/services.ts` |
-| Global + typed middleware, request locals | `server.ts` (`logger`, `session`, `createLocals`) |
+| Global + typed middleware, request state | `server.ts` (`logger`, `session`) |
 | Typed GET route with JSON normalization | `server.ts` → `/api/health` |
 | Typed POST route (405 for other methods) | `server.ts` → `/api/echo` |
 | Prefix-group protection | `server.ts` → `/api/admin/*` |
-| Server functions + module middleware + `getServerContext()` | `server/functions/stories.ts` |
+| Typed server functions + module middleware | `server/functions/stories.ts` |
 | Colorless module source (SSR-settled, payload-hydrated) | `App.tsx` → `stories` |
 | Reactive component-local source (request rebinding) | `App.tsx` → `StoryDetail` |
 | Compiler-gated mutation + `$track` lifecycle | `App.tsx` → `postVote` |
@@ -68,12 +68,12 @@ curl -H 'x-admin: yes' localhost:3000/api/admin/stats
 
 # Generated server functions are ordinary HTTP endpoints
 curl 'localhost:3000/_fn/stories/getStory?id=2'
-curl -X POST localhost:3000/_fn/stories/postVote \
+curl -X POST localhost:3000/_fn/stories/vote \
   -H 'content-type: application/json' -d '{"id":1}'
 # Mutating server function guarded by its own context check
-curl -X POST localhost:3000/_fn/stories/deleteStory \
+curl -X DELETE localhost:3000/_fn/stories/removeStory \
   -H 'content-type: application/json' -d '{"id":3}'          # rejected
-curl -X POST localhost:3000/_fn/stories/deleteStory \
+curl -X DELETE localhost:3000/_fn/stories/removeStory \
   -H 'content-type: application/json' -H 'x-admin: yes' -d '{"id":3}'
 
 # The page itself: resolved SSR + hydration payload

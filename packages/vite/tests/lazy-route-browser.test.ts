@@ -43,12 +43,14 @@ describe('route-only component chunks', () => {
     }
     fixture = await mkdtemp(join(tmpdir(), 'memoized-dom-lazy-lifecycles-'));
     await mkdir(join(fixture, 'src'));
+    await mkdir(join(fixture, 'server'));
     await writeFile(join(fixture, 'index.html'), '<!doctype html><html><body><div id="root"><!--ssr-outlet--></div><script type="module" src="/src/main.ts"></script></body></html>');
     await writeFile(join(fixture, 'src/main.ts'), "import {mount} from '@memoized-dom/runtime';import {App} from './App';mount('root',App);");
     await writeFile(join(fixture, 'src/App.tsx'), routedApp);
     await writeFile(join(fixture, 'src/Detail.tsx'), routedDetail);
     await writeFile(join(fixture, 'src/opaque.mjs'), routedOpaque);
-    await writeFile(join(fixture, 'server.ts'), "import {serve} from '@memoized-dom/server';import {App} from './src/App';const app=serve();app.get('/api/user',()=>({name:'Ada'}));app.ssr(App);export default app;");
+    await writeFile(join(fixture, 'server/define.ts'), "import {createDefine} from '@memoized-dom/server';export const define=createDefine();");
+    await writeFile(join(fixture, 'server.ts'), "import {serve} from '@memoized-dom/server';import {define} from './server/define';import {App} from './src/App';const app=serve({define});app.get('/api/user',()=>({name:'Ada'}));app.ssr(App);export default app;");
     const entries = {
       '@memoized-dom/runtime/server': 'runtime/src/server.ts',
       '@memoized-dom/runtime/hot': 'runtime/src/hot.ts',

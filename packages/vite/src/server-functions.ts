@@ -9,7 +9,6 @@ import {
   generateServerFunctionImplementation,
   memoizedEstreeFrontend,
   parseWithEstreeFrontendOrThrow,
-  serverFunctionMetadataExport,
   type EstreeFrontend,
   type ServerFunctionModule,
 } from '@memoized-dom/compiler';
@@ -112,6 +111,86 @@ interface DiscoveredModule {
   readonly middlewareFile: boolean;
 }
 
+export interface DiscoveredServerService {
+  readonly file: string;
+  readonly exported: string;
+  readonly name: string;
+}
+
+function nodeName(node: { type: string; [key: string]: unknown }): string | null {
+  if (node.type === 'Identifier') return String(node.name);
+  if (node.type === 'Literal' && typeof node.value === 'string') return node.value;
+  return null;
+}
+
+function serviceExports(
+  source: string,
+  file: string,
+  frontend: EstreeFrontend,
+): DiscoveredServerService[] {
+  if (!source.includes('.service')) return [];
+  const parsed = parseWithEstreeFrontendOrThrow(frontend, source, {
+    filename: file,
+    sourceType: 'module',
+  });
+  type Node = { type: string; [key: string]: unknown };
+  const services: DiscoveredServerService[] = [];
+  for (const raw of parsed.program.body) {
+    const statement = raw as unknown as Node;
+    if (statement.type !== 'ExportNamedDeclaration') continue;
+    const declaration = statement.declaration as Node | null;
+    if (declaration?.type !== 'VariableDeclaration') continue;
+    for (const item of declaration.declarations as Node[]) {
+      const exported = nodeName(item.id as Node);
+      const call = item.init as Node | null;
+      if (exported === null || call?.type !== 'CallExpression') continue;
+      const callee = call.callee as Node;
+      if (
+        callee.type !== 'MemberExpression' ||
+        callee.computed === true ||
+        nodeName(callee.property as Node) !== 'service'
+      ) continue;
+      const first = (call.arguments as Node[])[0];
+      const name = first?.type === 'Literal' && typeof first.value === 'string'
+        ? first.value
+        : null;
+      if (name === null) {
+        throw new Error(
+          `memo-dom: exported service '${exported}' in '${file}' needs a literal service name`,
+        );
+      }
+      services.push({ file, exported, name });
+    }
+  }
+  return services;
+}
+
+export async function discoverServerServices(
+  root: string,
+  options: ResolvedAdapterOptions,
+): Promise<readonly DiscoveredServerService[]> {
+  const services: DiscoveredServerService[] = [];
+  const seen = new Map<string, string>();
+  for (const file of await sourceFiles(serverRoot(root, options))) {
+    const source = await readFile(file, 'utf8');
+    for (const service of serviceExports(
+      source,
+      file,
+      options.frontend ?? memoizedEstreeFrontend,
+    )) {
+      const owner = seen.get(service.name);
+      if (owner !== undefined) {
+        throw new Error(
+          `memo-dom: service '${service.name}' is exported by both '${owner}' and '${file}'`,
+        );
+      }
+      seen.set(service.name, file);
+      services.push(service);
+    }
+  }
+  return services;
+}
+
 function directoryKey(root: string, file: string): string {
   const value = relative(root, file).replaceAll('\\', '/');
   const slash = value.lastIndexOf('/');
@@ -128,6 +207,7 @@ export interface GeneratedServerFunctionModules {
   readonly source: string;
   readonly files: readonly string[];
   readonly modules: readonly ServerFunctionModule[];
+  readonly services: readonly DiscoveredServerService[];
   /** Client `#server-functions` re-export barrel over facade modules. */
   readonly clientBarrelSource: string;
   /** Flat exported-name ownership used to rewrite barrel imports per module. */
@@ -210,11 +290,13 @@ export async function generateServerFunctionRoutesModule(
       source: 'export const serverFunctionManifest = [];\nexport const serverFunctionRoutes = [];\n',
       files: [],
       modules: [],
+      services: [],
       clientBarrelSource: '',
       clientBarrelEntries: [],
     };
   }
   const discovered: DiscoveredModule[] = [];
+  const services = await discoverServerServices(root, options);
   for (const file of await sourceFiles(directory)) {
     const source = await readFile(file, 'utf8');
     const metadata = analyzeServerFunctionModule(source, {
@@ -233,6 +315,7 @@ export async function generateServerFunctionRoutesModule(
 
   const imports = [
     `import { createServerFunctionRoutes as __mmd_create_routes, invokeRoutedPreparation as __mmd_invoke_routed } from ${JSON.stringify('@memoized-dom/server/router')};`,
+    ...services.map(service => `import ${JSON.stringify(service.file)};`),
   ];
   const aliases = new Map<string, string>();
   discovered.forEach((module, index) => {
@@ -255,6 +338,7 @@ export async function generateServerFunctionRoutesModule(
     id: string;
     method: string;
     path: string;
+    schemaInput: boolean;
     parameters: ServerFunctionModule['functions'][number]['parameters'];
   }> = [];
   const definitions: string[] = [];
@@ -271,19 +355,20 @@ export async function generateServerFunctionRoutesModule(
         id,
         method: fn.method,
         path: fn.path,
+        schemaInput: fn.schemaInput,
         parameters: fn.parameters,
       });
-      const metadata = `${alias}.${serverFunctionMetadataExport}[${JSON.stringify(fn.exported)}]`;
       const middleware = layers.map(layer => `...${layer}`);
-      if (fn.middleware !== undefined) middleware.push(`...${metadata}.middleware`);
+      middleware.push(`...${alias}[${JSON.stringify(fn.exported)}].middleware`);
       definitions.push(`{
         id: ${JSON.stringify(id)},
         method: ${JSON.stringify(fn.method)},
         path: ${JSON.stringify(fn.path)},
+        schemaInput: ${JSON.stringify(fn.schemaInput)},
         parameters: ${JSON.stringify(fn.parameters)},
         middleware: [${middleware.join(', ')}],
-        ${fn.input === undefined ? '' : `input: ${metadata}.input,`}
-        handler: ${alias}[${JSON.stringify(fn.exported)}]
+        input: ${alias}[${JSON.stringify(fn.exported)}].input,
+        handler: ${alias}[${JSON.stringify(fn.exported)}].handler
       }`);
     }
   }
@@ -325,8 +410,12 @@ export const serverFunctionRoutes = [...__mmd_function_routes, {
   }
 }];
 `,
-    files: discovered.map(module => module.file),
+    files: [...new Set([
+      ...discovered.map(module => module.file),
+      ...services.map(service => service.file),
+    ])],
     modules: discovered.map(module => module.metadata),
+    services,
     clientBarrelSource: `${barrel.join('\n')}${barrel.length === 0 ? '' : '\n'}`,
     clientBarrelEntries: barrelEntries,
   };

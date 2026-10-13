@@ -27,7 +27,8 @@ const component = (label: string) => `export function App() { let count = 0;
 const backend = (label: string, kind = 'hono') => `import { Hono } from 'hono';
 ${kind === 'worker' ? "import assetUrl from './worker-image.svg?url';" : ''}
 import { serve } from '@memoized-dom/server'; import { App } from './src/App';
-const app = serve({ onError(error) { console.error(error); return new Response(String(error), { status: 500 }); } }); app.ssr(App);
+import { define } from './server/define';
+const app = serve({ define, onError(error) { console.error(error); return new Response(String(error), { status: 500 }); } }); app.ssr(App);
 ${kind === 'serve' ? `app.get('/api/native', c => ({ label: '${label}', message: c.platform.env.MESSAGE,
   worker: typeof WebSocketPair, bun: typeof Bun, context: typeof c.platform.executionCtx.waitUntil }));
 export default app;` : `const backend = new Hono();
@@ -53,16 +54,16 @@ async function project(kind = 'hono') {
   await writeFile(join(fixture, 'src/main.ts'), `import './style.css'; import { mount } from '@memoized-dom/runtime'; import { App } from './App'; mount('root', App);`);
   await writeFile(join(fixture, 'src/style.css'), 'h1 { color: rgb(12, 34, 56); }');
   await writeFile(join(fixture, 'src/App.tsx'), component('Before'));
+  await writeFile(join(fixture, 'server/define.ts'), `import { createDefine } from '@memoized-dom/server';
+export const define = createDefine<Record<string, never>, { env: any; executionCtx: any }>();`);
   await writeFile(join(fixture, 'server.ts'), backend('before', kind));
   await writeFile(join(fixture, 'public/robots.txt'), 'User-agent: *');
   await writeFile(join(fixture, 'worker-image.svg'), '<svg xmlns="http://www.w3.org/2000/svg">' + '<rect width="1" height="1"/>'.repeat(300) + '</svg>');
-  await writeFile(join(fixture, 'server/functions/greeting.ts'), `import { getServerContext } from '@memoized-dom/server';
-/** @GET */
-export async function greeting(name: string) {
+  await writeFile(join(fixture, 'server/functions/greeting.ts'), `import { define } from '../define';
+export const greeting = define.function.get(async (context, name: string) => {
   await new Promise(done => setTimeout(done, name === 'first' ? 20 : 0));
-  const context = getServerContext();
   return { greeting: 'Hello ' + name, message: context.platform.env.MESSAGE, user: context.request.headers.get('x-user') };
-}`);
+});`);
   await writeFile(join(fixture, 'launch.mjs'), `const { createDevServer } = await import('@memoized-dom/vite/dev');
 const { default: memoizedDom } = await import('@memoized-dom/vite');
 const { cloudflare } = await import('@memoized-dom/vite/cloudflare');

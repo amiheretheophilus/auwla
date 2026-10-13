@@ -51,7 +51,9 @@ export function App() {
             <li key={story.id}>
               <strong>{story.title}</strong> — {story.votes} votes
               <button onClick={() => { selectedId = story.id; }}>Details</button>
-              <button onClick={() => { handleVote(story.id)}}>Vote</button>
+              <button onClick={() => {
+                lastVote = handleVote(story.id, { id: story.id });
+              }}>Vote</button>
             </li>
           ))}
         </ul>

@@ -10,7 +10,7 @@ import { waitFor } from '../../../test-support/helpers';
  * - `buffer` responds with the complete document and Server-Timing.
  */
 import { beforeAll, describe, expect, it } from 'bun:test';
-import { serve, type RenderReport, type ServerApplication } from '../src/index';
+import { createDefine, serve, type RenderReport, type ServerApplication } from '../src/index';
 import { compileFixture, type CompiledTiers } from './parity-harness';
 
 const TEMPLATE = '<!doctype html><head><title>t</title></head><body><!--ssr-outlet--></body>';
@@ -48,7 +48,7 @@ interface Harness {
 
 function createApp(
   configure: (app: ServerApplication) => void = app => app.ssr(fixture.serverModule.App),
-  options: Parameters<typeof serve>[0] = {},
+  options: Parameters<typeof serve>[0] = { define: createDefine() },
 ): Harness {
   const reports: RenderReport[] = [];
   const apiSignals: AbortSignal[] = [];
@@ -141,7 +141,7 @@ describe('SSR delivery', () => {
         mode: 'shell',
         markers: false,
       }),
-      { render: { mode: 'resolve' } },
+      { define: createDefine(), render: { mode: 'resolve' } },
     );
     const response = await harness.app.fetch(new Request('https://app.test/landing'));
     const html = await response.text();

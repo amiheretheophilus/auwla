@@ -5,6 +5,7 @@ import type { ResolvedAdapterOptions } from './options';
 import { normalizeFile } from './paths';
 
 const configExtensions = ['.ts', '.tsx', '.js', '.jsx'] as const;
+const serverSourceExtensions = new Set<string>([...configExtensions, '.tsrx']);
 
 export function serverRoot(
   root: string,
@@ -44,13 +45,13 @@ export function serverConfigSource(
   root: string,
   options: ResolvedAdapterOptions,
 ): string | null {
-  const base = resolve(serverRoot(root, options), 'config', 'index');
+  const base = resolve(serverRoot(root, options), 'define');
   const matches = configExtensions
     .map(extension => normalizeFile(`${base}${extension}`))
     .filter(file => existsSync(file));
   if (matches.length > 1) {
     throw new Error(
-      `memo-dom: server config has multiple index files: ${matches.join(', ')}`,
+      `memo-dom: server definition has multiple source files: ${matches.join(', ')}`,
     );
   }
   return matches[0] ?? null;
@@ -61,9 +62,27 @@ export function isServerConfigFile(
   file: string,
   options: ResolvedAdapterOptions,
 ): boolean {
-  const base = normalizeFile(resolve(serverRoot(root, options), 'config', 'index'));
+  const base = normalizeFile(resolve(serverRoot(root, options), 'define'));
   const clean = normalizeFile(file);
   return configExtensions.some(extension => clean === `${base}${extension}`);
+}
+
+/** Whether a source file belongs to the configured server-only root. */
+export function isServerSourceFile(
+  root: string,
+  file: string,
+  options: ResolvedAdapterOptions,
+): boolean {
+  const base = serverRoot(root, options);
+  const clean = normalizeFile(file);
+  const fromBase = relative(base, clean).replaceAll('\\', '/');
+  return serverSourceExtensions.has(
+    clean.slice(clean.lastIndexOf('.')),
+  ) &&
+    !clean.endsWith('.d.ts') &&
+    fromBase !== '..' &&
+    !fromBase.startsWith('../') &&
+    !isAbsolute(fromBase);
 }
 
 export function serverConfigDeclarationFile(root: string): string {
@@ -81,6 +100,11 @@ function typeSpecifier(root: string, source: string): string {
 export async function writeServerConfigDeclaration(
   root: string,
   options: ResolvedAdapterOptions,
+  services: readonly {
+    readonly file: string;
+    readonly exported: string;
+    readonly name: string;
+  }[] = [],
 ): Promise<string | null> {
   const output = serverConfigDeclarationFile(root);
   const source = serverConfigSource(root, options);
@@ -88,7 +112,22 @@ export async function writeServerConfigDeclaration(
     if (existsSync(output)) await unlink(output);
     return null;
   }
-  const content = `import type { ServerTypes as __MemoizedDomServerTypes } from ${JSON.stringify(typeSpecifier(root, source))};
+  const serviceImports = services.map((service, index) =>
+    `import type { ${service.exported} as __MemoizedDomService${index} } from ${JSON.stringify(typeSpecifier(root, service.file))};`
+  ).join('\n');
+  const serviceFields = services.map((service, index) =>
+    `${JSON.stringify(service.name)}: import('@memoized-dom/server').ServiceValue<typeof __MemoizedDomService${index}>;`
+  ).join('\n      ');
+  const content = `import type { define as __MemoizedDomDefinition } from ${JSON.stringify(typeSpecifier(root, source))};
+${serviceImports}
+
+type __MemoizedDomServerTypes = {
+  state: import('@memoized-dom/server').DefinitionState<typeof __MemoizedDomDefinition>;
+  platform?: import('@memoized-dom/server').DefinitionPlatform<typeof __MemoizedDomDefinition>;
+  services: {
+      ${serviceFields}
+  };
+};
 
 declare module '@memoized-dom/server/router' {
   interface ServerTypeRegistry {

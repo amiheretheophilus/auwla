@@ -7,7 +7,7 @@ import { pathToFileURL } from 'node:url';
 import { describe, expect, it } from 'bun:test';
 import { compileModulesDetailed } from '@memoized-dom/compiler';
 import { initialBootstrapDescriptor } from '@memoized-dom/runtime/server';
-import { render, renderToString, renderToReadableStream, serve } from '../src/index';
+import { createDefine, render, renderToString, renderToReadableStream, serve } from '../src/index';
 import { StringDocument, type StringRenderableNode } from '../src/string-document';
 
 const entry = `import {mount} from '@memoized-dom/runtime';import {App} from './App';mount('root',App);`;
@@ -205,7 +205,7 @@ describe('request-only server delivery', () => {
   it.each(['shell', 'resolve'] as const)('serves request-only HTML after settlement with a %s policy and reports failures before commit', async mode => {
     const value = await fixture(`request-handler-${mode}`, `export function App(){const user=$fetch('/api/user');return <main><h1>{user?.name}</h1></main>;}`);
     const contract = value.server.initialDelivery!;
-    const application = serve();
+    const application = serve({ define: createDefine() });
     let fail = false;
     application.get('/api/user', () => fail
       ? new Response('Unavailable', { status: 503 }) : { name: 'Ada' });

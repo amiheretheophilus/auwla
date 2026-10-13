@@ -52,6 +52,36 @@ beforeAll(() => {
       },
     });
 
+    const counters = [{ id: 'one', count: 0 }, { id: 'two', count: 10 }];
+    let reconciled = '';
+    const changeCount = optimistic({
+      action: input => $fetch('/count?id=' + input.id, { method: 'POST' }),
+      apply(input) {
+        const counter = counters.find(counter => counter.id === input.id);
+        counter.count++;
+        return () => { counter.count--; };
+      },
+      reconcile(saved) {
+        const counter = counters.find(counter => counter.id === saved.id);
+        counter.count = saved.count;
+        reconciled += saved.id + ';';
+      },
+    });
+
+    export function CounterApp() {
+      let lastChange = null;
+      return <section>
+        <output id="reconciled">{reconciled}</output>
+        {counters.map(counter => <div key={counter.id}>
+          <output data-count={counter.id}>{counter.count}</output>
+          <button data-increase={counter.id} onClick={() => {
+            lastChange = changeCount({ id: counter.id }, { id: counter.id });
+          }}>Increase</button>
+        </div>)}
+        {lastChange !== null && <span>{$track(lastChange).pending ? 'Saving' : 'Saved'}</span>}
+      </section>;
+    }
+
     export function VoteApp() {
       const form = $forms({ schema, action: submitVote });
       return <section>
@@ -135,5 +165,36 @@ it('renders direct and form optimistic writes, then rolls back only failed out-o
     'direct-up:up:saved',
     'form-up:up:saved',
   ]);
+  expect((globalThis.fetch as ReturnType<typeof vi.fn>)).toHaveBeenCalledTimes(4);
+});
+
+it('keeps rapid counter clicks optimistic until their ID settles, independently of other buttons', async () => {
+  const requests: Array<{ id: string; resolve: (response: Response) => void }> = [];
+  stubGlobal('fetch', vi.fn((input: RequestInfo | URL) => {
+    const id = new URL(String(input), 'http://localhost').searchParams.get('id')!;
+    return new Promise<Response>(resolve => requests.push({ id, resolve }));
+  }));
+  const { CounterApp } = await import(pathToFileURL(fixture).href);
+  setScheduler(run => run());
+  const root = CounterApp('Counters', null) as HTMLElement;
+  document.body.append(root);
+  const click = (id: string) => root.querySelector<HTMLButtonElement>(`[data-increase="${id}"]`)!.click();
+  const count = (id: string) => root.querySelector(`[data-count="${id}"]`)!.textContent;
+
+  click('one'); click('one'); click('one'); click('two');
+  await waitFor(() => expect(requests).toHaveLength(4));
+  expect(count('one')).toBe('3');
+  expect(count('two')).toBe('11');
+
+  requests[2]!.resolve(Response.json({ id: 'one', count: 3 }));
+  requests[3]!.resolve(Response.json({ id: 'two', count: 12 }));
+  await waitFor(() => expect(count('two')).toBe('12'));
+  expect(count('one')).toBe('3');
+  requests[0]!.resolve(Response.json({ id: 'one', count: 1 }));
+  await new Promise(resolve => setTimeout(resolve, 0));
+  expect(count('one')).toBe('3');
+  requests[1]!.resolve(Response.json({ id: 'one', count: 2 }));
+  await waitFor(() => expect(root.querySelector('#reconciled')?.textContent).toBe('two;one;'));
+  expect(count('one')).toBe('3');
   expect((globalThis.fetch as ReturnType<typeof vi.fn>)).toHaveBeenCalledTimes(4);
 });

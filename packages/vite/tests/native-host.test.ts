@@ -25,7 +25,8 @@ const component = (label: string) => `export function App() {
 const backend = (label: string) => `import { Hono } from 'hono';
 import { serve } from '@memoized-dom/server';
 import { App } from './src/App';
-const mmd = serve();
+import { define } from './server/define';
+const mmd = serve({ define });
 mmd.get('/api/framework', context => ({ label: '${label}', nativePort: context.platform?.port }));
 mmd.ssr(App);
 const backend = new Hono();
@@ -45,8 +46,11 @@ async function project(): Promise<string> {
   await writeFile(join(fixture, 'src/main.ts'), `import './style.css'; import { mount } from '@memoized-dom/runtime'; import { App } from './App'; mount('root', App);`);
   await writeFile(join(fixture, 'src/style.css'), 'h1 { color: rgb(12, 34, 56); }');
   await writeFile(join(fixture, 'src/App.tsx'), component('Before'));
+  await writeFile(join(fixture, 'server/define.ts'), `import { createDefine } from '@memoized-dom/server';
+export const define = createDefine<Record<string, never>, { port: number }>();`);
   await writeFile(join(fixture, 'server.ts'), backend('before'));
-  await writeFile(join(fixture, 'server/functions/greeting.ts'), `/** @GET */\nexport async function greeting(name: string) { return { greeting: 'Hello ' + name }; }`);
+  await writeFile(join(fixture, 'server/functions/greeting.ts'), `import { define } from '../define';
+export const greeting = define.function.get(async (_context, name: string) => ({ greeting: 'Hello ' + name }));`);
   return fixture;
 }
 
@@ -89,7 +93,8 @@ describe('backend-owned fullstack integration', () => {
     await waitFor(async () => expect(await (await fetch(origin + '/api/native')).json()).toEqual({ label: 'after', bun: Bun.version, port: native.port }), 10_000);
     await writeFile(join(root, 'src/App.tsx'), component('After'));
     await waitFor(async () => expect(await (await fetch(origin)).text()).toContain('<h1>After</h1>'), 10_000);
-    await writeFile(join(root, 'server/functions/greeting.ts'), `/** @GET */\nexport async function greeting(name: string) { return { greeting: 'Updated ' + name }; }`);
+    await writeFile(join(root, 'server/functions/greeting.ts'), `import { define } from '../define';
+export const greeting = define.function.get(async (_context, name: string) => ({ greeting: 'Updated ' + name }));`);
     await waitFor(async () => expect(await (await fetch(origin + '/_fn/greeting/greeting?name=Ada')).json()).toEqual({ greeting: 'Updated Ada' }), 10_000);
     for (const label of ['second', 'third']) {
       await writeFile(join(root, 'server.ts'), backend(label));
@@ -180,7 +185,8 @@ describe('backend-owned fullstack integration', () => {
     const root = await project();
     const source = (label: string) => `import { Hono } from 'hono';
       import { serve } from '@memoized-dom/server'; import { App } from './src/App';
-      const app = serve(); app.ssr(App);
+      import { define } from './server/define';
+      const app = serve({ define }); app.ssr(App);
       const backend = new Hono();
       backend.get('/api/native', c => c.json({ label: '${label}', node: process.versions.node, method: c.env.incoming.method }));
       backend.all('*', c => app.fetch(c.req.raw, { platform: c.env })); export default backend;`;
@@ -238,7 +244,8 @@ describe('backend-owned fullstack integration', () => {
     const root = await project();
     if (kind === 'serve') await writeFile(join(root, 'server.ts'), `import { serve } from '@memoized-dom/server';
       import { App } from './src/App';
-      const app = serve(); app.ssr(App);
+      import { define } from './server/define';
+      const app = serve({ define }); app.ssr(App);
       app.get('/api/native', context => ({ label: 'before', bun: Bun.version, port: context.platform?.port }));
       export default app;`);
     const builder = await createBuilder({ root, configFile: false, logLevel: 'silent', base: '/demo/',

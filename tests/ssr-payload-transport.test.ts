@@ -28,9 +28,9 @@ const modules = {
 
     export function App() {
       const user = $fetch('/api/user');
-      const page = $routed(({ state }) => {
-        state.visits = Number(state.visits ?? 0) + 1;
-        return { title: 'Prepared route', visits: state.visits };
+      const page = $routed(({ routeState }) => {
+        routeState.visits = Number(routeState.visits ?? 0) + 1;
+        return { title: 'Prepared route', visits: routeState.visits };
       });
       return (
         <section route="/">

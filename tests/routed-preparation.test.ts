@@ -15,7 +15,7 @@ describe('$routed preparation discovery', () => {
         }
 
         export function ReportPage() {
-          const page = $routed(({ state, params, query, signal }) =>
+          const page = $routed(({ routeState, params, query, signal }) =>
             loadReport(params.reportId)
           );
           return <h1>{page.title}</h1>;
@@ -29,7 +29,7 @@ describe('$routed preparation discovery', () => {
         moduleId: './ReportPage.tsx',
         component: 'ReportPage',
         binding: 'page',
-        contextFields: ['state', 'params', 'query', 'signal'],
+        contextFields: ['routeState', 'params', 'query', 'signal'],
         server: false,
       }),
     ]);
@@ -41,8 +41,8 @@ describe('$routed preparation discovery', () => {
         import { $routed, redirectRoute } from '@memoized-dom/router';
 
         export function AdminPage() {
-          const page = $routed(({ state, params, request, locals, services, platform }) => {
-            if (!locals.user) return redirectRoute('/login');
+          const page = $routed(({ routeState, params, request, state, services, platform }) => {
+            if (!state.user) return redirectRoute('/login');
             return services.admin.load(params.section, request, platform);
           });
           return <h1>{page.title}</h1>;
@@ -54,10 +54,10 @@ describe('$routed preparation discovery', () => {
       expect.objectContaining({
         component: 'AdminPage',
         contextFields: [
-          'state',
+          'routeState',
           'params',
           'request',
-          'locals',
+          'state',
           'services',
           'platform',
         ],
@@ -70,7 +70,7 @@ describe('$routed preparation discovery', () => {
     expect(() => compileModules({
       './module.ts': `
         import { $routed } from '@memoized-dom/router';
-        const page = $routed(({ state, params }) => params.id);
+        const page = $routed(({ routeState, params }) => params.id);
       `,
     })).toThrow(/\$routed must be declared directly in a component/);
 
@@ -78,7 +78,7 @@ describe('$routed preparation discovery', () => {
       './Page.tsx': `
         import { $routed } from '@memoized-dom/router';
         export function Page() {
-          let page = $routed(({ state, params }) => params.id);
+          let page = $routed(({ routeState, params }) => params.id);
           return <p>{page}</p>;
         }
       `,
@@ -91,7 +91,7 @@ describe('$routed preparation discovery', () => {
       './AsyncPage.tsx': `
         import { $routed } from '@memoized-dom/router';
         export function AsyncPage() {
-          const page = $routed(async ({ state, params }) => params.id);
+          const page = $routed(async ({ routeState, params }) => params.id);
           return <p>{page}</p>;
         }
       `,

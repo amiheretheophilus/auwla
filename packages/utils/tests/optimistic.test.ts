@@ -10,7 +10,7 @@ import {
   type ResolvedValue,
   type StandardSchemaV1,
 } from '@memoized-dom/data';
-import { optimistic } from '../src';
+import { optimistic, type OptimisticCallOptions } from '../src';
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
@@ -39,6 +39,8 @@ describe('optimistic', () => {
       reconcile(saved) { expectTypeOf(saved.savedId).toEqualTypeOf<string>(); },
     });
     expectTypeOf(submit).returns.toEqualTypeOf<ResolvedValue<{ savedId: string }>>();
+    expectTypeOf<Parameters<typeof submit>[1]>()
+      .toEqualTypeOf<OptimisticCallOptions | undefined>();
     const form = $forms({ schema, action: submit });
     expectTypeOf(form.result).toEqualTypeOf<{ savedId: string } | undefined>();
   });
@@ -163,6 +165,183 @@ describe('optimistic', () => {
     expect(saved).toEqual([2, 3]);
     expect(failed[0]).toMatchObject({ kind: 'http', status: 409, data: { message: 'denied' } });
     runtime.clear();
+  });
+
+  it.each([
+    { order: [0, 1, 2] },
+    { order: [2, 0, 1] },
+    { order: [1, 2, 0] },
+  ])('reconciles one grouped burst once, in response order %j', async ({ order }) => {
+    const responses: Array<ReturnType<typeof deferred<Response>>> = [];
+    const runtime = createDataRuntime({
+      baseURL: 'https://example.test',
+      fetch: (() => {
+        const response = deferred<Response>();
+        responses.push(response);
+        return response.promise;
+      }) as FetchStub,
+    });
+    let count = 0;
+    const operationIds: string[] = [];
+    const reconcile = vi.fn((saved: { count: number }, _payload: number, _id: string) => {
+      count = saved.count;
+    });
+    const submit = optimistic({
+      action: (index: number) => runtime.$fetch<{ count: number }>(`/counter?call=${index}`, { method: 'POST' }),
+      apply(_index, operationId) {
+        operationIds.push(operationId);
+        count++;
+        return () => { count--; };
+      },
+      reconcile,
+    });
+    const sources = [0, 1, 2].map(index => submit(index, { id: 'counter' }));
+    expect(count).toBe(3);
+    expect(new Set(operationIds).size).toBe(3);
+    await waitFor(() => expect(responses).toHaveLength(3));
+
+    for (const [position, index] of order.entries()) {
+      responses[index]!.resolve(Response.json({ count: index + 1 }));
+      await waitFor(() => expect(sources[index]!.status).toBe('success'));
+      if (position < 2) expect(reconcile).not.toHaveBeenCalled();
+      expect(count).toBe(3);
+    }
+    expect(reconcile).toHaveBeenCalledTimes(1);
+    expect(reconcile).toHaveBeenCalledWith({ count: 3 }, 2, operationIds[2]!);
+    runtime.clear();
+  });
+
+  it('settles resource IDs independently and keeps ungrouped calls immediate', async () => {
+    const responses: Array<ReturnType<typeof deferred<Response>>> = [];
+    const runtime = createDataRuntime({
+      baseURL: 'https://example.test',
+      fetch: (() => {
+        const response = deferred<Response>();
+        responses.push(response);
+        return response.promise;
+      }) as FetchStub,
+    });
+    const counts: Record<string, number> = { a: 0, b: 0, c: 0 };
+    let call = 0;
+    const reconcile = vi.fn((saved: { count: number }, resource: string) => {
+      counts[resource] = saved.count;
+    });
+    const submit = optimistic({
+      action: (_resource: string) => runtime.$fetch<{ count: number }>(`/counter?call=${call++}`, { method: 'POST' }),
+      apply(resource) {
+        counts[resource]!++;
+        return () => { counts[resource]!--; };
+      },
+      reconcile,
+    });
+    const sources = [submit('a', { id: 'a' }), submit('a', { id: 'a' }),
+      submit('b', { id: 0 }), submit('c')];
+    await waitFor(() => expect(responses).toHaveLength(4));
+    responses[2]!.resolve(Response.json({ count: 10 }));
+    responses[3]!.resolve(Response.json({ count: 20 }));
+    await waitFor(() => expect(counts).toEqual({ a: 2, b: 10, c: 20 }));
+    responses[0]!.resolve(Response.json({ count: 1 }));
+    await waitFor(() => expect(sources[0]!.status).toBe('success'));
+    expect(counts.a).toBe(2);
+    expect(reconcile).toHaveBeenCalledTimes(2);
+    responses[1]!.resolve(Response.json({ count: 2 }));
+    await waitFor(() => expect(reconcile).toHaveBeenCalledTimes(3));
+    runtime.clear();
+  });
+
+  it('keeps individual rollbacks and falls back to the latest successful grouped call', async () => {
+    const responses: Array<ReturnType<typeof deferred<Response>>> = [];
+    const runtime = createDataRuntime({
+      baseURL: 'https://example.test',
+      fetch: (() => {
+        const response = deferred<Response>();
+        responses.push(response);
+        return response.promise;
+      }) as FetchStub,
+    });
+    let count = 0;
+    const rollback = vi.fn();
+    const reconcile = vi.fn((saved: { count: number }, _payload: number, _id: string) => {
+      count = saved.count;
+    });
+    const submit = optimistic({
+      action: (index: number) => runtime.$fetch<{ count: number }>(`/counter?call=${index}`, { method: 'POST' }),
+      apply(index, operationId) {
+        count++;
+        return error => { count--; rollback(index, operationId, error); };
+      },
+      reconcile,
+    });
+    const sources = [0, 1, 2].map(index => submit(index, { id: 'counter' }));
+    await waitFor(() => expect(responses).toHaveLength(3));
+    responses[1]!.resolve(Response.json({ count: 1 }));
+    await waitFor(() => expect(sources[1]!.status).toBe('success'));
+    responses[2]!.resolve(Response.json({ message: 'Newest failed' }, { status: 409 }));
+    await waitFor(() => expect(count).toBe(2));
+    expect(reconcile).not.toHaveBeenCalled();
+    responses[0]!.resolve(Response.json({ message: 'Oldest failed' }, { status: 409 }));
+    await waitFor(() => expect(reconcile).toHaveBeenCalledTimes(1));
+    expect(count).toBe(1);
+    expect(rollback.mock.calls.map(([index]) => index)).toEqual([2, 0]);
+    expect(reconcile.mock.calls[0]?.slice(0, 2)).toEqual([{ count: 1 }, 1]);
+
+    const next = submit(3, { id: 'counter' });
+    await waitFor(() => expect(responses).toHaveLength(4));
+    responses[3]!.resolve(Response.json({ count: 2 }));
+    await waitFor(() => expect(next.status).toBe('success'));
+    expect(reconcile).toHaveBeenCalledTimes(2);
+    expect(count).toBe(2);
+    runtime.clear();
+  });
+
+  it('does not leave a resource group waiting on an aborted call', async () => {
+    const responses: Array<ReturnType<typeof deferred<Response>>> = [];
+    const runtime = createDataRuntime({
+      baseURL: 'https://example.test',
+      fetch: (() => {
+        const response = deferred<Response>();
+        responses.push(response);
+        return response.promise;
+      }) as FetchStub,
+    });
+    const reconcile = vi.fn();
+    const submit = optimistic({
+      action: (index: number) => runtime.$fetch<{ count: number }>(`/counter?call=${index}`, { method: 'POST' }),
+      apply: () => () => {},
+      reconcile,
+    });
+    const first = submit(0, { id: 'counter' });
+    const last = submit(1, { id: 'counter' });
+    await waitFor(() => expect(responses).toHaveLength(2));
+    responses[1]!.resolve(Response.json({ count: 1 }));
+    await waitFor(() => expect(last.status).toBe('success'));
+    expect(reconcile).not.toHaveBeenCalled();
+    first.abort();
+    await waitFor(() => expect(reconcile).toHaveBeenCalledTimes(1));
+    expect(reconcile.mock.calls[0]?.slice(0, 2)).toEqual([{ count: 1 }, 1]);
+    runtime.clear();
+  });
+
+  it('releases failed startup groups and preserves grouped promise results', async () => {
+    const work = deferred<number>();
+    const reconcile = vi.fn();
+    let first = true;
+    const submit = optimistic({
+      action: (_payload: string) => {
+        if (first) {
+          first = false;
+          throw new Error('Failed before dispatch');
+        }
+        return work.promise;
+      },
+      apply: () => () => {},
+      reconcile,
+    });
+    expect(() => submit('first', { id: 'counter' })).toThrow('Failed before dispatch');
+    expect(submit('second', { id: 'counter' })).toBe(work.promise);
+    work.resolve(2);
+    await waitFor(() => expect(reconcile).toHaveBeenCalledTimes(1));
+    expect(reconcile.mock.calls[0]?.slice(0, 2)).toEqual([2, 'second']);
   });
 
   it('uses the same operation with a form and retains form submission errors', async () => {

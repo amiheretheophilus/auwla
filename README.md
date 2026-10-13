@@ -224,8 +224,8 @@ Declare routes and links with compile-time JSX attributes:
 `$routed(prepare)` runs before a route commits and its component renders:
 
 - Must be placed in a component attached to a `route`.
-- **Universal context**: `{ url, params, query, signal, state }`. The `state` bag persists across navigations to that route.
-- **Server-backed context**: Accessing `request`, `locals`, `services`, or `platform` marks the callback as server-only. The compiler extracts the function to execute on the server, streaming only the serialized result to the browser.
+- **Universal context**: `{ url, params, query, signal, routeState }`. The `routeState` bag persists across navigations to that route.
+- **Server-backed context**: Accessing `request`, `state`, `services`, or `platform` marks the callback as server-only. The compiler extracts the function to execute on the server, streaming only the serialized result to the browser.
 - Supports `async`/`await` and returning `redirectRoute('/login')` to redirect before rendering.
 
 ```tsx
@@ -245,14 +245,24 @@ export function StoryPage() {
 Configure full-stack applications with `serve()`:
 
 ```ts
+// server/define.ts
+import { createDefine } from '@memoized-dom/server';
+
+export const define = createDefine<{
+  requestId: string;
+}>();
+```
+
+```ts
 // server.ts
 import { serve } from '@memoized-dom/server';
 import { App } from './src/App';
+import { define } from './server/define';
 
 const app = serve({
-  createLocals: (request) => ({ requestId: crypto.randomUUID() }),
-  createServices: async () => ({ database: await initDb() }),
-  createPlatform: (request) => ({ env: process.env }),
+  define,
+  state: () => ({ requestId: crypto.randomUUID() }),
+  platform: () => ({ env: process.env }),
   onError: (error) => new Response('Internal Error', { status: 500 }),
 });
 
@@ -261,11 +271,8 @@ app.ssr(App);
 export default app;
 ```
 
-- **Lifetimes**:
-  - `createLocals`: Runs on every request for request-specific state.
-  - `createServices`: Runs once lazily to build shared application resources (e.g. database pools).
-  - `createPlatform`: Runs per request to provide deployment host bindings (e.g. Cloudflare Workers env).
-- **HTTP endpoints**: Standard routing methods (`app.get`, `app.post`, `app.put`, `app.delete`, etc.) receive `{ request, url, params, locals, services, platform }`.
+- **Lifetimes**: `state` runs per request, declared services initialize lazily once per application, and `platform` supplies per-request host bindings.
+- **HTTP endpoints**: Standard routing methods (`app.get`, `app.post`, `app.put`, `app.delete`, etc.) receive `{ request, url, params, state, services, platform }`.
 - **SSR modes**:
   - `resolve`: Waits for all data sources before sending the full HTML page.
   - `stream`: Sends the shell immediately, streaming content regions and hydration data as they resolve.
@@ -278,11 +285,18 @@ export default app;
 
 Server functions reside in `server/functions/*.ts` and provide type-safe RPC endpoints:
 
-- **Annotations**: Explicit JSDoc annotations define HTTP methods (`@GET`, `@POST`, `@PUT`, `@PATCH`, `@DELETE`).
-- **Validation**: `@Input schema` validates arguments using Standard Schema (such as Zod).
-- **Virtual import**: Client code imports functions through `#server-functions`. Calling a `@GET` endpoint returns a transparent data source; calling mutation methods sends JSON payloads.
-- **Context access**: Read server state inside functions using `getServerContext()`.
-- **Typing contract**: Export `interface ServerTypes` from `server/config/index.ts` to type `locals`, `services`, and `platform` globally across routes, middleware, and server functions.
+```ts
+export const getUser = define.function.get(
+  async ({ state, services }, id: string) =>
+    services.database.users.findFor(id, state.user),
+);
+```
+
+- **Methods**: `define.function.get/post/put/patch/delete` declares the transport method.
+- **Validation**: The descriptor form accepts a Standard Schema `input` validator.
+- **Virtual import**: Client code imports the generated facade through `#server-functions`.
+- **Context**: The first handler argument is injected; only following named parameters cross the transport.
+- **Typing contract**: `server/define.ts` and discovered `define.service()` exports type state, platform, and services everywhere.
 
 ---
 

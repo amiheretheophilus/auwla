@@ -37,11 +37,13 @@ The client entry contains the application `mount()` call. The server entry
 default-exports the application returned by `serve()`, or a backend such as Hono:
 
 ```ts
-import { serve } from '@memoized-dom/server';
+import { createDefine, serve } from '@memoized-dom/server';
 import { App } from './App';
 
+const define = createDefine<{ requestId: string }>();
 const app = serve({
-  createLocals: () => ({ requestId: crypto.randomUUID() }),
+  define,
+  state: () => ({ requestId: crypto.randomUUID() }),
 });
 
 app.get('/api/health', () => ({ ok: true }));
@@ -55,10 +57,11 @@ in the same server entry:
 
 ```ts
 import { Hono } from 'hono';
-import { serve } from '@memoized-dom/server';
+import { createDefine, serve } from '@memoized-dom/server';
 import { App } from './App';
 
-const app = serve();
+const define = createDefine();
+const app = serve({ define });
 app.ssr(App);
 const backend = new Hono();
 backend.get('/api/users', c => c.json([]));
@@ -203,50 +206,49 @@ alternate bootstrap or compatibility renderer is generated.
 The compiler's initial-content plan and the next steps for interactive regions
 are documented in `../../docs/browser-bundle-architecture.md`.
 
-## Server config contract
+## Server definition contract
 
-When present, `<server>/config/index.ts` exports the application-wide server
-types:
+When present, `<server>/define.ts` exports the shared definition:
 
 ```ts
-export interface ServerTypes {
-  locals: {
-    requestId: string;
-    user?: User;
-  };
-  platform?: PlatformBindings;
-  services: ApplicationServices;
-}
+import { createDefine } from '@memoized-dom/server';
+
+export const define = createDefine<RequestState, PlatformBindings>();
 ```
 
-The plugin generates `.memoized/server-config.d.ts`. That declaration merges
-the application contract into the server type registry, so normal imports
-from `@memoized-dom/server` automatically carry these types:
+The plugin generates `.memoized/server-config.d.ts`, which registers the
+definition's state and platform types plus every discovered exported service.
+Normal server, middleware, route, and `$routed` imports then use that contract
+without call-site generics.
 
 ```ts
-import {
-  getServerContext,
-  type ServerMiddleware,
-} from '@memoized-dom/server';
-
-const session: ServerMiddleware = async (context, next) => {
-  context.locals.user = await readSession(context.request);
+export const session = define.middleware(async (context, next) => {
+  context.state.user = await readSession(context.request);
   return next();
-};
+});
 
-export function getCurrentUser() {
-  const context = getServerContext();
-  return context.services.users.find(context.locals.user);
-}
+export const currentUser = define.function.get(
+  async ({ state, services }) => services.users.find(state.user),
+);
 ```
 
-No call-site generic or relative import from `config` is needed. TypeScript
-projects must include `.memoized/**/*.d.ts`; generated project templates do
-this automatically. If an editor shows `Record<string, never>` for `locals`,
-the generated declaration is not loaded by that TypeScript project.
+Declare services anywhere under the configured server root:
 
-Plain TypeScript resolution also needs the server alias mapping (Vite handles
-the runtime/build side):
+```ts
+export const database = define.service('database', connectDatabase);
+
+export const users = define.service('users', {
+  dependencies: { database },
+  create: ({ database }) => createUserRepository(database),
+});
+```
+
+The generated registry exposes resolved service values as
+`context.services.database` and `context.services.users`. Service modules
+are imported into the server integration before requests are dispatched.
+
+TypeScript projects must include `.memoized/**/*.d.ts`. Plain TypeScript
+resolution also needs the aliases:
 
 ```json
 {
@@ -259,39 +261,6 @@ the runtime/build side):
   "include": ["src", ".memoized/**/*.d.ts"]
 }
 ```
-
-Only `ServerTypes` has framework meaning. Other files beneath
-`server/config` are ordinary server-only application modules and are a good
-home for environment parsing, authentication policy, error types, constants,
-host-binding adapters, and typed service factories. Import them with the
-server-root alias:
-
-```ts
-import { env } from '#server/config/env';
-import { createServices } from '#server/config/services';
-```
-
-Routes, middleware ordering, handlers, and SSR registration do not belong in
-the config folder; compose them through the `serve()` application.
-
-An application-scoped service factory can perform asynchronous startup once:
-
-```ts
-// src/server/config/services.ts
-export async function createServices() {
-  const database = await connectDatabase(env.DATABASE_URL);
-  return { database, stories: createStoryRepository(database) };
-}
-
-// src/entry.server.ts
-import { serve } from '@memoized-dom/server';
-import { createServices } from '#server/config/services';
-
-const app = serve({ createServices });
-```
-
-The result is available as typed `context.services` in middleware, routes,
-SSR, and server functions. Per-request state stays in `context.locals`.
 
 ## Server boundaries
 

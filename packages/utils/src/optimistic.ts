@@ -1,6 +1,6 @@
 import { $read } from '@memoized-dom/data';
 import type { FetchResource, RequestError, ResolvedValue } from '@memoized-dom/data';
-import { disposeFetchResource, isFetchResource, trackResolvedValue } from '@memoized-dom/data/internal';
+import { disposeFetchResource, isFetchResource, subscribeFetchResource, trackResolvedValue } from '@memoized-dom/data/internal';
 
 type OperationResult =
   | PromiseLike<unknown>
@@ -29,6 +29,11 @@ export interface OptimisticOptions<TPayload, TResult extends OperationResult> {
   ) => void;
 }
 
+export interface OptimisticCallOptions {
+  /** Group overlapping calls that update the same resource or value. */
+  readonly id?: string | number;
+}
+
 const seenOperations = new WeakMap<object, string>();
 const seenPromises = new WeakSet<object>();
 
@@ -42,63 +47,131 @@ function isPromiseLike(value: unknown): value is PromiseLike<unknown> {
 /** Apply an immediate change and undo only that call if its request fails. */
 export function optimistic<TPayload, TResult extends OperationResult>(
   options: OptimisticOptions<TPayload, TResult>,
-): (payload: TPayload) => TResult {
-  return (payload) => {
-    const result = options.action(payload);
-    const existingSource = isFetchResource(result);
-    if (!existingSource && !isPromiseLike(result)) {
-      throw new TypeError('optimistic action must return a trackable source or promise');
+): (payload: TPayload, callOptions?: OptimisticCallOptions) => TResult {
+  type Group = {
+    pending: number;
+    nextOrder: number;
+    latestSuccess?: {
+      order: number;
+      saved: SettledResult<TResult>;
+      payload: TPayload;
+      operationId: string;
+    };
+  };
+  const groups = new Map<string | number, Group>();
+
+  return (payload, callOptions) => {
+    const id = callOptions?.id;
+    let group = id === undefined ? undefined : groups.get(id);
+    if (id !== undefined && group === undefined) {
+      group = { pending: 0, nextOrder: 0 };
+      groups.set(id, group);
     }
-    if (!existingSource) {
-      if (seenPromises.has(result)) {
-        throw new TypeError('optimistic action must start a new operation for each call');
+    const order = group === undefined ? 0 : group.nextOrder++;
+    if (group !== undefined) group.pending++;
+    let released = false;
+    const releaseGroup = (): void => {
+      if (id === undefined || group === undefined || released) return;
+      released = true;
+      if (--group.pending !== 0) return;
+      groups.delete(id);
+      const latest = group.latestSuccess;
+      if (latest !== undefined) {
+        options.reconcile?.(latest.saved, latest.payload, latest.operationId);
       }
-      seenPromises.add(result);
-    }
-
-    // Transparent values are FetchResource holders at runtime; their authored
-    // ResolvedValue type intentionally hides those methods from application code.
-    const source: FetchResource<unknown> = existingSource
-      ? result
-      : $read(result) as unknown as FetchResource<unknown>;
-    const tracker = trackResolvedValue(source as unknown as ResolvedValue<unknown>);
-    const operationId = tracker.id;
-    const previousId = seenOperations.get(source);
-    if (previousId === operationId) {
-      if (!existingSource) disposeFetchResource(source);
-      throw new TypeError('optimistic action must start a new operation for each call');
-    }
-    seenOperations.set(source, operationId);
-
-    let rollback: (error: RequestError) => void;
-    try {
-      rollback = options.apply(payload, operationId);
-      if (typeof rollback !== 'function') {
-        throw new TypeError('optimistic apply must return a rollback function');
-      }
-    } catch (error) {
-      if (!existingSource) disposeFetchResource(source);
-      throw error;
-    }
-
-    let finished = false;
-    let stopSuccess = () => {};
-    let stopError = () => {};
-    const finish = (error?: RequestError): void => {
-      if (finished) return;
-      finished = true;
-      stopSuccess();
-      stopError();
-      if (!existingSource) disposeFetchResource(source);
-      if (error !== undefined) rollback(error);
     };
 
-    stopSuccess = tracker.onSuccess(saved => {
-      if (finished) return;
-      finish();
-      options.reconcile?.(saved as SettledResult<TResult>, payload, operationId);
-    });
-    if (!finished) stopError = tracker.onError(error => finish(error));
-    return result;
+    try {
+      const result = options.action(payload);
+      const existingSource = isFetchResource(result);
+      if (!existingSource && !isPromiseLike(result)) {
+        throw new TypeError('optimistic action must return a trackable source or promise');
+      }
+      if (!existingSource) {
+        if (seenPromises.has(result)) {
+          throw new TypeError('optimistic action must start a new operation for each call');
+        }
+        seenPromises.add(result);
+      }
+
+      // Transparent values are FetchResource holders at runtime; their authored
+      // ResolvedValue type intentionally hides those methods from application code.
+      const source: FetchResource<unknown> = existingSource
+        ? result
+        : $read(result) as unknown as FetchResource<unknown>;
+      const tracker = trackResolvedValue(source as unknown as ResolvedValue<unknown>);
+      const operationId = tracker.id;
+      const previousId = seenOperations.get(source);
+      if (previousId === operationId) {
+        if (!existingSource) disposeFetchResource(source);
+        throw new TypeError('optimistic action must start a new operation for each call');
+      }
+      seenOperations.set(source, operationId);
+
+      let rollback: (error: RequestError) => void;
+      try {
+        rollback = options.apply(payload, operationId);
+        if (typeof rollback !== 'function') {
+          throw new TypeError('optimistic apply must return a rollback function');
+        }
+      } catch (error) {
+        if (!existingSource) disposeFetchResource(source);
+        throw error;
+      }
+
+      let finished = false;
+      let stopSuccess = () => {};
+      let stopError = () => {};
+      let stopAbort = () => {};
+      const finish = (): void => {
+        if (finished) return;
+        finished = true;
+        stopSuccess();
+        stopError();
+        stopAbort();
+        if (!existingSource) disposeFetchResource(source);
+      };
+
+      stopSuccess = tracker.onSuccess(saved => {
+        if (finished) return;
+        finish();
+        if (group === undefined) {
+          options.reconcile?.(saved as SettledResult<TResult>, payload, operationId);
+        } else {
+          if (group.latestSuccess === undefined || order > group.latestSuccess.order) {
+            group.latestSuccess = {
+              order,
+              saved: saved as SettledResult<TResult>,
+              payload,
+              operationId,
+            };
+          }
+          releaseGroup();
+        }
+      });
+      if (!finished) stopError = tracker.onError(error => {
+        if (finished) return;
+        finish();
+        try {
+          rollback(error);
+        } finally {
+          releaseGroup();
+        }
+      });
+      if (!finished && group !== undefined) {
+        stopAbort = subscribeFetchResource(source, snapshot => {
+          if (finished || snapshot.pending || snapshot.refreshing || snapshot.status !== 'idle') return;
+          finish();
+          releaseGroup();
+        });
+      }
+      return result;
+    } catch (error) {
+      try {
+        releaseGroup();
+      } finally {
+        throw error;
+      }
+    }
   };
 }

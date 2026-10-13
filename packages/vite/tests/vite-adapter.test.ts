@@ -192,6 +192,10 @@ describe('Vite 8 adapter', () => {
     const temporarySource = resolve(root, 'src');
     const functions = resolve(root, 'server/functions');
     await mkdir(functions, { recursive: true });
+    await writeFile(resolve(root, 'server/define.ts'), `
+      import { createDefine } from '@memoized-dom/server';
+      export const define = createDefine();
+    `);
     await writeFile(resolve(functions, '_middleware.ts'), `
       export const middleware = [async (_context, next) => {
         const response = await next();
@@ -201,6 +205,7 @@ describe('Vite 8 adapter', () => {
     `);
     await writeFile(resolve(functions, 'stories.ts'), `
       import { readFile } from 'node:fs/promises';
+      import { define } from '../define';
       const SERVER_SECRET = 'must-not-enter-client';
       export const middleware = [async (_context, next) => {
         const response = await next();
@@ -216,28 +221,27 @@ describe('Vite 8 adapter', () => {
         '~standard': {
           version: 1, vendor: 'test',
           validate(value) {
-            return value.id > 0 ? { value } : { issues: [{ message: 'Positive ID required' }] };
+            const id = Number(value.id);
+            return id > 0 ? { value: { id } } : { issues: [{ message: 'Positive ID required' }] };
           },
         },
       };
-      /**
-       * @GET
-       * @middleware [functionGuard]
-       * @Input storyInput
-       */
-      export async function story(id: number) {
-        if (false) await readFile('secret');
-        return { id, title: 'Story ' + id };
-      }
-      /** @POST */
-      export async function vote(id: number) {
-        return { id, votes: 1 };
-      }
+      export const story = define.function.get({
+        middleware: [functionGuard],
+        input: storyInput,
+        handler: async (_context, input) => {
+          if (false) await readFile('secret');
+          return { id: input.id, title: 'Story ' + input.id };
+        },
+      });
+      export const vote = define.function.post(
+        async (_context, id: number) => ({ id, votes: 1 })
+      );
     `);
     await writeFile(resolve(temporarySource, 'App.tsx'), `
       import { story as loadStory, vote } from '#server-functions';
       export function App() {
-        const story = loadStory(7);
+        const story = loadStory({ id: 7 });
         return <main>
           <h1>{story.title}</h1>
           <button onClick={() => vote(story.id)}>Vote</button>
@@ -252,6 +256,7 @@ describe('Vite 8 adapter', () => {
       '@memoized-dom/data/internal': dataInternal,
       '@memoized-dom/data': data,
       '@memoized-dom/server/router': serverRouter,
+      '@memoized-dom/server': serverIndex,
     };
     const result = await build({
       root,
@@ -289,7 +294,7 @@ describe('Vite 8 adapter', () => {
       'import type * as __mmd_impl_0 from "../server/functions/stories.js"',
     );
     expect(declarationSource).toContain(
-      'export declare function story(...args: Parameters<typeof __mmd_impl_0.story>): ResolvedValue<__mmdClientValue<Awaited<ReturnType<typeof __mmd_impl_0.story>>>>;',
+      'export declare function story(...args: ServerFunctionArguments<typeof __mmd_impl_0.story>): ResolvedValue<__mmdClientValue<Awaited<ServerFunctionResult<typeof __mmd_impl_0.story>>>>;',
     );
 
     server = await createServer({
@@ -337,9 +342,13 @@ describe('Vite 8 adapter', () => {
     const temporarySource = resolve(root, 'src');
     const functions = resolve(root, 'server/functions');
     await mkdir(functions, { recursive: true });
+    await writeFile(resolve(root, 'server/define.ts'), `
+      import { createDefine } from '@memoized-dom/server';
+      export const define = createDefine();
+    `);
     await writeFile(resolve(functions, 'stories.ts'), `
-      /** @GET */
-      export async function getStories() { return []; }
+      import { define } from '../define';
+      export const getStories = define.function.get(async (_context) => []);
     `);
     await writeFile(resolve(temporarySource, 'App.tsx'), `
       import { getStories } from '../server/functions/stories';
@@ -847,15 +856,20 @@ describe('Vite 8 adapter', () => {
     const root = await copyFixture();
     const functions = resolve(root, 'server/functions');
     await mkdir(functions, { recursive: true });
+    await writeFile(resolve(root, 'server/define.ts'), `
+      import { createDefine } from '@memoized-dom/server';
+      export const define = createDefine();
+    `);
     await writeFile(resolve(functions, 'stories.ts'), `
-      /** @GET */
-      export async function getStory(id: number) {
+      import { define } from '../define';
+      export const getStory = define.function.get(async (_context, id: number) => {
         return { id, title: 'Story ' + id };
-      }
+      });
     `);
     await writeFile(resolve(root, 'src/server.ts'), `
       import { serve } from '@memoized-dom/server';
-      const app = serve();
+      import { define } from '../server/define';
+      const app = serve({ define });
       app.get('/health', () => ({ ok: true }));
       export default app;
     `);
@@ -908,7 +922,8 @@ describe('Vite 8 adapter', () => {
     await writeFile(resolve(root, 'src/server.ts'), `
       import { serve } from '@memoized-dom/server';
       import { databaseUrl } from '#server/db';
-      const app = serve();
+      import { createDefine } from '@memoized-dom/server';
+      const app = serve({ define: createDefine() });
       app.get('/health', () => ({ ok: true, databaseUrl }));
       export default app;
     `);

@@ -61,7 +61,8 @@ describe('fullstack SSR request isolation', () => {
     await writeFile(resolve(fixture, 'server.ts'), `
       import { serve } from '@memoized-dom/server';
       import { App } from './App';
-      const app = serve();
+      import { createDefine } from '@memoized-dom/server';
+      const app = serve({ define: createDefine() });
       app.ssr(App);
       export default app;
     `);

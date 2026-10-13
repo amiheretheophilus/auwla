@@ -1,6 +1,6 @@
-import { serve } from '@memoized-dom/server';
+import { createDefine, serve } from '@memoized-dom/server';
 
-const app = serve();
+const app = serve({ define: createDefine() });
 
 app.get('/health', () => ({ ok: true }));
 

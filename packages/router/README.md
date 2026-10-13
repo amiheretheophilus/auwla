@@ -150,15 +150,15 @@ function isReportPageData(value: unknown): value is ReportPageData {
 }
 
 export function ReportPage() {
-  const page = $routed(({ state, params }) => {
+  const page = $routed(({ routeState, params }) => {
     // One state object belongs to this preparation. It is not automatically
     // partitioned by params, so the application chooses any cache key.
     const cacheKey = `report:${params.reportId}`;
-    const cached = state[cacheKey];
+    const cached = routeState[cacheKey];
     if (isReportPageData(cached)) return cached;
 
     const loaded = readLocalReport(params.reportId);
-    state[cacheKey] = loaded;
+    routeState[cacheKey] = loaded;
     return loaded;
   });
 
@@ -173,19 +173,19 @@ The callback receives one prospective-route context:
 | `params` | Parameters for the destination match. |
 | `url`, `query` | Destination URL and its read-only query values. |
 | `signal` | Cancellation signal aborted when preparation is superseded. |
-| `state` | Mutable application-owned object retained for this preparation ID. |
+| `routeState` | Mutable application-owned object retained for this preparation ID. |
 | `request` | Active server request for a server-backed preparation. |
-| `locals` | Typed request-owned application data. |
+| `state` | Typed request-owned application data. |
 | `services` | Typed application-scoped services. |
 | `platform` | Typed host bindings, when configured. |
 
 These fields are siblings. Read `params.reportId`, not
-`state.params.reportId`. `state` has no framework methods such as `key()`,
+`routeState.params.reportId`. `routeState` has no framework methods such as `key()`,
 `freshFor()`, or `invalidate()`. Because its keys are application-defined,
 reads have type `unknown` and should be narrowed or asserted by the
 application.
 
-The same `state` object is reused on later visits within a route runtime.
+The same `routeState` object is reused on later visits within a route runtime.
 Serializable keys cross the SSR hydration and browser/server preparation
 boundaries. Non-serializable keys stay local to the runtime that created them.
 The successful `$routed` result itself must be transportable when preparation
@@ -193,7 +193,7 @@ runs on the server.
 
 ### Server-backed preparation
 
-Using `request`, `locals`, `services`, `platform`, or a `#server/*` value makes
+Using `request`, `state`, `services`, `platform`, or a `#server/*` value makes
 the callback server-backed. The compiler removes that callback body from the
 browser graph and generates the route-preparation transport automatically.
 
@@ -201,14 +201,14 @@ browser graph and generates the route-preparation transport automatically.
 import { $routed, redirectRoute } from '@memoized-dom/router';
 
 export function AdminReportPage() {
-  const page = $routed(({ params, locals, services, signal }) => {
-    if (!locals.user) {
+  const page = $routed(({ params, state, services, signal }) => {
+    if (!state.user) {
       return redirectRoute('/login', { replace: true });
     }
 
     // Do not author async/await here. Returning service or server-function
     // work lets the route runtime settle it before committing navigation.
-    return services.reports.loadPage(params.reportId, locals.user.id, {
+    return services.reports.loadPage(params.reportId, state.user.id, {
       signal,
     });
   });
@@ -217,7 +217,7 @@ export function AdminReportPage() {
 }
 ```
 
-There is no need to call `getServerContext()` inside `$routed`; its callback
+There is no need to call an ambient request-context API inside `$routed`; its callback
 already receives the active typed request context. Raw request, local,
 platform, and service objects are never serialized to the browser.
 
@@ -268,7 +268,7 @@ An owned render/resource failure after entry rejects `finished` and emits
 region, without replaying successful entry gates or adding history entries.
 
 During SSR, the matched preparation runs before the component. Its result and
-serializable `state` keys are included in the hydration payload, and `mount()`
+serializable `routeState` keys are included in the hydration payload, and `mount()`
 adopts them automatically before the component reads its `$routed` result.
 
 ---

@@ -9,7 +9,7 @@ import { resolveRoutePath } from '@memoized-dom/router';
 import { RoutedPreparationRedirectError } from '@memoized-dom/router/internal';
 import {
   createServerRouter,
-  type RegisteredServerLocals,
+  type RegisteredServerState,
   type RegisteredServerPlatform,
   type RegisteredServerServices,
   type ServerContext,
@@ -93,7 +93,7 @@ export interface RenderReport {
 }
 
 export interface ApplicationHandlerOptions<
-  TLocals extends object = RegisteredServerLocals,
+  TLocals extends object = RegisteredServerState,
   TPlatform = RegisteredServerPlatform,
   TServices extends object = RegisteredServerServices,
 > {
@@ -113,7 +113,7 @@ export interface ApplicationHandlerOptions<
     context: ServerContext<TLocals, TPlatform, TServices>,
   ) => void;
   readonly init?: ResponseInit;
-  readonly createLocals?: (request: Request) => TLocals;
+  readonly createState?: (request: Request) => TLocals;
   readonly createPlatform?: (request: Request) => TPlatform | undefined;
   readonly services: TServices;
   readonly fetch?: typeof globalThis.fetch;
@@ -141,21 +141,6 @@ const DEFAULT_TIMEOUT = 10_000;
  * the call sets them explicitly.
  */
 const FORWARDED_REQUEST_HEADERS = ['cookie', 'authorization', 'accept-language', 'user-agent'];
-
-/** Read the request context from middleware or a server-function body. */
-export function getServerContext<
-  TLocals extends object = RegisteredServerLocals,
-  TPlatform = RegisteredServerPlatform,
-  TServices extends object = RegisteredServerServices,
->(): ServerContext<TLocals, TPlatform, TServices> {
-  const active = activeServerContext.getStore();
-  if (active === undefined) {
-    throw new Error(
-      'memo-dom: getServerContext() must be called while serve() is handling a request',
-    );
-  }
-  return active.context as unknown as ServerContext<TLocals, TPlatform, TServices>;
-}
 
 function prepareDocument<
   TLocals extends object,
@@ -257,7 +242,7 @@ function createServerFetch<
         dispatchDepth,
       },
       () => router.dispatch(new Request(request, { headers }), {
-        locals: parent.locals,
+        state: parent.state,
         ...(parent.platform === undefined ? {} : { platform: parent.platform }),
         services: parent.services,
       }),
@@ -409,7 +394,7 @@ function serverTiming(settlement: RenderSettlement, durationMs: number): string 
 
 /** Build the Web handler from serve()'s normalized application declarations. */
 export function createApplicationHandler<
-  TLocals extends object = RegisteredServerLocals,
+  TLocals extends object = RegisteredServerState,
   TPlatform = RegisteredServerPlatform,
   TServices extends object = RegisteredServerServices,
 >(
@@ -421,7 +406,7 @@ export function createApplicationHandler<
     routes: options.routes ?? [],
     groups: options.groups,
     middleware: [serverContextMiddleware(), ...(options.middleware ?? [])],
-    createLocals: options.createLocals,
+    createState: options.createState,
     createPlatform: options.createPlatform,
     services: options.services,
     onError: options.onError,

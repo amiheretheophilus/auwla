@@ -52,17 +52,17 @@ on client and server:
 | `params` | the route's params — `/story/:id` → `{ id }` |
 | `query` | read-only query (`query.get('page')`) |
 | `signal` | `AbortSignal` — aborted if the user navigates away mid-preparation |
-| `state` | a mutable bag that **persists across navigations** to this route |
+| `routeState` | a mutable bag that **persists across navigations** to this route |
 
 ```tsx
-const data = $routed(({ params, signal, state }) => {
-  state.visits = (state.visits as number ?? 0) + 1;   // survives revisits
-  return { id: params.id, visits: state.visits };
+const data = $routed(({ params, signal, routeState }) => {
+  routeState.visits = (routeState.visits as number ?? 0) + 1;   // survives revisits
+  return { id: params.id, visits: routeState.visits };
 });
 ```
 
-`state` is per-preparation cache space — stash things between visits
-(it's serialized into the SSR payload, so server-prepared state arrives
+`routeState` is per-preparation cache space — stash things between visits
+(it's serialized into the SSR payload, so server-prepared cache state arrives
 intact on the client).
 
 ## The server-only fields — where the door is
@@ -72,21 +72,21 @@ Four more fields classify the whole callback as **server-backed**:
 | Field | |
 |---|---|
 | `request` | the incoming `Request` — headers, cookies |
-| `locals` | per-request data from `createLocals` |
-| `services` | shared dependencies from `createServices` — **the db lives here** |
+| `state` | per-request data from `serve({ state })` |
+| `services` | shared dependencies from declared services — **the db lives here** |
 | `platform` | host bindings |
 
 ```tsx
 export function Story() {
-  const story = $routed(({ params, services, locals }) => {
-    return services.database.stories.findFor(params.id, locals.user);
+  const story = $routed(({ params, services, state }) => {
+    return services.database.stories.findFor(params.id, state.user);
   });
 
   return <h1>{story.title}</h1>;
 }
 ```
 
-Yes — write it like that. Use `services`, `locals`, `request`,
+Yes — write it like that. Use `services`, `state`, `request`,
 `platform` freely inside `$routed`, even though this component runs in the
 browser. **The compiler decides at compile time where the callback runs**:
 if it touches server-only fields, the body never ships to the client —
@@ -152,9 +152,9 @@ Return `redirectRoute(...)` and the navigation reroutes — the component
 never mounts:
 
 ```tsx
-const data = $routed(({ locals }) => {
-  if (locals.user === undefined) return redirectRoute('/login');
-  return { user: locals.user };
+const data = $routed(({ state }) => {
+  if (state.user === undefined) return redirectRoute('/login');
+  return { user: state.user };
 });
 ```
 

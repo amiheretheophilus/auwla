@@ -6,14 +6,13 @@ import {
 } from '@memoized-dom/router';
 import {
   createApplicationHandler,
-  getServerContext,
   type ApplicationHandler,
   type RenderPolicy,
   type RenderReport,
   type SsrTarget,
 } from './application-handler';
 import type {
-  RegisteredServerLocals,
+  RegisteredServerState,
   RegisteredServerPlatform,
   RegisteredServerServices,
   ServerContext,
@@ -23,6 +22,10 @@ import type {
   ServerRoute,
   ServerDispatchOptions,
 } from './http-router';
+import {
+  createServiceResolver,
+  type ServerDefinition,
+} from './define';
 import type { ServerComponent } from './index';
 import type { ServerIntegration } from './integration';
 
@@ -51,7 +54,7 @@ export type ServerRouteParams<TPath extends string> =
 
 export type ServerRouteContext<
   TPath extends string,
-  TLocals extends object = RegisteredServerLocals,
+  TLocals extends object = RegisteredServerState,
   TPlatform = RegisteredServerPlatform,
   TServices extends object = RegisteredServerServices,
 > = Omit<ServerContext<TLocals, TPlatform, TServices>, 'params'> & {
@@ -60,7 +63,7 @@ export type ServerRouteContext<
 
 export type ServerRouteHandler<
   TPath extends string,
-  TLocals extends object = RegisteredServerLocals,
+  TLocals extends object = RegisteredServerState,
   TPlatform = RegisteredServerPlatform,
   TServices extends object = RegisteredServerServices,
 > = (
@@ -68,14 +71,13 @@ export type ServerRouteHandler<
 ) => ServerHandlerResult | Promise<ServerHandlerResult>;
 
 export interface ServeOptions<
-  TLocals extends object = RegisteredServerLocals,
+  TLocals extends object = RegisteredServerState,
   TPlatform = RegisteredServerPlatform,
   TServices extends object = RegisteredServerServices,
 > {
-  readonly createLocals?: (request: Request) => TLocals;
-  readonly createPlatform?: (request: Request) => TPlatform | undefined;
-  /** Lazily create application-scoped dependencies once per app instance. */
-  readonly createServices?: () => TServices | Promise<TServices>;
+  readonly define: ServerDefinition<TLocals, TPlatform, TServices>;
+  readonly state?: (request: Request) => NoInfer<TLocals>;
+  readonly platform?: (request: Request) => NoInfer<TPlatform> | undefined;
   readonly onError?: (
     error: unknown,
     context: ServerContext<TLocals, TPlatform, TServices>,
@@ -93,7 +95,7 @@ export interface ServeOptions<
 }
 
 export interface ServerApplication<
-  TLocals extends object = RegisteredServerLocals,
+  TLocals extends object = RegisteredServerState,
   TPlatform = RegisteredServerPlatform,
   TServices extends object = RegisteredServerServices,
 > {
@@ -182,15 +184,15 @@ interface InstallableServerApplication<
  * before the next request.
  */
 export function serve<
-  TLocals extends object = RegisteredServerLocals,
+  TLocals extends object = RegisteredServerState,
   TPlatform = RegisteredServerPlatform,
   TServices extends object = RegisteredServerServices,
 >(
   options: ServeOptions<
-    NoInfer<TLocals>,
-    NoInfer<TPlatform>,
-    NoInfer<TServices>
-  > = {},
+    TLocals,
+    TPlatform,
+    TServices
+  >,
 ): ServerApplication<TLocals, TPlatform, TServices> {
   const middleware: ServerMiddleware<TLocals, TPlatform, TServices>[] = [];
   const groups: ServerMiddlewareGroup<TLocals, TPlatform, TServices>[] = [];
@@ -205,7 +207,7 @@ export function serve<
   >[] = [];
   let documentTemplate: string | undefined;
   let integration: ServerIntegration | undefined;
-  let servicesPromise: Promise<TServices> | undefined;
+  const resolveDefinedServices = createServiceResolver(options.define);
   let current: ApplicationHandler | undefined;
   let dirty = true;
 
@@ -237,17 +239,7 @@ export function serve<
   };
 
   const resolveServices = async (): Promise<TServices> => {
-    if (servicesPromise === undefined) {
-      servicesPromise = Promise.resolve().then(() =>
-        options.createServices?.() ?? (Object.create(null) as TServices)
-      );
-    }
-    try {
-      return await servicesPromise;
-    } catch (error) {
-      servicesPromise = undefined;
-      throw error;
-    }
+    return await resolveDefinedServices() as TServices;
   };
 
   const handler = async (): Promise<ApplicationHandler> => {
@@ -263,8 +255,8 @@ export function serve<
         middleware,
         groups,
         routes: [...installedServerFunctions, ...routes],
-        createLocals: options.createLocals,
-        createPlatform: options.createPlatform,
+        createState: options.state,
+        createPlatform: options.platform,
         services,
         onError: options.onError,
         render: options.render,
@@ -454,4 +446,4 @@ export function serve<
   return application;
 }
 
-export { getServerContext, type RenderPolicy, type RenderReport };
+export type { RenderPolicy, RenderReport };

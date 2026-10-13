@@ -21,14 +21,15 @@ afterEach(async () => {
 describe('server config type registration', () => {
   it('writes one package augmentation for the conventional server contract', async () => {
     fixture = await mkdtemp(resolve(tmpdir(), 'memoized-dom-server-config-'));
-    const configDirectory = resolve(fixture, 'src/server/config');
-    const configFile = resolve(configDirectory, 'index.ts');
+    const configDirectory = resolve(fixture, 'src/server');
+    const configFile = resolve(configDirectory, 'define.ts');
     await mkdir(configDirectory, { recursive: true });
     await writeFile(configFile, `
-      export interface ServerTypes {
-        locals: { requestId: string };
-        platform: { region: string };
-      }
+      import { createDefine } from '@memoized-dom/server';
+      export const define = createDefine<
+        { requestId: string },
+        { region: string }
+      >();
     `);
     const options = resolveAdapterOptions({
       clientEntry: 'src/main.ts',
@@ -42,7 +43,7 @@ describe('server config type registration', () => {
       'utf8',
     );
     expect(declaration).toContain(
-      'ServerTypes as __MemoizedDomServerTypes',
+      'define as __MemoizedDomDefinition',
     );
     expect(declaration).toContain(
       "declare module '@memoized-dom/server/router'",
@@ -57,12 +58,38 @@ describe('server config type registration', () => {
     expect(isServerConfigFile(fixture, configFile, options)).toBe(true);
   });
 
+  it('registers the resolved type of every discovered service', async () => {
+    fixture = await mkdtemp(resolve(tmpdir(), 'memoized-dom-server-config-'));
+    const server = resolve(fixture, 'server');
+    const definition = resolve(server, 'define.ts');
+    const services = resolve(server, 'services.ts');
+    await mkdir(server, { recursive: true });
+    await Promise.all([
+      writeFile(definition, `export const define = createDefine();`),
+      writeFile(services, `export const database = define.service('database', () => ({ ready: true }));`),
+    ]);
+    const options = resolveAdapterOptions({ clientEntry: 'main.ts' });
+    await writeServerConfigDeclaration(fixture, options, [{
+      file: services.replaceAll('\\', '/'),
+      exported: 'database',
+      name: 'database',
+    }]);
+    const declaration = await readFile(serverConfigDeclarationFile(fixture), 'utf8');
+    expect(declaration).toContain('database as __MemoizedDomService0');
+    expect(declaration).toContain(
+      '"database": import(\'@memoized-dom/server\').ServiceValue<typeof __MemoizedDomService0>;',
+    );
+  });
+
   it('removes a stale registration when the config entry is removed', async () => {
     fixture = await mkdtemp(resolve(tmpdir(), 'memoized-dom-server-config-'));
-    const configDirectory = resolve(fixture, 'server/config');
-    const configFile = resolve(configDirectory, 'index.ts');
+    const configDirectory = resolve(fixture, 'server');
+    const configFile = resolve(configDirectory, 'define.ts');
     await mkdir(configDirectory, { recursive: true });
-    await writeFile(configFile, 'export interface ServerTypes { locals: {} }');
+    await writeFile(configFile, `
+      import { createDefine } from '@memoized-dom/server';
+      export const define = createDefine();
+    `);
     const options = resolveAdapterOptions({ clientEntry: 'main.ts' });
     await writeServerConfigDeclaration(fixture, options);
     await rm(configFile);

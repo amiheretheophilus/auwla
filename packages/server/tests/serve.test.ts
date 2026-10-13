@@ -2,7 +2,7 @@ import { waitFor } from '../../../test-support/helpers';
 // Runs with Bun globals; no DOM preload.
 import { describe, expect, it, vi } from 'bun:test';
 import {
-  getServerContext,
+  createDefine,
   serve,
   type ServerMiddleware,
 } from '../src/index';
@@ -39,7 +39,7 @@ describe('serve', () => {
     type Platform = { region: string };
     const events: string[] = [];
     const logger: ServerMiddleware<Locals, Platform> = async (context, next) => {
-      events.push(`global:before:${context.locals.requestId}`);
+      events.push(`global:before:${context.state.requestId}`);
       const response = await next();
       events.push(`global:after:${response.status}`);
       return response;
@@ -51,22 +51,23 @@ describe('serve', () => {
       return response;
     };
     const local: ServerMiddleware<Locals, Platform> = (context, next) => {
-      context.locals.user = 'Ada';
+      context.state.user = 'Ada';
       events.push('local');
       return next();
     };
 
     const app = serve<Locals, Platform>({
-      createLocals: () => ({ requestId: 'request-1' }),
-      createPlatform: () => ({ region: 'local' }),
+      define: createDefine<Locals, Platform>(),
+      state: () => ({ requestId: 'request-1' }),
+      platform: () => ({ region: 'local' }),
     });
     app.use(logger);
     app.use('/api/*', api);
     app.get('/api/stories/:id', local, (context) => {
       return {
         id: context.params.id,
-        requestId: context.locals.requestId,
-        user: context.locals.user,
+        requestId: context.state.requestId,
+        user: context.state.user,
         region: context.platform?.region,
       };
     });
@@ -90,7 +91,7 @@ describe('serve', () => {
   });
 
   it('registers every supported HTTP verb through its named method', async () => {
-    const app = serve();
+    const app = serve({ define: createDefine() });
 
     expect(app.get('/verbs', () => 'GET')).toBe(app);
     expect(app.post('/verbs', () => 'POST')).toBe(app);
@@ -119,17 +120,18 @@ describe('serve', () => {
   it('installs generated server functions into the same request pipeline', async () => {
     type Locals = { requestId: string };
     const app = serve<Locals>({
-      createLocals: () => ({ requestId: 'request-7' }),
+      define: createDefine<Locals>(),
+      state: () => ({ requestId: 'request-7' }),
     });
     const serverFunctions = createServerFunctionRoutes<Locals>([{
       id: 'stories/getStory',
       method: 'GET',
       path: '/_fn/stories/getStory',
       parameters: [{ name: 'id', optional: false, queryKind: 'number' }],
-      handler: (id) => ({
+      handler: (context, id) => ({
         id,
         title: `Story ${String(id)}`,
-        requestId: getServerContext<Locals>().locals.requestId,
+        requestId: context.state.requestId,
       }),
     }]);
     internals<Locals, unknown>(app).installServerFunctions(serverFunctions);
@@ -149,17 +151,16 @@ describe('serve', () => {
     type Services = {
       database: { readonly name: string };
     };
-    const createServices = vi.fn(async (): Promise<Services> => ({
-      database: { name: 'stories' },
-    }));
+    const createServices = vi.fn(async () => ({ name: 'stories' }));
+    const define = createDefine<Locals, unknown, Services>();
+    define.service('database', createServices);
     const app = serve<Locals, unknown, Services>({
-      createLocals: () => ({ requestId: crypto.randomUUID() }),
-      createServices,
+      define,
+      state: () => ({ requestId: crypto.randomUUID() }),
     });
     app.get('/api/service', context => ({
       database: context.services.database.name,
-      activeDatabase: getServerContext<Locals, unknown, Services>()
-        .services.database.name,
+      activeDatabase: context.services.database.name,
     }));
 
     const responses = await Promise.all([
@@ -186,7 +187,7 @@ describe('serve', () => {
         return <main><h1>Reports</h1></main>;
       }
     `, {}, 'Reports');
-    const app = serve();
+    const app = serve({ define: createDefine() });
     app.ssr(global.serverModule.App);
     app.ssr('/reports/*', reports.serverModule.Reports);
     internals(app).installDocumentTemplate(
@@ -204,7 +205,7 @@ describe('serve', () => {
     expect(await reportsResponse.text()).toContain('<h1>Reports</h1>');
   });
 
-  it('prepares routed data with request locals and application services before SSR', async () => {
+  it('prepares routed data with request state and application services before SSR', async () => {
     type Locals = { user: string | null };
     type Services = {
       reports: { find(id: string): { title: string } };
@@ -213,11 +214,11 @@ describe('serve', () => {
       import { $routed, redirectRoute } from '@memoized-dom/router';
 
       export function Reports() {
-        const page = $routed(({ state, params, locals, services }) => {
-          if (!locals.user) return redirectRoute('/login');
-          state.visits = Number(state.visits ?? 0) + 1;
+        const page = $routed(({ routeState, params, state, services }) => {
+          if (!state.user) return redirectRoute('/login');
+          routeState.visits = Number(routeState.visits ?? 0) + 1;
           const report = services.reports.find(params.id);
-          return { title: report.title, user: locals.user, visits: state.visits };
+          return { title: report.title, user: state.user, visits: routeState.visits };
         });
         return (
           <main route="/reports/:id">
@@ -227,12 +228,14 @@ describe('serve', () => {
         );
       }
     `, { routedEnvironment: 'server' }, 'Reports');
+    const define = createDefine<Locals, unknown, Services>();
+    define.service('reports', () => ({
+      find: (id: string) => ({ title: `Report ${id}` }),
+    }));
     const app = serve<Locals, unknown, Services>({
-      createLocals: request => ({
+      define,
+      state: request => ({
         user: request.headers.get('authorization'),
-      }),
-      createServices: () => ({
-        reports: { find: id => ({ title: `Report ${id}` }) },
       }),
     });
     app.ssr(fixture.serverModule.Reports);
@@ -267,7 +270,7 @@ describe('serve', () => {
       }
     `);
     const seen: string[] = [];
-    const app = serve();
+    const app = serve({ define: createDefine() });
     app.use('/api', (context, next) => {
       seen.push(`${context.url.pathname}:${context.request.headers.get('cookie') ?? 'none'}`);
       return next();
@@ -305,7 +308,7 @@ describe('serve', () => {
         return <main route="/account/login"><h1>{String(page)}</h1></main>;
       }
     `, { routedEnvironment: 'server' }, 'Login');
-    const app = serve();
+    const app = serve({ define: createDefine() });
     app.ssr(fixture.serverModule.Login);
     internals(app).installDocumentTemplate(
       '<!doctype html><body><!--ssr-outlet--></body>',
@@ -339,7 +342,10 @@ describe('serve', () => {
       }
     `);
     const outcomes: string[] = [];
-    const app = serve({ onRender: report => outcomes.push(report.outcome) });
+    const app = serve({
+      define: createDefine(),
+      onRender: report => outcomes.push(report.outcome),
+    });
     app.get('/api/feed', async () => {
       await new Promise(resolve => setTimeout(resolve, 20));
       return { title: 'Fresh' };
@@ -375,7 +381,7 @@ describe('serve', () => {
   });
 
   it('rejects duplicate SSR fallbacks and ambiguous scoped registrations', () => {
-    const app = serve();
+    const app = serve({ define: createDefine() });
     const component = vi.fn();
     app.ssr(component);
     expect(() => app.ssr(component)).toThrow('fallback is already registered');

@@ -62,6 +62,10 @@ describe('fullstack browser integration', () => {
     fixture = await mkdtemp(join(tmpdir(), 'memoized-dom-fullstack-browser-'));
     const functions = resolve(fixture, 'server/functions');
     await mkdir(functions, { recursive: true });
+    await writeFile(resolve(fixture, 'server/define.ts'), `
+      import { createDefine } from '@memoized-dom/server';
+      export const define = createDefine();
+    `);
     await writeFile(resolve(fixture, 'index.html'), `
       <!doctype html>
       <html>
@@ -76,27 +80,25 @@ describe('fullstack browser integration', () => {
       main { color: rgb(12, 34, 56); }
     `);
     await writeFile(resolve(functions, 'stories.ts'), `
+      import { define } from '../define';
       const stories = [
         { id: 1, title: 'First', votes: 3 },
         { id: 2, title: 'Second', votes: 5 },
       ];
-      /** @GET */
-      export async function getStories() {
+      export const getStories = define.function.get(async (_context) => {
         return stories;
-      }
-      /** @GET */
-      export async function getStory(id: number) {
+      });
+      export const getStory = define.function.get(async (_context, id: number) => {
         return stories.find(story => story.id === id) ?? null;
-      }
-      /** @POST */
-      export async function postVote(id: number) {
+      });
+      export const postVote = define.function.post(async (_context, id: number) => {
         const story = stories.find(candidate => candidate.id === id);
         if (story === undefined) throw new Error('Missing story');
         await new Promise(resolve => setTimeout(resolve, 100));
         if (id === 2) throw new Error('Vote rejected');
         story.votes++;
         return { id: story.id, votes: story.votes };
-      }
+      });
     `);
     await writeFile(resolve(fixture, 'App.tsx'), `
       import { getStories, getStory, postVote } from '#server-functions';
@@ -162,7 +164,8 @@ describe('fullstack browser integration', () => {
     await writeFile(resolve(fixture, 'server.ts'), `
       import { serve } from '@memoized-dom/server';
       import { App } from './App';
-      const app = serve();
+      import { define } from './server/define';
+      const app = serve({ define });
       app.ssr(App);
       export default app;
     `);

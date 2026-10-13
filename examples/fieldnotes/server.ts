@@ -1,11 +1,18 @@
 import { serve } from '@memoized-dom/server';
 import { Main } from './App';
-import { createServices } from '#server/config/services';
-import { createLocals } from '#server/config/locals';
+import { define } from '#server/define';
 import { logger, session } from '#server/middleware';
 import { delay } from '#server/latency';
 
-const app = serve({ createLocals, createServices });
+let sequence = 0;
+
+const app = serve({
+  define,
+  state: () => ({
+    requestId: `req-${String(++sequence)}`,
+    visitor: 'anonymous',
+  }),
+});
 
 app.use(logger, session);
 

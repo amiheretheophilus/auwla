@@ -9,10 +9,6 @@ import {
 } from './ast';
 import { unwrapTypeExpression } from './context';
 import { compilerError } from './errors';
-import type { AstComment } from './ast/parser';
-
-/** Only emitted in server implementation modules, never in client facades. */
-export const serverFunctionMetadataExport = '__mmdServerFunctionMetadata';
 
 export type ServerFunctionMethod =
   | 'GET'
@@ -41,10 +37,9 @@ export interface ServerFunctionDefinition {
   readonly local: string;
   readonly method: ServerFunctionMethod;
   readonly path: string;
+  /** Descriptor input is one schema-owned transport value. */
+  readonly schemaInput: boolean;
   readonly parameters: readonly ServerFunctionParameter[];
-  /** Source expressions resolved in the implementation module's scope. */
-  readonly middleware?: string;
-  readonly input?: string;
 }
 
 export interface ServerFunctionModule {
@@ -63,8 +58,9 @@ export interface AnalyzeServerFunctionOptions {
 interface FunctionBinding {
   readonly local: string;
   readonly declaration: BaseNode;
+  readonly method: ServerFunctionMethod;
+  readonly schemaInput: boolean;
   readonly node:
-    | t.FunctionDeclaration
     | t.FunctionExpression
     | t.ArrowFunctionExpression;
 }
@@ -106,227 +102,113 @@ export function serverFunctionModuleName(
     .join('/');
 }
 
-function functionBindings(program: t.Program): Map<string, FunctionBinding> {
+function propertyName(node: BaseNode): string | null {
+  const value = record(node);
+  if (node.type === 'Identifier') return value.name as string;
+  if (node.type === 'Literal' && typeof value.value === 'string') {
+    return value.value;
+  }
+  return null;
+}
+
+function definedFunction(
+  local: string,
+  declaration: BaseNode,
+  raw: t.Expression,
+  moduleId: string,
+): FunctionBinding | null {
+  const init = unwrapTypeExpression(raw);
+  if (!astFactory.isCallExpression(init)) return null;
+  const callee = unwrapTypeExpression(init.callee);
+  if (!astFactory.isMemberExpression(callee) || callee.computed) return null;
+  const methodName = propertyName(callee.property as unknown as BaseNode);
+  const method = methodName?.toUpperCase();
+  if (!['GET', 'POST', 'PUT', 'PATCH', 'DELETE'].includes(method ?? '')) {
+    return null;
+  }
+  const family = unwrapTypeExpression(callee.object);
+  if (
+    !astFactory.isMemberExpression(family) ||
+    family.computed ||
+    propertyName(family.property as unknown as BaseNode) !== 'function'
+  ) return null;
+  if (init.arguments.length !== 1 || !astFactory.isExpression(init.arguments[0]!)) {
+    throw compilerError(
+      `memo-dom: define.function.${methodName}() requires exactly one handler or descriptor`,
+      moduleId,
+      declaration,
+    );
+  }
+  const argument = unwrapTypeExpression(init.arguments[0]!);
+  let handler: BaseNode | null = null;
+  let schemaInput = false;
+  if (
+    astFactory.isFunctionExpression(argument) ||
+    astFactory.isArrowFunctionExpression(argument)
+  ) {
+    handler = argument as unknown as BaseNode;
+  } else if (astFactory.isObjectExpression(argument)) {
+    for (const property of argument.properties) {
+      if (
+        property.type !== 'Property' ||
+        property.computed
+      ) continue;
+      const name = propertyName(property.key as unknown as BaseNode);
+      if (name === 'input') {
+        schemaInput = true;
+        continue;
+      }
+      if (name !== 'handler') continue;
+      const value = unwrapTypeExpression(property.value as t.Expression);
+      if (
+        astFactory.isFunctionExpression(value) ||
+        astFactory.isArrowFunctionExpression(value)
+      ) handler = value as unknown as BaseNode;
+    }
+  }
+  if (
+    handler === null ||
+    (!astFactory.isFunctionExpression(handler) &&
+      !astFactory.isArrowFunctionExpression(handler))
+  ) {
+    throw compilerError(
+      `memo-dom: define.function.${methodName}() descriptor requires an inline handler`,
+      moduleId,
+      declaration,
+    );
+  }
+  return {
+    local,
+    declaration,
+    method: method as ServerFunctionMethod,
+    schemaInput,
+    node: handler,
+  };
+}
+
+function functionBindings(
+  program: t.Program,
+  moduleId: string,
+): Map<string, FunctionBinding> {
   const functions = new Map<string, FunctionBinding>();
   for (const statement of program.body) {
     const declaration = astFactory.isExportNamedDeclaration(statement)
       ? statement.declaration
       : statement;
-    if (
-      astFactory.isFunctionDeclaration(declaration) &&
-      declaration.id !== null
-    ) {
-      functions.set(declaration.id.name, {
-        local: declaration.id.name,
-        declaration: statement as unknown as BaseNode,
-        node: declaration,
-      });
-      continue;
-    }
     if (!astFactory.isVariableDeclaration(declaration)) continue;
     for (const item of declaration.declarations) {
       if (!astFactory.isIdentifier(item.id) || item.init === null) continue;
-      const init = astFactory.isExpression(item.init)
-        ? unwrapTypeExpression(item.init)
-        : item.init;
-      if (
-        astFactory.isFunctionExpression(init) ||
-        astFactory.isArrowFunctionExpression(init)
-      ) {
-        functions.set(item.id.name, {
-          local: item.id.name, node: init,
-          declaration: statement as unknown as BaseNode,
-        });
-      }
+      if (!astFactory.isExpression(item.init)) continue;
+      const binding = definedFunction(
+        item.id.name,
+        statement as unknown as BaseNode,
+        item.init,
+        moduleId,
+      );
+      if (binding !== null) functions.set(item.id.name, binding);
     }
   }
   return functions;
-}
-
-function nodeStart(node: BaseNode): number {
-  return (record(node).start as number | undefined) ?? node.range?.[0] ?? 0;
-}
-
-function moduleBindings(program: t.Program): Set<string> {
-  const names = new Set<string>();
-  function pattern(node: BaseNode): void {
-    const value = record(node);
-    if (node.type === 'Identifier') names.add(value.name as string);
-    else if (node.type === 'RestElement') pattern(value.argument as BaseNode);
-    else if (node.type === 'AssignmentPattern') pattern(value.left as BaseNode);
-    else if (node.type === 'ArrayPattern') {
-      for (const item of value.elements as Array<BaseNode | null>) {
-        if (item !== null) pattern(item);
-      }
-    } else if (node.type === 'ObjectPattern') {
-      for (const property of value.properties as BaseNode[]) {
-        pattern(property.type === 'RestElement'
-          ? property : record(property).value as BaseNode);
-      }
-    }
-  }
-  for (const statement of program.body) {
-    const declaration = astFactory.isExportNamedDeclaration(statement)
-      ? statement.declaration : statement;
-    if (declaration === null) continue;
-    const value = record(declaration as unknown as BaseNode);
-    if (declaration.type === 'ImportDeclaration') {
-      if (value.importKind === 'type') continue;
-      for (const specifier of value.specifiers as BaseNode[]) {
-        if (record(specifier).importKind !== 'type') {
-          pattern(record(specifier).local as BaseNode);
-        }
-      }
-    } else if (astFactory.isVariableDeclaration(declaration)) {
-      for (const item of declaration.declarations) pattern(item.id as unknown as BaseNode);
-    } else if (
-      ['FunctionDeclaration', 'ClassDeclaration', 'TSEnumDeclaration'].includes(declaration.type) &&
-      value.id != null
-    ) pattern(value.id as BaseNode);
-  }
-  return names;
-}
-
-function annotationExpression(
-  expression: string,
-  tag: string,
-  names: ReadonlySet<string>,
-  moduleId: string,
-  at: BaseNode,
-): void {
-  const fail = (message: string): never => {
-    throw compilerError(`memo-dom: [MMD-S014] @${tag}: ${message}`, moduleId, at);
-  };
-  let parsed;
-  try {
-    parsed = parseWithEstreeFrontendOrThrow(memoizedEstreeFrontend,
-      `const __annotation = (${expression});`, { filename: 'annotation.ts' });
-  } catch {
-    fail('expected a valid TypeScript expression');
-  }
-  const declaration = parsed!.program.body[0]!;
-  if (parsed!.program.body.length !== 1 || declaration.type !== 'VariableDeclaration') {
-    fail('expected a single expression');
-  }
-  const item = (record(declaration).declarations as BaseNode[])[0]!;
-  const root = record(item).init as BaseNode;
-  if (tag === 'middleware' && root.type !== 'ArrayExpression') {
-    fail('expected an array of middleware');
-  }
-  function visit(node: BaseNode): void {
-    const value = record(node);
-    switch (node.type) {
-      case 'Identifier':
-        if (!names.has(value.name as string) && value.name !== 'undefined') {
-          fail(`'${String(value.name)}' is not a runtime binding in this module`);
-        }
-        return;
-      case 'Literal': return;
-      case 'MemberExpression':
-        visit(value.object as BaseNode);
-        if (value.computed) visit(value.property as BaseNode);
-        return;
-      case 'Property':
-        if (value.computed) visit(value.key as BaseNode);
-        visit(value.value as BaseNode);
-        return;
-      case 'CallExpression':
-        visit(value.callee as BaseNode);
-        for (const argument of value.arguments as BaseNode[]) visit(argument);
-        return;
-      case 'ArrayExpression':
-        for (const element of value.elements as Array<BaseNode | null>) {
-          if (element !== null) visit(element);
-        }
-        return;
-      case 'ObjectExpression':
-        for (const property of value.properties as BaseNode[]) visit(property);
-        return;
-      case 'SpreadElement': case 'UnaryExpression':
-        visit(value.argument as BaseNode); return;
-      case 'TSAsExpression': case 'TSSatisfiesExpression': case 'TSNonNullExpression':
-        visit(value.expression as BaseNode); return;
-      default:
-        fail('use a module binding, member access, or factory call; declare more complex expressions in TypeScript');
-    }
-  }
-  visit(root);
-}
-
-/** Locate JSDoc tags without interpreting @ inside annotation expressions. */
-function annotationTags(text: string): Array<{ name: string; start: number; end: number }> {
-  const tags: Array<{ name: string; start: number; end: number }> = [];
-  let expression = false;
-  let depth = 0;
-  let quote: string | null = null;
-  for (let index = 0; index < text.length; index++) {
-    const character = text[index]!;
-    if (expression) {
-      if (quote !== null) {
-        if (character === '\\') index++;
-        else if (character === quote) quote = null;
-        continue;
-      }
-      if (character === '"' || character === "'" || character === '`') {
-        quote = character;
-        continue;
-      }
-      if (character === '/' && text[index + 1] === '/') {
-        const newline = text.indexOf('\n', index);
-        index = newline === -1 ? text.length : newline;
-        continue;
-      }
-      if ('([{'.includes(character)) depth++;
-      else if (')]}'.includes(character)) depth--;
-    }
-    if (character !== '@' || depth !== 0 || (index > 0 && !/\s/.test(text[index - 1]!))) continue;
-    const match = /^@([A-Za-z]+)\b/.exec(text.slice(index));
-    if (match === null) continue;
-    tags.push({ name: match[1]!, start: index, end: index + match[0].length });
-    expression = match[1] === 'middleware' || match[1] === 'Input';
-    index += match[0].length - 1;
-  }
-  return tags;
-}
-
-function functionAnnotations(
-  source: string,
-  comments: readonly AstComment[],
-  binding: FunctionBinding,
-  names: ReadonlySet<string>,
-  moduleId: string,
-): { method?: ServerFunctionMethod; middleware?: string; input?: string } {
-  const start = nodeStart(binding.declaration);
-  const comment = [...comments].reverse().find(candidate =>
-    candidate.end <= start && source.slice(candidate.end, start).trim() === '');
-  if (comment?.type !== 'Block' || !comment.value.startsWith('*')) return {};
-  const text = comment.value.replace(/^\s*\* ?/gm, '').trim();
-  const tags = annotationTags(text);
-  const result: { method?: ServerFunctionMethod; middleware?: string; input?: string } = {};
-  for (let index = 0; index < tags.length; index++) {
-    const match = tags[index]!;
-    const tag = match.name;
-    const value = text.slice(match.end, tags[index + 1]?.start).trim();
-    const isMethod = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'].includes(tag);
-    if (!isMethod && tag !== 'middleware' && tag !== 'Input') continue;
-    const key = isMethod ? 'method' : tag === 'Input' ? 'input' : 'middleware';
-    if (result[key] !== undefined) {
-      throw compilerError(`memo-dom: [MMD-S014] duplicate server-function @${tag} annotation`, moduleId, binding.declaration);
-    }
-    if (isMethod) result.method = tag as ServerFunctionMethod;
-    else {
-      annotationExpression(value, tag, names, moduleId, binding.declaration);
-      result[key as 'input' | 'middleware'] = value;
-    }
-  }
-  if (Object.keys(result).length > 0) {
-    const declaration = record(binding.declaration).declaration as BaseNode | undefined;
-    const variable = declaration ?? binding.declaration;
-    if (variable.type === 'VariableDeclaration' && (record(variable).declarations as unknown[]).length !== 1) {
-      throw compilerError('memo-dom: [MMD-S014] annotated server functions need their own declaration', moduleId, binding.declaration);
-    }
-  }
-  return result;
 }
 
 function exportedLocals(program: t.Program): Array<{
@@ -461,8 +343,24 @@ function parametersFor(
   fn: FunctionBinding['node'],
   method: ServerFunctionMethod,
   moduleId: string,
+  schemaInput: boolean,
 ): ServerFunctionParameter[] {
-  return fn.params.map((rawParameter) => {
+  if (fn.params.length === 0) {
+    throw compilerError(
+      'memo-dom: [MMD-S013] a defined server function handler needs its injected request argument first',
+      moduleId,
+      fn as unknown as BaseNode,
+    );
+  }
+  if (schemaInput && fn.params.length !== 2) {
+    throw compilerError(
+      'memo-dom: [MMD-S013] a server function with input validation receives exactly one schema-owned input after its injected request argument',
+      moduleId,
+      fn as unknown as BaseNode,
+    );
+  }
+  if (schemaInput) return [{ name: 'input', optional: false }];
+  return fn.params.slice(1).map((rawParameter) => {
     const defaulted = astFactory.isAssignmentPattern(rawParameter);
     const parameter = defaulted ? rawParameter.left : rawParameter;
     if (!astFactory.isIdentifier(parameter)) {
@@ -504,18 +402,11 @@ export function analyzeServerFunctionModule(
     options.moduleId,
     options.functionsRoot,
   );
-  const bindings = functionBindings(program);
-  const names = moduleBindings(program);
-  if (names.has(serverFunctionMetadataExport)) {
-    throw compilerError(`memo-dom: [MMD-S014] '${serverFunctionMetadataExport}' is reserved for generated server metadata`, options.moduleId);
-  }
+  const bindings = functionBindings(program, options.moduleId);
   const functions: ServerFunctionDefinition[] = [];
   let middlewareExport = false;
 
   for (const exported of exportedLocals(program)) {
-    if (exported.exported === serverFunctionMetadataExport) {
-      throw compilerError(`memo-dom: [MMD-S014] '${serverFunctionMetadataExport}' is reserved for generated server metadata`, options.moduleId, exported.at);
-    }
     if (exported.exported === 'middleware') {
       middlewareExport = true;
       continue;
@@ -523,23 +414,14 @@ export function analyzeServerFunctionModule(
     const binding = bindings.get(exported.local);
     if (binding === undefined) {
       throw compilerError(
-        `memo-dom: [MMD-S003] Server function module export '${exported.exported}' must be an async function; only annotated async functions and 'middleware' may cross the client boundary`,
-        options.moduleId,
-        exported.at,
-      );
-    }
-    const annotations = functionAnnotations(source, parsed.comments, binding, names, options.moduleId);
-    const method = annotations.method;
-    if (method === undefined) {
-      throw compilerError(
-        `memo-dom: [MMD-S011] Server function '${exported.exported}' needs @GET, @POST, @PUT, @PATCH, or @DELETE`,
+        `memo-dom: [MMD-S003] Server function module export '${exported.exported}' must be created by define.function.get(), post(), put(), patch(), or delete(); only defined functions and 'middleware' may cross the client boundary`,
         options.moduleId,
         exported.at,
       );
     }
     if (!binding.node.async || binding.node.generator) {
       throw compilerError(
-        `memo-dom: [MMD-S003] Server function '${exported.exported}' must be async before it can cross the client boundary`,
+        `memo-dom: [MMD-S003] Server function '${exported.exported}' handler must be async before it can cross the client boundary`,
         options.moduleId,
         exported.at,
       );
@@ -554,11 +436,15 @@ export function analyzeServerFunctionModule(
     functions.push({
       exported: exported.exported,
       local: binding.local,
-      method,
+      method: binding.method,
       path: `/_fn/${moduleName}/${encodeURIComponent(exported.exported)}`,
-      parameters: parametersFor(binding.node, method, options.moduleId),
-      ...(annotations.middleware === undefined ? {} : { middleware: annotations.middleware }),
-      ...(annotations.input === undefined ? {} : { input: annotations.input }),
+      schemaInput: binding.schemaInput,
+      parameters: parametersFor(
+        binding.node,
+        binding.method,
+        options.moduleId,
+        binding.schemaInput,
+      ),
     });
   }
 
@@ -571,17 +457,12 @@ export function analyzeServerFunctionModule(
   };
 }
 
-/** Append metadata where private schema and middleware bindings remain accessible. */
+/** Definition calls retain their own metadata; implementation source is unchanged. */
 export function generateServerFunctionImplementation(
   source: string,
-  options: AnalyzeServerFunctionOptions,
+  _options: AnalyzeServerFunctionOptions,
 ): string {
-  const module = analyzeServerFunctionModule(source, options);
-  const entries = module.functions
-    .filter(fn => fn.middleware !== undefined || fn.input !== undefined)
-    .map(fn => `[${JSON.stringify(fn.exported)}]: { middleware: ${fn.middleware ?? '[]'}${fn.input === undefined ? '' : `, input: ${fn.input}`} }`);
-  if (entries.length === 0) return source;
-  return `${source}\nexport const ${serverFunctionMetadataExport} = {\n${entries.join(',\n')}\n};\n`;
+  return source;
 }
 
 export function generateServerFunctionClient(
@@ -595,12 +476,18 @@ export function generateServerFunctionClient(
     if (fn.method === 'GET') {
       const options = fn.parameters.length === 0
         ? ''
-        : `, { query: { ${entries} } }`;
+        : fn.schemaInput
+          ? `, { query: ${parameters} }`
+          : `, { query: { ${entries} } }`;
       lines.push(
         `export function ${fn.exported}(${parameters}) { return __mmd_fetch(${JSON.stringify(fn.path)}${options}); }`,
       );
     } else {
-      const body = fn.parameters.length === 0 ? '' : `, body: { ${entries} }`;
+      const body = fn.parameters.length === 0
+        ? ''
+        : fn.schemaInput
+          ? `, body: ${parameters}`
+          : `, body: { ${entries} }`;
       lines.push(
         `export function ${fn.exported}(${parameters}) { return __mmd_fetch(${JSON.stringify(fn.path)}, { method: ${JSON.stringify(fn.method)}${body} }); }`,
       );
@@ -634,7 +521,7 @@ export function generateServerFunctionDeclarations(
   const lines = [
     '// Generated by @memoized-dom/compiler — client facade declarations for the application server functions.',
     `import type { ResolvedValue } from ${JSON.stringify(options.dataModule ?? '@memoized-dom/data')};`,
-    `import type { JsonResponse, ErrorResponse } from '@memoized-dom/server';`,
+    `import type { ErrorResponse, JsonResponse, ServerFunctionArguments, ServerFunctionResult } from '@memoized-dom/server';`,
     'type __mmdClientValue<T> = T extends ErrorResponse ? never : T extends JsonResponse<infer U> ? U : T extends Response ? unknown : T;',
   ];
   const seen = new Map<string, string>();
@@ -657,7 +544,7 @@ export function generateServerFunctionDeclarations(
       seen.set(fn.exported, module.moduleId);
       const target = `${alias}.${fn.exported}`;
       statements.push(
-        `export declare function ${fn.exported}(...args: Parameters<typeof ${target}>): ResolvedValue<__mmdClientValue<Awaited<ReturnType<typeof ${target}>>>>;`,
+        `export declare function ${fn.exported}(...args: ServerFunctionArguments<typeof ${target}>): ResolvedValue<__mmdClientValue<Awaited<ServerFunctionResult<typeof ${target}>>>>;`,
       );
     }
   }

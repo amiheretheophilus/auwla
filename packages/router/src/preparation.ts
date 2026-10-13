@@ -52,7 +52,7 @@ export interface RoutedPreparationInput {
 
 export interface RoutedServerContext {
   readonly request: Request;
-  readonly locals: object;
+  readonly state: object;
   readonly platform?: unknown;
   readonly services: object;
 }
@@ -138,12 +138,12 @@ function browserContext(
   const url = new URL(input.href);
   const server = input.serverContext;
   return Object.freeze({
-    state: stateFor(runtime, id),
+    routeState: stateFor(runtime, id),
     params: input.params,
     url,
     query: routeQuery(url),
     request: server?.request ?? new Request(url, { signal: input.signal }),
-    locals: server?.locals ?? Object.freeze({}),
+    state: server?.state ?? Object.freeze({}),
     platform: server?.platform,
     services: server?.services ?? Object.freeze({}),
     signal: input.signal,
@@ -382,12 +382,12 @@ export async function invokeServerRoutedPreparation(
   const url = new URL(input.href, context.request.url);
   const state: RoutedCacheState = { ...input.state };
   const returned = await definition.prepare(Object.freeze({
-    state,
+    routeState: state,
     params: Object.freeze({ ...input.params }),
     url,
     query: routeQuery(url),
     request: context.request,
-    locals: context.locals,
+    state: context.state,
     platform: context.platform,
     services: context.services,
     signal: context.request.signal,

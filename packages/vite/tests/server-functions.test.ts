@@ -1,10 +1,15 @@
-import { mkdtemp, readFile, rm, stat } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
 import { afterEach, describe, expect, it } from 'bun:test';
 import { analyzeServerFunctionModule, parseWithEstreeFrontendOrThrow, memoizedEstreeFrontend } from '@memoized-dom/compiler';
 import { resolveAdapterOptions } from '../src/options';
-import { rewriteServerFunctionBarrelImports, serverFunctionsDeclarationFile, writeServerFunctionDeclarations } from '../src/server-functions';
+import {
+  generateServerFunctionRoutesModule,
+  rewriteServerFunctionBarrelImports,
+  serverFunctionsDeclarationFile,
+  writeServerFunctionDeclarations,
+} from '../src/server-functions';
 import { routesDeclarationFile, writeRoutesDeclaration } from '../src/routes';
 
 let fixture: string | undefined;
@@ -61,7 +66,8 @@ describe('conditional generated declarations', () => {
   it('removes stale declarations when their last function or route disappears', async () => {
     fixture = await mkdtemp(resolve(tmpdir(), 'memoized-dom-declarations-'));
     const options = resolveAdapterOptions({ clientEntry: 'main.ts' });
-    const module = analyzeServerFunctionModule('/** @GET */ export async function story() {}', {
+    const module = analyzeServerFunctionModule(
+      'export const story = define.function.get(async ({ state }) => state);', {
       moduleId: resolve(fixture, 'server/functions/stories.ts'),
     });
     await writeServerFunctionDeclarations(fixture, [module], options);
@@ -76,5 +82,46 @@ describe('conditional generated declarations', () => {
     ]);
     await expect(stat(serverFunctionsDeclarationFile(fixture))).rejects.toMatchObject({ code: 'ENOENT' });
     await expect(stat(routesDeclarationFile(fixture))).rejects.toMatchObject({ code: 'ENOENT' });
+  });
+});
+
+describe('server service discovery', () => {
+  it('imports exported define services and reports their resolved names', async () => {
+    fixture = await mkdtemp(resolve(tmpdir(), 'memoized-dom-services-'));
+    const server = resolve(fixture, 'server');
+    await mkdir(server, { recursive: true });
+    const servicesFile = resolve(server, 'services.ts');
+    await writeFile(servicesFile, `
+      import { define } from './define';
+      export const database = define.service('database', async () => ({ ready: true }));
+    `);
+    const generated = await generateServerFunctionRoutesModule(
+      fixture,
+      resolveAdapterOptions({ clientEntry: 'main.ts' }),
+    );
+    expect(generated.services).toEqual([{
+      file: servicesFile.replaceAll('\\', '/'),
+      exported: 'database',
+      name: 'database',
+    }]);
+    expect(generated.source).toContain(
+      `import ${JSON.stringify(servicesFile.replaceAll('\\', '/'))};`,
+    );
+  });
+
+  it('rejects duplicate service names across modules', async () => {
+    fixture = await mkdtemp(resolve(tmpdir(), 'memoized-dom-services-'));
+    const server = resolve(fixture, 'server');
+    await mkdir(server, { recursive: true });
+    await Promise.all([
+      writeFile(resolve(server, 'one.ts'),
+        `export const one = define.service('database', () => ({}));`),
+      writeFile(resolve(server, 'two.ts'),
+        `export const two = define.service('database', () => ({}));`),
+    ]);
+    await expect(generateServerFunctionRoutesModule(
+      fixture,
+      resolveAdapterOptions({ clientEntry: 'main.ts' }),
+    )).rejects.toThrow("service 'database' is exported by both");
   });
 });

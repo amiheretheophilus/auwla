@@ -20,7 +20,7 @@ export interface MemoizedDomViteOptions
    */
   exclude?: RegExp | readonly RegExp[];
   /**
-   * Server-only convention root. Its config/index.ts registers application
+   * Server-only convention root. Its define.ts registers application
    * server types and its functions directory contains server functions.
    */
   server?: string;

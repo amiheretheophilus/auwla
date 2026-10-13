@@ -46,12 +46,14 @@ import {
   resolvedServerFunctionsClientVirtualId,
   resolvedServerFunctionsVirtualId,
   type ServerFunctionBarrelEntry,
+  type DiscoveredServerService,
   serverFunctionsClientVirtualId,
   serverFunctionsVirtualId,
   writeServerFunctionDeclarations,
 } from './server-functions';
 import {
   isServerConfigFile,
+  isServerSourceFile,
   resolveServerAlias,
   writeServerConfigDeclaration,
 } from './server-config';
@@ -83,6 +85,7 @@ export function memoizedDom(
     'export const serverFunctionManifest = [];\nexport const serverFunctionRoutes = [];\n';
   let serverFunctionClientBarrelSource = '';
   let serverFunctionBarrelEntries: readonly ServerFunctionBarrelEntry[] = [];
+  let serverServices: readonly DiscoveredServerService[] = [];
   let productionDelivery: ProductionDelivery | undefined;
   const api: FullstackPluginApi = {
     runtime: options.runtime ?? 'bun',
@@ -111,13 +114,14 @@ export function memoizedDom(
     serverFunctionRoutesSource = generated.source;
     serverFunctionClientBarrelSource = generated.clientBarrelSource;
     serverFunctionBarrelEntries = generated.clientBarrelEntries;
+    serverServices = generated.services;
     await writeServerFunctionDeclarations(config.root, generated.modules, options);
     return generated.files;
   }
 
   async function refreshServerConfig(): Promise<string | null> {
     if (config === undefined) return null;
-    return writeServerConfigDeclaration(config.root, options);
+    return writeServerConfigDeclaration(config.root, options, serverServices);
   }
 
   function stateFor(environment: object): AdapterState {
@@ -635,7 +639,10 @@ export function memoizedDom(
     async hotUpdate(update) {
       const file = normalizeFile(update.file);
       const serverFunctionChanged =
-        config !== undefined && isServerFunctionFile(config.root, file, options);
+        config !== undefined && (
+          isServerFunctionFile(config.root, file, options) ||
+          isServerSourceFile(config.root, file, options)
+        );
       const serverConfigChanged = config !== undefined &&
         isServerConfigFile(config.root, file, options);
       if (serverConfigChanged) await refreshServerConfig();
@@ -651,6 +658,7 @@ export function memoizedDom(
         : undefined;
       if (serverFunctionChanged) {
         await refreshServerFunctions();
+        await refreshServerConfig();
         for (const module of [virtualModule, clientBarrelModule]) {
           if (module !== undefined) {
             this.environment.moduleGraph.invalidateModule(

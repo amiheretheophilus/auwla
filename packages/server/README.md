@@ -63,29 +63,39 @@ setting the cookie. Deletion appends an expired cookie, following the
 
 ## Application composition
 
-`serve()` creates the application object used for middleware, routes, and SSR:
+Create one shared server definition, then pass it to `serve()`:
 
 ```ts
-import { serve, type ServerMiddleware } from '@memoized-dom/server';
-import { createServices } from '#server/config/services';
+// server/define.ts
+import { createDefine } from '@memoized-dom/server';
+
+export const define = createDefine<{
+  requestId: string;
+  user?: User;
+}, PlatformBindings>();
+```
+
+```ts
+// server.ts
+import { serve } from '@memoized-dom/server';
+import { define } from './server/define';
+import './server/services/database';
 import { App } from './App';
 
-const logger: ServerMiddleware = async (context, next) => {
+const logger = define.middleware(async (context, next) => {
   const started = performance.now();
   const response = await next();
   console.log(context.request.method, context.url.pathname, response.status,
     performance.now() - started);
   return response;
-};
+});
 
 const app = serve({
-  createServices,
-  createLocals() {
-    return {
-      requestId: crypto.randomUUID(),
-      user: undefined,
-    };
-  },
+  define,
+  state: () => ({
+    requestId: crypto.randomUUID(),
+    user: undefined,
+  }),
   onError(error, context) {
     console.error(context.url.pathname, error);
     return new Response('Internal Server Error', { status: 500 });
@@ -93,138 +103,92 @@ const app = serve({
 });
 
 app.use(logger);
-app.use('/api/*', apiMiddleware);
-
-app.get('/api/health', () => ({ ok: true }));
-app.get('/api/stories/:id', ({ params }) => {
-  return readStory(params.id);
-});
-
+app.get('/api/health', ({ services }) => ({
+  ok: services.database.ready,
+}));
 app.ssr(App);
-// Or scope a root: app.ssr('/reports/*', ReportsApp);
 
 export default app;
 ```
 
-`app.fetch(request, { platform }?)` is the portable host boundary. Mount it
-inside a backend such as Hono, or export the application directly. The native
-development launcher executes the backend in Bun or Node, and the Cloudflare
-integration executes it in `workerd`; Vite supplies
-transforms, frontend assets, and hot updates. The application build installs
-the production HTML document and client assets automatically. Native request
-bindings passed as `platform` reach middleware, SSR, and server functions.
+`app.fetch(request, { platform }?)` is the portable host boundary. A directly
+exported application receives host platform data automatically; a backend such
+as Hono can delegate explicitly. See the [serve guide](../../docs/10-serve.md).
 
-On Cloudflare, Hono retains its normal Worker export and delegates using
-`app.fetch(c.req.raw, { platform: { env: c.env, executionCtx: c.executionCtx } })`.
-A directly exported application receives that Worker context automatically.
-See the [SSR setup guide](../../docs/09-ssr.md) for runtime configuration,
-development/build commands, and automatic production asset delivery, and the
-[serve() guide](../../docs/10-serve.md) for application options and host context.
+### Services
 
-HTTP endpoints use `app.get()`, `app.post()`, `app.put()`, `app.patch()`,
-`app.delete()`, `app.head()`, and `app.options()`. Literal paths preserve exact
-parameter inference, and middleware may precede the final handler on every
-verb method.
-
-### Middleware
-
-Middleware is an ordinary function:
+Declare application-scoped services through the same definition:
 
 ```ts
-type ServerMiddleware = (
-  context: ServerContext,
-  next: () => Promise<Response>,
-) => Response | Promise<Response>;
-```
+// server/services/database.ts
+import { define } from '../define';
 
-Global middleware uses `app.use(middleware)`. Path middleware uses
-`app.use('/api/*', middleware)`. Route-local middleware precedes the final
-handler:
-
-```ts
-app.patch('/api/stories/:id', requireUser, async (context) => {
-  const input: unknown = await context.request.json();
-  return updateStory(context.params.id, parseStoryPatch(input));
+export const database = define.service('database', async () => {
+  return connectDatabase(process.env.DATABASE_URL);
 });
 ```
 
-The passed `context` is the source of request state in middleware and route
-handlers. `getServerContext()` exists for server-function bodies and deeper
-helpers that do not receive the context argument; handlers should not receive
-a context and then look it up again.
-
-### Application-wide server types
-
-The Vite integration discovers `<server>/config/index.ts`:
+Dependencies are explicit and typed:
 
 ```ts
-export interface ServerTypes {
-  locals: {
-    requestId: string;
-    user?: User;
-  };
-  platform?: PlatformBindings;
-}
+export const users = define.service('users', {
+  dependencies: { database },
+  create: ({ database }) => createUserRepository(database),
+});
 ```
 
-It generates one project declaration that registers this contract. Normal
-imports from `@memoized-dom/server` then default `ServerContext`,
-`ServerMiddleware`, `serve()`, and `getServerContext()` to those application
-types. No generic or relative config import is needed.
+The Vite integration discovers exported services under the server root and
+generates their `context.services` types. Each service initializes lazily once
+per application, concurrent initialization is deduplicated, and a failed
+initialization can retry. Service factories do not receive request state or
+platform.
+
+### Middleware and routes
+
+`define.middleware()` gives middleware the application's state, platform, and
+service types. Request state is one mutable object shared across the complete
+middleware chain:
 
 ```ts
-import { getServerContext } from '@memoized-dom/server';
+export const session = define.middleware(async (context, next) => {
+  context.state.user = await context.services.sessions.read(context.request);
+  return next();
+});
 
-export function currentUser() {
-  return getServerContext().locals.user;
-}
+app.use(session);
+app.patch('/api/stories/:id', requireUser, async ({ request, params, services }) => {
+  return services.stories.update(params.id, await request.json());
+});
 ```
 
-Other config modules can hold server-only environment parsing, authentication
-policy, errors, constants, binding adapters, and service factories. Import
-those application modules through `#server/config/*`. Routes and middleware
-ordering remain part of the `serve()` composition root.
+### Server functions
 
-`createServices` may asynchronously connect a database and construct
-repositories, queues, or caches. It runs lazily once per application instance,
-and the result is exposed as typed `context.services` everywhere in the
-request pipeline. Request-specific data remains in `context.locals`.
+Server functions use executable, typed definitions and receive context as
+their first injected argument:
+
+```ts
+export const getCurrentUser = define.function.get(
+  async ({ state, services }) => services.users.find(state.user),
+);
+```
+
+The remaining named parameters form the client transport. The descriptor form
+adds middleware or a Standard Schema validator to one function. Folder
+`_middleware.ts` files and module `middleware` exports continue to compose.
 
 ### Route preparation during SSR
 
-Components use `$routed` when authentication, redirects, or route-owned data
-must be ready before the destination renders:
+Server-backed `$routed` callbacks receive the same request values:
 
 ```tsx
-import { $routed, redirectRoute } from '@memoized-dom/router';
-
-export function ReportPage() {
-  const page = $routed(({ params, locals, services, signal }) => {
-    if (!locals.user) return redirectRoute('/login');
-
-    return services.reports.loadPage(params.reportId, locals.user.id, {
-      signal,
-    });
-  });
-
-  return <h1>{page.report.title}</h1>;
-}
+const page = $routed(({ params, state, services, signal }) => {
+  if (!state.user) return redirectRoute('/login');
+  return services.reports.loadPage(params.reportId, state.user.id, { signal });
+});
 ```
 
-`serve()` supplies the same request-owned `request`, `locals`, `platform`, and
-application `services` used by middleware and HTTP handlers. The callback
-therefore should not call `getServerContext()` again. A routed redirect becomes
-an HTTP redirect before any destination HTML is streamed.
-
-The application handler prepares the initial route before creating its
-component tree. Successful routed results and the JSON-safe keys of the
-preparation's plain `state` object are included in the SSR payload. The
-browser's normal `mount()` call restores them before hydration; application
-code does not initialize a route-data runtime manually.
-
-Direct callers rendering an application that contains `$routed` must use
-`render()` or `renderToReadableStream()`. `renderToString()` is synchronous
-and has no preparation phase.
+`state` is request-owned. `routeState` is the separate preparation cache
+that can persist across matching navigations.
 
 ## Renderers
 

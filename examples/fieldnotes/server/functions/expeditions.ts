@@ -1,9 +1,7 @@
-import { getServerContext } from '@memoized-dom/server';
 import { delay } from '#server/latency';
+import { define } from '../define';
 
-/** @GET */
-export async function getExpeditions() {
-  const { services } = getServerContext();
+export const getExpeditions = define.function.get(async ({ services }) => {
   await delay(900);
   return services.expeditions.all().map(e => ({
     id: e.id,
@@ -12,11 +10,13 @@ export async function getExpeditions() {
     days: e.days,
     notes: e.notes.length,
   }));
-}
+});
 
-/** @POST */
-export async function postNote(expeditionId: string, text: string) {
-  const { locals, services } = getServerContext();
+export const postNote = define.function.post(async (
+  { state, services },
+  expeditionId: string,
+  text: string,
+) => {
   if (text.trim() === '') {
     throw new Error('Note text cannot be empty');
   }
@@ -24,16 +24,18 @@ export async function postNote(expeditionId: string, text: string) {
     throw new Error('Note rejected by content filter');
   }
   await delay(1500);
-  return services.notes.add(expeditionId, text, locals.visitor);
-}
+  return services.notes.add(expeditionId, text, state.visitor);
+});
 
-/** @DELETE */
-export async function deleteNote(expeditionId: string, noteId: string) {
-  const { services } = getServerContext();
+export const deleteNote = define.function.delete(async (
+  { services },
+  expeditionId: string,
+  noteId: string,
+) => {
   await delay(700);
   const removed = services.notes.remove(expeditionId, noteId);
   if (removed === null) {
     throw new Error('Unknown note');
   }
   return removed;
-}
+});

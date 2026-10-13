@@ -52,146 +52,83 @@ generated `.memoized/server-functions.d.ts` declarations (written on
 dev/build), so the calls are fully typed end to end: rename a function or
 change a parameter and the client call sites fail typecheck, not runtime.
 
-## What a server function is
 
-A file in `functions/` whose **annotated async exports** become HTTP
-endpoints — the filename is the route namespace, the export name finishes
-the path (`/_fn/<file>/<name>`):
+Files under the configured `server/functions` directory expose client-callable
+HTTP operations. Declare each export through the shared `define` object:
 
 ```ts
-// server/functions/stories.ts
-/** @GET */
-export async function stories() {          // GET  /_fn/stories/stories
-  return db.stories.findMany();
-}
+// server/functions/users.ts
+import { define } from '../define';
 
-/** @POST */
-export async function vote(id: number) {    // POST /_fn/stories/vote
-  return db.stories.vote(id);
-}
+export const getUser = define.function.get(
+  async ({ state, services }, id: string) => {
+    return services.database.users.findFor(id, state.user);
+  },
+);
+
+export const createUser = define.function.post(
+  async ({ state, services }, input: CreateUserInput) => {
+    return services.database.users.create(input, state.user);
+  },
+);
 ```
 
-`@GET`, `@POST`, `@PUT`, `@PATCH`, and `@DELETE` select the method independently
-of the function name. Every endpoint requires an explicit method annotation;
-names such as `getStory` do not select a method. Attach the JSDoc to the function declaration or its single
-variable declaration; local export aliases are supported.
+The first parameter is injected on the server. It is never serialized and the
+client does not pass it. Every remaining parameter must be a named identifier;
+those parameters form the transport contract.
 
-### Function middleware and input validation
+Client code imports the generated facade:
 
 ```ts
-import { requireUser } from '#server/middleware';
-import { voteInput } from '#server/validation';
-import { json } from '@memoized-dom/server';
+import { createUser, getUser } from '#server-functions';
 
-/**
- * @POST
- * @middleware [requireUser]
- * @Input voteInput
- */
-export async function vote(storyId: number) {
-  return json(await db.stories.vote(storyId));
-}
+const user = getUser(selectedId);
+await createUser({ name, email });
 ```
 
-`@middleware [...]` adds ordinary middleware after inherited folder and file
-middleware, in listed order. Imported and private local bindings are supported;
-member access, factory calls, and array spreads can be used in the list.
-These bindings and their dependencies remain server-only.
+`get` arguments use query encoding. `post`, `put`, `patch`, and `delete`
+arguments use a JSON body. The method name is executable metadata, so there is
+no comment-based method declaration for the compiler or language service to
+reconstruct.
 
-The `@memoized-dom/language-service` editor plugin recognizes these annotation
-references and checks middleware signatures and schema output types. A binding
-used only by a tag counts as used. The editor checks an in-memory copy without
-changing source files. Plain `tsc` does not load editor plugins,
-so it still treats custom tag references as comments and may report the
-imported or local binding as unused. See the
-[language-service setup](../packages/language-service/README.md) for editor
-compatibility and custom server roots.
+Use the descriptor form only for settings targeted to one function:
 
-`@Input` references a Standard Schema v1 validator for the named argument
-object, such as `{ storyId: 42 }`. Middleware runs first; a short-circuit
-response skips validation and the handler. The transport decodes input once,
-then the schema validates it. GET numbers and booleans are decoded from query
-strings before validation. Schemas may supply defaults or transform field
-values, but must return an object with the function's argument names and
-compatible value types. Optional/defaulted parameters should be optional in
-the schema or have a schema default; function defaults run after validation.
-Validation issues produce a `400` response with
-`error: 'invalid_server_function_input'`, a message, and `issues`.
-
-`json()` uses native JSON serialization. Values received by the client have
-ordinary JSON types; dates serialize to strings and are never reconstructed.
-
-For expected failures, use
-`return error({ message: 'Story not found' }, { status: 404 })`, importing
-`error` from `@memoized-dom/server`. Like `json`, it serializes exactly the
-supplied body and accepts response headers and other response options.
-It requires a 400–599 status. The client records an HTTP failure and
-preserves the successful return type. Cookie helpers are covered in the
-[server package documentation](../packages/server/README.md#response-and-cookie-helpers).
-
-Parameterized GET results can be adopted from SSR state during hydration
-without another initial fetch. Transfer records identify the complete request
-by a fingerprint rather than embedding raw query arguments.
-
-The plugin writes `.memoized/server-functions.d.ts` only when it discovers
-server functions, and removes a stale declaration when the last function is
-removed. Likewise, `.memoized/routes.d.ts` is generated only for an app with
-discovered routes.
-
-And client code just calls them — imported from `#server-functions`,
-one flat barrel of every function across all files:
-
-```tsx
-// src/App.tsx — client code
-import { stories as loadStories, vote } from '#server-functions';
-
-export function App() {
-  const stories = loadStories();         // a data source, like $fetch
-
-  return (
-    <ul>
-      {stories.map(s => (
-        <li key={s.id}>
-          {s.title}
-          <button onClick={() => vote(s.id)}>Vote</button>
-        </li>
-      ))}
-    </ul>
-  );
-}
+```ts
+export const removeUser = define.function.delete({
+  middleware: [requireOwner],
+  input: removeUserInput,
+  handler: async ({ services }, input) => {
+    return services.database.users.remove(input.id);
+  },
+});
 ```
 
-## The rules
+`input` is the single transported value in this form. The client accepts the
+schema input type and the handler receives the validated schema output type.
+The existing folder `_middleware.ts` files and a module-level
+`export const middleware = [...]` still apply to groups of functions.
 
-- **The annotation picks the HTTP method**: `@GET`, `@POST`, `@PUT`, `@PATCH`, or `@DELETE`. A missing method is a
-  compile error (`[MMD-S011]`).
-- **Exports must be async functions** — sync functions, constants,
-  default exports, and re-exports can't cross the boundary (`[MMD-S003]`).
-  A `middleware` export is the one allowed exception.
-- **Parameters are named identifiers only** — no destructuring or rest
-  args; they define the HTTP contract (`[MMD-S013]`). Default values mark
-  a parameter optional.
-- **Names are globally unique** — `#server-functions` is one flat barrel,
-  so two files can't both export `getUser` (`[MMD-S012]`).
 
-## What the call becomes
 
-- **`@GET` → a data source.** Args go in the query string
-  (`getStory(7)` → `/_fn/stories/getStory?id=7`). The return is the same
-  transparent `ResolvedValue<T>` as `$fetch` — read it directly in markup,
-  `$track` it, put it under a `Group`. It's a derivation: reactive args
-  refire it.
-- **`@POST`/`@PUT`/`@PATCH`/`@DELETE` → a mutation.** Args go in the JSON
-  body. These **cannot be called during render or module evaluation** —
-  the compiler rejects it (`[MMD-S010]`); call them from event handlers,
-  effects, or deferred callbacks.
 
-Mutation arguments are sent as a JSON object keyed by parameter name, not a
-positional array: `postVote(7)` sends `{"id":7}`.
+## Transport and tracking
 
-```tsx
-const story = getStory(selectedId);   // refetches when selectedId changes
-```
+GET calls return the same transparent data source as `$fetch`; reactive
+arguments rerun the read, and `$track` exposes pending state, errors, and
+refresh. Mutations must run from event handlers, effects, or deferred
+callbacks. Calling them during render or module evaluation is a compile error.
+
+For direct functions, mutation arguments form a JSON object keyed by parameter
+name. With a schema descriptor, the client's one input argument is the complete
+JSON body. GET descriptors send the input object's properties as query fields;
+validation receives strings or arrays of strings, so use schema coercion for
+numeric and boolean fields. Schema output is passed directly to the handler,
+including transformed values and defaults. Validation issues return HTTP 400
+with `error: 'invalid_server_function_input'` and `issues`.
+
+Names must be unique across the flat `#server-functions` barrel. Every handler
+must be inline and async. The injected context and schema input may be
+destructured; direct transported parameters must be named identifiers.
 
 ## Status, cookies, and errors
 
@@ -201,8 +138,7 @@ The optional `json()` helper is a short, typed way to create one:
 ```ts
 import { json } from '@memoized-dom/server';
 
-/** @POST */
-export async function postLogin(email: string, password: string) {
+export const postLogin = define.function.post(async (_context, email: string, password: string) => {
   const session = await authenticate(email, password);
   if (session === null) {
     return json({ error: 'invalid_credentials' }, { status: 401 });
@@ -211,7 +147,7 @@ export async function postLogin(email: string, password: string) {
     status: 201,
     headers: { 'set-cookie': session.cookie },
   });
-}
+});
 ```
 
 `json()` returns a native `Response`; it has no special server-function
@@ -233,20 +169,77 @@ the decoded body in `data`. Unexpected thrown exceptions still go through
 
 A mutation's return value is the server's truth for what it changed.
 `postNote` returns the created note, `postVote` returns the new vote count
-— use that to patch local state in `onSuccess`, not a second `get*` call:
+— use that to reconcile local state:
 
 ```ts
-const optimistic = { id: 'pending', text, by: 'you' };
-notes.push(optimistic);                       // instant UI
+import { optimistic } from '@memoized-dom/utils';
 
-lastPost = postNote(expeditionId, text);
-$track(lastPost).onSuccess((saved) => {
-  notes.splice(notes.indexOf(optimistic), 1, saved);   // swap in the real row
+const saveNote = optimistic({
+  action: (text: string) => postNote(expeditionId, text),
+  apply(text, operationId) {
+    notes.push({ id: operationId, text, by: 'you' });
+    return () => {
+      const index = notes.findIndex(note => note.id === operationId);
+      if (index !== -1) notes.splice(index, 1);
+    };
+  },
+  reconcile(saved, _text, operationId) {
+    const index = notes.findIndex(note => note.id === operationId);
+    if (index !== -1) notes.splice(index, 1, saved);
+  },
 });
-$track(lastPost).onError(() => {
-  notes.splice(notes.indexOf(optimistic), 1);          // roll back
-});
+
+lastPost = saveNote(text);
 ```
+
+`optimistic()` applies the temporary change immediately and owns the rollback
+and reconciliation for each operation. Its unique operation ID keeps
+overlapping submissions distinct. It returns the original server-function
+result, so `$track(lastPost)` can still display submission state.
+
+For forms, pass the returned action to `$forms`:
+
+```tsx
+const form = $forms((fields: FormData) =>
+  saveNote(String(fields.get('text') ?? '')),
+);
+
+return <form onSubmit={event => form.submit(event)}>
+  <input name="text" />
+  <button type="submit" disabled={form.pending}>Save note</button>
+</form>;
+```
+
+`$forms` owns validation and submission state; `optimistic` owns the immediate
+change and rollback.
+
+For repeated updates to the same resource, pass a grouping ID on each call:
+
+```ts
+const castVote = optimistic({
+  action: (id: number) => postVote(id),
+  apply(id) {
+    const story = stories.find(story => story.id === id);
+    if (story !== undefined) story.votes++;
+    return () => {
+      if (story !== undefined) story.votes--;
+    };
+  },
+  reconcile(saved) {
+    const story = stories.find(story => story.id === saved.id);
+    if (story !== undefined) story.votes = saved.votes;
+  },
+});
+
+lastVote = castVote(story.id, { id: story.id });
+```
+
+Rapid clicks for one story still update immediately. Reconciliation waits for
+all pending calls with that ID, then applies the most recently started
+successful call's result once. Different story IDs settle independently, and
+each failure keeps its own rollback. The grouping ID is optional; omit it for
+independent operations such as inserting separate notes. Each request retains
+its own operation ID, and `$track(lastVote)` still observes that request.
 
 Refetching after every mutation would waste a round trip for data you
 already have. `refresh()` is for the rarer case — a write that changes
@@ -274,10 +267,8 @@ export function App() {
     const tracker = $track(lastVote);             // track that call
 
     tracker.onSuccess((result) => {
-      storiesRequest.refresh();                   // re-run getStories
-    });
-    tracker.onError(() => {
-      // undo optimistic change, show a toast, …
+      const story = stories.find(story => story.id === result.id);
+      if (story !== undefined) story.votes = result.votes;
     });
   }
 
@@ -309,5 +300,10 @@ export function App() {
 Each `postVote(id)` call is its own request — `$track` exposes a `request
 id`, so `onSuccess`/`onError` callbacks know which invocation settled.
 Same tracker shape as [05 — Data](./05-data.md), no new API.
+
+The POST response supplies the updated vote data. Applying it to the existing
+story updates the UI without issuing another GET request. For immediate
+feedback before the response arrives, use `optimistic()` with the same
+reconciliation logic.
 
 Next: [13 — Server middleware](./13-server-middleware.md)

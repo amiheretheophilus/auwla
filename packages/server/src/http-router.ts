@@ -39,8 +39,8 @@ type RegisteredApplication = ServerTypeRegistry extends {
   ? TApplication
   : Record<string, never>;
 
-export type RegisteredServerLocals = RegisteredApplication extends {
-  locals: infer TLocals extends object;
+export type RegisteredServerState = RegisteredApplication extends {
+  state: infer TLocals extends object;
 }
   ? TLocals
   : Record<string, never>;
@@ -58,20 +58,20 @@ export type RegisteredServerServices = RegisteredApplication extends {
   : Record<string, never>;
 
 export interface ServerContext<
-  TLocals extends object = RegisteredServerLocals,
+  TLocals extends object = RegisteredServerState,
   TPlatform = RegisteredServerPlatform,
   TServices extends object = RegisteredServerServices,
 > {
   readonly request: Request;
   readonly url: URL;
   readonly params: Readonly<Record<string, string>>;
-  readonly locals: TLocals;
+  readonly state: TLocals;
   readonly platform: TPlatform | undefined;
   readonly services: TServices;
 }
 
 export type ServerHandler<
-  TLocals extends object = RegisteredServerLocals,
+  TLocals extends object = RegisteredServerState,
   TPlatform = RegisteredServerPlatform,
   TServices extends object = RegisteredServerServices,
 > = (
@@ -79,7 +79,7 @@ export type ServerHandler<
 ) => ServerHandlerResult | Promise<ServerHandlerResult>;
 
 export type ServerMiddleware<
-  TLocals extends object = RegisteredServerLocals,
+  TLocals extends object = RegisteredServerState,
   TPlatform = RegisteredServerPlatform,
   TServices extends object = RegisteredServerServices,
 > = (
@@ -88,7 +88,7 @@ export type ServerMiddleware<
 ) => Response | Promise<Response>;
 
 export interface ServerRoute<
-  TLocals extends object = RegisteredServerLocals,
+  TLocals extends object = RegisteredServerState,
   TPlatform = RegisteredServerPlatform,
   TServices extends object = RegisteredServerServices,
 > {
@@ -114,22 +114,27 @@ export interface ServerFunctionRouteParameter {
 }
 
 export interface ServerFunctionRouteDefinition<
-  TLocals extends object = RegisteredServerLocals,
+  TLocals extends object = RegisteredServerState,
   TPlatform = RegisteredServerPlatform,
   TServices extends object = RegisteredServerServices,
 > {
   readonly id: string;
   readonly method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
   readonly path: `/_fn/${string}`;
+  /** The schema owns one transported value passed after context. */
+  readonly schemaInput?: boolean;
   readonly parameters: readonly ServerFunctionRouteParameter[];
   readonly middleware?: readonly ServerMiddleware<TLocals, TPlatform, TServices>[];
-  /** Validates the decoded named argument object after request middleware. */
-  readonly input?: StandardSchemaV1<unknown, Record<string, unknown>>;
-  readonly handler: (...args: unknown[]) => ServerHandlerResult | Promise<ServerHandlerResult>;
+  /** Validates one transport value after request middleware. */
+  readonly input?: StandardSchemaV1;
+  readonly handler: (
+    context: ServerContext<TLocals, TPlatform, TServices>,
+    ...args: unknown[]
+  ) => ServerHandlerResult | Promise<ServerHandlerResult>;
 }
 
 export interface ServerMiddlewareGroup<
-  TLocals extends object = RegisteredServerLocals,
+  TLocals extends object = RegisteredServerState,
   TPlatform = RegisteredServerPlatform,
   TServices extends object = RegisteredServerServices,
 > {
@@ -138,25 +143,25 @@ export interface ServerMiddlewareGroup<
 }
 
 export interface ServerDispatchOptions<
-  TLocals extends object = RegisteredServerLocals,
+  TLocals extends object = RegisteredServerState,
   TPlatform = RegisteredServerPlatform,
   TServices extends object = RegisteredServerServices,
 > {
-  /** Reuse request-owned locals for a derived in-memory dispatch. */
-  readonly locals?: TLocals;
+  /** Reuse request-owned state for a derived in-memory dispatch. */
+  readonly state?: TLocals;
   readonly platform?: TPlatform;
   readonly services?: TServices;
 }
 
 export interface ServerRouterOptions<
-  TLocals extends object = RegisteredServerLocals,
+  TLocals extends object = RegisteredServerState,
   TPlatform = RegisteredServerPlatform,
   TServices extends object = RegisteredServerServices,
 > {
   readonly routes: readonly ServerRoute<TLocals, TPlatform, TServices>[];
   readonly middleware?: readonly ServerMiddleware<TLocals, TPlatform, TServices>[];
   readonly groups?: readonly ServerMiddlewareGroup<TLocals, TPlatform, TServices>[];
-  readonly createLocals?: (request: Request) => TLocals;
+  readonly createState?: (request: Request) => TLocals;
   readonly createPlatform?: (request: Request) => TPlatform | undefined;
   readonly services?: TServices;
   /** Handles paths that have no HTTP route, such as an application page fallback. */
@@ -168,7 +173,7 @@ export interface ServerRouterOptions<
 }
 
 export interface ServerRouter<
-  TLocals extends object = RegisteredServerLocals,
+  TLocals extends object = RegisteredServerState,
   TPlatform = RegisteredServerPlatform,
   TServices extends object = RegisteredServerServices,
 > {
@@ -331,12 +336,9 @@ async function bodyArguments(
 }
 
 async function validateServerFunctionArguments(
-  schema: StandardSchemaV1<unknown, Record<string, unknown>>,
-  parameters: readonly ServerFunctionRouteParameter[],
-  args: readonly unknown[],
+  schema: StandardSchemaV1,
+  input: unknown,
 ): Promise<unknown[] | Response> {
-  const input = Object.fromEntries(parameters.flatMap((parameter, index) =>
-    args[index] === undefined ? [] : [[parameter.name, args[index]]]));
   const result = await schema['~standard'].validate(input);
   if (result.issues !== undefined) {
     return Response.json({
@@ -345,19 +347,24 @@ async function validateServerFunctionArguments(
       issues: result.issues,
     }, { status: 400 });
   }
-  if (!isRecord(result.value)) {
-    throw new TypeError('Server function input schema must return a named argument object');
+  return [result.value];
+}
+
+function querySchemaInput(url: URL): Record<string, string | string[]> {
+  const input: Record<string, string | string[]> = Object.create(null);
+  for (const name of new Set(url.searchParams.keys())) {
+    const values = url.searchParams.getAll(name);
+    input[name] = values.length === 1 ? values[0]! : values;
   }
-  const known = new Set(parameters.map(parameter => parameter.name));
-  if (Object.keys(result.value).some(name => !known.has(name))) {
-    throw new TypeError('Server function input schema returned an unknown argument');
+  return input;
+}
+
+async function bodySchemaInput(request: Request): Promise<unknown> {
+  try {
+    return await request.json();
+  } catch {
+    return serverFunctionInputError('Request body must be valid JSON');
   }
-  return parameters.map(parameter => {
-    if (!parameter.optional && !Object.hasOwn(result.value, parameter.name)) {
-      throw new TypeError(`Server function input schema omitted required argument '${parameter.name}'`);
-    }
-    return Object.hasOwn(result.value, parameter.name) ? result.value[parameter.name] : undefined;
-  });
 }
 
 function serverFunctionError(error: ServerFunctionInputError): Response {
@@ -369,7 +376,7 @@ function serverFunctionError(error: ServerFunctionInputError): Response {
 
 /** Convert discovered named HTTP functions into ordinary router definitions. */
 export function createServerFunctionRoutes<
-  TLocals extends object = RegisteredServerLocals,
+  TLocals extends object = RegisteredServerState,
   TPlatform = RegisteredServerPlatform,
   TServices extends object = RegisteredServerServices,
 >(
@@ -390,6 +397,12 @@ export function createServerFunctionRoutes<
     )) {
       throw new TypeError(`Server function '${definition.id}' input must implement Standard Schema v1`);
     }
+    if (definition.schemaInput === true && definition.input === undefined) {
+      throw new TypeError(`Server function '${definition.id}' schema input requires an input validator`);
+    }
+    if (definition.input !== undefined && definition.schemaInput !== true) {
+      throw new TypeError(`Server function '${definition.id}' input validator requires schema input transport`);
+    }
     const route: InternalServerFunctionRoute<TLocals, TPlatform, TServices> = {
       [SERVER_FUNCTION_ROUTE_KEY]: true,
       id: definition.id,
@@ -398,15 +411,20 @@ export function createServerFunctionRoutes<
       middleware: definition.middleware,
       async handler(context) {
         try {
-          let args = definition.method === 'GET'
-            ? queryArguments(context.url, definition.parameters)
-            : await bodyArguments(context.request, definition.parameters);
-          if (definition.input !== undefined) {
-            const validated = await validateServerFunctionArguments(definition.input, definition.parameters, args);
+          let args: unknown[];
+          if (definition.schemaInput === true) {
+            const input = definition.method === 'GET'
+              ? querySchemaInput(context.url)
+              : await bodySchemaInput(context.request);
+            const validated = await validateServerFunctionArguments(definition.input!, input);
             if (validated instanceof Response) return validated;
             args = validated;
+          } else {
+            args = definition.method === 'GET'
+              ? queryArguments(context.url, definition.parameters)
+              : await bodyArguments(context.request, definition.parameters);
           }
-          return definition.handler(...args);
+          return definition.handler(context, ...args);
         } catch (error) {
           if (error instanceof ServerFunctionInputError) {
             return serverFunctionError(error);
@@ -504,7 +522,7 @@ function withoutBody(response: Response): Response {
  * Rendering and filesystem discovery deliberately live above this layer.
  */
 export function createServerRouter<
-  TLocals extends object = RegisteredServerLocals,
+  TLocals extends object = RegisteredServerState,
   TPlatform = RegisteredServerPlatform,
   TServices extends object = RegisteredServerServices,
 >(
@@ -691,7 +709,7 @@ export function createServerRouter<
     const params = selection === null
       ? groupMatch.params
       : Object.freeze({ ...groupMatch.params, ...selection.params });
-    const locals = dispatchOptions.locals ?? options.createLocals?.(request) ??
+    const state = dispatchOptions.state ?? options.createState?.(request) ??
       (Object.create(null) as TLocals);
     const platform = dispatchOptions.platform ?? options.createPlatform?.(request);
     const services = dispatchOptions.services ?? options.services ??
@@ -700,7 +718,7 @@ export function createServerRouter<
       request,
       url,
       params,
-      locals,
+      state,
       platform,
       services,
     });

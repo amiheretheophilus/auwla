@@ -11,16 +11,10 @@ import {
   collectPreferConstDiagnostics,
   createPreferConstCodeFix,
 } from './diagnostics/prefer-const';
-import {
-  installServerFunctionTypeSnapshots,
-  mapServerFunctionTypeDiagnostics,
-  type ServerFunctionTypeOptions,
-  type ServerFunctionTypeSource,
-} from './server-function-types';
 
 type TypeScript = typeof ts;
 
-interface PluginConfig extends ServerFunctionTypeOptions {
+interface PluginConfig {
   preferConst?: boolean;
   compilerDiagnostics?: boolean;
 }
@@ -32,9 +26,6 @@ export function createLanguageService(
   const original = info.languageService;
   const proxy = bindLanguageService(original);
   const config = info.config as PluginConfig;
-  const annotationSources = info.languageServiceHost === undefined || config.serverFunctionAnnotations === false
-    ? new Map<string, ServerFunctionTypeSource>()
-    : installServerFunctionTypeSnapshots(typescript, info.languageServiceHost, config);
   const preferConstCache = new WeakMap<
     ts.SourceFile,
     ts.DiagnosticWithLocation[]
@@ -45,8 +36,7 @@ export function createLanguageService(
   >();
 
   proxy.getSemanticDiagnostics = (fileName) => {
-    const diagnostics = mapServerFunctionTypeDiagnostics(typescript,
-      original.getSemanticDiagnostics(fileName), annotationSources);
+    const diagnostics = original.getSemanticDiagnostics(fileName);
     const program = original.getProgram();
     const sourceFile = program?.getSourceFile(fileName);
     if (program === undefined || sourceFile === undefined) {
@@ -71,14 +61,12 @@ export function createLanguageService(
         byFile = collectCompilerDiagnostics(
           typescript,
           program,
-          annotationSources,
         );
         compilerCache.set(program, byFile);
       }
       customDiagnostics.push(...(byFile.get(normalizePath(fileName)) ?? []));
     }
-    return [...diagnostics, ...customDiagnostics,
-      ...(annotationSources.get(normalizePath(fileName))?.diagnostics ?? [])];
+    return [...diagnostics, ...customDiagnostics];
   };
 
   proxy.getCodeFixesAtPosition = (
@@ -119,7 +107,6 @@ export function createLanguageService(
 function collectCompilerDiagnostics(
   typescript: TypeScript,
   program: ts.Program,
-  annotationSources: ReadonlyMap<string, ServerFunctionTypeSource>,
 ): Map<string, ts.DiagnosticWithLocation[]> {
   const sourceFiles = program.getSourceFiles().filter(
     (sourceFile) =>
@@ -131,7 +118,7 @@ function collectCompilerDiagnostics(
   const modules = Object.fromEntries(
     sourceFiles.map((sourceFile) => [
       normalizePath(sourceFile.fileName),
-      annotationSources.get(normalizePath(sourceFile.fileName))?.authored ?? sourceFile.text,
+      sourceFile.text,
     ]),
   );
   const diagnostics = diagnoseModules(modules, {

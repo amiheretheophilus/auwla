@@ -442,9 +442,9 @@ describe('route runtime', () => {
       id: 'persistent-route-state',
       server: false,
       prepare: context => {
-        const next = Number(context.state.visits ?? 0) + 1;
-        context.state.visits = next;
-        context.state.localOnly = () => 'not transported';
+        const next = Number(context.routeState.visits ?? 0) + 1;
+        context.routeState.visits = next;
+        context.routeState.localOnly = () => 'not transported';
         visits.push(next);
         return { visits: next };
       },
@@ -487,10 +487,10 @@ describe('route runtime', () => {
     registerRoutedPreparation({
       id: 'shared-report-preparation',
       server: false,
-      prepare: ({ state, url }) => {
-        state.visits = Number(state.visits ?? 0) + 1;
-        visits.push(`${url.pathname}:${state.visits}`);
-        return state.visits;
+      prepare: ({ routeState, url }) => {
+        routeState.visits = Number(routeState.visits ?? 0) + 1;
+        visits.push(`${url.pathname}:${routeState.visits}`);
+        return routeState.visits;
       },
     });
     const runtime = createRouteRuntime({
@@ -514,8 +514,8 @@ describe('route runtime', () => {
       id: 'state-transport-boundary',
       server: false,
       prepare: context => {
-        context.state.visits = 1;
-        context.state.circular = context.state;
+        context.routeState.visits = 1;
+        context.routeState.circular = context.routeState;
         return { initialized: true };
       },
     });
@@ -568,8 +568,8 @@ describe('route runtime', () => {
       id: 'retry-route-data',
       server: false,
       prepare: context => {
-        const attempts = Number(context.state.attempts ?? 0) + 1;
-        context.state.attempts = attempts;
+        const attempts = Number(context.routeState.attempts ?? 0) + 1;
+        context.routeState.attempts = attempts;
         if (attempts === 1) throw new Error('temporary failure');
         return { attempts };
       },

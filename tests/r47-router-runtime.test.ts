@@ -149,9 +149,9 @@ describe('compiled router DOM integration', () => {
       './PreparedReports.compiled.tsx': `
         import { $routed } from '@memoized-dom/router';
         export function Reports() {
-          const visits = $routed(({ state }) => {
-            state.visits = Number(state.visits ?? 0) + 1;
-            return state.visits;
+          const visits = $routed(({ routeState }) => {
+            routeState.visits = Number(routeState.visits ?? 0) + 1;
+            return routeState.visits;
           });
           return <p data-visits>{visits}</p>;
         }

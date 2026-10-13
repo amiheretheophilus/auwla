@@ -10,7 +10,7 @@ import { mdd, mr } from './dom/identifiers';
 const ROUTER_MODULE = '@memoized-dom/router';
 const SERVER_CONTEXT_FIELDS = new Set([
   'request',
-  'locals',
+  'state',
   'services',
   'platform',
 ]);

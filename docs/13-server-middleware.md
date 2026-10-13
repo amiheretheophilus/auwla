@@ -1,142 +1,50 @@
 # Server middleware
 
-A middleware is a function that wraps the request pipeline:
+Create middleware with the application `define` object so its context is typed
+without separate annotations:
 
 ```ts
-import type { ServerMiddleware } from '@memoized-dom/server';
-
-const logger: ServerMiddleware = async (context, next) => {
-  const started = Date.now();
-  const response = await next();              // run the rest of the pipeline
-  console.log(
-    `${context.request.method} ${context.url.pathname} → ${response.status} (${Date.now() - started}ms)`,
-  );
-  return response;
-};
-```
-
-`(context, next)` — the same `context` handlers get, plus `next()` which
-runs everything downstream and resolves to its `Response`. Code before
-`next()` runs on the way in; code after runs on the way out. **Don't call
-`next()`** and return your own `Response` → the request never reaches the
-handler (short-circuit).
-
-Middleware can also write into `context.locals` — downstream middleware
-and the handler see it:
-
-```ts
-const session: ServerMiddleware = (context, next) => {
-  context.locals.user = context.request.headers.get('x-user') ?? undefined;
+export const session = define.middleware(async (context, next) => {
+  context.state.user = await context.services.sessions.read(context.request);
   return next();
-};
+});
 ```
 
-## On the app instance
+Request `state` is shared by reference across the middleware chain. A write in
+one middleware is visible to every downstream middleware and handler, and is
+still visible when control returns upstream after `await next()`.
+
+Defining middleware does not apply it. Choose its scope explicitly:
 
 ```ts
-const app = serve({ createLocals: () => ({ user:string | undefined }) });
-
-app.use(logger, session);                          // every request, in order
-app.use('/api/admin/*', requireAdmin);             // only matching paths
+app.use(logger);                         // every request
+app.use('/api/admin/*', authenticated); // path group
+app.post('/api/items', rateLimit, handler); // one raw route
 ```
 
-- `app.use(...middleware)` — global, runs for every request in argument
-  order.
-- `app.use(path, ...middleware)` — a **group**: the path prefix-matches
-  (`/api` covers `/api/*`), so the middleware wraps the whole subtree.
+Server functions retain two group conventions:
 
 ```ts
-const requireAdmin: ServerMiddleware = (context, next) => {
-  if (context.locals.user !== 'admin') {
-    return new Response('Forbidden', { status: 403 });   // short-circuit
-  }
-  return next();
-};
+// server/functions/admin/_middleware.ts
+export const middleware = [authenticated];
 ```
-
-## On a route
-
-A route's pipeline is `path`, then any number of middleware, then the
-handler — always last:
 
 ```ts
-app.get('/api/admin/stats', requireAdmin, (context) => ({   // GET route
-  stats: context.services.database.stats(),                 // + one guard
-}));
-
-app.post(
-  '/api/stories',
-  requireUser,                    // runs first
-  validateBody,                   // then this
-  async (context) => {            // handler — always the last argument
-    return createStory(await context.request.json());
-  },
-);
+// server/functions/users.ts
+export const middleware = [auditUsers];
 ```
 
-Route middleware runs after global and group middleware, in listed order —
-scoped to that single route, no pattern needed.
-
-## Inside server functions
-
-Three places, no registration needed:
-
-**Module middleware** — a `middleware` export in the function file runs in
-front of every endpoint that file registers:
+Target one function through its descriptor only when needed:
 
 ```ts
-// server/functions/stories.ts
-import type { ServerMiddleware } from '@memoized-dom/server';
-
-const logCalls: ServerMiddleware = (context, next) => {
-  console.log(`[fn] ${context.request.method} ${context.url.pathname}`);
-  return next();
-};
-
-export const middleware = [logCalls];      // wraps getStories, postVote, …
-
-/** @GET */
-export async function getStories() { /* … */ }
+export const removeUser = define.function.delete({
+  middleware: [requireOwner],
+  handler: async ({ services }, id: string) => services.users.remove(id),
+});
 ```
 
-**Directory middleware** — a `_middleware.ts` file applies to every
-function module in its folder and below:
+The order is global middleware, path middleware, raw-route middleware,
+ancestor function-folder middleware, module middleware, targeted middleware,
+input validation, then the handler.
 
-```ts
-// server/functions/admin/_middleware.ts — covers all of functions/admin/*
-export const middleware = [requireAdmin];
-```
-
-A `_middleware.ts` file **must** export a named `middleware` array — it's
-the only thing that file is for.
-
-**Function middleware** — a JSDoc annotation applies middleware to just one
-function, after folder and module middleware:
-
-```ts
-/**
- * @DELETE
- * @middleware [requireAdmin]
- */
-export async function removeStory(storyId: number) {
-  return db.stories.delete(storyId);
-}
-```
-
-The list uses ordinary imported or local middleware bindings. Function
-middleware adds to the inherited pipeline and does not replace it.
-
-## Order
-
-Outermost to innermost:
-
-```
-app.use global → app.use group → route middleware → _middleware.ts
-(ancestor folders, outermost first) → module middleware export → function middleware
-→ @Input validation (when declared) → handler
-```
-
-Locals written by an earlier layer are visible to all later layers — put
-auth/session first, feature middleware after.
-
-Next: [14 — The server `config/` folder](./14-server-config.md)
+Next: [14 — server definition and services](./14-server-config.md)

@@ -32,3 +32,76 @@ temporary data with the server's returned data without refetching.
 The returned function can be called directly from an event handler or passed
 as a `$forms` action. `$forms` owns validation and submission state; this
 utility owns the optimistic change and rollback.
+
+## Grouping repeated updates by ID
+
+Pass an optional second argument on each invocation:
+
+```ts
+changeCount(payload);                     // reconcile every successful call
+changeCount(payload, { id: counter.id }); // reconcile this counter's burst once
+```
+
+The ID identifies the resource or value being updated. Use the same string or
+number for all buttons that change the same counter, and different IDs for
+different counters:
+
+```tsx
+interface Counter { id: string; count: number }
+
+const changeCount = optimistic({
+  action: ({ counter, delta }: { counter: Counter; delta: number }) =>
+    updateCounter(counter.id, delta),
+
+  apply({ counter, delta }) {
+    counter.count += delta;
+    return () => { counter.count -= delta; };
+  },
+
+  reconcile(saved, { counter }) {
+    counter.count = saved.count;
+  },
+});
+
+return counters.map(counter => (
+  <div key={counter.id}>
+    <span>{counter.count}</span>
+    <button onClick={() =>
+      changeCount({ counter, delta: 1 }, { id: counter.id })
+    }>+</button>
+    <button onClick={() =>
+      changeCount({ counter, delta: -1 }, { id: counter.id })
+    }>−</button>
+  </div>
+));
+```
+
+Every click still starts its request and applies its optimistic change
+immediately. While any call with that ID is pending, successful responses
+are held instead of overwriting the displayed value. Once the group settles,
+`reconcile` runs once with the most recently started successful call's result,
+payload, and operation ID. Response arrival order does not select the winner.
+Each failed call still runs its own rollback; if every call fails, there is no
+reconciliation. Calls arriving while a group is pending join that group. After
+it settles, another call with that ID starts a new group.
+Aborted source calls stop holding the group open and supply no reconciliation
+result.
+
+IDs are scoped to the function returned by `optimistic()`. Different IDs settle
+independently. The caller-provided ID groups updates; the operation ID received
+by `apply` and `reconcile` still uniquely identifies an individual request.
+Omitting the options, passing `{}`, or passing `{ id: undefined }` keeps the
+per-call behavior. The original request result is returned unchanged.
+
+Use grouped reconciliation for repeated writes to one value or resource. For
+inserting separate rows, omit the grouping ID so every successful insertion
+gets its own reconciliation.
+
+For a form, provide the ID in the action wrapper:
+
+```ts
+const form = $forms((fields: FormData) => changeCount(
+  { counter, delta: Number(fields.get('delta')) },
+  { id: counter.id },
+));
+```

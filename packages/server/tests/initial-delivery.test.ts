@@ -9,7 +9,7 @@ import { commit, mount, mountInitial, resetScheduler, setScheduler } from '@memo
 import { registerRootFactory, rootFactoryStore } from '@memoized-dom/runtime/server';
 import { initialBootstrapDescriptor } from '@memoized-dom/runtime/server';
 import { registeredIds } from '@memoized-dom/runtime/testing';
-import { render, renderToReadableStream, serve } from '../src/index';
+import { createDefine, render, renderToReadableStream, serve } from '../src/index';
 
 const compileInitial: typeof compileModulesDetailed = (sources, options = {}) =>
   compileModulesDetailed(sources, { initialContent: true, ...options });
@@ -105,7 +105,7 @@ describe('shared initial server delivery', () => {
     const key = first.server.initialDelivery!.key;
     const template = `<!doctype html><head></head><body><div id="root"><!--ssr-outlet--></div></body>` +
       initialBootstrapDescriptor({ key, target: 'root', browser: 'none' });
-    const application = serve();
+    const application = serve({ define: createDefine() });
     application.ssr(first.serverModule.App, { delivery });
     application.ssr('/other', other.serverModule.App, { delivery });
     (application as unknown as { installDocumentTemplate(template: string): void }).installDocumentTemplate(template);

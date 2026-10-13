@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'bun:test';
-import { getServerContext, integrateApplication, serve } from '../src';
+import { createDefine, integrateApplication, serve } from '../src';
 import { createServerFunctionRoutes } from '../src/http-router';
 import { compileFixture } from './parity-harness';
 
@@ -9,10 +9,11 @@ describe('host delivery integration', () => {
     const document = vi.fn(() => { throw new Error('Broken frontend document'); });
     const assets = vi.fn(() => new Response('frontend asset'));
     const app = integrateApplication(serve<Record<string, never>, { port: number }>({
+      define: createDefine<Record<string, never>, { port: number }>(),
       onError: error => new Response(String(error), { status: 500 }),
     }), {
       routes: createServerFunctionRoutes([{ id: 'native', method: 'GET', path: '/_fn/native', parameters: [],
-        handler: () => ({ port: getServerContext<Record<string, never>, { port: number }>().platform!.port }) }]),
+        handler: context => ({ port: context.platform!.port }) }]),
       document, assets,
     });
     app.get('/api/native.json', context => ({ port: context.platform!.port }));
@@ -30,7 +31,10 @@ describe('host delivery integration', () => {
   it('keeps concurrent request documents separate and reports preparation errors through application middleware', async () => {
     const { serverModule } = await compileFixture('integration-documents', 'export function App() { return <p>Ready</p>; }');
     let fail = false;
-    const app = integrateApplication(serve({ onError: error => new Response(String(error), { status: 503 }) }), {
+    const app = integrateApplication(serve({
+      define: createDefine(),
+      onError: error => new Response(String(error), { status: 503 }),
+    }), {
       routes: [], assets: () => undefined,
       async document(request) {
         if (fail) throw new Error('Document unavailable');

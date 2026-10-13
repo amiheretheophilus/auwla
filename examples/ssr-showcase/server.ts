@@ -1,9 +1,9 @@
 /** Server entry composed with the public serve() application API. */
 import {
   serve,
-  type ServerMiddleware,
 } from '@memoized-dom/server';
 import { App } from './App';
+import { define } from './server/define';
 
 const SESSION = { name: 'Ada Lovelace', role: 'admin', avatar: 'A' };
 
@@ -44,17 +44,17 @@ const STORIES = [
 
 function devDelay(
   delays: Record<string, number>,
-): ServerMiddleware {
-  return async (context, next) => {
+) {
+  return define.middleware(async (context, next) => {
     const duration = delays[context.url.pathname];
     if (duration !== undefined) {
       await new Promise(resolve => setTimeout(resolve, duration));
     }
     return next();
-  };
+  });
 }
 
-const pageCache: ServerMiddleware = async (_context, next) => {
+const pageCache = define.middleware(async (_context, next) => {
   const response = await next();
   if (response.headers.get('content-type')?.includes('text/html')) {
     response.headers.set(
@@ -63,9 +63,9 @@ const pageCache: ServerMiddleware = async (_context, next) => {
     );
   }
   return response;
-};
+});
 
-const app = serve();
+const app = serve({ define });
 
 app.use(pageCache);
 app.use('/api/*', devDelay({

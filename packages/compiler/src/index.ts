@@ -49,7 +49,6 @@ export {
   generateServerFunctionClient,
   generateServerFunctionDeclarations,
   generateServerFunctionImplementation,
-  serverFunctionMetadataExport,
   serverFunctionModuleName,
   type AnalyzeServerFunctionOptions,
   type ServerFunctionDeclarationOptions,

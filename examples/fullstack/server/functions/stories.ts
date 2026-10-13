@@ -7,19 +7,17 @@
  * export composes in front of every endpoint it registers (RFC §11):
  * here it logs each server-function invocation.
  *
- * `getServerContext()` reads the active request context — the same locals
- * the `session` middleware in server.ts populated for this dispatch, whether
- * the request arrived over HTTP or through in-memory SSR dispatch.
+ * The injected first argument carries the same request state the session
+ * middleware in server.ts populated for this dispatch.
  */
-import { getServerContext } from '@memoized-dom/server';
-import type { ServerMiddleware } from '@memoized-dom/server';
+import { define } from '../define';
 
 
-function logServerFunction(): ServerMiddleware {
-  return (context, next) => {
+function logServerFunction() {
+  return define.middleware((context, next) => {
     console.log(`[fn] ${context.request.method} ${context.url.pathname}`);
     return next();
-  };
+  });
 }
 
 export const middleware = [
@@ -58,21 +56,17 @@ function delay(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-/** @GET */
-export async function getStories() {
+export const getStories = define.function.get(async (_context) => {
   await delay(3000);
   return stories;
-}
+});
 
-/** @GET */
-export async function getStory(id: number) {
+export const getStory = define.function.get(async (_context, id: number) => {
   await delay(3000);
   return stories.find((story) => story.id === id) ?? null;
-}
+});
 
-/** @POST */
-export async function vote(id: number) {
-  const { locals } = getServerContext();
+export const vote = define.function.post(async ({ state }, id: number) => {
   const story = stories.find((candidate) => candidate.id === id)!;
 
   story.votes += 1;
@@ -80,12 +74,10 @@ export async function vote(id: number) {
   if(story.votes === 10 || story.votes === 15 || story.votes === 16 || story.votes === 18) {
     throw new Error('Story has reached the vote limit');
   }
-  return { id: story.id, votes: story.votes, by: locals.user ?? 'anonymous' };
-}
+  return { id: story.id, votes: story.votes, by: state.user ?? 'anonymous' };
+});
 
-/** @DELETE */
-export async function removeStory(id: number) {
-  const { request } = getServerContext();
+export const removeStory = define.function.delete(async ({ request }, id: number) => {
   if (request.headers.get('x-admin') !== 'yes') {
     throw new Error('removeStory requires the x-admin: yes header');
   }
@@ -96,4 +88,4 @@ export async function removeStory(id: number) {
 
    await delay(3000);
   return stories.splice(index, 1)[0]!;
-}
+});
