@@ -16,14 +16,14 @@ import { KanbanColumn } from './KanbanColumn';
 
 const BoardList = ({ items, renderItem }: {
   items: typeof columns;
-  renderItem: (item: (typeof columns)[number]) => unknown;
+  renderItem: (item: (typeof columns)[number]) => JSX.Child;
 }) => (
   <div class="kanban-grid">
     {items.map((item) => renderItem(item))}
   </div>
 );
 
-const RepeatedFeature = ({ content }: { content: unknown }) => (
+const RepeatedFeature = ({ content }: { content: JSX.Child }) => (
   <div class="composition-feature">
     <span>Compiled twice:</span>
     <b>{content}</b>

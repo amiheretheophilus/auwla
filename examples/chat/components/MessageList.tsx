@@ -16,7 +16,7 @@ export function MessageList({
   onReact,
   onOpenThread,
 }: MessageListProps) {
-  let listElement: HTMLElement | undefined;
+  let listElement: HTMLDivElement | undefined;
 
   return (
     <div class="message-list-container" ref={listElement}>

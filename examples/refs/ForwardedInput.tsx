@@ -1,7 +1,7 @@
 export interface ForwardedInputProps {
   label: string;
-  ref?: unknown;
-  inputRef?: unknown;
+  ref?: JSX.IntrinsicElements['input']['ref'];
+  inputRef?: HTMLInputElement;
   id?: string;
   placeholder?: string;
 }

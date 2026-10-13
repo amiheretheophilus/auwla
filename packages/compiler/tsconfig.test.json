@@ -1,0 +1,14 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "incremental": false,
+    "noEmit": true,
+    "jsxImportSource": "@memoized-dom/compiler",
+    "paths": {
+      "@memoized-dom/compiler/jsx": ["./src/jsx-types.ts"],
+      "@memoized-dom/compiler/jsx-runtime": ["./src/jsx-runtime.ts"]
+    }
+  },
+  "include": ["src/jsx-types.ts", "src/jsx-runtime.ts", "src/jsx/dom-types.ts", "tests"],
+  "exclude": ["dist"]
+}

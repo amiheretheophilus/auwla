@@ -15,8 +15,8 @@ export interface StatCardProps {
   trend?: 'up' | 'down' | 'neutral';
   icon?: string;
   accent?: 'emerald' | 'amber' | 'stone';
-  ref?: unknown;
-  cardRef?: unknown;
+  ref?: HTMLDivElement;
+  cardRef?: HTMLDivElement;
 }
 
 export function StatCard({
