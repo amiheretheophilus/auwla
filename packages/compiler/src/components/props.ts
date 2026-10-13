@@ -46,6 +46,8 @@ export interface ComponentPropsPlan {
   hasWholeDefault: boolean;
   /** Props consumed as compiler-owned mount slots rather than scalar values. */
   renderProps: string[];
+  /** Authored `<slot>` names; the empty string denotes the default slot. */
+  slots: string[];
   /** Props invoked by structural list sites as caller-owned row factories. */
   renderCallbacks: string[];
   /** Props consumed as DOM ref adapters and forwarded without reading a sink. */
@@ -141,6 +143,7 @@ export function analyzeComponentProps(
     ...shape,
     params: plain.map(cloneCompilerNode),
     renderProps: [],
+    slots: [],
     renderCallbacks: [],
     refProps: [],
   };

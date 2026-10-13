@@ -11,6 +11,10 @@ export namespace JSX {
   }
   export interface IntrinsicAttributes extends globalThis.JSX.IntrinsicAttributes {}
   export interface IntrinsicElements extends DOMIntrinsicElements {
+    slot: IntrinsicAttributes & {
+      name?: string;
+      children?: Child;
+    };
     [name: `${string}-${string}`]: unknown;
   }
 }

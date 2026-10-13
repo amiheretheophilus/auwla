@@ -18,6 +18,7 @@ function linkedComponentPlan(
     params: [],
     hasWholeDefault: component.hasWholeDefault,
     renderProps: [...(component.renderProps ?? [])],
+    slots: [...(component.slots ?? [])],
     renderCallbacks: [...(component.renderCallbacks ?? [])],
     refProps: [...(component.refProps ?? [])],
   };

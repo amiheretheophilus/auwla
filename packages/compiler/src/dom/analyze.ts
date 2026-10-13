@@ -61,6 +61,7 @@ import {
 } from '../analysis/module-scan';
 import { scanRenderProps } from '../analysis/render-props';
 import { collectReads } from '../analysis/read-collection';
+import { componentSlotProp } from '../jsx/component-slots';
 
 
 import { analyzeModuleListTargets } from '../analysis/module-list-targets';
@@ -78,7 +79,10 @@ export function runAnalysis(ctx: Ctx, programPath: ProgramPath): void {
   // Reanalyze normalized lexical bindings from the backend's explicit result.
   // The backend never publishes its positional ABI by mutating source props.
   for (const [name, parameters] of normalizedParameters) {
-    ctx.componentProps.set(name, analyzeComponentProps(parameters));
+    const props = analyzeComponentProps(parameters);
+    props.slots = [...(ctx.componentSlots.get(name) ?? [])];
+    props.renderProps.push(...props.slots.map(componentSlotProp));
+    ctx.componentProps.set(name, props);
   }
   lowerSourceDestructuring(ctx, planSourceDestructuring(ctx, programPath.node,
     refreshAstAnalysis(ctx, programPath.node), programPath));

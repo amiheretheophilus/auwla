@@ -94,6 +94,12 @@ export function platformJSXTypes() {
     />
   );
   const customElement = <memoized-widget arbitrary="yes" payload={{ nested: true }} />;
+  const slotted = (
+    <TypedSlotPanel title="Panel">
+      <h2 slot="header">Heading</h2>
+      <p>Body</p>
+    </TypedSlotPanel>
+  );
   const component = ({ text }: { text: string }) => <p>{text}</p>;
   type ComponentReturnIsNotAny = Assert<IsAny<ReturnType<typeof component>> extends false ? true : false>;
   const typedReturn: ComponentReturnIsNotAny = true;
@@ -123,6 +129,7 @@ export function platformJSXTypes() {
     math,
     attributes,
     customElement,
+    slotted,
     badDiv,
     badKey,
     badButton,
@@ -138,4 +145,8 @@ export function platformJSXTypes() {
 
 function TypedComponent({ count }: { count: number }) {
   return <span>{count}</span>;
+}
+
+function TypedSlotPanel({ title }: { title: string }) {
+  return <section aria-label={title}><slot name="header" /><slot /></section>;
 }

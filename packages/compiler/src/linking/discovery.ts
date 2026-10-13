@@ -485,6 +485,7 @@ export function analyzeManifest(
               ...importedComponent,
               delegatedEvents: [...(importedComponent.delegatedEvents ?? [])],
               renderProps: [...(importedComponent.renderProps ?? [])],
+              slots: [...(importedComponent.slots ?? [])],
               renderCallbacks: [...(importedComponent.renderCallbacks ?? [])],
               refProps: [...(importedComponent.refProps ?? [])],
               subtreeReads: [...(importedComponent.subtreeReads ?? [])],

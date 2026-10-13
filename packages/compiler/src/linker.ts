@@ -9,6 +9,7 @@
 import type * as t from './ast/compiler-types';
 import { posix } from 'node:path';
 import {
+  cloneNode as cloneEstreeNode,
   parseWithEstreeFrontendOrThrow,
   walkAst,
   type BaseNode,
@@ -57,6 +58,8 @@ import { type InitialRenderPlan } from './planning/initial-content';
 import { planInitialDom } from './dom/initial-dom';
 import { emitInitialHtml } from './dom/initial-html';
 import { planInitialDelivery, type InitialDelivery } from './dom/delivery-plan';
+import { normalizeComponentDeclarations } from './components/declarations';
+import { normalizeComponentSlots } from './jsx/component-slots';
 
 export interface CompiledComponentExport {
   exported: string;
@@ -625,6 +628,37 @@ function compileLinkedModules(
     options,
     enforceSingleApplicationRoot,
   );
+  // Initial rendering consumes the same compiler-owned slot syntax as the
+  // browser backend. Normalize a separate AST so source discovery remains
+  // immutable and final compilation can still perform its own lowering.
+  for (const entry of entries.values()) {
+    const initialProgram = cloneEstreeNode(
+      entry.ast as unknown as BaseNode,
+      true,
+    ) as unknown as t.Program;
+    const initialPath = {
+      node: initialProgram,
+      buildCodeFrameError(message: string, at = initialProgram) {
+        return compilerError(message, entry.id, at as unknown as BaseNode);
+      },
+    };
+    normalizeComponentDeclarations(initialPath);
+    normalizeComponentSlots(
+      createCtx({
+        ...compilerOptions(options, rootId),
+        moduleId: entry.id,
+        linkedImports: linkImports(
+          entry,
+          manifests.get(entry.id)!,
+          manifests,
+          entries,
+          options,
+        ),
+      }),
+      initialPath,
+    );
+    authoredPrograms.set(entry.id, initialProgram);
+  }
   // Capture initial content before any backend mutates component bodies.
   const initialRender = planInitialRendering(authoredPrograms, applicationRoot,
     (importer, specifier) => resolveModule(importer, specifier, entries, options)?.id,

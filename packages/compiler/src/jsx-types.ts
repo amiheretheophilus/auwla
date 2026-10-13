@@ -74,6 +74,9 @@ declare global {
 
     interface IntrinsicAttributes {
       key?: unknown;
+      /** Compiler-owned component content and named-slot assignment marker. */
+      children?: Child;
+      slot?: string;
       if?: boolean;
       'else-if'?: boolean;
       else?: true;
@@ -83,6 +86,11 @@ declare global {
     }
 
     interface IntrinsicElements extends DOMIntrinsicElements {
+      /** Compiler placeholder; no HTMLSlotElement is emitted. */
+      slot: IntrinsicAttributes & {
+        name?: string;
+        children?: Child;
+      };
       /** Custom elements remain open-ended while standard tags stay strict. */
       [name: `${string}-${string}`]: unknown;
     }

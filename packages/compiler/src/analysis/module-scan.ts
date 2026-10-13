@@ -20,6 +20,7 @@ import {
 } from '../context';
 import { analyzeComponentProps } from '../components/props';
 import { hostJsxEventNames } from '../jsx/events';
+import { componentSlotProp } from '../jsx/component-slots';
 import { moduleStateStringCandidates } from './type-candidates';
 import {
   discoverTopLevelFunctions,
@@ -218,10 +219,10 @@ export function scanComponents(ctx: Ctx, programPath: ProgramPath): void {
       ctx.componentsWithHostEvents.add(discovered.name);
     }
     try {
-      ctx.componentProps.set(
-        discovered.name,
-        analyzeComponentProps(componentPath.node.params),
-      );
+      const props = analyzeComponentProps(componentPath.node.params);
+      props.slots = [...(ctx.componentSlots.get(discovered.name) ?? [])];
+      props.renderProps.push(...props.slots.map(componentSlotProp));
+      ctx.componentProps.set(discovered.name, props);
     } catch (error) {
       throw path.buildCodeFrameError(
         `memo-dom: invalid props for component '${discovered.name}': ${

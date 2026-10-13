@@ -190,7 +190,7 @@ type SVGAttributes<T extends SVGElement> = Common<T> &
   };
 
 export type DOMIntrinsicElements = {
-  [K in keyof HTMLElementTagNameMap]: HTMLAttributes<HTMLElementTagNameMap[K]>;
+  [K in Exclude<keyof HTMLElementTagNameMap, 'slot'>]: HTMLAttributes<HTMLElementTagNameMap[K]>;
 } & {
   [
     K in Exclude<keyof HTMLElementDeprecatedTagNameMap, keyof HTMLElementTagNameMap>

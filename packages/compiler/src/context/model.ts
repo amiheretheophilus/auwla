@@ -214,6 +214,8 @@ export interface LinkedComponentImport {
   delegatedEvents?: string[];
   /** Props consumed as compiler-owned mount slots. */
   renderProps?: string[];
+  /** Authored `<slot>` names; the empty string denotes the default slot. */
+  slots?: string[];
   /** Props consumed as caller-owned structural row factories. */
   renderCallbacks?: string[];
   /** Props consumed as DOM ref adapters. */
@@ -470,6 +472,8 @@ export interface Ctx {
     Map<string, LinkedComponentPropSource>
   >;
   linkedComponentRenderProps: Map<string, string[]>;
+  /** Local authored `<slot>` declarations discovered before component analysis. */
+  componentSlots: Map<string, string[]>;
   comps: Map<string, CompInfo>;
   compPaths: Map<string, CompilerPath<t.FunctionDeclaration>>;
   /** Top-level functions WITHOUT JSX — helpers, summarized for interprocedural effects. */
@@ -695,6 +699,7 @@ export function createAnalysisCtx(opts: AnalysisOptions = {}): Ctx {
       params: [],
       hasWholeDefault: component.hasWholeDefault,
       renderProps: [...(component.renderProps ?? [])],
+      slots: [...(component.slots ?? [])],
       renderCallbacks: [...(component.renderCallbacks ?? [])],
       refProps: [...(component.refProps ?? [])],
     });
@@ -809,6 +814,7 @@ export function createAnalysisCtx(opts: AnalysisOptions = {}): Ctx {
     rowComponentSites: new Map(),
     componentProps,
     linkedComponentRenderProps,
+    componentSlots: new Map(),
     lightweightCache: new Map(),
     rowReads: new Map(),
     lightweightInlineRows: new WeakSet(),

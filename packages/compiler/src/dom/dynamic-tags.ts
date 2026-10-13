@@ -53,6 +53,7 @@ export function lowerLinkedDynamicComponentImports(
           listLightweight: candidate.listLightweight,
           delegatedEvents: candidate.delegatedEvents,
           renderProps: [...(candidate.renderProps ?? [])],
+          slots: [...(candidate.slots ?? [])],
           renderCallbacks: [...(candidate.renderCallbacks ?? [])],
           refProps: [...(candidate.refProps ?? [])],
           subtreeReads: [...(candidate.subtreeReads ?? [])],

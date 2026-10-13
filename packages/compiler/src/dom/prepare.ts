@@ -24,6 +24,7 @@ import { lowerReadReplays } from './read-replay';
 import { lowerTransparentGroups } from './group-lowering';
 import { lowerModuleSourceDeclarations } from './source-declarations';
 import { rejectNonGetServerFunctionRenderCalls, scanEventSourceAssignments } from '../analysis/transparent-sources';
+import { normalizeComponentSlots } from '../jsx/component-slots';
 
 export function prepareProgramAnalysis(ctx: Ctx, programPath: ProgramPath): void {
   installCompilerIntrinsics(ctx, programPath);
@@ -31,6 +32,7 @@ export function prepareProgramAnalysis(ctx: Ctx, programPath: ProgramPath): void
   const dynamicImports = lowerLinkedDynamicComponentImports(ctx, programPath);
   recordLinkedDynamicComponentBindings(ctx, dynamicImports);
   ctx.emission.header.push(...dynamicImports.imports);
+  normalizeComponentSlots(ctx, programPath);
   normalizeConditionalJsxDirectives(programPath);
   initializeGeneratedIdentifiers(ctx, programPath.node);
   scanExternalReactiveImports(ctx, programPath);

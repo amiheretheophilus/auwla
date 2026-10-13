@@ -7,6 +7,7 @@
  */
 
 import { walkAst, type BaseNode } from '../ast';
+import type * as t from '../ast/compiler-types';
 import { isListLightweightCandidate } from '../analysis/component-graph';
 import { canonicalStateKey, keyPathOf } from '../context';
 import type { Ctx } from '../context/model';
@@ -20,6 +21,7 @@ import {
 } from './prop-origins';
 import { componentSubtreeReads } from '../analysis/component-reads';
 import { hostJsxEventNames } from '../jsx/events';
+import { componentSlotProp, discoverComponentSlots } from '../jsx/component-slots';
 
 export interface ComponentExportInfo {
   key: string;
@@ -31,6 +33,8 @@ export interface ComponentExportInfo {
   listResourceFree?: boolean;
   delegatedEvents: string[];
   renderProps: string[];
+  /** Authored `<slot>` names; the empty string denotes the default slot. */
+  slots: string[];
   renderCallbacks: string[];
   refProps: string[];
   subtreeReads: string[];
@@ -53,6 +57,7 @@ export function discoverComponentExports(
   const nodes = (value: unknown): BaseNode[] =>
     Array.isArray(value) ? value.filter((item): item is BaseNode => node(item) !== null) : [];
   const body = nodes(fields(program).body);
+  const discoveredSlots = discoverComponentSlots(program as unknown as t.Program);
   for (const statement of body) {
     const declaration =
       statement.type === 'ExportNamedDeclaration' ||
@@ -74,17 +79,22 @@ export function discoverComponentExports(
     });
     if (!hasJsx) continue;
     const props = analyzeComponentPropShape(nodes(fields(declaration).params));
+    const slots = (discoveredSlots.get(name) ?? []).map((slot) => slot.name);
+    const privateSlotProps = slots.map(componentSlotProp);
     const functionBody = node(fields(declaration).body);
     components.set(name, {
       key: `${moduleId}#${name}`,
-      props: [...props.names],
+      props: props.acceptsUnknown
+        ? [...props.names]
+        : [...props.names, ...privateSlotProps],
       objectProps: props.mode === 'object',
       acceptsUnknownProps: props.acceptsUnknown,
       hasWholeDefault: props.hasWholeDefault,
       listLightweight: false,
       delegatedEvents:
         functionBody === null ? [] : hostJsxEventNames(functionBody),
-      renderProps: [],
+      renderProps: privateSlotProps,
+      slots,
       renderCallbacks: [],
       refProps: [],
       subtreeReads: [],
@@ -113,6 +123,7 @@ export function analyzedComponentExport(
     delegatedEvents: [...(ctx.componentHostEvents.get(local) ?? [])],
     ...(publication.listResourceFree ? { listResourceFree: true } : {}),
     renderProps: [...props.renderProps],
+    slots: [...props.slots],
     renderCallbacks: [...props.renderCallbacks],
     refProps: [...props.refProps],
     subtreeReads: [...componentSubtreeReads(ctx, local)]
