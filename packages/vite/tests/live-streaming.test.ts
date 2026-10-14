@@ -130,9 +130,29 @@ it.skipIf(!chrome)('automatically synchronizes Fieldnotes and protects multiple 
     await viewer.bringToFront();
     await viewer.click('a.back');
     await viewer.waitForSelector('li.expedition');
+    await viewer.waitForFunction(() => document.querySelector('a[href="/expeditions/ice-cores"]')?.closest('li')
+      ?.querySelector('.meta .chip:last-child')?.textContent === '4 notes', { timeout: 15_000, polling: 100 });
+    await waitFor(() => expect(liveRequests.some(url => url.includes('/getExpeditions'))).toBe(true));
     const count = liveRequests.length;
-    await viewer.evaluate(() => new Promise(resolve => setTimeout(resolve, 1_200)));
+
+    // Regression: a mounted overview receives a detail-page mutation without
+    // navigation, refresh(), or a new browser GET. Deletion updates it too.
+    await writer.bringToFront();
+    const overviewNote = 'A detail mutation updates the overview count';
+    await writer.type('.note-form input', overviewNote);
+    await writer.click('.note-form button');
+    await viewer.waitForFunction(() => document.querySelector('a[href="/expeditions/ice-cores"]')?.closest('li')
+      ?.querySelector('.meta .chip:last-child')?.textContent === '5 notes', { timeout: 15_000, polling: 100 });
+    await writer.waitForFunction(() => document.querySelector('.status-line')?.textContent?.includes('Note saved'), { timeout: 10_000, polling: 100 });
+    await writer.evaluate(value => {
+      const note = [...document.querySelectorAll('li.note')].find(node => node.textContent?.includes(value));
+      if (!note) throw new Error('Saved note missing');
+      note.querySelector('button')!.click();
+    }, overviewNote);
+    await viewer.waitForFunction(() => document.querySelector('a[href="/expeditions/ice-cores"]')?.closest('li')
+      ?.querySelector('.meta .chip:last-child')?.textContent === '4 notes', { timeout: 15_000, polling: 100 });
     expect(liveRequests).toHaveLength(count);
+    await viewer.bringToFront();
     await viewer.click('a[href="/expeditions/canopy"]');
     await viewer.waitForFunction(() => document.querySelectorAll('li.note').length === 1, { timeout: 15_000, polling: 100 });
     expect(await viewer.$eval('[data-note-count]', element => element.textContent)).toContain('1 notes');

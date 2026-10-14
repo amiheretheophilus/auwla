@@ -95,7 +95,7 @@ describe('consistent CLI launcher', () => {
     await writeFile(join(root, 'server/functions/live.ts'), `import { define } from '../define';
       let count = 0;
       export const getCount = define.function({ live: () => ['count'], async get() { return count; } });
-      export const increment = define.function({ updates: () => ['count'], async post() { return ++count; } });
+      export const increment = define.function({ updates: () => ['count', 'one'], async post() { return ++count; } });
       export const answer = define.function({ async *post() { yield 'a'; yield 'ab'; return 'ignored'; } });`);
     await writeFile(join(root, 'server.ts'), `import { createDefine, serve } from '@memoized-dom/server';
       import { define } from './server/define'; import { App } from './src/App';

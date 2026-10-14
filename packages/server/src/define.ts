@@ -55,7 +55,9 @@ type ServerFunctionHandler<
 ) => Promise<TResult> | AsyncGenerator<TResult, unknown, unknown>;
 
 type FunctionInvalidation<TState extends object, TPlatform, TServices extends object, TArguments extends readonly unknown[]> = {
+  /** Observe a hierarchical key. Receives context, then the handler's server arguments in positional order. */
   readonly live?: (context: ServerContext<TState, TPlatform, TServices>, ...args: { [K in keyof TArguments]: NoInfer<TArguments[K]> }) => LiveKey;
+  /** Invalidate a key and related active queries after success; arguments follow the handler's positional order. */
   readonly updates?: (context: ServerContext<TState, TPlatform, TServices>, ...args: { [K in keyof TArguments]: NoInfer<TArguments[K]> }) => LiveKey;
 };
 
@@ -189,7 +191,7 @@ export interface ServerDefinition<
     readonly serviceTypes?: TServices;
   };
   readonly function: DefineServerFunction<TState, TPlatform, TServices>;
-  /** Invalidate a dependency after changes made outside declared mutation functions. */
+  /** Invalidate a dependency and its active ancestor/descendant queries after external changes. */
   invalidate(key: LiveKey): void;
   middleware<TMiddleware extends ServerMiddleware<TState, TPlatform, TServices>>(
     middleware: TMiddleware,

@@ -6,6 +6,8 @@ export class LiveHub {
   readonly epoch = crypto.randomUUID();
   private readonly revisions = new Map<string, number>();
   private readonly listeners = new Map<string, Set<() => void>>();
+  /** Active query keys below each structural prefix; unrelated families are never scanned. */
+  private readonly descendants = new Map<string, Set<string>>();
   private revision = 0;
   onActivity: ((active: boolean) => void) | undefined;
 
@@ -20,26 +22,53 @@ export class LiveHub {
   stamp(key: string): LiveStamp {
     return { epoch: this.epoch, key, revision: this.revisions.get(key) ?? this.revision };
   }
+  private prefixes(key: LiveKey): string[] {
+    const prefixes: string[] = [];
+    for (let length = 1; length <= key.length; length++) prefixes.push(JSON.stringify(key.slice(0, length)));
+    return prefixes;
+  }
   invalidate(input: LiveKey): LiveStamp {
     const key = this.key(input);
     const revision = ++this.revision;
-    if (this.listeners.has(key)) this.revisions.set(key, revision);
-    for (const listener of this.listeners.get(key) ?? []) listener();
-    return this.stamp(key);
+    const affected = new Set(this.descendants.get(key));
+    for (const prefix of this.prefixes(input)) {
+      if (this.listeners.has(prefix)) affected.add(prefix);
+    }
+    // Advance every affected query before waking any of them. One mutation
+    // cursor covers its ancestors and descendants without an expanding header.
+    for (const query of affected) this.revisions.set(query, revision);
+    for (const query of affected) {
+      for (const listener of [...this.listeners.get(query) ?? []]) listener();
+    }
+    return { epoch: this.epoch, key, revision };
   }
   subscribe(key: string, listener: () => void): () => void {
+    const prefixes = this.prefixes(JSON.parse(key) as LiveKey);
     let listeners = this.listeners.get(key);
     if (listeners === undefined) {
       const activate = this.listeners.size === 0;
       this.listeners.set(key, listeners = new Set());
       this.revisions.set(key, this.revision);
+      for (const prefix of prefixes) {
+        let queries = this.descendants.get(prefix);
+        if (queries === undefined) this.descendants.set(prefix, queries = new Set());
+        queries.add(key);
+      }
       if (activate) this.onActivity?.(true);
     }
     listeners.add(listener);
+    let subscribed = true;
     return () => {
+      if (!subscribed) return;
+      subscribed = false;
       listeners!.delete(listener);
       if (listeners!.size === 0) {
         this.listeners.delete(key); this.revisions.delete(key);
+        for (const prefix of prefixes) {
+          const queries = this.descendants.get(prefix)!;
+          queries.delete(key);
+          if (queries.size === 0) this.descendants.delete(prefix);
+        }
         if (this.listeners.size === 0) this.onActivity?.(false);
       }
     };

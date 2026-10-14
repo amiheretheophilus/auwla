@@ -2,6 +2,7 @@ import { delay } from '#server/latency';
 import { define } from '../define';
 
 export const getExpeditions = define.function({
+  live: () => ['expedition-notes'],
   async get({ services }) {
     await delay(900);
     return services.expeditions.all().map(e => ({
@@ -15,7 +16,6 @@ export const getExpeditions = define.function({
 });
 
 export const postNote = define.function({
-  updates: (_context, expeditionId: string) => ['expedition-notes', expeditionId],
   async post({ state, services }, expeditionId: string, text: string) {
     if (text.trim() === '') {
       throw new Error('Note text cannot be empty');
@@ -26,10 +26,10 @@ export const postNote = define.function({
     await delay(1500);
     return services.notes.add(expeditionId, text, state.visitor);
   },
+  updates: (_context, expeditionId) => ['expedition-notes', expeditionId],
 });
 
 export const deleteNote = define.function({
-  updates: (_context, expeditionId: string) => ['expedition-notes', expeditionId],
   async delete({ services }, expeditionId: string, noteId: string) {
     await delay(700);
     const removed = services.notes.remove(expeditionId, noteId);
@@ -38,22 +38,23 @@ export const deleteNote = define.function({
     }
     return removed;
   },
+  updates: (_context, expeditionId) => ['expedition-notes', expeditionId],
 });
 
 export const getNotes = define.function({
-  live: (_context, expeditionId: string) => ['expedition-notes', expeditionId],
   async get({ services }, expeditionId: string) {
     const expedition = services.expeditions.all().find(item => item.id === expeditionId);
     if (expedition === undefined) throw new Error('Unknown expedition');
     return expedition.notes;
   },
+  live: (_context, expeditionId) => ['expedition-notes', expeditionId],
 });
 
 export const getExpeditionSummary = define.function({
-  live: (_context, expeditionId: string) => ['expedition-notes', expeditionId],
   async get({ services }, expeditionId: string) {
     const expedition = services.expeditions.all().find(item => item.id === expeditionId);
     if (expedition === undefined) throw new Error('Unknown expedition');
     return { noteCount: expedition.notes.length };
   },
+  live: (_context, expeditionId) => ['expedition-notes', expeditionId],
 });

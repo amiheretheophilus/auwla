@@ -38,40 +38,94 @@ implement a feed. The services receive their existing generated types.
 import { define } from '../define';
 
 export const getNotes = define.function({
-  live: (_context, expeditionId: string) =>
-    ['expedition-notes', expeditionId],
-
   async get({ services }, expeditionId: string) {
     return services.notes.all(expeditionId);
   },
+  live: (_context, expeditionId) =>
+    ['expedition-notes', expeditionId],
 });
 
 export const postNote = define.function({
-  updates: (_context, expeditionId: string) =>
-    ['expedition-notes', expeditionId],
-
   async post({ state, services }, expeditionId: string, text: string) {
     return services.notes.add(expeditionId, text, state.visitor);
   },
+  updates: (_context, expeditionId) =>
+    ['expedition-notes', expeditionId],
 });
 
 export const deleteNote = define.function({
-  updates: (_context, expeditionId: string) =>
-    ['expedition-notes', expeditionId],
-
   async delete({ services }, expeditionId: string, noteId: string) {
     return services.notes.remove(expeditionId, noteId);
   },
+  updates: (_context, expeditionId) =>
+    ['expedition-notes', expeditionId],
 });
 ```
 
-`live` and `updates` receive the injected context first and the handler's
-arguments afterward, and return a structured dependency key. Input validation
-remains optional; validated definitions must use their validated server input
-consistently when evaluating those callbacks. Different expedition IDs produce
-different keys. Keys are not URLs and do not cross into client calls as extra
-arguments. The current scope is ordinary GET queries with `live` and
-mutation functions with `updates`; generators have a separate role below.
+`live` and `updates` receive the injected context first, then **the same server
+arguments as the HTTP handler, in the same positional order**. Parameter names
+do not determine the match: `id` and `expeditionId` may name the same argument.
+Their types are inferred from the handler, so repeating annotations is optional.
+To infer callback argument types from the handler, declare the HTTP handler
+before `live`/`updates`, as above. A callback above the handler remains supported
+when its arguments are explicitly typed.
+Callbacks may omit unused trailing arguments, but skipping an earlier argument
+requires a placeholder. For a handler whose arguments are `text, expeditionId`:
+
+```ts
+export const postNote = define.function({
+  async post({ state, services }, text: string, expeditionId: string) {
+    return services.notes.add(expeditionId, text, state.visitor);
+  },
+  updates: (_context, _text, id) => ['expedition-notes', id],
+});
+
+// The framework supplies context; authors pass only the transported arguments.
+postNote('New note', 'ice-cores');
+// updates receives (_context, 'New note', 'ice-cores'), so id is 'ice-cores'.
+```
+
+This argument rule applies equally to `live` and `updates`. Validation remains
+optional. With `input`, the client sends the schema's input and both the handler
+and key callback receive the same validated/transformed server value. Neither
+callback receives the handler's return value as an extra argument. Keys are not
+URLs or additional client-call arguments. The current scope is ordinary GET
+queries with `live` and mutation functions with `updates`; generators have a
+separate role below.
+
+### Hierarchical keys: overview and targeted details
+
+Keys are nonempty arrays of finite JSON primitives, matched by complete segments.
+An overview can observe an entire family, while details observe one member:
+
+```ts
+export const getExpeditions = define.function({
+  live: () => ['expedition-notes'],
+  async get({ services }) {
+    return services.expeditions.all().map(expedition => ({
+      id: expedition.id,
+      name: expedition.name,
+      notes: expedition.notes.length,
+    }));
+  },
+});
+
+// getNotes and the detail summary retain ['expedition-notes', expeditionId].
+// postNote and deleteNote invalidate ['expedition-notes', expeditionId].
+```
+
+Invalidating `['expedition-notes', 'ice-cores']` updates exact matches, ancestor
+queries such as `['expedition-notes']`, and any more-specific descendants of
+that expedition. It does not rerun sibling details such as
+`['expedition-notes', 'canopy']`, or queries in another family. Invalidating the
+parent `['expedition-notes']` deliberately updates that whole family.
+
+This is structural prefix matching, not string-prefix matching or a wildcard:
+`'ice'` does not match `'ice-cores'`, and the number `1` does not match the string
+`'1'`. Only mounted/active queries are rerun; invalidation does not open new
+subscriptions or share computed results between subscribers. The server indexes
+active query prefixes rather than scanning unrelated query families. The same
+rules apply to `define.invalidate(key)` and generator mutation completion.
 
 After a successful mutation, the framework invalidates its declared key,
 reruns matching active queries on the server, and streams their updated values.
@@ -221,6 +275,9 @@ does not simply flush any buffered snapshot when its counter reaches zero. These
 are framework-owned delivery positions, not author-provided entity versions,
 and do not establish database write order. In-flight live queries discard their
 result and rerun if their dependency changed while they were evaluating.
+Acknowledgements follow the same hierarchy: a child mutation protects an
+associated parent overview, and a family-wide mutation protects associated
+descendants. Sibling mutation cursors do not hold an unrelated detail source.
 
 This acknowledgement guarantee uses the generated server-function result.
 An ordinary promise can still protect a source until it settles, but it does

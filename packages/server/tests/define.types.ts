@@ -82,15 +82,29 @@ define.service('mailer', {
 
 const app = serve({ define, state: () => ({ requestId: 'one' }) });
 const liveNotes = define.function({
-  live: (_context, id: string) => ['notes', id],
   async get({ state }, id: string) { return [{ id, by: state.requestId }]; },
+  live: (_context, id) => { type LiveKeyInputCheck = Assert<Equal<typeof id, string>>; return ['notes', id]; },
 });
 type LiveResultCheck = Assert<Equal<ServerFunctionResult<typeof liveNotes>, { id: string; by: string }[]>>;
 const saveLive = define.function({
+  async post(_context, id: string, text: string) { return { id, text }; },
+  updates: (_context, id) => { type UpdateKeyInputCheck = Assert<Equal<typeof id, string>>; return ['notes', id]; },
+});
+type LiveArgumentsCheck = Assert<Equal<ServerFunctionArguments<typeof saveLive>, [id: string, text: string]>>;
+const reordered = define.function({
+  async post(_context, text: string, expeditionId: number) { return { text, expeditionId }; },
+  updates: (_context, _text, id) => {
+    type TextPositionCheck = Assert<Equal<typeof _text, string>>;
+    type IdPositionCheck = Assert<Equal<typeof id, number>>;
+    return ['notes', id];
+  },
+});
+type ReorderedArgumentsCheck = Assert<Equal<ServerFunctionArguments<typeof reordered>, [text: string, expeditionId: number]>>;
+const callbackFirst = define.function({
   updates: (_context, id: string) => ['notes', id],
   async post(_context, id: string, text: string) { return { id, text }; },
 });
-type LiveArgumentsCheck = Assert<Equal<ServerFunctionArguments<typeof saveLive>, [id: string, text: string]>>;
+type CallbackFirstCheck = Assert<Equal<ServerFunctionArguments<typeof callbackFirst>, [id: string, text: string]>>;
 const streamed = define.function({ async *post(_context, prompt: string) { yield prompt; yield prompt + '!'; return undefined; } });
 type StreamResultCheck = Assert<Equal<ServerFunctionResult<typeof streamed>, string>>;
 const validatedLive = define.function({

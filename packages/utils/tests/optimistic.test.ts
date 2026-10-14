@@ -27,13 +27,13 @@ function deferred<T>() {
 afterEach(() => clearDataRuntime());
 
 describe('optimistic', () => {
-  it('protects multiple live sources through overlapping responses and waits for acknowledged snapshots', async () => {
+  it('protects parent and child live sources through overlapping responses and waits for acknowledged snapshots', async () => {
     const encoder = new TextEncoder();
     const feeds = new Map<string, ReadableStreamDefaultController<Uint8Array>>();
     const pending = new Map<string, ReturnType<typeof deferred<Response>>>();
-    const stamp = (revision: number) => ({ epoch: 'one', key: '["notes"]', revision });
+    const stamp = (revision: number, key = '["notes","one"]') => ({ epoch: 'one', key, revision });
     const emit = (path: string, value: unknown, revision: number) => feeds.get(path)!.enqueue(encoder.encode(
-      `event: value\ndata: ${JSON.stringify({ value, stamp: stamp(revision) })}\n\n`,
+      `event: value\ndata: ${JSON.stringify({ value, stamp: stamp(revision, path === '/summary' ? '["notes"]' : '["notes","one"]') })}\n\n`,
     ));
     const runtime = createDataRuntime({ baseURL: 'https://app.test', fetch: async (input, init) => {
       const path = new URL(String(input)).pathname;

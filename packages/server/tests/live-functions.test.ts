@@ -19,6 +19,49 @@ function install(app: object, routes: readonly unknown[]) {
 }
 
 describe('automatic live server functions', () => {
+  it('updates an overview and its targeted detail using the same positional mutation arguments, without querying siblings', async () => {
+    const define = createDefine<{ user: string }, unknown, { rows: Record<string, number> }>();
+    define.service('rows', () => ({ one: 0, two: 0 }));
+    const app = serve({ define, state: req => ({ user: req.headers.get('x-user') ?? 'viewer' }) });
+    const queries = { overview: 0, one: 0, two: 0 };
+    let updateArguments: unknown[] = [];
+    install(app, createServerFunctionRoutes<{ user: string }, unknown, { rows: Record<string, number> }>([
+      { id: 'overview', method: 'GET', path: '/_fn/tree/overview', parameters: [], live: () => ['notes'],
+        async handler({ services }) { queries.overview++; return services.rows; } },
+      { id: 'detail', method: 'GET', path: '/_fn/tree/detail', parameters: [{ name: 'id', optional: false, queryKind: 'string' }],
+        live: (_context, id) => ['notes', String(id)],
+        async handler({ services }, id) { queries[String(id) as 'one' | 'two']++; return services.rows[String(id)]; } },
+      { id: 'save', method: 'POST', path: '/_fn/tree/save', parameters: [{ name: 'text', optional: false }, { name: 'expeditionId', optional: false }],
+        updates: ({ state }, message, id) => { updateArguments = [state.user, message, id]; return ['notes', String(id)]; },
+        async handler({ services, state }, text, expeditionId) {
+          services.rows[String(expeditionId)]!++;
+          return { user: state.user, text, expeditionId };
+        } },
+    ]));
+    const readers = await Promise.all(['overview', 'detail?id=one', 'detail?id=two'].map(async path =>
+      (await app.fetch(new Request('https://app.test/_fn/tree/' + path, { headers: { 'x-mmd-stream': 'live' } }))).body!.getReader(),
+    ));
+    try {
+      await Promise.all(readers.map(read));
+      const posted = await app.fetch(new Request('https://app.test/_fn/tree/save', {
+        method: 'POST', headers: { 'x-user': 'writer', 'content-type': 'application/json' },
+        // Transport field order differs; declaration order still determines arguments.
+        body: JSON.stringify({ expeditionId: 'one', text: 'hello' }),
+      }));
+      expect(await posted.json()).toEqual({ user: 'writer', text: 'hello', expeditionId: 'one' });
+      expect(updateArguments).toEqual(['writer', 'hello', 'one']);
+      expect(JSON.parse(posted.headers.get('x-mmd-updates')!)).toEqual([
+        expect.objectContaining({ key: '["notes","one"]', revision: 1 }),
+      ]);
+      expect((await read(readers[0]!)).data.value).toEqual({ one: 1, two: 0 });
+      expect((await read(readers[1]!)).data.value).toBe(1);
+      expect(queries).toEqual({ overview: 2, one: 2, two: 1 });
+      define.invalidate(['notes']);
+      await Promise.all(readers.map(read));
+      expect(queries).toEqual({ overview: 3, one: 3, two: 2 });
+    } finally { await Promise.all(readers.map(reader => reader.cancel())); }
+  });
+
   it('streams invalidations under each subscriber context and acknowledges mutations', async () => {
     const define = createDefine<{ user: string }, unknown, { rows: { value: number } }>();
     define.service('rows', () => ({ value: 0 }));
@@ -54,7 +97,7 @@ describe('automatic live server functions', () => {
 
   it('coalesces invalidations and never labels an older in-flight value with a newer cursor', async () => {
     const hub = new LiveHub();
-    const key = hub.key(['notes', 'one']);
+    const key = hub.key(['notes']);
     let value = 0, calls = 0;
     let finish!: () => void;
     const gate = new Promise<void>(resolve => { finish = resolve; });
@@ -118,6 +161,31 @@ describe('automatic live server functions', () => {
     expect((await read(reader)).event).toBe('done');
     expect((await reader.read()).done).toBe(true);
     expect((await app.fetch(new Request('https://app.test/_fn/live/answer', { method: 'POST' }))).status).toBe(400);
+  });
+
+  it('invalidates parent queries only when a child-key generator mutation completes successfully', async () => {
+    const app = serve({ define: createDefine() });
+    let value = 0, queries = 0;
+    install(app, createServerFunctionRoutes([
+      { id: 'overview', method: 'GET', path: '/_fn/generator/overview', parameters: [], live: () => ['notes'],
+        async handler() { queries++; return value; } },
+      { id: 'save', method: 'POST', path: '/_fn/generator/save', parameters: [], updates: () => ['notes', 'one'],
+        async *handler() { yield 'starting'; value = 1; yield 'saved'; } },
+    ]));
+    const overview = (await app.fetch(new Request('https://app.test/_fn/generator/overview', { headers: { 'x-mmd-stream': 'live' } }))).body!.getReader();
+    let mutation: ReadableStreamDefaultReader<Uint8Array> | undefined;
+    try {
+      expect((await read(overview)).data.value).toBe(0);
+      mutation = (await app.fetch(new Request('https://app.test/_fn/generator/save', { method: 'POST', headers: { 'x-mmd-stream': 'generator' } }))).body!.getReader();
+      expect((await read(mutation)).data.value).toBe('starting');
+      expect(queries).toBe(1);
+      expect((await read(mutation)).data.value).toBe('saved');
+      const complete = await read(mutation);
+      expect(complete.event).toBe('done');
+      expect(complete.data.updates).toEqual([expect.objectContaining({ key: '["notes","one"]', revision: 1 })]);
+      expect((await read(overview)).data.value).toBe(1);
+      expect(queries).toBe(2);
+    } finally { await overview.cancel(); await mutation?.cancel(); }
   });
 
   it('cancels pending live queries on body cancellation', async () => {

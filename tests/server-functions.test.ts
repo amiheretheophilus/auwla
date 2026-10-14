@@ -13,11 +13,19 @@ describe('defined HTTP server functions', () => {
     const metadata = analyzeServerFunctionModule(`
       export const getNotes = define.function({ live: (_ctx, id) => ['notes', id], async get(_ctx, id: string) { return []; } });
       export const answer = define.function({ async *post(_ctx, prompt: string) { yield prompt; return prompt; } });
+      export const postTextFirst = define.function({
+        async post(_ctx, text: string, expeditionId: string) { return { text, expeditionId }; },
+        updates: (_ctx, _message, id) => ['notes', id],
+      });
     `, { moduleId: '/app/server/functions/notes.ts' });
     expect(metadata.functions.find(fn => fn.exported === 'getNotes')?.live).toBe(true);
     expect(metadata.functions.find(fn => fn.exported === 'answer')?.generator).toBe(true);
     const facade = generateServerFunctionClient(metadata);
     expect(facade).toContain('createStreamingSource');
+    expect(metadata.functions.find(fn => fn.exported === 'postTextFirst')?.parameters.map(parameter => parameter.name))
+      .toEqual(['text', 'expeditionId']);
+    expect(facade).toContain('export function postTextFirst(text, expeditionId)');
+    expect(facade).toContain('body: { text, expeditionId }');
     const output = compileModules({
       './functions.ts': facade,
       './App.tsx': `import { getNotes } from './functions'; import { optimistic as update } from '@memoized-dom/utils';
