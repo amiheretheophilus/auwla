@@ -56,36 +56,44 @@ function delay(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-export const getStories = define.function.get(async (_context) => {
-  await delay(3000);
-  return stories;
+export const getStories = define.function({
+  async get() {
+    await delay(3000);
+    return stories;
+  },
 });
 
-export const getStory = define.function.get(async (_context, id: number) => {
-  await delay(3000);
-  return stories.find((story) => story.id === id) ?? null;
+export const getStory = define.function({
+  async get(_context, id: number) {
+    await delay(3000);
+    return stories.find((story) => story.id === id) ?? null;
+  },
 });
 
-export const vote = define.function.post(async ({ state }, id: number) => {
-  const story = stories.find((candidate) => candidate.id === id)!;
+export const vote = define.function({
+  async post({ state }, id: number) {
+    const story = stories.find((candidate) => candidate.id === id)!;
 
-  story.votes += 1;
-  await delay(3000);
-  if(story.votes === 10 || story.votes === 15 || story.votes === 16 || story.votes === 18) {
-    throw new Error('Story has reached the vote limit');
-  }
-  return { id: story.id, votes: story.votes, by: state.user ?? 'anonymous' };
+    story.votes += 1;
+    await delay(3000);
+    if(story.votes === 10 || story.votes === 15 || story.votes === 16 || story.votes === 18) {
+      throw new Error('Story has reached the vote limit');
+    }
+    return { id: story.id, votes: story.votes, by: state.user ?? 'anonymous' };
+  },
 });
 
-export const removeStory = define.function.delete(async ({ request }, id: number) => {
-  if (request.headers.get('x-admin') !== 'yes') {
-    throw new Error('removeStory requires the x-admin: yes header');
-  }
-  const index = stories.findIndex((story) => story.id === id);
-  if (index === -1) {
-    throw new Error(`Unknown story ${String(id)}`);
-  }
+export const removeStory = define.function({
+  async delete({ request }, id: number) {
+    if (request.headers.get('x-admin') !== 'yes') {
+      throw new Error('removeStory requires the x-admin: yes header');
+    }
+    const index = stories.findIndex((story) => story.id === id);
+    if (index === -1) {
+      throw new Error(`Unknown story ${String(id)}`);
+    }
 
-   await delay(3000);
-  return stories.splice(index, 1)[0]!;
+    await delay(3000);
+    return stories.splice(index, 1)[0]!;
+  },
 });

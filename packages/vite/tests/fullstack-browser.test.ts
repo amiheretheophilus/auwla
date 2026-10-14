@@ -85,20 +85,36 @@ describe('fullstack browser integration', () => {
         { id: 1, title: 'First', votes: 3 },
         { id: 2, title: 'Second', votes: 5 },
       ];
-      export const getStories = define.function.get(async (_context) => {
-        return stories;
+      export const getStories = define.function({
+        async get() {
+          return stories;
+        },
       });
-      export const getStory = define.function.get(async (_context, id: number) => {
-        return stories.find(story => story.id === id) ?? null;
+      const storyIdSchema = {
+        '~standard': {
+          version: 1,
+          vendor: 'browser-fixture',
+          validate(value: unknown) {
+            return typeof value === 'number'
+              ? { value }
+              : { issues: [{ message: 'Expected a numeric story ID' }] };
+          },
+        },
+      };
+      export const getStory = define.function({
+        input: storyIdSchema,
+        async get(_context, id) {
+          return stories.find(story => story.id === id) ?? null;
+        },
       });
-      export const postVote = define.function.post(async (_context, id: number) => {
+      export const postVote = define.function({ post: async (_context, id: number) => {
         const story = stories.find(candidate => candidate.id === id);
         if (story === undefined) throw new Error('Missing story');
         await new Promise(resolve => setTimeout(resolve, 100));
         if (id === 2) throw new Error('Vote rejected');
         story.votes++;
         return { id: story.id, votes: story.votes };
-      });
+      } });
     `);
     await writeFile(resolve(fixture, 'App.tsx'), `
       import { getStories, getStory, postVote } from '#server-functions';

@@ -26,9 +26,9 @@ const schema: StandardSchemaV1<{ id: string }, { id: number }> = {
     validate: value => ({ value: { id: Number((value as { id: string }).id) } }),
   },
 };
-const story = define.function.get({
+const story = define.function({
   input: schema,
-  async handler({ state }, input) {
+  async get({ state }, input) {
     type HandlerInputCheck = Assert<Equal<typeof input, { id: number }>>;
     type HandlerStateCheck = Assert<Equal<typeof state, State>>;
     // @ts-expect-error The schema output has a numeric id.
@@ -44,8 +44,31 @@ clientStory({ id: '42' });
 // @ts-expect-error The caller supplies the schema input, before transformation.
 clientStory({ id: 42 });
 
-const vote = define.function.post(async ({ state }, id: number) => ({ id, by: state.user }));
+const vote = define.function({ post: async ({ state }, id: number) => ({ id, by: state.user }) });
 type PositionalCheck = Assert<Equal<ServerFunctionArguments<typeof vote>, [id: number]>>;
+
+const noInput = define.function({ async get() { return ['story']; } });
+type NoInputCheck = Assert<Equal<ServerFunctionArguments<typeof noInput>, []>>;
+type NoInputResultCheck = Assert<Equal<ServerFunctionResult<typeof noInput>, string[]>>;
+
+const scalarSchema: StandardSchemaV1<string, number> = {
+  '~standard': { version: 1, vendor: 'test', validate: value => ({ value: Number(value) }) },
+};
+const scalar = define.function({
+  input: scalarSchema,
+  async post({ state }, id) {
+    type ScalarOutputCheck = Assert<Equal<typeof id, number>>;
+    return { id, requestId: state.requestId };
+  },
+});
+type ScalarInputCheck = Assert<Equal<ServerFunctionArguments<typeof scalar>, readonly [input: string]>>;
+
+// @ts-expect-error Every operation declares exactly one HTTP verb.
+define.function({ async get() {}, async post() {} });
+// @ts-expect-error A definition needs an HTTP verb handler.
+define.function({});
+// @ts-expect-error The prior method-chain declaration is no longer supported.
+define.function.get(async () => []);
 
 const database = define.service('database', async () => ({ name: 'primary' }));
 type ServiceCheck = Assert<Equal<ServiceValue<typeof database>, { name: string }>>;

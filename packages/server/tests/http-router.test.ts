@@ -22,8 +22,8 @@ describe('server HTTP router', () => {
         version: 1, vendor: 'test',
         async validate(input) {
           order.push('validation');
-          const value = input as { id: string; label?: string };
-          const id = Number(value.id);
+          const value = input as { id: number; label?: string };
+          const id = value.id;
           return id > 0
             ? { value: { id, label: value.label ?? 'default' } }
             : { issues: [{ message: 'ID must be positive', path: ['id'] }] };
@@ -41,13 +41,41 @@ describe('server HTTP router', () => {
       middleware: [async (_context, next) => { order.push('middleware'); return next(); }],
       input: schema, handler,
     }]) });
-    const response = await router.fetch(new Request('https://app.test/_fn/stories/story?id=42'));
+    const request = (id: number) => new Request('https://app.test/_fn/stories/story?input=' + encodeURIComponent(JSON.stringify({ id })));
+    const response = await router.fetch(request(42));
     expect(await response.json()).toEqual({ args: [{ id: 42, label: 'default' }] });
     expect(order).toEqual(['middleware', 'validation', 'handler']);
-    const invalid = await router.fetch(new Request('https://app.test/_fn/stories/story?id=-1'));
+    const invalid = await router.fetch(request(-1));
     expect(invalid.status).toBe(400);
     expect(await invalid.json()).toMatchObject({ error: 'invalid_server_function_input', issues: [{ message: 'ID must be positive' }] });
     expect(handler).toHaveBeenCalledTimes(1);
+  });
+
+  it('preserves scalar schema inputs for GET and mutation handlers', async () => {
+    const schema: StandardSchemaV1<number, string> = {
+      '~standard': {
+        version: 1, vendor: 'test',
+        validate: value => typeof value === 'number'
+          ? { value: String(value) }
+          : { issues: [{ message: 'Expected number' }] },
+      },
+    };
+    for (const method of ['GET', 'POST'] as const) {
+      const router = createServerRouter({ routes: createServerFunctionRoutes([{
+        id: 'scalar', method, path: '/_fn/scalar', schemaInput: true,
+        parameters: [{ name: 'input', optional: false }], input: schema,
+        handler: (_context, input) => ({ input, type: typeof input }),
+      }]) });
+      const request = method === 'GET'
+        ? new Request('https://app.test/_fn/scalar?input=42')
+        : new Request('https://app.test/_fn/scalar', { method, body: '42' });
+      expect(await (await router.fetch(request)).json()).toEqual({ input: '42', type: 'string' });
+      if (method === 'GET') {
+        for (const query of ['', '?input=oops', '?input=1&input=2', '?input=1&extra=2']) {
+          expect((await router.fetch(new Request('https://app.test/_fn/scalar' + query))).status).toBe(400);
+        }
+      }
+    }
   });
 
   it('validates mutation values and allows auth middleware to short-circuit validation', async () => {

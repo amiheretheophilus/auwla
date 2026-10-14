@@ -227,9 +227,11 @@ export const session = define.middleware(async (context, next) => {
   return next();
 });
 
-export const currentUser = define.function.get(
-  async ({ state, services }) => services.users.find(state.user),
-);
+export const currentUser = define.function({
+  async get({ state, services }) {
+    return services.users.find(state.user);
+  },
+});
 ```
 
 Declare services anywhere under the configured server root:

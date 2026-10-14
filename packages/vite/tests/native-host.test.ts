@@ -50,7 +50,7 @@ async function project(): Promise<string> {
 export const define = createDefine<Record<string, never>, { port: number }>();`);
   await writeFile(join(fixture, 'server.ts'), backend('before'));
   await writeFile(join(fixture, 'server/functions/greeting.ts'), `import { define } from '../define';
-export const greeting = define.function.get(async (_context, name: string) => ({ greeting: 'Hello ' + name }));`);
+export const greeting = define.function({ get: async (_context, name: string) => ({ greeting: 'Hello ' + name }) });`);
   return fixture;
 }
 
@@ -94,7 +94,7 @@ describe('backend-owned fullstack integration', () => {
     await writeFile(join(root, 'src/App.tsx'), component('After'));
     await waitFor(async () => expect(await (await fetch(origin)).text()).toContain('<h1>After</h1>'), 10_000);
     await writeFile(join(root, 'server/functions/greeting.ts'), `import { define } from '../define';
-export const greeting = define.function.get(async (_context, name: string) => ({ greeting: 'Updated ' + name }));`);
+export const greeting = define.function({ get: async (_context, name: string) => ({ greeting: 'Updated ' + name }) });`);
     await waitFor(async () => expect(await (await fetch(origin + '/_fn/greeting/greeting?name=Ada')).json()).toEqual({ greeting: 'Updated Ada' }), 10_000);
     for (const label of ['second', 'third']) {
       await writeFile(join(root, 'server.ts'), backend(label));

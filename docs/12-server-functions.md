@@ -60,22 +60,23 @@ HTTP operations. Declare each export through the shared `define` object:
 // server/functions/users.ts
 import { define } from '../define';
 
-export const getUser = define.function.get(
-  async ({ state, services }, id: string) => {
+export const getUser = define.function({
+  async get({ state, services }, id: string) {
     return services.database.users.findFor(id, state.user);
   },
-);
+});
 
-export const createUser = define.function.post(
-  async ({ state, services }, input: CreateUserInput) => {
+export const createUser = define.function({
+  async post({ state, services }, input: CreateUserInput) {
     return services.database.users.create(input, state.user);
   },
-);
+});
 ```
 
-The first parameter is injected on the server. It is never serialized and the
-client does not pass it. Every remaining parameter must be a named identifier;
-those parameters form the transport contract.
+Each definition declares exactly one HTTP verb handler. When present, the
+first parameter is injected on the server. It is never serialized and the
+client does not pass it. Without a schema, every remaining parameter must be a
+named identifier; those parameters form the transport contract.
 
 Client code imports the generated facade:
 
@@ -91,13 +92,14 @@ arguments use a JSON body. The method name is executable metadata, so there is
 no comment-based method declaration for the compiler or language service to
 reconstruct.
 
-Use the descriptor form only for settings targeted to one function:
+Validation is optional. Add a schema only when the operation needs it, and put
+targeted middleware beside the handler:
 
 ```ts
-export const removeUser = define.function.delete({
+export const removeUser = define.function({
   middleware: [requireOwner],
   input: removeUserInput,
-  handler: async ({ services }, input) => {
+  async delete({ services }, input) {
     return services.database.users.remove(input.id);
   },
 });
@@ -108,9 +110,28 @@ schema input type and the handler receives the validated schema output type.
 The existing folder `_middleware.ts` files and a module-level
 `export const middleware = [...]` still apply to groups of functions.
 
+For an operation with no context or transported inputs:
 
+```ts
+export const getStories = define.function({
+  async get() {
+    return loadStories();
+  },
+});
+```
 
+Schemas can validate a scalar as well as an object:
 
+```ts
+export const getUser = define.function({
+  input: userIdSchema,
+  async get({ services }, id) {
+    return services.users.find(id);
+  },
+});
+
+getUser(userId);
+```
 ## Transport and tracking
 
 GET calls return the same transparent data source as `$fetch`; reactive
@@ -118,17 +139,16 @@ arguments rerun the read, and `$track` exposes pending state, errors, and
 refresh. Mutations must run from event handlers, effects, or deferred
 callbacks. Calling them during render or module evaluation is a compile error.
 
-For direct functions, mutation arguments form a JSON object keyed by parameter
-name. With a schema descriptor, the client's one input argument is the complete
-JSON body. GET descriptors send the input object's properties as query fields;
-validation receives strings or arrays of strings, so use schema coercion for
-numeric and boolean fields. Schema output is passed directly to the handler,
-including transformed values and defaults. Validation issues return HTTP 400
-with `error: 'invalid_server_function_input'` and `issues`.
+Without a schema, mutation arguments form a JSON object keyed by parameter
+name. With a schema, the client's one input argument is the complete
+JSON body. Schema-backed GET calls JSON-encode the input into the `input` query
+parameter, preserving its JSON types before validation. Schema output is passed
+directly to the handler, including transformed values and defaults. Validation
+issues return HTTP 400 with `error: 'invalid_server_function_input'` and `issues`.
 
 Names must be unique across the flat `#server-functions` barrel. Every handler
 must be inline and async. The injected context and schema input may be
-destructured; direct transported parameters must be named identifiers.
+destructured; transported parameters without a schema must be named identifiers.
 
 ## Status, cookies, and errors
 
@@ -138,15 +158,17 @@ The optional `json()` helper is a short, typed way to create one:
 ```ts
 import { json } from '@memoized-dom/server';
 
-export const postLogin = define.function.post(async (_context, email: string, password: string) => {
-  const session = await authenticate(email, password);
-  if (session === null) {
-    return json({ error: 'invalid_credentials' }, { status: 401 });
-  }
-  return json({ user: session.user }, {
-    status: 201,
-    headers: { 'set-cookie': session.cookie },
-  });
+export const postLogin = define.function({
+  async post(_context, email: string, password: string) {
+    const session = await authenticate(email, password);
+    if (session === null) {
+      return json({ error: 'invalid_credentials' }, { status: 401 });
+    }
+    return json({ user: session.user }, {
+      status: 201,
+      headers: { 'set-cookie': session.cookie },
+    });
+  },
 });
 ```
 

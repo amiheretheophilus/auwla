@@ -291,23 +291,25 @@ import { authenticated } from '../middleware/authenticated';
 
 export const middleware = [authenticated];
 
-export const getUser = define.function.get(
-  async ({ state, services }, id: string) => {
+export const getUser = define.function({
+  async get({ state, services }, id: string) {
     return services.database.users.findFor(id, state.user);
   },
-);
+});
 
-export const createUser = define.function.post(
-  async ({ state, services }, input: CreateUserInput) => {
+export const createUser = define.function({
+  async post({ state, services }, input: CreateUserInput) {
     const user = await services.database.users.create(input, state.user);
     await services.mailer.sendWelcome(user);
     return user;
   },
-);
+});
 ```
 
-The first argument is injected by the server and is not part of the client
-contract. The remaining named arguments are transported. Client code still
+Each definition has exactly one `get`, `post`, `put`, `patch`, or `delete`
+handler. When declared, the first argument is injected by the server and is not
+part of the client contract. Without a schema, the remaining named arguments
+are transported. Client code still
 calls the generated facade without constructing server context:
 
 ```ts
@@ -320,23 +322,34 @@ await createUser({ name, email });
 `get`, `post`, `put`, `patch`, and `delete` select the HTTP method. This
 replaces `@GET`, `@POST`, and the other method annotations.
 
-When one function needs additional middleware or input validation, it uses
-the descriptor form:
+Validation is optional. Without `input`, annotate transported arguments as
+ordinary TypeScript parameters. A handler with no inputs can omit its context
+parameter entirely:
 
 ```ts
-export const removeUser = define.function.delete({
+export const getStories = define.function({
+  async get() {
+    return loadStories();
+  },
+});
+```
+
+Add `input` or targeted `middleware` beside the verb when needed:
+
+```ts
+export const removeUser = define.function({
   middleware: [requireOwner],
   input: removeUserInput,
 
-  handler: async ({ services }, input) => {
+  async delete({ services }, input) {
     return services.database.users.remove(input.id);
   },
 });
 ```
 
-In descriptor form, `input` is the one transported value: the client accepts
+With a schema, `input` is the one transported value: the client accepts
 the schema input type and the handler receives its validated output. The
-descriptor middleware is targeted only at `removeUser`. It adds to rather
+definition's middleware is targeted only at `removeUser`. It adds to rather
 than replaces inherited middleware. The complete order is:
 
 ```text
@@ -349,6 +362,24 @@ app.use global
 → input validation
 → handler
 ```
+
+A schema may describe a scalar as well as an object. The client call uses the
+schema input type, and the second handler argument uses its output type:
+
+```ts
+export const getUser = define.function({
+  input: userIdSchema,
+  async get({ services }, id) {
+    return services.users.find(id);
+  },
+});
+
+getUser(userId);
+```
+
+Schema-backed GET calls JSON-encode the one input into a query parameter;
+mutations send it as the JSON body. The validator receives the original JSON
+types, including scalar numbers, booleans, arrays, and objects.
 
 `server/functions` and `#server-functions` remain. The new definition syntax
 replaces annotation-based declarations and ambient context access; it does not

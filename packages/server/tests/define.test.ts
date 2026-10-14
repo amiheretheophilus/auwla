@@ -7,6 +7,19 @@ import {
 } from '../src';
 
 describe('createDefine', () => {
+  it('defines no-input operations and validates HTTP method ownership', async () => {
+    const define = createDefine();
+    const stories = define.function({ async get() { return ['story']; } });
+    expect(stories.method).toBe('GET');
+    expect(await stories.handler({
+      request: new Request('https://app.test'), url: new URL('https://app.test'),
+      params: {}, state: {}, services: {}, platform: undefined,
+    })).toEqual(['story']);
+    // @ts-expect-error Intentionally bypass the definition shape to verify runtime validation.
+    expect(() => define.function({})).toThrow('exactly one HTTP method');
+    // @ts-expect-error Intentionally invalid multi-method definition.
+    expect(() => define.function({ async get() {}, async post() {} })).toThrow('exactly one HTTP method');
+  });
   it('shares request state through middleware and handlers', async () => {
     interface State { requestId: string; user?: string }
     const define = createDefine<State>();
@@ -61,9 +74,9 @@ describe('createDefine', () => {
       state.user = 'Ada';
       return next();
     });
-    const getUser = define.function.get({
+    const getUser = define.function({
       middleware: [authenticated],
-      handler: async ({ state }, id: number) => ({ id, user: state.user }),
+      get: async ({ state }, id: number) => ({ id, user: state.user }),
     });
 
     expect(getUser.method).toBe('GET');
@@ -89,9 +102,9 @@ describe('createDefine', () => {
         },
       },
     };
-    const story = define.function.get({
+    const story = define.function({
       input,
-      async handler(_context, value) {
+      async get(_context, value) {
         expectTypeOf(value).toEqualTypeOf<{ id: number }>();
         return value.id;
       },

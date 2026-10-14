@@ -67,7 +67,7 @@ describe('conditional generated declarations', () => {
     fixture = await mkdtemp(resolve(tmpdir(), 'memoized-dom-declarations-'));
     const options = resolveAdapterOptions({ clientEntry: 'main.ts' });
     const module = analyzeServerFunctionModule(
-      'export const story = define.function.get(async ({ state }) => state);', {
+      'export const story = define.function({ get: async ({ state }) => state });', {
       moduleId: resolve(fixture, 'server/functions/stories.ts'),
     });
     await writeServerFunctionDeclarations(fixture, [module], options);

@@ -350,13 +350,19 @@ async function validateServerFunctionArguments(
   return [result.value];
 }
 
-function querySchemaInput(url: URL): Record<string, string | string[]> {
-  const input: Record<string, string | string[]> = Object.create(null);
-  for (const name of new Set(url.searchParams.keys())) {
-    const values = url.searchParams.getAll(name);
-    input[name] = values.length === 1 ? values[0]! : values;
+function querySchemaInput(url: URL): unknown {
+  for (const name of url.searchParams.keys()) {
+    if (name !== 'input') serverFunctionInputError(`Unknown query parameter '${name}'`);
   }
-  return input;
+  const values = url.searchParams.getAll('input');
+  if (values.length !== 1) {
+    return serverFunctionInputError("Validated GET input must appear once as query parameter 'input'");
+  }
+  try {
+    return JSON.parse(values[0]!);
+  } catch {
+    return serverFunctionInputError('Validated GET input must be valid JSON');
+  }
 }
 
 async function bodySchemaInput(request: Request): Promise<unknown> {

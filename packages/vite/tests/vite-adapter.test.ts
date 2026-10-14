@@ -226,17 +226,15 @@ describe('Vite 8 adapter', () => {
           },
         },
       };
-      export const story = define.function.get({
+      export const story = define.function({
         middleware: [functionGuard],
         input: storyInput,
-        handler: async (_context, input) => {
+        async get(_context, input) {
           if (false) await readFile('secret');
           return { id: input.id, title: 'Story ' + input.id };
         },
       });
-      export const vote = define.function.post(
-        async (_context, id: number) => ({ id, votes: 1 })
-      );
+      export const vote = define.function({ post: async (_context, id: number) => ({ id, votes: 1 }) });
     `);
     await writeFile(resolve(temporarySource, 'App.tsx'), `
       import { story as loadStory, vote } from '#server-functions';
@@ -310,7 +308,7 @@ describe('Vite 8 adapter', () => {
     ) as { serverFunctionRoutes: Parameters<typeof createServerRouter>[0]['routes'] };
     const router = createServerRouter({ routes: generated.serverFunctionRoutes });
     const response = await router.fetch(new Request(
-      'https://app.test/_fn/stories/story?id=9',
+      'https://app.test/_fn/stories/story?input=' + encodeURIComponent(JSON.stringify({ id: 9 })),
     ));
 
     expect(response.status).toBe(200);
@@ -319,7 +317,7 @@ describe('Vite 8 adapter', () => {
     expect(response.headers.get('x-module')).toBe('must-not-enter-client');
     await expect(response.json()).resolves.toEqual({ id: 9, title: 'Story 9' });
 
-    const invalidInput = await router.fetch(new Request('https://app.test/_fn/stories/story?id=-1'));
+    const invalidInput = await router.fetch(new Request('https://app.test/_fn/stories/story?input=' + encodeURIComponent(JSON.stringify({ id: -1 }))));
     expect(invalidInput.status).toBe(400);
     expect(await invalidInput.json()).toMatchObject({ issues: [{ message: 'Positive ID required' }] });
 
@@ -348,7 +346,7 @@ describe('Vite 8 adapter', () => {
     `);
     await writeFile(resolve(functions, 'stories.ts'), `
       import { define } from '../define';
-      export const getStories = define.function.get(async (_context) => []);
+      export const getStories = define.function({ get: async (_context) => [] });
     `);
     await writeFile(resolve(temporarySource, 'App.tsx'), `
       import { getStories } from '../server/functions/stories';
@@ -862,9 +860,9 @@ describe('Vite 8 adapter', () => {
     `);
     await writeFile(resolve(functions, 'stories.ts'), `
       import { define } from '../define';
-      export const getStory = define.function.get(async (_context, id: number) => {
+      export const getStory = define.function({ get: async (_context, id: number) => {
         return { id, title: 'Story ' + id };
-      });
+      } });
     `);
     await writeFile(resolve(root, 'src/server.ts'), `
       import { serve } from '@memoized-dom/server';

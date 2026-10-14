@@ -167,13 +167,16 @@ Server functions use executable, typed definitions and receive context as
 their first injected argument:
 
 ```ts
-export const getCurrentUser = define.function.get(
-  async ({ state, services }) => services.users.find(state.user),
-);
+export const getCurrentUser = define.function({
+  async get({ state, services }) {
+    return services.users.find(state.user);
+  },
+});
 ```
 
-The remaining named parameters form the client transport. The descriptor form
-adds middleware or a Standard Schema validator to one function. Folder
+The remaining named parameters form the client transport. Each definition has
+one HTTP verb; optional `middleware` and Standard Schema `input` fields sit beside
+it. A handler without inputs may use `async get()`. Folder
 `_middleware.ts` files and module `middleware` exports continue to compose.
 
 ### Route preparation during SSR

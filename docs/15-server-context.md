@@ -3,11 +3,11 @@
 Server code receives request context as an argument:
 
 ```ts
-export const createUser = define.function.post(
-  async ({ request, url, params, state, services, platform }, input: Input) => {
+export const createUser = define.function({
+  async post({ request, url, params, state, services, platform }, input: Input) {
     // ...
   },
-);
+});
 ```
 
 The same shape is used by middleware, ordinary routes, server functions, SSR

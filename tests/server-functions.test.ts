@@ -9,18 +9,16 @@ import {
 } from '@memoized-dom/compiler';
 
 describe('defined HTTP server functions', () => {
-  it('discovers method calls, descriptors, aliases, and transported parameters', () => {
+  it('discovers HTTP verb definitions, aliases, and transported parameters', () => {
     const source = `
       import { define } from '../define';
       import { requireUser } from '../middleware';
       const voteInput = schema();
-      export const stories = define.function.get(
-        async ({ services }, limit: number = 20) => services.database.stories(limit)
-      );
-      const save = define.function.post({
+      export const stories = define.function({ get: async ({ services }, limit: number = 20) => services.database.stories(limit) });
+      const save = define.function({
         middleware: [requireUser],
         input: voteInput,
-        handler: async ({ services }, input) => services.database.vote(input.id),
+        post: async ({ services }, input) => services.database.vote(input.id),
       });
       export { save as vote };
     `;
@@ -41,7 +39,7 @@ describe('defined HTTP server functions', () => {
     expect(generateServerFunctionImplementation(source, options)).toBe(source);
     const client = generateServerFunctionClient(module);
     expect(client).toContain('export function vote(input)');
-    expect(client).toContain('body: input');
+    expect(client).toContain('body: JSON.stringify(input)');
     expect(client).not.toContain('requireUser');
     expect(client).not.toContain('voteInput');
     expect(client).not.toContain('services');
@@ -49,44 +47,39 @@ describe('defined HTTP server functions', () => {
 
   it('uses the definition method independently of the export name', () => {
     const module = analyzeServerFunctionModule(`
-      export const getAccessToken = define.function.post(async ({ state }) => state);
+      export const getAccessToken = define.function({ post: async ({ state }) => state });
     `, { moduleId: '/app/server/functions/auth.ts' });
     expect(module.functions[0]?.method).toBe('POST');
   });
 
   it('transports the schema input directly even when the handler destructures its output', () => {
     const module = analyzeServerFunctionModule(`
-      export const story = define.function.get({
+      export const story = define.function({
         input: storySchema,
-        handler: async (_context, { id }) => ({ id }),
+        get: async (_context, { id }) => ({ id }),
       });
-      export const save = define.function.post({
+      export const save = define.function({
         input: saveSchema,
-        handler: async (_context, { title }) => ({ title }),
+        post: async (_context, { title }) => ({ title }),
       });
     `, { moduleId: '/app/server/functions/stories.ts' });
     const client = generateServerFunctionClient(module);
-    expect(client).toContain('query: input');
-    expect(client).toContain('body: input');
-    expect(client).not.toContain('query: { input }');
+    expect(client).toContain('query: { input: JSON.stringify(input) }');
+    expect(client).toContain('body: JSON.stringify(input)');
     expect(() => analyzeServerFunctionModule(`
-      export const invalid = define.function.post({
+      export const invalid = define.function({
         input: schema,
-        handler: async (_context, id, title) => ({ id, title }),
+        post: async (_context, id, title) => ({ id, title }),
       });
     `, { moduleId: '/app/server/functions/invalid.ts' }))
-      .toThrow('exactly one schema-owned input');
+      .toThrow('at most one schema-owned input');
   });
 
   it('discovers endpoints and keeps the module middleware export', () => {
     const module = analyzeServerFunctionModule(`
       export const middleware = [requireAuth()];
-      export const getStory = define.function.get(
-        async ({ services }, id: number, preview = false) => services.database.story(id, preview)
-      );
-      const vote = define.function.post(
-        async ({ services }, id: number) => services.database.vote(id)
-      );
+      export const getStory = define.function({ get: async ({ services }, id: number, preview = false) => services.database.story(id, preview) });
+      const vote = define.function({ post: async ({ services }, id: number) => services.database.vote(id) });
       export { vote as postVote };
     `, { moduleId: 'C:\\app\\server\\functions\\news\\stories.ts' });
 
@@ -116,9 +109,9 @@ describe('defined HTTP server functions', () => {
 
   it('generates a small $fetch-only client facade', () => {
     const module = analyzeServerFunctionModule(`
-      export const getStories = define.function.get(async ({ services }) => services.database.all());
-      export const getStory = define.function.get(async ({ services }, id: number) => services.database.find(id));
-      export const deleteStory = define.function.delete(async ({ services }, id: number) => services.database.remove(id));
+      export const getStories = define.function({ get: async ({ services }) => services.database.all() });
+      export const getStory = define.function({ get: async ({ services }, id: number) => services.database.find(id) });
+      export const deleteStory = define.function({ delete: async ({ services }, id: number) => services.database.remove(id) });
     `, { moduleId: '/app/server/functions/stories.ts' });
     const client = generateServerFunctionClient(module);
     expect(client).toContain('return __mmd_fetch("/_fn/stories/getStories")');
@@ -129,8 +122,8 @@ describe('defined HTTP server functions', () => {
 
   it('generates declarations from definition argument and result types', () => {
     const first = analyzeServerFunctionModule(`
-      export const getStory = define.function.get(async ({ services }, id: number) => services.database.find(id));
-      export const postVote = define.function.post(async ({ services }, id: number) => services.database.vote(id));
+      export const getStory = define.function({ get: async ({ services }, id: number) => services.database.find(id) });
+      export const postVote = define.function({ post: async ({ services }, id: number) => services.database.vote(id) });
     `, { moduleId: '/app/server/functions/stories.ts' });
     const declarations = generateServerFunctionDeclarations([first], {
       resolveImplementation: () => '../server/functions/stories.js',
@@ -148,7 +141,7 @@ describe('defined HTTP server functions', () => {
   });
 
   it('rejects duplicate exported names across the barrel', () => {
-    const source = 'export const getStory = define.function.get(async ({ services }, id: number) => ({ id }));';
+    const source = 'export const getStory = define.function({ get: async ({ services }, id: number) => ({ id }) });';
     const first = analyzeServerFunctionModule(source, {
       moduleId: '/app/server/functions/news/stories.ts',
     });
@@ -160,22 +153,48 @@ describe('defined HTTP server functions', () => {
     })).toThrow(/\[MMD-S012\].*news\/stories.*shop\/stories/s);
   });
 
-  it('rejects ordinary exports, sync handlers, missing context, and invalid parameters', () => {
+  it('accepts zero-argument method handlers without transport arguments', () => {
+    const module = analyzeServerFunctionModule(`
+      export const stories = define.function({
+        async get() { return loadStories(); },
+      });
+    `, { moduleId: '/app/server/functions/stories.ts' });
+    expect(module.functions[0]?.parameters).toEqual([]);
+    expect(generateServerFunctionClient(module)).toContain('export function stories()');
+  });
+
+  it('rejects missing, multiple, hidden, and non-inline HTTP handlers', () => {
+    const options = { moduleId: '/app/server/functions/stories.ts' };
+    for (const source of [
+      'export const story = define.function({});',
+      'export const story = define.function({ async get() {}, async post() {} });',
+    ]) {
+      expect(() => analyzeServerFunctionModule(source, options)).toThrow('exactly one HTTP method');
+    }
+    expect(() => analyzeServerFunctionModule(
+      'export const story = define.function({ get: loadStory });', options,
+    )).toThrow('inline handler');
+    expect(() => analyzeServerFunctionModule(
+      'export const story = define.function({ ...methods });', options,
+    )).toThrow('fields must be explicit');
+    expect(() => analyzeServerFunctionModule(
+      'export const story = define.function.get(async () => 1);', options,
+    )).toThrow('created by define.function()');
+  });
+
+  it('rejects ordinary exports, sync handlers, and invalid parameters', () => {
     const options = { moduleId: '/app/server/functions/stories.ts' };
     expect(() => analyzeServerFunctionModule(
       'export async function authenticate() {}', options,
     )).toThrow(/created by define\.function/);
     expect(() => analyzeServerFunctionModule(
-      'export const getSession = define.function.get(({ state }) => state);', options,
+      'export const getSession = define.function({ get: ({ state }) => state });', options,
     )).toThrow(/handler must be async/);
     expect(() => analyzeServerFunctionModule(
-      'export const story = define.function.post(async () => 1);', options,
-    )).toThrow(/injected request argument/);
-    expect(() => analyzeServerFunctionModule(
-      'export const story = define.function.post(async ({ state }, { title }: { title: string }) => title);', options,
+      'export const story = define.function({ post: async ({ state }, { title }: { title: string }) => title });', options,
     )).toThrow(/named identifiers/);
     expect(() => analyzeServerFunctionModule(
-      'export const value = define.function.get(async ({ state }, value: string | number) => value);', options,
+      'export const value = define.function({ get: async ({ state }, value: string | number) => value });', options,
     )).toThrow(/parameter 'value'.*query type/s);
     expect(() => analyzeServerFunctionModule(
       'export const databaseForTests = database;', options,
@@ -191,7 +210,7 @@ describe('defined HTTP server functions', () => {
 
   it('rejects non-GET server functions during render but allows handlers', () => {
     const metadata = analyzeServerFunctionModule(`
-      export const postVote = define.function.post(async ({ services }, id: number) => ({ id, votes: 4 }));
+      export const postVote = define.function({ post: async ({ services }, id: number) => ({ id, votes: 4 }) });
     `, { moduleId: '/app/server/functions/stories.ts' });
     const facade = generateServerFunctionClient(metadata);
     expect(() => compileModules({
@@ -218,8 +237,8 @@ describe('defined HTTP server functions', () => {
 
   it('replays facade calls and resolves event-created values', () => {
     const metadata = analyzeServerFunctionModule(`
-      export const getStory = define.function.get(async ({ services }, id: number) => ({ id }));
-      export const postVote = define.function.post(async ({ services }, id: number) => ({ id }));
+      export const getStory = define.function({ get: async ({ services }, id: number) => ({ id }) });
+      export const postVote = define.function({ post: async ({ services }, id: number) => ({ id }) });
     `, { moduleId: '/app/server/functions/stories.ts' });
     const facade = generateServerFunctionClient(metadata);
     const output = compileModules({

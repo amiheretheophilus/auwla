@@ -286,14 +286,15 @@ export default app;
 Server functions reside in `server/functions/*.ts` and provide type-safe RPC endpoints:
 
 ```ts
-export const getUser = define.function.get(
-  async ({ state, services }, id: string) =>
-    services.database.users.findFor(id, state.user),
-);
+export const getUser = define.function({
+  async get({ state, services }, id: string) {
+    return services.database.users.findFor(id, state.user);
+  },
+});
 ```
 
-- **Methods**: `define.function.get/post/put/patch/delete` declares the transport method.
-- **Validation**: The descriptor form accepts a Standard Schema `input` validator.
+- **Methods**: `define.function({ async get() { ... } })` declares one HTTP verb handler.
+- **Validation**: An optional Standard Schema `input` validator infers the handler's input type.
 - **Virtual import**: Client code imports the generated facade through `#server-functions`.
 - **Context**: The first handler argument is injected; only following named parameters cross the transport.
 - **Typing contract**: `server/define.ts` and discovered `define.service()` exports type state, platform, and services everywhere.

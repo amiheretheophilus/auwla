@@ -120,70 +120,79 @@ function definedFunction(
   const init = unwrapTypeExpression(raw);
   if (!astFactory.isCallExpression(init)) return null;
   const callee = unwrapTypeExpression(init.callee);
-  if (!astFactory.isMemberExpression(callee) || callee.computed) return null;
-  const methodName = propertyName(callee.property as unknown as BaseNode);
-  const method = methodName?.toUpperCase();
-  if (!['GET', 'POST', 'PUT', 'PATCH', 'DELETE'].includes(method ?? '')) {
-    return null;
-  }
-  const family = unwrapTypeExpression(callee.object);
   if (
-    !astFactory.isMemberExpression(family) ||
-    family.computed ||
-    propertyName(family.property as unknown as BaseNode) !== 'function'
+    !astFactory.isMemberExpression(callee) || callee.computed ||
+    propertyName(callee.property as unknown as BaseNode) !== 'function'
   ) return null;
   if (init.arguments.length !== 1 || !astFactory.isExpression(init.arguments[0]!)) {
     throw compilerError(
-      `memo-dom: define.function.${methodName}() requires exactly one handler or descriptor`,
+      'memo-dom: define.function() requires exactly one object definition',
       moduleId,
       declaration,
     );
   }
-  const argument = unwrapTypeExpression(init.arguments[0]!);
-  let handler: BaseNode | null = null;
-  let schemaInput = false;
-  if (
-    astFactory.isFunctionExpression(argument) ||
-    astFactory.isArrowFunctionExpression(argument)
-  ) {
-    handler = argument as unknown as BaseNode;
-  } else if (astFactory.isObjectExpression(argument)) {
-    for (const property of argument.properties) {
-      if (
-        property.type !== 'Property' ||
-        property.computed
-      ) continue;
-      const name = propertyName(property.key as unknown as BaseNode);
-      if (name === 'input') {
-        schemaInput = true;
-        continue;
-      }
-      if (name !== 'handler') continue;
-      const value = unwrapTypeExpression(property.value as t.Expression);
-      if (
-        astFactory.isFunctionExpression(value) ||
-        astFactory.isArrowFunctionExpression(value)
-      ) handler = value as unknown as BaseNode;
-    }
-  }
-  if (
-    handler === null ||
-    (!astFactory.isFunctionExpression(handler) &&
-      !astFactory.isArrowFunctionExpression(handler))
-  ) {
+  const definition = unwrapTypeExpression(init.arguments[0]!);
+  if (!astFactory.isObjectExpression(definition)) {
     throw compilerError(
-      `memo-dom: define.function.${methodName}() descriptor requires an inline handler`,
+      'memo-dom: define.function() requires an inline object definition',
       moduleId,
       declaration,
     );
   }
-  return {
-    local,
-    declaration,
-    method: method as ServerFunctionMethod,
-    schemaInput,
-    node: handler,
-  };
+  const methods = new Set(['get', 'post', 'put', 'patch', 'delete']);
+  let method: ServerFunctionMethod | null = null;
+  let handler: t.FunctionExpression | t.ArrowFunctionExpression | null = null;
+  let schemaInput = false;
+  for (const property of definition.properties) {
+    if (property.type !== 'Property' || property.computed) {
+      throw compilerError(
+        'memo-dom: define.function() fields must be explicit; spreads and computed keys hide HTTP method ownership',
+        moduleId,
+        property as unknown as BaseNode,
+      );
+    }
+    const name = propertyName(property.key as unknown as BaseNode);
+    if (name === 'input') {
+      schemaInput = true;
+      continue;
+    }
+    if (name === 'middleware') continue;
+    if (name === null || !methods.has(name)) {
+      throw compilerError(
+        `memo-dom: unsupported define.function() field '${name ?? 'unknown'}'`,
+        moduleId,
+        property as unknown as BaseNode,
+      );
+    }
+    if (method !== null) {
+      throw compilerError(
+        'memo-dom: define.function() requires exactly one HTTP method: get, post, put, patch, or delete',
+        moduleId,
+        property as unknown as BaseNode,
+      );
+    }
+    method = name.toUpperCase() as ServerFunctionMethod;
+    const value = unwrapTypeExpression(property.value as t.Expression);
+    if (
+      !astFactory.isFunctionExpression(value) &&
+      !astFactory.isArrowFunctionExpression(value)
+    ) {
+      throw compilerError(
+        `memo-dom: define.function() '${name}' requires an inline handler`,
+        moduleId,
+        property as unknown as BaseNode,
+      );
+    }
+    handler = value;
+  }
+  if (method === null || handler === null) {
+    throw compilerError(
+      'memo-dom: define.function() requires exactly one HTTP method: get, post, put, patch, or delete',
+      moduleId,
+      declaration,
+    );
+  }
+  return { local, declaration, method, schemaInput, node: handler };
 }
 
 function functionBindings(
@@ -345,16 +354,9 @@ function parametersFor(
   moduleId: string,
   schemaInput: boolean,
 ): ServerFunctionParameter[] {
-  if (fn.params.length === 0) {
+  if (schemaInput && fn.params.length > 2) {
     throw compilerError(
-      'memo-dom: [MMD-S013] a defined server function handler needs its injected request argument first',
-      moduleId,
-      fn as unknown as BaseNode,
-    );
-  }
-  if (schemaInput && fn.params.length !== 2) {
-    throw compilerError(
-      'memo-dom: [MMD-S013] a server function with input validation receives exactly one schema-owned input after its injected request argument',
+      'memo-dom: [MMD-S013] a server function with input validation receives at most one schema-owned input after its injected request argument',
       moduleId,
       fn as unknown as BaseNode,
     );
@@ -414,7 +416,7 @@ export function analyzeServerFunctionModule(
     const binding = bindings.get(exported.local);
     if (binding === undefined) {
       throw compilerError(
-        `memo-dom: [MMD-S003] Server function module export '${exported.exported}' must be created by define.function.get(), post(), put(), patch(), or delete(); only defined functions and 'middleware' may cross the client boundary`,
+        `memo-dom: [MMD-S003] Server function module export '${exported.exported}' must be created by define.function() with one get, post, put, patch, or delete handler; only defined functions and 'middleware' may cross the client boundary`,
         options.moduleId,
         exported.at,
       );
@@ -477,7 +479,7 @@ export function generateServerFunctionClient(
       const options = fn.parameters.length === 0
         ? ''
         : fn.schemaInput
-          ? `, { query: ${parameters} }`
+          ? `, { query: { input: JSON.stringify(${parameters}) } }`
           : `, { query: { ${entries} } }`;
       lines.push(
         `export function ${fn.exported}(${parameters}) { return __mmd_fetch(${JSON.stringify(fn.path)}${options}); }`,
@@ -486,7 +488,7 @@ export function generateServerFunctionClient(
       const body = fn.parameters.length === 0
         ? ''
         : fn.schemaInput
-          ? `, body: ${parameters}`
+          ? `, body: JSON.stringify(${parameters}), headers: { 'content-type': 'application/json' }`
           : `, body: { ${entries} }`;
       lines.push(
         `export function ${fn.exported}(${parameters}) { return __mmd_fetch(${JSON.stringify(fn.path)}, { method: ${JSON.stringify(fn.method)}${body} }); }`,

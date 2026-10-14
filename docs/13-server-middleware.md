@@ -34,12 +34,14 @@ export const middleware = [authenticated];
 export const middleware = [auditUsers];
 ```
 
-Target one function through its descriptor only when needed:
+Target one function by placing middleware beside its verb handler:
 
 ```ts
-export const removeUser = define.function.delete({
+export const removeUser = define.function({
   middleware: [requireOwner],
-  handler: async ({ services }, id: string) => services.users.remove(id),
+  async delete({ services }, id: string) {
+    return services.users.remove(id);
+  },
 });
 ```
 

@@ -51,23 +51,30 @@ type ServerFunctionHandler<
   ...args: TArguments
 ) => Promise<TResult>;
 
-export interface ServerFunctionDescriptor<
+type ServerFunctionVerb = 'get' | 'post' | 'put' | 'patch' | 'delete';
+
+type OneFunctionMethod<THandler> = {
+  [TMethod in ServerFunctionVerb]:
+    { readonly [TKey in TMethod]: THandler } &
+    { readonly [TKey in Exclude<ServerFunctionVerb, TMethod>]?: never };
+}[ServerFunctionVerb];
+
+export type ServerFunctionDescriptor<
   TState extends object,
   TPlatform,
   TServices extends object,
   TArguments extends readonly unknown[],
   TResult,
-> {
+> = {
   readonly middleware?: readonly ServerMiddleware<TState, TPlatform, TServices>[];
   readonly input?: undefined;
-  readonly handler: ServerFunctionHandler<
-    TState,
-    TPlatform,
-    TServices,
-    TArguments,
-    TResult
-  >;
-}
+} & OneFunctionMethod<ServerFunctionHandler<
+  TState,
+  TPlatform,
+  TServices,
+  TArguments,
+  TResult
+>>;
 
 type SchemaInput<TSchema> =
   TSchema extends StandardSchemaV1<infer TInput, unknown> ? TInput : never;
@@ -75,25 +82,24 @@ type SchemaInput<TSchema> =
 type SchemaOutput<TSchema> =
   TSchema extends StandardSchemaV1<unknown, infer TOutput> ? TOutput : never;
 
-export interface ServerFunctionInputDescriptor<
+export type ServerFunctionInputDescriptor<
   TState extends object,
   TPlatform,
   TServices extends object,
   TSchema extends StandardSchemaV1,
   TResult,
-> {
+> = {
   readonly middleware?: readonly ServerMiddleware<TState, TPlatform, TServices>[];
   readonly input: TSchema;
-  readonly handler: ServerFunctionHandler<
-    TState,
-    TPlatform,
-    TServices,
-    readonly [input: SchemaOutput<TSchema>],
-    TResult
-  >;
-}
+} & OneFunctionMethod<ServerFunctionHandler<
+  TState,
+  TPlatform,
+  TServices,
+  readonly [input: SchemaOutput<TSchema>],
+  TResult
+>>;
 
-export interface DefineServerFunctionMethod<
+export interface DefineServerFunction<
   TState extends object,
   TPlatform,
   TServices extends object,
@@ -114,15 +120,6 @@ export interface DefineServerFunctionMethod<
     TServices,
     readonly [input: SchemaOutput<TSchema>]
   >;
-  <TArguments extends readonly unknown[], TResult>(
-    handler: ServerFunctionHandler<
-      TState,
-      TPlatform,
-      TServices,
-      TArguments,
-      TResult
-    >,
-  ): DefinedServerFunction<TArguments, TResult, TState, TPlatform, TServices>;
   <TArguments extends readonly unknown[], TResult>(
     descriptor: ServerFunctionDescriptor<
       TState,
@@ -182,13 +179,7 @@ export interface ServerDefinition<
     readonly platform?: TPlatform;
     readonly serviceTypes?: TServices;
   };
-  readonly function: {
-    readonly get: DefineServerFunctionMethod<TState, TPlatform, TServices>;
-    readonly post: DefineServerFunctionMethod<TState, TPlatform, TServices>;
-    readonly put: DefineServerFunctionMethod<TState, TPlatform, TServices>;
-    readonly patch: DefineServerFunctionMethod<TState, TPlatform, TServices>;
-    readonly delete: DefineServerFunctionMethod<TState, TPlatform, TServices>;
-  };
+  readonly function: DefineServerFunction<TState, TPlatform, TServices>;
   middleware<TMiddleware extends ServerMiddleware<TState, TPlatform, TServices>>(
     middleware: TMiddleware,
   ): TMiddleware;
@@ -216,28 +207,32 @@ export type DefinitionPlatform<TDefinition> =
     ? TPlatform
     : never;
 
-function createFunctionMethod<
+function createFunctionDefinition<
   TState extends object,
   TPlatform,
   TServices extends object,
->(
-  method: ServerFunctionMethod,
-): DefineServerFunctionMethod<TState, TPlatform, TServices> {
+>(): DefineServerFunction<TState, TPlatform, TServices> {
   return (<TArguments extends readonly unknown[], TResult>(
-    value:
-      | ServerFunctionHandler<TState, TPlatform, TServices, TArguments, TResult>
+    descriptor:
       | ServerFunctionDescriptor<TState, TPlatform, TServices, TArguments, TResult>
       | ServerFunctionInputDescriptor<TState, TPlatform, TServices, StandardSchemaV1, TResult>,
   ): DefinedServerFunction<TArguments, TResult, TState, TPlatform, TServices> => {
-    const descriptor = typeof value === 'function'
-      ? { handler: value }
-      : value;
-    if (typeof descriptor.handler !== 'function') {
-      throw new TypeError(`memo-dom: define.function.${method.toLowerCase()}() requires a handler`);
+    if (typeof descriptor !== 'object' || descriptor === null) {
+      throw new TypeError('memo-dom: define.function() requires an object definition');
+    }
+    const methods = (['get', 'post', 'put', 'patch', 'delete'] as const)
+      .filter(method => Object.hasOwn(descriptor, method));
+    if (methods.length !== 1) {
+      throw new TypeError('memo-dom: define.function() requires exactly one HTTP method: get, post, put, patch, or delete');
+    }
+    const method = methods[0]!;
+    const handler = descriptor[method];
+    if (typeof handler !== 'function') {
+      throw new TypeError(`memo-dom: define.function() '${method}' must be a function`);
     }
     return Object.freeze({
-      method,
-      handler: descriptor.handler,
+      method: method.toUpperCase() as ServerFunctionMethod,
+      handler,
       middleware: Object.freeze([...(descriptor.middleware ?? [])]),
       ...(descriptor.input === undefined ? {} : { input: descriptor.input }),
     }) as unknown as DefinedServerFunction<
@@ -247,7 +242,7 @@ function createFunctionMethod<
       TPlatform,
       TServices
     >;
-  }) as DefineServerFunctionMethod<TState, TPlatform, TServices>;
+  }) as DefineServerFunction<TState, TPlatform, TServices>;
 }
 
 /** Create the one definition object shared by an application's server code. */
@@ -280,13 +275,7 @@ export function createDefine<
   };
   return Object.freeze({
     [SERVER_DEFINITION]: runtime,
-    function: Object.freeze({
-      get: createFunctionMethod<TState, TPlatform, TServices>('GET'),
-      post: createFunctionMethod<TState, TPlatform, TServices>('POST'),
-      put: createFunctionMethod<TState, TPlatform, TServices>('PUT'),
-      patch: createFunctionMethod<TState, TPlatform, TServices>('PATCH'),
-      delete: createFunctionMethod<TState, TPlatform, TServices>('DELETE'),
-    }),
+    function: createFunctionDefinition<TState, TPlatform, TServices>(),
     middleware<TMiddleware extends ServerMiddleware<TState, TPlatform, TServices>>(
       middleware: TMiddleware,
     ): TMiddleware {

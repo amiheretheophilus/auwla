@@ -60,10 +60,10 @@ export const define = createDefine<Record<string, never>, { env: any; executionC
   await writeFile(join(fixture, 'public/robots.txt'), 'User-agent: *');
   await writeFile(join(fixture, 'worker-image.svg'), '<svg xmlns="http://www.w3.org/2000/svg">' + '<rect width="1" height="1"/>'.repeat(300) + '</svg>');
   await writeFile(join(fixture, 'server/functions/greeting.ts'), `import { define } from '../define';
-export const greeting = define.function.get(async (context, name: string) => {
+export const greeting = define.function({ get: async (context, name: string) => {
   await new Promise(done => setTimeout(done, name === 'first' ? 20 : 0));
   return { greeting: 'Hello ' + name, message: context.platform.env.MESSAGE, user: context.request.headers.get('x-user') };
-});`);
+} });`);
   await writeFile(join(fixture, 'launch.mjs'), `const { createDevServer } = await import('@memoized-dom/vite/dev');
 const { default: memoizedDom } = await import('@memoized-dom/vite');
 const { cloudflare } = await import('@memoized-dom/vite/cloudflare');
