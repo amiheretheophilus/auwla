@@ -1,0 +1,339 @@
+# Live queries and streaming functions
+
+Implemented: live GET queries, mutation invalidation, single/multiple optimistic
+source protection, and async generator server functions. This document began as
+the authoring design and now describes the implementation and its boundaries.
+Invalidation is application-instance-local; it is not a distributed database feed.
+
+## What this adds
+
+Authors write ordinary typed server functions and consume their results as
+reactive values. The compiler and runtime own streaming transport, generated
+endpoints, subscription lifetimes, and delivery to the existing data source.
+Authors do not write SSE routes, message parsers, `watch()` methods, or client
+event handlers for live queries.
+
+This does not replace existing SSR streaming. SSR `mode: 'stream'` delivers
+initial regions as their reads settle and then finishes. A live query keeps an
+already-open page synchronized with subsequent server changes.
+
+## Server authoring: declare what a query observes
+
+Keep the existing shared definition and discovery layout:
+
+```ts
+// server/define.ts
+import { createDefine } from '@memoized-dom/server';
+
+export const define = createDefine<{ visitor: string }>();
+```
+
+Export service definitions under the configured server root and server
+functions under `server/functions`. Services keep ordinary methods: `all`,
+`add`, and `remove` below read or change application data; they do not need to
+implement a feed. The services receive their existing generated types.
+
+```ts
+// server/functions/notes.ts
+import { define } from '../define';
+
+export const getNotes = define.function({
+  live: (_context, expeditionId: string) =>
+    ['expedition-notes', expeditionId],
+
+  async get({ services }, expeditionId: string) {
+    return services.notes.all(expeditionId);
+  },
+});
+
+export const postNote = define.function({
+  updates: (_context, expeditionId: string) =>
+    ['expedition-notes', expeditionId],
+
+  async post({ state, services }, expeditionId: string, text: string) {
+    return services.notes.add(expeditionId, text, state.visitor);
+  },
+});
+
+export const deleteNote = define.function({
+  updates: (_context, expeditionId: string) =>
+    ['expedition-notes', expeditionId],
+
+  async delete({ services }, expeditionId: string, noteId: string) {
+    return services.notes.remove(expeditionId, noteId);
+  },
+});
+```
+
+`live` and `updates` receive the injected context first and the handler's
+arguments afterward, and return a structured dependency key. Input validation
+remains optional; validated definitions must use their validated server input
+consistently when evaluating those callbacks. Different expedition IDs produce
+different keys. Keys are not URLs and do not cross into client calls as extra
+arguments. The current scope is ordinary GET queries with `live` and
+mutation functions with `updates`; generators have a separate role below.
+
+After a successful mutation, the framework invalidates its declared key,
+reruns matching active queries on the server, and streams their updated values.
+The mutation still returns its normal result to the caller. There is no extra
+browser GET after the mutation, although updating a live query does perform its
+server-side read again. This is invalidation-driven querying, not automatic
+database observation.
+
+Changes that occur outside these functions use an explicit boundary:
+
+```ts
+await services.notes.importFromJob(expeditionId);
+define.invalidate(['expedition-notes', expeditionId]);
+```
+
+Publish invalidations after changes commit. Transactions, partially committed
+failures, and changes made by other applications need an appropriate integration;
+successful function completion alone cannot reveal arbitrary database writes.
+
+## Client authoring: an ordinary reactive result
+
+```tsx
+import { getNotes } from '#server-functions';
+
+export function Notes(expeditionId: string) {
+  const notes = getNotes(expeditionId);
+
+  return (
+    <ul>
+      {notes.map(note => (
+        <li key={note.id}>{note.text}</li>
+      ))}
+    </ul>
+  );
+}
+```
+
+If the query returns `Note[]`, `notes` is typed as `Note[]`, not an event source,
+promise wrapper, or generator. Existing `Group`, `suspend`, and `$track` remain
+the ways to author initial pending/error UI and inspect the data source.
+
+The framework loads the initial value and owns the live subscription. Incoming
+results replace the source's confirmed value; compiled JSX updates its DOM.
+Changing the query arguments rebinds the source. Unmounting releases the
+subscription; the underlying connection closes when no consumers remain.
+GET functions without `live` retain their existing single-result behavior.
+
+SSR obtains an initial value and transfers it for hydration; it does not wait
+for a live connection to finish. After adoption, the browser opens a live
+connection and receives a fresh snapshot, covering changes since SSR. `$routed`
+remains a finite preparation gate. Its cached payload does not itself own a
+live subscription: declare the live source in the mounted component when
+ongoing updates are needed.
+
+## Optimistic authoring: preserve callbacks, associate the source
+
+```tsx
+import { getNotes, postNote } from '#server-functions';
+import { optimistic } from '@memoized-dom/utils';
+
+export function Notes(expeditionId: string) {
+  const notes = getNotes(expeditionId);
+
+  const saveNote = optimistic({
+    source: notes,
+
+    action: (text: string) => postNote(expeditionId, text),
+
+    apply(text, operationId) {
+      notes.push({ id: operationId, text, by: 'you' });
+      return () => {
+        const index = notes.findIndex(note => note.id === operationId);
+        if (index !== -1) notes.splice(index, 1);
+      };
+    },
+
+    reconcile(saved, _text, operationId) {
+      const index = notes.findIndex(note => note.id === operationId);
+      if (index !== -1) notes.splice(index, 1, saved);
+    },
+  });
+
+  return (
+    <section>
+      <button onClick={() => saveNote('New field note')}>Add note</button>
+      <ul>{notes.map(note => <li key={note.id}>{note.text}</li>)}</ul>
+    </section>
+  );
+}
+```
+
+Use `source: notes` for one source or `source: [notes, summary]` for multiple
+sources. Both are optional additions to the existing callback-based approach.
+For example, an optimistic note insertion can protect its notes list and the
+live note-count summary, incrementing the count in `apply` and decrementing it
+in rollback. Each source waits for all of its own associated operations; an
+unrelated source continues updating normally.
+
+`source: notes` associates the operation with the compiler-owned live source,
+not a copy of its array and not another request. The compiler preserves this
+as a source reference rather than its current payload. Unsupported plain
+arrays/objects produce an error rather than silently failing to protect data.
+Use direct live-source bindings or an explicit array of those bindings inside
+the imported `optimistic` call. Arbitrary derived values and dynamically
+assembled source lists are outside this compiler-preserved authoring contract.
+
+The framework cannot reliably infer this relationship from arbitrary closures.
+`apply` might change an array through a helper or alias, update several objects,
+or touch unrelated state. An explicit source avoids treating unrelated live
+queries as if they belonged to the mutation.
+
+### Protection, not optimistic overlays
+
+Protection does not analyze, extract, or replay optimistic callback changes:
+
+1. Protect the associated source before starting each operation.
+2. Start the request and run `apply` immediately, preserving current concurrency.
+3. While associated operations remain pending, retain the newest incoming
+   snapshot without applying it to the displayed value.
+4. Run normal successful reconciliation or operation-specific rollback.
+5. Release protection after settlement callbacks, including failure paths.
+6. When no associated operations remain, allow an eligible current snapshot to
+   update the source.
+
+For example, `[A, B, temporaryC]` stays visible while C's request is pending,
+even if another user's update arrives as `[A, B, D]`. C reconciles or rolls back
+first; a current confirmed snapshot can then become visible. This avoids losing
+the placeholder that the authored reconciliation callback expects to find.
+
+Protection is shared by operations associated with the same underlying source,
+including different optimistic helpers. A complete-array snapshot must not
+replace that array while any associated operation is still pending. Unrelated
+sources continue updating. Retain the latest snapshot, not an unbounded queue.
+
+The source association is optional for existing non-streaming usage. Existing
+`apply`, rollback, `reconcile`, request return values, and optional grouping IDs
+keep their meanings. For independent row insertions, omit the grouping ID so
+each successful insertion reconciles. For repeated writes to one value, the
+existing `save(payload, { id })` still groups reconciliation; `source` separately
+protects against incoming stream snapshots. It does not select a group winner
+or serialize requests.
+
+There is a real timing constraint: the last received snapshot may predate a
+successful mutation. The protocol carries internal change cursors and mutation
+acknowledgements so such a snapshot cannot undo the reconciled result. Protection
+does not simply flush any buffered snapshot when its counter reaches zero. These
+are framework-owned delivery positions, not author-provided entity versions,
+and do not establish database write order. In-flight live queries discard their
+result and rerun if their dependency changed while they were evaluating.
+
+This acknowledgement guarantee uses the generated server-function result.
+An ordinary promise can still protect a source until it settles, but it does
+not carry the framework's mutation cursor; it cannot reject older snapshots
+on that basis. Return the server-function result directly when relying on
+automatic mutation acknowledgements.
+
+The deliberate tradeoff: external changes to this source are delayed while its
+optimistic operations remain pending. Long-pending operations can delay updates.
+There is no guarantee for arbitrary writes made outside the associated helper,
+and cancellation cannot prove that a remote mutation did not commit.
+
+## Generator functions: incremental results, not required for live queries
+
+Use a normal live query when the framework can rerun a normal query on declared
+changes. Use a generator when an operation itself naturally produces successive
+values, such as generated text or job progress:
+
+```ts
+export const generateAnswer = define.function({
+  async *post({ services, request }, prompt: string) {
+    let answer = '';
+    for await (const token of services.ai.generate(prompt, {
+      signal: request.signal,
+    })) {
+      answer += token;
+      yield answer;
+    }
+    return answer;
+  },
+});
+```
+
+The compiler recognizes the generator and generates the transport. The client
+receives a transparent reactive string, not an `AsyncGenerator`. Every yielded
+value represents the current complete result; appending text is explicit in the
+server function above. Arrays likewise yield complete arrays, not implicit
+append operations or custom added/deleted event protocols.
+
+Tracking semantics:
+
+- `pending`: waiting for the first value.
+- `streaming`: the streaming operation is open or reconnecting, including while
+  waiting for its first value. `pending` distinguishes that initial wait.
+- `onSuccess`: once on successful completion, not once per yield.
+- Errors distinguish an initial failure from a failure after delivering data.
+
+Successful completion must not cause optimistic reconciliation on every yield.
+The client type is inferred from yielded values, not the generator's return
+value. `return` ends execution but does not publish another payload. Completion
+reports the last yielded value once to `onSuccess`. A generator must yield at
+least one JSON-serializable value; an empty generator is an error. Forms
+submitting generator actions also wait for completion before accepting a result.
+Live GET `onSuccess` observes initial fulfillment once per execution, rather
+than firing for every subsequent snapshot.
+
+Do not automatically restart a POST generator after a network interruption:
+that could repeat side effects. This implementation explicitly fails interrupted
+generators rather than restarting them. Safe resumption would need an execution
+identity and retained/durable state. A live read query reconnects by obtaining a
+fresh snapshot; a mutation stream is not equivalent.
+Closing a connection and cancelling an underlying durable job are separate
+application decisions.
+
+## Runtime and security boundaries
+
+- Use the existing typed context, middleware, and service injection. Re-evaluated
+  queries retain their own authorized context; never evaluate every subscriber
+  using the mutating caller's context.
+- Dependency keys identify invalidation audiences, not authorization. Do not
+  share a computed result between users merely because their keys match.
+- Middleware authorizes the opening request. Query re-evaluations retain that
+  request's context; they do not rerun its middleware. Applications with
+  revocable permissions should check current access in the query or terminate
+  the connection when access changes.
+- Bound buffers and apply backpressure. Clean up subscriptions on unmount,
+  cancellation, argument changes, and application shutdown.
+- Reconnect live queries with cursor-aware recovery or a current snapshot, keep
+  the last successful value during transient disconnection, and expose status.
+- Process-local invalidations do not reach another server instance. Production
+  scaling needs a shared broker/change log and an explicit adapter boundary.
+- SSE is a transport choice, not the author-facing API. Its use still requires
+  deployment support for streaming responses, authentication, and cancellation.
+
+## Delivery and current limits
+
+Live queries reconnect after transient transport failures with bounded backoff
+(up to 30 seconds), keeping their last successful data. Authorization failures,
+declared query errors, and invalid frames are terminal; `$track(source).error`
+reports the failure and explicit `refresh()` can retry. `abort()` and final
+ownership release stop the source and reconnection. Equivalent active live
+sources share one request/cache entry; ordinary and streaming requests do not
+share transport identities even if their URLs match.
+
+The framework sends JSON value frames over an internal fetch-based SSE protocol.
+The generated facade handles headers and bodies; no authored SSE endpoint or
+EventSource wiring is needed. Complete values replace the source rather than
+implicitly appending array items. Parsing supports fragmented UTF-8 and CRLF/LF
+lines and rejects frames over 1 MiB. Server live queries use backpressure, one
+queued frame, coalesced invalidations, and 5-second idle heartbeats. Deployments
+still need a host and proxy that permit streamed responses.
+Each distinct active live query uses its own connection; this implementation
+does not multiplex query subscriptions. Host and browser connection limits
+therefore matter when mounting many different live queries simultaneously.
+
+SSR consumes a finite query snapshot or one generator GET yield. Hydration
+retains that transferred value and reconnects live GET sources after adoption.
+Reconnections supply current snapshots, not a historical event log. A generator
+GET's restored first yield remains finite; hydration does not restart it.
+Live values cached as ordinary `$routed` payloads are payloads, not subscriptions:
+declare the live source in the mounted component to receive ongoing updates.
+
+No automatic browser GET follows a successful mutation. Its result reconciles
+the caller; invalidation reruns subscribed queries on the server and streams
+their values. Multiple sources are independently protected and updated; separate
+connections do not promise atomic visual delivery across sources.

@@ -9,6 +9,40 @@ import {
 } from '@memoized-dom/compiler';
 
 describe('defined HTTP server functions', () => {
+  it('generates live and generator facades and preserves multiple optimistic source holders', () => {
+    const metadata = analyzeServerFunctionModule(`
+      export const getNotes = define.function({ live: (_ctx, id) => ['notes', id], async get(_ctx, id: string) { return []; } });
+      export const answer = define.function({ async *post(_ctx, prompt: string) { yield prompt; return prompt; } });
+    `, { moduleId: '/app/server/functions/notes.ts' });
+    expect(metadata.functions.find(fn => fn.exported === 'getNotes')?.live).toBe(true);
+    expect(metadata.functions.find(fn => fn.exported === 'answer')?.generator).toBe(true);
+    const facade = generateServerFunctionClient(metadata);
+    expect(facade).toContain('createStreamingSource');
+    const output = compileModules({
+      './functions.ts': facade,
+      './App.tsx': `import { getNotes } from './functions'; import { optimistic as update } from '@memoized-dom/utils';
+        export function App() {
+          const notes = getNotes('one');
+          const summary = getNotes('two');
+          const save = update({ source: [notes, summary], action: () => Promise.resolve(1), apply() { return () => {}; } });
+          return <div><button onClick={() => save()}>Save</button>{notes.map(note => <p>{note.text}</p>)}</div>;
+        }`,
+    });
+    expect(output['./App.tsx']).toContain('source: [notes, summary]');
+    expect(output['./App.tsx']).toContain('readResolvedValue');
+    const shared = compileModules({
+      './functions.ts': facade,
+      './sources.ts': `import { getNotes } from './functions'; export const notes = getNotes('one');`,
+      './App.tsx': `import { notes } from './sources'; import { optimistic } from '@memoized-dom/utils';
+        export function App() {
+          const save = optimistic({ source: notes, action: () => Promise.resolve(1), apply() { return () => {}; } });
+          return <div><button onClick={() => save()}>Save</button>{notes.map(note => <p>{note.text}</p>)}</div>;
+        }`,
+    });
+    expect(shared['./App.tsx']).toContain('source: notes');
+    expect(shared['./App.tsx']).not.toMatch(/source: (?:readResolvedValue|readModuleSource)/);
+    expect(() => analyzeServerFunctionModule('export const bad = define.function({ live: () => ["a"], async *get() { yield 1; } });', { moduleId: '/app/server/functions/bad.ts' })).toThrow('ordinary GET');
+  });
   it('discovers HTTP verb definitions, aliases, and transported parameters', () => {
     const source = `
       import { define } from '../define';

@@ -1,4 +1,6 @@
 export { createDataRuntime } from './client';
+export { createStreamingSource } from './streaming';
+export { protectLiveSources } from './source-protection';
 export { nextDataRuntimeSettlement } from './runtime-lifetime';
 export {
   disposeFetchResource,

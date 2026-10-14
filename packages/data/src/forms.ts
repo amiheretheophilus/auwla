@@ -86,21 +86,21 @@ function settleOutput<T>(output: T | PromiseLike<T>): Promise<T> {
   if (!isFetchResource(output)) return Promise.resolve(output);
   const resource = output;
   const snapshot = fetchResourceSnapshot(resource);
-  if (snapshot.status === 'success' && !snapshot.pending && !snapshot.refreshing) {
+  if (snapshot.status === 'success' && !snapshot.pending && !snapshot.refreshing && !snapshot.streaming && snapshot.error === null) {
     return Promise.resolve(snapshot.data as T);
   }
-  if (snapshot.status === 'error' && snapshot.error !== null) {
+  if (!snapshot.pending && !snapshot.refreshing && snapshot.error !== null) {
     return Promise.reject(snapshot.error);
   }
   return new Promise<T>((resolve, reject) => {
     let unsubscribe = () => {};
     let completed = false;
     const observe = (value: ReturnType<typeof fetchResourceSnapshot>) => {
-      if (value.status === 'success' && !value.pending && !value.refreshing) {
+      if (value.status === 'success' && !value.pending && !value.refreshing && !value.streaming && value.error === null) {
         completed = true;
         unsubscribe();
         resolve(value.data as T);
-      } else if (value.status === 'error' && value.error !== null) {
+      } else if (!value.pending && !value.refreshing && value.error !== null) {
         completed = true;
         unsubscribe();
         reject(value.error);

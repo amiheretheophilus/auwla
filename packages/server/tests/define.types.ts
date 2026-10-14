@@ -81,6 +81,25 @@ define.service('mailer', {
 });
 
 const app = serve({ define, state: () => ({ requestId: 'one' }) });
+const liveNotes = define.function({
+  live: (_context, id: string) => ['notes', id],
+  async get({ state }, id: string) { return [{ id, by: state.requestId }]; },
+});
+type LiveResultCheck = Assert<Equal<ServerFunctionResult<typeof liveNotes>, { id: string; by: string }[]>>;
+const saveLive = define.function({
+  updates: (_context, id: string) => ['notes', id],
+  async post(_context, id: string, text: string) { return { id, text }; },
+});
+type LiveArgumentsCheck = Assert<Equal<ServerFunctionArguments<typeof saveLive>, [id: string, text: string]>>;
+const streamed = define.function({ async *post(_context, prompt: string) { yield prompt; yield prompt + '!'; return undefined; } });
+type StreamResultCheck = Assert<Equal<ServerFunctionResult<typeof streamed>, string>>;
+const validatedLive = define.function({
+  input: scalarSchema,
+  live: (_context, input) => { type ValidatedKeyCheck = Assert<Equal<typeof input, number>>; return ['notes', input]; },
+  async get(_context, input) { return input; },
+});
+type ValidatedLiveCheck = Assert<Equal<ServerFunctionArguments<typeof validatedLive>, readonly [input: string]>>;
+define.invalidate(['notes', 'one']);
 app.get('/account/:id', ({ state, platform, params }) => {
   type RouteStateCheck = Assert<Equal<typeof state, State>>;
   type RoutePlatformCheck = Assert<Equal<typeof platform, Platform | undefined>>;

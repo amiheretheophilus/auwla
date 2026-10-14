@@ -2,9 +2,46 @@ import {expect, it, vi} from 'bun:test';
 import {Window} from 'happy-dom';
 import {createApplicationRuntime, runWithApplicationRuntime} from '@memoized-dom/runtime';
 import {createCoreDataRuntime, fetchStoreForRuntime} from '../src/runtime-core';
-import {enableDataRestoration, resumeDataHydration, cancelDataHydration} from '../src/restoration';
+import {enableDataRestoration, resumeDataHydration, cancelDataHydration, deliverStreamedDataState} from '../src/restoration';
 import {exposeDataRuntime} from '../src/client';
 import {disposeFetchResource} from '../src/resource';
+
+it.each(['before', 'after'] as const)('opens a live subscription when an SSR streamed snapshot arrives %s adoption', async timing => {
+  const server = exposeDataRuntime(createCoreDataRuntime());
+  fetchStoreForRuntime(server).environment.stream = async (_descriptor, _signal, delivery) => {
+    delivery.value('server', {epoch:'test',key:'notes',revision:0});
+    return 'server';
+  };
+  server.$fetch('/live', {stream:'live'});
+  await server.settle();
+  const state = server.serializeState();
+  const window = new Window();
+  const app = createApplicationRuntime('late-live-'+timing, {mode:'hydrate',schedule:null,
+    document:window.document as unknown as Document});
+  const runtime = enableDataRestoration(createCoreDataRuntime());
+  let requests = 0;
+  fetchStoreForRuntime(runtime).environment.stream = async (_descriptor, _signal, delivery) => {
+    requests++;
+    delivery.value('client', {epoch:'test',key:'notes',revision:1});
+    return 'client';
+  };
+  try {
+    expect(state.sources).toHaveLength(1);
+    runtime.restoreState({...state,sources:state.sources.map(record => ({...record,snapshot:{status:'pending',streamed:true}}))});
+    const source = runWithApplicationRuntime(app, () => runtime.$fetch<string>('/live', {stream:'live'}));
+    expect(requests).toBe(0);
+    if (timing === 'after') resumeDataHydration(runtime);
+    deliverStreamedDataState(runtime, state);
+    if (timing === 'before') {
+      expect(source.data).toBe('server');
+      expect(requests).toBe(0);
+      resumeDataHydration(runtime);
+    }
+    await runtime.settle();
+    expect(requests).toBe(1);
+    expect(source.data).toBe('client');
+  } finally {server.clear();runtime.clear();app.dispose();await window.happyDOM.close();}
+});
 
 it('upgrades an existing client cache without replacing its resource or request engine', async () => {
   const fetcher = vi.fn(async () => Response.json({name:'Ada'}));

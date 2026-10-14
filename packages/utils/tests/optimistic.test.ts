@@ -5,12 +5,14 @@ import {
   $forms,
   clearDataRuntime,
   createDataRuntime,
+  runWithDataRuntime,
   RequestError,
   type FetchResource,
   type ResolvedValue,
   type StandardSchemaV1,
 } from '@memoized-dom/data';
 import { optimistic, type OptimisticCallOptions } from '../src';
+import { createStreamingSource, disposeFetchResource } from '@memoized-dom/data/internal';
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
@@ -25,6 +27,65 @@ function deferred<T>() {
 afterEach(() => clearDataRuntime());
 
 describe('optimistic', () => {
+  it('protects multiple live sources through overlapping responses and waits for acknowledged snapshots', async () => {
+    const encoder = new TextEncoder();
+    const feeds = new Map<string, ReadableStreamDefaultController<Uint8Array>>();
+    const pending = new Map<string, ReturnType<typeof deferred<Response>>>();
+    const stamp = (revision: number) => ({ epoch: 'one', key: '["notes"]', revision });
+    const emit = (path: string, value: unknown, revision: number) => feeds.get(path)!.enqueue(encoder.encode(
+      `event: value\ndata: ${JSON.stringify({ value, stamp: stamp(revision) })}\n\n`,
+    ));
+    const runtime = createDataRuntime({ baseURL: 'https://app.test', fetch: async (input, init) => {
+      const path = new URL(String(input)).pathname;
+      if (path === '/save') {
+        const text = JSON.parse(String(init!.body)).text as string;
+        const work = deferred<Response>(); pending.set(text, work); return work.promise;
+      }
+      return new Response(new ReadableStream<Uint8Array>({ start(controller) { feeds.set(path, controller); } }), {
+        headers: { 'content-type': 'text/event-stream' },
+      });
+    } });
+    try {
+      const notes = runWithDataRuntime(runtime, () => createStreamingSource<{ id: string; text: string }[]>('/notes', {}, 'live'));
+      const summary = runWithDataRuntime(runtime, () => createStreamingSource<{ count: number }>('/summary', {}, 'live'));
+      const rows = notes as unknown as FetchResource<{ id: string; text: string }[]>;
+      const count = summary as unknown as FetchResource<{ count: number }>;
+      emit('/notes', [{ id: 'A', text: 'A' }], 0); emit('/summary', { count: 1 }, 0);
+      await runtime.settle();
+      const save = optimistic({
+        source: [notes, summary],
+        action: (text: string) => runtime.$fetch<{ id: string; text: string }>('/save', { method: 'POST', body: { text } }),
+        apply(text, id) {
+          rows.mutate(items => items!.push({ id, text })); count.mutate(value => { value!.count++; });
+          return () => {
+            rows.mutate(items => { const index = items!.findIndex(item => item.id === id); if (index !== -1) items!.splice(index, 1); });
+            count.mutate(value => { value!.count--; });
+          };
+        },
+        reconcile(saved, _text, id) {
+          rows.mutate(items => { const index = items!.findIndex(item => item.id === id); if (index !== -1) items!.splice(index, 1, saved); });
+        },
+      });
+      const first = save('C'), second = save('E');
+      expect(count.data?.count).toBe(3);
+      emit('/notes', [{ id: 'A', text: 'A' }, { id: 'D', text: 'D' }], 1); emit('/summary', { count: 2 }, 1);
+      await Bun.sleep(10);
+      expect(rows.data!.map(row => row.text)).toEqual(['A', 'C', 'E']);
+      pending.get('E')!.resolve(Response.json({ id: 'E', text: 'E' }, { headers: { 'x-mmd-updates': JSON.stringify([stamp(2)]) } }));
+      await waitFor(() => expect(rows.data!.some(row => row.id === 'E')).toBe(true));
+      expect(rows.data!.map(row => row.text)).toEqual(['A', 'C', 'E']);
+      pending.get('C')!.resolve(Response.json({ id: 'C', text: 'C' }, { headers: { 'x-mmd-updates': JSON.stringify([stamp(3)]) } }));
+      await runtime.settle();
+      // The latest buffered snapshot is older than both acknowledgements.
+      expect(rows.data!.map(row => row.id)).toEqual(['A', 'C', 'E']);
+      expect(count.data?.count).toBe(3);
+      emit('/notes', ['A', 'D', 'E', 'C'].map(id => ({ id, text: id })), 3); emit('/summary', { count: 4 }, 3);
+      await waitFor(() => expect(rows.data!.map(row => row.id)).toEqual(['A', 'D', 'E', 'C']));
+      expect(count.data?.count).toBe(4);
+      disposeFetchResource(first); disposeFetchResource(second);
+    } finally { runtime.clear(); }
+  });
+
   it('preserves transparent source and form payload types', () => {
     const schema: StandardSchemaV1<unknown, { id: string }> = {
       '~standard': {

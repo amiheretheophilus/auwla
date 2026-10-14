@@ -290,4 +290,8 @@ callbacks for overlapping submissions; displayed result and errors belong
 to the newest accepted submission. Server-side code can submit a `FormData`
 instance without DOM globals, and the same validation and tracking apply.
 
+For automatic live queries, generator results, and protection against incoming
+snapshots during optimistic writes, see
+[Live queries and streaming functions](./live-streaming-design.md).
+
 Next: [06 — Group](./06-group.md)

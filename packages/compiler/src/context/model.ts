@@ -11,6 +11,10 @@ import type { PresentationOwner } from '../planning/presentation-ownership';
 export const DEFAULT_TRANSPARENT_ASYNC_SOURCES: readonly TransparentAsyncSourceDefinition[] = [
   {
     module: '@memoized-dom/data/internal',
+    source: 'createStreamingSource',
+  },
+  {
+    module: '@memoized-dom/data/internal',
     source: 'createClientSource',
   },
   {

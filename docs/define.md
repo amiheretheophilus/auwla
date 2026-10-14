@@ -1,5 +1,8 @@
 # `createDefine()` — server authoring
 
+For live query dependencies, mutation invalidation, and async generator server
+functions, see [Live queries and streaming functions](./live-streaming-design.md).
+
 The server should have one typed definition object shared by configuration,
 middleware, services, server functions, ordinary HTTP routes, SSR, and
 `$routed` preparations:

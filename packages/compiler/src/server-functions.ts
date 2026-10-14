@@ -39,6 +39,8 @@ export interface ServerFunctionDefinition {
   readonly path: string;
   /** Descriptor input is one schema-owned transport value. */
   readonly schemaInput: boolean;
+  readonly live?: true;
+  readonly generator?: true;
   readonly parameters: readonly ServerFunctionParameter[];
 }
 
@@ -60,6 +62,7 @@ interface FunctionBinding {
   readonly declaration: BaseNode;
   readonly method: ServerFunctionMethod;
   readonly schemaInput: boolean;
+  readonly live: boolean;
   readonly node:
     | t.FunctionExpression
     | t.ArrowFunctionExpression;
@@ -143,6 +146,8 @@ function definedFunction(
   let method: ServerFunctionMethod | null = null;
   let handler: t.FunctionExpression | t.ArrowFunctionExpression | null = null;
   let schemaInput = false;
+  let live = false;
+  let updates = false;
   for (const property of definition.properties) {
     if (property.type !== 'Property' || property.computed) {
       throw compilerError(
@@ -157,6 +162,11 @@ function definedFunction(
       continue;
     }
     if (name === 'middleware') continue;
+    if (name === 'live' || name === 'updates') {
+      if (name === 'live') live = true;
+      else updates = true;
+      continue;
+    }
     if (name === null || !methods.has(name)) {
       throw compilerError(
         `memo-dom: unsupported define.function() field '${name ?? 'unknown'}'`,
@@ -192,7 +202,10 @@ function definedFunction(
       declaration,
     );
   }
-  return { local, declaration, method, schemaInput, node: handler };
+  if ((live && (method !== 'GET' || updates || handler.generator)) || (updates && method === 'GET')) {
+    throw compilerError('memo-dom: live requires an ordinary GET; updates belongs to mutations', moduleId, declaration);
+  }
+  return { local, declaration, method, schemaInput, live, node: handler };
 }
 
 function functionBindings(
@@ -421,7 +434,7 @@ export function analyzeServerFunctionModule(
         exported.at,
       );
     }
-    if (!binding.node.async || binding.node.generator) {
+    if (!binding.node.async) {
       throw compilerError(
         `memo-dom: [MMD-S003] Server function '${exported.exported}' handler must be async before it can cross the client boundary`,
         options.moduleId,
@@ -441,6 +454,8 @@ export function analyzeServerFunctionModule(
       method: binding.method,
       path: `/_fn/${moduleName}/${encodeURIComponent(exported.exported)}`,
       schemaInput: binding.schemaInput,
+      ...(binding.live ? { live: true as const } : {}),
+      ...(binding.node.generator ? { generator: true as const } : {}),
       parameters: parametersFor(
         binding.node,
         binding.method,
@@ -472,9 +487,21 @@ export function generateServerFunctionClient(
   dataModule = '@memoized-dom/data',
 ): string {
   const lines = [`import { $fetch as __mmd_fetch } from ${JSON.stringify(dataModule)};`];
+  if (module.functions.some(fn => fn.live || fn.generator)) {
+    lines.push(`import { createStreamingSource as __mmd_stream } from ${JSON.stringify(dataModule + '/internal')};`);
+  }
   for (const fn of module.functions) {
     const parameters = fn.parameters.map(parameter => parameter.name).join(', ');
     const entries = fn.parameters.map(parameter => parameter.name).join(', ');
+    const fetcher = fn.live || fn.generator ? '__mmd_stream' : '__mmd_fetch';
+    const stream = fn.live ? 'live' : 'generator';
+    if (fn.live || fn.generator) {
+      const options = fn.method === 'GET'
+        ? (fn.parameters.length === 0 ? '{}' : fn.schemaInput ? `{ query: { input: JSON.stringify(${parameters}) } }` : `{ query: { ${entries} } }`)
+        : `{ method: ${JSON.stringify(fn.method)}, ${fn.parameters.length === 0 ? '' : fn.schemaInput ? `body: JSON.stringify(${parameters}), headers: { 'content-type': 'application/json' }` : `body: { ${entries} }`} }`;
+      lines.push(`export function ${fn.exported}(${parameters}) { return ${fetcher}(${JSON.stringify(fn.path)}, ${options}, ${JSON.stringify(stream)}); }`);
+      continue;
+    }
     if (fn.method === 'GET') {
       const options = fn.parameters.length === 0
         ? ''

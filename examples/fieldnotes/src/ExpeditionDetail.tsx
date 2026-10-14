@@ -1,5 +1,5 @@
 import { redirectRoute, blockNavigation } from '@memoized-dom/router';
-import { postNote, deleteNote } from '#server-functions';
+import { postNote, deleteNote, getNotes, getExpeditionSummary } from '#server-functions';
 import { optimistic } from '@memoized-dom/utils';
 
 export function ExpeditionDetail() {
@@ -13,23 +13,40 @@ export function ExpeditionDetail() {
   });
 
   const nodes = { noteInput: null as HTMLInputElement | null };
+  const notes = getNotes(page.expedition.id);
+  const summary = getExpeditionSummary(page.expedition.id);
   let lastPost = null as ReturnType<typeof postNote> | null;
   const deleting = new Set<string>();
 
   const saveNote = optimistic({
+    source: [notes, summary],
     action: (text: string) => postNote(page.expedition.id, text),
     apply(text, operationId) {
-      const notes = page.expedition.notes;
       notes.push({ id: operationId, text, by: page.viewer });
+      summary.noteCount++;
       return () => {
         const index = notes.findIndex(note => note.id === operationId);
         if (index !== -1) notes.splice(index, 1);
+        summary.noteCount--;
       };
     },
     reconcile(saved, _text, operationId) {
-      const notes = page.expedition.notes;
       const index = notes.findIndex(note => note.id === operationId);
       if (index !== -1) notes.splice(index, 1, saved);
+    },
+  });
+
+  const removeSavedNote = optimistic({
+    source: [notes, summary],
+    action: (noteId: string) => deleteNote(page.expedition.id, noteId),
+    apply(noteId) {
+      deleting.add(noteId);
+      return () => { deleting.delete(noteId); };
+    },
+    reconcile(_removed, noteId) {
+      const index = notes.findIndex(note => note.id === noteId);
+      if (index !== -1) { notes.splice(index, 1); summary.noteCount--; }
+      deleting.delete(noteId);
     },
   });
 
@@ -51,16 +68,7 @@ export function ExpeditionDetail() {
   }
 
   function removeNote(noteId: string) {
-    deleting.add(noteId);
-    const removed = deleteNote(page.expedition.id, noteId);
-    $track(removed).onSuccess(() => {
-      const index = page.expedition.notes.findIndex(n => n.id === noteId);
-      if (index !== -1) page.expedition.notes.splice(index, 1);
-      deleting.delete(noteId);
-    });
-    $track(removed).onError(() => {
-      deleting.delete(noteId);
-    });
+    removeSavedNote(noteId);
   }
 
   return (
@@ -70,6 +78,10 @@ export function ExpeditionDetail() {
         <span class="chip">{page.expedition.region}</span>{' '}
         <span class="chip">{page.expedition.days} days</span>{' '}
         <span class="chip">logged as {page.viewer}</span>
+        {' '}<span class="chip" data-note-count>{summary.noteCount} notes</span>
+      </p>
+      <p class="meta" data-live-status>
+        {$track(notes).streaming ? 'Live notes connected' : 'Live notes disconnected'}
       </p>
 
       <div class="note-form">
@@ -95,7 +107,7 @@ export function ExpeditionDetail() {
       ) : null}
 
       <ul class="plain">
-        {page.expedition.notes.map(n => (
+        {notes.map(n => (
           <li key={n.id} class="note">
             {n.text} <span class="meta">— {n.by}</span>
             <button

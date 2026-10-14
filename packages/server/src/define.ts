@@ -1,4 +1,5 @@
 import type { StandardSchemaV1 } from '@memoized-dom/data';
+import { liveHub, type LiveHub, type LiveKey } from './live';
 import type {
   RegisteredServerServices,
   ServerContext,
@@ -25,9 +26,11 @@ export interface DefinedServerFunction<
   readonly handler: (
     context: ServerContext<TState, TPlatform, TServices>,
     ...args: THandlerArguments
-  ) => Promise<TResult>;
+  ) => Promise<TResult> | AsyncGenerator<TResult, unknown, unknown>;
   readonly middleware: readonly ServerMiddleware<TState, TPlatform, TServices>[];
   readonly input?: StandardSchemaV1;
+  readonly live?: (context: ServerContext<TState, TPlatform, TServices>, ...args: THandlerArguments) => LiveKey;
+  readonly updates?: (context: ServerContext<TState, TPlatform, TServices>, ...args: THandlerArguments) => LiveKey;
 }
 
 export type ServerFunctionArguments<TFunction> =
@@ -49,7 +52,12 @@ type ServerFunctionHandler<
 > = (
   context: ServerContext<TState, TPlatform, TServices>,
   ...args: TArguments
-) => Promise<TResult>;
+) => Promise<TResult> | AsyncGenerator<TResult, unknown, unknown>;
+
+type FunctionInvalidation<TState extends object, TPlatform, TServices extends object, TArguments extends readonly unknown[]> = {
+  readonly live?: (context: ServerContext<TState, TPlatform, TServices>, ...args: { [K in keyof TArguments]: NoInfer<TArguments[K]> }) => LiveKey;
+  readonly updates?: (context: ServerContext<TState, TPlatform, TServices>, ...args: { [K in keyof TArguments]: NoInfer<TArguments[K]> }) => LiveKey;
+};
 
 type ServerFunctionVerb = 'get' | 'post' | 'put' | 'patch' | 'delete';
 
@@ -68,7 +76,7 @@ export type ServerFunctionDescriptor<
 > = {
   readonly middleware?: readonly ServerMiddleware<TState, TPlatform, TServices>[];
   readonly input?: undefined;
-} & OneFunctionMethod<ServerFunctionHandler<
+} & FunctionInvalidation<TState, TPlatform, TServices, TArguments> & OneFunctionMethod<ServerFunctionHandler<
   TState,
   TPlatform,
   TServices,
@@ -91,7 +99,7 @@ export type ServerFunctionInputDescriptor<
 > = {
   readonly middleware?: readonly ServerMiddleware<TState, TPlatform, TServices>[];
   readonly input: TSchema;
-} & OneFunctionMethod<ServerFunctionHandler<
+} & FunctionInvalidation<TState, TPlatform, TServices, readonly [input: SchemaOutput<TSchema>]> & OneFunctionMethod<ServerFunctionHandler<
   TState,
   TPlatform,
   TServices,
@@ -167,6 +175,7 @@ const SERVER_DEFINITION = Symbol('memoized-dom.server-definition');
 
 interface ServerDefinitionRuntime {
   readonly services: Map<string, ServiceDefinition>;
+  readonly hubs: Set<LiveHub>;
 }
 
 export interface ServerDefinition<
@@ -180,6 +189,8 @@ export interface ServerDefinition<
     readonly serviceTypes?: TServices;
   };
   readonly function: DefineServerFunction<TState, TPlatform, TServices>;
+  /** Invalidate a dependency after changes made outside declared mutation functions. */
+  invalidate(key: LiveKey): void;
   middleware<TMiddleware extends ServerMiddleware<TState, TPlatform, TServices>>(
     middleware: TMiddleware,
   ): TMiddleware;
@@ -230,11 +241,24 @@ function createFunctionDefinition<
     if (typeof handler !== 'function') {
       throw new TypeError(`memo-dom: define.function() '${method}' must be a function`);
     }
+    if (descriptor.live !== undefined && (method !== 'get' || descriptor.updates !== undefined ||
+      handler.constructor.name === 'AsyncGeneratorFunction')) {
+      throw new TypeError('memo-dom: live requires an ordinary GET handler without updates');
+    }
+    if (descriptor.updates !== undefined && method === 'get') {
+      throw new TypeError('memo-dom: updates belongs to mutation functions, not GET');
+    }
+    if ((descriptor.live !== undefined && typeof descriptor.live !== 'function') ||
+      (descriptor.updates !== undefined && typeof descriptor.updates !== 'function')) {
+      throw new TypeError('memo-dom: live and updates must be key callbacks');
+    }
     return Object.freeze({
       method: method.toUpperCase() as ServerFunctionMethod,
       handler,
       middleware: Object.freeze([...(descriptor.middleware ?? [])]),
       ...(descriptor.input === undefined ? {} : { input: descriptor.input }),
+      ...(descriptor.live === undefined ? {} : { live: descriptor.live }),
+      ...(descriptor.updates === undefined ? {} : { updates: descriptor.updates }),
     }) as unknown as DefinedServerFunction<
       TArguments,
       TResult,
@@ -251,7 +275,7 @@ export function createDefine<
   TPlatform = unknown,
   TServices extends object = RegisteredServerServices,
 >(): ServerDefinition<TState, TPlatform, TServices> {
-  const runtime: ServerDefinitionRuntime = { services: new Map() };
+  const runtime: ServerDefinitionRuntime = { services: new Map(), hubs: new Set() };
   const registerService = <TName extends string, TValue>(
     name: TName,
     value: (() => TValue | Promise<TValue>) | ServiceDescriptor<ServiceDependencies, TValue>,
@@ -276,6 +300,9 @@ export function createDefine<
   return Object.freeze({
     [SERVER_DEFINITION]: runtime,
     function: createFunctionDefinition<TState, TPlatform, TServices>(),
+    invalidate(key: LiveKey) {
+      for (const hub of runtime.hubs) hub.invalidate(key);
+    },
     middleware<TMiddleware extends ServerMiddleware<TState, TPlatform, TServices>>(
       middleware: TMiddleware,
     ): TMiddleware {
@@ -327,7 +354,12 @@ export function createServiceResolver<
     if (all === undefined) {
       all = Promise.all([...runtime.services].map(
         async ([name, service]) => [name, await resolveService(service)] as const,
-      )).then(entries => Object.freeze(Object.fromEntries(entries)));
+      )).then(entries => {
+        const services = Object.freeze(Object.fromEntries(entries));
+        const hub = liveHub(services);
+        hub.onActivity = active => { if (active) runtime.hubs.add(hub); else runtime.hubs.delete(hub); };
+        return services;
+      });
       all.catch(() => { all = undefined; });
     }
     return all;

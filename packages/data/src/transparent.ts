@@ -7,6 +7,7 @@ import {
   disposeFetchResource,
   fetchResourceOperationId,
   fetchResourceSnapshot,
+  fetchResourceIsGenerator,
   isFetchResource,
   rebindFetchResource,
   retryFetchResourceIfLive,
@@ -126,6 +127,7 @@ function observeTrackedOutcome<T>(
       !snapshot.pending &&
       !snapshot.refreshing &&
       snapshot.error === null
+      && (snapshot.streaming !== true || !fetchResourceIsGenerator(resource))
     ) {
       active = false;
       callback(snapshot.data as T, requestId);
@@ -162,6 +164,7 @@ export function trackResolvedValue<T>(
     get status() { return resource.status; },
     get pending() { return resource.pending; },
     get refreshing() { return resource.refreshing; },
+    get streaming() { return fetchResourceSnapshot(resource).streaming === true; },
     get error() { return resource.error; },
     onSuccess(callback: (data: T, requestId: string) => void) {
       return observeTrackedOutcome(

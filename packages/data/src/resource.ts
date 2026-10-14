@@ -5,6 +5,7 @@ import {
 } from './errors';
 import { SnapshotNotifier } from './notifications';
 import { dispatchResourceWrite } from './resource-write-capability';
+import { LiveProtection, updateStamps, type LiveStamp } from './live-protocol';
 import {
   disposeFormSource,
   formSourceOperationId,
@@ -44,6 +45,7 @@ import type {
 } from './types';
 
 interface FetchDescriptor {
+  readonly stream?: 'live' | 'generator';
   readonly url: string;
   readonly method: FetchMethod;
   readonly headers: HeadersInit | undefined;
@@ -63,13 +65,21 @@ function createRequestId(): string {
 }
 
 export interface FetchEnvironment {
+  stream?: (descriptor: FetchDescriptor, signal: AbortSignal, delivery: StreamDelivery) => Promise<unknown>;
   readonly fetch: () => NonNullable<import('./types').DataRuntimeOptions['fetch']>;
   readonly baseURL: string | URL | undefined;
   prepareBody?: (input: unknown, headers: Headers) => PreparedRequestBody;
   transferIdentity?: typeof fetchTransferIdentity;
 }
 
+export interface StreamDelivery {
+  value(data: unknown, stamp?: LiveStamp): void;
+  state(streaming: boolean, error?: unknown): void;
+  updates(stamps: LiveStamp[]): void;
+}
+
 interface MutableSnapshot<T> {
+  streaming?: boolean;
   data: T | undefined;
   error: import('./errors').RequestError | null;
   status: ResourceSnapshot<T>['status'];
@@ -115,10 +125,23 @@ function equalDescriptor(
     left.transferIdentity === right.transferIdentity &&
     equalCache(left.cache, right.cache) &&
     left.schema === right.schema &&
-    left.signal === right.signal;
+    left.signal === right.signal && left.stream === right.stream;
 }
 
 class FetchEntry {
+  updates: LiveStamp[] = [];
+  private liveProtection: LiveProtection | undefined;
+  get protection(): LiveProtection {
+    return this.liveProtection ??= new LiveProtection(value => {
+      this.snapshot.data = value;
+      this.snapshot.pending = false;
+      this.snapshot.refreshing = false;
+      this.snapshot.status = 'success';
+      this.snapshot.error = null;
+      this.hasData = true;
+      this.emit();
+    });
+  }
   readonly consumers = new Set<ResourceController<unknown>>();
   snapshot: MutableSnapshot<unknown> = idleSnapshot();
   hasData = false;
@@ -154,6 +177,11 @@ class FetchEntry {
 
   cancelRequest(reason?: unknown): void {
     this.cancelDeferredStart();
+    if (this.descriptor.stream !== undefined) {
+      this.controller?.abort(reason);
+      this.snapshot.streaming = false;
+      this.liveProtection?.clear();
+    }
     if (this.controller === null && this.request === null && !this.snapshot.pending && !this.snapshot.refreshing) return;
     // A response may notify consumers from its terminal `then` immediately
     // before the promise finalizer clears these handles. Releasing the final
@@ -202,6 +230,7 @@ class FetchEntry {
     if (!force && this.hasData) {
       return Promise.resolve(this.snapshot.data);
     }
+    if (this.descriptor.stream !== undefined) this.controller?.abort();
 
     const generation = ++this.generation;
     this.store.restoration?.release(this);
@@ -215,7 +244,34 @@ class FetchEntry {
     this.snapshot.status = this.hasData ? 'success' : 'pending';
     this.emit();
 
-    const request = abortable(
+    const streaming = this.descriptor.stream !== undefined;
+    const streamRequest = streaming ? this.store.environment.stream?.(this.descriptor, controller.signal, {
+      value: (data, stamp) => {
+        if (generation !== this.generation || controller.signal.aborted) return;
+        if (stamp !== undefined) this.protection.receive(data, stamp);
+        else {
+          this.snapshot.data = data;
+          this.snapshot.status = 'success';
+          this.snapshot.pending = false;
+          this.snapshot.refreshing = false;
+          this.hasData = true;
+          this.emit();
+        }
+      },
+      state: (open, error) => {
+        if (generation !== this.generation || controller.signal.aborted) return;
+        this.snapshot.streaming = open;
+        if (error !== undefined) {
+          this.snapshot.error = toRequestError(error);
+          this.snapshot.status = this.hasData ? 'success' : 'error';
+          this.snapshot.pending = false;
+          this.snapshot.refreshing = false;
+        }
+        this.emit();
+      },
+      updates: stamps => { if (generation === this.generation) this.updates = stamps; },
+    }) : undefined;
+    const request = (streaming ? streamRequest ?? Promise.reject(new Error('Streaming transport is not installed')) : abortable(
       () => this.store.environment.fetch()(this.descriptor.url, {
           method: this.descriptor.method,
           headers: this.descriptor.headers,
@@ -224,13 +280,16 @@ class FetchEntry {
         }),
       controller.signal,
     )
-      .then(response => abortable(
+      .then(response => {
+        this.updates = updateStamps(response.headers.get('x-mmd-updates'));
+        return abortable(
         () => decodeResponse(response, this.descriptor.schema),
         controller.signal,
-      ))
+      ); }))
       .then(
         data => {
           if (generation !== this.generation) return data;
+          if (streaming) return data;
           this.snapshot = {
             data,
             error: null,
@@ -262,7 +321,7 @@ class FetchEntry {
       .finally(() => {
         if (generation === this.generation) {
           this.request = null;
-          this.controller = null;
+          if (!streaming) this.controller = null;
         }
       });
 
@@ -355,6 +414,7 @@ export class FetchStore {
 }
 
 class ResourceController<T> {
+  updates: LiveStamp[] = [];
   snapshot: MutableSnapshot<T> = idleSnapshot();
   entry: FetchEntry | null = null;
   disposed = false;
@@ -405,6 +465,7 @@ class ResourceController<T> {
   receive(entry: FetchEntry, snapshot: MutableSnapshot<unknown>): void {
     if (this.entry !== null && this.entry !== entry) return;
     this.operationId = entry.operationId;
+    this.updates = entry.updates;
     this.snapshot = { ...snapshot } as MutableSnapshot<T>;
     this.notify();
   }
@@ -458,6 +519,7 @@ class ResourceController<T> {
     }
     this.snapshot.pending = false;
     this.snapshot.refreshing = false;
+    if (this.descriptor.stream !== undefined) this.snapshot.streaming = false;
     this.snapshot.status =
       this.snapshot.status === 'success' ? 'success' : 'idle';
     this.snapshot.error = null;
@@ -525,17 +587,19 @@ function fetchDescriptor(
       preparedBody.identity,
       key,
       schema,
-    ),
+    ) + (options.stream === undefined ? '' : `|stream:${options.stream}`),
     get transferIdentity() {
       if (transferTarget === null || environment.transferIdentity === undefined) return null;
       if (transferIdentity === undefined) {
-        transferIdentity = environment.transferIdentity(transferTarget, url, method,
+        const identity = environment.transferIdentity(transferTarget, url, method,
           headers as Headers, preparedBody.identity, key, schema);
+        transferIdentity = options.stream === undefined ? identity : `${identity}|stream:${options.stream}`;
       }
       return transferIdentity;
     },
     cache: normalizedCache(options.cache, method),
     schema,
+    stream: options.stream,
     signal: options.signal,
   };
   return { descriptor, paused };
@@ -569,6 +633,14 @@ export function resourceController<T>(
     throw new TypeError('Value is not a fetch resource from @memoized-dom/data');
   }
   return controller as ResourceController<T>;
+}
+
+export function fetchResourceUpdates(resource: unknown): readonly LiveStamp[] {
+  return typeof resource === 'object' && resource !== null ? controllers.get(resource)?.updates ?? [] : [];
+}
+
+export function fetchResourceIsGenerator(resource: unknown): boolean {
+  return typeof resource === 'object' && resource !== null && controllers.get(resource)?.descriptor.stream === 'generator';
 }
 
 /** Internal capability check used by cross-runtime availability adapters. */

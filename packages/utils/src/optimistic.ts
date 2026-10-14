@@ -1,6 +1,6 @@
 import { $read } from '@memoized-dom/data';
 import type { FetchResource, RequestError, ResolvedValue } from '@memoized-dom/data';
-import { disposeFetchResource, isFetchResource, subscribeFetchResource, trackResolvedValue } from '@memoized-dom/data/internal';
+import { disposeFetchResource, isFetchResource, subscribeFetchResource, trackResolvedValue, protectLiveSources } from '@memoized-dom/data/internal';
 
 type OperationResult =
   | PromiseLike<unknown>
@@ -14,6 +14,8 @@ type SettledResult<T> =
   never;
 
 export interface OptimisticOptions<TPayload, TResult extends OperationResult> {
+  /** Live query source(s) protected from snapshots while associated operations settle. */
+  readonly source?: ResolvedValue<unknown> | FetchResource<unknown> | readonly (ResolvedValue<unknown> | FetchResource<unknown>)[];
   /** Start one new request for each call. Its result is returned unchanged. */
   readonly action: (payload: TPayload) => TResult;
   /** Make the immediate change and return its operation-specific rollback. */
@@ -61,6 +63,7 @@ export function optimistic<TPayload, TResult extends OperationResult>(
   const groups = new Map<string | number, Group>();
 
   return (payload, callOptions) => {
+    const releaseSource = protectLiveSources(options.source);
     const id = callOptions?.id;
     let group = id === undefined ? undefined : groups.get(id);
     if (id !== undefined && group === undefined) {
@@ -135,19 +138,21 @@ export function optimistic<TPayload, TResult extends OperationResult>(
       stopSuccess = tracker.onSuccess(saved => {
         if (finished) return;
         finish();
-        if (group === undefined) {
-          options.reconcile?.(saved as SettledResult<TResult>, payload, operationId);
-        } else {
-          if (group.latestSuccess === undefined || order > group.latestSuccess.order) {
-            group.latestSuccess = {
-              order,
-              saved: saved as SettledResult<TResult>,
-              payload,
-              operationId,
-            };
+        try {
+          if (group === undefined) {
+            options.reconcile?.(saved as SettledResult<TResult>, payload, operationId);
+          } else {
+            if (group.latestSuccess === undefined || order > group.latestSuccess.order) {
+              group.latestSuccess = {
+                order,
+                saved: saved as SettledResult<TResult>,
+                payload,
+                operationId,
+              };
+            }
+            releaseGroup();
           }
-          releaseGroup();
-        }
+        } finally { releaseSource(source); }
       });
       if (!finished) stopError = tracker.onError(error => {
         if (finished) return;
@@ -155,14 +160,15 @@ export function optimistic<TPayload, TResult extends OperationResult>(
         try {
           rollback(error);
         } finally {
-          releaseGroup();
+          try { releaseGroup(); } finally { releaseSource(); }
         }
       });
-      if (!finished && group !== undefined) {
+      if (!finished && (group !== undefined || options.source !== undefined)) {
         stopAbort = subscribeFetchResource(source, snapshot => {
-          if (finished || snapshot.pending || snapshot.refreshing || snapshot.status !== 'idle') return;
+          if (finished || tracker.id === operationId &&
+            (snapshot.pending || snapshot.refreshing || snapshot.status !== 'idle')) return;
           finish();
-          releaseGroup();
+          try { releaseGroup(); } finally { releaseSource(); }
         });
       }
       return result;
@@ -170,8 +176,9 @@ export function optimistic<TPayload, TResult extends OperationResult>(
       try {
         releaseGroup();
       } finally {
-        throw error;
+        releaseSource();
       }
+      throw error;
     }
   };
 }

@@ -33,6 +33,18 @@ The returned function can be called directly from an event handler or passed
 as a `$forms` action. `$forms` owns validation and submission state; this
 utility owns the optimistic change and rollback.
 
+## Protecting live sources
+
+Use `source: notes`, or `source: [notes, summary]` for multiple live sources, in
+the `optimistic()` options. The compiler preserves those bindings; callbacks
+still own the immediate change, rollback, and reconciliation. Each source holds
+its newest incoming snapshot until all associated operations settle, and does
+not apply a snapshot older than a successful mutation acknowledgement. This is
+optional and separate from grouping IDs; it neither serializes requests nor
+replays callbacks. See the self-contained
+[streaming guide](../../docs/live-streaming-design.md#optimistic-authoring-preserve-callbacks-associate-the-source)
+for full examples and the delivery contract.
+
 ## Grouping repeated updates by ID
 
 Pass an optional second argument on each invocation:

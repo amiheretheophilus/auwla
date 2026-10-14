@@ -368,6 +368,8 @@ export async function generateServerFunctionRoutesModule(
         parameters: ${JSON.stringify(fn.parameters)},
         middleware: [${middleware.join(', ')}],
         input: ${alias}[${JSON.stringify(fn.exported)}].input,
+        live: ${alias}[${JSON.stringify(fn.exported)}].live,
+        updates: ${alias}[${JSON.stringify(fn.exported)}].updates,
         handler: ${alias}[${JSON.stringify(fn.exported)}].handler
       }`);
     }

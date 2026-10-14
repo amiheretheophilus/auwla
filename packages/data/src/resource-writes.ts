@@ -12,7 +12,7 @@ export const writeFetchResource: ResourceWriter = (resource, change, mutable) =>
   const result = change(current);
   // A local write wins over a read that began before it, even if that fetcher
   // ignores cancellation. A throwing callback must not cancel the request.
-  entry?.cancelRequest();
+  if (entry?.descriptor.stream !== 'live') entry?.cancelRequest();
   snapshot.data = mutable ? current : result;
   snapshot.status = 'success';
   snapshot.error = null;

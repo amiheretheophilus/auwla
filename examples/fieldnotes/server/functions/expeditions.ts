@@ -15,6 +15,7 @@ export const getExpeditions = define.function({
 });
 
 export const postNote = define.function({
+  updates: (_context, expeditionId: string) => ['expedition-notes', expeditionId],
   async post({ state, services }, expeditionId: string, text: string) {
     if (text.trim() === '') {
       throw new Error('Note text cannot be empty');
@@ -28,6 +29,7 @@ export const postNote = define.function({
 });
 
 export const deleteNote = define.function({
+  updates: (_context, expeditionId: string) => ['expedition-notes', expeditionId],
   async delete({ services }, expeditionId: string, noteId: string) {
     await delay(700);
     const removed = services.notes.remove(expeditionId, noteId);
@@ -35,5 +37,23 @@ export const deleteNote = define.function({
       throw new Error('Unknown note');
     }
     return removed;
+  },
+});
+
+export const getNotes = define.function({
+  live: (_context, expeditionId: string) => ['expedition-notes', expeditionId],
+  async get({ services }, expeditionId: string) {
+    const expedition = services.expeditions.all().find(item => item.id === expeditionId);
+    if (expedition === undefined) throw new Error('Unknown expedition');
+    return expedition.notes;
+  },
+});
+
+export const getExpeditionSummary = define.function({
+  live: (_context, expeditionId: string) => ['expedition-notes', expeditionId],
+  async get({ services }, expeditionId: string) {
+    const expedition = services.expeditions.all().find(item => item.id === expeditionId);
+    if (expedition === undefined) throw new Error('Unknown expedition');
+    return { noteCount: expedition.notes.length };
   },
 });

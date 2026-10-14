@@ -11,6 +11,7 @@ import {
   type RoutedServerContext,
 } from '@memoized-dom/router/internal';
 import type { StandardSchemaV1 } from '@memoized-dom/data';
+import { generatorResponse, liveHub, liveResponse, type LiveKey } from './live';
 
 /** Framework route used by compiler-extracted server-backed `$routed` work. */
 export function invokeRoutedPreparation(
@@ -127,6 +128,8 @@ export interface ServerFunctionRouteDefinition<
   readonly middleware?: readonly ServerMiddleware<TLocals, TPlatform, TServices>[];
   /** Validates one transport value after request middleware. */
   readonly input?: StandardSchemaV1;
+  readonly live?: (context: ServerContext<TLocals, TPlatform, TServices>, ...args: unknown[]) => LiveKey;
+  readonly updates?: (context: ServerContext<TLocals, TPlatform, TServices>, ...args: unknown[]) => LiveKey;
   readonly handler: (
     context: ServerContext<TLocals, TPlatform, TServices>,
     ...args: unknown[]
@@ -311,7 +314,9 @@ async function bodyArguments(
   if (parameters.length === 0 && request.body === null) return [];
   let body: unknown;
   try {
-    body = await request.json();
+    const text = await request.text();
+    if (parameters.length === 0 && text.trim() === '') return [];
+    body = JSON.parse(text);
   } catch {
     return serverFunctionInputError('Request body must be valid JSON');
   }
@@ -430,7 +435,59 @@ export function createServerFunctionRoutes<
               ? queryArguments(context.url, definition.parameters)
               : await bodyArguments(context.request, definition.parameters);
           }
-          return definition.handler(context, ...args);
+          const hub = liveHub(context.services);
+          const key = definition.live?.(context, ...args);
+          const update = () => definition.updates === undefined ? [] : [hub.invalidate(definition.updates(context, ...args))];
+          const mode = context.request.headers.get('x-mmd-stream');
+          if (key !== undefined && mode === 'live') {
+            return liveResponse(hub, hub.key(key), context.request, async signal => {
+              const request = new Request(context.url, { method: context.request.method, headers: context.request.headers, signal });
+              const result = await definition.handler({ ...context, request }, ...args);
+              if (result instanceof Response) {
+                if (!result.ok) { await result.body?.cancel(); throw new Error('Live query rejected'); }
+                return result.headers.get('content-type')?.includes('json') ? result.json() : result.text();
+              }
+              return result;
+            });
+          }
+          const cancellation = new AbortController();
+          let value: unknown;
+          let snapshotStamp = key === undefined ? undefined : hub.stamp(hub.key(key));
+          do {
+            snapshotStamp = key === undefined ? undefined : hub.stamp(hub.key(key));
+            value = await definition.handler(mode === 'generator' || mode === 'snapshot'
+              ? { ...context, request: new Request(context.url, { method: context.request.method, headers: context.request.headers, signal: AbortSignal.any([context.request.signal, cancellation.signal]) }) }
+              : context, ...args);
+          } while (snapshotStamp !== undefined && snapshotStamp.revision !== hub.stamp(snapshotStamp.key).revision);
+          if (value !== null && typeof value === 'object' && Symbol.asyncIterator in value) {
+            const iterator = (value as AsyncIterable<unknown>)[Symbol.asyncIterator]();
+            if (mode === 'generator') {
+              return generatorResponse(context.request, iterator, () => cancellation.abort(), update);
+            }
+            // SSR/read preparation only consumes one yield. POST streams must
+            // execute through their generated streaming client, never as snapshots.
+            if (definition.method !== 'GET') {
+              cancellation.abort();
+              void iterator.return?.().catch(() => {});
+              return new Response('Mutation streams require their streaming client', { status: 400 });
+            }
+            try {
+              const first = await iterator.next();
+              if (first.done) throw new Error('Streaming functions must yield an initial value');
+              return first.value;
+            } finally {
+              cancellation.abort();
+              void iterator.return?.().catch(() => {});
+            }
+          }
+          const response = normalizeHandlerResult(value);
+          if (!response.ok) return response;
+          const stamps = update();
+          if (stamps.length === 0 && snapshotStamp === undefined) return response;
+          const headers = new Headers(response.headers);
+          if (stamps.length > 0) headers.set('x-mmd-updates', JSON.stringify(stamps));
+          if (snapshotStamp !== undefined) headers.set('x-mmd-live', JSON.stringify(snapshotStamp));
+          return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
         } catch (error) {
           if (error instanceof ServerFunctionInputError) {
             return serverFunctionError(error);

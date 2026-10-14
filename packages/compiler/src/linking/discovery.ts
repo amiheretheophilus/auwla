@@ -616,12 +616,12 @@ export function discoverManifest(
         );
         const components = discoverComponentExports(compilerPath.node, entry.id);
         const componentNames = new Set(components.keys());
-        const providerSources = new Map(
-          (options.transparentAsyncSources ??
-            DEFAULT_TRANSPARENT_ASYNC_SOURCES).map(
-            (d) => [d.module, d.source] as const,
-          ),
-        );
+        const providerSources = new Map<string, Set<string>>();
+        for (const definition of options.transparentAsyncSources ?? DEFAULT_TRANSPARENT_ASYNC_SOURCES) {
+          let sources = providerSources.get(definition.module);
+          if (sources === undefined) providerSources.set(definition.module, sources = new Set());
+          sources.add(definition.source);
+        }
         const providerFactories = new Set<string>();
         for (const stmt of compilerPath.node.body) {
           if (!astFactory.isImportDeclaration(stmt)) continue;
@@ -631,7 +631,7 @@ export function discoverManifest(
             if (
               astFactory.isImportSpecifier(spec) &&
               astFactory.isIdentifier(spec.imported) &&
-              spec.imported.name === def
+              def.has(spec.imported.name)
             ) {
               providerFactories.add(spec.local.name);
             }

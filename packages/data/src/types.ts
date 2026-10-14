@@ -85,6 +85,8 @@ export interface AppCacheOptions {
 export type FetchCache = false | 'active' | AppCacheOptions;
 
 export interface FetchOptions {
+  /** @internal Compiler-generated server-function transport. */
+  readonly stream?: 'live' | 'generator';
   /** HTTP method (GET by default). */
   readonly method?: FetchMethod;
   /**
@@ -125,6 +127,8 @@ export type ResolvedValue<T> = T extends null | undefined
 
 /** Reactive request state exposed for authored conditional rendering. */
 export interface TrackedValue<T, TError = import('./errors').RequestError> {
+  /** Whether this source has an open or reconnecting streaming operation. */
+  readonly streaming: boolean;
   /** Identity of the exact request execution currently represented. */
   readonly id: string;
   /** The fulfilled value, or undefined while no value is available. */
@@ -273,6 +277,7 @@ export interface SerializedDataStateV1 {
 export type SerializedDataState = SerializedDataStateV1;
 
 export interface ResourceSnapshot<T> {
+  readonly streaming?: boolean;
   readonly data: T | undefined;
   readonly error: import('./errors').RequestError | null;
   readonly status: AsyncStatus;

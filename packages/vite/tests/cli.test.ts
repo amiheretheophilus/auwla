@@ -88,6 +88,51 @@ async function origin(log: ReturnType<typeof launch>, runtime: string): Promise<
 }
 
 describe('consistent CLI launcher', () => {
+  it.each(['node', 'cloudflare'] as const)('streams declared queries and generator functions on %s', async runtime => {
+    const root = await project(runtime);
+    await mkdir(join(root, 'server/functions'), { recursive: true });
+    await writeFile(join(root, 'server/define.ts'), `import { createDefine } from '@memoized-dom/server'; export const define = createDefine();`);
+    await writeFile(join(root, 'server/functions/live.ts'), `import { define } from '../define';
+      let count = 0;
+      export const getCount = define.function({ live: () => ['count'], async get() { return count; } });
+      export const increment = define.function({ updates: () => ['count'], async post() { return ++count; } });
+      export const answer = define.function({ async *post() { yield 'a'; yield 'ab'; return 'ignored'; } });`);
+    await writeFile(join(root, 'server.ts'), `import { createDefine, serve } from '@memoized-dom/server';
+      import { define } from './server/define'; import { App } from './src/App';
+      const app = serve({ define }); app.ssr(App); export default app;`);
+    const log = launch('node', root, ['dev']);
+    const address = await origin(log, runtime);
+    const response = await fetch(address + '/_fn/live/getCount', { headers: { 'x-mmd-stream': 'live' }, signal: AbortSignal.timeout(20_000) });
+    expect(response.headers.get('content-type')).toContain('text/event-stream');
+    const reader = response.body!.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+    const nextValue = async () => {
+      for (;;) {
+        const boundary = buffer.indexOf('\n\n');
+        if (boundary !== -1) {
+          const frame = buffer.slice(0, boundary); buffer = buffer.slice(boundary + 2);
+          if (!frame.startsWith('event: value')) continue;
+          return JSON.parse(frame.split('\n')[1]!.slice(6)).value as number;
+        }
+        const part = await reader.read();
+        if (part.done) throw new Error('Unexpected stream end');
+        buffer += decoder.decode(part.value, { stream: true });
+      }
+    };
+    try {
+      expect(await nextValue()).toBe(0);
+      const result = await fetch(address + '/_fn/live/increment', { method: 'POST' });
+      expect(await result.json()).toBe(1);
+      expect(result.headers.has('x-mmd-updates')).toBe(true);
+      expect(await nextValue()).toBe(1);
+    } finally { await reader.cancel(); }
+    const generated = await fetch(address + '/_fn/live/answer', { method: 'POST', headers: { 'x-mmd-stream': 'generator' }, signal: AbortSignal.timeout(10_000) });
+    const events = await generated.text();
+    expect(events).toContain('"value":"a"'); expect(events).toContain('"value":"ab"');
+    expect(events).toContain('event: done'); expect(events).not.toContain('ignored');
+  }, 120_000);
+
   it.skipIf(!chrome)('hydrates routed source caches as arrays and reuses them after browser navigation', async () => {
     const root = await project('bun');
     await mkdir(join(root, 'server/functions'), { recursive: true });

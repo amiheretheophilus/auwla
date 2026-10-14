@@ -130,7 +130,13 @@ class RestoredFetchStore implements FetchRestoration {
         waiters.delete(entry);
         seedEntryFromRecord(entry, record);
         entry.emit();
-        if (record.snapshot.status === 'success' && record.snapshot.revalidate) entry.start(true).catch(() => {});
+        if (this.store.allEntries.has(entry) && record.snapshot.status === 'success' &&
+          (record.snapshot.revalidate || entry.descriptor.stream === 'live')) {
+          if (this.hydrationBlocked) {
+            entry.deferStart();
+            this.deferredStarts.add(entry);
+          } else entry.start(true).catch(() => {});
+        }
       }
       if (waiters.size === 0) {
         this.streamWaiters.delete(record.sourceId);
@@ -184,11 +190,12 @@ class RestoredFetchStore implements FetchRestoration {
         waiters.add(entry);
       }
     }
-    // A seeded entry resumes only through an explicit refresh — a restored
+    // Ordinary seeded entries resume only through an explicit refresh — a restored
     // success must not re-issue its request (RFC §16.6.6) and a restored
     // error retries only through its restored source handle (§16.6.8).
     // Shell pending entries fetch after adoption. Streamed entries wait for
-    // delivery or the end of parsing; explicit refresh takes ownership.
+    // delivery or the end of parsing; explicit refresh takes ownership. Live
+    // queries open their ongoing subscription after the snapshot is adopted.
     const shouldStart =
       force ||
       (restored === undefined &&
@@ -197,14 +204,15 @@ class RestoredFetchStore implements FetchRestoration {
       (restored !== undefined &&
         ((restored.snapshot.status === 'pending' && !awaitingStream) ||
           (restored.snapshot.status === 'success' && restored.snapshot.revalidate)));
+    const reconnectLive = restored?.snapshot.status === 'success' && descriptor.stream === 'live';
     if (getActiveEnvironment().mode === 'hydrate') {
       this.hydrationBlocked = true;
-      if (shouldStart) {
+      if (shouldStart || reconnectLive) {
         entry.deferStart();
         this.deferredStarts.add(entry);
       }
-    } else if (shouldStart) {
-      entry.start(force).catch(() => {});
+    } else if (shouldStart || reconnectLive) {
+      entry.start(force || reconnectLive).catch(() => {});
     }
   }
 
