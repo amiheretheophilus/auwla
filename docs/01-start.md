@@ -37,11 +37,13 @@ src/
 {
   "type": "module",
   "scripts": {
-    "dev": "vite",
-    "build": "vite build"
+    "dev": "memoized-dom dev",
+    "build": "memoized-dom build"
   }
 }
 ```
+
+The [CLI guide](./cli.md) explains these commands, runtime selection, and options.
 
 `tsconfig.json`
 

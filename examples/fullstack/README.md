@@ -11,6 +11,9 @@ dispatch bridge.
 bun run example:fullstack
 ```
 
+Both the Bun and Cloudflare scripts use `memoized-dom dev` and
+`memoized-dom build`; their configuration selects the host, not the command.
+
 Then open http://localhost:3000/. Hono owns `/api/backend`; the delegated
 Memoized DOM application owns its API routes, generated functions, SSR, and
 frontend assets. Vite supplies transforms and HMR through private tooling.

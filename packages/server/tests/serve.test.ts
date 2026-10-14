@@ -8,6 +8,7 @@ import {
 } from '../src/index';
 import {
   createServerFunctionRoutes,
+  invokeRoutedPreparation,
   type ServerRoute,
 } from '../src/http-router';
 import { compileFixture } from './parity-harness';
@@ -34,6 +35,36 @@ function internals<
 }
 
 describe('serve', () => {
+  it('scopes server-backed preparation fetches to the request and dispatches them in memory', async () => {
+    const fixture = await compileFixture('serve-routed-fetch', `
+      import { $fetch } from '@memoized-dom/data';
+      export function App() {
+        const page = $routed(({ state, routeState }) => {
+          const me = $fetch('/api/me');
+          routeState.me = me;
+          return { name: me.name, user: state.user };
+        });
+        return <main route="/"><h1>{page.name}</h1></main>;
+      }
+    `, { routedEnvironment: 'server' });
+    const define = createDefine<{ user: string }>();
+    const app = serve({ define, state: request => ({ user: request.headers.get('x-user') ?? 'anonymous' }) });
+    app.get('/api/me', ({ state, request }) => ({ name: state.user + ':' + request.headers.get('cookie') }));
+    app.post('/_memoized/routed', async context => invokeRoutedPreparation(await context.request.json(), context));
+    app.ssr(fixture.serverModule.App);
+    internals(app).installDocumentTemplate('<!doctype html><body><!--ssr-outlet--></body>');
+    const responses = await Promise.all(['Ada', 'Grace'].map(user => app.fetch(new Request('https://app.test/_memoized/routed', {
+      method: 'POST', headers: { 'content-type': 'application/json', 'x-user': user, cookie: `sid=${user}` },
+      body: JSON.stringify({ id: './serve-routed-fetch.tsx#routed:App:0', href: '/', params: {} }),
+    })).then(response => response.json())));
+    expect(responses).toEqual(['Ada', 'Grace'].map(user => ({
+      kind: 'data', data: { name: `${user}:sid=${user}`, user },
+      state: { me: { name: `${user}:sid=${user}` } },
+    })));
+    const response = await app.fetch(new Request('https://app.test/', { headers: { 'x-user': 'SSR', cookie: 'sid=SSR' } }));
+    expect(await response.text()).toContain('<h1>SSR:sid=SSR</h1>');
+  });
+
   it('composes typed routes, request context, and middleware in declaration order', async () => {
     type Locals = { requestId: string; user?: string };
     type Platform = { region: string };

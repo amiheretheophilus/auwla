@@ -251,5 +251,47 @@ describe('$routed preparation discovery', () => {
     })['./Page.tsx']!;
 
     expect(compiled).toContain('settle: _MDD.settleRoutedValue');
+    expect(compiled).toContain('prepare: _MDD.withRoutedSources(async');
+    expect(compiled).toContain('await _routedRead($fetch(');
+  });
+
+  it('lowers cache writes, derived reads, and read promises inside extracted preparations', () => {
+    const compiled = compileModules({
+      './Page.tsx': `
+        import { $fetch, $read } from '@memoized-dom/data';
+        export function Page() {
+          const page = $routed(({ routeState }) => {
+            if (routeState.items) return routeState.items;
+            const result = $fetch('/api/items');
+            const suffix = $read(Promise.resolve('!'));
+            routeState.items = result.map(item => item.name + suffix);
+            return routeState.items;
+          });
+          return <main route="/">{page.map(item => <p>{item}</p>)}</main>;
+        }
+      `,
+    })['./Page.tsx']!;
+    expect(compiled).toContain('const result = await _routedRead($fetch(');
+    expect(compiled).toContain('const suffix = await _routedRead($read(');
+    expect(compiled).toContain('routeState.items = result.map(');
+  });
+
+  it('does not rewrite shadowed factories and keeps generated names collision-free', () => {
+    const compiled = compileModules({
+      './Page.tsx': `
+        import { $fetch } from '@memoized-dom/data';
+        export function Page() {
+          const page = $routed(({ routeState }) => {
+            const _routedRead = 'suffix';
+            const source = $fetch('/api/value');
+            const local = ($fetch) => $fetch('local');
+            return { name: source.name + _routedRead + local(value => value) };
+          });
+          return <main route="/">{page.name}</main>;
+        }
+      `,
+    })['./Page.tsx']!;
+    expect(compiled).toContain('await _routedRead_($fetch(');
+    expect(compiled).not.toContain('await _routedRead_($fetch("local"))');
   });
 });

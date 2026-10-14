@@ -191,6 +191,16 @@ boundaries. Non-serializable keys stay local to the runtime that created them.
 The successful `$routed` result itself must be transportable when preparation
 runs on the server.
 
+Inside a compiled preparation, `$fetch`, `$read`, and generated server-function
+calls settle to payload values before derived reads or cache assignments. For
+example, storing `const loaded = getReports(); routeState.reports = loaded`
+caches report data, not an internal resource object. Preparation-created sources
+are released on completion, failure, or cancellation. GET's active cache can
+share a result with another live consumer, but does not retain a finished gate's
+consumer forever. Use `routeState` or an explicit app-scoped data cache when you
+want reuse across visits. Service methods have only the caching their own
+implementation provides.
+
 ### Server-backed preparation
 
 Using `request`, `state`, `services`, `platform`, or a `#server/*` value makes
@@ -206,8 +216,7 @@ export function AdminReportPage() {
       return redirectRoute('/login', { replace: true });
     }
 
-    // Do not author async/await here. Returning service or server-function
-    // work lets the route runtime settle it before committing navigation.
+    // Returning service work lets the route runtime settle it before navigation.
     return services.reports.loadPage(params.reportId, state.user.id, {
       signal,
     });

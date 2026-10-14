@@ -4,8 +4,8 @@ This project does not support legacy APIs. All packages and consumers must use t
 
 Vite 8 integration for compiler-linked Memoized DOM applications. One plugin
 owns the client compiler graph, server-function facade, and frontend delivery.
-The native host owns the public listener. Bun/Node development runs backend
-code in the launching runtime; Cloudflare development uses `workerd`. Backend
+The native host owns the public listener. The CLI selects Bun or Node from the
+configured `runtime`; Cloudflare development uses `workerd`. Backend
 code has access to the selected host's native APIs and bindings.
 
 ```ts
@@ -81,14 +81,24 @@ the explicit fetch option shown above.
 ```json
 {
   "scripts": {
-    "dev": "bun run --bun memoized-dom dev",
-    "build": "bun run --bun memoized-dom build",
+    "dev": "memoized-dom dev",
+    "build": "memoized-dom build",
     "start": "bun dist/server.js"
   }
 }
 ```
 
-Development runs backend modules through Vite's ModuleRunner inside Bun.
+Run `bun run dev` and `bun run build` (or your package manager's equivalent).
+The commands stay the same for browser-only, Bun, Node, and Cloudflare projects.
+`runtime` in `memoizedDom()` selects the host; Bun is the default when a server
+entry is configured. The CLI reads configuration and builds under Node, then
+hands Bun development to a Bun process automatically. The selected executable
+must be installed and available on PATH. There is no need for `--bun`, a direct
+`node` command, or an application-specific launcher. `--config` remains useful
+for repositories containing multiple projects; a normal application uses its
+own `vite.config.ts` automatically. Browser-only development starts Vite directly.
+
+Bun development runs backend modules through Vite's ModuleRunner inside Bun.
 The public listener handles API requests, SSR, streams, and native WebSocket
 upgrades. A separate loopback Vite listener supplies transforms, the document,
 styles, and the browser HMR connection. Vite does not dispatch backend routes.
@@ -111,10 +121,11 @@ paths remain relative to the emitted server chunks, so the output can be moved.
 Environment-specific build output directories are supported. Use an absolute
 path for Vite's `base`, such as `/` or `/app/`.
 
-For Node, launch development with `node` and configure `runtime: 'node'` for
-production, then run `node dist/server.js`. Development chooses the runtime
-of the launching process; `runtime` selects the production asset reader and
-executable host. Node requires the version specified by this package's engines.
+For Node, configure `runtime: 'node'`; use the same `memoized-dom dev` and
+`memoized-dom build` commands, then run `node dist/server.js` in production.
+Node requires the version specified by this package's engines. Direct calls to
+the lower-level `createDevServer()` API run in their calling process; automatic
+runtime handoff belongs to the CLI.
 
 ## Cloudflare Workers
 
@@ -151,8 +162,9 @@ binding name is respected. The binding runs after application routing, and raw
 HTML assets do not bypass SSR.
 
 Development executes application modules inside `workerd`; Vite supplies the
-transformed modules and browser HMR. Start tooling with Node (`memoized-dom dev`
-or `vite dev`). `memoized-dom build` builds the client first, embeds its document
+transformed modules and browser HMR. Use the same `memoized-dom dev` command;
+the CLI keeps Worker tooling under Node automatically. `memoized-dom build`
+builds the client first, embeds its document
 into the Worker, and emits Cloudflare's deployment config. Use `vite preview`
 to test the built Worker locally and `wrangler deploy` for deployment. No
 `Bun.serve()`, static middleware, or authored asset fetch handler is needed.
@@ -323,9 +335,10 @@ payload. Universal preparations that use only fields such as `params`,
 `query`, `signal`, and `routeState` retain their callback in both environments
 and do not generate a server round trip.
 
-The callback must remain inline, synchronous, and assigned to a
-component-local `const`. Return a service or server-function result directly;
-the router settles it before navigation commits. See
+The callback must remain inline and assigned to a component-local `const`.
+Authored async callbacks are supported. Return a service result directly or
+use colorless server-function, `$fetch`, and `$read` payloads inside the callback;
+the router settles preparation before navigation commits. See
 `packages/router/README.md` for the complete authored and navigation contract.
 
 ## Development replacement
@@ -354,6 +367,14 @@ changing them. Long-lived upgraded sockets are managed by the native host.
 
 Restart the Vite process after changing or rebuilding this plugin itself;
 Vite does not hot-replace its own plugin hooks.
+
+### Browser requests fail while the server is running
+
+Check the browser's DevTools Network throttling dropdown. In Chrome, **Offline**
+blocks fetches, including `/_memoized/routed` and server-function calls, even
+when the local server is healthy and another browser can connect. Switch it to
+**No throttling**, then retry navigation or reload the page. A server restart
+does not change this browser setting.
 
 ## Commands
 

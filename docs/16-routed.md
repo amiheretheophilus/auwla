@@ -99,6 +99,46 @@ The one visible consequence: `console.log(services)` in such a callback
 prints in your **server terminal**, not the browser console — the code
 isn't in the browser.
 
+## Colorless sources and payload caching
+
+`$fetch`, `$read`, and generated GET server functions work inside `$routed`.
+The compiler settles preparation-local sources before their payload is read,
+derived, returned, or stored in `routeState`. The cached value is application
+data, not a resource's internal status object, so it remains usable after SSR
+hydration and on later visits:
+
+```tsx
+import { getExpeditions } from '#server-functions';
+
+export function ExpeditionList() {
+  const expeditions = $routed(({ routeState }) => {
+    if (Array.isArray(routeState.expeditions)) return routeState.expeditions;
+    const loaded = getExpeditions();
+    routeState.expeditions = loaded;
+    return loaded;
+  });
+
+  return <ul>{expeditions.map(expedition => <li>{expedition.name}</li>)}</ul>;
+}
+```
+
+Sources created by a preparation are released when it finishes, fails, or is
+cancelled. GET still uses the active data cache: another live consumer of the
+same request can share its result, but a finished preparation does not retain
+an active consumer indefinitely. For reuse across later visits, cache the
+payload in `routeState` or use an explicitly app-scoped `$fetch` cache.
+
+Ordinary service methods do not acquire a data cache merely because their
+service instance is shared. Calling `services.expeditions.find(id)` runs that
+method again unless the service or your preparation explicitly caches it.
+Key parameter-dependent `routeState` caches by `params.id`; the state bag is
+not automatically partitioned by route parameters.
+
+During SSR and server-backed preparation requests, `$fetch` uses the current
+request's data runtime. Same-origin application routes and server functions
+dispatch in memory with the current state, services, platform, and credentials;
+external destinations use the host fetch implementation.
+
 ## Tracking a preparation
 
 A `$routed` result is the same kind of source `$fetch` returns, so it can

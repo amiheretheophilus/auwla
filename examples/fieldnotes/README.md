@@ -7,6 +7,11 @@ A tiny expedition journal exercising the fullstack surface documented in
 bun run example:fieldnotes
 ```
 
+The script uses `memoized-dom dev`; the Vite configuration selects the runtime.
+If Chrome alone cannot navigate while this server is running, check that its
+DevTools Network dropdown is **No throttling**, not **Offline**. Retry navigation
+after changing the setting; restarting the server is not needed.
+
 ## What each piece demos
 
 | File | Doc |

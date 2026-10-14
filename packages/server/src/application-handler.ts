@@ -5,8 +5,9 @@
  * same-origin in-memory `$fetch` bridge behind serve().
  */
 import { createStorage, rootFactoryStore } from '@memoized-dom/runtime/server';
-import { resolveRoutePath } from '@memoized-dom/router';
+import { normalizeRoutePath, resolveRoutePath } from '@memoized-dom/router';
 import { RoutedPreparationRedirectError } from '@memoized-dom/router/internal';
+import { createDataRuntime, runWithDataRuntime } from '@memoized-dom/data';
 import {
   createServerRouter,
   type RegisteredServerState,
@@ -174,7 +175,9 @@ function serverContextMiddleware<
   TLocals extends object,
   TPlatform,
   TServices extends object,
->(): ServerMiddleware<TLocals, TPlatform, TServices> {
+>(
+  requestFetch: (context: ServerContext<TLocals, TPlatform, TServices>) => typeof globalThis.fetch,
+): ServerMiddleware<TLocals, TPlatform, TServices> {
   return (context, next) => {
     const inheritedDepth = activeServerContext.getStore()?.dispatchDepth ?? 0;
     return activeServerContext.run(
@@ -182,7 +185,19 @@ function serverContextMiddleware<
         context: context as unknown as ServerContext<object, unknown, object>,
         dispatchDepth: inheritedDepth,
       },
-      next,
+      async () => {
+        if (normalizeRoutePath(context.url.pathname) !== '/_memoized/routed') return next();
+        const data = createDataRuntime({ fetch: requestFetch(context), baseURL: context.url });
+        const cancel = () => data.clear();
+        context.request.signal.addEventListener('abort', cancel, { once: true });
+        try {
+          context.request.signal.throwIfAborted();
+          return await runWithDataRuntime(data, next);
+        } finally {
+          context.request.signal.removeEventListener('abort', cancel);
+          data.clear();
+        }
+      },
     );
   };
 }
@@ -405,7 +420,8 @@ export function createApplicationHandler<
   router = createServerRouter({
     routes: options.routes ?? [],
     groups: options.groups,
-    middleware: [serverContextMiddleware(), ...(options.middleware ?? [])],
+    middleware: [serverContextMiddleware(context =>
+      createServerFetch(router, context, options.fetch ?? globalThis.fetch)), ...(options.middleware ?? [])],
     createState: options.createState,
     createPlatform: options.createPlatform,
     services: options.services,

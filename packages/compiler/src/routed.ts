@@ -166,6 +166,55 @@ function owningComponent(ctx: Ctx, call: t.CallExpression): string | null {
   return null;
 }
 
+/** Extracted gates need payload reads, not the component's deferred render subscriptions. */
+function lowerRoutedSourceReads(
+  ctx: Ctx,
+  callback: t.ArrowFunctionExpression | t.FunctionExpression,
+  programPath: ProgramPath,
+): t.Expression {
+  const names = new Set<string>();
+  walkAst<BaseNode>(callback as unknown as BaseNode, {
+    enter(node) { if (astFactory.isIdentifier(node)) names.add(node.name); },
+  });
+  let readName = '_routedRead';
+  while (names.has(readName)) readName += '_';
+  const functions: BaseNode[] = [];
+  let lowered = false;
+  walkAst<BaseNode>(callback as unknown as BaseNode, {
+    enter(node) { if (astFactory.isFunction(node)) functions.push(node); },
+    leave(node, parent, key, index) {
+      if (astFactory.isCallExpression(node) && astFactory.isIdentifier(node.callee) &&
+        ctx.transparentSourceFactories.has(node.callee.name) &&
+        astBindingAt(ctx, node.callee, node.callee.name)?.kind === 'import') {
+        const owner = functions.at(-1);
+        if (owner !== callback && !(owner as unknown as t.FunctionExpression)?.async) {
+          throw programPath.buildCodeFrameError(
+            'memo-dom: a colorless source inside a nested $routed callback requires an async callback so its payload can settle',
+            node,
+          );
+        }
+        const replacement = {
+          type: 'AwaitExpression',
+          argument: astFactory.callExpression(astFactory.identifier(readName), [node as t.Expression]),
+        } as t.Expression;
+        if (parent && key) {
+          const record = parent as unknown as Record<string, unknown>;
+          if (index === undefined) record[key] = replacement;
+          else (record[key] as unknown[])[index] = replacement;
+        }
+        lowered = true;
+      }
+      if (astFactory.isFunction(node)) functions.pop();
+    },
+  });
+  if (!lowered) return cloneEstreeNode(callback, true);
+  callback.async = true;
+  if (callback.params.length === 0) callback.params.push(astFactory.identifier('_routedContext'));
+  callback.params.push(astFactory.identifier(readName));
+  ctx.usesTransparentData = true;
+  return astFactory.callExpression(mdd(ctx, 'withRoutedSources'), [cloneEstreeNode(callback, true)]);
+}
+
 /**
  * Finds statically extractable `$routed` sites after normal component and
  * lexical-scope discovery. This pass records execution classification but does
@@ -305,7 +354,9 @@ export function analyzeRoutedPreparations(
           properties.push(
             astFactory.objectProperty(
               astFactory.identifier('prepare'),
-              cloneEstreeNode(argument, true),
+              usesTransparentSource
+                ? lowerRoutedSourceReads(ctx, argument, programPath)
+                : cloneEstreeNode(argument, true),
             ),
           );
         }

@@ -20,6 +20,7 @@ import {
   readResolvedValueForRender,
   retryResolvedValues,
   settleRoutedValue,
+  withRoutedSources,
 } from '../src/internal';
 
 interface User {
@@ -35,6 +36,74 @@ function json(value: unknown, status = 200): Response {
 }
 
 describe('transparent resolved values', () => {
+  it('settles preparation-local sources into payload caches and releases active entries', async () => {
+    const fetcher = vi.fn(async () => json([{ id: 'one' }]));
+    const runtime = createDataRuntime({ fetch: fetcher as FetchStub });
+    const routeState: Record<string, unknown> = {};
+    const prepare = withRoutedSources(async ({ routeState }: { routeState: Record<string, unknown>; signal: AbortSignal }, read) => {
+      if (routeState.items) return routeState.items;
+      const items = await read(runtime.$fetch('/items'));
+      routeState.items = items;
+      return items;
+    });
+    const context = { routeState, signal: new AbortController().signal };
+    expect(await prepare(context)).toEqual([{ id: 'one' }]);
+    expect(JSON.parse(JSON.stringify(routeState))).toEqual({ items: [{ id: 'one' }] });
+    expect(await prepare(context)).toEqual([{ id: 'one' }]);
+    expect(fetcher).toHaveBeenCalledTimes(1);
+    const uncached = withRoutedSources(async (_context: { signal: AbortSignal }, read) => read(runtime.$fetch('/items')));
+    await uncached(context);
+    await uncached(context);
+    expect(fetcher).toHaveBeenCalledTimes(3);
+    runtime.clear();
+  });
+
+  it('retains GET deduplication for other active consumers and explicit app caching', async () => {
+    const fetcher = vi.fn(async () => json({ id: 1 }));
+    const runtime = createDataRuntime({ fetch: fetcher as FetchStub });
+    const active = runtime.$fetch('/shared');
+    const context = { signal: new AbortController().signal };
+    const prepare = withRoutedSources(async (_context: typeof context, read) => read(runtime.$fetch('/shared')));
+    expect(await prepare(context)).toEqual({ id: 1 });
+    expect(await prepare(context)).toEqual({ id: 1 });
+    expect(active.data).toEqual({ id: 1 });
+    expect(fetcher).toHaveBeenCalledTimes(1);
+    const cached = withRoutedSources(async (_context: typeof context, read) =>
+      read(runtime.$fetch('/app-cache', { cache: { scope: 'app' } })));
+    await cached(context);
+    await cached(context);
+    expect(fetcher).toHaveBeenCalledTimes(2);
+    runtime.clear();
+  });
+
+  it('releases a preparation source when the gate throws', async () => {
+    const fetcher = vi.fn(async () => json([1]));
+    const runtime = createDataRuntime({ fetch: fetcher as FetchStub });
+    const context = { signal: new AbortController().signal };
+    const failed = withRoutedSources(async (_context: typeof context, read) => {
+      await read(runtime.$fetch('/items'));
+      throw new Error('gate failed');
+    });
+    await expect(failed(context)).rejects.toThrow('gate failed');
+    const next = withRoutedSources(async (_context: typeof context, read) => read(runtime.$fetch('/items')));
+    expect(await next(context)).toEqual([1]);
+    expect(fetcher).toHaveBeenCalledTimes(2);
+    runtime.clear();
+  });
+
+  it('cancels pending work and prevents late continuations from retaining sources', async () => {
+    const runtime = createDataRuntime({ fetch: ((_input, init) => new Promise<Response>((_resolve, reject) => {
+      init?.signal?.addEventListener('abort', () => reject(init.signal!.reason), { once: true });
+    })) as FetchStub });
+    const controller = new AbortController();
+    const prepare = withRoutedSources(async (_context: { signal: AbortSignal }, read) => read(runtime.$fetch('/pending')));
+    const pending = prepare({ signal: controller.signal });
+    controller.abort(new Error('navigation cancelled'));
+    await expect(pending).rejects.toThrow('navigation cancelled');
+    await expect(runtime.settle(20)).resolves.toBe(true);
+    runtime.clear();
+  });
+
   it('settles a colorless value into an honest routed payload', async () => {
     let finish!: (response: Response) => void;
     const runtime = createDataRuntime({

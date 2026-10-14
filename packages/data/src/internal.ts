@@ -28,6 +28,7 @@ export {
   retryResolvedValues,
   runResolvedValuesEffect,
   settleRoutedValue,
+  withRoutedSources,
   resolvedValueSnapshot,
   trackResolvedValue,
   throwResolvedValuesError,

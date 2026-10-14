@@ -393,6 +393,45 @@ export function settleRoutedValue(
   });
 }
 
+/** Compiler-owned scope: preparation-local sources settle to payloads and retire together. */
+export function withRoutedSources<TContext extends { readonly signal: AbortSignal }, TResult>(
+  prepare: (context: TContext, read: (value: unknown) => Promise<unknown>) => TResult | Promise<TResult>,
+): (context: TContext) => Promise<TResult> {
+  return async context => {
+    const sources = new Set<FetchResource<unknown>>();
+    let closed = false;
+    const dispose = () => {
+      if (closed) return;
+      closed = true;
+      for (const source of sources) disposeFetchResource(source);
+      sources.clear();
+    };
+    const read = async (value: unknown): Promise<unknown> => {
+      if (isFetchResource(value)) {
+        // A late continuation must not create a request after cancellation.
+        if (closed || context.signal.aborted) {
+          disposeFetchResource(value);
+          context.signal.throwIfAborted();
+          throw new Error('memo-dom: routed preparation source scope is closed');
+        }
+        sources.add(value);
+      }
+      context.signal.throwIfAborted();
+      return await (settleRoutedValue(value, context.signal) ?? value);
+    };
+    context.signal.addEventListener('abort', dispose, { once: true });
+    try {
+      context.signal.throwIfAborted();
+      const result = await prepare(context, read);
+      context.signal.throwIfAborted();
+      return result;
+    } finally {
+      context.signal.removeEventListener('abort', dispose);
+      dispose();
+    }
+  };
+}
+
 export function resolvedValueSnapshot<T>(
   value: ResolvedValue<T>,
 ): ResourceSnapshot<T> {

@@ -23,6 +23,10 @@ Optional capability packages:
 - `@memoized-dom/router` — client-side routing, navigation, and `$routed`
 - `@memoized-dom/server` — `serve()`, server routes, SSR, and streaming
 
+Use `memoized-dom dev` and `memoized-dom build` for every application target.
+The Vite configuration selects browser-only, Bun, Node, or Cloudflare behavior.
+See the [CLI guide](./docs/cli.md) for package scripts and options.
+
 ### 2. Configuration
 
 **`tsconfig.json`**

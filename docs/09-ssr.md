@@ -68,20 +68,25 @@ mount('root', App);   // detects the server markup and hydrates
 
 ## Development and production
 
-For Bun, replace the browser-only scripts with:
+See the [CLI guide](./cli.md) for commands, flags, and runtime selection.
+
+Keep the same development and build commands as the browser-only application.
+For a Bun production target, add its start command:
 
 ```json
 {
   "scripts": {
-    "dev": "bun run --bun memoized-dom dev",
-    "build": "bun run --bun memoized-dom build",
+    "dev": "memoized-dom dev",
+    "build": "memoized-dom build",
     "start": "bun dist/server.js"
   }
 }
 ```
 
-These commands read the normal `vite.config.ts`. Development runs transformed
-server modules inside Bun and starts a native Bun listener. Bun APIs and the
+These commands read the normal `vite.config.ts`. The CLI selects the development
+host from `runtime` in the plugin configuration; Bun is the default for a server
+application. With `runtime: 'bun'`, development runs transformed server modules
+inside Bun and starts a native Bun listener. Bun APIs and the
 actual server remain available. A private loopback Vite listener supplies
 frontend modules, styles, and browser HMR. Set `server.port` in `vite.config.ts`
 or pass `--port` to the launcher to change the public port (default 3000).
