@@ -1,7 +1,7 @@
 # Server middleware
 
-Create middleware with the application `define` object so its context is typed
-without separate annotations:
+Create middleware with the application `define` object to infer its context
+types:
 
 ```ts
 export const session = define.middleware(async (context, next) => {

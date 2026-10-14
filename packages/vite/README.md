@@ -245,9 +245,17 @@ export const users = define.service('users', {
 });
 ```
 
+Export each `define.service()` definition directly for automatic discovery;
+bare calls and unexported declarations are not discovered. The exported value
+is a definition, not an initialized service. The `services/` folder is an
+organizational convention, not a discovery requirement.
+
 The generated registry exposes resolved service values as
 `context.services.database` and `context.services.users`. Service modules
 are imported into the server integration before requests are dispatched.
+These resolved types are shared by server-function, middleware, ordinary-route,
+and server-backed `$routed` contexts without importing each service definition
+into each handler. The registry is generated during dev/build.
 
 TypeScript projects must include `.memoized/**/*.d.ts`. Plain TypeScript
 resolution also needs the aliases:
@@ -290,9 +298,9 @@ import { $routed, redirectRoute } from '@memoized-dom/router';
 import { reports } from '#server/repositories/reports';
 
 export function ReportPage() {
-  const page = $routed(({ params, locals, signal }) => {
-    if (!locals.user) return redirectRoute('/login');
-    return reports.loadPage(params.reportId, locals.user.id, { signal });
+  const page = $routed(({ params, state, signal }) => {
+    if (!state.user) return redirectRoute('/login');
+    return reports.loadPage(params.reportId, state.user.id, { signal });
   });
 
   return <h1>{page.report.title}</h1>;
@@ -307,13 +315,13 @@ For a server-backed preparation, the plugin:
 4. installs the internal `/_memoized/routed` transport beside generated
    server-function routes; and
 5. forwards only the preparation ID, destination URL/params, and JSON-safe
-   application-owned `state` values from the browser.
+   application-owned `routeState` values from the browser.
 
-The server attaches the real request, typed locals, platform, and services at
-dispatch time. Those capabilities never enter the client bundle or transport
+The server attaches the real request, typed request `state`, platform, and
+services at dispatch time. Those capabilities never enter the client bundle or transport
 payload. Universal preparations that use only fields such as `params`,
-`query`, `signal`, and `state` retain their callback in both environments and
-do not generate a server round trip.
+`query`, `signal`, and `routeState` retain their callback in both environments
+and do not generate a server round trip.
 
 The callback must remain inline, synchronous, and assigned to a
 component-local `const`. Return a service or server-function result directly;

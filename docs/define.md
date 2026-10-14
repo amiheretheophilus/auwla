@@ -33,9 +33,8 @@ export const define = createDefine<{
 }>();
 ```
 
-Every server module imports this same `define`. There is no separate
-`ServerTypes` interface and no mandatory `server/config/index.ts`. The
-definition and the things created through it are the server contract.
+Every server module imports this same `define`. The definition and the
+capabilities created through it are the server contract.
 
 ## The boundary and project layout
 
@@ -163,9 +162,9 @@ Handlers created from `define` receive one consistent first argument:
 | `services` | Shared and initialized once per `serve()` application |
 | `platform` | Supplied by the host or created per request |
 
-Normal authoring no longer needs `getServerContext()`. The server runtime
-still needs an internal request scope for SSR, nested in-memory dispatch, and
-request isolation, but that mechanism is not the public way to obtain values.
+Authoring receives request values through handler arguments. The server runtime
+maintains an internal request scope for SSR, nested in-memory dispatch, and
+request isolation.
 
 ## Services
 
@@ -180,9 +179,18 @@ export const database = define.service('database', async () => {
 });
 ```
 
-Services under the server root are discovered and installed into the
-application. The generated server registry makes each name and resolved value
-available on `services` without a manually maintained services interface:
+Export the returned definition directly for automatic discovery. The exported
+`database` is a service definition, not the initialized database. Vite discovers
+these exports in ordinary modules under the server root and imports them into
+the server application; an unexported declaration or a bare `define.service()`
+call is not automatically discovered. The `services/` folder is organization
+only, while `functions/` is reserved for client-callable functions.
+
+During dev/build, Vite generates the server registry. Include
+`.memoized/**/*.d.ts` in your tsconfig to make the resolved service types
+available through handler contexts. Functions, middleware, ordinary routes,
+and server-backed `$routed` callbacks receive typed `services` without importing
+each definition or maintaining a separate services interface:
 
 ```ts
 services.database;
@@ -282,7 +290,7 @@ not as a server function or client-facade export.
 
 ## Server functions
 
-HTTP methods move out of JSDoc and onto `define.function`:
+Declare an HTTP verb handler inside `define.function`:
 
 ```ts
 // server/functions/users.ts
@@ -309,8 +317,8 @@ export const createUser = define.function({
 Each definition has exactly one `get`, `post`, `put`, `patch`, or `delete`
 handler. When declared, the first argument is injected by the server and is not
 part of the client contract. Without a schema, the remaining named arguments
-are transported. Client code still
-calls the generated facade without constructing server context:
+are transported. Client code calls the generated facade without constructing
+server context:
 
 ```ts
 import { createUser, getUser } from '#server-functions';
@@ -319,8 +327,7 @@ const user = getUser(selectedId);
 await createUser({ name, email });
 ```
 
-`get`, `post`, `put`, `patch`, and `delete` select the HTTP method. This
-replaces `@GET`, `@POST`, and the other method annotations.
+`get`, `post`, `put`, `patch`, and `delete` select the HTTP method.
 
 Validation is optional. Without `input`, annotate transported arguments as
 ordinary TypeScript parameters. A handler with no inputs can omit its context
@@ -381,9 +388,8 @@ Schema-backed GET calls JSON-encode the one input into a query parameter;
 mutations send it as the JSON body. The validator receives the original JSON
 types, including scalar numbers, booleans, arrays, and objects.
 
-`server/functions` and `#server-functions` remain. The new definition syntax
-replaces annotation-based declarations and ambient context access; it does not
-remove the server-only discovery boundary or generated client facade.
+`server/functions` is the server-only discovery boundary. Client code accesses
+the generated facade through `#server-functions`.
 
 ## Ordinary HTTP routes and SSR
 
@@ -486,17 +492,9 @@ The complete proposed `$routed` argument is:
 }
 ```
 
-## What this removes
+## Server authoring contract
 
-With this model, normal application code no longer needs:
-
-- `server/config/index.ts` and its manually mirrored `ServerTypes`;
-- `createLocals` and the public name `locals`;
-- `createServices` returning one manually assembled service object;
-- `getServerContext()` inside server functions;
-- method and middleware JSDoc such as `@GET` and `@middleware`.
-
-It deliberately keeps:
+The application uses:
 
 - the configured server-only root;
 - the special `server/functions` discovery folder;

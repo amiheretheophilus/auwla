@@ -310,7 +310,7 @@ handles this automatically; use the same `app.ssr()` and `mount()` calls.
   `moduleStateCells: false` for an SSR app with mutable module state.
 - **Ordinary server module globals are still process-wide.** Module caches,
   third-party singletons, and server-function implementation variables are
-  not automatically per-request. Keep user/session data in request locals,
+  not automatically per-request. Keep user/session data in request `state`,
   route preparation, or component-owned data, not a mutable server singleton.
 
 Next: [10 — `serve()` configuration](./10-serve.md)

@@ -88,9 +88,8 @@ await createUser({ name, email });
 ```
 
 `get` arguments use query encoding. `post`, `put`, `patch`, and `delete`
-arguments use a JSON body. The method name is executable metadata, so there is
-no comment-based method declaration for the compiler or language service to
-reconstruct.
+arguments use a JSON body. The verb handler supplies executable metadata to
+the compiler and language service.
 
 Validation is optional. Add a schema only when the operation needs it, and put
 targeted middleware beside the handler:

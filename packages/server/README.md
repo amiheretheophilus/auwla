@@ -321,5 +321,5 @@ and produces `404`, `405`, and `Allow` responses consistently.
 
 `createServerFunctionRoutes()` converts compiler-generated function manifests
 into the same route representation. During SSR, same-origin server-function
-requests dispatch through this router in memory and inherit the active locals
+requests dispatch through this router in memory and inherit the active `state`
 and platform; browser calls use the generated transport facade.
