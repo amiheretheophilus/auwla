@@ -1,9 +1,14 @@
 /** Transfer fingerprints are installed only by serialization or restoration. */
 import { textIdentity } from './request-hash';
 import type { FetchMethod, RequestKey, StandardSchemaV1 } from './types';
+const compilerContracts = new WeakMap<StandardSchemaV1,string>();
+/** Internal protocol validators have a versioned contract, independent of bundler formatting. */
+export function registerCompilerTransferContract(schema:StandardSchemaV1,contract:string):void {compilerContracts.set(schema,contract);}
 
 export function fetchTransferContract(schema: StandardSchemaV1 | undefined): string {
   if (schema === undefined) return 'mmd-fetch/v1:raw';
+  const compiled = compilerContracts.get(schema);
+  if (compiled !== undefined) return compiled;
   const standard = schema['~standard'];
   const validator = textIdentity('schema', standard.validate.toString());
   return `mmd-fetch/v1:validated:${standard.vendor}:${validator}`;

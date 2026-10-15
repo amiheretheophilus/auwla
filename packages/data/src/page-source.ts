@@ -3,6 +3,7 @@ import { getActiveEnvironment, isPageContent, type PageContent } from '@memoized
 import { getActiveDataRuntime } from './active-runtime';
 import { enableRequestEncoding } from './request-encoding';
 import { createStreamingSource } from './streaming';
+import { registerCompilerTransferContract } from './request-transfer';
 import type { FetchOptions, ResolvedValue, StandardSchemaV1 } from './types';
 
 type Loader = (id:string,key:string|undefined) => Promise<void>;
@@ -17,6 +18,7 @@ export function createPageSource(target:string, options:FetchOptions, mode:'live
       return {value:input};
     }}};
     validators.set(loader,validate);
+    registerCompilerTransferContract(validate,'mmd-page/v1');
   }
   const validated = {...options,validate};
   return mode ? createStreamingSource(target,validated,mode) : enableRequestEncoding(getActiveDataRuntime()).$fetch(target,validated) as unknown as ResolvedValue<PageContent>;

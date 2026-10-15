@@ -26,6 +26,7 @@ import {
   normalizeFile,
 } from './paths';
 import { AdapterState } from './state';
+import { ServerPages, isPageModule, pageHydrationId } from './server-pages';
 import { hydrationBootstrap, hydrationVirtualId, resolvedHydrationVirtualId } from './hydration';
 import { applyInitialPage } from './initial-html';
 import { initialBootstrapDescriptor } from '@memoized-dom/runtime/server';
@@ -86,6 +87,7 @@ export function memoizedDom(
   let serverFunctionClientBarrelSource = '';
   let serverFunctionBarrelEntries: readonly ServerFunctionBarrelEntry[] = [];
   let serverServices: readonly DiscoveredServerService[] = [];
+  let serverPages: ServerPages | undefined;
   let productionDelivery: ProductionDelivery | undefined;
   const api: FullstackPluginApi = {
     runtime: options.runtime ?? 'bun',
@@ -115,6 +117,7 @@ export function memoizedDom(
     serverFunctionClientBarrelSource = generated.clientBarrelSource;
     serverFunctionBarrelEntries = generated.clientBarrelEntries;
     serverServices = generated.services;
+    serverPages = new ServerPages(config.root,options,generated.modules,generated.clientBarrelEntries);
     await writeServerFunctionDeclarations(config.root, generated.modules, options);
     return generated.files;
   }
@@ -312,7 +315,7 @@ export function memoizedDom(
     // Fullstack entries mount over server markup: append the side-effect
     // import that installs the hydration runtime. Appending after the
     // compiled body keeps existing sourcemap lines exact.
-    return `${code}\nimport ${JSON.stringify(config?.command === 'build' ? hydrationVirtualId : '@memoized-dom/runtime/hydrate')};\n`;
+    return `${code}\nimport ${JSON.stringify(config?.command === 'build' ? hydrationVirtualId : '@memoized-dom/runtime/hydrate')};\n${serverPages?.enabled ? `import ${JSON.stringify(pageHydrationId)};\n` : ''}`;
   }
 
   async function transformModule(
@@ -323,6 +326,7 @@ export function memoizedDom(
     if (
       config === undefined ||
       !sourceId.test(id) ||
+      isPageModule(id) ||
       id.includes('?memo-style.css') ||
       isServerFunctionImplementation(id)
     ) return null;
@@ -539,6 +543,7 @@ export function memoizedDom(
       },
     },
     async resolveId(id, importer) {
+      if (isPageModule(id)) return '\0'+id.replace(/^\0/,'');
       if (id === applicationVirtualId) return resolvedApplicationVirtualId;
       if (id === integrationVirtualId) return resolvedIntegrationVirtualId;
       if (id === productionEntryVirtualId) return resolvedProductionEntryVirtualId;
@@ -579,6 +584,12 @@ export function memoizedDom(
       return null;
     },
     async load(id) {
+      if (isPageModule(id)) {
+        await serverPages?.prepare(graphContext(this));
+        const code=serverPages?.load(id,this.environment.name === 'ssr');
+        if (code === undefined) this.error('memo-dom: unknown private page artifact');
+        return {code,map:{mappings:''}};
+      }
       if (id === resolvedApplicationVirtualId) return { code: applicationModule(api.runtime), map: { mappings: '' } };
       if (id === resolvedIntegrationVirtualId) {
         return { code: productionDelivery ? productionIntegrationModule(productionDelivery) : developmentIntegrationModule(devServer!, api.runtime, api.cloudflareAssetsBinding), map: { mappings: '' } };
@@ -595,8 +606,9 @@ export function memoizedDom(
         }
         const file = cleanViteId(id);
         this.addWatchFile(file);
+        await serverPages?.prepare(graphContext(this));
         return {
-          code: serverFunctionImplementationSource(await readFile(file, 'utf8'), file, config!.root, options),
+          code: serverPages?.implementation(file) ?? serverFunctionImplementationSource(await readFile(file, 'utf8'), file, config!.root, options),
           map: { mappings: '' },
         };
       }

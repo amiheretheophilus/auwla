@@ -100,6 +100,7 @@ export async function compileGraph(
   const resolutions = new Map<string, string>();
   const visiting = new Set<string>();
   const styles = new Set<string>();
+  let renderableContent = false;
   const directStyles = new Map<string, Set<string>>();
 
   function recordStyle(id: string, style: string): void {
@@ -145,6 +146,7 @@ export async function compileGraph(
       serverFunctionBarrelEntries,
       { moduleId: id, ...(options.frontend === undefined ? {} : { frontend: options.frontend }) },
     );
+    if (isServerFunctionFile(root,cleanFile,options) && /\bcreatePageSource\b/.test(facadeSource)) renderableContent=true;
     sources.set(id, source);
     sourceIds.set(cleanFile, id);
 
@@ -230,6 +232,7 @@ export async function compileGraph(
   }
 
   const compileOptions = {
+    renderableContent,
     dataDelivery: options.serverEntry !== undefined || routedEnvironment === 'server'
       ? 'universal' : options.dataDelivery ?? 'client',
     ...(options.frontend === undefined ? {} : { frontend: options.frontend }),
@@ -259,6 +262,7 @@ export async function compileGraph(
     moduleStateCells: options.moduleStateCells ?? routedEnvironment === 'server',
     routedEnvironment,
     initialContent: (plan: CompiledModules['initialRender'], delivery: InitialDelivery | undefined) => {
+      if (renderableContent) return false;
       if (hot || routedEnvironment === 'server' || !documents.length || plan.kind === 'browser' ||
           options.serverEntry !== undefined && delivery === undefined) return false;
       const request = plan.kind === 'request' || plan.kind === 'bindings' && plan.request;
