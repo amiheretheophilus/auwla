@@ -8,6 +8,7 @@ import { createBuilder } from 'vite';
 import puppeteer from 'puppeteer-core';
 import { createDevServer, type NativeDevServer } from '../src/dev';
 import memoizedDom from '../src';
+import { decodePageHtml } from '../../runtime/src/page-html';
 
 const repository=resolve(import.meta.dirname,'../../..');
 const chrome=[process.env.MMD_CHROME_PATH,'C:/Program Files/Google/Chrome/Application/chrome.exe','/usr/bin/chromium'].find((path):path is string=>!!path&&existsSync(path));
@@ -46,7 +47,10 @@ it.each(['development','production','development-stream'] as const)('delivers fi
   }
   const response=await fetch(origin+'/_fn/boards/getBoard',{headers:{'x-mmd-stream':'snapshot'}});
   const content=await response.text();expect(response.status,content).toBe(200);expect(content).not.toContain('SERVER_SECRET');
-  expect(JSON.parse(content)).toMatchObject({$mmd:'page',html:expect.stringContaining('Ada')});
+  expect(response.headers.get('content-type')).toBe('text/html; charset=utf-8');
+  expect(response.headers.get('x-mmd-page')).toBe('1');
+  expect(content.startsWith('<div')).toBe(true);
+  expect(decodePageHtml(content)).toMatchObject({$mmd:'page',html:expect.stringContaining('Ada')});
   const html=await (await fetch(origin)).text();expect(html).toMatch(/<h1[^>]*>Ada<\/h1>/);expect(html).not.toContain('SERVER_SECRET');
   if(vite) await expect(vite.vite.environments.client!.pluginContainer.load('\0virtual:memoized-dom/page/0/server/'+encodeURIComponent('./server/functions/boards.tsx.MemoizedServerPage0.tsx')+'.js')).rejects.toThrow('cannot be imported by the client');
   if(!chrome)return;

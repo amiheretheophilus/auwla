@@ -1,5 +1,6 @@
 import { isAbortError, RequestError } from './errors';
 import { validateValue } from './schema';
+import { responseDecoder } from './response-decoder';
 import { bytesIdentity, createIdentityHash, finishIdentityHash, textIdentity, updateTextHash } from './request-hash';
 import type {
   FetchMethod,
@@ -202,7 +203,8 @@ export async function decodeResponse(
       data = undefined;
     } else {
       const contentType = response.headers.get('content-type')?.toLowerCase() ?? '';
-      data = contentType.includes('json')
+      const decode = response.ok ? responseDecoder(schema) : undefined;
+      data = decode ? await decode(response) : contentType.includes('json')
         ? await response.json()
         : await response.text();
     }

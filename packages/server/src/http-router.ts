@@ -18,13 +18,14 @@ const pageFetches = new WeakMap<object, typeof globalThis.fetch>();
 /** @internal Same request dispatch capability already used by document SSR. */
 export function installServerPageFetch(context: object, fetch: typeof globalThis.fetch): void { pageFetches.set(context, fetch); }
 
-async function serverFunctionValue(value: unknown, context: ServerContext<object, unknown, object>, fetchContext: object = context): Promise<unknown> {
+async function serverFunctionValue(value: unknown, context: ServerContext<object, unknown, object>, fetchContext: object = context, html = false): Promise<unknown> {
   if (!isServerPage(value)) return value;
-  const { renderServerPage } = await import('./page');
-  return renderServerPage(value, {
+  const { renderServerPage, serverPageResponse } = await import('./page');
+  const rendered = await renderServerPage(value, {
     url: context.url.href, signal: context.request.signal, routedContext: context,
     ...(pageFetches.has(fetchContext) ? { fetch: pageFetches.get(fetchContext)! } : {}),
   });
+  return html ? serverPageResponse(rendered) : rendered;
 }
 
 // Keep reporting request-scoped without adding public context fields or retaining
@@ -477,7 +478,7 @@ export function createServerFunctionRoutes<
             value = await definition.handler(mode === 'generator' || mode === 'snapshot'
               ? { ...context, request: new Request(context.url, { method: context.request.method, headers: context.request.headers, signal: AbortSignal.any([context.request.signal, cancellation.signal]) }) }
               : context, ...args);
-            value = await serverFunctionValue(value, context);
+            value = await serverFunctionValue(value, context, context, true);
           } while (snapshotStamp !== undefined && snapshotStamp.revision !== hub.stamp(snapshotStamp.key).revision);
           if (value !== null && typeof value === 'object' && Symbol.asyncIterator in value) {
             const iterator = (value as AsyncIterable<unknown>)[Symbol.asyncIterator]();

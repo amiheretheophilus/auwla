@@ -3,13 +3,23 @@ import { registerRootFactory } from '@memoized-dom/runtime/server';
 import { render } from './render';
 import type { RenderOptions } from './index';
 import type { ServerComponent } from './root-id';
-import type { PageContent } from '@memoized-dom/runtime';
+import { encodePageHtml, type PageContent } from '@memoized-dom/runtime';
 import { isServerPage, type ServerPageDefinition } from './page-definition';
 import { encodePageInputs } from './page-inputs';
 export { createServerPage, isServerPage } from './page-definition';
 export type { ServerPageDefinition } from './page-definition';
 
 export type ServerPageRender = PageContent;
+
+/** Finite UI results are HTML fragments, never document navigation instructions. */
+export function serverPageResponse(page: PageContent): Response {
+  return new Response(encodePageHtml(page), { headers: {
+    'content-type': 'text/html; charset=utf-8',
+    'x-mmd-page': '1',
+    'cache-control': 'no-store',
+    'x-content-type-options': 'nosniff',
+  } });
+}
 
 /**
  * Evaluate a selected page without rerunning its action. Vite supplies the

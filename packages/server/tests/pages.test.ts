@@ -6,6 +6,7 @@ import { extractServerPages } from '../../compiler/src/server-pages';
 import { createServerPage, isServerPage, renderServerPage, type ServerPageDefinition } from '../src/page';
 import { createServerFunctionRoutes, createServerRouter, installServerPageFetch } from '../src/http-router';
 import { liveHub } from '../src/live';
+import { decodePageHtml } from '../../runtime/src/page-html';
 
 /** Execute compiler output without temporary files or application-side imports. */
 function fixture(source: string, modules: Record<string, string> = {}): (...args: unknown[]) => Promise<ServerPageDefinition> {
@@ -60,7 +61,7 @@ describe('request-owned server page rendering foundation', () => {
     }])});
     const response=router.fetch(new Request('https://app.test/_fn/board',{headers:{'x-mmd-stream':'snapshot'}}));
     await started.promise;version=1;liveHub(services).invalidate(['board']);release.resolve();
-    expect(await (await response).json()).toMatchObject({html:'<h1>1:settled</h1>'});expect(reads).toBe(2);
+    expect(decodePageHtml(await (await response).text())).toMatchObject({html:'<h1>1:settled</h1>'});expect(reads).toBe(2);
   });
   it('delivers finite GET and POST pages as rendered content without SSE or repeating mutations', async () => {
     const make = fixture(`import {page} from '@memoized-dom/server';
@@ -73,10 +74,24 @@ describe('request-owned server page rendering foundation', () => {
     for (const [name, method, html] of [['get', 'GET', '<h1>Read</h1>'], ['save', 'POST', '<h1>Saved</h1>']]) {
       const response = await router.fetch(new Request('https://app.test/_fn/' + name, { method }));
       expect(response.status).toBe(200);
-      expect(response.headers.get('content-type')).toContain('application/json');
-      expect(await response.json()).toMatchObject({ $mmd: 'page', version: 1, html });
+      expect(response.headers.get('content-type')).toBe('text/html; charset=utf-8');
+      expect(response.headers.get('x-mmd-page')).toBe('1');
+      const body = await response.text();
+      expect(body.startsWith(html)).toBe(true);
+      expect(body).not.toContain('"html":');
+      expect(decodePageHtml(body)).toMatchObject({ $mmd: 'page', version: 1, html });
     }
     expect(writes).toBe(1);
+  });
+  it('does not reinterpret ordinary JSON as a page HTML response', async () => {
+    const value = {$mmd:'page',version:1,id:'spoof',html:'<p>JSON</p>'};
+    const router = createServerRouter({routes:createServerFunctionRoutes([{
+      id:'json',path:'/_fn/json',method:'GET',parameters:[],handler:async()=>value,
+    }])});
+    const response=await router.fetch(new Request('https://app.test/_fn/json'));
+    expect(response.headers.get('content-type')).toContain('application/json');
+    expect(response.headers.get('x-mmd-page')).toBeNull();
+    expect(await response.json()).toEqual(value);
   });
   it('defers rendering, isolates concurrent inputs, and escapes rendered HTML', async () => {
     const make = fixture(`import {page} from '@memoized-dom/server';
