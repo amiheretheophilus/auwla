@@ -1,4 +1,5 @@
 /** Public compiler package entry. */
+export { extractServerPages, type ExtractedServerPage, type ExtractedServerPages, type ServerPageExtractionOptions } from './server-pages';
 export type { InitialDelivery } from './dom/delivery-plan';
 
 export {

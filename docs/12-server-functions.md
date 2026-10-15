@@ -1,5 +1,9 @@
 # Server functions
 
+For the proposed ability to return server-owned JSX regions, see
+[Server-owned components through `page(...)`](./server-components-design.md).
+That API is not implemented; this guide documents current server functions.
+
 ## The `server` field
 
 The vite plugin takes one more option besides `clientEntry`/`serverEntry`:

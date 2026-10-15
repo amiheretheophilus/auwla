@@ -3,6 +3,7 @@ import { defineConfig } from 'rolldown';
 
 export default defineConfig({
   input: {
+    internal: './src/internal.ts',
     index: './src/index.ts',
     dom: './src/dom.ts',
     'http-router': './src/http-router.ts',
