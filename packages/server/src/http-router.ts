@@ -12,6 +12,20 @@ import {
 } from '@memoized-dom/router/internal';
 import type { StandardSchemaV1 } from '@memoized-dom/data';
 import { generatorResponse, liveHub, liveResponse, type LiveKey } from './live';
+import { isServerPage } from './page-definition';
+
+const pageFetches = new WeakMap<object, typeof globalThis.fetch>();
+/** @internal Same request dispatch capability already used by document SSR. */
+export function installServerPageFetch(context: object, fetch: typeof globalThis.fetch): void { pageFetches.set(context, fetch); }
+
+async function serverFunctionValue(value: unknown, context: ServerContext<object, unknown, object>, fetchContext: object = context): Promise<unknown> {
+  if (!isServerPage(value)) return value;
+  const { renderServerPage } = await import('./page');
+  return renderServerPage(value, {
+    url: context.url.href, signal: context.request.signal, routedContext: context,
+    ...(pageFetches.has(fetchContext) ? { fetch: pageFetches.get(fetchContext)! } : {}),
+  });
+}
 
 // Keep reporting request-scoped without adding public context fields or retaining
 // completed requests. Live bodies execute after the dispatch try/catch returns.
@@ -446,7 +460,8 @@ export function createServerFunctionRoutes<
           if (key !== undefined && mode === 'live') {
             return liveResponse(hub, hub.key(key), context.request, async signal => {
               const request = new Request(context.url, { method: context.request.method, headers: context.request.headers, signal });
-              const result = await definition.handler({ ...context, request }, ...args);
+              const liveContext = { ...context, request };
+              const result = await serverFunctionValue(await definition.handler(liveContext, ...args), liveContext, context);
               if (result instanceof Response) {
                 if (!result.ok) { await result.body?.cancel(); throw new Error('Live query rejected'); }
                 return result.headers.get('content-type')?.includes('json') ? result.json() : result.text();
@@ -462,6 +477,7 @@ export function createServerFunctionRoutes<
             value = await definition.handler(mode === 'generator' || mode === 'snapshot'
               ? { ...context, request: new Request(context.url, { method: context.request.method, headers: context.request.headers, signal: AbortSignal.any([context.request.signal, cancellation.signal]) }) }
               : context, ...args);
+            value = await serverFunctionValue(value, context);
           } while (snapshotStamp !== undefined && snapshotStamp.revision !== hub.stamp(snapshotStamp.key).revision);
           if (value !== null && typeof value === 'object' && Symbol.asyncIterator in value) {
             const iterator = (value as AsyncIterable<unknown>)[Symbol.asyncIterator]();

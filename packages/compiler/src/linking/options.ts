@@ -25,5 +25,6 @@ export function compilerOptions(
       ? {}
       : { routedEnvironment: options.routedEnvironment }),
     rootId,
+    ...(options.renderableContent === undefined ? {} : { renderableContent: options.renderableContent }),
   };
 }

@@ -10,6 +10,7 @@ import { RoutedPreparationRedirectError } from '@memoized-dom/router/internal';
 import { createDataRuntime, runWithDataRuntime } from '@memoized-dom/data';
 import {
   createServerRouter,
+  installServerPageFetch,
   type RegisteredServerState,
   type RegisteredServerPlatform,
   type RegisteredServerServices,
@@ -186,6 +187,7 @@ function serverContextMiddleware<
         dispatchDepth: inheritedDepth,
       },
       async () => {
+        if (normalizeRoutePath(context.url.pathname).startsWith('/_fn/')) installServerPageFetch(context, requestFetch(context));
         if (normalizeRoutePath(context.url.pathname) !== '/_memoized/routed') return next();
         const data = createDataRuntime({ fetch: requestFetch(context), baseURL: context.url });
         const cancel = () => data.clear();

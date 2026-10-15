@@ -31,6 +31,8 @@ export type {
 } from './hydration-marker';
 
 export interface HydrationController {
+  /** Consume a complete server-owned range without running its component tree. */
+  claimOpaqueContent?(): Node[];
   claimList(parent: Node, identity: string): ClaimedHydrationList;
   claimRange(
     kind: Exclude<PairedHydrationMarkerKind, 'r'>,
@@ -191,9 +193,11 @@ export function claimHydrationRoot(
 export class HydrationNodePlan {
   readonly boundary: string;
   readonly #nodes: Node[];
+  readonly #range: ClaimedHydrationRange;
   #position = 0;
 
   constructor(range: ClaimedHydrationRange) {
+    this.#range = range;
     this.boundary = range.identity;
     this.#nodes = [];
     collectCreationOrder(range.open.nextSibling, range.end, this.#nodes);
@@ -205,6 +209,14 @@ export class HydrationNodePlan {
 
   get done(): boolean {
     return this.#position === this.#nodes.length;
+  }
+
+  claimOpaqueContent(): Node[] {
+    if (this.#position !== 0) throw new HydrationMismatchError(this.boundary, 'an unclaimed remote region', 'partially claimed content');
+    const nodes: Node[] = [];
+    for (let node = this.#range.open.nextSibling; node !== null && node !== this.#range.end; node = node.nextSibling) nodes.push(node);
+    this.#position = this.#nodes.length;
+    return nodes;
   }
 
   /** Claim the next node in compiler creation order and validate its shape. */
@@ -543,6 +555,10 @@ export class HydrationDocument
   claimMarkup(markup: string): Node[] {
     if (!this.capabilities.markup) throw new HydrationMismatchError(this.#activePlan().boundary, 'markup adoption capability', 'an incomplete browser program');
     return this.capabilities.markup(this, markup);
+  }
+
+  claimOpaqueContent(): Node[] {
+    return this.#activePlan().claimOpaqueContent();
   }
 
   recoverRange(range: ClaimedHydrationRange, error: unknown, render: () => void): boolean {

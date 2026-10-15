@@ -18,7 +18,8 @@ import { domAttributeWrite, domPropertyName, domPropertyWrite, isMappedDomAttrib
 import { createElementExpression, isSvgElement } from './svg';
 import { compileRefValue, emitRefMount } from './refs';
 import { preparationRead, registerTransparentDataSite } from './data-subscriptions';
-import { transparentExpressionSources } from '../planning/async-reads';
+import { transparentExpressionSources, asyncReadFact } from '../planning/async-reads';
+import { emitContentRegion } from './content-region';
 import { emitText } from './text-node';
 import { literalClassValue } from './class-value';
 import type { NodeEmitter } from './node-emitter';
@@ -84,6 +85,8 @@ export function emitDirectChildOperations(
           ),
         )),
       );
+    } else if (operation.type === 'content') {
+      emitContentRegion(ctx, scope, parentVar, ownerId, operation.expression);
     } else if (operation.type === 'slot') {
       emitForwardedSlotMount(
         ctx,
@@ -162,6 +165,7 @@ if (innerHtmlAttribute !== undefined) {
 const initial=scope.initialDom?.plan.elements[initialSite(element)];
 let initialTextIndex=0;
 const childPlan = planDirectChildren(element.children, {
+  isContent: expression => ctx.renderableContent && asyncReadFact(expression)?.binding !== undefined,
   isForwarded: (expression) =>
     isRenderPropReference(ctx, componentName, expression),
   fail: (message) => {

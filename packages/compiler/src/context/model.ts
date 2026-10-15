@@ -38,6 +38,8 @@ export const DEFAULT_TRANSPARENT_ASYNC_SOURCES: readonly TransparentAsyncSourceD
 ];
 
 export interface MemoDomOptions {
+  /** Host capability: direct async child values may contain remote rendered UI. */
+  renderableContent?: boolean;
   /** Module specifier compiled output imports the runtime from. */
   runtimePath?: string;
   /** Development runtime subpath for compiler-owned HMR and optional tracing. */
@@ -393,6 +395,7 @@ export type HelperPath = CompilerPath<
 >;
 
 export interface Ctx {
+  renderableContent: boolean;
   runtimePath: string;
   hotRuntimePath: string;
   routerPath: string;
@@ -731,6 +734,7 @@ export function createAnalysisCtx(opts: AnalysisOptions = {}): Ctx {
     rootComponent: opts.rootComponent ?? null,
     hot: opts.hot ?? false,
     diagnostics: opts.diagnostics ?? false,
+    renderableContent: opts.renderableContent ?? false,
     moduleStateCells: opts.moduleStateCells ?? false,
     ssrWriter: opts.ssrWriter ?? false,
     moduleId,

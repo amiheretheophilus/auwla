@@ -20,6 +20,7 @@ export type JsxChild = t.JSXElement['children'][number];
 export type JsxNode = t.JSXElement | t.JSXFragment;
 
 export type DirectChildPlan =
+  | { type: 'content'; expression: t.Expression }
   | { type: 'text'; expression: t.Expression }
   | { type: 'node'; node: JsxNode }
   | { type: 'list'; expression: MapCallExpression }
@@ -30,6 +31,7 @@ export type DirectChildPlan =
   | { type: 'slot'; expression: t.Expression };
 
 export interface DirectChildClassifier {
+  isContent?(expression: t.Expression): boolean;
   isForwarded(expression: t.Expression): boolean;
   fail(message: string): never;
 }
@@ -74,6 +76,11 @@ export function planDirectChildren(
     }
 
     const expression = child.expression;
+    if (classifier.isContent?.(expression)) {
+      flushText();
+      result.push({ type: 'content', expression: cloneEstreeNode(expression) });
+      continue;
+    }
     if (classifier.isForwarded(expression)) {
       flushText();
       result.push({ type: 'slot', expression: cloneEstreeNode(expression) });

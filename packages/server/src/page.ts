@@ -2,39 +2,12 @@
 import { registerRootFactory } from '@memoized-dom/runtime/server';
 import { render, type RenderOptions } from './index';
 import type { ServerComponent } from './root-id';
+import type { PageContent } from '@memoized-dom/runtime';
+import { isServerPage, type ServerPageDefinition } from './page-definition';
+export { createServerPage, isServerPage } from './page-definition';
+export type { ServerPageDefinition } from './page-definition';
 
-const PAGE = Symbol('memoized-dom:server-page');
-
-export interface ServerPageDefinition {
-  readonly [PAGE]: true;
-  readonly id: string;
-  readonly create: ServerComponent;
-}
-
-export interface ServerPageRender {
-  readonly id: string;
-  readonly html: string;
-}
-
-/** Compiler-owned constructor: never evaluate JSX before render isolation exists. */
-export function createServerPage(
-  id: string,
-  factory: (id: string, parent: null, captures: readonly unknown[]) => Node,
-  captures: readonly unknown[] = [],
-): ServerPageDefinition {
-  if (typeof id !== 'string' || !id || typeof factory !== 'function' || !Array.isArray(captures)) throw new TypeError('Invalid compiled server page');
-  const inputs = Object.freeze([...captures]);
-  const create: ServerComponent = (root, parent) => factory(root, parent, inputs);
-  return Object.freeze({ [PAGE]: true as const, id, create,
-    toJSON(): never {
-      throw new TypeError('A server page requires renderable-result delivery; it cannot be serialized as ordinary data');
-    },
-  });
-}
-
-export function isServerPage(value: unknown): value is ServerPageDefinition {
-  return typeof value === 'object' && value !== null && PAGE in value;
-}
+export type ServerPageRender = PageContent;
 
 /**
  * Evaluate a selected page in the existing isolated renderer. This intentionally
@@ -52,5 +25,12 @@ export async function renderServerPage(
   if (result.settlement.status === 'timeout') {
     throw new DOMException('Server page did not settle before its timeout', 'TimeoutError');
   }
-  return { id: page.id, html: result.html };
+  let html = result.html;
+  if (page.wrapped) {
+    if (!html.startsWith('<div>') || !html.endsWith('</div>')) throw new Error('memo-dom: invalid compiled page root');
+    html = page.binding ? '<div style="display:contents">' + html.slice(5) : html.slice(5, -6);
+  }
+  return { $mmd: 'page', version: 1, id: page.id, html,
+    ...(page.binding ? { binding: { key: page.binding.key, inputs: page.binding.inputs() } } : {}),
+  };
 }

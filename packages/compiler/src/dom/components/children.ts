@@ -409,6 +409,6 @@ export function emitChildrenIntoParent(
     if (operation.type==='node') append(operation.variable);
     else if (operation.type==='slot') emitters.emitForwarded(operation.expression,parentVar);
     else if (operation.type==='list') emitters.emitList(operation.expression,parentVar);
-    else emitters.emitCondition(operation.expression,parentVar);
+    else if (operation.type === 'condition') emitters.emitCondition(operation.expression,parentVar);
   }
 }

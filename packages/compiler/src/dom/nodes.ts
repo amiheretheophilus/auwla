@@ -38,6 +38,7 @@ import { emitText } from './text-node';
 import { emitComponentCall } from './component-call';
 import { emitDirectChildOperations, emitHostElement, type HostElementDependencies } from './host-element';
 import { createAuthoredSlotBuilders } from './authored-slots';
+import { asyncReadFact } from '../planning/async-reads';
 
 const {
   buildAuthoredChildrenSlot,
@@ -112,6 +113,7 @@ function emitFragment(
   ownerId: t.Expression = componentId(ctx, compName),
 ): string {
   const plan = planDirectChildren(fragment.children, {
+    isContent: expression => ctx.renderableContent && asyncReadFact(expression)?.binding !== undefined,
     isForwarded: (expression) =>
       isRenderPropReference(ctx, compName, expression),
     fail: (message) => {

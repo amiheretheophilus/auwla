@@ -159,6 +159,7 @@ export function renderToString(
 export { renderToReadableStream } from './stream';
 export { json, type JsonResponse } from './json';
 export { error, type ErrorResponse } from './error';
+export { page } from './page-definition';
 export { getCookie, setCookie, deleteCookie, type CookieOptions } from './cookies';
 export {
   createDefine,

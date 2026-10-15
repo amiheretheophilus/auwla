@@ -4,6 +4,7 @@ import * as data from '@memoized-dom/data/internal';
 import { compileModules } from '../../compiler/src/linker';
 import { extractServerPages } from '../../compiler/src/server-pages';
 import { createServerPage, isServerPage, renderServerPage, type ServerPageDefinition } from '../src/page';
+import { createServerFunctionRoutes, createServerRouter } from '../src/http-router';
 
 /** Execute compiler output without temporary files or application-side imports. */
 function fixture(source: string, modules: Record<string, string> = {}): (...args: unknown[]) => Promise<ServerPageDefinition> {
@@ -44,6 +45,22 @@ function fixture(source: string, modules: Record<string, string> = {}): (...args
 }
 
 describe('request-owned server page rendering foundation', () => {
+  it('delivers finite GET and POST pages as rendered content without SSE or repeating mutations', async () => {
+    const make = fixture(`import {page} from '@memoized-dom/server';
+      export async function make(name:string){return page(<h1>{name}</h1>);}`);
+    let writes = 0;
+    const router = createServerRouter({ routes: createServerFunctionRoutes([
+      { id: 'get', path: '/_fn/get', method: 'GET', parameters: [], handler: () => make('Read') },
+      { id: 'save', path: '/_fn/save', method: 'POST', parameters: [], handler: () => { writes++; return make('Saved'); } },
+    ]) });
+    for (const [name, method, html] of [['get', 'GET', '<h1>Read</h1>'], ['save', 'POST', '<h1>Saved</h1>']]) {
+      const response = await router.fetch(new Request('https://app.test/_fn/' + name, { method }));
+      expect(response.status).toBe(200);
+      expect(response.headers.get('content-type')).toContain('application/json');
+      expect(await response.json()).toMatchObject({ $mmd: 'page', version: 1, html });
+    }
+    expect(writes).toBe(1);
+  });
   it('defers rendering, isolates concurrent inputs, and escapes rendered HTML', async () => {
     const make = fixture(`import {page} from '@memoized-dom/server';
       export async function make(name: string) {return page(<section><h1>{name}</h1></section>);}`);
