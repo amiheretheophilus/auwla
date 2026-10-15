@@ -7,7 +7,7 @@ import {
   type BaseNode,
   type Identifier,
 } from '../ast';
-import { astBindingAt, type Ctx } from '../context';
+import { astBindingAt, variableDeclaratorFor, type Ctx } from '../context';
 import { isCallToImported } from './source-calls';
 
 const RENDER_FUNCTION_TYPES = new Set([
@@ -65,6 +65,18 @@ export function rejectNonGetServerFunctionRenderCalls(
 
 /** Register event-assigned source holders that need per-update subscriptions. */
 export function scanEventSourceAssignments(ctx: Ctx): void {
+  const isSourceValue = (node: BaseNode | null, seen = new Set<BaseNode>()): boolean => {
+    if (node === null || seen.has(node)) return false;
+    seen.add(node);
+    if (astFactory.isCallExpression(node as unknown as t.Node)) {
+      return isCallToImported(ctx, node, node as unknown as t.Expression, ctx.transparentSourceFactories);
+    }
+    if (node.type !== 'Identifier') return false;
+    const binding = astBindingAt(ctx, node, (node as unknown as Identifier).name);
+    if (!binding || binding.kind !== 'const' || binding.constantViolations.length) return false;
+    const declaration = variableDeclaratorFor(ctx, binding);
+    return declaration !== null && isSourceValue(childNode(declaration, 'init'), seen);
+  };
   for (const [component, componentPath] of ctx.compPaths) {
     const componentNode = componentPath.node as unknown as BaseNode;
     const names = new Set<string>();
@@ -76,16 +88,7 @@ export function scanEventSourceAssignments(ctx: Ctx): void {
         const left = childNode(node, 'left');
         const right = childNode(node, 'right');
         if (left?.type !== 'Identifier') return;
-        if (
-          right === null ||
-          !astFactory.isCallExpression(right as unknown as t.Node) ||
-          !isCallToImported(
-            ctx,
-            componentNode,
-            right as unknown as t.Expression,
-            ctx.transparentSourceFactories,
-          )
-        ) {
+        if (!isSourceValue(right)) {
           return;
         }
         const identifier = left as unknown as Identifier;

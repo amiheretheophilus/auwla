@@ -4,10 +4,29 @@ import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { afterEach, describe, expect, it, vi } from 'bun:test';
 import { compileModules } from '@memoized-dom/compiler';
+import { memoizedEstreeFrontend, parseWithEstreeFrontendOrThrow } from '../packages/compiler/src/ast';
 import { render, renderToString } from '@memoized-dom/server';
 import { _internals, resetScheduler, setScheduler, unregister } from '@memoized-dom/runtime/testing';
 
 describe('$read and $forms compiler integration', () => {
+  it('keeps event source assignment through a const alias as a writable holder', () => {
+    const output = compileModules({ './app.tsx': `
+      export function App() {
+        let receipt = $fetch('/receipt');
+        const form = $forms((fields: FormData) => {
+          const result = $fetch('/save', { method: 'POST', body: { title: fields.get('title') } });
+          const alias = result;
+          receipt = alias;
+          return result;
+        });
+        return <div><p>{receipt.title}</p><form onSubmit={form.submit}><input name="title"/><button>Save</button></form></div>;
+      }`,
+    });
+    const app = output['./app.tsx']!;
+    expect(() => parseWithEstreeFrontendOrThrow(memoizedEstreeFrontend, app, { filename: './app.js' })).not.toThrow();
+    expect(app).toContain('receipt = alias');
+    expect(app).not.toMatch(/readResolvedValue\(receipt[^;]+\) = alias/);
+  });
   afterEach(() => {
     for (const id of _internals().registry.keys()) unregister(id);
     document.body.replaceChildren();
