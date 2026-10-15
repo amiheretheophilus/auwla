@@ -3,6 +3,19 @@ import { encodeLiveFrame as frame, LivePatchEncoder } from './live-patch';
 /** Internal invalidation and delivery protocol; no authored SSE endpoints. */
 export type LiveKey = readonly (string | number | boolean | null)[];
 export interface LiveStamp { epoch: string; key: string; revision: number }
+type StreamErrorReporter = (error: unknown) => void | Promise<void>;
+
+async function reportStreamError(error: unknown, request: Request, report?: StreamErrorReporter): Promise<void> {
+  if (report === undefined) {
+    console.error(`[memoized-dom] Stream failed: ${request.method} ${new URL(request.url).pathname}`, error);
+    return;
+  }
+  try { await report(error); }
+  catch (reportError) {
+    console.error('[memoized-dom] Stream error reporter failed', reportError);
+    console.error('[memoized-dom] Original stream failure', error);
+  }
+}
 
 export class LiveHub {
   readonly epoch = crypto.randomUUID();
@@ -92,6 +105,7 @@ export function liveResponse(
   key: string,
   request: Request,
   query: (signal: AbortSignal) => Promise<unknown>,
+  onError?: StreamErrorReporter,
 ): Response {
   const abort = new AbortController();
   const patches = request.headers.get('x-mmd-live-patches') === '1' ? new LivePatchEncoder() : undefined;
@@ -131,10 +145,16 @@ export function liveResponse(
         }
         if (abort.signal.aborted) controller.close();
         else controller.enqueue(encoder.encode(': heartbeat\n\n'));
-      } catch {
-        if (!abort.signal.aborted) controller.enqueue(frame('error', { message: 'Live query failed' }));
-        controller.close();
-        stop();
+      } catch (error) {
+        const failed = !abort.signal.aborted;
+        try {
+          if (failed) controller.enqueue(frame('error', { message: 'Live query failed' }));
+          controller.close();
+        } finally {
+          stop();
+          // A slow telemetry hook must not retain subscriptions or delay failure delivery.
+          if (failed) void reportStreamError(error, request, onError);
+        }
       }
     },
     cancel: stop,
@@ -152,6 +172,7 @@ export function generatorResponse(
   iterator: AsyncIterator<unknown>,
   cancel: () => void,
   onComplete: () => LiveStamp[] = () => [],
+  onError?: StreamErrorReporter,
 ): Response {
   let active = true;
   let delivered = false;
@@ -182,10 +203,15 @@ export function generatorResponse(
           controller.close();
           stop();
         }
-      } catch {
-        if (active) controller.enqueue(frame('error', { message: 'Streaming function failed' }));
-        controller.close();
-        stop();
+      } catch (error) {
+        const failed = active;
+        try {
+          if (failed) controller.enqueue(frame('error', { message: 'Streaming function failed' }));
+          controller.close();
+        } finally {
+          stop();
+          if (failed) void reportStreamError(error, request, onError);
+        }
       }
     },
     cancel: stop,

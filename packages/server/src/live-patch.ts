@@ -16,13 +16,40 @@ export function encodeLiveFrame(event: string, data: unknown): Uint8Array {
   return encoder.encode(`event: ${event}\ndata: ${json}\n\n`);
 }
 
-/** Index-based JSON diff: no inferred row identity, DOM keys, or database semantics. */
+/** Structural JSON diff: no inferred row identity, DOM keys, or database semantics. */
 function difference(before: LiveJsonValue, after: LiveJsonValue): LivePatchOperation[] | null {
   const operations: LivePatchOperation[] = [];
   let work = MAX_DIFF_WORK;
   const append = (operation: LivePatchOperation): boolean => {
     if (--work < 0 || operations.length >= LIVE_PATCH_MAX_OPERATIONS) return false;
     operations.push(operation);
+    return true;
+  };
+  // Compare retained array edges once, with the same bounded work/depth budget.
+  // In particular, an unchanged row must not allocate a patch path for every field.
+  const equal = (left: LiveJsonValue, right: LiveJsonValue, depth: number): boolean | null => {
+    if (--work < 0 || depth > LIVE_PATCH_MAX_DEPTH) return null;
+    if (left === right) return true;
+    if (left === null || right === null || typeof left !== 'object' || typeof right !== 'object' ||
+      Array.isArray(left) !== Array.isArray(right)) return false;
+    if (Array.isArray(left) && Array.isArray(right)) {
+      if (left.length !== right.length) return false;
+      for (let index = 0; index < left.length; index++) {
+        const same = equal(left[index]!, right[index]!, depth + 1);
+        if (same !== true) return same;
+      }
+      return true;
+    }
+    const a = left as { [key: string]: LiveJsonValue }, b = right as { [key: string]: LiveJsonValue };
+    const keys = Object.keys(a), otherKeys = Object.keys(b);
+    if (keys.length !== otherKeys.length) return false;
+    for (let index = 0; index < keys.length; index++) {
+      if (--work < 0) return null;
+      const key = keys[index]!;
+      if (key !== otherKeys[index]) return false;
+      const same = equal(a[key]!, b[key]!, depth + 1);
+      if (same !== true) return same;
+    }
     return true;
   };
   const visit = (left: LiveJsonValue, right: LiveJsonValue, path: string, depth: number): boolean => {
@@ -32,14 +59,27 @@ function difference(before: LiveJsonValue, after: LiveJsonValue): LivePatchOpera
       Array.isArray(left) !== Array.isArray(right)) return append({ op: 'replace', path, value: right });
     if (depth === LIVE_PATCH_MAX_DEPTH) return false;
     if (Array.isArray(left) && Array.isArray(right)) {
-      const shared = Math.min(left.length, right.length);
-      for (let index = 0; index < shared; index++) {
+      let start = 0, leftEnd = left.length, rightEnd = right.length;
+      while (start < leftEnd && start < rightEnd) {
+        const same = equal(left[start]!, right[start]!, depth + 1);
+        if (same === null) return false;
+        if (!same) break;
+        start++;
+      }
+      while (leftEnd > start && rightEnd > start) {
+        const same = equal(left[leftEnd - 1]!, right[rightEnd - 1]!, depth + 1);
+        if (same === null) return false;
+        if (!same) break;
+        leftEnd--; rightEnd--;
+      }
+      const sharedEnd = start + Math.min(leftEnd - start, rightEnd - start);
+      for (let index = start; index < sharedEnd; index++) {
         if (!visit(left[index]!, right[index]!, `${path}/${index}`, depth + 1)) return false;
       }
-      for (let index = left.length - 1; index >= right.length; index--) {
+      for (let index = leftEnd - 1; index >= sharedEnd; index--) {
         if (!append({ op: 'remove', path: `${path}/${index}` })) return false;
       }
-      for (let index = shared; index < right.length; index++) {
+      for (let index = sharedEnd; index < rightEnd; index++) {
         if (!append({ op: 'add', path: `${path}/${index}`, value: right[index]! })) return false;
       }
       return true;

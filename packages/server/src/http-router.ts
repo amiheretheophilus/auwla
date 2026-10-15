@@ -13,6 +13,10 @@ import {
 import type { StandardSchemaV1 } from '@memoized-dom/data';
 import { generatorResponse, liveHub, liveResponse, type LiveKey } from './live';
 
+// Keep reporting request-scoped without adding public context fields or retaining
+// completed requests. Live bodies execute after the dispatch try/catch returns.
+const streamErrorReporters = new WeakMap<object, (error: unknown) => Promise<void>>();
+
 /** Framework route used by compiler-extracted server-backed `$routed` work. */
 export function invokeRoutedPreparation(
   input: {
@@ -448,7 +452,7 @@ export function createServerFunctionRoutes<
                 return result.headers.get('content-type')?.includes('json') ? result.json() : result.text();
               }
               return result;
-            });
+            }, streamErrorReporters.get(context));
           }
           const cancellation = new AbortController();
           let value: unknown;
@@ -462,7 +466,7 @@ export function createServerFunctionRoutes<
           if (value !== null && typeof value === 'object' && Symbol.asyncIterator in value) {
             const iterator = (value as AsyncIterable<unknown>)[Symbol.asyncIterator]();
             if (mode === 'generator') {
-              return generatorResponse(context.request, iterator, () => cancellation.abort(), update);
+              return generatorResponse(context.request, iterator, () => cancellation.abort(), update, streamErrorReporters.get(context));
             }
             // SSR/read preparation only consumes one yield. POST streams must
             // execute through their generated streaming client, never as snapshots.
@@ -785,6 +789,14 @@ export function createServerRouter<
       platform,
       services,
     });
+    if (options.onError !== undefined) {
+      streamErrorReporters.set(context, async error => {
+        // Headers/status are already committed: use onError for server-side
+        // observation, discard its replacement response and release its body.
+        const response = await options.onError!(error, context);
+        await response.body?.cancel();
+      });
+    }
 
     let terminal: (
       value: ServerContext<TLocals, TPlatform, TServices>,

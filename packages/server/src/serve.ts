@@ -78,6 +78,10 @@ export interface ServeOptions<
   readonly define: ServerDefinition<TLocals, TPlatform, TServices>;
   readonly state?: (request: Request) => NoInfer<TLocals>;
   readonly platform?: (request: Request) => NoInfer<TPlatform> | undefined;
+  /**
+   * Handle request errors. For live/generator body failures this observes the
+   * original error/context, but its Response cannot replace the selected stream.
+   */
   readonly onError?: (
     error: unknown,
     context: ServerContext<TLocals, TPlatform, TServices>,

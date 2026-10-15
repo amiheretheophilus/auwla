@@ -45,6 +45,43 @@ describe('automatic live GET patch encoding', () => {
     expect(JSON.stringify(after).length).toBeGreaterThan(40_000);
   });
 
+  it('keeps append, prepend, removal and middle edits compact for five thousand rows', () => {
+    const rows = Array.from({ length: 5000 }, (_, id) => ({ id: `n${id}`, text: `field note number ${id} with some body text`, by: 'user' }));
+    const added = { id: 'new', text: 'A new note', by: 'user' };
+    for (const [after, expected] of [
+      [[...rows, added], [{ op: 'add', path: '/5000', value: added }]],
+      [[added, ...rows], [{ op: 'add', path: '/0', value: added }]],
+      [rows.slice(1), [{ op: 'remove', path: '/0' }]],
+      [rows.map((row, index) => index === 2500 ? { ...row, text: 'edited' } : row), [{ op: 'replace', path: '/2500/text', value: 'edited' }]],
+      [[...rows.slice(0, 2500), added, ...rows.slice(2500)], [{ op: 'add', path: '/2500', value: added }]],
+      [[...rows.slice(0, 2500), ...rows.slice(2501)], [{ op: 'remove', path: '/2500' }]],
+    ] as const) {
+      const encoder = new LivePatchEncoder(); encoder.encode(rows, stamp(0));
+      const bytes = encoder.encode(after, stamp(1));
+      const update = decode(bytes);
+      expect(update.event).toBe('patch'); expect(update.data.patch).toEqual(expected);
+      expect(bytes.byteLength).toBeLessThan(300);
+      expect(applyLivePatch(rows, update.data.patch)).toEqual(after);
+    }
+  });
+
+  it('preserves duplicate rows, nested arrays and observable key order when aligning array edges', () => {
+    for (const [before, after] of [
+      [[1, 1, 2, 2], [1, 2, 2]],
+      [[1, 1, 2, 2], [1, 1, 1, 2, 2]],
+      [[1, 2, 3, 4], [1, 8, 9, 10, 4]],
+      [[1, 2, 3, 4], [1, 8, 4]],
+      [[1, 2], []], [[], [1, 2]],
+      [[{ first: 1, second: 2 }], [{ second: 2, first: 1 }]],
+      [[[1, 2], [3, 4]], [[1, 2], [0, 3, 4]]],
+    ] as [LiveJsonValue, LiveJsonValue][]) {
+      const encoder = new LivePatchEncoder(); encoder.encode({ rows: before, padding }, stamp(0));
+      const update = decode(encoder.encode({ rows: after, padding }, stamp(1)));
+      const actual = update.event === 'patch' ? applyLivePatch({ rows: before, padding }, update.data.patch) : update.data.value;
+      expect(JSON.stringify(actual)).toBe(JSON.stringify({ rows: after, padding }));
+    }
+  });
+
   it('sends confirmation cursors even for unchanged large values', () => {
     const encoder = new LivePatchEncoder();
     encoder.encode({ count: 1, padding }, stamp(0));

@@ -40,6 +40,14 @@ through global middleware, path middleware, routes, server functions, SSR, and
 nested in-memory dispatch for that request. A different request gets a
 different object.
 
+Live-query and generator body failures also reach `onError` with the original
+exception and request context. Their response is already selected, so the hook
+can report/log the error but its returned `Response` cannot replace the stream;
+its body is cancelled. The browser receives a generic terminal error frame.
+Without a hook, these failures are logged server-side. Reporting does not delay
+stream cleanup, and ordinary cancellation is not reported as a query failure.
+See [stream failure reporting](./live-streaming-design.md#reporting-stream-failures-on-the-server).
+
 `platform` is a per-request fallback. A host can override it when dispatching:
 
 ```ts

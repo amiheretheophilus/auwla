@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { spawn, type ChildProcess } from 'node:child_process';
 import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -88,6 +88,71 @@ async function origin(log: ReturnType<typeof launch>, runtime: string): Promise<
 }
 
 describe('consistent CLI launcher', () => {
+  it.each(['node', 'bun'] as const)('generates project types from %s without starting a backend or emitting bundles', async caller => {
+    const root = await project('node');
+    await mkdir(join(root, 'server/functions'), { recursive: true });
+    await writeFile(join(root, 'server/define.ts'), `import { createDefine } from '@memoized-dom/server';
+      export const define = createDefine<{ user: string }>();`);
+    await writeFile(join(root, 'server/database.ts'), `import { define } from './define';
+      export const database = define.service('database', () => { throw new Error('Services must not execute during types'); });`);
+    await writeFile(join(root, 'server/functions/stories.ts'), `import { define } from '../define';
+      export const getStories = define.function({ async get() { return [{ id: 'one', title: 'First story' }]; }, live: () => ['stories'] });`);
+    await writeFile(join(root, 'src/App.tsx'), `import { getStories } from '#server-functions';
+      import { Story } from '@views/Story';
+      import { Custom } from 'custom:view';
+      export function App() { const stories = getStories(); return <main><Story route="/stories/:id" /><Custom route="/custom" />{stories.map(s => <p>{s.title}</p>)}</main>; }`);
+    await writeFile(join(root, 'src/Story.tsx'), 'export function Story() { return <p>Story page</p>; }');
+    await writeFile(join(root, 'src/Custom.tsx'), 'export function Custom() { return <p>Custom resolved page</p>; }');
+    await writeFile(join(root, 'server.ts'), 'throw new Error("Backend must not execute during types");');
+    await writeFile(join(root, 'vite.config.mts'), `import memoizedDom from ${JSON.stringify(plugin)};
+      export default {
+        root: import.meta.dirname, logLevel: 'error',
+        resolve: { alias: { '@views': import.meta.dirname + '/src' } },
+        optimizeDeps: { include: ['not-installed-optimizer-dependency'] },
+        plugins: [memoizedDom({ clientEntry: 'src/main.ts', serverEntry: 'server.ts' }), {
+          name: 'assert-types-only',
+          resolveId(id) { if (id === 'custom:view') return import.meta.dirname + '/src/Custom.tsx'; },
+          configureServer() { throw new Error('Types must not configure a dev server'); },
+          generateBundle() { throw new Error('Types must not emit bundles'); },
+        }],
+      };`);
+    const log = launch(caller, root, ['types', '--config', 'vite.config.mts']);
+    await waitFor(() => expect(child!.exitCode, log.output() + log.errors()).toBe(0), 30_000);
+    expect(log.output()).toContain('project types generated');
+    const declaration = join(root, '.memoized/server-functions.d.ts');
+    expect(await readFile(declaration, 'utf8')).toContain('getStories');
+    expect(await readFile(join(root, '.memoized/routes.d.ts'), 'utf8')).toContain('/stories/:id');
+    expect(await readFile(join(root, '.memoized/routes.d.ts'), 'utf8')).toContain('/custom');
+    const configTypes = await readFile(join(root, '.memoized/server-config.d.ts'), 'utf8');
+    expect(configTypes).toContain('database'); expect(configTypes).toContain('DefinitionState');
+    expect(existsSync(join(root, 'dist'))).toBe(false);
+    expect(existsSync(join(root, 'node_modules/.vite'))).toBe(false);
+    const before = (await stat(declaration)).mtimeMs;
+    const repeat = launch(caller, root, ['types']);
+    await waitFor(() => expect(child!.exitCode, repeat.output() + repeat.errors()).toBe(0), 30_000);
+    expect((await stat(declaration)).mtimeMs).toBe(before);
+    await writeFile(join(root, 'src/App.tsx'), 'export function App() { return <h1>No routes or functions</h1>; }');
+    await writeFile(join(root, 'server/functions/stories.ts'), 'export {};');
+    const removed = launch(caller, root, ['types']);
+    await waitFor(() => expect(child!.exitCode, removed.output() + removed.errors()).toBe(0), 30_000);
+    expect(existsSync(declaration)).toBe(false);
+    expect(existsSync(join(root, '.memoized/routes.d.ts'))).toBe(false);
+    await writeFile(join(root, 'vite.config.mts'), 'throw new Error("Type generation config failure");');
+    const failed = launch(caller, root, ['types']);
+    await waitFor(() => expect(child!.exitCode, failed.output() + failed.errors()).toBe(1), 30_000);
+    expect(failed.errors()).toContain('Type generation config failure');
+  }, 90_000);
+
+  it('generates Cloudflare types without starting the Worker host', async () => {
+    const root = await project('cloudflare');
+    await writeFile(join(root, 'server.ts'), 'throw new Error("Worker must not execute during types");');
+    await writeFile(join(root, 'src/App.tsx'), 'export function App() { return <main route="/worker">Worker</main>; }');
+    const log = launch('node', root, ['types']);
+    await waitFor(() => expect(child!.exitCode, log.output() + log.errors()).toBe(0), 60_000);
+    expect(await readFile(join(root, '.memoized/routes.d.ts'), 'utf8')).toContain('/worker');
+    expect(existsSync(join(root, 'dist'))).toBe(false);
+  }, 90_000);
+
   it.each(['node', 'cloudflare'] as const)('streams declared queries and generator functions on %s', async runtime => {
     const root = await project(runtime);
     await mkdir(join(root, 'server/functions'), { recursive: true });

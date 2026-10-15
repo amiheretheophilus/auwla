@@ -330,7 +330,7 @@ Development tests and type checks use Bun 1.4.3 or newer (including the current 
 ```bash
 bun run test        # All suites, including Chrome integration tests
 bun run test:root   # Compiler/runtime tests, with two isolated Bun workers
-bun check          # Project type check
+bun run typecheck   # Generate example declarations, then Bun checks + JSX coverage
 bun run bench:router
 ```
 

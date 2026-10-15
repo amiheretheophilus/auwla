@@ -1,7 +1,8 @@
-import { describe, expect, it } from 'bun:test';
+import { describe, expect, it, spyOn } from 'bun:test';
 import { createDefine, serve } from '../src/index';
 import { createServerFunctionRoutes, type ServerFunctionRouteDefinition } from '../src/http-router';
 import { LiveHub, liveResponse } from '../src/live';
+import { waitFor } from '../../../test-support/helpers';
 
 const decoder = new TextDecoder();
 const url = 'https://app.test/_fn/notes/getNotes?id=one';
@@ -19,6 +20,96 @@ function install(app: object, routes: readonly unknown[]) {
 }
 
 describe('automatic live server functions', () => {
+  it.each([false, true])('reports live query failures through onError with subscriber context (after initial value: %s)', async afterInitial => {
+    const define = createDefine<{ user: string }, unknown, { secret: string }>();
+    define.service('secret', () => 'private-service');
+    const failure = new Error('private database details');
+    const reports: { error: unknown; user: string; secret: string; path: string }[] = [];
+    let cancelledReports = 0, fail = !afterInitial;
+    const app = serve({ define, state: req => ({ user: req.headers.get('x-user')! }),
+      async onError(error, context) {
+        reports.push({ error, user: context.state.user, secret: context.services.secret, path: context.url.pathname });
+        return new Response(new ReadableStream({ cancel() { cancelledReports++; } }), { status: 503 });
+      },
+    });
+    install(app, createServerFunctionRoutes<{ user: string }, unknown, { secret: string }>([
+      { id: 'get', method: 'GET', path: '/_fn/notes/getNotes', parameters: [{ name: 'id', optional: false, queryKind: 'string' }], live: () => ['notes'],
+        async handler({ state }) { if (fail) throw failure; return state.user; } },
+    ]));
+    const response = await app.fetch(request('Ada'));
+    const reader = response.body!.getReader();
+    try {
+      if (afterInitial) {
+        expect((await read(reader)).data.value).toBe('Ada');
+        fail = true; define.invalidate(['notes']);
+      }
+      const event = await read(reader);
+      expect(event).toEqual({ event: 'error', data: { message: 'Live query failed' } });
+      expect(JSON.stringify(event)).not.toContain(failure.message);
+      expect(reports).toEqual([{ error: failure, user: 'Ada', secret: 'private-service', path: '/_fn/notes/getNotes' }]);
+      await waitFor(() => expect(cancelledReports).toBe(1)); expect(response.status).toBe(200);
+      expect((await reader.read()).done).toBe(true);
+    } finally { await reader.cancel(); }
+  });
+
+  it('reports generator failures once without leaking exceptions or acknowledging failed mutations', async () => {
+    const failure = new Error('private generator error');
+    const reports: unknown[] = [];
+    const app = serve({ define: createDefine(), onError(error, context) {
+      reports.push([error, context.request.method, context.url.pathname]);
+      return new Response('Not sent to the browser', { status: 500 });
+    } });
+    install(app, createServerFunctionRoutes([
+      { id: 'answer', method: 'POST', path: '/_fn/notes/answer', parameters: [], updates: () => ['notes'],
+        async *handler() { yield 'first'; throw failure; } },
+    ]));
+    const response = await app.fetch(new Request('https://app.test/_fn/notes/answer', {
+      method: 'POST', headers: { 'x-mmd-stream': 'generator' },
+    }));
+    const reader = response.body!.getReader();
+    try {
+      expect((await read(reader)).data.value).toBe('first');
+      expect(await read(reader)).toEqual({ event: 'error', data: { message: 'Streaming function failed' } });
+      expect(reports).toEqual([[failure, 'POST', '/_fn/notes/answer']]);
+      expect((await reader.read()).done).toBe(true);
+      expect(response.headers.has('x-mmd-updates')).toBe(false);
+    } finally { await reader.cancel(); }
+  });
+
+  it('logs unhandled stream failures and reporter failures, but not ordinary cancellation', async () => {
+    const logged = spyOn(console, 'error').mockImplementation(() => {});
+    const hub = new LiveHub(), failure = new Error('private failure');
+    try {
+      const reader = liveResponse(hub, hub.key(['notes']), request(), async () => { throw failure; }).body!.getReader();
+      expect((await read(reader)).event).toBe('error'); await reader.cancel();
+      expect(logged).toHaveBeenCalledWith(expect.stringContaining('/_fn/notes/getNotes'), failure);
+      logged.mockClear();
+      const broken = liveResponse(hub, hub.key(['notes']), request(), async () => { throw failure; }, async () => { throw new Error('logger unavailable'); }).body!.getReader();
+      expect((await read(broken)).event).toBe('error'); await broken.cancel();
+      await waitFor(() => expect(logged).toHaveBeenCalledTimes(2));
+      logged.mockClear();
+      const cancelled = liveResponse(hub, hub.key(['notes']), request(), signal => new Promise((_resolve, reject) => {
+        signal.addEventListener('abort', () => reject(signal.reason), { once: true });
+      })).body!.getReader();
+      const reading = cancelled.read(); await Promise.resolve(); await cancelled.cancel(); await reading;
+      expect(logged).not.toHaveBeenCalled();
+    } finally { logged.mockRestore(); }
+  });
+
+  it('releases a failed live subscription even while its asynchronous error reporter is pending', async () => {
+    const hub = new LiveHub();
+    const activity: boolean[] = []; hub.onActivity = active => activity.push(active);
+    const reporting = Promise.withResolvers<void>();
+    let reported = false;
+    const reader = liveResponse(hub, hub.key(['notes']), request(), async () => { throw new Error('failed'); },
+      async () => { reported = true; await reporting.promise; }).body!.getReader();
+    try {
+      expect((await read(reader)).event).toBe('error');
+      expect((await reader.read()).done).toBe(true);
+      expect(activity).toEqual([true, false]); expect(reported).toBe(true);
+    } finally { reporting.resolve(); await reader.cancel(); }
+  });
+
   it('negotiates patch delivery per connection without changing legacy full snapshots or subscriber isolation', async () => {
     const hub = new LiveHub(), key = hub.key(['notes']);
     const state = { count: 0, padding: 'unchanged'.repeat(200) };

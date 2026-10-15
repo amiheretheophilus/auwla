@@ -426,10 +426,16 @@ This internal subset is not an author-facing general-purpose patch API.
 The server compares complete UTF-8 frame sizes, including metadata. It sends a
 patch only when it is strictly smaller; otherwise it sends another full snapshot.
 Diff work is bounded to 50,000 work units, 128 operations, and 64 path segments.
-Exceeding a bound falls back to the full snapshot. Arrays are compared by index,
-not by an assumed `id` field or a compiled JSX `key`. Insertions, removals, and
-reordering remain correct against the expected baseline; many changes can simply
-make a full snapshot cheaper.
+Exceeding a bound falls back to the full snapshot. Arrays first align structurally
+equal prefixes and suffixes; only their changed middle is diffed. This keeps a
+prepend, removal, append, or middle edit compact without treating every shifted
+index as a changed row. Equality checks share the same work/depth budget and
+preserve object-property order. No `id` field or compiled JSX `key` is assumed;
+duplicates and nested arrays work too. This is not an unbounded edit-distance or
+move-detection algorithm: many disjoint edits or large reorderings can still make
+a full snapshot cheaper. Regression coverage includes compact patches for the
+four reported edit cases on 5,000 three-field rows; there is no universal row-count
+threshold because work depends on each value's shape.
 Object-property enumeration order is preserved too; an object is replaced when
 individual member updates would leave its keys in a different order.
 
@@ -496,7 +502,31 @@ normal case; reconnect and baseline recovery are explicit exceptions.
 Patches reduce wire payload size, not query execution time. The server still
 performs its read, JSON normalization, and bounded comparison. Private baselines
 and detached visible values also have memory/copying costs; this is not a promise
-of lower CPU or rendering cost. Initial snapshots still need to fit the existing
+of lower CPU or rendering cost. Each connection still owns its query evaluation,
+baseline, and encoding work. Costs therefore grow with subscribers and result
+size; identical invalidation keys do not establish identical authorization and
+never automatically opt subscribers into shared computed results.
+Initial snapshots still need to fit the existing
 1 MiB per-frame client limit. Independent sources still do not update atomically,
 and invalidations remain application-instance-local. The Fieldnotes example's
 artificial query/mutation delays remain unchanged.
+
+## Reporting stream failures on the server
+
+Failures while evaluating a live query, advancing a generator, or encoding its
+frames reach the existing `serve({ onError(error, context) })` handler with the
+original exception and the subscriber's request context. This includes failures
+before the first frame and after earlier values were delivered. The returned
+stream response is already selected: the handler can log/report the failure but
+cannot replace its HTTP status, headers, or body. Its replacement response body
+is cancelled instead of leaked. The browser receives only the generic terminal
+`Live query failed` or `Streaming function failed` message, never private details
+or a stack trace.
+
+When no `onError` is configured, stream failures are logged server-side with the
+request method/path and original exception. A throwing/rejected reporting hook
+logs both failures and still permits stream termination and cleanup. Error
+reporting runs independently of failure delivery and subscription cleanup, so a
+slow asynchronous hook does not hold the failed stream open. Ordinary
+request cancellation is not logged as a query failure. This uses the existing
+application error hook; there is no separate stream-specific configuration API.

@@ -56,8 +56,8 @@ async function main(): Promise<void> {
     },
   });
   const command = positionals[0] ?? 'dev';
-  if (!['dev', 'build'].includes(command) || positionals.length > 1) {
-    throw new Error('Usage: memoized-dom [dev|build] [--config path] [--root path] [--port number]');
+  if (!['dev', 'build', 'types'].includes(command) || positionals.length > 1) {
+    throw new Error('Usage: memoized-dom [dev|build|types] [--config path] [--root path] [--port number]');
   }
   if (values.port !== undefined && (!Number.isInteger(Number(values.port)) || Number(values.port) < 0 || Number(values.port) > 65535)) {
     throw new Error('memoized-dom: --port must be an integer between 0 and 65535');
@@ -72,6 +72,11 @@ async function main(): Promise<void> {
     root: values.root,
     ...(values.port === undefined ? {} : { server: { port: Number(values.port) } }),
   };
+  if (command === 'types') {
+    await (await import('./typegen')).generateProjectTypes(config);
+    console.log('Memoized DOM: project types generated');
+    return;
+  }
   const { createBuilder, createServer, loadConfigFromFile } = await import('vite');
   if (command === 'build') {
     await (await createBuilder(config)).buildApp();

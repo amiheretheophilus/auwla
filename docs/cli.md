@@ -1,8 +1,8 @@
 # Memoized DOM CLI
 
 `@memoized-dom/vite` installs the `memoized-dom` command. It uses the normal
-`vite.config.ts` to compile the application, run development, and build for
-production.
+`vite.config.ts` to compile the application, run development, generate project
+types, and build for production.
 
 ## One command shape
 
@@ -92,8 +92,41 @@ with the SSR document, server functions, and asset delivery integrated.
 
 Production startup remains host-specific: `bun dist/server.js` for Bun,
 `node dist/server.js` for Node, and Cloudflare's deployment tooling for Workers.
-The CLI currently provides `dev` and `build`, not `start`, `preview`, or `deploy`.
+The CLI provides `dev`, `build`, and `types`, not `start`, `preview`, or `deploy`.
 Use `vite preview` for browser/Worker preview and `wrangler deploy` for Workers.
+
+## `types`
+
+```sh
+memoized-dom types
+memoized-dom types --config examples/fullstack/vite.config.ts
+```
+
+Generate `.memoized/server-functions.d.ts`, `server-config.d.ts`, and route
+declarations from the configured source graph without a production build.
+Declarations that are no longer needed are removed by the normal generators;
+unchanged declarations retain their timestamps. This uses the configured Vite
+resolution (including aliases and resolver plugins) and graph/declaration hooks.
+It does not start a dev server, execute the application or its services, launch
+the selected backend/Worker host, optimize dependencies, or emit bundles.
+Configuration/graph failures exit nonzero instead of being hidden.
+
+For a Bun application, keep type generation ahead of the type checker:
+
+```json
+{
+  "scripts": {
+    "typecheck": "memoized-dom types && bun check"
+  }
+}
+```
+
+Development and production builds still refresh these declarations automatically.
+Use `types` for clean-clone/editor/CI setup when you do not need either server or
+bundles. In this repository, run `bun install`, then `bun run build` once to build
+the workspace packages. `bun run typecheck` then generates the fullstack example's
+declarations before `bun check` and JSX coverage; an example production build is
+not required. Run `types` with each project's config when checking another app.
 
 ## Options
 
