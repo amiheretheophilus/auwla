@@ -9,6 +9,23 @@ import type { LiveStamp } from './live';
 const encoder = new TextEncoder();
 const MAX_DIFF_WORK = 50_000;
 const escape = (key: string) => key.replace(/~/g, '~0').replace(/\//g, '~1');
+const valuePrefix = 'event: value\ndata: {"value":';
+
+/** Count UTF-8 bytes without allocating an encoded snapshot. */
+function utf8ByteLength(value: string): number {
+  let bytes = value.length;
+  for (let index = 0; index < value.length; index++) {
+    const code = value.charCodeAt(index);
+    if (code < 0x80) continue;
+    if (code < 0x800) { bytes++; continue; }
+    bytes += 2;
+    if (code >= 0xd800 && code <= 0xdbff) {
+      const next = value.charCodeAt(index + 1);
+      if (next >= 0xdc00 && next <= 0xdfff) index++;
+    }
+  }
+  return bytes;
+}
 
 export function encodeLiveFrame(event: string, data: unknown): Uint8Array {
   const json = JSON.stringify(data);
@@ -120,16 +137,23 @@ export class LivePatchEncoder {
     const confirmed = JSON.parse(json) as LiveJsonValue;
     const seq = this.sequence + 1;
     if (!Number.isSafeInteger(seq)) throw new Error('Live patch sequence exhausted');
-    const snapshot = encodeLiveFrame('value', { value: confirmed, stamp, seq });
-    let output = snapshot;
+    // Reuse the serialized value instead of stringifying the whole baseline again.
+    // Only metadata is serialized here; the full frame is built if it is selected.
+    const suffix = `,${JSON.stringify({ stamp, seq }).slice(1)}\n\n`;
+    let output: Uint8Array | undefined;
     if (this.baseline !== undefined) {
       const patch = difference(this.baseline, confirmed);
       if (patch !== null) {
         // Even an empty patch carries its new confirmation cursor and sequence.
         const candidate = encodeLiveFrame('patch', { base: this.sequence, seq, patch, stamp });
-        if (candidate.byteLength < snapshot.byteLength) output = candidate;
+        // UTF-16 length is a lower bound for UTF-8 size. Small patches normally
+        // win immediately, without scanning or encoding the full JSON value.
+        const minimumSize = valuePrefix.length + json.length + suffix.length;
+        if (candidate.byteLength < minimumSize || candidate.byteLength <
+          valuePrefix.length + utf8ByteLength(json) + utf8ByteLength(suffix)) output = candidate;
       }
     }
+    output ??= encoder.encode(`${valuePrefix}${json}${suffix}`);
     this.baseline = confirmed;
     this.sequence = seq;
     return output;

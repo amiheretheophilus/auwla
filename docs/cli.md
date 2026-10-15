@@ -148,6 +148,23 @@ memoized-dom dev --config examples/fullstack/vite.cloudflare.config.ts
 
 Only the selected configuration changes; the command shape stays the same.
 
+## Working on the framework repository
+
+From a fresh checkout, run:
+
+```sh
+bun install
+bun run build
+bun run typecheck
+```
+
+The repository's `types` and example scripts invoke `node packages/vite/dist/cli.js`
+directly. During the first install that file has not been built yet, so the
+package manager may not create a `memoized-dom` bin link. Direct invocation avoids
+depending on that link; no second install is required after building. It still
+uses the same CLI runtime selection. Installed application packages keep using
+the normal `memoized-dom dev`, `build`, and `types` commands shown above.
+
 ## Browser cannot connect while the server is running
 
 Check DevTools' Network dropdown. Chrome's **Offline** setting blocks requests

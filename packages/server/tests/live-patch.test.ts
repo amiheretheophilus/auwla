@@ -1,6 +1,6 @@
-import { describe, expect, it } from 'bun:test';
+import { describe, expect, it, spyOn } from 'bun:test';
 import { applyLivePatch, type LiveJsonValue } from '@memoized-dom/data/internal';
-import { LivePatchEncoder } from '../src/live-patch';
+import { encodeLiveFrame, LivePatchEncoder } from '../src/live-patch';
 
 const stamp = (revision: number) => ({ epoch: 'server', key: '["notes"]', revision });
 const padding = '🪐'.repeat(300);
@@ -10,6 +10,72 @@ function decode(bytes: Uint8Array) {
 }
 
 describe('automatic live GET patch encoding', () => {
+  it('serializes the payload once and never encodes the discarded full snapshot when a small patch wins', () => {
+    const encoder = new LivePatchEncoder();
+    const before = { rows: Array.from({ length: 5000 }, (_, id) => ({ id, text: `Note ${id}` })) };
+    encoder.encode(before, stamp(0));
+    const after = structuredClone(before); after.rows[2500]!.text = 'edited';
+    const serialization = spyOn(JSON, 'stringify');
+    const encoding = spyOn(TextEncoder.prototype, 'encode');
+    let bytes: Uint8Array;
+    try {
+      bytes = encoder.encode(after, stamp(1));
+      const serialized = serialization.mock.calls.map(call => call[0]);
+      const encoded = encoding.mock.calls.map(call => call[0]);
+      expect(serialized.filter(value => value === after)).toHaveLength(1);
+      expect(serialized.some(value => value !== null && typeof value === 'object' &&
+        Object.hasOwn(value, 'value') && Object.hasOwn(value, 'seq'))).toBe(false);
+      expect(encoded).toHaveLength(1);
+      expect(encoded[0]!.startsWith('event: patch\n')).toBe(true);
+    } finally { serialization.mockRestore(); encoding.mockRestore(); }
+    const update = decode(bytes!);
+    expect(applyLivePatch(before, update.data.patch)).toEqual(after);
+  });
+
+  it('selects the strictly smaller UTF-8 frame across Unicode size boundaries and exact ties', () => {
+    let unicodeWins = 0, ties = 0;
+    for (const character of ['a', 'é', '中', '🪐', '\ud800', '\udc00', '"\n\\']) {
+      for (let length = 0; length < 100; length++) {
+        const encoder = new LivePatchEncoder();
+        const before = { count: 0, padding: character.repeat(length) };
+        const after = { ...before, count: 1 };
+        const cursor = { epoch: 'server🪐', key: '["nœtes","中文"]', revision: 1 };
+        encoder.encode(before, stamp(0));
+        const snapshot = encodeLiveFrame('value', { value: after, stamp: cursor, seq: 2 });
+        const patch = encodeLiveFrame('patch', { base: 1, seq: 2,
+          patch: [{ op: 'replace', path: '/count', value: 1 }], stamp: cursor });
+        if (patch.byteLength === snapshot.byteLength) ties++;
+        if (patch.byteLength < snapshot.byteLength && new TextDecoder().decode(patch).length >=
+          new TextDecoder().decode(snapshot).length) unicodeWins++;
+        const actual = encoder.encode(after, cursor);
+        expect(actual).toEqual(patch.byteLength < snapshot.byteLength ? patch : snapshot);
+      }
+    }
+    expect(unicodeWins).toBeGreaterThan(0);
+    expect(ties).toBeGreaterThan(0);
+  });
+
+  it('preserves one-pass JSON normalization when snapshotting getters, toJSON, and escaped values', () => {
+    const encoder = new LivePatchEncoder();
+    let reads = 0, conversions = 0;
+    const value = {
+      toJSON(key: string) {
+        conversions++; expect(key).toBe('');
+        return { get count() { reads++; return reads; }, padding, omitted: undefined,
+          date: new Date('2026-01-01'), numbers: [NaN, Infinity, -0], text: '🪐\ud800\n"\\' };
+      },
+    };
+    const initial = decode(encoder.encode(value, stamp(0)));
+    expect(conversions).toBe(1); expect(reads).toBe(1);
+    expect(initial.event).toBe('value');
+    expect(initial.data.value).toEqual({ count: 1, padding, date: '2026-01-01T00:00:00.000Z',
+      numbers: [null, null, 0], text: '🪐\ud800\n"\\' });
+    const update = decode(encoder.encode(value, stamp(1)));
+    expect(conversions).toBe(2); expect(reads).toBe(2);
+    expect(update.event).toBe('patch');
+    expect(applyLivePatch(initial.data.value, update.data.patch)).toEqual({ ...initial.data.value, count: 2 });
+  });
+
   it('starts full and sends only a changed overview field when smaller', () => {
     const encoder = new LivePatchEncoder();
     const before = [{ id: 'one', notes: 0, description: padding }, { id: 'two', notes: 2, description: padding }];

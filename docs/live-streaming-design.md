@@ -425,6 +425,12 @@ This internal subset is not an author-facing general-purpose patch API.
 
 The server compares complete UTF-8 frame sizes, including metadata. It sends a
 patch only when it is strictly smaller; otherwise it sends another full snapshot.
+The payload is serialized once for normalization, and that JSON is reused if a
+snapshot is selected. A winning patch does not require constructing or UTF-8
+encoding a discarded full snapshot. Small patches can be selected from a safe
+size lower bound; close comparisons count exact UTF-8 bytes without allocating
+the full snapshot buffer. Unicode content and equal-size ties retain the same
+selection rule.
 Diff work is bounded to 50,000 work units, 128 operations, and 64 path segments.
 Exceeding a bound falls back to the full snapshot. Arrays first align structurally
 equal prefixes and suffixes; only their changed middle is diffed. This keeps a
@@ -500,7 +506,9 @@ normal case; reconnect and baseline recovery are explicit exceptions.
 ### What this does not optimize
 
 Patches reduce wire payload size, not query execution time. The server still
-performs its read, JSON normalization, and bounded comparison. Private baselines
+performs its read, JSON normalization, and bounded comparison. Avoiding redundant
+snapshot serialization/encoding does not remove those full-value costs, and the
+diff work budget does not bound query time or serialization cost. Private baselines
 and detached visible values also have memory/copying costs; this is not a promise
 of lower CPU or rendering cost. Each connection still owns its query evaluation,
 baseline, and encoding work. Costs therefore grow with subscribers and result

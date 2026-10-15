@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, stat, symlink, writeFile } from 'node:fs/promises';
 import { spawn, type ChildProcess } from 'node:child_process';
 import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -88,6 +88,34 @@ async function origin(log: ReturnType<typeof launch>, runtime: string): Promise<
 }
 
 describe('consistent CLI launcher', () => {
+  it('runs the repository type-generation script without an install-created local CLI shim', async () => {
+    const manifest = JSON.parse(await readFile(join(repository, 'package.json'), 'utf8'));
+    expect(manifest.scripts.types).toBe('node packages/vite/dist/cli.js types --config examples/fullstack/vite.config.ts');
+    for (const script of Object.values(manifest.scripts) as string[]) {
+      expect(script).not.toMatch(/\bmemoized-dom\s+(?:dev|build|types)\b/);
+    }
+    const root = await project('browser');
+    await mkdir(join(root, 'packages/vite'), { recursive: true });
+    await symlink(join(repository, 'packages/vite/dist'), join(root, 'packages/vite/dist'), 'junction');
+    await mkdir(join(root, 'examples/fullstack'), { recursive: true });
+    await writeFile(join(root, 'examples/fullstack/vite.config.ts'), "export { default } from '../../vite.config.mts';");
+    await writeFile(join(root, 'package.json'), JSON.stringify({ type: 'module', scripts: { types: manifest.scripts.types } }));
+    await writeFile(join(root, 'src/App.tsx'), 'export function App() { return <main route="/fresh">Fresh checkout</main>; }');
+    expect(existsSync(join(root, 'node_modules/.bin/memoized-dom'))).toBe(false);
+    child = spawn('bun', ['run', 'types'], {
+      cwd: root, stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true,
+    });
+    let output = '';
+    child.stdout!.on('data', chunk => { output += chunk.toString(); });
+    child.stderr!.on('data', chunk => { output += chunk.toString(); });
+    child.on('error', error => { output += String(error); });
+    await waitFor(() => expect(child!.exitCode, output).toBe(0), 30_000);
+    expect(output).toContain('project types generated');
+    expect(await readFile(join(root, '.memoized/routes.d.ts'), 'utf8')).toContain('/fresh');
+    expect(existsSync(join(root, 'node_modules/.bin/memoized-dom'))).toBe(false);
+    expect(existsSync(join(root, 'dist'))).toBe(false);
+  }, 60_000);
+
   it.each(['node', 'bun'] as const)('generates project types from %s without starting a backend or emitting bundles', async caller => {
     const root = await project('node');
     await mkdir(join(root, 'server/functions'), { recursive: true });
