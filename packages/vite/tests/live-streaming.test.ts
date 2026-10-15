@@ -50,6 +50,7 @@ it.skipIf(!chrome)('automatically synchronizes Fieldnotes and protects multiple 
   await probeReader.cancel();
   const browser = await puppeteer.launch({ executablePath: chrome, headless: true });
   const errors: string[] = [];
+  const diagnostics: string[] = [];
   const pages: Page[] = [];
   let wireReader: ReadableStreamDefaultReader<Uint8Array> | undefined;
   try {
@@ -58,6 +59,9 @@ it.skipIf(!chrome)('automatically synchronizes Fieldnotes and protects multiple 
     pages.push(writer, viewer);
     for (const page of [writer, viewer]) {
       page.on('pageerror', error => errors.push(String(error)));
+      page.on('console', message => {
+        if (message.text().startsWith('[memoized-dom:live]')) diagnostics.push(message.text());
+      });
     }
     const liveRequests: string[] = [];
     const cancelledStreams: string[] = [];
@@ -168,6 +172,10 @@ it.skipIf(!chrome)('automatically synchronizes Fieldnotes and protects multiple 
     await viewer.waitForFunction(() => document.querySelectorAll('li.note').length === 1, { timeout: 15_000, polling: 100 });
     expect(await viewer.$eval('[data-note-count]', element => element.textContent)).toContain('1 notes');
     expect(errors, log).toEqual([]);
+    expect(diagnostics.some(message => message.includes('snapshot-held'))).toBe(true);
+    expect(diagnostics.some(message => message.includes('snapshot-applied'))).toBe(true);
+    expect(diagnostics.some(message => message.includes('missing-mutation-confirmation'))).toBe(false);
+    expect(log).toContain('[memoized-dom:live] invalidate');
   } catch (error) {
     const snapshots = await Promise.all(pages.map(page => bounded(page.evaluate(() => ({
       status: document.querySelector('[data-live-status]')?.textContent,

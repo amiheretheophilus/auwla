@@ -1,6 +1,6 @@
 import { $read } from '@memoized-dom/data';
 import type { FetchResource, RequestError, ResolvedValue } from '@memoized-dom/data';
-import { disposeFetchResource, isFetchResource, subscribeFetchResource, trackResolvedValue, protectLiveSources } from '@memoized-dom/data/internal';
+import { disposeFetchResource, isFetchResource, subscribeFetchResource, trackResolvedValue, protectLiveSources, liveDiagnosticsEnabled, reportLiveDiagnostic } from '@memoized-dom/data/internal';
 
 type OperationResult =
   | PromiseLike<unknown>
@@ -61,6 +61,15 @@ export function optimistic<TPayload, TResult extends OperationResult>(
     };
   };
   const groups = new Map<string | number, Group>();
+  const reconcile = (saved: SettledResult<TResult>, payload: TPayload, operationId: string): void => {
+    try { options.reconcile?.(saved, payload, operationId); }
+    catch (error) {
+      if (liveDiagnosticsEnabled()) reportLiveDiagnostic('optimistic-callback-failed', {
+        phase: 'reconcile', operationId, error,
+      }, 'warn');
+      throw error;
+    }
+  };
 
   return (payload, callOptions) => {
     const releaseSource = protectLiveSources(options.source);
@@ -80,7 +89,7 @@ export function optimistic<TPayload, TResult extends OperationResult>(
       groups.delete(id);
       const latest = group.latestSuccess;
       if (latest !== undefined) {
-        options.reconcile?.(latest.saved, latest.payload, latest.operationId);
+        reconcile(latest.saved, latest.payload, latest.operationId);
       }
     };
 
@@ -140,7 +149,7 @@ export function optimistic<TPayload, TResult extends OperationResult>(
         finish();
         try {
           if (group === undefined) {
-            options.reconcile?.(saved as SettledResult<TResult>, payload, operationId);
+            reconcile(saved as SettledResult<TResult>, payload, operationId);
           } else {
             if (group.latestSuccess === undefined || order > group.latestSuccess.order) {
               group.latestSuccess = {
@@ -159,6 +168,11 @@ export function optimistic<TPayload, TResult extends OperationResult>(
         finish();
         try {
           rollback(error);
+        } catch (callbackError) {
+          if (liveDiagnosticsEnabled()) reportLiveDiagnostic('optimistic-callback-failed', {
+            phase: 'rollback', operationId, error: callbackError,
+          }, 'warn');
+          throw callbackError;
         } finally {
           try { releaseGroup(); } finally { releaseSource(); }
         }

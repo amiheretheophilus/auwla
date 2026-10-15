@@ -7,6 +7,8 @@ the authoring design and now describes the implementation and its boundaries.
 Invalidation is application-instance-local; it is not a distributed database feed.
 Cross-instance support is [under discussion](./live-adapters-discussion.md);
 no adapter API has been selected or implemented.
+For resolved keys, pending holds, rejected snapshots, and missing mutation
+confirmations, see [development diagnostics](./live-diagnostics.md).
 
 ## What this adds
 

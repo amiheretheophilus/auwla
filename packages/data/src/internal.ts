@@ -3,6 +3,7 @@ export { createStreamingSource } from './streaming';
 export { applyLivePatch, LIVE_PATCH_MAX_DEPTH, LIVE_PATCH_MAX_OPERATIONS } from './live-patch';
 export type { LiveJsonValue, LivePatchOperation } from './live-patch';
 export { protectLiveSources } from './source-protection';
+export { liveDiagnosticsEnabled, reportLiveDiagnostic } from './live-diagnostics';
 export { nextDataRuntimeSettlement } from './runtime-lifetime';
 export {
   disposeFetchResource,

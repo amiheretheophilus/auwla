@@ -45,6 +45,12 @@ replays callbacks. See the self-contained
 [streaming guide](../../docs/live-streaming-design.md#optimistic-authoring-preserve-callbacks-associate-the-source)
 for full examples and the delivery contract.
 
+Development diagnostics explain pending holds, missing mutation confirmations,
+and exceptions from reconciliation/rollback without changing this API. Plain
+promises remain supported; when protecting live sources they do not carry the
+generated server function's acknowledgement guarantee. See
+[debugging live and optimistic updates](../../docs/live-diagnostics.md).
+
 ## Grouping repeated updates by ID
 
 Pass an optional second argument on each invocation:
