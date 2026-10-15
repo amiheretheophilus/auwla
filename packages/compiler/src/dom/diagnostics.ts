@@ -3,7 +3,7 @@ import type * as t from '../ast/compiler-types';
 import * as astFactory from '../ast/factory';
 import { cloneNode, isReferenceIdentifier, walkAst } from '../ast';
 import type { DomContext } from './context';
-import { componentId, mdTrace } from './identifiers';
+import { componentId, md, mdTrace } from './identifiers';
 import type { ScopeWrites } from '../handlers/write-facts';
 import type { RowCtx } from './row-context';
 
@@ -31,6 +31,7 @@ export function traceDomWrite(
 }
 
 export function traceHandler(ctx: DomContext, owner: t.Expression, type: string, handler: t.Expression): t.Expression {
+  if (ctx.scopedEvents) handler = astFactory.callExpression(md(ctx,'bindRuntimeCallback'), [handler]);
   return ctx.diagnostics ? astFactory.callExpression(mdTrace(ctx, 'traceEvent'), [
     cloneNode(owner), astFactory.stringLiteral(type), handler,
   ]) : handler;

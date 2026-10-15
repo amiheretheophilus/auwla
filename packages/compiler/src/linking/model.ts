@@ -34,6 +34,8 @@ export interface CompileModulesOptions
    * A host predicate can validate its shell before emission. Direct JS entries omit this.
    */
   initialContent?: boolean | ((plan: InitialRenderPlan, delivery: InitialDelivery | undefined) => boolean);
+  /** Internal server-page root inputs are available before rendering starts. */
+  pageCaptureCount?: number;
 }
 
 export interface StateExport {

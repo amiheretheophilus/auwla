@@ -1,5 +1,5 @@
 /** Public compiler package entry. */
-export { extractServerPages, type ExtractedServerPage, type ExtractedServerPages, type ServerPageExtractionOptions } from './server-pages';
+export { extractServerPages, type ExtractedServerPage, type ExtractedServerPages, type ServerPageExtractionOptions, type ServerPageImport } from './server-pages';
 export type { InitialDelivery } from './dom/delivery-plan';
 
 export {
@@ -69,3 +69,4 @@ export type { CompilerRoutedPreparation } from './routed';
 export type { ExternalReactiveSourceDefinition } from './context';
 export type { InitialRenderNode, InitialRenderAttribute, InitialRenderPlan, BrowserRequirement } from './planning/initial-content';
 export { emitInitialHtml } from './dom/initial-html';
+export { compileServerPage } from './page-compiler';

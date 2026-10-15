@@ -7,7 +7,7 @@ import {
   type BaseNode,
   type EstreeFrontend,
 } from './ast';
-import { unwrapTypeExpression } from './context';
+import { unwrapTypeExpression, nodeHasJsx } from './context';
 import { compilerError } from './errors';
 
 export type ServerFunctionMethod =
@@ -41,6 +41,7 @@ export interface ServerFunctionDefinition {
   readonly schemaInput: boolean;
   readonly live?: true;
   readonly generator?: true;
+  readonly page?: true;
   readonly parameters: readonly ServerFunctionParameter[];
 }
 
@@ -456,6 +457,7 @@ export function analyzeServerFunctionModule(
       schemaInput: binding.schemaInput,
       ...(binding.live ? { live: true as const } : {}),
       ...(binding.node.generator ? { generator: true as const } : {}),
+      ...(nodeHasJsx(binding.node) ? { page:true as const } : {}),
       parameters: parametersFor(
         binding.node,
         binding.method,
@@ -490,11 +492,21 @@ export function generateServerFunctionClient(
   if (module.functions.some(fn => fn.live || fn.generator)) {
     lines.push(`import { createStreamingSource as __mmd_stream } from ${JSON.stringify(dataModule + '/internal')};`);
   }
+  if (module.functions.some(fn => fn.page)) lines.push(`import { createPageSource as __mmd_page } from ${JSON.stringify(dataModule + '/internal')};`,
+    `import { loadPageBinding as __mmd_pageBinding } from 'virtual:memoized-dom/page-bindings';`);
   for (const fn of module.functions) {
     const parameters = fn.parameters.map(parameter => parameter.name).join(', ');
     const entries = fn.parameters.map(parameter => parameter.name).join(', ');
     const fetcher = fn.live || fn.generator ? '__mmd_stream' : '__mmd_fetch';
     const stream = fn.live ? 'live' : 'generator';
+    if (fn.page) {
+      if (fn.generator) throw new Error('memo-dom: page() generator results are not supported');
+      const options = fn.method === 'GET'
+        ? fn.parameters.length === 0 ? '{}' : fn.schemaInput ? `{query:{input:JSON.stringify(${parameters})}}` : `{query:{${entries}}}`
+        : `{method:${JSON.stringify(fn.method)}${fn.parameters.length === 0 ? '' : fn.schemaInput ? `,body:JSON.stringify(${parameters}),headers:{'content-type':'application/json'}` : `,body:{${entries}}`}}`;
+      lines.push(`export function ${fn.exported}(${parameters}) { return __mmd_page(${JSON.stringify(fn.path)}, ${options}, ${fn.live ? '"live"' : 'undefined'}, __mmd_pageBinding); }`);
+      continue;
+    }
     if (fn.live || fn.generator) {
       const options = fn.method === 'GET'
         ? (fn.parameters.length === 0 ? '{}' : fn.schemaInput ? `{ query: { input: JSON.stringify(${parameters}) } }` : `{ query: { ${entries} } }`)

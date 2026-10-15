@@ -1,0 +1,47 @@
+/** Only compiler-proved primitive leaves cross the page binding boundary. */
+export function projectPageInputs(inputs: readonly unknown[], paths: readonly (readonly (string | number)[])[]): readonly unknown[] {
+  interface Selection { leaf?: true; children: Map<string | number, Selection> }
+  const selection: Selection = {children:new Map()};
+  for (const path of paths) {
+    let node = selection;
+    for (const key of path) {
+      if (key === '__proto__' || key === 'prototype' || key === 'constructor') throw new TypeError('memo-dom: unsafe page input path');
+      let child = node.children.get(key);
+      if (!child) node.children.set(key,child={children:new Map()});
+      node = child;
+    }
+    node.leaf = true;
+  }
+  function project(value: unknown, node: Selection): unknown {
+    if (value === null || value === undefined) return value;
+    if (node.leaf) {
+      if (typeof value === 'object' || typeof value === 'function' || typeof value === 'symbol' || typeof value === 'bigint') {
+        throw new TypeError('memo-dom: page bindings require explicit serializable fields, not whole objects or server closures');
+      }
+      if (typeof value === 'number' && !Number.isFinite(value)) throw new TypeError('memo-dom: non-finite page binding input');
+      return value;
+    }
+    if (typeof value !== 'object') throw new TypeError('memo-dom: page binding input shape does not match its compiled projection');
+    if (Array.isArray(value)) {
+      const output = new Array(value.length).fill(null);
+      const row = node.children.get('*');
+      if (row) for (let index=0; index<value.length; index++) output[index]=project(value[index],row);
+      for (const [key,child] of node.children) if (key !== '*' && key !== 'length') {
+        const index = Number(key);
+        if (!Number.isInteger(index) || index < 0 || index >= value.length) throw new TypeError('memo-dom: invalid page array projection');
+        output[index] = project(value[index],child);
+      }
+      return output;
+    }
+    const prototype = Object.getPrototypeOf(value);
+    if (prototype !== Object.prototype && prototype !== null) throw new TypeError('memo-dom: services and class instances cannot be page binding inputs');
+    const output: Record<string, unknown> = Object.create(null);
+    for (const [key,child] of node.children) {
+      const descriptor = Object.getOwnPropertyDescriptor(value,key);
+      if (descriptor && !('value' in descriptor)) throw new TypeError('memo-dom: page inputs cannot invoke getters');
+      output[String(key)]=project(descriptor?.value,child);
+    }
+    return output;
+  }
+  return project(inputs,selection) as readonly unknown[];
+}

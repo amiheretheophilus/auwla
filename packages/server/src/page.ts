@@ -20,8 +20,12 @@ export async function renderServerPage(
 ): Promise<ServerPageRender> {
   if (!isServerPage(page)) throw new TypeError('Expected a compiled server page');
   const component: ServerComponent = (id, parent) => page.create(id, parent);
-  registerRootFactory(component, { id: page.id, create: () => component(page.id, null) });
-  const result = await render(component, { ...options, mode: 'resolve', markers: false });
+  registerRootFactory(component, { id: page.id, create: () => component(page.id, null),
+    ...(page.delivery ? {initialDelivery:page.delivery} : {}),
+  });
+  const result = await render(component, { ...options, mode: 'resolve', markers: false,
+    ...(page.delivery ? {initialKey:page.delivery.key} : {}),
+  });
   if (result.settlement.status === 'timeout') {
     throw new DOMException('Server page did not settle before its timeout', 'TimeoutError');
   }

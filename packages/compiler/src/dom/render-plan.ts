@@ -48,6 +48,7 @@ export function planInitialRendering(
   root: { readonly mountModuleId: string; readonly moduleId: string; readonly local: string } | undefined,
   resolveImport: (importer: string, specifier: string) => string | undefined,
   runtimePath: string,
+  pageCaptureCount?: number,
 ): InitialRenderPlan {
   function need(scope: Scope, detail: string, kind: BrowserRequirement['kind'] = 'unknown'): never {
     throw new NeedsBrowser({ moduleId: scope.moduleId, kind, detail });
@@ -58,7 +59,7 @@ export function planInitialRendering(
   const analyses = new Map<string, ScopeAnalysis>();
   let mixed = false;
   let bindings = false;
-  let request = false;
+  let request = pageCaptureCount !== undefined;
   let requestReads = false;
   let bindingEvents = false;
   let bindingEventCount = 0;
@@ -301,6 +302,7 @@ export function planInitialRendering(
         const name = nodeField(node, 'computed')
           ? primitive(expression(childNode(node, 'property'), scope), scope)
           : identifierLikeName(childNode(node, 'property'));
+        if (object !== null && typeof object === 'object' && object.kind === 'array' && typeof name === 'number' && Number.isInteger(name)) return object.items[name];
         if (object === null || typeof object !== 'object' || object.kind !== 'object' || typeof name !== 'string') {
           return need(scope, 'Member reads outside closed props need browser execution');
         }
@@ -493,7 +495,9 @@ export function planInitialRendering(
           ? undefined : { kind: 'object', fields: props, props: true, live }, scope);
       } else {
         for (let index = 0; index < params.length; index++) {
-          bind(params[index]!, rootCall ? undefined : props.get(shape.names[index]!), scope);
+          bind(params[index]!, rootCall ? pageCaptureCount !== undefined && index === 0
+            ? { kind: 'array', items: Array.from({length:pageCaptureCount}, () => availableRequestValue) } : undefined
+            : props.get(shape.names[index]!), scope);
           if (live.has(shape.names[index]!)) markLive(params[index]!,scope);
         }
       }
@@ -777,7 +781,7 @@ export function planInitialRendering(
 
   if (!root) return { kind: 'browser', requirements: [{ moduleId: '', kind: 'unknown', detail: 'No single application root' }] };
   function plan(): InitialRenderPlan {
-    owners.clear();ownerSiteCount=0;bindingEvents=false;bindingEventCount=0;requestReads=false;
+    owners.clear();ownerSiteCount=0;bindingEvents=false;bindingEventCount=0;requestReads=pageCaptureCount !== undefined;
     module(root!.mountModuleId);
     const component = module(root!.moduleId).values.get(root!.local);
     if (!target || component === null || typeof component !== 'object' || component.kind !== 'component') {

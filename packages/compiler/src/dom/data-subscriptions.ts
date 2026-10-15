@@ -124,11 +124,12 @@ export function subscribeTransparentStructuralSite(
   scope: EmitScope,
   expression: t.Expression,
   entityId: t.Expression,
+  sources: readonly string[] = transparentExpressionSources(expression),
 ): void {
   subscribeTransparentEntity(
     ctx,
     scope,
-    transparentExpressionSources(expression),
+    sources,
     entityId,
   );
 }

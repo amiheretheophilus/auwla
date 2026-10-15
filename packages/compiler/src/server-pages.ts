@@ -23,6 +23,10 @@ export interface ServerPageExtractionOptions {
   readonly componentModule?: string;
   /** Host-resolved re-exports of the framework page helper, never name guesses. */
   readonly pageImports?: readonly ServerPageImport[];
+  /** Hosts wrap remote roots so the existing initial binding proof can bind fragments too. */
+  readonly wrap?: boolean;
+  /** Compiler-owned delivery metadata, supplied only after linking each page graph. */
+  readonly delivery?: Readonly<Record<string, { key: string; paths: readonly (readonly (string | number)[])[]; browser: 'none' | 'bindings' }>>;
 }
 
 export interface ExtractedServerPage {
@@ -122,7 +126,8 @@ export function extractServerPages(source: string, options: ServerPageExtraction
       f.blockStatement([
         ...(captured.length ? [f.variableDeclaration('const', captured.map((name, index) =>
           f.variableDeclarator(f.identifier(name), f.memberExpression(f.identifier(inputs), f.numericLiteral(index), true))))] : []),
-        f.returnStatement(cloneNode(input)),
+        f.returnStatement(options.wrap ? f.jsxElement(f.jsxOpeningElement(f.jsxIdentifier('div'), [], false),
+          {type:'JSXClosingElement',name:f.jsxIdentifier('div')}, [cloneNode(input)]) : cloneNode(input)),
       ])));
     const root = fresh('__pageId');
     const parent = fresh('__pageParent');
@@ -134,6 +139,13 @@ export function extractServerPages(source: string, options: ServerPageExtraction
           ...(captured.length ? [f.arrayExpression([f.identifier(values)])] : []),
         ])),
       f.arrayExpression(captured.map(name => f.identifier(name))),
+      ...(options.wrap ? [options.delivery?.[component]
+        ? f.objectExpression([
+          f.objectProperty(f.identifier('key'), f.stringLiteral(options.delivery[component]!.key)),
+          f.objectProperty(f.identifier('browser'), f.stringLiteral(options.delivery[component]!.browser)),
+          f.objectProperty(f.identifier('paths'), f.arrayExpression(options.delivery[component]!.paths.map(path => f.arrayExpression(path.map(part =>
+            typeof part === 'number' ? f.numericLiteral(part) : f.stringLiteral(part)))))),
+        ]) : f.nullLiteral(), f.booleanLiteral(true)] : []),
     ]);
     overwriteNode(raw, replacement as unknown as BaseNode);
     pages.push({ id, component, captures: captured });

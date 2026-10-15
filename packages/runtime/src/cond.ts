@@ -28,7 +28,7 @@ export interface CondEntry {
   dispose?: () => void;
 }
 
-export type CondBranchFactory = (adoptingInitial?: boolean) => CondEntry;
+export type CondBranchFactory = (adoptingInitial?: boolean, hydrating?: boolean) => CondEntry;
 
 export interface CondRegion {
   /** Re-pick and re-render: same branch → guarded update; swap → rebuild. */
@@ -125,7 +125,7 @@ export function createCondRegion(
     let factoryError: unknown;
     let factoryFailed = false;
     try {
-      if (factory !== null) entry = bindingInitial ? factory(true) : factory();
+      if (factory !== null) entry = factory(bindingInitial ? true : undefined, adopting);
     } catch (error) {
       factoryFailed = true;
       factoryError = error;

@@ -9,6 +9,7 @@ import type { CompilerRouteDefinition, CompilerRouteElement } from '../analysis/
 import type { PresentationOwner } from '../planning/presentation-ownership';
 
 export const DEFAULT_TRANSPARENT_ASYNC_SOURCES: readonly TransparentAsyncSourceDefinition[] = [
+  { module:'@memoized-dom/data/internal', source:'createPageSource' },
   {
     module: '@memoized-dom/data/internal',
     source: 'createStreamingSource',
@@ -66,6 +67,7 @@ export interface MemoDomOptions {
   hot?: boolean;
   /** Emit optional development event/binding/DOM traces; off in production output. */
   diagnostics?: boolean;
+  scopedEvents?: boolean;
   /**
    * Stable identity for this source module. Defaults to `./component.tsx`.
    * Module-state keys are always `<moduleId>#<binding>[.<path>]`.
@@ -407,6 +409,7 @@ export interface Ctx {
   rootComponent: string | null;
   hot: boolean;
   diagnostics: boolean;
+  scopedEvents: boolean;
   /** SSR Phase 1.3 lowering: lower reactive module state into request cells. */
   moduleStateCells: boolean;
   ssrWriter: boolean;
@@ -734,6 +737,7 @@ export function createAnalysisCtx(opts: AnalysisOptions = {}): Ctx {
     rootComponent: opts.rootComponent ?? null,
     hot: opts.hot ?? false,
     diagnostics: opts.diagnostics ?? false,
+    scopedEvents: opts.scopedEvents ?? false,
     renderableContent: opts.renderableContent ?? false,
     moduleStateCells: opts.moduleStateCells ?? false,
     ssrWriter: opts.ssrWriter ?? false,

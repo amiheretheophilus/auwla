@@ -3,9 +3,9 @@ import { createCondRegion } from './cond';
 import { getActiveEnvironment } from './kernel';
 import { isPageContent, pageBinder, type PageBindingHandle } from './page-content';
 import { textValue } from './setters';
+import { HydrationMismatchError } from './hydration-error';
 
 export function createContentRegion(parent: Node, id: string, read: () => unknown) {
-  const environment = getActiveEnvironment();
   let value: unknown;
   let binding: PageBindingHandle | undefined;
   let active: unknown;
@@ -21,11 +21,13 @@ export function createContentRegion(parent: Node, id: string, read: () => unknow
     }
     identity = value;
     return value == null || typeof value === 'boolean' ? -1 : 0;
-  }, [() => {
+  }, [(_adoptingInitial, hydrating) => {
+    const environment = getActiveEnvironment();
     active = value;
     let nodes: Node[];
-    if (environment.hydration?.claimOpaqueContent) {
+    if (hydrating && environment.hydration?.claimOpaqueContent) {
       nodes = environment.hydration.claimOpaqueContent();
+      if (isPageContent(value) && value.html && nodes.length === 0) throw new HydrationMismatchError(id,'server-owned HTML','an empty range');
     } else if (isPageContent(value)) {
       const document = environment.document;
       if (document.htmlWriter) { const html = value.html; nodes = [document.htmlWriter.create(() => html)]; }
@@ -38,7 +40,7 @@ export function createContentRegion(parent: Node, id: string, read: () => unknow
     if (isPageContent(value) && value.binding && !environment.mode.startsWith('server-')) {
       const bind = pageBinder(value.binding.key);
       if (!bind || nodes.length !== 1 || nodes[0]?.nodeType !== 1) {
-        throw new Error('memo-dom: server page binding contract is unavailable or has an invalid root');
+        throw new Error(`memo-dom: server page binding contract is unavailable or has an invalid root (binding=${Boolean(bind)}, roots=${nodes.map(node=>node.nodeName).join(',')})`);
       }
       binding = bind(nodes[0] as Element, value.binding.inputs);
     }

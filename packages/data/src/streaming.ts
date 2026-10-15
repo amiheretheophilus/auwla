@@ -6,6 +6,7 @@ import { RequestError, isAbortError } from './errors';
 import { liveStamp, updateStamps, type LiveStamp } from './live-protocol';
 import { applyLivePatch, type LiveJsonValue } from './live-patch';
 import { decodeResponse } from './request';
+import { validateValue } from './schema';
 import type { FetchEnvironment } from './resource';
 import type { FetchOptions, ResolvedValue } from './types';
 
@@ -82,7 +83,11 @@ function transport(environment: FetchEnvironment): NonNullable<FetchEnvironment[
         }
         return input;
       };
-      const line = (input: string) => {
+      const deliver = async (input: unknown, stamp?: LiveStamp) => {
+        const decoded = descriptor.schema ? await validateValue(descriptor.schema,input) : input;
+        if (!signal.aborted) value(decoded,stamp);
+      };
+      const line = async (input: string) => {
         frameBytes += encoder.encode(input).byteLength + 1;
         if (frameBytes > 1_048_576) throw new StreamProtocolError('Streaming frame exceeds 1 MiB');
         if (input === '') {
@@ -101,11 +106,11 @@ function transport(environment: FetchEnvironment): NonNullable<FetchEnvironment[
               if (sequence !== undefined && nextSequence === sequence + 1) baselineRecoveries = 0;
               sequence = nextSequence;
               baseline = frame.value as LiveJsonValue;
-              value(structuredClone(baseline), stamp);
+              await deliver(structuredClone(baseline), stamp);
             } else {
               // Older servers still deliver complete values without patch negotiation.
               baseline = undefined; sequence = undefined;
-              value(frame.value, stamp);
+              await deliver(frame.value, stamp);
             }
           } else if (event === 'patch') {
             if (descriptor.stream !== 'live') throw new StreamProtocolError('Patches are only supported for live queries');
@@ -118,7 +123,7 @@ function transport(environment: FetchEnvironment): NonNullable<FetchEnvironment[
             catch { throw new StreamProtocolError('Invalid live patch operations'); }
             sequence = seq;
             baselineRecoveries = 0;
-            value(structuredClone(baseline), stamp);
+            await deliver(structuredClone(baseline), stamp);
           } else if (event === 'done') {
             if (!seen) throw new StreamProtocolError('Streaming function did not yield an initial value');
             delivery.updates(updateStamps(JSON.stringify(frame.updates ?? [])));
@@ -142,7 +147,7 @@ function transport(environment: FetchEnvironment): NonNullable<FetchEnvironment[
           while ((newline = buffer.indexOf('\n')) !== -1 && !terminal) {
             const current = buffer.slice(0, newline).replace(/\r$/, '');
             buffer = buffer.slice(newline + 1);
-            line(current);
+            await line(current);
           }
           if (!terminal && frameBytes + encoder.encode(buffer).byteLength > 1_048_576) {
             throw new StreamProtocolError('Streaming frame exceeds 1 MiB');

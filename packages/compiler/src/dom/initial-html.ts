@@ -77,6 +77,11 @@ export function emitInitialHtml(plan: InitialRenderPlan): string | null {
         const mapped = (name === 'htmlFor' ? 'for' : name).toLowerCase();
         if (!/^[a-zA-Z_][\w:.-]*$/.test(mapped)) return null;
         if (value == null) { normalized.delete(mapped); continue; }
+        if (typeof value === 'boolean' && (mapped.startsWith('data-') || mapped.startsWith('aria-'))) {
+          if (value === false && !mapped.startsWith('aria-')) normalized.delete(mapped);
+          else normalized.set(mapped,String(value));
+          continue;
+        }
         if (typeof value !== 'string' && typeof value !== 'number') return null;
         normalized.set(mapped, String(value));
       }

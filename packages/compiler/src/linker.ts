@@ -662,7 +662,7 @@ function compileLinkedModules(
   // Capture initial content before any backend mutates component bodies.
   const initialRender = planInitialRendering(authoredPrograms, applicationRoot,
     (importer, specifier) => resolveModule(importer, specifier, entries, options)?.id,
-    options.runtimePath ?? '@memoized-dom/runtime');
+    options.runtimePath ?? '@memoized-dom/runtime', options.pageCaptureCount);
   const initialHtml = emitInitialHtml(initialRender);
   const requestHtmlShape = initialRender.kind === 'request' &&
     emitInitialHtml({...initialRender,kind:'html'}) !== null;

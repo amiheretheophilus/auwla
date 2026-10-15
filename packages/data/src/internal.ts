@@ -1,5 +1,6 @@
 export { createDataRuntime } from './client';
 export { createStreamingSource } from './streaming';
+export { createPageSource } from './page-source';
 export { applyLivePatch, LIVE_PATCH_MAX_DEPTH, LIVE_PATCH_MAX_OPERATIONS } from './live-patch';
 export type { LiveJsonValue, LivePatchOperation } from './live-patch';
 export { protectLiveSources } from './source-protection';
