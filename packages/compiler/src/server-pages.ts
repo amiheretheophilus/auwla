@@ -154,7 +154,7 @@ export function extractServerPages(source: string, options: ServerPageExtraction
     overwriteNode(raw, replacement as unknown as BaseNode);
     pages.push({ id, component, captures: captured, imports:[...pageImports] });
   }
-  // Do not leave a runtime import of the not-yet-public authoring helper in the
+  // Do not leave a runtime import of the compile-time authoring helper in the
   // implementation. Reject escaping uses rather than accidentally calling it.
   for (const binding of bindings) {
     if (!binding) continue;

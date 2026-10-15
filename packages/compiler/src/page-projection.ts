@@ -3,7 +3,8 @@ import { childNode, childNodes, identifierLikeName, nodeField, parseWithEstreeFr
   memoizedEstreeFrontend, type BaseNode, type EstreeFrontend } from './ast';
 
 type Path = readonly (string | number)[];
-type Value = { path: Path } | { fields: Map<string, Value | undefined> } | undefined;
+type Value = { path: Path } | { fields: Map<string, Value | undefined> } |
+  { callable: {id:string;node:BaseNode;environment:Environment} } | undefined;
 type Environment = Map<string, Value>;
 
 export function pageInputPaths(sources: Readonly<Record<string, string>>, root: string, component: string,
@@ -16,10 +17,11 @@ export function pageInputPaths(sources: Readonly<Record<string, string>>, root: 
   const consume = (value: Value): void => {
     if (!value) return;
     if ('path' in value) paths.set(JSON.stringify(value.path), value.path);
+    else if ('callable' in value) invoke(value.callable.id,value.callable.node,[],value.callable.environment);
     else for (const field of value.fields.values()) consume(field);
   };
   function member(value: Value, key: string | number): Value {
-    return value && ('path' in value ? {path:[...value.path,key]} : value.fields.get(String(key)));
+    return value && ('path' in value ? {path:[...value.path,key]} : 'fields' in value ? value.fields.get(String(key)) : undefined);
   }
   function bind(pattern: BaseNode | null, value: Value, env: Environment): void {
     if (!pattern) return;
@@ -90,9 +92,11 @@ export function pageInputPaths(sources: Readonly<Record<string, string>>, root: 
         else consume(source);
         return;
       }
-      const fn = callee?.type === 'Identifier' ? declaration(id,identifierLikeName(callee)!) : undefined;
+      const local = callee?.type === 'Identifier' ? env.get(identifierLikeName(callee)!) : undefined;
+      const fn = callee?.type === 'Identifier' && !env.has(identifierLikeName(callee)!) ? declaration(id,identifierLikeName(callee)!) : undefined;
       const values = args.map(arg => expression(arg,env,id));
-      if (fn) invoke(fn.id,fn.node,values,env);
+      if (local && 'callable' in local) invoke(local.callable.id,local.callable.node,values,local.callable.environment);
+      else if (fn) invoke(fn.id,fn.node,values);
       else { if (callee?.type === 'MemberExpression') consume(expression(childNode(callee,'object'),env,id)); values.forEach(consume); }
       return;
     }
@@ -114,7 +118,7 @@ export function pageInputPaths(sources: Readonly<Record<string, string>>, root: 
       for (const child of childNodes(node,'children')) visit(child,env,id);
       return;
     }
-    if (['ArrowFunctionExpression','FunctionExpression'].includes(node.type)) { invoke(id,node,[],env); return; }
+    if (['ArrowFunctionExpression','FunctionExpression'].includes(node.type)) return {callable:{id,node,environment:env}};
     for (const [key,value] of Object.entries(node)) {
       if (['loc','range','start','end','type','id','key','property'].includes(key)) continue;
       if (Array.isArray(value)) { for (const item of value) if (item && typeof item === 'object' && 'type' in item) visit(item as BaseNode,env,id); }
@@ -125,7 +129,18 @@ export function pageInputPaths(sources: Readonly<Record<string, string>>, root: 
     if (!node) return;
     if (node.type === 'VariableDeclaration') {
       for (const item of childNodes(node,'declarations')) bind(childNode(item,'id'),expression(childNode(item,'init'),env,id),env);
-    } else if (node.type === 'BlockStatement') for (const item of childNodes(node,'body')) visit(item,env,id);
+    } else if (node.type === 'BlockStatement') {
+      const scope=new Map(env);
+      const statements=childNodes(node,'body');
+      // Keep helpers as lexical closures, including hoisted declarations and
+      // aliases. Read their captured inputs when the handler is consumed, not
+      // before later local declarations have established their origins.
+      for(const item of statements) if(item.type==='FunctionDeclaration') {
+        const name=identifierLikeName(childNode(item,'id'));
+        if(name)scope.set(name,{callable:{id,node:item,environment:scope}});
+      }
+      for (const item of statements) visit(item,scope,id);
+    }
     else if (node.type !== 'FunctionDeclaration') consume(expression(node,env,id));
   }
   const fn = declaration(root,component);

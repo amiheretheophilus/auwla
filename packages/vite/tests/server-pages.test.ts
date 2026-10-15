@@ -23,10 +23,10 @@ it.each(['development','production','development-stream'] as const)('delivers fi
     'server/define.ts':`import {createDefine} from '@memoized-dom/server';export const define=createDefine();export {page} from '@memoized-dom/server';`,
     'server/functions/boards.tsx':`import {define,page} from '../define';import {Board} from '../../Board.tsrx';
       let count=0;
-      export const getBoard=define.function({live:()=>['board'],async get(){const user={name:'Ada',password:'SERVER_SECRET'},subtitle=undefined;return page(<Board count={count} user={user} subtitle={subtitle}/>);}});
-      export const saveBoard=define.function({updates:()=>['board'],async post(){count++;const user={name:'Saved',password:'SERVER_SECRET'},subtitle=undefined;return page(<Board count={count} user={user} subtitle={subtitle}/>);}});
+      export const getBoard=define.function({live:()=>['board'],async get(){const user={name:'Ada',hint:'Event-only',password:'SERVER_SECRET'},subtitle=undefined;return page(<Board count={count} user={user} subtitle={subtitle}/>);}});
+      export const saveBoard=define.function({updates:()=>['board'],async post(){count++;const user={name:'Saved',hint:'Event-only',password:'SERVER_SECRET'},subtitle=undefined;return page(<Board count={count} user={user} subtitle={subtitle}/>);}});
       export const getDenied=define.function({async get(){return page(<p data-denied>Denied</p>);}});`,
-    'Board.tsrx':`import './board.css';export function Board({count,user,subtitle='No subtitle'}) @{let expanded=false;<section class="board" data-board><style>.board{color:rgb(12,34,56);}</style><h1>{user.name}</h1><small data-subtitle>{subtitle}</small><p data-count>{count}</p><input data-local-input value="initial"/><button data-toggle onClick={async()=>{await Promise.resolve();expanded=!expanded}}>Toggle</button>{expanded&&<p data-expanded>Expanded</p>}</section>}`,
+    'Board.tsrx':`import './board.css';export function Board({count,user,subtitle='No subtitle'}) @{let expanded=false;let hint='';function reveal(){hint=user.hint}<section class="board" data-board><style>.board{color:rgb(12,34,56);}</style><h1>{user.name}</h1><small data-subtitle>{subtitle}</small><p data-count>{count}</p><input data-local-input value="initial"/><button data-reveal onClick={reveal}>Reveal</button><p data-hint>{hint}</p><button data-toggle onClick={async()=>{await Promise.resolve();expanded=!expanded}}>Toggle</button>{expanded&&<p data-expanded>Expanded</p>}</section>}`,
     'board.css':`[data-count]{font-weight:700;}`,
     'App.tsx':`import {getBoard,saveBoard,getDenied} from '#server-functions';
       export function App(){let board=getBoard();const form=$forms(()=>{const result=saveBoard();board=result;return result;});return <main><div suspend>{board}</div><button data-save onClick={()=>{board=saveBoard()}}>Save</button><form onSubmit={form.submit}><button data-form disabled={form.pending}>Form save</button><span data-form-state>{form.pending?'Saving':'Ready'}</span></form><button data-deny onClick={()=>{board=getDenied()}}>Denied</button></main>}`,
@@ -53,14 +53,22 @@ it.each(['development','production','development-stream'] as const)('delivers fi
   const browser=await puppeteer.launch({executablePath:chrome,headless:true});
   try{
     const page=await browser.newPage(), viewer=await browser.newPage();const errors:string[]=[];
-    const modules:string[]=[];page.on('request',request=>{if(request.url().includes('memoized-dom/page'))modules.push(request.url());});
-    for(const tab of [page,viewer])tab.on('pageerror',error=>errors.push(String(error)));
+    const modules:string[]=[],diagnostics:string[]=[];page.on('request',request=>{if(request.url().includes('memoized-dom/page'))modules.push(request.url());});
+    for(const tab of [page,viewer]){
+      tab.on('pageerror',error=>errors.push(String(error)));
+      tab.on('console',message=>{if(message.type()==='error')diagnostics.push(message.text());});
+      tab.on('requestfailed',request=>diagnostics.push(request.url()+': '+request.failure()?.errorText));
+      tab.on('response',response=>{if(response.status()>=400)diagnostics.push(response.status()+': '+response.url());});
+    }
     await Promise.all([page,viewer].map(tab=>tab.goto(origin,{waitUntil:'domcontentloaded'})));
+    await page.bringToFront();
     try { await page.waitForFunction(()=>typeof (document.querySelector('[data-toggle]') as HTMLButtonElement|null)?.onclick === 'function',{timeout:10_000,polling:100}); }
-    catch(error){throw new Error(String(error)+'\n'+errors.join('\n')+'\n'+modules.join('\n')+'\n'+await page.content());}
+    catch(error){throw new Error(String(error)+'\n'+errors.join('\n')+'\n'+diagnostics.join('\n')+'\n'+modules.join('\n')+'\n'+await page.content());}
     expect(await page.$eval('[data-board]',node=>getComputedStyle(node).color)).toBe('rgb(12, 34, 56)');
     expect(await page.$eval('[data-count]',node=>getComputedStyle(node).fontWeight)).toBe('700');
     expect(await page.$eval('[data-subtitle]',node=>node.textContent)).toBe('No subtitle');
+    await page.bringToFront();await page.click('[data-reveal]');
+    await page.waitForFunction(()=>document.querySelector('[data-hint]')?.textContent==='Event-only',{polling:100});
     await page.bringToFront();await page.click('[data-toggle]');await page.waitForSelector('[data-expanded]',{timeout:5000});
     await viewer.bringToFront();await viewer.click('[data-toggle]');await viewer.waitForSelector('[data-expanded]',{timeout:5000});
     await viewer.type('[data-local-input]','USER');

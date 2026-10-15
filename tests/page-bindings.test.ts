@@ -45,6 +45,15 @@ it('projects only fields used by composed page bindings, including row aliases',
   expect(() => projectPageInputs([{password:'SECRET'}],[[0]])).toThrow('not whole objects');
 });
 
+it.each([
+  `function show(){globalThis.showName(user.name)}const user=inputs[0];`,
+  `const show=()=>globalThis.showName(user.name);const user=inputs[0];`,
+  `const user=inputs[0];function reveal(value){globalThis.showName(value.name)}const show=()=>reveal(user);`,
+])('projects values read only by lexical event helpers: %s', (setup) => {
+  const compiled=compileServerPage({'./page.tsx':`export function Page(inputs){${setup}return <div><button onClick={show}>Show name</button></div>}`},'./page.tsx','Page',1);
+  expect(projectPageInputs([{name:'Ada',password:'SECRET'}],compiled.delivery.paths)).toEqual([{name:'Ada'}]);
+});
+
 it('binds server HTML, isolates repeated page events and preserves local state on new inputs', async () => {
   const source = `export function Page(inputs){const user=inputs[0];let count=0;return <div><h1>{user.name}</h1><button onClick={async()=>{await Promise.resolve();count++}}>Count {count}</button></div>}`;
   const compiled = compileServerPage({'./page.tsx':source},'./page.tsx','Page',1);
