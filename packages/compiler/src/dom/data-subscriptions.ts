@@ -5,7 +5,8 @@ import {
   cloneNode,
 } from '../ast/index';
 import type { DomContext as Ctx } from './context';
-import { generatedIdentifier, md, mdd } from './identifiers';
+import { generatedIdentifier, md, mdd, mdTrace } from './identifiers';
+import { diagnosticSourceArray } from './diagnostics';
 import { registerStmt, type EmitScope } from './scope';
 import {transparentExpressionSources} from '../planning/async-reads';
 
@@ -105,7 +106,11 @@ export function registerTransparentDataSite(
       ctx,
       cloneNode(siteId, true),
       cloneNode(ownerId, true),
-      astFactory.arrowFunctionExpression([], astFactory.blockStatement([render])),
+      astFactory.arrowFunctionExpression([], astFactory.blockStatement([
+        ...(ctx.diagnostics ? [astFactory.expressionStatement(astFactory.callExpression(mdTrace(ctx, 'traceBinding'), [
+          cloneNode(ownerId), astFactory.stringLiteral(suffix), diagnosticSourceArray(routed),
+        ]))] : []), render,
+      ])),
     ),
   );
   subscribeTransparentEntity(ctx, scope, routed, siteId);

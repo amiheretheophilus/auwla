@@ -31,6 +31,10 @@ automatic server invalidation, smaller-patch delivery, generator results, and
 optimistic source protection. Cross-instance invalidation is
 [under discussion](./docs/live-adapters-discussion.md), not implemented.
 
+For debugging, see [live delivery diagnostics](./docs/live-diagnostics.md) and
+[opt-in event/binding/DOM tracing](./docs/runtime-diagnostics.md). Both use the
+development console; application authoring stays unchanged.
+
 ### 2. Configuration
 
 **`tsconfig.json`**

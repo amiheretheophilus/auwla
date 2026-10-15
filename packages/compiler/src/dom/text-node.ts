@@ -2,7 +2,8 @@ import type * as t from '../ast/compiler-types';
 import * as astFactory from '../ast/factory';
 import { cloneNode as cloneEstreeNode } from '../ast';
 import { type DomContext as Ctx } from './context';
-import { generatedIdentifier, md } from './identifiers';
+import { generatedIdentifier, md, mdTrace } from './identifiers';
+import { diagnosticSourceArray, diagnosticSources, traceDomWrite } from './diagnostics';
 import { freshSlot, pushSlotUpdater, renderDocument, slotGuard, type EmitScope } from './scope';
 import { preparationRead, registerTransparentDataSite } from './data-subscriptions';
 import { transparentExpressionSources } from '../planning/async-reads';
@@ -23,6 +24,7 @@ export function emitText(
   initialStatic = false,
   initialEmpty = false,
 ): string {
+  scope.diagnosticOwner ??= cloneEstreeNode(ownerId);
   const varName = generatedIdentifier(ctx, `text${scope.textCounter++}`).name;
   const adopting=scope.initialDom?.adopting;
   if (initialStatic && !adopting) {
@@ -67,9 +69,11 @@ export function emitText(
   if (!scope.cacheText) {
     const setter = (): t.Statement =>
       astFactory.expressionStatement(
-        astFactory.callExpression(md(ctx, 'setTextData'), [
+        astFactory.callExpression(ctx.diagnostics ? mdTrace(ctx, 'traceText') : md(ctx, 'setTextData'), [
+          ...(ctx.diagnostics ? [cloneEstreeNode(ownerId)] : []),
           astFactory.identifier(varName),
           cloneEstreeNode(prepared),
+          ...(ctx.diagnostics ? [diagnosticSourceArray(diagnosticSources(expr))] : []),
         ]),
       );
     if (!initialPath || adopting) scope.creation.push(freshInitialStatement(scope,setter()));
@@ -103,7 +107,7 @@ export function emitText(
   } else scope.creation.push(...freshSeed.body);
   const write = (expression: t.Expression): t.Statement =>
     slotGuard(scope, slot, astFactory.callExpression(md(ctx, 'textValue'), [expression]), (value) =>
-      astFactory.expressionStatement(
+      traceDomWrite(ctx, ownerId, 'text', expr, astFactory.expressionStatement(
         astFactory.assignmentExpression(
           '=',
           astFactory.memberExpression(
@@ -112,7 +116,7 @@ export function emitText(
           ),
           value,
         ),
-      ),
+      )),
     );
   const updater = () => value(write);
   registerTransparentDataSite(

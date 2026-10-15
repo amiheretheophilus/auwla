@@ -50,7 +50,7 @@ it('explains a discarded in-flight query while leaving SSE frames unchanged', as
     expect(result).not.toContain('diagnostic');
     expect(calls).toBe(2);
     expect(debug.mock.calls).toContainEqual(['[memoized-dom:live] query-discarded', {
-      reason: 'invalidated-during-read', path: '/_fn/notes/get',
+      reason: 'invalidated-during-read', source: 'get',
       stamp: { key, epoch: hub.epoch, revision: 0 }, current: { key, epoch: hub.epoch, revision: 1 },
     }]);
     const logs = JSON.stringify(debug.mock.calls);

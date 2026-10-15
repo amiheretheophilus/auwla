@@ -1,4 +1,5 @@
 /** Dev-only ownership and replacement for compiler-emitted component roots. */
+export { traceEvent, traceUpdate, traceWrite, traceBinding, traceDom, traceText } from './diagnostics';
 import {
   markDirtySubtree,
   onEntityDispose,

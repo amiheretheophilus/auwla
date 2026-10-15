@@ -18,10 +18,22 @@ in the development server console. Browser protection and delivery traces appear
 in the browser console. Warnings remain visible without enabling Verbose.
 
 Diagnostics record keys, revision/epoch stamps, pending counts, and server
-function paths, not response payloads, request bodies, cookies, or service state.
+function names, not request URLs, response payloads, request bodies, cookies, or service state.
 Callback failures include the original error. Keys and application errors can
 themselves contain sensitive information: keep development logs private.
 No diagnostic events or additional user keys are sent over the live connection.
+
+Live-source messages include `source` (for example, `getNotes`),
+`method`, and an opaque `sourceId`. Protecting `[notes, summary]` produces one
+start/release pair per source, even if both share the same invalidation key.
+The names distinguish `getNotes` from `getExpeditionSummary`; these are not
+duplicate mutation requests. Missing-confirmation warnings list protected names
+alongside their keys.
+Request paths remain in the ordinary `[http]` request log, not in live trace metadata.
+
+For opt-in tracing of ordinary JSX interactions and binding updates, see
+[runtime diagnostics](./runtime-diagnostics.md). Its `[memoized-dom:trace]`
+messages and filters are separate from the live protocol messages below.
 
 ## A mutation succeeds, but a query does not update
 
@@ -55,7 +67,7 @@ the same positional arguments.
 
 ## A query ran, but its result was not sent
 
-`query-started` identifies the function path and revision being read.
+`query-started` identifies the function name and revision being read.
 `query-discarded`, with `reason: 'invalidated-during-read'`, means an invalidation
 arrived before that evaluation finished. The stream discards the old result and
 reruns the query rather than labelling it with a newer revision.

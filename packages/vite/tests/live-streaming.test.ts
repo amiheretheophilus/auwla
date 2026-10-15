@@ -51,6 +51,8 @@ it.skipIf(!chrome)('automatically synchronizes Fieldnotes and protects multiple 
   const browser = await puppeteer.launch({ executablePath: chrome, headless: true });
   const errors: string[] = [];
   const diagnostics: string[] = [];
+  const traces: string[] = [];
+  const protectionSources: Array<Promise<string | undefined>> = [];
   const pages: Page[] = [];
   let wireReader: ReadableStreamDefaultReader<Uint8Array> | undefined;
   try {
@@ -61,6 +63,12 @@ it.skipIf(!chrome)('automatically synchronizes Fieldnotes and protects multiple 
       page.on('pageerror', error => errors.push(String(error)));
       page.on('console', message => {
         if (message.text().startsWith('[memoized-dom:live]')) diagnostics.push(message.text());
+        if (message.text().startsWith('[memoized-dom:trace]')) traces.push(message.text());
+        if (message.text().startsWith('[memoized-dom:live] protection-started')) {
+          protectionSources.push(message.args()[1]!.jsonValue().then((details: unknown) => {
+            return (details as { source?: string }).source;
+          }).catch(() => undefined));
+        }
       });
     }
     const liveRequests: string[] = [];
@@ -86,6 +94,7 @@ it.skipIf(!chrome)('automatically synchronizes Fieldnotes and protects multiple 
     expect(new Set(liveRequests).size).toBe(2);
     expect(liveRequests.length - cancelledStreams.length).toBe(2);
     const initialRequests = liveRequests.length;
+    expect(traces).toEqual([]); // Broad tracing must be opt-in.
     const wire = await fetch(address + '/_fn/expeditions/getNotes?expeditionId=ice-cores', {
       headers: { 'x-mmd-stream': 'live', 'x-mmd-live-patches': '1' }, signal: AbortSignal.timeout(15_000),
     });
@@ -95,7 +104,14 @@ it.skipIf(!chrome)('automatically synchronizes Fieldnotes and protects multiple 
 
     const text = 'Optimistic note held until its response';
     await bounded(writer.type('.note-form input', text), 'typing');
+    // Capture one interaction, not every continuous pull during the scenario.
+    await writer.evaluate(() => {
+      (globalThis as typeof globalThis & { __MEMOIZED_DOM_TRACE__?: unknown }).__MEMOIZED_DOM_TRACE__ = { component: 'ExpeditionDetail' };
+    });
     await bounded(writer.click('.note-form button'), 'clicking');
+    await writer.evaluate(() => {
+      (globalThis as typeof globalThis & { __MEMOIZED_DOM_TRACE__?: unknown }).__MEMOIZED_DOM_TRACE__ = false;
+    });
     await writer.waitForFunction(value => [...document.querySelectorAll('li.note')].some(note => note.textContent?.includes(value)), { polling: 100 }, text);
     await viewer.waitForFunction(value => [...document.querySelectorAll('li.note')].some(note => note.textContent?.includes(value)), { timeout: 10_000, polling: 100 }, text);
     expect(new TextDecoder().decode((await wireReader.read()).value)).toContain('event: patch');
@@ -176,6 +192,12 @@ it.skipIf(!chrome)('automatically synchronizes Fieldnotes and protects multiple 
     expect(diagnostics.some(message => message.includes('snapshot-applied'))).toBe(true);
     expect(diagnostics.some(message => message.includes('missing-mutation-confirmation'))).toBe(false);
     expect(log).toContain('[memoized-dom:live] invalidate');
+    const names = await Promise.all(protectionSources);
+    expect(names).toContain('getNotes');
+    expect(names).toContain('getExpeditionSummary');
+    for (const event of ['event-started', 'write-published', 'binding-evaluated', 'dom-write']) {
+      expect(traces.some(message => message.includes(event)), `Missing ${event}: ${traces.join('\n')}`).toBe(true);
+    }
   } catch (error) {
     const snapshots = await Promise.all(pages.map(page => bounded(page.evaluate(() => ({
       status: document.querySelector('[data-live-status]')?.textContent,

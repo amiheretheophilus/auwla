@@ -6,6 +6,7 @@ import {
 import { SnapshotNotifier } from './notifications';
 import { dispatchResourceWrite } from './resource-write-capability';
 import { LiveProtection, updateStamps, type LiveStamp } from './live-protocol';
+import { liveDiagnosticName } from './live-diagnostics';
 import {
   disposeFormSource,
   formSourceOperationId,
@@ -140,6 +141,9 @@ class FetchEntry {
       this.snapshot.error = null;
       this.hasData = true;
       this.emit();
+    }, {
+      source: liveDiagnosticName(this.descriptor.url),
+      method: this.descriptor.method, sourceId: this.operationId,
     });
   }
   readonly consumers = new Set<ResourceController<unknown>>();

@@ -1,6 +1,6 @@
 import { isFetchResource, resourceController, fetchResourceUpdates } from './resource';
 import { isModuleSourceRef, resolveModuleSource } from './transparent-module';
-import { liveDiagnosticsEnabled, reportLiveDiagnostic } from './live-diagnostics';
+import { liveDiagnosticsEnabled, reportLiveDiagnostic, liveDiagnosticName } from './live-diagnostics';
 
 /** Returns an idempotent release; source identity is the shared entry at call start. */
 export function protectLiveSources(input: unknown): (result?: unknown) => void {
@@ -24,6 +24,7 @@ export function protectLiveSources(input: unknown): (result?: unknown) => void {
       reportLiveDiagnostic('missing-mutation-confirmation', {
         reason: 'pending-only-protection',
         keys: [...entries].map(entry => entry.protection.stamp?.key ?? null),
+        sources: [...entries].map(entry => liveDiagnosticName(entry.descriptor.url)),
         message: 'This successful optimistic operation supplied no mutation confirmation. Pending protection still works, but older snapshots cannot be rejected using this result. Return the server-function result directly when relying on its acknowledgements; ordinary promises remain supported.',
       }, 'warn');
     }

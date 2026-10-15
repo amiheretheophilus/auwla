@@ -1,5 +1,5 @@
 import { encodeLiveFrame as frame, LivePatchEncoder } from './live-patch';
-import { liveDiagnosticsEnabled, reportLiveDiagnostic } from '@memoized-dom/data/internal';
+import { liveDiagnosticsEnabled, reportLiveDiagnostic, liveDiagnosticName } from '@memoized-dom/data/internal';
 
 /** Internal invalidation and delivery protocol; no authored SSE endpoints. */
 export type LiveKey = readonly (string | number | boolean | null)[];
@@ -147,19 +147,19 @@ export function liveResponse(
           dirty = false;
           const stamp = hub.stamp(key);
           if (liveDiagnosticsEnabled()) reportLiveDiagnostic('query-started', {
-            path: new URL(request.url).pathname, stamp,
+            source: liveDiagnosticName(request.url), stamp,
           });
           const value = await query(abort.signal);
           if (abort.signal.aborted) break;
           if (dirty || stamp.revision !== hub.stamp(key).revision) {
             if (liveDiagnosticsEnabled()) reportLiveDiagnostic('query-discarded', {
-              reason: 'invalidated-during-read', path: new URL(request.url).pathname,
+              reason: 'invalidated-during-read', source: liveDiagnosticName(request.url),
               stamp, current: hub.stamp(key),
             });
             continue;
           }
           controller.enqueue(patches === undefined ? frame('value', { value, stamp }) : patches.encode(value, stamp));
-          if (liveDiagnosticsEnabled()) reportLiveDiagnostic('query-delivered', { path: new URL(request.url).pathname, stamp });
+          if (liveDiagnosticsEnabled()) reportLiveDiagnostic('query-delivered', { source: liveDiagnosticName(request.url), stamp });
           return;
         }
         if (abort.signal.aborted) controller.close();

@@ -303,7 +303,7 @@ function finishProgram(ctx: Ctx, programPath: ProgramTransformPath): void {
     ),
   ];
   imports.push(...externalReactiveImportStatements(ctx));
-  if (ctx.hot) {
+  if (ctx.hot || ctx.diagnostics) {
     imports.push(
       astFactory.importDeclaration(
         [

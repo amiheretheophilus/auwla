@@ -1,9 +1,30 @@
 import { describe, expect, it, spyOn } from 'bun:test';
 import { LiveProtection } from '../src/live-protocol';
+import { liveDiagnosticName } from '../src/live-diagnostics';
 
 const stamp = (revision: number, epoch = 'server', key = '["notes"]') => ({ revision, epoch, key });
 
 describe('live delivery diagnostics', () => {
+  it('distinguishes live functions sharing an invalidation key using names, not request paths', () => {
+    const previous = process.env.NODE_ENV; process.env.NODE_ENV = 'development';
+    const debug = spyOn(console, 'debug').mockImplementation(() => {});
+    try {
+      for (const source of ['/_fn/notes/getNotes', '/_fn/notes/getSummary']) {
+        const protection = new LiveProtection(() => {}, { source: liveDiagnosticName(source + '?private=secret'), method: 'GET' });
+        protection.receive([], stamp(0)); protection.protect()();
+      }
+      const starts = debug.mock.calls.filter(call => call[0] === '[memoized-dom:live] protection-started');
+      expect(starts.map(call => call[1])).toEqual([
+        { source: 'getNotes', method: 'GET', key: '["notes"]', pending: 1 },
+        { source: 'getSummary', method: 'GET', key: '["notes"]', pending: 1 },
+      ]);
+      expect(JSON.stringify(debug.mock.calls)).not.toContain('/_fn/');
+      expect(JSON.stringify(debug.mock.calls)).not.toContain('secret');
+    } finally {
+      debug.mockRestore();
+      if (previous === undefined) delete process.env.NODE_ENV; else process.env.NODE_ENV = previous;
+    }
+  });
   it('explains pending holds, stale confirmations, unrelated keys, new epochs, and successful delivery without logging payloads', () => {
     const previous = process.env.NODE_ENV;
     process.env.NODE_ENV = 'development';

@@ -35,10 +35,16 @@ export class LiveProtection {
   private readonly required = new Map<string, LiveStamp>();
   private pending = 0;
   private buffered: { value: unknown; stamp: LiveStamp } | undefined;
-  constructor(private readonly apply: (value: unknown) => void) {}
+  constructor(
+    private readonly apply: (value: unknown) => void,
+    private readonly source?: { readonly source: string; readonly method: string; readonly sourceId?: string },
+  ) {}
+  private report(event: string, details: Record<string, unknown>): void {
+    reportLiveDiagnostic(event, { ...this.source, ...details });
+  }
   receive(value: unknown, stamp: LiveStamp): void {
     if (this.stamp?.epoch === stamp.epoch && this.stamp.key === stamp.key && this.stamp.revision > stamp.revision) {
-      if (liveDiagnosticsEnabled()) reportLiveDiagnostic('snapshot-rejected', {
+      if (liveDiagnosticsEnabled()) this.report('snapshot-rejected', {
         reason: 'older-than-received', stamp, current: this.stamp,
       });
       return;
@@ -50,19 +56,19 @@ export class LiveProtection {
     this.required.clear();
     for (const update of required) this.require(update);
     this.buffered = { value, stamp };
-    if (liveDiagnosticsEnabled()) reportLiveDiagnostic('snapshot-received', { stamp, pending: this.pending });
+    if (liveDiagnosticsEnabled()) this.report('snapshot-received', { stamp, pending: this.pending });
     this.flush();
   }
   protect(): (updates?: readonly LiveStamp[]) => void {
     this.pending++;
-    if (liveDiagnosticsEnabled()) reportLiveDiagnostic('protection-started', { key: this.stamp?.key, pending: this.pending });
+    if (liveDiagnosticsEnabled()) this.report('protection-started', { key: this.stamp?.key, pending: this.pending });
     let released = false;
     return updates => {
       if (released) return;
       released = true;
       for (const update of updates ?? []) this.require(update);
       this.pending--;
-      if (liveDiagnosticsEnabled()) reportLiveDiagnostic('protection-released', {
+      if (liveDiagnosticsEnabled()) this.report('protection-released', {
         key: this.stamp?.key, pending: this.pending, confirmations: updates ?? [],
       });
       this.flush();
@@ -70,7 +76,7 @@ export class LiveProtection {
   }
   private require(update: LiveStamp): void {
     if (this.stamp !== undefined && !keysOverlap(this.stamp.key, update.key)) {
-      if (liveDiagnosticsEnabled()) reportLiveDiagnostic('confirmation-ignored', {
+      if (liveDiagnosticsEnabled()) this.report('confirmation-ignored', {
         reason: 'unrelated-key', queryKey: this.stamp.key, mutationKey: update.key,
       });
       return;
@@ -85,7 +91,7 @@ export class LiveProtection {
     const snapshot = this.buffered;
     if (snapshot === undefined) return;
     if (this.pending > 0) {
-      if (liveDiagnosticsEnabled()) reportLiveDiagnostic('snapshot-held', {
+      if (liveDiagnosticsEnabled()) this.report('snapshot-held', {
         reason: 'optimistic-pending', stamp: snapshot.stamp, pending: this.pending,
       });
       return;
@@ -95,19 +101,19 @@ export class LiveProtection {
     const required = this.required.get(snapshot.stamp.key);
     if (required !== undefined && required.epoch === snapshot.stamp.epoch &&
       snapshot.stamp.revision < required.revision) {
-      if (liveDiagnosticsEnabled()) reportLiveDiagnostic('snapshot-held', {
+      if (liveDiagnosticsEnabled()) this.report('snapshot-held', {
         reason: 'awaiting-mutation-confirmation', stamp: snapshot.stamp, required,
       });
       return;
     }
     if (required !== undefined && required.epoch !== snapshot.stamp.epoch && liveDiagnosticsEnabled()) {
-      reportLiveDiagnostic('confirmation-epoch-changed', {
+      this.report('confirmation-epoch-changed', {
         reason: 'confirmation-not-comparable; accepting-new-epoch', stamp: snapshot.stamp, required,
       });
     }
     this.buffered = undefined;
     this.apply(snapshot.value);
-    if (liveDiagnosticsEnabled()) reportLiveDiagnostic('snapshot-applied', { stamp: snapshot.stamp });
+    if (liveDiagnosticsEnabled()) this.report('snapshot-applied', { stamp: snapshot.stamp });
   }
   clear(): void { this.buffered = undefined; }
 }

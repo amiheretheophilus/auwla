@@ -252,6 +252,7 @@ export async function compileGraph(
       ? {}
       : { externalReactiveSources: options.externalReactiveSources }),
     ...(hot ? { hot: true } : {}),
+    diagnostics: hot && routedEnvironment !== 'server',
     // Browser module state lives in one application runtime. Server modules
     // are reused across requests, so authored state must be request-owned by
     // default or a render can leak one request's writes into the next.

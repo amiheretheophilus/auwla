@@ -8,6 +8,7 @@ import { componentId, generatedIdentifier, md } from './identifiers';
 
 import { freshNodeName, freshSlot, pushSlotUpdater, renderDocument, slotGuard, type EmitScope } from './scope';
 import { buildHandler } from './handlers';
+import { traceDomWrite, traceHandler } from './diagnostics';
 import { emitForwardedSlotMount, isRenderPropReference } from './components/children';
 import { planDirectChildren } from '../jsx/children';
 import { materializeDirectChildren, type DirectChildOperation } from './direct-children';
@@ -219,6 +220,7 @@ if (!initial || needsInitialBinding || adopting) scope.creation.push(
 );
 
 // -- attributes ---------------------------------------------------------
+scope.diagnosticOwner ??= cloneEstreeNode(ownerId);
 const hasSpread = open.attributes.some((attribute) =>
   astFactory.isJSXSpreadAttribute(attribute),
 );
@@ -245,7 +247,7 @@ if (hasSpread) {
       const binding = generatedIdentifier(ctx, `${name}Handler`);
       scope.creation.push(
         astFactory.variableDeclaration('const', [
-          astFactory.variableDeclarator(cloneEstreeNode(binding), handler),
+          astFactory.variableDeclarator(cloneEstreeNode(binding), traceHandler(ctx, ownerId, name, handler)),
         ]),
       );
       return binding;
@@ -334,7 +336,7 @@ if (hasSpread) {
         `memo-dom: ${attrName} needs a handler expression (L1)`,
       );
     }
-    const handler = buildHandler(
+    const handler = traceHandler(ctx, ownerId, attrName, buildHandler(
       ctx,
       componentPath,
       v,
@@ -343,7 +345,7 @@ if (hasSpread) {
       rowContext,
       eventOriginId,
       scope.callbacks,
-    );
+    ));
     const delegatedBinding = scope.delegatedEventBindings.get(attrName);
     scope.creation.push(
       delegatedBinding === undefined
@@ -466,43 +468,44 @@ if (hasSpread) {
   const propName = domPropertyName(attrName, elementSvg);
   // M5.9: inline guarded writes (see slotGuard) — no MD.setX call overhead
   const makeCall = (): t.Statement => {
+    const traced = (write: t.Statement): t.Statement => traceDomWrite(ctx, ownerId, `attribute:${attrName}`, v, write);
     if (attrName === 'class' || attrName === 'className') {
       return slotGuard(
         scope,
         key,
         literalClassValue(expr) ?? astFactory.callExpression(md(ctx, 'classValue'), [cloneEstreeNode(expr)]),
         (tmp) =>
-          astFactory.expressionStatement(
+          traced(astFactory.expressionStatement(
             astFactory.callExpression(md(ctx, 'setClassValue'), [
               astFactory.identifier(varName),
               tmp,
             ]),
-          ),
+          )),
       );
     }
     if (propName !== null) {
       return slotGuard(scope, key, cloneEstreeNode(expr), (tmp) =>
-        domPropertyWrite(varName, propName, tmp),
+        traced(domPropertyWrite(varName, propName, tmp)),
       );
     }
     if (isMappedDomAttribute(attrName, elementSvg)) {
       return slotGuard(scope, key, cloneEstreeNode(expr), (tmp) =>
-        domAttributeWrite(varName, attrName, tmp),
+        traced(domAttributeWrite(varName, attrName, tmp)),
       );
     }
     if (elementSvg) {
       return slotGuard(scope, key, cloneEstreeNode(expr), (tmp) =>
-        astFactory.expressionStatement(
+        traced(astFactory.expressionStatement(
           astFactory.callExpression(md(ctx, 'setDomValue'), [
             astFactory.identifier(varName),
             astFactory.stringLiteral(attrName),
             tmp,
           ]),
-        ),
+        )),
       );
     }
     return slotGuard(scope, key, cloneEstreeNode(expr), (tmp) =>
-      domAttributeWrite(varName, attrName, tmp),
+      traced(domAttributeWrite(varName, attrName, tmp)),
     );
   };
   if (!initial || adopting) scope.creation.push(makeCall());

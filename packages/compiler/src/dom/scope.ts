@@ -7,8 +7,10 @@
 
 import type * as t from '../ast/compiler-types';
 import * as astFactory from '../ast/factory';
+import { cloneNode } from '../ast';
 import type { DomContext as Ctx } from './context';
-import { generatedIdentifier, md } from './identifiers';
+import { generatedIdentifier, md, mdTrace } from './identifiers';
+import { diagnosticSourceArray, diagnosticSources } from './diagnostics';
 import { reasonCondition } from './components/local-derived';
 import type { ComponentRegionReplay } from '../analysis/region-replay';
 import type { ComponentListSites } from '../planning/list-sites';
@@ -30,6 +32,8 @@ export interface EmitScope extends RegionSourcePlans {
   initialDom: {plan:InitialDomRoot;variable:string;descriptors:t.Expression[];adopting?:t.Identifier;offset?:t.Expression} | null;
   /** Repeated row text avoids a DOM read on every content replay. */
   cacheText: boolean;
+  diagnosticOwner: t.Expression | null;
+  diagnosticExpressions: Map<() => t.Statement, t.Expression> | null;
   slots: string[];
   tempVar: string;
   updateVar: string;
@@ -84,6 +88,8 @@ export function newEmitScope(ctx: Ctx, manualDisposal = false, sources?: RegionS
     regionShapes: sources?.regionShapes ?? null,
     listSites: sources?.listSites ?? null,
     cacheText: false,
+    diagnosticOwner: null,
+    diagnosticExpressions: ctx.diagnostics ? new Map() : null,
     slots: [],
     tempVar: generatedIdentifier(ctx, 'value').name,
     updateVar: generatedIdentifier(ctx, 'update').name,
@@ -184,6 +190,7 @@ export function pushSlotUpdater(
   updater: () => t.Statement,
   expression: t.Expression,
 ): void {
+  scope.diagnosticExpressions?.set(updater, expression);
   const reasons = scope.slotReasons?.(expression) ?? null;
   if (reasons !== null && reasons.length > 0) {
     scope.updaterReasons.set(updater, reasons);
@@ -197,8 +204,20 @@ export function pushSlotUpdater(
  * skips whole runs of slots; ungated updaters run unconditionally.
  */
 export function updateBody(ctx: Ctx, scope: EmitScope): t.Statement[] {
+  let bindingIndex = 0;
+  const emit = (updater: () => t.Statement): t.Statement => {
+    const statement = updater();
+    if (!ctx.diagnostics || scope.diagnosticOwner === null) return statement;
+    const expression = scope.diagnosticExpressions?.get(updater);
+    return astFactory.blockStatement([
+      astFactory.expressionStatement(astFactory.callExpression(mdTrace(ctx, 'traceBinding'), [
+        cloneNode(scope.diagnosticOwner), astFactory.stringLiteral(`binding:${bindingIndex++}`),
+        diagnosticSourceArray(expression ? diagnosticSources(expression) : []),
+      ])), statement,
+    ]);
+  };
   if (scope.reasonVar === null || scope.updaterReasons.size === 0) {
-    return scope.updaters.map((updater) => updater());
+    return scope.updaters.map(emit);
   }
   const body: t.Statement[] = [];
   let group: {
@@ -222,7 +241,7 @@ export function updateBody(ctx: Ctx, scope: EmitScope): t.Statement[] {
     const reasons = scope.updaterReasons.get(updater);
     if (reasons === undefined) {
       flush();
-      body.push(updater());
+      body.push(emit(updater));
       continue;
     }
     // Handler emission has now finished, so the proof can require that every
@@ -234,7 +253,7 @@ export function updateBody(ctx: Ctx, scope: EmitScope): t.Statement[] {
       flush();
       group = { key, reasons, statements: [], includePull };
     }
-    group.statements.push(updater());
+    group.statements.push(emit(updater));
   }
   flush();
   return body;
@@ -271,7 +290,8 @@ export function registerStmt(
       astFactory.objectExpression([
         astFactory.objectProperty(astFactory.identifier('id'), id),
         astFactory.objectProperty(astFactory.identifier('parent'), parent),
-        astFactory.objectProperty(astFactory.identifier('render'), render),
+        astFactory.objectProperty(astFactory.identifier('render'), ctx.diagnostics
+          ? astFactory.callExpression(mdTrace(ctx, 'traceUpdate'), [cloneNode(id), render]) : render),
         ...(volatile
           ? [astFactory.objectProperty(astFactory.identifier('volatile'), astFactory.booleanLiteral(true))]
           : []),

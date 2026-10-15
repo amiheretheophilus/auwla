@@ -10,6 +10,7 @@ import { generatedIdentifier, md } from './identifiers';
 import { HandlerPath } from '../handlers/traversal';
 import { isPlainDataAssignment } from '../handlers/member-assignment';
 import type { HandlerExecutionSite } from '../handlers/plan';
+import { traceCommit } from './diagnostics';
 
 export function finalizeHandlerInstrumentation(
   ctx: Ctx,
@@ -89,7 +90,7 @@ export function finalizeHandlerInstrumentation(
       continue;
     }
     const guarded = astFactory.ifStatement(
-      cloneEstreeNode(site.flag!), cloneEstreeNode(site.commit),
+      cloneEstreeNode(site.flag!), traceCommit(ctx, site.writes, compName, rowCtx, cloneEstreeNode(site.commit)),
     );
     guardedCommits.push(guarded);
     pendingRootRefresh = mergeableRefresh ? guarded : null;
@@ -107,7 +108,8 @@ export function finalizeHandlerInstrumentation(
     appendScopeCommit(
       ctx,
       fn as t.ArrowFunctionExpression | t.FunctionExpression | t.FunctionDeclaration,
-      commit,
+      executionAwareRoot && fn === root && guardedRootSites.length > 0
+        ? commit : traceCommit(ctx, writes, compName, rowCtx, commit),
     );
   }
 

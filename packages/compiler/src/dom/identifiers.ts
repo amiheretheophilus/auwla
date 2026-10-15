@@ -122,6 +122,10 @@ export function mdHot(owner: IdentifierOwner, name: string): t.MemberExpression 
   );
 }
 
+export function mdTrace(owner: IdentifierOwner, name: string): t.MemberExpression {
+  return mdHot(owner, name);
+}
+
 export function mr(owner: IdentifierOwner, name: string): t.MemberExpression {
   const identifiers = requireIdentifiers(owner);
   return astFactory.memberExpression(

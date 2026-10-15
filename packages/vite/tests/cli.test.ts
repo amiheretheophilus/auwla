@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, readFile, rm, stat, symlink, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, readdir, rm, stat, symlink, writeFile } from 'node:fs/promises';
 import { spawn, type ChildProcess } from 'node:child_process';
 import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -88,6 +88,54 @@ async function origin(log: ReturnType<typeof launch>, runtime: string): Promise<
 }
 
 describe('consistent CLI launcher', () => {
+  it.skipIf(!chrome)('supports opt-in filtered runtime diagnostics in browser development', async () => {
+    const root = await project('browser');
+    await writeFile(join(root, 'src/App.tsx'), `export function App(){let count=0;return <button onClick={()=>count++}>{count}</button>;}`);
+    const log = launch('bun', root, ['dev']);
+    const address = await origin(log, 'browser');
+    const compiled = await (await fetch(address + '/src/App.tsx')).text();
+    expect(compiled).toContain('/hot.js'); expect(compiled).toContain('.traceEvent(');
+    const browser = await puppeteer.launch({ executablePath: chrome, headless: true });
+    try {
+      const page = await browser.newPage();
+      const traces: string[] = [], errors: string[] = [];
+      page.on('pageerror', error => errors.push(String(error)));
+      page.on('console', message => { if (message.text().startsWith('[memoized-dom:trace]')) traces.push(message.text()); });
+      await page.goto(address, { waitUntil: 'networkidle0', timeout: 60_000 });
+      await page.click('button');
+      await page.waitForFunction(() => document.querySelector('button')!.textContent === '1');
+      expect(traces).toEqual([]);
+      await page.evaluate(() => { (globalThis as typeof globalThis & { __MEMOIZED_DOM_TRACE__?: unknown }).__MEMOIZED_DOM_TRACE__ = { component: 'App' }; });
+      await page.click('button');
+      await page.waitForFunction(() => document.querySelector('button')!.textContent === '2');
+      for (const stage of ['event-started', 'write-published', 'binding-evaluated', 'dom-write']) {
+        expect(traces.some(message => message.includes(stage)), traces.join('\n')).toBe(true);
+      }
+      await page.evaluate(() => { (globalThis as typeof globalThis & { __MEMOIZED_DOM_TRACE__?: unknown }).__MEMOIZED_DOM_TRACE__ = false; });
+      const count = traces.length;
+      await page.click('button');
+      await page.waitForFunction(() => document.querySelector('button')!.textContent === '3');
+      expect(traces).toHaveLength(count);
+      expect(errors, log.output() + log.errors()).toEqual([]);
+    } finally { await browser.close(); }
+  }, 150_000);
+
+  it('omits runtime diagnostics from production browser assets', async () => {
+    const root = await project('browser');
+    await writeFile(join(root, 'src/App.tsx'), `export function App(){let count=0;return <button onClick={()=>count++}>{count}</button>;}`);
+    const log = launch('bun', root, ['build']);
+    await waitFor(() => expect(child!.exitCode, log.output() + log.errors()).toBe(0), 60_000);
+    const assets = join(root, 'dist/assets');
+    const scripts = (await readdir(assets)).filter(name => name.endsWith('.js'));
+    expect(scripts.length).toBeGreaterThan(0);
+    for (const script of scripts) {
+      const code = await readFile(join(assets, script), 'utf8');
+      expect(code).not.toContain('__MEMOIZED_DOM_TRACE__');
+      expect(code).not.toContain('memoized-dom:trace');
+      expect(code).not.toContain('/diagnostics');
+    }
+  }, 90_000);
+
   it('runs the repository type-generation script without an install-created local CLI shim', async () => {
     const manifest = JSON.parse(await readFile(join(repository, 'package.json'), 'utf8'));
     expect(manifest.scripts.types).toBe('node packages/vite/dist/cli.js types --config examples/fullstack/vite.config.ts');

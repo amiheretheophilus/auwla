@@ -40,7 +40,7 @@ export const DEFAULT_TRANSPARENT_ASYNC_SOURCES: readonly TransparentAsyncSourceD
 export interface MemoDomOptions {
   /** Module specifier compiled output imports the runtime from. */
   runtimePath?: string;
-  /** Dev-only runtime subpath used by compiler-emitted HMR ownership. */
+  /** Development runtime subpath for compiler-owned HMR and optional tracing. */
   hotRuntimePath?: string;
   /** Module specifier used by compiler-generated router integration. */
   routerPath?: string;
@@ -62,6 +62,8 @@ export interface MemoDomOptions {
   externalReactiveSources?: readonly ExternalReactiveSourceDefinition[];
   /** Emit dev-only live-component ownership used by framework HMR adapters. */
   hot?: boolean;
+  /** Emit optional development event/binding/DOM traces; off in production output. */
+  diagnostics?: boolean;
   /**
    * Stable identity for this source module. Defaults to `./component.tsx`.
    * Module-state keys are always `<moduleId>#<binding>[.<path>]`.
@@ -401,6 +403,7 @@ export interface Ctx {
   rootId: string;
   rootComponent: string | null;
   hot: boolean;
+  diagnostics: boolean;
   /** SSR Phase 1.3 lowering: lower reactive module state into request cells. */
   moduleStateCells: boolean;
   ssrWriter: boolean;
@@ -727,6 +730,7 @@ export function createAnalysisCtx(opts: AnalysisOptions = {}): Ctx {
     rootId: opts.rootId ?? 'App',
     rootComponent: opts.rootComponent ?? null,
     hot: opts.hot ?? false,
+    diagnostics: opts.diagnostics ?? false,
     moduleStateCells: opts.moduleStateCells ?? false,
     ssrWriter: opts.ssrWriter ?? false,
     moduleId,
