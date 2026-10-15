@@ -1,36 +1,22 @@
 # Server-owned components through `page(...)`
 
-Status: authoring design with internal compiler/server foundations started.
-`page` is not currently exported, server functions cannot yet deliver this
-renderable result to the browser, and the examples below describe the intended
-DX rather than runnable current APIs. See the implementation checkpoint below.
+Status: implemented first version. The Vite adapter links server-function JSX
+to the existing server renderer and initial browser-binding compiler. Finite
+GETs, mutations, live GETs, forms, and supported local interactions work without
+a second component language.
 
-## Direction
+`page(JSX)` describes a server-rendered result, not a document, route, or
+subscription. It accepts a subtree or fragment. It does not navigate, select a
+DOM target, or require SSE.
 
-A server function may return rendered UI instead of ordinary application data.
-`page(JSX)` marks the server-owned rendering boundary. It uses ordinary JSX and
-the existing component, server-function, and live-invalidation models; it does
-not introduce another component language or rendering engine.
+## Configuration and server authoring
 
-The component's rendering stays on the server. The browser receives its rendered
-region and any necessary local interaction bindings. It does not rerun the
-server-owned component to reconstruct its output from transferred application
-data. This is server rendering, but not an automatic handoff of that region to
-a client-rendered application after its initial HTML arrives.
-
-Despite its name, `page` accepts a component, fragment, or subtree. It does not
-require an entire document and does not implicitly change the URL or register a
-route.
-
-## Server authoring
-
-The existing shared definition remains the configuration and typing boundary.
-The proposed framework helper can be re-exported from that same module:
+Keep the existing `createDefine()`, `serve()`, and Vite configuration. Re-export
+the helper from the shared definition module if desired:
 
 ```ts
-// server/define.ts — proposed page export
+// server/define.ts
 import { createDefine } from '@memoized-dom/server';
-
 export { page } from '@memoized-dom/server';
 
 export const define = createDefine<{
@@ -38,9 +24,8 @@ export const define = createDefine<{
 }>();
 ```
 
-Functions remain under the configured server root's `functions` directory.
-Components used to render server-owned content can live under that server root;
-ordinary shared components remain usable where their dependencies permit it.
+Functions remain in the configured server root's `functions` directory. Load
+data and perform authorization in the handler, then return JSX:
 
 ```tsx
 // server/functions/expedition-page.tsx
@@ -55,25 +40,24 @@ export const getExpeditionPage = define.function({
     }
 
     const notes = await services.notes.all(expeditionId);
-
-    return page(
-      <ExpeditionBoard expeditionId={expeditionId} notes={notes} />
-    );
+    return page(<ExpeditionBoard expeditionId={expeditionId} notes={notes} />);
   },
 
-  live: (_context, expeditionId) =>
-    ['expedition-notes', expeditionId],
+  live: (_context, expeditionId) => ['expedition-notes', expeditionId],
 });
 ```
 
-JSX props retain normal compiler JSX type-checking. Authors do not import a new
-render-result type, build a transport descriptor, or serialize JSX themselves.
-`state.user` uses the existing injected request state, not a new top-level
-context field.
+`state.user` is ordinary injected request state. JSX props retain their normal
+type-checking. No render-result type import is needed. The handler, services,
+and selected server rendering implementation stay on the server.
 
-## Browser authoring
+Components can live under the server root or in an ordinary shared UI directory.
+Imports needed by local browser interactions must still be browser-safe. Server
+placement alone does not make a captured service or secret safe to transfer.
 
-Import the generated function facade and interpolate its result:
+## Browser usage
+
+Import the generated function and interpolate its result directly:
 
 ```tsx
 import { getExpeditionPage } from '#server-functions';
@@ -99,84 +83,102 @@ export function ExpeditionScreen({ expeditionId }: { expeditionId: string }) {
 }
 ```
 
-The intended result is a compiler-recognized remote renderable source, not an
-HTML string or a pretend browser `Node`. Its internal representation must not
-become an authoring requirement. Generated declarations and JSX lowering need
-to support this distinction; today's DOM-oriented `JSX.Element` type alone does
-not establish that contract.
+There is no authored SSE endpoint, message parser, mounting wrapper, or manual
+HTML insertion. Generated source readiness includes loading its allowlisted
+binding module. `Group` and `suspend` handle pending/error presentation; a failed
+binding load is a source failure, not a silently noninteractive page.
 
-There is no `.html` property, manual DOM insertion, new mounting component,
-authored SSE endpoint, message parser, or subscription listener. Reuse existing
-`Group`/`suspend` presentation and source-lifetime behavior, including rebinding
-when arguments change and releasing work when no consumers remain. Existing
-request controls should remain applicable where their lifecycle makes sense;
-this does not turn the rendered result into mutable application data.
+The result is a remote renderable value, not a browser `Node` or application
+data to mutate. Consume the generated source directly. In this first version,
+do not serialize it through arbitrary JSON caches, `routeState`, or a
+`$routed` result: those paths do not carry the generated page transport's
+render authorization. An ordinary route component can use the direct source
+shown above.
 
-## Finite reads, mutations, and forms
+## Finite GETs and mutations
 
-`page(...)` describes a result, not a subscription. Support finite results from
-GET and mutation handlers as a core capability; do not require `live`, SSE, or a
-second GET to use server-owned components. Finite results and progressive
-delivery are separate concepts: an ordinary response can finish after one page
-result, while a live GET remains subscribed to later invalidations.
+Omit `live` for a finite GET. Both finite GETs and mutations deliver one result
+through the normal HTTP response; they do not open SSE connections.
 
 ```tsx
 export const archiveExpedition = define.function({
   async post({ services }, expeditionId: string) {
     const expedition = await services.expeditions.archive(expeditionId);
-    return page(<ExpeditionBoard expedition={expedition} />);
+    return page(
+      <section>
+        <h2>{expedition.name}</h2>
+        <p>Archived</p>
+      </section>
+    );
   },
 
   updates: (_context, expeditionId) => ['expeditions', expeditionId],
 });
 ```
 
-The caller explicitly chooses where the returned UI appears. Returning a page
-does not select a DOM target, navigate, or replace the entire document:
+The caller chooses the target by assignment:
 
 ```tsx
-// getExpeditionPage is a finite GET in this example: it has no live declaration.
+// Assume this getExpeditionPage has no live declaration.
 let board = getExpeditionPage(expeditionId);
 
 function archive() {
   board = archiveExpedition(expeditionId);
 }
+
+return (
+  <main>
+    <div suspend>{board}</div>
+    <button onClick={archive}>Archive</button>
+  </main>
+);
 ```
 
-The region interpolating `board` receives the mutation result using the same
-source/presentation machinery. The POST executes once. Its optional `updates`
-callback notifies independent live subscribers after success; neither rendering
-its result nor receiving an invalidation may repeat the mutation.
+The POST executes once. Rendering its result does not repeat the mutation or
+require a follow-up GET. Optional `updates` invalidates independent live
+subscribers after success.
 
-Form actions should use existing `$forms` rather than a second form API:
+Assigning a different source replaces the old source's ownership. An old live
+subscription is released when it has no remaining consumers. Assignment does
+not secretly keep that subscription connected to the new finite result. Other
+viewers with their own live sources remain subscribed.
+
+## Forms
+
+Use existing `$forms`, not a second form API. For example, given a
+`saveExpedition(expeditionId, title)` mutation that returns `page(...)`:
 
 ```tsx
-const form = $forms((input: EditExpeditionInput) => {
-  const result = saveExpedition(expeditionId, input); // returns page(...)
+let board = getExpeditionPage(expeditionId);
+const form = $forms((fields: FormData) => {
+  const result = saveExpedition(expeditionId, String(fields.get('title') ?? ''));
   board = result;
   return result;
 });
+
+return (
+  <main>
+    <div suspend>{board}</div>
+    <form onSubmit={form.submit}>
+      <input name="title" />
+      <button disabled={form.pending}>
+        {form.pending ? 'Saving…' : 'Save'}
+      </button>
+    </form>
+  </main>
+);
 ```
 
-Here `saveExpedition` is the application's defined mutation, not another
-framework helper. The action returns its server-function result so `$forms`
-can own validation/submission state. Validation remains optional. That integration
-still needs implementation and tests for completion, failure, and result delivery.
+Return the server-function result so the form owns its submission lifecycle.
+Validation is optional and uses the existing form/server-function facilities.
+A pending reassignment can retire the old page region; do not assume a form
+submission preserves its local component state.
 
-A target that already has an active live source needs an explicit ownership
-decision. Replacing its source with a finite action result and applying that
-result while retaining the original subscription are different operations. Do
-not silently promise both, disconnect a retained source, or allow an older live
-frame to overwrite the acknowledged action result. The exact retained-live-target
-contract remains open; the finite example above does not establish it.
+## Live updates and connections
 
-## Live regions
-
-Without `live`, the function delivers a finite renderable result. With `live`,
-matching invalidations rerun the server function and deliver updated UI for its
-region. Ordinary data-returning functions remain unchanged.
-
-Mutations keep their existing authoring shape:
+With `live`, matching invalidations rerun the GET and deliver its new rendered
+result. Key callbacks receive context first, followed by the same positional
+arguments as the handler:
 
 ```ts
 export const postNote = define.function({
@@ -184,183 +186,154 @@ export const postNote = define.function({
     return services.notes.add(expeditionId, text);
   },
 
-  updates: (_context, expeditionId) =>
+  updates: (_context, expeditionId, _text) =>
     ['expedition-notes', expeditionId],
 });
 ```
 
-The handler and key callbacks keep the existing positional argument contract:
-injected context first, then the same server arguments in the same order.
-See [live queries and streaming functions](./live-streaming-design.md).
+The source retains the existing stale-read checks: an invalidation during data
+loading or rendering discards that obsolete result and reruns the GET before
+delivery. Cancellation and subscription cleanup follow existing source ownership.
 
-The intended flow is:
+One distinct active live source owns one streaming request. Nested components
+do not open their own connections. Equivalent requests can share the existing
+data resource within one runtime under its normal cache policy; disabling
+caching bypasses that sharing. Equal invalidation keys do not merge different
+queries into a connection. App-wide SSE multiplexing is not implemented.
 
-```text
-getExpeditionPage(id) → server renders page(JSX) → browser receives region
-mutation succeeds → matching invalidation → server renders again → region updates
-```
+Live updates do not preserve server component instances between requests.
+Request state remains request-scoped. Persistent application state belongs in
+appropriately scoped services/storage. Invalidation is explicit, not automatic
+database observation, and coordination is still instance-local. See
+[live queries](./live-streaming-design.md) and the
+[adapter discussion](./live-adapters-discussion.md).
 
-Rendering again does not mean retaining a persistent component instance on the
-server. Local variables must not implicitly become durable session state.
-Request state remains request-scoped; persistent application data belongs in
-appropriately scoped services or storage. Invalidation is not automatic database
-observation, and the current instance-local coordination limitation still applies.
+## Local interactivity
 
-## Streaming and connections
-
-Existing initial HTML streaming sends the shell and then changed HTML regions
-as data settles, through one finite document response. It compares serialized
-marker-bounded regions; it is not a general field-level HTML patch protocol.
-After the client mounts, that existing path delivers late data to the mounted
-root rather than replacing client-owned HTML.
-
-The proposed page region instead stays server-owned across live updates. A page
-source would own one live streaming request capable of carrying multiple nested
-region updates. Nesting components inside `ExpeditionBoard` must not create a
-connection per component.
-
-Following the current resource model, distinct active page/data sources can have
-separate streams. Equivalent requests can share a resource within the same data
-runtime under normal caching; explicit cache disabling bypasses that sharing.
-Sharing an invalidation key does not combine distinct sources into one stream.
-Application-wide SSE multiplexing is not part of this first implementation.
-
-An `await` before `return page(...)` still delays that returned region. The
-example above waits for `notes` before returning the board. A live connection
-enables later updates; it does not automatically make that earlier await reveal
-nested content progressively. Progressive delivery inside a page must be wired
-to supported render-time settlement boundaries, not assumed from the helper.
-
-## Local interactivity and the server boundary
-
-Keep ordinary components and event syntax. Do not require a new `use client`
-directive or separate island-authoring syntax for this model. Reuse compiler
-analysis and existing HTML-binding machinery to retain necessary browser
-behavior without shipping server-owned rendering implementations.
-
-For example, the intended authoring remains ordinary local state and events:
+Use ordinary JSX, local variables, and events; no `"use client"` directive or
+separate island syntax:
 
 ```tsx
-export function ExpeditionBoard({ expedition }: {
-  expedition: { name: string; description: string };
+export function ExpeditionBoard({ expeditionId, notes }: {
+  expeditionId: string;
+  notes: readonly { id: string; text: string }[];
 }) {
   let expanded = false;
 
+  async function toggle() {
+    await Promise.resolve();
+    expanded = !expanded;
+  }
+
   return (
     <section>
-      <h2>{expedition.name}</h2>
-      <button onClick={() => expanded = !expanded}>Toggle details</button>
-      <p if={expanded}>{expedition.description}</p>
+      <h2>Expedition {expeditionId}</h2>
+      <button onClick={toggle}>Toggle notes</button>
+      <ul if={expanded}>
+        {notes.map(note => <li key={note.id}>{note.text}</li>)}
+      </ul>
     </section>
   );
 }
 ```
 
-The server renders the region. The browser needs the local toggle's bindings
-and any values needed for that interaction, not the server's database query or
-service instances. Local interactions do not require a server round trip;
-server mutations still call defined server functions. This does not grant a
-browser handler access to a service merely because the surrounding UI rendered
-on the server.
+The server produces the initial HTML. The browser attaches the compiler's
+supported initial bindings and carries out local events, including async
+continuations. It does not rerun the server-owned component's rendering program
+to reconstruct that HTML. Local toggles need no server round trip. Defined
+server functions remain the boundary for server mutations; arbitrary captured
+server closures are not RPCs.
 
-This is an implementation goal, not a claim that arbitrary component code is
-already splittable:
+Interactive pages must satisfy the existing initial-binding compiler proof.
+Unsupported interactive setup fails compilation instead of discarding handlers
+or falling back to full component rendering in the browser. In particular,
+load initial request data in the server handler before returning JSX, rather
+than starting a setup-time request inside an interactive page component.
+Noninteractive pages can settle supported render-time requests on the server.
 
-- Browser handlers must not capture server services, secrets, or arbitrary
-  server-side closures. Unsupported dependencies must produce clear compile
-  errors, not leak into browser code.
-- Do not silently discard handlers or fall back to executing server-owned
-  rendering in the browser.
-- Only explicitly needed browser-visible values may cross the boundary;
-  rendering with a database object must not implicitly serialize that object.
-- Arbitrary server closures do not become remotely callable. Existing defined
-  server functions remain the mutation boundary.
-- A noninteractive region needs no component rendering program in the browser,
-  but live delivery still requires shared browser transport/application code.
+A passive page sends no component binding program, although the shared source
+transport and containing application still need their normal browser runtime.
 
-## Update ownership and preservation
+## Update identity and cleanup
 
-The server owns the rendered region; any local interaction binding must have a
-defined owner within it. We should preserve compatible keyed interactive
-regions and their local state, and dispose bindings/effects correctly when
-their regions are replaced. Repeated delivery must not duplicate listeners or
-retain abandoned resources.
+When a page stays mounted and receives the same page call-site identity and
+binding contract, the runtime updates its projected inputs through those
+bindings. Tested compatible live updates retain local state, an uncontrolled
+input's node/value, and focus. Repeated regions have isolated runtime owners.
 
-Input values, focus, selection, keyed identity, local state, and cleanup require
-explicit semantics and tests. Existing initial-node adoption is useful machinery,
-but it does not prove that arbitrary subsequent HTML replacement preserves them.
-Do not promise transparent preservation for every replacement or assume that a
-JSX `key` already provides identity across streamed render results.
+A different page call site or binding contract replaces the region and disposes
+its bindings. Passive HTML results replace their region. Reassigning to a new
+pending source can also unmount/remount it through pending presentation.
+JSX `key` is not a promise of identity across these replacements. General
+focus/selection preservation across arbitrary replacements and a separate
+"apply action UI while retaining this live target" operation are not provided.
 
-## Reuse and implementation boundaries
+## CSS and the transfer boundary
 
-The codebase already has separate initial HTML/browser plans, request-only HTML
-delivery, supported composition/list/conditional bindings, request-owned render
-sessions, initial region streaming, and live query invalidation/transport.
-Extend these facilities rather than introduce a second renderer or state model.
+TSRX scoped styles accompany the result and are owned by its region.
+External CSS imports go through Vite's normal CSS pipeline. The current
+region-owned scoped-style path uses inline style elements without a nonce
+option; use external CSS when a strict CSP disallows those inline styles.
 
-The integration work is to:
+Only compiler-selected input paths needed by browser bindings cross the
+boundary. Reading `user.name` does not transfer unused `user.password`.
+Arrays retain their row structure; optional `undefined` inputs preserve their
+meaning through the JSON wire format.
 
-1. Recognize `page(JSX)` as a render entry within server-function implementations.
-   Current initial planning starts from an application `mount()`, and those
-   implementation modules bypass normal UI compilation.
-2. Produce a renderable server-function result and matching generated client
-   types instead of passing it through ordinary data response normalization.
-3. Deliver and update server-owned regions beyond the existing initial-document
-   handoff, retaining cancellation, stale-result checks, and failure reporting.
-4. Adapt binding registration, ownership, and cleanup to newly delivered regions,
-   including any required browser code and CSS.
+Whole-object/function captures, service/class instances, getters, unsafe
+prototype paths, and unsupported leaf values are rejected rather than
+implicitly serialized. Browser-visible rendered text and event inputs are
+necessarily public; projection is not permission to put secrets there.
+Browser code dependencies must be reviewed as browser code.
 
-The existing JSON patch protocol patches data values. It is not automatically
-an HTML/DOM patch protocol, and its guarantees must not be claimed for remote UI
-without implementing and verifying that integration.
+The client accepts only generated/verified page transports and known binding
+contracts. Ordinary JSON that happens to contain `$mmd: 'page'` remains text,
+not executable HTML. No response-selected module URL, `eval`, or JavaScript
+source string is executed. Vite rejects client access to private server-page
+artifact modules. Development edits to page dependencies trigger a full reload
+so stale contracts are not reused.
 
-## First implementation scope and verification
+## What streams today
 
-Start with finite GET and mutation functions returning `page(...)`, optional
-live GET updates, existing pending/error presentation and forms, and verified
-local interaction bindings. Keep validation optional and ordinary JSON/data
-functions unchanged. Subscription machinery must not be a prerequisite for
-finite UI results.
+Finite results use a JSON envelope containing server HTML and optional binding
+inputs. Live pages use the existing SSE snapshot/JSON-patch transport for that
+envelope. The JSON patch mechanism is not a field-level DOM/HTML diff.
+A mounted compatible interactive page uses its bindings to update inputs;
+passive or incompatible content replaces the owned region.
 
-Before presenting it as supported, verify finite and live delivery, changing
-arguments, independent/repeated regions, branch changes, scoped CSS, disconnect
-and unmount cleanup, stale in-flight renders, browser-binding identity, and
-server dependency exclusion. Test focus/input/local-state behavior explicitly,
-including unsupported capture diagnostics and failures after streaming starts.
+The existing initial document streaming mode is supported too: the shell may
+arrive first and page sources settle later. Restoring such a source waits for
+its browser binding module without issuing an unnecessary replacement fetch.
 
-Deferred: generator `yield page(...)`, a single multiplexed application stream,
-and optimistic mutation of remote rendered UI. Existing data-based optimistic
-callbacks remain unchanged. Mixing ordinary data and page results in one
-function, the precise UI update encoding, and preservation rules beyond verified
-cases need a separate decision; this document does not invent APIs for them.
+Each individual `page(...)` render currently settles before that page result
+is delivered. An `await` before `return page(...)` delays the region, and
+there is no separate progressive nested HTML-region protocol inside a page
+result yet. Do not confuse an open live connection with progressive rendering.
 
-## Implementation checkpoint
+This differs from the usual SSR handoff: the region keeps server-owned
+rendering instead of becoming a fully client-rendered copy of the component.
+It is not React's server-component tree protocol: results are owned HTML
+regions plus compiled binding inputs, not an RSC component-tree payload.
 
-The first internal foundation is implemented, not yet activated in application
-delivery:
+## First-version boundaries
 
-- `packages/compiler/src/server-pages.ts` extracts imported framework `page(JSX)`
-  calls into a private companion UI module. Async handlers stay ordinary server
-  code; only the selected JSX is lowered through the existing component compiler.
-  Imported aliases and host-resolved helper re-exports are binding-aware, and
-  captured values are supplied without copying server handler/service imports
-  into that companion module. Imported components remain server dependencies.
-- `packages/server/src/page.ts` holds a compiler-created render definition and
-  evaluates it through the existing request-isolated renderer. It reuses data
-  settlement, cancellation, timeout, escaping, and cleanup rather than creating
-  another renderer. Rendering a selected action result does not rerun its action.
-- These definitions reject ordinary JSON serialization. An internal render
-  product is not a browser-ready interactive result, and must not accidentally
-  pass through the existing data response path.
+Supported: direct `page(<Component ... />)`, intrinsic JSX and fragments;
+finite GET/POST results; live GET invalidation; direct generated-source
+interpolation; existing pending/error/form presentation; passive HTML and
+supported interactive initial bindings.
 
-Current extraction supports direct JSX/fragments and imported component tags;
-same-module component declarations and nested `page(...)` results are not yet
-linked by this extraction path. Interaction syntax is preserved for subsequent
-binding compilation, not silently erased.
+Component tags in extracted JSX must currently be simple imported names.
+Same-module component declarations, namespace/member tags, nested `page(...)`,
+and generators yielding pages are not linked by this version. Keep a function's
+successful results consistently page results rather than mixing ordinary data
+and pages. Do not wrap a page in a custom JSON response.
 
-Still required before the public API becomes usable: Vite companion-module
-integration, public helper/result typing, HTTP result normalization, browser
-region interpolation and transport, finite action/form integration, live UI
-delivery, and interaction binding/ownership. No claim of browser interactivity
-or state preservation is established by these internal rendering tests alone.
+Deferred: optimistic mutation of rendered UI, app-wide stream multiplexing,
+retained-live-target action application, progressive nested page delivery,
+and arbitrary server/client closure splitting. Existing data-based
+`optimistic()` callbacks are unchanged.
+
+Regression coverage includes compiler extraction/projection, independent binding
+owners and async handlers, finite/action rendering and stale reads, generated
+source restoration, opaque-region hydration, safe JSON handling, CSS, and
+Chrome two-tab flows in development, production, and initial document streaming.

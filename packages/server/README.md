@@ -14,6 +14,11 @@ Every render creates isolated application, route, and data runtimes. Effects,
 cleanup tables, prop boxes, and request data do not leak between concurrent
 requests.
 
+Server functions can return `page(<Component />)` instead of application data.
+Finite GETs and mutations do not require SSE; optional `live` enables updates.
+See [server-owned components](../../docs/server-components-design.md) for the
+shared `define` setup, direct JSX consumption, forms, local bindings, and limits.
+
 ## Response and cookie helpers
 
 ```ts
