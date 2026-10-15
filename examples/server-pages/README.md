@@ -34,7 +34,11 @@ The form uses existing `$forms`; no authored SSE endpoint or manual HTML inserti
 - `server.ts`: existing `serve()` with initial document streaming.
 
 In Network → All/Fetch/XHR, two `getBoard` requests stay open as live streams.
-`getReceipt`, `changeCount`, and `renameOrchard` are finite requests. Live GET
+`getReceipt`, `changeCount`, and `renameOrchard` are finite requests. The page
+results from `getReceipt`, `renameOrchard`, and finite `getBoard` snapshots
+return `text/html`: the rendered region followed by inert binding metadata,
+not a JSON-wrapped HTML string. `changeCount` still returns ordinary JSON.
+These are Fetch/XHR requests, not Document navigations. Live GET
 rendering can appear in the terminal without another GET row: updates travel
 over the already-open stream. Render numbers include SSR and reconnect reads
 from all viewers, so initial numbers need not be 1 or match between tabs.

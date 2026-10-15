@@ -97,7 +97,7 @@ shown above.
 
 ## Finite GETs and mutations
 
-Omit `live` for a finite GET. Both finite GETs and mutations deliver one result
+Omit `live` for a finite GET. Both finite GETs and mutations deliver one HTML result
 through the normal HTTP response; they do not open SSE connections.
 
 ```tsx
@@ -295,9 +295,26 @@ so stale contracts are not reused.
 
 ## What streams today
 
-Finite results use a JSON envelope containing server HTML and optional binding
-inputs. Live pages use the existing SSE snapshot/JSON-patch transport for that
-envelope. The JSON patch mechanism is not a field-level DOM/HTML diff.
+Finite page GETs and mutations return `text/html; charset=utf-8`, with
+`x-mmd-page: 1`. The response body starts with the rendered region, not a JSON
+object containing an HTML string. It ends with an inert
+`<script type="application/mmd-page+json" data-mmd-page="1">` metadata block
+containing the page identity, optional binding inputs, and scoped styles.
+Metadata is escaped for HTML embedding and is parsed as data, never executed.
+The generated source removes the transport metadata before inserting the region
+and waits for its allowlisted binding program. Ordinary `$fetch` HTML reads
+still return text; only the generated page transport enables this decoder.
+
+These remain Fetch/XHR requests in browser tools. `text/html` describes the
+response body; a Document request means navigation, which this API does not
+perform. Error responses keep their normal status and error body. Ordinary
+data-returning server functions still return JSON.
+
+Live pages keep `text/event-stream` and the existing SSE snapshot/JSON-patch
+transport for their internal page values (HTML plus binding metadata). Finite
+SSR snapshot requests use the HTML format above. Changing finite delivery does
+not introduce another live protocol or nested progressive page delivery.
+The JSON patch mechanism is not a field-level DOM/HTML diff.
 A mounted compatible interactive page uses its bindings to update inputs;
 passive or incompatible content replaces the owned region.
 
