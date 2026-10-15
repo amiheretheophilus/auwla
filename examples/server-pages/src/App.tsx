@@ -1,6 +1,6 @@
 import { Group } from '@memoized-dom/data';
 import type { ErrorPolicyComponentProps } from '@memoized-dom/data';
-import { changeCount, getBoard, getReceipt, renameOrchard } from '#server-functions';
+import { changeCount, getBoard, getReceipt, renameOrchard, getProgressiveBoard } from '#server-functions';
 
 function Loading() {
   return <p class="status">Waiting for server UI…</p>;
@@ -15,6 +15,7 @@ export function App() {
   const orchard = getBoard('orchard');
   const harbor = getBoard('harbor');
   let receipt = getReceipt();
+  const progressive = getProgressiveBoard('orchard');
 
   const rename = $forms((fields: FormData) => {
     const result = renameOrchard(String(fields.get('title') ?? ''));
@@ -69,6 +70,13 @@ export function App() {
           </form>
         </div>
         <Group pending={Loading} error={Failed}><div suspend>{receipt}</div></Group>
+      </section>
+
+      <section>
+        <h2>Colorless progressive delivery</h2>
+        <p>On first load, the static region appears before its data. Repeating it keeps the previous completed result visible.</p>
+        <button data-progressive-reload onClick={() => $track(progressive).refresh()}>Load a new result</button>
+        <Group pending={Loading} error={Failed}>{progressive}</Group>
       </section>
 
       <footer>Demo state lives in this server process. Restarting resets it.

@@ -316,7 +316,7 @@ so stale contracts are not reused.
 
 ## What streams today
 
-Finite page GETs and mutations return `text/html; charset=utf-8`, with
+Without progressive negotiation, finite page GETs and mutations return `text/html; charset=utf-8`, with
 `x-mmd-page: 1`. The response body starts with the rendered region, not a JSON
 object containing an HTML string. It ends with an inert
 `<script type="application/mmd-page+json" data-mmd-page="1">` metadata block
@@ -334,7 +334,8 @@ data-returning server functions still return JSON.
 Live pages keep `text/event-stream` and the existing SSE snapshot/JSON-patch
 transport for their internal page values (HTML plus binding metadata). Finite
 SSR snapshot requests use the HTML format above. Changing finite delivery does
-not introduce another live protocol or nested progressive page delivery.
+not introduce another live protocol. Nested progression is negotiated separately,
+as described below.
 With negotiated v2 support, compatible interactive page updates may carry a
 compact text edit for `/html` alongside binding-input patches, instead of the
 complete HTML string. The client reconstructs the exact current HTML before
@@ -351,10 +352,95 @@ The existing initial document streaming mode is supported too: the shell may
 arrive first and page sources settle later. Restoring such a source waits for
 its browser binding module without issuing an unnecessary replacement fetch.
 
-Each individual `page(...)` render currently settles before that page result
-is delivered. An `await` before `return page(...)` delays the region, and
-there is no separate progressive nested HTML-region protocol inside a page
-result yet. Do not confuse an open live connection with progressive rendering.
+## Colorless progressive page delivery
+
+Generated page sources negotiate progressive delivery automatically. A new
+server-owned page can deliver static content and available values first; each
+unresolved read uses its nearest `Group` pending policy. Regions fill in as their
+data settles, independently of slower siblings. There is no authored generator,
+`watch`, streaming component, or connection per section.
+
+For example, a server-rendered component can keep independent reads colorless:
+
+```tsx
+export function ExpeditionOverview({ expeditionId }: { expeditionId: string }) {
+  const summary = getSummary(expeditionId);
+  const notes = getNotes(expeditionId);
+
+  return (
+    <article>
+      <h2>Expedition overview</h2>
+      <Group pending={SummaryLoading} error={SummaryFailed}>
+        <section>{summary.description}</section>
+      </Group>
+      <Group pending={NotesLoading} error={NotesFailed}>
+        <ul>{notes.map(note => <li key={note.id}>{note.text}</li>)}</ul>
+      </Group>
+    </article>
+  );
+}
+```
+
+`getSummary` and `getNotes` above are ordinary generated data-returning server
+functions, not generators. `$fetch` and `$read` follow the same consumption
+rules. Keep `suspend` when a whole section must become available together; it is
+not implicitly applied to the entire remote page. Errors handled by one local
+policy do not replace successful siblings. An unhandled render failure fails
+the page source and is reported server-side through the existing error hook.
+
+Pending/error markup must be valid at its insertion site. For example, use an
+inline `<span>` fallback for reads inside a `<p>`, not another `<p>`. Browser HTML
+repair can otherwise move the region anchors and break progressive delivery.
+With `<p>{summary.title}: {summary.count}</p>`, the two unresolved reads have
+separate placeholders and the static colon is visible. `<p suspend>...</p>`
+instead treats that entire paragraph as one unit; another suspended paragraph
+can still complete independently. Neither requires suspending the whole page.
+Separate placeholders do not create separate requests or readiness: the title
+and count read the same summary result and both update when it arrives, without
+waiting for an unrelated source. `suspend` is a presentation choice, not a fix
+for a source reader incorrectly waiting for another request.
+
+An explicit `await` before `return page(...)` still delays the page: the renderer
+cannot stream JSX it has not received. Authorization and middleware run before
+selecting/delivering protected content. Keep independent data work in render-time
+sources when it should not block the shell.
+
+A finite GET or mutation uses one `text/html` response containing length-framed,
+inert HTML page values (`x-mmd-page: 2`), then closes after all regions settle.
+The decoder does not execute streamed scripts. `$forms` remains pending until
+completion, and the action runs once. Ordinary requests without negotiation and
+older clients retain the complete version-1 HTML response. Live pages use their
+existing SSE connection for initial progression, then retain the last completed
+page during revalidation instead of flashing nested loading UI. Assigning a new
+finite source likewise retains the previous page until that replacement is ready.
+
+Each render has a private generation and ordered region records. Records are
+cumulative so coalesced deliveries cannot lose an earlier update. Marker lookup
+is scoped to the owning page, not the document: two instances of the same page
+cannot patch each other. The full current HTML remains available for future
+mounts. Comparison work and frame sizes are bounded; this first protocol still
+normalizes complete page values rather than providing a token/string append API.
+
+Document SSR can forward a partial page and its later source values without a
+duplicate browser fetch. A live page opens its browser subscription after that
+initial generation completes. Cancelling a page response releases its server
+render and outstanding data reads. Already-dispatched event actions retain their
+existing settle-without-replay lifetime.
+
+This does not rerun a server component in the browser. Passive page components
+remain server-only; the enclosing application's existing hydration path adopts
+their HTML as an opaque region. The page's nested markers belong to that page,
+not to the app's hydration index. Supported interactive pages still attach their
+compiler-produced binding programs to existing nodes. Streaming a sibling region
+must not recreate already-delivered static nodes or erase a native input typed
+before hydration.
+
+The existing interactive binding proof is unchanged. Pages whose fixed binding
+contract is supported remain interactive and preserve their local state on
+compatible updates. Mixed interactive components with render-time async work
+that the compiler cannot safely bind still produce the existing compile error;
+progressive transport does not bypass that check or ship server closures to the
+browser. Broader interactive async binding needs a separate compiler proof.
 
 This differs from the usual SSR handoff: the region keeps server-owned
 rendering instead of becoming a fully client-rendered copy of the component.
@@ -376,7 +462,7 @@ and pages. Do not wrap a page in a custom JSON response.
 
 Deferred: native no-JavaScript form/navigation progressive enhancement,
 optimistic mutation of rendered UI, app-wide stream multiplexing,
-retained-live-target action application, progressive nested page delivery,
+retained-live-target action application, broader interactive async page binding,
 and arbitrary server/client closure splitting. Existing data-based
 `optimistic()` callbacks are unchanged.
 

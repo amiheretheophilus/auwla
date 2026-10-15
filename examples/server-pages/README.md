@@ -22,6 +22,17 @@ built yet, run `bun install` and `bun run build` first.
    `updates` key notifies Orchard's live subscribers in both tabs.
    The previous receipt stays visible while the button says “Saving…”, then the
    completed receipt replaces it. Initial loading and errors keep their policies.
+6. Reload and watch the progressive section: its heading/input appear first,
+   then its summary, then its slower activity. Type while waiting: filling a
+   sibling section does not replace that input. “Load a new result” retains the
+   completed page until the replacement finishes.
+
+The summary title and count have separate placeholders, but both consume the
+same result and become available when the summary request resolves. Neither
+waits for activity. No `suspend` is needed for this: it is normal source delivery,
+not an atomic presentation workaround. The inline `<span>` loading policy is
+valid inside these paragraphs; a block `<p>` fallback nested inside another `<p>`
+is invalid HTML and browser reparsing can break the regions.
 
 The page result is rendered on the server. The interactive Board receives
 compiled browser bindings; the passive Receipt needs no component binding code.
@@ -62,10 +73,21 @@ the form fetched its receipt again: that UI came from `renameOrchard`'s POST.
 Compatible live updates can use compact HTML text edits plus binding-input
 patches; reconnects still receive full results.
 
+`getProgressiveBoard` is also a finite GET. On first document load its sections
+arrive through SSR, without a duplicate browser GET. The reload button requests
+one new finite HTML response; its nested data reads stay server-side. No SSE
+connection is opened for that section.
+The button explicitly uses `$track(progressive).refresh()`: calling the same GET
+again can share its already-active cached result, which is not a forced reload.
+
 This demo uses instance-local memory, resets on restart/HMR, and is not durable
 storage. It has no optimistic update, so counters wait for the server response.
-Each `page(...)` result settles before delivery; initial document streaming is
-not progressive delivery of nested content inside that individual page.
+The passive `ProgressiveBoard` uses ordinary data functions with independent
+`Group` policies, without `await` or a page-wide `suspend`. Its nested regions
+arrive as they become ready, through one finite HTML response (or the initial
+document stream). Supported fixed-binding interactive boards are unchanged;
+mixed interactive components with render-time async reads still have the
+existing compiler restrictions. This is not no-JavaScript progressive enhancement.
 
 Build with `bun run example:server-pages:build`. Type-check after generating
 types with `node packages/vite/dist/cli.js types --config examples/server-pages/vite.config.ts`,

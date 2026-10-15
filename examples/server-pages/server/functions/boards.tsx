@@ -1,6 +1,7 @@
 import { define, page } from '../define';
 import { Board } from '../components/Board';
 import { Receipt } from '../components/Receipt';
+import { ProgressiveBoard } from '../components/ProgressiveBoard';
 
 // Deliberately instance-local demo storage. Restarting the server resets it.
 const boards: Record<string, { title: string; count: number; renders: number }> = {
@@ -54,4 +55,25 @@ export const renameOrchard = define.function({
     return page(<Receipt title={trimmed} saved={true} />);
   },
   updates: () => ['demo-board', 'orchard'],
+});
+
+export const getBoardSummary = define.function({
+  async get(_context, boardId: string) {
+    await Bun.sleep(400);
+    const board = findBoard(boardId);
+    return { title: board.title, count: board.count };
+  },
+});
+
+export const getBoardActivity = define.function({
+  async get(_context, boardId: string) {
+    await Bun.sleep(1600);
+    return { message: `${findBoard(boardId).title} activity is ready.` };
+  },
+});
+
+export const getProgressiveBoard = define.function({
+  async get(_context, boardId: string) {
+    return page(<ProgressiveBoard boardId={boardId} />);
+  },
 });

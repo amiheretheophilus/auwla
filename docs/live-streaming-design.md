@@ -9,6 +9,10 @@ Cross-instance support is [under discussion](./live-adapters-discussion.md);
 no adapter API has been selected or implemented.
 For resolved keys, pending holds, rejected snapshots, and missing mutation
 confirmations, see [development diagnostics](./live-diagnostics.md).
+Server functions returning `page(...)` reuse these live connections. Their
+initial passive HTML can reveal ready sections independently; subsequent live
+renders retain the completed page while new sections settle. See
+[colorless progressive page delivery](./server-components-design.md#colorless-progressive-page-delivery).
 
 ## What this adds
 
