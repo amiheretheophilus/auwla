@@ -7,7 +7,7 @@ import {
   disposeFetchResource,
   fetchResourceOperationId,
   fetchResourceSnapshot,
-  fetchResourceIsGenerator,
+  fetchResourceIsFiniteStream,
   isFetchResource,
   rebindFetchResource,
   retryFetchResourceIfLive,
@@ -127,7 +127,7 @@ function observeTrackedOutcome<T>(
       !snapshot.pending &&
       !snapshot.refreshing &&
       snapshot.error === null
-      && (snapshot.streaming !== true || !fetchResourceIsGenerator(resource))
+      && (snapshot.streaming !== true || !fetchResourceIsFiniteStream(resource))
     ) {
       active = false;
       callback(snapshot.data as T, requestId);
@@ -536,7 +536,8 @@ function retireEventSource(
 ): void {
   const resource = source(value);
   const snapshot = fetchResourceSnapshot(resource);
-  if (!snapshot.pending && !snapshot.refreshing) {
+  const finiteStream = fetchResourceIsFiniteStream(resource);
+  if (!snapshot.pending && !snapshot.refreshing && !(finiteStream && snapshot.streaming)) {
     disposeFetchResource(resource);
     return;
   }
@@ -546,7 +547,7 @@ function retireEventSource(
   };
   slot.retired.add(retired);
   retired.disconnect = subscribeFetchResource(resource, settled => {
-    if (settled.pending || settled.refreshing) return;
+    if (settled.pending || settled.refreshing || finiteStream && settled.streaming) return;
     retired.disconnect();
     slot.retired.delete(retired);
     disposeFetchResource(resource);

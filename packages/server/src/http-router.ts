@@ -20,11 +20,16 @@ export function installServerPageFetch(context: object, fetch: typeof globalThis
 
 async function serverFunctionValue(value: unknown, context: ServerContext<object, unknown, object>, fetchContext: object = context, html = false): Promise<unknown> {
   if (!isServerPage(value)) return value;
-  const { renderServerPage, serverPageResponse } = await import('./page');
-  const rendered = await renderServerPage(value, {
+  const { renderServerPage, serverPageResponse, serverPageUpdates, serverPageStreamResponse } = await import('./page');
+  const options = {
     url: context.url.href, signal: context.request.signal, routedContext: context,
     ...(pageFetches.has(fetchContext) ? { fetch: pageFetches.get(fetchContext)! } : {}),
-  });
+  };
+  if (context.request.headers.get('x-mmd-page-stream') === '1' && context.request.headers.get('x-mmd-stream') !== 'snapshot') {
+    const updates = serverPageUpdates(value, options);
+    return html ? serverPageStreamResponse(updates, context.request, streamErrorReporters.get(fetchContext)) : updates;
+  }
+  const rendered = await renderServerPage(value, options);
   return html ? serverPageResponse(rendered) : rendered;
 }
 

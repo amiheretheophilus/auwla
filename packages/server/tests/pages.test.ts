@@ -5,8 +5,12 @@ import { compileModules } from '../../compiler/src/linker';
 import { extractServerPages } from '../../compiler/src/server-pages';
 import { createServerPage, isServerPage, renderServerPage, type ServerPageDefinition } from '../src/page';
 import { createServerFunctionRoutes, createServerRouter, installServerPageFetch } from '../src/http-router';
-import { liveHub } from '../src/live';
+import { liveHub, liveResponse } from '../src/live';
+import { pageUpdates } from '../src/page-definition';
+import type { PageContent } from '@memoized-dom/runtime';
 import { decodePageHtml } from '../../runtime/src/page-html';
+import { decodePageFrames } from '../../runtime/src/page-html';
+import { waitFor } from '../../../test-support/helpers';
 
 /** Execute compiler output without temporary files or application-side imports. */
 function fixture(source: string, modules: Record<string, string> = {}): (...args: unknown[]) => Promise<ServerPageDefinition> {
@@ -18,7 +22,7 @@ function fixture(source: string, modules: Record<string, string> = {}): (...args
   const loaded = new Map<string, Record<string, unknown>>();
   const load = (id: string): Record<string, unknown> => {
     if (id === '@memoized-dom/runtime') return runtime;
-    if (id === '@memoized-dom/data/internal') return data;
+    if (id === '@memoized-dom/data/internal' || id === '@memoized-dom/data') return data;
     if (id === '../components/Board') id = './components/Board.tsx';
     if (loaded.has(id)) return loaded.get(id)!;
     const code = compiled[id]!;
@@ -47,6 +51,107 @@ function fixture(source: string, modules: Record<string, string> = {}): (...args
 }
 
 describe('request-owned server page rendering foundation', () => {
+  it('uses one live connection for initial progression and retains complete content during later renders',async()=>{
+    const services={},hub=liveHub(services),key=hub.key(['page']);
+    const finish=Promise.withResolvers<void>(),started=Promise.withResolvers<void>();
+    let reads=0,cancelled=0;
+    const value=(generation:number,sequence:number,complete:boolean):PageContent=>({$mmd:'page',version:1,id:'page',html:`<p>${generation}:${sequence}</p>`,progress:{id:String(generation),sequence,complete,regions:[]}});
+    const response=liveResponse(hub,key,new Request('https://app.test/page'),async()=>{
+      const generation=++reads;
+      return pageUpdates(async function*(){
+        if(generation===2)started.resolve();
+        yield value(generation,1,false);
+        if(generation===2)await finish.promise;
+        yield value(generation,2,true);
+      },()=>{cancelled|=1<<generation;});
+    });
+    const reader=response.body!.getReader();
+    const read=async()=>JSON.parse(new TextDecoder().decode((await reader.read()).value).split('data: ')[1]!) as {value:PageContent};
+    expect((await read()).value.progress?.complete).toBe(false);
+    expect((await read()).value.progress?.complete).toBe(true);
+    hub.invalidate(['page']);
+    let delivered=false;const next=read().then(result=>{delivered=true;return result;});
+    await started.promise;await Bun.sleep(10);expect(delivered).toBe(false);
+    finish.resolve();expect((await next).value.html).toBe('<p>2:2</p>');expect(reads).toBe(2);
+    await reader.cancel();expect(cancelled).toBe(6);
+  });
+
+  it('keeps a failed nested data policy local while successful siblings complete',async()=>{
+    const make=fixture(`import {page} from '@memoized-dom/server';import {Board} from '../components/Board';export async function make(){return page(<Board/>);}`,{
+      './components/Board.tsx':`import {Group} from '@memoized-dom/data';function Failed(){return <p>Only this section failed</p>}
+        export function Board(){const bad=$fetch('/bad'),good=$fetch('/good');return <main><h1>Static</h1><Group error={Failed}><p>{bad.label}</p></Group><aside>{good.label}</aside></main>}`,
+    });
+    const {serverPageUpdates}=await import('../src/page');
+    const fetch=(async(input:RequestInfo|URL)=>String(input)==='/bad'?new Response('No',{status:500}):Response.json({label:'Good sibling'})) as typeof globalThis.fetch;
+    let last:PageContent|undefined;
+    for await(const frame of serverPageUpdates(await make(),{fetch}))last=frame;
+    expect(last?.progress?.complete).toBe(true);expect(last?.html).toContain('Only this section failed');expect(last?.html).toContain('Good sibling');expect(last?.html).toContain('Static');
+  });
+
+  it('streams static content and independent colorless read sites through one finite HTML response', async () => {
+    const make = fixture(`import {page} from '@memoized-dom/server';import {Board} from '../components/Board';
+      export async function make(){return page(<Board/>);}`, {
+      './components/Board.tsx':`import {Group} from '@memoized-dom/data';
+        function Loading(){return <i>Loading section</i>}
+        export function Board(){const summary=$fetch('/summary'),notes=$fetch('/notes');return <main><h1>Static board</h1>
+          <Group pending={Loading}><section><p>{summary.label}</p></section><aside>{notes.label}</aside></Group></main>}`,
+    });
+    const pending=new Map<string,(response:Response)=>void>();let calls=0;
+    const fetch=(async(input:RequestInfo|URL)=>new Promise<Response>(resolve=>pending.set(String(input),resolve))) as typeof globalThis.fetch;
+    const router=createServerRouter({middleware:[(context,next)=>{installServerPageFetch(context,fetch);return next();}],routes:createServerFunctionRoutes([
+      {id:'board',path:'/_fn/board',method:'POST',parameters:[],handler:()=>{calls++;return make();}},
+    ])});
+    const response=await router.fetch(new Request('https://app.test/_fn/board',{method:'POST',headers:{'x-mmd-stream':'page','x-mmd-page-stream':'1'}}));
+    expect(response.headers.get('content-type')).toBe('text/html; charset=utf-8');expect(response.headers.get('x-mmd-page')).toBe('2');
+    const frames=decodePageFrames(response.body!);
+    const first=await frames.next();expect(first.value?.html).toContain('Static board');
+    expect(first.value?.html.match(/Loading section/g)).toHaveLength(2);
+    expect(first.value?.progress?.complete).toBe(false);
+    const next=frames.next();await waitFor(()=>expect(pending.size).toBe(2));
+    pending.get('/summary')!(Response.json({label:'Summary ready'}));
+    const second=await next;expect(second.value?.html).toContain('Summary ready');expect(second.value?.html).toContain('Loading section');
+    expect(second.value?.progress?.regions.length).toBeGreaterThan(0);
+    pending.get('/notes')!(Response.json({label:'Notes ready'}));
+    let final=second.value;
+    for await(const value of frames)final=value;
+    expect(final?.html).toContain('Notes ready');expect(final?.html).not.toContain('Loading section');
+    expect(final?.progress?.complete).toBe(true);expect(calls).toBe(1);
+  });
+
+  it('keeps explicit suspend sections atomic while unrelated static content streams', async () => {
+    const make=fixture(`import {page} from '@memoized-dom/server';import {Board} from '../components/Board';
+      export async function make(){return page(<Board/>);}`,{
+      './components/Board.tsx':`import {Group} from '@memoized-dom/data';function Loading(){return <p>Waiting together</p>}
+        export function Board(){const first=$fetch('/first'),second=$fetch('/second');return <main><h1>Available</h1>
+          <Group pending={Loading}><section suspend><strong>{first.label}</strong><em>{second.label}</em></section></Group></main>}`,
+    });
+    const pending=new Map<string,(response:Response)=>void>();
+    const fetch=(async(input:RequestInfo|URL)=>new Promise<Response>(resolve=>pending.set(String(input),resolve))) as typeof globalThis.fetch;
+    const {serverPageUpdates}=await import('../src/page');
+    const frames=serverPageUpdates(await make(),{fetch})[Symbol.asyncIterator]();
+    const first=await frames.next();expect(first.value?.html).toContain('Available');expect(first.value?.html).toContain('Waiting together');
+    const reading=frames.next();pending.get('/first')!(Response.json({label:'First ready'}));
+    const second=await reading;expect(second.value?.html).not.toContain('First ready');
+    pending.get('/second')!(Response.json({label:'Second ready'}));
+    let final=second.value;for await(const value of {[Symbol.asyncIterator]:()=>frames})final=value;
+    expect(final?.html).toContain('First ready');expect(final?.html).toContain('Second ready');expect(final?.html).not.toContain('Waiting together');
+  });
+
+  it('cancels a pending nested render when the finite response is cancelled', async () => {
+    const make=fixture(`import {page} from '@memoized-dom/server';import {Board} from '../components/Board';
+      export async function make(){return page(<Board/>);}`,{
+      './components/Board.tsx':`export function Board(){const source=$fetch('/never');return <main><h1>Shell</h1><p>{source.label}</p></main>}`,
+    });
+    let signal:AbortSignal|null|undefined;
+    const fetch=(async(_input:RequestInfo|URL,init?:RequestInit)=>{signal=init?.signal;return new Promise<Response>(()=>{});}) as typeof globalThis.fetch;
+    const router=createServerRouter({middleware:[(context,next)=>{installServerPageFetch(context,fetch);return next();}],routes:createServerFunctionRoutes([
+      {id:'board',path:'/_fn/board',method:'GET',parameters:[],handler:()=>make()},
+    ])});
+    const response=await router.fetch(new Request('https://app.test/_fn/board',{headers:{'x-mmd-stream':'page','x-mmd-page-stream':'1'}}));
+    const reader=response.body!.getReader();await reader.read();await waitFor(()=>expect(signal).toBeDefined());
+    await reader.cancel();expect(signal?.aborted).toBe(true);
+  });
+
   it('discards a page invalidated while its nested server rendering is still settling', async () => {
     const make = fixture(`import {page} from '@memoized-dom/server';import {Board} from '../components/Board';
       export async function make(version){return page(<Board version={version}/>);}`, {

@@ -1,10 +1,8 @@
 /** Compiler-owned page transport; readiness includes loading its allowlisted bindings. */
-import { acceptPageContent, decodePageHtml, getActiveEnvironment, isPageContent, type PageContent } from '@memoized-dom/runtime';
-import { getActiveDataRuntime } from './active-runtime';
-import { enableRequestEncoding } from './request-encoding';
+import { acceptPageContent, decodePageHtml, decodePageFrames, getActiveEnvironment, isPageContent, type PageContent } from '@memoized-dom/runtime';
 import { createStreamingSource } from './streaming';
 import { registerCompilerTransferContract } from './request-transfer';
-import { registerResponseDecoder } from './response-decoder';
+import { registerResponseDecoder, registerResponseStreamDecoder } from './response-decoder';
 import type { FetchOptions, ResolvedValue, StandardSchemaV1 } from './types';
 
 type Loader = (id:string,key:string|undefined) => Promise<void> | void;
@@ -27,7 +25,13 @@ export function createPageSource(target:string, options:FetchOptions, mode:'live
       }
       return decodePageHtml(await response.text());
     });
+    registerResponseStreamDecoder(validate, (response, signal) => {
+      if (response.headers.get('content-type')?.split(';',1)[0]?.trim().toLowerCase() !== 'text/html' || response.body === null) {
+        throw new TypeError('memo-dom: expected server page HTML delivery');
+      }
+      return decodePageFrames(response.body, signal);
+    });
   }
   const validated = {...options,validate};
-  return mode ? createStreamingSource(target,validated,mode) : enableRequestEncoding(getActiveDataRuntime()).$fetch(target,validated) as unknown as ResolvedValue<PageContent>;
+  return createStreamingSource(target,validated,mode ?? 'page');
 }

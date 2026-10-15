@@ -6,6 +6,8 @@ import type {FetchStore, FetchRestoration} from './resource';
 import {fetchStoreForRuntime, fetchRestorationForRuntime, installFetchTransferIdentity, type CoreDataRuntime} from './runtime-core';
 import type {DataRuntime, SerializedDataState, SerializedSourceRecord, SerializedSourceSnapshot} from './types';
 type FetchEntry = FetchStore['allEntries'] extends Set<infer Entry> ? Entry : never;
+const awaitingDelivery = (record: SerializedSourceRecord): boolean =>
+  record.snapshot.status !== 'error' && record.snapshot.streamed === true;
 
 /**
  * Apply a restored record to a freshly acquired entry. Success restores as
@@ -25,7 +27,7 @@ function seedEntryFromRecord(
         if(value.issues)throw new RequestError('Invalid restored server page',{kind:'validation',issues:value.issues});
         return value.value;
       };
-      if(validated instanceof Promise)return entry.restoreValidated(validated.then(result),snapshot.revalidate);
+      if(validated instanceof Promise)return entry.restoreValidated(validated.then(result),snapshot.revalidate,snapshot.streamed);
       data=result(validated);
     }
     entry.snapshot = {
@@ -34,6 +36,7 @@ function seedEntryFromRecord(
       status: 'success',
       pending: false,
       refreshing: snapshot.revalidate,
+      ...(snapshot.streamed ? {streaming:true} : {}),
     };
     entry.hasData = true;
     return;
@@ -139,17 +142,19 @@ class RestoredFetchStore implements FetchRestoration {
         if (!this.store.allEntries.has(entry) || record.contractId !== fetchTransferContract(entry.descriptor.schema)) continue;
         waiters.delete(entry);
         const restoring=seedEntryFromRecord(entry, record);
+        const awaiting = awaitingDelivery(record);
+        if (awaiting) waiters.add(entry);
         entry.emit();
         if(restoring){
           void restoring.then(()=>{
-            if(this.store.allEntries.has(entry)&&(record.snapshot.status==='success'&&(record.snapshot.revalidate||entry.descriptor.stream==='live'))){
+            if(!awaiting&&this.store.allEntries.has(entry)&&(record.snapshot.status==='success'&&(record.snapshot.revalidate||entry.descriptor.stream==='live'))){
               if(this.hydrationBlocked){entry.deferStart();this.deferredStarts.add(entry);}
               else entry.start(true).catch(()=>{});
             }
           },()=>{});
           continue;
         }
-        if (this.store.allEntries.has(entry) && record.snapshot.status === 'success' &&
+        if (!awaiting && this.store.allEntries.has(entry) && record.snapshot.status === 'success' &&
           (record.snapshot.revalidate || entry.descriptor.stream === 'live')) {
           if (this.hydrationBlocked) {
             entry.deferStart();
@@ -178,6 +183,8 @@ class RestoredFetchStore implements FetchRestoration {
     for (const [identity, record] of this.restoreRecords) {
       if (record.snapshot.status === 'pending' && record.snapshot.streamed) {
         this.restoreRecords.set(identity, {...record, snapshot: {status: 'pending'}});
+      } else if (record.snapshot.status === 'success' && record.snapshot.streamed) {
+        this.restoreRecords.set(identity, {...record, snapshot: {...record.snapshot, streamed: false, revalidate: true}});
       }
     }
   }
@@ -189,7 +196,7 @@ class RestoredFetchStore implements FetchRestoration {
     if (identity === null) return undefined;
     const record = this.restoreRecords.get(identity);
     if (record === undefined || record.contractId !== contractId) return undefined;
-    if (record.snapshot.status !== 'pending' || record.snapshot.streamed !== true) this.restoreRecords.delete(identity);
+    if (!awaitingDelivery(record)) this.restoreRecords.delete(identity);
     return record;
   }
 
@@ -199,24 +206,24 @@ class RestoredFetchStore implements FetchRestoration {
       descriptor.transferIdentity,
       fetchTransferContract(descriptor.schema),
     );
-    const awaitingStream = restored?.snapshot.status === 'pending' && restored.snapshot.streamed === true;
+    const awaitingStream = restored !== undefined && awaitingDelivery(restored);
     if (restored !== undefined) {
       const restoring=seedEntryFromRecord(entry, restored);
+      if (awaitingStream) {
+        let waiters = this.streamWaiters.get(restored.sourceId);
+        if (waiters === undefined) this.streamWaiters.set(restored.sourceId, waiters = new Set());
+        waiters.add(entry);
+      }
       entry.emit();
       if(restoring){
         void restoring.then(()=>{
           if(!this.store.allEntries.has(entry))return;
-          if(force||restored.snapshot.status==='success'&&(restored.snapshot.revalidate||descriptor.stream==='live')){
+          if(force||!awaitingStream&&restored.snapshot.status==='success'&&(restored.snapshot.revalidate||descriptor.stream==='live')){
             if(this.hydrationBlocked){entry.deferStart();this.deferredStarts.add(entry);}
             else entry.start(true).catch(()=>{});
           }
         },()=>{});
         return;
-      }
-      if (awaitingStream) {
-        let waiters = this.streamWaiters.get(restored.sourceId);
-        if (waiters === undefined) this.streamWaiters.set(restored.sourceId, waiters = new Set());
-        waiters.add(entry);
       }
     }
     // Ordinary seeded entries resume only through an explicit refresh — a restored
@@ -233,7 +240,7 @@ class RestoredFetchStore implements FetchRestoration {
       (restored !== undefined &&
         ((restored.snapshot.status === 'pending' && !awaitingStream) ||
           (restored.snapshot.status === 'success' && restored.snapshot.revalidate)));
-    const reconnectLive = restored?.snapshot.status === 'success' && descriptor.stream === 'live';
+    const reconnectLive = !awaitingStream && restored?.snapshot.status === 'success' && descriptor.stream === 'live';
     if (getActiveEnvironment().mode === 'hydrate') {
       this.hydrationBlocked = true;
       if (shouldStart || reconnectLive) {
@@ -241,7 +248,9 @@ class RestoredFetchStore implements FetchRestoration {
         this.deferredStarts.add(entry);
       }
     } else if (shouldStart || reconnectLive) {
-      entry.start(force || reconnectLive).catch(() => {});
+      // Incomplete page handoffs must resume even though a partial payload
+      // exists. Keep the ordinary source restoration/revalidation policy.
+      entry.start(force || reconnectLive || descriptor.stream === 'page').catch(() => {});
     }
   }
 

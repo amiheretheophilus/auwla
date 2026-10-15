@@ -3,12 +3,97 @@ import { createDataRuntime, runWithDataRuntime } from '../src';
 import { createPageSource } from '../src/page-source';
 import type { FetchResource } from '../src/types';
 import { fetchStoreForRuntime } from '../src/runtime-core';
-import { encodePageHtml, type PageContent } from '@memoized-dom/runtime';
+import { encodePageHtml, encodePageFrame, type PageContent } from '@memoized-dom/runtime';
+import { deliverStreamedDataState, endDataStream } from '../src/restoration';
+import { createEventSourceSlot, rebindEventSourceSlot, disposeEventSourceSlot, trackResolvedValue } from '../src/transparent';
 import { waitFor } from '../../../test-support/helpers';
 
 function pageResponse(value: PageContent): Response {
   return new Response(encodePageHtml(value), {headers:{'content-type':'text/html; charset=utf-8','x-mmd-page':'1'}});
 }
+
+function progressive(sequence:number,complete=false):PageContent {
+  return {$mmd:'page',version:1,id:'progressive',html:`<p>${sequence}</p>`,progress:{id:'render',sequence,complete,regions:[]}};
+}
+
+it('lets a replaced finite page action finish once after its partial content has arrived',async()=>{
+  const channels:ReadableStreamDefaultController<Uint8Array>[]=[],signals:AbortSignal[]=[];
+  const runtime=createDataRuntime({baseURL:'https://app.test',fetch:async(_url,init)=>{
+    signals.push(init!.signal!);
+    return new Response(new ReadableStream({start(controller){channels.push(controller);}}),{headers:{'content-type':'text/html','x-mmd-page':'2'}});
+  }});
+  const slot=createEventSourceSlot();
+  try {
+    const first=runWithDataRuntime(runtime,()=>createPageSource('/save',{method:'POST'},undefined,()=>{}));
+    const successes:PageContent[]=[];trackResolvedValue(first).onSuccess(page=>successes.push(page));
+    rebindEventSourceSlot(slot,()=>first,()=>{});
+    const send=(index:number,page:PageContent)=>channels[index]!.enqueue(new TextEncoder().encode(encodePageFrame(page)));
+    send(0,progressive(1));await waitFor(()=>expect((first as unknown as FetchResource<PageContent>).data).toBeDefined());
+    expect(successes).toEqual([]);
+    const second=runWithDataRuntime(runtime,()=>createPageSource('/save',{method:'POST'},undefined,()=>{}));
+    rebindEventSourceSlot(slot,()=>second,()=>{});
+    expect(signals[0]!.aborted).toBe(false);
+    send(0,progressive(2,true));channels[0]!.close();
+    send(1,progressive(1,true));channels[1]!.close();await runtime.settle();
+    await waitFor(()=>expect(successes).toHaveLength(1));expect(successes[0]?.progress?.complete).toBe(true);expect(signals).toHaveLength(2);
+  }finally{disposeEventSourceSlot(slot);runtime.clear();}
+});
+
+it('delivers finite partial pages immediately but keeps settlement pending until completion',async()=>{
+  let channel!:ReadableStreamDefaultController<Uint8Array>;
+  let requests=0;
+  const runtime=createDataRuntime({baseURL:'https://app.test',fetch:async(_url,init)=>{
+    requests++;expect(new Headers(init?.headers).get('x-mmd-page-stream')).toBe('1');
+    return new Response(new ReadableStream({start(controller){channel=controller;}}),{headers:{'content-type':'text/html','x-mmd-page':'2'}});
+  }});
+  try {
+    const source=runWithDataRuntime(runtime,()=>createPageSource('/page',{method:'POST'},undefined,()=>{})) as unknown as FetchResource<PageContent>;
+    const emit=(page:PageContent)=>channel.enqueue(new TextEncoder().encode(encodePageFrame(page)));
+    emit(progressive(1));await waitFor(()=>expect(source.data?.progress?.sequence).toBe(1));
+    expect([...fetchStoreForRuntime(runtime).allEntries][0]?.snapshot.streaming).toBe(true);expect(await runtime.settle(0)).toBe(false);
+    emit(progressive(2,true));channel.close();await runtime.settle();
+    expect(source.data?.progress?.complete).toBe(true);expect([...fetchStoreForRuntime(runtime).allEntries][0]?.snapshot.streaming).toBe(false);expect(requests).toBe(1);
+  }finally{runtime.clear();}
+});
+
+it('restores successive partial page values without refetching and recovers unclaimed incomplete handoffs',async()=>{
+  const server=createDataRuntime({baseURL:'https://app.test',fetch:async()=>pageResponse(progressive(1,true))});
+  let requests=0;
+  const client=createDataRuntime({baseURL:'https://app.test',fetch:async()=>{requests++;return pageResponse(progressive(3,true));}});
+  try {
+    server.serializeState();runWithDataRuntime(server,()=>createPageSource('/page',{},undefined,()=>{}));await server.settle();
+    const state=server.serializeState();
+    const record=state.sources[0]!;
+    const partial={...state,sources:[{...record,snapshot:{status:'success' as const,data:progressive(1),revalidate:false,streamed:true}}]};
+    client.restoreState(partial);
+    const restoredSource=runWithDataRuntime(client,()=>createPageSource('/page',{},undefined,()=>{}));
+    const source=restoredSource as unknown as FetchResource<PageContent>;
+    let successes=0;trackResolvedValue(restoredSource).onSuccess(()=>{successes++;});
+    await client.settle();expect(source.data?.progress?.sequence).toBe(1);expect(requests).toBe(0);
+    expect(successes).toBe(0);
+    deliverStreamedDataState(client,{...state,sources:[{...record,snapshot:{status:'success',data:progressive(2),revalidate:false,streamed:true}}]});
+    await client.settle();expect(source.data?.progress?.sequence).toBe(2);expect(requests).toBe(0);
+    expect(successes).toBe(0);
+    deliverStreamedDataState(client,{...state,sources:[{...record,snapshot:{status:'success',data:progressive(3,true),revalidate:false}}]});await client.settle();
+    expect(source.data?.progress?.complete).toBe(true);expect(requests).toBe(0);
+    expect(successes).toBe(1);
+    const late=createDataRuntime({baseURL:'https://app.test',fetch:async()=>{requests++;return pageResponse(progressive(3,true));}});
+    try {
+      late.restoreState(partial);endDataStream(late);
+      const recovered=runWithDataRuntime(late,()=>createPageSource('/page',{},undefined,()=>{})) as unknown as FetchResource<PageContent>;
+      await waitFor(()=>expect(recovered.data?.progress?.sequence).toBe(3));expect(requests).toBe(1);
+    }finally{late.clear();}
+  }finally{client.clear();server.clear();}
+});
+
+it('does not transfer a truncated progressive page as a completed success',async()=>{
+  const runtime=createDataRuntime({baseURL:'https://app.test',fetch:async()=>new Response(encodePageFrame(progressive(1)),{headers:{'content-type':'text/html','x-mmd-page':'2'}})});
+  try {
+    runtime.serializeState();
+    const source=runWithDataRuntime(runtime,()=>createPageSource('/page',{},undefined,()=>{})) as unknown as FetchResource<PageContent>;
+    await runtime.settle();expect(source.error).not.toBeNull();expect(runtime.serializeState().sources[0]?.snapshot.status).toBe('error');
+  }finally{runtime.clear();}
+});
 
 it('reconstructs a live page text edit before validation and binding delivery', async () => {
   let channel: ReadableStreamDefaultController<Uint8Array>;

@@ -403,7 +403,9 @@ export class HydrationMarkerIndex {
     while (node !== null && node !== end) {
       const marker = markerFor(node);
       if (marker?.type !== 'open') {
-        if (node.nodeType === 1) this.#walk(node.firstChild, null);
+        // A progressive server page owns its inner markers. They are opaque
+        // to the enclosing application and may repeat in sibling instances.
+        if (node.nodeType === 1 && !(node as Element).hasAttribute('data-mmd-page-render')) this.#walk(node.firstChild, null);
         node = node.nextSibling;
         continue;
       }

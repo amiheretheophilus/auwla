@@ -12,6 +12,7 @@
 import type { SerializedDataState, SerializedSourceRecord } from '@memoized-dom/data';
 import { escapeJsonForScriptTag } from './json-script';
 import type { StringRenderableNode } from './string-document';
+import { isPageContent } from '@memoized-dom/runtime';
 
 const RANGE_OPEN = /^mmd:([cgl]):(.+)$/;
 const PAIRED_OPEN = /^mmd:[rcgl]:/;
@@ -76,9 +77,9 @@ export class RegionTracker {
   }
 
   /** Changed ranges, outermost first; a sent range carries its descendants. */
-  changes(): ChangedRegion[] {
+  changes(pageChanges: readonly { before: string; after: string }[] = []): ChangedRegion[] {
     const changed: ChangedRegion[] = [];
-    this.#diff(rangesIn(this.root, null), changed);
+    this.#diff(rangesIn(this.root, null), changed, pageChanges);
     return changed;
   }
 
@@ -97,13 +98,24 @@ export class RegionTracker {
     }
   }
 
-  #diff(ranges: readonly MarkerRange[], changed: ChangedRegion[]): void {
+  #diff(ranges: readonly MarkerRange[], changed: ChangedRegion[], pageChanges: readonly { before: string; after: string }[]): void {
     for (const range of ranges) {
       const html = this.#html(range);
       const previous = this.#sent.get(range.id);
       if (previous === html) {
-        this.#diff(rangesIn(range.open.nextSibling, range.close), changed);
+        this.#diff(rangesIn(range.open.nextSibling, range.close), changed, pageChanges);
         continue;
+      }
+      if (previous !== undefined && pageChanges.length) {
+        let before = previous, after = html;
+        // The source delta carries scoped inner-page changes separately. Only
+        // omit an enclosing HTML replacement when every other byte is equal.
+        // Unique request-generation attributes make these exact owned extents.
+        for (const [index, page] of pageChanges.entries()) {
+          const token = `<!--mmd:page-progress:${index}-->`;
+          before = before.replaceAll(page.before, token); after = after.replaceAll(page.after, token);
+        }
+        if (before === after) { this.#record([range]); continue; }
       }
       // A range the browser never received has no target; its sent parent
       // already carried it.
@@ -117,8 +129,9 @@ export class RegionTracker {
 export function streamedState(state: SerializedDataState): SerializedDataState {
   return {
     ...state,
-    sources: state.sources.map(record => record.snapshot.status === 'pending'
-      ? { ...record, snapshot: { status: 'pending', streamed: true } }
+    sources: state.sources.map(record => record.snapshot.status === 'pending' ||
+      record.snapshot.status === 'success' && isPageContent(record.snapshot.data) && record.snapshot.data.progress?.complete === false
+      ? { ...record, snapshot: { ...record.snapshot, streamed: true } }
       : record),
   };
 }
@@ -160,6 +173,16 @@ function inlineScript(source: string, nonce: string | undefined): string {
  * root's payload (before mount) or hands the data to the mounted root.
  */
 const CLIENT_STREAM = `(function(){var K=Symbol.for("memoized-dom:stream");` +
+  `function pages(state){state.sources.forEach(function(record){var value=record.snapshot.data,p=value&&value.progress;` +
+  `if(record.contractId!=="mmd-fetch/v1:page:1"||record.snapshot.status!=="success"||!p)return;` +
+  `document.querySelectorAll("[data-mmd-page-render]").forEach(function(root){` +
+  `if(root.getAttribute("data-mmd-page-render")!==p.id)return;var sequence=Number(root.getAttribute("data-mmd-page-sequence"));` +
+  `p.regions.forEach(function(region){if(region.sequence<=sequence)return;var walker=document.createTreeWalker(root,128),open,node,depth=0;` +
+  `while(node=walker.nextNode()){if(!open){if(/^mmd:[cgl]:/.test(node.data)&&node.data.slice(6)===region.id)open=node;continue}` +
+  `if(/^mmd:[rcgl]:/.test(node.data))depth++;else if(node.data==="/mmd"){if(!depth)break;depth--}}` +
+  `if(!open||!node||open.parentNode!==node.parentNode)return;var template=document.createElement("template");template.innerHTML=region.html;` +
+  `while(open.nextSibling!==node)open.parentNode.removeChild(open.nextSibling);node.parentNode.insertBefore(template.content,node)});` +
+  `root.setAttribute("data-mmd-page-sequence",p.sequence)})})}` +
   `function find(selector,attribute,value,use){var list=document.querySelectorAll(selector);` +
   `for(var i=0;i<list.length;i++)if(list[i].getAttribute(attribute)===value)return use(list[i])}` +
   `function swap(id,template){var walker=document.createTreeWalker(document,128),open,node,depth=0;` +
@@ -176,7 +199,7 @@ const CLIENT_STREAM = `(function(){var K=Symbol.for("memoized-dom:stream");` +
   `self.__mmdS=function(root,ids){var script=document.currentScript,delta=script&&script.previousElementSibling,` +
   `api=self[K],live=!!(api&&api.owns(root)),state;` +
   `if(delta&&delta.getAttribute("data-mmd-delta")===root){state=JSON.parse(delta.textContent);delta.parentNode.removeChild(delta)}` +
-  `if(state){if(live)api.deliver(root,state);else merge(root,state)}` +
+  `if(state){if(live)api.deliver(root,state);else {pages(state);merge(root,state)}}` +
   `ids.forEach(function(id){find("template[data-mmd-region]","data-mmd-region",id,function(template){` +
   `if(!live)swap(id,template);template.parentNode.removeChild(template)})});` +
   `if(script)script.parentNode.removeChild(script)};` +

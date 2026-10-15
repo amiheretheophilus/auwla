@@ -46,7 +46,7 @@ import type {
 } from './types';
 
 interface FetchDescriptor {
-  readonly stream?: 'live' | 'generator';
+  readonly stream?: 'live' | 'generator' | 'page';
   readonly url: string;
   readonly method: FetchMethod;
   readonly headers: HeadersInit | undefined;
@@ -225,14 +225,14 @@ class FetchEntry {
   }
 
   /** Compiler protocol restoration may wait for its browser binding artifact. */
-  restoreValidated(data:PromiseLike<unknown>,revalidate:boolean):Promise<unknown> {
+  restoreValidated(data:PromiseLike<unknown>,revalidate:boolean,streaming?:boolean):Promise<unknown> {
     this.cancelRequest();
     const generation=++this.generation;
     this.snapshot.pending=true;this.snapshot.refreshing=this.hasData;
     this.snapshot.status=this.hasData?'success':'pending';
     const request=Promise.resolve(data).then(value=>{
       if(generation !== this.generation)return;
-      this.snapshot={data:value,error:null,status:'success',pending:false,refreshing:revalidate};
+      this.snapshot={data:value,error:null,status:'success',pending:false,refreshing:revalidate,...(streaming?{streaming:true}:{})};
       this.hasData=true;this.emit();return value;
     },error=>{
       if(generation !== this.generation)return;
@@ -661,8 +661,9 @@ export function fetchResourceUpdates(resource: unknown): readonly LiveStamp[] {
   return typeof resource === 'object' && resource !== null ? controllers.get(resource)?.updates ?? [] : [];
 }
 
-export function fetchResourceIsGenerator(resource: unknown): boolean {
-  return typeof resource === 'object' && resource !== null && controllers.get(resource)?.descriptor.stream === 'generator';
+export function fetchResourceIsFiniteStream(resource: unknown): boolean {
+  const mode = typeof resource === 'object' && resource !== null ? controllers.get(resource)?.descriptor.stream : undefined;
+  return mode === 'generator' || mode === 'page';
 }
 
 /** Internal capability check used by cross-runtime availability adapters. */

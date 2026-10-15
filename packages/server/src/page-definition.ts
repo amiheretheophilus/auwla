@@ -3,6 +3,15 @@ import type { ServerComponent } from './root-id';
 import { projectPageInputs } from './page-inputs';
 
 const PAGE = /* @__PURE__ */ Symbol('memoized-dom:server-page');
+const PROGRESSIVE_PAGE = Symbol('memoized-dom:page-render');
+/** Internal renderer iteration, never an authored generator function. */
+export interface ServerPageUpdates extends AsyncIterable<PageContent> { readonly [PROGRESSIVE_PAGE]: true; cancel(): void }
+export function pageUpdates(iterate: () => AsyncGenerator<PageContent>, cancel: () => void): ServerPageUpdates {
+  return { [PROGRESSIVE_PAGE]: true, [Symbol.asyncIterator]: iterate, cancel };
+}
+export function isServerPageUpdates(value: unknown): value is ServerPageUpdates {
+  return typeof value === 'object' && value !== null && PROGRESSIVE_PAGE in value;
+}
 
 export interface ServerPageDefinition {
   readonly [PAGE]: true;

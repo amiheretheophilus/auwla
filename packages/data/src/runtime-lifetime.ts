@@ -8,6 +8,8 @@ export interface DataRuntimeProvider {
 interface Lifetime {
   providers: Set<DataRuntimeProvider>;
   disposers: Set<() => void>;
+  progress: boolean;
+  listeners: Set<() => void>;
 }
 
 const lifetimes = new WeakMap<object, Lifetime>();
@@ -15,10 +17,16 @@ const lifetimes = new WeakMap<object, Lifetime>();
 function lifetime(runtime: object): Lifetime {
   let current = lifetimes.get(runtime);
   if (current === undefined) {
-    current = { providers: new Set(), disposers: new Set() };
+    current = { providers: new Set(), disposers: new Set(), progress: false, listeners: new Set() };
     lifetimes.set(runtime, current);
   }
   return current;
+}
+
+/** A streamed value can advance rendering before its finite request completes. */
+export function notifyDataRuntimeProgress(runtime: object): void {
+  const current = lifetime(runtime); current.progress = true;
+  for (const listener of [...current.listeners]) listener();
 }
 
 export function registerDataRuntimeProvider(runtime: object, provider: DataRuntimeProvider): void {
@@ -82,14 +90,22 @@ export async function nextDataRuntimeSettlement(
   await Promise.resolve();
   const pending = [...lifetime(runtime).providers].flatMap(provider => [...provider.pending()]);
   if (pending.length === 0) return 'idle';
+  const current = lifetime(runtime);
+  if (current.progress) { current.progress = false; return 'progress'; }
   if (budgetMs <= 0) return 'timeout';
   let timer: ReturnType<typeof setTimeout> | undefined;
+  let progress: (() => void) | undefined;
   try {
     return await Promise.race([
       ...pending.map(work => work.then(() => 'progress' as const, () => 'progress' as const)),
+      new Promise<'progress'>(resolve => {
+        progress = () => { current.progress = false; resolve('progress'); };
+        current.listeners.add(progress);
+      }),
       new Promise<'timeout'>(resolve => { timer = setTimeout(() => resolve('timeout'), budgetMs); }),
     ]);
   } finally {
     clearTimeout(timer);
+    if (progress) current.listeners.delete(progress);
   }
 }

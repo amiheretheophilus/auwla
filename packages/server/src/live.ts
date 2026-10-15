@@ -1,12 +1,14 @@
 import { encodeLiveFrame as frame, LivePatchEncoder } from './live-patch';
 import { liveDiagnosticsEnabled, reportLiveDiagnostic, liveDiagnosticName } from '@memoized-dom/data/internal';
+import { isServerPageUpdates, type ServerPageUpdates } from './page-definition';
+import type { PageContent } from '@memoized-dom/runtime';
 
 /** Internal invalidation and delivery protocol; no authored SSE endpoints. */
 export type LiveKey = readonly (string | number | boolean | null)[];
 export interface LiveStamp { epoch: string; key: string; revision: number }
 type StreamErrorReporter = (error: unknown) => void | Promise<void>;
 
-async function reportStreamError(error: unknown, request: Request, report?: StreamErrorReporter): Promise<void> {
+export async function reportStreamError(error: unknown, request: Request, report?: StreamErrorReporter): Promise<void> {
   if (report === undefined) {
     console.error(`[memoized-dom] Stream failed: ${request.method} ${new URL(request.url).pathname}`, error);
     return;
@@ -122,49 +124,69 @@ export function liveResponse(
   let dirty = true;
   let wake: (() => void) | undefined;
   let heartbeat: ReturnType<typeof setTimeout> | undefined;
+  let rendering: { updates: ServerPageUpdates; iterator: AsyncIterator<PageContent>; stamp: LiveStamp } | undefined;
+  let committed = false;
+  const releaseRender = () => {
+    const previous = rendering; rendering = undefined;
+    previous?.updates.cancel();
+    void previous?.iterator.return?.().catch(() => {});
+  };
   const stop = () => {
     if (abort.signal.aborted) return;
     abort.abort();
     disconnect();
     request.signal.removeEventListener('abort', stop);
     clearTimeout(heartbeat);
+    releaseRender();
     wake?.();
   };
-  const disconnect = hub.subscribe(key, () => { dirty = true; wake?.(); });
+  const disconnect = hub.subscribe(key, () => { dirty = true; rendering?.updates.cancel(); wake?.(); });
   request.signal.addEventListener('abort', stop, { once: true });
   if (request.signal.aborted) stop();
   const body = new ReadableStream<Uint8Array>({
     async pull(controller) {
       try {
-        if (!dirty && !abort.signal.aborted) {
-          await new Promise<void>(resolve => {
-            wake = resolve;
-            heartbeat = setTimeout(resolve, 5_000);
-          });
-          wake = undefined;
-          clearTimeout(heartbeat);
-        }
-        while (dirty && !abort.signal.aborted) {
-          dirty = false;
-          const stamp = hub.stamp(key);
-          if (liveDiagnosticsEnabled()) reportLiveDiagnostic('query-started', {
-            source: liveDiagnosticName(request.url), stamp,
-          });
-          const value = await query(abort.signal);
-          if (abort.signal.aborted) break;
-          if (dirty || stamp.revision !== hub.stamp(key).revision) {
-            if (liveDiagnosticsEnabled()) reportLiveDiagnostic('query-discarded', {
-              reason: 'invalidated-during-read', source: liveDiagnosticName(request.url),
-              stamp, current: hub.stamp(key),
-            });
-            continue;
-          }
+        const deliver = (value: unknown, stamp: LiveStamp) => {
           controller.enqueue(patches === undefined ? frame('value', { value, stamp }) : patches.encode(value, stamp));
           if (liveDiagnosticsEnabled()) reportLiveDiagnostic('query-delivered', { source: liveDiagnosticName(request.url), stamp });
-          return;
+        };
+        while (!abort.signal.aborted) {
+          if (dirty) {
+            releaseRender(); dirty = false;
+            const stamp = hub.stamp(key);
+            if (liveDiagnosticsEnabled()) reportLiveDiagnostic('query-started', { source: liveDiagnosticName(request.url), stamp });
+            const value = await query(abort.signal);
+            if (abort.signal.aborted) { if (isServerPageUpdates(value)) value.cancel(); break; }
+            if (dirty || stamp.revision !== hub.stamp(key).revision) {
+              if (isServerPageUpdates(value)) value.cancel();
+              if (liveDiagnosticsEnabled()) reportLiveDiagnostic('query-discarded', {
+                reason: 'invalidated-during-read', source: liveDiagnosticName(request.url), stamp, current: hub.stamp(key),
+              });
+              continue;
+            }
+            if (isServerPageUpdates(value)) rendering = { updates: value, iterator: value[Symbol.asyncIterator](), stamp };
+            else { committed = true; deliver(value, stamp); return; }
+          }
+          if (rendering) {
+            const current = rendering;
+            let next: IteratorResult<PageContent>;
+            try { next = await current.iterator.next(); }
+            catch (error) { if (dirty && !abort.signal.aborted) { releaseRender(); continue; } throw error; }
+            if (abort.signal.aborted) break;
+            if (dirty || current.stamp.revision !== hub.stamp(key).revision) { dirty = true; releaseRender(); continue; }
+            if (next.done) { releaseRender(); continue; }
+            // First visits reveal ready regions; revalidations retain the last
+            // complete result instead of flashing nested loading fallbacks.
+            if (committed && next.value.progress?.complete === false) continue;
+            if (next.value.progress?.complete !== false) committed = true;
+            deliver(next.value, current.stamp); return;
+          }
+          await new Promise<void>(resolve => { wake = resolve; heartbeat = setTimeout(resolve, 5_000); });
+          wake = undefined; clearTimeout(heartbeat);
+          if (dirty) continue;
+          if (!abort.signal.aborted) { controller.enqueue(encoder.encode(': heartbeat\n\n')); return; }
         }
-        if (abort.signal.aborted) controller.close();
-        else controller.enqueue(encoder.encode(': heartbeat\n\n'));
+        controller.close();
       } catch (error) {
         const failed = !abort.signal.aborted;
         try {

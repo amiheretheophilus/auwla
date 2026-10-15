@@ -2,6 +2,7 @@ import { stringTier, type StringRenderableNode } from './string-document';
 import { createPayloadScriptTag } from './render';
 import type { RenderOptions } from './index';
 import type { ServerComponent } from './root-id';
+import { isPageContent, type PageContent } from '@memoized-dom/runtime';
 import { RenderSession, type RenderSettlement } from './session';
 import {
   RegionTracker,
@@ -37,6 +38,9 @@ async function streamRegions(
   const payload = session.payload();
   const state = payload.state === undefined ? undefined : streamedState(payload.state);
   const deltas = new SourceDeltas(state ?? { formatVersion: 1, sources: [] });
+  const pages = new Map<string, PageContent>();
+  for (const record of state?.sources ?? []) if (record.snapshot.status === 'success' &&
+    record.contractId === 'mmd-fetch/v1:page:1' && isPageContent(record.snapshot.data)) pages.set(record.sourceId, record.snapshot.data);
   const nonce = session.options.nonce;
   await push(
     session.wrap(serialize(root)) +
@@ -48,8 +52,14 @@ async function streamRegions(
   let step: 'idle' | 'progress' | 'timeout';
   do {
     step = await session.nextSettlement(budgetEnd);
-    const regions = tracker.changes();
     const sources = deltas.take(streamedState(session.dataRuntime.serializeState()));
+    const pageChanges: { before: string; after: string }[] = [];
+    for (const record of sources) if (record.snapshot.status === 'success' && record.contractId === 'mmd-fetch/v1:page:1' && isPageContent(record.snapshot.data)) {
+      const page = record.snapshot.data, previous = pages.get(record.sourceId);
+      if (page.progress && page.progress.id === previous?.progress?.id) pageChanges.push({ before: previous.html, after: page.html });
+      pages.set(record.sourceId, page);
+    }
+    const regions = tracker.changes(pageChanges);
     if (regions.length > 0 || sources.length > 0) {
       await push(streamChunk(session.rootId, regions, sources, nonce));
     }

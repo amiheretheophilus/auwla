@@ -1,5 +1,6 @@
 import { getActiveEnvironment } from '@memoized-dom/runtime';
 import { getActiveDataRuntime } from './active-runtime';
+import { installActiveDataRestoration } from './active-restoration';
 import { enableRequestEncoding } from './request-encoding';
 import { fetchStoreForRuntime } from './runtime-core';
 import { RequestError, isAbortError } from './errors';
@@ -7,6 +8,9 @@ import { liveStamp, updateStamps, type LiveStamp } from './live-protocol';
 import { applyLivePatch, type LiveJsonValue } from './live-patch';
 import { decodeResponse } from './request';
 import { validateValue } from './schema';
+import { responseStreamDecoder } from './response-decoder';
+import { notifyDataRuntimeProgress } from './runtime-lifetime';
+import type { CoreDataRuntime } from './runtime-core';
 import type { FetchEnvironment } from './resource';
 import type { FetchOptions, ResolvedValue } from './types';
 
@@ -23,31 +27,39 @@ function delay(ms: number, signal: AbortSignal): Promise<void> {
 }
 
 /** The first value settles request readiness; the pump belongs to the source lifetime. */
-function transport(environment: FetchEnvironment): NonNullable<FetchEnvironment['stream']> {
+function transport(environment: FetchEnvironment, runtime: CoreDataRuntime): NonNullable<FetchEnvironment['stream']> {
   return (descriptor, signal, delivery) => {
     const first = Promise.withResolvers<unknown>();
+    const completed = Promise.withResolvers<void>();
+    void completed.promise.catch(() => {});
     let seen = false;
     let last: unknown;
     let baselineRecoveries = 0;
     const value = (data: unknown, stamp?: LiveStamp) => {
       last = data;
       delivery.value(data, stamp);
+      notifyDataRuntimeProgress(runtime);
       if (!seen) { seen = true; first.resolve(data); }
     };
     const fail = (error: unknown) => {
       if (!signal.aborted) delivery.state(false, error);
       if (!seen) first.reject(error);
+      completed.reject(error);
     };
     const request = async () => {
       const headers = new Headers(descriptor.headers);
-      const snapshot = getActiveEnvironment().mode.startsWith('server-');
+      const pageDecoder = responseStreamDecoder(descriptor.schema);
+      const server = getActiveEnvironment().mode.startsWith('server-');
+      const snapshot = server && !pageDecoder;
       headers.set('x-mmd-stream', snapshot ? 'snapshot' : descriptor.stream!);
       if (!snapshot && descriptor.stream === 'live') headers.set('x-mmd-live-patches', '2');
       else headers.delete('x-mmd-live-patches');
+      if (!snapshot && pageDecoder) headers.set('x-mmd-page-stream', '1');
       const response = await environment.fetch()(descriptor.url, {
         method: descriptor.method, headers, body: descriptor.body, signal,
       });
       if (!response.ok) {
+        if (descriptor.stream === 'page') await decodeResponse(response, descriptor.schema);
         await response.body?.cancel();
         throw new RequestError(`Streaming request failed with status ${response.status}`, { kind: 'http', status: response.status });
       }
@@ -56,6 +68,19 @@ function transport(environment: FetchEnvironment): NonNullable<FetchEnvironment[
         let stamp: LiveStamp | undefined;
         try { stamp = liveStamp(JSON.parse(response.headers.get('x-mmd-live') ?? 'null')); } catch {}
         value(data, stamp);
+        delivery.state(false);
+        return true;
+      }
+      if (descriptor.stream === 'page') {
+        delivery.updates(updateStamps(response.headers.get('x-mmd-updates')));
+        delivery.state(true);
+        if (response.headers.get('x-mmd-page') === '2' && pageDecoder) {
+          for await (const input of pageDecoder(response, signal)) {
+            const decoded = descriptor.schema ? await validateValue(descriptor.schema, input) : input;
+            if (!signal.aborted) value(decoded);
+          }
+        } else value(await decodeResponse(response, descriptor.schema));
+        signal.throwIfAborted();
         delivery.state(false);
         return true;
       }
@@ -133,6 +158,12 @@ function transport(environment: FetchEnvironment): NonNullable<FetchEnvironment[
             throw new RequestError(typeof frame.message === 'string' ? frame.message : 'Streaming function failed', { kind: 'http' });
           } else throw new StreamProtocolError(`Unknown streaming event '${event}'`);
           event = '';
+          // A server render consumes the current page generation, not an
+          // indefinitely open subscription. Its request remains pending until
+          // all nested regions in that generation have arrived.
+          if (server && pageDecoder && seen && (last as { progress?: { complete: boolean } })?.progress?.complete !== false) {
+            terminal = true; delivery.state(false);
+          }
           return;
         }
         if (input.startsWith('event:')) event = input.slice(6).trimStart();
@@ -166,7 +197,7 @@ function transport(environment: FetchEnvironment): NonNullable<FetchEnvironment[
       let failures = 0;
       while (!signal.aborted) {
         try {
-          if (await request()) return;
+          if (await request()) { completed.resolve(); return; }
           failures = 0;
         } catch (error) {
           if (signal.aborted || isAbortError(error)) break;
@@ -189,17 +220,20 @@ function transport(environment: FetchEnvironment): NonNullable<FetchEnvironment[
         catch { break; }
       }
       if (!seen) first.reject(signal.reason ?? new Error('Stream aborted'));
+      completed.reject(signal.reason ?? new Error('Stream aborted'));
     })().catch(fail);
     // Suppress an unobserved rejection until FetchEntry attaches its handler.
     first.promise.catch(() => {});
-    return first.promise.then(() => last);
+    return (descriptor.stream === 'page' || getActiveEnvironment().mode.startsWith('server-') && responseStreamDecoder(descriptor.schema)
+      ? completed.promise : first.promise).then(() => last);
   };
 }
 
 /** Compiler-generated server-function facade; not a new author-facing intrinsic. */
-export function createStreamingSource<T>(target: string, options: FetchOptions, mode: 'live' | 'generator'): ResolvedValue<T> {
+export function createStreamingSource<T>(target: string, options: FetchOptions, mode: 'live' | 'generator' | 'page'): ResolvedValue<T> {
+  installActiveDataRestoration();
   const runtime = enableRequestEncoding(getActiveDataRuntime());
   const environment = fetchStoreForRuntime(runtime).environment;
-  environment.stream ??= transport(environment);
+  environment.stream ??= transport(environment, runtime);
   return runtime.$fetch(target, { ...options, stream: mode }) as unknown as ResolvedValue<T>;
 }

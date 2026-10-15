@@ -1,4 +1,5 @@
 /** Optional data transfer producer; browser restoration stays in FetchStore. */
+import { isPageContent } from '@memoized-dom/runtime';
 import { fetchTransferContract, fetchTransferIdentity } from './request-transfer';
 import type { FetchStore } from './resource';
 import { fetchStoreForRuntime, installFetchTransferIdentity, type CoreDataRuntime } from './runtime-core';
@@ -48,14 +49,19 @@ function serializeEntry(entry: FetchEntry): SerializedSourceRecord | undefined {
   if (transferIdentity === null) return undefined;
   const { snapshot } = entry;
   let serialized: SerializedSourceSnapshot;
-  if (snapshot.status === 'success') {
+  // A partial page followed by a terminal transport failure is not a completed
+  // success. Preserve the error policy across SSR instead of leaving hydration
+  // waiting for a generation which can no longer finish.
+  const incompletePageError = snapshot.error && fetchTransferContract(entry.descriptor.schema) === 'mmd-fetch/v1:page:1' &&
+    isPageContent(snapshot.data) && snapshot.data.progress?.complete === false;
+  if (snapshot.status === 'success' && !incompletePageError) {
     if (!isJsonTransferValue(snapshot.data)) return undefined;
     serialized = {
       status: 'success',
       data: snapshot.data,
       revalidate: snapshot.refreshing,
     };
-  } else if (snapshot.status === 'error') {
+  } else if (snapshot.status === 'error' || incompletePageError) {
     const error = snapshot.error;
     serialized = {
       status: 'error',

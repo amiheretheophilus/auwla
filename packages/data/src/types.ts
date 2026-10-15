@@ -86,7 +86,7 @@ export type FetchCache = false | 'active' | AppCacheOptions;
 
 export interface FetchOptions {
   /** @internal Compiler-generated server-function transport. */
-  readonly stream?: 'live' | 'generator';
+  readonly stream?: 'live' | 'generator' | 'page';
   /** HTTP method (GET by default). */
   readonly method?: FetchMethod;
   /**
@@ -251,6 +251,8 @@ export type SerializedSourceSnapshot =
       readonly data: unknown;
       /** Committed payload plus a revalidate intent, never an in-flight promise. */
       readonly revalidate: boolean;
+      /** An available page shell still receives regions from the SSR response. */
+      readonly streamed?: boolean;
     }
   | { readonly status: 'error'; readonly error: SerializedSourceError }
   | {
