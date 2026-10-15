@@ -1,3 +1,5 @@
+import { encodeLiveFrame as frame, LivePatchEncoder } from './live-patch';
+
 /** Internal invalidation and delivery protocol; no authored SSE endpoints. */
 export type LiveKey = readonly (string | number | boolean | null)[];
 export interface LiveStamp { epoch: string; key: string; revision: number }
@@ -83,11 +85,6 @@ export function liveHub(services: object): LiveHub {
 }
 
 const encoder = new TextEncoder();
-function frame(event: string, data: unknown): Uint8Array {
-  const json = JSON.stringify(data);
-  if (json === undefined) throw new TypeError('Streaming values must be JSON serializable');
-  return encoder.encode(`event: ${event}\ndata: ${json}\n\n`);
-}
 
 /** Pull-driven live query, coalescing invalidations and discarding stale in-flight reads. */
 export function liveResponse(
@@ -97,6 +94,7 @@ export function liveResponse(
   query: (signal: AbortSignal) => Promise<unknown>,
 ): Response {
   const abort = new AbortController();
+  const patches = request.headers.get('x-mmd-live-patches') === '1' ? new LivePatchEncoder() : undefined;
   let dirty = true;
   let wake: (() => void) | undefined;
   let heartbeat: ReturnType<typeof setTimeout> | undefined;
@@ -128,7 +126,7 @@ export function liveResponse(
           const value = await query(abort.signal);
           if (abort.signal.aborted) break;
           if (dirty || stamp.revision !== hub.stamp(key).revision) continue;
-          controller.enqueue(frame('value', { value, stamp }));
+          controller.enqueue(patches === undefined ? frame('value', { value, stamp }) : patches.encode(value, stamp));
           return;
         }
         if (abort.signal.aborted) controller.close();

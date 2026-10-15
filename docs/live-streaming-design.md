@@ -1,9 +1,12 @@
 # Live queries and streaming functions
 
-Implemented: live GET queries, mutation invalidation, single/multiple optimistic
-source protection, and async generator server functions. This document began as
+Implemented: live GET queries, automatic smaller-patch delivery, mutation
+invalidation, single/multiple optimistic source protection, and async generator
+server functions. This document began as
 the authoring design and now describes the implementation and its boundaries.
 Invalidation is application-instance-local; it is not a distributed database feed.
+Cross-instance support is [under discussion](./live-adapters-discussion.md);
+no adapter API has been selected or implemented.
 
 ## What this adds
 
@@ -357,8 +360,9 @@ application decisions.
   cancellation, argument changes, and application shutdown.
 - Reconnect live queries with cursor-aware recovery or a current snapshot, keep
   the last successful value during transient disconnection, and expose status.
-- Process-local invalidations do not reach another server instance. Production
-  scaling needs a shared broker/change log and an explicit adapter boundary.
+- Process-local invalidations do not reach another server instance. Cross-instance
+  support is [under discussion](./live-adapters-discussion.md), with no adapter
+  API selected or implemented.
 - SSE is a transport choice, not the author-facing API. Its use still requires
   deployment support for streaming responses, authentication, and cancellation.
 
@@ -366,13 +370,15 @@ application decisions.
 
 Live queries reconnect after transient transport failures with bounded backoff
 (up to 30 seconds), keeping their last successful data. Authorization failures,
-declared query errors, and invalid frames are terminal; `$track(source).error`
+declared query errors, and malformed frames are terminal; `$track(source).error`
 reports the failure and explicit `refresh()` can retry. `abort()` and final
 ownership release stop the source and reconnection. Equivalent active live
 sources share one request/cache entry; ordinary and streaming requests do not
 share transport identities even if their URLs match.
 
-The framework sends JSON value frames over an internal fetch-based SSE protocol.
+The framework sends JSON snapshots or smaller patches over an internal fetch-based
+SSE protocol for live GET queries, as described below. Generator yields remain
+complete-value frames.
 The generated facade handles headers and bodies; no authored SSE endpoint or
 EventSource wiring is needed. Complete values replace the source rather than
 implicitly appending array items. Parsing supports fragmented UTF-8 and CRLF/LF
@@ -394,3 +400,103 @@ No automatic browser GET follows a successful mutation. Its result reconciles
 the caller; invalidation reruns subscribed queries on the server and streams
 their values. Multiple sources are independently protected and updated; separate
 connections do not promise atomic visual delivery across sources.
+
+## Automatic patch delivery for live GET queries
+
+This is an internal transport optimization, not a new authoring or data model.
+Existing `define.function({ get, live })`, `updates`, `Group`, `suspend`, `$track`,
+and optimistic callbacks keep their current meanings. Authors do not calculate
+patches, supply entity versions, or handle transport messages. A `Note[]` remains
+a complete reactive `Note[]` in component code.
+
+### Snapshots first, patches only when useful
+
+The browser advertises patch support through an internal request header. A server
+receiving no advertisement continues sending complete values; an updated client
+also accepts older complete-value servers. No configuration flag or import is
+needed in application code.
+
+Each new live connection starts with a full snapshot. After invalidation, the
+server still runs the authorized query and compares its new JSON-normalized
+result with the last result sent on that connection. It may send internal JSON
+Pointer `add`, `remove`, and `replace` operations. For example, one overview count
+can become a replacement at `/2/notes`, rather than retransmitting every row.
+This internal subset is not an author-facing general-purpose patch API.
+
+The server compares complete UTF-8 frame sizes, including metadata. It sends a
+patch only when it is strictly smaller; otherwise it sends another full snapshot.
+Diff work is bounded to 50,000 work units, 128 operations, and 64 path segments.
+Exceeding a bound falls back to the full snapshot. Arrays are compared by index,
+not by an assumed `id` field or a compiled JSX `key`. Insertions, removals, and
+reordering remain correct against the expected baseline; many changes can simply
+make a full snapshot cheaper.
+Object-property enumeration order is preserved too; an object is replaced when
+individual member updates would leave its keys in a different order.
+
+Each connection maintains its own baseline under its subscriber's authorized
+context. Baselines and computed values are not shared between users because
+their invalidation keys happen to match. JSON normalization also snapshots
+mutable service results: retaining a service's array reference would let later
+backend writes corrupt the previous baseline. Values retain existing JSON
+serialization semantics, such as Dates becoming strings.
+
+### Reconstruction and optimistic protection
+
+The browser keeps a private confirmed transport baseline, separate from the
+visible value that application and optimistic callbacks may mutate. Incoming
+patches update that private baseline; complete reconstructed values enter the
+existing source-protection boundary. A callback never receives a patch or the
+private baseline itself.
+
+While one or more associated operations remain pending, patches continue to be
+processed privately so subsequent patches have the right baseline. Protection
+retains only the newest reconstructed value, not a queue of patch operations.
+Normal `reconcile` or rollback runs first; existing mutation acknowledgement
+checks still determine when a buffered value is eligible to become visible.
+This applies equally to one source, multiple sources, and sources shared by
+different optimistic helpers. Requests remain concurrent and grouping IDs keep
+their existing meaning. There is no optimistic overlay or callback replay.
+
+An unchanged result must still deliver its updated confirmation cursor. It can
+use an empty patch when smaller, but cannot silently omit that acknowledgement:
+an older buffered value must not overwrite reconciliation or leave confirmation
+waiting indefinitely.
+
+### Baselines, recovery, and failures
+
+Patch frames identify their expected baseline and next connection-local sequence.
+These positions describe transport reconstruction, separately from the existing
+invalidation cursors used for optimistic confirmation. They are not database
+versions and do not establish database write order.
+
+The client applies operations without mutating its previous baseline; malformed
+operations cannot partially update displayed data. Paths use own properties,
+validate array indices and escapes, and do not traverse inherited prototypes.
+Operation and path-depth bounds are enforced on receipt as well.
+
+A missing or mismatched baseline cancels that reader and automatically opens a
+new live GET connection, retaining the last displayed value until a fresh full
+snapshot arrives. Recovery is bounded: repeated mismatches without a successfully
+applied patch or subsequent consecutive full snapshot become terminal rather
+than causing a reconnect loop. Malformed operations, invalid sequences, invalid
+JSON, and authorization/query failures remain terminal; `$track(source).error`
+reports them and explicit `refresh()` can retry. Ordinary transient network
+failures retain the existing bounded reconnect backoff. Unmount, abort, and
+argument changes still close the owned connection.
+
+SSR and `$routed` preparation remain finite snapshots. Hydration opens a live
+connection with a fresh full baseline; it never patches against an SSR payload
+that application code might already have changed. Async generators retain their
+complete-yield protocol, and mutation generators are never restarted to recover
+a patch baseline. No automatic browser GET follows a successful mutation in the
+normal case; reconnect and baseline recovery are explicit exceptions.
+
+### What this does not optimize
+
+Patches reduce wire payload size, not query execution time. The server still
+performs its read, JSON normalization, and bounded comparison. Private baselines
+and detached visible values also have memory/copying costs; this is not a promise
+of lower CPU or rendering cost. Initial snapshots still need to fit the existing
+1 MiB per-frame client limit. Independent sources still do not update atomically,
+and invalidations remain application-instance-local. The Fieldnotes example's
+artificial query/mutation delays remain unchanged.

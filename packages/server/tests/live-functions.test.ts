@@ -12,13 +12,40 @@ async function read(reader: ReadableStreamDefaultReader<Uint8Array>) {
   const next = await reader.read();
   if (next.done) throw new Error('Unexpected stream completion');
   const text = decoder.decode(next.value);
-  return { event: text.split('\n')[0]!.slice(7), data: JSON.parse(text.split('\n')[1]!.slice(6)) as { value: unknown; stamp: { revision: number }; updates?: unknown[] } };
+  return { event: text.split('\n')[0]!.slice(7), data: JSON.parse(text.split('\n')[1]!.slice(6)) as { value: unknown; stamp: { revision: number }; updates?: unknown[]; seq?: number; base?: number; patch?: unknown } };
 }
 function install(app: object, routes: readonly unknown[]) {
   (app as { installServerFunctions(routes: readonly unknown[]): void }).installServerFunctions(routes);
 }
 
 describe('automatic live server functions', () => {
+  it('negotiates patch delivery per connection without changing legacy full snapshots or subscriber isolation', async () => {
+    const hub = new LiveHub(), key = hub.key(['notes']);
+    const state = { count: 0, padding: 'unchanged'.repeat(200) };
+    const patchedRequest = new Request(url, { headers: { 'x-mmd-stream': 'live', 'x-mmd-live-patches': '1' } });
+    const patched = liveResponse(hub, key, patchedRequest, async () => ({ ...state, owner: 'Ada' })).body!.getReader();
+    const legacy = liveResponse(hub, key, request(), async () => ({ ...state, owner: 'Grace' })).body!.getReader();
+    try {
+      expect((await read(patched)).data.seq).toBe(1);
+      expect((await read(legacy)).data.seq).toBeUndefined();
+      state.count++; hub.invalidate(['notes']);
+      const delta = await read(patched), complete = await read(legacy);
+      expect(delta).toEqual({ event: 'patch', data: { base: 1, seq: 2,
+        patch: [{ op: 'replace', path: '/count', value: 1 }], stamp: expect.objectContaining({ revision: 1 }) } });
+      expect(complete.event).toBe('value');
+      expect(complete.data.value).toEqual({ ...state, owner: 'Grace' });
+      hub.invalidate(['notes']);
+      const unchanged = await read(patched);
+      expect(unchanged.event).toBe('patch'); expect(unchanged.data.patch).toEqual([]);
+      expect(unchanged.data.stamp.revision).toBe(2);
+      await read(legacy);
+      // Reconnection has its own full baseline, not the previous connection's sequence.
+      const reconnected = liveResponse(hub, key, patchedRequest, async () => state).body!.getReader();
+      try { expect(await read(reconnected)).toEqual({ event: 'value', data: { value: state, seq: 1, stamp: expect.objectContaining({ revision: 2 }) } }); }
+      finally { await reconnected.cancel(); }
+    } finally { await patched.cancel(); await legacy.cancel(); }
+  });
+
   it('updates an overview and its targeted detail using the same positional mutation arguments, without querying siblings', async () => {
     const define = createDefine<{ user: string }, unknown, { rows: Record<string, number> }>();
     define.service('rows', () => ({ one: 0, two: 0 }));

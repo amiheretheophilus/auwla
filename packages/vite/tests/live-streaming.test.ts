@@ -51,6 +51,7 @@ it.skipIf(!chrome)('automatically synchronizes Fieldnotes and protects multiple 
   const browser = await puppeteer.launch({ executablePath: chrome, headless: true });
   const errors: string[] = [];
   const pages: Page[] = [];
+  let wireReader: ReadableStreamDefaultReader<Uint8Array> | undefined;
   try {
     const writer = await browser.newPage();
     const viewer = await browser.newPage();
@@ -61,7 +62,10 @@ it.skipIf(!chrome)('automatically synchronizes Fieldnotes and protects multiple 
     const liveRequests: string[] = [];
     const cancelledStreams: string[] = [];
     viewer.on('request', request => {
-      if (request.headers()['x-mmd-stream'] === 'live') liveRequests.push(request.url());
+      if (request.headers()['x-mmd-stream'] === 'live') {
+        expect(request.headers()['x-mmd-live-patches']).toBe('1');
+        liveRequests.push(request.url());
+      }
     });
     viewer.on('requestfailed', request => {
       if (request.headers()['x-mmd-stream'] === 'live') cancelledStreams.push(request.url());
@@ -78,6 +82,11 @@ it.skipIf(!chrome)('automatically synchronizes Fieldnotes and protects multiple 
     expect(new Set(liveRequests).size).toBe(2);
     expect(liveRequests.length - cancelledStreams.length).toBe(2);
     const initialRequests = liveRequests.length;
+    const wire = await fetch(address + '/_fn/expeditions/getNotes?expeditionId=ice-cores', {
+      headers: { 'x-mmd-stream': 'live', 'x-mmd-live-patches': '1' }, signal: AbortSignal.timeout(15_000),
+    });
+    wireReader = wire.body!.getReader();
+    expect(new TextDecoder().decode((await wireReader.read()).value)).toContain('event: value');
     await writer.bringToFront();
 
     const text = 'Optimistic note held until its response';
@@ -85,6 +94,8 @@ it.skipIf(!chrome)('automatically synchronizes Fieldnotes and protects multiple 
     await bounded(writer.click('.note-form button'), 'clicking');
     await writer.waitForFunction(value => [...document.querySelectorAll('li.note')].some(note => note.textContent?.includes(value)), { polling: 100 }, text);
     await viewer.waitForFunction(value => [...document.querySelectorAll('li.note')].some(note => note.textContent?.includes(value)), { timeout: 10_000, polling: 100 }, text);
+    expect(new TextDecoder().decode((await wireReader.read()).value)).toContain('event: patch');
+    await wireReader.cancel(); wireReader = undefined;
     await waitFor(() => expect(releases).toHaveLength(1), 5_000);
     expect(await writer.$eval('.status-line', element => element.textContent)).toContain('Saving note');
     expect(await writer.$$eval('li.note', (notes, value) => notes.filter(note => note.textContent?.includes(value)).length, text)).toBe(1);
@@ -165,6 +176,7 @@ it.skipIf(!chrome)('automatically synchronizes Fieldnotes and protects multiple 
     })), 'DOM diagnostics').catch(String)));
     throw new Error(`${String(error)}\nDOM: ${JSON.stringify(snapshots)}\nBrowser errors: ${errors.join('\n')}\n${log}`);
   } finally {
+    await wireReader?.cancel().catch(() => {});
     try { await bounded(browser.close(), 'browser cleanup'); }
     catch {
       const process = browser.process();

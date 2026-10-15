@@ -27,7 +27,9 @@ Use `memoized-dom dev` and `memoized-dom build` for every application target.
 The Vite configuration selects browser-only, Bun, Node, or Cloudflare behavior.
 See the [CLI guide](./docs/cli.md) for package scripts and options.
 See [Live queries and streaming functions](./docs/live-streaming-design.md) for
-automatic server invalidation, generator results, and optimistic source protection.
+automatic server invalidation, smaller-patch delivery, generator results, and
+optimistic source protection. Cross-instance invalidation is
+[under discussion](./docs/live-adapters-discussion.md), not implemented.
 
 ### 2. Configuration
 
