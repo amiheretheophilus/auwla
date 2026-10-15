@@ -57,6 +57,7 @@
     "**/generated",
     "tests/fixtures/**",
     "bench/frameworks",
-    "examples/fieldnotes"
+    "examples/fieldnotes",
+    "examples/server-pages"
   ]
 }
