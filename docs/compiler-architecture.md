@@ -8,6 +8,11 @@ The [package capability audit](./package-capability-audit.md) records current
 unused-feature costs. The boundary table below reflects the later migrations;
 historical validation sections retain evidence for their recorded revisions.
 
+Separate compilation of reusable libraries is explored in
+[Package compilation and reactive linking research](./package-compilation-research.md).
+That document separates verified compiler gaps from a proposed partial-package
+artifact/linking model; it does not describe an implemented package-build API.
+
 ## Captured application handles — 2026-10-06
 
 Application entry discovery recognizes a top-level `mount()` call in a variable
