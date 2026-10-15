@@ -22,9 +22,10 @@ This does not replace existing SSR streaming. SSR `mode: 'stream'` delivers
 initial regions as their reads settle and then finishes. A live query keeps an
 already-open page synchronized with subsequent server changes.
 
-Returning server-owned UI rather than data is documented separately in the
-[proposed `page(...)` design](./server-components-design.md). That API is not
-implemented; the live examples in this document return data.
+Returning server-owned UI rather than data is documented separately in
+[server-owned components through `page(...)`](./server-components-design.md).
+The live examples in this document return data; page sources reuse their
+invalidation and transport model with the boundaries described in that guide.
 
 ## Server authoring: declare what a query observes
 

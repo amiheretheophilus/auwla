@@ -1,8 +1,8 @@
 # Server functions
 
-For the proposed ability to return server-owned JSX regions, see
+To return server-owned JSX regions instead of application data, see
 [Server-owned components through `page(...)`](./server-components-design.md).
-That API is not implemented; this guide documents current server functions.
+That guide covers finite results, live updates, local interactions, and limits.
 
 ## The `server` field
 
