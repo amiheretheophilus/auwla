@@ -3,5 +3,5 @@ import { define } from './server/define';
 import { App } from './src/App';
 
 const app = serve({ define });
-app.ssr(App, { mode: 'stream' });
+app.ssr('/', App, { mode: 'stream' });
 export default app;

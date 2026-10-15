@@ -10,6 +10,65 @@ function decode(bytes: Uint8Array) {
 }
 
 describe('automatic live GET patch encoding', () => {
+  const page = (html: string, count = 0, id = 'board', key = 'contract') => ({
+    $mmd: 'page', version: 1, id, html, binding: { key, inputs: [count] },
+  });
+
+  it('negotiates compact HTML edits while keeping a complete exact baseline for later mounts', () => {
+    const html = (count: number) => `<section>${padding}<p>${count}</p>${padding}</section>`;
+    const encoder = new LivePatchEncoder(true);
+    const initial = decode(encoder.encode(page(html(0)), stamp(0)));
+    expect(initial.event).toBe('value');
+    let baseline = initial.data.value;
+    for (let count = 1; count < 12; count++) {
+      const next = page(html(count), count);
+      const bytes = encoder.encode(next, stamp(count));
+      const update = decode(bytes);
+      expect(update.event).toBe('patch');
+      expect(update.data.patch.some((op: { op: string; path: string }) => op.op === 'text' && op.path === '/html')).toBe(true);
+      baseline = applyLivePatch(baseline, update.data.patch);
+      expect(baseline).toEqual(next);
+      expect(bytes.byteLength).toBeLessThan(400);
+    }
+    expect(decode(new LivePatchEncoder(true).encode(baseline, stamp(12))).data.value).toEqual(baseline);
+    const legacy = new LivePatchEncoder(); legacy.encode(page(html(0)), stamp(0));
+    const legacyUpdate = decode(legacy.encode(page(html(1), 1), stamp(1)));
+    expect(legacyUpdate.data.patch?.some((op: { op: string }) => op.op === 'text') ?? false).toBe(false);
+    expect(legacyUpdate.event === 'value' ? legacyUpdate.data.value : applyLivePatch(initial.data.value, legacyUpdate.data.patch)).toEqual(page(html(1), 1));
+  });
+
+  it('uses full HTML for other contracts, noninteractive pages and ordinary JSON', () => {
+    for (const [before, after] of [
+      [page(padding + 'old'), page(padding + 'new', 1, 'different')],
+      [page(padding + 'old'), page(padding + 'new', 1, 'board', 'different')],
+      [{ $mmd: 'page', version: 1, id: 'static', html: padding + 'old' }, { $mmd: 'page', version: 1, id: 'static', html: padding + 'new' }],
+      [{ html: padding + 'old' }, { html: padding + 'new' }],
+    ]) {
+      const encoder = new LivePatchEncoder(true); encoder.encode(before, stamp(0));
+      const update = decode(encoder.encode(after, stamp(1)));
+      expect(update.event === 'value' ? update.data.value : applyLivePatch(before as LiveJsonValue, update.data.patch)).toEqual(after);
+      expect(update.data.patch?.some((op: { op: string }) => op.op === 'text') ?? false).toBe(false);
+    }
+  });
+
+  it('round-trips Unicode, changing branches and text edit size fallbacks', () => {
+    let seed = 31;
+    const random = () => seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
+    const characters = ['a', '中', '🌍', '🚀', '\ud800', '\udc00', '"', '\n', '/', '~'];
+    const encoder = new LivePatchEncoder(true);
+    let current = page(padding) as LiveJsonValue; encoder.encode(current, stamp(0));
+    for (let revision = 1; revision <= 500; revision++) {
+      const text = Array.from({ length: random() % 60 }, () => characters[random() % characters.length]).join('');
+      const next = page(`<section>${padding}${revision % 2 ? `<p>${text}</p>` : `<ul><li>${text}</li></ul>`}${padding}</section>`, revision);
+      const update = decode(encoder.encode(next, stamp(revision)));
+      current = update.event === 'patch' ? applyLivePatch(current, update.data.patch) : update.data.value;
+      expect(current).toEqual(next);
+    }
+    // The comparison budget still bounds long strings.
+    const huge = new LivePatchEncoder(true); huge.encode(page('x'.repeat(60_000)), stamp(0));
+    expect(decode(huge.encode(page('x'.repeat(60_000) + 'a'), stamp(1))).event).toBe('value');
+  });
+
   it('serializes the payload once and never encodes the discarded full snapshot when a small patch wins', () => {
     const encoder = new LivePatchEncoder();
     const before = { rows: Array.from({ length: 5000 }, (_, id) => ({ id, text: `Note ${id}` })) };

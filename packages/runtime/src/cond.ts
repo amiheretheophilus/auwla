@@ -24,6 +24,10 @@ export interface CondEntry {
   nodes: Node[];
   /** The branch's guarded update closure. */
   update: (reasons?: DirtyReasons) => void;
+  /** Replay local bindings without advancing committed source captures. */
+  retain?: (reasons?: DirtyReasons) => void;
+  /** A stable holder may have rebound in place and lost its old payload. */
+  canRetain?: () => boolean;
   /** Drain structural regions retained by this branch before replacement. */
   dispose?: () => void;
 }
@@ -46,6 +50,7 @@ export function createCondRegion(
   branches: readonly (CondBranchFactory | null)[],
   identity?: () => unknown,
   initial?: { readonly open: Node; readonly end: Node; readonly index?: number },
+  retain?: { readonly content: number; readonly pending: readonly number[] },
 ): CondRegion {
   // Hydration protocol (hydration-markers.md §2/§3): an opening `mmd:g`
   // marker before the branch content and a uniform `/mmd` close after it.
@@ -101,6 +106,12 @@ export function createCondRegion(
     if (disposed) return;
     const idx = pick();
     if (disposed) return;
+    // Automatic source presentation keeps committed content during replacement,
+    // but never suppresses initial pending UI, errors or authored control flow.
+    if (entry !== null && current === retain?.content && retain.pending.includes(idx) && entry.canRetain?.()) {
+      entry.retain?.(reasons);
+      return;
+    }
     if (bindingInitial && initial!.index !== undefined && idx !== initial!.index) {
       throw new Error('memo-dom: initial conditional selection does not match its HTML');
     }

@@ -2,6 +2,33 @@ import { describe, expect, it } from 'bun:test';
 import { applyLivePatch, LIVE_PATCH_MAX_DEPTH, LIVE_PATCH_MAX_OPERATIONS } from '../src/live-patch';
 
 describe('internal live patch application', () => {
+  it('reconstructs text edits exactly using UTF-16 offsets without mutating the old HTML', () => {
+    const before = { html: '<p>🌍中文\ud800old</p>', inputs: [0] };
+    const start = before.html.indexOf('old');
+    expect(applyLivePatch(before, [
+      { op: 'text', path: '/html', start, deleteCount: 3, value: '🚀new' },
+      { op: 'replace', path: '/inputs/0', value: 1 },
+    ])).toEqual({ html: '<p>🌍中文\ud800🚀new</p>', inputs: [1] });
+    expect(before.inputs).toEqual([0]);
+    expect(before.html).toEndWith('old</p>');
+    expect(applyLivePatch('😀', [{ op: 'text', path: '', start: 1, deleteCount: 1, value: '\ude80' }])).toBe('🚀');
+    expect(applyLivePatch(['abc'], [{ op: 'text', path: '/0', start: 3, deleteCount: 0, value: 'd' }])).toEqual(['abcd']);
+  });
+
+  it('rejects malformed text edits atomically', () => {
+    const before = { html: 'abc', count: 0 };
+    for (const edit of [
+      { start: -1, deleteCount: 0, value: '' }, { start: 4, deleteCount: 0, value: '' },
+      { start: 0, deleteCount: 4, value: '' }, { start: 0.5, deleteCount: 0, value: '' },
+      { start: 0, deleteCount: -1, value: '' }, { start: 0, deleteCount: 0.5, value: '' },
+      { start: 0, deleteCount: 0, value: 3 }, { start: 0, value: '' },
+    ]) expect(() => applyLivePatch(before, [
+      { op: 'replace', path: '/count', value: 1 }, { op: 'text', path: '/html', ...edit },
+    ])).toThrow();
+    expect(() => applyLivePatch(before, [{ op: 'text', path: '/count', start: 0, deleteCount: 0, value: '' }])).toThrow();
+    expect(before).toEqual({ html: 'abc', count: 0 });
+  });
+
   it('copies changed paths without mutating the baseline', () => {
     const before = { rows: [{ count: 0 }], unchanged: { value: true } };
     const after = applyLivePatch(before, [{ op: 'replace', path: '/rows/0/count', value: 1 }]);

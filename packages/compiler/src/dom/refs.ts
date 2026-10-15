@@ -14,6 +14,7 @@ import { type DomContext as Ctx } from './context';
 import { renderPropReferenceName } from '../analysis/render-prop-reference';
 import { generatedIdentifier, md } from './identifiers';
 import type { EmitScope } from './scope';
+import { imperativeCallback } from './retained-content';
 
 /** Compile one source ref into callback/array values understood by mountRef. */
 export function compileRefValue(
@@ -68,7 +69,7 @@ export function emitRefMount(
         cloneEstreeNode(disposer),
         astFactory.callExpression(md(ctx, 'mountRef'), [
           cloneEstreeNode(node, true),
-          cloneEstreeNode(value, true),
+          imperativeCallback(cloneEstreeNode(value, true)),
         ]),
       ),
     ]),

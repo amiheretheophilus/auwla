@@ -155,6 +155,106 @@ Publish invalidations after changes commit. Transactions, partially committed
 failures, and changes made by other applications need an appropriate integration;
 successful function completion alone cannot reveal arbitrary database writes.
 
+## Same keys, private data, and collaboration
+
+**A live key identifies which queries to notify. It does not identify a shared
+result, select a user's data, or synchronize browser-local state.**
+
+Keep three things separate:
+
+- **Browser-local state:** local counters, open panels, drafts, and focus belong
+  to that browser/component instance. Declaring a query `live` does not share them.
+- **Server data and authorization:** the handler decides which data the viewer
+  may read or change, using that viewer's authenticated request context.
+- **Invalidation keys:** matching keys notify active queries to run again. Each
+  query uses its own subscriber context, not the mutating caller's context.
+
+### Alice and Bob: same key, separate private inboxes
+
+In this separate inbox example, assume the shared `define` declares
+`state.userId: string`, and authentication middleware sets it from a verified
+session. `services.messages.forUser()` and `addForUser()` are application-owned
+data-access methods; they must enforce the appropriate access rules.
+
+```ts
+export const getInbox = define.function({
+  async get({ state, services }) {
+    return services.messages.forUser(state.userId);
+  },
+  live: () => ['inbox'],
+});
+
+export const addMessage = define.function({
+  async post({ state, services }, text: string) {
+    return services.messages.addForUser(state.userId, text);
+  },
+  updates: () => ['inbox'],
+});
+```
+
+Alice opens her inbox and Bob opens his. Both live queries observe `['inbox']`,
+but their connections have different authenticated contexts.
+
+When Alice adds an item to her own inbox:
+
+1. The mutation changes Alice's data, then invalidates `['inbox']`.
+2. Alice's query runs again with **Alice's user ID** and returns her updated inbox.
+3. Bob's query also runs again, but with **Bob's user ID**. It returns his own
+   unchanged inbox, not Alice's messages.
+
+The invalidation is a notification, not a broadcast of Alice's data or rendered
+HTML. Same-key subscribers do not share a computed result or a connection merely
+because their keys match. Here the broad key causes an unnecessary read for Bob;
+it does not make the inboxes collaborative.
+
+### User-specific keys avoid unrelated reruns
+
+Replace the callbacks in those same two definitions with:
+
+```ts
+// On getInbox:
+live: ({ state }) => ['inbox', state.userId]
+
+// On addMessage; context first, then the handler's positional arguments:
+updates: ({ state }, _text) => ['inbox', state.userId]
+```
+
+Now Alice's query observes `['inbox', 'alice']` and Bob's observes
+`['inbox', 'bob']`. Alice's mutation invalidates her key, so Bob's sibling key is
+not notified. Alice's other tabs observing her inbox still update normally.
+
+The existing [prefix rule](#hierarchical-keys-overview-and-targeted-details)
+still applies: deliberately invalidating the parent `['inbox']` notifies both
+users' queries. **User-specific keys are an efficiency boundary, not an
+authorization boundary.** Handlers must continue selecting and authorizing the
+correct data; making a key more specific cannot repair an unsafe query.
+
+Each live connection retains its opening request's context. Middleware is not
+rerun for each invalidation; check current permissions in the handler when access
+can be revoked, as described under [security boundaries](#runtime-and-security-boundaries).
+
+### When it becomes collaborative
+
+It becomes collaborative when authorized viewers read and mutate the **same
+underlying server data**, and matching keys notify their live views. For example,
+members of one project can observe `['project-board', projectId]`. Their handlers
+must still check project membership. Sharing that key does not share their local
+drafts, open panels, or focus.
+
+This applies to both data-returning queries and server-owned `page(...)` results.
+For a page result, each subscriber's handler renders that subscriber's permitted
+UI; the framework does not render once as Alice and send her page to Bob.
+
+The server-pages example is collaborative deliberately: both browsers access the
+same in-memory board records and matching board keys. The shared records, not
+the key alone, make the displayed server count/title shared.
+
+Live is also useful for private inboxes, a user's background jobs, and private
+order status. It does not require a collaborative application or globally shared
+pages. Use a finite query when ongoing updates are not needed. In either case,
+live notifications still require the declared `updates` or explicit invalidation;
+the framework does not automatically observe database writes.
+
 ## Client authoring: an ordinary reactive result
 
 ```tsx
@@ -429,6 +529,21 @@ result with the last result sent on that connection. It may send internal JSON
 Pointer `add`, `remove`, and `replace` operations. For example, one overview count
 can become a replacement at `/2/notes`, rather than retransmitting every row.
 This internal subset is not an author-facing general-purpose patch API.
+
+Updated clients advertise `x-mmd-live-patches: 2`. Version 2 also supports an
+internal `text` operation for the root `/html` field of a compatible interactive
+server page (same page ID and binding key). It retains the common string prefix
+and suffix and sends the changed middle with UTF-16 offsets. Binding inputs
+continue using ordinary JSON operations. Applying the edit reconstructs the
+complete exact HTML, including Unicode, so later mounts and replacements never
+reuse an obsolete HTML baseline. It does not morph DOM or assume an unchanging
+template. A large or unhelpful edit uses replacement/snapshot delivery instead.
+
+Version 1 clients receive only the original operations. A server without patch
+support can still send complete values to a version 2 client. Every connection,
+including a reconnect, establishes a full baseline first. Server render/query
+work still occurs per subscriber; these edits reduce transfer size, not that
+work. They do not eliminate full-value serialization or baseline storage.
 
 The server compares complete UTF-8 frame sizes, including metadata. It sends a
 patch only when it is strictly smaller; otherwise it sends another full snapshot.

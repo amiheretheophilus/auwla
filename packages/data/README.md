@@ -116,11 +116,16 @@ host element:
 The pending arm appears once until every inferred source has its initial value.
 The compiler removes `suspend` before component prop checking and emission.
 Committed content remains visible during later refreshes.
+Assigning a different pending source also retains the last committed content at
+automatic presentation sites until the replacement is ready. Local interactions
+continue; the new source's own status remains pending. Latest assignment wins,
+and failures still reach the error policy. This is not a promise to preserve
+component identity when the completed result requires a different region.
 Suspension includes reads of child-owned resources across files. The active
 subtree prepares off-screen; refs/effects run only after atomic publication.
 Inactive branches and unused sources do not block it. `Group suspend` uses
-the same mechanism for all its children. Source rebinds in an already
-committed instance use read-local pending UI; a fresh route-parameter
+the same mechanism for all its children. In-place source rebinds that discard
+their old payload still use read-local pending UI; a fresh route-parameter
 destination remounts and starts a new atomic activation.
 
 ---

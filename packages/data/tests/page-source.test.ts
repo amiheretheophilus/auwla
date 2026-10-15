@@ -4,10 +4,40 @@ import { createPageSource } from '../src/page-source';
 import type { FetchResource } from '../src/types';
 import { fetchStoreForRuntime } from '../src/runtime-core';
 import { encodePageHtml, type PageContent } from '@memoized-dom/runtime';
+import { waitFor } from '../../../test-support/helpers';
 
 function pageResponse(value: PageContent): Response {
   return new Response(encodePageHtml(value), {headers:{'content-type':'text/html; charset=utf-8','x-mmd-page':'1'}});
 }
+
+it('reconstructs a live page text edit before validation and binding delivery', async () => {
+  let channel: ReadableStreamDefaultController<Uint8Array>;
+  let cancelled = false;
+  const runtime = createDataRuntime({baseURL:'https://app.test',fetch:async(_input, init)=>{
+    expect(new Headers(init?.headers).get('x-mmd-live-patches')).toBe('2');
+    return new Response(new ReadableStream<Uint8Array>({start(controller){channel=controller;},cancel(){cancelled=true;}}),{headers:{'content-type':'text/event-stream'}});
+  }});
+  const encoder = new TextEncoder();
+  const emit=(event:string, data:unknown)=>channel.enqueue(encoder.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`));
+  const stamp=(revision:number)=>({epoch:'server',key:'["board"]',revision});
+  const loaded:unknown[][]=[];
+  const loader=(id:string,key:string|undefined)=>{loaded.push([id,key]);};
+  try {
+    const source=runWithDataRuntime(runtime,()=>createPageSource('/board',{},'live',loader)) as unknown as FetchResource<PageContent>;
+    const initial:PageContent={$mmd:'page',version:1,id:'board',html:'<p>🌍 first</p>',binding:{key:'contract',inputs:[0]}};
+    emit('value',{value:initial,stamp:stamp(0),seq:1});await runtime.settle();
+    expect(source.data).toEqual(initial);
+    emit('patch',{base:1,seq:2,stamp:stamp(1),patch:[
+      {op:'text',path:'/html',start:6,deleteCount:5,value:'🚀 second'},
+      {op:'replace',path:'/binding/inputs/0',value:1},
+    ]});
+    await waitFor(()=>expect(source.data?.binding?.inputs).toEqual([1]));
+    expect(source.data?.html).toBe('<p>🌍 🚀 second</p>');
+    expect(loaded).toEqual([['board','contract'],['board','contract']]);
+    expect(source.error).toBeNull();
+  }finally{runtime.clear();}
+  await waitFor(()=>expect(cancelled).toBe(true));
+});
 
 it('does not expose a finite page until its allowlisted binding loader finishes', async () => {
   const ready=Promise.withResolvers<void>(); let loads=0;

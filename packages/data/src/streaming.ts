@@ -42,7 +42,7 @@ function transport(environment: FetchEnvironment): NonNullable<FetchEnvironment[
       const headers = new Headers(descriptor.headers);
       const snapshot = getActiveEnvironment().mode.startsWith('server-');
       headers.set('x-mmd-stream', snapshot ? 'snapshot' : descriptor.stream!);
-      if (!snapshot && descriptor.stream === 'live') headers.set('x-mmd-live-patches', '1');
+      if (!snapshot && descriptor.stream === 'live') headers.set('x-mmd-live-patches', '2');
       else headers.delete('x-mmd-live-patches');
       const response = await environment.fetch()(descriptor.url, {
         method: descriptor.method, headers, body: descriptor.body, signal,

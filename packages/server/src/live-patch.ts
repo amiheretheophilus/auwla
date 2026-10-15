@@ -5,6 +5,7 @@ import {
   type LivePatchOperation,
 } from '@memoized-dom/data/internal';
 import type { LiveStamp } from './live';
+import { isPageContent } from '@memoized-dom/runtime';
 
 const encoder = new TextEncoder();
 const MAX_DIFF_WORK = 50_000;
@@ -34,7 +35,7 @@ export function encodeLiveFrame(event: string, data: unknown): Uint8Array {
 }
 
 /** Structural JSON diff: no inferred row identity, DOM keys, or database semantics. */
-function difference(before: LiveJsonValue, after: LiveJsonValue): LivePatchOperation[] | null {
+function difference(before: LiveJsonValue, after: LiveJsonValue, pageText: boolean): LivePatchOperation[] | null {
   const operations: LivePatchOperation[] = [];
   let work = MAX_DIFF_WORK;
   const append = (operation: LivePatchOperation): boolean => {
@@ -72,6 +73,22 @@ function difference(before: LiveJsonValue, after: LiveJsonValue): LivePatchOpera
   const visit = (left: LiveJsonValue, right: LiveJsonValue, path: string, depth: number): boolean => {
     if (--work < 0 || depth > LIVE_PATCH_MAX_DEPTH) return false;
     if (left === right) return true;
+    if (pageText && path === '/html' && typeof left === 'string' && typeof right === 'string') {
+      // Exact string reconstruction, not DOM morphing or a fixed-template promise.
+      // Oversized comparisons use the ordinary full-snapshot fallback.
+      let start = 0, leftEnd = left.length, rightEnd = right.length;
+      while (start < leftEnd && start < rightEnd && left[start] === right[start]) {
+        if (--work < 0) return false;
+        start++;
+      }
+      while (leftEnd > start && rightEnd > start && left[leftEnd - 1] === right[rightEnd - 1]) {
+        if (--work < 0) return false;
+        leftEnd--; rightEnd--;
+      }
+      const edit: LivePatchOperation = { op: 'text', path, start, deleteCount: leftEnd - start, value: right.slice(start, rightEnd) };
+      const replace: LivePatchOperation = { op: 'replace', path, value: right };
+      return append(utf8ByteLength(JSON.stringify(edit)) < utf8ByteLength(JSON.stringify(replace)) ? edit : replace);
+    }
     if (left === null || right === null || typeof left !== 'object' || typeof right !== 'object' ||
       Array.isArray(left) !== Array.isArray(right)) return append({ op: 'replace', path, value: right });
     if (depth === LIVE_PATCH_MAX_DEPTH) return false;
@@ -130,6 +147,8 @@ export class LivePatchEncoder {
   private baseline: LiveJsonValue | undefined;
   private sequence = 0;
 
+  constructor(private readonly pageText = false) {}
+
   encode(value: unknown, stamp: LiveStamp): Uint8Array {
     // Snapshot now: services may return their own mutable arrays, objects, or Dates.
     const json = JSON.stringify(value);
@@ -142,7 +161,10 @@ export class LivePatchEncoder {
     const suffix = `,${JSON.stringify({ stamp, seq }).slice(1)}\n\n`;
     let output: Uint8Array | undefined;
     if (this.baseline !== undefined) {
-      const patch = difference(this.baseline, confirmed);
+      const compatiblePage = this.pageText && isPageContent(this.baseline) && isPageContent(confirmed) &&
+        this.baseline.id === confirmed.id && this.baseline.binding !== undefined &&
+        this.baseline.binding.key === confirmed.binding?.key;
+      const patch = difference(this.baseline, confirmed, compatiblePage);
       if (patch !== null) {
         // Even an empty patch carries its new confirmation cursor and sequence.
         const candidate = encodeLiveFrame('patch', { base: this.sequence, seq, patch, stamp });

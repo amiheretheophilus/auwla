@@ -20,10 +20,19 @@ built yet, run `bun install` and `bun run build` first.
 5. Submit a new Orchard title. The POST returns `page(<Receipt />)` directly,
    and the caller assigns it to the receipt region. Independently, its
    `updates` key notifies Orchard's live subscribers in both tabs.
+   The previous receipt stays visible while the button says “Saving…”, then the
+   completed receipt replaces it. Initial loading and errors keep their policies.
 
 The page result is rendered on the server. The interactive Board receives
 compiled browser bindings; the passive Receipt needs no component binding code.
 The form uses existing `$forms`; no authored SSE endpoint or manual HTML insertion.
+
+The shared count/title are collaborative deliberately: both tabs read the same
+in-memory server records and observe matching board keys. Equal keys alone do
+not share data or browser-local state. A private page can be live too: each
+subscriber's query uses its own authenticated context, and user-scoped keys can
+avoid unnecessary reruns for other users. Keys do not replace authorization.
+See [Alice and Bob's private inboxes](../../docs/live-streaming-design.md#same-keys-private-data-and-collaboration).
 
 ## Where to look
 
@@ -42,6 +51,16 @@ These are Fetch/XHR requests, not Document navigations. Live GET
 rendering can appear in the terminal without another GET row: updates travel
 over the already-open stream. Render numbers include SSR and reconnect reads
 from all viewers, so initial numbers need not be 1 or match between tabs.
+These are query-execution counters, not mutation counts or database versions.
+A full reload executes SSR and then establishes fresh live subscriptions, which
+can advance both labels without changing either board's count. The demo mounts
+SSR only at `/`, so a missing `/favicon.ico` does not render the app.
+
+After a rename, verbose `getBoard` snapshot messages describe the existing
+Orchard live stream receiving the invalidated query's result. They do not mean
+the form fetched its receipt again: that UI came from `renameOrchard`'s POST.
+Compatible live updates can use compact HTML text edits plus binding-input
+patches; reconnects still receive full results.
 
 This demo uses instance-local memory, resets on restart/HMR, and is not durable
 storage. It has no optimistic update, so counters wait for the server response.

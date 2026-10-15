@@ -13,6 +13,7 @@ import { atomicSitePolicy } from '../features/data-sources/atomic-sites';
 import { transparentExpressionSources } from '../planning/async-reads';
 import { preparationRead, subscribeTransparentStructuralSite } from './data-subscriptions';
 import { transparentBoundaryPolicyArgument } from './data-policies';
+import { captureCommittedSources, retainedBranches } from './retained-content';
 
 /** Static path appended to a component factory id by enclosing regions. */
 function ownerPathSuffix(expression: t.Expression): string | null {
@@ -90,6 +91,7 @@ export function emitConditionalRegion(
     return;
   }
   const transparentSources = transparentExpressionSources(expression);
+  const retention = retainedBranches(expression);
 
   // Route regions are real runtime owners (`App/route0/...`). Conditional
   // read analysis runs before emission and starts from the component path, so
@@ -106,7 +108,7 @@ export function emitConditionalRegion(
   }
 
   const pick = astFactory.arrowFunctionExpression([], preparationRead(
-    ctx, scope, regionId, cloneEstreeNode(site.pickExpr), transparentSources,
+    ctx, scope, regionId, cloneEstreeNode(site.pickExpr), retention?.sources ?? transparentSources,
   ));
   const initial=scope.initialDom?.plan.conditions[initialSite(expression)];
   if (scope.initialDom && !initial) throw new Error('memo-dom: initial conditional has no placement');
@@ -123,7 +125,7 @@ export function emitConditionalRegion(
       initialNode(scope,initial!.open,`#comment:mmd:initial:when:${initialSite(expression)}`),
       astFactory.identifier('nextSibling'),
     ) : undefined;
-    return (
+    const factory = (
     jsx !== null
       ? buildConditionalBranchCreate(
           ctx,
@@ -144,6 +146,8 @@ export function emitConditionalRegion(
         )
       : astFactory.nullLiteral()
     );
+    return retention?.content === index && factory !== null && astFactory.isArrowFunctionExpression(factory)
+      ? captureCommittedSources(ctx, factory, retention.sources) : factory;
   });
 
   const serverPlacement=initialStructuralPlacement(ctx.initialServerComponents[componentName],initialSite(expression))?.conditions[initialSite(expression)];
@@ -182,11 +186,15 @@ export function emitConditionalRegion(
           cloneEstreeNode(regionId),
           pick,
           astFactory.arrayExpression(branchFactories),
-          ...(initial ? [astFactory.identifier('undefined'),initialOrCreate(scope,astFactory.objectExpression([
+          ...(initial || retention ? [astFactory.identifier('undefined'),initial ? initialOrCreate(scope,astFactory.objectExpression([
             astFactory.objectProperty(astFactory.identifier('open'),initialNode(scope,initial.open,`#comment:mmd:initial:when:${initialSite(expression)}`)),
             astFactory.objectProperty(astFactory.identifier('end'),initialNode(scope,initial.end,'#comment:/mmd:initial:when')),
             ...(initial.branch===null ? [] : [astFactory.objectProperty(astFactory.identifier('index'),astFactory.numericLiteral(initial.branch))]),
-          ]),astFactory.identifier('undefined'))] : []),
+          ]),astFactory.identifier('undefined')) : astFactory.identifier('undefined')] : []),
+          ...(retention ? [astFactory.objectExpression([
+            astFactory.objectProperty(astFactory.identifier('content'), astFactory.numericLiteral(retention.content)),
+            astFactory.objectProperty(astFactory.identifier('pending'), astFactory.arrayExpression(retention.pending.map(index => astFactory.numericLiteral(index)))),
+          ])] : []),
         ]),
       ),
     ]),

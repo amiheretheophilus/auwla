@@ -171,8 +171,18 @@ return (
 
 Return the server-function result so the form owns its submission lifecycle.
 Validation is optional and uses the existing form/server-function facilities.
-A pending reassignment can retire the old page region; do not assume a form
-submission preserves its local component state.
+On first load, `Group`/`suspend` shows its pending policy until there is content.
+After a page has committed, assigning a new pending request keeps the old page
+visible and interactive until the replacement value and its binding module are
+ready. The form still reports `pending`; the new request does not pretend to
+contain the old data. Overlapping assignments display only the current source's
+result, and replacement failures still use the existing error policy.
+
+This is automatic source presentation, not a second form or page API. The same
+behavior applies to ordinary data sources under these boundaries. Explicit
+authored conditions such as `form.pending ? <Loading /> : ...` still mean what
+they say. Retention ends when the boundary unmounts or its error policy takes
+over. Retaining content during the wait does not guarantee identity after commit.
 
 ## Live updates and connections
 
@@ -200,6 +210,15 @@ do not open their own connections. Equivalent requests can share the existing
 data resource within one runtime under its normal cache policy; disabling
 caching bypasses that sharing. Equal invalidation keys do not merge different
 queries into a connection. App-wide SSE multiplexing is not implemented.
+
+**Live does not mean globally shared UI.** A key selects which queries to rerun;
+each subscriber's handler renders using its own request context. Two private
+inboxes can use the same key and still return different authorized results,
+although both rerun unnecessarily. Matching user-scoped `live`/`updates` keys
+avoid unrelated reads; handlers, not keys, enforce privacy. Collaboration needs
+shared underlying server data as well as matching invalidations. Browser-local
+state stays local. See the step-by-step
+[Alice/Bob example and key-scoping guidance](./live-streaming-design.md#same-keys-private-data-and-collaboration).
 
 Live updates do not preserve server component instances between requests.
 Request state remains request-scoped. Persistent application state belongs in
@@ -262,8 +281,10 @@ bindings. Tested compatible live updates retain local state, an uncontrolled
 input's node/value, and focus. Repeated regions have isolated runtime owners.
 
 A different page call site or binding contract replaces the region and disposes
-its bindings. Passive HTML results replace their region. Reassigning to a new
-pending source can also unmount/remount it through pending presentation.
+its bindings. Passive HTML results replace their region when the new result is
+ready. Assigning a new pending request retains the committed page during the
+wait. A compatible completed result then updates its existing bindings; an
+incompatible one replaces the region at commit, not at request start.
 JSX `key` is not a promise of identity across these replacements. General
 focus/selection preservation across arbitrary replacements and a separate
 "apply action UI while retaining this live target" operation are not provided.
@@ -314,7 +335,15 @@ Live pages keep `text/event-stream` and the existing SSE snapshot/JSON-patch
 transport for their internal page values (HTML plus binding metadata). Finite
 SSR snapshot requests use the HTML format above. Changing finite delivery does
 not introduce another live protocol or nested progressive page delivery.
-The JSON patch mechanism is not a field-level DOM/HTML diff.
+With negotiated v2 support, compatible interactive page updates may carry a
+compact text edit for `/html` alongside binding-input patches, instead of the
+complete HTML string. The client reconstructs the exact current HTML before
+delivery; it never keeps a stale HTML copy just because the bindings match.
+First delivery and reconnects still start full. Passive/incompatible pages use
+ordinary replacement/snapshot delivery. Text comparisons are bounded, and an
+edit is selected only when smaller. This is a wire-size optimization, not a
+field-level DOM diff or a fixed-template assumption: conditional markup can
+change without changing the binding key.
 A mounted compatible interactive page uses its bindings to update inputs;
 passive or incompatible content replaces the owned region.
 
@@ -345,10 +374,18 @@ and generators yielding pages are not linked by this version. Keep a function's
 successful results consistently page results rather than mixing ordinary data
 and pages. Do not wrap a page in a custom JSON response.
 
-Deferred: optimistic mutation of rendered UI, app-wide stream multiplexing,
+Deferred: native no-JavaScript form/navigation progressive enhancement,
+optimistic mutation of rendered UI, app-wide stream multiplexing,
 retained-live-target action application, progressive nested page delivery,
 and arbitrary server/client closure splitting. Existing data-based
 `optimistic()` callbacks are unchanged.
+
+Current stabilization takes priority over progressive enhancement. Direct HTML
+delivery is not a no-JavaScript guarantee: `$forms` actions and local handlers
+need the browser runtime, and initial document streaming uses inline scripts
+to apply late regions. Native form POST fallbacks and a no-JavaScript delivery
+strategy have not been selected or implemented. These remain separate from
+correct SSR settlement and hydration, which must work in the current model.
 
 Regression coverage includes compiler extraction/projection, independent binding
 owners and async handlers, finite/action rendering and stale reads, generated

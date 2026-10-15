@@ -117,7 +117,8 @@ export function liveResponse(
   onError?: StreamErrorReporter,
 ): Response {
   const abort = new AbortController();
-  const patches = request.headers.get('x-mmd-live-patches') === '1' ? new LivePatchEncoder() : undefined;
+  const patchVersion = request.headers.get('x-mmd-live-patches');
+  const patches = patchVersion === '1' || patchVersion === '2' ? new LivePatchEncoder(patchVersion === '2') : undefined;
   let dirty = true;
   let wake: (() => void) | undefined;
   let heartbeat: ReturnType<typeof setTimeout> | undefined;

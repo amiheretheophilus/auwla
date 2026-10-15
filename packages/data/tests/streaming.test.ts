@@ -155,7 +155,7 @@ describe('compiler-owned streaming sources', () => {
     runtimes.push(runtime);
     const live = runWithDataRuntime(runtime, () => createStreamingSource<number>('/live', {}, 'live')) as unknown as FetchResource<number>;
     runWithDataRuntime(runtime, () => createStreamingSource<number>('/generator', {}, 'generator'));
-    expect(headers[0]!.get('x-mmd-live-patches')).toBe('1');
+    expect(headers[0]!.get('x-mmd-live-patches')).toBe('2');
     expect(headers[1]!.has('x-mmd-live-patches')).toBe(false);
     channels[0]!.enqueue(frame('value', { value: 1, stamp: stamp(0) }));
     channels[0]!.enqueue(frame('value', { value: 2, stamp: stamp(1) }));

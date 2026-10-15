@@ -3,6 +3,7 @@ import { createDefine, serve } from '../src/index';
 import { createServerFunctionRoutes, type ServerFunctionRouteDefinition } from '../src/http-router';
 import { LiveHub, liveResponse } from '../src/live';
 import { waitFor } from '../../../test-support/helpers';
+import { applyLivePatch, type LiveJsonValue } from '@memoized-dom/data/internal';
 
 const decoder = new TextDecoder();
 const url = 'https://app.test/_fn/notes/getNotes?id=one';
@@ -20,6 +21,30 @@ function install(app: object, routes: readonly unknown[]) {
 }
 
 describe('automatic live server functions', () => {
+  it('negotiates v2 page text edits and starts reconnects with complete current HTML', async () => {
+    const hub = new LiveHub(), key = hub.key(['board']);
+    let count = 0;
+    const query = async () => ({ $mmd: 'page', version: 1, id: 'board',
+      html: `<section>${'Static content'.repeat(100)}<p>${count}</p></section>`,
+      binding: { key: 'contract', inputs: [count] },
+    });
+    const negotiated = () => new Request(url, { headers: { 'x-mmd-stream': 'live', 'x-mmd-live-patches': '2' } });
+    const reader = liveResponse(hub, key, negotiated(), query).body!.getReader();
+    try {
+      const first = await read(reader); expect(first.event).toBe('value');
+      count++; hub.invalidate(['board']);
+      const next = await read(reader); expect(next.event).toBe('patch');
+      expect(next.data.patch).toContainEqual(expect.objectContaining({ op: 'text', path: '/html' }));
+      expect(applyLivePatch(first.data.value as LiveJsonValue, next.data.patch)).toEqual(await query());
+      const reconnect = liveResponse(hub, key, negotiated(), query).body!.getReader();
+      try {
+        const restored = await read(reconnect);
+        expect(restored.event).toBe('value'); expect(restored.data.seq).toBe(1);
+        expect(restored.data.value).toEqual(await query());
+      } finally { await reconnect.cancel(); }
+    } finally { await reader.cancel(); }
+  });
+
   it.each([false, true])('reports live query failures through onError with subscriber context (after initial value: %s)', async afterInitial => {
     const define = createDefine<{ user: string }, unknown, { secret: string }>();
     define.service('secret', () => 'private-service');

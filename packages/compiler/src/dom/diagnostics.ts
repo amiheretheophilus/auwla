@@ -6,6 +6,7 @@ import type { DomContext } from './context';
 import { componentId, md, mdTrace } from './identifiers';
 import type { ScopeWrites } from '../handlers/write-facts';
 import type { RowCtx } from './row-context';
+import { imperativeCallback } from './retained-content';
 
 export function diagnosticSources(expression: t.Expression): string[] {
   const names = new Set<string>();
@@ -32,9 +33,9 @@ export function traceDomWrite(
 
 export function traceHandler(ctx: DomContext, owner: t.Expression, type: string, handler: t.Expression): t.Expression {
   if (ctx.scopedEvents) handler = astFactory.callExpression(md(ctx,'bindRuntimeCallback'), [handler]);
-  return ctx.diagnostics ? astFactory.callExpression(mdTrace(ctx, 'traceEvent'), [
+  return imperativeCallback(ctx.diagnostics ? astFactory.callExpression(mdTrace(ctx, 'traceEvent'), [
     cloneNode(owner), astFactory.stringLiteral(type), handler,
-  ]) : handler;
+  ]) : handler);
 }
 
 /** Attach only after write-commit coalescing, never as an optimization input. */

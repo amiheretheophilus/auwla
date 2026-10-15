@@ -12,6 +12,7 @@ import type { TransparentPresentationPolicy, TransparentPresentationComponent } 
 import { md, mdd } from './identifiers';
 import { sourceArray } from './data-subscriptions';
 import { annotateTransparentSources } from '../planning/async-reads';
+import { retainAutomaticContent } from './retained-content';
 
 interface TransparentPolicyRenderer {
   renderer: t.Expression;
@@ -207,6 +208,7 @@ export function wrapAutomaticSite(
     __memoDomTransparentGroup?: boolean;
   }).__memoDomTransparentGroup = true;
   annotateTransparentSources(conditional, dependencies);
+  retainAutomaticContent(conditional, dependencies);
   overwriteNode(
     expression as unknown as BaseNode,
     conditional as unknown as BaseNode,

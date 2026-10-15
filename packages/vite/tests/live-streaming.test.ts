@@ -75,7 +75,7 @@ it.skipIf(!chrome)('automatically synchronizes Fieldnotes and protects multiple 
     const cancelledStreams: string[] = [];
     viewer.on('request', request => {
       if (request.headers()['x-mmd-stream'] === 'live') {
-        expect(request.headers()['x-mmd-live-patches']).toBe('1');
+        expect(request.headers()['x-mmd-live-patches']).toBe('2');
         liveRequests.push(request.url());
       }
     });
