@@ -1,18 +1,20 @@
-/** Internal server-owned page foundation. Browser delivery is a separate layer. */
+/** Render compiler-selected page definitions in isolated server sessions. */
 import { registerRootFactory } from '@memoized-dom/runtime/server';
-import { render, type RenderOptions } from './index';
+import { render } from './render';
+import type { RenderOptions } from './index';
 import type { ServerComponent } from './root-id';
 import type { PageContent } from '@memoized-dom/runtime';
 import { isServerPage, type ServerPageDefinition } from './page-definition';
+import { encodePageInputs } from './page-inputs';
 export { createServerPage, isServerPage } from './page-definition';
 export type { ServerPageDefinition } from './page-definition';
 
 export type ServerPageRender = PageContent;
 
 /**
- * Evaluate a selected page in the existing isolated renderer. This intentionally
- * returns an internal render product, not a browser-ready response: interaction
- * bindings must be linked before the result may be delivered to an application.
+ * Evaluate a selected page without rerunning its action. Vite supplies the
+ * matching binding identity and projected client inputs; opaque definitions
+ * never pass through ordinary data serialization before this boundary.
  */
 export async function renderServerPage(
   page: ServerPageDefinition,
@@ -35,6 +37,7 @@ export async function renderServerPage(
     html = page.binding ? '<div style="display:contents">' + html.slice(5) : html.slice(5, -6);
   }
   return { $mmd: 'page', version: 1, id: page.id, html,
-    ...(page.binding ? { binding: { key: page.binding.key, inputs: page.binding.inputs() } } : {}),
+    ...(page.styles?.length ? {styles:page.styles} : {}),
+    ...(page.binding ? { binding: { key: page.binding.key, ...encodePageInputs(page.binding.inputs()) } } : {}),
   };
 }

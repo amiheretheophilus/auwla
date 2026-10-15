@@ -15,11 +15,21 @@ type FetchEntry = FetchStore['allEntries'] extends Set<infer Entry> ? Entry : ne
 function seedEntryFromRecord(
   entry: FetchEntry,
   record: SerializedSourceRecord,
-): void {
+): Promise<unknown> | undefined {
   const { snapshot } = record;
   if (snapshot.status === 'success') {
+    let data=snapshot.data;
+    if(fetchTransferContract(entry.descriptor.schema)==='mmd-fetch/v1:page:1') {
+      const validated=entry.descriptor.schema!['~standard'].validate(data);
+      const result=(value:Awaited<typeof validated>)=>{
+        if(value.issues)throw new RequestError('Invalid restored server page',{kind:'validation',issues:value.issues});
+        return value.value;
+      };
+      if(validated instanceof Promise)return entry.restoreValidated(validated.then(result),snapshot.revalidate);
+      data=result(validated);
+    }
     entry.snapshot = {
-      data: snapshot.data,
+      data,
       error: null,
       status: 'success',
       pending: false,
@@ -128,8 +138,17 @@ class RestoredFetchStore implements FetchRestoration {
       for (const entry of [...waiters]) {
         if (!this.store.allEntries.has(entry) || record.contractId !== fetchTransferContract(entry.descriptor.schema)) continue;
         waiters.delete(entry);
-        seedEntryFromRecord(entry, record);
+        const restoring=seedEntryFromRecord(entry, record);
         entry.emit();
+        if(restoring){
+          void restoring.then(()=>{
+            if(this.store.allEntries.has(entry)&&(record.snapshot.status==='success'&&(record.snapshot.revalidate||entry.descriptor.stream==='live'))){
+              if(this.hydrationBlocked){entry.deferStart();this.deferredStarts.add(entry);}
+              else entry.start(true).catch(()=>{});
+            }
+          },()=>{});
+          continue;
+        }
         if (this.store.allEntries.has(entry) && record.snapshot.status === 'success' &&
           (record.snapshot.revalidate || entry.descriptor.stream === 'live')) {
           if (this.hydrationBlocked) {
@@ -182,8 +201,18 @@ class RestoredFetchStore implements FetchRestoration {
     );
     const awaitingStream = restored?.snapshot.status === 'pending' && restored.snapshot.streamed === true;
     if (restored !== undefined) {
-      seedEntryFromRecord(entry, restored);
+      const restoring=seedEntryFromRecord(entry, restored);
       entry.emit();
+      if(restoring){
+        void restoring.then(()=>{
+          if(!this.store.allEntries.has(entry))return;
+          if(force||restored.snapshot.status==='success'&&(restored.snapshot.revalidate||descriptor.stream==='live')){
+            if(this.hydrationBlocked){entry.deferStart();this.deferredStarts.add(entry);}
+            else entry.start(true).catch(()=>{});
+          }
+        },()=>{});
+        return;
+      }
       if (awaitingStream) {
         let waiters = this.streamWaiters.get(restored.sourceId);
         if (waiters === undefined) this.streamWaiters.set(restored.sourceId, waiters = new Set());

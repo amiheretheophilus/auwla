@@ -1,5 +1,5 @@
 import { stringTier, type StringRenderableNode } from './string-document';
-import { createPayloadScriptTag } from './index';
+import { createPayloadScriptTag } from './render';
 import type { RenderOptions } from './index';
 import type { ServerComponent } from './root-id';
 import { RenderSession, type RenderSettlement } from './session';

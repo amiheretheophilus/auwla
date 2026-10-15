@@ -3,9 +3,30 @@ import * as runtime from '@memoized-dom/runtime';
 import * as serverRuntime from '@memoized-dom/runtime/server';
 import { compileServerPage } from '../packages/compiler/src/page-compiler';
 import { createServerPage, renderServerPage } from '../packages/server/src/page';
-import { projectPageInputs } from '../packages/server/src/page-inputs';
+import { encodePageInputs, projectPageInputs } from '../packages/server/src/page-inputs';
+import { pageBindingInputs } from '../packages/runtime/src/page-content';
 
 afterEach(() => document.body.replaceChildren());
+it('preserves optional undefined props without colliding with user object values',()=>{
+  const encoded=encodePageInputs([undefined,{$mmd:'undefined',optional:undefined,rows:[{name:undefined}]}]);
+  const decoded=pageBindingInputs(JSON.parse(JSON.stringify({key:'test',...encoded})));
+  expect(decoded).toEqual([undefined,{$mmd:'undefined',optional:undefined,rows:[{name:undefined}]}]);
+  expect(()=>pageBindingInputs({key:'bad',inputs:[{}],missing:[[0,'__proto__']]})).toThrow('input path');
+});
+it('rejects accessor, service, prototype and whole-object inputs before serialization',()=>{
+  let getters=0;const value={get name(){getters++;return 'secret';}};
+  expect(()=>projectPageInputs([value],[[0,'name']])).toThrow('getters');expect(getters).toBe(0);
+  class Service {name='secret';}
+  expect(()=>projectPageInputs([new Service()],[[0,'name']])).toThrow('class instances');
+  expect(()=>projectPageInputs([{}],[[0,'__proto__']])).toThrow('unsafe');
+  expect(()=>projectPageInputs([()=>{}],[[0]])).toThrow('server closures');
+});
+
+it('retains opaque noninteractive rendering on the server and refuses unproved interactive setup reads',()=>{
+  const passive=compileServerPage({'./page.tsx':`export function Page(inputs){const name=inputs[0].name.toUpperCase();return <div><h1>{name}</h1></div>}`},'./page.tsx','Page',1);
+  expect(passive.delivery.browser).toBe('none');expect(passive.browser).toEqual({});expect(passive.delivery.paths).toEqual([]);
+  expect(()=>compileServerPage({'./page.tsx':`export function Page(){const user=$fetch('/user');let count=0;return <div><h1>{user.name}</h1><button onClick={()=>count++}>{count}</button></div>}`},'./page.tsx','Page',0)).toThrow('unsupported browser creation');
+});
 function evaluate(code: string, api: typeof runtime): (id:string,parent:null,props:unknown[]) => Node {
   const imports = [...code.matchAll(/^import \* as (\w+) from [^;]+;/gm)].map(match => `const ${match[1]}=api;`).join('\n');
   const output = code.replace(/^import \* as (\w+) from [^;]+;/gm, '')
@@ -32,15 +53,15 @@ it('binds server HTML, isolates repeated page events and preserves local state o
   runtime.registerCompiledPage(compiled.delivery.key,browser,'Page');
   const make = (name:string) => createServerPage('test/page',(id,parent,inputs)=>server(id,parent,[inputs]),
     [{name,password:'SECRET'}],compiled.delivery,true);
-  let first = await renderServerPage(make('Ada'));
-  const second = await renderServerPage(make('Grace'));
+  let first = runtime.acceptPageContent(await renderServerPage(make('Ada')));
+  const second = runtime.acceptPageContent(await renderServerPage(make('Grace')));
   expect(first.html).toContain('Ada'); expect(JSON.stringify(first)).not.toContain('SECRET');
   const a=document.createElement('main'), b=document.createElement('aside'); document.body.append(a,b);
   const regionA=runtime.createContentRegion(a,'first',()=>first);
   const regionB=runtime.createContentRegion(b,'second',()=>second);
   const button=a.querySelector('button')!; button.click(); await Bun.sleep(5);
   expect(button.textContent).toBe('Count 1'); expect(b.querySelector('button')?.textContent).toBe('Count 0');
-  first=await renderServerPage(make('Updated'));regionA.update();await Bun.sleep(5);
+  first=runtime.acceptPageContent(await renderServerPage(make('Updated')));regionA.update();await Bun.sleep(5);
   expect(a.querySelector('button')).toBe(button); expect(button.textContent).toBe('Count 1');
   expect(a.querySelector('h1')?.textContent).toBe('Updated');
   regionA.dispose();regionB.dispose();expect(a.childNodes.length+b.childNodes.length).toBe(0);

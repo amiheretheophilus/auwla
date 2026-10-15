@@ -4,16 +4,27 @@ import { pageInputPaths } from './page-projection';
 import { parseWithEstreeFrontendOrThrow, memoizedEstreeFrontend, printEstree, type BaseNode } from './ast';
 import * as f from './ast/factory';
 import type * as t from './ast/compiler-types';
+import { createHash } from 'node:crypto';
+import { walkAst } from './ast';
 
 export function compileServerPage(sources: Readonly<Record<string,string>>, rootModule: string, component: string,
   captureCount: number, options: CompileModulesOptions = {}) {
   const entry = rootModule + '.mount.ts';
-  const modules = { ...sources, [entry]: `import {mount} from '@memoized-dom/runtime';import {${component}} from ${JSON.stringify(rootModule)};mount('__mmd_page_root',${component});` };
+  const modules = { ...sources, [entry]: `import {mount} from ${JSON.stringify(options.runtimePath ?? '@memoized-dom/runtime')};import {${component}} from ${JSON.stringify(rootModule)};mount('__mmd_page_root',${component});` };
   const resolveImport = (specifier:string, importer:string) => specifier === rootModule ? rootModule : options.resolveImport?.(specifier,importer);
   const base = { ...options, resolveImport, hot:false, pageCaptureCount:captureCount, initialContent:true };
   const browser = compileModulesDetailed(modules, {...base,routedEnvironment:'client',scopedEvents:true,moduleStateCells:false});
-  const delivery = browser.initialDelivery;
-  if (!delivery || browser.initialRender.kind === 'browser' || browser.initialRender.kind === 'mixed') {
+  let delivery = browser.initialDelivery;
+  if (!delivery) {
+    let interactive=false;
+    for (const [id,source] of Object.entries(sources)) walkAst<t.Node>(parseWithEstreeFrontendOrThrow(options.frontend ?? memoizedEstreeFrontend,source,{filename:id,sourceType:'module'}).program as unknown as t.Node,{enter(node){
+      if (f.isJSXAttribute(node) && node.name.type === 'JSXIdentifier' && (node.name.name === 'ref' || /^on[A-Z]/.test(node.name.name))) interactive=true;
+      if (node.type === 'JSXSpreadAttribute') interactive=true;
+      if (f.isCallExpression(node) && f.isIdentifier(node.callee) && ['$effect','$cleanup'].includes(node.callee.name)) interactive=true;
+    }});
+    if (!interactive) delivery={key:createHash('sha256').update(JSON.stringify([rootModule,component,sources])).digest('hex'),target:'__mmd_page_root',browser:'none'};
+  }
+  if (!delivery || delivery.browser === 'bindings' && (browser.initialRender.kind === 'browser' || browser.initialRender.kind === 'mixed')) {
     throw new Error('memo-dom: this server page needs an unsupported browser creation program; simplify its bindings or move server-only work into the handler: '+JSON.stringify(browser.initialRender));
   }
   const server = compileModulesDetailed(modules, {...base,routedEnvironment:'server',moduleStateCells:true});
@@ -41,6 +52,6 @@ export function compileServerPage(sources: Readonly<Record<string,string>>, root
     output[id] = printEstree(program as unknown as BaseNode).code;
   }
   return { server:server.output, browser:output, component, rootModule,
-    delivery:{key:delivery.key,browser:delivery.browser,paths},
+    delivery:{key:delivery.key,browser:delivery.browser,paths,styles:[...new Set(Object.values(server.css ?? {}))]},
   };
 }

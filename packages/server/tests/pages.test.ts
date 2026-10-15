@@ -4,7 +4,8 @@ import * as data from '@memoized-dom/data/internal';
 import { compileModules } from '../../compiler/src/linker';
 import { extractServerPages } from '../../compiler/src/server-pages';
 import { createServerPage, isServerPage, renderServerPage, type ServerPageDefinition } from '../src/page';
-import { createServerFunctionRoutes, createServerRouter } from '../src/http-router';
+import { createServerFunctionRoutes, createServerRouter, installServerPageFetch } from '../src/http-router';
+import { liveHub } from '../src/live';
 
 /** Execute compiler output without temporary files or application-side imports. */
 function fixture(source: string, modules: Record<string, string> = {}): (...args: unknown[]) => Promise<ServerPageDefinition> {
@@ -45,6 +46,22 @@ function fixture(source: string, modules: Record<string, string> = {}): (...args
 }
 
 describe('request-owned server page rendering foundation', () => {
+  it('discards a page invalidated while its nested server rendering is still settling', async () => {
+    const make = fixture(`import {page} from '@memoized-dom/server';import {Board} from '../components/Board';
+      export async function make(version){return page(<Board version={version}/>);}`, {
+      './components/Board.tsx':`export function Board({version}){const nested=$fetch('/nested');return <h1>{version}:{nested.label}</h1>;}`,
+    });
+    const started=Promise.withResolvers<void>(), release=Promise.withResolvers<void>();
+    let version=0, reads=0, nested=0;
+    const services={};
+    const fetch=(async()=>{if(nested++ === 0){started.resolve();await release.promise;}return Response.json({label:'settled'});}) as unknown as typeof globalThis.fetch;
+    const router=createServerRouter({services,middleware:[(context,next)=>{installServerPageFetch(context,fetch);return next();}],routes:createServerFunctionRoutes([{
+      id:'board',path:'/_fn/board',method:'GET',parameters:[],live:()=>['board'],handler:()=>{reads++;return make(version);},
+    }])});
+    const response=router.fetch(new Request('https://app.test/_fn/board',{headers:{'x-mmd-stream':'snapshot'}}));
+    await started.promise;version=1;liveHub(services).invalidate(['board']);release.resolve();
+    expect(await (await response).json()).toMatchObject({html:'<h1>1:settled</h1>'});expect(reads).toBe(2);
+  });
   it('delivers finite GET and POST pages as rendered content without SSE or repeating mutations', async () => {
     const make = fixture(`import {page} from '@memoized-dom/server';
       export async function make(name:string){return page(<h1>{name}</h1>);}`);

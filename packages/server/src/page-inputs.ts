@@ -1,4 +1,16 @@
 /** Only compiler-proved primitive leaves cross the page binding boundary. */
+export function encodePageInputs(inputs:readonly unknown[]):{inputs:readonly unknown[];missing?:readonly (readonly (string|number)[])[]} {
+  const missing:(string|number)[][]=[];
+  const encode=(value:unknown,path:(string|number)[]):unknown=>{
+    if(value===undefined){missing.push(path);return null;}
+    if(Array.isArray(value))return value.map((item,index)=>encode(item,[...path,index]));
+    if(value!==null&&typeof value==='object')return Object.fromEntries(Object.entries(value).map(([key,item])=>[key,encode(item,[...path,key])]));
+    return value;
+  };
+  const encoded=encode(inputs,[]) as readonly unknown[];
+  return {inputs:encoded,...(missing.length?{missing}:{})};
+}
+
 export function projectPageInputs(inputs: readonly unknown[], paths: readonly (readonly (string | number)[])[]): readonly unknown[] {
   interface Selection { leaf?: true; children: Map<string | number, Selection> }
   const selection: Selection = {children:new Map()};

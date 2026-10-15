@@ -650,10 +650,11 @@ export function memoizedDom(
     },
     async hotUpdate(update) {
       const file = normalizeFile(update.file);
+      const pageChanged = serverPages?.owns(file) === true;
       const serverFunctionChanged =
         config !== undefined && (
           isServerFunctionFile(config.root, file, options) ||
-          isServerSourceFile(config.root, file, options)
+          isServerSourceFile(config.root, file, options) || pageChanged
         );
       const serverConfigChanged = config !== undefined &&
         isServerConfigFile(config.root, file, options);
@@ -681,6 +682,11 @@ export function memoizedDom(
             );
           }
         }
+      }
+      if (pageChanged) {
+        for (const environment of Object.values(devServer?.environments ?? {})) environment.moduleGraph.invalidateAll();
+        devServer?.ws.send({type:'full-reload'});
+        return [];
       }
       const primary = states.get(this.environment);
       const isPrimary = primary?.files.has(file) === true;

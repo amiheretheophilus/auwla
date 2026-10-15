@@ -57,7 +57,7 @@ export { cleanup } from './cleanup';
 export { readPreparationScope, releasePreparationRead } from './preparation-read';
 export { createPreparedRegion } from './prepared-region';
 export { createContentRegion } from './content-region';
-export { isPageContent, registerPageBinder } from './page-content';
+export { isPageContent, acceptPageContent, registerPageBinder } from './page-content';
 export type { PageContent, PageBinder, PageBindingHandle } from './page-content';
 export { bindRuntimeCallback, bindRuntimeNamespace, registerCompiledPage } from './page-bindings';
 export { collectRenderReadiness } from './render-readiness';

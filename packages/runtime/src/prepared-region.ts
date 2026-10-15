@@ -74,6 +74,7 @@ export function createPreparedRegion(
   let preparation: RenderPreparation;
   let detached: DocumentFragment;
   let content: CondEntry | undefined;
+  let published = false;
   let fallback: CondEntry | undefined;
   let state: 'pending' | 'active' | 'error' | 'disposed' = 'pending';
   const hasFailed = () => state === 'error';
@@ -129,13 +130,19 @@ export function createPreparedRegion(
     if (preparation.readiness === 'error') { fail(preparation.errors[0]); return; }
     if (preparation.readiness !== 'ready') return;
     releaseFallback();
-    if (!preserveAdopted) { clear(); end.parentNode!.insertBefore(detached, end); }
+    if (!preserveAdopted && !published) { clear(); end.parentNode!.insertBefore(detached, end); published=true; }
     state = 'active';
     unsubscribe();
     const token = generation;
     // The surrounding compiler factory may still be initializing its closures.
     queueMicrotask(() => inRuntime(() => {
       if (token !== generation || state !== 'active') return;
+      // Hydration handoff or a same-turn source write may dirty discovery
+      // between readiness and deferred activation. Wait for its next proof;
+      // never clear/reinsert a range that was already published or adopted.
+      if (preparation.readiness !== 'ready') {
+        state='pending';unsubscribe=preparation.subscribe(check);check();return;
+      }
       try { preparation.activate(); resolveReady(); }
       catch (cause) {
         if (preparation.status === 'active') { rejectReady(cause); throw cause; }
@@ -144,6 +151,7 @@ export function createPreparedRegion(
     }));
   };
   function start() {
+    published=preserveAdopted;
     state = 'pending';
     failure = undefined;
     generation++;

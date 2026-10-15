@@ -370,6 +370,7 @@ export function planInitialRendering(
             need(scope,'Request HTML needs a read-only fetch');
           }
           if(bindings) {
+            if (pageCaptureCount !== undefined) need(scope,'Interactive server page data must be loaded in its server-function handler');
             // Binding needs a restored payload. These options intentionally
             // have no transfer identity in the data runtime; keep adoption.
             if(options && typeof options==='object' && options.kind==='object' &&

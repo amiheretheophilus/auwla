@@ -13,16 +13,24 @@ export function bindRuntimeCallback<T>(callback: T): T {
 }
 
 /** Captured by a compiled factory; calls after await still target its owner. */
+const namespaces = new WeakMap<object,WeakMap<object,object>>();
 export function bindRuntimeNamespace<T extends object>(namespace: T): T {
+  const runtime=getActiveApplicationRuntime();
+  let cached=namespaces.get(runtime);
+  if(!cached)namespaces.set(runtime,cached=new WeakMap());
+  const previous=cached.get(namespace);if(previous)return previous as T;
   const bound = Object.create(null) as Record<string, unknown>;
   for (const [name,value] of Object.entries(namespace)) bound[name] = bindRuntimeCallback(value);
+  cached.set(namespace,bound);
   return bound as T;
 }
 
 export function registerCompiledPage(key: string, create: (id: string, parent: null, props: unknown[]) => Node, rootId: string): void {
   registerPageBinder(key, (root, inputs) => {
     const environment = getActiveEnvironment();
-    const document = environment.document;
+    // Adoption documents are read cursors, not reusable creation documents.
+    // Future local branches must create real nodes after outer hydration ends.
+    const document = root.ownerDocument;
     const pageDocument: DocumentLike = {
       createComment: document.createComment.bind(document), createElement: document.createElement.bind(document),
       createElementNS: document.createElementNS.bind(document), createTextNode: document.createTextNode.bind(document),

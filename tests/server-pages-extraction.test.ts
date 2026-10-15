@@ -18,6 +18,7 @@ describe('server page boundary extraction', () => {
     expect(result.source).toContain('await database.all(id)');
     expect(result.source).not.toContain('<Board');
     expect(result.source).not.toContain('markDirty');
+    expect(result.source).not.toContain('../components/Board');
     expect(result.componentSource).toContain('<Board');
     expect(result.componentSource).not.toContain('database');
     expect(result.componentSource).not.toContain('getBoard');

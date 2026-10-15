@@ -26,13 +26,14 @@ export interface ServerPageExtractionOptions {
   /** Hosts wrap remote roots so the existing initial binding proof can bind fragments too. */
   readonly wrap?: boolean;
   /** Compiler-owned delivery metadata, supplied only after linking each page graph. */
-  readonly delivery?: Readonly<Record<string, { key: string; paths: readonly (readonly (string | number)[])[]; browser: 'none' | 'bindings' }>>;
+  readonly delivery?: Readonly<Record<string, { key: string; paths: readonly (readonly (string | number)[])[]; browser: 'none' | 'bindings'; styles?:readonly string[] }>>;
 }
 
 export interface ExtractedServerPage {
   readonly id: string;
   readonly component: string;
   readonly captures: readonly string[];
+  readonly imports: readonly string[];
 }
 
 export interface ExtractedServerPages {
@@ -96,6 +97,7 @@ export function extractServerPages(source: string, options: ServerPageExtraction
       throw compilerError('memo-dom: nested page() results must be separate server-function render boundaries', options.moduleId, raw);
     }
     const captures = new Map<string, Identifier>();
+    const pageImports = new Set<string>();
     walkAst(input as unknown as BaseNode, { enter(node) {
       if (f.isJSXElement(node)) {
         const tag = node.openingElement.name;
@@ -108,6 +110,7 @@ export function extractServerPages(source: string, options: ServerPageExtraction
             throw compilerError(`memo-dom: page component '${tag.name}' must currently be imported from a component module`, options.moduleId, node);
           }
           componentImports.add(tag.name);
+          pageImports.add(tag.name);
         }
       }
       if (node.type !== 'Identifier') return;
@@ -143,12 +146,13 @@ export function extractServerPages(source: string, options: ServerPageExtraction
         ? f.objectExpression([
           f.objectProperty(f.identifier('key'), f.stringLiteral(options.delivery[component]!.key)),
           f.objectProperty(f.identifier('browser'), f.stringLiteral(options.delivery[component]!.browser)),
+          f.objectProperty(f.identifier('styles'), f.arrayExpression((options.delivery[component]!.styles ?? []).map(css=>f.stringLiteral(css)))),
           f.objectProperty(f.identifier('paths'), f.arrayExpression(options.delivery[component]!.paths.map(path => f.arrayExpression(path.map(part =>
             typeof part === 'number' ? f.numericLiteral(part) : f.stringLiteral(part)))))),
         ]) : f.nullLiteral(), f.booleanLiteral(true)] : []),
     ]);
     overwriteNode(raw, replacement as unknown as BaseNode);
-    pages.push({ id, component, captures: captured });
+    pages.push({ id, component, captures: captured, imports:[...pageImports] });
   }
   // Do not leave a runtime import of the not-yet-public authoring helper in the
   // implementation. Reject escaping uses rather than accidentally calling it.
@@ -174,11 +178,18 @@ export function extractServerPages(source: string, options: ServerPageExtraction
   const componentProgram: t.Program = { type: 'Program', sourceType: 'module', body: [
     ...imports, ...components.map(component => f.exportNamedDeclaration(component)),
   ] };
+  const remaining = analyzeScope(program as unknown as Program);
+  const remainingTags = new Set<string>();
+  walkAst<BaseNode>(program as unknown as BaseNode,{enter(node){
+    if (f.isJSXElement(node) && node.openingElement.name.type === 'JSXIdentifier') remainingTags.add(node.openingElement.name.name);
+  }});
   program.body = program.body.filter(statement => {
     if (!f.isImportDeclaration(statement)) return true;
     const originalCount = statement.specifiers.length;
     statement.specifiers = statement.specifiers.filter(specifier =>
-      !bindings.has(analysis.rootScope.getBinding(specifier.local.name)));
+      !bindings.has(analysis.rootScope.getBinding(specifier.local.name)) &&
+      (!componentImports.has(specifier.local.name) || remainingTags.has(specifier.local.name) ||
+        (remaining.rootScope.getBinding(specifier.local.name)?.references.length ?? 0) > 0));
     return originalCount === 0 || statement.specifiers.length > 0;
   });
   program.body.unshift(f.importDeclaration([

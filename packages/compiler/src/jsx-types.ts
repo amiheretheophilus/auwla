@@ -16,7 +16,9 @@ declare global {
     /** Compiled browser JSX produces DOM nodes, including fragment nodes. */
     interface Element extends globalThis.Node {}
 
-    type Child = Element | import('@memoized-dom/runtime').PageContent | string | number | bigint | boolean | null | undefined | readonly Child[];
+    /** Structural wire result; JSX typing does not depend on the runtime implementation. */
+    interface ServerContent { readonly $mmd:'page'; readonly version:1; readonly id:string; readonly html:string }
+    type Child = Element | ServerContent | string | number | bigint | boolean | null | undefined | readonly Child[];
     type ElementType = keyof IntrinsicElements | ((props: never) => Child);
 
     /** Application route patterns from the generated `.memoized/routes.d.ts`. */

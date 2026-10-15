@@ -224,6 +224,24 @@ class FetchEntry {
     }
   }
 
+  /** Compiler protocol restoration may wait for its browser binding artifact. */
+  restoreValidated(data:PromiseLike<unknown>,revalidate:boolean):Promise<unknown> {
+    this.cancelRequest();
+    const generation=++this.generation;
+    this.snapshot.pending=true;this.snapshot.refreshing=this.hasData;
+    this.snapshot.status=this.hasData?'success':'pending';
+    const request=Promise.resolve(data).then(value=>{
+      if(generation !== this.generation)return;
+      this.snapshot={data:value,error:null,status:'success',pending:false,refreshing:revalidate};
+      this.hasData=true;this.emit();return value;
+    },error=>{
+      if(generation !== this.generation)return;
+      this.snapshot.error=toRequestError(error);this.snapshot.status=this.hasData?'success':'error';
+      this.snapshot.pending=false;this.snapshot.refreshing=false;this.emit();throw this.snapshot.error;
+    }).finally(()=>{if(generation===this.generation)this.request=null;});
+    this.request=request;request.catch(()=>{});return request;
+  }
+
   cancelDeferredStart(): void {
     this.store.restoration?.release(this);
     this.pendingOperationId = null;

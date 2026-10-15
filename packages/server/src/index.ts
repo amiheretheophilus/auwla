@@ -18,15 +18,12 @@
  * Effects and refs do not run during server rendering.
  */
 
-import { stringTier, type StringRenderableNode } from './string-document';
-import { escapeJsonForScriptTag } from './json-script';
 import type {
   RoutedServerContext,
   SerializedRoutedPreparationState,
 } from '@memoized-dom/router/internal';
 import type { SerializedDataState } from '@memoized-dom/data';
-import { RenderSession, type RenderSettlement } from './session';
-import type { ServerComponent } from './root-id';
+import type { RenderSettlement } from './session';
 
 export { serverRootId, type ServerComponent } from './root-id';
 export { integrateApplication, type ServerIntegration } from './integration';
@@ -97,64 +94,8 @@ export interface RenderOptions {
   markers?: boolean;
 }
 
-export { escapeJsonForScriptTag };
-
-export function createPayloadScriptTag(rootId: string, payload: RenderPayload): string {
-  const safeJson = escapeJsonForScriptTag(JSON.stringify(payload));
-  const safeRootId = rootId
-    .replace(/&/g, '&amp;')
-    .replace(/"/g, '&quot;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;');
-  return `<script type="application/mmd+json" data-mmd-root="${safeRootId}">${safeJson}</script>`;
-}
-
-function serializeString(session: RenderSession, root: Node): string {
-  return session.wrap(
-    (root as unknown as StringRenderableNode).toString(session.markers, session.initialBindings),
-  );
-}
-
-/**
- * Render a complete application: run route preparation, mount, settle
- * request data in `resolve` mode, and return the HTML together with its
- * hydration payload (`<script type="application/mmd+json">`).
- */
-export async function render(
-  component: ServerComponent,
-  options: RenderOptions = {},
-): Promise<RenderResult> {
-  return RenderSession.execute(component, options, stringTier(), async session => {
-    await session.prepare();
-    const root = session.mount();
-    await session.settle();
-    const html = serializeString(session, root);
-    const payload = session.payload();
-    return {
-      html,
-      payload,
-      scriptTag: session.carriesPayload ? createPayloadScriptTag(session.rootId, payload) : '',
-      settlement: session.settlement,
-    };
-  });
-}
-
-/**
- * Synchronously render an application shell. No route preparation or data
- * settlement can run, so applications reading `$routed` values must use
- * `render()` or `renderToReadableStream()`.
- */
-export function renderToString(
-  component: ServerComponent,
-  options: Omit<RenderOptions, 'mode' | 'timeout' | 'deadline' | 'signal'> = {},
-): string {
-  return RenderSession.execute(component, options, stringTier(), session => {
-    if (session.initialDelivery && session.initialDelivery.html===undefined) {
-      throw new Error('memo-dom: request-only HTML requires asynchronous rendering');
-    }
-    return serializeString(session, session.mount());
-  });
-}
+export { escapeJsonForScriptTag } from './json-script';
+export { createPayloadScriptTag, render, renderToString } from './render';
 
 export { renderToReadableStream } from './stream';
 export { json, type JsonResponse } from './json';
