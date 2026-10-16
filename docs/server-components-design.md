@@ -273,6 +273,13 @@ Noninteractive pages can settle supported render-time requests on the server.
 A passive page sends no component binding program, although the shared source
 transport and containing application still need their normal browser runtime.
 
+Interactive binding programs select only the runtime helpers their compiled
+code uses. Owner-bound callbacks (including updates after `await`) do not
+require passing the whole runtime namespace through the binding layer. This
+keeps unused capabilities such as list handling eligible for normal bundler
+tree-shaking; pages that use those capabilities still retain them.
+There is no additional author-facing API or change to page hydration.
+
 ## Update identity and cleanup
 
 When a page stays mounted and receives the same page call-site identity and

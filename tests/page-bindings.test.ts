@@ -75,3 +75,29 @@ it('binds server HTML, isolates repeated page events and preserves local state o
   expect(a.querySelector('h1')?.textContent).toBe('Updated');
   regionA.dispose();regionB.dispose();expect(a.childNodes.length+b.childNodes.length).toBe(0);
 });
+
+it('avoids collisions with authored page-runtime names when selecting binding helpers', async () => {
+  const source = `export function Page(){const _pageRuntime=2,_pagePrimitives=3;let count=0;
+    return <div><button onClick={async()=>{await Promise.resolve();count+=_pageRuntime+_pagePrimitives}}>Count {count}</button></div>}`;
+  const compiled = compileServerPage({'./page.tsx':source},'./page.tsx','Page',0);
+  const server = evaluate(compiled.server['./page.tsx']!,serverRuntime);
+  const browser = evaluate(compiled.browser['./page.tsx']!,runtime);
+  runtime.registerCompiledPage(compiled.delivery.key,browser,'Page');
+  const content = runtime.acceptPageContent(await renderServerPage(createServerPage('collision/page',
+    (id,parent,inputs)=>server(id,parent,[inputs]),[],compiled.delivery,true)));
+  const host=document.createElement('main');document.body.append(host);
+  const region=runtime.createContentRegion(host,'collision',()=>content);
+  try {
+    host.querySelector('button')!.click();await Bun.sleep(5);
+    expect(host.querySelector('button')?.textContent).toBe('Count 5');
+  } finally {region.dispose();}
+});
+
+it('selects binding helpers for the configured runtime path', () => {
+  const compiled=compileServerPage({'./page.tsx':`export function Page(){let count=0;
+    return <div><button onClick={()=>count++}>{count}</button></div>}`},'./page.tsx','Page',0,{runtimePath:'@custom/runtime'});
+  const browser=compiled.browser['./page.tsx']!;
+  expect(browser).toContain('@custom/runtime');
+  expect(browser).toContain('bindRuntimeNamespace');
+  expect(browser).not.toMatch(/bindRuntimeNamespace\((_pageRuntime\w*)\)/);
+});

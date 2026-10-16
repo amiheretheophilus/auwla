@@ -5,7 +5,28 @@ import { parseWithEstreeFrontendOrThrow, memoizedEstreeFrontend, printEstree, ty
 import * as f from './ast/factory';
 import type * as t from './ast/compiler-types';
 import { createHash } from 'node:crypto';
-import { walkAst } from './ast';
+import { isReferenceIdentifier, walkAst } from './ast';
+import { GeneratedIdentifiers } from './dom/identifiers';
+
+/** Keep static runtime reads visible to downstream application tree-shaking. */
+function pageRuntimeMembers(program: t.Program, namespace: string): string[] | undefined {
+  const members = new Set<string>();
+  let opaque = false;
+  walkAst<t.Node>(program, { enter(node, parent, key) {
+    if (!f.isIdentifier(node) || node.name !== namespace || !isReferenceIdentifier(parent, key)) return;
+    if (parent?.type === 'MemberExpression' && key === 'object') {
+      const member = parent as t.MemberExpression;
+      if (!member.computed && f.isIdentifier(member.property)) { members.add(member.property.name); return; }
+      if (member.computed && member.property.type === 'Literal' && typeof member.property.value === 'string') {
+        members.add(member.property.value); return;
+      }
+    }
+    // Authored reflection/dynamic namespace access still needs the full API.
+    // Compiler-owned runtime calls use statically named members.
+    opaque = true;
+  } });
+  return opaque ? undefined : [...members].sort();
+}
 
 export function compileServerPage(sources: Readonly<Record<string,string>>, rootModule: string, component: string,
   captureCount: number, options: CompileModulesOptions = {}) {
@@ -34,19 +55,28 @@ export function compileServerPage(sources: Readonly<Record<string,string>>, root
     if (id === entry) continue;
     const parsed = parseWithEstreeFrontendOrThrow(options.frontend ?? memoizedEstreeFrontend,code,{filename:id,sourceType:'module'});
     const program = parsed.program as unknown as t.Program;
+    const identifiers = new GeneratedIdentifiers(program);
     for (const statement of [...program.body]) {
       if (!f.isImportDeclaration(statement) || statement.source.value !== (options.runtimePath ?? '@memoized-dom/runtime')) continue;
       const specifier = statement.specifiers.find(item => item.type === 'ImportNamespaceSpecifier');
       if (!specifier) continue;
       const name = specifier.local.name;
-      const baseName = name + '__pageRuntime';
+      const members = pageRuntimeMembers(program, name);
+      const baseName = identifiers.generate('pageRuntime').name;
+      const selectedName = members === undefined ? baseName : identifiers.generate('pagePrimitives').name;
       specifier.local.name = baseName;
-      program.body.unshift(f.variableDeclaration('const',[f.variableDeclarator(f.identifier(name),f.identifier(baseName))]));
+      const declarations: t.Statement[] = [];
+      if (members !== undefined) declarations.push(f.variableDeclaration('const',[
+        f.variableDeclarator(f.identifier(selectedName),f.objectExpression(members.map(member =>
+          f.objectProperty(f.identifier(member),f.memberExpression(f.identifier(baseName),f.identifier(member)))))),
+      ]));
+      declarations.push(f.variableDeclaration('const',[f.variableDeclarator(f.identifier(name),f.identifier(selectedName))]));
+      program.body.unshift(...declarations);
       for (const item of program.body) {
         const node = item.type === 'ExportNamedDeclaration' || item.type === 'ExportDefaultDeclaration' ? item.declaration : item;
         if (node?.type !== 'FunctionDeclaration') continue;
         node.body.body.unshift(f.variableDeclaration('const',[f.variableDeclarator(f.identifier(name),
-          f.callExpression(f.memberExpression(f.identifier(baseName),f.identifier('bindRuntimeNamespace')),[f.identifier(baseName)]))]));
+          f.callExpression(f.memberExpression(f.identifier(baseName),f.identifier('bindRuntimeNamespace')),[f.identifier(selectedName)]))]));
       }
     }
     output[id] = printEstree(program as unknown as BaseNode).code;
