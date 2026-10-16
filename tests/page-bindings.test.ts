@@ -101,3 +101,26 @@ it('selects binding helpers for the configured runtime path', () => {
   expect(browser).toContain('bindRuntimeNamespace');
   expect(browser).not.toMatch(/bindRuntimeNamespace\((_pageRuntime\w*)\)/);
 });
+
+it.each([
+  `function Child(props){let clicks=0;return <button onClick={()=>clicks+=props.count}>{props.title}:{clicks}</button>}`,
+  `function Child(title='Untitled',count=0){let clicks=0;return <button onClick={()=>clicks+=count}>{title}:{clicks}</button>}`,
+])('binds composed page inputs and preserves local state when props update: %s', async child => {
+  const source=`export function Page(inputs){return <div><Child title={inputs[0].title} count={inputs[0].count}/></div>}${child}`;
+  const compiled=compileServerPage({'./page.tsx':source},'./page.tsx','Page',1);
+  const server=evaluate(compiled.server['./page.tsx']!,serverRuntime),browser=evaluate(compiled.browser['./page.tsx']!,runtime);
+  runtime.registerCompiledPage(compiled.delivery.key,browser,'Page');
+  const make=async(title:string,count:number)=>runtime.acceptPageContent(await renderServerPage(createServerPage('props/page',
+    (id,parent,inputs)=>server(id,parent,[inputs]),[{title,count,password:'SECRET'}],compiled.delivery,true)));
+  let content=await make('First',2);
+  expect(JSON.stringify(content)).not.toContain('SECRET');
+  const host=document.createElement('main');document.body.append(host);
+  const region=runtime.createContentRegion(host,'props',()=>content);
+  try{
+    const button=host.querySelector('button')!;button.click();await Bun.sleep(5);
+    expect(button.textContent).toBe('First:2');
+    content=await make('Second',3);region.update();await Bun.sleep(5);
+    expect(host.querySelector('button')).toBe(button);expect(button.textContent).toBe('Second:2');
+    button.click();await Bun.sleep(5);expect(button.textContent).toBe('Second:5');
+  }finally{region.dispose();}
+});

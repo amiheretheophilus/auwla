@@ -11,7 +11,7 @@ import {
   type RoutedServerContext,
 } from '@memoized-dom/router/internal';
 import type { StandardSchemaV1 } from '@memoized-dom/data';
-import { generatorResponse, liveHub, liveResponse, type LiveKey } from './live';
+import { generatorResponse, liveHub, liveResponse, type LiveKey, type LiveStamp } from './live';
 import { isServerPage } from './page-definition';
 
 const pageFetches = new WeakMap<object, typeof globalThis.fetch>();
@@ -31,6 +31,15 @@ async function serverFunctionValue(value: unknown, context: ServerContext<object
   }
   const rendered = await renderServerPage(value, options);
   return html ? serverPageResponse(rendered) : rendered;
+}
+
+/** A consistency retry owns its discarded body/iterator, not the eventual caller. */
+async function discardServerFunctionValue(value: unknown): Promise<void> {
+  if (value instanceof Response) await value.body?.cancel();
+  else if (value !== null && typeof value === 'object' && Symbol.asyncIterator in value) {
+    const iterator = (value as AsyncIterable<unknown>)[Symbol.asyncIterator]();
+    await iterator.return?.();
+  }
 }
 
 // Keep reporting request-scoped without adding public context fields or retaining
@@ -475,16 +484,42 @@ export function createServerFunctionRoutes<
               return result;
             }, streamErrorReporters.get(context));
           }
-          const cancellation = new AbortController();
+          let cancellation = new AbortController();
           let value: unknown;
-          let snapshotStamp = key === undefined ? undefined : hub.stamp(hub.key(key));
-          do {
-            snapshotStamp = key === undefined ? undefined : hub.stamp(hub.key(key));
-            value = await definition.handler(mode === 'generator' || mode === 'snapshot'
-              ? { ...context, request: new Request(context.url, { method: context.request.method, headers: context.request.headers, signal: AbortSignal.any([context.request.signal, cancellation.signal]) }) }
-              : context, ...args);
-            value = await serverFunctionValue(value, context, context, true);
-          } while (snapshotStamp !== undefined && snapshotStamp.revision !== hub.stamp(snapshotStamp.key).revision);
+          let snapshotStamp: LiveStamp | undefined;
+          // Snapshot reads need the same key-local cursor tracking as SSE reads.
+          // Otherwise an unsubscribed key follows the global revision and retries
+          // whenever an unrelated query family changes.
+          const snapshotKey = key === undefined ? undefined : hub.key(key);
+          const releaseSnapshot = snapshotKey === undefined ? undefined : hub.subscribe(snapshotKey, () => {});
+          // A handler may ignore its signal or finish much later than the client.
+          if (releaseSnapshot) context.request.signal.addEventListener('abort', releaseSnapshot, { once: true });
+          try {
+            for (;;) {
+              context.request.signal.throwIfAborted();
+              snapshotStamp = snapshotKey === undefined ? undefined : hub.stamp(snapshotKey);
+              const attemptContext = mode === 'generator' || mode === 'snapshot' || snapshotKey !== undefined
+                ? { ...context, request: new Request(context.url, { method: context.request.method, headers: context.request.headers, signal: AbortSignal.any([context.request.signal, cancellation.signal]) }) }
+                : context;
+              value = await definition.handler(attemptContext, ...args);
+              value = await serverFunctionValue(value, attemptContext, context, true);
+              context.request.signal.throwIfAborted();
+              if (snapshotStamp === undefined || snapshotStamp.revision === hub.stamp(snapshotStamp.key).revision) break;
+              cancellation.abort();
+              const discarded = value;
+              value = undefined;
+              await discardServerFunctionValue(discarded);
+              cancellation = new AbortController();
+            }
+          } catch (error) {
+            cancellation.abort();
+            // Preserve the original handler/render failure if cleanup also fails.
+            await discardServerFunctionValue(value).catch(() => {});
+            throw error;
+          } finally {
+            if (releaseSnapshot) context.request.signal.removeEventListener('abort', releaseSnapshot);
+            releaseSnapshot?.();
+          }
           if (value !== null && typeof value === 'object' && Symbol.asyncIterator in value) {
             const iterator = (value as AsyncIterable<unknown>)[Symbol.asyncIterator]();
             if (mode === 'generator') {

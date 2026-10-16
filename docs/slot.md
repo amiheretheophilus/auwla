@@ -131,6 +131,10 @@ function Broken({ children }: { children: JSX.Child }) {
 Likewise, a call may not combine an explicit `children={...}` prop with nested
 slot content. Existing components that only interpolate `children` keep their
 current behavior.
+The same rule applies inside nested helpers and event callbacks, including
+reads through a stable alias of `props`. A callback's separate parameter or
+local variable also named `props` is not the component's props and is not
+rejected by this rule.
 
 Each default or named slot is declared once. A slot name may not collide with
 an ordinary component prop. On a slot component, supplying an unknown named

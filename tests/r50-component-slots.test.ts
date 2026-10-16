@@ -201,4 +201,27 @@ describe('R50 - component slots', () => {
       export function App() { return <Panel>bad</Panel>; }
     `)).toThrow(/cannot use both <slot> and props.children/);
   });
+
+  it.each([
+    `return <button onClick={()=>globalThis.show(props.children)}><slot/></button>`,
+    `return <button onClick={()=>{const {children:content}=props;globalThis.show(content)}}><slot/></button>`,
+    `const alias=props;return <button onClick={()=>globalThis.show(alias['children'])}><slot/></button>`,
+    `function read(){return props.children}return <button onClick={read}><slot/></button>`,
+  ])('rejects children reads captured by nested slot-component callbacks: %s', body => {
+    expect(()=>compile(`export function Card(props){${body}}`)).toThrow(/cannot use both <slot> and props.children/);
+  });
+
+  it('rejects named-slot prop collisions inside nested callbacks', () => {
+    expect(()=>compile(`export function Card(props){return <div><slot name="header"/>
+      <button onClick={()=>{const {header}=props;globalThis.show(header)}}>Show</button></div>}`))
+      .toThrow(/slot 'header' conflicts with props.header/);
+  });
+
+  it.each([
+    `function read(props){return props.children}return <button onClick={()=>read({children:'local'})}><slot/></button>`,
+    `function read(){const props={children:'local'};return props.children}return <button onClick={read}><slot/></button>`,
+    `return <button onClick={()=>{try{throw {children:'local'}}catch(props){globalThis.show(props.children)}}}><slot/></button>`,
+  ])('allows unrelated shadowed props inside slot-component callbacks: %s', body => {
+    expect(()=>compile(`export function Card(props){${body}}`)).not.toThrow();
+  });
 });

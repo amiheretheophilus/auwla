@@ -168,6 +168,29 @@ describe('request-owned server page rendering foundation', () => {
     await started.promise;version=1;liveHub(services).invalidate(['board']);release.resolve();
     expect(decodePageHtml(await (await response).text())).toMatchObject({html:'<h1>1:settled</h1>'});expect(reads).toBe(2);
   });
+
+  it('releases the discarded progressive page session before retrying its initial response', async () => {
+    const make=fixture(`import {page} from '@memoized-dom/server';import {Board} from '../components/Board';
+      export async function make(){return page(<Board/>);}`,{
+      './components/Board.tsx':`export function Board(){const data=$fetch('/never');return <main><h1>Shell</h1><p>{data.label}</p></main>}`,
+    });
+    const services={},hub=liveHub(services),signals:AbortSignal[]=[];let calls=0;
+    const fetch=(async(_input:RequestInfo|URL,init?:RequestInit)=>{signals.push(init!.signal!);return new Promise<Response>(()=>{});}) as typeof globalThis.fetch;
+    const router=createServerRouter({services,middleware:[(context,next)=>{installServerPageFetch(context,fetch);return next();}],routes:createServerFunctionRoutes([{
+      id:'board',path:'/_fn/board',method:'GET',parameters:[],live:()=>['board'],
+      async handler(){
+        const attempt=++calls,definition=await make();
+        return createServerPage(definition.id,(id,parent)=>{if(attempt===1)hub.invalidate(['board']);return definition.create(id,parent);});
+      },
+    }])});
+    const response=await router.fetch(new Request('https://app.test/_fn/board',{headers:{'x-mmd-stream':'page','x-mmd-page-stream':'1'}}));
+    try{
+      expect(calls).toBe(2);expect(signals.map(signal=>signal.aborted)).toEqual([true,false]);
+      expect(Reflect.get(hub,'listeners').size).toBe(0);
+    }finally{await response.body!.cancel();}
+    expect(signals.map(signal=>signal.aborted)).toEqual([true,true]);
+  });
+
   it('delivers finite GET and POST pages as rendered content without SSE or repeating mutations', async () => {
     const make = fixture(`import {page} from '@memoized-dom/server';
       export async function make(name:string){return page(<h1>{name}</h1>);}`);

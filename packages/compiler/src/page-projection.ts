@@ -1,6 +1,7 @@
 /** Data-flow projection for compiler-owned page binding inputs. No application code executes here. */
 import { childNode, childNodes, identifierLikeName, nodeField, parseWithEstreeFrontendOrThrow,
   memoizedEstreeFrontend, type BaseNode, type EstreeFrontend } from './ast';
+import { analyzeComponentPropShape } from './components/prop-shape';
 
 type Path = readonly (string | number)[];
 type Value = { path: Path } | { fields: Map<string, Value | undefined> } |
@@ -76,7 +77,12 @@ export function pageInputPaths(sources: Readonly<Record<string, string>>, root: 
     if (node.type === 'ObjectExpression') {
       const fields = new Map<string,Value>();
       for (const property of childNodes(node,'properties')) {
-        if (property.type === 'SpreadElement') {consume(expression(childNode(property,'argument'),env,id));continue;}
+        if (property.type === 'SpreadElement') {
+          const spread = expression(childNode(property,'argument'),env,id);
+          if (spread && 'fields' in spread) for (const [key,value] of spread.fields) fields.set(key,value);
+          else consume(spread); // Opaque spreads must fail closed, not silently lose their inputs.
+          continue;
+        }
         const key = identifierLikeName(childNode(property,'key')) ?? nodeField(childNode(property,'key')!,'value');
         fields.set(String(key),expression(childNode(property,'value'),env,id));
       }
@@ -106,14 +112,21 @@ export function pageInputPaths(sources: Readonly<Record<string, string>>, root: 
       const fn = name && /^[A-Z]/.test(name) ? declaration(id,name) : undefined;
       const props = new Map<string,Value>();
       for (const attribute of childNodes(opening,'attributes')) {
+        if (attribute.type === 'JSXSpreadAttribute') {
+          const spread = expression(childNode(attribute,'argument'),env,id);
+          if (fn && spread && 'fields' in spread) for (const [key,value] of spread.fields) props.set(key,value);
+          else consume(spread);
+          continue;
+        }
         const value = childNode(attribute,'value');
         const item = expression(value?.type === 'JSXExpressionContainer' ? childNode(value,'expression') : value,env,id);
         if (fn) props.set(identifierLikeName(childNode(attribute,'name'))!,item); else consume(item);
       }
       if (fn) {
         const params = childNodes(fn.node,'params');
-        invoke(fn.id,fn.node,params[0]?.type === 'ObjectPattern' || params[0]?.type === 'AssignmentPattern'
-          ? [{fields:props}] : params.map(param => props.get(identifierLikeName(param)!)));
+        const shape = analyzeComponentPropShape(params);
+        invoke(fn.id,fn.node,shape.mode === 'object'
+          ? [{fields:props}] : shape.names.map(name => props.get(name)));
       }
       for (const child of childNodes(node,'children')) visit(child,env,id);
       return;

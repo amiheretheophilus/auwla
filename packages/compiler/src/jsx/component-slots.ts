@@ -2,7 +2,7 @@
 
 import type * as t from '../ast/compiler-types';
 import * as astFactory from '../ast/factory';
-import { walkAst, type BaseNode } from '../ast';
+import { analyzeScope, childNode, variableDeclaratorForBinding, walkAst, type BaseNode, type Binding } from '../ast';
 import type { Ctx, ProgramPath } from '../context';
 import { analyzeComponentPropShape } from '../components/prop-shape';
 
@@ -159,13 +159,24 @@ function componentReadsGenericProp(
   prop: string,
 ): boolean {
   let found = false;
+  const analysis = analyzeScope(component as unknown as BaseNode);
+  const object = analysis.nodeToScope.get(component as unknown as BaseNode)?.getBinding(binding);
+  if (!object) return false;
+  const refersToProps = (node: BaseNode | null, seen = new Set<Binding>()): boolean => {
+    if (!astFactory.isIdentifier(node)) return false;
+    const resolved = analysis.nodeToScope.get(node)?.getBinding(node.name);
+    if (resolved === object) return true;
+    if (!resolved || seen.has(resolved) || resolved.constantViolations.length > 0) return false;
+    seen.add(resolved);
+    const declaration = variableDeclaratorForBinding(analysis,resolved);
+    return declaration !== null && refersToProps(childNode(declaration,'init'),seen);
+  };
   walkAst<BaseNode>(component.body as unknown as BaseNode, {
     enter(node) {
       if (found) return false;
-      if (node !== component.body && astFactory.isFunction(node)) return false;
       if (
         astFactory.isMemberExpression(node) &&
-        astFactory.isIdentifier(node.object, { name: binding }) &&
+        refersToProps(node.object as unknown as BaseNode) &&
         ((!node.computed && astFactory.isIdentifier(node.property, { name: prop })) ||
           (node.computed && astFactory.isStringLiteral(node.property) && node.property.value === prop))
       ) {
@@ -174,7 +185,7 @@ function componentReadsGenericProp(
       }
       if (
         astFactory.isVariableDeclarator(node) &&
-        astFactory.isIdentifier(node.init, { name: binding }) &&
+        refersToProps(node.init as unknown as BaseNode | null) &&
         astFactory.isObjectPattern(node.id) &&
         node.id.properties.some((property) =>
           astFactory.isObjectProperty(property) &&

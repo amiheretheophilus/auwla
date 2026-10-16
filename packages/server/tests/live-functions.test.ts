@@ -1,7 +1,7 @@
 import { describe, expect, it, spyOn } from 'bun:test';
 import { createDefine, serve } from '../src/index';
-import { createServerFunctionRoutes, type ServerFunctionRouteDefinition } from '../src/http-router';
-import { LiveHub, liveResponse } from '../src/live';
+import { createServerFunctionRoutes, createServerRouter, type ServerFunctionRouteDefinition } from '../src/http-router';
+import { LiveHub, liveHub, liveResponse } from '../src/live';
 import { waitFor } from '../../../test-support/helpers';
 import { applyLivePatch, type LiveJsonValue } from '@memoized-dom/data/internal';
 
@@ -21,6 +21,98 @@ function install(app: object, routes: readonly unknown[]) {
 }
 
 describe('automatic live server functions', () => {
+  it.each([
+    {invalidated:['metrics','ping'],expected:1},
+    {invalidated:['dashboard'],expected:2},
+    {invalidated:['dashboard','one'],expected:2},
+    {invalidated:['dashboard','one','notes'],expected:2},
+  ])('tracks snapshot retries by overlapping key: $invalidated', async ({invalidated,expected}) => {
+    const services={},hub=liveHub(services),activity:boolean[]=[];
+    hub.onActivity=active=>activity.push(active);
+    let calls=0;
+    const router=createServerRouter({services,routes:createServerFunctionRoutes([{
+      id:'snapshot',path:'/_fn/snapshot',method:'GET',parameters:[],live:()=>['dashboard','one'],
+      async handler(){if(++calls===1)hub.invalidate(invalidated);return calls;},
+    }])});
+    const response=await router.fetch(new Request('https://app.test/_fn/snapshot',{headers:{'x-mmd-stream':'snapshot'}}));
+    expect(await response.json()).toBe(expected);expect(calls).toBe(expected);
+    expect(JSON.parse(response.headers.get('x-mmd-live')!).revision).toBe(expected===1?0:1);
+    expect(activity).toEqual([true,false]);
+    expect(Reflect.get(hub,'listeners').size).toBe(0);
+    expect(Reflect.get(hub,'descendants').size).toBe(0);
+  });
+
+  it.each(['failure','abort'] as const)('releases snapshot tracking after %s', async mode => {
+    const services={},hub=liveHub(services),activity:boolean[]=[];
+    hub.onActivity=active=>activity.push(active);
+    const cancellation=new AbortController();let signal:AbortSignal|undefined;
+    const router=createServerRouter({services,onError:()=>new Response('Failed',{status:500}),routes:createServerFunctionRoutes([{
+      id:'snapshot',path:'/_fn/snapshot',method:'GET',parameters:[],live:()=>['dashboard'],
+      async handler(context){signal=context.request.signal;if(mode==='failure')throw new Error('Read failed');cancellation.abort();return 'discarded';},
+    }])});
+    const response=await router.fetch(new Request('https://app.test/_fn/snapshot',{signal:cancellation.signal,headers:{'x-mmd-stream':'snapshot'}}));
+    expect(response.status).toBe(500);expect(signal?.aborted).toBe(true);
+    expect(activity).toEqual([true,false]);expect(Reflect.get(hub,'listeners').size).toBe(0);
+  });
+
+  it('releases only the snapshot tracker when a live subscription already owns the key', async () => {
+    const services={},hub=liveHub(services),key=hub.key(['dashboard']);let notifications=0;
+    const release=hub.subscribe(key,()=>notifications++);
+    const router=createServerRouter({services,routes:createServerFunctionRoutes([{
+      id:'snapshot',path:'/_fn/snapshot',method:'GET',parameters:[],live:()=>['dashboard'],handler:()=>1,
+    }])});
+    try{
+      const response=await router.fetch(new Request('https://app.test/_fn/snapshot',{headers:{'x-mmd-stream':'snapshot'}}));
+      expect(await response.json()).toBe(1);expect(Reflect.get(hub,'listeners').get(key).size).toBe(1);
+      hub.invalidate(['dashboard']);expect(notifications).toBe(1);
+    }finally{release();}
+    expect(Reflect.get(hub,'listeners').size).toBe(0);
+  });
+
+  it('releases snapshot tracking immediately on disconnect even if the handler ignores cancellation', async () => {
+    const services={},hub=liveHub(services),cancellation=new AbortController();
+    const started=Promise.withResolvers<void>(),finish=Promise.withResolvers<void>();
+    const router=createServerRouter({services,onError:()=>new Response('Aborted',{status:500}),routes:createServerFunctionRoutes([{
+      id:'snapshot',path:'/_fn/snapshot',method:'GET',parameters:[],live:()=>['dashboard'],
+      async handler(){started.resolve();await finish.promise;return 1;},
+    }])});
+    const response=router.fetch(new Request('https://app.test/_fn/snapshot',{signal:cancellation.signal,headers:{'x-mmd-stream':'snapshot'}}));
+    try{
+      await started.promise;expect(Reflect.get(hub,'listeners').size).toBe(1);
+      cancellation.abort();expect(Reflect.get(hub,'listeners').size).toBe(0);
+      expect(Reflect.get(hub,'descendants').size).toBe(0);
+    }finally{finish.resolve();await response;}
+  });
+
+  it('cancels discarded retry responses and aborts only the discarded attempt', async () => {
+    const services={},hub=liveHub(services),cancelled:number[]=[],signals:AbortSignal[]=[];let calls=0;
+    const router=createServerRouter({services,routes:createServerFunctionRoutes([{
+      id:'snapshot',path:'/_fn/snapshot',method:'GET',parameters:[],live:()=>['dashboard'],
+      async handler({request}){
+        const attempt=++calls;signals.push(request.signal);
+        const response=new Response(new ReadableStream({start(controller){controller.enqueue(new TextEncoder().encode(String(attempt)));},cancel(){cancelled.push(attempt);}}));
+        if(attempt===1)hub.invalidate(['dashboard']);return response;
+      },
+    }])});
+    const response=await router.fetch(new Request('https://app.test/_fn/snapshot'));
+    try{expect(calls).toBe(2);expect(cancelled).toEqual([1]);expect(signals.map(signal=>signal.aborted)).toEqual([true,false]);}
+    finally{await response.body!.cancel();}
+    expect(cancelled).toEqual([1,2]);
+  });
+
+  it('closes a discarded custom async iterable before retrying', async () => {
+    const services={},hub=liveHub(services),closed:number[]=[];let calls=0;
+    const router=createServerRouter({services,routes:createServerFunctionRoutes([{
+      id:'snapshot',path:'/_fn/snapshot',method:'GET',parameters:[],live:()=>['dashboard'],
+      async handler(){
+        const attempt=++calls;if(attempt===1)hub.invalidate(['dashboard']);
+        return {[Symbol.asyncIterator](){return {async next(){return {done:false,value:attempt};},async return(){closed.push(attempt);return {done:true,value:undefined};}};}};
+      },
+    }])});
+    const response=await router.fetch(new Request('https://app.test/_fn/snapshot',{headers:{'x-mmd-stream':'snapshot'}}));
+    expect(await response.json()).toBe(2);expect(closed).toEqual([1,2]);
+  });
+
   it('negotiates v2 page text edits and starts reconnects with complete current HTML', async () => {
     const hub = new LiveHub(), key = hub.key(['board']);
     let count = 0;

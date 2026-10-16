@@ -12,11 +12,18 @@ export function encodePageInputs(inputs:readonly unknown[]):{inputs:readonly unk
 }
 
 export function projectPageInputs(inputs: readonly unknown[], paths: readonly (readonly (string | number)[])[]): readonly unknown[] {
-  interface Selection { leaf?: true; children: Map<string | number, Selection> }
+  interface Selection { leaf?: true; children: Map<string, Selection> }
+  function merge(left: Selection | undefined, right: Selection): Selection {
+    if (!left) return right;
+    const children = new Map(left.children);
+    for (const [key,child] of right.children) children.set(key,merge(children.get(key),child));
+    return { ...(left.leaf || right.leaf ? {leaf:true} : {}), children };
+  }
   const selection: Selection = {children:new Map()};
   for (const path of paths) {
     let node = selection;
-    for (const key of path) {
+    for (const part of path) {
+      const key = String(part);
       if (key === '__proto__' || key === 'prototype' || key === 'constructor') throw new TypeError('memo-dom: unsafe page input path');
       let child = node.children.get(key);
       if (!child) node.children.set(key,child={children:new Map()});
@@ -37,11 +44,16 @@ export function projectPageInputs(inputs: readonly unknown[], paths: readonly (r
     if (Array.isArray(value)) {
       const output = new Array(value.length).fill(null);
       const row = node.children.get('*');
-      if (row) for (let index=0; index<value.length; index++) output[index]=project(value[index],row);
+      const specific = new Map<number, Selection>();
       for (const [key,child] of node.children) if (key !== '*' && key !== 'length') {
         const index = Number(key);
         if (!Number.isInteger(index) || index < 0 || index >= value.length) throw new TypeError('memo-dom: invalid page array projection');
-        output[index] = project(value[index],child);
+        specific.set(index,merge(specific.get(index),child));
+      }
+      for (let index=0; index<value.length; index++) {
+        const child = specific.get(index);
+        const fields = child ? merge(row,child) : row;
+        if (fields) output[index] = project(value[index],fields);
       }
       return output;
     }

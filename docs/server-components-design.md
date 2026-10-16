@@ -307,6 +307,12 @@ Only compiler-selected input paths needed by browser bindings cross the
 boundary. Reading `user.name` does not transfer unused `user.password`.
 Arrays retain their row structure; optional `undefined` inputs preserve their
 meaning through the JSON wire format.
+Composed components use the same object/positional prop rules as ordinary JSX,
+including defaulted parameters. Reading both `items.map(item => item.title)`
+and `items[0].id` transfers both selected fields for the first row, not one
+selection in place of the other. This does not transfer unselected row fields.
+Spreads do not bypass projection or the browser-creation proof: unsupported
+spreads are rejected rather than implicitly transferring an entire object.
 
 Whole-object/function captures, service/class instances, getters, unsafe
 prototype paths, and unsupported leaf values are rejected rather than

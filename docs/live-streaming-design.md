@@ -504,6 +504,12 @@ SSR consumes a finite query snapshot or one generator GET yield. Hydration
 retains that transferred value and reconnects live GET sources after adoption.
 Reconnections supply current snapshots, not a historical event log. A generator
 GET's restored first yield remains finite; hydration does not restart it.
+While a live GET's finite snapshot is being prepared, only overlapping key
+invalidations trigger a consistency retry; unrelated mutations do not restart
+the read. A retry aborts its discarded attempt and releases its response body
+or iterator, including nested progressive page rendering. Temporary snapshot
+tracking is released on success, failure, or cancellation; it does not leave
+an SSE subscription behind.
 Live values cached as ordinary `$routed` payloads are payloads, not subscriptions:
 declare the live source in the mounted component to receive ongoing updates.
 
