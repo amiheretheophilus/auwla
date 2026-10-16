@@ -2,6 +2,7 @@ import { describe, expect, it } from 'bun:test';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { originalPositionFor, TraceMap } from '@jridgewell/trace-mapping';
 import {
   analyzeServerFunctionModule,
   compileModulesDetailed,
@@ -54,6 +55,36 @@ describe('experimental package compilation artifacts', () => {
     expect(() => definePackageBoundaries({
       bad: { helper: { source: [-1] } },
     })).toThrow('must be a non-negative integer');
+  });
+
+  it('returns authored source maps with precompiled package output', () => {
+    const source = `
+      export function PackageBadge({ label }: { label: string }) {
+        return <strong>{label}</strong>;
+      }
+    `;
+    const packaged = experimentalCompilePackage({
+      '../src/index.tsx': source,
+    }, {
+      packageEntries: { 'mapped-package': '../src/index.tsx' },
+    });
+    const code = packaged.output['../src/index.tsx']!;
+    const lines = code.split('\n');
+    const generatedLine = lines.findIndex(line =>
+      line.includes('createElement("strong")'),
+    ) + 1;
+    const generatedColumn = lines[generatedLine - 1]!.indexOf('document');
+    const map = packaged.maps['../src/index.tsx']!;
+
+    expect(map.sources).toEqual(['../src/index.tsx']);
+    expect(map.sourcesContent).toEqual([source]);
+    expect(originalPositionFor(new TraceMap(map), {
+      line: generatedLine,
+      column: generatedColumn,
+    })).toMatchObject({
+      source: '../src/index.tsx',
+      line: 3,
+    });
   });
 
   it('links a separately compiled ordinary helper without its source', async () => {

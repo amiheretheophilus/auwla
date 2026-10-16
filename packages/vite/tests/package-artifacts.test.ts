@@ -66,8 +66,8 @@ describe('package compilation artifacts', () => {
         false,
       );
       expect(graph.files).toEqual(new Set([entry.replaceAll('\\', '/')]));
-      expect(watched).toContain(join(packageRoot, 'package.json'));
-      expect(watched).toContain(artifactFile);
+      expect(watched).toContain(join(packageRoot, 'package.json').replaceAll('\\', '/'));
+      expect(watched).toContain(artifactFile.replaceAll('\\', '/'));
       expect(graph.output.get(entry.replaceAll('\\', '/'))).toContain(
         '_MDD.connectResolvedValues([stories]',
       );
@@ -178,6 +178,10 @@ describe('package compilation artifacts', () => {
         false,
       );
       expect(graph.files).toEqual(new Set([entry.replaceAll('\\', '/')]));
+      expect(graph.semanticDependencies).toEqual(new Set([
+        join(packageRoot, 'package.json').replaceAll('\\', '/'),
+        artifactFile.replaceAll('\\', '/'),
+      ]));
       expect(graph.output.get(entry.replaceAll('\\', '/'))).toContain(
         'Badge(_id + "/Badge"',
       );

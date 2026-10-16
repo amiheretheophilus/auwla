@@ -143,7 +143,10 @@ export function memoizedDom(
     return {
       resolve: (specifier, importer, resolveOptions) =>
         context.resolve(specifier, importer, resolveOptions),
-      addWatchFile: (watched) => context.addWatchFile(watched),
+      addWatchFile(watched) {
+        context.addWatchFile(watched);
+        devServer?.watcher.add(watched);
+      },
       error: (error) => context.error(error),
     };
   }
@@ -160,8 +163,10 @@ export function memoizedDom(
           ? null
           : { id: resolved.id, external: resolved.external };
       },
-      addWatchFile: (watched) =>
-        environment.pluginContainer.watchFiles.add(watched),
+      addWatchFile(watched) {
+        environment.pluginContainer.watchFiles.add(watched);
+        devServer?.watcher.add(watched);
+      },
       error: (error) => context.error(error),
     };
   }
@@ -263,9 +268,19 @@ export function memoizedDom(
     const perFile = lazyStates.get(environment);
     if (perFile === undefined) return undefined;
     const direct = perFile.get(file);
-    if (direct !== undefined && (direct.files.has(file) || direct.css.has(file))) return direct;
+    if (
+      direct !== undefined && (
+        direct.files.has(file) ||
+        direct.css.has(file) ||
+        direct.semanticDependencies.has(file)
+      )
+    ) return direct;
     for (const state of perFile.values()) {
-      if (state.files.has(file) || state.css.has(file)) return state;
+      if (
+        state.files.has(file) ||
+        state.css.has(file) ||
+        state.semanticDependencies.has(file)
+      ) return state;
     }
     return undefined;
   }
@@ -275,7 +290,13 @@ export function memoizedDom(
     file: string,
   ): AdapterState | undefined {
     const primary = states.get(environment);
-    if (primary !== undefined && (primary.files.has(file) || primary.css.has(file))) return primary;
+    if (
+      primary !== undefined && (
+        primary.files.has(file) ||
+        primary.css.has(file) ||
+        primary.semanticDependencies.has(file)
+      )
+    ) return primary;
     return lazyStateContaining(environment, file);
   }
 
@@ -706,8 +727,8 @@ export function memoizedDom(
         return [];
       }
       const primary = states.get(this.environment);
-      const isPrimary = primary?.files.has(file) === true;
       const state = hotStateFor(this.environment, file);
+      const isPrimary = primary === state;
       if (state === undefined) {
         // Preserve Vite's affected modules, especially importers whose prior
         // resolution failed while a dependency was missing. Replacing them
@@ -759,7 +780,14 @@ export function memoizedDom(
         // A repaired edit can compile to the same output as the last good
         // graph. It still needs one HMR update so Vite clears its error
         // overlay and resumes the client update pipeline.
-        changed.add(file);
+        if (state.files.has(file) || state.css.has(file)) {
+          changed.add(file);
+        } else {
+          // A semantic dependency is not itself a browser module. Re-emit the
+          // managed modules so Vite clears the overlay after a repaired
+          // artifact, even when generated output returns to its last-good form.
+          for (const candidate of state.files) changed.add(candidate);
+        }
         state.hotUpdateFailed = false;
       }
       const modules = invalidateManagedModules(

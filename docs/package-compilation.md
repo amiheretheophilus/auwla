@@ -100,6 +100,13 @@ await writeFile(
 );
 ```
 
+`compiled.maps` contains one authored source map per emitted module. A package
+build should pass those maps into its bundler, or write the matching `.js.map`
+file and append its `sourceMappingURL` comment. Choose compiler module IDs which
+remain meaningful from the published map (for example `../src/index.ts` when
+the map is in `dist`), or rewrite `map.sources` while packaging. The maps retain
+`sourcesContent`; the semantic artifact itself is not a source map.
+
 Multi-module packages must write the corresponding output modules or bundle
 those compiler-produced modules afterward. Generate declarations separately;
 the semantic artifact does not replace `.d.ts` files. Consumers continue to
@@ -212,6 +219,15 @@ contract. Package components remain external ESM modules, so the artifact does
 not flatten them into the application bundle or erase the bundler's chunk
 boundary.
 
+The static initial-content planner currently treats a packaged component as a
+browser-owned boundary because its body is deliberately absent from the
+application graph. Fullstack SSR can still render it through the emitted server
+factory, but a browser-only build cannot yet turn that package subtree into the
+compiler's zero/low-JavaScript initial HTML. Preserving that optimization needs
+a portable deferred render plan parameterized by consumer props and slots. The
+compiler must not execute arbitrary package code at build time or smuggle the
+package AST back into each application as a shortcut.
+
 ## Current boundaries
 
 - Named imports are supported; namespace imports do not identify one semantic
@@ -222,10 +238,17 @@ boundary.
   describe `my-package/subpath`.
 - The package build must regenerate the artifact whenever helper behavior
   changes. Vite watches the file but cannot repair stale published metadata.
+- In development, Vite treats the package manifest and semantic artifact as
+  graph inputs. A changed artifact recompiles its consuming graph; an invalid
+  edit reaches the normal error overlay, and repairing it resumes HMR without a
+  forced page reload. JavaScript implementation updates still use Vite's normal
+  package-module invalidation path.
 - The artifact and executable JavaScript must come from the same package
   compilation. Artifact/source integrity hashes are not implemented yet.
 - Distinct installed versions which expose the same bare specifier are not yet
   assigned separate artifact identities inside one application compile.
+- Packaged components do not yet participate in static initial-content
+  specialization; they use ordinary browser creation or runtime SSR.
 - Array literals passed to a holder relationship preserve every contained
   holder. Arbitrarily assembled dynamic collections are not yet a portable
   holder contract.

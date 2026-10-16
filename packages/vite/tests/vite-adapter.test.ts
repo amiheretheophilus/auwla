@@ -11,6 +11,7 @@ import {
   createServer,
   type ViteDevServer,
 } from 'vite';
+import { experimentalCompilePackage } from '@memoized-dom/compiler';
 import memoizedDom from '../src';
 import { createDevServer, type NativeDevServer } from '../src/dev';
 import { clientStyleUrls } from '../src/dev-assets';
@@ -759,6 +760,81 @@ describe('Vite 8 adapter', () => {
     expect(send.mock.calls.some(([payload]) => payload.type === 'update'))
       .toBe(true);
   }, 30_000);
+
+  it('recompiles package artifact edits and recovers the HMR boundary', async () => {
+    const root = await copyFixture();
+    const temporarySource = resolve(root, 'src');
+    const packageRoot = resolve(root, 'ui-package');
+    const artifactFile = resolve(packageRoot, 'memoized-dom.package.json');
+    const packaged = experimentalCompilePackage({
+      './index.tsx': `
+        export function Badge({ value }: { value: number }) {
+          return <strong data-badge>{value}</strong>;
+        }
+      `,
+    }, {
+      packageEntries: { 'ui-package': './index.tsx' },
+    });
+    await mkdir(packageRoot, { recursive: true });
+    await writeFile(resolve(temporarySource, 'App.tsx'), `
+      import { Badge } from 'ui-package';
+      export function App() { return <main><Badge value={1} /></main>; }
+    `);
+    await writeFile(resolve(packageRoot, 'index.js'), packaged.output['./index.tsx']!);
+    await writeFile(resolve(packageRoot, 'package.json'), JSON.stringify({
+      name: 'ui-package',
+      type: 'module',
+      exports: './index.js',
+      'memoized-dom': { artifact: './memoized-dom.package.json' },
+    }));
+    await writeFile(artifactFile, JSON.stringify(packaged.artifact));
+
+    server = await createServer({
+      root,
+      configFile: false,
+      logLevel: 'silent',
+      resolve: { alias: {
+        '@': temporarySource,
+        'ui-package': resolve(packageRoot, 'index.js'),
+        '@memoized-dom/runtime/hot': runtimeHot,
+        '@memoized-dom/runtime': runtime,
+      } },
+      optimizeDeps: { noDiscovery: true },
+      plugins: plugins(),
+      server: { middlewareMode: true },
+    });
+    const app = await server.environments.client.transformRequest('/src/App.tsx');
+    expect(app?.code).toContain('Badge(_id + "/Badge"');
+    expect(server.environments.client.pluginContainer.watchFiles.has(
+      artifactFile.replaceAll('\\', '/'),
+    )).toBe(true);
+
+    const hot = server.environments.client.hot;
+    const send = vi.spyOn(hot, 'send').mockImplementation(() => {});
+    const invalid = structuredClone(packaged.artifact);
+    const badge = invalid.entries['ui-package']!.components!.Badge!;
+    (badge as { key: string }).key = './forged.tsx#Badge';
+    await writeFile(artifactFile, JSON.stringify(invalid));
+
+    await waitFor(() => {
+      expect(send.mock.calls.some(
+        ([payload]) =>
+          payload.type === 'error' &&
+          payload.err.message.includes(
+            "component 'ui-package' export 'Badge' has invalid key",
+          ),
+      )).toBe(true);
+    }, { timeout: 15_000 });
+
+    send.mockClear();
+    await writeFile(artifactFile, JSON.stringify(packaged.artifact));
+    await waitFor(() => {
+      expect(send.mock.calls.some(([payload]) => payload.type === 'update'))
+        .toBe(true);
+    }, { timeout: 15_000 });
+    expect(send.mock.calls.some(([payload]) => payload.type === 'full-reload'))
+      .toBe(false);
+  }, 40_000);
 
   it('sends compiler failures from an edit to Vite error feedback', async () => {
     const root = await copyFixture();

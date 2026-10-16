@@ -23,6 +23,7 @@ import {
   acceptsSource,
   cleanViteId,
   moduleId,
+  normalizeFile,
 } from '../paths';
 import { valueImports, type ParsedProgram } from './imports';
 import {
@@ -57,6 +58,8 @@ export interface CompiledGraph {
   readonly initialDelivery?: InitialDelivery;
   readonly initialPage?: InitialPage;
   files: ReadonlySet<string>;
+  /** Non-module files whose contents affect semantic linking. */
+  semanticDependencies: ReadonlySet<string>;
   output: ReadonlyMap<string, string>;
   maps: ReadonlyMap<string, CompilerSourceMap>;
   css: ReadonlyMap<string, string>;
@@ -105,6 +108,7 @@ export async function compileGraph(
   let renderableContent = false;
   const directStyles = new Map<string, Set<string>>();
   const packageArtifacts = new Map<string, ExperimentalPackageArtifact>();
+  const semanticDependencies = new Set<string>();
   const artifactLookups = new Map<string, ReturnType<typeof discoverPackageArtifact>>();
 
   async function recordPackageArtifact(
@@ -120,8 +124,12 @@ export async function compileGraph(
     }
     const discovered = await lookup;
     if (discovered === undefined) return false;
-    context.addWatchFile(discovered.manifestFile);
-    context.addWatchFile(discovered.artifactFile);
+    const manifestFile = normalizeFile(discovered.manifestFile);
+    const artifactFile = normalizeFile(discovered.artifactFile);
+    context.addWatchFile(manifestFile);
+    context.addWatchFile(artifactFile);
+    semanticDependencies.add(manifestFile);
+    semanticDependencies.add(artifactFile);
     packageArtifacts.set(discovered.artifactFile, discovered.artifact);
     return true;
   }
@@ -245,6 +253,7 @@ export async function compileGraph(
     return {
       hydrationCapabilities: { list: true, markup: true },
       files: new Set(),
+      semanticDependencies: new Set(),
       output: new Map(),
       maps: new Map(),
       css: new Map(),
@@ -429,6 +438,7 @@ export async function compileGraph(
   return {
     hydrationCapabilities: compiled.hydrationCapabilities,
     files: new Set(sourceIds.keys()),
+    semanticDependencies,
     ...(compiled.initialDelivery === undefined ? {} : { initialDelivery: compiled.initialDelivery }),
     ...(!compiled.initialContent || (initialHtml === null && compiled.initialRender.kind !== 'request') || initialEntry === undefined || compiled.initialRender.kind === 'browser' ? {} : {
       initialPage: { entry: initialEntry, target: compiled.initialRender.target,

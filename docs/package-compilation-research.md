@@ -230,6 +230,34 @@ whole-program build. An application can still map a packaged component as a
 keyed row and retain its DOM identity; it merely takes the general component
 path until a portable dual row ABI is designed.
 
+Package compilation already returns authored maps alongside every emitted
+module. Package builds must carry those maps through later bundling or publish
+the corresponding map file and URL; the semantic artifact does not replace that
+ordinary JavaScript toolchain responsibility. Vite now records package manifests
+and artifacts as normalized semantic graph inputs. Artifact edits recompile
+consumers, surface invalid metadata through the normal overlay, and recover via
+HMR after repair, including on Windows path conventions.
+
+### Initial delivery needs a deferred render contract
+
+A measured static application containing only `<Badge label="Ready" />` from a
+package currently plans as `browser`: it emits no compiler-owned initial HTML or
+initial-delivery descriptor. This is expected from the present artifact because
+the consuming planner has the component's call contract but not its body.
+Runtime SSR remains correct because it executes the already compiled server
+factory; the missing capability is build-time zero/low-JavaScript
+specialization.
+
+The safe next representation is a small package-owned render plan with symbolic
+prop and slot inputs. Application linking can substitute actual call-site values
+and finish the existing initial-content plan. Executing an arbitrary package
+factory during a build is unsafe and host-dependent, while serializing source or
+the current internal AST would recreate per-application parsing and expose an
+unstable compiler representation. The deferred plan needs its own versioned,
+validated format and must conservatively fall back to browser creation whenever
+effects, refs, unknown calls, request state, or unsupported control flow prevent
+specialization.
+
 Prop modes are intentionally exact. A typed scalar prop remains scalar; an
 authored render prop remains JSX-bearing. Cross-mode consumer calls fail during
 application compilation rather than adapting the already-emitted package
@@ -391,9 +419,9 @@ open decisions, not documented APIs.
    generation, and warm linking now have a reproducible benchmark.
 3. The first component-library boundary covers exact scalar/render-prop modes,
    local state, explicit slots, nested components, retained keyed lists, Vite
-   discovery, forwarded refs, and SSR. HMR, source-map delivery, and existing
-   initial-delivery optimizations remain acceptance work before broadening the
-   contract.
+   discovery, forwarded refs, SSR, authored source maps, and package-artifact
+   HMR/recovery. Existing initial-delivery optimizations remain acceptance work
+   before broadening the contract.
 4. The reproducible synthetic benchmark now measures cold generation, warm
    linking, and artifact size. Browser output, filesystem/plugin cost, and real
    package workloads still need measurement before selecting a public format or

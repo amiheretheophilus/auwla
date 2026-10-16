@@ -10,6 +10,7 @@ export class AdapterState {
   initialDelivery?: InitialDelivery;
   initialPage?: InitialPage;
   readonly files = new Set<string>();
+  readonly semanticDependencies = new Set<string>();
   readonly output = new Map<string, string>();
   readonly maps = new Map<string, CompilerSourceMap>();
   readonly css = new Map<string, string>();
@@ -34,6 +35,10 @@ export class AdapterState {
     this.initialPage = graph.initialPage;
     this.files.clear();
     for (const file of graph.files) this.files.add(file);
+    this.semanticDependencies.clear();
+    for (const file of graph.semanticDependencies) {
+      this.semanticDependencies.add(file);
+    }
     this.output.clear();
     for (const [file, code] of graph.output) this.output.set(file, code);
     this.maps.clear();
