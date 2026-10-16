@@ -3,6 +3,7 @@ import { readFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import { dirname, isAbsolute, join, parse, relative, resolve, sep } from 'node:path';
 import {
+  experimentalPackageArtifactInstance,
   validateExperimentalPackageArtifact,
   type ExperimentalPackageArtifact,
 } from '@memoized-dom/compiler';
@@ -29,6 +30,7 @@ function packageName(specifier: string): string | undefined {
 
 export interface DiscoveredPackageArtifact {
   readonly artifact: ExperimentalPackageArtifact;
+  readonly instance: string;
   readonly artifactFile: string;
   readonly manifestFile: string;
 }
@@ -82,7 +84,12 @@ export async function discoverPackageArtifact(
       const artifact = validateExperimentalPackageArtifact(JSON.parse(
         await readFile(artifactFile, 'utf8'),
       ));
-      return { artifact, artifactFile, manifestFile };
+      return {
+        artifact,
+        instance: experimentalPackageArtifactInstance(artifact),
+        artifactFile,
+        manifestFile,
+      };
     }
     directory = dirname(directory);
   }

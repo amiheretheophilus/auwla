@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import type {
   ExperimentalPackageArtifact,
   ExperimentalPackageComponentSummary,
@@ -8,6 +9,7 @@ type UnknownRecord = Record<string, unknown>;
 
 const methods = new Set(['GET', 'POST', 'PUT', 'PATCH', 'DELETE']);
 const validatedArtifacts = new WeakMap<object, ExperimentalPackageArtifact>();
+const artifactInstances = new WeakMap<object, string>();
 
 function invalid(path: string, expectation: string): never {
   throw new TypeError(
@@ -165,4 +167,32 @@ export function validateExperimentalPackageArtifact(
   };
   validatedArtifacts.set(artifact, validated);
   return validated;
+}
+
+function canonicalJson(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(',')}]`;
+  if (value !== null && typeof value === 'object') {
+    return `{${Object.keys(value).sort().map(key =>
+      `${JSON.stringify(key)}:${canonicalJson((value as UnknownRecord)[key])}`
+    ).join(',')}}`;
+  }
+  return JSON.stringify(value);
+}
+
+/** Reproducible semantic identity for one validated package artifact. */
+export function experimentalPackageArtifactInstance(value: unknown): string {
+  if (value !== null && typeof value === 'object') {
+    const cached = artifactInstances.get(value);
+    if (cached !== undefined) return cached;
+  }
+  const artifact = validateExperimentalPackageArtifact(value);
+  const instance = createHash('sha256')
+    .update(canonicalJson(artifact))
+    .digest('hex')
+    .slice(0, 32);
+  artifactInstances.set(artifact, instance);
+  if (value !== null && typeof value === 'object') {
+    artifactInstances.set(value, instance);
+  }
+  return instance;
 }

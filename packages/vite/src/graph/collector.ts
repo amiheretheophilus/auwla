@@ -13,7 +13,7 @@ import {
   type CompiledModules,
   type CompiledModuleMetadata,
   type CompilerSourceMap,
-  type ExperimentalPackageArtifact,
+  type ExperimentalPackageImport,
   type InitialDelivery,
 } from '@memoized-dom/compiler';
 import type { ResolvedAdapterOptions } from '../options';
@@ -107,19 +107,20 @@ export async function compileGraph(
   const styles = new Set<string>();
   let renderableContent = false;
   const directStyles = new Map<string, Set<string>>();
-  const packageArtifacts = new Map<string, ExperimentalPackageArtifact>();
+  const packageImports = new Map<string, ExperimentalPackageImport>();
   const semanticDependencies = new Set<string>();
   const artifactLookups = new Map<string, ReturnType<typeof discoverPackageArtifact>>();
 
   async function recordPackageArtifact(
     resolvedId: string,
     specifier: string,
-    importer: string,
+    importerFile: string,
+    importerId: string,
   ): Promise<boolean> {
-    const key = `${resolvedId}\0${specifier}\0${importer}`;
+    const key = `${resolvedId}\0${specifier}\0${importerFile}`;
     let lookup = artifactLookups.get(key);
     if (lookup === undefined) {
-      lookup = discoverPackageArtifact(resolvedId, specifier, importer);
+      lookup = discoverPackageArtifact(resolvedId, specifier, importerFile);
       artifactLookups.set(key, lookup);
     }
     const discovered = await lookup;
@@ -130,7 +131,12 @@ export async function compileGraph(
     context.addWatchFile(artifactFile);
     semanticDependencies.add(manifestFile);
     semanticDependencies.add(artifactFile);
-    packageArtifacts.set(discovered.artifactFile, discovered.artifact);
+    packageImports.set(resolutionKey(importerId, specifier), {
+      importer: importerId,
+      specifier,
+      instance: discovered.instance,
+      artifact: discovered.artifact,
+    });
     return true;
   }
 
@@ -199,7 +205,7 @@ export async function compileGraph(
       });
       if (resolved === null) continue;
       if (resolved.external) {
-        await recordPackageArtifact(resolved.id, specifier, cleanFile);
+        await recordPackageArtifact(resolved.id, specifier, cleanFile, id);
         continue;
       }
 
@@ -208,7 +214,7 @@ export async function compileGraph(
         recordStyle(id, resolved.id);
         continue;
       }
-      if (await recordPackageArtifact(target, specifier, cleanFile)) continue;
+      if (await recordPackageArtifact(target, specifier, cleanFile, id)) continue;
       const authored = authoredImports.get(specifier);
       if (
         authored !== undefined &&
@@ -293,8 +299,8 @@ export async function compileGraph(
       : { externalReactiveSources: options.externalReactiveSources }),
     experimentalPackageArtifacts: [
       ...(options.experimentalPackageArtifacts ?? []),
-      ...packageArtifacts.values(),
     ],
+    experimentalPackageImports: [...packageImports.values()],
     ...(hot ? { hot: true } : {}),
     diagnostics: hot && routedEnvironment !== 'server',
     // Browser module state lives in one application runtime. Server modules

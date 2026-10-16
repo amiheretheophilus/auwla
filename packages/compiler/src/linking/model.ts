@@ -39,6 +39,8 @@ export interface CompileModulesOptions
   pageCaptureCount?: number;
   /** Experimental semantic summaries for separately compiled package entries. */
   experimentalPackageArtifacts?: readonly ExperimentalPackageArtifact[];
+  /** Importer-specific package instances resolved by a host such as Vite. */
+  experimentalPackageImports?: readonly ExperimentalPackageImport[];
 }
 
 export interface ExperimentalPackageFunctionSummary {
@@ -70,6 +72,15 @@ export interface ExperimentalPackageArtifact {
   kind: 'memoized-dom-package';
   version: 1;
   entries: Record<string, ExperimentalPackageEntry>;
+}
+
+/** One host-resolved package import, kept separate from its portable artifact. */
+export interface ExperimentalPackageImport {
+  readonly importer: string;
+  readonly specifier: string;
+  /** Reproducible semantic instance identity, normally an artifact digest. */
+  readonly instance: string;
+  readonly artifact: ExperimentalPackageArtifact;
 }
 
 export interface StateExport {
@@ -143,4 +154,5 @@ export interface LinkResolutionOptions {
   resolveImport?: (specifier: string, importer: string) => string | undefined;
   linkFunctionSummaries?: boolean;
   experimentalPackageArtifacts?: readonly ExperimentalPackageArtifact[];
+  experimentalPackageImports?: readonly ExperimentalPackageImport[];
 }

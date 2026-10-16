@@ -7,6 +7,7 @@ import type {
   ComponentGraphNode,
 } from '../component-linker';
 import type {
+  ExperimentalPackageComponentSummary,
   ExperimentalPackageEntry,
   LinkResolutionOptions,
   ModuleEntry,
@@ -15,29 +16,119 @@ import type {
 } from './model';
 import { validateExperimentalPackageArtifact } from './package-artifact';
 
-function packageEntries(
-  options: LinkResolutionOptions,
-): Map<string, ExperimentalPackageEntry> {
-  const entries = new Map<string, ExperimentalPackageEntry>();
+interface PackageEntryBinding {
+  readonly specifier: string;
+  readonly entry: ExperimentalPackageEntry;
+  readonly instance?: string;
+}
+
+interface PackageIndex {
+  readonly global: Map<string, ExperimentalPackageEntry>;
+  readonly resolved: Map<string, PackageEntryBinding>;
+}
+
+const packageIndexes = new WeakMap<object, PackageIndex>();
+
+function packageImportKey(importer: string, specifier: string): string {
+  return `${importer}\0${specifier}`;
+}
+
+function packageIndex(options: LinkResolutionOptions): PackageIndex {
+  const cached = packageIndexes.get(options);
+  if (cached !== undefined) return cached;
+  const global = new Map<string, ExperimentalPackageEntry>();
   for (const input of options.experimentalPackageArtifacts ?? []) {
     const artifact = validateExperimentalPackageArtifact(input);
     for (const [specifier, entry] of Object.entries(artifact.entries)) {
-      if (entries.has(specifier)) {
+      if (global.has(specifier)) {
         throw new Error(
           `memo-dom: multiple experimental package artifacts describe entry '${specifier}'`,
         );
       }
-      entries.set(specifier, entry);
+      global.set(specifier, entry);
     }
   }
-  return entries;
+  const resolved = new Map<string, PackageEntryBinding>();
+  for (const resolution of options.experimentalPackageImports ?? []) {
+    if (!resolution.instance || !/^[A-Za-z0-9._~-]+$/.test(resolution.instance)) {
+      throw new Error(
+        `memo-dom: experimental package instance for '${resolution.specifier}' must be a non-empty portable identifier`,
+      );
+    }
+    const key = packageImportKey(resolution.importer, resolution.specifier);
+    if (resolved.has(key)) {
+      throw new Error(
+        `memo-dom: multiple experimental package instances resolve '${resolution.specifier}' from '${resolution.importer}'`,
+      );
+    }
+    const artifact = validateExperimentalPackageArtifact(resolution.artifact);
+    const entry = artifact.entries[resolution.specifier];
+    if (entry === undefined) {
+      throw new Error(
+        `memo-dom: resolved experimental package artifact does not describe entry '${resolution.specifier}'`,
+      );
+    }
+    resolved.set(key, {
+      specifier: resolution.specifier,
+      entry,
+      instance: resolution.instance,
+    });
+  }
+  const index = { global, resolved };
+  packageIndexes.set(options, index);
+  return index;
+}
+
+function packageEntries(
+  options: LinkResolutionOptions,
+): Map<string, ExperimentalPackageEntry> {
+  return packageIndex(options).global;
+}
+
+function resolvedPackageEntries(
+  options: LinkResolutionOptions,
+): Map<string, PackageEntryBinding> {
+  return packageIndex(options).resolved;
 }
 
 function packageEntry(
   options: LinkResolutionOptions,
+  importer: string,
   source: string,
-): ExperimentalPackageEntry | undefined {
-  return packageEntries(options).get(source);
+): PackageEntryBinding | undefined {
+  const resolved = resolvedPackageEntries(options).get(
+    packageImportKey(importer, source),
+  );
+  if (resolved !== undefined) return resolved;
+  const entry = packageEntries(options).get(source);
+  return entry === undefined ? undefined : { specifier: source, entry };
+}
+
+function packageComponentKey(
+  binding: PackageEntryBinding,
+  exported: string,
+): string {
+  return binding.instance === undefined
+    ? `package:${binding.specifier}#${exported}`
+    : `package:${binding.specifier}@${binding.instance}#${exported}`;
+}
+
+function validatePackageComponent(
+  binding: PackageEntryBinding,
+  exported: string,
+  component: ExperimentalPackageComponentSummary,
+): void {
+  const expectedKey = `package:${binding.specifier}#${exported}`;
+  if (component.key !== expectedKey) {
+    throw new Error(
+      `memo-dom: experimental package component '${binding.specifier}' export '${exported}' has invalid key '${component.key}'`,
+    );
+  }
+  if (component.listLightweight) {
+    throw new Error(
+      `memo-dom: experimental package component '${binding.specifier}' export '${exported}' advertises an unsupported lightweight row ABI`,
+    );
+  }
 }
 
 /** Add precompiled package components as leaf factories in the app graph. */
@@ -45,29 +136,28 @@ export function experimentalPackageComponentDeclarations(
   options: LinkResolutionOptions,
 ): ComponentGraphNode[] {
   const declarations: ComponentGraphNode[] = [];
-  const keys = new Set<string>();
-  for (const [specifier, entry] of packageEntries(options)) {
+  const keys = new Map<string, string>();
+  const bindings: PackageEntryBinding[] = [
+    ...[...packageEntries(options)].map(([specifier, entry]) => ({ specifier, entry })),
+    ...resolvedPackageEntries(options).values(),
+  ];
+  for (const binding of bindings) {
+    const { entry } = binding;
     for (const [exported, component] of Object.entries(entry.components ?? {})) {
-      const expectedKey = `package:${specifier}#${exported}`;
-      if (component.key !== expectedKey) {
+      validatePackageComponent(binding, exported, component);
+      const key = packageComponentKey(binding, exported);
+      const shape = JSON.stringify(component);
+      const existing = keys.get(key);
+      if (existing !== undefined && existing !== shape) {
         throw new Error(
-          `memo-dom: experimental package component '${specifier}' export '${exported}' has invalid key '${component.key}'`,
+          `memo-dom: experimental package component key '${key}' is not unique`,
         );
       }
-      if (component.listLightweight) {
-        throw new Error(
-          `memo-dom: experimental package component '${specifier}' export '${exported}' advertises an unsupported lightweight row ABI`,
-        );
-      }
-      if (keys.has(component.key)) {
-        throw new Error(
-          `memo-dom: experimental package component key '${component.key}' is not unique`,
-        );
-      }
-      keys.add(component.key);
+      if (existing !== undefined) continue;
+      keys.set(key, shape);
       declarations.push({
-        key: component.key,
-        moduleId: `package:${specifier}`,
+        key,
+        moduleId: key.slice(0, key.lastIndexOf('#')),
         local: exported,
         edges: [],
       });
@@ -191,7 +281,8 @@ export function linkImports(
   for (const ref of manifest.imports) {
     const target = resolveModule(entry.id, ref.source, entries, options);
     if (target === undefined) {
-      const packagedEntry = packageEntry(options, ref.source);
+      const packagedBinding = packageEntry(options, entry.id, ref.source);
+      const packagedEntry = packagedBinding?.entry;
       if (packagedEntry !== undefined && ref.imported === '*') {
         throw new Error(
           `memo-dom: namespace import '${ref.local}' from '${ref.source}' cannot identify a reactive package export; use named imports`,
@@ -204,9 +295,10 @@ export function linkImports(
         ? undefined
         : packagedEntry?.components?.[ref.imported];
       if (packagedComponent !== undefined) {
+        validatePackageComponent(packagedBinding!, ref.imported, packagedComponent);
         linked[ref.local] = {
           type: 'component',
-          key: packagedComponent.key,
+          key: packageComponentKey(packagedBinding!, ref.imported),
           props: [...packagedComponent.props],
           objectProps: packagedComponent.objectProps,
           acceptsUnknownProps: packagedComponent.acceptsUnknownProps,

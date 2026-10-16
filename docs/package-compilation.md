@@ -30,6 +30,20 @@ Hosts which call `compileModules` or `compileModulesDetailed` directly do not
 perform filesystem discovery. They must read the artifact and pass it through
 `experimentalPackageArtifacts` themselves.
 
+### Multiple installed copies
+
+Vite keeps artifact selection attached to the importing module, just like its
+ordinary JavaScript resolution. Two modules may therefore import the same bare
+specifier and resolve to different installed copies with different package
+artifacts. Each semantic copy receives a reproducible digest derived from the
+validated artifact; absolute installation paths do not enter compiler identity
+or generated output. Copies with identical semantic artifacts may share that
+compiler identity while their ESM imports still resolve normally.
+
+Low-level hosts which need the same behavior pass importer-specific
+`experimentalPackageImports` entries. Normal Vite users and package consumers do
+not configure this and continue to write ordinary imports.
+
 ## Package layout
 
 Publish the generated artifact with the package's normal output:
@@ -250,8 +264,9 @@ package AST back into each application as a shortcut.
   package-module invalidation path.
 - The artifact and executable JavaScript must come from the same package
   compilation. Artifact/source integrity hashes are not implemented yet.
-- Distinct installed versions which expose the same bare specifier are not yet
-  assigned separate artifact identities inside one application compile.
+- The semantic digest identifies artifact contents; it is not yet an integrity
+  proof that published JavaScript was built from the same source. Package builds
+  must still publish compiler output and its matching artifact together.
 - Packaged components do not yet participate in static initial-content
   specialization; they use ordinary browser creation or runtime SSR.
 - Array literals passed to a holder relationship preserve every contained

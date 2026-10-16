@@ -168,6 +168,100 @@ describe('package compilation artifacts', () => {
     }
   });
 
+  it('keeps two importer-resolved copies of one package specifier distinct', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'mmd-package-artifact-copies-'));
+    const entry = join(root, 'App.tsx');
+    const first = join(root, 'First.tsx');
+    const second = join(root, 'Second.tsx');
+    const firstPackage = join(root, 'copies', 'first', 'ui-package');
+    const secondPackage = join(root, 'copies', 'second', 'ui-package');
+    const component = (props: string[]) => ({
+      key: 'package:ui-package#Badge',
+      props,
+      objectProps: true,
+      acceptsUnknownProps: false,
+      hasWholeDefault: false,
+      listLightweight: false,
+      delegatedEvents: [],
+      renderProps: [],
+      slots: [],
+      renderCallbacks: [],
+      refProps: [],
+      subtreeReads: [],
+    });
+    const writePackage = (directory: string, props: string[]) => {
+      mkdirSync(directory, { recursive: true });
+      writeFileSync(join(directory, 'index.js'), 'export function Badge() {}');
+      writeFileSync(join(directory, 'package.json'), JSON.stringify({
+        name: 'ui-package',
+        type: 'module',
+        exports: './index.js',
+        'memoized-dom': { artifact: './memoized-dom.package.json' },
+      }));
+      writeFileSync(join(directory, 'memoized-dom.package.json'), JSON.stringify({
+        kind: 'memoized-dom-package',
+        version: 1,
+        entries: {
+          'ui-package': {
+            functions: {},
+            components: { Badge: component(props) },
+          },
+        },
+      }));
+    };
+    writeFileSync(entry, `
+      import { First } from './First';
+      import { Second } from './Second';
+      export function App() { return <main><First /><Second /></main>; }
+    `);
+    writeFileSync(first, `
+      import { Badge } from 'ui-package';
+      export function First() { return <Badge value={1} />; }
+    `);
+    writeFileSync(second, `
+      import { Badge } from 'ui-package';
+      export function Second() { return <Badge label="two" />; }
+    `);
+    writePackage(firstPackage, ['value']);
+    writePackage(secondPackage, ['label']);
+
+    const context: GraphPluginContext = {
+      async resolve(specifier, importer) {
+        if (specifier === './First') return { id: first };
+        if (specifier === './Second') return { id: second };
+        if (specifier === 'ui-package') {
+          return {
+            id: join(
+              importer.replaceAll('\\', '/') === first.replaceAll('\\', '/')
+                ? firstPackage
+                : secondPackage,
+              'index.js',
+            ),
+          };
+        }
+        return null;
+      },
+      addWatchFile() {},
+      error(error): never { throw new Error(error.message); },
+    };
+    try {
+      const graph = await compileGraph(
+        context,
+        root,
+        [entry],
+        resolveAdapterOptions({ clientEntry: entry }),
+        new Map(),
+        false,
+        false,
+      );
+      expect(graph.output.get(first.replaceAll('\\', '/'))).toContain('{ value: 1 }');
+      expect(graph.output.get(second.replaceAll('\\', '/'))).toContain('{ label: "two" }');
+      expect(graph.semanticDependencies.size).toBe(4);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   it('links a precompiled package component without admitting its source', async () => {
     const root = mkdtempSync(join(tmpdir(), 'mmd-package-component-'));
     const entry = join(root, 'App.tsx');

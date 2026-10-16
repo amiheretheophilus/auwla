@@ -241,6 +241,15 @@ The versioned artifact is validated as untrusted input before either direct or
 Vite-driven linking, with diagnostics naming the malformed entry, export, and
 field.
 
+Package discovery also retains the importing module's resolution. Two modules
+can resolve the same bare specifier to different installed artifacts without
+conflating their function or component contracts. The application linker uses a
+canonical digest of each validated artifact as its semantic instance identity,
+not an absolute package path; equal artifacts may share compiler facts while the
+host keeps their ordinary ESM resolution intact. This solves duplicate semantic
+versions without claiming that the digest verifies the separately published
+JavaScript.
+
 ### Initial delivery needs a deferred render contract
 
 A measured static application containing only `<Badge label="Ready" />` from a
@@ -423,8 +432,9 @@ open decisions, not documented APIs.
 3. The first component-library boundary covers exact scalar/render-prop modes,
    local state, explicit slots, nested components, retained keyed lists, Vite
    discovery, forwarded refs, SSR, authored source maps, and package-artifact
-   HMR/recovery. Existing initial-delivery optimizations remain acceptance work
-   before broadening the contract.
+   HMR/recovery. Importer-specific resolution also keeps multiple installed
+   semantic versions distinct. Existing initial-delivery optimizations remain
+   acceptance work before broadening the contract.
 4. The reproducible synthetic benchmark now measures cold generation, warm
    linking, and artifact size. Browser output, filesystem/plugin cost, and real
    package workloads still need measurement before selecting a public format or

@@ -44,6 +44,7 @@ export {
   type ExperimentalPackageEntry,
   type ExperimentalPackageEntryPoint,
   type ExperimentalPackageFunctionSummary,
+  type ExperimentalPackageImport,
 } from './linker';
 export {
   compilerDiagnosticCode,
@@ -84,4 +85,7 @@ export {
   type PackageBoundaryEntries,
   type PackageFunctionBoundary,
 } from './package-boundaries';
-export { validateExperimentalPackageArtifact } from './linking/package-artifact';
+export {
+  experimentalPackageArtifactInstance,
+  validateExperimentalPackageArtifact,
+} from './linking/package-artifact';

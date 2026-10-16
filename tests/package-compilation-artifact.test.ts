@@ -7,6 +7,7 @@ import {
   analyzeServerFunctionModule,
   compileModulesDetailed,
   definePackageBoundaries,
+  experimentalPackageArtifactInstance,
   experimentalCompilePackage,
   generateServerFunctionClient,
   validateExperimentalPackageArtifact,
@@ -133,6 +134,64 @@ describe('experimental package compilation artifacts', () => {
       source: '../src/index.tsx',
       line: 3,
     });
+  });
+
+  it('keeps importer-resolved copies of one package specifier distinct', () => {
+    const first = experimentalCompilePackage({
+      './index.tsx': `
+        export function Badge({ value }: { value: number }) {
+          return <strong>{value}</strong>;
+        }
+      `,
+    }, {
+      packageEntries: { 'ui-package': './index.tsx' },
+    });
+    const second = experimentalCompilePackage({
+      './index.tsx': `
+        export function Badge({ label }: { label: string }) {
+          return <em>{label}</em>;
+        }
+      `,
+    }, {
+      packageEntries: { 'ui-package': './index.tsx' },
+    });
+    const firstInstance = experimentalPackageArtifactInstance(first.artifact);
+    const secondInstance = experimentalPackageArtifactInstance(second.artifact);
+    expect(firstInstance).not.toBe(secondInstance);
+
+    const application = compileModulesDetailed({
+      './first.tsx': `
+        import { Badge } from 'ui-package';
+        export function First() { return <Badge value={1} />; }
+      `,
+      './second.tsx': `
+        import { Badge } from 'ui-package';
+        export function Second() { return <Badge label="two" />; }
+      `,
+      './app.tsx': `
+        import { First } from './first';
+        import { Second } from './second';
+        export function App() { return <main><First /><Second /></main>; }
+      `,
+    }, {
+      experimentalPackageImports: [
+        {
+          importer: './first.tsx',
+          specifier: 'ui-package',
+          instance: firstInstance,
+          artifact: first.artifact,
+        },
+        {
+          importer: './second.tsx',
+          specifier: 'ui-package',
+          instance: secondInstance,
+          artifact: second.artifact,
+        },
+      ],
+    });
+
+    expect(application.output['./first.tsx']).toContain('{ value: 1 }');
+    expect(application.output['./second.tsx']).toContain('{ label: "two" }');
   });
 
   it('links a separately compiled ordinary helper without its source', async () => {

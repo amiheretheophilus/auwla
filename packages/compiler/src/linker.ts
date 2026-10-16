@@ -52,6 +52,7 @@ export type {
   ExperimentalPackageComponentSummary,
   ExperimentalPackageEntry,
   ExperimentalPackageFunctionSummary,
+  ExperimentalPackageImport,
 } from './linking/model';
 import {
   canonicalModuleId,
