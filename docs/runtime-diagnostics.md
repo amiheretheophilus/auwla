@@ -1,5 +1,9 @@
 # Tracing events, bindings, and DOM updates
 
+The current interface is console tracing. A unified development panel is
+proposed, but not implemented; see
+[the development inspector design](./dev-inspector-design.md).
+
 Run `memoized-dom dev`, enable **Verbose** in the browser's Console, and enable
 tracing from that Console:
 

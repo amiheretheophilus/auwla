@@ -5,6 +5,10 @@ function signatures, optimistic callbacks, invalidation rules, or delivery.
 There is no additional inspector package, dashboard, subscription, or retained
 event history.
 
+A development UI is intentionally deferred. Its proposed experience, event
+bridge and privacy boundaries are recorded in
+[the development inspector design](./dev-inspector-design.md).
+
 ## Finding the messages
 
 Run the application with `memoized-dom dev`. Browser diagnostics use Vite's
