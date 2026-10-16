@@ -245,13 +245,40 @@ data, not executable code or serialized source. At application compilation the
 consumer's static prop and slot values are substituted into the ordinary
 initial-content planner.
 
-This first delivery boundary is intentionally atomic. It is used only when the
-whole package component call is static, so the application can retain its HTML
-and omit the browser factory call. A package component with reactive props, an
-event/ref/effect, dynamic structure, or non-static projected content continues
-through ordinary browser creation. Supporting those cases safely requires a
-portable, host-relative adoption plan in the separately emitted package factory;
-the compiler does not claim that capability from a render template alone.
+A wholly static call retains its HTML and omits the browser factory call.
+Components in this subset without slots also receive a generated host-relative
+binding program. A reactive call can therefore retain the same initial HTML:
+
+```tsx
+// Published package source, compiled once by its author.
+export function Badge({ label }: { label: string }) {
+  return <strong title={label}>{label}</strong>;
+}
+
+// Consuming application.
+import { Badge } from 'my-ui';
+export function App() {
+  let label = 'Ready';
+  return <main><Badge label={label} /><button onClick={() => label = 'Done'}>Change</button></main>;
+}
+```
+
+On initial delivery, the application emits `Ready` as HTML. The package factory
+binds that existing host and its text once; later prop updates target those
+nodes. Conditional remounts use the same factory's creation path. Application
+compilation needs only the generated artifact and the published JavaScript.
+
+The generated template declares `adoption: 'host-v1'` only when the matching
+factory contains this optional host-binding path. Authors do not write this
+field or pass a host themselves. The application linker supplies it through the
+compiled call contract. Earlier artifacts without this capability continue to
+use static specialization or ordinary creation.
+
+Slot components currently support only whole-call static specialization. Their
+adoption needs caller-specific slot positions in addition to a package host.
+Components with events, refs, effects, setup statements, nested components, or
+dynamic structure also continue through ordinary creation. General runtime SSR
+and its existing hydration path remain available for those broader components.
 
 Fullstack SSR remains independent and can render broader package components by
 executing their emitted server factories. Package compilation never executes an
@@ -278,9 +305,9 @@ the consuming application as a shortcut.
 - The semantic digest identifies artifact contents; it is not yet an integrity
   proof that published JavaScript was built from the same source. Package builds
   must still publish compiler output and its matching artifact together.
-- Packaged components participate in static initial-content specialization only
-  for the closed atomic subset described above. Reactive package DOM adoption is
-  not implemented yet.
+- Package initial HTML and host adoption cover the subset described above.
+  Slot placement and locally interactive package components are not yet part of
+  that portable initial-binding contract.
 - Array literals passed to a holder relationship preserve every contained
   holder. Arbitrarily assembled dynamic collections are not yet a portable
   holder contract.

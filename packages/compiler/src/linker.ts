@@ -41,6 +41,7 @@ import type {
   ExperimentalPackageArtifact,
   ExperimentalPackageComponentSummary,
   ExperimentalPackageFunctionSummary,
+  ExperimentalPackageRenderPlan,
   FunctionExport,
   ModuleEntry,
   ModuleManifest,
@@ -72,12 +73,12 @@ import { installCompilerIntrinsics } from './dom/intrinsics';
 import { resolveRenderUsage } from './components/render-usage';
 import { planInitialRendering } from './dom/render-plan';
 import { type InitialRenderPlan } from './planning/initial-content';
-import { planInitialDom } from './dom/initial-dom';
+import { planInitialDom, type InitialDomRoot } from './dom/initial-dom';
 import { emitInitialHtml } from './dom/initial-html';
 import { planInitialDelivery, type InitialDelivery } from './dom/delivery-plan';
 import { normalizeComponentDeclarations } from './components/declarations';
 import { normalizeComponentSlots } from './jsx/component-slots';
-import { extractExperimentalPackageRenderPlan } from './linking/package-render';
+import { extractExperimentalPackageRenderPlan, packageInitialDom } from './linking/package-render';
 
 export interface CompiledComponentExport extends Omit<ComponentExportInfo, 'key'> {
   exported: string;
@@ -584,6 +585,7 @@ function compileLinkedModules(
   modules: Readonly<Record<string, string>>,
   options: CompileModulesOptions,
   sourceMaps: boolean,
+  packageBindings?: (entry: ModuleEntry, metadata: CompiledModuleMetadata) => Readonly<Record<string, InitialDomRoot>>,
 ): CompiledModules {
   const frontend = options.frontend ?? memoizedEstreeFrontend;
   const entries = new Map<string, ModuleEntry>();
@@ -975,6 +977,9 @@ function compileLinkedModules(
             ...(options.routedEnvironment === 'server' && initialDelivery !== undefined
               ? { initialDelivery } : {}) }
         : {}),
+      ...(packageBindings === undefined ? {} : {
+        initialDomComponents: packageBindings(entry, metadata[entry.originalId]!),
+      }),
     };
     const initialComponents=Object.fromEntries(Object.entries(initialDom?.factories??{}).flatMap(([key,plan])=>
       key.startsWith(`${entry.id}#`) ? [[key.slice(entry.id.length+1),plan]] : []));
@@ -1062,27 +1067,44 @@ export function experimentalCompilePackage(
   options: ExperimentalCompilePackageOptions,
 ): ExperimentalCompiledPackage {
   const { packageEntries, ...compileOptions } = options;
-  const compiled = compileModulesDetailed(modules, compileOptions);
   const entries: ExperimentalPackageArtifact['entries'] = {};
   const initialPrograms = new Map<string, t.Program>();
+  const initialPlans = new Map<string, Map<string, ExperimentalPackageRenderPlan>>();
 
-  const initialProgram = (moduleId: string): t.Program => {
-    const existing = initialPrograms.get(moduleId);
+  const initialProgram = (entry: ModuleEntry): t.Program => {
+    const existing = initialPrograms.get(entry.originalId);
     if (existing !== undefined) return existing;
-    const parsed = parseModule(
-      moduleId,
-      modules[moduleId]!,
-      compileOptions.frontend ?? memoizedEstreeFrontend,
-    ).ast;
+    const parsed = cloneEstreeNode(entry.ast, true);
     normalizeComponentDeclarations({
       node: parsed,
       buildCodeFrameError(message: string) {
         return new Error(`memo-dom: ${message}`);
       },
     });
-    initialPrograms.set(moduleId, parsed);
+    initialPrograms.set(entry.originalId, parsed);
     return parsed;
   };
+
+  const compiled = compileLinkedModules(modules, compileOptions, true, (entry, metadata) => {
+    const templates = new Map<string, ExperimentalPackageRenderPlan>();
+    initialPlans.set(entry.originalId, templates);
+    const bindings: Record<string, InitialDomRoot> = {};
+    for (const summary of metadata.componentExports) {
+      const scalarProps = new Set(summary.props.filter(prop =>
+        !summary.renderProps.includes(prop) &&
+        !summary.renderCallbacks.includes(prop) &&
+        !summary.refProps.includes(prop)));
+      const template = extractExperimentalPackageRenderPlan(
+        initialProgram(entry), summary.local, scalarProps, new Set(summary.slots),
+      );
+      if (template === undefined) continue;
+      const dom = summary.slots.length > 0
+        ? undefined : packageInitialDom(template, entry.id, summary.local);
+      templates.set(summary.local, dom === undefined ? template : { ...template, adoption: 'host-v1' });
+      if (dom !== undefined) bindings[summary.local] = dom;
+    }
+    return bindings;
+  });
 
   for (const [specifier, entryPoint] of Object.entries(packageEntries)) {
     const moduleId = typeof entryPoint === 'string'
@@ -1174,16 +1196,7 @@ export function experimentalCompilePackage(
         );
       }
       for (const summary of selectedComponents) {
-        const scalarProps = new Set(summary.props.filter(prop =>
-          !summary.renderProps.includes(prop) &&
-          !summary.renderCallbacks.includes(prop) &&
-          !summary.refProps.includes(prop)));
-        const initial = extractExperimentalPackageRenderPlan(
-          initialProgram(moduleId),
-          summary.local,
-          scalarProps,
-          new Set(summary.slots),
-        );
+        const initial = initialPlans.get(moduleId)?.get(summary.local);
         components[summary.exported] = {
           key: `package:${specifier}#${summary.exported}`,
           props: [...summary.props],

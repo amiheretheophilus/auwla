@@ -2,10 +2,56 @@ import { describe, expect, it } from 'bun:test';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { experimentalCompilePackage } from '@memoized-dom/compiler';
 import { compileGraph, type GraphPluginContext } from '../src/graph/collector';
 import { resolveAdapterOptions } from '../src/options';
 
 describe('package compilation artifacts', () => {
+  it('discovers generated host adoption contracts for reactive initial HTML', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'mmd-package-adoption-'));
+    const entry = join(root, 'main.ts');
+    const component = join(root, 'App.tsx');
+    const packageRoot = join(root, 'node_modules', 'adopted-ui');
+    const packageEntry = join(packageRoot, 'index.js');
+    mkdirSync(packageRoot, { recursive: true });
+    const packaged = experimentalCompilePackage({
+      './index.tsx': `export function Badge({label}:{label:string}) { return <strong>{label}</strong>; }`,
+    }, { packageEntries: { 'adopted-ui': './index.tsx' } });
+    writeFileSync(packageEntry, packaged.output['./index.tsx']!);
+    writeFileSync(join(packageRoot, 'memoized-dom.package.json'), JSON.stringify(packaged.artifact));
+    writeFileSync(join(packageRoot, 'package.json'), JSON.stringify({
+      name: 'adopted-ui', type: 'module', exports: './index.js',
+      'memoized-dom': { artifact: './memoized-dom.package.json' },
+    }));
+    writeFileSync(entry, `import {mount} from '@memoized-dom/runtime'; import {App} from './App'; mount('root', App);`);
+    writeFileSync(component, `import {Badge} from 'adopted-ui'; export function App() {
+      let label='Before'; return <main><Badge label={label}/><button onClick={()=>label='After'}>Change</button></main>;
+    }`);
+    const context: GraphPluginContext = {
+      async resolve(specifier) {
+        if (specifier === './App') return { id: component };
+        if (specifier === 'adopted-ui') return { id: packageEntry };
+        return null;
+      },
+      addWatchFile() {},
+      error(error): never { throw new Error(error.message); },
+    };
+    try {
+      const graph = await compileGraph(context, root, [entry],
+        resolveAdapterOptions({ clientEntry: entry }), new Map(), false, true, [], 'client', [{
+          filename: join(root, 'index.html'),
+          html: '<!doctype html><html><body><div id="root"></div><script type="module" src="/main.ts"></script></body></html>',
+        }]);
+      expect(graph.files).toEqual(new Set([entry, component].map(file => file.replaceAll('\\', '/'))));
+      expect(graph.initialPage?.html).toContain('<strong>Before</strong>');
+      expect(graph.initialPage?.interactive).toBe(true);
+      expect(graph.initialDelivery?.browser).toBe('bindings');
+      expect(graph.output.get(component.replaceAll('\\', '/'))).toMatch(/Badge\([^;]+_initialNodes\[/);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   it('discovers package metadata and links it without compiling package source', async () => {
     const root = mkdtempSync(join(tmpdir(), 'mmd-package-artifact-'));
     const entry = join(root, 'App.tsx');

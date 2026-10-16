@@ -6,6 +6,7 @@ import { createServer as createHttpServer } from 'node:http';
 import { afterEach, describe, expect, it } from 'bun:test';
 import { build, createServer } from 'vite';
 import puppeteer from 'puppeteer-core';
+import { experimentalCompilePackage } from '@memoized-dom/compiler';
 import memoizedDom from '../src';
 import { applyInitialPage } from '../src/initial-html';
 
@@ -54,6 +55,84 @@ async function production(root: string) {
 }
 
 describe('HTML first production builds', () => {
+  it.skipIf(!chromeExecutable())('adopts separately compiled reactive package DOM in production Chrome', async () => {
+    const executablePath = chromeExecutable();
+    if (!executablePath) return;
+    const root = await fixture(`import {Badge} from 'precompiled-ui'; export function App(){
+      let label='Before';let show=true;
+      return <main><Badge label={label}/><button class="change" onClick={()=>label='After'}>Change</button>
+        <button class="toggle" onClick={()=>show=!show}>Toggle</button>{show&&<Badge label={label}/>}</main>;
+    }`);
+    const packaged = experimentalCompilePackage({
+      './index.tsx': `export function Badge({label}:{label:string}){return <strong title={label}>{label}</strong>;}`,
+    }, { packageEntries: { 'precompiled-ui': './index.tsx' } });
+    const directory = join(root, 'node_modules', 'precompiled-ui');
+    await mkdir(directory, { recursive: true });
+    await Promise.all([
+      writeFile(join(directory, 'index.js'), packaged.output['./index.tsx']!),
+      writeFile(join(directory, 'memoized-dom.package.json'), JSON.stringify(packaged.artifact)),
+      writeFile(join(directory, 'package.json'), JSON.stringify({
+        name: 'precompiled-ui', type: 'module', exports: './index.js',
+        'memoized-dom': { artifact: './memoized-dom.package.json' },
+      })),
+    ]);
+    const result = await production(root);
+    expect(result.html).toContain('<strong title="Before">Before</strong>');
+    const server = createHttpServer((request, response) => {
+      const file = result.files.find(item => item.fileName === (request.url === '/' ? 'index.html' : request.url?.slice(1)));
+      if (!file) { response.writeHead(404).end(); return; }
+      response.setHeader('Content-Type', file.type === 'chunk' ? 'text/javascript' : 'text/html');
+      response.end(file.type === 'chunk' ? file.code : file.source);
+    });
+    await new Promise<void>(done => server.listen(0, '127.0.0.1', done));
+    const browser = await puppeteer.launch({ executablePath, headless: true });
+    try {
+      const address = server.address();
+      if (!address || typeof address === 'string') throw new Error('Missing HTTP address');
+      const url = `http://127.0.0.1:${address.port}/`;
+      const staticPage = await browser.newPage();
+      await staticPage.setJavaScriptEnabled(false);
+      await staticPage.goto(url);
+      expect(await staticPage.$$eval('strong', nodes => nodes.map(node => node.textContent))).toEqual(['Before', 'Before']);
+      await staticPage.close();
+      const page = await browser.newPage();
+      const errors: string[] = [];
+      page.on('pageerror', error => errors.push(String(error)));
+      await page.evaluateOnNewDocument(() => {
+        const state = window as unknown as { initial?: Element[]; created: string[] };
+        state.created = [];
+        const create = document.createElement.bind(document);
+        document.createElement = ((...args: Parameters<Document['createElement']>) => {
+          state.created.push(args[0]); return create(...args);
+        }) as Document['createElement'];
+        new MutationObserver(() => {
+          if (document.querySelectorAll('strong').length === 2) state.initial ??= [...document.querySelectorAll('strong')];
+        }).observe(document, { subtree: true, childList: true });
+      });
+      await page.goto(url);
+      await page.click('.change');
+      await page.waitForFunction(() => [...document.querySelectorAll('strong')].every(node => node.textContent === 'After'));
+      expect(await page.evaluate(() => {
+        const state = window as unknown as { initial: Element[]; created: string[] };
+        return { same: [...document.querySelectorAll('strong')].every((node, index) => node === state.initial[index]),
+          titles: state.initial.map(node => node.getAttribute('title')), created: state.created.filter(tag => tag !== 'link') };
+      })).toEqual({ same: true, titles: ['After', 'After'], created: [] });
+      await page.click('.toggle');
+      await page.waitForFunction(() => document.querySelectorAll('strong').length === 1);
+      await page.click('.toggle');
+      await page.waitForFunction(() => document.querySelectorAll('strong').length === 2);
+      expect(await page.evaluate(() => {
+        const state = window as unknown as { initial: Element[] };
+        const current = [...document.querySelectorAll('strong')];
+        return { kept: current[0] === state.initial[0], replaced: current[1] !== state.initial[1], text: current[1]!.textContent };
+      })).toEqual({ kept: true, replaced: true, text: 'After' });
+      expect(errors).toEqual([]);
+    } finally {
+      await browser.close();
+      await new Promise<void>((done, reject) => server.close(error => error ? reject(error) : done()));
+    }
+  }, 120_000);
+
   it('retains the browser program for request data without a paired server entry', async () => {
     const result = await production(await fixture(`export function App(){const user=$fetch('/api/user');return <h1>{user?.name}</h1>;}`));
     expect(result.files.some(file => file.type === 'chunk' && file.isEntry)).toBe(true);

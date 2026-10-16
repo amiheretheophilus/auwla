@@ -172,7 +172,13 @@ function renderPlan(
   };
   const root = node(plan.root, `${path}.root`, 0);
   if (root.kind !== 'element') invalid(`${path}.root`, 'expected one host element root');
-  return { root };
+  if (plan.adoption !== undefined && plan.adoption !== 'host-v1') {
+    invalid(`${path}.adoption`, "expected 'host-v1'");
+  }
+  if (plan.adoption !== undefined && slots.size > 0) {
+    invalid(`${path}.adoption`, 'host-v1 does not support component slots');
+  }
+  return { root, ...(plan.adoption === undefined ? {} : { adoption: 'host-v1' as const }) };
 }
 
 function facts(value: unknown, path: string): { index: number; path: string[] }[] {

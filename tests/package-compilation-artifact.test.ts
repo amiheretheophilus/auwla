@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'bun:test';
+import { describe, expect, it, vi } from 'bun:test';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -16,6 +16,7 @@ import {
 } from '@memoized-dom/compiler';
 import { createDataRuntime, setActiveDataRuntime } from '@memoized-dom/data';
 import { registerRootFactory, unregister } from '@memoized-dom/runtime';
+import { mountInitial } from '@memoized-dom/runtime/testing';
 import { renderToString } from '@memoized-dom/server';
 import { waitFor } from '../test-support/helpers';
 import { utilsPackageArtifact } from '../test-support/package-artifacts';
@@ -313,6 +314,103 @@ describe('experimental package compilation artifacts', () => {
 
     expect(application.output['./first.tsx']).toContain('{ value: 1 }');
     expect(application.output['./second.tsx']).toContain('{ label: "two" }');
+  });
+
+  it('adopts reactive package props once and creates later package mounts', async () => {
+    const runtimePath = '@memoized-dom/runtime/testing';
+    const packaged = experimentalCompilePackage({
+      './index.tsx': `
+        export function Card({ label, title }: { label: string; title: string }) {
+          return <article data-reactive-card title={title}><h2>{label}</h2></article>;
+        }
+      `,
+    }, { packageEntries: { 'adopted-package': './index.tsx' }, runtimePath });
+    expect(packaged.artifact.entries['adopted-package']!.components!.Card.initial?.adoption)
+      .toBe('host-v1');
+    const application = compileModulesDetailed({
+      './main.ts': `import { mount } from '${runtimePath}'; import { App } from './app'; mount('root', App);`,
+      './app.tsx': `
+        import { Card } from 'adopted-package';
+        export function App() {
+          let label = 'Ada';
+          let empty = '';
+          let show = true;
+          return <main>
+            <button data-rename onClick={() => { label = 'Grace'; empty = 'Ready'; }}>Rename</button>
+            <button data-toggle onClick={() => show = !show}>Toggle</button>
+            <Card label={label} title={label} />
+            <Card label={empty} title={label} />
+            <Card label="Fixed" title="Fixed" />
+            {show && <Card label={label} title="Branch" />}
+          </main>;
+        }
+      `,
+    }, { experimentalPackageArtifacts: [JSON.parse(JSON.stringify(packaged.artifact))], initialContent: true, runtimePath });
+    expect(application.initialContent).toBe(true);
+    expect(application.initialRender.kind).toBe('bindings');
+    const directory = join(outDir, 'initial-adoption');
+    const packageDirectory = join(directory, 'node_modules', 'adopted-package');
+    mkdirSync(packageDirectory, { recursive: true });
+    writeFileSync(join(packageDirectory, 'package.json'), JSON.stringify({ type: 'module', exports: './index.js' }));
+    writeFileSync(join(packageDirectory, 'index.js'), packaged.output['./index.tsx']!);
+    writeFileSync(join(directory, 'app.js'), application.output['./app.tsx']!);
+    document.body.innerHTML = `<div id="root">${emitInitialHtml(application.initialRender)}</div>`;
+    const originals = [...document.querySelectorAll('article')];
+    const create = vi.spyOn(document, 'createElement');
+    let mounted: ReturnType<typeof mountInitial> | undefined;
+    try {
+      const { App } = await import(`${pathToFileURL(join(directory, 'app.js')).href}?adoption=${Date.now()}`);
+      mounted = mountInitial('root', App);
+      expect(create).not.toHaveBeenCalled();
+      expect([...document.querySelectorAll('article')]).toEqual(originals);
+      create.mockRestore();
+      document.querySelector<HTMLButtonElement>('[data-rename]')!.click();
+      await waitFor(() => {
+        expect(originals.map(node => node.textContent)).toEqual(['Grace', 'Ready', 'Fixed', 'Grace']);
+        expect(originals[0]!.title).toBe('Grace');
+        expect(originals[1]!.title).toBe('Grace');
+      });
+      document.querySelector<HTMLButtonElement>('[data-toggle]')!.click();
+      await waitFor(() => expect(document.querySelectorAll('article')).toHaveLength(3));
+      document.querySelector<HTMLButtonElement>('[data-toggle]')!.click();
+      await waitFor(() => {
+        const cards = [...document.querySelectorAll('article')];
+        expect(cards).toHaveLength(4);
+        expect(cards.slice(0, 3)).toEqual(originals.slice(0, 3));
+        expect(cards[3]).not.toBe(originals[3]);
+        expect(cards[3]!.textContent).toBe('Grace');
+      });
+    } finally {
+      create.mockRestore();
+      mounted?.unmount();
+      document.body.replaceChildren();
+    }
+  });
+
+  it('keeps ordinary creation when a package has no compatible adoption path', () => {
+    const packaged = experimentalCompilePackage({
+      './index.tsx': `
+        export function Badge({ label }: { label: string }) { return <b>{label}</b>; }
+        export function Panel() { return <section><slot><i>Fallback</i></slot></section>; }
+      `,
+    }, { packageEntries: { 'older-ui': './index.tsx' } });
+    const oldArtifact = structuredClone(packaged.artifact);
+    Reflect.deleteProperty(oldArtifact.entries['older-ui']!.components!.Badge.initial!, 'adoption');
+    const compile = (body: string, artifact = packaged.artifact) => compileModulesDetailed({
+      './main.ts': `import { mount } from '@memoized-dom/runtime'; import { App } from './app'; mount('root', App);`,
+      './app.tsx': `import {Badge, Panel} from 'older-ui'; export function App() { ${body} }`,
+    }, { initialContent: true, experimentalPackageArtifacts: [artifact] });
+    expect(compile(`let label='Before'; return <main><Badge label={label}/><button onClick={()=>label='After'}>Change</button></main>;`, oldArtifact).initialContent)
+      .toBe(false);
+    expect(compile(`let show=false; return <main><Panel><b>Fixed</b></Panel><button onClick={()=>show=!show}>Toggle</button>{show&&<Panel><b>Later</b></Panel>}</main>;`).initialContent)
+      .toBe(false);
+
+    const unsupported = structuredClone(packaged.artifact);
+    Reflect.set(unsupported.entries['older-ui']!.components!.Badge.initial!, 'adoption', 'host-v2');
+    expect(() => validateExperimentalPackageArtifact(unsupported)).toThrow(".initial.adoption; expected 'host-v1'");
+    const slotAdoption = structuredClone(packaged.artifact);
+    Reflect.set(slotAdoption.entries['older-ui']!.components!.Panel.initial!, 'adoption', 'host-v1');
+    expect(() => validateExperimentalPackageArtifact(slotAdoption)).toThrow('host-v1 does not support component slots');
   });
 
   it('links a separately compiled ordinary helper without its source', async () => {

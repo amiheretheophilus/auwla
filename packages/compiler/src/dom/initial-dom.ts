@@ -249,7 +249,7 @@ function shiftInitialDom(root:InitialDomRoot, offset:number):InitialDomRoot {
   };
 }
 
-function relativeInitialDom(root:InitialDomRoot):InitialDomRoot {
+export function relativeInitialDom(root:InitialDomRoot):InitialDomRoot {
   return {...root,elements:Object.fromEntries(Object.entries(root.elements).map(([site,element])=>
     [site,{...element,path:element.path.slice(1),texts:element.texts.map(text=>({...text,path:text.path.slice(1)}))}])),
     components:Object.fromEntries(Object.entries(root.components).map(([site,component])=>[site,{...component,path:component.path.slice(1)}])),

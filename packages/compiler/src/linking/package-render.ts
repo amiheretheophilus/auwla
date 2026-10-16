@@ -9,6 +9,9 @@ import {
   type BaseNode,
 } from '../ast';
 import { initialSite } from '../planning/initial-content';
+import type { InitialRenderNode, InitialRenderPlan } from '../planning/initial-content';
+import { planInitialDom, relativeInitialDom, type InitialDomRoot } from '../dom/initial-dom';
+import { emitInitialHtml } from '../dom/initial-html';
 import type {
   ExperimentalPackageRenderNode,
   ExperimentalPackageRenderPlan,
@@ -274,4 +277,41 @@ export function extractExperimentalPackageRenderPlan(
   if (root.type !== 'JSXElement') return undefined;
   const rendered = element(root);
   return rendered?.kind === 'element' ? { root: rendered } : undefined;
+}
+
+/** Package-owned bindings stay relative to their host regardless of caller placement. */
+export function packageInitialDom(
+  initial: ExperimentalPackageRenderPlan,
+  moduleId: string,
+  component: string,
+): InitialDomRoot | undefined {
+  if (initial.root.kind !== 'element') return undefined;
+  const node = (input: ExperimentalPackageRenderNode): InitialRenderNode | undefined => {
+    if (input.kind === 'slot') return undefined;
+    if (input.kind === 'text') {
+      // All symbolic reads remain live, including calls initially given constants.
+      return { kind: 'text', value: 'package', live: input.parts.some(part => part.kind === 'prop') };
+    }
+    const children = input.children.map(node);
+    if (children.some(child => child === undefined)) return undefined;
+    return {
+      kind: 'element', tag: input.tag, site: input.site,
+      attributes: input.attributes.map(attribute => ({
+        name: attribute.name, site: attribute.site,
+        value: attribute.value.kind === 'literal' ? attribute.value.value : 'package',
+        live: attribute.value.kind === 'prop',
+      })),
+      children: children as InitialRenderNode[],
+    };
+  };
+  const root = node(initial.root);
+  if (root === undefined) return undefined;
+  const plan: Extract<InitialRenderPlan, { kind: 'bindings' }> = {
+    kind: 'bindings', target: '', mountModuleId: moduleId,
+    rootModuleId: moduleId, rootLocal: component, returnSite: initial.root.site,
+    nodes: [root],
+  };
+  if (emitInitialHtml(plan) === null) return undefined;
+  const dom = planInitialDom(plan);
+  return dom === null ? undefined : { ...relativeInitialDom(dom), retainCreation: true };
 }

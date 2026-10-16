@@ -760,7 +760,8 @@ export function planInitialRendering(
         const isStatic = !inStructure && !owners.has(`${component.scope.moduleId}#${component.local}`) &&
           eventCount===bindingEventCount && liveProps.size===0 && closedContent(children);
         if (component.initial !== undefined &&
-            (!isStatic || authoredChildren && !staticChildren)) {
+            (!isStatic || authoredChildren && !staticChildren) &&
+            component.initial.adoption !== 'host-v1') {
           need(scope, 'Interactive package initial content needs a portable adoption plan');
         }
         return [{kind:'component',site:initialSite(node),moduleId:component.scope.moduleId,callModuleId:scope.moduleId,component:component.local!,children,
@@ -981,6 +982,13 @@ export function planInitialRendering(
       // A future parent creates its composed descendants too. Keep one factory
       // for binding and creation, including each region's proved host extent.
       for (const key of creationComponents) for (const child of descendants.get(key)??[]) creationComponents.add(child);
+      for (const scope of modules.values()) for (const value of scope.values.values()) {
+        if (value !== null && typeof value === 'object' && value.kind === 'component' &&
+            value.initial !== undefined && value.initial.adoption !== 'host-v1' &&
+            creationComponents.has(`${value.scope.moduleId}#${value.local}`)) {
+          need(scope, 'Retained package initial content needs a portable adoption plan');
+        }
+      }
       function retain(nodes:readonly InitialRenderNode[], creating=false):readonly InitialRenderNode[] {
         return nodes.map(node=>{
           if (node.kind==='component') {

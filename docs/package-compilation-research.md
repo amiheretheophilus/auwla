@@ -266,14 +266,25 @@ package factory during a build remains unsafe and host-dependent, while
 serializing source or the current internal AST would recreate per-application
 parsing and expose an unstable compiler representation.
 
-The first implementation uses the plan only when the entire component call is
-static. In an otherwise interactive application that subtree is emitted as HTML
-and the caller omits its package factory call. Reactive props, events, refs,
-effects, dynamic structure, unsupported control flow, and non-static projected
-content still fall back to ordinary browser creation. This is deliberate: a
-symbolic HTML shape does not by itself teach a separately compiled factory how to
-adopt caller-specific DOM. That later step needs a portable host-relative
-adoption contract and must be proved independently.
+A wholly static component call emits HTML and omits its package factory call.
+The slot-free subset also supports a generated `host-v1` adoption capability.
+The package compiler derives a host-relative DOM plan from the same render
+template and emits one factory with optional adoption and ordinary creation
+paths. Every symbolic prop stays live in that factory, even when a particular
+consumer initially supplies a constant. The application linker specializes the
+initial values and passes the existing host to that factory. Node addresses stay
+owned by the package; consumer-specific absolute paths stay in the application.
+
+End-to-end checks cover repeated instances, reactive text and attributes, empty
+initial text, retained element identity, conditional removal and fresh mounts,
+plus Vite discovery without admitting package source. This reuses the existing
+binding emitter and does not add another runtime hydration mechanism.
+
+Slots still need caller-specific positions, and components with events, refs,
+effects, setup statements, nested components, or dynamic structure still use
+ordinary creation for browser-only initial delivery. Runtime SSR/hydration
+remains available. A symbolic HTML shape alone cannot grant those broader
+adoption capabilities.
 
 Prop modes are intentionally exact. A typed scalar prop remains scalar; an
 authored render prop remains JSX-bearing. Cross-mode consumer calls fail during

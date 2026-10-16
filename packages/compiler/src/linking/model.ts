@@ -95,6 +95,8 @@ export type ExperimentalPackageRenderNode =
  */
 export interface ExperimentalPackageRenderPlan {
   readonly root: ExperimentalPackageRenderNode;
+  /** The matching package factory accepts an optional host after its ordinary arguments. */
+  readonly adoption?: 'host-v1';
 }
 
 export interface ExperimentalPackageEntry {
