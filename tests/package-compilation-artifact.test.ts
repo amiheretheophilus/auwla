@@ -7,6 +7,7 @@ import {
   analyzeServerFunctionModule,
   compileModulesDetailed,
   definePackageBoundaries,
+  emitInitialHtml,
   experimentalPackageArtifactInstance,
   experimentalCompilePackage,
   generateServerFunctionClient,
@@ -134,6 +135,126 @@ describe('experimental package compilation artifacts', () => {
       source: '../src/index.tsx',
       line: 3,
     });
+  });
+
+  it('specializes static package DOM, scalar props, and slots into initial HTML', () => {
+    const packaged = experimentalCompilePackage({
+      './index.tsx': `
+        export function Card({ title, name }: { title: string; name: string }) {
+          return <article data-card title={title}>Hello {name}<slot><i>Fallback</i></slot></article>;
+        }
+        export function Interactive() {
+          let count = 0;
+          return <button onClick={() => count++}>{count}</button>;
+        }
+      `,
+    }, {
+      packageEntries: { 'initial-package': './index.tsx' },
+    });
+    const components = packaged.artifact.entries['initial-package']!.components!;
+    expect(components.Card.initial).toBeDefined();
+    expect(components.Interactive.initial).toBeUndefined();
+
+    const emptySiteArtifact = structuredClone(packaged.artifact);
+    const emptySite = emptySiteArtifact.entries['initial-package']!.components!.Card.initial!;
+    if (emptySite.root.kind !== 'element') throw new Error('expected a package host root');
+    Reflect.set(emptySite.root, 'site', '');
+    expect(() => validateExperimentalPackageArtifact(emptySiteArtifact)).toThrow(
+      '.initial.root.site; expected a non-empty string',
+    );
+
+    const nonFiniteArtifact = structuredClone(packaged.artifact);
+    const nonFinite = nonFiniteArtifact.entries['initial-package']!.components!.Card.initial!;
+    if (nonFinite.root.kind !== 'element') throw new Error('expected a package host root');
+    Reflect.set(nonFinite.root.attributes[0]!.value, 'value', Number.POSITIVE_INFINITY);
+    expect(() => validateExperimentalPackageArtifact(nonFiniteArtifact)).toThrow(
+      '.initial.root.attributes[0].value.value; expected a finite JSON number',
+    );
+
+    const directiveArtifact = structuredClone(packaged.artifact);
+    const directive = directiveArtifact.entries['initial-package']!.components!.Card.initial!;
+    if (directive.root.kind !== 'element') throw new Error('expected a package host root');
+    Reflect.set(directive.root.attributes[0]!, 'name', 'onClick');
+    expect(() => validateExperimentalPackageArtifact(directiveArtifact)).toThrow(
+      '.initial.root.attributes[0].name; expected a static platform attribute',
+    );
+
+    const storedArtifact = JSON.parse(JSON.stringify(packaged.artifact)) as ExperimentalPackageArtifact;
+
+    const application = compileModulesDetailed({
+      './main.ts': `
+        import { mount } from '@memoized-dom/runtime';
+        import { App } from './app';
+        mount('root', App);
+      `,
+      './app.tsx': `
+        import { Card } from 'initial-package';
+        export function App() {
+          return <main>
+            <Card title={'A & B'} name="Ada"><strong>Projected</strong></Card>
+            <Card title="Second" name="Grace" />
+          </main>;
+        }
+      `,
+    }, {
+      experimentalPackageArtifacts: [storedArtifact],
+      initialContent: true,
+    });
+
+    expect(application.initialRender.kind).toBe('html');
+    expect(emitInitialHtml(application.initialRender)).toBe(
+      '<main><article data-card="true" title="A &amp; B">Hello Ada<strong>Projected</strong></article><article data-card="true" title="Second">Hello Grace<i>Fallback</i></article></main>',
+    );
+
+    const bound = compileModulesDetailed({
+      './main.ts': `
+        import { mount } from '@memoized-dom/runtime';
+        import { App } from './app';
+        mount('root', App);
+      `,
+      './app.tsx': `
+        import { Card } from 'initial-package';
+        export function App() {
+          let count = 0;
+          return <main>
+            <button onClick={() => count++}>{count}</button>
+            <Card title="Fixed" name="Ada"><strong>Projected</strong></Card>
+          </main>;
+        }
+      `,
+    }, {
+      experimentalPackageArtifacts: [storedArtifact],
+      initialContent: true,
+    });
+    expect(bound.initialRender.kind).toBe('bindings');
+    expect(bound.initialContent).toBe(true);
+    expect(emitInitialHtml(bound.initialRender)).toContain(
+      '<article data-card="true" title="Fixed">Hello Ada<strong>Projected</strong></article>',
+    );
+    expect(bound.output['./app.tsx']).not.toContain('Card("');
+
+    const reactive = compileModulesDetailed({
+      './main.ts': `
+        import { mount } from '@memoized-dom/runtime';
+        import { App } from './app';
+        mount('root', App);
+      `,
+      './app.tsx': `
+        import { Card } from 'initial-package';
+        export function App() {
+          let name = 'Ada';
+          return <main>
+            <button onClick={() => name = 'Grace'}>Rename</button>
+            <Card title="Live" name={name} />
+          </main>;
+        }
+      `,
+    }, {
+      experimentalPackageArtifacts: [storedArtifact],
+      initialContent: true,
+    });
+    expect(reactive.initialContent).toBe(false);
+    expect(reactive.initialRender.kind).toBe('browser');
   });
 
   it('keeps importer-resolved copies of one package specifier distinct', () => {

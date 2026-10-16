@@ -12,6 +12,12 @@ import type * as t from '../ast/compiler-types';
 import { planConditionalBranches } from '../jsx/conditional-plan';
 import { planListCallback } from '../lists/callback-plan';
 import { initialSite, type InitialRenderNode, type InitialRenderAttribute, type InitialRenderPlan, type BrowserRequirement } from '../planning/initial-content';
+import { componentSlotProp } from '../jsx/component-slots';
+import type {
+  ExperimentalPackageRenderNode,
+  ExperimentalPackageRenderPlan,
+  ExperimentalPackageRenderValue,
+} from '../linking/model';
 
 
 type Value = string | number | boolean | null | undefined | ValueObject | ValueArray | Component | Content | RequestValue | RequestFactory | RequestTracker;
@@ -26,7 +32,14 @@ function isRequestValue(value: Value): value is RequestValue {
 }
 interface ValueArray { readonly kind: 'array'; readonly items: readonly Value[] }
 interface ValueObject { readonly kind: 'object'; readonly fields: ReadonlyMap<string, Value>; readonly props?: boolean; readonly live?: ReadonlySet<string> }
-interface Component { readonly kind: 'component'; readonly node: BaseNode; readonly scope: Scope; readonly local?: string }
+interface Component {
+  readonly kind: 'component';
+  readonly node?: BaseNode;
+  readonly scope: Scope;
+  readonly local?: string;
+  readonly initial?: ExperimentalPackageRenderPlan;
+  readonly slots?: readonly string[];
+}
 interface Content { readonly kind: 'content'; readonly nodes: readonly InitialRenderNode[] }
 interface Scope { readonly moduleId: string; readonly values: Map<string, Value>; readonly unstable: Set<string>; readonly rootRender?: boolean; readonly component?:string }
 interface ModuleScope extends Scope { readonly exports: Map<string, Value>; readonly unstableExports: Set<string> }
@@ -49,6 +62,11 @@ export function planInitialRendering(
   resolveImport: (importer: string, specifier: string) => string | undefined,
   runtimePath: string,
   pageCaptureCount?: number,
+  resolvePackageComponent?: (
+    importer: string,
+    specifier: string,
+    exported: string,
+  ) => { readonly moduleId: string; readonly component: string; readonly initial: ExperimentalPackageRenderPlan; readonly slots: readonly string[] } | undefined,
 ): InitialRenderPlan {
   function need(scope: Scope, detail: string, kind: BrowserRequirement['kind'] = 'unknown'): never {
     throw new NeedsBrowser({ moduleId: scope.moduleId, kind, detail });
@@ -482,8 +500,68 @@ export function planInitialRendering(
     return value == null || typeof value === 'boolean' ? [] : [{ kind: 'text', value: String(value) }];
   }
 
+  function packageRender(
+    component: Component,
+    props: ReadonlyMap<string, Value>,
+    live: ReadonlySet<string>,
+  ): readonly InitialRenderNode[] {
+    const scope = component.scope;
+    const value = (input: ExperimentalPackageRenderValue) =>
+      input.kind === 'literal' ? input.value : props.get(input.name);
+    const node = (input: ExperimentalPackageRenderNode): readonly InitialRenderNode[] => {
+      if (input.kind === 'text') {
+        const values = input.parts.map(part => primitive(value(part), scope));
+        if (values.length === 0) return [];
+        let joined: string | number | boolean | null | undefined;
+        if (values.length === 1) joined = values[0];
+        else {
+          joined = input.parts.some(part => part.kind === 'literal' && typeof part.value === 'string')
+            ? values[0]
+            : String(values[0]);
+          for (const next of values.slice(1)) {
+            joined = typeof joined === 'string' || typeof next === 'string'
+              ? String(joined) + String(next)
+              : Number(joined) + Number(next);
+          }
+        }
+        return [{
+          kind: 'text',
+          value: joined == null || typeof joined === 'boolean' ? '' : String(joined),
+          live: input.parts.some(part => part.kind === 'prop' && live.has(part.name)),
+        }];
+      }
+      if (input.kind === 'slot') {
+        const projected = props.get(componentSlotProp(input.name));
+        if (projected === undefined) return input.fallback.flatMap(node);
+        if (
+          projected === null ||
+          typeof projected !== 'object' ||
+          projected.kind !== 'content'
+        ) {
+          return need(scope, 'Package initial slot needs closed JSX content');
+        }
+        return projected.nodes;
+      }
+      return [{
+        kind: 'element',
+        tag: input.tag,
+        site: input.site,
+        attributes: input.attributes.map(attribute => ({
+          name: attribute.name,
+          site: attribute.site,
+          value: primitive(value(attribute.value), scope),
+          live: attribute.value.kind === 'prop' && live.has(attribute.value.name),
+        })),
+        children: input.children.flatMap(node),
+      }];
+    };
+    return node(component.initial!.root);
+  }
+
   function render(component: Component, props: ReadonlyMap<string, Value>, rootCall = false, live: ReadonlySet<string> = new Set()): readonly InitialRenderNode[] {
     if (rendering.has(component)) need(component.scope, 'Recursive component composition');
+    if (component.initial !== undefined) return packageRender(component, props, live);
+    if (!component.node) return need(component.scope, 'Package component has no portable initial render plan');
     if (nodeField(component.node, 'async') || nodeField(component.node, 'generator')) need(component.scope, 'Async component');
     rendering.add(component);
     const scope: Scope = { moduleId: component.scope.moduleId, values: new Map(component.scope.values),
@@ -542,7 +620,7 @@ export function planInitialRendering(
       node.kind==='component' || node.kind==='slot' ? node.static===true : false);
   }
 
-  function jsx(node: BaseNode, scope: Scope): readonly InitialRenderNode[] {
+  function jsx(node: BaseNode, scope: Scope, allowBindingFragment = false): readonly InitialRenderNode[] {
     function children(): InitialRenderNode[] {
       const result: InitialRenderNode[] = [];
       const pending: t.Expression[] = [];
@@ -588,7 +666,7 @@ export function planInitialRendering(
       return result;
     }
     if (node.type === 'JSXFragment') {
-      if (bindings) need(scope,'Fragment bindings need a placement proof');
+      if (bindings && !allowBindingFragment) need(scope,'Fragment bindings need a placement proof');
       return children();
     }
     if (node.type !== 'JSXElement') return need(scope, 'Unknown JSX child');
@@ -596,6 +674,7 @@ export function planInitialRendering(
     const tag = identifierLikeName(childNode(opening, 'name'));
     if (tag === null) return need(scope, 'Dynamic tag needs browser execution');
     const host = /^[a-z]/.test(tag);
+    const targetComponent = host ? undefined : scope.values.get(tag);
     const props = new Map<string, Value>();
     const liveProps = new Set<string>();
     const attributes: InitialRenderAttribute[] = [];
@@ -628,13 +707,27 @@ export function planInitialRendering(
       if (name === '__proto__') return need(scope, 'Prototype-bearing props need browser execution');
       const input = childNode(attribute, 'value');
       const valueNode = input?.type === 'JSXExpressionContainer' ? childNode(input, 'expression') : input;
-      const value = input === null ? true : expression(valueNode, scope);
+      const propEventCount = bindingEventCount;
+      const propOwnerCount = ownerSiteCount;
+      const packageSlot = targetComponent !== null && typeof targetComponent === 'object' &&
+        targetComponent.kind === 'component' && targetComponent.initial !== undefined &&
+        targetComponent.slots?.some(slot => componentSlotProp(slot) === name) === true;
+      const value = input === null ? true : packageSlot && valueNode?.type === 'JSXFragment'
+        ? { kind: 'content' as const, nodes: jsx(valueNode, scope, true) }
+        : expression(valueNode, scope);
       if (host && name !== 'key') attributes.push({ name, value: isRequestValue(value) ? null : primitive(value, scope),
         ...(bindings ? {site:initialSite(attribute),live:!staysClosed(valueNode,scope)} : {}) });
-      else { props.set(name, value); if (bindings && !staysClosed(valueNode,scope)) liveProps.add(name); }
+      else {
+        props.set(name, value);
+        const closedPackageSlot = packageSlot &&
+          propEventCount === bindingEventCount && propOwnerCount === ownerSiteCount &&
+          value !== null && typeof value === 'object' && value.kind === 'content' &&
+          closedContent(value.nodes);
+        if (bindings && !closedPackageSlot && !staysClosed(valueNode,scope)) liveProps.add(name);
+      }
     }
     if (!host) {
-      const component = scope.values.get(tag);
+      const component = targetComponent;
       if (component === null || typeof component !== 'object' || component.kind !== 'component') return need(scope, `Unknown component '${tag}'`);
       if (props.has('children')) return need(scope, 'Explicit children prop needs browser execution');
       if (bindings && (!component.local || !('exports' in component.scope))) need(scope,'Local component bindings need a placement proof');
@@ -666,9 +759,15 @@ export function planInitialRendering(
         if (children.length!==1 || children[0]?.kind!=='element') need(scope,'Initial component bindings need one host root');
         const isStatic = !inStructure && !owners.has(`${component.scope.moduleId}#${component.local}`) &&
           eventCount===bindingEventCount && liveProps.size===0 && closedContent(children);
+        if (component.initial !== undefined &&
+            (!isStatic || authoredChildren && !staticChildren)) {
+          need(scope, 'Interactive package initial content needs a portable adoption plan');
+        }
         return [{kind:'component',site:initialSite(node),moduleId:component.scope.moduleId,callModuleId:scope.moduleId,component:component.local!,children,
           static:isStatic,
-          ...(staticChildren && isStatic ? {staticChildren:true as const} : {}),
+          ...(isStatic && (staticChildren || component.initial !== undefined)
+            ? {staticChildren:true as const}
+            : {}),
           ...(inStructure ? {creation:true as const} : {})}];
       }
       catch (error) {
@@ -713,7 +812,37 @@ export function planInitialRendering(
         // Only stylesheet side-effect imports can be moved into the HTML product.
         if (!specifiers.length && /\.(css|less|sass|scss|styl|stylus|pcss|postcss|sss)$/.test(source)) continue;
         const dependencyId = resolveImport(id, source);
-        if (dependencyId === undefined) need(scope, `External import '${source}' may have browser effects`);
+        if (dependencyId === undefined) {
+          const packaged = specifiers.map(item => {
+            if (item.type !== 'ImportSpecifier') return undefined;
+            const imported = identifierLikeName(childNode(item, 'imported'));
+            return imported === null
+              ? undefined
+              : resolvePackageComponent?.(id, source, imported);
+          });
+          if (packaged.length === 0 || packaged.some(component => component === undefined)) {
+            need(scope, `External import '${source}' may have browser effects`);
+          }
+          for (let index = 0; index < specifiers.length; index++) {
+            const item = specifiers[index]!;
+            const component = packaged[index]!;
+            const packageScope: ModuleScope = {
+              moduleId: component.moduleId,
+              values: new Map(),
+              unstable: new Set(),
+              exports: new Map(),
+              unstableExports: new Set(),
+            };
+            scope.values.set(identifierLikeName(childNode(item, 'local'))!, {
+              kind: 'component',
+              scope: packageScope,
+              local: component.component,
+              initial: component.initial,
+              slots: component.slots,
+            });
+          }
+          continue;
+        }
         const dependency = module(dependencyId);
         for (const item of specifiers) {
           const imported = item.type === 'ImportDefaultSpecifier' ? 'default' : identifierLikeName(childNode(item, 'imported'));

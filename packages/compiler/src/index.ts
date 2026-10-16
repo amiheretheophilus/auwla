@@ -45,6 +45,10 @@ export {
   type ExperimentalPackageEntryPoint,
   type ExperimentalPackageFunctionSummary,
   type ExperimentalPackageImport,
+  type ExperimentalPackageRenderAttribute,
+  type ExperimentalPackageRenderNode,
+  type ExperimentalPackageRenderPlan,
+  type ExperimentalPackageRenderValue,
 } from './linker';
 export {
   compilerDiagnosticCode,

@@ -9,6 +9,7 @@ import type {
 import type {
   ExperimentalPackageComponentSummary,
   ExperimentalPackageEntry,
+  ExperimentalPackageRenderPlan,
   LinkResolutionOptions,
   ModuleEntry,
   ModuleManifest,
@@ -111,6 +112,33 @@ function packageComponentKey(
   return binding.instance === undefined
     ? `package:${binding.specifier}#${exported}`
     : `package:${binding.specifier}@${binding.instance}#${exported}`;
+}
+
+export interface ExperimentalPackageInitialComponent {
+  readonly moduleId: string;
+  readonly component: string;
+  readonly initial: ExperimentalPackageRenderPlan;
+  readonly slots: readonly string[];
+}
+
+/** Resolve one package-owned closed render plan for the initial-content pass. */
+export function experimentalPackageInitialComponent(
+  options: LinkResolutionOptions,
+  importer: string,
+  source: string,
+  exported: string,
+): ExperimentalPackageInitialComponent | undefined {
+  const binding = packageEntry(options, importer, source);
+  const component = binding?.entry.components?.[exported];
+  if (binding === undefined || component?.initial === undefined) return undefined;
+  validatePackageComponent(binding, exported, component);
+  const key = packageComponentKey(binding, exported);
+  return {
+    moduleId: key.slice(0, key.lastIndexOf('#')),
+    component: exported,
+    initial: component.initial,
+    slots: component.slots,
+  };
 }
 
 function validatePackageComponent(

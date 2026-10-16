@@ -238,14 +238,25 @@ contract. Package components remain external ESM modules, so the artifact does
 not flatten them into the application bundle or erase the bundler's chunk
 boundary.
 
-The static initial-content planner currently treats a packaged component as a
-browser-owned boundary because its body is deliberately absent from the
-application graph. Fullstack SSR can still render it through the emitted server
-factory, but a browser-only build cannot yet turn that package subtree into the
-compiler's zero/low-JavaScript initial HTML. Preserving that optimization needs
-a portable deferred render plan parameterized by consumer props and slots. The
-compiler must not execute arbitrary package code at build time or smuggle the
-package AST back into each application as a shortcut.
+Package compilation automatically emits a small initial render template when a
+component has one closed host root made from static platform DOM, direct scalar
+prop reads, and compiler slots with portable fallback content. The template is
+data, not executable code or serialized source. At application compilation the
+consumer's static prop and slot values are substituted into the ordinary
+initial-content planner.
+
+This first delivery boundary is intentionally atomic. It is used only when the
+whole package component call is static, so the application can retain its HTML
+and omit the browser factory call. A package component with reactive props, an
+event/ref/effect, dynamic structure, or non-static projected content continues
+through ordinary browser creation. Supporting those cases safely requires a
+portable, host-relative adoption plan in the separately emitted package factory;
+the compiler does not claim that capability from a render template alone.
+
+Fullstack SSR remains independent and can render broader package components by
+executing their emitted server factories. Package compilation never executes an
+arbitrary package factory during a build and never admits the package AST into
+the consuming application as a shortcut.
 
 ## Current boundaries
 
@@ -267,8 +278,9 @@ package AST back into each application as a shortcut.
 - The semantic digest identifies artifact contents; it is not yet an integrity
   proof that published JavaScript was built from the same source. Package builds
   must still publish compiler output and its matching artifact together.
-- Packaged components do not yet participate in static initial-content
-  specialization; they use ordinary browser creation or runtime SSR.
+- Packaged components participate in static initial-content specialization only
+  for the closed atomic subset described above. Reactive package DOM adoption is
+  not implemented yet.
 - Array literals passed to a holder relationship preserve every contained
   holder. Arbitrarily assembled dynamic collections are not yet a portable
   holder contract.

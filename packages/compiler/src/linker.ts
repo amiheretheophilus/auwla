@@ -53,10 +53,15 @@ export type {
   ExperimentalPackageEntry,
   ExperimentalPackageFunctionSummary,
   ExperimentalPackageImport,
+  ExperimentalPackageRenderAttribute,
+  ExperimentalPackageRenderNode,
+  ExperimentalPackageRenderPlan,
+  ExperimentalPackageRenderValue,
 } from './linking/model';
 import {
   canonicalModuleId,
   experimentalPackageComponentDeclarations,
+  experimentalPackageInitialComponent,
   linkImports,
   resolveModule,
 } from './linking/resolution';
@@ -72,6 +77,7 @@ import { emitInitialHtml } from './dom/initial-html';
 import { planInitialDelivery, type InitialDelivery } from './dom/delivery-plan';
 import { normalizeComponentDeclarations } from './components/declarations';
 import { normalizeComponentSlots } from './jsx/component-slots';
+import { extractExperimentalPackageRenderPlan } from './linking/package-render';
 
 export interface CompiledComponentExport extends Omit<ComponentExportInfo, 'key'> {
   exported: string;
@@ -696,7 +702,9 @@ function compileLinkedModules(
   // Capture initial content before any backend mutates component bodies.
   const initialRender = planInitialRendering(authoredPrograms, applicationRoot,
     (importer, specifier) => resolveModule(importer, specifier, entries, options)?.id,
-    options.runtimePath ?? '@memoized-dom/runtime', options.pageCaptureCount);
+    options.runtimePath ?? '@memoized-dom/runtime', options.pageCaptureCount,
+    (importer, specifier, exported) =>
+      experimentalPackageInitialComponent(options, importer, specifier, exported));
   const initialHtml = emitInitialHtml(initialRender);
   const requestHtmlShape = initialRender.kind === 'request' &&
     emitInitialHtml({...initialRender,kind:'html'}) !== null;
@@ -1056,6 +1064,25 @@ export function experimentalCompilePackage(
   const { packageEntries, ...compileOptions } = options;
   const compiled = compileModulesDetailed(modules, compileOptions);
   const entries: ExperimentalPackageArtifact['entries'] = {};
+  const initialPrograms = new Map<string, t.Program>();
+
+  const initialProgram = (moduleId: string): t.Program => {
+    const existing = initialPrograms.get(moduleId);
+    if (existing !== undefined) return existing;
+    const parsed = parseModule(
+      moduleId,
+      modules[moduleId]!,
+      compileOptions.frontend ?? memoizedEstreeFrontend,
+    ).ast;
+    normalizeComponentDeclarations({
+      node: parsed,
+      buildCodeFrameError(message: string) {
+        return new Error(`memo-dom: ${message}`);
+      },
+    });
+    initialPrograms.set(moduleId, parsed);
+    return parsed;
+  };
 
   for (const [specifier, entryPoint] of Object.entries(packageEntries)) {
     const moduleId = typeof entryPoint === 'string'
@@ -1147,6 +1174,16 @@ export function experimentalCompilePackage(
         );
       }
       for (const summary of selectedComponents) {
+        const scalarProps = new Set(summary.props.filter(prop =>
+          !summary.renderProps.includes(prop) &&
+          !summary.renderCallbacks.includes(prop) &&
+          !summary.refProps.includes(prop)));
+        const initial = extractExperimentalPackageRenderPlan(
+          initialProgram(moduleId),
+          summary.local,
+          scalarProps,
+          new Set(summary.slots),
+        );
         components[summary.exported] = {
           key: `package:${specifier}#${summary.exported}`,
           props: [...summary.props],
@@ -1163,6 +1200,7 @@ export function experimentalCompilePackage(
           renderCallbacks: [...summary.renderCallbacks],
           refProps: [...summary.refProps],
           subtreeReads: [...summary.subtreeReads],
+          ...(initial === undefined ? {} : { initial }),
         };
       }
     }

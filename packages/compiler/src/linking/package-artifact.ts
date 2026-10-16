@@ -3,11 +3,25 @@ import type {
   ExperimentalPackageArtifact,
   ExperimentalPackageComponentSummary,
   ExperimentalPackageFunctionSummary,
+  ExperimentalPackageRenderNode,
+  ExperimentalPackageRenderPlan,
+  ExperimentalPackageRenderValue,
 } from './model';
 
 type UnknownRecord = Record<string, unknown>;
 
 const methods = new Set(['GET', 'POST', 'PUT', 'PATCH', 'DELETE']);
+const renderDirectives = new Set([
+  'ref',
+  'key',
+  'route',
+  'route-to',
+  'if',
+  'else-if',
+  'else',
+  'suspend',
+  'innerHTML',
+]);
 const validatedArtifacts = new WeakMap<object, ExperimentalPackageArtifact>();
 const artifactInstances = new WeakMap<object, string>();
 
@@ -34,9 +48,131 @@ function string(value: unknown, path: string): string {
   return value;
 }
 
+function nonEmptyString(value: unknown, path: string): string {
+  const result = string(value, path);
+  if (result.length === 0) invalid(path, 'expected a non-empty string');
+  return result;
+}
+
 function stringArray(value: unknown, path: string): string[] {
   if (!Array.isArray(value)) invalid(path, 'expected an array of strings');
   return value.map((item, index) => string(item, `${path}[${index}]`));
+}
+
+function renderValue(
+  value: unknown,
+  path: string,
+  props: ReadonlySet<string>,
+): ExperimentalPackageRenderValue {
+  const input = record(value, path);
+  if (input.kind === 'literal') {
+    const literal = input.value;
+    if (
+      literal !== null &&
+      typeof literal !== 'string' &&
+      typeof literal !== 'number' &&
+      typeof literal !== 'boolean'
+    ) {
+      invalid(`${path}.value`, 'expected a JSON scalar');
+    }
+    if (typeof literal === 'number' && !Number.isFinite(literal)) {
+      invalid(`${path}.value`, 'expected a finite JSON number');
+    }
+    return { kind: 'literal', value: literal as string | number | boolean | null };
+  }
+  if (input.kind === 'prop') {
+    const name = string(input.name, `${path}.name`);
+    if (!props.has(name)) {
+      invalid(`${path}.name`, `expected a declared component prop; received ${JSON.stringify(name)}`);
+    }
+    return { kind: 'prop', name };
+  }
+  return invalid(`${path}.kind`, "expected 'literal' or 'prop'");
+}
+
+function renderPlan(
+  value: unknown,
+  path: string,
+  props: ReadonlySet<string>,
+  slots: ReadonlySet<string>,
+): ExperimentalPackageRenderPlan {
+  const plan = record(value, path);
+  let count = 0;
+  const nodes = (
+    value: unknown,
+    path: string,
+    depth: number,
+  ): ExperimentalPackageRenderNode[] => {
+    if (!Array.isArray(value)) invalid(path, 'expected an array of render nodes');
+    return value.map((item, index) => node(item, `${path}[${index}]`, depth));
+  };
+  const node = (
+    value: unknown,
+    path: string,
+    depth: number,
+  ): ExperimentalPackageRenderNode => {
+    if (depth > 64 || ++count > 4096) {
+      invalid(path, 'render plan exceeds the structural limit');
+    }
+    const input = record(value, path);
+    if (input.kind === 'text') {
+      if (!Array.isArray(input.parts) || input.parts.length === 0) {
+        invalid(`${path}.parts`, 'expected a non-empty array of render values');
+      }
+      return {
+        kind: 'text',
+        parts: input.parts.map((part, index) =>
+          renderValue(part, `${path}.parts[${index}]`, props)),
+      };
+    }
+    if (input.kind === 'element') {
+      const tag = string(input.tag, `${path}.tag`);
+      if (!/^[a-z][a-z0-9]*$/.test(tag)) {
+        invalid(`${path}.tag`, 'expected a lowercase platform tag');
+      }
+      if (!Array.isArray(input.attributes)) {
+        invalid(`${path}.attributes`, 'expected an array of attributes');
+      }
+      return {
+        kind: 'element',
+        tag,
+        site: nonEmptyString(input.site, `${path}.site`),
+        attributes: input.attributes.map((attribute, index) => {
+          const attributePath = `${path}.attributes[${index}]`;
+          const item = record(attribute, attributePath);
+          const name = string(item.name, `${attributePath}.name`);
+          if (
+            !/^[A-Za-z_][A-Za-z0-9_.:-]*$/.test(name) ||
+            /^on/i.test(name) ||
+            renderDirectives.has(name)
+          ) {
+            invalid(`${attributePath}.name`, 'expected a static platform attribute');
+          }
+          return {
+            name,
+            site: nonEmptyString(item.site, `${attributePath}.site`),
+            value: renderValue(item.value, `${attributePath}.value`, props),
+          };
+        }),
+        children: nodes(input.children, `${path}.children`, depth + 1),
+      };
+    }
+    if (input.kind === 'slot') {
+      const name = string(input.name, `${path}.name`);
+      if (!slots.has(name)) {
+        invalid(`${path}.name`, `expected a declared component slot; received ${JSON.stringify(name)}`);
+      }
+      return {
+        kind: 'slot',
+        name,
+        fallback: nodes(input.fallback, `${path}.fallback`, depth + 1),
+      };
+    }
+    return invalid(`${path}.kind`, "expected 'text', 'element', or 'slot'");
+  };
+  const root = node(plan.root, `${path}.root`, 0);
+  if (root.kind !== 'element') invalid(`${path}.root`, 'expected one host element root');
+  return { root };
 }
 
 function facts(value: unknown, path: string): { index: number; path: string[] }[] {
@@ -94,9 +230,19 @@ function componentSummary(
   if (listResourceFree !== undefined && typeof listResourceFree !== 'boolean') {
     invalid(`${path}.listResourceFree`, 'expected a boolean');
   }
+  const props = stringArray(summary.props, `${path}.props`);
+  const slots = stringArray(summary.slots, `${path}.slots`);
+  const initial = summary.initial === undefined
+    ? undefined
+    : renderPlan(
+        summary.initial,
+        `${path}.initial`,
+        new Set(props),
+        new Set(slots),
+      );
   return {
     key: string(summary.key, `${path}.key`),
-    props: stringArray(summary.props, `${path}.props`),
+    props,
     objectProps: boolean(summary.objectProps, `${path}.objectProps`),
     acceptsUnknownProps: boolean(
       summary.acceptsUnknownProps,
@@ -107,10 +253,11 @@ function componentSummary(
     ...(listResourceFree === undefined ? {} : { listResourceFree }),
     delegatedEvents: stringArray(summary.delegatedEvents, `${path}.delegatedEvents`),
     renderProps: stringArray(summary.renderProps, `${path}.renderProps`),
-    slots: stringArray(summary.slots, `${path}.slots`),
+    slots,
     renderCallbacks: stringArray(summary.renderCallbacks, `${path}.renderCallbacks`),
     refProps: stringArray(summary.refProps, `${path}.refProps`),
     subtreeReads: stringArray(summary.subtreeReads, `${path}.subtreeReads`),
+    ...(initial === undefined ? {} : { initial }),
   };
 }
 

@@ -250,25 +250,30 @@ host keeps their ordinary ESM resolution intact. This solves duplicate semantic
 versions without claiming that the digest verifies the separately published
 JavaScript.
 
-### Initial delivery needs a deferred render contract
+### Static initial delivery now uses a deferred render contract
 
-A measured static application containing only `<Badge label="Ready" />` from a
-package currently plans as `browser`: it emits no compiler-owned initial HTML or
-initial-delivery descriptor. This is expected from the present artifact because
-the consuming planner has the component's call contract but not its body.
-Runtime SSR remains correct because it executes the already compiled server
-factory; the missing capability is build-time zero/low-JavaScript
-specialization.
+A package may now carry a small package-owned render plan with symbolic scalar
+prop and slot inputs. The package compiler generates it automatically for one
+closed host root made from static platform DOM, direct scalar reads, and compiler
+slots with portable fallbacks. Application linking substitutes actual call-site
+values and finishes the existing initial-content plan without reading package
+source.
 
-The safe next representation is a small package-owned render plan with symbolic
-prop and slot inputs. Application linking can substitute actual call-site values
-and finish the existing initial-content plan. Executing an arbitrary package
-factory during a build is unsafe and host-dependent, while serializing source or
-the current internal AST would recreate per-application parsing and expose an
-unstable compiler representation. The deferred plan needs its own versioned,
-validated format and must conservatively fall back to browser creation whenever
-effects, refs, unknown calls, request state, or unsupported control flow prevent
-specialization.
+The plan is versioned build data and is validated with the rest of the untrusted
+artifact, including its declared prop/slot references and structural limits. It
+contains neither executable callbacks nor compiler AST. Executing an arbitrary
+package factory during a build remains unsafe and host-dependent, while
+serializing source or the current internal AST would recreate per-application
+parsing and expose an unstable compiler representation.
+
+The first implementation uses the plan only when the entire component call is
+static. In an otherwise interactive application that subtree is emitted as HTML
+and the caller omits its package factory call. Reactive props, events, refs,
+effects, dynamic structure, unsupported control flow, and non-static projected
+content still fall back to ordinary browser creation. This is deliberate: a
+symbolic HTML shape does not by itself teach a separately compiled factory how to
+adopt caller-specific DOM. That later step needs a portable host-relative
+adoption contract and must be proved independently.
 
 Prop modes are intentionally exact. A typed scalar prop remains scalar; an
 authored render prop remains JSX-bearing. Cross-mode consumer calls fail during
