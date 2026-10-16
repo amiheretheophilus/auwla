@@ -496,9 +496,13 @@ implicitly appending array items. Parsing supports fragmented UTF-8 and CRLF/LF
 lines and rejects frames over 1 MiB. Server live queries use backpressure, one
 queued frame, coalesced invalidations, and 5-second idle heartbeats. Deployments
 still need a host and proxy that permit streamed responses.
-Each distinct active live query uses its own connection; this implementation
-does not multiplex query subscriptions. Host and browser connection limits
-therefore matter when mounting many different live queries simultaneously.
+Browser live server functions share a multiplexed connection within compatible
+runtime/origin/header boundaries. Dynamic subscriptions use batched controls;
+each query keeps its own cache, patch baseline, cursor, and optimistic holds.
+Direct SSE remains supported, including fallback for older servers or middleware
+that needs ordinary HTTP response handling. SSR, finite pages and generators
+keep their existing transports. See [multiplexing and its limits](./live-multiplexing.md),
+especially single-instance session ownership and bounded delivery queues.
 
 SSR consumes a finite query snapshot or one generator GET yield. Hydration
 retains that transferred value and reconnects live GET sources after adoption.

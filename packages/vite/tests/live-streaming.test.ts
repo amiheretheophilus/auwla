@@ -73,14 +73,16 @@ it.skipIf(!chrome)('automatically synchronizes Fieldnotes and protects multiple 
     }
     const liveRequests: string[] = [];
     const cancelledStreams: string[] = [];
+    const subscriptions:string[]=[];
     viewer.on('request', request => {
-      if (request.headers()['x-mmd-stream'] === 'live') {
-        expect(request.headers()['x-mmd-live-patches']).toBe('2');
-        liveRequests.push(request.url());
+      if (request.headers()['x-mmd-multiplex'] === '1') {
+        const control=JSON.parse(request.postData()!) as {session?:string;subscribe:{url:string}[]};
+        subscriptions.push(...control.subscribe.map(item=>item.url));
+        if(!control.session)liveRequests.push(request.url());
       }
     });
     viewer.on('requestfailed', request => {
-      if (request.headers()['x-mmd-stream'] === 'live') cancelledStreams.push(request.url());
+      if (request.headers()['x-mmd-multiplex'] === '1'&&!JSON.parse(request.postData()!).session) cancelledStreams.push(request.url());
     });
     const cdp = await writer.createCDPSession();
     await cdp.send('Fetch.enable', { patterns: [{ urlPattern: '*/_fn/expeditions/postNote', requestStage: 'Response' }] });
@@ -91,8 +93,10 @@ it.skipIf(!chrome)('automatically synchronizes Fieldnotes and protects multiple 
       document.querySelector('[data-live-status]')?.textContent?.includes('Live notes connected') &&
       document.querySelectorAll('li.note').length === 2,
     { timeout: 30_000, polling: 100 });
-    expect(new Set(liveRequests).size).toBe(2);
-    expect(liveRequests.length - cancelledStreams.length).toBe(2);
+    expect(new Set(liveRequests).size).toBe(1);
+    expect(liveRequests.length - cancelledStreams.length).toBe(1);
+    expect(subscriptions.some(url=>url.includes('/getNotes'))).toBe(true);
+    expect(subscriptions.some(url=>url.includes('/getExpeditionSummary'))).toBe(true);
     const initialRequests = liveRequests.length;
     expect(traces).toEqual([]); // Broad tracing must be opt-in.
     const wire = await fetch(address + '/_fn/expeditions/getNotes?expeditionId=ice-cores', {
@@ -163,7 +167,7 @@ it.skipIf(!chrome)('automatically synchronizes Fieldnotes and protects multiple 
     await viewer.waitForSelector('li.expedition');
     await viewer.waitForFunction(() => document.querySelector('a[href="/expeditions/ice-cores"]')?.closest('li')
       ?.querySelector('.meta .chip:last-child')?.textContent === '4 notes', { timeout: 15_000, polling: 100 });
-    await waitFor(() => expect(liveRequests.some(url => url.includes('/getExpeditions'))).toBe(true));
+    await waitFor(() => expect(subscriptions.some(url => url.includes('/getExpeditions'))).toBe(true));
     const count = liveRequests.length;
 
     // Regression: a mounted overview receives a detail-page mutation without

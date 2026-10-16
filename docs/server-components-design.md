@@ -205,11 +205,13 @@ The source retains the existing stale-read checks: an invalidation during data
 loading or rendering discards that obsolete result and reruns the GET before
 delivery. Cancellation and subscription cleanup follow existing source ownership.
 
-One distinct active live source owns one streaming request. Nested components
-do not open their own connections. Equivalent requests can share the existing
-data resource within one runtime under its normal cache policy; disabling
-caching bypasses that sharing. Equal invalidation keys do not merge different
-queries into a connection. App-wide SSE multiplexing is not implemented.
+Each distinct live source owns an independent query subscription. Equivalent
+requests can share the existing data resource within one runtime under its
+normal cache policy; disabling caching bypasses that resource sharing.
+Compatible browser live queries share the
+[live transport multiplexer](./live-multiplexing.md), independently of whether
+their invalidation keys match. Nested server components do not independently
+open connections. Page identity, cursors, and optimistic ownership stay separate.
 
 **Live does not mean globally shared UI.** A key selects which queries to rerun;
 each subscriber's handler renders using its own request context. Two private
@@ -474,7 +476,7 @@ successful results consistently page results rather than mixing ordinary data
 and pages. Do not wrap a page in a custom JSON response.
 
 Deferred: native no-JavaScript form/navigation progressive enhancement,
-optimistic mutation of rendered UI, app-wide stream multiplexing,
+optimistic mutation of rendered UI, cross-instance stream session routing,
 retained-live-target action application, broader interactive async page binding,
 and arbitrary server/client closure splitting. Existing data-based
 `optimistic()` callbacks are unchanged.

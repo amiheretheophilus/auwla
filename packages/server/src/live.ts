@@ -110,20 +110,24 @@ export function liveHub(services: object): LiveHub {
 
 const encoder = new TextEncoder();
 
-/** Pull-driven live query, coalescing invalidations and discarding stale in-flight reads. */
-export function liveResponse(
+export interface LiveQueryValue { value: unknown; stamp: LiveStamp }
+export interface LiveSubscription {
+  next(): Promise<IteratorResult<LiveQueryValue>>;
+  cancel(): void;
+  fail(error:unknown):void;
+}
+
+/** Transport-independent query lifetime: one pending read, no heartbeat or wire queue. */
+export function createLiveSubscription(
   hub: LiveHub,
   key: string,
   request: Request,
   query: (signal: AbortSignal) => Promise<unknown>,
   onError?: StreamErrorReporter,
-): Response {
+): LiveSubscription {
   const abort = new AbortController();
-  const patchVersion = request.headers.get('x-mmd-live-patches');
-  const patches = patchVersion === '1' || patchVersion === '2' ? new LivePatchEncoder(patchVersion === '2') : undefined;
   let dirty = true;
   let wake: (() => void) | undefined;
-  let heartbeat: ReturnType<typeof setTimeout> | undefined;
   let rendering: { updates: ServerPageUpdates; iterator: AsyncIterator<PageContent>; stamp: LiveStamp } | undefined;
   let committed = false;
   const releaseRender = () => {
@@ -136,19 +140,20 @@ export function liveResponse(
     abort.abort();
     disconnect();
     request.signal.removeEventListener('abort', stop);
-    clearTimeout(heartbeat);
     releaseRender();
     wake?.();
   };
   const disconnect = hub.subscribe(key, () => { dirty = true; rendering?.updates.cancel(); wake?.(); });
   request.signal.addEventListener('abort', stop, { once: true });
   if (request.signal.aborted) stop();
-  const body = new ReadableStream<Uint8Array>({
-    async pull(controller) {
+  return {
+    cancel: stop,
+    fail(error){stop();void reportStreamError(error,request,onError);},
+    async next() {
       try {
-        const deliver = (value: unknown, stamp: LiveStamp) => {
-          controller.enqueue(patches === undefined ? frame('value', { value, stamp }) : patches.encode(value, stamp));
+        const deliver = (value: unknown, stamp: LiveStamp): IteratorResult<LiveQueryValue> => {
           if (liveDiagnosticsEnabled()) reportLiveDiagnostic('query-delivered', { source: liveDiagnosticName(request.url), stamp });
+          return {done:false,value:{value,stamp}};
         };
         while (!abort.signal.aborted) {
           if (dirty) {
@@ -165,7 +170,7 @@ export function liveResponse(
               continue;
             }
             if (isServerPageUpdates(value)) rendering = { updates: value, iterator: value[Symbol.asyncIterator](), stamp };
-            else { committed = true; deliver(value, stamp); return; }
+            else { committed = true; return deliver(value, stamp); }
           }
           if (rendering) {
             const current = rendering;
@@ -179,27 +184,56 @@ export function liveResponse(
             // complete result instead of flashing nested loading fallbacks.
             if (committed && next.value.progress?.complete === false) continue;
             if (next.value.progress?.complete !== false) committed = true;
-            deliver(next.value, current.stamp); return;
+            return deliver(next.value, current.stamp);
           }
-          await new Promise<void>(resolve => { wake = resolve; heartbeat = setTimeout(resolve, 5_000); });
-          wake = undefined; clearTimeout(heartbeat);
-          if (dirty) continue;
-          if (!abort.signal.aborted) { controller.enqueue(encoder.encode(': heartbeat\n\n')); return; }
+          await new Promise<void>(resolve => { wake = resolve; });
+          wake = undefined;
         }
-        controller.close();
+        return {done:true,value:undefined};
       } catch (error) {
         const failed = !abort.signal.aborted;
-        try {
-          if (failed) controller.enqueue(frame('error', { message: 'Live query failed' }));
-          controller.close();
-        } finally {
-          stop();
-          // A slow telemetry hook must not retain subscriptions or delay failure delivery.
-          if (failed) void reportStreamError(error, request, onError);
-        }
+        stop();
+        if (!failed) return {done:true,value:undefined};
+        void reportStreamError(error,request,onError);
+        throw error;
       }
     },
-    cancel: stop,
+  };
+}
+
+/** Direct SSE remains a supported transport over the same subscription engine. */
+export function liveResponse(hub: LiveHub, key: string, request: Request,
+  query: (signal: AbortSignal) => Promise<unknown>, onError?: StreamErrorReporter,
+): Response {
+  const subscription=createLiveSubscription(hub,key,request,query,onError);
+  const version=request.headers.get('x-mmd-live-patches');
+  const patches=version==='1'||version==='2'?new LivePatchEncoder(version==='2'):undefined;
+  let pending:Promise<IteratorResult<LiveQueryValue>>|undefined;
+  let heartbeat:ReturnType<typeof setTimeout>|undefined;
+  let wake:(()=>void)|undefined;
+  let stopped=false;
+  const stop=()=>{if(stopped)return;stopped=true;subscription.cancel();clearTimeout(heartbeat);wake?.();request.signal.removeEventListener('abort',stop);};
+  request.signal.addEventListener('abort',stop,{once:true});
+  if(request.signal.aborted)stop();
+  const body=new ReadableStream<Uint8Array>({
+    async pull(controller){
+      try{
+        if(stopped){controller.close();return;}
+        pending??=subscription.next();
+        const next=await Promise.race([pending,new Promise<null>(resolve=>{wake=()=>resolve(null);heartbeat=setTimeout(wake,5_000);})]);
+        clearTimeout(heartbeat);wake=undefined;
+        if(stopped){controller.close();return;}
+        if(next===null){controller.enqueue(encoder.encode(': heartbeat\n\n'));return;}
+        pending=undefined;
+        if(next.done){controller.close();stop();return;}
+        const {value,stamp}=next.value;
+        try{controller.enqueue(patches?patches.encode(value,stamp):frame('value',{value,stamp}));}
+        catch(error){subscription.fail(error);throw error;}
+      }catch{
+        if(!stopped){controller.enqueue(frame('error',{message:'Live query failed'}));controller.close();}
+        stop();
+      }
+    },cancel:stop,
   }, { highWaterMark: 1 });
   return new Response(body, { headers: {
     'content-type': 'text/event-stream; charset=utf-8',

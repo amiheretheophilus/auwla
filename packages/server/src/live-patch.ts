@@ -149,7 +149,7 @@ export class LivePatchEncoder {
 
   constructor(private readonly pageText = false) {}
 
-  encode(value: unknown, stamp: LiveStamp): Uint8Array {
+  encode(value: unknown, stamp: LiveStamp, sub?: string): Uint8Array {
     // Snapshot now: services may return their own mutable arrays, objects, or Dates.
     const json = JSON.stringify(value);
     if (json === undefined) throw new TypeError('Streaming values must be JSON serializable');
@@ -158,7 +158,7 @@ export class LivePatchEncoder {
     if (!Number.isSafeInteger(seq)) throw new Error('Live patch sequence exhausted');
     // Reuse the serialized value instead of stringifying the whole baseline again.
     // Only metadata is serialized here; the full frame is built if it is selected.
-    const suffix = `,${JSON.stringify({ stamp, seq }).slice(1)}\n\n`;
+    const suffix = `,${JSON.stringify({ ...(sub===undefined?{}:{sub}), stamp, seq }).slice(1)}\n\n`;
     let output: Uint8Array | undefined;
     if (this.baseline !== undefined) {
       const compatiblePage = this.pageText && isPageContent(this.baseline) && isPageContent(confirmed) &&
@@ -167,7 +167,7 @@ export class LivePatchEncoder {
       const patch = difference(this.baseline, confirmed, compatiblePage);
       if (patch !== null) {
         // Even an empty patch carries its new confirmation cursor and sequence.
-        const candidate = encodeLiveFrame('patch', { base: this.sequence, seq, patch, stamp });
+        const candidate = encodeLiveFrame('patch', { base: this.sequence, seq, patch, stamp, ...(sub===undefined?{}:{sub}) });
         // UTF-16 length is a lower bound for UTF-8 size. Small patches normally
         // win immediately, without scanning or encoding the full JSON value.
         const minimumSize = valuePrefix.length + json.length + suffix.length;

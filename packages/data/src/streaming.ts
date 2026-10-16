@@ -10,6 +10,7 @@ import { decodeResponse } from './request';
 import { validateValue } from './schema';
 import { responseStreamDecoder } from './response-decoder';
 import { notifyDataRuntimeProgress } from './runtime-lifetime';
+import { multiplexTransport } from './live-multiplex';
 import type { CoreDataRuntime } from './runtime-core';
 import type { FetchEnvironment } from './resource';
 import type { FetchOptions, ResolvedValue } from './types';
@@ -234,6 +235,6 @@ export function createStreamingSource<T>(target: string, options: FetchOptions, 
   installActiveDataRestoration();
   const runtime = enableRequestEncoding(getActiveDataRuntime());
   const environment = fetchStoreForRuntime(runtime).environment;
-  environment.stream ??= transport(environment, runtime);
+  environment.stream ??= multiplexTransport(environment,runtime,transport(environment, runtime));
   return runtime.$fetch(target, { ...options, stream: mode }) as unknown as ResolvedValue<T>;
 }

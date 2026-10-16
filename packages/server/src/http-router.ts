@@ -13,6 +13,7 @@ import {
 import type { StandardSchemaV1 } from '@memoized-dom/data';
 import { generatorResponse, liveHub, liveResponse, type LiveKey, type LiveStamp } from './live';
 import { isServerPage } from './page-definition';
+import { captureLiveResponse, createLiveSessions, createLiveSubscription, LIVE_SESSION_PATH } from './live-session';
 
 const pageFetches = new WeakMap<object, typeof globalThis.fetch>();
 /** @internal Same request dispatch capability already used by document SSR. */
@@ -269,6 +270,7 @@ const SERVER_FUNCTION_ROUTE_KEY = '__memoDomServerFunctionRoute';
 type InternalServerFunctionRoute<TLocals extends object, TPlatform, TServices extends object> =
   ServerRoute<TLocals, TPlatform, TServices> & {
     readonly [SERVER_FUNCTION_ROUTE_KEY]?: true;
+    readonly __memoizedLive?: boolean;
   };
 
 class ServerFunctionInputError extends Error {}
@@ -449,6 +451,7 @@ export function createServerFunctionRoutes<
     }
     const route: InternalServerFunctionRoute<TLocals, TPlatform, TServices> = {
       [SERVER_FUNCTION_ROUTE_KEY]: true,
+      __memoizedLive: definition.method==='GET'&&definition.live!==undefined,
       id: definition.id,
       method: definition.method,
       path: definition.path,
@@ -473,7 +476,7 @@ export function createServerFunctionRoutes<
           const update = () => definition.updates === undefined ? [] : [hub.invalidate(definition.updates(context, ...args))];
           const mode = context.request.headers.get('x-mmd-stream');
           if (key !== undefined && mode === 'live') {
-            return liveResponse(hub, hub.key(key), context.request, async signal => {
+            const query=async (signal:AbortSignal) => {
               const request = new Request(context.url, { method: context.request.method, headers: context.request.headers, signal });
               const liveContext = { ...context, request };
               const result = await serverFunctionValue(await definition.handler(liveContext, ...args), liveContext, context);
@@ -482,7 +485,10 @@ export function createServerFunctionRoutes<
                 return result.headers.get('content-type')?.includes('json') ? result.json() : result.text();
               }
               return result;
-            }, streamErrorReporters.get(context));
+            };
+            const report=streamErrorReporters.get(context);
+            return captureLiveResponse(context.request,run=>createLiveSubscription(hub,hub.key(key),context.request,
+              signal=>run(()=>query(signal),signal),report))??liveResponse(hub,hub.key(key),context.request,query,report);
           }
           let cancellation = new AbortController();
           let value: unknown;
@@ -660,10 +666,15 @@ export function createServerRouter<
     string,
     PreparedRoute<TLocals, TPlatform, TServices>
   >();
+  const livePaths=new Set(options.routes.filter(route=>
+    (route as ServerRoute<TLocals,TPlatform,TServices>&{__memoizedLive?:boolean}).__memoizedLive===true).map(route=>route.path));
+  const liveSessions=createLiveSessions(path=>livePaths.has(path),(request,platform)=>dispatch(request,
+    platform===undefined?{}:{platform:platform as TPlatform}));
 
   for (let routeIndex = 0; routeIndex < options.routes.length; routeIndex++) {
     const declared = options.routes[routeIndex]!;
     const path = validateRoutePattern(declared.path);
+    if(path===LIVE_SESSION_PATH)throw new TypeError(`Route '${path}' uses the reserved live transport namespace`);
     const internal = declared as InternalServerFunctionRoute<
       TLocals,
       TPlatform,
@@ -824,6 +835,7 @@ export function createServerRouter<
     request: Request,
     dispatchOptions: ServerDispatchOptions<TLocals, TPlatform, TServices> = {},
   ): Promise<Response> {
+    if(new URL(request.url).pathname===LIVE_SESSION_PATH)return liveSessions.handle(request,dispatchOptions.platform);
     const url = new URL(request.url);
     const pathname = normalizeRoutePath(url.pathname);
     const method = normalizeMethod(request.method);
