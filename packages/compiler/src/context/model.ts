@@ -195,6 +195,8 @@ export interface LinkedFunctionImport {
   boundedWrites: string[];
   /** Effects on arguments, expressed as paths relative to each argument. */
   parameterWrites: ParameterWrite[];
+  /** Arguments inspected as transparent request holders rather than payloads. */
+  parameterSourceReads: ParameterSourceRead[];
   /** Effects may extend beyond every known root and argument. */
   unbounded: boolean;
 }
@@ -276,6 +278,12 @@ export interface ParameterWrite {
   path: string[];
 }
 
+/** A request-state read rooted at one function argument. */
+export interface ParameterSourceRead {
+  index: number;
+  path: string[];
+}
+
 /**
  * Reactive-state classification (the two — three — legal ways JS state changes):
  *   'let'   — rebindable binding; writes are assignments/updates/mutations
@@ -319,6 +327,8 @@ export interface FnSummary {
   boundedWrites: Set<string>;
   /** Effects on arguments, expressed as paths relative to each argument. */
   parameterWrites: ParameterWrite[];
+  /** Request-holder reads expressed relative to helper arguments. */
+  parameterSourceReads: ParameterSourceRead[];
   /** True when effects cannot be bounded to known roots or arguments. */
   unbounded: boolean;
 }
@@ -691,6 +701,10 @@ export function createAnalysisCtx(opts: AnalysisOptions = {}): Ctx {
         writes: new Set(linked.writes),
         boundedWrites: new Set(linked.boundedWrites),
         parameterWrites: linked.parameterWrites.map((effect) => ({
+          index: effect.index,
+          path: [...effect.path],
+        })),
+        parameterSourceReads: linked.parameterSourceReads.map((effect) => ({
           index: effect.index,
           path: [...effect.path],
         })),

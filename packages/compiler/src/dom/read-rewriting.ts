@@ -124,6 +124,21 @@ export function rewriteTransparentDataReads(ctx: Ctx): void {
       );
       refresh();
       const projection = cloneEstreeNode(init, true);
+      if (derivation.requestStateOnly === true) {
+        derivation.source = cloneEstreeNode(init, true);
+        for (const name of derivation.bindings) {
+          const binding = astBindingAt(ctx, componentNode, name);
+          if (binding !== undefined) {
+            derived.set(name, {
+              binding,
+              sources,
+              expression: cloneEstreeNode(projection, true),
+              requestStateOnly: true,
+            });
+          }
+        }
+        continue;
+      }
       const wrapped = resolvedRenderExpression(
         ctx,
         init,
@@ -194,7 +209,7 @@ export function rewriteTransparentDataReads(ctx: Ctx): void {
         if (selector !== null && nodeHasJsx(expression) && sourceDependencies(
           ctx, selector as unknown as BaseNode, bindings, derived, eventSources,
         ).length === 0 && trackDependencies(
-          ctx, selector as unknown as BaseNode, tracks, bindings,
+          ctx, selector as unknown as BaseNode, tracks, bindings, derived,
         ).length === 0) {
           // A local selector chooses the active branch before that branch's
           // payload sinks are evaluated. Descend into those sinks instead of
@@ -216,9 +231,15 @@ export function rewriteTransparentDataReads(ctx: Ctx): void {
           rawExpression,
           tracks,
           bindings,
+          derived,
         );
         if (dependencies.length === 0) {
           if (stateDependencies.length > 0) {
+            // Request-state-only scalar derivations must be recomputed in the
+            // subscribed render entity. Keeping the local binding here would
+            // leave child entities reading the component's initial value.
+            replaceDerivedReads(ctx, rawExpression, derived);
+            refresh();
             annotateTransparentSources(expression, stateDependencies);
             excludeTransparentSubscriptions(
               expression,

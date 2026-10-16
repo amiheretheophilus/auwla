@@ -565,6 +565,16 @@ export function analyzeManifest(
                     a.index - b.index ||
                     a.path.join('.').localeCompare(b.path.join('.')),
                 ),
+              parameterSourceReads: summary.parameterSourceReads
+                .map((effect) => ({
+                  index: effect.index,
+                  path: [...effect.path],
+                }))
+                .sort(
+                  (a, b) =>
+                    a.index - b.index ||
+                    a.path.join('.').localeCompare(b.path.join('.')),
+                ),
               unbounded: summary.unbounded,
             };
             continue;
@@ -682,6 +692,7 @@ export function discoverManifest(
                   writes: [],
                   boundedWrites: [],
                   parameterWrites: [],
+                  parameterSourceReads: [],
                   unbounded: true,
                 });
                 continue;
@@ -755,6 +766,7 @@ export function discoverManifest(
               writes: [],
               boundedWrites: [],
               parameterWrites: [],
+              parameterSourceReads: [],
               unbounded: true,
             });
           }

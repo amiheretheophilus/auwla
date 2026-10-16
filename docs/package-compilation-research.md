@@ -1,9 +1,10 @@
 # Separate package compilation and reactive linking
 
-Status: research and proposed direction, recorded 2026-10-15. No reusable
-package artifact format, package-build command, or compatibility contract has
-been selected or implemented. Authoring examples below describe intended
-behavior, not a feature that works today.
+Status: active compiler work, started 2026-10-16. Request-state-only helper
+relationships now link across local functions, imports, aliases, and re-exports.
+No reusable package artifact format, package-build command, or compatibility
+contract has been selected or implemented. Authoring examples involving an
+installed precompiled package still describe intended behavior.
 
 ## Motivation
 
@@ -31,7 +32,7 @@ of this discussion is the web compiler and its browser/server delivery paths.
 Small in-memory experiments against the existing built compiler established the
 following gaps. These were compilation probes, not runtime or performance tests.
 
-### Including helper source does not preserve request identity
+### Request-state-only helpers now preserve request identity
 
 Given a linked helper:
 
@@ -43,27 +44,29 @@ export function busy(source) {
 }
 ```
 
-And a component binding `const waiting = busy(stories)`, the compiler emits a
-payload derivation whose callback calls `busy(_storiesValue)`. The helper receives
-resolved data rather than the original request source, even when both modules
-are compiled together.
+And a component binding `const waiting = busy(stories)`, the function summary
+now records `parameterSourceReads: [{ index: 0, path: [] }]`. The linker composes
+that symbolic relationship through wrappers and re-exports, keeps `stories` as
+the request holder, and attaches the derived scalar to the component's existing
+source subscription. The helper expression is replayed in the subscribed DOM
+entity, so pending-to-settled changes update in place without rerunning or
+replacing the component.
 
-Its published function summary contains empty reads, writes, bounded writes, and
-parameter writes, with `unbounded: false`. It does not record the argument's
-request-state role. A summary with no recorded writes is also not, by itself,
-proof that a call is safe to repeat.
+Property paths are retained too. A helper reading
+`$track(options.source).pending` records argument zero at `['source']`, and a
+caller passing `{ source: stories }` maps that relationship back to `stories`.
+This behavior comes from function summaries, not helper-name recognition.
 
-Simply allowing package files into the existing compilation graph cannot fix
-this gap; general helper/source analysis must improve first.
+### Direct derived request state is no longer payload-gated
 
-### Direct derived request state is also payload-gated
+`const waiting = $track(stories).pending` evaluates against the holder before
+the first payload and replays through request-state subscriptions. It no longer
+becomes `deriveResolvedValues([stories], ...)`.
 
-`const waiting = $track(stories).pending` currently becomes a
-`deriveResolvedValues([stories], ...)` call. This incorrectly treats a
-request-state calculation as depending on the first payload being available.
-
-State inspection must be usable while a request is pending or has failed.
-Fixing only imported utilities would leave this underlying derivation issue.
+Mixed helpers remain a separate gate. A helper that both calls `$track(source)`
+and reads payload fields from `source` needs both relationships represented and
+its body lowered so only the payload reads materialize. The current
+`parameterSourceReads` fact deliberately does not claim to solve that case.
 
 ### Component emission depends on consuming code
 

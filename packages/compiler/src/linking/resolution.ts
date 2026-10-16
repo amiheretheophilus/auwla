@@ -135,6 +135,7 @@ export function linkImports(
         writes: [],
         boundedWrites: [],
         parameterWrites: [],
+        parameterSourceReads: [],
         unbounded: true,
       };
       continue;
@@ -155,6 +156,7 @@ export function linkImports(
         writes: [],
         boundedWrites: [],
         parameterWrites: [],
+        parameterSourceReads: [],
         unbounded: true,
       };
       continue;
@@ -216,6 +218,7 @@ export function linkImports(
           writes: [],
           boundedWrites: [],
           parameterWrites: [],
+          parameterSourceReads: [],
           unbounded: true,
         };
         continue;
@@ -236,6 +239,10 @@ export function linkImports(
         writes: [...targetExport.writes],
         boundedWrites: [...targetExport.boundedWrites],
         parameterWrites: [...targetExport.parameterWrites],
+        parameterSourceReads: targetExport.parameterSourceReads.map((effect) => ({
+          index: effect.index,
+          path: [...effect.path],
+        })),
         unbounded: targetExport.unbounded,
       };
     }

@@ -9,6 +9,7 @@ import type { InitialDelivery } from '../dom/delivery-plan';
 import type { ComponentPropUsage } from '../components/render-usage';
 import type {
   ParameterWrite,
+  ParameterSourceRead,
   MemoDomOptions,
   StateKind,
   TransparentSourceMethod,
@@ -59,6 +60,7 @@ export interface FunctionExport {
   writes: string[];
   boundedWrites: string[];
   parameterWrites: ParameterWrite[];
+  parameterSourceReads: ParameterSourceRead[];
   unbounded: boolean;
 }
 

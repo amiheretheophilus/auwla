@@ -87,6 +87,7 @@ export function summarizeHelper(
       writes: new Set(),
       boundedWrites: new Set(),
       parameterWrites: [],
+      parameterSourceReads: [],
       unbounded: true,
     };
   }
@@ -104,6 +105,7 @@ export function summarizeHelper(
     writes: new Set(),
     boundedWrites: new Set(),
     parameterWrites: [],
+    parameterSourceReads: [],
     unbounded: false,
   };
   const opaqueRoots = opaqueModuleRoots(ctx);
@@ -198,6 +200,28 @@ export function summarizeHelper(
       return;
     }
     summary.parameterWrites.push({ index, path });
+  };
+
+  const addParameterSourceRead = (index: number, path: string[]): void => {
+    if (
+      summary.parameterSourceReads.some(
+        (effect) =>
+          effect.index === index &&
+          effect.path.length === path.length &&
+          effect.path.every((part, partIndex) => part === path[partIndex]),
+      )
+    ) {
+      return;
+    }
+    summary.parameterSourceReads.push({ index, path });
+  };
+
+  const noteSourceRead = (origin: ReactiveOrigin): void => {
+    if (origin.locality !== 'prop') return;
+    const index = parameterIndexes.get(origin.root);
+    if (index === undefined) return;
+    const path = origin.key === null ? [] : origin.key.split('.').slice(1);
+    addParameterSourceRead(index, path);
   };
 
   const noteReceiverEffect = (origin: ReactiveOrigin): void => {
@@ -383,6 +407,26 @@ export function summarizeHelper(
         if (
           calleeName !== null &&
           callee !== null &&
+          ctx.transparentTrackFactories.has(calleeName) &&
+          astBindingAt(ctx, callee, calleeName)?.kind === 'import'
+        ) {
+          const argument = childNodes(current, 'arguments')[0];
+          if (
+            argument !== undefined &&
+            argument.type !== 'SpreadElement' &&
+            argument.type !== 'ArgumentPlaceholder'
+          ) {
+            const origin = aliases.resolveExpression(
+              lexicalScope,
+              argument as unknown as t.Expression,
+            );
+            if (origin !== null) noteSourceRead(origin);
+          }
+          return;
+        }
+        if (
+          calleeName !== null &&
+          callee !== null &&
           astBindingAt(ctx, callee, calleeName)?.scope.isProgramScope === true &&
           (ctx.helpers.has(calleeName) || ctx.importedFunctions.has(calleeName))
         ) {
@@ -412,6 +456,23 @@ export function summarizeHelper(
             if (capturesOpaque(argument)) summary.unbounded = true;
             if (origin !== null) {
               noteReceiverEffect(extendOrigin(origin, effect.path));
+            }
+          }
+          for (const effect of nested.parameterSourceReads) {
+            const argument = args[effect.index];
+            if (
+              argument === undefined ||
+              argument.type === 'SpreadElement' ||
+              argument.type === 'ArgumentPlaceholder'
+            ) {
+              continue;
+            }
+            const origin = aliases.resolveExpression(
+              lexicalScope,
+              argument as unknown as t.Expression,
+            );
+            if (origin !== null) {
+              noteSourceRead(extendOrigin(origin, effect.path));
             }
           }
           if (nested.unbounded) summary.unbounded = true;

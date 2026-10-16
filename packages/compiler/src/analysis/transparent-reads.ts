@@ -3,6 +3,7 @@ import type * as t from '../ast/compiler-types';
 import * as astFactory from '../ast/factory';
 import {
   childNode,
+  childNodes,
   walkAst,
   type BaseNode,
   type Binding as AstBinding,
@@ -16,6 +17,7 @@ export interface TransparentDerivation {
   binding: AstBinding;
   sources: readonly string[];
   expression: t.Expression;
+  requestStateOnly?: boolean;
 }
 
 export function isBoundTo(
@@ -107,12 +109,72 @@ export function isPassthroughArgument(
   identifier: BaseNode,
 ): boolean {
   if (isOptimisticSource(ctx, identifier)) return true;
+  if (sourceStateArgument(ctx, identifier)) return true;
   const parent = ctx.astAnalysis?.parentByNode.get(identifier) ?? null;
   if (parent?.type !== 'CallExpression') return false;
   const call = parent as unknown as t.CallExpression;
   if (!call.arguments.includes(identifier as unknown as t.Expression)) return false;
   const root = astFactory.isIdentifier(call.callee) ? call.callee.name : null;
   return root !== null && ctx.transparentSourcePassthroughs.has(root);
+}
+
+function staticPropertyName(property: BaseNode): string | null {
+  const key = childNode(property, 'key');
+  if (key?.type === 'Identifier' && !(property as unknown as t.ObjectProperty).computed) {
+    return (key as unknown as AstIdentifier).name;
+  }
+  if (key?.type === 'StringLiteral' || key?.type === 'NumericLiteral') {
+    return String((key as unknown as { value: string | number }).value);
+  }
+  return null;
+}
+
+/** Whether this source occurrence feeds a helper parameter's request-state read. */
+export function sourceStateArgument(ctx: Ctx, identifier: BaseNode): boolean {
+  let current = identifier;
+  const path: string[] = [];
+  for (;;) {
+    const parent = ctx.astAnalysis?.parentByNode.get(current) ?? null;
+    if (parent === null) return false;
+    if (
+      (parent.type === 'ObjectProperty' || parent.type === 'Property') &&
+      childNode(parent, 'value') === current
+    ) {
+      const key = staticPropertyName(parent);
+      if (key === null) return false;
+      path.unshift(key);
+      current = parent;
+      continue;
+    }
+    if (parent.type === 'ObjectExpression') {
+      current = parent;
+      continue;
+    }
+    if (parent.type === 'ArrayExpression') {
+      const index = childNodes(parent, 'elements').indexOf(current);
+      if (index < 0) return false;
+      path.unshift(String(index));
+      current = parent;
+      continue;
+    }
+    if (parent.type !== 'CallExpression') return false;
+    const call = parent as unknown as t.CallExpression;
+    const index = call.arguments.indexOf(current as unknown as t.Expression);
+    if (index < 0 || !astFactory.isIdentifier(call.callee)) return false;
+    const binding = astBindingAt(
+      ctx,
+      call.callee as unknown as BaseNode,
+      call.callee.name,
+    );
+    const summary = binding?.kind === 'import'
+      ? ctx.importedFunctions.get(call.callee.name)
+      : binding?.scope.isProgramScope === true && ctx.helpers.has(call.callee.name)
+        ? ctx.helperSummaries.get(call.callee.name)
+        : undefined;
+    return summary?.parameterSourceReads.some(effect =>
+      effect.index === index && effect.path.length === path.length &&
+      effect.path.every((part, partIndex) => part === path[partIndex])) === true;
+  }
 }
 
 /** Only the source field of an imported optimistic() call carries holder identity. */
@@ -253,6 +315,7 @@ export function sourceDependencies(
       derivation !== undefined &&
       isBoundTo(ctx, identifier, derivation.binding)
     ) {
+      if (derivation.requestStateOnly === true) return;
       for (const source of derivation.sources) found.add(source);
     }
   };

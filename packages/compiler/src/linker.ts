@@ -26,7 +26,7 @@ import {
   linkComponentGraph,
 } from './component-linker';
 import { createCtx, type InternalMemoDomOptions } from './dom/context';
-import { type LinkedComponentRowUse, type MemoDomOptions, type ParameterWrite, type StateKind, type TransparentSourceMethod } from './context';
+import { type LinkedComponentRowUse, type MemoDomOptions, type ParameterSourceRead, type ParameterWrite, type StateKind, type TransparentSourceMethod } from './context';
 import {
   collectCompilerRoutes,
   validateCompilerRouteGraph,
@@ -84,6 +84,8 @@ export interface CompiledFunctionExport {
   writes: string[];
   boundedWrites: string[];
   parameterWrites: ParameterWrite[];
+  /** Arguments whose holder state is inspected without awaiting payload data. */
+  parameterSourceReads: ParameterSourceRead[];
   unbounded: boolean;
 }
 
@@ -804,6 +806,10 @@ function compileLinkedModules(
           writes: [...summary.writes],
           boundedWrites: [...summary.boundedWrites],
           parameterWrites: summary.parameterWrites.map((effect) => ({
+            index: effect.index,
+            path: [...effect.path],
+          })),
+          parameterSourceReads: summary.parameterSourceReads.map((effect) => ({
             index: effect.index,
             path: [...effect.path],
           })),

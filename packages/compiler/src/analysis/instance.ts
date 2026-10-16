@@ -20,6 +20,7 @@ import {
   variableDeclaratorFor,
   type Ctx,
 } from '../context';
+import { sourceStateArgument } from './transparent-reads';
 import {
   bindingNames,
   type LocalDerivation,
@@ -470,6 +471,8 @@ export function scanInstanceDerivations(ctx: Ctx): void {
         if (classifyOpaqueReads(initializer) === 'bad') continue;
 
         const directReads = new Set<string>();
+        const payloadReads = new Set<string>();
+        const requestStateReads = new Set<string>();
         let reason: string | null = null;
         const bindingIsReactive = (name: string, at: BaseNode): boolean => {
           const binding = astBindingAt(ctx, at, name);
@@ -480,9 +483,20 @@ export function scanInstanceDerivations(ctx: Ctx): void {
           const binding = astBindingAt(ctx, current, current.name);
           const source =
             binding === undefined ? undefined : reactiveBindings.get(binding);
-          if (source !== undefined) directReads.add(source);
+          if (source !== undefined) {
+            directReads.add(source);
+            if (
+              isTransparentLocal(source, current) &&
+              sourceStateArgument(ctx, current)
+            ) {
+              requestStateReads.add(source);
+            } else {
+              payloadReads.add(source);
+            }
+          }
           else if (isOpaqueLocal(current.name, current)) {
             directReads.add(current.name);
+            payloadReads.add(current.name);
           }
         };
         const helperCache = new Map<BaseNode, LocalDerivationHelperSummary>();
@@ -500,7 +514,10 @@ export function scanInstanceDerivations(ctx: Ctx): void {
             helperVisiting,
           );
           if (local !== null) {
-            for (const read of local.reads) directReads.add(read);
+            for (const read of local.reads) {
+              directReads.add(read);
+              payloadReads.add(read);
+            }
             reason ??= local.reason;
             return;
           }
@@ -513,7 +530,10 @@ export function scanInstanceDerivations(ctx: Ctx): void {
           const summary =
             ctx.importedFunctions.get(calleeName) ??
             summarizeHelper(ctx, calleeName);
-          for (const read of summary.reads) directReads.add(read);
+          for (const read of summary.reads) {
+            directReads.add(read);
+            payloadReads.add(read);
+          }
           if (
             summary.writes.size !== 0 ||
             summary.boundedWrites.size !== 0
@@ -581,6 +601,9 @@ export function scanInstanceDerivations(ctx: Ctx): void {
           source: cloneNode(declaration.init),
           bindings: names,
           sources: [...sources].sort(),
+          ...(payloadReads.size === 0 && requestStateReads.size > 0
+            ? { requestStateOnly: true }
+            : {}),
           ...(stableFetchTarget
             ? { stableTarget: true, replay }
             : transportedSourceTarget

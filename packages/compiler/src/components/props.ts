@@ -107,6 +107,8 @@ export interface LocalDerivation {
   bindings: string[];
   /** Transitive non-derived roots that can change this value. */
   sources: string[];
+  /** Every transparent source is consumed as request state, never payload. */
+  requestStateOnly?: boolean;
   /**
    * Some reactive setup keeps its authored binding stable and only updates
    * the hidden value behind it. Fetch query rebinding is the first such
