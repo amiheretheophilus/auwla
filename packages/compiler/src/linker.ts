@@ -38,12 +38,19 @@ import { compilerError } from './errors';
 import type {
   CompileModulesOptions,
   ComponentExport,
+  ExperimentalPackageArtifact,
+  ExperimentalPackageFunctionSummary,
   FunctionExport,
   ModuleEntry,
   ModuleManifest,
   StateExport,
 } from './linking/model';
-export type { CompileModulesOptions } from './linking/model';
+export type {
+  CompileModulesOptions,
+  ExperimentalPackageArtifact,
+  ExperimentalPackageEntry,
+  ExperimentalPackageFunctionSummary,
+} from './linking/model';
 import {
   canonicalModuleId,
   linkImports,
@@ -148,6 +155,15 @@ export interface CompiledModules {
   initialDelivery?: InitialDelivery;
   /** The sole output program binds compiler-proved document content. */
   initialContent: boolean;
+}
+
+export interface ExperimentalCompilePackageOptions extends CompileModulesOptions {
+  /** Public package specifier -> module id in `modules`. */
+  packageEntries: Readonly<Record<string, string>>;
+}
+
+export interface ExperimentalCompiledPackage extends CompiledModules {
+  artifact: ExperimentalPackageArtifact;
 }
 
 function parseModule(
@@ -997,4 +1013,83 @@ export function compileModules(
   options: CompileModulesOptions = {},
 ): Record<string, string> {
   return compileLinkedModules(modules, options, false).output;
+}
+
+/**
+ * Compile package modules once and expose portable summaries for ordinary
+ * named helper exports. Components and state remain application-linked work.
+ *
+ * This contract is experimental: consumers must opt in by passing the returned
+ * artifact through `experimentalPackageArtifacts`.
+ */
+export function experimentalCompilePackage(
+  modules: Readonly<Record<string, string>>,
+  options: ExperimentalCompilePackageOptions,
+): ExperimentalCompiledPackage {
+  const { packageEntries, ...compileOptions } = options;
+  const compiled = compileModulesDetailed(modules, compileOptions);
+  const entries: ExperimentalPackageArtifact['entries'] = {};
+
+  for (const [specifier, moduleId] of Object.entries(packageEntries)) {
+    if (!Object.hasOwn(modules, moduleId)) {
+      throw new Error(
+        `memo-dom: experimental package entry '${specifier}' refers to unknown module '${moduleId}'`,
+      );
+    }
+    const metadata = compiled.metadata[moduleId];
+    if (metadata === undefined) {
+      throw new Error(
+        `memo-dom: experimental package entry '${specifier}' has no compiled metadata for '${moduleId}'`,
+      );
+    }
+    if (metadata.componentExports.length > 0 || metadata.stateExports.length > 0) {
+      throw new Error(
+        `memo-dom: experimental package entry '${specifier}' may export ordinary helpers only; component and state package linking is not implemented`,
+      );
+    }
+    const functions: Record<string, ExperimentalPackageFunctionSummary> = {};
+    for (const summary of metadata.functionExports) {
+      if (
+        summary.reads.length > 0 ||
+        summary.writes.length > 0 ||
+        summary.boundedWrites.length > 0 ||
+        summary.opaqueReads === true
+      ) {
+        throw new Error(
+          `memo-dom: experimental package helper '${specifier}' export '${summary.exported}' captures package state; only argument-relative helpers are portable`,
+        );
+      }
+      functions[summary.exported] = {
+        ...(summary.transparentSourceFactory === true
+          ? { transparentSourceFactory: true }
+          : {}),
+        ...(summary.transparentSourceMethod === undefined
+          ? {}
+          : { transparentSourceMethod: summary.transparentSourceMethod }),
+        parameterWrites: summary.parameterWrites.map((effect) => ({
+          index: effect.index,
+          path: [...effect.path],
+        })),
+        parameterSourceReads: summary.parameterSourceReads.map((effect) => ({
+          index: effect.index,
+          path: [...effect.path],
+        })),
+        parameterPayloadReads: summary.parameterPayloadReads.map((effect) => ({
+          index: effect.index,
+          path: [...effect.path],
+        })),
+        unbounded: summary.unbounded,
+      };
+    }
+    entries[specifier] = { functions };
+  }
+
+  return {
+    ...compiled,
+    artifact: {
+      kind: 'memoized-dom-package',
+      version: 1,
+      entries,
+    },
+  };
 }

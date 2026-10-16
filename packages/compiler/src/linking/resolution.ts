@@ -4,11 +4,33 @@ import type {
   LinkedImport,
 } from '../context';
 import type {
+  ExperimentalPackageEntry,
   LinkResolutionOptions,
   ModuleEntry,
   ModuleManifest,
   RenderUsage,
 } from './model';
+
+function packageEntry(
+  options: LinkResolutionOptions,
+  source: string,
+): ExperimentalPackageEntry | undefined {
+  let found: ExperimentalPackageEntry | undefined;
+  for (const artifact of options.experimentalPackageArtifacts ?? []) {
+    if (artifact.kind !== 'memoized-dom-package' || artifact.version !== 1) {
+      throw new Error('memo-dom: unsupported experimental package artifact');
+    }
+    const candidate = artifact.entries[source];
+    if (candidate === undefined) continue;
+    if (found !== undefined) {
+      throw new Error(
+        `memo-dom: multiple experimental package artifacts describe entry '${source}'`,
+      );
+    }
+    found = candidate;
+  }
+  return found;
+}
 
 export function canonicalModuleId(raw: string): string {
   const slashed = raw.replace(/\\/g, '/');
@@ -125,6 +147,47 @@ export function linkImports(
   for (const ref of manifest.imports) {
     const target = resolveModule(entry.id, ref.source, entries, options);
     if (target === undefined) {
+      const packagedEntry = packageEntry(options, ref.source);
+      if (packagedEntry !== undefined && ref.imported === '*') {
+        throw new Error(
+          `memo-dom: namespace import '${ref.local}' from '${ref.source}' cannot identify a reactive package export; use named imports`,
+        );
+      }
+      const packaged = ref.imported === '*'
+        ? undefined
+        : packagedEntry?.functions[ref.imported];
+      if (packaged !== undefined) {
+        linked[ref.local] = {
+          type: 'function',
+          transparentSourceFactory: packaged.transparentSourceFactory,
+          transparentSourceMethod: packaged.transparentSourceMethod,
+          tagCandidates: [],
+          componentCandidates: [],
+          reads: [],
+          writes: [],
+          boundedWrites: [],
+          parameterWrites: options.linkFunctionSummaries === false
+            ? []
+            : packaged.parameterWrites.map((effect) => ({
+              index: effect.index,
+              path: [...effect.path],
+            })),
+          parameterSourceReads: options.linkFunctionSummaries === false
+            ? []
+            : packaged.parameterSourceReads.map((effect) => ({
+              index: effect.index,
+              path: [...effect.path],
+            })),
+          parameterPayloadReads: options.linkFunctionSummaries === false
+            ? []
+            : packaged.parameterPayloadReads.map((effect) => ({
+              index: effect.index,
+              path: [...effect.path],
+            })),
+          unbounded: options.linkFunctionSummaries === false || packaged.unbounded,
+        };
+        continue;
+      }
       // Calls through external imports are conservatively unbounded. If the
       // binding is only read as ordinary data, it remains non-reactive.
       linked[ref.local] = {

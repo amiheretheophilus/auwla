@@ -37,6 +37,31 @@ export interface CompileModulesOptions
   initialContent?: boolean | ((plan: InitialRenderPlan, delivery: InitialDelivery | undefined) => boolean);
   /** Internal server-page root inputs are available before rendering starts. */
   pageCaptureCount?: number;
+  /** Experimental semantic summaries for separately compiled package entries. */
+  experimentalPackageArtifacts?: readonly ExperimentalPackageArtifact[];
+}
+
+export interface ExperimentalPackageFunctionSummary {
+  transparentSourceFactory?: boolean;
+  transparentSourceMethod?: TransparentSourceMethod;
+  parameterWrites: ParameterWrite[];
+  parameterSourceReads: ParameterSourceRead[];
+  parameterPayloadReads: ParameterSourceRead[];
+  unbounded: boolean;
+}
+
+export interface ExperimentalPackageEntry {
+  functions: Record<string, ExperimentalPackageFunctionSummary>;
+}
+
+/**
+ * Versioned, helper-only semantic metadata produced by the experimental package
+ * compiler. It complements the emitted JavaScript; it is not executable code.
+ */
+export interface ExperimentalPackageArtifact {
+  kind: 'memoized-dom-package';
+  version: 1;
+  entries: Record<string, ExperimentalPackageEntry>;
 }
 
 export interface StateExport {
@@ -109,4 +134,5 @@ export interface LinkResolutionOptions {
   aliases?: Readonly<Record<string, string>>;
   resolveImport?: (specifier: string, importer: string) => string | undefined;
   linkFunctionSummaries?: boolean;
+  experimentalPackageArtifacts?: readonly ExperimentalPackageArtifact[];
 }

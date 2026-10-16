@@ -2,10 +2,10 @@
 
 Status: active compiler work, started 2026-10-16. Request-state and payload
 relationships now link across local functions, imports, aliases, and re-exports,
-including helpers that use both relationships. No reusable package artifact
-format, package-build command, or compatibility contract has been selected or
-implemented. Authoring examples involving an installed precompiled package
-still describe intended behavior.
+including helpers that use both relationships. A versioned, explicitly
+experimental artifact now proves separate compilation for argument-relative
+ordinary helpers. Automatic package discovery, a package-build command, and a
+stable compatibility contract have not been selected or implemented.
 
 ## Motivation
 
@@ -153,6 +153,44 @@ reactivity can always be inferred.
 
 ## Proposed compilation boundary
 
+### Experimental helper artifact
+
+The first semantic proof is available through `experimentalCompilePackage`:
+
+```js
+const compiled = experimentalCompilePackage({
+  './index.ts': helperSource,
+}, {
+  packageEntries: { 'story-utils': './index.ts' },
+});
+
+// The host writes `compiled.output` as the package's JavaScript and stores the
+// JSON-serializable artifact beside it.
+const application = compileModulesDetailed(applicationModules, {
+  experimentalPackageArtifacts: [compiled.artifact],
+});
+```
+
+The consuming compile receives no package source. An exact bare entry specifier
+such as `story-utils` or `story-utils/status` maps named imports to portable
+argument-relative function summaries. The emitted JavaScript remains a normal
+package import and must resolve through the host or bundler; the artifact carries
+semantic linking information, not executable code.
+
+This prototype intentionally accepts only ordinary named helpers. It rejects
+entry modules that export components or compiler-owned state, and rejects
+helpers whose summaries depend on captured compiler-owned state. Ordinary
+JavaScript closures remain owned by the emitted package code and need no linker
+metadata. The artifact supports argument-relative request-state reads, payload
+reads, writes, and transparent-source provenance. Namespace imports remain
+unsupported because they do not identify one reactive export.
+
+There is deliberately no filesystem lookup, `package.json` condition, Vite
+integration, stale-artifact check, cache, or CLI yet. Callers pass artifacts
+explicitly, and entry matching is exact. The purpose of this API is to prove
+that separately emitted helper code and separately consumed semantic summaries
+preserve runtime behavior before designing publication and discovery.
+
 ### 1. Package compilation: preserve reusable meaning
 
 Analyze a package's modules and emit JavaScript plus dependency/effect summaries
@@ -282,9 +320,10 @@ open decisions, not documented APIs.
    state from payload readiness. The request-state-only and mixed conditional
    cases now have compile and runtime regressions; broader callback/facade cases
    remain part of the acceptance matrix.
-2. Prototype reusable artifacts for ordinary helpers, using an unrelated package
-   as well as our utils. Compare source compilation, cold artifact generation, and
-   warm cached linking for equivalent behavior.
+2. The helper-only artifact prototype now links an unrelated package without its
+   source and has an end-to-end pending-to-settled runtime regression. Next,
+   exercise our utils and measure source compilation, cold artifact generation,
+   and warm cached linking before adding automatic discovery.
 3. Extend the boundary to component libraries and verify consumer-dependent prop
    handling, SSR, HMR, source maps, and existing delivery optimizations.
 4. Measure cold/warm build cost, artifact size, and browser output before selecting

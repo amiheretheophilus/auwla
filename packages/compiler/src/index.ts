@@ -28,6 +28,7 @@ export {
 export {
   compileModules,
   compileModulesDetailed,
+  experimentalCompilePackage,
   type CompiledComponentExport,
   type CompiledFunctionExport,
   type CompiledModuleMetadata,
@@ -36,6 +37,11 @@ export {
   type CompiledRoutePattern,
   type CompiledStateExport,
   type CompileModulesOptions,
+  type ExperimentalCompiledPackage,
+  type ExperimentalCompilePackageOptions,
+  type ExperimentalPackageArtifact,
+  type ExperimentalPackageEntry,
+  type ExperimentalPackageFunctionSummary,
 } from './linker';
 export {
   compilerDiagnosticCode,
