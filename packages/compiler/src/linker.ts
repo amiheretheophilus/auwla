@@ -1098,9 +1098,10 @@ export function experimentalCompilePackage(
         initialProgram(entry), summary.local, scalarProps, new Set(summary.slots),
       );
       if (template === undefined) continue;
-      const dom = summary.slots.length > 0
-        ? undefined : packageInitialDom(template, entry.id, summary.local);
-      templates.set(summary.local, dom === undefined ? template : { ...template, adoption: 'host-v1' });
+      const dom = packageInitialDom(template, entry.id, summary.local);
+      templates.set(summary.local, dom === undefined ? template : {
+        ...template, adoption: summary.slots.length > 0 ? 'host-slots-v1' : 'host-v1',
+      });
       if (dom !== undefined) bindings[summary.local] = dom;
     }
     return bindings;

@@ -11,7 +11,7 @@ import * as astFactory from '../ast/factory';
 import type * as t from '../ast/compiler-types';
 import { planConditionalBranches } from '../jsx/conditional-plan';
 import { planListCallback } from '../lists/callback-plan';
-import { initialSite, type InitialRenderNode, type InitialRenderAttribute, type InitialRenderPlan, type BrowserRequirement } from '../planning/initial-content';
+import { initialSite, initialRenderPropSite, type InitialRenderNode, type InitialRenderAttribute, type InitialRenderPlan, type BrowserRequirement } from '../planning/initial-content';
 import { componentSlotProp } from '../jsx/component-slots';
 import type {
   ExperimentalPackageRenderNode,
@@ -540,7 +540,12 @@ export function planInitialRendering(
         ) {
           return need(scope, 'Package initial slot needs closed JSX content');
         }
-        return projected.nodes;
+        // These consumer-side identities distinguish mount bookkeeping. The
+        // dedicated-host contract guarantees offset zero for every mount, so
+        // no caller address depends on the package's private emitted key.
+        return projected.nodes.map(child => bindings && child.kind === 'slot' ? {
+          ...child, mount: {moduleId:scope.moduleId, component:component.local!, site:componentSlotProp(input.name)},
+        } : child);
       }
       return [{
         kind: 'element',
@@ -712,17 +717,26 @@ export function planInitialRendering(
       const packageSlot = targetComponent !== null && typeof targetComponent === 'object' &&
         targetComponent.kind === 'component' && targetComponent.initial !== undefined &&
         targetComponent.slots?.some(slot => componentSlotProp(slot) === name) === true;
-      const value = input === null ? true : packageSlot && valueNode?.type === 'JSXFragment'
+      let value = input === null ? true : packageSlot && valueNode?.type === 'JSXFragment'
         ? { kind: 'content' as const, nodes: jsx(valueNode, scope, true) }
         : expression(valueNode, scope);
       if (host && name !== 'key') attributes.push({ name, value: isRequestValue(value) ? null : primitive(value, scope),
         ...(bindings ? {site:initialSite(attribute),live:!staysClosed(valueNode,scope)} : {}) });
       else {
-        props.set(name, value);
         const closedPackageSlot = packageSlot &&
           propEventCount === bindingEventCount && propOwnerCount === ownerSiteCount &&
           value !== null && typeof value === 'object' && value.kind === 'content' &&
           closedContent(value.nodes);
+        if (bindings && packageSlot && targetComponent?.initial?.adoption === 'host-slots-v1' &&
+            value !== null && typeof value === 'object' && value.kind === 'content') {
+          if (!scope.component) need(scope, 'Package slot needs a lexical owner');
+          value = {kind:'content', nodes:[{
+            kind:'slot', moduleId:scope.moduleId, component:scope.component!,
+            site:initialRenderPropSite(initialSite(node), name), children:value.nodes,
+            ...(closedPackageSlot ? {static:true as const} : {}),
+          }]};
+        }
+        props.set(name, value);
         if (bindings && !closedPackageSlot && !staysClosed(valueNode,scope)) liveProps.add(name);
       }
     }
@@ -761,7 +775,7 @@ export function planInitialRendering(
           eventCount===bindingEventCount && liveProps.size===0 && closedContent(children);
         if (component.initial !== undefined &&
             (!isStatic || authoredChildren && !staticChildren) &&
-            component.initial.adoption !== 'host-v1') {
+            component.initial.adoption === undefined) {
           need(scope, 'Interactive package initial content needs a portable adoption plan');
         }
         return [{kind:'component',site:initialSite(node),moduleId:component.scope.moduleId,callModuleId:scope.moduleId,component:component.local!,children,
@@ -929,6 +943,13 @@ export function planInitialRendering(
       const shapes = new Map<string,string>();
       const creationComponents = new Set<string>();
       const descendants = new Map<string, Set<string>>();
+      const portableSlotComponents = new Set<string>();
+      for (const scope of modules.values()) for (const value of scope.values.values()) {
+        if (value !== null && typeof value === 'object' && value.kind === 'component' &&
+            value.initial?.adoption === 'host-slots-v1') {
+          portableSlotComponents.add(`${value.scope.moduleId}#${value.local}`);
+        }
+      }
       const rootScope=component.scope;
       function collect(nodes: readonly InitialRenderNode[], owner?: string): void {
         for(const node of nodes) {
@@ -938,7 +959,10 @@ export function planInitialRendering(
             if (owner) { const children=descendants.get(owner)??new Set<string>();children.add(key);descendants.set(owner,children); }
             // A wholly static slot has no browser factory or binding shape.
             // Future creation is checked below before that omission is used.
-            if (!node.staticChildren) {
+            // Dedicated package slot hosts have a fixed package-owned shape
+            // even when different callers project different content widths.
+            // The DOM planner still validates and merges their host bindings.
+            if (!node.staticChildren && !portableSlotComponents.has(key)) {
               const shape=JSON.stringify(node.children,(key,value)=>value?.kind==='slot'
                 ? {kind:'slot',width:initialNodeExtent(value)}
                 : value?.kind==='conditional' && value.alternatives ? {kind:value.kind,site:value.site,branch:null,alternatives:value.alternatives}
@@ -984,7 +1008,7 @@ export function planInitialRendering(
       for (const key of creationComponents) for (const child of descendants.get(key)??[]) creationComponents.add(child);
       for (const scope of modules.values()) for (const value of scope.values.values()) {
         if (value !== null && typeof value === 'object' && value.kind === 'component' &&
-            value.initial !== undefined && value.initial.adoption !== 'host-v1' &&
+            value.initial !== undefined && value.initial.adoption === undefined &&
             creationComponents.has(`${value.scope.moduleId}#${value.local}`)) {
           need(scope, 'Retained package initial content needs a portable adoption plan');
         }

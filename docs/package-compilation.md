@@ -242,7 +242,7 @@ Package compilation automatically emits a small initial render template when a
 component has one closed host root made from static platform DOM, direct scalar
 prop reads, and compiler slots with portable fallback content. The template is
 data, not executable code or serialized source. At application compilation the
-consumer's static prop and slot values are substituted into the ordinary
+consumer's initial prop and slot values are substituted into the ordinary
 initial-content planner.
 
 A wholly static call retains its HTML and omits the browser factory call.
@@ -274,11 +274,53 @@ field or pass a host themselves. The application linker supplies it through the
 compiled call contract. Earlier artifacts without this capability continue to
 use static specialization or ordinary creation.
 
-Slot components currently support only whole-call static specialization. Their
-adoption needs caller-specific slot positions in addition to a package host.
-Components with events, refs, effects, setup statements, nested components, or
-dynamic structure also continue through ordinary creation. General runtime SSR
-and its existing hydration path remain available for those broader components.
+### Binding package slots
+
+A package component can also retain initial HTML when each slot is the sole
+content of its own host and has no fallback:
+
+```tsx
+// Package source, compiled once.
+export function Panel({ title }: { title: string }) {
+  return <section>
+    <h2>{title}</h2>
+    <header><slot name="heading" /></header>
+    <main><slot /></main>
+  </section>;
+}
+
+// Application source. No special mounting or hydration API.
+import { Panel } from 'my-ui';
+export function App() {
+  let count = 1;
+  return <div><Panel title={'Count ' + count}>
+    <button slot="heading" onClick={() => count++}>Increment</button>
+    <p>{count}</p>
+    <input placeholder="Your draft" />
+  </Panel></div>;
+}
+```
+
+The package binds its section, heading and slot hosts. The application binds
+projected content inside those hosts, so its state, events and update closures
+remain owned by the caller. Updating `count` does not rerun either component
+body or recreate the input. Conditional removal and remounting use the normal
+creation and cleanup paths. Separate instances can receive different content
+widths or omit slots; supported caller-owned lists and conditional content keep
+their normal binding behavior.
+
+The compiler generates `adoption: 'host-slots-v1'` for this bounded contract.
+There is no extra author configuration or handwritten slot address metadata.
+Its dedicated hosts keep package-owned addresses independent of the projected
+content's width. `<main>Before<slot />After</main>` and slots with fallbacks do
+not yet receive this capability: they retain whole-call static specialization
+or ordinary creation instead. This is an initial-delivery optimization boundary,
+not a restriction on authoring or rendering package slots in general.
+
+Components with their own events, refs, effects, setup statements, nested
+components, or dynamic structure also continue through ordinary creation.
+General runtime SSR and its existing hydration path remain available for those
+broader components.
 
 Fullstack SSR remains independent and can render broader package components by
 executing their emitted server factories. Package compilation never executes an
@@ -305,9 +347,9 @@ the consuming application as a shortcut.
 - The semantic digest identifies artifact contents; it is not yet an integrity
   proof that published JavaScript was built from the same source. Package builds
   must still publish compiler output and its matching artifact together.
-- Package initial HTML and host adoption cover the subset described above.
-  Slot placement and locally interactive package components are not yet part of
-  that portable initial-binding contract.
+- Package initial HTML and host adoption cover the subsets described above.
+  Mixed-sibling slots, slot fallbacks and locally interactive package components
+  are not yet part of that portable initial-binding contract.
 - Array literals passed to a holder relationship preserve every contained
   holder. Arbitrarily assembled dynamic collections are not yet a portable
   holder contract.

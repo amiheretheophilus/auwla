@@ -65,3 +65,8 @@ export function initialSite(node: BaseNode): string {
 export function initialSlotMountKey(moduleId: string, component: string, site: string): string {
   return `${moduleId}#${component}#${site}`;
 }
+
+/** Distinguish caller-owned JSX props on the same component call. */
+export function initialRenderPropSite(callSite: string, prop: string): string {
+  return `${callSite}#prop:${prop}`;
+}

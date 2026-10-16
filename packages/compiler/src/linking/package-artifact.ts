@@ -172,13 +172,24 @@ function renderPlan(
   };
   const root = node(plan.root, `${path}.root`, 0);
   if (root.kind !== 'element') invalid(`${path}.root`, 'expected one host element root');
-  if (plan.adoption !== undefined && plan.adoption !== 'host-v1') {
-    invalid(`${path}.adoption`, "expected 'host-v1'");
+  if (plan.adoption !== undefined && plan.adoption !== 'host-v1' && plan.adoption !== 'host-slots-v1') {
+    invalid(`${path}.adoption`, "expected 'host-v1' or 'host-slots-v1'");
   }
-  if (plan.adoption !== undefined && slots.size > 0) {
+  if (plan.adoption === 'host-v1' && slots.size > 0) {
     invalid(`${path}.adoption`, 'host-v1 does not support component slots');
   }
-  return { root, ...(plan.adoption === undefined ? {} : { adoption: 'host-v1' as const }) };
+  if (plan.adoption === 'host-slots-v1') {
+    const check = (input: ExperimentalPackageRenderNode): void => {
+      if (input.kind !== 'element') return;
+      const projected = input.children.filter(child => child.kind === 'slot');
+      if (projected.length && (input.children.length !== 1 || projected[0]!.fallback.length > 0)) {
+        invalid(`${path}.adoption`, 'host-slots-v1 requires dedicated slot hosts without fallbacks');
+      }
+      input.children.forEach(check);
+    };
+    check(root);
+  }
+  return { root, ...(plan.adoption === undefined ? {} : { adoption: plan.adoption }) };
 }
 
 function facts(value: unknown, path: string): { index: number; path: string[] }[] {

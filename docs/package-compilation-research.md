@@ -280,11 +280,29 @@ initial text, retained element identity, conditional removal and fresh mounts,
 plus Vite discovery without admitting package source. This reuses the existing
 binding emitter and does not add another runtime hydration mechanism.
 
-Slots still need caller-specific positions, and components with events, refs,
-effects, setup statements, nested components, or dynamic structure still use
-ordinary creation for browser-only initial delivery. Runtime SSR/hydration
-remains available. A symbolic HTML shape alone cannot grant those broader
-adoption capabilities.
+Dedicated slot hosts now support a second generated capability,
+`host-slots-v1`. Each `<slot>` must be its host's only child, without fallback
+content. The package binding plan owns that host but contains no projected
+descendant addresses. The consumer specializes the projected content into
+caller-owned slot plans, keyed by component call site and prop name, relative
+to the real mount host. Different instances can therefore project different
+widths or omit slots without shifting any package-owned bindings. Ordinary DOM
+plan merging still checks the package host shape.
+
+Transparent forwarded-slot fragments mount directly into the real parent;
+caller JSX-prop fragments likewise bind their contents there rather than
+creating an intermediate fragment for structural anchors. This uses the
+existing slot ABI, update closures, lifetime cleanup and optional host argument,
+not a new slot runtime. Production Chrome checks cover initial HTML without
+JavaScript, original node retention, projected events, draft preservation and
+conditional remounts. Compiler regressions also cover multiple instances with
+different extents, omitted named/default slots, and caller lists/conditionals.
+
+Mixed siblings and fallback branches still need a broader placement contract.
+Components with their own events, refs, effects, setup statements, nested
+components, or dynamic structure also still use ordinary creation for
+browser-only initial delivery. Runtime SSR/hydration remains available. A
+symbolic HTML shape alone cannot grant those broader adoption capabilities.
 
 Prop modes are intentionally exact. A typed scalar prop remains scalar; an
 authored render prop remains JSX-bearing. Cross-mode consumer calls fail during

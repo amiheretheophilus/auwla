@@ -7,7 +7,7 @@ import { type DomContext as Ctx } from './context';
 import { generatedIdentifier, md, mr } from './identifiers';
 import type { EmitScope } from './scope';
 import { initialNode, initialOrCreate } from './initial-dom';
-import { initialSite } from '../planning/initial-content';
+import { initialSite, initialRenderPropSite } from '../planning/initial-content';
 import { hasComponentChildren, isRenderPropReference } from './components/children';
 import { planOrderedAttributes, jsxAttributeName } from '../jsx/attributes';
 import { emitOrderedAttributes } from './ordered-attributes';
@@ -235,6 +235,7 @@ export function emitComponentCall(
           eventOriginId,
           inSvg,
           ownerId,
+          initialRenderPropSite(initialSite(element), propName),
         ),
       });
       continue;

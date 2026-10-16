@@ -81,7 +81,10 @@ describe('JSX paradigm matrix', () => {
     `);
     expect(code.match(/\.createCondRegion\(/g)?.length).toBeGreaterThanOrEqual(2);
     expect(code).toContain('.createListRegion(');
-    expect(code).toContain('createDocumentFragment()');
+    // A render-prop fragment is transparent: both siblings mount directly
+    // into the callee's real host without a temporary fragment allocation.
+    expect(code.match(/\.createElement\("small"\)/g)?.length).toBe(2);
+    expect(code).not.toContain('createDocumentFragment()');
   });
 
   it('supports a JSX render prop on an authored component list row', () => {

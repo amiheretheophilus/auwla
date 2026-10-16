@@ -407,10 +407,156 @@ describe('experimental package compilation artifacts', () => {
 
     const unsupported = structuredClone(packaged.artifact);
     Reflect.set(unsupported.entries['older-ui']!.components!.Badge.initial!, 'adoption', 'host-v2');
-    expect(() => validateExperimentalPackageArtifact(unsupported)).toThrow(".initial.adoption; expected 'host-v1'");
+    expect(() => validateExperimentalPackageArtifact(unsupported)).toThrow(".initial.adoption; expected 'host-v1' or 'host-slots-v1'");
     const slotAdoption = structuredClone(packaged.artifact);
     Reflect.set(slotAdoption.entries['older-ui']!.components!.Panel.initial!, 'adoption', 'host-v1');
     expect(() => validateExperimentalPackageArtifact(slotAdoption)).toThrow('host-v1 does not support component slots');
+  });
+
+  it.each([false, true])('adopts dedicated package slots with caller-owned events and remounts (open=%s)', async open => {
+    const runtimePath = '@memoized-dom/runtime/testing';
+    const packaged = experimentalCompilePackage({
+      './index.tsx': `export function Panel({title}:{title:string}) {
+        return <section><h2>{title}</h2><header><slot name="heading"/></header>
+          <main><slot/></main><footer>After</footer></section>;
+      }`,
+    }, {packageEntries: {'slotted-package': './index.tsx'}, runtimePath});
+    expect(packaged.artifact.entries['slotted-package']!.components!.Panel.initial?.adoption).toBe('host-slots-v1');
+    const application = compileModulesDetailed({
+      './main.ts': `import {mount} from '${runtimePath}';import {App} from './app';mount('root',App);`,
+      './app.tsx': `import {Panel} from 'slotted-package';export function App(){let n=1;let open=${open};
+        return <div><button class="toggle" onClick={()=>open=!open}>Toggle</button>
+          <button class="next" onClick={()=>n++}>Next</button>{open&&<Panel title={'Title '+n}>
+            <button slot="heading" class="inside" onClick={()=>n++}>{n}</button>
+            <b>{n}</b><input class="draft" placeholder="Draft"/>
+          </Panel>}<p>{n}</p></div>;
+      }`,
+    }, {initialContent:true, experimentalPackageArtifacts:[JSON.parse(JSON.stringify(packaged.artifact))],runtimePath});
+    expect(application.initialContent).toBe(true);
+    expect(application.initialRender.kind).toBe('bindings');
+    const directory = join(outDir, `slot-adoption-${open}`);
+    const packageDirectory = join(directory, 'node_modules', 'slotted-package');
+    mkdirSync(packageDirectory, {recursive:true});
+    writeFileSync(join(packageDirectory, 'package.json'), JSON.stringify({type:'module',exports:'./index.js'}));
+    writeFileSync(join(packageDirectory, 'index.js'), packaged.output['./index.tsx']!);
+    writeFileSync(join(directory, 'app.js'), application.output['./app.tsx']!);
+    document.body.innerHTML = `<div id="root">${emitInitialHtml(application.initialRender)}</div>`;
+    const originals = [...document.querySelectorAll('*')];
+    const create = vi.spyOn(document,'createElement');
+    let mounted: ReturnType<typeof mountInitial> | undefined;
+    const click = (selector:string) => document.querySelector<HTMLButtonElement>(selector)!.click();
+    try {
+      const {App} = await import(`${pathToFileURL(join(directory,'app.js')).href}?slots=${Date.now()}`);
+      mounted = mountInitial('root',App);
+      expect(create).not.toHaveBeenCalled();
+      expect([...document.querySelectorAll('*')]).toEqual(originals);
+      create.mockRestore();
+      if (!open) {
+        click('.toggle');
+        await waitFor(() => expect(document.querySelectorAll('section').length).toBe(1));
+      }
+      const section = document.querySelector('section');
+      const buttons = [...document.querySelectorAll<HTMLButtonElement>('.inside')];
+      const draft = document.querySelector<HTMLInputElement>('.draft')!;
+      draft.value = 'Keep my draft';
+      buttons[0]!.click();
+      await waitFor(() => {
+        expect(buttons.map(node=>node.textContent)).toEqual(['2']);
+        expect(document.querySelector('b')!.textContent).toBe('2');
+        expect(document.querySelector('h2')!.textContent).toBe('Title 2');
+      });
+      expect(document.querySelector('section')).toBe(section);
+      expect(document.querySelector('.draft')).toBe(draft);
+      expect(draft.value).toBe('Keep my draft');
+      click('.toggle');
+      await waitFor(() => expect(document.querySelectorAll('section').length).toBe(0));
+      click('.next');
+      await waitFor(() => expect(document.querySelector('p')!.textContent).toBe('3'));
+      click('.toggle');
+      await waitFor(() => {
+        expect([...document.querySelectorAll('.inside')].map(node=>node.textContent)).toEqual(['3']);
+        expect(document.querySelector('b')!.textContent).toBe('3');
+      });
+      expect(document.querySelector('section')).not.toBe(section);
+      document.querySelector<HTMLButtonElement>('.inside')!.click();
+      await waitFor(() => expect([...document.querySelectorAll('.inside')].map(node=>node.textContent)).toEqual(['4']));
+    } finally {
+      create.mockRestore();mounted?.unmount();document.body.replaceChildren();
+    }
+  });
+
+  it('rejects portable slot adoption without dedicated hosts or with fallbacks', () => {
+    const packaged = experimentalCompilePackage({
+      './index.tsx': `export function Mixed(){return <section><b>Before</b><slot/></section>;}
+        export function Fallback(){return <section><main><slot><b>Empty</b></slot></main></section>;}`,
+    }, {packageEntries:{'bounded-slots':'./index.tsx'}});
+    for (const [name,component] of Object.entries(packaged.artifact.entries['bounded-slots']!.components!)) {
+      expect(component.initial?.adoption).toBeUndefined();
+      const artifact = structuredClone(packaged.artifact);
+      Reflect.set(artifact.entries['bounded-slots']!.components![name]!.initial!, 'adoption','host-slots-v1');
+      expect(()=>validateExperimentalPackageArtifact(artifact)).toThrow('requires dedicated slot hosts without fallbacks');
+    }
+  });
+
+  it.each([0,2])('binds repeated package slots with distinct extents, lists and empty slots (rows=%s)', async count => {
+    const runtimePath='@memoized-dom/runtime/testing';
+    const packaged=experimentalCompilePackage({
+      './index.tsx':`export function Panel({title}:{title:string}){return <section><h2>{title}</h2><header><slot name="heading"/></header><main><slot/></main><footer>After</footer></section>;}`,
+    },{packageEntries:{'repeated-slots':'./index.tsx'},runtimePath});
+    const application=compileModulesDetailed({
+      './main.ts':`import {mount} from '${runtimePath}';import {App} from './app';mount('root',App);`,
+      './app.tsx':`import {Panel} from 'repeated-slots';export function App(){let n=1;let shown=true;let rows=${JSON.stringify(Array.from({length:count},(_,id)=>({id,label:'row'+id})))};
+        return <div><button class="reverse" onClick={()=>rows=rows.toReversed()}>Reverse</button>
+          <button class="append" onClick={()=>rows=[...rows,{id:2,label:'new'}]}>Append</button>
+          <button class="shown" onClick={()=>shown=!shown}>Shown</button>
+          <Panel title={'First '+n}><button slot="heading" class="inside" onClick={()=>n++}>{n}</button>
+            {shown&&<b>{n}</b>}{rows.map(row=><li key={row.id}>{row.label}:{n}</li>)}</Panel>
+          <Panel title={'Second '+n}><i>{n}</i></Panel>
+          <Panel title={'Empty '+n}/></div>;
+      }`,
+    },{initialContent:true,experimentalPackageArtifacts:[packaged.artifact],runtimePath});
+    expect(application.initialContent).toBe(true);
+    const directory=join(outDir,`repeated-slot-adoption-${count}`);
+    const packageDirectory=join(directory,'node_modules','repeated-slots');
+    mkdirSync(packageDirectory,{recursive:true});
+    writeFileSync(join(packageDirectory,'package.json'),JSON.stringify({type:'module',exports:'./index.js'}));
+    writeFileSync(join(packageDirectory,'index.js'),packaged.output['./index.tsx']!);
+    writeFileSync(join(directory,'app.js'),application.output['./app.tsx']!);
+    document.body.innerHTML=`<div id="root">${emitInitialHtml(application.initialRender)}</div>`;
+    const originals=[...document.querySelectorAll('*')];
+    const create=vi.spyOn(document,'createElement');
+    let mounted:ReturnType<typeof mountInitial>|undefined;
+    const click=(selector:string)=>document.querySelector<HTMLButtonElement>(selector)!.click();
+    try {
+      const {App}=await import(`${pathToFileURL(join(directory,'app.js')).href}?repeated=${Date.now()}`);
+      mounted=mountInitial('root',App);
+      expect(create).not.toHaveBeenCalled();
+      const adopted=[...document.querySelectorAll('*')];
+      expect(adopted.length).toBe(originals.length);
+      expect(adopted.every((node,index)=>node===originals[index])).toBe(true);
+      create.mockRestore();
+      const rows=[...document.querySelectorAll('li')];
+      click('.reverse');
+      await waitFor(()=>{
+        const current=[...document.querySelectorAll('li')];
+        expect(current.length).toBe(rows.length);
+        expect(current.every((node,index)=>node===rows.at(-index-1))).toBe(true);
+      });
+      click('.inside');
+      await waitFor(()=>{
+        expect([...document.querySelectorAll('h2')].map(node=>node.textContent)).toEqual(['First 2','Second 2','Empty 2']);
+        expect(document.querySelector('b')!.textContent).toBe('2');expect(document.querySelector('i')!.textContent).toBe('2');
+        expect([...document.querySelectorAll('li')].map(node=>node.textContent)).toEqual(
+          Array.from({length:count},(_,index)=>`row${count-index-1}:2`));
+      });
+      click('.append');
+      await waitFor(()=>expect(document.querySelectorAll('li').length).toBe(count+1));
+      click('.shown');await waitFor(()=>expect(document.querySelectorAll('b').length).toBe(0));
+      click('.shown');await waitFor(()=>expect(document.querySelector('b')?.textContent).toBe('2'));
+      expect(originals.filter(node=>node.tagName==='SECTION').every(node=>node.isConnected)).toBe(true);
+    } finally {
+      create.mockRestore();mounted?.unmount();document.body.replaceChildren();
+    }
   });
 
   it('links a separately compiled ordinary helper without its source', async () => {

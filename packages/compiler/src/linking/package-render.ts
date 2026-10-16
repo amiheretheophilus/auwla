@@ -292,7 +292,12 @@ export function packageInitialDom(
       // All symbolic reads remain live, including calls initially given constants.
       return { kind: 'text', value: 'package', live: input.parts.some(part => part.kind === 'prop') };
     }
-    const children = input.children.map(node);
+    // A separately compiled host cannot know projected widths. A dedicated
+    // slot host has no later sibling addresses to shift and owns no projected
+    // bindings. The caller plans that content relative to this host instead.
+    const slots = input.children.filter(child => child.kind === 'slot');
+    if (slots.length && (input.children.length !== 1 || slots[0]!.fallback.length > 0)) return undefined;
+    const children = slots.length ? [] : input.children.map(node);
     if (children.some(child => child === undefined)) return undefined;
     return {
       kind: 'element', tag: input.tag, site: input.site,

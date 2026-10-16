@@ -64,6 +64,16 @@ export function planDirectChildren(
     }
     if (astFactory.isJSXElement(child) || astFactory.isJSXFragment(child)) {
       flushText();
+      // A fragment containing only a forwarded slot is transparent. Mount the
+      // slot into the real parent, not an empty temporary DocumentFragment;
+      // this is also the host against which initial content is addressed.
+      const forwarded = astFactory.isJSXFragment(child) && child.children.length === 1
+        ? child.children[0] : undefined;
+      if (forwarded && astFactory.isJSXExpressionContainer(forwarded) &&
+          astFactory.isExpression(forwarded.expression) && classifier.isForwarded(forwarded.expression)) {
+        result.push({type:'slot', expression:cloneEstreeNode(forwarded.expression)});
+        continue;
+      }
       result.push({ type: 'node', node: child });
       continue;
     }

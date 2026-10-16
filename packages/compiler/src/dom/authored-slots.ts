@@ -60,6 +60,7 @@ export type AuthoredRenderValueSlotBuilder = (
   eventOriginId: t.Expression | undefined,
   inSvg: boolean,
   ownerId: t.Expression,
+  site?: string,
 ) => t.Identifier;
 
 export function createAuthoredSlotBuilders(
@@ -159,9 +160,10 @@ export function createAuthoredSlotBuilders(
     eventOriginId: t.Expression | undefined,
     inSvg: boolean,
     ownerId: t.Expression,
+    site?: string,
   ): t.Identifier => {
-    const children: JsxChild[] =
-      astFactory.isJSXElement(value) || astFactory.isJSXFragment(value)
+    const children: JsxChild[] = astFactory.isJSXFragment(value) ? value.children :
+      astFactory.isJSXElement(value)
         ? [value]
         : [astFactory.jsxExpressionContainer(value)];
     return buildAuthoredChildrenSlot(
@@ -175,6 +177,7 @@ export function createAuthoredSlotBuilders(
       eventOriginId,
       inSvg,
       ownerId,
+      site,
     );
   };
 
