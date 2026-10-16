@@ -3,8 +3,10 @@ import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import {
+  analyzeServerFunctionModule,
   compileModulesDetailed,
   experimentalCompilePackage,
+  generateServerFunctionClient,
   type ExperimentalPackageArtifact,
 } from '@memoized-dom/compiler';
 import { createDataRuntime, setActiveDataRuntime } from '@memoized-dom/data';
@@ -225,6 +227,80 @@ describe('experimental package compilation artifacts', () => {
     expect(output).toContain('source: [first, second]');
     expect(output).not.toMatch(
       /source: \[(?:_MDD\.)?(?:readResolvedValue|readModuleSource)/,
+    );
+  });
+
+  it('composes request-state relationships through package re-exports', () => {
+    const packaged = experimentalCompilePackage({
+      './pending.ts': `
+        import { $track } from '@memoized-dom/data';
+        export function pending(source) {
+          return $track(source).pending;
+        }
+      `,
+      './index.ts': `
+        import { pending } from './pending';
+        export function waitingFor(source) {
+          return pending(source);
+        }
+      `,
+    }, {
+      packageEntries: { 'status-package': './index.ts' },
+    });
+
+    expect(
+      packaged.artifact.entries['status-package']!.functions.waitingFor,
+    ).toMatchObject({
+      parameterSourceReads: [{ index: 0, path: [] }],
+      parameterPayloadReads: [],
+    });
+
+    const application = compileModulesDetailed({
+      './app.tsx': `
+        import { waitingFor as pending } from 'status-package';
+        export function App() {
+          const stories = $fetch('/stories');
+          return <p>{pending(stories) ? 'Loading' : 'Ready'}</p>;
+        }
+      `,
+    }, {
+      experimentalPackageArtifacts: [packaged.artifact],
+    });
+
+    expect(application.output['./app.tsx']).toContain('pending(stories)');
+    expect(application.output['./app.tsx']).not.toMatch(
+      /deriveResolvedValues\(\[stories\].*pending/s,
+    );
+  });
+
+  it('preserves an event-created request holder through a packaged projection', () => {
+    const functions = generateServerFunctionClient(analyzeServerFunctionModule(`
+      export const postVote = define.function({
+        post: async (_context, id: number) => ({ id }),
+      });
+    `, { moduleId: '/app/server/functions/votes.ts' }));
+    const application = compileModulesDetailed({
+      './app.tsx': `
+        import { pending } from '@memoized-dom/utils';
+        import { postVote } from './functions';
+        export function App() {
+          let lastVote: ReturnType<typeof postVote> | null = null;
+          return <main>
+            <button onClick={() => { lastVote = postVote(1); }}>Vote</button>
+            {lastVote !== null && <p>{pending(lastVote) ? 'Voting' : 'Saved'}</p>}
+          </main>;
+        }
+      `,
+      './functions.ts': functions,
+    }, {
+      experimentalPackageArtifacts: [utilsPackageArtifact],
+    });
+
+    const output = application.output['./app.tsx']!;
+    expect(output).toContain('createEventSourceSlot()');
+    expect(output).toContain('pending(lastVote)');
+    expect(output).not.toMatch(
+      /deriveResolvedValues\(\[lastVote\].*pending/s,
     );
   });
 });

@@ -93,6 +93,10 @@ In a monorepo, build ordering matters: build the compiler before packages which
 generate artifacts. The root Memoized DOM build does this for
 `@memoized-dom/utils`.
 
+The repository's `bun run bench:package-compilation` command compares compiling
+package source with linking an already generated artifact. It is a compiler
+microbenchmark, not a promise about a complete Vite build.
+
 ## Opaque runtime boundaries
 
 Package compilation can compose relationships through local helpers and other

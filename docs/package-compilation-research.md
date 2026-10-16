@@ -283,7 +283,26 @@ edits, patched dependencies, peer dependency resolution, and browser/server entr
 conditions must not silently reuse stale facts. Published metadata must match the
 JavaScript it describes after bundling/minification.
 
-No build-time or bundle-size improvement has been benchmarked for this proposal.
+### Current compilation-cost measurement
+
+The repository includes `bun run bench:package-compilation`. It compares an
+application linked with all package source present against the same application
+linked from a previously generated semantic artifact. On the Windows/Bun
+development machine used on 2026-10-16, the warm median results were:
+
+| Helpers | Package modules | Source-linked app | Artifact-linked app | Ratio |
+| ---: | ---: | ---: | ---: | ---: |
+| 8 | 9 | 155.7 ms | 40.0 ms | 3.89x |
+| 32 | 33 | 336.8 ms | 29.1 ms | 11.58x |
+| 64 | 65 | 478.6 ms | 24.3 ms | 19.72x |
+
+Cold artifact generation took 366–494 ms and produced 1.2–9.3 KiB of JSON for
+2.2–17.7 KiB of synthetic package source. Generation is package-owned work;
+applications reuse its result. These numbers validate that excluding package
+source can materially reduce compiler work for this synthetic graph. They are
+not a general build-time promise: the app imports at most eight helpers, the
+benchmark does not include bundling or filesystem discovery, and real packages
+will have different parsing, linking, I/O, and plugin costs.
 
 ### Reads, actions, and setup have different lifetimes
 
@@ -336,14 +355,18 @@ open decisions, not documented APIs.
    state from payload readiness. The request-state-only and mixed conditional
    cases now have compile and runtime regressions; broader callback/facade cases
    remain part of the acceptance matrix.
-2. The helper-only artifact prototype now links an unrelated package without its
-   source and has an end-to-end pending-to-settled runtime regression. Next,
-   exercise our utils and measure source compilation, cold artifact generation,
-   and warm cached linking before adding automatic discovery.
+2. The helper-only artifact links an unrelated package without its source,
+   drives the real request-state and optimistic utilities, composes through
+   package re-exports, and preserves event-created request holders. Vite now
+   discovers package artifacts automatically. Next, measure source compilation,
+   cold artifact generation, and warm cached linking before treating artifact
+   generation as a stable public build surface.
 3. Extend the boundary to component libraries and verify consumer-dependent prop
    handling, SSR, HMR, source maps, and existing delivery optimizations.
-4. Measure cold/warm build cost, artifact size, and browser output before selecting
-   a public format and promising performance improvements.
+4. The reproducible synthetic benchmark now measures cold generation, warm
+   linking, and artifact size. Browser output, filesystem/plugin cost, and real
+   package workloads still need measurement before selecting a public format or
+   promising performance improvements.
 
 Required regressions include import aliases and re-exports; lexical shadowing;
 nested wrappers; source fields/arrays; mixed state/payload reads; returned facades
