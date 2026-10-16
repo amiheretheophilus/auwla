@@ -6,6 +6,7 @@ import { afterEach, beforeAll, expect, it, vi } from 'bun:test';
 import { compileModules } from '@memoized-dom/compiler';
 import { clearDataRuntime } from '@memoized-dom/data';
 import { _internals, resetAccessTable, resetScheduler, setScheduler, unregister } from '@memoized-dom/runtime/testing';
+import { utilsPackageArtifacts } from '../test-support/package-artifacts';
 
 const outputDir = join(import.meta.dirname, 'fixtures', 'out', 'optimistic-utils-integration');
 const fixture = join(outputDir, 'app.ts');
@@ -101,7 +102,7 @@ beforeAll(() => {
       </section>;
     }
   `;
-  const output = compileModules({ './app.tsx': source });
+  const output = compileModules({ './app.tsx': source }, utilsPackageArtifacts);
   mkdirSync(outputDir, { recursive: true });
   writeFileSync(fixture, output['./app.tsx']!);
 });

@@ -5,6 +5,7 @@ import { afterEach, expect, it, vi } from 'bun:test';
 import { compileModules } from '@memoized-dom/compiler';
 import { clearDataRuntime } from '@memoized-dom/data';
 import { _internals, resetAccessTable, resetScheduler, setScheduler, unregister } from '@memoized-dom/runtime/testing';
+import { utilsPackageArtifacts } from '../test-support/package-artifacts';
 
 const messagingSource = `
   import { $forms } from '@memoized-dom/data';
@@ -58,7 +59,7 @@ afterEach(() => {
 });
 
 it('compiles an optimistic form with an expression before the error-row return', () => {
-  expect(() => compileModules({ './App.tsx': messagingSource, './action.ts': 'export async function deliverMessage(message) { return message; }' })).not.toThrow();
+  expect(() => compileModules({ './App.tsx': messagingSource, './action.ts': 'export async function deliverMessage(message) { return message; }' }, utilsPackageArtifacts)).not.toThrow();
 });
 
 it('submits overlapping optimistic messages, reconciles success and rolls back failure', async () => {
@@ -70,7 +71,7 @@ it('submits overlapping optimistic messages, reconciles success and rolls back f
     './action.ts': `export function deliverMessage(message) {
       return new Promise((resolve, reject) => globalThis.__messageRequests.push({ message, resolve, reject }));
     }`,
-  });
+  }, utilsPackageArtifacts);
   mkdirSync(directory, { recursive: true });
   for (const [file, output] of Object.entries(modules)) writeFileSync(join(directory, file.slice(2)), output);
   const specifier = './fixtures/out/simple-messaging/App.tsx';

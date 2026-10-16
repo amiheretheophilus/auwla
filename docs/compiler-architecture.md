@@ -10,8 +10,9 @@ historical validation sections retain evidence for their recorded revisions.
 
 Separate compilation of reusable libraries is explored in
 [Package compilation and reactive linking research](./package-compilation-research.md).
-That document separates verified compiler gaps from a proposed partial-package
-artifact/linking model; it does not describe an implemented package-build API.
+The experimental helper artifact and its package-author workflow are documented
+in [Packaging compiler-aware helpers](./package-compilation.md). Component and
+exported-state package linking remain research work.
 
 ## Captured application handles — 2026-10-06
 

@@ -343,8 +343,10 @@ not a copy of its array and not another request. The compiler preserves this
 as a source reference rather than its current payload. Unsupported plain
 arrays/objects produce an error rather than silently failing to protect data.
 Use direct live-source bindings or an explicit array of those bindings inside
-the imported `optimistic` call. Arbitrary derived values and dynamically
-assembled source lists are outside this compiler-preserved authoring contract.
+the `source` field. This is carried by the utility's generated package artifact,
+not by compiler recognition of `optimistic` or `@memoized-dom/utils`. Arbitrary
+derived values and dynamically assembled source lists are outside the current
+compiler-preserved authoring contract.
 
 The framework cannot reliably infer this relationship from arbitrary closures.
 `apply` might change an array through a helper or alias, update several objects,

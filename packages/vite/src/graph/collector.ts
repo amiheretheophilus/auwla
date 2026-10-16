@@ -13,6 +13,7 @@ import {
   type CompiledModules,
   type CompiledModuleMetadata,
   type CompilerSourceMap,
+  type ExperimentalPackageArtifact,
   type InitialDelivery,
 } from '@memoized-dom/compiler';
 import type { ResolvedAdapterOptions } from '../options';
@@ -30,6 +31,7 @@ import {
   rewriteServerFunctionBarrelImports,
   type ServerFunctionBarrelEntry,
 } from '../server-functions';
+import { discoverPackageArtifact } from './package-artifacts';
 
 export interface ResolvedImport {
   id: string;
@@ -102,6 +104,27 @@ export async function compileGraph(
   const styles = new Set<string>();
   let renderableContent = false;
   const directStyles = new Map<string, Set<string>>();
+  const packageArtifacts = new Map<string, ExperimentalPackageArtifact>();
+  const artifactLookups = new Map<string, ReturnType<typeof discoverPackageArtifact>>();
+
+  async function recordPackageArtifact(
+    resolvedId: string,
+    specifier: string,
+    importer: string,
+  ): Promise<boolean> {
+    const key = `${resolvedId}\0${specifier}\0${importer}`;
+    let lookup = artifactLookups.get(key);
+    if (lookup === undefined) {
+      lookup = discoverPackageArtifact(resolvedId, specifier, importer);
+      artifactLookups.set(key, lookup);
+    }
+    const discovered = await lookup;
+    if (discovered === undefined) return false;
+    context.addWatchFile(discovered.manifestFile);
+    context.addWatchFile(discovered.artifactFile);
+    packageArtifacts.set(discovered.artifactFile, discovered.artifact);
+    return true;
+  }
 
   function recordStyle(id: string, style: string): void {
     styles.add(style);
@@ -166,13 +189,18 @@ export async function compileGraph(
       const resolved = await context.resolve(specifier, cleanFile, {
         skipSelf: true,
       });
-      if (resolved === null || resolved.external) continue;
+      if (resolved === null) continue;
+      if (resolved.external) {
+        await recordPackageArtifact(resolved.id, specifier, cleanFile);
+        continue;
+      }
 
       const target = cleanViteId(resolved.id);
       if (styleExtension.test(resolved.id)) {
         recordStyle(id, resolved.id);
         continue;
       }
+      if (await recordPackageArtifact(target, specifier, cleanFile)) continue;
       const authored = authoredImports.get(specifier);
       if (
         authored !== undefined &&
@@ -254,6 +282,10 @@ export async function compileGraph(
     ...(options.externalReactiveSources === undefined
       ? {}
       : { externalReactiveSources: options.externalReactiveSources }),
+    experimentalPackageArtifacts: [
+      ...(options.experimentalPackageArtifacts ?? []),
+      ...packageArtifacts.values(),
+    ],
     ...(hot ? { hot: true } : {}),
     diagnostics: hot && routedEnvironment !== 'server',
     // Browser module state lives in one application runtime. Server modules

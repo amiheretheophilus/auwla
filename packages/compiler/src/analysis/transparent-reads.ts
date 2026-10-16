@@ -108,7 +108,6 @@ export function isPassthroughArgument(
   ctx: Ctx,
   identifier: BaseNode,
 ): boolean {
-  if (isOptimisticSource(ctx, identifier)) return true;
   if (sourceStateArgument(ctx, identifier)) return true;
   const parent = ctx.astAnalysis?.parentByNode.get(identifier) ?? null;
   if (parent?.type !== 'CallExpression') return false;
@@ -177,9 +176,22 @@ function sourceArgumentRead(
     const effects = kind === 'state'
       ? summary?.parameterSourceReads
       : summary?.parameterPayloadReads;
-    return effects?.some(effect =>
-      effect.index === index && effect.path.length === path.length &&
-      effect.path.every((part, partIndex) => part === path[partIndex])) === true;
+    return effects?.some(effect => {
+      if (
+        effect.index !== index ||
+        effect.path.length > path.length ||
+        !effect.path.every((part, partIndex) => part === path[partIndex])
+      ) {
+        return false;
+      }
+      if (effect.path.length === path.length) return true;
+      // A holder-state relationship applies to the holders inside an authored
+      // array too. Payload relationships stay exact: reading one collection's
+      // payload does not imply reading every nested value as a payload.
+      return kind === 'state' && path.slice(effect.path.length).every(
+        part => /^(?:0|[1-9]\d*)$/.test(part),
+      );
+    }) === true;
   }
 }
 
@@ -191,36 +203,6 @@ export function sourceStateArgument(ctx: Ctx, expression: BaseNode): boolean {
 /** Whether this source occurrence feeds a helper parameter's payload read. */
 export function sourcePayloadArgument(ctx: Ctx, expression: BaseNode): boolean {
   return sourceArgumentRead(ctx, expression, 'payload');
-}
-
-/** Only the source field of an imported optimistic() call carries holder identity. */
-function isOptimisticSource(ctx: Ctx, identifier: BaseNode): boolean {
-  let current = identifier;
-  let parent = ctx.astAnalysis?.parentByNode.get(current) ?? null;
-  if (parent?.type === 'ArrayExpression') {
-    current = parent;
-    parent = ctx.astAnalysis?.parentByNode.get(parent) ?? null;
-  }
-  if (parent?.type !== 'Property' || childNode(parent, 'value') !== current) return false;
-  const property = parent as unknown as t.ObjectProperty;
-  if (property.computed || !(astFactory.isIdentifier(property.key, { name: 'source' }) ||
-    astFactory.isStringLiteral(property.key, { value: 'source' }))) return false;
-  const object = ctx.astAnalysis?.parentByNode.get(parent) ?? null;
-  const call = object && ctx.astAnalysis?.parentByNode.get(object);
-  if (call?.type !== 'CallExpression') return false;
-  const callee = childNode(call, 'callee');
-  if (callee?.type !== 'Identifier') return false;
-  const binding = astBindingAt(ctx, callee, (callee as unknown as AstIdentifier).name);
-  if (binding?.kind !== 'import') return false;
-  const declaration = binding.declarationNode;
-  if (declaration.type !== 'ImportDeclaration') return false;
-  const imported = (declaration as unknown as t.ImportDeclaration).specifiers.find(specifier =>
-    specifier.type === 'ImportSpecifier' && specifier.local.name === (callee as unknown as AstIdentifier).name);
-  if (imported === undefined) return false;
-  const name = childNode(imported as unknown as BaseNode, 'imported');
-  const source = childNode(declaration, 'source');
-  return (name as unknown as t.Identifier)?.name === 'optimistic' &&
-    (source as unknown as { value?: string })?.value === '@memoized-dom/utils';
 }
 
 export function isActionRefreshTarget(ctx: Ctx, identifier: BaseNode): boolean {

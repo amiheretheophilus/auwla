@@ -4,8 +4,8 @@ Status: active compiler work, started 2026-10-16. Request-state and payload
 relationships now link across local functions, imports, aliases, and re-exports,
 including helpers that use both relationships. A versioned, explicitly
 experimental artifact now proves separate compilation for argument-relative
-ordinary helpers. Automatic package discovery, a package-build command, and a
-stable compatibility contract have not been selected or implemented.
+ordinary helpers. Vite discovers those artifacts from package metadata. The
+contract remains experimental and component-package linking is still deferred.
 
 ## Motivation
 
@@ -122,12 +122,12 @@ when reused for SSR.
   [component manifests](../packages/compiler/src/components/manifest.ts) retain
   more facts than the currently exposed compilation metadata. That public
   metadata is not a complete reusable package format.
-- [Source acceptance](../packages/vite/src/paths.ts) currently excludes files
-  under `node_modules`; package artifact discovery/consumption is absent.
+- [Source acceptance](../packages/vite/src/paths.ts) continues to exclude files
+  under `node_modules`; Vite discovers their semantic artifacts separately so
+  package source does not enter the application graph.
 - [Transparent read analysis](../packages/compiler/src/analysis/transparent-reads.ts)
-  currently includes an `optimistic()` source-field exception tied to
-  `@memoized-dom/utils`. A sufficiently expressive general contract should
-  eventually replace that exception, not add more names beside it.
+  now relies on linked function summaries for package helpers. The former
+  `@memoized-dom/utils`/`optimistic()` source-field exception has been removed.
 
 ## External research
 
@@ -178,18 +178,34 @@ package import and must resolve through the host or bundler; the artifact carrie
 semantic linking information, not executable code.
 
 This prototype intentionally accepts only ordinary named helpers. It rejects
-entry modules that export components or compiler-owned state, and rejects
-helpers whose summaries depend on captured compiler-owned state. Ordinary
-JavaScript closures remain owned by the emitted package code and need no linker
-metadata. The artifact supports argument-relative request-state reads, payload
-reads, writes, and transparent-source provenance. Namespace imports remain
-unsupported because they do not identify one reactive export.
+entry modules that export components or compiler-owned state. Package authors
+may mark an entry `runtimeOwnedState: true` when its ordinary JavaScript module
+state is fully owned by the emitted package runtime and must not become part of
+the consuming application's reactive graph. That assertion is needed for the
+optimistic utility's private operation-deduplication `WeakMap`s; its portable
+artifact still exposes only argument-relative effects.
 
-There is deliberately no filesystem lookup, `package.json` condition, Vite
-integration, stale-artifact check, cache, or CLI yet. Callers pass artifacts
-explicitly, and entry matching is exact. The purpose of this API is to prove
-that separately emitted helper code and separately consumed semantic summaries
-preserve runtime behavior before designing publication and discovery.
+The artifact supports argument-relative request-state reads, payload reads,
+writes, and transparent-source provenance. Namespace imports remain unsupported
+because they do not identify one reactive export. Vite resolves bare imports,
+reads the package's `memoized-dom.artifact` declaration, watches both the
+manifest and artifact, and passes the summary to the application linker. Direct
+compiler callers pass artifacts explicitly. Entry matching is exact.
+
+### Optimistic utility proof
+
+`@memoized-dom/utils` is now compiled into the same artifact as the request-state
+projection helpers. Its generated summary says that `options.source` consumes
+request-holder identity. That general property-path relationship works through
+an aliased import and through inline arrays of multiple sources. The compiler no
+longer contains the utility name or package name.
+
+The utility's package build supplies one lower-level contract for
+`protectLiveSources`: argument zero consumes holder identity without consuming
+its resolved payload. Package compilation composes that opaque runtime boundary
+through `optimistic` and emits the public relationship. This is the unavoidable
+dependency information for behavior hidden behind an imported function; it is
+not application-facing syntax or a compiler exception for the utility.
 
 ### 1. Package compilation: preserve reusable meaning
 

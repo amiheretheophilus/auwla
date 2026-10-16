@@ -4,6 +4,44 @@ This project does not support legacy APIs. All packages and consumers must use t
 
 Optional helpers for Memoized DOM applications.
 
+## Request-state projections
+
+Use the small projections when an expression needs one field from `$track`:
+
+```tsx
+import {
+  error,
+  pending,
+  refreshing,
+  status,
+  streaming,
+} from '@memoized-dom/utils';
+
+const stories = getStories();
+const failure = error(stories);
+
+return <section>
+  <button disabled={pending(stories)}>Continue</button>
+  {refreshing(stories) && <small>Updating…</small>}
+  {streaming(stories) && <small>Live</small>}
+  <output>{status(stories)}</output>
+  {failure && <p>{failure.message}</p>}
+</section>;
+```
+
+They are ordinary functions equivalent to reading the corresponding field from
+`$track(source)`. They do not create, own, refresh, or dispose a request. Their
+generated package artifact tells the application compiler that the argument is
+a request holder, so a derived binding such as `const waiting = pending(stories)`
+updates with request state without waiting for the payload and without any
+helper-name rule in the compiler.
+
+Use `$track(source)` itself when you need operations such as `refresh`, `retry`,
+or callback registration. These projections intentionally expose only current
+state.
+
+## Optimistic updates
+
 ```tsx
 import { optimistic } from '@memoized-dom/utils';
 

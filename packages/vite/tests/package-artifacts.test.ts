@@ -1,0 +1,115 @@
+import { describe, expect, it } from 'bun:test';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { compileGraph, type GraphPluginContext } from '../src/graph/collector';
+import { resolveAdapterOptions } from '../src/options';
+
+describe('package compilation artifacts', () => {
+  it('discovers package metadata and links it without compiling package source', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'mmd-package-artifact-'));
+    const entry = join(root, 'App.tsx');
+    const packageRoot = join(root, 'node_modules', 'track-utils');
+    const packageEntry = join(packageRoot, 'index.js');
+    const artifactFile = join(packageRoot, 'memoized-dom.package.json');
+    mkdirSync(packageRoot, { recursive: true });
+    writeFileSync(entry, `
+      import { pending } from 'track-utils';
+      export function App() {
+        const stories = $fetch('/stories');
+        const waiting = pending(stories);
+        return <p>{waiting ? 'Loading' : stories.length + ' stories'}</p>;
+      }
+    `);
+    writeFileSync(packageEntry, `
+      export function pending(source) { return source.pending; }
+    `);
+    writeFileSync(join(packageRoot, 'package.json'), JSON.stringify({
+      name: 'track-utils',
+      type: 'module',
+      exports: './index.js',
+      'memoized-dom': { artifact: './memoized-dom.package.json' },
+    }));
+    writeFileSync(artifactFile, JSON.stringify({
+      kind: 'memoized-dom-package',
+      version: 1,
+      entries: {
+        'track-utils': {
+          functions: {
+            pending: {
+              parameterWrites: [],
+              parameterSourceReads: [{ index: 0, path: [] }],
+              parameterPayloadReads: [],
+              unbounded: false,
+            },
+          },
+        },
+      },
+    }));
+
+    const watched = new Set<string>();
+    const context: GraphPluginContext = {
+      async resolve(specifier) {
+        return specifier === 'track-utils' ? { id: packageEntry } : null;
+      },
+      addWatchFile(file) { watched.add(file); },
+      error(error): never { throw new Error(error.message); },
+    };
+    try {
+      const graph = await compileGraph(
+        context,
+        root,
+        [entry],
+        resolveAdapterOptions({ clientEntry: entry }),
+        new Map(),
+        false,
+        false,
+      );
+      expect(graph.files).toEqual(new Set([entry.replaceAll('\\', '/')]));
+      expect(watched).toContain(join(packageRoot, 'package.json'));
+      expect(watched).toContain(artifactFile);
+      expect(graph.output.get(entry.replaceAll('\\', '/'))).toContain(
+        '_MDD.connectResolvedValues([stories]',
+      );
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it('rejects an artifact path which escapes the package directory', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'mmd-package-artifact-escape-'));
+    const packageRoot = join(root, 'node_modules', 'track-utils');
+    const packageEntry = join(packageRoot, 'index.js');
+    const importer = join(root, 'App.tsx');
+    mkdirSync(packageRoot, { recursive: true });
+    writeFileSync(importer, `import { pending } from 'track-utils';`);
+    writeFileSync(packageEntry, 'export function pending() {}');
+    writeFileSync(join(packageRoot, 'package.json'), JSON.stringify({
+      name: 'track-utils',
+      type: 'module',
+      exports: './index.js',
+      'memoized-dom': { artifact: '../shared-artifact.json' },
+    }));
+
+    const context: GraphPluginContext = {
+      async resolve(specifier) {
+        return specifier === 'track-utils' ? { id: packageEntry } : null;
+      },
+      addWatchFile() {},
+      error(error): never { throw new Error(error.message); },
+    };
+    try {
+      await expect(compileGraph(
+        context,
+        root,
+        [importer],
+        resolveAdapterOptions({ clientEntry: importer }),
+        new Map(),
+        false,
+        false,
+      )).rejects.toThrow('outside its package directory');
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+});

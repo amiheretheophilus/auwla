@@ -7,6 +7,7 @@ import {
   generateServerFunctionImplementation,
   serverFunctionModuleName,
 } from '@memoized-dom/compiler';
+import { utilsPackageArtifacts } from '../test-support/package-artifacts';
 
 describe('defined HTTP server functions', () => {
   it('generates live and generator facades and preserves multiple optimistic source holders', () => {
@@ -35,7 +36,7 @@ describe('defined HTTP server functions', () => {
           const save = update({ source: [notes, summary], action: () => Promise.resolve(1), apply() { return () => {}; } });
           return <div><button onClick={() => save()}>Save</button>{notes.map(note => <p>{note.text}</p>)}</div>;
         }`,
-    });
+    }, utilsPackageArtifacts);
     expect(output['./App.tsx']).toContain('source: [notes, summary]');
     expect(output['./App.tsx']).toContain('readResolvedValue');
     const shared = compileModules({
@@ -46,7 +47,7 @@ describe('defined HTTP server functions', () => {
           const save = optimistic({ source: notes, action: () => Promise.resolve(1), apply() { return () => {}; } });
           return <div><button onClick={() => save()}>Save</button>{notes.map(note => <p>{note.text}</p>)}</div>;
         }`,
-    });
+    }, utilsPackageArtifacts);
     expect(shared['./App.tsx']).toContain('source: notes');
     expect(shared['./App.tsx']).not.toMatch(/source: (?:readResolvedValue|readModuleSource)/);
     expect(() => analyzeServerFunctionModule('export const bad = define.function({ live: () => ["a"], async *get() { yield 1; } });', { moduleId: '/app/server/functions/bad.ts' })).toThrow('ordinary GET');

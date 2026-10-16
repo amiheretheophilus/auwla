@@ -157,9 +157,20 @@ export interface CompiledModules {
   initialContent: boolean;
 }
 
+export interface ExperimentalPackageEntryPoint {
+  readonly moduleId: string;
+  /** Named ordinary helpers described by this artifact. Omit to describe every export. */
+  readonly exports?: readonly string[];
+  /**
+   * The emitted package runtime owns captured module state; it is deliberately
+   * omitted from the portable application-linking summary.
+   */
+  readonly runtimeOwnedState?: boolean;
+}
+
 export interface ExperimentalCompilePackageOptions extends CompileModulesOptions {
-  /** Public package specifier -> module id in `modules`. */
-  packageEntries: Readonly<Record<string, string>>;
+  /** Public package specifier -> module id or selected helper entry in `modules`. */
+  packageEntries: Readonly<Record<string, string | ExperimentalPackageEntryPoint>>;
 }
 
 export interface ExperimentalCompiledPackage extends CompiledModules {
@@ -1030,7 +1041,15 @@ export function experimentalCompilePackage(
   const compiled = compileModulesDetailed(modules, compileOptions);
   const entries: ExperimentalPackageArtifact['entries'] = {};
 
-  for (const [specifier, moduleId] of Object.entries(packageEntries)) {
+  for (const [specifier, entryPoint] of Object.entries(packageEntries)) {
+    const moduleId = typeof entryPoint === 'string'
+      ? entryPoint
+      : entryPoint.moduleId;
+    const selected = typeof entryPoint === 'string' || entryPoint.exports === undefined
+      ? undefined
+      : new Set(entryPoint.exports);
+    const runtimeOwnedState = typeof entryPoint !== 'string' &&
+      entryPoint.runtimeOwnedState === true;
     if (!Object.hasOwn(modules, moduleId)) {
       throw new Error(
         `memo-dom: experimental package entry '${specifier}' refers to unknown module '${moduleId}'`,
@@ -1042,18 +1061,33 @@ export function experimentalCompilePackage(
         `memo-dom: experimental package entry '${specifier}' has no compiled metadata for '${moduleId}'`,
       );
     }
-    if (metadata.componentExports.length > 0 || metadata.stateExports.length > 0) {
+    if (
+      selected === undefined &&
+      (metadata.componentExports.length > 0 || metadata.stateExports.length > 0)
+    ) {
       throw new Error(
         `memo-dom: experimental package entry '${specifier}' may export ordinary helpers only; component and state package linking is not implemented`,
       );
     }
+    if (selected !== undefined) {
+      for (const exported of selected) {
+        if (!metadata.functionExports.some(summary => summary.exported === exported)) {
+          throw new Error(
+            `memo-dom: experimental package entry '${specifier}' export '${exported}' is not an ordinary function helper`,
+          );
+        }
+      }
+    }
     const functions: Record<string, ExperimentalPackageFunctionSummary> = {};
     for (const summary of metadata.functionExports) {
+      if (selected !== undefined && !selected.has(summary.exported)) continue;
       if (
-        summary.reads.length > 0 ||
-        summary.writes.length > 0 ||
-        summary.boundedWrites.length > 0 ||
-        summary.opaqueReads === true
+        !runtimeOwnedState && (
+          summary.reads.length > 0 ||
+          summary.writes.length > 0 ||
+          summary.boundedWrites.length > 0 ||
+          summary.opaqueReads === true
+        )
       ) {
         throw new Error(
           `memo-dom: experimental package helper '${specifier}' export '${summary.exported}' captures package state; only argument-relative helpers are portable`,

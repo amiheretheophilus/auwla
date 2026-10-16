@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test';
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import {
@@ -10,6 +10,7 @@ import {
 import { createDataRuntime, setActiveDataRuntime } from '@memoized-dom/data';
 import { unregister } from '@memoized-dom/runtime';
 import { waitFor } from '../test-support/helpers';
+import { utilsPackageArtifact } from '../test-support/package-artifacts';
 
 const outDir = join(
   import.meta.dirname,
@@ -113,5 +114,117 @@ describe('experimental package compilation artifacts', () => {
     }, {
       packageEntries: { 'some-components': './index.tsx' },
     })).toThrow('component and state package linking is not implemented');
+  });
+
+  it('compiles the real request-state utilities without utility-name handling', async () => {
+    const utilitySource = readFileSync(
+      join(import.meta.dirname, '..', 'packages', 'utils', 'src', 'request-state.ts'),
+      'utf8',
+    );
+    const packaged = experimentalCompilePackage({
+      './request-state.ts': utilitySource,
+    }, {
+      packageEntries: { 'track-utils': './request-state.ts' },
+      runtimePath: '@memoized-dom/runtime/testing',
+    });
+    expect(
+      packaged.artifact.entries['track-utils']!.functions.pending,
+    ).toMatchObject({
+      parameterSourceReads: [{ index: 0, path: [] }],
+      parameterPayloadReads: [],
+    });
+    expect(
+      packaged.artifact.entries['track-utils']!.functions.status,
+    ).toMatchObject({
+      parameterSourceReads: [{ index: 0, path: [] }],
+      parameterPayloadReads: [],
+    });
+
+    const application = compileModulesDetailed({
+      './utils-app.tsx': `
+        import { pending, status } from 'track-utils';
+        export function UtilsApp() {
+          const stories = $fetch('/api/utils-stories');
+          const waiting = pending(stories);
+          return <p>{waiting
+            ? 'Loading'
+            : status(stories) + ':' + stories.length}</p>;
+        }
+      `,
+    }, {
+      experimentalPackageArtifacts: [packaged.artifact],
+      runtimePath: '@memoized-dom/runtime/testing',
+    });
+
+    const packageDir = join(outDir, 'node_modules', 'track-utils');
+    mkdirSync(packageDir, { recursive: true });
+    writeFileSync(
+      join(packageDir, 'package.json'),
+      JSON.stringify({ type: 'module', exports: './index.js' }),
+    );
+    writeFileSync(
+      join(packageDir, 'index.js'),
+      packaged.output['./request-state.ts']!,
+    );
+    writeFileSync(
+      join(outDir, 'utils-app.js'),
+      application.output['./utils-app.tsx']!,
+    );
+
+    const request = Promise.withResolvers<Response>();
+    const data = createDataRuntime({ fetch: () => request.promise });
+    const previous = setActiveDataRuntime(data);
+    document.body.replaceChildren();
+    try {
+      const { UtilsApp } = await import(
+        `${pathToFileURL(join(outDir, 'utils-app.js')).href}?runtime=${Date.now()}`
+      );
+      const paragraph = UtilsApp('PackageTrackUtilsApp', null) as HTMLParagraphElement;
+      document.body.append(paragraph);
+      expect(paragraph.textContent).toBe('Loading');
+
+      request.resolve(Response.json([{ id: 1 }]));
+      await waitFor(() => {
+        expect(paragraph.textContent).toBe('success:1');
+      });
+      expect(document.querySelector('p')).toBe(paragraph);
+    } finally {
+      unregister('PackageTrackUtilsApp');
+      data.clear();
+      setActiveDataRuntime(previous);
+      document.body.replaceChildren();
+    }
+  });
+
+  it('links optimistic source holders through package metadata without compiler name handling', () => {
+    expect(
+      utilsPackageArtifact.entries['@memoized-dom/utils']!.functions.optimistic,
+    ).toMatchObject({
+      parameterSourceReads: [{ index: 0, path: ['source'] }],
+    });
+
+    const application = compileModulesDetailed({
+      './app.tsx': `
+        import { optimistic as mutate } from '@memoized-dom/utils';
+        export function App() {
+          const first = $fetch('/first');
+          const second = $fetch('/second');
+          const save = mutate({
+            source: [first, second],
+            action: () => Promise.resolve(1),
+            apply: () => () => {},
+          });
+          return <button onClick={() => save()}>Save</button>;
+        }
+      `,
+    }, {
+      experimentalPackageArtifacts: [utilsPackageArtifact],
+    });
+
+    const output = application.output['./app.tsx']!;
+    expect(output).toContain('source: [first, second]');
+    expect(output).not.toMatch(
+      /source: \[(?:_MDD\.)?(?:readResolvedValue|readModuleSource)/,
+    );
   });
 });

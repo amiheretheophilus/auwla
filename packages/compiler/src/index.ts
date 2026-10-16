@@ -41,6 +41,7 @@ export {
   type ExperimentalCompilePackageOptions,
   type ExperimentalPackageArtifact,
   type ExperimentalPackageEntry,
+  type ExperimentalPackageEntryPoint,
   type ExperimentalPackageFunctionSummary,
 } from './linker';
 export {
