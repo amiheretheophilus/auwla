@@ -1,12 +1,12 @@
-# Packaging compiler-aware helpers
+# Packaging compiler-aware libraries
 
 Memoized DOM packages may ship a small semantic artifact beside their ordinary
 JavaScript and declarations. The artifact lets the application compiler retain
 reactive relationships hidden behind a package import without recognizing the
 package or helper by name.
 
-This API is experimental. It currently supports ordinary named functions only;
-package components and exported compiler-owned state are not portable yet.
+This API is experimental. It supports ordinary named functions and a deliberately
+narrow component boundary. Exported compiler-owned package state is not portable.
 
 ## What package consumers do
 
@@ -69,7 +69,7 @@ const modules = {
   './status.ts': await readFile(new URL('../src/status.ts', import.meta.url), 'utf8'),
 };
 
-const { artifact } = experimentalCompilePackage(modules, {
+const compiled = experimentalCompilePackage(modules, {
   packageEntries: {
     'my-package': {
       moduleId: './index.ts',
@@ -80,14 +80,30 @@ const { artifact } = experimentalCompilePackage(modules, {
 
 await writeFile(
   new URL('../dist/memoized-dom.package.json', import.meta.url),
-  `${JSON.stringify(artifact, null, 2)}\n`,
+  `${JSON.stringify(compiled.artifact, null, 2)}\n`,
 );
 ```
 
 `exports` is recommended when the public entry also exposes values or types
-which are not compiler-aware helpers. Every selected name must resolve to an
-ordinary named function export. The generated JavaScript remains the package's
-normal JavaScript; consumers still load it through the bundler.
+which are not compiler-aware. Every selected name must resolve to an ordinary
+named function or component export.
+
+Publish JavaScript produced by the same compilation. Helpers whose bodies need
+payload lowering and every component rely on that output; generating an artifact
+from source and then publishing an unrelated transpilation can make the metadata
+disagree with the executable module. For a single-module package:
+
+```ts
+await writeFile(
+  new URL('../dist/index.js', import.meta.url),
+  compiled.output['./index.ts']!,
+);
+```
+
+Multi-module packages must write the corresponding output modules or bundle
+those compiler-produced modules afterward. Generate declarations separately;
+the semantic artifact does not replace `.d.ts` files. Consumers continue to
+load ordinary ESM through the bundler.
 
 In a monorepo, build ordering matters: build the compiler before packages which
 generate artifacts. The root Memoized DOM build does this for
@@ -105,24 +121,15 @@ For example, a runtime function which stores request-holder identity without
 reading its payload needs a summary saying so:
 
 ```ts
-import type { ExperimentalPackageArtifact } from '@memoized-dom/compiler';
+import { definePackageBoundaries } from '@memoized-dom/compiler';
 
-const dependencyArtifact: ExperimentalPackageArtifact = {
-  kind: 'memoized-dom-package',
-  version: 1,
-  entries: {
-    'runtime-package/internal': {
-      functions: {
-        holdSource: {
-          parameterWrites: [],
-          parameterSourceReads: [{ index: 0, path: [] }],
-          parameterPayloadReads: [],
-          unbounded: false,
-        },
-      },
+const dependencyArtifact = definePackageBoundaries({
+  'runtime-package/internal': {
+    holdSource: {
+      source: [0],
     },
   },
-};
+});
 
 experimentalCompilePackage(modules, {
   experimentalPackageArtifacts: [dependencyArtifact],
@@ -133,7 +140,11 @@ experimentalCompilePackage(modules, {
 This is dependency information at the opaque boundary, not a special case for
 the public helper. `@memoized-dom/utils` uses this mechanism for
 `protectLiveSources`; the resulting public `optimistic` summary is inferred as
-`options.source` holder usage.
+`options.source` holder usage. A nested argument path can be written as
+`{ argument: 0, path: ['source'] }`. Package authors do not write the complete
+versioned artifact shape: `experimentalCompilePackage` generates it from source,
+and this builder fills the format details only for behavior hidden from the
+compiler.
 
 ## Runtime-owned module state
 
@@ -157,18 +168,67 @@ whose lifecycle and updates are handled by package runtime code. Do not use it
 when UI reactivity depends on the application compiler observing that captured
 state; the artifact intentionally omits it.
 
+## Precompiled components
+
+Components are compiled in the package and linked into the consuming component
+graph through the artifact. The application compiler still owns each call site:
+it validates props, builds slot callbacks, assigns runtime IDs, pushes changed
+props, and places the component in the application tree. Package source is not
+admitted into the application graph.
+
+Packaged components currently expose the ordinary component factory ABI. They
+work as rows in application-owned keyed lists, but do not advertise the
+caller-specific lightweight row ABI; preserving correctness across the package
+boundary takes precedence over that allocation optimization.
+
+```tsx
+export function Badge({ value }: { value: number }) {
+  let localClicks = 0;
+  return <button onClick={() => localClicks++}>{value}:{localClicks}</button>;
+}
+
+export function Panel() {
+  return <section><slot><p>Fallback</p></slot></section>;
+}
+```
+
+Component-local state is supported because each factory instance owns it.
+Scalar props should be typed so their scalar mode is fixed during package
+compilation. Explicit `<slot>` declarations fix projected JSX content. An
+untyped interpolation such as `{value}` may deliberately become a render prop;
+the artifact preserves that decision, and the consumer receives a compile error
+if it passes a scalar. Passing JSX to a packaged scalar prop is also rejected.
+
+The current component boundary rejects:
+
+- reads or writes of reactive package module state;
+- routed preparation owned by the package component;
+- application-dependent package state exports.
+
+Local interaction, parent-driven prop updates, explicit slots, nested package
+components, retained keyed lists, client rendering, and server rendering have
+end-to-end regressions. Forwarded DOM refs are also carried by the component
+contract. Package components remain external ESM modules, so the artifact does
+not flatten them into the application bundle or erase the bundler's chunk
+boundary.
+
 ## Current boundaries
 
 - Named imports are supported; namespace imports do not identify one semantic
   export and are not linked.
-- Package components and exported compiler-owned state are not supported.
+- Exported compiler-owned package state is not supported. Components are limited
+  to the precompiled boundary described above.
 - Entry matching is exact; metadata for `my-package` does not automatically
   describe `my-package/subpath`.
 - The package build must regenerate the artifact whenever helper behavior
   changes. Vite watches the file but cannot repair stale published metadata.
+- The artifact and executable JavaScript must come from the same package
+  compilation. Artifact/source integrity hashes are not implemented yet.
+- Distinct installed versions which expose the same bare specifier are not yet
+  assigned separate artifact identities inside one application compile.
 - Array literals passed to a holder relationship preserve every contained
   holder. Arbitrarily assembled dynamic collections are not yet a portable
   holder contract.
 
-The implementation rationale and future component work are recorded in
+The implementation rationale and remaining component work are recorded in
 [Separate package compilation and reactive linking](./package-compilation-research.md).

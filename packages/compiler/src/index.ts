@@ -40,6 +40,7 @@ export {
   type ExperimentalCompiledPackage,
   type ExperimentalCompilePackageOptions,
   type ExperimentalPackageArtifact,
+  type ExperimentalPackageComponentSummary,
   type ExperimentalPackageEntry,
   type ExperimentalPackageEntryPoint,
   type ExperimentalPackageFunctionSummary,
@@ -77,3 +78,9 @@ export type { ExternalReactiveSourceDefinition } from './context';
 export type { InitialRenderNode, InitialRenderAttribute, InitialRenderPlan, BrowserRequirement } from './planning/initial-content';
 export { emitInitialHtml } from './dom/initial-html';
 export { compileServerPage } from './page-compiler';
+export {
+  definePackageBoundaries,
+  type PackageBoundaryArgument,
+  type PackageBoundaryEntries,
+  type PackageFunctionBoundary,
+} from './package-boundaries';

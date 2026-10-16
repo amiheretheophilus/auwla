@@ -4,6 +4,9 @@ import type {
   LinkedImport,
 } from '../context';
 import type {
+  ComponentGraphNode,
+} from '../component-linker';
+import type {
   ExperimentalPackageEntry,
   LinkResolutionOptions,
   ModuleEntry,
@@ -11,25 +14,67 @@ import type {
   RenderUsage,
 } from './model';
 
-function packageEntry(
+function packageEntries(
   options: LinkResolutionOptions,
-  source: string,
-): ExperimentalPackageEntry | undefined {
-  let found: ExperimentalPackageEntry | undefined;
+): Map<string, ExperimentalPackageEntry> {
+  const entries = new Map<string, ExperimentalPackageEntry>();
   for (const artifact of options.experimentalPackageArtifacts ?? []) {
     if (artifact.kind !== 'memoized-dom-package' || artifact.version !== 1) {
       throw new Error('memo-dom: unsupported experimental package artifact');
     }
-    const candidate = artifact.entries[source];
-    if (candidate === undefined) continue;
-    if (found !== undefined) {
-      throw new Error(
-        `memo-dom: multiple experimental package artifacts describe entry '${source}'`,
-      );
+    for (const [specifier, entry] of Object.entries(artifact.entries)) {
+      if (entries.has(specifier)) {
+        throw new Error(
+          `memo-dom: multiple experimental package artifacts describe entry '${specifier}'`,
+        );
+      }
+      entries.set(specifier, entry);
     }
-    found = candidate;
   }
-  return found;
+  return entries;
+}
+
+function packageEntry(
+  options: LinkResolutionOptions,
+  source: string,
+): ExperimentalPackageEntry | undefined {
+  return packageEntries(options).get(source);
+}
+
+/** Add precompiled package components as leaf factories in the app graph. */
+export function experimentalPackageComponentDeclarations(
+  options: LinkResolutionOptions,
+): ComponentGraphNode[] {
+  const declarations: ComponentGraphNode[] = [];
+  const keys = new Set<string>();
+  for (const [specifier, entry] of packageEntries(options)) {
+    for (const [exported, component] of Object.entries(entry.components ?? {})) {
+      const expectedKey = `package:${specifier}#${exported}`;
+      if (component.key !== expectedKey) {
+        throw new Error(
+          `memo-dom: experimental package component '${specifier}' export '${exported}' has invalid key '${component.key}'`,
+        );
+      }
+      if (component.listLightweight) {
+        throw new Error(
+          `memo-dom: experimental package component '${specifier}' export '${exported}' advertises an unsupported lightweight row ABI`,
+        );
+      }
+      if (keys.has(component.key)) {
+        throw new Error(
+          `memo-dom: experimental package component key '${component.key}' is not unique`,
+        );
+      }
+      keys.add(component.key);
+      declarations.push({
+        key: component.key,
+        moduleId: `package:${specifier}`,
+        local: exported,
+        edges: [],
+      });
+    }
+  }
+  return declarations;
 }
 
 export function canonicalModuleId(raw: string): string {
@@ -156,6 +201,30 @@ export function linkImports(
       const packaged = ref.imported === '*'
         ? undefined
         : packagedEntry?.functions[ref.imported];
+      const packagedComponent = ref.imported === '*'
+        ? undefined
+        : packagedEntry?.components?.[ref.imported];
+      if (packagedComponent !== undefined) {
+        linked[ref.local] = {
+          type: 'component',
+          key: packagedComponent.key,
+          props: [...packagedComponent.props],
+          objectProps: packagedComponent.objectProps,
+          acceptsUnknownProps: packagedComponent.acceptsUnknownProps,
+          hasWholeDefault: packagedComponent.hasWholeDefault,
+          listLightweight: packagedComponent.listLightweight,
+          ...(packagedComponent.listResourceFree === true
+            ? { listResourceFree: true }
+            : {}),
+          delegatedEvents: [...packagedComponent.delegatedEvents],
+          renderProps: [...packagedComponent.renderProps],
+          slots: [...packagedComponent.slots],
+          renderCallbacks: [...packagedComponent.renderCallbacks],
+          refProps: [...packagedComponent.refProps],
+          subtreeReads: [...packagedComponent.subtreeReads],
+        };
+        continue;
+      }
       if (packaged !== undefined) {
         linked[ref.local] = {
           type: 'function',

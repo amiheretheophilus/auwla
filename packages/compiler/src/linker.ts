@@ -39,6 +39,7 @@ import type {
   CompileModulesOptions,
   ComponentExport,
   ExperimentalPackageArtifact,
+  ExperimentalPackageComponentSummary,
   ExperimentalPackageFunctionSummary,
   FunctionExport,
   ModuleEntry,
@@ -48,14 +49,17 @@ import type {
 export type {
   CompileModulesOptions,
   ExperimentalPackageArtifact,
+  ExperimentalPackageComponentSummary,
   ExperimentalPackageEntry,
   ExperimentalPackageFunctionSummary,
 } from './linking/model';
 import {
   canonicalModuleId,
+  experimentalPackageComponentDeclarations,
   linkImports,
   resolveModule,
 } from './linking/resolution';
+import type { ComponentExportInfo } from './components/manifest';
 import { compilerOptions } from './linking/options';
 import { analyzeManifest, discoverManifest, exportedLocals } from './linking/discovery';
 import { installCompilerIntrinsics } from './dom/intrinsics';
@@ -68,11 +72,9 @@ import { planInitialDelivery, type InitialDelivery } from './dom/delivery-plan';
 import { normalizeComponentDeclarations } from './components/declarations';
 import { normalizeComponentSlots } from './jsx/component-slots';
 
-export interface CompiledComponentExport {
+export interface CompiledComponentExport extends Omit<ComponentExportInfo, 'key'> {
   exported: string;
   local: string;
-  listLightweight: boolean;
-  listResourceFree?: boolean;
 }
 
 export interface CompiledStateExport {
@@ -159,7 +161,7 @@ export interface CompiledModules {
 
 export interface ExperimentalPackageEntryPoint {
   readonly moduleId: string;
-  /** Named ordinary helpers described by this artifact. Omit to describe every export. */
+  /** Named helpers/components described by this artifact. Omit to describe every supported export. */
   readonly exports?: readonly string[];
   /**
    * The emitted package runtime owns captured module state; it is deliberately
@@ -757,7 +759,10 @@ function compileLinkedModules(
   }
 
   const componentGraph = linkComponentGraph(
-    [...manifests.values()].flatMap((manifest) => manifest.components),
+    [
+      ...[...manifests.values()].flatMap((manifest) => manifest.components),
+      ...experimentalPackageComponentDeclarations(options),
+    ],
     applicationRoot,
   );
   const output: Record<string, string> = {};
@@ -805,6 +810,16 @@ function compileLinkedModules(
             )?.local ?? component.key.slice(component.key.lastIndexOf('#') + 1),
           listLightweight: component.listLightweight,
           ...(component.listResourceFree === true ? { listResourceFree: true } : {}),
+          props: [...component.props],
+          objectProps: component.objectProps,
+          acceptsUnknownProps: component.acceptsUnknownProps,
+          hasWholeDefault: component.hasWholeDefault,
+          delegatedEvents: [...component.delegatedEvents],
+          renderProps: [...component.renderProps],
+          slots: [...component.slots],
+          renderCallbacks: [...component.renderCallbacks],
+          refProps: [...component.refProps],
+          subtreeReads: [...component.subtreeReads],
         }))
         .sort((left, right) => left.local.localeCompare(right.local)),
       stateExports: Object.entries(manifest.exports)
@@ -1061,19 +1076,19 @@ export function experimentalCompilePackage(
         `memo-dom: experimental package entry '${specifier}' has no compiled metadata for '${moduleId}'`,
       );
     }
-    if (
-      selected === undefined &&
-      (metadata.componentExports.length > 0 || metadata.stateExports.length > 0)
-    ) {
+    if (selected === undefined && metadata.stateExports.length > 0) {
       throw new Error(
-        `memo-dom: experimental package entry '${specifier}' may export ordinary helpers only; component and state package linking is not implemented`,
+        `memo-dom: experimental package entry '${specifier}' exports compiler-owned state; package state linking is not implemented`,
       );
     }
     if (selected !== undefined) {
       for (const exported of selected) {
-        if (!metadata.functionExports.some(summary => summary.exported === exported)) {
+        if (
+          !metadata.functionExports.some(summary => summary.exported === exported) &&
+          !metadata.componentExports.some(summary => summary.exported === exported)
+        ) {
           throw new Error(
-            `memo-dom: experimental package entry '${specifier}' export '${exported}' is not an ordinary function helper`,
+            `memo-dom: experimental package entry '${specifier}' export '${exported}' is not a portable function or component`,
           );
         }
       }
@@ -1115,7 +1130,45 @@ export function experimentalCompilePackage(
         unbounded: summary.unbounded,
       };
     }
-    entries[specifier] = { functions };
+    const components: Record<string, ExperimentalPackageComponentSummary> = {};
+    const selectedComponents = metadata.componentExports.filter(
+      summary => selected === undefined || selected.has(summary.exported),
+    );
+    if (selectedComponents.length > 0) {
+      if (Object.keys(metadata.readers).length > 0) {
+        throw new Error(
+          `memo-dom: experimental package entry '${specifier}' components read package module state; package state linking is not implemented`,
+        );
+      }
+      if (metadata.routedPreparations.length > 0) {
+        throw new Error(
+          `memo-dom: experimental package entry '${specifier}' components contain routed preparation; package route linking is not implemented`,
+        );
+      }
+      for (const summary of selectedComponents) {
+        components[summary.exported] = {
+          key: `package:${specifier}#${summary.exported}`,
+          props: [...summary.props],
+          objectProps: summary.objectProps,
+          acceptsUnknownProps: summary.acceptsUnknownProps,
+          hasWholeDefault: summary.hasWholeDefault,
+          // Separately emitted package components expose the ordinary component
+          // factory ABI. The lightweight row ABI is caller-specific and cannot
+          // be promised by a portable package artifact yet.
+          listLightweight: false,
+          delegatedEvents: [...summary.delegatedEvents],
+          renderProps: [...summary.renderProps],
+          slots: [...summary.slots],
+          renderCallbacks: [...summary.renderCallbacks],
+          refProps: [...summary.refProps],
+          subtreeReads: [...summary.subtreeReads],
+        };
+      }
+    }
+    entries[specifier] = {
+      functions,
+      ...(Object.keys(components).length === 0 ? {} : { components }),
+    };
   }
 
   return {

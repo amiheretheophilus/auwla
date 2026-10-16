@@ -112,4 +112,77 @@ describe('package compilation artifacts', () => {
       rmSync(root, { recursive: true, force: true });
     }
   });
+
+  it('links a precompiled package component without admitting its source', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'mmd-package-component-'));
+    const entry = join(root, 'App.tsx');
+    const packageRoot = join(root, 'node_modules', 'ui-package');
+    const packageEntry = join(packageRoot, 'index.js');
+    const artifactFile = join(packageRoot, 'memoized-dom.package.json');
+    mkdirSync(packageRoot, { recursive: true });
+    writeFileSync(entry, `
+      import { Badge } from 'ui-package';
+      export function App() {
+        let value = 1;
+        return <Badge value={value} />;
+      }
+    `);
+    writeFileSync(packageEntry, 'export function Badge() {}');
+    writeFileSync(join(packageRoot, 'package.json'), JSON.stringify({
+      name: 'ui-package',
+      type: 'module',
+      exports: './index.js',
+      'memoized-dom': { artifact: './memoized-dom.package.json' },
+    }));
+    writeFileSync(artifactFile, JSON.stringify({
+      kind: 'memoized-dom-package',
+      version: 1,
+      entries: {
+        'ui-package': {
+          functions: {},
+          components: {
+            Badge: {
+              key: 'package:ui-package#Badge',
+              props: ['value'],
+              objectProps: true,
+              acceptsUnknownProps: false,
+              hasWholeDefault: false,
+              listLightweight: false,
+              delegatedEvents: [],
+              renderProps: [],
+              slots: [],
+              renderCallbacks: [],
+              refProps: [],
+              subtreeReads: [],
+            },
+          },
+        },
+      },
+    }));
+
+    const context: GraphPluginContext = {
+      async resolve(specifier) {
+        return specifier === 'ui-package' ? { id: packageEntry } : null;
+      },
+      addWatchFile() {},
+      error(error): never { throw new Error(error.message); },
+    };
+    try {
+      const graph = await compileGraph(
+        context,
+        root,
+        [entry],
+        resolveAdapterOptions({ clientEntry: entry }),
+        new Map(),
+        false,
+        false,
+      );
+      expect(graph.files).toEqual(new Set([entry.replaceAll('\\', '/')]));
+      expect(graph.output.get(entry.replaceAll('\\', '/'))).toContain(
+        'Badge(_id + "/Badge"',
+      );
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
 });

@@ -3,9 +3,11 @@
 Status: active compiler work, started 2026-10-16. Request-state and payload
 relationships now link across local functions, imports, aliases, and re-exports,
 including helpers that use both relationships. A versioned, explicitly
-experimental artifact now proves separate compilation for argument-relative
-ordinary helpers. Vite discovers those artifacts from package metadata. The
-contract remains experimental and component-package linking is still deferred.
+experimental artifact proves separate compilation for argument-relative
+ordinary helpers and precompiled prop/local-state/slot components. Vite
+discovers those artifacts from package metadata. The contract remains
+experimental; package module state and broader component facilities stay
+deferred.
 
 ## Motivation
 
@@ -177,8 +179,9 @@ argument-relative function summaries. The emitted JavaScript remains a normal
 package import and must resolve through the host or bundler; the artifact carries
 semantic linking information, not executable code.
 
-This prototype intentionally accepts only ordinary named helpers. It rejects
-entry modules that export components or compiler-owned state. Package authors
+The artifact accepts ordinary named helpers and precompiled components whose
+reactive state is component-local. It rejects compiler-owned package module
+state and routed preparation. Package authors
 may mark an entry `runtimeOwnedState: true` when its ordinary JavaScript module
 state is fully owned by the emitted package runtime and must not become part of
 the consuming application's reactive graph. That assertion is needed for the
@@ -205,7 +208,33 @@ The utility's package build supplies one lower-level contract for
 its resolved payload. Package compilation composes that opaque runtime boundary
 through `optimistic` and emits the public relationship. This is the unavoidable
 dependency information for behavior hidden behind an imported function; it is
-not application-facing syntax or a compiler exception for the utility.
+not application-facing syntax or a compiler exception for the utility. The
+compact `definePackageBoundaries` builder owns the versioned artifact shape for
+this rare case; ordinary package functions and components remain fully inferred.
+
+### Precompiled component proof
+
+The package compiler records the component's fixed prop/slot contract and emits
+its factory once. The consuming application uses that metadata to lower call
+sites, project explicit slots, assign IDs, and push prop changes without parsing
+or compiling the package source. A runtime regression covers component-local
+state, parent prop updates without remounting, default-slot projection, nested
+package components, retained keyed lists, and forwarded DOM refs; another
+renders a precompiled package component during SSR. Vite discovery keeps the
+package source outside the application graph.
+
+The emitted package factory currently uses the ordinary component ABI. Package
+artifacts therefore deliberately report `listLightweight: false`, even when the
+component could use the application compiler's lightweight keyed-row ABI in a
+whole-program build. An application can still map a packaged component as a
+keyed row and retain its DOM identity; it merely takes the general component
+path until a portable dual row ABI is designed.
+
+Prop modes are intentionally exact. A typed scalar prop remains scalar; an
+authored render prop remains JSX-bearing. Cross-mode consumer calls fail during
+application compilation rather than adapting the already-emitted package
+factory differently. This is the portable subset that avoids serializing the
+compiler's internal AST while preserving consumer-owned call-site work.
 
 ### 1. Package compilation: preserve reusable meaning
 
@@ -355,14 +384,16 @@ open decisions, not documented APIs.
    state from payload readiness. The request-state-only and mixed conditional
    cases now have compile and runtime regressions; broader callback/facade cases
    remain part of the acceptance matrix.
-2. The helper-only artifact links an unrelated package without its source,
+2. The helper artifact links an unrelated package without its source,
    drives the real request-state and optimistic utilities, composes through
    package re-exports, and preserves event-created request holders. Vite now
-   discovers package artifacts automatically. Next, measure source compilation,
-   cold artifact generation, and warm cached linking before treating artifact
-   generation as a stable public build surface.
-3. Extend the boundary to component libraries and verify consumer-dependent prop
-   handling, SSR, HMR, source maps, and existing delivery optimizations.
+   discovers package artifacts automatically. Source compilation, cold artifact
+   generation, and warm linking now have a reproducible benchmark.
+3. The first component-library boundary covers exact scalar/render-prop modes,
+   local state, explicit slots, nested components, retained keyed lists, Vite
+   discovery, forwarded refs, and SSR. HMR, source-map delivery, and existing
+   initial-delivery optimizations remain acceptance work before broadening the
+   contract.
 4. The reproducible synthetic benchmark now measures cold generation, warm
    linking, and artifact size. Browser output, filesystem/plugin cost, and real
    package workloads still need measurement before selecting a public format or

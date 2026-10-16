@@ -1,7 +1,9 @@
 import { readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { experimentalCompilePackage } from '@memoized-dom/compiler';
-import type { ExperimentalPackageArtifact } from '@memoized-dom/compiler';
+import {
+  definePackageBoundaries,
+  experimentalCompilePackage,
+} from '@memoized-dom/compiler';
 
 const root = join(import.meta.dirname, '..');
 const names = ['index.ts', 'optimistic.ts', 'request-state.ts'] as const;
@@ -13,22 +15,13 @@ const modules = Object.fromEntries(await Promise.all(names.map(async name => [
 // This runtime boundary consumes holder identity without reading the holder's
 // resolved payload. Package compilation carries that fact through ordinary
 // helpers which call it; applications never need to know about this contract.
-const dataInternalArtifact: ExperimentalPackageArtifact = {
-  kind: 'memoized-dom-package',
-  version: 1,
-  entries: {
-    '@memoized-dom/data/internal': {
-      functions: {
-        protectLiveSources: {
-          parameterWrites: [],
-          parameterSourceReads: [{ index: 0, path: [] }],
-          parameterPayloadReads: [],
-          unbounded: false,
-        },
-      },
+const dataInternalArtifact = definePackageBoundaries({
+  '@memoized-dom/data/internal': {
+    protectLiveSources: {
+      source: [0],
     },
   },
-};
+});
 
 const { artifact } = experimentalCompilePackage(modules, {
   experimentalPackageArtifacts: [dataInternalArtifact],
