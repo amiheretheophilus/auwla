@@ -20,6 +20,16 @@ function fixture(handler:(id:string,signal:AbortSignal)=>Promise<unknown>|unknow
   return {router,hub,calls};
 }
 describe('multiplexed live server transport',()=>{
+  it('matches subscriptions against normalized live route paths',async()=>{
+    const router=createServerRouter({routes:createServerFunctionRoutes([{
+      id:'normalized',path:'/_fn/normalized/',method:'GET',parameters:[],live:()=>['normalized'],handler:()=>42,
+    }])});
+    const response=await router.fetch(request({revision:1,subscribe:[{id:'one',url:'/_fn/normalized',page:false}],unsubscribe:[]}));
+    const reader=response.body!.getReader();
+    try{await read(reader);expect(await read(reader)).toMatchObject({event:'value',data:{sub:'one',value:42}});}
+    finally{await reader.cancel();}
+  });
+
   it('captures registered routes across separate native-host/tooling module instances',async()=>{
     const {createLiveSessions}=await import('../src/live-session.ts?separate-host');
     const {router}=fixture();

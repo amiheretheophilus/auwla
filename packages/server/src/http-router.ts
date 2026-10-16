@@ -666,8 +666,7 @@ export function createServerRouter<
     string,
     PreparedRoute<TLocals, TPlatform, TServices>
   >();
-  const livePaths=new Set(options.routes.filter(route=>
-    (route as ServerRoute<TLocals,TPlatform,TServices>&{__memoizedLive?:boolean}).__memoizedLive===true).map(route=>route.path));
+  const livePaths=new Set<string>();
   const liveSessions=createLiveSessions(path=>livePaths.has(path),(request,platform)=>dispatch(request,
     platform===undefined?{}:{platform:platform as TPlatform}));
 
@@ -680,6 +679,7 @@ export function createServerRouter<
       TPlatform,
       TServices
     >;
+    if(internal.__memoizedLive===true)livePaths.add(path);
     if (
       (path === '/_fn' || path.startsWith('/_fn/')) &&
       internal[SERVER_FUNCTION_ROUTE_KEY] !== true

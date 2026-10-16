@@ -100,6 +100,10 @@ export function createLiveSessions(
     };
     enqueue(id:string,bytes:Uint8Array){
       if(!this.slots.has(id)||this.abort.signal.aborted)return;
+      // A later patch may depend on the queued frame's sequence. Replacing it
+      // would corrupt that baseline, so fail loudly if serialization changes
+      // ever allow more than one pending frame for a subscription.
+      if(this.queue.has(id)){this.stop('Live subscription produced overlapping frames');return;}
       if(bytes.byteLength>MAX_FRAME||this.bytes+bytes.byteLength>MAX_QUEUE){this.stop('Live session delivery capacity exceeded');return;}
       this.queue.set(id,bytes);this.bytes+=bytes.byteLength;this.wake?.();
     }
