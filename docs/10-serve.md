@@ -35,10 +35,16 @@ const app = serve({
 export default app;
 ```
 
-`state` runs once for each incoming request. The same mutable object then flows
-through global middleware, path middleware, routes, server functions, SSR, and
-nested in-memory dispatch for that request. A different request gets a
-different object.
+`state` runs once for each application dispatch. The same mutable object flows
+through that dispatch's global middleware, path middleware, and final route or
+server-function handler. A different dispatch gets a different object.
+
+An SSR page can make same-origin server-function calls in memory instead of
+going through the network. Each call is still a new dispatch with fresh state,
+matching the equivalent browser request. Cookies and authorization are
+forwarded so middleware can reconstruct authentication; parallel child calls
+cannot mutate the page request's state or one another's state. Services remain
+application-owned and the current platform context is inherited.
 
 Live-query and generator body failures also reach `onError` with the original
 exception and request context. Their response is already selected, so the hook

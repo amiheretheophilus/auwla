@@ -10,9 +10,10 @@ export const session = define.middleware(async (context, next) => {
 });
 ```
 
-Request `state` is shared by reference across the middleware chain. A write in
-one middleware is visible to every downstream middleware and handler, and is
-still visible when control returns upstream after `await next()`.
+The current dispatch's `state` is shared by reference across its middleware
+chain. A write in one middleware is visible to every downstream middleware and
+handler, and is still visible when control returns upstream after `await
+next()`. A nested server-function call is another dispatch with its own state.
 
 Defining middleware does not apply it. Choose its scope explicitly:
 

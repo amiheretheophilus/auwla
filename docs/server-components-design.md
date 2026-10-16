@@ -223,8 +223,9 @@ state stays local. See the step-by-step
 [Alice/Bob example and key-scoping guidance](./live-streaming-design.md#same-keys-private-data-and-collaboration).
 
 Live updates do not preserve server component instances between requests.
-Request state remains request-scoped. Persistent application state belongs in
-appropriately scoped services/storage. Invalidation is explicit, not automatic
+Each page query dispatch receives request-scoped state. Persistent application
+state belongs in appropriately scoped services/storage. Invalidation is
+explicit, not automatic
 database observation, and coordination is still instance-local. See
 [live queries](./live-streaming-design.md) and the
 [adapter discussion](./live-adapters-discussion.md).

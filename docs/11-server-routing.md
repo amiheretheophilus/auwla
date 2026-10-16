@@ -32,7 +32,7 @@ produced, plus the request itself:
 | `request` | the incoming `Request` — headers, body, method |
 | `url` | parsed `URL` — `url.searchParams` for the query string |
 | `params` | pattern params — `/api/stories/:id` → `{ id }` |
-| `state` | per-request data from `serve({ state })` |
+| `state` | per-dispatch data from `serve({ state })` |
 | `services` | shared dependencies from `define.service()` |
 | `platform` | host bindings from `serve({ platform })` (`undefined` if unset) |
 

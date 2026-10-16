@@ -53,7 +53,12 @@ See [Alice and Bob's private inboxes](../../docs/live-streaming-design.md#same-k
 - `src/App.tsx`: direct generated-source interpolation and explicit action target.
 - `server.ts`: existing `serve()` with initial document streaming.
 
-In Network → All/Fetch/XHR, two `getBoard` requests stay open as live streams.
+In Network → All/Fetch/XHR, compatible live reads from one tab normally share
+one long-lived `POST /_memoized/live` stream. Its initial control payload lists
+the Orchard and Harbor `getBoard` subscription URLs; later control requests can
+add or remove subscriptions without reopening healthy siblings. A direct
+`getBoard` SSE request can still appear when multiplexing is unavailable or the
+route needs ordinary HTTP response semantics. Each tab owns its own connection.
 `getReceipt`, `changeCount`, and `renameOrchard` are finite requests. The page
 results from `getReceipt`, `renameOrchard`, and finite `getBoard` snapshots
 return `text/html`: the rendered region followed by inert binding metadata,
