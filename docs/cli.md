@@ -170,3 +170,19 @@ the normal `memoized-dom dev`, `build`, and `types` commands shown above.
 Check DevTools' Network dropdown. Chrome's **Offline** setting blocks requests
 even when another browser works. Select **No throttling**, then retry navigation
 or reload. Restarting the server does not change this browser setting.
+
+## Recovering from editing errors
+
+During development, invalid server-page edits show Vite's error overlay while
+keeping the last working page visible. A corrected edit reloads the page with
+fresh server output, including when you restore the exact original source.
+
+If an uncaught backend/import error prevents a document from rendering, the
+native Bun/Node development host returns a 500 development error page that
+connects directly to Vite. Saving a correction reloads it automatically; it
+does not depend on the broken backend serving the hot-reload client. This
+recovery page is development-only and does not change function/API responses.
+Restoring a temporarily missing server dependency also invalidates its affected
+importers, so the repaired page does not retain a cached missing-module error.
+The Bun development listener also allows slow compilation/render requests
+without its default idle timeout; an explicit exported `idleTimeout` still wins.

@@ -81,6 +81,7 @@ export function memoizedDom(
   const lazyStates = new Map<object, Map<string, AdapterState>>();
   let config: ResolvedConfig | undefined;
   let devServer: import('vite').ViteDevServer | undefined;
+  let pageReloadPending = false;
   let entries: readonly string[] = [];
   let serverFunctionRoutesSource =
     'export const serverFunctionManifest = [];\nexport const serverFunctionRoutes = [];\n';
@@ -477,6 +478,19 @@ export function memoizedDom(
     },
     configureServer(server) {
       devServer = server;
+      const updateEnvironments = server.config.server.hotUpdateEnvironments;
+      server.config.server.hotUpdateEnvironments = async (server, hmr) => {
+        if (updateEnvironments) await updateEnvironments(server, hmr);
+        else await Promise.all(Object.values(server.environments).map(environment => hmr(environment)));
+        if (pageReloadPending) {
+          pageReloadPending = false;
+          // Both compiler environments must finish before a browser request
+          // can import the new backend. Reloading inside hotUpdate races SSR.
+          for (const environment of Object.values(server.environments)) environment.moduleGraph.invalidateAll();
+          api.invalidateBackend?.();
+          server.ws.send({ type: 'full-reload' });
+        }
+      };
       for (const [environment, state] of states) {
         if ((environment as { name?: string }).name === 'client') {
           registerClientStyles(server, state, state.eagerStyles, state.routeStyles, state.routeTree);
@@ -684,15 +698,21 @@ export function memoizedDom(
         }
       }
       if (pageChanged) {
-        for (const environment of Object.values(devServer?.environments ?? {})) environment.moduleGraph.invalidateAll();
-        devServer?.ws.send({type:'full-reload'});
+        // Do not navigate away from a working document until its replacement
+        // page artifacts compile. Vite can show a recoverable overlay instead.
+        try { await serverPages?.prepare(hotGraphContext(this.environment, this)); }
+        catch (error) { pageReloadPending = false; throw error; }
+        if (this.environment.name === 'ssr') pageReloadPending = true;
         return [];
       }
       const primary = states.get(this.environment);
       const isPrimary = primary?.files.has(file) === true;
       const state = hotStateFor(this.environment, file);
       if (state === undefined) {
-        return virtualModule === undefined ? undefined : [virtualModule];
+        // Preserve Vite's affected modules, especially importers whose prior
+        // resolution failed while a dependency was missing. Replacing them
+        // with only the generated routes leaves their failed transforms cached.
+        return virtualModule === undefined ? undefined : [...new Set([...update.modules, virtualModule])];
       }
       const previous = new Map(state.output);
       const previousCss = new Map(state.css);

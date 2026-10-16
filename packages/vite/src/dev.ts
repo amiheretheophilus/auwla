@@ -3,6 +3,7 @@ import { createServer as createHttpServer, type Server } from 'node:http';
 import { createServer as createPortProbe } from 'node:net';
 import { toWebRequest, sendNodeResponse } from '@memoized-dom/adapters/node';
 import type { FullstackPluginApi } from './fullstack';
+import { isDocumentRequest, recoveryDocument, serverUpdateEvent } from './dev-recovery';
 
 interface Backend {
   fetch(request: Request, platform?: unknown): Response | undefined | Promise<Response | undefined>;
@@ -44,6 +45,7 @@ export async function createDevServer(inline: InlineConfig = {}): Promise<Native
   let hostname = '127.0.0.1';
   let entry: string | undefined;
   let revision = 0;
+  let failedBackend = false;
   let workerHost = false;
   const launcher: Plugin = {
     name: 'memoized-dom:native-launcher', enforce: 'post',
@@ -62,18 +64,26 @@ export async function createDevServer(inline: InlineConfig = {}): Promise<Native
       const api = plugin?.api as FullstackPluginApi | undefined;
       if (!api?.serverEntry) throw new Error('memoized-dom: native development requires memoizedDom({ clientEntry, serverEntry })');
       api.nativeDevelopment = true;
+      api.invalidateBackend = () => { revision++; };
       entry = api.serverEntry;
     },
     hotUpdate(update) {
       if (workerHost) return;
-      if (this.environment.name !== 'ssr' || update.modules.length === 0) return;
+      if (this.environment.name !== 'ssr') return;
+      if (update.modules.length === 0 && !(failedBackend && update.type === 'create')) return;
       // The compiler's hotUpdate has finished. Invalidate transforms before
       // allowing a request to load the replacement backend.
       const seen = new Set<import('vite').EnvironmentModuleNode>();
+      // A failed SSR resolution can have no edge to the newly created file.
+      // Retry its importer transforms as well, not just the restored module.
+      if (failedBackend) this.environment.moduleGraph.invalidateAll();
       for (const module of update.modules) {
         this.environment.moduleGraph.invalidateModule(module, seen, update.timestamp, true);
       }
       revision++;
+      // A document that failed before the application/template loaded still
+      // needs to hear server-only repairs, not just client module updates.
+      vite.ws.send({ type: 'custom', event: serverUpdateEvent, data: {} });
     },
   };
   const vite = await createViteServer(mergeConfig(inline, { plugins: [launcher] }));
@@ -119,12 +129,14 @@ export async function createDevServer(inline: InlineConfig = {}): Promise<Native
         }
         const previous = current;
         current = next;
+        failedBackend = false;
         generations.add(next);
         if (previous) { previous.retired = true; await dispose(previous); }
         return next;
       }
     })();
     try { return await loading; }
+    catch (error) { failedBackend = true; throw error; }
     finally { loading = undefined; }
   };
   const dispatch = async (request: Request, platform?: unknown): Promise<Response | undefined> => {
@@ -155,6 +167,13 @@ export async function createDevServer(inline: InlineConfig = {}): Promise<Native
       return new Response(stream, { status: response.status, statusText: response.statusText, headers: response.headers });
     } catch (error) { await release(); throw error; }
   };
+  const developmentFetch = async (request: Request, platform?: unknown): Promise<Response | undefined> => {
+    try { return await dispatch(request, platform); }
+    catch (error) {
+      if (!isDocumentRequest(request)) throw error;
+      return recoveryDocument(vite, `http://127.0.0.1:${port}`, error);
+    }
+  };
   try {
     await vite.listen();
     const initial = (await backend()).module.default;
@@ -166,7 +185,9 @@ export async function createDevServer(inline: InlineConfig = {}): Promise<Native
       for (const key of ['port', 'hostname', 'websocket', 'error', 'idleTimeout', 'maxRequestBodySize', 'tls', 'reusePort', 'ipv6Only']) {
         if (exported[key] !== undefined) native[key] = exported[key];
       }
-      bun = Bun.serve({ port: backendPort, hostname, ...native, fetch: dispatch } as Bun.Serve.Options<unknown>);
+      // Cold compilation/server reloads can exceed Bun's default idle timeout.
+      // Explicit application listener options still take precedence.
+      bun = Bun.serve({ port: backendPort, hostname, idleTimeout: 0, ...native, fetch: developmentFetch } as Bun.Serve.Options<unknown>);
       origin = bun.url.origin;
     } else {
       const exported = initial as unknown as { port?: number; hostname?: string };
@@ -174,7 +195,7 @@ export async function createDevServer(inline: InlineConfig = {}): Promise<Native
       hostname = exported.hostname ?? hostname;
       node = createHttpServer(async (request, response) => {
         try {
-          const result = await dispatch(toWebRequest(request), { incoming: request, outgoing: response });
+          const result = await developmentFetch(toWebRequest(request), { incoming: request, outgoing: response });
           await sendNodeResponse(result ?? new Response('Not Found', { status: 404 }), response);
         } catch (error) {
           vite.config.logger.error(String(error));

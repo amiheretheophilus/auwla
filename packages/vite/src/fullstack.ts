@@ -18,6 +18,8 @@ export interface FullstackPluginApi {
   readonly serverEntry?: string;
   readonly runtime: 'bun' | 'node' | 'cloudflare';
   nativeDevelopment: boolean;
+  /** Retire native server modules before a compiler-owned full reload. */
+  invalidateBackend?: () => void;
   cloudflareAssetsBinding?: string;
 }
 
