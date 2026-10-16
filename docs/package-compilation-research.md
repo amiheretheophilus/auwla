@@ -237,6 +237,9 @@ ordinary JavaScript toolchain responsibility. Vite now records package manifests
 and artifacts as normalized semantic graph inputs. Artifact edits recompile
 consumers, surface invalid metadata through the normal overlay, and recover via
 HMR after repair, including on Windows path conventions.
+The versioned artifact is validated as untrusted input before either direct or
+Vite-driven linking, with diagnostics naming the malformed entry, export, and
+field.
 
 ### Initial delivery needs a deferred render contract
 

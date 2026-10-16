@@ -21,6 +21,11 @@ manifest, loads its artifact, and watches both files during development. The
 artifact is compiler metadata, not executable code, and does not add a runtime
 import.
 
+Artifacts are treated as untrusted build input. Their format version, function
+facts, component contracts, argument indexes, property paths, and HTTP method
+metadata are validated before linking. An incompatible or malformed artifact
+fails at the exact field path instead of entering the graph with partial facts.
+
 Hosts which call `compileModules` or `compileModulesDetailed` directly do not
 perform filesystem discovery. They must read the artifact and pass it through
 `experimentalPackageArtifacts` themselves.

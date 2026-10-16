@@ -9,6 +9,7 @@ import {
   definePackageBoundaries,
   experimentalCompilePackage,
   generateServerFunctionClient,
+  validateExperimentalPackageArtifact,
   type ExperimentalPackageArtifact,
 } from '@memoized-dom/compiler';
 import { createDataRuntime, setActiveDataRuntime } from '@memoized-dom/data';
@@ -55,6 +56,53 @@ describe('experimental package compilation artifacts', () => {
     expect(() => definePackageBoundaries({
       bad: { helper: { source: [-1] } },
     })).toThrow('must be a non-negative integer');
+  });
+
+  it('rejects incompatible and malformed package artifacts at the boundary', () => {
+    expect(() => validateExperimentalPackageArtifact({
+      kind: 'memoized-dom-package',
+      version: 2,
+      entries: {},
+    })).toThrow('artifact.version; expected format version 1');
+
+    expect(() => validateExperimentalPackageArtifact({
+      kind: 'memoized-dom-package',
+      version: 1,
+      entries: {
+        'broken-package': {
+          functions: {
+            pending: {
+              parameterWrites: [],
+              parameterSourceReads: [{ index: 'first', path: [] }],
+              parameterPayloadReads: [],
+              unbounded: false,
+            },
+          },
+        },
+      },
+    })).toThrow(
+      'artifact.entries["broken-package"].functions["pending"].parameterSourceReads[0].index; expected a non-negative integer',
+    );
+
+    expect(() => compileModulesDetailed({
+      './app.tsx': `
+        import { Badge } from 'broken-package';
+        export function App() { return <Badge />; }
+      `,
+    }, {
+      experimentalPackageArtifacts: [{
+        kind: 'memoized-dom-package',
+        version: 1,
+        entries: {
+          'broken-package': {
+            functions: {},
+            components: { Badge: { key: 'package:broken-package#Badge' } },
+          },
+        },
+      } as ExperimentalPackageArtifact],
+    })).toThrow(
+      'artifact.entries["broken-package"].components["Badge"].props; expected an array of strings',
+    );
   });
 
   it('returns authored source maps with precompiled package output', () => {

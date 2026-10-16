@@ -2,7 +2,10 @@ import { existsSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import { dirname, isAbsolute, join, parse, relative, resolve, sep } from 'node:path';
-import type { ExperimentalPackageArtifact } from '@memoized-dom/compiler';
+import {
+  validateExperimentalPackageArtifact,
+  type ExperimentalPackageArtifact,
+} from '@memoized-dom/compiler';
 
 interface PackageManifest {
   readonly name?: string;
@@ -76,9 +79,9 @@ export async function discoverPackageArtifact(
           `memo-dom: package '${expectedPackage}' declares an artifact outside its package directory`,
         );
       }
-      const artifact = JSON.parse(
+      const artifact = validateExperimentalPackageArtifact(JSON.parse(
         await readFile(artifactFile, 'utf8'),
-      ) as ExperimentalPackageArtifact;
+      ));
       return { artifact, artifactFile, manifestFile };
     }
     directory = dirname(directory);

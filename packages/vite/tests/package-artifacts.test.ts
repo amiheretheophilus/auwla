@@ -113,6 +113,61 @@ describe('package compilation artifacts', () => {
     }
   });
 
+  it('reports the exact malformed field in a discovered artifact', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'mmd-package-artifact-invalid-'));
+    const packageRoot = join(root, 'node_modules', 'track-utils');
+    const packageEntry = join(packageRoot, 'index.js');
+    const importer = join(root, 'App.tsx');
+    mkdirSync(packageRoot, { recursive: true });
+    writeFileSync(importer, `import { pending } from 'track-utils'; pending(null);`);
+    writeFileSync(packageEntry, 'export function pending() {}');
+    writeFileSync(join(packageRoot, 'package.json'), JSON.stringify({
+      name: 'track-utils',
+      type: 'module',
+      exports: './index.js',
+      'memoized-dom': { artifact: './memoized-dom.package.json' },
+    }));
+    writeFileSync(join(packageRoot, 'memoized-dom.package.json'), JSON.stringify({
+      kind: 'memoized-dom-package',
+      version: 1,
+      entries: {
+        'track-utils': {
+          functions: {
+            pending: {
+              parameterWrites: [],
+              parameterSourceReads: 'argument zero',
+              parameterPayloadReads: [],
+              unbounded: false,
+            },
+          },
+        },
+      },
+    }));
+
+    const context: GraphPluginContext = {
+      async resolve(specifier) {
+        return specifier === 'track-utils' ? { id: packageEntry } : null;
+      },
+      addWatchFile() {},
+      error(error): never { throw new Error(error.message); },
+    };
+    try {
+      await expect(compileGraph(
+        context,
+        root,
+        [importer],
+        resolveAdapterOptions({ clientEntry: importer }),
+        new Map(),
+        false,
+        false,
+      )).rejects.toThrow(
+        'artifact.entries["track-utils"].functions["pending"].parameterSourceReads; expected an array of argument facts',
+      );
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   it('links a precompiled package component without admitting its source', async () => {
     const root = mkdtempSync(join(tmpdir(), 'mmd-package-component-'));
     const entry = join(root, 'App.tsx');

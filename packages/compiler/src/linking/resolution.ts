@@ -13,15 +13,14 @@ import type {
   ModuleManifest,
   RenderUsage,
 } from './model';
+import { validateExperimentalPackageArtifact } from './package-artifact';
 
 function packageEntries(
   options: LinkResolutionOptions,
 ): Map<string, ExperimentalPackageEntry> {
   const entries = new Map<string, ExperimentalPackageEntry>();
-  for (const artifact of options.experimentalPackageArtifacts ?? []) {
-    if (artifact.kind !== 'memoized-dom-package' || artifact.version !== 1) {
-      throw new Error('memo-dom: unsupported experimental package artifact');
-    }
+  for (const input of options.experimentalPackageArtifacts ?? []) {
+    const artifact = validateExperimentalPackageArtifact(input);
     for (const [specifier, entry] of Object.entries(artifact.entries)) {
       if (entries.has(specifier)) {
         throw new Error(

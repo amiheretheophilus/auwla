@@ -1043,7 +1043,7 @@ export function compileModules(
 
 /**
  * Compile package modules once and expose portable summaries for ordinary
- * named helper exports. Components and state remain application-linked work.
+ * named helpers and the supported precompiled component boundary.
  *
  * This contract is experimental: consumers must opt in by passing the returned
  * artifact through `experimentalPackageArtifacts`.

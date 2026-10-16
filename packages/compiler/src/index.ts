@@ -84,3 +84,4 @@ export {
   type PackageBoundaryEntries,
   type PackageFunctionBoundary,
 } from './package-boundaries';
+export { validateExperimentalPackageArtifact } from './linking/package-artifact';
