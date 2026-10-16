@@ -259,7 +259,10 @@ function createServerFetch<
         dispatchDepth,
       },
       () => router.dispatch(new Request(request, { headers }), {
-        state: parent.state,
+        // In-memory delivery is an optimization, not a different request-state
+        // contract. Each derived dispatch initializes state exactly like the
+        // equivalent browser request, so parallel server functions cannot
+        // mutate the page request or one another through hidden shared locals.
         ...(parent.platform === undefined ? {} : { platform: parent.platform }),
         services: parent.services,
       }),

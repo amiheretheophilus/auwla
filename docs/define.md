@@ -453,7 +453,7 @@ different names:
 
 | Name | Meaning |
 |---|---|
-| `state` | Server request state created by `serve({ state })`; server-only and fresh per request |
+| `state` | Server dispatch state created by `serve({ state })`; server-only and fresh for nested SSR function calls too |
 | `routeState` | Preparation-owned state that persists across navigations and can transfer through SSR |
 
 The existing universal `$routed` preparation state therefore becomes

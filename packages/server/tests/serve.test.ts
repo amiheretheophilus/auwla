@@ -35,34 +35,57 @@ function internals<
 }
 
 describe('serve', () => {
-  it('scopes server-backed preparation fetches to the request and dispatches them in memory', async () => {
+  it('dispatches server-backed preparation fetches in memory with isolated state', async () => {
     const fixture = await compileFixture('serve-routed-fetch', `
       import { $fetch } from '@memoized-dom/data';
       export function App() {
         const page = $routed(({ state, routeState }) => {
           const me = $fetch('/api/me');
+          const other = $fetch('/api/other');
           routeState.me = me;
-          return { name: me.name, user: state.user };
+          routeState.other = other;
+          return { name: me.name, other: other.name, user: state.user };
         });
-        return <main route="/"><h1>{page.name}</h1></main>;
+        return <main route="/"><h1>{page.name}/{page.other}</h1></main>;
       }
     `, { routedEnvironment: 'server' });
-    const define = createDefine<{ user: string }>();
-    const app = serve({ define, state: request => ({ user: request.headers.get('x-user') ?? 'anonymous' }) });
+    type State = { user: string; visits: number; path: string };
+    const states = new Map<string, State[]>();
+    const define = createDefine<State>();
+    const app = serve({
+      define,
+      state: request => {
+        const user = request.headers.get('authorization') ?? 'anonymous';
+        const state = { user, visits: 0, path: new URL(request.url).pathname };
+        const owned = states.get(user) ?? [];
+        owned.push(state);
+        states.set(user, owned);
+        return state;
+      },
+    });
+    app.use((context, next) => { context.state.visits++; return next(); });
     app.get('/api/me', ({ state, request }) => ({ name: state.user + ':' + request.headers.get('cookie') }));
+    app.get('/api/other', ({ state }) => ({ name: state.user + ':other' }));
     app.post('/_memoized/routed', async context => invokeRoutedPreparation(await context.request.json(), context));
     app.ssr(fixture.serverModule.App);
     internals(app).installDocumentTemplate('<!doctype html><body><!--ssr-outlet--></body>');
     const responses = await Promise.all(['Ada', 'Grace'].map(user => app.fetch(new Request('https://app.test/_memoized/routed', {
-      method: 'POST', headers: { 'content-type': 'application/json', 'x-user': user, cookie: `sid=${user}` },
+      method: 'POST', headers: { 'content-type': 'application/json', authorization: user, cookie: `sid=${user}` },
       body: JSON.stringify({ id: './serve-routed-fetch.tsx#routed:App:0', href: '/', params: {} }),
     })).then(response => response.json())));
     expect(responses).toEqual(['Ada', 'Grace'].map(user => ({
-      kind: 'data', data: { name: `${user}:sid=${user}`, user },
-      state: { me: { name: `${user}:sid=${user}` } },
+      kind: 'data', data: { name: `${user}:sid=${user}`, other: `${user}:other`, user },
+      state: { me: { name: `${user}:sid=${user}` }, other: { name: `${user}:other` } },
     })));
-    const response = await app.fetch(new Request('https://app.test/', { headers: { 'x-user': 'SSR', cookie: 'sid=SSR' } }));
-    expect(await response.text()).toContain('<h1>SSR:sid=SSR</h1>');
+    const response = await app.fetch(new Request('https://app.test/', { headers: { authorization: 'SSR', cookie: 'sid=SSR' } }));
+    expect(await response.text()).toContain('<h1>SSR:sid=SSR/SSR:other</h1>');
+    for (const user of ['Ada', 'Grace', 'SSR']) {
+      const owned = states.get(user)!;
+      const outerPath = user === 'SSR' ? '/' : '/_memoized/routed';
+      expect(owned.map(state => state.path).sort()).toEqual([outerPath, '/api/me', '/api/other'].sort());
+      expect(new Set(owned).size).toBe(3);
+      expect(owned.every(state => state.visits === 1)).toBe(true);
+    }
   });
 
   it('composes typed routes, request context, and middleware in declaration order', async () => {
