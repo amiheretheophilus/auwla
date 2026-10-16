@@ -177,4 +177,68 @@ describe('request-state helper linking', () => {
       document.body.replaceChildren();
     }
   });
+
+  it('lowers mixed request-state and payload reads inside the helper', async () => {
+    const { metadata, output } = compileModulesDetailed({
+      './mixed-helper.ts': `
+        import { $track } from '@memoized-dom/data';
+        export function describe(source) {
+          return $track(source).pending
+            ? 'Loading'
+            : source.length + ' stories';
+        }
+      `,
+      './mixed-app.tsx': `
+        import { describe } from './mixed-helper';
+        export function MixedApp() {
+          const stories = $fetch('/api/mixed-stories');
+          const label = describe(stories);
+          return <p>{label}</p>;
+        }
+      `,
+    }, { runtimePath: '@memoized-dom/runtime/testing' });
+
+    expect(metadata['./mixed-helper.ts']!.functionExports).toContainEqual(
+      expect.objectContaining({
+        exported: 'describe',
+        parameterSourceReads: [{ index: 0, path: [] }],
+        parameterPayloadReads: [{ index: 0, path: [] }],
+      }),
+    );
+    expect(output['./mixed-helper.ts']).toContain(
+      '_MDD.readResolvedValue(source',
+    );
+    expect(output['./mixed-helper.ts']).toContain('$track(source).pending');
+
+    mkdirSync(outDir, { recursive: true });
+    for (const [file, code] of Object.entries(output)) {
+      writeFileSync(
+        join(outDir, file.slice(2).replace(/\.tsx$/, '.ts')),
+        code,
+      );
+    }
+    const request = Promise.withResolvers<Response>();
+    const data = createDataRuntime({ fetch: () => request.promise });
+    const previous = setActiveDataRuntime(data);
+    document.body.replaceChildren();
+    try {
+      const { MixedApp } = await import(
+        `${pathToFileURL(join(outDir, 'mixed-app.ts')).href}?runtime=${Date.now()}`
+      );
+      const paragraph = MixedApp('MixedRequestStateHelper', null) as HTMLParagraphElement;
+      document.body.append(paragraph);
+      expect(paragraph.textContent).toBe('Loading');
+
+      request.resolve(Response.json([{ id: 1 }, { id: 2 }]));
+      await waitFor(() => {
+        expect(paragraph.textContent).toBe('2 stories');
+      });
+      expect(document.querySelector('p')).toBe(paragraph);
+    } finally {
+      unregister('MixedRequestStateHelper');
+      data.clear();
+      setActiveDataRuntime(previous);
+      document.body.replaceChildren();
+    }
+  });
 });

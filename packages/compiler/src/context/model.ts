@@ -197,6 +197,8 @@ export interface LinkedFunctionImport {
   parameterWrites: ParameterWrite[];
   /** Arguments inspected as transparent request holders rather than payloads. */
   parameterSourceReads: ParameterSourceRead[];
+  /** Transparent-source arguments whose resolved payload is consumed. */
+  parameterPayloadReads: ParameterSourceRead[];
   /** Effects may extend beyond every known root and argument. */
   unbounded: boolean;
 }
@@ -329,6 +331,8 @@ export interface FnSummary {
   parameterWrites: ParameterWrite[];
   /** Request-holder reads expressed relative to helper arguments. */
   parameterSourceReads: ParameterSourceRead[];
+  /** Resolved-payload reads expressed relative to helper arguments. */
+  parameterPayloadReads: ParameterSourceRead[];
   /** True when effects cannot be bounded to known roots or arguments. */
   unbounded: boolean;
 }
@@ -705,6 +709,10 @@ export function createAnalysisCtx(opts: AnalysisOptions = {}): Ctx {
           path: [...effect.path],
         })),
         parameterSourceReads: linked.parameterSourceReads.map((effect) => ({
+          index: effect.index,
+          path: [...effect.path],
+        })),
+        parameterPayloadReads: linked.parameterPayloadReads.map((effect) => ({
           index: effect.index,
           path: [...effect.path],
         })),

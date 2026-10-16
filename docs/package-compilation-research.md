@@ -1,10 +1,11 @@
 # Separate package compilation and reactive linking
 
-Status: active compiler work, started 2026-10-16. Request-state-only helper
-relationships now link across local functions, imports, aliases, and re-exports.
-No reusable package artifact format, package-build command, or compatibility
-contract has been selected or implemented. Authoring examples involving an
-installed precompiled package still describe intended behavior.
+Status: active compiler work, started 2026-10-16. Request-state and payload
+relationships now link across local functions, imports, aliases, and re-exports,
+including helpers that use both relationships. No reusable package artifact
+format, package-build command, or compatibility contract has been selected or
+implemented. Authoring examples involving an installed precompiled package
+still describe intended behavior.
 
 ## Motivation
 
@@ -63,10 +64,30 @@ This behavior comes from function summaries, not helper-name recognition.
 the first payload and replays through request-state subscriptions. It no longer
 becomes `deriveResolvedValues([stories], ...)`.
 
-Mixed helpers remain a separate gate. A helper that both calls `$track(source)`
-and reads payload fields from `source` needs both relationships represented and
-its body lowered so only the payload reads materialize. The current
-`parameterSourceReads` fact deliberately does not claim to solve that case.
+### Mixed request-state and payload helpers preserve authored control flow
+
+A helper may inspect the holder and then consume its payload:
+
+```js
+export function describe(source) {
+  return $track(source).pending
+    ? 'Loading'
+    : `${source.length} stories`;
+}
+```
+
+Its summary records both `parameterSourceReads` and `parameterPayloadReads`.
+The call boundary preserves the holder so the pending branch is available
+immediately and participates in the existing request-state subscription. Inside
+the helper, only the proven payload use is lowered to a materializing read. Once
+the request settles, the same derived DOM entity replays the helper and reaches
+the payload branch; the component itself does not rerun and its DOM node is not
+replaced.
+
+This preserves the helper's authored control flow. It does not make every
+unconditional payload access safe: a helper that reads `source.length` while the
+source is still pending can still suspend or throw according to the surrounding
+boundary. The compiler does not invent a loading branch the author did not write.
 
 ### Component emission depends on consuming code
 
@@ -258,7 +279,9 @@ open decisions, not documented APIs.
 ## Suggested sequence and acceptance gates
 
 1. Correct general local/cross-module helper analysis and distinguish request
-   state from payload readiness. Prove the semantics before adding a package cache.
+   state from payload readiness. The request-state-only and mixed conditional
+   cases now have compile and runtime regressions; broader callback/facade cases
+   remain part of the acceptance matrix.
 2. Prototype reusable artifacts for ordinary helpers, using an unrelated package
    as well as our utils. Compare source compilation, cold artifact generation, and
    warm cached linking for equivalent behavior.

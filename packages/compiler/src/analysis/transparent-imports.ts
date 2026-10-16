@@ -43,6 +43,7 @@ export function scanTransparentSourceImports(
           boundedWrites: new Set(),
           parameterWrites: [],
           parameterSourceReads: [],
+          parameterPayloadReads: [],
           unbounded: false,
         });
       }
@@ -62,6 +63,7 @@ export function scanTransparentSourceImports(
           parameterSourceReads: name === passthrough.track
             ? [{ index: 0, path: [] }]
             : [],
+          parameterPayloadReads: [],
           unbounded: false,
         });
       }

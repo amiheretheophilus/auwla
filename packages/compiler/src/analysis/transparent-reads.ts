@@ -129,9 +129,12 @@ function staticPropertyName(property: BaseNode): string | null {
   return null;
 }
 
-/** Whether this source occurrence feeds a helper parameter's request-state read. */
-export function sourceStateArgument(ctx: Ctx, identifier: BaseNode): boolean {
-  let current = identifier;
+function sourceArgumentRead(
+  ctx: Ctx,
+  expression: BaseNode,
+  kind: 'state' | 'payload',
+): boolean {
+  let current = expression;
   const path: string[] = [];
   for (;;) {
     const parent = ctx.astAnalysis?.parentByNode.get(current) ?? null;
@@ -171,10 +174,23 @@ export function sourceStateArgument(ctx: Ctx, identifier: BaseNode): boolean {
       : binding?.scope.isProgramScope === true && ctx.helpers.has(call.callee.name)
         ? ctx.helperSummaries.get(call.callee.name)
         : undefined;
-    return summary?.parameterSourceReads.some(effect =>
+    const effects = kind === 'state'
+      ? summary?.parameterSourceReads
+      : summary?.parameterPayloadReads;
+    return effects?.some(effect =>
       effect.index === index && effect.path.length === path.length &&
       effect.path.every((part, partIndex) => part === path[partIndex])) === true;
   }
+}
+
+/** Whether this source occurrence feeds a helper parameter's request-state read. */
+export function sourceStateArgument(ctx: Ctx, expression: BaseNode): boolean {
+  return sourceArgumentRead(ctx, expression, 'state');
+}
+
+/** Whether this source occurrence feeds a helper parameter's payload read. */
+export function sourcePayloadArgument(ctx: Ctx, expression: BaseNode): boolean {
+  return sourceArgumentRead(ctx, expression, 'payload');
 }
 
 /** Only the source field of an imported optimistic() call carries holder identity. */

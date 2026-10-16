@@ -490,7 +490,8 @@ export function scanInstanceDerivations(ctx: Ctx): void {
               sourceStateArgument(ctx, current)
             ) {
               requestStateReads.add(source);
-            } else {
+            }
+            if (!sourceStateArgument(ctx, current)) {
               payloadReads.add(source);
             }
           }

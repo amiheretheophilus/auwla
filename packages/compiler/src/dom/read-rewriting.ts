@@ -11,7 +11,12 @@ import {
   type Binding as AstBinding,
   type Identifier as AstIdentifier,
 } from '../ast';
-import { astBindingAt, nodeHasJsx, refreshAstAnalysis } from '../context';
+import {
+  astBindingAt,
+  memberKey,
+  nodeHasJsx,
+  refreshAstAnalysis,
+} from '../context';
 import { type DomContext as Ctx } from './context';
 import { mdd } from './identifiers';
 import {annotateAsyncRead, annotateTransparentSources, excludeTransparentSubscriptions} from '../planning/async-reads';
@@ -32,6 +37,7 @@ import {
   sourceDependencies,
   type TransparentDerivation,
 } from '../analysis/transparent-reads';
+import { summarizeHelper } from '../helper-summaries';
 import { isGeneratedDataCall } from './data-read-recognition';
 import {
   gateEventSourceEffects,
@@ -48,6 +54,78 @@ export function rewriteTransparentDataReads(ctx: Ctx): void {
     const root = ctx.astAnalysis?.rootScope.block;
     if (root !== undefined) refreshAstAnalysis(ctx, root);
   };
+  // Helpers that mix request-state and payload access keep the holder at their
+  // call boundary. Materialize only the proven payload reads inside the helper
+  // body so `$track(source)` and `source.length` can coexist without changing
+  // the authored function signature.
+  for (const [name, helperPath] of ctx.helpers) {
+    const summary = summarizeHelper(ctx, name);
+    if (summary.parameterPayloadReads.length === 0) continue;
+    const helper = helperPath.node;
+    const helperNode = helper as unknown as BaseNode;
+    const replacements: Array<{
+      expression: BaseNode;
+      binding: string;
+      site: string;
+    }> = [];
+    for (const effect of summary.parameterPayloadReads) {
+      const parameter = helper.params[effect.index];
+      if (!astFactory.isIdentifier(parameter)) continue;
+      const parameterBinding = astBindingAt(
+        ctx,
+        helperNode,
+        parameter.name,
+      );
+      if (parameterBinding === undefined) continue;
+      const expected = [parameter.name, ...effect.path].join('.');
+      walkAst(helperNode, {
+        enter(current) {
+          let matches = false;
+          if (effect.path.length === 0 && current.type === 'Identifier') {
+            matches = (current as unknown as AstIdentifier).name === parameter.name &&
+              astBindingAt(ctx, current, parameter.name) === parameterBinding &&
+              parameterBinding.references.includes(current as unknown as AstIdentifier);
+          } else if (effect.path.length > 0 && current.type === 'MemberExpression') {
+            matches = memberKey(current as unknown as t.MemberExpression) === expected &&
+              astBindingAt(ctx, current, parameter.name) === parameterBinding;
+          }
+          if (!matches || isPassthroughArgument(ctx, current)) return;
+          const parent = ctx.astAnalysis?.parentByNode.get(current) ?? null;
+          if (
+            (parent?.type === 'AssignmentExpression' &&
+              childNode(parent, 'left') === current) ||
+            (parent?.type === 'UpdateExpression' &&
+              childNode(parent, 'argument') === current) ||
+            (parent?.type === 'UnaryExpression' &&
+              (parent as unknown as t.UnaryExpression).operator === 'delete')
+          ) return;
+          const site = current.loc === null || current.loc === undefined
+            ? ctx.moduleId
+            : `${ctx.moduleId}:${current.loc.start.line}:${current.loc.start.column + 1}`;
+          replacements.push({
+            expression: current,
+            binding: effect.path.length === 0
+              ? parameter.name
+              : `${parameter.name}.${effect.path.join('.')}`,
+            site,
+          });
+          return false;
+        },
+      });
+    }
+    for (const { expression, binding, site } of replacements) {
+      overwriteNode(
+        expression,
+        annotateAsyncRead(astFactory.callExpression(mdd(ctx, 'readResolvedValue'), [
+          cloneEstreeNode(expression, true) as unknown as t.Expression,
+          astFactory.stringLiteral(binding),
+          astFactory.stringLiteral(site),
+        ]), [binding], 'throw', binding) as unknown as BaseNode,
+      );
+      ctx.usesTransparentData = true;
+    }
+  }
+  refresh();
   // Module-scope sources (RFC §16.4): lower refs to materializing reads
   // first so plain sites are safe immediately; derivation roots themselves
   // are skipped by that pass and owned by the derive pass below.

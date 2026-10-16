@@ -86,6 +86,8 @@ export interface CompiledFunctionExport {
   parameterWrites: ParameterWrite[];
   /** Arguments whose holder state is inspected without awaiting payload data. */
   parameterSourceReads: ParameterSourceRead[];
+  /** Arguments whose resolved payload is consumed by the helper. */
+  parameterPayloadReads: ParameterSourceRead[];
   unbounded: boolean;
 }
 
@@ -810,6 +812,10 @@ function compileLinkedModules(
             path: [...effect.path],
           })),
           parameterSourceReads: summary.parameterSourceReads.map((effect) => ({
+            index: effect.index,
+            path: [...effect.path],
+          })),
+          parameterPayloadReads: summary.parameterPayloadReads.map((effect) => ({
             index: effect.index,
             path: [...effect.path],
           })),

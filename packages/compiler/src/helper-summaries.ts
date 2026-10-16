@@ -31,6 +31,10 @@ import {
   type ReactiveOrigin,
 } from './mutation-analysis';
 import { opaqueModuleRoots } from './analysis/opaque-volatility';
+import {
+  sourcePayloadArgument,
+  sourceStateArgument,
+} from './analysis/transparent-reads';
 
 function scopeAt(ctx: Ctx, at: BaseNode): Scope {
   let scope = astScopeAt(ctx, at);
@@ -88,6 +92,7 @@ export function summarizeHelper(
       boundedWrites: new Set(),
       parameterWrites: [],
       parameterSourceReads: [],
+      parameterPayloadReads: [],
       unbounded: true,
     };
   }
@@ -106,6 +111,7 @@ export function summarizeHelper(
     boundedWrites: new Set(),
     parameterWrites: [],
     parameterSourceReads: [],
+    parameterPayloadReads: [],
     unbounded: false,
   };
   const opaqueRoots = opaqueModuleRoots(ctx);
@@ -214,6 +220,20 @@ export function summarizeHelper(
       return;
     }
     summary.parameterSourceReads.push({ index, path });
+  };
+
+  const addParameterPayloadRead = (index: number, path: string[]): void => {
+    if (
+      summary.parameterPayloadReads.some(
+        (effect) =>
+          effect.index === index &&
+          effect.path.length === path.length &&
+          effect.path.every((part, partIndex) => part === path[partIndex]),
+      )
+    ) {
+      return;
+    }
+    summary.parameterPayloadReads.push({ index, path });
   };
 
   const noteSourceRead = (origin: ReactiveOrigin): void => {
@@ -475,6 +495,27 @@ export function summarizeHelper(
               noteSourceRead(extendOrigin(origin, effect.path));
             }
           }
+          for (const effect of nested.parameterPayloadReads) {
+            const argument = args[effect.index];
+            if (
+              argument === undefined ||
+              argument.type === 'SpreadElement' ||
+              argument.type === 'ArgumentPlaceholder'
+            ) {
+              continue;
+            }
+            const origin = aliases.resolveExpression(
+              lexicalScope,
+              argument as unknown as t.Expression,
+            );
+            if (origin?.locality !== 'prop') continue;
+            const index = parameterIndexes.get(origin.root);
+            if (index === undefined) continue;
+            const prefix = origin.key === null
+              ? []
+              : origin.key.split('.').slice(1);
+            addParameterPayloadRead(index, [...prefix, ...effect.path]);
+          }
           if (nested.unbounded) summary.unbounded = true;
           return;
         }
@@ -506,6 +547,43 @@ export function summarizeHelper(
       }
     },
   });
+
+  // Once request-holder paths are known, distinguish uses that consume their
+  // resolved payload. Calls into another summarized helper may carry both
+  // facts; holder identity is still preserved while payload readiness gates
+  // the caller.
+  if (summary.parameterSourceReads.length > 0) {
+    walkAst<BaseNode>(body, {
+      enter(current) {
+        if (current.type !== 'Identifier' && current.type !== 'MemberExpression') {
+          return;
+        }
+        const origin = aliases.resolveExpression(
+          scopeAt(ctx, current),
+          current as unknown as t.Expression,
+        );
+        if (origin?.locality !== 'prop') return;
+        const index = parameterIndexes.get(origin.root);
+        if (index === undefined) return;
+        const path = origin.key === null
+          ? []
+          : origin.key.split('.').slice(1);
+        if (!summary.parameterSourceReads.some(effect =>
+          effect.index === index && effect.path.length === path.length &&
+          effect.path.every((part, partIndex) => part === path[partIndex]))) {
+          return;
+        }
+        if (assignmentLeftIs(ctx, current, current)) return;
+        if (
+          sourcePayloadArgument(ctx, current) ||
+          !sourceStateArgument(ctx, current)
+        ) {
+          addParameterPayloadRead(index, path);
+        }
+        return false;
+      },
+    });
+  }
 
   visiting.delete(name);
   ctx.helperSummaries.set(name, summary);

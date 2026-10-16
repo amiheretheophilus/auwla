@@ -61,6 +61,7 @@ export interface FunctionExport {
   boundedWrites: string[];
   parameterWrites: ParameterWrite[];
   parameterSourceReads: ParameterSourceRead[];
+  parameterPayloadReads: ParameterSourceRead[];
   unbounded: boolean;
 }
 
