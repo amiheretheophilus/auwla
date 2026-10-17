@@ -124,6 +124,14 @@ never re-call `$fetch` yourself; the derivation does it, and everything that
 reads `story` (markup, other derivations, a `Group`, a `$track`) keeps
 observing the same stable binding.
 
+While the new request runs, the previous story stays on screen: an input
+change is a refresh, not a new initial load. `$track(story).refreshing` is
+`true` and `pending` stays `false`, so nothing flashes to a loading state
+unless you render one from `refreshing`. If the new request fails, the
+previous payload stays visible and `error` is set. Responses that arrive out
+of order are ignored; the latest input always wins. Changing the target to
+`null` pauses the request and clears the payload.
+
 The same is true for **function calls**: an imported function that returns
 one of these transparent values re-runs when its arguments change —
 `const story = getStory(id)` refires whenever `id` does. Inputs in,
@@ -182,8 +190,8 @@ What `request` gives you:
 |---|---|
 | `id` | unique id of the current request execution — changes on each new request |
 | `status` | `'idle' \| 'pending' \| 'success' \| 'error'` |
-| `pending` | initial load in flight |
-| `refreshing` | a re-request in flight while old data stays visible |
+| `pending` | a request is in flight and there is **no data yet** (initial load, or a retry before any success) |
+| `refreshing` | a request is in flight while **existing data stays visible**: `refresh()`, an input change, a retry after a later failure |
 | `error` | `RequestError \| null` |
 | `onSuccess(cb)` | fires once for this execution — `(data, requestId)` |
 | `onError(cb)` | fires once on failure — `(error, requestId)` |
@@ -206,6 +214,36 @@ return <p>{user.name}</p>;
 inputs. A separately bound promise works too: `const promise = loadUser(id);
 const user = $read(promise);`. The compiler retains the creation expression.
 `$track(promise)` is unsupported, and trackers have no `.value` property.
+
+## Editing a copy of loaded data
+
+A loaded value updates in place when a newer version arrives (refresh, input
+change or live update), so markup that reads it directly is always current.
+An edit buffer is different: `let text = note.text` followed by writes is
+**local state, initialized once**, so it keeps its value when `note.text`
+changes. That is what protects a user's typing from an incoming update; copy
+the current value yourself when editing starts:
+
+```tsx
+export function Note({ note }: { note: Note }) {
+  let editing = false;
+  let text = note.text;                  // edit buffer, owned by this component
+
+  if (editing) {
+    return <input value={text}
+      onInput={(e) => text = e.currentTarget.value}
+      onBlur={() => { saveNote(note.id, text); editing = false; }} />;
+  }
+  return <span onDblClick={() => {
+    text = note.text;                    // re-seed from the latest version
+    editing = true;
+  }}>{note.text}</span>;
+}
+```
+
+Outside edit mode the component shows `note.text`, so updates appear at once.
+Inside edit mode a live update changes `note.text` but not `text`. Saving
+sends `text`, and the server's response brings the new `note.text` back.
 
 ## Optimistic updates — the real pattern
 

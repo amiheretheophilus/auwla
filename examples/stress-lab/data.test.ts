@@ -166,7 +166,7 @@ const cases: DataCase[] = [
         <button id="next" onClick={()=>id++}>next</button></main>;}`,
     steps: [
       ['ok:/api/s/1:{"t":"one"}', 'success:false:false:one'],
-      ['click:next', 'success:true:true:one'],
+      ['click:next', 'success:false:true:one'],
       ['ok:/api/s/2:{"t":"two"}', 'success:false:false:two'],
     ],
   },
@@ -323,28 +323,29 @@ const cases: DataCase[] = [
         app: list(''),
         steps: [[v1, 'a'], ['click:edit1', 'local'], ['click:refresh', 'local'], [v2, 'b']],
       },
+      // A written `let` copy is local state set once (docs/05-data.md, "Editing a copy").
       {
-        name: 'd resolved: local copy (let text = note.text) after a new version, never edited',
+        name: 'd resolved: local copy keeps its value when a new version arrives',
         modules: { ...api, './Note.tsx': `export function Note({note}:{note:{id:number;text:string}}){
           let text=note.text;
           return <i>{note.text}/{text}<button id={'type'+note.id} onClick={()=>{text='typed';}}></button></i>;}` },
         app: list(''),
-        steps: [[v1, 'a/a'], ['click:refresh', 'a/a'], [v2, 'b/b']],
+        steps: [[v1, 'a/a'], ['click:refresh', 'a/a'], [v2, 'b/a']],
       },
       {
-        name: 'd resolved: local copy edited, then a new version arrives',
+        name: 'd resolved: typed edits survive a new version arriving',
         modules: { ...api, './Note.tsx': `export function Note({note}:{note:{id:number;text:string}}){
           let text=note.text;
           return <i>{note.text}/{text}<button id={'type'+note.id} onClick={()=>{text='typed';}}></button></i>;}` },
         app: list(''),
-        steps: [[v1, 'a/a'], ['click:type1', 'a/typed'], ['click:refresh', 'a/typed'], [v2, 'b/b']],
+        steps: [[v1, 'a/a'], ['click:type1', 'a/typed'], ['click:refresh', 'a/typed'], [v2, 'b/typed']],
       },
       {
-        name: 'd resolved: the Notes pattern (double-click to edit, re-enter after a new version)',
+        name: 'd resolved: the Notes pattern re-seeds on entering edit mode',
         modules: { ...api, './Note.tsx': `export function Note({note}:{note:{id:number;text:string}}){
           let editing=false;let text=note.text;
           return <i>{editing?'['+text+']':note.text}
-            <button id={'open'+note.id} onClick={()=>{editing=true;}}></button>
+            <button id={'open'+note.id} onClick={()=>{text=note.text;editing=true;}}></button>
             <button id={'type'+note.id} onClick={()=>{text='typed';}}></button>
             <button id={'close'+note.id} onClick={()=>{editing=false;}}></button></i>;}` },
         app: list(''),

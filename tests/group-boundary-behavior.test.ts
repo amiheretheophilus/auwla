@@ -204,7 +204,9 @@ describe('Group boundaries across component ownership', () => {
     expect(document.querySelector('#waterfall-b-shell')).toBeNull();
   });
 
-  it('keeps the committed owner during refresh and uses read-local pending on rebind', async () => {
+  // An input change refreshes what is on screen: no pending policy, the
+  // previous value stays until the new one arrives (docs/05-data.md).
+  it('keeps the committed owner and its value during both refresh and rebind', async () => {
     mount('SuspendedRefreshAndRebind');
     await waitFor(() => expect(requests).toHaveLength(1));
 
@@ -228,7 +230,8 @@ describe('Group boundaries across component ownership', () => {
     await waitFor(() => expect(requests).toHaveLength(3));
     expect(requests[2]!.url).toMatch(/\/matrix\/rebind\/two$/);
     expect(document.querySelector('#rebind-value')).toBe(committed);
-    expect(document.querySelector('.outer-pending')).not.toBeNull();
+    expect(committed?.textContent).toBe('Refreshed');
+    expect(document.querySelector('.outer-pending')).toBeNull();
     requests[2]!.resolve(json({ name: 'Rebound' }));
     await waitFor(async () => expect(await (() => document.querySelector('#rebind-value')?.textContent)())
       .toBe('Rebound'));

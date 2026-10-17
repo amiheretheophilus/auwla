@@ -10,8 +10,12 @@ function json(data: unknown, status = 200): Response {
   });
 }
 
+/** No request in flight: neither an initial load nor a refresh. */
 async function settled<T>(resource: FetchResource<T>): Promise<void> {
-  await waitFor(() => expect(resource.pending).toBe(false));
+  await waitFor(() => {
+    expect(resource.pending).toBe(false);
+    expect(resource.refreshing).toBe(false);
+  });
 }
 
 describe('resource concurrency', () => {
@@ -112,10 +116,11 @@ describe('resource concurrency', () => {
     await settled(resource);
 
     const refresh = resource.refresh();
+    // `pending` means no data yet; a request with data on screen refreshes.
     expect(resource).toMatchObject({
       data: ['current'],
       status: 'success',
-      pending: true,
+      pending: false,
       refreshing: true,
     });
     await expect(refresh).rejects.toMatchObject({ kind: 'http', status: 503 });

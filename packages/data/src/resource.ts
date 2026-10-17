@@ -228,7 +228,8 @@ class FetchEntry {
   restoreValidated(data:PromiseLike<unknown>,revalidate:boolean,streaming?:boolean):Promise<unknown> {
     this.cancelRequest();
     const generation=++this.generation;
-    this.snapshot.pending=true;this.snapshot.refreshing=this.hasData;
+    // `pending` means no data yet; with data on screen a request is a refresh.
+    this.snapshot.pending=!this.hasData;this.snapshot.refreshing=this.hasData;
     this.snapshot.status=this.hasData?'success':'pending';
     const request=Promise.resolve(data).then(value=>{
       if(generation !== this.generation)return;
@@ -261,7 +262,8 @@ class FetchEntry {
     const controller = new AbortController();
     this.controller = controller;
     this.snapshot.error = null;
-    this.snapshot.pending = true;
+    // `pending` means no data yet; with data on screen a request is a refresh.
+    this.snapshot.pending = !this.hasData;
     this.snapshot.refreshing = this.hasData;
     this.snapshot.status = this.hasData ? 'success' : 'pending';
     this.emit();
@@ -484,11 +486,41 @@ class ResourceController<T> {
     );
   }
 
+  /**
+   * Payload kept from before a rebind (`/api/s/${id}` with a new id) until the
+   * new request has data, so changing an input refreshes instead of blanking.
+   */
+  private previous: { data: T } | null = null;
+
+  /**
+   * Keep the current payload visible across a rebind to another request. A
+   * paused (`null`) target clears it: there is no request to refresh.
+   */
+  retainForRebind(paused: boolean): void {
+    this.previous = !paused && this.snapshot.status === 'success'
+      ? { data: this.snapshot.data as T }
+      : null;
+  }
+
   receive(entry: FetchEntry, snapshot: MutableSnapshot<unknown>): void {
     if (this.entry !== null && this.entry !== entry) return;
     this.operationId = entry.operationId;
     this.updates = entry.updates;
-    this.snapshot = { ...snapshot } as MutableSnapshot<T>;
+    if (this.previous !== null && snapshot.status !== 'success') {
+      // The new request has no data yet: it refreshes what is on screen. A
+      // failure keeps that data visible with the error, as a refresh does.
+      const inFlight = snapshot.pending || snapshot.refreshing;
+      this.snapshot = {
+        ...snapshot,
+        data: this.previous.data,
+        status: 'success',
+        pending: false,
+        refreshing: inFlight,
+      } as MutableSnapshot<T>;
+    } else {
+      if (snapshot.status === 'success') this.previous = null;
+      this.snapshot = { ...snapshot } as MutableSnapshot<T>;
+    }
     this.notify();
   }
 
@@ -731,6 +763,7 @@ export function rebindFetchResource<T>(
   }
   controller.descriptor = descriptor;
   controller.paused = paused;
+  controller.retainForRebind(paused);
   controller.snapshot = idleSnapshot();
 
   if (!controller.bindSignal(descriptor.signal) || paused) {
@@ -782,6 +815,7 @@ export function rebindFetchResourceFrom<T>(
   }
   controller.descriptor = incoming.descriptor;
   controller.paused = incoming.paused;
+  controller.retainForRebind(controller.paused);
   controller.snapshot = idleSnapshot();
 
   if (!controller.bindSignal(controller.descriptor.signal) || controller.paused) {
