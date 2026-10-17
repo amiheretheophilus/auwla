@@ -160,7 +160,7 @@ export interface ComponentExport extends ComponentExportInfo {
   type: 'component';
 }
 
-export interface ValueExport { type: 'value'; reactiveClass?: true }
+export interface ValueExport { type: 'value'; reactiveClass?: true; impliedReads?: string[] }
 
 export type LinkedExport =
   | StateExport

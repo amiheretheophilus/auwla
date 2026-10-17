@@ -50,6 +50,13 @@ function memberBodies(node: t.Node): BaseNode[] {
   return [];
 }
 
+/** Module state a class's getters and methods read, for its export metadata. */
+export function classMemberReads(ctx: Ctx, declaration: t.ClassDeclaration): Set<string> {
+  const reads = new Set<string>();
+  for (const body of memberBodies(declaration)) for (const read of functionReads(ctx, body, '')) reads.add(read);
+  return reads;
+}
+
 /** Record implied reads for module objects whose getters or methods read other state. */
 export function planStateImpliedReads(ctx: Ctx, program: ProgramPath): void {
   const classes = new Map<string, t.Node>();
@@ -65,11 +72,13 @@ export function planStateImpliedReads(ctx: Ctx, program: ProgramPath): void {
       if (!astFactory.isIdentifier(declarator.id) || declarator.init == null || !ctx.state.has(declarator.id.name)) continue;
       const name = declarator.id.name;
       const init = declarator.init as t.Node;
-      const source = astFactory.isNewExpression(init) && astFactory.isIdentifier(init.callee)
-        ? classes.get(init.callee.name) : init;
-      if (source === undefined) continue;
-      const reads = new Set<string>();
-      for (const body of memberBodies(source)) for (const read of functionReads(ctx, body, name)) reads.add(read);
+      const className = astFactory.isNewExpression(init) && astFactory.isIdentifier(init.callee)
+        ? init.callee.name : null;
+      const source = className === null ? init : classes.get(className);
+      const reads = new Set<string>(className === null ? [] : ctx.importedClassReads.get(className) ?? []);
+      if (source !== undefined) {
+        for (const body of memberBodies(source)) for (const read of functionReads(ctx, body, name)) reads.add(read);
+      }
       reads.delete(canonicalStateKey(ctx, name));
       if (reads.size > 0) ctx.stateImpliedReads.set(canonicalStateKey(ctx, name), reads);
     }

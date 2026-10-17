@@ -133,15 +133,24 @@ function destructuredParameterPaths(
   return paths;
 }
 
-/** Read/write summary of a module-level helper, memoized and cycle-safe. */
+/**
+ * Read/write summary of a module-level helper, memoized and cycle-safe.
+ *
+ * A recursive call contributes nothing new: the frame that is already
+ * summarizing that helper covers its body. `cycleHits` records which active
+ * frames were re-entered, so a summary computed inside someone else's cycle
+ * (incomplete) is not cached, and recursive writers stay conservative.
+ */
 export function summarizeHelper(
   ctx: Ctx,
   name: string,
   visiting: Set<string> = new Set(),
+  cycleHits: Set<string> = new Set(),
 ): FnSummary {
   const cached = ctx.helperSummaries.get(name);
   if (cached) return cached;
   if (visiting.has(name)) {
+    cycleHits.add(name);
     return {
       reads: new Set(),
       writes: new Set(),
@@ -149,7 +158,7 @@ export function summarizeHelper(
       parameterWrites: [],
       parameterSourceReads: [],
       parameterPayloadReads: [],
-      unbounded: true,
+      unbounded: false,
     };
   }
 
@@ -221,6 +230,7 @@ export function summarizeHelper(
   const isComputedOrigin = (origin: ReactiveOrigin): boolean =>
     origin.stateKind === 'computed' || ctx.state.get(origin.root) === 'computed';
   const parameterPaths = destructuredParameterPaths(helper.params);
+  const selfCalls: { call: BaseNode; scope: Scope }[] = [];
   seedModuleObjectAliases(ctx, aliases);
 
   visiting.add(name);
@@ -371,7 +381,7 @@ export function summarizeHelper(
         astBindingAt(ctx, callee, calleeName)?.scope.isProgramScope === true &&
         (ctx.helpers.has(calleeName) || ctx.importedFunctions.has(calleeName))) {
       const nested = ctx.importedFunctions.get(calleeName) ??
-        summarizeHelper(ctx, calleeName, visiting);
+        summarizeHelper(ctx, calleeName, visiting, cycleHits);
       for (const read of nested.reads) summary.boundedWrites.add(read);
       if (nested.opaqueReads === true || nested.unbounded) summary.unbounded = true;
       return;
@@ -565,9 +575,10 @@ export function summarizeHelper(
           astBindingAt(ctx, callee, calleeName)?.scope.isProgramScope === true &&
           (ctx.helpers.has(calleeName) || ctx.importedFunctions.has(calleeName))
         ) {
+          if (calleeName === name) selfCalls.push({ call: current, scope: lexicalScope });
           const nested =
             ctx.importedFunctions.get(calleeName) ??
-            summarizeHelper(ctx, calleeName, visiting);
+            summarizeHelper(ctx, calleeName, visiting, cycleHits);
           for (const read of nested.reads) summary.reads.add(read);
           if (nested.opaqueReads === true) summary.opaqueReads = true;
           for (const write of nested.writes) summary.writes.add(write);
@@ -700,8 +711,31 @@ export function summarizeHelper(
     });
   }
 
+  // A self-call writes through its own arguments exactly as this body writes
+  // through its parameters. Route those effects to the arguments until no new
+  // effect appears; deeper laps are covered by the argument's root.
+  for (let changed = true; changed;) {
+    const before = summary.parameterWrites.length + summary.boundedWrites.size;
+    for (const { call, scope } of selfCalls) {
+      const args = childNodes(call, 'arguments');
+      for (const effect of [...summary.parameterWrites]) {
+        const argument = args[effect.index];
+        if (argument === undefined || argument.type === 'SpreadElement') continue;
+        const origin = aliases.resolveExpression(scope, argument as unknown as t.Expression);
+        if (origin !== null) noteReceiverEffect({ ...origin });
+      }
+    }
+    changed = summary.parameterWrites.length + summary.boundedWrites.size !== before;
+  }
+  cycleHits.delete(name);
+  const reenteredAncestor = [...cycleHits].some(hit => hit !== name && visiting.has(hit));
+  if (reenteredAncestor && (summary.writes.size > 0 || summary.boundedWrites.size > 0 ||
+      summary.parameterWrites.length > 0)) {
+    // Mutual recursion: the other helper's later laps are not visible here.
+    summary.unbounded = true;
+  }
   visiting.delete(name);
-  ctx.helperSummaries.set(name, summary);
+  if (!reenteredAncestor) ctx.helperSummaries.set(name, summary);
   return summary;
 }
 

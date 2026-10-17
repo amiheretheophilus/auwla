@@ -75,3 +75,12 @@ it.each([
     './App.tsx':app("import {add} from './store';",'add'),
   },2)).toEqual(['0','5','10']);
 });
+
+it('updates readers of an instance of an imported class whose getter reads its own module',async()=>{
+  expect(await clickAndRead('imported-class-getter',{
+    './cart.ts':"export const cart:number[]=[];export function add(){cart.push(5);}export class Totals{get sum(){return cart.reduce((a,b)=>a+b,0);}}",
+    './totals.ts':"import {Totals} from './cart';export const totals=new Totals();",
+    './Reader.tsx':"import {totals} from './totals';export function Reader(){return <output id=\"out\">{totals.sum}</output>;}",
+    './App.tsx':app("import {add} from './cart';",'add'),
+  },2)).toEqual(['0','5','10']);
+});

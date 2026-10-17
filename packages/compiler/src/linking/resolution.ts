@@ -455,6 +455,7 @@ export function linkImports(
       linked[ref.local] = {
         type: 'value',
         ...(targetExport.reactiveClass === true ? { reactiveClass: true } : {}),
+        ...(targetExport.impliedReads === undefined ? {} : { impliedReads: [...targetExport.impliedReads] }),
       };
       continue;
     } else {

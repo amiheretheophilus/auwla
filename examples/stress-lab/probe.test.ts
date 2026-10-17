@@ -3,11 +3,11 @@
  *
  *   bun test --preload ./test-support/dom.ts ./examples/stress-lab/probe.test.ts
  *
- * This is an exploratory probe, outside the test root. Failing cases record
- * open questions (const reference aliases, recursive helper derivations) or
- * shapes rejected by design (JSX built in loops). Fixed findings are pinned by
- * tests/stress-lab-regressions.test.ts, tests/recursive-components.test.ts and
- * tests/indirect-module-writes.test.ts.
+ * This is an exploratory probe, outside the test root. Remaining failures are
+ * shapes rejected by design (JSX built in loops; see
+ * docs/dynamic-rendering-options.md). Fixed findings are pinned by tests named
+ * after them: stress-lab-regressions, recursive-components, recursive-helpers,
+ * indirect-module-writes, namespace-and-getter-reads and snapshot-intrinsic.
  */
 import { afterEach, expect, it } from 'bun:test';
 import { mkdirSync, writeFileSync } from 'node:fs';

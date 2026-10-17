@@ -272,6 +272,8 @@ export interface LinkedValueImport {
   type: 'value';
   /** An exported class whose methods can reach module state or helpers. */
   reactiveClass?: true;
+  /** Module state the class's getters and methods read. */
+  impliedReads?: string[];
 }
 
 export type LinkedImport =
@@ -501,6 +503,8 @@ export interface Ctx {
   readReplayOrigins: Set<t.VariableDeclarator>;
   /** Canonical state key → keys its getters and methods read (reading it reads them). */
   stateImpliedReads: Map<string, Set<string>>;
+  /** Imported class → module state its getters and methods read. */
+  importedClassReads: Map<string, Set<string>>;
   linkedComponentPaths: Map<string, string[]>;
   /** Graph-linked keyed-row modes for declarations in this module. */
   linkedComponentRows: Map<string, LinkedComponentRowUse[]>;
@@ -674,6 +678,7 @@ export function createAnalysisCtx(opts: AnalysisOptions = {}): Ctx {
   const importedValues = new Set<string>();
   const importedReactiveClasses = new Set<string>();
   const stateImpliedReads = new Map<string, Set<string>>();
+  const importedClassReads = new Map<string, Set<string>>();
   for (const [local, linked] of Object.entries(opts.linkedImports ?? {})) {
     if (linked.type === 'state') {
       state.set(local, linked.kind);
@@ -736,6 +741,9 @@ export function createAnalysisCtx(opts: AnalysisOptions = {}): Ctx {
     } else if (linked.type === 'value') {
       importedValues.add(local);
       if (linked.reactiveClass === true) importedReactiveClasses.add(local);
+      if (linked.impliedReads !== undefined && linked.impliedReads.length > 0) {
+        importedClassReads.set(local, new Set(linked.impliedReads));
+      }
     } else {
       importedComponents.set(local, linked);
     }
@@ -810,6 +818,7 @@ export function createAnalysisCtx(opts: AnalysisOptions = {}): Ctx {
     importedReactiveClasses,
     readReplayOrigins: new Set(),
     stateImpliedReads,
+    importedClassReads,
     transparentModuleSources,
     transparentSourceProps: new Map(),
     presentationOwners: new Map(),
