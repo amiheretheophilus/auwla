@@ -56,8 +56,8 @@ async function main(): Promise<void> {
     },
   });
   const command = positionals[0] ?? 'dev';
-  if (!['dev', 'build', 'types'].includes(command) || positionals.length > 1) {
-    throw new Error('Usage: memoized-dom [dev|build|types] [--config path] [--root path] [--port number]');
+  if (!['dev', 'build', 'types', 'package'].includes(command) || positionals.length > 1) {
+    throw new Error('Usage: memoized-dom [dev|build|types|package] [--config path] [--root path] [--port number]');
   }
   if (values.port !== undefined && (!Number.isInteger(Number(values.port)) || Number(values.port) < 0 || Number(values.port) > 65535)) {
     throw new Error('memoized-dom: --port must be an integer between 0 and 65535');
@@ -65,6 +65,11 @@ async function main(): Promise<void> {
   // Read configuration under Node so Worker tooling never has to initialize in Bun.
   if (process.versions.bun && !values['runtime-child']) {
     await launchHost('node', false);
+    return;
+  }
+  if (command === 'package') {
+    if (values.port !== undefined) throw new Error('memoized-dom: --port is not a package-build option');
+    await (await import('./library-build')).buildLibrary({ root: values.root, config: values.config });
     return;
   }
   const config: InlineConfig = {

@@ -2,22 +2,19 @@ import { afterEach, expect, it } from 'bun:test';
 import { execFile } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { mkdir, mkdtemp, readFile, readdir, rm, symlink, writeFile } from 'node:fs/promises';
-import { createRequire } from 'node:module';
 import { dirname, join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 import { pathToFileURL } from 'node:url';
 import { promisify } from 'node:util';
 import { createBuilder } from 'vite';
 import puppeteer from 'puppeteer-core';
-import { experimentalCompilePackage, experimentalFinalizePackage } from '@memoized-dom/compiler';
+import { experimentalVerifyPackageIntegrity } from '@memoized-dom/compiler';
 import memoizedDom from '../src';
 import { createDevServer, type NativeDevServer } from '../src/dev';
 import { discoverPackageArtifact } from '../src/graph/package-artifacts';
 
 const run = promisify(execFile);
 const repository = resolve(import.meta.dirname, '../../..');
-const require = createRequire(import.meta.url);
-const tsc = join(dirname(require.resolve('typescript/package.json')), 'bin/tsc');
 const chrome = [process.env.MMD_CHROME_PATH, 'C:/Program Files/Google/Chrome/Application/chrome.exe', '/usr/bin/chromium']
   .find((path): path is string => !!path && existsSync(path));
 let fixture: string | undefined;
@@ -49,6 +46,7 @@ it('consumes a packed, minified component/helper library without its source in t
   for (const name of ['runtime', 'data', 'router', 'server', 'compiler', 'adapters']) {
     await symlink(join(repository, 'packages', name), join(scope, name), process.platform === 'win32' ? 'junction' : 'dir');
   }
+  await symlink(join(repository, 'node_modules/typescript'), join(fixture, 'node_modules/typescript'), process.platform === 'win32' ? 'junction' : 'dir');
   const modules = {
     './index.ts': `export {Badge,Unused} from './badge';export {add} from './helpers';`,
     './badge.tsx': `export function Badge({value,onPress}:{value:number;onPress:()=>void}){
@@ -57,35 +55,26 @@ it('consumes a packed, minified component/helper library without its source in t
       }
       export function Unused(){return <aside>UNUSED_PACKAGE_EXPORT_SENTINEL</aside>;}`,
     './helpers.ts': `export function add(counter:{value:number},amount:number):void{counter.value+=amount;}`,
-    './status.ts': `import {$track,type ResolvedValue} from '@memoized-dom/data';
+    './public/status.ts': `import {$track,type ResolvedValue} from '@memoized-dom/data';
       export function waiting<T>(source:ResolvedValue<T>):boolean{return $track(source).refreshing;}`,
   };
   await files(producer, Object.fromEntries(Object.entries(modules).map(([name, source]) => ['src/' + name.slice(2), source])));
-  const compiled = experimentalCompilePackage(modules, { packageEntries: {
-    '@publication/ui': './index.ts', '@publication/ui/status': './status.ts',
-  } });
-  expect(compiled.artifact.entries['@publication/ui']!.components!.Badge!.initial?.adoption).toBe('host-slots-v2');
-  await files(producer, Object.fromEntries(Object.entries(compiled.output).map(([name, source]) => ['compiled/' + name.slice(2), source])));
   await files(producer, {
     'package.json': JSON.stringify({ name: '@publication/ui', version: '0.0.0', type: 'module', sideEffects: false, files: ['dist'],
-      exports: { '.': { types: './dist/index.d.ts', import: './dist/index.js' }, './status': { types: './dist/status.d.ts', import: './dist/status.js' } },
       peerDependencies: { '@memoized-dom/runtime': '*', '@memoized-dom/data': '*' },
-      'memoized-dom': { artifact: './dist/memoized-dom.package.json', integrity: true },
     }),
+    '.lib.config.ts': `export default {entry:'./src/index.ts',subpaths:['./src/public']};`,
     'tsconfig.json': JSON.stringify({ compilerOptions: { target: 'ESNext', module: 'Preserve', moduleResolution: 'Bundler',
       jsx: 'preserve', strict: true, skipLibCheck: true, types: ['@memoized-dom/compiler/jsx'],
       declaration: true, emitDeclarationOnly: true, rootDir: './src', outDir: './dist' }, include: ['src'] }),
   });
-  // Declaration generation is separate from the consumer's Bun typecheck.
-  await run('node', [tsc, '-p', 'tsconfig.json'], { cwd: producer, windowsHide: true, timeout: 30_000 });
-  const bundled = await Bun.build({ entrypoints: ['index.ts', 'status.ts'].map(name => join(producer, 'compiled', name)),
-    outdir: join(producer, 'dist'), target: 'browser', format: 'esm', minify: true, external: ['@memoized-dom/*'] });
-  expect(bundled.success, bundled.logs.map(String).join('\n')).toBe(true);
-  const artifact = await experimentalFinalizePackage(compiled.artifact, { packageRoot: producer });
-  expect(Object.keys(artifact.integrity!.files)).toEqual(['dist/index.js', 'dist/status.js']);
-  await writeFile(join(producer, 'dist/memoized-dom.package.json'), JSON.stringify(artifact));
+  // The public one-file CLI owns collection, compiler output, bundling, types and finalization.
+  await run('node', [join(repository, 'packages/vite/dist/cli.js'), 'package'], { cwd: producer, windowsHide: true, timeout: 60_000 });
+  const artifact = JSON.parse(await readFile(join(producer, 'dist/memoized-dom.package.json'), 'utf8'));
+  expect(artifact.entries['@publication/ui'].components.Badge.initial.adoption).toBe('host-slots-v2');
+  expect(await experimentalVerifyPackageIntegrity(artifact, join(producer, 'dist'))).not.toHaveLength(0);
   const tarball = join(fixture, 'publication-ui.tgz');
-  await run(process.execPath, ['pm', 'pack', '--ignore-scripts', '--filename', tarball], { cwd: producer, windowsHide: true, timeout: 30_000 });
+  await run(process.execPath, ['pm', 'pack', '--ignore-scripts', '--filename', tarball], { cwd: join(producer, 'dist'), windowsHide: true, timeout: 30_000 });
   await files(consumer, {
     'package.json': JSON.stringify({ name: 'publication-consumer', private: true, type: 'module', dependencies: {
       '@publication/ui': 'file:../publication-ui.tgz', '@memoized-dom/runtime': 'workspace:*', '@memoized-dom/data': 'workspace:*',
@@ -128,12 +117,12 @@ it('consumes a packed, minified component/helper library without its source in t
   for (const name of ['router', 'server', 'compiler', 'adapters']) {
     if (!existsSync(join(scope, name))) await symlink(join(repository, 'packages', name), join(scope, name), process.platform === 'win32' ? 'junction' : 'dir');
   }
-  const installed = dirname(dirname(Bun.resolveSync('@publication/ui', consumer)));
-  expect(existsSync(join(installed, 'dist/index.js'))).toBe(true);
-  expect(existsSync(join(installed, 'dist/memoized-dom.package.json'))).toBe(true);
+  const installed = dirname(Bun.resolveSync('@publication/ui', consumer));
+  expect(existsSync(join(installed, 'index.js'))).toBe(true);
+  expect(existsSync(join(installed, 'memoized-dom.package.json'))).toBe(true);
   expect(existsSync(join(installed, 'src'))).toBe(false);
   expect(existsSync(join(installed, 'compiled'))).toBe(false);
-  expect(await readFile(join(installed, 'dist/badge.d.ts'), 'utf8')).toContain('JSX.Element');
+  expect(await readFile(join(installed, '.types/src/badge.d.ts'), 'utf8')).toContain('JSX.Element');
   const discovered = await discoverPackageArtifact(Bun.resolveSync('@publication/ui', consumer), '@publication/ui', join(consumer, 'App.tsx'));
   expect(discovered?.artifact.entries['@publication/ui']?.components?.Badge, installed).toBeDefined();
   await rm(producer, { recursive: true, force: true });

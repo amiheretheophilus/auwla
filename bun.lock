@@ -131,10 +131,12 @@
       "peerDependencies": {
         "@cloudflare/vite-plugin": "^1.63.1",
         "@memoized-dom/runtime": "workspace:*",
+        "typescript": ">=5.0.0",
         "vite": "^8.0.0",
       },
       "optionalPeers": [
         "@cloudflare/vite-plugin",
+        "typescript",
       ],
     },
   },

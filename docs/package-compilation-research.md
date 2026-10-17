@@ -501,7 +501,11 @@ files, not dishonest metadata. Generated compiler/runtime contract requirements
 now reject unknown contracts; Vite checks the package's and application's
 resolved runtime ABI declarations, including nested copies, aliases, and
 external SSR resolution. This is not exact npm-version pinning or arbitrary
-dependency negotiation. A dedicated library-build CLI remains open work.
+dependency negotiation. The single `.lib.config.ts` library build now collects
+the graph, bundles compiler output, emits declarations, generates public export
+paths and the publication manifest, and finalizes the artifact automatically.
+Utils uses this flow instead of maintaining an artifact script. See
+[library packaging](./library-packaging.md).
 
 ## Suggested sequence and acceptance gates
 
@@ -533,8 +537,8 @@ discovery, import-only SSR discovery, and late external runtime-copy request
 scope attachment. Framework dependencies still use the matching built checkout.
 The tarball gate now uses the finalization stamp, including verification after
 the package manager packs/installs and rewrites dependency versions. Declared
-runtime ABI checks now accompany this flow; broader cross-version integration
-and a dedicated library-build command remain open;
+runtime ABI checks and the public one-file packaging command now accompany this
+flow; broader cross-version integration remains open;
 passing this gate is not a claim that the entire publication contract is stable.
 
 The mixed JSX conditional issue found by this gate is now fixed generally:

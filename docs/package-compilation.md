@@ -46,25 +46,37 @@ not configure this and continue to write ordinary imports.
 
 ## Package layout
 
-Publish the generated artifact with the package's normal output:
+Package authors use [the single-file library build](./library-packaging.md):
+
+```ts
+// .lib.config.ts
+export default {
+  entry: './src/index.ts',
+  subpaths: ['./src/public'], // optional public directories
+};
+```
+
+Run `memoized-dom package` and publish the generated output directory. No Vite
+configuration, module/export list, artifact script or compiler-specific source
+manifest fields are needed. Output includes the generated artifact:
 
 ```text
 my-package/
   package.json
   dist/
+    package.json
     index.js
     index.d.ts
     memoized-dom.package.json
 ```
 
-Declare its path in `package.json`:
+The tool writes this declaration in the **generated** `dist/package.json`:
 
 ```json
 {
   "name": "my-package",
-  "files": ["dist"],
   "memoized-dom": {
-    "artifact": "./dist/memoized-dom.package.json",
+    "artifact": "./memoized-dom.package.json",
     "integrity": true
   }
 }
@@ -75,10 +87,10 @@ artifact entry name must exactly match the bare import specifier. A package
 which exposes both `my-package` and `my-package/status` needs one entry for each
 specifier it wants the compiler to understand.
 
-## Generating the artifact
+## Low-level compiler host API
 
-Run package compilation after building `@memoized-dom/compiler` and before
-publishing the package. A package may keep this in a build script:
+The following is for custom tool hosts, not the ordinary publishing workflow.
+`memoized-dom package` handles these operations automatically.
 
 ```ts
 import { readFile, writeFile } from 'node:fs/promises';
@@ -151,7 +163,7 @@ requires `"memoized-dom": { "artifact": "…", "integrity": true }` in the
 package manifest. The flag makes a missing stamp an error, including accidentally
 publishing an older unfinalized artifact. Consumers still use normal imports;
 the current Vite plugin verifies the package automatically before linking it.
-The utils build uses this step, and the tarball publication regression installs
+The single-file library build uses this step, and the tarball publication regression installs
 and checks a finalized package.
 
 The stamp binds the validated semantic metadata, the manifest's resolution and
@@ -246,7 +258,8 @@ correct. Keep the runtime external when bundling a package. A privately inlined
 runtime cannot be inspected this way. The check does not negotiate arbitrary
 third-party dependencies, data/router/server package contracts, engine support,
 or every cross-version behavior. Those still need appropriate peer dependencies
-and integration tests. The dedicated library-build CLI remains separate work.
+and integration tests. The single-file library command automates the supported
+publication flow; these boundaries still apply to its generated output.
 
 ### Barrels and bundling
 
@@ -313,7 +326,8 @@ runtime versions interchangeable.
 
 In a monorepo, build ordering matters: build the compiler before packages which
 generate artifacts. The root Memoized DOM build does this for
-`@memoized-dom/utils`.
+`@memoized-dom/utils`. The Vite CLI is built before utils because utils now uses
+the shared `package` command.
 
 The repository's `bun run bench:package-compilation` command compares compiling
 package source with linking an already generated artifact. It is a compiler
@@ -620,7 +634,7 @@ JavaScript and matching artifact together.
 - The semantic digest identifies metadata, independently of final byte hashes.
   Package builds must publish matching compiler output and finalized metadata
   together. Compiler/runtime contract checks are separate from byte integrity;
-  a dedicated library-build CLI remains open work.
+  the single-file library command automates the supported publication flow.
 - Package initial HTML and host adoption cover the subsets described above.
   Text-adjacent or multiple same-parent slots, nested fallback slots, and
   package-local setup/state, refs or effects are outside the portable
