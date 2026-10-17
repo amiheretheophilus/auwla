@@ -7,6 +7,12 @@ the authoring design and now describes the implementation and its boundaries.
 Invalidation is application-instance-local; it is not a distributed database feed.
 Cross-instance support is [under discussion](./live-adapters-discussion.md);
 no adapter API has been selected or implemented.
+During native development, replacing the backend closes its old live query
+connections (both direct and multiplexed). Clients reconnect automatically to
+the replacement application's invalidation hub; no manual browser refresh is
+required. Ordinary finite responses and generator streams are not interrupted
+by this live-query retirement. Application-owned in-memory data can still reset
+when its defining server modules are reloaded; this is not durable storage.
 For resolved keys, pending holds, rejected snapshots, and missing mutation
 confirmations, see [development diagnostics](./live-diagnostics.md).
 Server functions returning `page(...)` reuse these live connections. Their

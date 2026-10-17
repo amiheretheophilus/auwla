@@ -20,6 +20,7 @@ interface Generation {
   pending: number;
   retired: boolean;
   disposed: boolean;
+  liveStreams: Set<() => void>;
 }
 
 export interface NativeDevServer {
@@ -121,7 +122,7 @@ export async function createDevServer(inline: InlineConfig = {}): Promise<Native
         if (!module.default || typeof module.default.fetch !== 'function') {
           throw new TypeError(`memoized-dom: '${entry}' must default-export a backend with a fetch handler`);
         }
-        const next = { module, revision: nextRevision, pending: 0, retired: false, disposed: false };
+        const next: Generation = { module, revision: nextRevision, pending: 0, retired: false, disposed: false, liveStreams: new Set() };
         if (revision !== nextRevision) {
           next.retired = true;
           await dispose(next);
@@ -131,7 +132,13 @@ export async function createDevServer(inline: InlineConfig = {}): Promise<Native
         current = next;
         failedBackend = false;
         generations.add(next);
-        if (previous) { previous.retired = true; await dispose(previous); }
+        if (previous) {
+          previous.retired = true;
+          // Live queries must reconnect to the new application's invalidation hub.
+          // Ordinary finite streams continue draining from their original generation.
+          for (const reconnect of previous.liveStreams) reconnect();
+          await dispose(previous);
+        }
         return next;
       }
     })();
@@ -154,15 +161,42 @@ export async function createDevServer(inline: InlineConfig = {}): Promise<Native
       const response = await application.fetch(request, application.installIntegration ? { platform } : platform);
       if (!response?.body) { await release(); return response; }
       const reader = response.body.getReader();
+      const live = response.headers.get('content-type')?.includes('text/event-stream') &&
+        (response.headers.get('x-mmd-multiplex') === '1' || request.headers.get('x-mmd-stream') === 'live');
+      let finished = false;
+      let reconnect: (() => void) | undefined;
+      const finish = async (reason?: unknown) => {
+        if (finished) return;
+        finished = true;
+        if (reconnect) generation.liveStreams.delete(reconnect);
+        try { await reader.cancel(reason); }
+        finally { reader.releaseLock(); await release(); }
+      };
       const stream = new ReadableStream<Uint8Array>({
+        start(controller) {
+          if (!live) return;
+          reconnect = () => {
+            if (finished) return;
+            // A clean EOF uses the client's existing reconnect/backoff protocol.
+            controller.close();
+            void finish().catch(error => vite.config.logger.error(`memoized-dom: live stream retirement failed: ${String(error)}`));
+          };
+          generation.liveStreams.add(reconnect);
+          // The handler may have finished after its generation was replaced.
+          if (generation.retired) reconnect();
+        },
         async pull(controller) {
           try {
             const next = await reader.read();
-            if (next.done) { reader.releaseLock(); await release(); controller.close(); }
+            if (finished) return;
+            if (next.done) { await finish(); controller.close(); }
             else controller.enqueue(next.value);
-          } catch (error) { reader.releaseLock(); await release(); controller.error(error); }
+          } catch (error) {
+            if (finished) return;
+            try { await finish(error); } finally { controller.error(error); }
+          }
         },
-        async cancel(reason) { try { await reader.cancel(reason); } finally { reader.releaseLock(); await release(); } },
+        cancel: finish,
       });
       return new Response(stream, { status: response.status, statusText: response.statusText, headers: response.headers });
     } catch (error) { await release(); throw error; }

@@ -159,6 +159,46 @@ export const greeting = define.function({ get: async (_context, name: string) =>
     Reflect.deleteProperty(globalThis, key);
   }, 60_000);
 
+  it.each(['direct', 'multiplex'] as const)('retires %s live subscriptions so clients can reconnect to the replacement backend', async transport => {
+    const root = await project();
+    const filename = join(root, 'server/functions/greeting.ts');
+    const source = (label: string) => `import {define} from '../define';
+      export const observe=define.function({get:async()=>({label:'${label}'}),live:()=>['demo']});`;
+    await writeFile(filename, source('before'));
+    development = await createDevServer({ root, configFile: false, logLevel: 'silent',
+      plugins: [memoizedDom({ clientEntry: 'src/main.ts', serverEntry: 'server.ts' })], server: { port: 0 } });
+    const origin = development.origin;
+    const url = origin + '/_fn/greeting/observe';
+    const connect = () => transport === 'direct'
+      ? fetch(url, { headers: { 'x-mmd-stream': 'live' } })
+      : fetch(origin + '/_memoized/live', { method: 'POST',
+        headers: { 'content-type': 'application/json', 'x-mmd-multiplex': '1', origin },
+        body: JSON.stringify({ version: 1, revision: 1, subscribe: [{ id: 'notes', url, page: false }], unsubscribe: [] }) });
+    const readLabel = async (reader: ReadableStreamDefaultReader<Uint8Array>, label: string) => {
+      let text = '';
+      while (!text.includes(`"label":"${label}"`)) {
+        const next = await reader.read();
+        if (next.done) throw new Error('Live stream ended before its initial snapshot');
+        text += new TextDecoder().decode(next.value);
+      }
+      return text;
+    };
+    const response = await connect();
+    expect(response.status).toBe(200);
+    const reader = response.body!.getReader();
+    try {
+      expect(await readLabel(reader, 'before')).toContain('"label":"before"');
+      await writeFile(filename, source('after'));
+      await waitFor(async () => expect(await (await fetch(url)).json()).toEqual({ label: 'after' }), 10_000);
+      const end = await Promise.race([reader.read(), Bun.sleep(2_000).then(() => ({ done: false }))]);
+      expect(end.done).toBe(true);
+      const reconnected = await connect();
+      const next = reconnected.body!.getReader();
+      try { expect(await readLabel(next, 'after')).toContain('"label":"after"'); }
+      finally { await next.cancel(); }
+    } finally { await reader.cancel(); }
+  }, 30_000);
+
   it('exposes the actual Bun server for native WebSocket upgrades', async () => {
     const root = await project();
     await writeFile(join(root, 'server.ts'), `export default {
