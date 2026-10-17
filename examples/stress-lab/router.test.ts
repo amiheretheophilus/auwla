@@ -17,13 +17,17 @@ const sources = {
       const data = $fetch('/detail/' + route.params.id);
       return <article id="detail"><span>{data.name}</span><b>{$track(data).pending ? 'P' : ''}{$track(data).refreshing ? 'R' : ''}</b></article>;
     }
+    export function Prepared() {
+      const report = $routed(({ params }) => $fetch('/prepared/' + params.id));
+      return <article id="prepared"><span>{report.name}</span></article>;
+    }
     export function Atomic() {
       const data = $fetch('/atomic/' + route.params.id);
       return <article id="atomic"><span>{data.name}</span></article>;
     }
   `,
   './App.tsx': `
-    import { Detail, Atomic } from './Detail';
+    import { Detail, Atomic, Prepared } from './Detail';
     import { Group } from '@memoized-dom/data';
     function Loading() { return <i class="loading">Loading</i>; }
     export function App() {
@@ -32,6 +36,7 @@ const sources = {
           <Detail route="/reports/:id" />
           <Atomic route="/atomic/:id" suspend />
         </Group>
+        <Prepared route="/prepared/:id" />
         <p route="/elsewhere" id="elsewhere">elsewhere</p>
       </main>;
     }
@@ -102,6 +107,22 @@ it('R1b: a parameter change mounts a fresh instance that loads from scratch', as
   expect(text('#detail b')).toBe('P');
   reply('/detail/two', 'Two');
   await waitFor(() => expect(text('#detail span')).toBe('Two'));
+});
+
+it('R1c: with $routed, the current page stays on screen until the next one is prepared', async () => {
+  router.navigate('/prepared/one');
+  await waitFor(() => expect(requests).toHaveLength(1));
+  expect(document.querySelector('#prepared')).toBeNull();
+  reply('/prepared/one', 'One');
+  await waitFor(() => expect(text('#prepared span')).toBe('One'));
+  router.navigate('/prepared/two');
+  await waitFor(() => expect(requests).toHaveLength(2));
+  await settle();
+  expect(text('#prepared span')).toBe('One');
+  expect(document.querySelector('.loading')).toBeNull();
+  reply('/prepared/two', 'Two');
+  await waitFor(() => expect(text('#prepared span')).toBe('Two'));
+  expect(document.querySelectorAll('#prepared')).toHaveLength(1);
 });
 
 it('R2: leaving while a request is in flight cancels it, and returning loads again', async () => {

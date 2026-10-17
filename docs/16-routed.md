@@ -22,6 +22,20 @@ whenever a matching route is navigated to, before the component renders.
 What it returns is what the binding holds — `story` above *is* the object,
 not a promise and not a wrapper.
 
+Navigation waits for the preparation. Going from `/story/one` to
+`/story/two`, the page for `one` stays on screen, with no loading UI,
+until `two` is prepared; then the switch happens in one step. A `$fetch`
+in the component body works the other way: the new page mounts at once
+and shows its loading UI while its data arrives. Put data the page cannot
+render without, and auth checks, in `$routed`:
+
+```tsx
+export function Report() {
+  const report = $routed(({ params }) => $fetch('/api/reports/' + params.id));
+  return <h1>{report.title}</h1>;
+}
+```
+
 ## It must belong to a route
 
 A preparation only runs when its route matches — so a component (or the
