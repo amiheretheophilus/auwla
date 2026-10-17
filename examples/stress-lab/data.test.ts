@@ -394,6 +394,34 @@ const cases: DataCase[] = [
         <form onSubmit={form.submit}><button id="send" type="submit">send</button></form></main>;}`,
     steps: [['click:send', 'saving'], ['click:send', 'saving'], ['resolve:save', 'saving'], ['resolve:save', 'idle']],
   },
+  // Round 5: overlapping submissions settling out of order.
+  {
+    name: 'd5 forms: a later submission finishing first; the earlier failure rolls back only its own vote',
+    app: `export function App(){const story={votes:0};const pending=new Set<string>();let n=0;
+      const form=$forms((_fields:FormData)=>{const request=$track(form);pending.add(request.id);story.votes++;
+        request.onSuccess((_r,id)=>{pending.delete(id);});
+        request.onError((_e,id)=>{if(pending.delete(id))story.votes--;});
+        return (globalThis as any).__defer('save'+(++n));});
+      return <main><output id="out">{story.votes+'/'+(form.pending?'p':'i')}</output>
+        <form onSubmit={form.submit}><button id="send" type="submit">send</button></form></main>;}`,
+    steps: [['click:send', '1/p'], ['click:send', '2/p'], ['resolve:save2', '2/p'], ['reject:save1', '1/i']],
+  },
+  {
+    name: 'd5 forms: an older submission failing after a newer one succeeded shows no error',
+    app: `export function App(){let n=0;const form=$forms((_fields:FormData)=>(globalThis as any).__defer('save'+(++n)));
+      return <main><output id="out">{form.pending?'p':'errors:'+form.errors.length}</output>
+        <form onSubmit={form.submit}><button id="send" type="submit">send</button></form></main>;}`,
+    steps: [['click:send', 'p'], ['click:send', 'p'], ['resolve:save2', 'p'], ['reject:save1', 'errors:0']],
+  },
+  {
+    name: 'd5 forms: a schema failure reports the field and never runs the action',
+    app: `const schema={'~standard':{version:1,vendor:'lab',validate:(value:any)=>value.m
+        ?{value}:{issues:[{message:'required',path:['m']}]}}} as any;
+      export function App(){let calls=0;const form=$forms({schema,action:(_fields:any)=>{calls++;return (globalThis as any).__defer('save');}});
+      return <main><output id="out">{calls+':'+form.errors.map(e=>e.kind+'@'+(e.path??[]).join('.')).join(',')}</output>
+        <form onSubmit={form.submit}><input name="m"/><button id="send" type="submit">send</button></form></main>;}`,
+    steps: [['click:send', '0:parse@m']],
+  },
 ];
 
 for (const [index, testCase] of cases.entries()) {
