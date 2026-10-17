@@ -45,6 +45,7 @@ export function prepareProgramAnalysis(ctx: Ctx, programPath: ProgramPath): void
     : new Set<string>();
   if (bodylessFetches.size > 0) sourceAnalysis = refreshAstAnalysis(ctx, programPath.node);
   const reads = planReadReplays(programPath.node, sourceAnalysis, ctx.transparentReadFactories);
+  for (const read of reads) if (read.origin !== undefined) ctx.readReplayOrigins.add(read.origin);
   lowerReadReplays(ctx, reads);
   // Refresh only when lowering introduced callbacks or lexical declarations.
   if (reads.length > 0) sourceAnalysis = refreshAstAnalysis(ctx, programPath.node);

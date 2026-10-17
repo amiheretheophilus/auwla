@@ -4,9 +4,10 @@
  *   bun test --preload ./test-support/dom.ts ./examples/stress-lab/probe.test.ts
  *
  * This is an exploratory probe, outside the test root. Failing cases record
- * open questions (const reference aliases, recursive components) or shapes
- * rejected by design (JSX built in loops). Fixed findings are pinned by
- * tests/stress-lab-regressions.test.ts.
+ * open questions (const reference aliases, recursive helper derivations) or
+ * shapes rejected by design (JSX built in loops). Fixed findings are pinned by
+ * tests/stress-lab-regressions.test.ts, tests/recursive-components.test.ts and
+ * tests/indirect-module-writes.test.ts.
  */
 import { afterEach, expect, it } from 'bun:test';
 import { mkdirSync, writeFileSync } from 'node:fs';

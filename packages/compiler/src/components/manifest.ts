@@ -179,6 +179,7 @@ export function analyzedComponentDeclarations(
           target: componentTarget(ctx, tag),
           suffix: `/${site.suffix}`,
           mode: 'static',
+          bounded: true,
           ...(sources === undefined ? {} : { propSources: sources }),
         });
       }
@@ -191,6 +192,7 @@ export function analyzedComponentDeclarations(
           target: componentTarget(ctx, tag),
           suffix: `/${site.suffix}`,
           mode: 'static',
+          bounded: true,
           ...(sources === undefined ? {} : { propSources: sources }),
         });
       }

@@ -495,6 +495,8 @@ export interface Ctx {
   importedValues: Set<string>;
   /** Imported classes whose instances' methods can change shared state. */
   importedReactiveClasses: Set<string>;
+  /** Declarators whose promise initializer a `$read` replays in place. */
+  readReplayOrigins: Set<t.VariableDeclarator>;
   linkedComponentPaths: Map<string, string[]>;
   /** Graph-linked keyed-row modes for declarations in this module. */
   linkedComponentRows: Map<string, LinkedComponentRowUse[]>;
@@ -798,6 +800,7 @@ export function createAnalysisCtx(opts: AnalysisOptions = {}): Ctx {
     importedComponents,
     importedValues,
     importedReactiveClasses,
+    readReplayOrigins: new Set(),
     transparentModuleSources,
     transparentSourceProps: new Map(),
     presentationOwners: new Map(),

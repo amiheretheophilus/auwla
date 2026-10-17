@@ -1,5 +1,6 @@
 /**
- * Propagates canonical prop origins through the acyclic component graph.
+ * Propagates canonical prop origins through the component graph. Recursive
+ * placements are closed after their outside callers resolve.
  */
 import type {
   ComponentGraphNode,
@@ -74,7 +75,8 @@ function resolveRef(
   target.publishedCallback &&= callerSource.publishedCallback;
   target.transparent ||= callerSource.transparent;
   const suffix = ref.path.length === 0 ? '' : `.${ref.path.join('.')}`;
-  for (const key of callerSource.keys) target.keys.add(`${key}${suffix}`);
+  // A recursive component forwards a prop to itself: target may be callerSource.
+  for (const key of [...callerSource.keys]) target.keys.add(`${key}${suffix}`);
 }
 
 /** Caller-resolved source boundaries for every named component prop. */
@@ -98,9 +100,10 @@ export function linkComponentPropSources(
     Map<string, MutablePropSource>
   >();
   const remaining = new Map(incoming);
+  const visited = new Set<string>();
   const pending = [...roots];
-  while (pending.length > 0) {
-    const caller = pending.shift()!;
+  const visit = (caller: string): void => {
+    visited.add(caller);
     for (const edge of nodes.get(caller)?.edges ?? []) {
       for (const prop of suppliedProps.get(edge.target) ?? []) {
         const refs = edge.propSources?.[prop] ?? [{ type: 'root' as const }];
@@ -109,8 +112,19 @@ export function linkComponentPropSources(
       }
       const count = (remaining.get(edge.target) ?? 1) - 1;
       remaining.set(edge.target, count);
-      if (count === 0) pending.push(edge.target);
+      if (count === 0 && !visited.has(edge.target)) pending.push(edge.target);
     }
+  };
+  for (;;) {
+    while (pending.length > 0) visit(pending.shift()!);
+    // A recursive component keeps an unprocessed incoming edge from its own
+    // cycle. Once an outside caller has supplied its props, one pass over its
+    // edges completes the cycle: each further lap would only append property
+    // paths below keys it already carries.
+    const cyclic = [...nodes.keys()].find(key =>
+      !visited.has(key) && (remaining.get(key) ?? 0) > 0 && resolved.has(key));
+    if (cyclic === undefined) break;
+    visit(cyclic);
   }
 
   return new Map(

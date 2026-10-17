@@ -19,6 +19,8 @@ export interface ComponentGraphEdge {
   target: string;
   suffix: string;
   mode: 'static' | 'row';
+  /** Conditional and list-contained placements can stop a recursive cycle. */
+  bounded?: true;
   keyPath?: string[] | null;
   sourceKey?: string;
   sourceLocal?: boolean;
@@ -43,22 +45,60 @@ export interface LinkedComponentGraph {
   propSources: Map<string, Map<string, LinkedComponentPropSource>>;
 }
 
-function assertAcyclic(nodes: Map<string, ComponentGraphNode>): void {
-  const visited = new Set<string>();
-  const active = new Set<string>();
+/**
+ * Group recursive placements (Tarjan). Only components in a cycle are
+ * returned; each maps to the shared member set of its cycle.
+ */
+function recursiveCycles(
+  nodes: Map<string, ComponentGraphNode>,
+): Map<string, ReadonlySet<string>> {
+  const index = new Map<string, number>();
+  const low = new Map<string, number>();
+  const stack: string[] = [];
+  const onStack = new Set<string>();
+  const cycles = new Map<string, ReadonlySet<string>>();
+  let next = 0;
 
-  const visit = (key: string): void => {
-    if (active.has(key)) {
-      throw new Error(`memo-dom: recursive cross-module component graph at '${key}'`);
+  const connect = (key: string): void => {
+    index.set(key, next);
+    low.set(key, next);
+    next++;
+    stack.push(key);
+    onStack.add(key);
+    for (const edge of nodes.get(key)?.edges ?? []) {
+      if (!nodes.has(edge.target)) continue;
+      if (!index.has(edge.target)) {
+        connect(edge.target);
+        low.set(key, Math.min(low.get(key)!, low.get(edge.target)!));
+      } else if (onStack.has(edge.target)) {
+        low.set(key, Math.min(low.get(key)!, index.get(edge.target)!));
+      }
     }
-    if (visited.has(key)) return;
-    active.add(key);
-    for (const edge of nodes.get(key)?.edges ?? []) visit(edge.target);
-    active.delete(key);
-    visited.add(key);
+    if (low.get(key) !== index.get(key)) return;
+    const members = new Set<string>();
+    let member: string;
+    do {
+      member = stack.pop()!;
+      onStack.delete(member);
+      members.add(member);
+    } while (member !== key);
+    const selfPlaced = nodes.get(key)?.edges.some(edge => edge.target === key) === true;
+    if (members.size > 1 || selfPlaced) {
+      // Only a list row or a condition can end the recursion at runtime.
+      const terminates = [...members].some(member =>
+        nodes.get(member)!.edges.some(edge => members.has(edge.target) &&
+          (edge.mode === 'row' || edge.bounded === true)));
+      if (!terminates) {
+        throw new Error(
+          `memo-dom: recursive cross-module component graph at '${key}' renders itself unconditionally — recurse through a list (items.map(...)) or a condition`,
+        );
+      }
+      for (const each of members) cycles.set(each, members);
+    }
   };
 
-  for (const key of nodes.keys()) visit(key);
+  for (const key of nodes.keys()) if (!index.has(key)) connect(key);
+  return cycles;
 }
 
 /** Compute every declaration's caller-derived paths and keyed-row metadata. */
@@ -67,7 +107,7 @@ export function linkComponentGraph(
   applicationRoot?: ApplicationRootPlacement,
 ): LinkedComponentGraph {
   const nodes = new Map(declarations.map((decl) => [decl.key, decl]));
-  assertAcyclic(nodes);
+  const cycles = recursiveCycles(nodes);
 
   const incoming = new Map<string, Set<'static' | 'row'>>();
   const rows = new Map<string, LinkedComponentRowUse[]>();
@@ -96,7 +136,9 @@ export function linkComponentGraph(
   }
 
   for (const [key, modes] of incoming) {
-    if (modes.size > 1) {
+    // A recursive component is its own entry and its own row; its paths
+    // carry both placements, so the mixed use is resolvable.
+    if (modes.size > 1 && !cycles.has(key)) {
       throw new Error(
         `memo-dom: component '${key}' is used both as a keyed row and a static child`,
       );
@@ -104,7 +146,10 @@ export function linkComponentGraph(
   }
 
   const pathSets = new Map<string, Set<string>>();
-  const inferredRoots = [...nodes.keys()].filter((key) => !incoming.has(key));
+  const inferredRoots = [...nodes.keys()].filter((key) =>
+    !incoming.has(key) || (cycles.has(key) &&
+      [...nodes.values()].every(node => !node.edges.some(edge =>
+        edge.target === key && !cycles.get(key)!.has(node.key)))));
   const roots = applicationRoot === undefined
     ? inferredRoots
     : [applicationRoot.key];
@@ -113,26 +158,32 @@ export function linkComponentGraph(
       `memo-dom: mounted component '${applicationRoot.key}' is missing from the linked component graph`,
     );
   }
-  for (const key of roots) {
-    pathSets.set(
-      key,
-      new Set([applicationRoot?.rootId ?? 'App']),
-    );
-  }
+  const pending: string[] = [];
+  const place = (key: string, path: string): void => {
+    const add = (target: string, value: string): void => {
+      const targetPaths = pathSets.get(target) ?? new Set<string>();
+      if (targetPaths.has(value)) return;
+      targetPaths.add(value);
+      pathSets.set(target, targetPaths);
+      pending.push(target);
+    };
+    add(key, path);
+    // Entering a cycle: every member can sit at any depth below this entry.
+    for (const member of cycles.get(key) ?? []) add(member, `${path}/**`);
+  };
+  for (const key of roots) place(key, applicationRoot?.rootId ?? 'App');
 
-  const pending = [...roots];
   while (pending.length > 0) {
     const key = pending.shift()!;
     const parentPaths = pathSets.get(key);
     if (parentPaths === undefined) continue;
+    const cycle = cycles.get(key);
     for (const edge of nodes.get(key)?.edges ?? []) {
-      const targetPaths = pathSets.get(edge.target) ?? new Set<string>();
-      const before = targetPaths.size;
-      for (const parentPath of parentPaths) {
-        targetPaths.add(`${parentPath}${edge.suffix}`);
+      // Edges inside a cycle are covered by the members' `/**` paths.
+      if (cycle?.has(edge.target) === true) continue;
+      for (const parentPath of [...parentPaths]) {
+        place(edge.target, `${parentPath}${edge.suffix}`);
       }
-      pathSets.set(edge.target, targetPaths);
-      if (targetPaths.size !== before) pending.push(edge.target);
     }
   }
 

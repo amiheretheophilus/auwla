@@ -60,6 +60,7 @@
     "bench:lifecycle": "bun run bench/lifecycle/run.ts",
     "bench:children": "bun run bench/children/run.ts",
     "bench:components": "bun run bench/components/run.ts",
+    "bench:recursive-tree": "bun run bench/recursive-tree/run.ts",
     "bench:local-state": "bun run bench/local-state/run.ts",
     "bench:local-derived": "bun run bench/local-derived/run.ts",
     "bench:frontends": "bun run bench/frontends/run.mjs",

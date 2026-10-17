@@ -276,12 +276,63 @@ export function summarizeHelper(
     }
   };
 
+  // Calls whose result a member chain is rooted in, directly or through a
+  // local alias: `find(id).done = true`, `const node = deepest(); node.x = 1`.
+  const resultCalls = (expression: BaseNode | null, seen = new Set<Binding>()): BaseNode[] => {
+    let root = expression;
+    while (root?.type === 'MemberExpression' || root?.type === 'OptionalMemberExpression' ||
+           root?.type === 'ChainExpression' || root?.type === 'TSNonNullExpression') {
+      root = childNode(root, root.type === 'ChainExpression' || root.type === 'TSNonNullExpression'
+        ? 'expression' : 'object');
+    }
+    if (root === null) return [];
+    if (root.type === 'CallExpression' || root.type === 'OptionalCallExpression') return [root];
+    const rootName = identifierName(root);
+    const binding = rootName === null ? undefined : astBindingAt(ctx, root, rootName);
+    if (binding === undefined || binding.scope.isProgramScope || seen.has(binding)) return [];
+    const next = new Set(seen).add(binding);
+    const declaration = variableDeclaratorFor(ctx, binding);
+    return [
+      ...resultCalls(declaration === null ? null : childNode(declaration, 'init'), next),
+      ...binding.constantViolations.flatMap(write => write.type === 'AssignmentExpression'
+        ? resultCalls(childNode(write, 'right'), next) : []),
+    ];
+  };
+
+  // A returned object can alias state the callee reaches; bound the write to it.
+  const noteResultWrite = (call: BaseNode): void => {
+    const callee = childNode(call, 'callee');
+    const calleeName = identifierName(callee);
+    if (calleeName !== null && callee !== null &&
+        astBindingAt(ctx, callee, calleeName)?.scope.isProgramScope === true &&
+        (ctx.helpers.has(calleeName) || ctx.importedFunctions.has(calleeName))) {
+      const nested = ctx.importedFunctions.get(calleeName) ??
+        summarizeHelper(ctx, calleeName, visiting);
+      for (const read of nested.reads) summary.boundedWrites.add(read);
+      if (nested.opaqueReads === true || nested.unbounded) summary.unbounded = true;
+      return;
+    }
+    if (callee?.type === 'MemberExpression' || callee?.type === 'OptionalMemberExpression') {
+      const receiver = childNode(callee, 'object');
+      const origins = receiver === null ? [] : aliases.resolveExpressionOrigins(
+        scopeAt(ctx, call), receiver as unknown as t.Expression);
+      for (const origin of origins) noteReceiverEffect(origin);
+      if (origins.length > 0) return;
+      if (receiver !== null && resultCalls(receiver).length > 0) {
+        for (const nested of resultCalls(receiver)) noteResultWrite(nested);
+        return;
+      }
+    }
+    summary.unbounded = true;
+  };
+
   const noteMemberWrite = (at: BaseNode, member: BaseNode): void => {
     const origin = aliases.resolveExpression(
       scopeAt(ctx, at),
       member as unknown as t.MemberExpression,
     );
     if (origin !== null) noteOriginWrite(origin);
+    else for (const call of resultCalls(member)) noteResultWrite(call);
     if (capturesOpaque(childNode(member, 'object'))) summary.unbounded = true;
   };
 

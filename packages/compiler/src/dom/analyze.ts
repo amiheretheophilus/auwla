@@ -30,7 +30,7 @@ import {
   finalizeInstancePreludes,
   scanInstanceControlFlow,
 } from '../analysis/instance-control-flow';
-import { isListLightweightCandidate, pathVariants } from '../analysis/component-graph';
+import { assertTerminatingRecursion, isListLightweightCandidate, recursiveComponents } from '../analysis/component-graph';
 import { normalizeComponentJsxValues } from '../components/jsx-values';
 import { planPrivateRowProps } from '../planning/private-row-props';
 import { lowerPrivateRowProps } from './private-row-props';
@@ -130,16 +130,16 @@ export function runAnalysis(ctx: Ctx, programPath: ProgramPath): void {
     ) continue;
     allocatePresentationParameter(ctx, requirePresentationOwner(ctx, name, 'inherited'));
   }
-  // acyclicity check runs unconditionally — a state-free recursive component
-  // would otherwise slip past (pathVariants is only reached via the table)
-  for (const [name] of ctx.comps) pathVariants(ctx, name);
-
+  assertTerminatingRecursion(ctx);
+  const recursive = recursiveComponents(ctx);
   const listedComponents = new Set([
     ...ctx.listedSites.keys(),
     ...ctx.linkedComponentRows.keys(),
   ]);
   for (const comp of listedComponents) {
-    if (ctx.importedComponents.has(comp)) continue;
+    // A recursive component is necessarily placed as both its own entry and
+    // its own rows; pathVariants unions both placements for it.
+    if (ctx.importedComponents.has(comp) || recursive.has(comp)) continue;
     const sites = ctx.listedSites.get(comp) ?? [];
     const p = ctx.compPaths.get(comp)!;
     // used both as a row AND a static child: patterns would drop one usage
