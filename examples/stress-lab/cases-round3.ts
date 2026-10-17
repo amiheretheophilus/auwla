@@ -24,7 +24,65 @@ const split = (name: string, store: string, reader: string, writerImports: strin
 const READ = (imports: string, expression: string) =>
   `${imports}export function Reader(){return <output id="out">{${expression}}</output>;}`;
 
+const BOARD = {
+  './state.ts': `export const columns=[{id:'todo',tasks:[{id:1,done:false},{id:2,done:false}]}];
+    export function toggle(task:{done:boolean}){task.done=!task.done;}`,
+  './Card.tsx': `import {toggle} from './state';
+    export function Card({task}:{task:{id:number;done:boolean}}){return <button id={'t'+task.id} onClick={()=>toggle(task)}>{String(task.done)[0]}</button>;}`,
+  './Count.tsx': `import {columns} from './state';
+    export function Count(){return <output id="out">{columns[0].tasks.filter(t=>t.done).length}</output>;}`,
+};
+const column = (list: string) => `import {Card} from './Card';
+  export function Column({column}:{column:{tasks:{id:number;done:boolean}[]}}){const visible=column.tasks.filter(t=>!t.done);
+  return <section>${list}</section>;}`;
+const board = (name: string, list: string): StressCase => ({
+  name,
+  modules: { ...BOARD, './Column.tsx': column(list) },
+  app: `import {columns} from './state';import {Column} from './Column';import {Count} from './Count';
+    export function App(){return <main><Count/>{columns.map(c=><Column key={c.id} column={c}/>)}</main>;}`,
+  initial: '0',
+  steps: [['t1', '1']],
+});
+
 export const cases: StressCase[] = [
+  board('r3 row write through a derived list reaches other readers (plain list)',
+    '{visible.map(task=><Card key={task.id} task={task}/>)}'),
+  board('r3 row write through a derived list reaches other readers (list in a ternary)',
+    "{visible.length>0?visible.map(task=><Card key={task.id} task={task}/>):'done'}"),
+  {
+    name: 'r3 inline row write through a derived list reaches other readers',
+    modules: {
+      './state.ts': `export const todos=[{id:1,done:false},{id:2,done:false}];`,
+      './Count.tsx': `import {todos} from './state';export function Count(){return <output id="out">{todos.filter(t=>t.done).length}</output>;}`,
+    },
+    app: `import {todos} from './state';import {Count} from './Count';
+      export function App(){const open=todos.filter(t=>!t.done);
+      return <main><Count/><ul>{open.map(t=><li key={t.id}><button id={'t'+t.id} onClick={()=>{t.done=true;}}>x</button></li>)}</ul></main>;}`,
+    initial: '0',
+    steps: [['t1', '1'], ['t2', '2']],
+  },
+  {
+    name: 'r3 list of simple row components inside a ternary branch',
+    modules: { './Note.tsx': `export function Note({note}:{note:{text:string}}){return <i>{note.text}</i>;}` },
+    app: `import {Note} from './Note';
+      export function App(){let ready=false;const notes=[{id:1,text:'a'}];
+      return <main><output id="out">{ready?notes.map(n=><Note key={n.id} note={n}/>):'loading'}</output>
+        <button id="a" onClick={()=>{ready=true;}}>go</button>
+        <button id="b" onClick={()=>{notes[0].text='b';}}>edit</button></main>;}`,
+    initial: 'loading',
+    steps: [['a', 'a'], ['b', 'b']],
+  },
+  {
+    name: 'r3 list of simple row components inside a ternary, list replaced',
+    modules: { './Note.tsx': `export function Note({note}:{note:{text:string}}){return <i>{note.text}</i>;}` },
+    app: `import {Note} from './Note';
+      export function App(){const state={ready:false,notes:[{id:1,text:'a'}]};
+      return <main><output id="out">{state.ready?state.notes.map(n=><Note key={n.id} note={n}/>):'loading'}</output>
+        <button id="a" onClick={()=>{state.ready=true;}}>go</button>
+        <button id="b" onClick={()=>{state.notes=[{id:1,text:'b'}];}}>replace</button></main>;}`,
+    initial: 'loading',
+    steps: [['a', 'a'], ['b', 'b']],
+  },
   split('r3 write through this in an object-literal method',
     `export const store={items:[] as string[],add(x:string){this.items.push(x);}};`,
     READ(`import {store} from './store';`, 'store.items.length'),

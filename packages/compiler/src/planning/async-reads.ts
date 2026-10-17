@@ -33,11 +33,17 @@ export function excludeTransparentSubscriptions(expression:t.Expression,sources:
 
 /** Dependency queries consume value facts, never generated runtime call names. */
 export function transparentExpressionSources(expression:t.Expression):readonly string[] {
-  const found=new Set((expression as SourceExpression).__memoDomTransparentSources??[]);
+  // Annotations live on the expression a planner saw, which may now be one
+  // operand of a larger sink: adjacent JSX text children are joined into one
+  // `"" + a + b` expression, and each operand keeps its own sources.
+  const found=new Set<string>();
+  const excluded=new Set<string>();
   walkAst(expression as unknown as BaseNode,{enter(node){
+    const annotated=node as unknown as SourceExpression;
+    for(const source of annotated.__memoDomTransparentSources??[])found.add(source);
+    for(const source of annotated.__memoDomTransparentSubscriptionExclusions??[])excluded.add(source);
     for(const source of asyncReadFact(node)?.sources??[])found.add(source);
   }});
-  const excluded=new Set((expression as SourceExpression).__memoDomTransparentSubscriptionExclusions??[]);
   return [...found].filter(source=>!excluded.has(source)).sort();
 }
 

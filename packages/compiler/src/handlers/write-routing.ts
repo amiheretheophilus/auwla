@@ -224,10 +224,36 @@ export function createHandlerWriteRouting({
     }
     mutate(site.writes);
   };
+  /**
+   * A local list can be a view of shared state (`const visible =
+   * column.tasks.filter(...)`), so item writes in its rows also reach that
+   * state's other readers. Same-module rows follow the owner's derivation
+   * sources; a row component in another module receives that provenance
+   * through its item prop's linked sources.
+   */
+  const routeLocalListProvenance = (scope: ScopeWrites): void => {
+    if (compName === null || rowCtx === undefined) return;
+    const listRoot = rowCtx.sourceKey.split('.')[0]!;
+    const derivation = ctx.instanceDerivations.get(compName)
+      ?.find(candidate => candidate.bindings.includes(listRoot));
+    if (derivation === undefined) {
+      applyLinkedPropEffect(ctx, compName, rowCtx,
+        { locality: 'prop', root: rowCtx.itemParam, key: rowCtx.itemParam }, scope);
+      return;
+    }
+    for (const dependency of derivation.sources) {
+      const root = dependency.split('.')[0]!;
+      if (ctx.state.has(root)) recordRoutedWrite(scope, dependency);
+      else if (propNames.has(root)) {
+        applyLinkedPropEffect(ctx, compName, rowCtx, { locality: 'prop', root, key: dependency }, scope);
+      }
+    }
+  };
   const noteSourceWrite = (p: HandlerPath): void => {
     mutateScope(p, (scope) => {
       if (rowCtx?.sourceLocal) {
         scope.rowOwnerLocal = true;
+        routeLocalListProvenance(scope);
       } else if (rowCtx !== undefined) {
         recordRoutedWrite(scope, rowCtx.sourceKey);
       }

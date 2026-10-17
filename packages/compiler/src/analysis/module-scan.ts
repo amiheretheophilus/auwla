@@ -74,7 +74,13 @@ function isBuiltModuleObject(ctx: Ctx, declaration: t.VariableDeclarator): boole
   let init: t.Node = declaration.init;
   while (astFactory.isTransparentExpression(init)) init = init.expression;
   if (astFactory.isAwaitExpression(init)) init = init.argument;
-  return astFactory.isCallExpression(init);
+  if (!astFactory.isCallExpression(init)) return false;
+  // $fetch/$read/$track/$forms results are request views with their own
+  // subscriptions, not mutable objects.
+  const callee = astFactory.isIdentifier(init.callee) ? init.callee.name : null;
+  return callee === null || !(
+    ctx.transparentSourceFactories.has(callee) || ctx.transparentReadFactories.has(callee) ||
+    ctx.transparentTrackFactories.has(callee) || ctx.transparentFormFactories.has(callee));
 }
 
 export function scanModuleState(ctx: Ctx, programPath: ProgramPath): void {
