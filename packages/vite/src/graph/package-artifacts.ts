@@ -42,9 +42,10 @@ export interface DiscoveredPackageArtifact {
   readonly artifactFile: string;
   readonly manifestFile: string;
   readonly verifiedFiles: readonly string[];
+  readonly resolvedFile: string;
 }
 
-function resolvableFile(
+export function resolvableFile(
   resolvedId: string,
   specifier: string,
   importer: string,
@@ -123,6 +124,7 @@ export async function discoverPackageArtifact(
         artifactFile,
         manifestFile,
         verifiedFiles,
+        resolvedFile,
       };
     }
     directory = dirname(directory);

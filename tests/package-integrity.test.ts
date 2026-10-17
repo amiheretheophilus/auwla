@@ -75,6 +75,12 @@ it('rejects stale metadata, changed resolution fields, and unprotected resolved 
   await expect(experimentalFinalizePackage(artifact, { packageRoot: root })).rejects.toThrow('unprotected file');
 });
 
+it('binds generated compatibility requirements into the integrity stamp', async () => {
+  const sealed = await experimentalFinalizePackage(artifact, { packageRoot: root });
+  const { compatibility: _compatibility, ...stripped } = sealed;
+  await expect(experimentalVerifyPackageIntegrity(stripped, root)).rejects.toThrow('semantic metadata changed');
+});
+
 it('protects exact public subpaths described by a wildcard export', async () => {
   await writeFile(join(root, 'package.json'), JSON.stringify({ ...manifest, exports: {
     '.': './dist/index.js', './*': './dist/*.browser.js',

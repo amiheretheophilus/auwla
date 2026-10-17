@@ -117,6 +117,11 @@ export interface ExperimentalPackageArtifact {
   kind: 'memoized-dom-package';
   version: 1;
   entries: Record<string, ExperimentalPackageEntry>;
+  /** Generated contracts, independent of npm package versions. */
+  compatibility?: {
+    compiler: number;
+    runtime?: { specifier: string; abi: number };
+  };
   /** Optional post-bundle consistency stamp, generated from final package files. */
   integrity?: {
     algorithm: 'sha256';

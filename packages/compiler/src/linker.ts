@@ -80,6 +80,9 @@ import { normalizeComponentDeclarations } from './components/declarations';
 import { normalizeComponentSlots } from './jsx/component-slots';
 import { extractExperimentalPackageRenderPlan, packageInitialDom } from './linking/package-render';
 import { normalizeNamedReexports } from './linking/reexports';
+import { isReferenceIdentifier } from './ast/scope';
+import { isIdentifier } from './ast/factory';
+import { PACKAGE_COMPILER_CONTRACT, PACKAGE_RUNTIME_ABI } from './linking/package-artifact';
 
 export interface CompiledComponentExport extends Omit<ComponentExportInfo, 'key'> {
   exported: string;
@@ -1252,12 +1255,29 @@ export function experimentalCompilePackage(
     };
   }
 
+  const runtimePath = compileOptions.runtimePath ?? '@memoized-dom/runtime';
+  const usesRuntime = Object.entries(compiled.output).some(([filename, source]) => {
+    const program = parseWithEstreeFrontendOrThrow(memoizedEstreeFrontend, source, { filename, sourceType: 'module' }).program as t.Program;
+    const referenced = new Set<string>();
+    walkAst(program as unknown as BaseNode, { enter(node, parent, key) {
+      if (isIdentifier(node) && isReferenceIdentifier(parent, key)) referenced.add(node.name);
+    } });
+    return program.body.some(statement => statement.type === 'ImportDeclaration' &&
+      typeof statement.source.value === 'string' &&
+      (statement.source.value === runtimePath || statement.source.value.startsWith(runtimePath + '/')) &&
+      (statement.specifiers.length === 0 || statement.specifiers.some(specifier => specifier.type !== 'ImportNamespaceSpecifier' ||
+        referenced.has(specifier.local.name))));
+  });
   return {
     ...compiled,
     artifact: {
       kind: 'memoized-dom-package',
       version: 1,
       entries,
+      compatibility: {
+        compiler: PACKAGE_COMPILER_CONTRACT,
+        ...(usesRuntime ? { runtime: { specifier: runtimePath, abi: PACKAGE_RUNTIME_ABI } } : {}),
+      },
     },
   };
 }

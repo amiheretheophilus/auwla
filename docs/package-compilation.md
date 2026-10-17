@@ -186,14 +186,67 @@ the metadata truthfully describes the code. A publisher can seal an incorrect
 pair, and stripping both the declaration and stamp can impersonate an older
 unsealed package. Older experimental artifacts without the declaration remain
 supported but have no byte-consistency guarantee. Older consumers may not enforce
-the new declaration; use tooling that implements this check. Runtime/compiler
-ABI negotiation is not implemented by this step.
+the new declaration; use tooling that implements this check. Compatibility is
+checked separately as described below; byte hashes alone cannot establish it.
 
 Low-level filesystem hosts can call
 `experimentalVerifyPackageIntegrity(artifact, packageRoot, resolvedEntry)` before
 passing metadata to `compileModules`. The optional last argument checks the
 actually resolved JavaScript entry; the result lists files to watch. Compiler
 calls supplied only in-memory artifacts cannot verify absent executable files.
+
+### Compiler and runtime compatibility
+
+Package authors keep the same compile → bundle → finalize workflow. The package
+compiler generates the compatibility requirements automatically; applications
+still use ordinary imports. There is no contract object to hand-author and no
+requirement to pin every package to an identical npm version.
+
+Two checks happen before Vite links a newly generated package:
+
+- The compiler validates the semantic contract and runtime ABI required by the
+  artifact. Unknown contracts fail with an upgrade/rebuild diagnostic instead of
+  being interpreted as a known format.
+- If emitted code uses the runtime, Vite resolves that runtime from the package
+  and from its application importer, honoring aliases and external SSR imports.
+  Both resolved runtime packages must explicitly support the required ABI. A
+  compatible app runtime cannot hide an incompatible nested package copy.
+
+For finalized packages, all protected JavaScript files/chunks are checked as
+runtime resolution contexts. For an unsealed package, only its resolved
+entry/package context is available. Runtime package manifests join the semantic watch
+inputs, and each new graph checks again after dependency edits.
+
+The framework runtime declares its supported ABI list in its own `package.json`
+under `memoized-dom.runtimeABI`. Currently the compiler and generated runtime
+contract are version 1. Different package versions declaring support for ABI 1
+are accepted; a missing declaration, unsupported ABI, unresolved runtime, or
+virtual runtime without an inspectable owning manifest produces an error. A
+custom runtime alias must resolve to a real implementation whose owning package
+declares the contract it actually implements—not merely be labeled compatible
+to suppress an error.
+
+This declaration is maintained by framework/runtime implementers, not app or
+component-library users. A newly required helper or changed calling convention
+must advance the generated requirement and the implementation's supported ABI
+list together. Preserve an older ABI in that list only while it really works;
+do not change internal contracts while continuing to advertise the old ABI.
+
+Compatibility requirements participate in the semantic identity and integrity
+stamp, so stripping/changing them from a finalized artifact fails verification.
+Older artifacts without requirements remain accepted for experimental backward
+compatibility, but have no runtime-compatibility guarantee. In-memory compiler
+hosts validate declared compiler contracts; they must check runtime resolution
+themselves because `compileModules` has no filesystem/package resolver.
+These checks require the updated tooling: an older experimental consumer may
+ignore optional compatibility metadata instead of enforcing it.
+
+This is a declared calling-contract check, not proof that an implementation is
+correct. Keep the runtime external when bundling a package. A privately inlined
+runtime cannot be inspected this way. The check does not negotiate arbitrary
+third-party dependencies, data/router/server package contracts, engine support,
+or every cross-version behavior. Those still need appropriate peer dependencies
+and integration tests. The dedicated library-build CLI remains separate work.
 
 ### Barrels and bundling
 
@@ -492,9 +545,9 @@ factory when it attaches a handler. The compiler-generated `host-events-v1`
 capability records that requirement. Older compilers reject this capability
 rather than silently treating the component as inert static HTML. Authors do
 not write that metadata, and handlers never execute while generating HTML.
-Use compatible compiler and runtime builds when generating and consuming these
-experimental packages; their emitted factories still use the runtime's internal
-component and invalidation ABI.
+The generated compatibility requirements and Vite checks described above guard
+the declared component and invalidation ABI. They do not replace integration
+tests for changes to those contracts.
 
 This extends initial binding for components whose body is a direct JSX return.
 It does not yet add initial binding for package-local setup/state, effects,
@@ -566,8 +619,8 @@ JavaScript and matching artifact together.
   it does not prove that the JavaScript was compiled from the claimed source.
 - The semantic digest identifies metadata, independently of final byte hashes.
   Package builds must publish matching compiler output and finalized metadata
-  together. Runtime ABI compatibility and a dedicated library-build CLI remain
-  separate open work.
+  together. Compiler/runtime contract checks are separate from byte integrity;
+  a dedicated library-build CLI remains open work.
 - Package initial HTML and host adoption cover the subsets described above.
   Text-adjacent or multiple same-parent slots, nested fallback slots, and
   package-local setup/state, refs or effects are outside the portable

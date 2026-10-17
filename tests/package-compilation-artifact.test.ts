@@ -578,6 +578,7 @@ describe('experimental package compilation artifacts', () => {
     expect(packaged.artifact).toEqual({
       kind: 'memoized-dom-package',
       version: 1,
+      compatibility: expect.objectContaining({ compiler: 1 }),
       entries: {
         'some-package': {
           functions: {

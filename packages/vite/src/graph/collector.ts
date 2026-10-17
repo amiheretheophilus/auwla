@@ -33,6 +33,7 @@ import {
   type ServerFunctionBarrelEntry,
 } from '../server-functions';
 import { discoverPackageArtifact } from './package-artifacts';
+import { verifyPackageRuntimeCompatibility } from './package-compatibility';
 
 export interface ResolvedImport {
   id: string;
@@ -113,6 +114,7 @@ export async function compileGraph(
   // Scoped to one compilation: shared imports hash a package once, while the
   // next HMR/build graph rechecks bytes rather than trusting a global cache.
   const integrityLookups = new Map<string, Promise<readonly string[]>>();
+  const runtimeLookups = new Map<string, Promise<string>>();
 
   async function recordPackageArtifact(
     resolvedId: string,
@@ -138,6 +140,10 @@ export async function compileGraph(
       const dependency = normalizeFile(file);
       context.addWatchFile(dependency);
       semanticDependencies.add(dependency);
+    }
+    for (const file of await verifyPackageRuntimeCompatibility(discovered, importerFile,
+      options.runtimePath ?? '@memoized-dom/runtime', context, runtimeLookups)) {
+      semanticDependencies.add(normalizeFile(file));
     }
     packageImports.set(resolutionKey(importerId, specifier), {
       importer: importerId,
