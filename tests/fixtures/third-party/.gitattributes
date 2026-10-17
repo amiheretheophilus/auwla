@@ -1,0 +1,5 @@
+# Published fixtures are verified byte-for-byte, including on Windows clones.
+dset/dist/index.mjs -text
+dset/merge/index.mjs -text
+throttle-debounce/esm/index.js -text
+throttle-debounce/LICENSE.md -text

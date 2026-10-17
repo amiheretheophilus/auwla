@@ -17,7 +17,7 @@ export interface ModuleCallbacks {
   readonly writesFor:(target:Callback,executionAware?:boolean)=>HandlerWritePlan;
 }
 
-export function planModuleCallbacks(ctx:Ctx,program:ProgramPath):ModuleCallbacks {
+export function planModuleCallbacks(ctx:Ctx & {retainedModuleCallbacks?:ReadonlySet<string>},program:ProgramPath):ModuleCallbacks {
   const bodies=new WeakMap<Callback,Callback>();
   const retained:ModuleCallbackSite[]=[];
   const selected=new Set<Callback>();
@@ -64,8 +64,8 @@ export function planModuleCallbacks(ctx:Ctx,program:ProgramPath):ModuleCallbacks
     },leave(node){if(FUNCTION_NODE_TYPES.has(node.type))depth--;}});
   };
   setup(program.node,true);
-  for(const helper of ctx.helpers.values()){
-    if(helper.node.async)select(helper.node,false);
+  for(const [name,helper] of ctx.helpers){
+    if(helper.node.async||ctx.retainedModuleCallbacks?.has(name))select(helper.node,false);
     else setup(helper.node.body,false);
   }
   return {retained,writesFor:(target,executionAware=false)=>{

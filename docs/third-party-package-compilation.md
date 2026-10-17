@@ -41,6 +41,77 @@ accept `.mjs`, and helper parameter writes did not publish local colorless-sourc
 notifications. Both are addressed through general compiler paths, not package
 name recognition.
 
+## Second real package: retained callbacks and cancellation
+
+The next regression compiles the **published, unchanged ESM implementation of
+throttle-debounce 5.0.2**. Its timer, cancellation flag and callback closure stay
+private to each returned function. The offline fixture retains both upstream
+MIT notices and pins source hashes verified against the official npm tarball.
+No debounce/throttle names or callback contracts are hard-coded in the compiler.
+
+The application keeps ordinary authoring:
+
+```tsx
+import { debounce } from 'throttle-debounce';
+
+export function Search() {
+  let query = '';
+  const update = debounce(150, async (value: string) => {
+    await Promise.resolve();
+    query = value;
+  });
+  $cleanup(() => update.cancel());
+
+  return <section>
+    <input onInput={event => update(event.currentTarget.value)} />
+    <output>{query}</output>
+  </section>;
+}
+```
+
+Both opaque and compiled execution are tested. Callback writes already use
+ordinary application callback lowering; package compilation is not required to
+make a debounce callback reactive. This is a compatibility check, not a speedup
+claim. A timer returning does not commit an async callback early: writes after
+`await` publish when that callback completes.
+
+The experiment found a general cross-module gap: an application function passed
+directly from another module could execute later without publishing its writes.
+The linker now recognizes escaped callback imports and instruments their original
+application declarations. Aliases, re-exports, static namespace imports and
+immutable local aliases retain that relationship; shadowed names and ordinary
+direct calls are not mistaken for escaping callbacks. This preserves the original
+function identity, arguments, receiver and return behavior instead of inserting
+a package-specific wrapper.
+
+Coverage includes:
+
+- Latest-argument delivery, named and inline callbacks, and post-`await` writes.
+- A separately compiled sibling observing a delayed module-state mutation.
+- Delayed writes to a resolved `$fetch` payload without another request.
+- Retained DOM nodes, input drafts and independent component-local closures.
+- Upcoming-only and permanent cancellation, disposal before the timer fires,
+  and a remounted component receiving fresh state.
+- Real Chromium with minified production runtime output, in both modes, checking
+  that updates do not rerun component setup or replace unrelated DOM.
+
+Cancellation is still explicit. `$cleanup(() => update.cancel())` connects the
+package's existing cancellation API to the component's lifetime. Compiling a
+package does not invent disposal, stop an already-running async operation, or
+turn an arbitrary external store into a subscribed reactive source. Pass an
+appropriate cancellation mechanism to in-flight work when the application needs
+that guarantee.
+
+After building, run:
+
+```sh
+bun test --isolate ./tests/third-party-callback-compilation.test.ts ./tests/linked-retained-callbacks.test.ts
+```
+
+The timer tests use a deterministic clock. Production-browser tests use real
+timers and require Chrome/Chromium; set `MMD_CHROME_PATH` if it is not discovered.
+They are explicitly skipped when no browser is available.
+
 ## Intended consumer workflow
 
 An application should explicitly opt a dependency into compilation once, then
@@ -76,8 +147,10 @@ still requires no opt-in or recompile.
 
 ## What this experiment does not prove
 
-dset has no dependency graph, callback scheduler or private reactive store. A
-passing integration is not proof that arbitrary npm packages can be transformed.
+dset and throttle-debounce cover synchronous argument writes and private
+timer/callback closures, respectively. Neither has a dependency graph or an
+external reactive store protocol. Passing these integrations is not proof that
+arbitrary npm packages can be transformed.
 CommonJS conversion, conditional browser/server implementations, dependency
 graphs and persistent caches still need dedicated integration coverage before a
 public installed-package option is introduced. The library command's authored

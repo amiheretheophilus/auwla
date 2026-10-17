@@ -67,6 +67,7 @@ import {
   resolveModule,
 } from './linking/resolution';
 import { lowerLocalNamespaceImports } from './linking/namespace-imports';
+import { linkedRetainedCallbacks } from './linking/retained-callbacks';
 import type { ComponentExportInfo } from './components/manifest';
 import { compilerOptions } from './linking/options';
 import { analyzeManifest, discoverManifest, exportedLocals } from './linking/discovery';
@@ -677,6 +678,7 @@ function compileLinkedModules(
     rootId,
     routeInstances,
   );
+  const retainedCallbacks = linkedRetainedCallbacks(entries, manifests, options);
   let linkedRoutes = attachRoutedPreparations(
     routeInstances,
     entries,
@@ -983,6 +985,7 @@ function compileLinkedModules(
       },
       moduleId: entry.id,
       linkedImports,
+      retainedModuleCallbacks: retainedCallbacks.get(entry.id),
       linkedComponentPaths,
       linkedComponentRows,
       linkedComponentPropSources,
