@@ -10,6 +10,8 @@ declare global {
   const $routed: typeof import('@memoized-dom/router').$routed;
   function $cleanup(disposer: () => void): () => void;
   function $effect(callback: () => void | (() => void)): void;
+  /** Capture `value` once. The binding does not follow later changes to its sources. */
+  function $snapshot<T>(value: T): T;
 
   /** Platform DOM elements plus compiler-authored directives. */
   namespace JSX {

@@ -6,6 +6,7 @@ These names are available in compiled memoized-dom source without imports:
 |---|---|---|
 | `$effect(callback)` | Replay synchronous imperative work when its reactive reads change | [Effects and cleanup](03-effects-and-cleanup.md) |
 | `$cleanup(disposer)` | Register teardown directly during component initialization | [Effects and cleanup](03-effects-and-cleanup.md) |
+| `$snapshot(value)` | Capture a value once instead of deriving it | [State](02-state.md#derived-state-is-just-an-expression) |
 | `$fetch(target, options?)` | Declare a transparent request payload | [Data](05-data.md) |
 | `$read(promise)` | Read an asynchronous result as a transparent value, retaining its replay operation | [Data](05-data.md) |
 | `$track(source)` | Observe and control the request behind a source or form | [Data](05-data.md) |
@@ -38,8 +39,9 @@ dependency version change.
 Only these framework names are implicit. An arbitrary `$name` is ordinary
 JavaScript. A local declaration, parameter or explicit import shadows the
 corresponding intrinsic. `Group`, runtime constructors, router utilities and
-types still use ordinary imports. `$effect` and `$cleanup` are compiler-owned
-calls, not runtime functions to capture as values.
+types still use ordinary imports. `$effect`, `$cleanup` and `$snapshot` are
+compiler-owned calls, not runtime functions to capture as values. `$snapshot`
+must initialize a declaration (`const saved = $snapshot(state.user)`).
 
 Unbound `effect` and `cleanup` calls are rejected. Use `$effect` and `$cleanup`.
 Explicitly bound names remain ordinary JavaScript; they do not become lifecycle

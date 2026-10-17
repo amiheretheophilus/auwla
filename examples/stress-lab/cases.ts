@@ -106,8 +106,19 @@ export const cases: StressCase[] = [
     steps: [['a', 'yes'], ['a', 'no']],
   },
   {
-    name: 'replace nested object then read deep',
+    // By design a const alias is derived: `old` follows state.user (docs/02-state.md).
+    name: 'replace nested object then write through a live alias',
     app: `export function App(){const state={user:{name:'ann'}};const old=state.user;
+      return <main><output id="out">{state.user.name}</output>
+        <button id="a" onClick={()=>{state.user={name:'bob'};}}>r</button>
+        <button id="b" onClick={()=>{old.name='stale';}}>old</button>
+        <button id="c" onClick={()=>{state.user.name='cy';}}>deep</button></main>;}`,
+    initial: 'ann',
+    steps: [['a', 'bob'], ['b', 'stale'], ['c', 'cy']],
+  },
+  {
+    name: 'replace nested object then write through a $snapshot',
+    app: `export function App(){const state={user:{name:'ann'}};const old=$snapshot(state.user);
       return <main><output id="out">{state.user.name}</output>
         <button id="a" onClick={()=>{state.user={name:'bob'};}}>r</button>
         <button id="b" onClick={()=>{old.name='stale';}}>old</button>
@@ -312,8 +323,8 @@ export const cases: StressCase[] = [
     steps: [['a', 'rab'], ['b', 'rAb']],
   },
   {
-    name: 'realistic undo: const snapshot of a reference',
-    app: `export function App(){const state={user:{name:'ann'}};const snapshot=state.user;
+    name: 'realistic undo: $snapshot of a reference',
+    app: `export function App(){const state={user:{name:'ann'}};const snapshot=$snapshot(state.user);
       return <main><output id="out">{state.user.name}</output>
         <button id="a" onClick={()=>{state.user={name:'bob'};}}>edit</button>
         <button id="b" onClick={()=>{state.user=snapshot;}}>undo</button></main>;}`,

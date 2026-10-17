@@ -48,9 +48,16 @@ So:
   the binding itself is reassigned (`count++`, `name = 'x'`) or when it reads
   reactive state as a derived value.
 
-A derived initializer stays live. If you need a one-time snapshot, assign it
-in a separate statement after declaring the variable; otherwise later source
-writes will replay the initializer.
+A derived initializer stays live. If you need a one-time snapshot, wrap the
+initializer in `$snapshot`; otherwise later source writes will replay it:
+
+```tsx
+const current = state.user;            // follows state.user
+const saved = $snapshot(state.user);   // keeps this object, e.g. for undo
+```
+
+`$snapshot` is equivalent to declaring the variable and assigning it in a
+separate statement, a form that still works.
 
 ## State can live anywhere
 
@@ -130,8 +137,8 @@ export function Cart() {
 - Write it as a `const` expression — no `computed()` exists.
 - Both `const` and `let` initializers that read reactive state are derived.
   `let doubled = count * 2` replays when `count` changes; assigning to
-  `doubled` is a compile error. Use a separate assignment after declaration
-  when you need an explicit one-time snapshot.
+  `doubled` is a compile error. Use `$snapshot(...)` when you need an explicit
+  one-time snapshot.
 - Chains work: `a` → `b` → `c` replays in order when `a` changes.
 - Pure helper calls inside derivations are fine.
 - **Never write to a derived value** — `total++` is invalid; update `coupon`.
