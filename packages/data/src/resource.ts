@@ -182,7 +182,12 @@ class FetchEntry {
   cancelRequest(reason?: unknown): void {
     this.cancelDeferredStart();
     if (this.descriptor.stream !== undefined) {
-      this.controller?.abort(reason);
+      // A finite stream that already delivered its result is only closing;
+      // aborting it would report a cancelled request for a completed one.
+      const finished = this.descriptor.stream !== 'live' && this.hasData &&
+        !this.snapshot.pending && !this.snapshot.refreshing;
+      if (finished) this.generation++;
+      else this.controller?.abort(reason);
       this.snapshot.streaming = false;
       this.liveProtection?.clear();
     }
