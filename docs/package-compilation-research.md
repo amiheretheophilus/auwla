@@ -298,11 +298,40 @@ JavaScript, original node retention, projected events, draft preservation and
 conditional remounts. Compiler regressions also cover multiple instances with
 different extents, omitted named/default slots, and caller lists/conditionals.
 
+Package-owned events now have a generated `host-events-v1` capability. The
+package compiler extracts only their passive host shape and emits handler
+attachment through the existing optional-host factory path. Application linking
+retains that factory even when every prop is constant or no props are supplied;
+it must not erase interaction as a static optimization. Handlers remain normal
+compiled JavaScript, not serialized expressions in the artifact, and are never
+executed by initial HTML planning. The new capability is rejected explicitly by
+older compilers. Dedicated slots can share this path without moving ownership
+of projected content into the package.
+
+Compiler/runtime regressions cover direct callbacks, package-authored handler
+wrappers, updated scalar props used by handlers, native input events, constant
+controls, repeated instances, slots, and conditional creation/remounts. A
+production Chrome regression checks the published package/artifact path, HTML
+with JavaScript disabled, original node retention, draft preservation, event
+execution counts, and later creation. No new runtime binding mechanism or
+consumer configuration was introduced.
+
+Testing opaque callbacks also exposed a pre-existing portability gap in event
+emission: a package component's conservative fallback embedded the publisher's
+default root name, `App`. Package component emission now resolves that fallback
+through its actual mounted owner and parent links in the active runtime. An
+unregistered static child can resolve its nearest registered owner. Regressions
+exercise a non-`App` root with both adoption and ordinary creation and verify
+that an unrelated registered tree is not invalidated. Shared module handlers
+without an instance owner retain conservative invalidation across the active
+runtime's registry; a separate-runtime regression checks request isolation.
+This does not infer new dependency facts from opaque third-party implementations.
+
 Mixed siblings and fallback branches still need a broader placement contract.
-Components with their own events, refs, effects, setup statements, nested
-components, or dynamic structure also still use ordinary creation for
-browser-only initial delivery. Runtime SSR/hydration remains available. A
-symbolic HTML shape alone cannot grant those broader adoption capabilities.
+Components with refs, effects, setup statements, nested components, or dynamic
+structure still use ordinary creation for browser-only initial delivery.
+Runtime SSR/hydration remains available. A symbolic HTML shape alone cannot
+grant those broader adoption capabilities.
 
 Prop modes are intentionally exact. A typed scalar prop remains scalar; an
 authored render prop remains JSX-bearing. Cross-mode consumer calls fail during
@@ -449,8 +478,9 @@ need an explicit diagnostic/boundary, not a claim of guaranteed reactivity.
 Compiler internals are not automatically a stable publication format. Decide how
 artifacts express required capabilities, runtime compatibility, and format
 versions; reject incompatible inputs clearly or rebuild from available source.
-Package discovery, fallback behavior, and any library-build CLI surface remain
-open decisions, not documented APIs.
+Vite discovery and conservative creation fallback are implemented as described
+above. A dedicated library-build CLI and stronger executable/artifact integrity
+checks remain open decisions, not documented APIs.
 
 ## Suggested sequence and acceptance gates
 

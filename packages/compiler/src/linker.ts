@@ -978,6 +978,7 @@ function compileLinkedModules(
               ? { initialDelivery } : {}) }
         : {}),
       ...(packageBindings === undefined ? {} : {
+        packageEmission: true,
         initialDomComponents: packageBindings(entry, metadata[entry.originalId]!),
       }),
     };
@@ -1099,8 +1100,11 @@ export function experimentalCompilePackage(
       );
       if (template === undefined) continue;
       const dom = packageInitialDom(template, entry.id, summary.local);
-      templates.set(summary.local, dom === undefined ? template : {
-        ...template, adoption: summary.slots.length > 0 ? 'host-slots-v1' : 'host-v1',
+      // A handler-bearing template must not become inert static HTML when its
+      // factory cannot adopt that shape. Keep ordinary creation in that case.
+      if (template.events && dom === undefined) continue;
+      templates.set(summary.local, dom === undefined ? { root: template.root } : {
+        root: template.root, adoption: template.events ? 'host-events-v1' : summary.slots.length > 0 ? 'host-slots-v1' : 'host-v1',
       });
       if (dom !== undefined) bindings[summary.local] = dom;
     }

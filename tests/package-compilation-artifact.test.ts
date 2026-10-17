@@ -407,7 +407,7 @@ describe('experimental package compilation artifacts', () => {
 
     const unsupported = structuredClone(packaged.artifact);
     Reflect.set(unsupported.entries['older-ui']!.components!.Badge.initial!, 'adoption', 'host-v2');
-    expect(() => validateExperimentalPackageArtifact(unsupported)).toThrow(".initial.adoption; expected 'host-v1' or 'host-slots-v1'");
+    expect(() => validateExperimentalPackageArtifact(unsupported)).toThrow(".initial.adoption; expected 'host-v1', 'host-slots-v1', or 'host-events-v1'");
     const slotAdoption = structuredClone(packaged.artifact);
     Reflect.set(slotAdoption.entries['older-ui']!.components!.Panel.initial!, 'adoption', 'host-v1');
     expect(() => validateExperimentalPackageArtifact(slotAdoption)).toThrow('host-v1 does not support component slots');

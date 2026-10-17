@@ -163,7 +163,7 @@ export function extractExperimentalPackageRenderPlan(
   local: string,
   scalarProps: ReadonlySet<string>,
   slots: ReadonlySet<string>,
-): ExperimentalPackageRenderPlan | undefined {
+): (ExperimentalPackageRenderPlan & { readonly events?: true }) | undefined {
   const component = declarationFor(program, local);
   if (component === undefined) return undefined;
   const bindings = propBindings(component);
@@ -176,6 +176,7 @@ export function extractExperimentalPackageRenderPlan(
   }
   const returned = childNode(statements[0]!, 'argument');
   if (returned === null) return undefined;
+  let events = false;
 
   const nodes = (children: readonly BaseNode[]): ExperimentalPackageRenderNode[] | undefined => {
     const output: ExperimentalPackageRenderNode[] = [];
@@ -245,6 +246,12 @@ export function extractExperimentalPackageRenderPlan(
     for (const attribute of childNodes(childNode(node, 'openingElement')!, 'attributes')) {
       if (attribute.type !== 'JSXAttribute') return undefined;
       const name = attributeName(attribute);
+      // Handler attachment belongs to the existing emitted factory, never the
+      // portable HTML template. Do not inspect or execute the handler body here.
+      if (name !== undefined && /^on[A-Z]/.test(name)) {
+        events = true;
+        continue;
+      }
       if (
         name === undefined ||
         name === 'ref' ||
@@ -276,7 +283,7 @@ export function extractExperimentalPackageRenderPlan(
   const root = unwrapTypeExpression(returned);
   if (root.type !== 'JSXElement') return undefined;
   const rendered = element(root);
-  return rendered?.kind === 'element' ? { root: rendered } : undefined;
+  return rendered?.kind === 'element' ? { root: rendered, ...(events ? { events: true } : {}) } : undefined;
 }
 
 /** Package-owned bindings stay relative to their host regardless of caller placement. */

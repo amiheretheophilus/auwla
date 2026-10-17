@@ -10,6 +10,8 @@ import type { InitialDomRoot } from './initial-dom';
 import { createDomEmissionState, type DomEmissionState } from './state';
 
 export interface InternalMemoDomOptions extends AnalysisOptions {
+  /** Package factories resolve conservative event invalidation through their runtime owner. */
+  packageEmission?: boolean;
   /** Emitted helper requirements, including retained future factories. */
   onRuntimeHelpers?: (helpers: ReadonlySet<string>) => void;
   initialDelivery?: InitialDelivery;
@@ -23,6 +25,7 @@ export interface InternalMemoDomOptions extends AnalysisOptions {
 }
 
 export interface DomContext extends AnalysisContext {
+  packageEmission: boolean;
   /** Runtime ABI allocation, separate from analyzed source names. */
   instanceReasonIds:Map<string,Map<string,number>>;
   analyzedFunctions:WeakSet<t.Node>;
@@ -45,7 +48,7 @@ export interface DomContext extends AnalysisContext {
 }
 
 export function createCtx(opts:InternalMemoDomOptions={}):DomContext {
-  return {...createAnalysisCtx(opts),instanceReasonIds:new Map(),analyzedFunctions:new WeakSet(),
+  return {...createAnalysisCtx(opts),packageEmission:opts.packageEmission===true,instanceReasonIds:new Map(),analyzedFunctions:new WeakSet(),
     callbackPublications:new Set(),handlerHasRootCommit:new WeakMap(),moduleCallbacks:null,initialDelivery:opts.initialDelivery,
     routeCallsiteIds:new WeakMap(),routeContextParams:new Map(),externalReactiveImports:new Map(),
     presentationParameters:new Map(),

@@ -27,7 +27,7 @@
 import { runWithApplicationRuntime } from './application-scope';
 export { runWithApplicationRuntime } from './application-scope';
 export { register } from './volatile';
-export { markDirty, markDirtyMany, markDirtySubtree } from './reasoned-invalidation';
+export { markDirty, markDirtyMany, markDirtySubtree, markOwnerRootDirty } from './reasoned-invalidation';
 import {
   clearDirtyReasons,
   createDirtyReasonStore,

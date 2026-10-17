@@ -506,6 +506,11 @@ export function planInitialRendering(
     live: ReadonlySet<string>,
   ): readonly InitialRenderNode[] {
     const scope = component.scope;
+    if (component.initial?.adoption === 'host-events-v1') {
+      if (!bindings) need(scope, 'Package event handlers require browser bindings', 'event');
+      bindingEvents = true;
+      bindingEventCount++;
+    }
     const value = (input: ExperimentalPackageRenderValue) =>
       input.kind === 'literal' ? input.value : props.get(input.name);
     const node = (input: ExperimentalPackageRenderNode): readonly InitialRenderNode[] => {
@@ -727,7 +732,7 @@ export function planInitialRendering(
           propEventCount === bindingEventCount && propOwnerCount === ownerSiteCount &&
           value !== null && typeof value === 'object' && value.kind === 'content' &&
           closedContent(value.nodes);
-        if (bindings && packageSlot && targetComponent?.initial?.adoption === 'host-slots-v1' &&
+        if (bindings && packageSlot && ['host-slots-v1', 'host-events-v1'].includes(targetComponent?.initial?.adoption ?? '') &&
             value !== null && typeof value === 'object' && value.kind === 'content') {
           if (!scope.component) need(scope, 'Package slot needs a lexical owner');
           value = {kind:'content', nodes:[{
@@ -946,7 +951,7 @@ export function planInitialRendering(
       const portableSlotComponents = new Set<string>();
       for (const scope of modules.values()) for (const value of scope.values.values()) {
         if (value !== null && typeof value === 'object' && value.kind === 'component' &&
-            value.initial?.adoption === 'host-slots-v1') {
+            ['host-slots-v1', 'host-events-v1'].includes(value.initial?.adoption ?? '')) {
           portableSlotComponents.add(`${value.scope.moduleId}#${value.local}`);
         }
       }

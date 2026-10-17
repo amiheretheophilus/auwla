@@ -317,10 +317,64 @@ not yet receive this capability: they retain whole-call static specialization
 or ordinary creation instead. This is an initial-delivery optimization boundary,
 not a restriction on authoring or rendering package slots in general.
 
-Components with their own events, refs, effects, setup statements, nested
-components, or dynamic structure also continue through ordinary creation.
+Components with refs, effects, setup statements, nested components, or dynamic
+structure still continue through ordinary creation.
 General runtime SSR and its existing hydration path remain available for those
 broader components.
+
+### Binding package-owned events
+
+A package component with the same closed DOM shape may also own event handlers:
+
+```tsx
+// Package source, compiled once.
+export function Button({ label, onPress }: {
+  label: string;
+  onPress: () => void;
+}) {
+  return <button onClick={onPress}>{label}</button>;
+}
+
+// Consuming application.
+import { Button } from 'my-ui';
+export function App() {
+  let count = 0;
+  return <main>
+    <Button label="Increment" onPress={() => count++} />
+    <output>{count}</output>
+  </main>;
+}
+```
+
+The initial button arrives as HTML. The package factory binds that existing
+button and attaches its handler once; the application's callback keeps its
+normal lexical state and invalidation behavior. Later prop changes update the
+existing bindings, not the component body. Handler wrappers inside the package
+and input events use the same path. Dedicated slot hosts without fallbacks can
+be combined with package-owned events and caller-owned slot content.
+
+If a package component handler needs conservative invalidation for an opaque
+callback, it resolves the root through its mounted runtime owner. It does not
+assume the consuming root is named `App`. This applies to both existing-HTML
+binding and ordinary creation and stays inside the active application runtime.
+Shared module handlers without a lexical component owner conservatively
+invalidate that active runtime; they cannot target a different request's runtime.
+
+Even a component with no props, or with only constant props, must retain its
+factory when it attaches a handler. The compiler-generated `host-events-v1`
+capability records that requirement. Older compilers reject this capability
+rather than silently treating the component as inert static HTML. Authors do
+not write that metadata, and handlers never execute while generating HTML.
+Use compatible compiler and runtime builds when generating and consuming these
+experimental packages; their emitted factories still use the runtime's internal
+component and invalidation ABI.
+
+This extends initial binding for components whose body is a direct JSX return.
+It does not yet add initial binding for package-local setup/state, effects,
+refs, dynamic structure, mixed-sibling slots, or slot fallbacks. Those components
+still work through ordinary creation and the existing runtime SSR/hydration
+path. If an event-bearing shape cannot safely bind, the compiler keeps that
+whole component on ordinary creation rather than emitting inactive controls.
 
 Fullstack SSR remains independent and can render broader package components by
 executing their emitted server factories. Package compilation never executes an
@@ -348,8 +402,8 @@ the consuming application as a shortcut.
   proof that published JavaScript was built from the same source. Package builds
   must still publish compiler output and its matching artifact together.
 - Package initial HTML and host adoption cover the subsets described above.
-  Mixed-sibling slots, slot fallbacks and locally interactive package components
-  are not yet part of that portable initial-binding contract.
+  Mixed-sibling slots, slot fallbacks and package-local setup/state, refs or
+  effects are not yet part of that portable initial-binding contract.
 - Array literals passed to a holder relationship preserve every contained
   holder. Arbitrarily assembled dynamic collections are not yet a portable
   holder contract.

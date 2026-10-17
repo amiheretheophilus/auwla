@@ -18,6 +18,7 @@ export {
   invalidateEntity,
   undirty,
   markDirtySubtree,
+  markOwnerRootDirty,
   commit,
   setScheduler,
   resetScheduler,

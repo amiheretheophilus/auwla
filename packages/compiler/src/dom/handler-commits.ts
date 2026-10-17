@@ -104,6 +104,12 @@ export function buildScopeCommit(
   };
 
   if (scope.rootFallback) {
+    if (ctx.packageEmission) {
+      return combine(astFactory.expressionStatement(astFactory.callExpression(
+        md(ctx, 'markOwnerRootDirty'),
+        instanceArguments.length > 0 ? instanceArguments : compName !== null ? [componentId(ctx, compName)] : [],
+      )));
+    }
     // Publish the exact owner and conservative subtree before scheduling. The
     // owner can be mounted outside the static root; inside it, broad reasons
     // dominate. A synchronous scheduler must not replay the owner twice.

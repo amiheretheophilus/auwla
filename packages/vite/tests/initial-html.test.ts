@@ -55,6 +55,113 @@ async function production(root: string) {
 }
 
 describe('HTML first production builds', () => {
+  it.skipIf(!chromeExecutable())('binds package-owned events to initial DOM in production Chrome', async () => {
+    const executablePath = chromeExecutable();
+    if (!executablePath) return;
+    const root = await fixture(`import { Action, Editor, Panel, Notice } from 'event-ui';
+      export function App() { let count=0;let amount=1;let text='Before';let show=true;
+        return <div><Action label="Add" amount={amount} onPress={value=>count+=value}/>
+          <Action label="Amount" amount={0} onPress={()=>amount++}/>
+          <Action label="Toggle" amount={0} onPress={()=>show=!show}/>
+          <Editor value={text} onEdit={value=>text=value}/><Notice/>
+          {show&&<Panel onPress={()=>count++}><b>{count}</b><input class="draft"/></Panel>}
+          <output>{count}:{text}</output></div>;
+      }`);
+    const packaged = experimentalCompilePackage({
+      './index.tsx': `
+        export function Action({label,amount,onPress}:{label:string;amount:number;onPress:(amount:number)=>void}) {
+          return <button class="action" data-amount={amount} onClick={()=>onPress(amount)}>{label}</button>;
+        }
+        export function Editor({value,onEdit}:{value:string;onEdit:(value:string)=>void}) {
+          return <input class="editor" value={value} onInput={event=>onEdit(event.currentTarget.value)}/>;
+        }
+        export function Panel({onPress}:{onPress:()=>void}) {
+          return <section><button class="package-button" onClick={onPress}>Package</button><main><slot/></main></section>;
+        }
+        export function Notice() {return <button class="notice" onClick={()=>console.log('constant-handler')}>Notice</button>;}
+      `,
+    }, { packageEntries: { 'event-ui': './index.tsx' } });
+    const directory = join(root, 'node_modules/event-ui');
+    await mkdir(directory, { recursive: true });
+    await Promise.all([
+      writeFile(join(directory, 'index.js'), packaged.output['./index.tsx']!),
+      writeFile(join(directory, 'memoized-dom.package.json'), JSON.stringify(packaged.artifact)),
+      writeFile(join(directory, 'package.json'), JSON.stringify({ name: 'event-ui', type: 'module', exports: './index.js',
+        'memoized-dom': { artifact: './memoized-dom.package.json' } })),
+    ]);
+    const result = await production(root);
+    expect(result.html).toContain('<button class="action" data-amount="1">Add</button>');
+    expect(result.html).toContain('<button class="notice">Notice</button>');
+    const server = createHttpServer((request, response) => {
+      const file = result.files.find(item => item.fileName === (request.url === '/' ? 'index.html' : request.url?.slice(1)));
+      if (!file) { response.writeHead(404).end(); return; }
+      response.setHeader('Content-Type', file.type === 'chunk' ? 'text/javascript' : 'text/html');
+      response.end(file.type === 'chunk' ? file.code : file.source);
+    });
+    await new Promise<void>(done => server.listen(0, '127.0.0.1', done));
+    const browser = await puppeteer.launch({ executablePath, headless: true });
+    try {
+      const address = server.address();
+      if (!address || typeof address === 'string') throw new Error('Missing HTTP address');
+      const url = `http://127.0.0.1:${address.port}/`;
+      const staticPage = await browser.newPage();
+      await staticPage.setJavaScriptEnabled(false);
+      await staticPage.goto(url);
+      expect(await staticPage.$eval('output', node => node.textContent)).toBe('0:Before');
+      expect(await staticPage.$$eval('button', nodes => nodes.length)).toBe(5);
+      await staticPage.close();
+      const page = await browser.newPage();
+      const errors: string[] = [];
+      let notices = 0;
+      page.on('pageerror', error => errors.push(String(error)));
+      page.on('console', message => { if (message.text() === 'constant-handler') notices++; });
+      await page.evaluateOnNewDocument(() => {
+        const state = window as unknown as { initial?: Element[]; created: string[] };
+        state.created = [];
+        const create = document.createElement.bind(document);
+        document.createElement = ((...args: Parameters<Document['createElement']>) => {
+          state.created.push(args[0]); return create(...args);
+        }) as Document['createElement'];
+        new MutationObserver(() => {
+          if (document.querySelector('.draft')) state.initial ??= [...document.querySelectorAll('#root *')];
+        }).observe(document, { subtree: true, childList: true });
+      });
+      await page.goto(url);
+      const click = (label: string) => page.$$eval('.action', (nodes, label) =>
+        (nodes.find(node => node.textContent === label) as HTMLButtonElement).click(), label);
+      await page.type('.draft', 'Unsubmitted');
+      await click('Add');
+      await page.waitForFunction(() => document.querySelector('output')?.textContent === '1:Before');
+      await click('Amount');
+      await page.waitForFunction(() => document.querySelector('.action')?.getAttribute('data-amount') === '2');
+      await click('Add');
+      await page.waitForFunction(() => document.querySelector('b')?.textContent === '3');
+      await page.focus('.editor');
+      await page.keyboard.press('End');
+      await page.keyboard.type('!');
+      await page.waitForFunction(() => document.querySelector('output')?.textContent === '3:Before!');
+      await page.click('.package-button');
+      await page.waitForFunction(() => document.querySelector('b')?.textContent === '4');
+      await page.click('.notice');
+      expect(notices).toBe(1);
+      expect(await page.evaluate(() => {
+        const state = window as unknown as { initial: Element[]; created: string[] };
+        return { same: [...document.querySelectorAll('#root *')].every((node, index) => node === state.initial[index]),
+          draft: document.querySelector<HTMLInputElement>('.draft')!.value, created: state.created.filter(tag => tag !== 'link') };
+      })).toEqual({ same: true, draft: 'Unsubmitted', created: [] });
+      await click('Toggle');
+      await page.waitForFunction(() => document.querySelector('section') === null);
+      await click('Toggle');
+      await page.waitForFunction(() => document.querySelector('b')?.textContent === '4');
+      await page.click('.package-button');
+      await page.waitForFunction(() => document.querySelector('output')?.textContent === '5:Before!');
+      expect(errors).toEqual([]);
+    } finally {
+      await browser.close();
+      await new Promise<void>((done, reject) => server.close(error => error ? reject(error) : done()));
+    }
+  }, 120_000);
+
   it.skipIf(!chromeExecutable())('adopts separately compiled slots and preserves caller interactions in production Chrome', async () => {
     const executablePath = chromeExecutable();
     if (!executablePath) return;
