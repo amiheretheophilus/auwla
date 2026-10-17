@@ -24,6 +24,7 @@ import {
   type TransparentDerivation,
 } from '../analysis/transparent-reads';
 import { sourceArray, type RenderGatedExpression } from './data-subscriptions';
+import { matchMapCall } from '../lists';
 
 export function replaceDerivedReads(
   ctx: Ctx,
@@ -233,6 +234,11 @@ export function replaceSourceReadsWithRenderGates(
   const scalars: t.Expression[] = [];
   walkAst(root, { enter(node) {
     if (astFactory.isFunction(node as unknown as t.Node)) return false;
+    // JSX maps belong to structural list lowering. Gating their member callee
+    // as a scalar would turn `items.map(...)` into `gate(...)(...)`, hiding the
+    // list from that planner. The source-read pass below still gates its receiver.
+    if (astFactory.isCallExpression(node as unknown as t.Node) &&
+      matchMapCall(node as unknown as t.CallExpression) && nodeHasJsx(node as unknown as t.Node)) return false;
     if (node.type === 'JSXExpressionContainer' && (
       isEventOrRefContainer(ctx, node) || isGroupDataContainer(ctx, node) ||
       isDirectSourceComponentProp(ctx, node, bindings)
