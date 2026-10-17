@@ -479,6 +479,11 @@ into the application graph.
 
 ### Do not automatically transform the entire npm ecosystem
 
+The first [real third-party compilation experiment](./third-party-package-compilation.md)
+now exercises unchanged published dset ESM, inferred deep writes, colorless payload
+mutation and SSR. Automatic installed-dependency compilation remains a separate
+integration step; this does not enable it for every npm import.
+
 Distinguish framework-compiled packages, conservatively analyzable ordinary
 JavaScript, and genuinely opaque/dynamic behavior. An ordinary dependency can
 remain ordinary JavaScript; it should not silently acquire different language

@@ -121,6 +121,7 @@ export const experimentalTsrxEstreeFrontend: EstreeFrontend = {
 /** Strict default router: each supported extension selects its parser explicitly. */
 export const memoizedEstreeFrontend = createExtensionEstreeFrontend({
   '.js': yukuEstreeFrontend,
+  '.mjs': yukuEstreeFrontend,
   '.jsx': yukuEstreeFrontend,
   '.ts': yukuEstreeFrontend,
   '.tsx': yukuEstreeFrontend,

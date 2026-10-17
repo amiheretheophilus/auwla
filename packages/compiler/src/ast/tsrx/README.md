@@ -23,7 +23,7 @@ The default frontend router is strict:
 
 | Extension | Frontend |
 |---|---|
-| `.js`, `.jsx`, `.ts`, `.tsx`, `.d.ts` | Yuku |
+| `.js`, `.mjs`, `.jsx`, `.ts`, `.tsx`, `.d.ts` | Yuku |
 | `.tsrx` | `@tsrx/core` plus direct lowering |
 
 Unknown and virtual module IDs do not use a fallback parser. Pass
