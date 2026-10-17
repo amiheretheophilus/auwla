@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import {
   definePackageBoundaries,
   experimentalCompilePackage,
+  experimentalFinalizePackage,
 } from '@memoized-dom/compiler';
 
 const root = join(import.meta.dirname, '..');
@@ -36,5 +37,5 @@ const { artifact } = experimentalCompilePackage(modules, {
 
 await writeFile(
   join(root, 'dist', 'memoized-dom.package.json'),
-  `${JSON.stringify(artifact, null, 2)}\n`,
+  `${JSON.stringify(await experimentalFinalizePackage(artifact, { packageRoot: root }), null, 2)}\n`,
 );

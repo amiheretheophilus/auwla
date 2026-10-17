@@ -1,10 +1,11 @@
 import { existsSync } from 'node:fs';
-import { readFile } from 'node:fs/promises';
+import { readFile, realpath } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import { dirname, isAbsolute, join, parse, relative, resolve, sep } from 'node:path';
 import type { DepOptimizationMetadata } from 'vite';
 import {
   experimentalPackageArtifactInstance,
+  experimentalVerifyPackageIntegrity,
   validateExperimentalPackageArtifact,
   type ExperimentalPackageArtifact,
 } from '@memoized-dom/compiler';
@@ -40,6 +41,7 @@ export interface DiscoveredPackageArtifact {
   readonly instance: string;
   readonly artifactFile: string;
   readonly manifestFile: string;
+  readonly verifiedFiles: readonly string[];
 }
 
 function resolvableFile(
@@ -72,6 +74,7 @@ export async function discoverPackageArtifact(
   resolvedId: string,
   specifier: string,
   importer: string,
+  integrityCache?: Map<string, Promise<readonly string[]>>,
 ): Promise<DiscoveredPackageArtifact | undefined> {
   const expectedPackage = packageName(specifier);
   if (expectedPackage === undefined) return undefined;
@@ -103,11 +106,23 @@ export async function discoverPackageArtifact(
       const artifact = validateExperimentalPackageArtifact(JSON.parse(
         await readFile(artifactFile, 'utf8'),
       ));
+      const instance = experimentalPackageArtifactInstance(artifact);
+      const cacheKey = `${artifactFile}\0${instance}\0${JSON.stringify(artifact.integrity)}\0${JSON.stringify(manifest)}`;
+      let verified = integrityCache?.get(cacheKey);
+      if (verified === undefined) {
+        verified = experimentalVerifyPackageIntegrity(artifact, directory);
+        integrityCache?.set(cacheKey, verified);
+      }
+      const verifiedFiles = await verified;
+      if (artifact.integrity !== undefined && resolvedFile !== manifestFile && !verifiedFiles.includes(await realpath(resolvedFile))) {
+        throw new Error(`memo-dom: package integrity check failed: resolved entry '${resolvedFile}' is not protected; rebuild and finalize the package after bundling`);
+      }
       return {
         artifact,
-        instance: experimentalPackageArtifactInstance(artifact),
+        instance,
         artifactFile,
         manifestFile,
+        verifiedFiles,
       };
     }
     directory = dirname(directory);

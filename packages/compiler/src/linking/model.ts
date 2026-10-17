@@ -117,6 +117,13 @@ export interface ExperimentalPackageArtifact {
   kind: 'memoized-dom-package';
   version: 1;
   entries: Record<string, ExperimentalPackageEntry>;
+  /** Optional post-bundle consistency stamp, generated from final package files. */
+  integrity?: {
+    algorithm: 'sha256';
+    metadata: string;
+    manifest: string;
+    files: Record<string, string>;
+  };
 }
 
 /** One host-resolved package import, kept separate from its portable artifact. */

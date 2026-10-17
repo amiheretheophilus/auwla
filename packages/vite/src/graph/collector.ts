@@ -110,6 +110,9 @@ export async function compileGraph(
   const packageImports = new Map<string, ExperimentalPackageImport>();
   const semanticDependencies = new Set<string>();
   const artifactLookups = new Map<string, ReturnType<typeof discoverPackageArtifact>>();
+  // Scoped to one compilation: shared imports hash a package once, while the
+  // next HMR/build graph rechecks bytes rather than trusting a global cache.
+  const integrityLookups = new Map<string, Promise<readonly string[]>>();
 
   async function recordPackageArtifact(
     resolvedId: string,
@@ -120,7 +123,7 @@ export async function compileGraph(
     const key = `${resolvedId}\0${specifier}\0${importerFile}`;
     let lookup = artifactLookups.get(key);
     if (lookup === undefined) {
-      lookup = discoverPackageArtifact(resolvedId, specifier, importerFile);
+      lookup = discoverPackageArtifact(resolvedId, specifier, importerFile, integrityLookups);
       artifactLookups.set(key, lookup);
     }
     const discovered = await lookup;
@@ -131,6 +134,11 @@ export async function compileGraph(
     context.addWatchFile(artifactFile);
     semanticDependencies.add(manifestFile);
     semanticDependencies.add(artifactFile);
+    for (const file of discovered.verifiedFiles) {
+      const dependency = normalizeFile(file);
+      context.addWatchFile(dependency);
+      semanticDependencies.add(dependency);
+    }
     packageImports.set(resolutionKey(importerId, specifier), {
       importer: importerId,
       specifier,

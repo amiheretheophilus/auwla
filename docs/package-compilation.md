@@ -64,7 +64,8 @@ Declare its path in `package.json`:
   "name": "my-package",
   "files": ["dist"],
   "memoized-dom": {
-    "artifact": "./dist/memoized-dom.package.json"
+    "artifact": "./dist/memoized-dom.package.json",
+    "integrity": true
   }
 }
 ```
@@ -96,11 +97,6 @@ const compiled = experimentalCompilePackage(modules, {
     },
   },
 });
-
-await writeFile(
-  new URL('../dist/memoized-dom.package.json', import.meta.url),
-  `${JSON.stringify(compiled.artifact, null, 2)}\n`,
-);
 ```
 
 `exports` is recommended when the public entry also exposes values or types
@@ -130,6 +126,74 @@ Multi-module packages must write the corresponding output modules or bundle
 those compiler-produced modules afterward. Generate declarations separately;
 the semantic artifact does not replace `.d.ts` files. Consumers continue to
 load ordinary ESM through the bundler.
+
+### Finalize the files that will be published
+
+After writing/bundling/minifying all emitted JavaScript, generate the publication
+stamp and write the artifact **last**:
+
+```ts
+import { fileURLToPath } from 'node:url';
+import { experimentalFinalizePackage } from '@memoized-dom/compiler';
+
+const publication = await experimentalFinalizePackage(compiled.artifact, {
+  packageRoot: fileURLToPath(new URL('../', import.meta.url)),
+  outputDirectory: 'dist', // default; use the actual final output directory
+});
+await writeFile(
+  new URL('../dist/memoized-dom.package.json', import.meta.url),
+  `${JSON.stringify(publication, null, 2)}\n`,
+);
+```
+
+The helper generates the hashes; authors do not type integrity metadata. It
+requires `"memoized-dom": { "artifact": "…", "integrity": true }` in the
+package manifest. The flag makes a missing stamp an error, including accidentally
+publishing an older unfinalized artifact. Consumers still use normal imports;
+the current Vite plugin verifies the package automatically before linking it.
+The utils build uses this step, and the tarball publication regression installs
+and checks a finalized package.
+
+The stamp binds the validated semantic metadata, the manifest's resolution and
+optimization fields, and the exact final bytes of every `.js`, `.mjs`, and `.cjs`
+file in the output directory, including chunks and conditional export variants.
+Changing code after finalization, dropping a chunk from the tarball, changing
+metadata, or redirecting an export fails with the affected file/reason and a
+rebuild instruction. Dependency-version rewrites performed by packing do not
+invalidate the stamp; runtime dependency compatibility is a separate concern.
+Package-relative paths make moving/installing the package safe. Timestamps and
+absolute publisher paths are not part of the stamp or semantic identity.
+Manifest whitespace and top-level field order do not matter. Conditional
+`exports`/`imports` key order does matter because it controls resolution, so
+reordering those conditions requires finalizing again.
+
+All JavaScript targets for the artifact's public entries must be protected by
+the output directory. Exact subpaths exposed through wildcard exports are
+supported; declared matching alternatives are checked conservatively rather
+than guessing the consumer's conditions. The directory must stay inside the
+package, cannot contain symlinks, and is limited to 4096 JavaScript files.
+Declarations, source maps, and external dependency contents are not hashed.
+
+Verification reads files without executing them. Within a compilation, repeated
+imports reuse verification; each new build/HMR graph rechecks the bytes. Verified
+JavaScript files join the watched semantic inputs, so a mismatched rebuild can
+produce an error overlay and recover after a matching artifact is written.
+Finish JavaScript output first and finalize last; multi-file rebuilds are not an
+atomic publishing transaction.
+
+This is a consistency check, **not** a signature, a security audit, or proof that
+the metadata truthfully describes the code. A publisher can seal an incorrect
+pair, and stripping both the declaration and stamp can impersonate an older
+unsealed package. Older experimental artifacts without the declaration remain
+supported but have no byte-consistency guarantee. Older consumers may not enforce
+the new declaration; use tooling that implements this check. Runtime/compiler
+ABI negotiation is not implemented by this step.
+
+Low-level filesystem hosts can call
+`experimentalVerifyPackageIntegrity(artifact, packageRoot, resolvedEntry)` before
+passing metadata to `compileModules`. The optional last argument checks the
+actually resolved JavaScript entry; the result lists files to watch. Compiler
+calls supplied only in-memory artifacts cannot verify absent executable files.
 
 ### Barrels and bundling
 
@@ -498,10 +562,12 @@ JavaScript and matching artifact together.
   forced page reload. JavaScript implementation updates still use Vite's normal
   package-module invalidation path.
 - The artifact and executable JavaScript must come from the same package
-  compilation. Artifact/source integrity hashes are not implemented yet.
-- The semantic digest identifies artifact contents; it is not yet an integrity
-  proof that published JavaScript was built from the same source. Package builds
-  must still publish compiler output and its matching artifact together.
+  compilation. Post-bundle finalization checks their publication consistency;
+  it does not prove that the JavaScript was compiled from the claimed source.
+- The semantic digest identifies metadata, independently of final byte hashes.
+  Package builds must publish matching compiler output and finalized metadata
+  together. Runtime ABI compatibility and a dedicated library-build CLI remain
+  separate open work.
 - Package initial HTML and host adoption cover the subsets described above.
   Text-adjacent or multiple same-parent slots, nested fallback slots, and
   package-local setup/state, refs or effects are outside the portable

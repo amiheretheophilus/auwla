@@ -5,7 +5,8 @@
   "type": "module",
   "sideEffects": false,
   "memoized-dom": {
-    "artifact": "./dist/memoized-dom.package.json"
+    "artifact": "./dist/memoized-dom.package.json",
+    "integrity": true
   },
   "files": [
     "dist",

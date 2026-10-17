@@ -9,7 +9,7 @@ import { pathToFileURL } from 'node:url';
 import { promisify } from 'node:util';
 import { createBuilder } from 'vite';
 import puppeteer from 'puppeteer-core';
-import { experimentalCompilePackage } from '@memoized-dom/compiler';
+import { experimentalCompilePackage, experimentalFinalizePackage } from '@memoized-dom/compiler';
 import memoizedDom from '../src';
 import { createDevServer, type NativeDevServer } from '../src/dev';
 import { discoverPackageArtifact } from '../src/graph/package-artifacts';
@@ -70,7 +70,7 @@ it('consumes a packed, minified component/helper library without its source in t
     'package.json': JSON.stringify({ name: '@publication/ui', version: '0.0.0', type: 'module', sideEffects: false, files: ['dist'],
       exports: { '.': { types: './dist/index.d.ts', import: './dist/index.js' }, './status': { types: './dist/status.d.ts', import: './dist/status.js' } },
       peerDependencies: { '@memoized-dom/runtime': '*', '@memoized-dom/data': '*' },
-      'memoized-dom': { artifact: './dist/memoized-dom.package.json' },
+      'memoized-dom': { artifact: './dist/memoized-dom.package.json', integrity: true },
     }),
     'tsconfig.json': JSON.stringify({ compilerOptions: { target: 'ESNext', module: 'Preserve', moduleResolution: 'Bundler',
       jsx: 'preserve', strict: true, skipLibCheck: true, types: ['@memoized-dom/compiler/jsx'],
@@ -81,7 +81,9 @@ it('consumes a packed, minified component/helper library without its source in t
   const bundled = await Bun.build({ entrypoints: ['index.ts', 'status.ts'].map(name => join(producer, 'compiled', name)),
     outdir: join(producer, 'dist'), target: 'browser', format: 'esm', minify: true, external: ['@memoized-dom/*'] });
   expect(bundled.success, bundled.logs.map(String).join('\n')).toBe(true);
-  await writeFile(join(producer, 'dist/memoized-dom.package.json'), JSON.stringify(compiled.artifact));
+  const artifact = await experimentalFinalizePackage(compiled.artifact, { packageRoot: producer });
+  expect(Object.keys(artifact.integrity!.files)).toEqual(['dist/index.js', 'dist/status.js']);
+  await writeFile(join(producer, 'dist/memoized-dom.package.json'), JSON.stringify(artifact));
   const tarball = join(fixture, 'publication-ui.tgz');
   await run(process.execPath, ['pm', 'pack', '--ignore-scripts', '--filename', tarball], { cwd: producer, windowsHide: true, timeout: 30_000 });
   await files(consumer, {

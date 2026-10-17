@@ -25,6 +25,33 @@ const renderDirectives = new Set([
 const validatedArtifacts = new WeakMap<object, ExperimentalPackageArtifact>();
 const artifactInstances = new WeakMap<object, string>();
 
+/** Portable package-relative output file, never an absolute or traversing path. */
+export function isPackageJavaScriptPath(path: string): boolean {
+  return path.length > 0 && !/[\\\u0000-\u001f\u007f:#?*]/.test(path) &&
+    !path.startsWith('/') && path.split('/').every(part => part !== '' && part !== '.' && part !== '..') &&
+    /\.(?:js|mjs|cjs)$/.test(path);
+}
+
+function integrity(value: unknown): NonNullable<ExperimentalPackageArtifact['integrity']> {
+  const input = record(value, 'artifact.integrity');
+  if (input.algorithm !== 'sha256') invalid('artifact.integrity.algorithm', "expected 'sha256'");
+  const digest = (value: unknown, path: string): string => {
+    if (typeof value !== 'string' || !/^[a-f0-9]{64}$/.test(value)) invalid(path, 'expected a lowercase SHA-256 digest');
+    return value;
+  };
+  const rawFiles = record(input.files, 'artifact.integrity.files');
+  if (Object.keys(rawFiles).length === 0 || Object.keys(rawFiles).length > 4096) {
+    invalid('artifact.integrity.files', 'expected between 1 and 4096 JavaScript files');
+  }
+  const files: Record<string, string> = Object.create(null);
+  for (const [path, hash] of Object.entries(rawFiles)) {
+    if (!isPackageJavaScriptPath(path)) invalid(`artifact.integrity.files[${JSON.stringify(path)}]`, 'expected a normalized package-relative JavaScript path');
+    files[path] = digest(hash, `artifact.integrity.files[${JSON.stringify(path)}]`);
+  }
+  return { algorithm: 'sha256', metadata: digest(input.metadata, 'artifact.integrity.metadata'),
+    manifest: digest(input.manifest, 'artifact.integrity.manifest'), files };
+}
+
 function invalid(path: string, expectation: string): never {
   throw new TypeError(
     `memo-dom: invalid experimental package artifact at ${path}; ${expectation}`,
@@ -346,19 +373,27 @@ export function validateExperimentalPackageArtifact(
     kind: 'memoized-dom-package',
     version: 1,
     entries,
+    ...(artifact.integrity === undefined ? {} : { integrity: integrity(artifact.integrity) }),
   };
   validatedArtifacts.set(artifact, validated);
   return validated;
 }
 
-function canonicalJson(value: unknown): string {
-  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(',')}]`;
+function canonicalPackageJson(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(canonicalPackageJson).join(',')}]`;
   if (value !== null && typeof value === 'object') {
     return `{${Object.keys(value).sort().map(key =>
-      `${JSON.stringify(key)}:${canonicalJson((value as UnknownRecord)[key])}`
+      `${JSON.stringify(key)}:${canonicalPackageJson((value as UnknownRecord)[key])}`
     ).join(',')}}`;
   }
   return JSON.stringify(value);
+}
+
+/** Hash semantic facts only: post-bundle bytes do not change component identity. */
+export function packageMetadataHash(artifact: ExperimentalPackageArtifact): string {
+  return createHash('sha256').update(canonicalPackageJson({
+    kind: artifact.kind, version: artifact.version, entries: artifact.entries,
+  })).digest('hex');
 }
 
 /** Reproducible semantic identity for one validated package artifact. */
@@ -368,10 +403,7 @@ export function experimentalPackageArtifactInstance(value: unknown): string {
     if (cached !== undefined) return cached;
   }
   const artifact = validateExperimentalPackageArtifact(value);
-  const instance = createHash('sha256')
-    .update(canonicalJson(artifact))
-    .digest('hex')
-    .slice(0, 32);
+  const instance = packageMetadataHash(artifact).slice(0, 32);
   artifactInstances.set(artifact, instance);
   if (value !== null && typeof value === 'object') {
     artifactInstances.set(value, instance);

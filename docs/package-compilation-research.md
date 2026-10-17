@@ -494,8 +494,11 @@ Compiler internals are not automatically a stable publication format. Decide how
 artifacts express required capabilities, runtime compatibility, and format
 versions; reject incompatible inputs clearly or rebuild from available source.
 Vite discovery and conservative creation fallback are implemented as described
-above. A dedicated library-build CLI and stronger executable/artifact integrity
-checks remain open decisions, not documented APIs.
+above. Post-bundle finalization now binds final JavaScript bytes, semantic
+metadata, and resolution fields; the Vite host verifies them before linking and
+watches the protected outputs. This catches stale/missing/changed published
+files, not dishonest metadata or incompatible runtime ABIs. A dedicated
+library-build CLI and runtime compatibility negotiation remain open decisions.
 
 ## Suggested sequence and acceptance gates
 
@@ -525,9 +528,10 @@ Bun, dev/prod SSR, browser interactions, and unused-export elimination. It
 exposed and closes named-barrel capability loss, optimized-entry metadata
 discovery, import-only SSR discovery, and late external runtime-copy request
 scope attachment. Framework dependencies still use the matching built checkout.
-Release integrity, runtime compatibility negotiation, and a dedicated library
-build command remain open; passing this gate is not a claim that the entire
-publication contract is stable.
+The tarball gate now uses the finalization stamp, including verification after
+the package manager packs/installs and rewrites dependency versions. Runtime
+compatibility negotiation and a dedicated library-build command remain open;
+passing this gate is not a claim that the entire publication contract is stable.
 
 The mixed JSX conditional issue found by this gate is now fixed generally:
 `refreshing ? 'Refreshing' : items.length` gates the payload expression, not
