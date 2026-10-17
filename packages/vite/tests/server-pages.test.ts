@@ -6,6 +6,7 @@ import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { createBuilder } from 'vite';
 import puppeteer from 'puppeteer-core';
+import { closeBrowser } from '../../../test-support/browser';
 import { createDevServer, type NativeDevServer } from '../src/dev';
 import memoizedDom from '../src';
 import { decodePageHtml } from '../../runtime/src/page-html';
@@ -139,5 +140,5 @@ it.each(['development','production','development-stream'] as const)('delivers fi
     await page.click('[data-toggle]');await page.waitForFunction(()=>!document.querySelector('[data-expanded]'),{polling:100});
     await page.click('[data-deny]');await page.waitForSelector('[data-denied]',{timeout:10_000});
     expect(await page.$('[data-board]')).toBeNull();expect(errors).toEqual([]);
-  }finally{await browser.close();}
+  }finally{await closeBrowser(browser);}
 },60_000);

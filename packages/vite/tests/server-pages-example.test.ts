@@ -3,6 +3,7 @@ import {spawn,type ChildProcess} from 'node:child_process';
 import {existsSync} from 'node:fs';
 import {resolve} from 'node:path';
 import puppeteer,{type HTTPRequest,type Page} from 'puppeteer-core';
+import { closeBrowser } from '../../../test-support/browser';
 import {waitFor} from '../../../test-support/helpers';
 
 const repository=resolve(import.meta.dirname,'../../..');
@@ -91,5 +92,5 @@ it.skipIf(!chrome)('keeps the documented server-pages example interactive across
     expect(await first.$eval('[data-receipt] h3',node=>node.textContent)).toBe('No submission yet');
     expect(errors).toEqual([]);
   }catch(error){throw new Error(`${String(error)}\n${log}`);}
-  finally{await browser.close();}
+  finally{await closeBrowser(browser);}
 },120_000);

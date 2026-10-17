@@ -4,6 +4,7 @@ import { pathToFileURL } from 'node:url';
 import { existsSync } from 'node:fs';
 import { spawn } from 'node:child_process';
 import puppeteer from 'puppeteer-core';
+import { closeBrowser } from '../../../test-support/browser';
 import { afterEach, describe, expect, it } from 'bun:test';
 import { createBuilder } from 'vite';
 import memoizedDom from '../src';
@@ -127,7 +128,7 @@ export const greeting = define.function({ get: async (_context, name: string) =>
       await writeFile(join(root, 'src/style.css'), 'h1 { color: rgb(65, 43, 21); }');
       await page.waitForFunction(() => getComputedStyle(document.querySelector('h1')!).color === 'rgb(65, 43, 21)');
       expect(errors).toEqual([]);
-    } finally { await browser.close(); }
+    } finally { await closeBrowser(browser); }
   }, 60_000);
 
   it('keeps in-flight streams alive and disposes retired server generations after they drain', async () => {

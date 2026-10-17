@@ -206,9 +206,11 @@ it.skipIf(!chrome)('automatically synchronizes Fieldnotes and protects multiple 
     const snapshots = await Promise.all(pages.map(page => bounded(page.evaluate(() => ({
       status: document.querySelector('[data-live-status]')?.textContent,
       rows: document.querySelectorAll('li.note').length,
+      input: (document.querySelector('.note-form input') as HTMLInputElement | null)?.value,
+      focused: document.activeElement?.outerHTML.slice(0, 120),
       text: document.body.innerText.slice(0, 1200),
     })), 'DOM diagnostics').catch(String)));
-    throw new Error(`${String(error)}\nDOM: ${JSON.stringify(snapshots)}\nBrowser errors: ${errors.join('\n')}\n${log}`);
+    throw new Error(`${String(error)}\nDOM: ${JSON.stringify(snapshots)}\nBrowser errors: ${errors.join('\n')}\nTraces: ${traces.join('\n')}\n${log}`);
   } finally {
     await wireReader?.cancel().catch(() => {});
     try { await bounded(browser.close(), 'browser cleanup'); }

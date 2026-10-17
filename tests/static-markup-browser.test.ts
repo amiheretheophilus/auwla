@@ -2,6 +2,7 @@
 import { existsSync } from 'node:fs';
 import { build } from 'esbuild';
 import puppeteer from 'puppeteer-core';
+import { closeBrowser } from '../test-support/browser';
 import { expect, it } from 'bun:test';
 import { compile } from '../packages/compiler/src/compile';
 
@@ -120,6 +121,6 @@ it.skipIf(!chromeExecutable())('preserves DOM shape and custom-element creation 
     }, code);
     expect(constructed).toBe(0);
   } finally {
-    await browser.close();
+    await closeBrowser(browser);
   }
 }, 60_000);

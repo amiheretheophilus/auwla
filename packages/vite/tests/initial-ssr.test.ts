@@ -6,6 +6,7 @@ import { pathToFileURL } from 'node:url';
 import { createServer } from 'node:http';
 import { build, type Rollup } from 'vite';
 import puppeteer, { type Page } from 'puppeteer-core';
+import { closeBrowser } from '../../../test-support/browser';
 import { afterEach, describe, expect, it } from 'bun:test';
 import type { MountedApplication } from '@memoized-dom/runtime';
 import memoizedDom from '../src';
@@ -151,7 +152,7 @@ async function browserPage(result: Awaited<ReturnType<typeof production>>, html:
     }
     expect(errors).toEqual([]);
   } finally {
-    try { await browser.close(); } finally { await new Promise<void>(done => server.close(() => done())); }
+    try { await closeBrowser(browser); } finally { await new Promise<void>(done => server.close(() => done())); }
   }
 }
 

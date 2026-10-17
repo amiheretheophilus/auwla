@@ -6,6 +6,7 @@ import {resolve} from 'node:path';
 import {pathToFileURL} from 'node:url';
 import {createBuilder} from 'vite';
 import puppeteer from 'puppeteer-core';
+import { closeBrowser } from '../../../test-support/browser';
 import {createDevServer,type NativeDevServer} from '../src/dev';
 import memoizedDom from '../src';
 
@@ -71,5 +72,5 @@ it.skipIf(!chrome).each(['development','production'] as const)('fills nested ser
     expect(await tab.evaluate(()=>document.activeElement===document.querySelector('[data-draft]'))).toBe(true);
     await tab.click('[data-local]');await tab.waitForFunction(()=>document.querySelector('[data-local]')?.textContent==='1');
     expect(requests).toEqual([]);expect(errors).toEqual([]);
-  }finally{await browser.close();}
+  }finally{await closeBrowser(browser);}
 },60_000);
