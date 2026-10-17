@@ -132,6 +132,13 @@ request and must return the state shape given to `createDefine()`.
 `app.fetch` remain application configuration rather than moving onto
 `define`.
 
+Live SSE sends idle keep-alives every 15 seconds by default. Configure a different
+interval in milliseconds with `serve({ define, liveHeartbeatInterval: 30_000 })`.
+This applies to shared and direct live connections. Actual data restarts the
+idle timer; updates arrive immediately and heartbeats do not rerun queries.
+Use a positive integer no greater than 2,147,483,647, below your deployment's
+idle timeout. See [idle keep-alives](./live-multiplexing.md#idle-keep-alives).
+
 The host boundary also remains intact. A delegated backend can still provide
 platform bindings for a request:
 

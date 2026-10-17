@@ -502,8 +502,12 @@ The generated facade handles headers and bodies; no authored SSE endpoint or
 EventSource wiring is needed. Complete values replace the source rather than
 implicitly appending array items. Parsing supports fragmented UTF-8 and CRLF/LF
 lines and rejects frames over 1 MiB. Server live queries use backpressure, one
-queued frame, coalesced invalidations, and 5-second idle heartbeats. Deployments
-still need a host and proxy that permit streamed responses.
+queued frame, coalesced invalidations, and 15-second idle heartbeats by default.
+`serve({ define, liveHeartbeatInterval: 30_000 })` overrides that idle interval in
+milliseconds for both direct and multiplexed live SSE. Actual data restarts the
+timer; heartbeats are keep-alive comments, not query polling. Updates never wait
+for a heartbeat. Deployments still need a host and proxy that permit streamed
+responses; choose an interval below their idle timeouts.
 Browser live server functions share a multiplexed connection within compatible
 runtime/origin/header boundaries. Dynamic subscriptions use batched controls;
 each query keeps its own cache, patch baseline, cursor, and optimistic holds.

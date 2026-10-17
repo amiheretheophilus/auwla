@@ -2,6 +2,7 @@ import { encodeLiveFrame as frame, LivePatchEncoder } from './live-patch';
 import { liveDiagnosticsEnabled, reportLiveDiagnostic, liveDiagnosticName } from '@memoized-dom/data/internal';
 import { isServerPageUpdates, type ServerPageUpdates } from './page-definition';
 import type { PageContent } from '@memoized-dom/runtime';
+import { resolveLiveHeartbeatInterval } from './live-heartbeat';
 
 /** Internal invalidation and delivery protocol; no authored SSE endpoints. */
 export type LiveKey = readonly (string | number | boolean | null)[];
@@ -204,7 +205,9 @@ export function createLiveSubscription(
 /** Direct SSE remains a supported transport over the same subscription engine. */
 export function liveResponse(hub: LiveHub, key: string, request: Request,
   query: (signal: AbortSignal) => Promise<unknown>, onError?: StreamErrorReporter,
+  heartbeatInterval?: number,
 ): Response {
+  const interval = resolveLiveHeartbeatInterval(heartbeatInterval);
   const subscription=createLiveSubscription(hub,key,request,query,onError);
   const version=request.headers.get('x-mmd-live-patches');
   const patches=version==='1'||version==='2'?new LivePatchEncoder(version==='2'):undefined;
@@ -220,7 +223,7 @@ export function liveResponse(hub: LiveHub, key: string, request: Request,
       try{
         if(stopped){controller.close();return;}
         pending??=subscription.next();
-        const next=await Promise.race([pending,new Promise<null>(resolve=>{wake=()=>resolve(null);heartbeat=setTimeout(wake,5_000);})]);
+        const next=await Promise.race([pending,new Promise<null>(resolve=>{wake=()=>resolve(null);heartbeat=setTimeout(wake,interval);})]);
         clearTimeout(heartbeat);wake=undefined;
         if(stopped){controller.close();return;}
         if(next===null){controller.enqueue(encoder.encode(': heartbeat\n\n'));return;}

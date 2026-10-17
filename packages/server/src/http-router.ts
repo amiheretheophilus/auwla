@@ -14,6 +14,7 @@ import type { StandardSchemaV1 } from '@memoized-dom/data';
 import { generatorResponse, liveHub, liveResponse, type LiveKey, type LiveStamp } from './live';
 import { isServerPage } from './page-definition';
 import { captureLiveResponse, createLiveSessions, createLiveSubscription, LIVE_SESSION_PATH } from './live-session';
+import { LIVE_HEARTBEAT_INTERVAL, resolveLiveHeartbeatInterval } from './live-heartbeat';
 
 const pageFetches = new WeakMap<object, typeof globalThis.fetch>();
 /** @internal Same request dispatch capability already used by document SSR. */
@@ -203,6 +204,8 @@ export interface ServerRouterOptions<
   readonly services?: TServices;
   /** Handles paths that have no HTTP route, such as an application page fallback. */
   readonly fallback?: ServerHandler<TLocals, TPlatform, TServices>;
+  /** Idle live SSE keep-alive interval in milliseconds; defaults to 15,000. */
+  readonly liveHeartbeatInterval?: number;
   readonly onError?: (
     error: unknown,
     context: ServerContext<TLocals, TPlatform, TServices>,
@@ -488,7 +491,8 @@ export function createServerFunctionRoutes<
             };
             const report=streamErrorReporters.get(context);
             return captureLiveResponse(context.request,run=>createLiveSubscription(hub,hub.key(key),context.request,
-              signal=>run(()=>query(signal),signal),report))??liveResponse(hub,hub.key(key),context.request,query,report);
+              signal=>run(()=>query(signal),signal),report))??liveResponse(hub,hub.key(key),context.request,query,report,
+                Reflect.get(context,LIVE_HEARTBEAT_INTERVAL) as number|undefined);
           }
           let cancellation = new AbortController();
           let value: unknown;
@@ -658,6 +662,7 @@ export function createServerRouter<
 >(
   options: ServerRouterOptions<TLocals, TPlatform, TServices>,
 ): ServerRouter<TLocals, TPlatform, TServices> {
+  const liveHeartbeatInterval = resolveLiveHeartbeatInterval(options.liveHeartbeatInterval);
   const routesByMethod = new Map<
     string,
     PreparedRoute<TLocals, TPlatform, TServices>[]
@@ -668,7 +673,7 @@ export function createServerRouter<
   >();
   const livePaths=new Set<string>();
   const liveSessions=createLiveSessions(path=>livePaths.has(path),(request,platform)=>dispatch(request,
-    platform===undefined?{}:{platform:platform as TPlatform}));
+    platform===undefined?{}:{platform:platform as TPlatform}),liveHeartbeatInterval);
 
   for (let routeIndex = 0; routeIndex < options.routes.length; routeIndex++) {
     const declared = options.routes[routeIndex]!;
@@ -850,14 +855,14 @@ export function createServerRouter<
     const platform = dispatchOptions.platform ?? options.createPlatform?.(request);
     const services = dispatchOptions.services ?? options.services ??
       (Object.create(null) as TServices);
-    const context: ServerContext<TLocals, TPlatform, TServices> = Object.freeze({
+    const context: ServerContext<TLocals, TPlatform, TServices> = Object.freeze(Object.defineProperty({
       request,
       url,
       params,
       state,
       platform,
       services,
-    });
+    }, LIVE_HEARTBEAT_INTERVAL, {value: liveHeartbeatInterval}));
     if (options.onError !== undefined) {
       streamErrorReporters.set(context, async error => {
         // Headers/status are already committed: use onError for server-side

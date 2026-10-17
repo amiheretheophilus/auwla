@@ -118,6 +118,8 @@ export interface ApplicationHandlerOptions<
   readonly createState?: (request: Request) => TLocals;
   readonly createPlatform?: (request: Request) => TPlatform | undefined;
   readonly services: TServices;
+  /** Idle live SSE keep-alive interval in milliseconds; defaults to 15,000. */
+  readonly liveHeartbeatInterval?: number;
   readonly fetch?: typeof globalThis.fetch;
   readonly onError?: (
     error: unknown,
@@ -431,6 +433,7 @@ export function createApplicationHandler<
     createPlatform: options.createPlatform,
     services: options.services,
     onError: options.onError,
+    liveHeartbeatInterval: options.liveHeartbeatInterval,
     fallback: async context => {
       const asset = await options.resolveAsset?.(context.request, context.platform);
       return asset ?? renderPage(context, options, router, template);

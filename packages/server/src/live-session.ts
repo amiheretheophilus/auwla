@@ -1,6 +1,7 @@
 /** Private, process-local multiplexed SSE sessions. Never a general request proxy. */
 import { createLiveSubscription, type LiveSubscription } from './live';
 import { encodeLiveFrame, LivePatchEncoder } from './live-patch';
+import { resolveLiveHeartbeatInterval } from './live-heartbeat';
 
 export const LIVE_SESSION_PATH = '/_memoized/live';
 const MAX_SUBSCRIPTIONS=64, MAX_SESSIONS=256, MAX_CONTROLS=4096;
@@ -58,7 +59,9 @@ async function control(request:Request):Promise<Control> {
 export function createLiveSessions(
   eligible:(path:string)=>boolean,
   dispatch:(request:Request, platform:unknown)=>Promise<Response>,
+  heartbeatInterval?: number,
 ):{handle(request:Request,platform?:unknown):Promise<Response>} {
+  const interval = resolveLiveHeartbeatInterval(heartbeatInterval);
   const sessions=new Map<string,Session>();
   class Session {
     readonly id=crypto.randomUUID();
@@ -161,7 +164,7 @@ export function createLiveSessions(
               return;
             }
             let idle=false;
-            await new Promise<void>(resolve=>{this.wake=resolve;this.timer=setTimeout(()=>{idle=true;resolve();},5000);});
+            await new Promise<void>(resolve=>{this.wake=resolve;this.timer=setTimeout(()=>{idle=true;resolve();},interval);});
             clearTimeout(this.timer);this.wake=undefined;
             if(idle&&!this.abort.signal.aborted){
               if(this.slots.size===0){this.stop();controller.close();return;}

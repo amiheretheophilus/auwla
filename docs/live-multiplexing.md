@@ -24,6 +24,31 @@ Ready subscriptions can deliver while another query is still pending. Frames
 within a subscription remain ordered. Async validation and page binding loads
 must not block unrelated subscriptions.
 
+### Idle keep-alives
+
+Live SSE sends a `: heartbeat` comment after **15 seconds without a delivered
+frame** by default. It keeps the existing connection active; it does not make a
+new request, rerun queries, or render UI. Actual frames restart the idle timer.
+Multiplexed subscriptions share one heartbeat timer per connection, not one per
+query. Direct live SSE uses the same policy.
+
+Override the interval on the server application if your deployment needs it:
+
+```ts
+const app = serve({
+  define,
+  liveHeartbeatInterval: 30_000, // milliseconds; omit for 15,000
+});
+```
+
+The value must be an integer from 1 to 2,147,483,647 milliseconds. Zero does not
+disable heartbeats. Select an interval below your host/proxy idle timeout; a
+longer heartbeat interval never delays real updates. The setting belongs to
+this application, not to individual functions or browser subscriptions. Finite
+responses and generator transports are unchanged.
+
+### Subscription lifetime
+
 The client batches initial subscriptions and subsequent subscribe/unsubscribe
 controls. Adding a source does not reconnect mounted siblings. Replacing a
 source or recovering its patch baseline uses a fresh subscription identity so

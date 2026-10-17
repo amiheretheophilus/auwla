@@ -28,6 +28,7 @@ import {
 } from './define';
 import type { ServerComponent } from './index';
 import type { ServerIntegration } from './integration';
+import { resolveLiveHeartbeatInterval } from './live-heartbeat';
 
 type ServerMethod =
   | 'GET'
@@ -76,6 +77,8 @@ export interface ServeOptions<
   TServices extends object = RegisteredServerServices,
 > {
   readonly define: ServerDefinition<TLocals, TPlatform, TServices>;
+  /** Idle live SSE keep-alive interval in milliseconds; defaults to 15,000. */
+  readonly liveHeartbeatInterval?: number;
   readonly state?: (request: Request) => NoInfer<TLocals>;
   readonly platform?: (request: Request) => NoInfer<TPlatform> | undefined;
   /**
@@ -198,6 +201,7 @@ export function serve<
     TServices
   >,
 ): ServerApplication<TLocals, TPlatform, TServices> {
+  const liveHeartbeatInterval = resolveLiveHeartbeatInterval(options.liveHeartbeatInterval);
   const middleware: ServerMiddleware<TLocals, TPlatform, TServices>[] = [];
   const groups: ServerMiddlewareGroup<TLocals, TPlatform, TServices>[] = [];
   const routes: ServerRoute<TLocals, TPlatform, TServices>[] = [];
@@ -263,6 +267,7 @@ export function serve<
         createPlatform: options.platform,
         services,
         onError: options.onError,
+        liveHeartbeatInterval,
         render: options.render,
         onRender: options.onRender,
       });
