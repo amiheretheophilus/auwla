@@ -20,7 +20,7 @@ import {
   moduleFunctionStringCandidates,
   moduleStateStringCandidates,
 } from '../analysis/type-candidates';
-import { canonicalStateKey, isConstObjectState, isStoreObject, nodeHasJsx, unwrapTypeExpression, type LinkedImport, type StateKind, type TransparentSourceMethod } from '../context';
+import { canonicalStateKey, isConstObjectState, isStoreObject, nodeHasJsx, unwrapTypeExpression, walkNodes, type Ctx, type LinkedImport, type StateKind, type TransparentSourceMethod } from '../context';
 import { createCtx } from '../dom/context';
 import { DEFAULT_TRANSPARENT_ASYNC_SOURCES } from '../context/model';
 import { renderPropReferenceName } from '../analysis/render-prop-reference';
@@ -397,6 +397,30 @@ function applicationMounts(
   return mounted;
 }
 
+/**
+ * A class whose body names module state or a module/imported function can
+ * change shared state through its instances. Over-approximation only widens
+ * the caller's invalidation, so shadowing is deliberately ignored.
+ */
+function classReachesSharedState(ctx: Ctx, program: t.Program, local: string): boolean {
+  const declaration = program.body
+    .map(statement => astFactory.isExportNamedDeclaration(statement) ||
+      astFactory.isExportDefaultDeclaration(statement) ? statement.declaration : statement)
+    .find((node): node is t.ClassDeclaration =>
+      astFactory.isClassDeclaration(node) && node.id?.name === local);
+  if (declaration === undefined) return false;
+  let reaches = false;
+  walkNodes(declaration.body as unknown as BaseNode, node => {
+    if (reaches) return false;
+    if (!astFactory.isIdentifier(node)) return;
+    const name = node.name;
+    reaches = ctx.state.has(name) || ctx.importedState.has(name) ||
+      ctx.transparentModuleSources.has(name) || ctx.helpers.has(name) ||
+      ctx.importedFunctions.has(name) || ctx.importedReactiveClasses.has(name);
+  });
+  return reaches;
+}
+
 export function exportedLocals(program: t.Program): Map<string, string> {
   const out = new Map<string, string>();
   for (const stmt of program.body) {
@@ -424,7 +448,10 @@ export function exportedLocals(program: t.Program): Map<string, string> {
       for (const item of decl.declarations) {
         if (astFactory.isIdentifier(item.id)) out.set(item.id.name, item.id.name);
       }
-    } else if (astFactory.isFunctionDeclaration(decl) && decl.id != null) {
+    } else if (
+      (astFactory.isFunctionDeclaration(decl) || astFactory.isClassDeclaration(decl)) &&
+      decl.id != null
+    ) {
       out.set(decl.id.name, decl.id.name);
     }
     for (const spec of stmt.specifiers) {
@@ -592,7 +619,9 @@ export function analyzeManifest(
             };
             continue;
           }
-          exports[exported] = { type: 'value' };
+          exports[exported] = classReachesSharedState(ctx, compilerPath.node, local)
+            ? { type: 'value', reactiveClass: true }
+            : { type: 'value' };
         }
         manifest = {
           exports,

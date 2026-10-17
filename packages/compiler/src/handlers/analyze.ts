@@ -182,7 +182,7 @@ export function planHandlerWrites(
   const outerScope = ctx.astAnalysis?.rootScope;
   if (outerScope !== undefined) {
     const program = outerScope.block as t.Program;
-    const reactiveClasses = new Set<string>();
+    const reactiveClasses = new Set<string>(ctx.importedReactiveClasses);
     for (const statement of program.body) {
       const declaration = astFactory.isExportNamedDeclaration(statement)
         ? statement.declaration : statement;

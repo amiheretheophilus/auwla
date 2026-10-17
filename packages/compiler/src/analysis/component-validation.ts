@@ -29,6 +29,37 @@ function isRenderAttributeContainer(ctx: Ctx, container: BaseNode): boolean {
   );
 }
 
+const LOOP_TYPES = new Set([
+  'ForStatement', 'ForInStatement', 'ForOfStatement', 'WhileStatement', 'DoWhileStatement',
+]);
+const COLLECTING_METHODS = new Set(['push', 'unshift', 'splice']);
+
+/**
+ * JSX collected into an array by a loop or push() is created once during
+ * setup and never re-run. Name that shape instead of reporting its symptoms
+ * (a misplaced key, or leftover JSX) so authors reach for `.map()`.
+ */
+function isImperativeJsx(ctx: Ctx, element: BaseNode): boolean {
+  let child = element;
+  let parent = ctx.astAnalysis?.parentByNode.get(element) ?? null;
+  while (parent !== null) {
+    if (parent.type === 'JSXElement' || parent.type === 'JSXFragment' ||
+        parent.type === 'JSXExpressionContainer' || parent.type === 'ReturnStatement' ||
+        astFactory.isFunction(parent)) return false;
+    if (LOOP_TYPES.has(parent.type)) return true;
+    if (parent.type === 'CallExpression') {
+      const call = parent as unknown as t.CallExpression;
+      if ((call.arguments as readonly BaseNode[]).includes(child) &&
+          astFactory.isMemberExpression(call.callee) && !call.callee.computed &&
+          astFactory.isIdentifier(call.callee.property) &&
+          COLLECTING_METHODS.has(call.callee.property.name)) return true;
+    }
+    child = parent;
+    parent = ctx.astAnalysis?.parentByNode.get(parent) ?? null;
+  }
+  return false;
+}
+
 // ---------------------------------------------------------------------
 // pass 1
 // ---------------------------------------------------------------------
@@ -80,6 +111,12 @@ export function analyzeComponent(ctx: Ctx, name: string): void {
       if (!astFactory.isJSXIdentifier(openName)) {
         return fail(
           'memo-dom: namespaced or member-expression JSX tags are not supported (L1)',
+        );
+      }
+      if (isImperativeJsx(ctx, node)) {
+        fail(
+          'memo-dom: JSX built in a loop or with push() runs once and never updates — render lists with items.map(item => <Row key={item.id} />) as a direct JSX child',
+          node as unknown as t.Node,
         );
       }
       // key is region metadata — meaningless (and misleading) elsewhere

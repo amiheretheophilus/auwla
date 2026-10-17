@@ -453,6 +453,7 @@ export function linkImports(
     } else if (targetExport.type === 'value') {
       linked[ref.local] = {
         type: 'value',
+        ...(targetExport.reactiveClass === true ? { reactiveClass: true } : {}),
       };
       continue;
     } else {

@@ -43,7 +43,7 @@ import { planHandlerWrites } from '../handlers/analyze';
 import { emitHandlerWrites } from './handler';
 import { mutationJournalVariable } from './list-bindings';
 import { callsOnlyCommittedLocalHelpers } from '../handlers/local-calls';
-import {hasConditionalRootExecution,resolveLocalHelper} from '../planning/component-callbacks';
+import {hasConditionalRootExecution,localCallableName,resolveLocalCallable,resolveLocalHelper,resolveLocalMethod} from '../planning/component-callbacks';
 import type {CallbackSourcePlan,ComponentCallbacks} from '../planning/component-callbacks';
 import {emitComponentCallback} from './component-callback';
 
@@ -140,6 +140,11 @@ export function buildHandler(
     );
   }
 
+  const localMethod =
+    astFactory.isMemberExpression(value) && !value.computed &&
+    astFactory.isIdentifier(value.object) && astFactory.isIdentifier(value.property)
+      ? resolveLocalMethod(ctx, compPath, value.object.name, value.property.name)
+      : null;
   if (astFactory.isArrowFunctionExpression(value) || astFactory.isFunctionExpression(value)) {
     target = value;
   } else if (astFactory.isIdentifier(value)) {
@@ -187,6 +192,10 @@ export function buildHandler(
         `memo-dom: cannot resolve handler '${value.name}' — use an inline arrow, a component-local const, or a module-level function (L1)`,
       );
     }
+  } else if (localMethod !== null) {
+    // A method of a component-local const command table is a named local
+    // helper: instrument it in place and pass the member reference through.
+    target = localMethod;
   } else {
     throw compPath.buildCodeFrameError(
       `memo-dom: unsupported ${attrName} handler form — expected an arrow function or a function reference (L1)`,
@@ -209,9 +218,9 @@ export function buildHandler(
     }
     const committedLocalDelegation =
       !forceTable &&
-      !astFactory.isIdentifier(value) &&
+      localCallableName(value) === null &&
       callsOnlyCommittedLocalHelpers(target, (name) => {
-        const helper = resolveLocalHelper(ctx, compPath, name);
+        const helper = resolveLocalCallable(ctx, compPath, name);
         return (
           helper !== null &&
           ctx.handlerHasRootCommit.get(helper) === true
@@ -223,11 +232,12 @@ export function buildHandler(
     // A handler RESOLVED BY NAME lives at component scope, so row-scoped
     // commit identifiers are never valid inside it — analyze it without the
     // row context even when the reference site is a row.
-    const nameResolved = astFactory.isIdentifier(value) && !forceTable && rowCtx?.refreshVar === undefined;
+    const named = localCallableName(value) !== null;
+    const nameResolved = named && !forceTable && rowCtx?.refreshVar === undefined;
     const directEventBoundary =
       !forceTable &&
       !target.async &&
-      (!astFactory.isIdentifier(value) || target.params.length > 0) &&
+      (!named || target.params.length > 0) &&
       !committedLocalDelegation;
     analyzeHandler(
       ctx,
@@ -269,7 +279,7 @@ export function buildHandler(
     }
   }
   if (
-    astFactory.isIdentifier(value) &&
+    localCallableName(value) !== null &&
     !forceTable &&
     (ctx.handlerHasRootCommit.get(target) === false || target.async)
   ) {
@@ -279,5 +289,5 @@ export function buildHandler(
       buildEventOriginCommit(ctx, compName, rowCtx, eventOriginId),
     );
   }
-  return astFactory.isIdentifier(value) ? value : (target as t.Expression);
+  return localCallableName(value) !== null ? value : (target as t.Expression);
 }

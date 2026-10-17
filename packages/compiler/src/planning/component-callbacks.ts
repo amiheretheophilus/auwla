@@ -27,6 +27,43 @@ export function resolveLocalHelper(ctx:Ctx, path:ComponentPath, name:string):Cal
   return init && (astFactory.isArrowFunctionExpression(init)||astFactory.isFunctionExpression(init)) ? init : null;
 }
 
+/**
+ * Resolve `object.method` where `object` is a factory-local `const` object
+ * literal and `method` is a non-computed property holding a function. Such a
+ * command table is the same lexical helper as a named local function.
+ */
+export function resolveLocalMethod(ctx:Ctx, path:ComponentPath, object:string, method:string):Callback|null {
+  const binding=astBindingAt(ctx,path.node as unknown as BaseNode,object);
+  if (!binding || binding.scope.getFunctionScope()?.block!==path.node || binding.kind!=='const') return null;
+  const init=variableDeclaratorFor(ctx,binding)?.init;
+  if (!init || !astFactory.isObjectExpression(init)) return null;
+  for (const property of init.properties) {
+    if (!astFactory.isObjectProperty(property) || property.computed || property.kind!=='init') continue;
+    const key=astFactory.isIdentifier(property.key) ? property.key.name :
+      astFactory.isStringLiteral(property.key) ? property.key.value : null;
+    if (key!==method) continue;
+    const value=property.value as t.Node;
+    return astFactory.isArrowFunctionExpression(value)||astFactory.isFunctionExpression(value) ? value : null;
+  }
+  return null;
+}
+
+/** A local callable name: `helper` or `object.method` for a local command table. */
+export function localCallableName(callee:t.Node):string|null {
+  if (astFactory.isIdentifier(callee)) return callee.name;
+  if (astFactory.isMemberExpression(callee) && !callee.computed &&
+      astFactory.isIdentifier(callee.object) && astFactory.isIdentifier(callee.property)) {
+    return `${callee.object.name}.${callee.property.name}`;
+  }
+  return null;
+}
+
+/** Resolve either a local helper or a local command-table method by name. */
+export function resolveLocalCallable(ctx:Ctx, path:ComponentPath, name:string):Callback|null {
+  const dot=name.indexOf('.');
+  return dot<0 ? resolveLocalHelper(ctx,path,name) : resolveLocalMethod(ctx,path,name.slice(0,dot),name.slice(dot+1));
+}
+
 export function hasConditionalRootExecution(target:Callback):boolean {
   let conditional=false;
   walkNodes(target.body,node=>{
@@ -51,7 +88,8 @@ export function planComponentCallbacks(ctx:Ctx,name:string,path:ComponentPath):C
   const capture=(node:Callback)=>{
     const calls=new Set<string>();
     walkNodes(node.body,child=>{
-      if(astFactory.isCallExpression(child)&&astFactory.isIdentifier(child.callee))calls.add(child.callee.name);
+      const callee=astFactory.isCallExpression(child)?localCallableName(child.callee):null;
+      if(callee!==null)calls.add(callee);
     });
     return {copy:node,calls:[...calls],conditional:hasConditionalRootExecution(node)};
   };
@@ -66,6 +104,15 @@ export function planComponentCallbacks(ctx:Ctx,name:string,path:ComponentPath):C
       astFactory.isVariableDeclaration(statement) ? statement.declarations.flatMap(declaration=>
         astFactory.isIdentifier(declaration.id)?[declaration.id.name]:[]) : [];
     for(const local of names){const helper=resolveLocalHelper(ctx,path,local);if(helper)helpers.set(local,helper);}
+    if(!astFactory.isVariableDeclaration(statement)||statement.kind!=='const')continue;
+    for(const declaration of statement.declarations){
+      if(!astFactory.isIdentifier(declaration.id)||!declaration.init||!astFactory.isObjectExpression(declaration.init))continue;
+      for(const property of declaration.init.properties){
+        if(!astFactory.isObjectProperty(property)||property.computed||!astFactory.isIdentifier(property.key))continue;
+        const key=`${declaration.id.name}.${property.key.name}`,method=resolveLocalCallable(ctx,path,key);
+        if(method)helpers.set(key,method);
+      }
+    }
   }
   // Backend replacement mutates ComponentPath.node. Preserve the authored
   // factory references used by semantic queries, sharing publication facts.
@@ -87,7 +134,7 @@ export function planComponentCallbacks(ctx:Ctx,name:string,path:ComponentPath):C
   }
   const resolve=(value:t.Expression,executionAware:boolean)=>{
     const target=astFactory.isArrowFunctionExpression(value)||astFactory.isFunctionExpression(value) ? value :
-      astFactory.isIdentifier(value)?helpers.get(value.name):undefined;
+      (()=>{const local=localCallableName(value);return local===null?undefined:helpers.get(local);})();
     return target?sourceFor(target,executionAware,new Set([target])):null;
   };
   return {

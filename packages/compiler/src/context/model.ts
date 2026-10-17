@@ -268,6 +268,8 @@ export interface LinkedComponentPropSource {
 
 export interface LinkedValueImport {
   type: 'value';
+  /** An exported class whose methods can reach module state or helpers. */
+  reactiveClass?: true;
 }
 
 export type LinkedImport =
@@ -491,6 +493,8 @@ export interface Ctx {
   importedFunctions: Map<string, FnSummary>;
   importedComponents: Map<string, LinkedComponentImport>;
   importedValues: Set<string>;
+  /** Imported classes whose instances' methods can change shared state. */
+  importedReactiveClasses: Set<string>;
   linkedComponentPaths: Map<string, string[]>;
   /** Graph-linked keyed-row modes for declarations in this module. */
   linkedComponentRows: Map<string, LinkedComponentRowUse[]>;
@@ -662,6 +666,7 @@ export function createAnalysisCtx(opts: AnalysisOptions = {}): Ctx {
   const importedFunctions = new Map<string, FnSummary>();
   const importedComponents = new Map<string, LinkedComponentImport>();
   const importedValues = new Set<string>();
+  const importedReactiveClasses = new Set<string>();
   for (const [local, linked] of Object.entries(opts.linkedImports ?? {})) {
     if (linked.type === 'state') {
       state.set(local, linked.kind);
@@ -720,6 +725,7 @@ export function createAnalysisCtx(opts: AnalysisOptions = {}): Ctx {
       });
     } else if (linked.type === 'value') {
       importedValues.add(local);
+      if (linked.reactiveClass === true) importedReactiveClasses.add(local);
     } else {
       importedComponents.set(local, linked);
     }
@@ -791,6 +797,7 @@ export function createAnalysisCtx(opts: AnalysisOptions = {}): Ctx {
     importedFunctions,
     importedComponents,
     importedValues,
+    importedReactiveClasses,
     transparentModuleSources,
     transparentSourceProps: new Map(),
     presentationOwners: new Map(),
