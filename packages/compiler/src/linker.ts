@@ -79,6 +79,7 @@ import { planInitialDelivery, type InitialDelivery } from './dom/delivery-plan';
 import { normalizeComponentDeclarations } from './components/declarations';
 import { normalizeComponentSlots } from './jsx/component-slots';
 import { extractExperimentalPackageRenderPlan, packageInitialDom } from './linking/package-render';
+import { normalizeNamedReexports } from './linking/reexports';
 
 export interface CompiledComponentExport extends Omit<ComponentExportInfo, 'key'> {
   exported: string;
@@ -197,6 +198,7 @@ function parseModule(
     sourceType: 'module',
   });
   const ast = parsed.program as unknown as t.Program;
+  normalizeNamedReexports(ast);
   // Discovery must see the same generated provider imports as final emission,
   // including route preparation and exported module-source identities.
   installCompilerIntrinsics(createCtx({ moduleId: id }), {
@@ -585,7 +587,7 @@ function compileLinkedModules(
   modules: Readonly<Record<string, string>>,
   options: CompileModulesOptions,
   sourceMaps: boolean,
-  packageBindings?: (entry: ModuleEntry, metadata: CompiledModuleMetadata) => Readonly<Record<string, InitialDomRoot>>,
+  packageBindings?: (entry: ModuleEntry, metadata: CompiledModuleMetadata, manifest: ModuleManifest) => Readonly<Record<string, InitialDomRoot>>,
 ): CompiledModules {
   const frontend = options.frontend ?? memoizedEstreeFrontend;
   const entries = new Map<string, ModuleEntry>();
@@ -631,9 +633,18 @@ function compileLinkedModules(
         const reference = manifest.imports.find(candidate => candidate.local === local);
         if (reference === undefined || reference.imported === '*') continue;
         const target = resolveModule(entry.id, reference.source, entries, options);
-        const identity = target === undefined ? undefined : discovered.get(target.id)?.exports[reference.imported];
+        const identity = target === undefined
+          ? linkImports(entry, { ...manifest, imports: [reference] }, discovered, entries, options)[local]
+          : discovered.get(target.id)?.exports[reference.imported];
         if (identity?.type !== 'component') continue;
-        manifest.exports[exported] = identity;
+        manifest.exports[exported] = { ...identity,
+          delegatedEvents: [...(identity.delegatedEvents ?? [])],
+          renderProps: [...(identity.renderProps ?? [])],
+          slots: [...(identity.slots ?? [])],
+          renderCallbacks: [...(identity.renderCallbacks ?? [])],
+          refProps: [...(identity.refProps ?? [])],
+          subtreeReads: [...(identity.subtreeReads ?? [])],
+        };
         changed = true;
       }
     }
@@ -979,7 +990,7 @@ function compileLinkedModules(
         : {}),
       ...(packageBindings === undefined ? {} : {
         packageEmission: true,
-        initialDomComponents: packageBindings(entry, metadata[entry.originalId]!),
+        initialDomComponents: packageBindings(entry, metadata[entry.originalId]!, manifest),
       }),
     };
     const initialComponents=Object.fromEntries(Object.entries(initialDom?.factories??{}).flatMap(([key,plan])=>
@@ -1070,7 +1081,9 @@ export function experimentalCompilePackage(
   const { packageEntries, ...compileOptions } = options;
   const entries: ExperimentalPackageArtifact['entries'] = {};
   const initialPrograms = new Map<string, t.Program>();
-  const initialPlans = new Map<string, Map<string, ExperimentalPackageRenderPlan>>();
+  const initialPlans = new Map<string, ExperimentalPackageRenderPlan>();
+  const componentKeys = new Map<string, string>();
+  const componentModules = new Map<string, string>();
 
   const initialProgram = (entry: ModuleEntry): t.Program => {
     const existing = initialPrograms.get(entry.originalId);
@@ -1086,11 +1099,14 @@ export function experimentalCompilePackage(
     return parsed;
   };
 
-  const compiled = compileLinkedModules(modules, compileOptions, true, (entry, metadata) => {
-    const templates = new Map<string, ExperimentalPackageRenderPlan>();
-    initialPlans.set(entry.originalId, templates);
+  const compiled = compileLinkedModules(modules, compileOptions, true, (entry, metadata, manifest) => {
     const bindings: Record<string, InitialDomRoot> = {};
     for (const summary of metadata.componentExports) {
+      const identity = manifest.exports[summary.exported];
+      if (identity?.type !== 'component') continue;
+      componentKeys.set(`${entry.originalId}#${summary.exported}`, identity.key);
+      if (!manifest.components.some(component => component.key === identity.key)) continue;
+      componentModules.set(identity.key, entry.originalId);
       const scalarProps = new Set(summary.props.filter(prop =>
         !summary.renderProps.includes(prop) &&
         !summary.renderCallbacks.includes(prop) &&
@@ -1103,7 +1119,7 @@ export function experimentalCompilePackage(
       // A handler-bearing template must not become inert static HTML when its
       // factory cannot adopt that shape. Keep ordinary creation in that case.
       if (template.events && dom === undefined) continue;
-      templates.set(summary.local, dom === undefined ? { root: template.root } : {
+      initialPlans.set(identity.key, dom === undefined ? { root: template.root } : {
         root: template.root,
         adoption: dom.packageSlotsV2 ? 'host-slots-v2' : template.events ? 'host-events-v1' : summary.slots.length > 0 ? 'host-slots-v1' : 'host-v1',
         ...(dom.packageSlotsV2 && template.events ? {events:true as const} : {}),
@@ -1203,7 +1219,13 @@ export function experimentalCompilePackage(
         );
       }
       for (const summary of selectedComponents) {
-        const initial = initialPlans.get(moduleId)?.get(summary.local);
+        const identity = componentKeys.get(`${moduleId}#${summary.exported}`);
+        const owner = identity === undefined ? undefined : componentModules.get(identity);
+        const origin = owner === undefined ? undefined : compiled.metadata[owner];
+        if (origin && (Object.keys(origin.readers).length > 0 || origin.routedPreparations.length > 0)) {
+          throw new Error(`memo-dom: experimental package entry '${specifier}' re-exports components with package module state or routed preparation; package state/route linking is not implemented`);
+        }
+        const initial = identity === undefined ? undefined : initialPlans.get(identity);
         components[summary.exported] = {
           key: `package:${specifier}#${summary.exported}`,
           props: [...summary.props],

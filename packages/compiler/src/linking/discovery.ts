@@ -3,6 +3,7 @@ import * as astFactory from '../ast/factory';
 import {
   cloneNode as cloneEstreeNode,
   ESTREE_VISITOR_KEYS,
+  nodeField,
   walkAst,
   type BaseNode,
 } from '../ast';
@@ -412,6 +413,7 @@ export function exportedLocals(program: t.Program): Map<string, string> {
       continue;
     }
     if (!astFactory.isExportNamedDeclaration(stmt)) continue;
+    if (nodeField(stmt as unknown as BaseNode, 'exportKind') === 'type') continue;
     if (stmt.source !== null) {
       throw new Error(
         `memo-dom: re-export-from declarations are not supported by compileModules(); import then export the binding explicitly`,
@@ -427,6 +429,7 @@ export function exportedLocals(program: t.Program): Map<string, string> {
     }
     for (const spec of stmt.specifiers) {
       if (!astFactory.isExportSpecifier(spec)) continue;
+      if (nodeField(spec as unknown as BaseNode, 'exportKind') === 'type') continue;
       const local = spec.local.name;
       const exported = astFactory.isStringLiteral(spec.exported)
         ? spec.exported.value

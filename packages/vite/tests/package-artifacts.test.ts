@@ -2,11 +2,49 @@ import { describe, expect, it } from 'bun:test';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { experimentalCompilePackage } from '@memoized-dom/compiler';
+import { experimentalCompilePackage, memoizedEstreeFrontend, parseWithEstreeFrontendOrThrow } from '@memoized-dom/compiler';
 import { compileGraph, type GraphPluginContext } from '../src/graph/collector';
 import { resolveAdapterOptions } from '../src/options';
+import { discoverPackageArtifact, packageArtifactSource } from '../src/graph/package-artifacts';
+import { valueImports } from '../src/graph/imports';
 
 describe('package compilation artifacts', () => {
+  it('follows exact optimized entry origins instead of guessing from package names', () => {
+    const metadata = { depInfoList: [
+      { id: 'library', file: '/cache/library.js', src: '/first/node_modules/library/dist/index.js' },
+      { id: 'library-copy', file: '/cache/library-copy.js', src: '/second/node_modules/library/dist/index.js' },
+      { id: 'chunk', file: '/cache/chunk.js' },
+    ] };
+    expect(packageArtifactSource('/cache/library.js?v=123', metadata)).toBe('/first/node_modules/library/dist/index.js');
+    expect(packageArtifactSource('/cache/library-copy.js?v=456', metadata)).toBe('/second/node_modules/library/dist/index.js');
+    expect(packageArtifactSource('/cache/chunk.js?v=789', metadata)).toBe('/cache/chunk.js?v=789');
+    expect(packageArtifactSource('/other/library.js', metadata)).toBe('/other/library.js');
+  });
+
+  it('collects named value re-exports while leaving type-only dependencies out', () => {
+    const program = parseWithEstreeFrontendOrThrow(memoizedEstreeFrontend,
+      `export {make,type Options} from 'library';export type {Other} from 'types-only';
+       export {privateValue} from '#server/private';`, { filename: './barrel.ts', sourceType: 'module' }).program;
+    expect(valueImports(program).map(reference => reference.specifier)).toEqual(['library', '#server/private']);
+  });
+
+  it('discovers import-only external SSR entries whose manifest is hidden by exports', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'mmd-import-only-artifact-'));
+    const directory = join(root, 'node_modules/import-only');
+    mkdirSync(directory, { recursive: true });
+    const compiled = experimentalCompilePackage({ './index.ts': 'export function identity(value:number){return value;}' },
+      { packageEntries: { 'import-only': './index.ts' } });
+    writeFileSync(join(directory, 'index.js'), compiled.output['./index.ts']!);
+    writeFileSync(join(directory, 'artifact.json'), JSON.stringify(compiled.artifact));
+    writeFileSync(join(directory, 'package.json'), JSON.stringify({ name: 'import-only', type: 'module',
+      exports: { '.': { import: './index.js' } }, 'memoized-dom': { artifact: './artifact.json' } }));
+    try {
+      const found = await discoverPackageArtifact('import-only', 'import-only', join(root, 'App.tsx'));
+      expect(found?.artifact.entries['import-only']?.functions.identity).toBeDefined();
+      expect(await discoverPackageArtifact('another-external-id', 'import-only', join(root, 'App.tsx'))).toBeUndefined();
+    } finally { rmSync(root, { recursive: true, force: true }); }
+  });
+
   it('discovers generated host adoption contracts for reactive initial HTML', async () => {
     const root = mkdtempSync(join(tmpdir(), 'mmd-package-adoption-'));
     const entry = join(root, 'main.ts');

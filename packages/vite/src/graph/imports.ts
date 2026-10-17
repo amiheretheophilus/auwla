@@ -1,31 +1,34 @@
 /**
- * Extracts statically imported value modules from Rolldown's parsed AST.
+ * Extracts value dependencies from imports and re-exports in the parsed AST.
  */
-interface ImportSpecifier {
+interface ModuleSpecifier {
   importKind?: 'type' | 'value';
+  exportKind?: 'type' | 'value';
 }
 
-interface ImportDeclaration {
-  type: 'ImportDeclaration';
+interface ModuleReference {
+  type: 'ImportDeclaration' | 'ExportNamedDeclaration' | 'ExportAllDeclaration';
   importKind?: 'type' | 'value';
+  exportKind?: 'type' | 'value';
   source: {
     value?: unknown;
     loc?: {
       start: { line: number; column: number };
     } | null;
   };
-  specifiers?: readonly ImportSpecifier[];
+  specifiers?: readonly ModuleSpecifier[];
 }
 
 interface Program {
   body: readonly unknown[];
 }
 
-function isImportDeclaration(node: unknown): node is ImportDeclaration {
+function isModuleReference(node: unknown): node is ModuleReference {
   return (
     typeof node === 'object' &&
     node !== null &&
-    (node as { type?: unknown }).type === 'ImportDeclaration'
+    ['ImportDeclaration', 'ExportNamedDeclaration', 'ExportAllDeclaration'].includes(String((node as { type?: unknown }).type)) &&
+    (node as { source?: unknown }).source != null
   );
 }
 
@@ -38,11 +41,11 @@ export interface ValueImport {
 export function valueImports(program: Program): ValueImport[] {
   const imports: ValueImport[] = [];
   for (const node of program.body) {
-    if (!isImportDeclaration(node) || node.importKind === 'type') continue;
+    if (!isModuleReference(node) || node.importKind === 'type' || node.exportKind === 'type') continue;
     const specifiers = node.specifiers ?? [];
     if (
       specifiers.length > 0 &&
-      specifiers.every((specifier) => specifier.importKind === 'type')
+      specifiers.every((specifier) => specifier.importKind === 'type' || specifier.exportKind === 'type')
     ) {
       continue;
     }

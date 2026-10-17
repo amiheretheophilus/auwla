@@ -13,6 +13,7 @@ import type {
 } from 'vite';
 import type { GraphPluginContext } from './graph/collector';
 import { compileGraph } from './graph/collector';
+import { packageArtifactSource } from './graph/package-artifacts';
 import { writeRoutesDeclaration } from './routes';
 import { invalidateManagedModules } from './hmr';
 import {
@@ -67,7 +68,7 @@ const statefulRuntimePackages = [
 ];
 
 interface AdapterTransformContext extends GraphPluginContext {
-  environment: { name: string };
+  environment: Pick<DevEnvironment, 'name' | 'depsOptimizer'>;
 }
 
 export function memoizedDom(
@@ -138,11 +139,14 @@ export function memoizedDom(
   }
 
   function graphContext(
-    context: GraphPluginContext,
+    context: GraphPluginContext & { environment?: AdapterTransformContext['environment'] },
   ): GraphPluginContext {
     return {
-      resolve: (specifier, importer, resolveOptions) =>
-        context.resolve(specifier, importer, resolveOptions),
+      async resolve(specifier, importer, resolveOptions) {
+        const resolved = await context.resolve(specifier, importer, resolveOptions);
+        return resolved === null ? null : { ...resolved,
+          id: packageArtifactSource(resolved.id, context.environment?.depsOptimizer?.metadata) };
+      },
       addWatchFile(watched) {
         context.addWatchFile(watched);
         devServer?.watcher.add(watched);
@@ -161,7 +165,7 @@ export function memoizedDom(
           await environment.pluginContainer.resolveId(specifier, importer);
         return resolved === null
           ? null
-          : { id: resolved.id, external: resolved.external };
+          : { id: packageArtifactSource(resolved.id, environment.depsOptimizer?.metadata), external: resolved.external };
       },
       addWatchFile(watched) {
         environment.pluginContainer.watchFiles.add(watched);

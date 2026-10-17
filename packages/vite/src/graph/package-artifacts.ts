@@ -2,6 +2,7 @@ import { existsSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import { dirname, isAbsolute, join, parse, relative, resolve, sep } from 'node:path';
+import type { DepOptimizationMetadata } from 'vite';
 import {
   experimentalPackageArtifactInstance,
   validateExperimentalPackageArtifact,
@@ -13,6 +14,12 @@ interface PackageManifest {
   readonly 'memoized-dom'?: {
     readonly artifact?: string;
   };
+}
+
+/** Semantic discovery follows Vite's real package entry, not its cache wrapper. */
+export function packageArtifactSource(id: string, metadata?: Pick<DepOptimizationMetadata, 'depInfoList'>): string {
+  const file = id.replace(/[?#].*$/, '').replaceAll('\\', '/');
+  return metadata?.depInfoList.find(info => info.src && info.file.replaceAll('\\', '/') === file)?.src ?? id;
 }
 
 function packageName(specifier: string): string | undefined {
@@ -41,9 +48,21 @@ function resolvableFile(
   importer: string,
 ): string | undefined {
   if (isAbsolute(resolvedId)) return resolvedId;
+  const require = createRequire(importer);
   try {
-    return createRequire(importer).resolve(specifier);
+    return require.resolve(specifier);
   } catch {
+    // SSR may externalize an import-only ESM entry as a bare specifier. A
+    // require-condition lookup cannot resolve it, and package.json itself may
+    // also be hidden by exports. Locate its owning manifest using the same
+    // importer-relative package search, without inventing an executable entry.
+    if (resolvedId !== specifier) return undefined;
+    const name = packageName(specifier);
+    if (name === undefined) return undefined;
+    for (const directory of require.resolve.paths(specifier) ?? []) {
+      const manifest = join(directory, name, 'package.json');
+      if (existsSync(manifest)) return manifest;
+    }
     return undefined;
   }
 }
