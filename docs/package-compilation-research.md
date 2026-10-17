@@ -529,13 +529,14 @@ Release integrity, runtime compatibility negotiation, and a dedicated library
 build command remain open; passing this gate is not a claim that the entire
 publication contract is stable.
 
-A separate rendering follow-up surfaced while building this gate: combining a
-derived request-state helper with a pending payload in one JSX conditional
-(`refreshing ? 'Refreshing' : items.length`) evaluated the absent payload during
-initial SSR. The publication fixture uses independent state and payload sinks
-so it checks both relationships without conflating this conditional-lowering
-issue with installation/linking. Mixed conditional sinks still need a targeted
-regression and diagnosis; the publication gate does not establish that case.
+The mixed JSX conditional issue found by this gate is now fixed generally:
+`refreshing ? 'Refreshing' : items.length` gates the payload expression, not
+just its source identifier. State-only arms remain immediate, and selected
+scalar arms wait only for their own inputs. Regressions cover direct tracking,
+ordinary local helpers, and separately compiled helpers with local and imported
+module sources, nested conditionals, and short-circuit selection. The tarball
+fixture again uses the mixed expression directly in dev/prod SSR and browser
+checks. This does not add helper-name special cases or change imperative reads.
 
 Required regressions include import aliases and re-exports; lexical shadowing;
 nested wrappers; source fields/arrays; mixed state/payload reads; returned facades

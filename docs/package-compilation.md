@@ -183,6 +183,8 @@ tree shaking. With Chrome available (`MMD_CHROME_PATH` or a detected local
 installation), it also tests events, request-state subscriptions, retained input
 drafts, slot fallback/projection, and conditional removal/remounting in both
 development and production.
+The request-state helper and its payload share one JSX conditional, exercising
+initial absence and refresh without requiring separate rendering sinks.
 
 The framework dependencies in that fixture use the matching built checkout;
 the library under test is a real installed tarball with no source alias. This

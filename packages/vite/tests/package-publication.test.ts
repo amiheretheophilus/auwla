@@ -96,7 +96,7 @@ it('consumes a packed, minified component/helper library without its source in t
         return <article><Card value={counter.value} onPress={()=>add(counter,2)}/>
           <button class="toggle" onClick={()=>shown=!shown}>Toggle</button>
           {shown&&<Card value={counter.value} onPress={()=>add(counter,2)}><i>Caller content</i></Card>}
-          <output>{counter.value}</output><p class="request">{loading?'Refreshing':'Idle'}</p><p class="ready">{items.length} ready</p>
+          <output>{counter.value}</output><p class="request">{loading?'Refreshing':items.length+' ready'}</p>
           <p class="item">{items[0]?.id}</p><button class="refresh" onClick={()=>$track(items).refresh()}>Refresh</button>
         </article>;}`,
     'server.ts': `import {createDefine,serve} from '@memoized-dom/server';import {App} from './App';let reads=0;const reports=[];
@@ -169,7 +169,7 @@ it('consumes a packed, minified component/helper library without its source in t
       expect(await page.$eval('.package-draft', node => (node as HTMLInputElement).value)).toBe('Keep my draft');
       const previous = await page.$eval('.item', node => node.textContent);
       await page.click('.refresh'); await page.waitForFunction(() => document.querySelector('.request')?.textContent === 'Refreshing');
-      await page.waitForFunction(() => document.querySelector('.request')?.textContent === 'Idle');
+      await page.waitForFunction(() => document.querySelector('.request')?.textContent === '1 ready');
       expect(await page.$eval('.item', node => node.textContent)).not.toBe(previous);
       await page.click('.toggle'); await page.waitForFunction(() => document.querySelectorAll('.badge').length === 1);
       await page.click('.toggle'); await page.waitForFunction(() => document.querySelectorAll('.badge').length === 2);

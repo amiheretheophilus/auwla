@@ -2,7 +2,7 @@ import { describe, expect, it } from 'bun:test';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { compileModulesDetailed } from '@memoized-dom/compiler';
+import { compileModulesDetailed, experimentalCompilePackage } from '@memoized-dom/compiler';
 import { createDataRuntime, setActiveDataRuntime } from '@memoized-dom/data';
 import { unregister } from '@memoized-dom/runtime';
 import { waitFor } from '../test-support/helpers';
@@ -15,6 +15,104 @@ const outDir = join(
 );
 
 describe('request-state helper linking', () => {
+  it('shows state-only arms immediately and waits only for the selected payload arm', async () => {
+    const { output } = compileModulesDetailed({ './lazy-sinks.tsx': `
+      export function App(){const left=$fetch('/left');const right=$fetch('/right');
+        const pending=$track(left).pending;
+        return <section>
+          <p class="conditional">{pending?'Loading':left.length?left[0].title:right[0].title}</p>
+          <p class="coalesce">{pending?'Loading':left[0]?.title??right[0].title}</p>
+          {pending?<b>Loading</b>:<i>{left.length?'Ready':'Empty'}</i>}
+          <button onClick={()=>$track(left).refresh()}>Refresh</button>
+        </section>;}`,
+    }, { runtimePath: '@memoized-dom/runtime/testing' });
+    mkdirSync(outDir, { recursive: true });
+    writeFileSync(join(outDir, 'lazy-sinks.ts'), output['./lazy-sinks.tsx']!);
+    const first = Promise.withResolvers<Response>(), second = Promise.withResolvers<Response>();
+    const unrelated = Promise.withResolvers<Response>();
+    let leftCalls = 0;
+    const data = createDataRuntime({ fetch: input => String(input).endsWith('/right')
+      ? unrelated.promise : leftCalls++ === 0 ? first.promise : second.promise });
+    const previous = setActiveDataRuntime(data);
+    document.body.replaceChildren();
+    try {
+      const { App } = await import(`${pathToFileURL(join(outDir, 'lazy-sinks.ts')).href}?runtime=${Date.now()}`);
+      const root = App('LazySinks', null) as HTMLElement;
+      document.body.append(root);
+      expect(root.querySelector('.conditional')!.textContent).toBe('Loading');
+      expect(root.querySelector('.coalesce')!.textContent).toBe('Loading');
+      first.resolve(Response.json([{ title: 'Left' }]));
+      await waitFor(() => expect(root.querySelector('.conditional')!.textContent).toBe('Left'));
+      expect(root.querySelector('.coalesce')!.textContent).toBe('Left');
+      expect(root.querySelector('i')!.textContent).toBe('Ready');
+      root.querySelector('button')!.click();
+      second.resolve(Response.json([]));
+      await waitFor(() => expect(root.querySelector('i')!.textContent).toBe('Empty'));
+      expect(root.querySelector('.conditional')!.textContent).toBe('');
+      expect(root.querySelector('.coalesce')!.textContent).toBe('');
+      unrelated.resolve(Response.json([{ title: 'Right' }]));
+      await waitFor(() => expect(root.querySelector('.conditional')!.textContent).toBe('Right'));
+      expect(root.querySelector('.coalesce')!.textContent).toBe('Right');
+    } finally {
+      unregister('LazySinks'); data.clear(); setActiveDataRuntime(previous); document.body.replaceChildren();
+    }
+  });
+  it.each((['direct', 'local', 'package'] as const).flatMap(kind =>
+    (['local', 'module'] as const).map(location => [kind, location] as const),
+  ))('gates scalar arms for %s request-state reads over a %s source', async (kind, location) => {
+    const helper = `import {$track} from '@memoized-dom/data';export function busy(source){return $track(source).refreshing;}`;
+    const library = experimentalCompilePackage({ './index.ts': helper }, { packageEntries: { 'mixed-status': './index.ts' } });
+    const id = `mixed-sinks-${kind}-${location}`;
+    const { output } = compileModulesDetailed({
+      ...(kind === 'local' ? { './helper.ts': helper } : {}),
+      ...(location === 'module' ? { './sources.ts': `export const stories=$fetch('/api/${id}');` } : {}),
+      [`./${id}.tsx`]: `${kind === 'direct' ? '' : `import {busy as waiting} from '${kind === 'local' ? './helper' : 'mixed-status'}';`}
+        ${location === 'module' ? `import {stories} from './sources';` : ''}
+        export function App(){${location === 'local' ? `const stories=$fetch('/api/${id}');` : ''}
+          const refreshing=${kind === 'direct' ? '$track(stories).refreshing' : 'waiting(stories)'};
+          return <section>
+            <p class="conditional">{refreshing?'Refreshing':stories.length+' ready'}</p>
+            <p class="nested">{refreshing?'Refreshing':stories.length?stories[0].title:'Empty'}</p>
+            <p class="logical">{!refreshing&&stories.map(item=>item.title).join(',')}</p>
+            <button onClick={()=>$track(stories).refresh()}>Refresh</button>
+          </section>;}`,
+    }, { runtimePath: '@memoized-dom/runtime/testing', experimentalPackageArtifacts: kind === 'package' ? [library.artifact] : [] });
+    const directory = join(outDir, id);
+    mkdirSync(directory, { recursive: true });
+    const installed = join(directory, 'node_modules/mixed-status');
+    mkdirSync(installed, { recursive: true });
+    writeFileSync(join(installed, 'package.json'), JSON.stringify({ name: 'mixed-status', type: 'module', exports: './index.js' }));
+    writeFileSync(join(installed, 'index.js'), library.output['./index.ts']!);
+    for (const [file, code] of Object.entries(output)) writeFileSync(join(directory, file.slice(2).replace(/\.tsx$/, '.ts')), code);
+    const requests = [Promise.withResolvers<Response>(), Promise.withResolvers<Response>()];
+    let calls = 0;
+    const data = createDataRuntime({ fetch: () => requests[calls++]!.promise });
+    const previous = setActiveDataRuntime(data);
+    document.body.replaceChildren();
+    try {
+      const { App } = await import(`${pathToFileURL(join(directory, id + '.ts')).href}?runtime=${Date.now()}`);
+      const root = App(id, null) as HTMLElement;
+      document.body.append(root);
+      expect(root.querySelector('.conditional')!.textContent).toBe('');
+      expect(root.querySelector('.nested')!.textContent).toBe('');
+      requests[0]!.resolve(Response.json([{ title: 'First' }]));
+      await waitFor(() => expect(root.querySelector('.conditional')!.textContent).toBe('1 ready'));
+      expect(root.querySelector('.nested')!.textContent).toBe('First');
+      expect(root.querySelector('.logical')!.textContent).toBe('First');
+      root.querySelector('button')!.click();
+      await waitFor(() => expect(root.querySelector('.conditional')!.textContent).toBe('Refreshing'));
+      expect(root.querySelector('.nested')!.textContent).toBe('Refreshing');
+      expect(root.querySelector('.logical')!.textContent).toBe('');
+      requests[1]!.resolve(Response.json([{ title: 'New' }, { title: 'Second' }]));
+      await waitFor(() => expect(root.querySelector('.conditional')!.textContent).toBe('2 ready'));
+      expect(root.querySelector('.nested')!.textContent).toBe('New');
+      expect(root.querySelector('.logical')!.textContent).toBe('New,Second');
+      expect(calls).toBe(2);
+      expect(document.querySelector('section')).toBe(root);
+    } finally {
+      unregister(id); data.clear(); setActiveDataRuntime(previous); document.body.replaceChildren();
+    }
+  });
   it('carries request-holder reads through imports and re-exports', () => {
     const { metadata, output } = compileModulesDetailed({
       './helper.ts': `
