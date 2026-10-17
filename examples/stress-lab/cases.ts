@@ -14,6 +14,8 @@ export interface StressCase {
   modules?: Record<string, string>;
   initial: string;
   steps: Array<[button: string, expected: string]>;
+  /** Selector whose node must be the same DOM node after every step (no re-creation). */
+  retained?: string;
 }
 
 export const cases: StressCase[] = [
@@ -106,8 +108,19 @@ export const cases: StressCase[] = [
     steps: [['a', 'yes'], ['a', 'no']],
   },
   {
-    name: 'replace nested object then read deep',
+    // By design a const alias is derived: `old` follows state.user (docs/02-state.md).
+    name: 'replace nested object then write through a live alias',
     app: `export function App(){const state={user:{name:'ann'}};const old=state.user;
+      return <main><output id="out">{state.user.name}</output>
+        <button id="a" onClick={()=>{state.user={name:'bob'};}}>r</button>
+        <button id="b" onClick={()=>{old.name='stale';}}>old</button>
+        <button id="c" onClick={()=>{state.user.name='cy';}}>deep</button></main>;}`,
+    initial: 'ann',
+    steps: [['a', 'bob'], ['b', 'stale'], ['c', 'cy']],
+  },
+  {
+    name: 'replace nested object then write through a $snapshot',
+    app: `export function App(){const state={user:{name:'ann'}};const old=$snapshot(state.user);
       return <main><output id="out">{state.user.name}</output>
         <button id="a" onClick={()=>{state.user={name:'bob'};}}>r</button>
         <button id="b" onClick={()=>{old.name='stale';}}>old</button>
@@ -312,8 +325,8 @@ export const cases: StressCase[] = [
     steps: [['a', 'rab'], ['b', 'rAb']],
   },
   {
-    name: 'realistic undo: const snapshot of a reference',
-    app: `export function App(){const state={user:{name:'ann'}};const snapshot=state.user;
+    name: 'realistic undo: $snapshot of a reference',
+    app: `export function App(){const state={user:{name:'ann'}};const snapshot=$snapshot(state.user);
       return <main><output id="out">{state.user.name}</output>
         <button id="a" onClick={()=>{state.user={name:'bob'};}}>edit</button>
         <button id="b" onClick={()=>{state.user=snapshot;}}>undo</button></main>;}`,
@@ -510,5 +523,200 @@ export const cases: StressCase[] = [
         <button id="a" onClick={()=>xs.push(3)}>push</button></main>;}`,
     initial: '12',
     steps: [['a', '123']],
+  },
+  {
+    name: 'write through a helper return value (deepest().label = x)',
+    modules: {
+      './doc.ts': `export const root={label:'r',kids:[{label:'a',kids:[] as any[]}]};
+        function deepest(){let node:any=root;while(node.kids.length>0)node=node.kids[node.kids.length-1];return node;}
+        export function renameDeep(){deepest().label='A';}`,
+    },
+    app: `import {root,renameDeep} from './doc';
+      export function App(){return <main><output id="out">{root.kids[0].label}</output>
+        <button id="a" onClick={renameDeep}>r</button></main>;}`,
+    initial: 'a',
+    steps: [['a', 'A']],
+  },
+  ...['deepest().label=\'A\';', 'const n=deepest();n.label=\'A\';'].map((write): StressCase => ({
+    name: `helper write read by another component: ${write}`,
+    modules: {
+      './doc.ts': `export const root={label:'r',kids:[{label:'a',kids:[] as any[]}]};
+        function deepest(){let node:any=root;while(node.kids.length>0)node=node.kids[node.kids.length-1];return node;}
+        export function renameDeep(){${write}}`,
+      './Label.tsx': `import {root} from './doc';export function Label(){return <output id="out">{root.kids[0].label}</output>;}`,
+    },
+    app: `import {renameDeep} from './doc';import {Label} from './Label';
+      export function App(){return <main><Label/><button id="a" onClick={renameDeep}>r</button></main>;}`,
+    initial: 'a',
+    steps: [['a', 'A']],
+  })),
+  ...[
+    ['handler writes a helper result', `import {deepest} from './doc';`, `()=>{deepest().label='A';}`],
+    ['handler writes a find() result', `import {root} from './doc';`, `()=>{root.kids.find(k=>k.label==='a')!.label='A';}`],
+    ['helper writes a find() result', `import {renameFound} from './doc';`, `renameFound`],
+  ].map(([label, imports, handler]): StressCase => ({
+    name: `result write read by another component: ${label}`,
+    modules: {
+      './doc.ts': `export const root={label:'r',kids:[{label:'a',kids:[] as any[]}]};
+        export function deepest(){let node:any=root;while(node.kids.length>0)node=node.kids[node.kids.length-1];return node;}
+        export function renameFound(){root.kids.find(k=>k.label==='a')!.label='A';}`,
+      './Label.tsx': `import {root} from './doc';export function Label(){return <output id="out">{root.kids[0].label}</output>;}`,
+    },
+    app: `${imports}import {Label} from './Label';
+      export function App(){return <main><Label/><button id="a" onClick={${handler}}>r</button></main>;}`,
+    initial: 'a',
+    steps: [['a', 'A']],
+  })),
+  ...[false, true].map((selfEdit): StressCase => ({
+    name: `recursive: helper rename from outside (self-edit handler: ${selfEdit})`,
+    modules: {
+      './doc.ts': `export type Node={id:number;label:string;kids:Node[]};
+        export const root:Node={id:0,label:'r',kids:[{id:1,label:'a',kids:[{id:2,label:'b',kids:[]}]}]};
+        function deepest(){let node=root;while(node.kids.length>0)node=node.kids[node.kids.length-1];return node;}
+        export function renameDeep(){deepest().label='B';}`,
+      './Tree.tsx': `import type {Node} from './doc';
+        export function Tree({node}:{node:Node}){return <span>{node.label}
+          ${selfEdit ? `<button onClick={()=>{node.label=node.label+'!';}}></button>` : ''}
+          {node.kids.map(k=><Tree key={k.id} node={k}/>)}</span>;}`,
+    },
+    app: `import {Tree} from './Tree';import {root,renameDeep} from './doc';
+      export function App(){return <main><output id="out"><Tree node={root}/></output>
+        <button id="a" onClick={renameDeep}>r</button></main>;}`,
+    initial: 'rab',
+    steps: [['a', 'raB']],
+  })),
+  {
+    name: 'recursive: module-state tree edited deep from outside',
+    modules: {
+      './outline.ts': `export type Node={id:number;label:string;kids:Node[]};
+        export const root:Node={id:0,label:'r',kids:[{id:1,label:'a',kids:[{id:2,label:'b',kids:[]}]}]};
+        export function renameDeep(){root.kids[0].kids[0].label='B';}
+        export function addDeep(){root.kids[0].kids[0].kids.push({id:3,label:'c',kids:[]});}
+        export function removeMiddle(){root.kids[0].kids.splice(0,1);}`,
+      './Tree.tsx': `import type {Node} from './outline';
+        export function Tree({node}:{node:Node}){return <span>{node.label}{node.kids.map(k=><Tree key={k.id} node={k}/>)}</span>;}`,
+    },
+    app: `import {Tree} from './Tree';import {root,renameDeep,addDeep,removeMiddle} from './outline';
+      export function App(){return <main><output id="out"><Tree node={root}/></output>
+        <button id="a" onClick={renameDeep}>rename</button>
+        <button id="b" onClick={addDeep}>add</button>
+        <button id="c" onClick={removeMiddle}>remove</button></main>;}`,
+    initial: 'rab',
+    steps: [['a', 'raB'], ['b', 'raBc'], ['c', 'ra']],
+  },
+  {
+    name: 'recursive: every depth reads shared module state directly',
+    modules: {
+      './selection.ts': `export const selection={id:-1};export function select(id:number){selection.id=id;}`,
+      './Tree.tsx': `import {selection} from './selection';
+        type Node={id:number;label:string;kids:Node[]};
+        export function Tree({node}:{node:Node}){return <span>{selection.id===node.id?'*':''}{node.label}{node.kids.map(k=><Tree key={k.id} node={k}/>)}</span>;}`,
+    },
+    app: `import {Tree} from './Tree';import {select} from './selection';
+      const root={id:0,label:'r',kids:[{id:1,label:'a',kids:[{id:2,label:'b',kids:[]}]}]};
+      export function App(){return <main><output id="out"><Tree node={root}/></output>
+        <button id="a" onClick={()=>select(2)}>deep</button>
+        <button id="b" onClick={()=>select(0)}>top</button></main>;}`,
+    initial: 'rab',
+    steps: [['a', 'ra*b'], ['b', '*rab']],
+  },
+  {
+    name: 'recursive: node edits itself from its own handler',
+    modules: {
+      './Tree.tsx': `type Node={id:number;label:string;kids:Node[]};
+        export function Tree({node}:{node:Node}){return <span>{node.label}
+          <button id={'n'+node.id} onClick={()=>{node.label=node.label.toUpperCase();}}></button>
+          {node.kids.map(k=><Tree key={k.id} node={k}/>)}</span>;}`,
+    },
+    app: `import {Tree} from './Tree';
+      const root={id:0,label:'r',kids:[{id:1,label:'a',kids:[{id:2,label:'b',kids:[]}]}]};
+      export function App(){return <main><output id="out"><Tree node={root}/></output></main>;}`,
+    initial: 'rab',
+    steps: [['n2', 'raB'], ['n0', 'RaB']],
+  },
+  {
+    name: 'recursive: per-node collapse state through a conditional',
+    modules: {
+      './Tree.tsx': `type Node={id:number;label:string;kids:Node[]};
+        export function Tree({node}:{node:Node}){let open=true;
+          return <span>{node.label}<button id={'t'+node.id} onClick={()=>{open=!open;}}></button>
+            {open ? <i>{node.kids.map(k=><Tree key={k.id} node={k}/>)}</i> : null}</span>;}`,
+    },
+    app: `import {Tree} from './Tree';
+      const root={id:0,label:'r',kids:[{id:1,label:'a',kids:[{id:2,label:'b',kids:[]}]}]};
+      export function App(){return <main><output id="out"><Tree node={root}/></output></main>;}`,
+    initial: 'rab',
+    steps: [['t1', 'ra'], ['t1', 'rab'], ['t0', 'r']],
+  },
+  {
+    name: 'recursive: mutual recursion across modules',
+    modules: {
+      './Folder.tsx': `import {Children} from './Children';
+        export function Folder({node}:{node:any}){return <span>{node.label}<Children node={node}/></span>;}`,
+      './Children.tsx': `import {Folder} from './Folder';
+        export function Children({node}:{node:any}){return <i>{node.kids.map((k:any)=><Folder key={k.id} node={k}/>)}</i>;}`,
+      './tree.ts': `export const root={id:0,label:'r',kids:[{id:1,label:'a',kids:[] as any[]}]};
+        export function add(){root.kids[0].kids.push({id:2,label:'b',kids:[]});}`,
+    },
+    app: `import {Folder} from './Folder';import {root,add} from './tree';
+      export function App(){return <main><output id="out"><Folder node={root}/></output>
+        <button id="a" onClick={add}>add</button></main>;}`,
+    initial: 'ra',
+    steps: [['a', 'rab']],
+  },
+  {
+    name: 'recursive: component and caller in one module',
+    app: `type Node={id:number;label:string;kids:Node[]};
+      const root:Node={id:0,label:'r',kids:[{id:1,label:'a',kids:[]}]};
+      function Tree({node}:{node:Node}){return <span>{node.label}{node.kids.map(k=><Tree key={k.id} node={k}/>)}</span>;}
+      export function App(){return <main><output id="out"><Tree node={root}/></output>
+        <button id="a" onClick={()=>root.kids[0].kids.push({id:2,label:'b',kids:[]})}>add</button>
+        <button id="b" onClick={()=>{root.kids[0].label='A';}}>rename</button></main>;}`,
+    initial: 'ra',
+    steps: [['a', 'rab'], ['b', 'rAb']],
+  },
+  {
+    name: 'tree workaround: iterative flatten rendered as one list',
+    app: `type Node={id:number;label:string;kids:Node[]};
+      function flatten(root:Node){const out:{id:number;label:string;depth:number}[]=[];
+        const stack=[{node:root,depth:0}];
+        while(stack.length>0){const {node,depth}=stack.pop()!;out.push({id:node.id,label:node.label,depth});
+          for(let i=node.kids.length-1;i>=0;i--)stack.push({node:node.kids[i],depth:depth+1});}
+        return out;}
+      export function App(){const root:Node={id:0,label:'r',kids:[{id:1,label:'a',kids:[]}]};
+      const rows=flatten(root);
+      return <main><output id="out">{rows.map(r=><span key={r.id}>{r.label}</span>)}</output>
+        <button id="a" onClick={()=>root.kids[0].kids.push({id:2,label:'b',kids:[]})}>add</button>
+        <button id="b" onClick={()=>{root.kids[0].label='A';}}>rename</button></main>;}`,
+    initial: 'ra',
+    steps: [['a', 'rab'], ['b', 'rAb']],
+  },
+  {
+    name: 'tree workaround: recursive flatten helper',
+    app: `type Node={id:number;label:string;kids:Node[]};
+      function flatten(node:Node,out:{id:number;label:string}[]=[]){out.push({id:node.id,label:node.label});
+        for(const kid of node.kids)flatten(kid,out);return out;}
+      export function App(){const root:Node={id:0,label:'r',kids:[{id:1,label:'a',kids:[]}]};
+      const rows=flatten(root);
+      return <main><output id="out">{rows.map(r=><span key={r.id}>{r.label}</span>)}</output>
+        <button id="a" onClick={()=>root.kids[0].kids.push({id:2,label:'b',kids:[]})}>add</button>
+        <button id="b" onClick={()=>{root.kids[0].label='A';}}>rename</button></main>;}`,
+    initial: 'ra',
+    steps: [['a', 'rab'], ['b', 'rAb']],
+  },
+  {
+    name: 'tree workaround: fixed-depth components (Level1 renders Level2)',
+    modules: {
+      './Levels.tsx': `type Node={id:number;label:string;kids:Node[]};
+        export function Level2({node}:{node:Node}){return <span>{node.label}</span>;}
+        export function Level1({node}:{node:Node}){return <span>{node.label}{node.kids.map(k=><Level2 key={k.id} node={k}/>)}</span>;}`,
+    },
+    app: `import {Level1} from './Levels';
+      export function App(){const root={id:0,label:'r',kids:[{id:1,label:'a',kids:[] as any[]}]};
+      return <main><output id="out">{root.label}{root.kids.map(k=><Level1 key={k.id} node={k}/>)}</output>
+        <button id="a" onClick={()=>root.kids[0].kids.push({id:2,label:'b',kids:[]})}>add</button>
+        <button id="b" onClick={()=>{root.kids[0].label='A';}}>rename</button></main>;}`,
+    initial: 'ra',
+    steps: [['a', 'rab'], ['b', 'rAb']],
   },
 ];

@@ -42,15 +42,51 @@ So:
 - **`const` doesn't block reactivity.** `state.step++`, `items.push(x)`,
   `set.add(x)` are all valid reactive writes.
 - **`let` can be derived.** An initializer that reads reactive state, such as
-  `let doubled = count * 2`, replays when the source changes. Later assigning
-  `doubled = 0` is a compile error; write `count` instead.
+  `let doubled = count * 2`, replays when the source changes, as long as the
+  binding is never written.
 - Use `const` whenever you only mutate contents. Reach for `let` only when
   the binding itself is reassigned (`count++`, `name = 'x'`) or when it reads
   reactive state as a derived value.
 
-A derived initializer stays live. If you need a one-time snapshot, assign it
-in a separate statement after declaring the variable; otherwise later source
-writes will replay the initializer.
+### When a derived value becomes local state
+
+A `let` initialized from reactive state (a variable, a prop, a loaded value,
+or a function's result) follows that source **until anything writes to the
+binding**. One write anywhere in the component, even in a distant handler,
+makes it local state, initialized once from the source and owned by you:
+
+| Declaration | Written? | Behavior |
+|---|---|---|
+| `let x = source` | never | derived: follows `source` |
+| `let x = source` | reassigned (`x = …`) | local state, initialized once |
+| `let x = source` | mutated (`x.name = …`) | local state, initialized once; the mutation changes the object captured at mount |
+| `const x = source` | mutated (`x.name = …`) | derived alias: follows `source`, and writes go to its current object |
+
+This is deliberate. A binding cannot follow its source and keep your writes at
+the same time; if it followed, every update to the source would silently
+overwrite them. The usual case is an edit buffer, where keeping your writes is
+the point (see [Editing a copy of loaded data](./05-data.md#editing-a-copy-of-loaded-data)):
+
+```tsx
+let text = note.text;   // written by onInput below: local state, set once
+<input value={text} onInput={(e) => text = e.currentTarget.value} />
+```
+
+Because the switch is caused by a write that can be far from the declaration,
+check for it when a `let` "stops updating". To follow the source again, copy
+it yourself at the moment you want the new value (`text = note.text` when
+editing starts), or read the source directly instead of the local copy.
+
+A derived initializer stays live. If you need a one-time snapshot, wrap the
+initializer in `$snapshot`; otherwise later source writes will replay it:
+
+```tsx
+const current = state.user;            // follows state.user
+const saved = $snapshot(state.user);   // keeps this object, e.g. for undo
+```
+
+`$snapshot` is equivalent to declaring the variable and assigning it in a
+separate statement, a form that still works.
 
 ## State can live anywhere
 
@@ -129,8 +165,9 @@ export function Cart() {
 
 - Write it as a `const` expression — no `computed()` exists.
 - Both `const` and `let` initializers that read reactive state are derived.
-  `let doubled = count * 2` replays when `count` changes; assigning to
-  `doubled` is a compile error. Use a separate assignment after declaration
+  `let doubled = count * 2` replays when `count` changes, until something
+  writes `doubled`; then it is local state
+  ([details](#when-a-derived-value-becomes-local-state)). Use `$snapshot(...)`
   when you need an explicit one-time snapshot.
 - Chains work: `a` → `b` → `c` replays in order when `a` changes.
 - Pure helper calls inside derivations are fine.

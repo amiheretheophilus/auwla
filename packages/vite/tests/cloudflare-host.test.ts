@@ -4,6 +4,7 @@ import { existsSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { spawn, type ChildProcess } from 'node:child_process';
 import puppeteer from 'puppeteer-core';
+import { closeBrowser } from '../../../test-support/browser';
 import { waitFor } from '../../../test-support/helpers';
 
 const fetch: typeof globalThis.fetch = (input, init) => globalThis.fetch(input, { ...init, signal: AbortSignal.timeout(15_000) });
@@ -12,6 +13,11 @@ let fixture: string | undefined;
 let child: ChildProcess | undefined;
 let childErrors = '';
 let childOutput = '';
+/** A workerd reload can take tens of seconds on a loaded machine; poll gently so polling adds no load. */
+async function reloaded(assertion: () => Promise<unknown>): Promise<void> {
+  try { await waitFor(assertion, { timeout: 45_000, interval: 250 }); }
+  catch (error) { throw new Error(String(error) + '\n' + (childErrors + childOutput).slice(-12_000)); }
+}
 afterEach(async () => {
   if (child) {
     child.kill();
@@ -119,13 +125,13 @@ describe('Cloudflare Worker host', () => {
       { headers: { 'x-user': name } }).then(response => response.json())));
     expect(replies).toEqual(['first', 'second'].map(name => ({ greeting: 'Hello ' + name, message: 'binding', user: name })));
     await writeFile(join(root, 'server.ts'), backend('after'));
-    await waitFor(async () => expect(await (await fetch(origin + '/api/native')).json()).toMatchObject({ label: 'after' }), 15_000);
+    await reloaded(async () => expect(await (await fetch(origin + '/api/native')).json()).toMatchObject({ label: 'after' }));
     const functionFile = join(root, 'server/functions/greeting.ts');
     await writeFile(functionFile, (await readFile(functionFile, 'utf8')).replace("'Hello '", "'Welcome '"));
-    await waitFor(async () => expect(await (await fetch(origin + '/_fn/greeting/greeting?name=Ada')).json())
-      .toMatchObject({ greeting: 'Welcome Ada', message: 'binding' }), 15_000);
+    await reloaded(async () => expect(await (await fetch(origin + '/_fn/greeting/greeting?name=Ada')).json())
+      .toMatchObject({ greeting: 'Welcome Ada', message: 'binding' }));
     await writeFile(join(root, 'src/App.tsx'), component('After'));
-    await waitFor(async () => expect(await (await fetch(origin)).text()).toContain('<h1>After</h1>'), 15_000);
+    await reloaded(async () => expect(await (await fetch(origin)).text()).toContain('<h1>After</h1>'));
     const chrome = ['C:/Program Files/Google/Chrome/Application/chrome.exe', '/usr/bin/chromium'].find(existsSync);
     if (chrome) {
       const browser = await puppeteer.launch({ executablePath: chrome, headless: true });
@@ -138,7 +144,7 @@ describe('Cloudflare Worker host', () => {
         await writeFile(join(root, 'src/App.tsx'), component('Browser update'));
         await page.waitForFunction(() => document.querySelector('h1')?.textContent === 'Browser update');
         expect(await page.evaluate(() => document.documentElement.dataset.marker)).toBe('retained');
-      } finally { await browser.close(); }
+      } finally { await closeBrowser(browser); }
     }
   }, 180_000);
 

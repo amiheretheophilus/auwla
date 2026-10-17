@@ -9,6 +9,7 @@ import { promisify } from 'node:util';
 import { createBuilder } from 'vite';
 import puppeteer from 'puppeteer-core';
 import { experimentalVerifyPackageIntegrity } from '@memoized-dom/compiler';
+import { closeBrowser } from '../../../test-support/browser';
 import memoizedDom from '../src';
 import { createDevServer, type NativeDevServer } from '../src/dev';
 import { discoverPackageArtifact } from '../src/graph/package-artifacts';
@@ -166,6 +167,6 @@ it('consumes a packed, minified component/helper library without its source in t
       await page.click('.toggle'); await page.waitForFunction(() => document.querySelectorAll('.badge').length === 2);
       expect(await page.$$eval('.package-button', nodes => nodes.map(node => node.textContent))).toEqual(['3', '3']);
       expect(errors).toEqual([]);
-    } finally { await browser.close(); }
+    } finally { await closeBrowser(browser); }
   }
 }, 240_000);

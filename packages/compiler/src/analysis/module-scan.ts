@@ -43,6 +43,46 @@ export function validateLinkedImports(ctx: Ctx, programPath: ProgramPath): void 
     );
   }
 }
+function isExported(ctx: Ctx, declaration: t.VariableDeclarator): boolean {
+  const statement = ctx.astAnalysis?.parentByNode.get(declaration as unknown as BaseNode) ?? null;
+  const parent = statement === null ? null : ctx.astAnalysis?.parentByNode.get(statement) ?? null;
+  if (parent?.type === 'ExportNamedDeclaration') return true;
+  const program = ctx.astAnalysis?.rootScope.block as t.Program | undefined;
+  const name = (declaration.id as t.Identifier).name;
+  return program?.body.some(item => astFactory.isExportNamedDeclaration(item) &&
+    item.specifiers.some(specifier => astFactory.isExportSpecifier(specifier) &&
+      specifier.local.name === name)) === true;
+}
+
+/**
+ * A module binding built by a call (`const root = build()`) holds a mutable
+ * object like a literal or `new X()` does. Its writes may happen anywhere:
+ * importers, local aliases, helper parameters and helper results, none of
+ * which name the binding itself. Computed analysis later reclassifies a call
+ * that reads reactive state as a derivation; compiler-owned sources and
+ * promises replayed by `$read` keep their own lowering. An unreferenced
+ * binding cannot be observed, so it stays plain.
+ */
+function isBuiltModuleObject(ctx: Ctx, declaration: t.VariableDeclarator): boolean {
+  if (!astFactory.isIdentifier(declaration.id) || declaration.init == null) return false;
+  if (ctx.transparentModuleSources.has(declaration.id.name) ||
+      ctx.readReplayOrigins.has(declaration)) return false;
+  const binding = astBindingAt(ctx, declaration as unknown as BaseNode, declaration.id.name);
+  if (binding === undefined || (binding.references.length === 0 && !isExported(ctx, declaration))) {
+    return false;
+  }
+  let init: t.Node = declaration.init;
+  while (astFactory.isTransparentExpression(init)) init = init.expression;
+  if (astFactory.isAwaitExpression(init)) init = init.argument;
+  if (!astFactory.isCallExpression(init)) return false;
+  // $fetch/$read/$track/$forms results are request views with their own
+  // subscriptions, not mutable objects.
+  const callee = astFactory.isIdentifier(init.callee) ? init.callee.name : null;
+  return callee === null || !(
+    ctx.transparentSourceFactories.has(callee) || ctx.transparentReadFactories.has(callee) ||
+    ctx.transparentTrackFactories.has(callee) || ctx.transparentFormFactories.has(callee));
+}
+
 export function scanModuleState(ctx: Ctx, programPath: ProgramPath): void {
   const tagCandidates = moduleStateStringCandidates(programPath.node);
   const destructured: {
@@ -68,19 +108,13 @@ export function scanModuleState(ctx: Ctx, programPath: ProgramPath): void {
           registerState(ctx, decl.id.name, 'let');
         } else if (isStoreObject(decl.init)) {
           registerState(ctx, decl.id.name, 'store');
-        } else if (isConstObjectState(decl.init)) {
+        } else if (isConstObjectState(decl.init) || isBuiltModuleObject(ctx, decl)) {
           registerState(ctx, decl.id.name, 'const');
         }
       } else if (inner.kind === 'const') {
         if (isStoreObject(decl.init)) {
           registerState(ctx, decl.id.name, 'store');
-        } else if (isConstObjectState(decl.init)) {
-          registerState(ctx, decl.id.name, 'const');
-        } else if (astFactory.isCallExpression(decl.init) &&
-                   bindingHasVisibleWrite(ctx,
-                     astBindingAt(ctx, decl as unknown as BaseNode, decl.id.name))) {
-          // A factory can return a stable mutable object with methods that
-          // change hidden state. Track its receiver so sibling readers update.
+        } else if (isConstObjectState(decl.init) || isBuiltModuleObject(ctx, decl)) {
           registerState(ctx, decl.id.name, 'const');
         }
       }

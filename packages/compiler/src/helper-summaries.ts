@@ -32,6 +32,12 @@ import {
 } from './mutation-analysis';
 import { opaqueModuleRoots } from './analysis/opaque-volatility';
 import {
+  callResultTarget,
+  programConstDeclarators,
+  reactiveModuleClasses,
+  seedOuterAliases,
+} from './analysis/function-effects';
+import {
   sourcePayloadArgument,
   sourceStateArgument,
 } from './analysis/transparent-reads';
@@ -77,15 +83,51 @@ function assignmentLeftIs(
   );
 }
 
-/** Read/write summary of a module-level helper, memoized and cycle-safe. */
+/**
+ * Bindings introduced by destructured parameters, by argument position and
+ * property path: `function rename({ user })` maps `user` to argument 0, path
+ * ['user']. Only plain shorthand or renamed object properties are mapped.
+ */
+function destructuredParameterPaths(
+  params: readonly t.Node[],
+): Map<string, { index: number; path: string[] }> {
+  const paths = new Map<string, { index: number; path: string[] }>();
+  const visit = (pattern: t.Node, index: number, path: string[]): void => {
+    const target = astFactory.isAssignmentPattern(pattern) ? pattern.left : pattern;
+    if (astFactory.isIdentifier(target)) {
+      if (path.length > 0) paths.set(target.name, { index, path });
+      return;
+    }
+    if (!astFactory.isObjectPattern(target)) return;
+    for (const property of target.properties) {
+      if (!astFactory.isObjectProperty(property) || property.computed) continue;
+      const key = astFactory.isIdentifier(property.key) ? property.key.name
+        : astFactory.isStringLiteral(property.key) ? property.key.value : null;
+      if (key !== null) visit(property.value as t.Node, index, [...path, key]);
+    }
+  };
+  params.forEach((parameter, index) => visit(parameter, index, []));
+  return paths;
+}
+
+/**
+ * Read/write summary of a module-level helper, memoized and cycle-safe.
+ *
+ * A recursive call contributes nothing new: the frame that is already
+ * summarizing that helper covers its body. `cycleHits` records which active
+ * frames were re-entered, so a summary computed inside someone else's cycle
+ * (incomplete) is not cached, and recursive writers stay conservative.
+ */
 export function summarizeHelper(
   ctx: Ctx,
   name: string,
   visiting: Set<string> = new Set(),
+  cycleHits: Set<string> = new Set(),
 ): FnSummary {
   const cached = ctx.helperSummaries.get(name);
   if (cached) return cached;
   if (visiting.has(name)) {
+    cycleHits.add(name);
     return {
       reads: new Set(),
       writes: new Set(),
@@ -93,7 +135,7 @@ export function summarizeHelper(
       parameterWrites: [],
       parameterSourceReads: [],
       parameterPayloadReads: [],
-      unbounded: true,
+      unbounded: false,
     };
   }
 
@@ -152,7 +194,7 @@ export function summarizeHelper(
   };
   const aliases = new AliasTracker((bindingName, binding) => {
     if (
-      parameterIndexes.has(bindingName) &&
+      (parameterIndexes.has(bindingName) || parameterPaths.has(bindingName)) &&
       binding?.scope.block === helperNode
     ) {
       return { locality: 'prop', root: bindingName, key: bindingName };
@@ -164,6 +206,13 @@ export function summarizeHelper(
   });
   const isComputedOrigin = (origin: ReactiveOrigin): boolean =>
     origin.stateKind === 'computed' || ctx.state.get(origin.root) === 'computed';
+  const parameterPaths = destructuredParameterPaths(helper.params);
+  const selfCalls: { call: BaseNode; scope: Scope }[] = [];
+  const programScope = ctx.astAnalysis?.rootScope;
+  if (programScope !== undefined) {
+    seedOuterAliases(aliases, programScope, programConstDeclarators(programScope.block as t.Program),
+      reactiveModuleClasses(ctx, aliases, programScope));
+  }
 
   visiting.add(name);
   walkAst<BaseNode>(helperNode, {
@@ -236,12 +285,20 @@ export function summarizeHelper(
     summary.parameterPayloadReads.push({ index, path });
   };
 
+  /** Argument position and full path of a parameter origin, destructured or not. */
+  const parameterEffect = (origin: ReactiveOrigin): { index: number; path: string[] } | null => {
+    const relative = origin.key === null ? [] : origin.key.split('.').slice(1);
+    const index = parameterIndexes.get(origin.root);
+    if (index !== undefined) return { index, path: relative };
+    const destructured = parameterPaths.get(origin.root);
+    return destructured === undefined ? null
+      : { index: destructured.index, path: [...destructured.path, ...relative] };
+  };
+
   const noteSourceRead = (origin: ReactiveOrigin): void => {
     if (origin.locality !== 'prop') return;
-    const index = parameterIndexes.get(origin.root);
-    if (index === undefined) return;
-    const path = origin.key === null ? [] : origin.key.split('.').slice(1);
-    addParameterSourceRead(index, path);
+    const effect = parameterEffect(origin);
+    if (effect !== null) addParameterSourceRead(effect.index, effect.path);
   };
 
   const noteReceiverEffect = (origin: ReactiveOrigin): void => {
@@ -251,11 +308,9 @@ export function summarizeHelper(
       return;
     }
     if (origin.locality === 'prop') {
-      const index = parameterIndexes.get(origin.root);
-      if (index !== undefined) {
-        const path =
-          origin.key === null ? [] : origin.key.split('.').slice(1);
-        addParameterWrite(index, path);
+      const effect = parameterEffect(origin);
+      if (effect !== null) {
+        addParameterWrite(effect.index, effect.path);
         return;
       }
     }
@@ -276,12 +331,60 @@ export function summarizeHelper(
     }
   };
 
+  // Calls whose result a member chain is rooted in, directly or through a
+  // local alias: `find(id).done = true`, `const node = deepest(); node.x = 1`.
+  const resultCalls = (expression: BaseNode | null, seen = new Set<Binding>()): BaseNode[] => {
+    let root = expression;
+    while (root?.type === 'MemberExpression' || root?.type === 'OptionalMemberExpression' ||
+           root?.type === 'ChainExpression' || root?.type === 'TSNonNullExpression') {
+      root = childNode(root, root.type === 'ChainExpression' || root.type === 'TSNonNullExpression'
+        ? 'expression' : 'object');
+    }
+    if (root === null) return [];
+    if (root.type === 'CallExpression' || root.type === 'OptionalCallExpression') return [root];
+    const rootName = identifierName(root);
+    const binding = rootName === null ? undefined : astBindingAt(ctx, root, rootName);
+    if (binding === undefined || binding.scope.isProgramScope || seen.has(binding)) return [];
+    const next = new Set(seen).add(binding);
+    const declaration = variableDeclaratorFor(ctx, binding);
+    return [
+      ...resultCalls(declaration === null ? null : childNode(declaration, 'init'), next),
+      ...binding.constantViolations.flatMap(write => write.type === 'AssignmentExpression'
+        ? resultCalls(childNode(write, 'right'), next) : []),
+    ];
+  };
+
+  // A returned object can alias state the callee reaches; bound the write to it.
+  const noteResultWrite = (call: BaseNode): void => {
+    const target = callResultTarget(ctx, call as unknown as t.CallExpression, aliases, scopeAt(ctx, call),
+      calleeName => astBindingAt(ctx, call, calleeName)?.scope.isProgramScope === true &&
+        (ctx.helpers.has(calleeName) || ctx.importedFunctions.has(calleeName)),
+      visiting, cycleHits);
+    if (target.kind === 'helper') {
+      for (const read of target.summary.reads) summary.boundedWrites.add(read);
+      if (target.summary.opaqueReads === true || target.summary.unbounded) summary.unbounded = true;
+      return;
+    }
+    if (target.kind === 'receiver') {
+      for (const origin of target.origins) noteReceiverEffect(origin);
+      return;
+    }
+    // `first().items.find(...)`: the receiver is itself a call result.
+    const callee = childNode(call, 'callee');
+    const receiver = callee?.type === 'MemberExpression' || callee?.type === 'OptionalMemberExpression'
+      ? childNode(callee, 'object') : null;
+    const nested = receiver === null ? [] : resultCalls(receiver);
+    if (nested.length > 0) for (const inner of nested) noteResultWrite(inner);
+    else summary.unbounded = true;
+  };
+
   const noteMemberWrite = (at: BaseNode, member: BaseNode): void => {
     const origin = aliases.resolveExpression(
       scopeAt(ctx, at),
       member as unknown as t.MemberExpression,
     );
     if (origin !== null) noteOriginWrite(origin);
+    else for (const call of resultCalls(member)) noteResultWrite(call);
     if (capturesOpaque(childNode(member, 'object'))) summary.unbounded = true;
   };
 
@@ -450,9 +553,10 @@ export function summarizeHelper(
           astBindingAt(ctx, callee, calleeName)?.scope.isProgramScope === true &&
           (ctx.helpers.has(calleeName) || ctx.importedFunctions.has(calleeName))
         ) {
+          if (calleeName === name) selfCalls.push({ call: current, scope: lexicalScope });
           const nested =
             ctx.importedFunctions.get(calleeName) ??
-            summarizeHelper(ctx, calleeName, visiting);
+            summarizeHelper(ctx, calleeName, visiting, cycleHits);
           for (const read of nested.reads) summary.reads.add(read);
           if (nested.opaqueReads === true) summary.opaqueReads = true;
           for (const write of nested.writes) summary.writes.add(write);
@@ -585,8 +689,31 @@ export function summarizeHelper(
     });
   }
 
+  // A self-call writes through its own arguments exactly as this body writes
+  // through its parameters. Route those effects to the arguments until no new
+  // effect appears; deeper laps are covered by the argument's root.
+  for (let changed = true; changed;) {
+    const before = summary.parameterWrites.length + summary.boundedWrites.size;
+    for (const { call, scope } of selfCalls) {
+      const args = childNodes(call, 'arguments');
+      for (const effect of [...summary.parameterWrites]) {
+        const argument = args[effect.index];
+        if (argument === undefined || argument.type === 'SpreadElement') continue;
+        const origin = aliases.resolveExpression(scope, argument as unknown as t.Expression);
+        if (origin !== null) noteReceiverEffect({ ...origin });
+      }
+    }
+    changed = summary.parameterWrites.length + summary.boundedWrites.size !== before;
+  }
+  cycleHits.delete(name);
+  const reenteredAncestor = [...cycleHits].some(hit => hit !== name && visiting.has(hit));
+  if (reenteredAncestor && (summary.writes.size > 0 || summary.boundedWrites.size > 0 ||
+      summary.parameterWrites.length > 0)) {
+    // Mutual recursion: the other helper's later laps are not visible here.
+    summary.unbounded = true;
+  }
   visiting.delete(name);
-  ctx.helperSummaries.set(name, summary);
+  if (!reenteredAncestor) ctx.helperSummaries.set(name, summary);
   return summary;
 }
 

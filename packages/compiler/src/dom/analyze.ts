@@ -30,7 +30,7 @@ import {
   finalizeInstancePreludes,
   scanInstanceControlFlow,
 } from '../analysis/instance-control-flow';
-import { isListLightweightCandidate, pathVariants } from '../analysis/component-graph';
+import { assertTerminatingRecursion, isListLightweightCandidate, recursiveComponents } from '../analysis/component-graph';
 import { normalizeComponentJsxValues } from '../components/jsx-values';
 import { planPrivateRowProps } from '../planning/private-row-props';
 import { lowerPrivateRowProps } from './private-row-props';
@@ -61,6 +61,7 @@ import {
 } from '../analysis/module-scan';
 import { scanRenderProps } from '../analysis/render-props';
 import { collectReads } from '../analysis/read-collection';
+import { planStateImpliedReads } from '../analysis/implied-reads';
 import { componentSlotProp } from '../jsx/component-slots';
 
 
@@ -110,6 +111,7 @@ export function runAnalysis(ctx: Ctx, programPath: ProgramPath): void {
   scanOpaqueVolatility(ctx);
   registerTransparentSourceRoots(ctx);
   scanComputeds(ctx, programPath); // R13: after helpers are known
+  planStateImpliedReads(ctx, programPath);
   scanModuleControlFlow(ctx, programPath, analyzeComputed);
   scanInstanceDerivations(ctx); // R14/R24: ordered local projections/computeds
   scanInstanceControlFlow(ctx);
@@ -130,16 +132,16 @@ export function runAnalysis(ctx: Ctx, programPath: ProgramPath): void {
     ) continue;
     allocatePresentationParameter(ctx, requirePresentationOwner(ctx, name, 'inherited'));
   }
-  // acyclicity check runs unconditionally — a state-free recursive component
-  // would otherwise slip past (pathVariants is only reached via the table)
-  for (const [name] of ctx.comps) pathVariants(ctx, name);
-
+  assertTerminatingRecursion(ctx);
+  const recursive = recursiveComponents(ctx);
   const listedComponents = new Set([
     ...ctx.listedSites.keys(),
     ...ctx.linkedComponentRows.keys(),
   ]);
   for (const comp of listedComponents) {
-    if (ctx.importedComponents.has(comp)) continue;
+    // A recursive component is necessarily placed as both its own entry and
+    // its own rows; pathVariants unions both placements for it.
+    if (ctx.importedComponents.has(comp) || recursive.has(comp)) continue;
     const sites = ctx.listedSites.get(comp) ?? [];
     const p = ctx.compPaths.get(comp)!;
     // used both as a row AND a static child: patterns would drop one usage

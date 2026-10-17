@@ -4,6 +4,7 @@ import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { spawn } from 'node:child_process';
 import puppeteer from 'puppeteer-core';
+import { closeBrowser } from '../../../test-support/browser';
 import memoizedDom from '../src';
 import { createDevServer, type NativeDevServer } from '../src/dev';
 import { waitFor } from '../../../test-support/helpers';
@@ -55,7 +56,8 @@ async function startNode(root: string): Promise<Pick<NativeDevServer, 'origin' |
   const exited = new Promise<void>(done => child.once('exit', () => done()));
   const close = async () => { child.kill(); await exited; };
   try {
-    await waitFor(() => expect(output, errors).toContain('"origin"'), 30_000);
+    // A fresh fixture re-optimizes dependencies on every start: 8–18s on a busy machine.
+    await waitFor(() => expect(output, errors).toContain('"origin"'), { timeout: 60_000, interval: 100 });
     return { origin: (JSON.parse(output.trim()) as { origin: string }).origin, close };
   } catch (error) { await close(); throw error; }
 }
@@ -81,7 +83,7 @@ it.skipIf(!chrome).each(['identical', 'changed'] as const)('keeps working server
         { timeout: 15_000 }, repair === 'identical' ? 'Before' : 'After');
     } catch (error) { throw new Error(String(error) + '\n' + await page.content()); }
     expect(await page.evaluate(() => document.documentElement.dataset.recoveryProbe)).toBeUndefined();
-  } finally { await browser.close(); await dev?.close(); await rm(root, { recursive: true, force: true }); }
+  } finally { await closeBrowser(browser); await dev?.close(); await rm(root, { recursive: true, force: true }); }
 }, 90_000);
 
 it.skipIf(!chrome).each([['bun', 'throw'], ['node', 'throw'], ['bun', 'missing'], ['node', 'missing']] as const)(
@@ -118,8 +120,8 @@ it.skipIf(!chrome).each([['bun', 'throw'], ['node', 'throw'], ['bun', 'missing']
     catch (error) { throw new Error(String(error) + '\n' + await page.content()); }
     expect(await page.$eval('[data-board]', element => element.textContent)).toBe('Before');
     expect(await page.$('vite-error-overlay')).toBeNull();
-  } finally { await browser.close(); await dev?.close(); await rm(root, { recursive: true, force: true }); }
-}, 90_000);
+  } finally { await closeBrowser(browser); await dev?.close(); await rm(root, { recursive: true, force: true }); }
+}, 150_000);
 
 it.skipIf(!chrome)('repairs an ordinary component syntax error even when the original source is restored', async () => {
   const root = await project();
@@ -135,7 +137,7 @@ it.skipIf(!chrome)('repairs an ordinary component syntax error even when the ori
     await writeFile(resolve(root, 'src/App.tsx'), app);
     await page.waitForFunction(() => !document.querySelector('vite-error-overlay') && document.querySelector('[data-board]')?.textContent === 'Before', { timeout: 20_000 });
     expect(await page.$eval('h1', element => element.textContent)).toBe('Recovery');
-  } finally { await browser.close(); await dev?.close(); await rm(root, { recursive: true, force: true }); }
+  } finally { await closeBrowser(browser); await dev?.close(); await rm(root, { recursive: true, force: true }); }
 }, 90_000);
 
 it('keeps slow development document requests alive beyond the default Bun idle timeout', async () => {

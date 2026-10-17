@@ -66,6 +66,7 @@ import {
   linkImports,
   resolveModule,
 } from './linking/resolution';
+import { lowerLocalNamespaceImports } from './linking/namespace-imports';
 import type { ComponentExportInfo } from './components/manifest';
 import { compilerOptions } from './linking/options';
 import { analyzeManifest, discoverManifest, exportedLocals } from './linking/discovery';
@@ -610,6 +611,11 @@ function compileLinkedModules(
       comments: parsed.comments,
       css: parsed.css,
     });
+  }
+
+  for (const entry of entries.values()) {
+    lowerLocalNamespaceImports(entry.ast, source =>
+      resolveModule(entry.id, source, entries, options) !== undefined);
   }
 
   const collectedRoutes = [...entries.values()].flatMap((entry) => {

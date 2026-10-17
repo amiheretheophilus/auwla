@@ -32,6 +32,13 @@ import type { HandlerWritePlan } from './plan';
 import { createHandlerWriteRouting } from './write-routing';
 import { captureOwnerListWrites } from '../analysis/owner-list-structure';
 import {asyncReadFact} from '../planning/async-reads';
+import {
+  callResultTarget,
+  programConstDeclarators,
+  reactiveModuleClasses,
+  rootCall,
+  seedOuterAliases,
+} from '../analysis/function-effects';
 
 /** A direct command on a compiler-known form publishes its own changes. */
 function isFormSubmit(ctx: Ctx, component: string | null, name: string, callee: t.MemberExpression): boolean {
@@ -181,126 +188,13 @@ export function planHandlerWrites(
   // declarations in the module and owning component before walking it.
   const outerScope = ctx.astAnalysis?.rootScope;
   if (outerScope !== undefined) {
-    const program = outerScope.block as t.Program;
-    const reactiveClasses = new Set<string>(ctx.importedReactiveClasses);
-    for (const statement of program.body) {
-      const declaration = astFactory.isExportNamedDeclaration(statement)
-        ? statement.declaration : statement;
-      if (astFactory.isClassDeclaration(declaration) && declaration.id &&
-          aliases.referencedOrigins(outerScope, declaration)
-            .some(origin => origin.locality === 'module')) {
-        reactiveClasses.add(declaration.id.name);
-      }
-    }
-    const seedDeclaration = (declaration: t.VariableDeclarator): void => {
-      if (declaration.init === null) return;
-      const init = declaration.init as t.Expression;
-      const rawInit = declaration.init as t.Node;
-      if (astFactory.isIdentifier(declaration.id)) {
-        const name = declaration.id.name;
-        if (astFactory.isObjectExpression(init)) {
-          for (const property of init.properties) {
-            if (astFactory.isObjectProperty(property) &&
-                property.kind === 'get' && !property.computed &&
-                astFactory.isFunction(property.value)) {
-              const key = astFactory.isIdentifier(property.key)
-                ? property.key.name
-                : astFactory.isStringLiteral(property.key)
-                  ? property.key.value
-                  : null;
-              if (key !== null) {
-                aliases.trackNamedMember(`${name}.${key}`,
-                  aliases.referencedOrigins(outerScope, property.value.body)
-                    .filter(origin => origin.locality === 'module'));
-              }
-              continue;
-            }
-            if (!astFactory.isObjectProperty(property) || property.computed ||
-                !astFactory.isExpression(property.value)) continue;
-            const key = astFactory.isIdentifier(property.key)
-              ? property.key.name
-              : astFactory.isStringLiteral(property.key)
-                ? property.key.value
-                : null;
-            if (key !== null) {
-              aliases.trackNamedMember(`${name}.${key}`,
-                aliases.resolveExpressionOrigins(outerScope, property.value)
-                  .filter(origin => origin.stateKind === 'const' || origin.stateKind === 'store'));
-            }
-          }
-        } else if (astFactory.isNewExpression(init)) {
-          if (astFactory.isIdentifier(init.callee) &&
-              reactiveClasses.has(init.callee.name)) classInstances.add(name);
-        } else if (astFactory.isCallExpression(init) &&
-                   astFactory.isMemberExpression(init.callee) &&
-                   astFactory.isIdentifier(init.callee.object) &&
-                   ((init.callee.object.name === 'Array' &&
-                     astFactory.isIdentifier(init.callee.property, { name: 'from' })) ||
-                    (init.callee.object.name === 'Object' &&
-                     astFactory.isIdentifier(init.callee.property, { name: 'values' })))) {
-          const source = init.arguments[0];
-          if (source !== undefined && astFactory.isExpression(source)) {
-            aliases.trackNamed(name, aliases.resolveExpressionOrigins(outerScope, source));
-          }
-        } else if (astFactory.isIdentifier(init) ||
-                   astFactory.isMemberExpression(init) ||
-                   astFactory.isConditionalExpression(init) ||
-                   astFactory.isTSNonNullExpression(rawInit)) {
-          const value = astFactory.isTSNonNullExpression(rawInit)
-            ? rawInit.expression
-            : init;
-          aliases.trackNamed(name,
-            astFactory.isCallExpression(value) &&
-            astFactory.isMemberExpression(value.callee)
-              ? aliases.resolveExpressionOrigins(outerScope, value.callee.object)
-              : aliases.resolveExpressionOrigins(outerScope, value));
-        } else if (astFactory.isCallExpression(init) &&
-                   astFactory.isMemberExpression(init.callee)) {
-          aliases.trackNamed(name,
-            aliases.resolveExpressionOrigins(outerScope, init.callee.object));
-        }
-      } else if (astFactory.isObjectPattern(declaration.id)) {
-        const sources = aliases.resolveExpressionOrigins(outerScope, init);
-        for (const property of declaration.id.properties) {
-          if (!astFactory.isObjectProperty(property) || property.computed ||
-              !astFactory.isIdentifier(property.value)) continue;
-          const key = astFactory.isIdentifier(property.key)
-            ? property.key.name
-            : astFactory.isStringLiteral(property.key)
-              ? property.key.value
-              : null;
-          if (key !== null) {
-            aliases.trackNamed(property.value.name,
-              sources.map(origin => extendOrigin(origin, [key])));
-          }
-        }
-      } else if (astFactory.isArrayPattern(declaration.id)) {
-        const source = astFactory.isCallExpression(init) &&
-          astFactory.isMemberExpression(init.callee) &&
-          astFactory.isIdentifier(init.callee.object, { name: 'Object' }) &&
-          astFactory.isIdentifier(init.callee.property, { name: 'values' })
-          ? init.arguments[0] : init;
-        const origins = source !== undefined && astFactory.isExpression(source)
-          ? aliases.resolveExpressionOrigins(outerScope, source) : [];
-        for (const element of declaration.id.elements) {
-          if (astFactory.isIdentifier(element)) aliases.trackNamed(element.name, origins);
-        }
-      }
-    };
-    for (const statement of program.body) {
-      const declaration = astFactory.isExportNamedDeclaration(statement)
-        ? statement.declaration
-        : statement;
-      if (astFactory.isVariableDeclaration(declaration) && declaration.kind === 'const') {
-        for (const item of declaration.declarations) seedDeclaration(item);
-      }
-    }
-    if (compName !== null) {
-      for (const statement of ctx.compPaths.get(compName)?.node.body.body ?? []) {
-        if (astFactory.isVariableDeclaration(statement) && statement.kind === 'const') {
-          for (const item of statement.declarations) seedDeclaration(item);
-        }
-      }
+    const componentConsts = compName === null ? [] :
+      (ctx.compPaths.get(compName)?.node.body.body ?? []).flatMap(statement =>
+        astFactory.isVariableDeclaration(statement) && statement.kind === 'const' ? statement.declarations : []);
+    for (const name of seedOuterAliases(aliases, outerScope,
+      [...programConstDeclarators(outerScope.block as t.Program), ...componentConsts],
+      reactiveModuleClasses(ctx, aliases, outerScope))) {
+      classInstances.add(name);
     }
   }
   const {
@@ -674,24 +568,20 @@ export function planHandlerWrites(
         if (receiverOrigins.length > 0) {
           for (const receiver of receiverOrigins) noteReceiverEffect(p, receiver);
         } else {
-          let callReceiver = callee.object;
-          while (astFactory.isMemberExpression(callReceiver)) {
-            callReceiver = callReceiver.object;
-          }
-          if (astFactory.isCallExpression(callReceiver)) {
-            const provider = callReceiver.callee;
-            if (astFactory.isIdentifier(provider) &&
-                !componentLocals.has(provider.name) &&
-                (ctx.helpers.has(provider.name) || ctx.importedFunctions.has(provider.name))) {
-              const summary = ctx.importedFunctions.get(provider.name) ??
-                summarizeHelper(ctx, provider.name);
-              mutateScope(p, scope => {
-                for (const read of summary.reads) recordRoutedWrite(scope, read);
-                // A holder returned by the helper can expose a reference to
-                // state that its read summary cannot identify precisely.
-                if (callReceiver !== callee.object) scope.rootFallback = true;
-              });
-            } else if (!isSynchronousConsumption(p)) {
+          const callReceiver = astFactory.isExpression(callee.object) ? rootCall(callee.object) : null;
+          const target = callReceiver === null ? null : callResultTarget(ctx, callReceiver, aliases, p.scope,
+            name => !componentLocals.has(name) && (ctx.helpers.has(name) || ctx.importedFunctions.has(name)));
+          if (target?.kind === 'helper') {
+            mutateScope(p, scope => {
+              for (const read of target.summary.reads) recordRoutedWrite(scope, read);
+              // A holder returned by the helper can expose a reference to
+              // state that its read summary cannot identify precisely.
+              if (callReceiver !== callee.object) scope.rootFallback = true;
+            });
+          } else if (target?.kind === 'receiver') {
+            for (const origin of target.origins) noteReceiverEffect(p, origin);
+          } else if (target !== null) {
+            if (!isSynchronousConsumption(p)) {
               // A call result can alias any module object. Escalate its
               // receiver effect instead of silently emitting no invalidation.
               mutateScope(p, scope => {

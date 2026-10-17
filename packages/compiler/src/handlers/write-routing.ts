@@ -25,6 +25,7 @@ import type { HandlerExecutionSite, HandlerMutationSite } from './plan';
 import { captureMutationJournals } from '../analysis/list-mutation-journals';
 import { hasKnownAccessor, isPlainDataAssignment } from './member-assignment';
 import { isSourceReplayConsumption } from '../effects/source-inputs';
+import { callResultTarget, rootCall } from '../analysis/function-effects';
 import type { BaseNode } from '../ast';
 
 export interface HandlerWriteRouting {
@@ -223,10 +224,36 @@ export function createHandlerWriteRouting({
     }
     mutate(site.writes);
   };
+  /**
+   * A local list can be a view of shared state (`const visible =
+   * column.tasks.filter(...)`), so item writes in its rows also reach that
+   * state's other readers. Same-module rows follow the owner's derivation
+   * sources; a row component in another module receives that provenance
+   * through its item prop's linked sources.
+   */
+  const routeLocalListProvenance = (scope: ScopeWrites): void => {
+    if (compName === null || rowCtx === undefined) return;
+    const listRoot = rowCtx.sourceKey.split('.')[0]!;
+    const derivation = ctx.instanceDerivations.get(compName)
+      ?.find(candidate => candidate.bindings.includes(listRoot));
+    if (derivation === undefined) {
+      applyLinkedPropEffect(ctx, compName, rowCtx,
+        { locality: 'prop', root: rowCtx.itemParam, key: rowCtx.itemParam }, scope);
+      return;
+    }
+    for (const dependency of derivation.sources) {
+      const root = dependency.split('.')[0]!;
+      if (ctx.state.has(root)) recordRoutedWrite(scope, dependency);
+      else if (propNames.has(root)) {
+        applyLinkedPropEffect(ctx, compName, rowCtx, { locality: 'prop', root, key: dependency }, scope);
+      }
+    }
+  };
   const noteSourceWrite = (p: HandlerPath): void => {
     mutateScope(p, (scope) => {
       if (rowCtx?.sourceLocal) {
         scope.rowOwnerLocal = true;
+        routeLocalListProvenance(scope);
       } else if (rowCtx !== undefined) {
         recordRoutedWrite(scope, rowCtx.sourceKey);
       }
@@ -489,6 +516,37 @@ export function createHandlerWriteRouting({
     }
   };
 
+  /**
+   * A write rooted in a call result (`find(id).done = true`) targets whatever
+   * the returned object aliases. A summarized helper bounds that to the state
+   * it reads; any other call result could alias any module object.
+   */
+  const noteCallResultWrite = (p: HandlerPath, node: t.MemberExpression): boolean => {
+    const call = rootCall(node);
+    if (call === null) return false;
+    const target = callResultTarget(ctx, call, aliases, p.scope, name =>
+      !componentLocals.has(name) && (ctx.helpers.has(name) || ctx.importedFunctions.has(name)));
+    if (target.kind === 'helper') {
+      mutateScope(p, scope => {
+        for (const read of target.summary.reads) recordRoutedWrite(scope, read);
+        if (target.summary.unbounded || target.summary.opaqueReads === true) scope.rootFallback = true;
+      });
+      return true;
+    }
+    if (target.kind === 'receiver') {
+      for (const origin of target.origins) noteReceiverEffect(p, origin);
+      return true;
+    }
+    // Same guard as receiver calls on call results: escalating inside an
+    // effect body would re-trigger the effect through its own commit.
+    if (isSynchronousConsumption(p)) return false;
+    mutateScope(p, scope => {
+      for (const name of ctx.state.keys()) recordRoutedWrite(scope, name);
+      if (compName !== null) scope.rootFallback = true;
+    });
+    return true;
+  };
+
   const noteMemberWrite = (p: HandlerPath, node: t.MemberExpression): void => {
     const rootName = memberRootName(node);
     const ownerStructural = rootName !== null && structuralWrites.get(p.node) === rootName;
@@ -632,6 +690,7 @@ export function createHandlerWriteRouting({
       });
       return;
     }
+    if (rootName === null && noteCallResultWrite(p, node)) return;
     if (rootName !== null && componentLocals.has(rootName)) return;
     if (!rootName || !ctx.state.has(rootName)) return;
     const kind = ctx.state.get(rootName)!;

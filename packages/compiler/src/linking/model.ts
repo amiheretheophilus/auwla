@@ -147,6 +147,8 @@ export interface StateExport {
   transparentSource?: boolean;
   tagCandidates: string[];
   componentCandidates: string[];
+  /** Canonical keys read by this object's getters and methods. */
+  impliedReads?: string[];
 }
 
 export interface FunctionExport {
@@ -170,7 +172,7 @@ export interface ComponentExport extends ComponentExportInfo {
   type: 'component';
 }
 
-export interface ValueExport { type: 'value'; reactiveClass?: true }
+export interface ValueExport { type: 'value'; reactiveClass?: true; impliedReads?: string[] }
 
 export type LinkedExport =
   | StateExport

@@ -456,6 +456,16 @@ export function collectReads(ctx: Ctx): void {
             branchChildren,
           );
         }
+        // `ready ? items.map(i => <Row />) : null`: the branch itself is the
+        // list. Skipping the root would record <Row> as a conditional child
+        // while emission builds a keyed list, splitting the row ABI between
+        // the caller and the row's module.
+        if (
+          (astFactory.isCallExpression(branch) || astFactory.isOptionalCallExpression(branch)) &&
+          !collectConditionalMap(branch, fullSuffix, branchPrefixes)
+        ) {
+          continue;
+        }
         const branchRoot = branch as unknown as BaseNode;
         walkAst<BaseNode>(branchRoot, {
           enter(current) {

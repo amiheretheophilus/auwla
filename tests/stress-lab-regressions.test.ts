@@ -76,3 +76,27 @@ it.each([
       return <main>{rows}<button onClick={()=>xs.push(3)}>push</button></main>;}`,
   })).toThrow(/JSX built in a loop or with push\(\) runs once and never updates/);
 });
+
+const BOARD = {
+  './state.ts': `export const columns=[{id:'todo',tasks:[{id:1,done:false},{id:2,done:false}]}];
+    export function toggle(task:{done:boolean}){task.done=!task.done;}`,
+  './Card.tsx': `import {toggle} from './state';
+    export function Card({task}:{task:{id:number;done:boolean}}){return <button id={'t'+task.id} onClick={()=>toggle(task)}>x</button>;}`,
+  './Count.tsx': `import {columns} from './state';
+    export function Count(){return <output id="out">{columns[0].tasks.filter(t=>t.done).length}</output>;}`,
+  './App.tsx': `import {columns} from './state';import {Column} from './Column';import {Count} from './Count';
+    export function App(){return <main><Count/>{columns.map(c=><Column key={c.id} column={c}/>)}</main>;}`,
+};
+
+it.each([
+  ['plain list', '{visible.map(task=><Card key={task.id} task={task}/>)}'],
+  ['list as a ternary branch', "{visible.length>0?visible.map(task=><Card key={task.id} task={task}/>):'done'}"],
+])('routes row writes through a derived local list to other readers (%s)',async(label,list)=>{
+  const app=await mountApp(`derived-rows-${label.replaceAll(' ','-')}`,{...BOARD,
+    './Column.tsx':`import {Card} from './Card';
+      export function Column({column}:{column:{tasks:{id:number;done:boolean}[]}}){const visible=column.tasks.filter(t=>!t.done);
+      return <section>${list}</section>;}`,
+  });
+  expect(app.out()).toBe('0');
+  app.click('t1');expect(app.out()).toBe('1');
+});

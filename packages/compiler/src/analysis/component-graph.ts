@@ -6,57 +6,106 @@ import { containsJsx, matchMapCall } from '../lists';
 import { expandRenderSlotPaths } from './slot-paths';
 import { isIntrinsicLifecycleCall } from '../intrinsics';
 
-/** Resolve every static runtime path at which a component may be mounted. */
+/**
+ * Reject recursion that only passes through plain static children: nothing
+ * can stop it, so mounting would recurse forever. A list row or a condition
+ * anywhere in the cycle can terminate it.
+ */
+export function assertTerminatingRecursion(ctx: Ctx): void {
+  for (const name of ctx.comps.keys()) {
+    const seen = new Set<string>();
+    const pending = [...(ctx.comps.get(name)?.parents ?? [])];
+    while (pending.length > 0) {
+      const parent = pending.pop()!;
+      if (parent === name) {
+        throw ctx.compPaths.get(name)!.buildCodeFrameError(
+          `memo-dom: recursive component '${name}' renders itself unconditionally — recurse through a list (items.map(...)) or a condition (L1)`,
+        );
+      }
+      if (seen.has(parent) || !ctx.comps.has(parent)) continue;
+      seen.add(parent);
+      pending.push(...(ctx.comps.get(parent)?.parents ?? []));
+    }
+  }
+}
+
+/** Components that can reach themselves through static, conditional or row placement. */
+export function recursiveComponents(ctx: Ctx): Set<string> {
+  const owners = (name: string): string[] => [
+    ...(ctx.listedSites.get(name) ?? []).map(site => site.owner),
+    ...(ctx.conditionalComponentSites.get(name) ?? []).map(site => site.owner),
+    ...(ctx.rowComponentSites.get(name) ?? []).map(site => site.owner),
+    ...(ctx.comps.get(name)?.parents ?? []),
+  ];
+  const recursive = new Set<string>();
+  for (const name of ctx.comps.keys()) {
+    const seen = new Set<string>();
+    const pending = owners(name);
+    while (pending.length > 0) {
+      const owner = pending.pop()!;
+      if (owner === name) { recursive.add(name); break; }
+      if (seen.has(owner) || !ctx.comps.has(owner)) continue;
+      seen.add(owner);
+      pending.push(...owners(owner));
+    }
+  }
+  return recursive;
+}
+
+/**
+ * Resolve every static runtime path at which a component may be mounted.
+ *
+ * A recursive placement has unbounded depth. Its cyclic edge contributes no
+ * finite path; the component instead reads through `<path>/**`, which the
+ * access resolver matches at any depth below each finite entry path.
+ */
 export function pathVariants(
   ctx: Ctx,
   name: string,
   visiting: Set<string> = new Set(),
+  cycles: Set<string> = new Set(),
 ): string[] {
   const linked = ctx.linkedComponentPaths.get(name);
   if (linked !== undefined) return [...linked];
   if (visiting.has(name)) {
-    throw ctx.compPaths.get(name)!.buildCodeFrameError(
-      `memo-dom: recursive component '${name}' — components cannot render themselves (L1)`,
-    );
+    cycles.add(name);
+    return [];
   }
 
   const listedSites = ctx.listedSites.get(name);
-  if (listedSites !== undefined && listedSites.length > 0) {
-    visiting.add(name);
-    const output = listedSites.flatMap((site) =>
-      pathVariants(ctx, site.owner, visiting).map(
-        (ownerPath) => `${ownerPath}/${site.suffix}/Row[*]`,
-      ),
-    );
-    visiting.delete(name);
-    return [...new Set(output)];
-  }
-
   const info = ctx.comps.get(name)!;
   const conditionalSites = ctx.conditionalComponentSites.get(name) ?? [];
   const rowSites = ctx.rowComponentSites.get(name) ?? [];
-  if (
-    info.parents.size === 0 &&
-    conditionalSites.length === 0 &&
-    rowSites.length === 0
-  ) {
+  const placedElsewhere =
+    info.parents.size > 0 || conditionalSites.length > 0 || rowSites.length > 0;
+  const output: string[] = [];
+  visiting.add(name);
+  for (const site of listedSites ?? []) {
+    for (const ownerPath of pathVariants(ctx, site.owner, visiting, cycles)) {
+      output.push(`${ownerPath}/${site.suffix}/Row[*]`);
+    }
+  }
+  visiting.delete(name);
+  if (listedSites !== undefined && listedSites.length > 0 && !placedElsewhere) {
+    return withRecursiveDepth(name, output, cycles);
+  }
+  if (output.length === 0 && !placedElsewhere) {
     return [ctx.rootId];
   }
   visiting.add(name);
-  const output: string[] = [];
   for (const site of conditionalSites) {
-    for (const ownerPath of pathVariants(ctx, site.owner, visiting)) {
+    for (const ownerPath of pathVariants(ctx, site.owner, visiting, cycles)) {
       output.push(`${ownerPath}/${site.suffix}`);
     }
   }
   for (const site of rowSites) {
-    for (const ownerPath of pathVariants(ctx, site.owner, visiting)) {
+    for (const ownerPath of pathVariants(ctx, site.owner, visiting, cycles)) {
       output.push(`${ownerPath}/${site.suffix}`);
     }
   }
   for (const parent of info.parents) {
     const count = ctx.childRefCounts.get(parent)?.get(name) ?? 1;
-    for (const parentPath of pathVariants(ctx, parent, visiting)) {
+    for (const parentPath of pathVariants(ctx, parent, visiting, cycles)) {
       if (count > 1) {
         output.push(`${parentPath}/${name}`, `${parentPath}/${name}[*]`);
       } else {
@@ -68,7 +117,14 @@ export function pathVariants(
     }
   }
   visiting.delete(name);
-  return output;
+  return withRecursiveDepth(name, output, cycles);
+}
+
+/** Close a placement cycle that returned to `name` with a depth wildcard. */
+function withRecursiveDepth(name: string, output: string[], cycles: Set<string>): string[] {
+  const finite = [...new Set(output)];
+  if (!cycles.delete(name)) return finite;
+  return [...new Set([...finite, ...finite.map(path => `${path}/**`)])];
 }
 
 /** Runtime reader patterns for static, conditional, and listed components. */
@@ -93,14 +149,6 @@ export function componentPatterns(ctx: Ctx, name: string): string[] {
   const linked = ctx.linkedComponentPaths.get(name);
   if (linked !== undefined) {
     return expandRenderSlotPaths(ctx, [...linked]);
-  }
-  if (sites && sites.length > 0) {
-    for (const site of sites) {
-      for (const variant of pathVariants(ctx, site.owner)) {
-        patterns.push(`${variant}/${site.suffix}/Row[*]`);
-      }
-    }
-    return expandRenderSlotPaths(ctx, patterns);
   }
   for (const variant of pathVariants(ctx, name)) {
     patterns.push(variant);

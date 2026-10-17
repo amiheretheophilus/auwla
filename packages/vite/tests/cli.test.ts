@@ -4,6 +4,7 @@ import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { existsSync } from 'node:fs';
 import puppeteer from 'puppeteer-core';
+import { closeBrowser } from '../../../test-support/browser';
 import { afterEach, describe, expect, it } from 'bun:test';
 import { waitFor } from '../../../test-support/helpers';
 
@@ -117,7 +118,7 @@ describe('consistent CLI launcher', () => {
       await page.waitForFunction(() => document.querySelector('button')!.textContent === '3');
       expect(traces).toHaveLength(count);
       expect(errors, log.output() + log.errors()).toEqual([]);
-    } finally { await browser.close(); }
+    } finally { await closeBrowser(browser); }
   }, 150_000);
 
   it('omits runtime diagnostics from production browser assets', async () => {
@@ -318,7 +319,7 @@ describe('consistent CLI launcher', () => {
       }
       expect(errors).toEqual([]);
       expect(requests).toEqual([]);
-    } finally { await browser.close(); }
+    } finally { await closeBrowser(browser); }
   }, 90_000);
 
   it.each([['node', 'bun'], ['bun', 'node'], ['node', 'node'], ['bun', 'bun']] as const)(

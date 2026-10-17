@@ -29,6 +29,7 @@ import { compilerError } from '../errors';
 import type { CompilerRouteDefinition } from '../analysis/routes';
 import { analyzeRoutedPreparations } from '../routed';
 import { compilerOptions } from './options';
+import { classMemberReads } from '../analysis/implied-reads';
 import type {
   CompileModulesOptions,
   ComponentPropUsage,
@@ -402,12 +403,16 @@ function applicationMounts(
  * change shared state through its instances. Over-approximation only widens
  * the caller's invalidation, so shadowing is deliberately ignored.
  */
-function classReachesSharedState(ctx: Ctx, program: t.Program, local: string): boolean {
-  const declaration = program.body
+function exportedClass(program: t.Program, local: string): t.ClassDeclaration | undefined {
+  return program.body
     .map(statement => astFactory.isExportNamedDeclaration(statement) ||
       astFactory.isExportDefaultDeclaration(statement) ? statement.declaration : statement)
     .find((node): node is t.ClassDeclaration =>
       astFactory.isClassDeclaration(node) && node.id?.name === local);
+}
+
+function classReachesSharedState(ctx: Ctx, program: t.Program, local: string): boolean {
+  const declaration = exportedClass(program, local);
   if (declaration === undefined) return false;
   let reaches = false;
   walkNodes(declaration.body as unknown as BaseNode, node => {
@@ -537,6 +542,10 @@ export function analyzeManifest(
                 ctx,
                 ctx.stateComponentCandidates.get(local) ?? [],
               ),
+              ...(() => {
+                const implied = ctx.stateImpliedReads.get(canonicalStateKey(ctx, local));
+                return implied === undefined ? {} : { impliedReads: [...implied].sort() };
+              })(),
             };
             continue;
           }
@@ -619,9 +628,13 @@ export function analyzeManifest(
             };
             continue;
           }
-          exports[exported] = classReachesSharedState(ctx, compilerPath.node, local)
-            ? { type: 'value', reactiveClass: true }
-            : { type: 'value' };
+          const declaration = exportedClass(compilerPath.node, local);
+          const implied = declaration === undefined ? [] : [...classMemberReads(ctx, declaration)].sort();
+          exports[exported] = {
+            type: 'value',
+            ...(classReachesSharedState(ctx, compilerPath.node, local) ? { reactiveClass: true as const } : {}),
+            ...(implied.length > 0 ? { impliedReads: implied } : {}),
+          };
         }
         manifest = {
           exports,

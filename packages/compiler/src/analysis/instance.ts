@@ -136,16 +136,16 @@ function summarizeLocalDerivationHelper(
   reactiveBindings: Map<Binding, string>,
   cache: Map<BaseNode, LocalDerivationHelperSummary>,
   visiting: Set<BaseNode>,
+  cycleHits: Set<BaseNode> = new Set(),
 ): LocalDerivationHelperSummary | null {
   const fn = localFunction(ctx, component, at, name);
   if (fn === null) return null;
   const cached = cache.get(fn);
   if (cached !== undefined) return cached;
   if (visiting.has(fn)) {
-    return {
-      reads: new Set(),
-      reason: `calls recursive local helper '${name}'`,
-    };
+    // The active frame for this helper already covers its body's reads.
+    cycleHits.add(fn);
+    return { reads: new Set(), reason: null };
   }
 
   const summary: LocalDerivationHelperSummary = {
@@ -183,6 +183,7 @@ function summarizeLocalDerivationHelper(
       reactiveBindings,
       cache,
       visiting,
+      cycleHits,
     );
     if (local !== null) {
       for (const read of local.reads) summary.reads.add(read);
@@ -223,8 +224,11 @@ function summarizeLocalDerivationHelper(
   const body = childNode(fn, 'body') ?? fn;
   walkExecuted(ctx, body, false, inspect);
   if (summary.reads.size !== 0) walkExecuted(ctx, body, true, inspect);
+  cycleHits.delete(fn);
+  const reenteredAncestor = [...cycleHits].some(hit => visiting.has(hit) && hit !== fn);
   visiting.delete(fn);
-  cache.set(fn, summary);
+  // A summary computed inside another helper's cycle is incomplete.
+  if (!reenteredAncestor) cache.set(fn, summary);
   return summary;
 }
 

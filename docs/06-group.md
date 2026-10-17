@@ -218,9 +218,10 @@ Details that matter:
   `Dashboard` as a prop.
 - `suspend` only controls the **first** mount. Later refreshes keep the
   committed UI on screen — it's not a "re-suspend on every fetch" switch.
-  Rebinding a source in the same committed instance uses ordinary read-local
-  pending UI. A remount or changed route path parameter starts a new atomic
-  activation; query/hash changes retain the instance.
+  Rebinding a source in the same committed instance (an input change) is a
+  refresh too: the previous value stays visible until the new one arrives,
+  and no pending policy renders. A remount or changed route path parameter
+  starts a new atomic activation; query/hash changes retain the instance.
 
 ### Across a component boundary
 

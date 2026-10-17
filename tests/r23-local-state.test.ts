@@ -281,7 +281,7 @@ describe('R23 - stable local state', () => {
     expect(code).not.toMatch(/\n\s+getter = makeGetter\(\)/);
   });
 
-  it('rejects local derivation helpers that write state or recurse', () => {
+  it('rejects local derivation helpers that write state, and derives through recursion', () => {
     expect(() =>
       compile(`
         export function App() {
@@ -293,17 +293,17 @@ describe('R23 - stable local state', () => {
       `),
     ).toThrow(/calls local helper 'bump' which writes reactive state 'count'/);
 
-    expect(() =>
-      compile(`
-        export function App() {
-          let count = 1;
-          function changeCount() { count++; }
-          function read() { return count > 0 ? read() : count; }
-          const double = read() * 2;
-          return <p>{double}</p>;
-        }
-      `),
-    ).toThrow(/calls recursive local helper 'read'/);
+    // A recursive helper's reads are its body's reads; recursion adds none.
+    // Termination is the author's, as in plain JavaScript.
+    const recursive = compile(`
+      export function App() {
+        let count = 3;
+        function sum(n) { return n <= 0 ? 0 : n + sum(n - 1); }
+        const total = sum(count);
+        return <button onClick={() => count++}>{total}</button>;
+      }
+    `);
+    expect(recursive).toMatch(/total = sum\(count\)/);
   });
 
   it('links imported helper reads into a component-local derivation', () => {

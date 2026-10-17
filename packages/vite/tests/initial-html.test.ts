@@ -6,6 +6,7 @@ import { createServer as createHttpServer } from 'node:http';
 import { afterEach, describe, expect, it } from 'bun:test';
 import { build, createServer } from 'vite';
 import puppeteer from 'puppeteer-core';
+import { closeBrowser } from '../../../test-support/browser';
 import { experimentalCompilePackage } from '@memoized-dom/compiler';
 import memoizedDom from '../src';
 import { applyInitialPage } from '../src/initial-html';
@@ -126,7 +127,7 @@ describe('HTML first production builds', () => {
       await page.click('.projected');await page.waitForFunction(()=>document.querySelector('.fallback')?.textContent==='Title 4');
       expect(errors).toEqual([]);
     }finally{
-      await browser.close();await new Promise<void>((done,reject)=>server.close(error=>error?reject(error):done()));
+      await closeBrowser(browser);await new Promise<void>((done,reject)=>server.close(error=>error?reject(error):done()));
     }
   },120_000);
 
@@ -232,7 +233,7 @@ describe('HTML first production builds', () => {
       await page.waitForFunction(() => document.querySelector('output')?.textContent === '5:Before!');
       expect(errors).toEqual([]);
     } finally {
-      await browser.close();
+      await closeBrowser(browser);
       await new Promise<void>((done, reject) => server.close(error => error ? reject(error) : done()));
     }
   }, 120_000);
@@ -316,7 +317,7 @@ describe('HTML first production builds', () => {
       expect(await page.$eval('h2',node=>node.textContent)).toBe('Title 4');
       expect(errors).toEqual([]);
     } finally {
-      await browser.close();
+      await closeBrowser(browser);
       await new Promise<void>((done,reject)=>server.close(error=>error?reject(error):done()));
     }
   },120_000);
@@ -394,7 +395,7 @@ describe('HTML first production builds', () => {
       })).toEqual({ kept: true, replaced: true, text: 'After' });
       expect(errors).toEqual([]);
     } finally {
-      await browser.close();
+      await closeBrowser(browser);
       await new Promise<void>((done, reject) => server.close(error => error ? reject(error) : done()));
     }
   }, 120_000);
@@ -464,7 +465,7 @@ describe('HTML first production builds', () => {
       })).toEqual({ same: true, created: [] });
       expect(errors).toEqual([]);
     } finally {
-      await browser.close(); await new Promise<void>((done, reject) => server.close(error => error ? reject(error) : done()));
+      await closeBrowser(browser); await new Promise<void>((done, reject) => server.close(error => error ? reject(error) : done()));
     }
   });
   it.skipIf(!chromeExecutable())('binds controlled input values and empty todo extents in Chrome',async () =>{
@@ -525,7 +526,7 @@ describe('HTML first production builds', () => {
         return state.field===document.querySelector('.todo')&&state.heading===document.querySelector('h1');
       })).toBe(true);expect(errors).toEqual([]);
     } finally {
-      await browser.close();await new Promise<void>((done,reject)=>server.close(error=>error?reject(error):done()));
+      await closeBrowser(browser);await new Promise<void>((done,reject)=>server.close(error=>error?reject(error):done()));
     }
   });
   it.skipIf(!chromeExecutable())('binds both list identity modes in Chrome and creates only later rows',async () =>{
@@ -586,7 +587,7 @@ describe('HTML first production builds', () => {
       expect(await page.evaluate(()=>(window as unknown as {heading:Element}).heading===document.querySelector('h1'))).toBe(true);
       expect(errors).toEqual([]);
     } finally {
-      await browser.close();await new Promise<void>((done,reject)=>server.close(error=>error?reject(error):done()));
+      await closeBrowser(browser);await new Promise<void>((done,reject)=>server.close(error=>error?reject(error):done()));
     }
   });
 
@@ -653,7 +654,7 @@ describe('HTML first production builds', () => {
           state.originalBranch!==document.querySelector('section');
       })).toBe(true);expect(errors).toEqual([]);
     } finally {
-      await browser.close();await new Promise<void>((done,reject)=>server.close(error=>error?reject(error):done()));
+      await closeBrowser(browser);await new Promise<void>((done,reject)=>server.close(error=>error?reject(error):done()));
     }
   });
 
@@ -769,7 +770,7 @@ describe('HTML first production builds', () => {
       expect(await page.$eval('#root', node => [...node.childNodes].filter(child => child.nodeType === 8).length)).toBe(0);
       expect(errors).toEqual([]);
     } finally {
-      await browser.close();
+      await closeBrowser(browser);
       await new Promise<void>((done,reject)=>server.close(error=>error?reject(error):done()));
     }
   });
@@ -885,7 +886,7 @@ describe('HTML first production builds', () => {
       })).toBe(true);
       expect(errors).toEqual(['Error: authored failure']);
     } finally {
-      await browser.close();
+      await closeBrowser(browser);
       await new Promise<void>((done,reject)=>server.close(error=>error?reject(error):done()));
     }
   });
@@ -931,7 +932,7 @@ describe('HTML first production builds', () => {
       expect(await page.$eval('h1', element => getComputedStyle(element).color)).toBe('rgb(1, 2, 3)');
       expect(scripts).toEqual([]);
     } finally {
-      await browser.close();
+      await closeBrowser(browser);
       await new Promise<void>((done, reject) => server.close(error => error ? reject(error) : done()));
     }
   });

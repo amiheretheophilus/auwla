@@ -3,10 +3,11 @@
  *
  *   bun test --preload ./test-support/dom.ts ./examples/stress-lab/probe.test.ts
  *
- * This is an exploratory probe, outside the test root. Failing cases record
- * open questions (const reference aliases, recursive components) or shapes
- * rejected by design (JSX built in loops). Fixed findings are pinned by
- * tests/stress-lab-regressions.test.ts.
+ * This is an exploratory probe, outside the test root. Remaining failures are
+ * shapes rejected by design (JSX built in loops; see
+ * docs/dynamic-rendering-options.md). Fixed findings are pinned by tests named
+ * after them: stress-lab-regressions, recursive-components, recursive-helpers,
+ * indirect-module-writes, namespace-and-getter-reads and snapshot-intrinsic.
  */
 import { afterEach, expect, it } from 'bun:test';
 import { mkdirSync, writeFileSync } from 'node:fs';
@@ -14,7 +15,11 @@ import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { compileModules } from '@memoized-dom/compiler';
 import { registeredIds, unregisterSubtree, setScheduler, resetScheduler } from '@memoized-dom/runtime/testing';
-import { cases } from './cases';
+import { cases as round1 } from './cases';
+import { cases as round2 } from './cases-round2';
+import { cases as round3 } from './cases-round3';
+
+const cases = [...round1, ...round2, ...round3];
 
 afterEach(() => {
   for (const id of registeredIds()) unregisterSubtree(id);
@@ -41,11 +46,16 @@ for (const [index, testCase] of cases.entries()) {
 
     const observed = [read()];
     const expected = [testCase.initial];
+    const retained = testCase.retained === undefined ? null : document.querySelector(testCase.retained);
     for (const [button, value] of testCase.steps) {
       document.querySelector<HTMLButtonElement>(`#${button}`)!.click();
       await settle();
       observed.push(read());
       expected.push(value);
+      if (retained !== null) {
+        observed.push(retained.isConnected ? 'retained' : 'recreated');
+        expected.push('retained');
+      }
     }
     expect(observed).toEqual(expected);
   });

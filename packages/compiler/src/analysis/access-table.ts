@@ -30,6 +30,18 @@ export function planAccessReaders(ctx: Ctx): AccessReaderPlan {
     structuralPatterns: readonly string[] = patterns,
   ): void => {
     const key = canonicalStateKey(ctx, variable);
+    // Reading an object also reads the state its getters and methods read.
+    const root = key.includes('#') ? key.replace(/^([^#]*#[^.]*).*$/, '$1') : key.split('.')[0]!;
+    for (const implied of ctx.stateImpliedReads.get(root) ?? []) {
+      if (implied !== key) addKey(implied, patterns);
+    }
+    addKey(key, patterns, structuralPatterns);
+  };
+  const addKey = (
+    key: string,
+    patterns: readonly string[],
+    structuralPatterns: readonly string[] = patterns,
+  ): void => {
     let readers = table.get(key);
     if (!readers) table.set(key, (readers = new Set()));
     for (const pattern of patterns) readers.add(pattern);
