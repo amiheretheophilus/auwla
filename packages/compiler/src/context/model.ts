@@ -172,6 +172,8 @@ export interface LinkedStateImport {
   tagCandidates?: string[];
   /** Finite component identities reachable through this state/registry. */
   componentCandidates?: LinkedDynamicComponentCandidate[];
+  /** State its getters and methods read; reading this export reads them too. */
+  impliedReads?: string[];
 }
 
 export interface LinkedFunctionImport {
@@ -497,6 +499,8 @@ export interface Ctx {
   importedReactiveClasses: Set<string>;
   /** Declarators whose promise initializer a `$read` replays in place. */
   readReplayOrigins: Set<t.VariableDeclarator>;
+  /** Canonical state key → keys its getters and methods read (reading it reads them). */
+  stateImpliedReads: Map<string, Set<string>>;
   linkedComponentPaths: Map<string, string[]>;
   /** Graph-linked keyed-row modes for declarations in this module. */
   linkedComponentRows: Map<string, LinkedComponentRowUse[]>;
@@ -669,10 +673,14 @@ export function createAnalysisCtx(opts: AnalysisOptions = {}): Ctx {
   const importedComponents = new Map<string, LinkedComponentImport>();
   const importedValues = new Set<string>();
   const importedReactiveClasses = new Set<string>();
+  const stateImpliedReads = new Map<string, Set<string>>();
   for (const [local, linked] of Object.entries(opts.linkedImports ?? {})) {
     if (linked.type === 'state') {
       state.set(local, linked.kind);
       stateKeys.set(local, linked.key);
+      if (linked.impliedReads !== undefined && linked.impliedReads.length > 0) {
+        stateImpliedReads.set(linked.key, new Set(linked.impliedReads));
+      }
       if (linked.tagCandidates !== undefined) {
         stateTagCandidates.set(local, [...linked.tagCandidates]);
       }
@@ -801,6 +809,7 @@ export function createAnalysisCtx(opts: AnalysisOptions = {}): Ctx {
     importedValues,
     importedReactiveClasses,
     readReplayOrigins: new Set(),
+    stateImpliedReads,
     transparentModuleSources,
     transparentSourceProps: new Map(),
     presentationOwners: new Map(),

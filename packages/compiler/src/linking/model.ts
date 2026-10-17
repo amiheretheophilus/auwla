@@ -135,6 +135,8 @@ export interface StateExport {
   transparentSource?: boolean;
   tagCandidates: string[];
   componentCandidates: string[];
+  /** Canonical keys read by this object's getters and methods. */
+  impliedReads?: string[];
 }
 
 export interface FunctionExport {

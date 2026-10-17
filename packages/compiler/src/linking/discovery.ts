@@ -537,6 +537,10 @@ export function analyzeManifest(
                 ctx,
                 ctx.stateComponentCandidates.get(local) ?? [],
               ),
+              ...(() => {
+                const implied = ctx.stateImpliedReads.get(canonicalStateKey(ctx, local));
+                return implied === undefined ? {} : { impliedReads: [...implied].sort() };
+              })(),
             };
             continue;
           }

@@ -394,7 +394,7 @@ export function linkImports(
     }
     if (ref.imported === '*') {
       throw new Error(
-        `memo-dom: namespace import '${ref.local}' from '${ref.source}' cannot identify a reactive export; use named imports`,
+        `memo-dom: namespace import '${ref.local}' from '${ref.source}' is used as a value, so its reactive exports cannot be identified; access members directly (${ref.local}.name) or use named imports`,
       );
     }
     const targetExport = manifests.get(target.id)?.exports[ref.imported];
@@ -427,6 +427,7 @@ export function linkImports(
           targetExport.componentCandidates,
           manifests,
         ),
+        ...(targetExport.impliedReads === undefined ? {} : { impliedReads: [...targetExport.impliedReads] }),
       };
     } else if (targetExport.type === 'component') {
       const usage = renderUsage?.get(targetExport.key);

@@ -61,6 +61,7 @@ import {
 } from '../analysis/module-scan';
 import { scanRenderProps } from '../analysis/render-props';
 import { collectReads } from '../analysis/read-collection';
+import { planStateImpliedReads } from '../analysis/implied-reads';
 import { componentSlotProp } from '../jsx/component-slots';
 
 
@@ -110,6 +111,7 @@ export function runAnalysis(ctx: Ctx, programPath: ProgramPath): void {
   scanOpaqueVolatility(ctx);
   registerTransparentSourceRoots(ctx);
   scanComputeds(ctx, programPath); // R13: after helpers are known
+  planStateImpliedReads(ctx, programPath);
   scanModuleControlFlow(ctx, programPath, analyzeComputed);
   scanInstanceDerivations(ctx); // R14/R24: ordered local projections/computeds
   scanInstanceControlFlow(ctx);
