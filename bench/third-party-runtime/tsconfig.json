@@ -1,0 +1,6 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": { "tsBuildInfoFile": "./.generated/typecheck.tsbuildinfo" },
+  "include": ["./*.ts"],
+  "exclude": ["./.generated", "./results"]
+}

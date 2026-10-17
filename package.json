@@ -56,6 +56,7 @@
     "bench:ssr:writer": "bun run bench/ssr/writer.ts",
     "bench:linker": "bun run bench/linker/run.ts",
     "bench:package-compilation": "bun run bench/package-compilation/run.ts",
+    "bench:third-party-runtime": "bun run bench/third-party-runtime/run.ts",
     "bench:router": "bun run --cwd packages/router build && bun run bench/router/run.ts",
     "bench:lifecycle": "bun run bench/lifecycle/run.ts",
     "bench:children": "bun run bench/children/run.ts",

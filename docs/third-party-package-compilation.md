@@ -101,6 +101,15 @@ Run the experiment after building the workspace:
 bun test --isolate ./tests/third-party-package-compilation.test.ts
 ```
 
+## Runtime measurements
+
+Use `bun run bench:third-party-runtime --smoke` to validate the benchmark setup,
+then `bun run bench:third-party-runtime` for the full opaque/compiled comparison.
+It measures idle-frame work separately from click throughput in real Chromium,
+verifies correctness in both modes, and saves raw samples plus machine metadata.
+See [benchmark instructions and interpretation](../bench/third-party-runtime/README.md).
+Do not infer a speedup merely from a removed volatile flag or from smoke timings.
+
 See [library packaging](./library-packaging.md) for the completed authoring flow
 and [package compilation research](./package-compilation-research.md) for the
 broader integration boundaries.
