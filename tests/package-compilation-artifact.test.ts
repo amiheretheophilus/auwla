@@ -396,18 +396,19 @@ describe('experimental package compilation artifacts', () => {
     }, { packageEntries: { 'older-ui': './index.tsx' } });
     const oldArtifact = structuredClone(packaged.artifact);
     Reflect.deleteProperty(oldArtifact.entries['older-ui']!.components!.Badge.initial!, 'adoption');
+    Reflect.deleteProperty(oldArtifact.entries['older-ui']!.components!.Panel.initial!, 'adoption');
     const compile = (body: string, artifact = packaged.artifact) => compileModulesDetailed({
       './main.ts': `import { mount } from '@memoized-dom/runtime'; import { App } from './app'; mount('root', App);`,
       './app.tsx': `import {Badge, Panel} from 'older-ui'; export function App() { ${body} }`,
     }, { initialContent: true, experimentalPackageArtifacts: [artifact] });
     expect(compile(`let label='Before'; return <main><Badge label={label}/><button onClick={()=>label='After'}>Change</button></main>;`, oldArtifact).initialContent)
       .toBe(false);
-    expect(compile(`let show=false; return <main><Panel><b>Fixed</b></Panel><button onClick={()=>show=!show}>Toggle</button>{show&&<Panel><b>Later</b></Panel>}</main>;`).initialContent)
+    expect(compile(`let show=false; return <main><Panel><b>Fixed</b></Panel><button onClick={()=>show=!show}>Toggle</button>{show&&<Panel><b>Later</b></Panel>}</main>;`, oldArtifact).initialContent)
       .toBe(false);
 
     const unsupported = structuredClone(packaged.artifact);
     Reflect.set(unsupported.entries['older-ui']!.components!.Badge.initial!, 'adoption', 'host-v2');
-    expect(() => validateExperimentalPackageArtifact(unsupported)).toThrow(".initial.adoption; expected 'host-v1', 'host-slots-v1', or 'host-events-v1'");
+    expect(() => validateExperimentalPackageArtifact(unsupported)).toThrow(".initial.adoption; expected 'host-v1', 'host-slots-v1', 'host-events-v1', or 'host-slots-v2'");
     const slotAdoption = structuredClone(packaged.artifact);
     Reflect.set(slotAdoption.entries['older-ui']!.components!.Panel.initial!, 'adoption', 'host-v1');
     expect(() => validateExperimentalPackageArtifact(slotAdoption)).toThrow('host-v1 does not support component slots');
@@ -485,13 +486,13 @@ describe('experimental package compilation artifacts', () => {
     }
   });
 
-  it('rejects portable slot adoption without dedicated hosts or with fallbacks', () => {
+  it('requires the newer capability for element-separated slots and fallbacks', () => {
     const packaged = experimentalCompilePackage({
       './index.tsx': `export function Mixed(){return <section><b>Before</b><slot/></section>;}
         export function Fallback(){return <section><main><slot><b>Empty</b></slot></main></section>;}`,
     }, {packageEntries:{'bounded-slots':'./index.tsx'}});
     for (const [name,component] of Object.entries(packaged.artifact.entries['bounded-slots']!.components!)) {
-      expect(component.initial?.adoption).toBeUndefined();
+      expect(component.initial?.adoption).toBe('host-slots-v2');
       const artifact = structuredClone(packaged.artifact);
       Reflect.set(artifact.entries['bounded-slots']!.components![name]!.initial!, 'adoption','host-slots-v1');
       expect(()=>validateExperimentalPackageArtifact(artifact)).toThrow('requires dedicated slot hosts without fallbacks');

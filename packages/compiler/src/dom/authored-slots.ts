@@ -8,6 +8,7 @@ import { type JsxChild } from '../jsx/children';
 import type { EmitScope } from './scope';
 import type { NodeEmitter } from './node-emitter';
 import { emitText } from './text-node';
+import { initialSite } from '../planning/initial-content';
 
 interface AuthoredSlotDependencies {
   emitNode: NodeEmitter;
@@ -182,4 +183,32 @@ export function createAuthoredSlotBuilders(
   };
 
   return { buildAuthoredChildrenSlot, buildAuthoredRenderValueSlot };
+}
+
+/** Bind a package-owned fallback only when no caller slot was supplied. */
+export function emitAuthoredSlotMount(
+  dependencies: AuthoredSlotDependencies,
+  ctx: Ctx,
+  scope: EmitScope,
+  expression: t.Expression,
+  parent: string,
+  component: string,
+  path: ComponentPath,
+  nestedIn: 'row' | 'cond' | null,
+  row: RowCtx | undefined,
+  inSvg: boolean,
+  owner: t.Expression,
+): void {
+  const plan = ctx.initialDomRoot?.component === component ? ctx.initialDomRoot : ctx.initialDomComponents[component];
+  const fallback = plan?.slotFallbacks?.[initialSite(expression)];
+  if (fallback && astFactory.isConditionalExpression(expression) && astFactory.isJSXFragment(expression.consequent)) {
+    const slot = createAuthoredSlotBuilders(dependencies).buildAuthoredChildrenSlot(
+      ctx, scope, expression.consequent.children, component, path,
+      nestedIn, row, undefined, inSvg, owner, fallback,
+    );
+    const location = expression.loc;
+    expression = astFactory.conditionalExpression(expression.test, slot, expression.alternate);
+    if (location) expression.loc = location;
+  }
+  emitForwardedSlotMount(ctx, scope, expression, parent, owner);
 }

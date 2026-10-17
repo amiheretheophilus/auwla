@@ -1104,7 +1104,9 @@ export function experimentalCompilePackage(
       // factory cannot adopt that shape. Keep ordinary creation in that case.
       if (template.events && dom === undefined) continue;
       templates.set(summary.local, dom === undefined ? { root: template.root } : {
-        root: template.root, adoption: template.events ? 'host-events-v1' : summary.slots.length > 0 ? 'host-slots-v1' : 'host-v1',
+        root: template.root,
+        adoption: dom.packageSlotsV2 ? 'host-slots-v2' : template.events ? 'host-events-v1' : summary.slots.length > 0 ? 'host-slots-v1' : 'host-v1',
+        ...(dom.packageSlotsV2 && template.events ? {events:true as const} : {}),
       });
       if (dom !== undefined) bindings[summary.local] = dom;
     }

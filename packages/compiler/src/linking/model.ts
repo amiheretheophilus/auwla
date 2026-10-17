@@ -86,6 +86,8 @@ export type ExperimentalPackageRenderNode =
       readonly kind: 'slot';
       /** Empty string denotes the default slot. */
       readonly name: string;
+      /** Authored identity for an independently bound package fallback. */
+      readonly site?: string;
       readonly fallback: readonly ExperimentalPackageRenderNode[];
     };
 
@@ -96,7 +98,9 @@ export type ExperimentalPackageRenderNode =
 export interface ExperimentalPackageRenderPlan {
   readonly root: ExperimentalPackageRenderNode;
   /** The matching package factory accepts an optional host after its ordinary arguments. */
-  readonly adoption?: 'host-v1' | 'host-slots-v1' | 'host-events-v1';
+  readonly adoption?: 'host-v1' | 'host-slots-v1' | 'host-events-v1' | 'host-slots-v2';
+  /** v2 slot factories may also need event attachment. */
+  readonly events?: true;
 }
 
 export interface ExperimentalPackageEntry {

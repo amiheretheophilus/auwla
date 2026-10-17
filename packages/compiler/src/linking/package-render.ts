@@ -1,5 +1,6 @@
 /** Portable, non-executable initial DOM extraction for package components. */
 import type * as t from '../ast/compiler-types';
+import { isBooleanLiteral, isNullLiteral } from '../ast/factory';
 import {
   childNode,
   childNodes,
@@ -8,10 +9,11 @@ import {
   unwrapTypeExpression,
   type BaseNode,
 } from '../ast';
-import { initialSite } from '../planning/initial-content';
+import { initialSite, initialSlotFallbackSite } from '../planning/initial-content';
 import type { InitialRenderNode, InitialRenderPlan } from '../planning/initial-content';
-import { planInitialDom, relativeInitialDom, type InitialDomRoot } from '../dom/initial-dom';
+import { planInitialDom, relativeInitialDom, type InitialDomRoot, type InitialDomSlot } from '../dom/initial-dom';
 import { emitInitialHtml } from '../dom/initial-html';
+import { componentSlotProp } from '../jsx/component-slots';
 import type {
   ExperimentalPackageRenderNode,
   ExperimentalPackageRenderPlan,
@@ -199,7 +201,7 @@ export function extractExperimentalPackageRenderPlan(
         if (
           expression === null ||
           expression.type === 'Identifier' && identifierLikeName(expression) === 'undefined' ||
-          ['NullLiteral', 'BooleanLiteral'].includes(expression.type)
+          isNullLiteral(expression) || isBooleanLiteral(expression)
         ) {
           continue;
         }
@@ -233,7 +235,7 @@ export function extractExperimentalPackageRenderPlan(
       }
       if (!slots.has(name)) return undefined;
       const fallback = nodes(childNodes(node, 'children'));
-      return fallback === undefined ? undefined : { kind: 'slot', name, fallback };
+      return fallback === undefined ? undefined : { kind: 'slot', name, site: initialSite(node), fallback };
     }
     if (!/^[a-z][a-z0-9]*$/.test(tag)) return undefined;
     const site = initialSite(node);
@@ -293,18 +295,51 @@ export function packageInitialDom(
   component: string,
 ): InitialDomRoot | undefined {
   if (initial.root.kind !== 'element') return undefined;
+  const fallbackSlots: Record<string, InitialDomSlot> = {};
+  const slotFallbacks: Record<string, string> = {};
+  const slotMounts: Record<string, string> = {};
+  let mixedSlots = false;
+  const makePlan = (nodes: readonly InitialRenderNode[], returnSite: string): Extract<InitialRenderPlan, {kind:'bindings'}> => ({
+    kind:'bindings', target:'', mountModuleId:moduleId, rootModuleId:moduleId, rootLocal:component, returnSite, nodes,
+  });
+  const containsSlot = (input: ExperimentalPackageRenderNode): boolean => input.kind === 'slot' ||
+    input.kind === 'element' && input.children.some(containsSlot);
   const node = (input: ExperimentalPackageRenderNode): InitialRenderNode | undefined => {
-    if (input.kind === 'slot') return undefined;
+    if (input.kind === 'slot') return {
+      kind: 'slot', site: input.site!, moduleId, component, children: [],
+      packagePlaceholder: true, variablePackageSlot: true,
+    };
     if (input.kind === 'text') {
       // All symbolic reads remain live, including calls initially given constants.
       return { kind: 'text', value: 'package', live: input.parts.some(part => part.kind === 'prop') };
     }
-    // A separately compiled host cannot know projected widths. A dedicated
-    // slot host has no later sibling addresses to shift and owns no projected
-    // bindings. The caller plans that content relative to this host instead.
+    // Projected widths are unknown here. With one slot, fixed suffix siblings
+    // can use existing end-relative addresses; adjacent text would merge with
+    // projected text, making those addresses ambiguous.
     const slots = input.children.filter(child => child.kind === 'slot');
-    if (slots.length && (input.children.length !== 1 || slots[0]!.fallback.length > 0)) return undefined;
-    const children = slots.length ? [] : input.children.map(node);
+    if (slots.length > 1) return undefined;
+    const slot = slots[0];
+    const position = slot ? input.children.indexOf(slot) : -1;
+    if (slot) {
+      if (!slot.site || input.children[position - 1]?.kind === 'text' || input.children[position + 1]?.kind === 'text') return undefined;
+      slotMounts[slot.site] = componentSlotProp(slot.name);
+      if (input.children.length > 1) mixedSlots = true;
+    }
+    if (slot?.fallback.length) {
+      if (!slot.site || slot.fallback.some(containsSlot)) return undefined;
+      const children = slot.fallback.map(node);
+      if (children.some(child => child === undefined)) return undefined;
+      const plan = makePlan(children as InitialRenderNode[], '');
+      if (emitInitialHtml(plan) === null) return undefined;
+      const fallback = planInitialDom(plan, {}, false, {}, position);
+      if (fallback === null) return undefined;
+      const site = initialSlotFallbackSite(slot.site);
+      slotFallbacks[slot.site] = site;
+      fallbackSlots[site] = {
+        plan: {...fallback, retainCreation: true}, offset: position, mounts: {[site]: position},
+      };
+    }
+    const children = input.children.map(node);
     if (children.some(child => child === undefined)) return undefined;
     return {
       kind: 'element', tag: input.tag, site: input.site,
@@ -325,5 +360,9 @@ export function packageInitialDom(
   };
   if (emitInitialHtml(plan) === null) return undefined;
   const dom = planInitialDom(plan);
-  return dom === null ? undefined : { ...relativeInitialDom(dom), retainCreation: true };
+  return dom === null ? undefined : {
+    ...relativeInitialDom(dom), retainCreation: true,
+    ...(Object.keys(slotFallbacks).length || mixedSlots ? {packageSlotsV2: true, slotMounts} : {}),
+    ...(Object.keys(slotFallbacks).length ? {slotFallbacks, slots: fallbackSlots} : {}),
+  };
 }

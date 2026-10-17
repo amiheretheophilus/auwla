@@ -11,7 +11,13 @@ export type InitialRenderNode =
   | { readonly kind: 'slot'; readonly site: string; readonly moduleId: string; readonly component: string;
       readonly children: readonly InitialRenderNode[]; readonly static?: true;
       readonly creation?: true;
-      readonly mount?: { readonly moduleId: string; readonly component: string; readonly site: string } }
+      /** Its package factory owns fallback bindings, independently of callers. */
+      readonly packageFallback?: true;
+      /** Symbolic package emission has no caller projection to bind. */
+      readonly packagePlaceholder?: true;
+      /** Later siblings must be addressed without knowing projected width. */
+      readonly variablePackageSlot?: true;
+      readonly mount?: { readonly moduleId: string; readonly component: string; readonly site: string; readonly key?:string } }
   | { readonly kind: 'conditional'; readonly site: string; readonly branch: number | null;
       readonly children: readonly InitialRenderNode[]; readonly alternatives?: readonly (readonly InitialRenderNode[])[] }
   | { readonly kind: 'list'; readonly site: string; readonly rows: readonly (readonly InitialRenderNode[])[];
@@ -69,4 +75,8 @@ export function initialSlotMountKey(moduleId: string, component: string, site: s
 /** Distinguish caller-owned JSX props on the same component call. */
 export function initialRenderPropSite(callSite: string, prop: string): string {
   return `${callSite}#prop:${prop}`;
+}
+
+export function initialSlotFallbackSite(site: string): string {
+  return `${site}#fallback`;
 }

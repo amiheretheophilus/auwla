@@ -327,7 +327,22 @@ without an instance owner retain conservative invalidation across the active
 runtime's registry; a separate-runtime regression checks request isolation.
 This does not infer new dependency facts from opaque third-party implementations.
 
-Mixed siblings and fallback branches still need a broader placement contract.
+The generated `host-slots-v2` capability now covers package-owned fallbacks and
+one slot per parent with element-separated siblings. A symbolic slot has unknown
+width in the package plan, so later package siblings use the existing
+end-relative addressing. The consumer uses the same addressing shape regardless
+of projected width or omission. Fallback bindings have an independent lexical
+slot plan, selected only when no caller projection was supplied; the existing
+slot mount/update/dispose ABI owns their lifetime. Package-authored fallback
+events retain the factory via the v2 event requirement. No extra runtime
+hydration protocol, marker nodes or wrapper elements were added.
+
+Compiler regressions cover repeated mixed instances, omitted/supplied slots,
+empty content, fallback events, drafts and remounting. Production Chrome checks
+exercise the installed artifact path, JavaScript-disabled HTML and original-node
+retention. Direct text adjacency, multiple slots under one parent and nested
+fallback slots remain outside the adoption contract; artifact validation rejects
+claims that those layouts implement v2. These need a broader placement contract.
 Components with refs, effects, setup statements, nested components, or dynamic
 structure still use ordinary creation for browser-only initial delivery.
 Runtime SSR/hydration remains available. A symbolic HTML shape alone cannot

@@ -312,10 +312,10 @@ their normal binding behavior.
 The compiler generates `adoption: 'host-slots-v1'` for this bounded contract.
 There is no extra author configuration or handwritten slot address metadata.
 Its dedicated hosts keep package-owned addresses independent of the projected
-content's width. `<main>Before<slot />After</main>` and slots with fallbacks do
-not yet receive this capability: they retain whole-call static specialization
-or ordinary creation instead. This is an initial-delivery optimization boundary,
-not a restriction on authoring or rendering package slots in general.
+content's width. The newer generated `host-slots-v2` capability extends this to
+fallback content and element-separated siblings, described below. These are
+initial-delivery optimization boundaries, not restrictions on authoring or
+rendering package slots in general.
 
 Components with refs, effects, setup statements, nested components, or dynamic
 structure still continue through ordinary creation.
@@ -350,8 +350,8 @@ The initial button arrives as HTML. The package factory binds that existing
 button and attaches its handler once; the application's callback keeps its
 normal lexical state and invalidation behavior. Later prop changes update the
 existing bindings, not the component body. Handler wrappers inside the package
-and input events use the same path. Dedicated slot hosts without fallbacks can
-be combined with package-owned events and caller-owned slot content.
+and input events use the same path. Package-owned events can be combined with
+caller-owned slot content and the portable fallbacks described below.
 
 If a package component handler needs conservative invalidation for an opaque
 callback, it resolves the root through its mounted runtime owner. It does not
@@ -371,7 +371,7 @@ component and invalidation ABI.
 
 This extends initial binding for components whose body is a direct JSX return.
 It does not yet add initial binding for package-local setup/state, effects,
-refs, dynamic structure, mixed-sibling slots, or slot fallbacks. Those components
+refs or dynamic structure. Those components
 still work through ordinary creation and the existing runtime SSR/hydration
 path. If an event-bearing shape cannot safely bind, the compiler keeps that
 whole component on ordinary creation rather than emitting inactive controls.
@@ -380,6 +380,44 @@ Fullstack SSR remains independent and can render broader package components by
 executing their emitted server factories. Package compilation never executes an
 arbitrary package factory during a build and never admits the package AST into
 the consuming application as a shortcut.
+
+### Slot fallbacks and surrounding package content
+
+```tsx
+export function Panel({ title, onPress }: {
+  title: string;
+  onPress: () => void;
+}) {
+  return <section>
+    <b>Before</b>
+    <slot><button onClick={onPress}>{title}</button></slot>
+    <strong>{title}</strong>
+  </section>;
+}
+```
+
+The package build generates `host-slots-v2` automatically. The fallback has its
+own package-owned binding plan; supplied content retains the caller's lexical
+ownership. One mounted instance can omit content while another supplies several
+nodes. Reactive text, attributes and handlers bind the original elements in
+either case, including the package's siblings after the slot. Local input drafts
+survive updates. Conditional removal disposes the old mount; showing it again
+creates a fresh mount through the existing factory. No component-body rerun,
+extra wrapper element, or new hydration mechanism is introduced.
+
+An omitted slot uses its fallback. Explicitly supplied empty content, such as
+`<Panel title="Title" onPress={save}>{null}</Panel>`, intentionally renders no
+fallback. Entirely static content can still become HTML without browser code;
+fallback handlers retain the factory even when all props are constant.
+
+This contract permits one slot per parent, with immediate siblings that are
+elements rather than text. Named and default slots can coexist in separate
+hosts. Direct text adjacency (`Before<slot />After`), multiple slots
+in the same parent, and slots nested inside fallback content do not receive this
+capability. They retain static specialization where proven or ordinary creation.
+The compiler validates these boundaries rather than assigning unsafe addresses.
+Authors do not write slot sites or capability metadata; publish the generated
+JavaScript and matching artifact together.
 
 ## Current boundaries
 
@@ -402,8 +440,9 @@ the consuming application as a shortcut.
   proof that published JavaScript was built from the same source. Package builds
   must still publish compiler output and its matching artifact together.
 - Package initial HTML and host adoption cover the subsets described above.
-  Mixed-sibling slots, slot fallbacks and package-local setup/state, refs or
-  effects are not yet part of that portable initial-binding contract.
+  Text-adjacent or multiple same-parent slots, nested fallback slots, and
+  package-local setup/state, refs or effects are outside the portable
+  initial-binding contract.
 - Array literals passed to a holder relationship preserve every contained
   holder. Arbitrarily assembled dynamic collections are not yet a portable
   holder contract.

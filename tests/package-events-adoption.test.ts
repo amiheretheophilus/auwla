@@ -119,9 +119,11 @@ it('keeps unsupported interactive package shapes on ordinary creation and valida
       export function Fallback() { return <section><main onClick={() => {}}><slot><b>Empty</b></slot></main></section>; }
       export function Setup() { let clicks = 0; return <button onClick={() => clicks++}>{clicks}</button>; }`,
   }, { packageEntries: { 'unsupported-ui': './index.tsx' } });
-  for (const component of Object.values(packaged.artifact.entries['unsupported-ui']!.components!)) {
-    expect(component.initial).toBeUndefined();
-  }
+  const components = packaged.artifact.entries['unsupported-ui']!.components!;
+  expect(components.Mixed.initial).toBeUndefined();
+  expect(components.Setup.initial).toBeUndefined();
+  expect(components.Fallback.initial?.adoption).toBe('host-slots-v2');
+  expect(components.Fallback.initial?.events).toBe(true);
   const invalid = structuredClone(experimentalCompilePackage({
     './index.tsx': `export function Panel() { return <section><b>Before</b><slot /></section>; }`,
   }, { packageEntries: { 'bad-ui': './index.tsx' } }).artifact);

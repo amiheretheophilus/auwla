@@ -54,6 +54,8 @@ export function isRenderPropReference(
   compName: string,
   expression: t.Expression,
 ): boolean {
+  const plan = ctx.initialDomRoot?.component === compName ? ctx.initialDomRoot : ctx.initialDomComponents[compName];
+  if (plan?.slotFallbacks?.[initialSite(expression)] !== undefined && astFactory.isConditionalExpression(expression)) return true;
   const name = renderPropReferenceName(ctx, compName, expression);
   return (
     name !== null &&
@@ -369,8 +371,8 @@ export function emitForwardedSlotMount(
           astFactory.callExpression(cloneEstreeNode(expression, true), [
             astFactory.identifier(parentVar),
             cloneEstreeNode(ownerId, true),
-            astFactory.stringLiteral(scope.initialDom
-              ? initialSlotMountKey(ctx.moduleId,scope.initialDom.plan.component,initialSite(expression)) : String(key)),
+            astFactory.stringLiteral(scope.initialDom?.plan.slotMounts?.[initialSite(expression)] ?? (scope.initialDom
+              ? initialSlotMountKey(ctx.moduleId,scope.initialDom.plan.component,initialSite(expression)) : String(key))),
             ...(scope.initialDom?.adopting?[scope.initialDom.adopting]:[]),
           ]),
         ),

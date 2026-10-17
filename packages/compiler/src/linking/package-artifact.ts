@@ -165,6 +165,7 @@ function renderPlan(
       return {
         kind: 'slot',
         name,
+        ...(input.site === undefined ? {} : {site:nonEmptyString(input.site, `${path}.site`)}),
         fallback: nodes(input.fallback, `${path}.fallback`, depth + 1),
       };
     }
@@ -172,24 +173,41 @@ function renderPlan(
   };
   const root = node(plan.root, `${path}.root`, 0);
   if (root.kind !== 'element') invalid(`${path}.root`, 'expected one host element root');
-  if (plan.adoption !== undefined && plan.adoption !== 'host-v1' && plan.adoption !== 'host-slots-v1' && plan.adoption !== 'host-events-v1') {
-    invalid(`${path}.adoption`, "expected 'host-v1', 'host-slots-v1', or 'host-events-v1'");
+  if (plan.adoption !== undefined && !['host-v1','host-slots-v1','host-events-v1','host-slots-v2'].includes(plan.adoption as string)) {
+    invalid(`${path}.adoption`, "expected 'host-v1', 'host-slots-v1', 'host-events-v1', or 'host-slots-v2'");
+  }
+  if (plan.events !== undefined && (plan.events !== true || plan.adoption !== 'host-slots-v2')) {
+    invalid(`${path}.events`, 'expected true on a host-slots-v2 plan');
   }
   if (plan.adoption === 'host-v1' && slots.size > 0) {
     invalid(`${path}.adoption`, 'host-v1 does not support component slots');
   }
-  if (plan.adoption === 'host-slots-v1' || plan.adoption === 'host-events-v1') {
+  if (plan.adoption === 'host-slots-v1' || plan.adoption === 'host-events-v1' || plan.adoption === 'host-slots-v2') {
+    const sites = new Set<string>();
+    const hasSlot = (input:ExperimentalPackageRenderNode):boolean => input.kind === 'slot' ||
+      input.kind === 'element' && input.children.some(hasSlot);
     const check = (input: ExperimentalPackageRenderNode): void => {
       if (input.kind !== 'element') return;
       const projected = input.children.filter(child => child.kind === 'slot');
-      if (projected.length && (input.children.length !== 1 || projected[0]!.fallback.length > 0)) {
+      if (projected.length && plan.adoption !== 'host-slots-v2' && (input.children.length !== 1 || projected[0]!.fallback.length > 0)) {
         invalid(`${path}.adoption`, `${plan.adoption} requires dedicated slot hosts without fallbacks`);
+      }
+      const slot=projected[0];
+      if(plan.adoption==='host-slots-v2' && slot) {
+        const position=input.children.indexOf(slot);
+        if(projected.length>1 || input.children[position-1]?.kind==='text' || input.children[position+1]?.kind==='text') {
+          invalid(`${path}.adoption`, 'host-slots-v2 requires one slot per host with element-separated siblings');
+        }
+        if (!slot.site || sites.has(slot.site)) invalid(`${path}.adoption`, 'package fallbacks require distinct authored slot sites');
+        if (slot.fallback.some(hasSlot)) invalid(`${path}.adoption`, 'nested fallback slots need a separate placement contract');
+        sites.add(slot.site);
       }
       input.children.forEach(check);
     };
     check(root);
   }
-  return { root, ...(plan.adoption === undefined ? {} : { adoption: plan.adoption }) };
+  return { root, ...(plan.adoption === undefined ? {} : { adoption: plan.adoption as ExperimentalPackageRenderPlan['adoption'] }),
+    ...(plan.events === true ? {events:true} : {}) };
 }
 
 function facts(value: unknown, path: string): { index: number; path: string[] }[] {

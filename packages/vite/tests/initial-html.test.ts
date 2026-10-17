@@ -55,6 +55,81 @@ async function production(root: string) {
 }
 
 describe('HTML first production builds', () => {
+  it.skipIf(!chromeExecutable())('binds mixed package slots and their own fallbacks in production Chrome', async () => {
+    const executablePath=chromeExecutable();
+    if(!executablePath)return;
+    const root=await fixture(`import {Panel} from 'fallback-ui';export function App(){let n=0;let show=true;
+      return <div><button class="next" onClick={()=>n++}>Next</button><button class="toggle" onClick={()=>show=!show}>Toggle</button>
+        <Panel title={'Title '+n} onPress={()=>n++}/>
+        {show&&<Panel title={'Title '+n} onPress={()=>n++}><button class="projected" onClick={()=>n++}>{n}</button><input class="draft"/></Panel>}
+      </div>;}`);
+    const packaged=experimentalCompilePackage({
+      './index.tsx':`export function Panel({title,onPress}:{title:string;onPress:()=>void}){return <section>
+        <header><b>Before</b><slot><button class="fallback" onClick={onPress}>{title}</button><input class="fallback-draft"/></slot><strong>{title}</strong></header>
+      </section>;}`,
+    },{packageEntries:{'fallback-ui':'./index.tsx'}});
+    const directory=join(root,'node_modules/fallback-ui');
+    await mkdir(directory,{recursive:true});
+    await Promise.all([
+      writeFile(join(directory,'index.js'),packaged.output['./index.tsx']!),
+      writeFile(join(directory,'artifact.json'),JSON.stringify(packaged.artifact)),
+      writeFile(join(directory,'package.json'),JSON.stringify({name:'fallback-ui',type:'module',exports:'./index.js','memoized-dom':{artifact:'./artifact.json'}})),
+    ]);
+    const result=await production(root);
+    expect(result.html).toContain('<button class="fallback">Title 0</button>');
+    expect(result.html).toContain('<button class="projected">0</button>');
+    const server=createHttpServer((request,response)=>{
+      const file=result.files.find(item=>item.fileName===(request.url==='/'?'index.html':request.url?.slice(1)));
+      if(!file){response.writeHead(404).end();return;}
+      response.setHeader('Content-Type',file.type==='chunk'?'text/javascript':'text/html');
+      response.end(file.type==='chunk'?file.code:file.source);
+    });
+    await new Promise<void>(done=>server.listen(0,'127.0.0.1',done));
+    const browser=await puppeteer.launch({executablePath,headless:true});
+    try{
+      const address=server.address();
+      if(!address||typeof address==='string')throw new Error('Missing HTTP address');
+      const url=`http://127.0.0.1:${address.port}/`;
+      const staticPage=await browser.newPage();
+      await staticPage.setJavaScriptEnabled(false);
+      await staticPage.goto(url);
+      expect(await staticPage.$$eval('section',nodes=>nodes.map(node=>node.textContent))).toEqual(['BeforeTitle 0Title 0','Before0Title 0']);
+      await staticPage.close();
+      const page=await browser.newPage();
+      const errors:string[]=[];
+      page.on('pageerror',error=>errors.push(String(error)));
+      await page.evaluateOnNewDocument(()=>{
+        const state=window as unknown as {initial?:Element[];created:string[]};
+        state.created=[];
+        const create=document.createElement.bind(document);
+        document.createElement=((...args:Parameters<Document['createElement']>)=>{state.created.push(args[0]);return create(...args);}) as Document['createElement'];
+        new MutationObserver(()=>{
+          if(document.querySelector('.draft'))state.initial??=[...document.querySelectorAll('#root *')];
+        }).observe(document,{subtree:true,childList:true});
+      });
+      await page.goto(url);
+      await page.type('.fallback-draft','Package draft');await page.type('.draft','Caller draft');
+      await page.click('.fallback');
+      await page.waitForFunction(()=>document.querySelector('.projected')?.textContent==='1');
+      await page.click('.projected');
+      await page.waitForFunction(()=>document.querySelector('.fallback')?.textContent==='Title 2');
+      expect(await page.$$eval('strong',nodes=>nodes.map(node=>node.textContent))).toEqual(['Title 2','Title 2']);
+      expect(await page.evaluate(()=>{
+        const state=window as unknown as {initial:Element[];created:string[]};
+        return {same:[...document.querySelectorAll('#root *')].every((node,index)=>node===state.initial[index]),
+          drafts:[document.querySelector<HTMLInputElement>('.fallback-draft')!.value,document.querySelector<HTMLInputElement>('.draft')!.value],
+          created:state.created.filter(tag=>tag!=='link')};
+      })).toEqual({same:true,drafts:['Package draft','Caller draft'],created:[]});
+      await page.click('.toggle');await page.waitForFunction(()=>document.querySelector('.projected')===null);
+      await page.click('.next');await page.waitForFunction(()=>document.querySelector('.fallback')?.textContent==='Title 3');
+      await page.click('.toggle');await page.waitForFunction(()=>document.querySelector('.projected')?.textContent==='3');
+      await page.click('.projected');await page.waitForFunction(()=>document.querySelector('.fallback')?.textContent==='Title 4');
+      expect(errors).toEqual([]);
+    }finally{
+      await browser.close();await new Promise<void>((done,reject)=>server.close(error=>error?reject(error):done()));
+    }
+  },120_000);
+
   it.skipIf(!chromeExecutable())('binds package-owned events to initial DOM in production Chrome', async () => {
     const executablePath = chromeExecutable();
     if (!executablePath) return;

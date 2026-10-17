@@ -9,7 +9,8 @@ import { componentId, generatedIdentifier, md } from './identifiers';
 import { freshNodeName, freshSlot, pushSlotUpdater, renderDocument, slotGuard, type EmitScope } from './scope';
 import { buildHandler } from './handlers';
 import { traceDomWrite, traceHandler } from './diagnostics';
-import { emitForwardedSlotMount, isRenderPropReference } from './components/children';
+import { isRenderPropReference } from './components/children';
+import { emitAuthoredSlotMount } from './authored-slots';
 import { planDirectChildren } from '../jsx/children';
 import { materializeDirectChildren, type DirectChildOperation } from './direct-children';
 import { planOrderedAttributes, jsxAttributeName } from '../jsx/attributes';
@@ -88,13 +89,7 @@ export function emitDirectChildOperations(
     } else if (operation.type === 'content') {
       emitContentRegion(ctx, scope, parentVar, ownerId, operation.expression);
     } else if (operation.type === 'slot') {
-      emitForwardedSlotMount(
-        ctx,
-        scope,
-        operation.expression,
-        parentVar,
-        ownerId,
-      );
+      emitAuthoredSlotMount(dependencies,ctx,scope,operation.expression,parentVar,compName,compPath,nestedIn,rowCtx,inSvg,ownerId);
     } else if (operation.type === 'list') {
       dependencies.emitList(
         ctx,

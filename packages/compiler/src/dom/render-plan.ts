@@ -11,7 +11,7 @@ import * as astFactory from '../ast/factory';
 import type * as t from '../ast/compiler-types';
 import { planConditionalBranches } from '../jsx/conditional-plan';
 import { planListCallback } from '../lists/callback-plan';
-import { initialSite, initialRenderPropSite, type InitialRenderNode, type InitialRenderAttribute, type InitialRenderPlan, type BrowserRequirement } from '../planning/initial-content';
+import { initialSite, initialRenderPropSite, initialSlotFallbackSite, type InitialRenderNode, type InitialRenderAttribute, type InitialRenderPlan, type BrowserRequirement } from '../planning/initial-content';
 import { componentSlotProp } from '../jsx/component-slots';
 import type {
   ExperimentalPackageRenderNode,
@@ -506,7 +506,7 @@ export function planInitialRendering(
     live: ReadonlySet<string>,
   ): readonly InitialRenderNode[] {
     const scope = component.scope;
-    if (component.initial?.adoption === 'host-events-v1') {
+    if (component.initial?.adoption === 'host-events-v1' || component.initial?.events) {
       if (!bindings) need(scope, 'Package event handlers require browser bindings', 'event');
       bindingEvents = true;
       bindingEventCount++;
@@ -537,7 +537,13 @@ export function planInitialRendering(
       }
       if (input.kind === 'slot') {
         const projected = props.get(componentSlotProp(input.name));
-        if (projected === undefined) return input.fallback.flatMap(node);
+        if (projected === undefined) {
+          const children=input.fallback.flatMap(node);
+          return bindings && component.initial?.adoption === 'host-slots-v2' ? [{
+            kind:'slot', site:initialSlotFallbackSite(input.site!),moduleId:scope.moduleId,component:component.local!,
+            children,packageFallback:true,variablePackageSlot:true,...(closedContent(children)?{static:true as const}:{}),
+          }] : children;
+        }
         if (
           projected === null ||
           typeof projected !== 'object' ||
@@ -545,11 +551,13 @@ export function planInitialRendering(
         ) {
           return need(scope, 'Package initial slot needs closed JSX content');
         }
-        // These consumer-side identities distinguish mount bookkeeping. The
-        // dedicated-host contract guarantees offset zero for every mount, so
-        // no caller address depends on the package's private emitted key.
+        // v1 dedicated hosts always mount at zero. v2 shares the private
+        // slot-prop identity with the package factory so mixed-host offsets
+        // remain independent of the consumer's import alias and call site.
         return projected.nodes.map(child => bindings && child.kind === 'slot' ? {
-          ...child, mount: {moduleId:scope.moduleId, component:component.local!, site:componentSlotProp(input.name)},
+          ...child, ...(component.initial?.adoption==='host-slots-v2'?{variablePackageSlot:true as const}:{}),
+          mount: {moduleId:scope.moduleId, component:component.local!, site:componentSlotProp(input.name),
+            ...(component.initial?.adoption==='host-slots-v2'?{key:componentSlotProp(input.name)}:{})},
         } : child);
       }
       return [{
@@ -732,7 +740,7 @@ export function planInitialRendering(
           propEventCount === bindingEventCount && propOwnerCount === ownerSiteCount &&
           value !== null && typeof value === 'object' && value.kind === 'content' &&
           closedContent(value.nodes);
-        if (bindings && packageSlot && ['host-slots-v1', 'host-events-v1'].includes(targetComponent?.initial?.adoption ?? '') &&
+        if (bindings && packageSlot && ['host-slots-v1', 'host-events-v1', 'host-slots-v2'].includes(targetComponent?.initial?.adoption ?? '') &&
             value !== null && typeof value === 'object' && value.kind === 'content') {
           if (!scope.component) need(scope, 'Package slot needs a lexical owner');
           value = {kind:'content', nodes:[{
@@ -951,7 +959,7 @@ export function planInitialRendering(
       const portableSlotComponents = new Set<string>();
       for (const scope of modules.values()) for (const value of scope.values.values()) {
         if (value !== null && typeof value === 'object' && value.kind === 'component' &&
-            ['host-slots-v1', 'host-events-v1'].includes(value.initial?.adoption ?? '')) {
+            ['host-slots-v1', 'host-events-v1', 'host-slots-v2'].includes(value.initial?.adoption ?? '')) {
           portableSlotComponents.add(`${value.scope.moduleId}#${value.local}`);
         }
       }

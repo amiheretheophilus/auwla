@@ -56,6 +56,12 @@ export interface InitialDomRoot {
   readonly elements: Readonly<Record<string,InitialDomElement>>;
   readonly texts?: InitialDomElement['texts'];
   readonly slots?: Readonly<Record<string, InitialDomSlot>>;
+  /** Slot-expression site -> package-owned fallback slot plan. */
+  readonly slotFallbacks?: Readonly<Record<string, string>>;
+  /** This factory requires the portable mixed-slot/fallback contract. */
+  readonly packageSlotsV2?: true;
+  /** Slot-expression site -> shared private mount key, independent of caller. */
+  readonly slotMounts?: Readonly<Record<string,string>>;
   readonly components: Readonly<Record<string,{readonly path:InitialDomPath;readonly tag:string;readonly moduleId:string;readonly component:string;readonly static?:boolean}>>;
   readonly factories?: Readonly<Record<string,InitialDomRoot>>;
   readonly conditions: Readonly<Record<string, {readonly branch: number | null; readonly open: InitialDomPath;
@@ -82,7 +88,7 @@ export function planInitialDom(plan: Extract<InitialRenderPlan,{kind:'bindings'}
   let valid=true;
   let pathMode:InitialDomRoot['pathMode']=start<0?'end':undefined;
   const width = initialNodeExtent;
-  const variableExtent=(node:InitialRenderNode)=>node.kind==='list' && node.requestRow!==undefined ||
+  const variableExtent=(node:InitialRenderNode)=>node.kind==='slot' && node.variablePackageSlot===true || node.kind==='list' && node.requestRow!==undefined ||
     node.kind==='conditional' && node.branch===null && new Set(node.alternatives?.map(branch=>branch.length)).size>1;
   function positions(nodes:readonly InitialRenderNode[],start:number):InitialDomStep[] {
     if(nodes.some(node=>node.kind==='slot' && node.children.some(variableExtent))){valid=false;return [];}
@@ -109,6 +115,7 @@ export function planInitialDom(plan: Extract<InitialRenderPlan,{kind:'bindings'}
     nodes.forEach((node,offset)=>{
       const current=addresses[offset]!;
       if (node.kind === 'slot') {
+        if (node.packageFallback || node.packagePlaceholder) return;
         if (!node.mount?.site || typeof current!=='number') {valid=false;return;}
         const slotPlan=planInitialDom({...plan, nodes:node.children, rootLocal:node.component,
           rootModuleId:node.moduleId, returnSite:''}, factories, false, slotOwners, current);
@@ -116,7 +123,7 @@ export function planInitialDom(plan: Extract<InitialRenderPlan,{kind:'bindings'}
         if (!nested) {valid=false;return;}
         const owner=`${node.moduleId}#${node.component}`;
         const slots=slotOwners[owner] ??= {};
-        const mount=initialSlotMountKey(node.mount.moduleId,node.mount.component,node.mount.site);
+        const mount=node.mount.key ?? initialSlotMountKey(node.mount.moduleId,node.mount.component,node.mount.site);
         const previous=slots[node.site];
         const merged=previous ? mergeInitialDom(previous.plan,shiftInitialDom(nested,previous.offset-current)) : nested;
         if (!merged || previous?.mounts[mount] !== undefined && previous.mounts[mount] !== current) {valid=false;return;}

@@ -281,6 +281,14 @@ function rewriteSlotPlaceholders(
   accessors: ReadonlyMap<string, t.Expression>,
   fail: (message: string, at: t.Node) => never,
 ): void {
+  const empty = (child: t.JSXElement['children'][number]): boolean => {
+    if (astFactory.isJSXText(child)) return child.value === '';
+    if (astFactory.isJSXFragment(child)) return child.children.every(empty);
+    if (!astFactory.isJSXExpressionContainer(child)) return false;
+    const expression = child.expression;
+    return astFactory.isJSXEmptyExpression(expression) || astFactory.isNullLiteral(expression) ||
+      astFactory.isBooleanLiteral(expression) || astFactory.isIdentifier(expression, { name: 'undefined' });
+  };
   walkAst<BaseNode>(component.body as unknown as BaseNode, {
     enter(node) {
       if (node !== component.body && astFactory.isFunction(node)) return false;
@@ -294,7 +302,7 @@ function rewriteSlotPlaceholders(
       if (accessor === undefined) {
         return fail(`memo-dom: missing compiler slot binding '${name || 'default'}'`, element);
       }
-      const fallback = element.children.length === 0
+      const fallback = element.children.every(empty)
         ? accessor
         : astFactory.conditionalExpression(
             astFactory.binaryExpression('==', accessor, astFactory.nullLiteral()),
@@ -305,6 +313,9 @@ function rewriteSlotPlaceholders(
             ),
             accessor,
           );
+      // Portable package fallbacks retain their authored identity through
+      // normalization; the emitter can then select their independent plan.
+      if (element.loc) fallback.loc = element.loc;
       replaceChild(
         parent,
         key,
