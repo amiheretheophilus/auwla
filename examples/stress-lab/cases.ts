@@ -14,6 +14,8 @@ export interface StressCase {
   modules?: Record<string, string>;
   initial: string;
   steps: Array<[button: string, expected: string]>;
+  /** Selector whose node must be the same DOM node after every step (no re-creation). */
+  retained?: string;
 }
 
 export const cases: StressCase[] = [

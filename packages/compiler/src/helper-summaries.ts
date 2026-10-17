@@ -77,6 +77,62 @@ function assignmentLeftIs(
   );
 }
 
+/**
+ * A module object can hold a reference to other state: `const refs =
+ * { current: state.user }`. Seed `refs.current` with that origin so a write
+ * through it reaches readers of `state.user`, as handler analysis does.
+ */
+function seedModuleObjectAliases(ctx: Ctx, aliases: AliasTracker): void {
+  const scope = ctx.astAnalysis?.rootScope;
+  const program = scope?.block as t.Program | undefined;
+  if (scope === undefined || program?.type !== 'Program') return;
+  for (const statement of program.body) {
+    const declaration = astFactory.isExportNamedDeclaration(statement) ? statement.declaration : statement;
+    if (!astFactory.isVariableDeclaration(declaration) || declaration.kind !== 'const') continue;
+    for (const declarator of declaration.declarations) {
+      if (!astFactory.isIdentifier(declarator.id) || !astFactory.isObjectExpression(declarator.init)) continue;
+      for (const property of declarator.init.properties) {
+        if (!astFactory.isObjectProperty(property) || property.computed || property.kind !== 'init' ||
+            !astFactory.isExpression(property.value)) continue;
+        const value = property.value;
+        if (!astFactory.isIdentifier(value) && !astFactory.isMemberExpression(value)) continue;
+        const key = astFactory.isIdentifier(property.key) ? property.key.name
+          : astFactory.isStringLiteral(property.key) ? property.key.value : null;
+        if (key === null) continue;
+        aliases.trackNamedMember(`${declarator.id.name}.${key}`,
+          aliases.resolveExpressionOrigins(scope, value).filter(origin => origin.locality === 'module'));
+      }
+    }
+  }
+}
+
+/**
+ * Bindings introduced by destructured parameters, by argument position and
+ * property path: `function rename({ user })` maps `user` to argument 0, path
+ * ['user']. Only plain shorthand or renamed object properties are mapped.
+ */
+function destructuredParameterPaths(
+  params: readonly t.Node[],
+): Map<string, { index: number; path: string[] }> {
+  const paths = new Map<string, { index: number; path: string[] }>();
+  const visit = (pattern: t.Node, index: number, path: string[]): void => {
+    const target = astFactory.isAssignmentPattern(pattern) ? pattern.left : pattern;
+    if (astFactory.isIdentifier(target)) {
+      if (path.length > 0) paths.set(target.name, { index, path });
+      return;
+    }
+    if (!astFactory.isObjectPattern(target)) return;
+    for (const property of target.properties) {
+      if (!astFactory.isObjectProperty(property) || property.computed) continue;
+      const key = astFactory.isIdentifier(property.key) ? property.key.name
+        : astFactory.isStringLiteral(property.key) ? property.key.value : null;
+      if (key !== null) visit(property.value as t.Node, index, [...path, key]);
+    }
+  };
+  params.forEach((parameter, index) => visit(parameter, index, []));
+  return paths;
+}
+
 /** Read/write summary of a module-level helper, memoized and cycle-safe. */
 export function summarizeHelper(
   ctx: Ctx,
@@ -152,7 +208,7 @@ export function summarizeHelper(
   };
   const aliases = new AliasTracker((bindingName, binding) => {
     if (
-      parameterIndexes.has(bindingName) &&
+      (parameterIndexes.has(bindingName) || parameterPaths.has(bindingName)) &&
       binding?.scope.block === helperNode
     ) {
       return { locality: 'prop', root: bindingName, key: bindingName };
@@ -164,6 +220,8 @@ export function summarizeHelper(
   });
   const isComputedOrigin = (origin: ReactiveOrigin): boolean =>
     origin.stateKind === 'computed' || ctx.state.get(origin.root) === 'computed';
+  const parameterPaths = destructuredParameterPaths(helper.params);
+  seedModuleObjectAliases(ctx, aliases);
 
   visiting.add(name);
   walkAst<BaseNode>(helperNode, {
@@ -236,12 +294,20 @@ export function summarizeHelper(
     summary.parameterPayloadReads.push({ index, path });
   };
 
+  /** Argument position and full path of a parameter origin, destructured or not. */
+  const parameterEffect = (origin: ReactiveOrigin): { index: number; path: string[] } | null => {
+    const relative = origin.key === null ? [] : origin.key.split('.').slice(1);
+    const index = parameterIndexes.get(origin.root);
+    if (index !== undefined) return { index, path: relative };
+    const destructured = parameterPaths.get(origin.root);
+    return destructured === undefined ? null
+      : { index: destructured.index, path: [...destructured.path, ...relative] };
+  };
+
   const noteSourceRead = (origin: ReactiveOrigin): void => {
     if (origin.locality !== 'prop') return;
-    const index = parameterIndexes.get(origin.root);
-    if (index === undefined) return;
-    const path = origin.key === null ? [] : origin.key.split('.').slice(1);
-    addParameterSourceRead(index, path);
+    const effect = parameterEffect(origin);
+    if (effect !== null) addParameterSourceRead(effect.index, effect.path);
   };
 
   const noteReceiverEffect = (origin: ReactiveOrigin): void => {
@@ -251,11 +317,9 @@ export function summarizeHelper(
       return;
     }
     if (origin.locality === 'prop') {
-      const index = parameterIndexes.get(origin.root);
-      if (index !== undefined) {
-        const path =
-          origin.key === null ? [] : origin.key.split('.').slice(1);
-        addParameterWrite(index, path);
+      const effect = parameterEffect(origin);
+      if (effect !== null) {
+        addParameterWrite(effect.index, effect.path);
         return;
       }
     }

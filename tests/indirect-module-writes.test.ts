@@ -39,6 +39,8 @@ it.each([
   ['helper result through a local',`${DEEPEST}export function rename(){const node=deepest();node.label='A';}`,'rename','rename'],
   ['helper result written in a handler',`export ${DEEPEST}`,'deepest',"()=>{deepest().label='A';}"],
   ['find() result in a helper',"export function rename(){root.kids.find((k:any)=>k.label==='a').label='A';}",'rename','rename'],
+  ['destructured helper parameter',"function relabel({kids}:{kids:any[]}){kids[0].label='A';}export function rename(){relabel(root);}",'rename','rename'],
+  ['reference stashed in a module object',"const refs={current:root.kids[0]};export function rename(){refs.current.label='A';}",'rename','rename'],
 ])('routes writes through returned objects to other readers (%s)',async(label,body,imports,handler)=>{
   expect(await renameAndRead(`result-${label.replaceAll(' ','-')}`,LITERAL+body,imports,handler)).toEqual(['a','A']);
 });

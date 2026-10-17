@@ -89,6 +89,25 @@ export class AliasTracker {
   }
 
   /**
+   * Origins of the longest seeded member prefix of `key`, extended by the
+   * rest of the path: a seed for `refs.current` also resolves
+   * `refs.current.name`.
+   */
+  private seededMember(key: string): ReactiveOrigin[] | undefined {
+    const parts = key.split('.');
+    for (let length = parts.length; length > 1; length--) {
+      const seeded = this.memberOrigins.get(parts.slice(0, length).join('.'));
+      if (seeded === undefined) continue;
+      const rest = parts.slice(length);
+      return rest.length === 0 ? seeded : seeded.map(origin => ({
+        ...origin,
+        key: origin.key === null ? null : [origin.key, ...rest].join('.'),
+      }));
+    }
+    return undefined;
+  }
+
+  /**
    * Find reactive values mentioned inside an expression when its resulting
    * provenance cannot be represented as one exact origin (for example a
    * conditional alias or destructuring source).
@@ -157,7 +176,7 @@ export class AliasTracker {
 
     const staticKey = memberKey(expression);
     if (staticKey !== null) {
-      const seeded = this.memberOrigins.get(staticKey);
+      const seeded = this.seededMember(staticKey);
       if (seeded !== undefined) return seeded.length === 1 ? seeded[0]! : null;
     }
     const root = memberRoot(expression);
@@ -186,7 +205,7 @@ export class AliasTracker {
     }
     if (astFactory.isMemberExpression(expression)) {
       const key = memberKey(expression);
-      const seeded = key === null ? undefined : this.memberOrigins.get(key);
+      const seeded = key === null ? undefined : this.seededMember(key);
       if (seeded !== undefined) return seeded;
       const root = memberRoot(expression);
       if (root !== null) {
