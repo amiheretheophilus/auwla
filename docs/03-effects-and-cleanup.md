@@ -99,6 +99,19 @@ Behavior, concretely:
 - **Never runs during SSR** — the server registers it but skips the body;
   it first runs on the client after hydration.
 
+An idle opaque-value poll is not a reactive write. It may re-check DOM values,
+including values passed through retained list rows, but does not by itself
+rerun effects. The pull-only cause is preserved through prop forwarding;
+genuine state writes or live-source publications still invalidate dependent
+effects. If both occur in one batch, the real write is not suppressed.
+
+For example, `$effect(() => console.log(editing))` in a keyed note component
+does not rerun just because its parent polls or receives an unrelated update.
+An effect reading `note` can rerun when the live query publishes that prop.
+The initial live snapshot after hydration is such a publication, so one early
+rerun is different from logging continuously while the application is idle.
+These are effect/update closures; the component's setup body is not rerun.
+
 If a value only gates *whether* work happens, read it inside the callback:
 
 ```tsx

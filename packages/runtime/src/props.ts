@@ -20,7 +20,7 @@
  * that changed, so its update skips slots that read other props.
  */
 
-import { getExtensionStore, markDirty, onRegistryChange, type EntityId } from './kernel';
+import { getExtensionStore, isPullUpdate, markDirty, onRegistryChange, type EntityId } from './kernel';
 import type { DirtyReason, DirtyReasonInput } from './dirty-reasons';
 
 interface PropReasons {
@@ -82,6 +82,10 @@ function setEnvelope(
   }
   if (changed.length === 0) return;
   box[0] = next;
+  if (isPullUpdate()) {
+    markDirty(id, -1);
+    return;
+  }
   const plan = reasonPlans().get(id);
   if (plan === undefined) {
     markDirty(id);
@@ -129,7 +133,8 @@ export function setProps(id: EntityId, next: readonly unknown[]): void {
   if (!changed) return;
   box.length = next.length;
   for (let i = 0; i < next.length; i++) box[i] = next[i];
-  markDirty(id);
+  if (isPullUpdate()) markDirty(id, -1);
+  else markDirty(id);
 }
 
 /** Test/devtool introspection only. */

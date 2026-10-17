@@ -29,7 +29,7 @@
  * Object identity keys get stable synthetic id segments (#1, #2, ...).
  */
 
-import { getActiveEnvironment, unregisterSubtree, undirty, getEntity, type EntityId } from './kernel';
+import { getActiveEnvironment, unregisterSubtree, undirty, renderEntity, type EntityId } from './kernel';
 import { encodeListKey } from './list-keys';
 import { createListDOM, removeListDOMRange, type InitialListDOM } from './list-dom';
 import { copyListItems, retainedRowNeedsSync } from './list-update';
@@ -221,11 +221,8 @@ export function createListRegion<T>(
       if (!disposed && rowId !== null) undirty(rowId); // M5.7: no double render
     } else if (rowId !== null) {
       // A registered row without a custom updater renders its entity directly.
-      const e = getEntity(rowId);
-      if (e) {
-        e.render();
-        if (!disposed) undirty(rowId);
-      }
+      renderEntity(rowId);
+      if (!disposed) undirty(rowId);
     }
   }
 

@@ -122,6 +122,8 @@ interface KernelState {
   inCommit: boolean;
   /** Cycle diagnostics — non-null only while a commit drain runs. */
   renderingEntity: EntityId | null;
+  /** Synchronous forwarding retains polling provenance, scoped to this runtime. */
+  pullUpdate: boolean;
   renderCounts: Map<EntityId, number> | null;
   markedBy: Map<EntityId, EntityId> | null;
   /**
@@ -149,6 +151,7 @@ function createKernelState(
     scheduled: false,
     inCommit: false,
     renderingEntity: null,
+    pullUpdate: false,
     renderCounts: null,
     markedBy: null,
     extensions: new Map(),
@@ -203,6 +206,7 @@ export function createApplicationRuntime(
         state.scheduled = false;
         state.inCommit = false;
         state.renderingEntity = null;
+        state.pullUpdate = false;
         state.renderCounts = null;
         state.markedBy = null;
         state.preparation = undefined;
@@ -648,6 +652,29 @@ export function undirty(id: EntityId): void {
   }
 }
 
+/** Compiler-owned prop forwarding must not turn a poll into a state write. */
+export function isPullUpdate(): boolean {
+  return getActiveApplicationRuntime().state.pullUpdate;
+}
+
+function runEntityUpdate(k: KernelState, entity: Entity, reasons: DirtyReasons): void {
+  const previous = k.pullUpdate;
+  k.pullUpdate = reasons === -1 || typeof reasons === 'object' && reasons !== null &&
+    reasons.size === 1 && reasons.has(-1);
+  try { entity.render(reasons); }
+  finally { k.pullUpdate = previous; }
+}
+
+/** Drain a retained entity synchronously without discarding its pending causes. */
+export function renderEntity(id: EntityId): void {
+  const k = getActiveApplicationRuntime().state;
+  const entity = k.registry.get(id);
+  if (!entity) return;
+  const reasons = k.dirty.has(id) ? takeDirtyReasons(k.dirtyReasons, id) : k.pullUpdate ? -1 : null;
+  k.dirty.delete(id);
+  runEntityUpdate(k, entity, reasons);
+}
+
 /**
  * Mark an entity and ALL its descendants dirty — the fallback for an
  * unbounded effect (spec §4.4). Equivalent to re-rendering from the mounted
@@ -780,7 +807,7 @@ export function commit(): void {
           }
           k.renderingEntity = e.id;
           try {
-            e.render(takeDirtyReasons(k.dirtyReasons, e.id));
+            runEntityUpdate(k, e, takeDirtyReasons(k.dirtyReasons, e.id));
           } catch (error) {
             // A partial render may have stopped before some dependent slots.
             // Keep a full dirty mark for the next commit; a later pull/write

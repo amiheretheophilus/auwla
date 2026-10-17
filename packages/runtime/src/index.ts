@@ -22,6 +22,7 @@ export {
   setScheduler,
   resetScheduler,
   getEntity,
+  renderEntity,
   renderDescendants,
   createApplicationRuntime,
   getActiveApplicationRuntime,

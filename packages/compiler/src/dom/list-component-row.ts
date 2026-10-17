@@ -97,12 +97,9 @@ function buildComponentRowFactory({
         : cloneEstreeNode(rowContentUpdate), [],
     )));
   } else {
-    const entity = generatedIdentifier(ctx, 'rowEntity');
-    contentUpdates.push(astFactory.variableDeclaration('const', [astFactory.variableDeclarator(
-      cloneEstreeNode(entity), astFactory.callExpression(md(ctx, 'getEntity'), [cloneEstreeNode(rowId)]),
-    )]), astFactory.ifStatement(cloneEstreeNode(entity), astFactory.expressionStatement(
-      astFactory.callExpression(astFactory.memberExpression(cloneEstreeNode(entity), astFactory.identifier('render')), []),
-    )));
+    contentUpdates.push(astFactory.expressionStatement(
+      astFactory.callExpression(md(ctx, 'renderEntity'), [cloneEstreeNode(rowId)]),
+    ));
   }
   if (!reuseLightweightEntry) {
     entryProperties.push(
@@ -589,9 +586,6 @@ export function buildComponentRowCreate(
           cloneEstreeNode(rowId),
           astFactory.arrayExpression(nextCallProps),
         ]),
-      ),
-      astFactory.expressionStatement(
-        astFactory.callExpression(md(ctx, 'invalidateEntity'), [cloneEstreeNode(rowId)]),
       ),
     );
   }
