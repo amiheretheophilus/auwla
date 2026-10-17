@@ -9,6 +9,7 @@ const GLOBAL_STORAGE_KEY = '__MMD_ASYNC_STORAGE_V2__';
 
 interface StorageRegistry {
   factory: StorageFactory;
+  factoryKey?: symbol;
   version: number;
   readonly storages: Map<string, StorageShim<unknown>>;
 }
@@ -27,9 +28,13 @@ function getStorageRegistry(): StorageRegistry {
 }
 
 /** Configure the host-specific scoped-storage implementation. */
-export function setStorageFactory(factory: StorageFactory): void {
+export function setStorageFactory(factory: StorageFactory, key?: symbol): void {
   const registry = getStorageRegistry();
+  // The server entry can be evaluated by both a module runner and native ESM.
+  // Reinstalling the same host must not replace stores under active requests.
+  if (key !== undefined && registry.factoryKey === key) return;
   registry.factory = factory;
+  registry.factoryKey = key;
   registry.version++;
 }
 

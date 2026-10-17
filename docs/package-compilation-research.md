@@ -519,6 +519,24 @@ checks remain open decisions, not documented APIs.
    package workloads still need measurement before selecting a public format or
    promising performance improvements.
 
+The source-free publication gate now installs an actual minified library
+tarball, removes its producer directory, and checks authored declarations with
+Bun, dev/prod SSR, browser interactions, and unused-export elimination. It
+exposed and closes named-barrel capability loss, optimized-entry metadata
+discovery, import-only SSR discovery, and late external runtime-copy request
+scope attachment. Framework dependencies still use the matching built checkout.
+Release integrity, runtime compatibility negotiation, and a dedicated library
+build command remain open; passing this gate is not a claim that the entire
+publication contract is stable.
+
+A separate rendering follow-up surfaced while building this gate: combining a
+derived request-state helper with a pending payload in one JSX conditional
+(`refreshing ? 'Refreshing' : items.length`) evaluated the absent payload during
+initial SSR. The publication fixture uses independent state and payload sinks
+so it checks both relationships without conflating this conditional-lowering
+issue with installation/linking. Mixed conditional sinks still need a targeted
+regression and diagnosis; the publication gate does not establish that case.
+
 Required regressions include import aliases and re-exports; lexical shadowing;
 nested wrappers; source fields/arrays; mixed state/payload reads; returned facades
 and callbacks; event-created requests and source rebinding; pending/error states;

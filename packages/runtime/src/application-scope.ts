@@ -8,11 +8,16 @@ import {
 
 let storage: StorageShim<ApplicationRuntime> | undefined;
 
-/** Install lazily so a later server entry can select AsyncLocalStorage. */
-export function runWithApplicationRuntime<T>(runtime: ApplicationRuntime, run: () => T): T {
+/** @internal Connect this kernel copy to the shared request scope. */
+export function installApplicationRuntimeStorage(): void {
   if (!storage) {
     storage = createStorage<ApplicationRuntime>('runtime');
     installApplicationRuntimeScope(storage);
   }
+}
+
+/** Install lazily so a later server entry can select AsyncLocalStorage. */
+export function runWithApplicationRuntime<T>(runtime: ApplicationRuntime, run: () => T): T {
+  installApplicationRuntimeStorage();
   return runInApplicationRuntime(runtime, run);
 }

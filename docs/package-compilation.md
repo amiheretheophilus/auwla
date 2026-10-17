@@ -131,6 +131,67 @@ those compiler-produced modules afterward. Generate declarations separately;
 the semantic artifact does not replace `.d.ts` files. Consumers continue to
 load ordinary ESM through the bundler.
 
+### Barrels and bundling
+
+Public entries can use ordinary explicit named re-exports, including aliases:
+
+```ts
+// src/index.ts
+export { Button as ActionButton } from './Button';
+export { pending } from './status';
+export type { ButtonProps } from './Button';
+```
+
+Include the referenced implementation modules in the package compilation.
+Helper relationships and component adoption capabilities follow their defining
+exports through these barrels. An application can also re-export the installed
+package from a local barrel. Type-only exports do not create runtime edges.
+Use explicit names: `export *` and namespace re-exports are not supported as
+compiler-aware publication entries.
+
+Bundling and minification happen **after** package compilation. Keep framework
+imports external, and declare the matching runtime/data dependencies as peers
+when the emitted package uses them; do not embed another runtime in the library
+bundle. Declare all public subpaths in both `exports` and `packageEntries`.
+An ESM-only entry such as `{ "import": "./dist/index.js" }` is supported; a
+`require` export is not necessary. Vite follows the actual optimized dependency
+entry back to its package metadata during development and discovers metadata for
+externalized ESM entries during SSR. The JavaScript still uses normal Vite/ESM
+resolution; the artifact does not replace or disable dependency optimization.
+
+Use `sideEffects: false` only if the library genuinely has no import-time side
+effects. It allows unused exports to disappear from the consumer's output.
+Do not strip required initialization just to reduce bundle size. Generate
+declarations from the authored TypeScript/TSX so consumers keep the original
+prop and helper signatures, rather than the compiler's internal factory ABI.
+
+### Publication regression
+
+From this repository, after building the framework, run:
+
+```sh
+cd packages/vite
+bun test --isolate ./tests/package-publication.test.ts
+```
+
+This test generates declarations, bundles/minifies a component/helper library,
+packs it with `bun pm pack`, installs the tarball into an isolated consumer,
+and deletes the producer directory before checking the consumer. Consumer
+typechecking uses `bun check`. It exercises named barrels, a public subpath,
+SSR, development dependency optimization, production builds, and unused-export
+tree shaking. With Chrome available (`MMD_CHROME_PATH` or a detected local
+installation), it also tests events, request-state subscriptions, retained input
+drafts, slot fallback/projection, and conditional removal/remounting in both
+development and production.
+
+The framework dependencies in that fixture use the matching built checkout;
+the library under test is a real installed tarball with no source alias. This
+is not yet a registry-release or cross-version runtime compatibility test.
+SSR regression coverage separately verifies that external library/runtime
+module copies share the active request scope without resetting concurrent
+requests when another server entry loads. That does not make incompatible
+runtime versions interchangeable.
+
 In a monorepo, build ordering matters: build the compiler before packages which
 generate artifacts. The root Memoized DOM build does this for
 `@memoized-dom/utils`.
