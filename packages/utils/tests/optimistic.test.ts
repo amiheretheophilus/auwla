@@ -11,7 +11,7 @@ import {
   type ResolvedValue,
   type StandardSchemaV1,
 } from '@memoized-dom/data';
-import { optimistic, type OptimisticCallOptions } from '../src';
+import { optimistic, type OptimisticCallOptions } from '@memoized-dom/utils';
 import { createStreamingSource, disposeFetchResource } from '@memoized-dom/data/internal';
 
 function deferred<T>() {

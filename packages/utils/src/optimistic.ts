@@ -177,7 +177,8 @@ export function optimistic<TPayload, TResult extends OperationResult>(
           try { releaseGroup(); } finally { releaseSource(); }
         }
       });
-      if (!finished && (group !== undefined || options.source !== undefined)) {
+      // Runtime bookkeeping needs option presence, not the source's payload.
+      if (!finished && (group !== undefined || 'source' in options)) {
         stopAbort = subscribeFetchResource(source, snapshot => {
           if (finished || tracker.id === operationId &&
             (snapshot.pending || snapshot.refreshing || snapshot.status !== 'idle')) return;
