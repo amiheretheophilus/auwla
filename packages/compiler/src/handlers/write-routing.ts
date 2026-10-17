@@ -25,7 +25,7 @@ import type { HandlerExecutionSite, HandlerMutationSite } from './plan';
 import { captureMutationJournals } from '../analysis/list-mutation-journals';
 import { hasKnownAccessor, isPlainDataAssignment } from './member-assignment';
 import { isSourceReplayConsumption } from '../effects/source-inputs';
-import { summarizeHelper } from '../helper-summaries';
+import { callResultTarget, rootCall } from '../analysis/function-effects';
 import type { BaseNode } from '../ast';
 
 export interface HandlerWriteRouting {
@@ -496,28 +496,19 @@ export function createHandlerWriteRouting({
    * it reads; any other call result could alias any module object.
    */
   const noteCallResultWrite = (p: HandlerPath, node: t.MemberExpression): boolean => {
-    let root: t.Node = node;
-    while (astFactory.isMemberExpression(root) || astFactory.isOptionalMemberExpression(root)) {
-      root = root.object;
-    }
-    if (!astFactory.isCallExpression(root) && !astFactory.isOptionalCallExpression(root)) return false;
-    const provider = root.callee;
-    if (astFactory.isIdentifier(provider) && !componentLocals.has(provider.name) &&
-        (ctx.helpers.has(provider.name) || ctx.importedFunctions.has(provider.name))) {
-      const summary = ctx.importedFunctions.get(provider.name) ?? summarizeHelper(ctx, provider.name);
+    const call = rootCall(node);
+    if (call === null) return false;
+    const target = callResultTarget(ctx, call, aliases, p.scope, name =>
+      !componentLocals.has(name) && (ctx.helpers.has(name) || ctx.importedFunctions.has(name)));
+    if (target.kind === 'helper') {
       mutateScope(p, scope => {
-        for (const read of summary.reads) recordRoutedWrite(scope, read);
-        if (summary.unbounded || summary.opaqueReads === true) scope.rootFallback = true;
+        for (const read of target.summary.reads) recordRoutedWrite(scope, read);
+        if (target.summary.unbounded || target.summary.opaqueReads === true) scope.rootFallback = true;
       });
       return true;
     }
-    if ((astFactory.isMemberExpression(provider) || astFactory.isOptionalMemberExpression(provider)) &&
-        astFactory.isExpression(provider.object) &&
-        aliases.resolveExpressionOrigins(p.scope, provider.object).length > 0) {
-      // A receiver method result (items.find(...)) is bounded to the receiver.
-      for (const origin of aliases.resolveExpressionOrigins(p.scope, provider.object)) {
-        noteReceiverEffect(p, origin);
-      }
+    if (target.kind === 'receiver') {
+      for (const origin of target.origins) noteReceiverEffect(p, origin);
       return true;
     }
     // Same guard as receiver calls on call results: escalating inside an

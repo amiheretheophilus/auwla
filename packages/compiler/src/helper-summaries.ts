@@ -32,6 +32,12 @@ import {
 } from './mutation-analysis';
 import { opaqueModuleRoots } from './analysis/opaque-volatility';
 import {
+  callResultTarget,
+  programConstDeclarators,
+  reactiveModuleClasses,
+  seedOuterAliases,
+} from './analysis/function-effects';
+import {
   sourcePayloadArgument,
   sourceStateArgument,
 } from './analysis/transparent-reads';
@@ -75,35 +81,6 @@ function assignmentLeftIs(
     fields(parent).operator === '=' &&
     childNode(parent, 'left') === candidate
   );
-}
-
-/**
- * A module object can hold a reference to other state: `const refs =
- * { current: state.user }`. Seed `refs.current` with that origin so a write
- * through it reaches readers of `state.user`, as handler analysis does.
- */
-function seedModuleObjectAliases(ctx: Ctx, aliases: AliasTracker): void {
-  const scope = ctx.astAnalysis?.rootScope;
-  const program = scope?.block as t.Program | undefined;
-  if (scope === undefined || program?.type !== 'Program') return;
-  for (const statement of program.body) {
-    const declaration = astFactory.isExportNamedDeclaration(statement) ? statement.declaration : statement;
-    if (!astFactory.isVariableDeclaration(declaration) || declaration.kind !== 'const') continue;
-    for (const declarator of declaration.declarations) {
-      if (!astFactory.isIdentifier(declarator.id) || !astFactory.isObjectExpression(declarator.init)) continue;
-      for (const property of declarator.init.properties) {
-        if (!astFactory.isObjectProperty(property) || property.computed || property.kind !== 'init' ||
-            !astFactory.isExpression(property.value)) continue;
-        const value = property.value;
-        if (!astFactory.isIdentifier(value) && !astFactory.isMemberExpression(value)) continue;
-        const key = astFactory.isIdentifier(property.key) ? property.key.name
-          : astFactory.isStringLiteral(property.key) ? property.key.value : null;
-        if (key === null) continue;
-        aliases.trackNamedMember(`${declarator.id.name}.${key}`,
-          aliases.resolveExpressionOrigins(scope, value).filter(origin => origin.locality === 'module'));
-      }
-    }
-  }
 }
 
 /**
@@ -231,7 +208,11 @@ export function summarizeHelper(
     origin.stateKind === 'computed' || ctx.state.get(origin.root) === 'computed';
   const parameterPaths = destructuredParameterPaths(helper.params);
   const selfCalls: { call: BaseNode; scope: Scope }[] = [];
-  seedModuleObjectAliases(ctx, aliases);
+  const programScope = ctx.astAnalysis?.rootScope;
+  if (programScope !== undefined) {
+    seedOuterAliases(aliases, programScope, programConstDeclarators(programScope.block as t.Program),
+      reactiveModuleClasses(ctx, aliases, programScope));
+  }
 
   visiting.add(name);
   walkAst<BaseNode>(helperNode, {
@@ -375,29 +356,26 @@ export function summarizeHelper(
 
   // A returned object can alias state the callee reaches; bound the write to it.
   const noteResultWrite = (call: BaseNode): void => {
-    const callee = childNode(call, 'callee');
-    const calleeName = identifierName(callee);
-    if (calleeName !== null && callee !== null &&
-        astBindingAt(ctx, callee, calleeName)?.scope.isProgramScope === true &&
-        (ctx.helpers.has(calleeName) || ctx.importedFunctions.has(calleeName))) {
-      const nested = ctx.importedFunctions.get(calleeName) ??
-        summarizeHelper(ctx, calleeName, visiting, cycleHits);
-      for (const read of nested.reads) summary.boundedWrites.add(read);
-      if (nested.opaqueReads === true || nested.unbounded) summary.unbounded = true;
+    const target = callResultTarget(ctx, call as unknown as t.CallExpression, aliases, scopeAt(ctx, call),
+      calleeName => astBindingAt(ctx, call, calleeName)?.scope.isProgramScope === true &&
+        (ctx.helpers.has(calleeName) || ctx.importedFunctions.has(calleeName)),
+      visiting, cycleHits);
+    if (target.kind === 'helper') {
+      for (const read of target.summary.reads) summary.boundedWrites.add(read);
+      if (target.summary.opaqueReads === true || target.summary.unbounded) summary.unbounded = true;
       return;
     }
-    if (callee?.type === 'MemberExpression' || callee?.type === 'OptionalMemberExpression') {
-      const receiver = childNode(callee, 'object');
-      const origins = receiver === null ? [] : aliases.resolveExpressionOrigins(
-        scopeAt(ctx, call), receiver as unknown as t.Expression);
-      for (const origin of origins) noteReceiverEffect(origin);
-      if (origins.length > 0) return;
-      if (receiver !== null && resultCalls(receiver).length > 0) {
-        for (const nested of resultCalls(receiver)) noteResultWrite(nested);
-        return;
-      }
+    if (target.kind === 'receiver') {
+      for (const origin of target.origins) noteReceiverEffect(origin);
+      return;
     }
-    summary.unbounded = true;
+    // `first().items.find(...)`: the receiver is itself a call result.
+    const callee = childNode(call, 'callee');
+    const receiver = callee?.type === 'MemberExpression' || callee?.type === 'OptionalMemberExpression'
+      ? childNode(callee, 'object') : null;
+    const nested = receiver === null ? [] : resultCalls(receiver);
+    if (nested.length > 0) for (const inner of nested) noteResultWrite(inner);
+    else summary.unbounded = true;
   };
 
   const noteMemberWrite = (at: BaseNode, member: BaseNode): void => {
