@@ -146,6 +146,20 @@ export function wrapAutomaticSite(
   dependencies: readonly string[],
   override?: TransparentPresentationPolicy,
 ): void {
+  overwriteNode(
+    expression as unknown as BaseNode,
+    automaticSiteExpression(ctx, component, expression, dependencies, override) as unknown as BaseNode,
+  );
+}
+
+/** `expression` shown once its sources commit, with the owner's pending and error presentation. */
+export function automaticSiteExpression(
+  ctx: Ctx,
+  component: string,
+  expression: t.Expression,
+  dependencies: readonly string[],
+  override?: TransparentPresentationPolicy,
+): t.ConditionalExpression {
   const sources = sourceArray(dependencies);
   const errorRead = (): t.CallExpression =>
     astFactory.callExpression(mdd(ctx, 'resolvedValuesError'), [
@@ -209,8 +223,5 @@ export function wrapAutomaticSite(
   }).__memoDomTransparentGroup = true;
   annotateTransparentSources(conditional, dependencies);
   retainAutomaticContent(conditional, dependencies);
-  overwriteNode(
-    expression as unknown as BaseNode,
-    conditional as unknown as BaseNode,
-  );
+  return conditional;
 }

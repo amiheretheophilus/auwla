@@ -46,7 +46,7 @@ import {
   initialRoutePreparationStatements,
 } from './router';
 import { analyzeRoutedPreparations } from '../routed';
-import { rewriteTransparentDataReads } from './read-rewriting';
+import { lowerSourceReads } from '../readiness';
 import {
   externalReactiveImportStatements,
 } from './external-reactivity';
@@ -254,7 +254,7 @@ function prepareProgram(
   indexDiagnosticSource(ctx, programPath.node as unknown as BaseNode);
   prepareProgramAnalysis(ctx, programPath);
   analyzeRoutedPreparations(ctx, programPath, true);
-  rewriteTransparentDataReads(ctx);
+  lowerSourceReads(ctx);
   ctx.moduleCallbacks=planModuleCallbacks(ctx,programPath);
   for(const site of ctx.moduleCallbacks.retained)instrumentSharedCallback(ctx,site.target,site.executionAware);
   return planComponentRendering(ctx.compPaths, {

@@ -18,6 +18,7 @@ import {
 } from './dom/program';
 import type { InternalMemoDomOptions } from './dom/context';
 import { compilerError } from './errors';
+import { recordCompile } from './corpus';
 
 export type { MemoDomOptions };
 
@@ -118,7 +119,7 @@ function transform(
 /** Compile source while preserving the historical string-only API. */
 export function compile(source: string, opts: CompileOptions = {}): string {
   const { frontend = memoizedEstreeFrontend, ...compilerOptions } = opts;
-  return transform(source, compilerOptions, false, undefined, frontend).code;
+  return recordCompile('compile', [source, opts], transform(source, compilerOptions, false, undefined, frontend).code);
 }
 
 /** Internal linked-graph path that reuses an ESTree program. */
@@ -141,7 +142,7 @@ export function compileDetailed(
   if (out.map === null) {
     throw new Error('memo-dom: compilation produced no source map');
   }
-  return { code: out.code, map: out.map, ...(out.css ? { css: out.css } : {}) };
+  return recordCompile('compileDetailed', [source, opts], { code: out.code, map: out.map, ...(out.css ? { css: out.css } : {}) });
 }
 
 /** Internal linked-graph path that reuses a cached ESTree program. */

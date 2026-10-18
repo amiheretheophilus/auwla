@@ -85,6 +85,7 @@ import { normalizeNamedReexports } from './linking/reexports';
 import { isReferenceIdentifier } from './ast/scope';
 import { isIdentifier } from './ast/factory';
 import { PACKAGE_COMPILER_CONTRACT, PACKAGE_RUNTIME_ABI } from './linking/package-artifact';
+import { recordCompile } from './corpus';
 
 export interface CompiledComponentExport extends Omit<ComponentExportInfo, 'key'> {
   exported: string;
@@ -1081,14 +1082,14 @@ export function compileModulesDetailed(
   modules: Readonly<Record<string, string>>,
   options: CompileModulesOptions = {},
 ): CompiledModules {
-  return compileLinkedModules(modules, options, true);
+  return recordCompile('compileModulesDetailed', [modules, options], compileLinkedModules(modules, options, true));
 }
 
 export function compileModules(
   modules: Readonly<Record<string, string>>,
   options: CompileModulesOptions = {},
 ): Record<string, string> {
-  return compileLinkedModules(modules, options, false).output;
+  return recordCompile('compileModules', [modules, options], compileLinkedModules(modules, options, false).output);
 }
 
 /**

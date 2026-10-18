@@ -1,6 +1,6 @@
 # Design draft: semantic graph and render plan
 
-**Status: DRAFT for the user's review. No code is written against it yet.**
+**Status: accepted by the agent (in charge since 2026-10-18). Answers to the questions are in `decisions.md`.**
 Questions for the user are marked **Q**.
 
 ## 1. Stages and what each owns

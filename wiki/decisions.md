@@ -9,3 +9,8 @@
 | 2026-10-18 | Readiness is the top priority among bugs. | User: "what needs me the most is the readiness bug". |
 | 2026-10-18 | Run heavy test suites on a pay-per-use remote machine (GitHub Codespaces suggested). | The local machine is slow and runs out of memory on the full suite. |
 | 2026-10-18 | Roadmap features are discussed separately with the user before any work. | User is the domain expert: "i am skeptics if you indeed have the needed knowledge which i can give". |
+| 2026-10-18 | The agent leads the refactor. | User: "you are in charge now". |
+| 2026-10-18 | Refs: a ref read updates on mount and when the element is replaced; not on resize. | Resize needs a ResizeObserver per read; that is an explicit opt-in, not a default. |
+| 2026-10-18 | Lists: every current list optimization stays until a plan pass reproduces it; `bench/` numbers are the gate. | List performance is a stated requirement. |
+| 2026-10-18 | Only GET server functions are sources in render; other server functions are actions (still rejected in render). | Matches the current rule; a mutation must not run because a component rendered. |
+| 2026-10-18 | Refactor slices verify by differential compilation (corpus diff) plus the test suites. | Behaviour is the contract; the diff shows every changed output for review. |
