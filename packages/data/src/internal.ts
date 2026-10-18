@@ -49,6 +49,7 @@ export {
   isModuleSourceRef,
   readModuleSourceList,
   rebindModuleSource,
+  rebindModuleSourceFromFactory,
   rebindReadModuleSource,
   resolveModuleSource,
   sourceRef,

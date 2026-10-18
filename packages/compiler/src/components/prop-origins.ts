@@ -27,6 +27,11 @@ export type ComponentPropSourceRefs = Record<
   ComponentPropSourceRef[]
 >;
 
+/** A module-scope data source (local `$fetch`, or an imported one), not a shadowing local. */
+function isModuleSourceBinding(ctx: Ctx, name: string, binding: { scope: { isProgramScope: boolean } }): boolean {
+  return ctx.transparentModuleSources.has(name) && binding.scope.isProgramScope;
+}
+
 function moduleStateSource(
   ctx: Ctx,
   raw: t.Expression,
@@ -300,6 +305,12 @@ function sourcesOf(
   }
   const listSources = listItemSources(ctx, owner, tag, unwrapped);
   if (listSources !== null) return listSources;
+
+  // A module-level data source passes as the source itself, like a local one.
+  if (astFactory.isIdentifier(unwrapped)) {
+    const binding = astBindingAt(ctx, unwrapped as unknown as BaseNode, unwrapped.name);
+    if (binding !== undefined && isModuleSourceBinding(ctx, unwrapped.name, binding)) return [{ type: 'transparent' }];
+  }
 
   const state = moduleStateSource(ctx, unwrapped);
   if (state !== null) return [{ type: 'state', key: state }];

@@ -89,6 +89,9 @@ export function multiplexTransport(environment:FetchEnvironment,runtime:CoreData
             body:JSON.stringify({version:1,session:this.token,revision:this.revision+1,subscribe,unsubscribe})});
           await response.body?.cancel();
           if(response.status===409)throw new SessionExpired('Live session expired');
+          // A session belongs to the credentials that opened it; after sign-in
+          // or sign-out the server refuses it. Reopen as the current reader.
+          if(response.status===403)throw new SessionExpired('Live session credentials changed');
           if(response.status!==204)throw new RequestError('Live subscription control rejected',{kind:'http',status:response.status});
           this.revision++;for(const id of unsubscribe)this.remote.delete(id);for(const item of subscribe)this.remote.add(item.id);
         }

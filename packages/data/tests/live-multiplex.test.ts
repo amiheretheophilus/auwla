@@ -78,11 +78,11 @@ describe('transparent live multiplexing',()=>{
 function wireFixture(){
   type Wire={controller:ReadableStreamDefaultController<Uint8Array>;body:{subscribe:{id:string;url:string}[]};cancelled:boolean};
   const wires:Wire[]=[],controls:{subscribe:{id:string;url:string}[];unsubscribe:string[]}[]=[];
-  let expire=false;
+  let expire=false,forbid=false;
   const emit=(wire:Wire,event:string,data:unknown)=>wire.controller.enqueue(new TextEncoder().encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`));
   const runtime=createDataRuntime({baseURL:'https://wire.test',fetch:async(_input,init)=>{
     const body=JSON.parse(String(init?.body));
-    if(body.session){controls.push(body);return new Response(null,{status:expire?409:204});}
+    if(body.session){controls.push(body);return new Response(null,{status:forbid?403:expire?409:204});}
     let wire:Wire;
     return new Response(new ReadableStream<Uint8Array>({start(controller){wire={controller,body,cancelled:false};wires.push(wire);emit(wire,'session',{version:1,session:'session-'+wires.length});},cancel(){wire.cancelled=true;}}),
       {headers:{'content-type':'text/event-stream','x-mmd-multiplex':'1'}});
@@ -90,7 +90,7 @@ function wireFixture(){
   const source=(name:string)=>runWithDataRuntime(runtime,()=>createStreamingSource<{count:number}>('/_fn/'+name,{},'live')) as unknown as FetchResource<{count:number}>;
   const stamp=(revision:number)=>({epoch:'e',key:'["value"]',revision});
   const value=(wire:Wire,id:string,count:number,revision=count)=>emit(wire,'value',{sub:id,value:{count},seq:1,stamp:stamp(revision)});
-  return {runtime,wires,controls,emit,source,stamp,value,expire(){expire=true;}};
+  return {runtime,wires,controls,emit,source,stamp,value,expire(){expire=true;},forbid(){forbid=true;}};
 }
 
 describe('multiplexed recovery and fault isolation',()=>{
@@ -135,6 +135,20 @@ describe('multiplexed recovery and fault isolation',()=>{
     f.emit(second,'error',{sub:b.id,message:'Not allowed',status:403});f.value(second,a.id,1);
     await waitFor(()=>expect(one.data?.count).toBe(1));await waitFor(()=>expect(resourceController(two).snapshot.error?.status).toBe(403));
     expect(f.wires).toHaveLength(2);
+  });
+
+  // Signing in or out changes the cookie, so the server refuses the session the
+  // old credentials opened. Every live query must survive on a fresh session.
+  it('reopens the session when the server refuses its credentials instead of failing every query',async()=>{
+    const f=wireFixture(),one=f.source('one');await waitFor(()=>expect(f.wires).toHaveLength(1));
+    f.value(f.wires[0]!,f.wires[0]!.body.subscribe[0]!.id,0);await f.runtime.settle();
+    f.forbid();const two=f.source('two');
+    await waitFor(()=>expect(f.wires).toHaveLength(2),5000);expect(f.wires[0]!.cancelled).toBe(true);
+    const second=f.wires[1]!;
+    const a=second.body.subscribe.find(item=>item.url.endsWith('/one'))!,b=second.body.subscribe.find(item=>item.url.endsWith('/two'))!;
+    f.value(second,a.id,1);f.value(second,b.id,2);
+    await waitFor(()=>expect(one.data?.count).toBe(1));await waitFor(()=>expect(two.data?.count).toBe(2));
+    expect(resourceController(one).snapshot.error).toBeNull();expect(resourceController(two).snapshot.error).toBeNull();
   });
 
   it('does not open a connection for sources disposed before the initial batch',async()=>{

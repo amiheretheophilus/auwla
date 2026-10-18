@@ -20,8 +20,10 @@ export function lowerModuleSourceDeclarations(
       const {key, declarator} = source;
       ctx.usesTransparentData = true;
       const readSource = source.kind === 'read';
+      const factoryCall = () => astFactory.arrowFunctionExpression([], cloneNode((source as {call: t.CallExpression}).call, true));
       const inputs = (): t.CallExpression['arguments'] => source.kind === 'read'
         ? [sourceReplayConsumption(cloneNode(source.replay, true))]
+        : source.kind === 'factory' ? [factoryCall()]
         : [source.target === undefined ? astFactory.nullLiteral() : cloneNode(source.target, true),
           ...(source.options === undefined ? [] : [cloneNode(source.options, true)])];
       if (source.inputs.length > 0) {
@@ -30,6 +32,7 @@ export function lowerModuleSourceDeclarations(
             [],
             astFactory.callExpression(mdd(ctx, readSource
               ? 'rebindReadModuleSource'
+              : source.kind === 'factory' ? 'rebindModuleSourceFromFactory'
               : 'rebindModuleSource'), [
               astFactory.callExpression(mdd(ctx, 'sourceRef'), [
                 astFactory.stringLiteral(key),
@@ -54,7 +57,7 @@ export function lowerModuleSourceDeclarations(
             astFactory.arrowFunctionExpression(
               [],
               astFactory.blockStatement([
-                astFactory.returnStatement(
+                astFactory.returnStatement(source.kind === 'factory' ? cloneNode(source.call, true) :
                   astFactory.callExpression(mdd(ctx, readSource
                     ? 'createReadSource'
                     : source.bodyless ? source.clientOnly ? 'createClientSource' : 'createBodylessSource' : 'createSource'), readSource

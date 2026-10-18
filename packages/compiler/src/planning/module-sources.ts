@@ -16,6 +16,8 @@ interface ModuleSourceBase {
 export type ModuleSourcePlan = ModuleSourceBase & (
   | {readonly kind: 'fetch'; readonly bodyless?: boolean; readonly clientOnly?: boolean; readonly target?: SourceInput; readonly options?: SourceInput}
   | {readonly kind: 'read'; readonly replay: t.Expression}
+  /** A linked factory (a server function, an app helper): call it as written. */
+  | {readonly kind: 'factory'; readonly call: t.CallExpression}
 );
 
 export interface ModuleSourceStatementPlan {
@@ -38,6 +40,8 @@ export function planModuleSources(
   analysis: ScopeAnalysis,
   moduleId: string,
   factories: {readonly sources: ReadonlySet<string>; readonly forms: ReadonlySet<string>; readonly reads: ReadonlySet<string>;
+    /** `$fetch`-shaped providers; any other source factory is a linked factory. */
+    readonly providers?: ReadonlySet<string>;
     readonly bodylessFetches?: ReadonlySet<string>; readonly clientOnly?: boolean},
   errorAt: {buildCodeFrameError(message: string, at?: t.Node): Error},
 ): readonly ModuleSourceStatementPlan[] {
@@ -102,6 +106,8 @@ export function planModuleSources(
           throw errorAt.buildCodeFrameError('memo-dom: module $read requires a promise expression and a replay expression', call);
         }
         sources.push(Object.freeze({...base, kind: 'read', replay: cloneNode(options, true)}));
+      } else if (factories.providers !== undefined && !factories.providers.has(call.callee.name)) {
+        sources.push(Object.freeze({...base, kind: 'factory', call: cloneNode(call, true)}));
       } else {
         sources.push(Object.freeze({...base, kind: 'fetch',
           ...(factories.bodylessFetches?.has(call.callee.name) ? {bodyless: true, clientOnly:factories.clientOnly === true} : {}),

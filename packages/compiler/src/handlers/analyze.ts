@@ -29,7 +29,7 @@ import {
   walkHandler,
 } from './traversal';
 import type { HandlerWritePlan } from './plan';
-import { createHandlerWriteRouting } from './write-routing';
+import { createHandlerWriteRouting, writesThroughRef } from './write-routing';
 import { captureOwnerListWrites } from '../analysis/owner-list-structure';
 import {asyncReadFact} from '../planning/async-reads';
 import {
@@ -430,7 +430,7 @@ export function planHandlerWrites(
 
       if (
         astFactory.isMemberExpression(callee) &&
-        hasPrimitiveReceiver(ctx, compName, callee)
+        (hasPrimitiveReceiver(ctx, compName, callee) || writesThroughRef(ctx, compName, callee))
       ) {
         // This is provenance-based, not a method allowlist: future methods on
         // primitive values inherit the same rule, while object/array methods
@@ -700,6 +700,11 @@ export function planHandlerWrites(
           const origin = aliases.resolveExpression(p.scope, argument);
           if (origin !== null) {
             if (isComputedOrigin(origin)) continue;
+            // An effect handing its prop to a helper (`host.innerHTML =
+            // render(source)`) consumes it, as above: a summary cannot tell a
+            // method call on the parameter from a mutation, and treating it as
+            // a write re-runs the effect that just consumed the prop, forever.
+            if (origin.locality === 'prop' && isSynchronousConsumption(p)) continue;
             noteReceiverEffect(p, extendOrigin(origin, effect.path));
           }
         }

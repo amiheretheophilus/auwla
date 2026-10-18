@@ -90,6 +90,67 @@ export function lowerModuleRefReadsEstree(
     });
     return found;
   };
+  const isComponentPropValue = (container: BaseNode): boolean => {
+    const attribute = ctx.astAnalysis?.parentByNode.get(container) ?? null;
+    if (attribute?.type !== 'JSXAttribute') return false;
+    const opening = ctx.astAnalysis?.parentByNode.get(attribute) ?? null;
+    if (opening?.type !== 'JSXOpeningElement') return false;
+    const tag = (opening as unknown as t.JSXOpeningElement).name;
+    return astFactory.isJSXIdentifier(tag) && /^[A-Z]/.test(tag.name);
+  };
+  const isJsxNode = (node: BaseNode) => node.type === 'JSXElement' || node.type === 'JSXFragment';
+  const isConditionalJsx = (expression: t.Expression): boolean => {
+    if (!astFactory.isConditionalExpression(expression) && !(astFactory.isLogicalExpression(expression) &&
+        (expression.operator === '&&' || expression.operator === '||'))) return false;
+    let found = false;
+    walkAst(expression as unknown as BaseNode, { enter(node) { if (isJsxNode(node)) found = true; return found ? false : undefined; } });
+    return found;
+  };
+  const collectOutsideJsx = (root: BaseNode) => {
+    const found: Array<{ identifier: BaseNode; entry: EstreeModuleSourceEntry }> = [];
+    walkAst(root, {
+      enter(node) {
+        if (isJsxNode(node)) return false;
+        if (node.type !== 'Identifier') return;
+        const entry = entryFor(node);
+        if (entry !== null && !isPassthroughArgument(ctx, node)) found.push({ identifier: node, entry });
+      },
+    });
+    return found;
+  };
+  /** Test of each `?:` and left side of each `&&`/`||`, through nested conditionals. */
+  const conditionOperands = (expression: t.Expression): BaseNode[] => {
+    if (astFactory.isConditionalExpression(expression)) {
+      return [expression.test as unknown as BaseNode,
+        ...conditionOperands(expression.consequent), ...conditionOperands(expression.alternate)];
+    }
+    if (astFactory.isLogicalExpression(expression) && (expression.operator === '&&' || expression.operator === '||')) {
+      return [expression.left as unknown as BaseNode, ...conditionOperands(expression.right)];
+    }
+    return [];
+  };
+  /** `operand` → `readResolvedValuesForRender([refs], (values) => operand)`. */
+  const wrapReads = (operand: BaseNode): void => {
+    const reads = collectOutsideJsx(operand);
+    if (reads.length === 0) return;
+    const unique = [...new Map(reads.map(({ entry }) => [entry.name, entry])).values()];
+    const replacements = new Map(unique.map(entry => [entry.name, generatedIdentifier(ctx, `${entry.name}Value`)]));
+    const body = cloneEstreeNode(operand, true) as unknown as BaseNode;
+    walkAst(body, {
+      enter(current) {
+        if (current.type !== 'Identifier') return;
+        const name = (current as unknown as AstIdentifier).name;
+        const original = reads.find(read => (read.identifier as unknown as AstIdentifier).name === name);
+        if (original !== undefined) overwriteNode(current, cloneEstreeNode(replacements.get(name)!) as unknown as BaseNode);
+      },
+    });
+    const callback = astFactory.arrowFunctionExpression(
+      unique.map(entry => cloneEstreeNode(replacements.get(entry.name)!)), body as unknown as t.Expression);
+    ctx.compilerOwnedCallbacks.add(callback);
+    overwriteNode(operand, annotateAsyncRead(astFactory.callExpression(mdd(ctx, 'readResolvedValuesForRender'), [
+      astFactory.arrayExpression(unique.map(entry => refCall(entry.key))), callback,
+    ]), unique.map(entry => entry.key), 'undefined') as unknown as BaseNode);
+  };
   const replaceRead = (
     identifier: BaseNode,
     entry: EstreeModuleSourceEntry,
@@ -155,6 +216,31 @@ export function lowerModuleRefReadsEstree(
         }
         refresh();
         return false;
+      }
+
+      // `<Card user={me} />`: the component receives the source itself, as it
+      // would a local one, and handles pending/error at its own read sites.
+      const direct = entryFor(rawExpression);
+      if (direct !== null && isComponentPropValue(node)) {
+        overwriteNode(rawExpression, refCall(direct.key) as unknown as BaseNode);
+        refresh();
+        return false;
+      }
+
+      // A conditional child stays a conditional: only its own operands are
+      // lowered here; branch JSX keeps its containers, visited next.
+      if (isConditionalJsx(expression)) {
+        // The condition runs only once every source it reads has committed
+        // (`me !== null && me.name` must not see a pending `me`); until then it
+        // is undefined and the falsy branch renders.
+        const conditions = conditionOperands(expression);
+        for (const condition of conditions) wrapReads(condition);
+        for (const { identifier, entry } of collectOutsideJsx(rawExpression)) {
+          replaceRead(identifier, entry, isListReceiver(identifier) ? 'readModuleSourceList' : 'readResolvedValueForRender');
+        }
+        annotateTransparentSources(expression, transparentExpressionSources(expression));
+        refresh();
+        return undefined;
       }
 
       const referenced = collect(rawExpression);

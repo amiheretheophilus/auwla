@@ -51,6 +51,24 @@ export interface HandlerWriteRouting {
   isSynchronousConsumption(path: HandlerPath): boolean;
 }
 
+/**
+ * `nodes.panel.innerHTML = …` or `nodes.panel.classList.add(…)`: the receiver
+ * is a node the runtime assigned through `ref={nodes.panel}`. That is DOM work,
+ * not a write to the `nodes` state, so it schedules no render.
+ */
+export function writesThroughRef(
+  ctx: { readonly refMemberPaths: ReadonlyMap<string, ReadonlySet<string>> },
+  compName: string | null,
+  member: t.MemberExpression,
+): boolean {
+  const paths = compName === null ? undefined : ctx.refMemberPaths.get(compName);
+  if (paths === undefined || !astFactory.isMemberExpression(member.object)) return false;
+  const receiver = memberKey(member.object);
+  if (receiver === null) return false;
+  for (const path of paths) if (receiver === path || receiver.startsWith(path + '.')) return true;
+  return false;
+}
+
 export function createHandlerWriteRouting({
   ctx,
   structuralWrites,
@@ -548,6 +566,7 @@ export function createHandlerWriteRouting({
   };
 
   const noteMemberWrite = (p: HandlerPath, node: t.MemberExpression): void => {
+    if (writesThroughRef(ctx, compName, node)) return;
     const rootName = memberRootName(node);
     const ownerStructural = rootName !== null && structuralWrites.get(p.node) === rootName;
     if (!ownerStructural && hasKnownAccessor(ctx, rootFn, node)) {

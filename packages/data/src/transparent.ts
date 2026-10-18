@@ -73,6 +73,20 @@ function source<T>(value: ResolvedValue<T> | ModuleSourceRef): FetchResource<T> 
   return resolveTarget(value);
 }
 
+/**
+ * A component prop planned as a source can also receive plain data from
+ * another caller (`<Author article={source} />` and `<Author article={row} />`).
+ * Plain data is already committed: it reads as itself and never changes here.
+ */
+function isSource(value: unknown): boolean {
+  return isModuleSourceRef(value) || isFetchResource(value);
+}
+
+function snapshotOf<T>(value: ResolvedValue<T> | ModuleSourceRef): ResourceSnapshot<T> {
+  if (isSource(value)) return fetchResourceSnapshot(source(value));
+  return { data: value as T, error: null, status: 'success', pending: false, refreshing: false } as ResourceSnapshot<T>;
+}
+
 /** Render-only bridge. Declaration, derivation and imperative status reads do
  * not join a staged subtree's wait set. No resource ownership is transferred. */
 function consumeRenderSource<T>(value: ResolvedValue<T>): FetchResource<T> {
@@ -97,7 +111,7 @@ function consumeRenderSources(values: readonly (ResolvedValue<unknown> | null | 
   // no detached generation is collecting render prerequisites.
   if (getActiveApplicationRuntime().state.preparation === undefined) return;
   for (const value of values) {
-    if (value !== null && value !== undefined) consumeRenderSource(value);
+    if (value !== null && value !== undefined && isSource(value)) consumeRenderSource(value);
   }
 }
 
@@ -217,7 +231,7 @@ export function readResolvedValue<T>(
   binding?: string,
   site?: string,
 ): T {
-  const snapshot = fetchResourceSnapshot(source(value));
+  const snapshot = snapshotOf(value);
   if (snapshot.status === 'success') return snapshot.data as T;
   if (snapshot.status === 'error' && snapshot.error !== null) {
     throw snapshot.error;
@@ -234,7 +248,8 @@ export function readResolvedValueForRender<T>(
   value: ResolvedValue<T> | null | undefined,
 ): T | undefined {
   if (value === null || value === undefined) return undefined;
-  const snapshot = fetchResourceSnapshot(consumeRenderSource(value));
+  if (isSource(value)) consumeRenderSource(value);
+  const snapshot = snapshotOf(value);
   if (snapshot.status === 'success') return snapshot.data as T;
   if (snapshot.status === 'error' && snapshot.error !== null) {
     throw snapshot.error;
@@ -262,7 +277,7 @@ function readResolvedValues<TResult>(
   const resolved: unknown[] = [];
   for (const value of values) {
     if (value === null || value === undefined) return undefined;
-    const snapshot = fetchResourceSnapshot(source(value));
+    const snapshot = snapshotOf(value);
     if (snapshot.status === 'error' && snapshot.error !== null) {
       throw snapshot.error;
     }
@@ -294,7 +309,7 @@ export function deriveResolvedValues<TResult>(
 ): TResult | undefined {
   const resolved: unknown[] = [];
   for (const value of values) {
-    const snapshot = fetchResourceSnapshot(source(value));
+    const snapshot = snapshotOf(value);
     if (snapshot.status !== 'success') return undefined;
     resolved.push(snapshot.data);
   }
@@ -306,7 +321,7 @@ export function resolvedValuesError(
 ): RequestError | null {
   consumeRenderSources(values);
   for (const value of values) {
-    const error = fetchResourceSnapshot(source(value)).error;
+    const error = snapshotOf(value).error;
     if (error !== null) return error;
   }
   return null;
@@ -317,7 +332,7 @@ export function resolvedValuesErrorIndex(
 ): number {
   consumeRenderSources(values);
   return values.findIndex(value =>
-    fetchResourceSnapshot(source(value)).error !== null
+    snapshotOf(value).error !== null
   );
 }
 
@@ -326,7 +341,7 @@ export function resolvedValuesPending(
 ): boolean {
   if (resolvedValuesError(values) !== null) return false;
   return values.some(value =>
-    fetchResourceSnapshot(source(value)).status !== 'success'
+    snapshotOf(value).status !== 'success'
   );
 }
 
@@ -335,7 +350,7 @@ export function resolvedValuesPendingIndex(
 ): number {
   consumeRenderSources(values);
   return values.findIndex(value => {
-    const snapshot = fetchResourceSnapshot(source(value));
+    const snapshot = snapshotOf(value);
     return snapshot.error === null && snapshot.status !== 'success';
   });
 }
@@ -354,7 +369,7 @@ export function retryResolvedValues(
 ): Promise<unknown> {
   const retries: Promise<unknown>[] = [];
   for (const value of values) {
-    const snapshot = fetchResourceSnapshot(source(value));
+    const snapshot = snapshotOf(value);
     if (snapshot.error !== null) retries.push(source(value).refresh());
   }
   if (retries.length === 0) return Promise.resolve();
@@ -438,7 +453,7 @@ export function withRoutedSources<TContext extends { readonly signal: AbortSigna
 export function resolvedValueSnapshot<T>(
   value: ResolvedValue<T>,
 ): ResourceSnapshot<T> {
-  return fetchResourceSnapshot(source(value));
+  return snapshotOf(value);
 }
 
 /**
@@ -464,6 +479,7 @@ export function observeResolvedValue<T>(
   value: ResolvedValue<T> | ModuleSourceRef,
   listener: ResourceListener<T>,
 ): () => void {
+  if (!isSource(value)) return () => {};
   let initial = true;
   return subscribeFetchResource(source(value), snapshot => {
     if (initial) {
@@ -485,8 +501,8 @@ export function connectResolvedValue<T>(
     unsubscribe();
     // Module sources live with their ApplicationRuntime — consumers only
     // detach; disposal authority stays with the runtime.
-    if (owned && !isModuleSourceRef(value)) {
-      disposeFetchResource(source(value));
+    if (owned && isFetchResource(value)) {
+      disposeFetchResource(value as unknown as FetchResource<unknown>);
     }
   };
 }
@@ -509,8 +525,8 @@ export function ownResolvedValue<T>(
   value: ResolvedValue<T> | ModuleSourceRef,
 ): () => void {
   // Module sources are disposed with their ApplicationRuntime.
-  if (isModuleSourceRef(value)) return () => {};
-  return () => disposeFetchResource(source(value));
+  if (!isFetchResource(value)) return () => {};
+  return () => disposeFetchResource(value as unknown as FetchResource<unknown>);
 }
 
 /** Per-instance slot holding whichever source an event-assigned variable currently references. */

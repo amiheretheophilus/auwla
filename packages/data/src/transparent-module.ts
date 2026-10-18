@@ -25,7 +25,7 @@ import { getExtensionStore } from '@memoized-dom/runtime';
 import { getActiveDataRuntime } from './active-runtime';
 import { enableRequestEncoding } from './request-encoding';
 import { installActiveDataRestoration } from './active-restoration';
-import { disposeFetchResource, rebindFetchResource } from './resource';
+import { disposeFetchResource, rebindFetchResource, rebindFetchResourceFrom } from './resource';
 import type { FetchOptions, FetchResource, ResolvedValue } from './types';
 import { enableDataReads, rebindReadResource } from './read-resource';
 import { registerDataRuntimeDisposer } from './runtime-lifetime';
@@ -196,6 +196,20 @@ export function rebindModuleSource<T>(
     cached.instance as unknown as FetchResource<T>,
     target,
     options,
+  );
+}
+
+/** A module source made by a linked factory (a server function) follows its inputs. */
+export function rebindModuleSourceFromFactory<T>(
+  ref: ModuleSourceRef,
+  factory: () => ResolvedValue<T>,
+): void {
+  const cached = runtimeCache().get(ref.key);
+  const described = describedSources.get(ref.key);
+  if (cached === undefined || cached.version !== described?.version) return;
+  rebindFetchResourceFrom(
+    cached.instance as unknown as FetchResource<T>,
+    factory() as unknown as FetchResource<T>,
   );
 }
 

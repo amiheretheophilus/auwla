@@ -394,6 +394,29 @@ const cases: DataCase[] = [
         <form onSubmit={form.submit}><button id="send" type="submit">send</button></form></main>;}`,
     steps: [['click:send', 'saving'], ['click:send', 'saving'], ['resolve:save', 'saving'], ['resolve:save', 'idle']],
   },
+  // Conduit port: a feed row passed down two component levels.
+  ...(['direct', 'in a ternary'] as const).map((shape): DataCase => ({
+    name: `d6 rows: a projected row passed through two components (${shape})`,
+    modules: { './Preview.tsx': `type Item={id:number;who:{name:string}};
+      export function Author({item}:{item:Item}){return <i>{item.who.name}</i>;}
+      export function Preview({item}:{item:Item}){return <b><Author item={item}/></b>;}` },
+    app: `import {Preview} from './Preview';
+      export function App(){const feed=$read(${defer('feed')} as Promise<{items:{id:number;who:{name:string}}[]}>);
+      return <main><output id="out">${shape === 'direct'
+        ? '{feed.items.map(item=><Preview key={item.id} item={item}/>)}'
+        : "{feed.items.length===0?<p>none</p>:feed.items.map(item=><Preview key={item.id} item={item}/>)}"}</output></main>;}`,
+    steps: [['resolve:feed:{"items":[{"id":1,"who":{"name":"ada"}}]}', 'ada']],
+  })),
+  {
+    name: 'd6 props: one component receives a source from one caller and a plain row from another',
+    modules: { './Author.tsx': `export function Author({item}:{item:{who:{name:string}}}){return <i>{item.who.name}</i>;}
+      export function Row({item}:{item:{who:{name:string}}}){return <b><Author item={item}/></b>;}` },
+    app: `import {Author,Row} from './Author';
+      export function App(){const one=$read(${defer('one')} as Promise<{who:{name:string}}>);
+        const rows=[{id:1,who:{name:'row'}}];
+        return <main><output id="out"><Author item={one}/>{rows.map(row=><Row key={row.id} item={row}/>)}</output></main>;}`,
+    steps: [['resolve:one:{"who":{"name":"src"}}', 'srcrow']],
+  },
   // Round 5: overlapping submissions settling out of order.
   {
     name: 'd5 forms: a later submission finishing first; the earlier failure rolls back only its own vote',

@@ -54,6 +54,7 @@ export function prepareProgramAnalysis(ctx: Ctx, programPath: ProgramPath): void
   lowerTransparentGroups(ctx, programPath,presentations);
   const moduleSources = planModuleSources(programPath.node, refreshAstAnalysis(ctx, programPath.node), ctx.moduleId,
     {sources: ctx.transparentSourceFactories, forms: ctx.transparentFormFactories, reads: ctx.transparentReadFactories,
+      providers: new Set([...ctx.transparentProviderFactories, ...bodylessFetches]),
       bodylessFetches, clientOnly:ctx.dataDelivery === 'client'}, programPath);
   recordModuleSourceBindings(ctx, moduleSources);
   lowerModuleSourceDeclarations(ctx, programPath.node, moduleSources);

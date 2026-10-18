@@ -3,9 +3,11 @@ import * as astFactory from '../ast/factory';
 import {refreshAstAnalysis,type Ctx,type ProgramPath} from '../context';
 import {planCompilerIntrinsics} from '../intrinsics';
 import {lowerSnapshotIntrinsics} from '../snapshot';
+import {lowerConditionalReturns} from '../conditional-returns';
 export function installCompilerIntrinsics(ctx:Ctx,program:ProgramPath):void {
   refreshAstAnalysis(ctx,program.node);
   if(lowerSnapshotIntrinsics(ctx,program))refreshAstAnalysis(ctx,program.node);
+  if(lowerConditionalReturns(program))refreshAstAnalysis(ctx,program.node);
   const imports=planCompilerIntrinsics(ctx,program);
   for(const {module,names} of imports){
     if(names.includes('$routed'))ctx.importedValues.add('$routed');

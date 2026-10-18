@@ -16,6 +16,7 @@ import {
   bindingHasVisibleWrite,
   isConstObjectState,
   isStoreObject,
+  memberKey,
   memberRootName,
   variableDeclaratorFor,
   type Ctx,
@@ -274,6 +275,15 @@ export function excludeRefBindings(ctx: Ctx): void {
     const state = ctx.instanceState.get(name);
     if (state === undefined || state.size === 0) continue;
     const refs = new Set<string>();
+    const members = new Set<string>();
+    const note = (target: BaseNode | null) => {
+      const direct = identifierName(target);
+      if (direct !== null) { refs.add(direct); return; }
+      if (target?.type === 'MemberExpression') {
+        const path = memberKey(target as unknown as t.MemberExpression);
+        if (path !== null) members.add(path);
+      }
+    };
     walkAst<BaseNode>(componentPath.node as unknown as BaseNode, {
       enter(current) {
         if (current.type !== 'JSXAttribute') return;
@@ -282,19 +292,12 @@ export function excludeRefBindings(ctx: Ctx): void {
         const value = childNode(current, 'value');
         if (value?.type !== 'JSXExpressionContainer') return;
         const expression = childNode(value, 'expression');
-        const direct = identifierName(expression);
-        if (direct !== null) {
-          refs.add(direct);
-          return;
-        }
-        if (expression?.type !== 'ArrayExpression') return;
-        for (const element of childNodes(expression, 'elements')) {
-          const item = identifierName(element);
-          if (item !== null) refs.add(item);
-        }
+        if (expression?.type !== 'ArrayExpression') { note(expression); return; }
+        for (const element of childNodes(expression, 'elements')) note(element);
       },
     });
     for (const ref of refs) state.delete(ref);
+    if (members.size > 0) ctx.refMemberPaths.set(name, members);
   }
 }
 
