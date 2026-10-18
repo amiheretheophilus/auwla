@@ -122,8 +122,8 @@ describe('Group boundaries across component ownership', () => {
     await waitFor(() => expect(requests).toHaveLength(1));
 
     request('/matrix/shared-user').resolve(failure());
-    await waitFor(async () => expect(await (() => document.querySelector('#shared-a-value .outer-error')?.textContent)()).toContain('503'));
-    expect(document.querySelector('.inner-error')?.textContent).toContain('503');
+    await waitFor(async () => expect(await (() => document.querySelector('#shared-a-value .outer-error')?.textContent)()).toContain('offline'));
+    expect(document.querySelector('.inner-error')?.textContent).toContain('offline');
     expect(document.querySelector('#shared-b')).toBeNull();
     expect(document.querySelector('#shared-a-shell')).not.toBeNull();
   });
@@ -198,7 +198,7 @@ describe('Group boundaries across component ownership', () => {
 
     request('/matrix/waterfall-parent').resolve(failure());
     await waitFor(async () => expect(await (() => document.querySelector('.outer-error')?.textContent)())
-      .toContain('503'));
+      .toContain('offline'));
     expect(requests).toHaveLength(2);
     expect(document.querySelector('#waterfall-a-shell')).toBeNull();
     expect(document.querySelector('#waterfall-b-shell')).toBeNull();

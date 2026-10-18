@@ -206,6 +206,7 @@ export function planHandlerWrites(
     mutateScope,
     recordInstanceMutation,
     noteReceiverEffect,
+    noteDerivedCopyEdit,
     noteMemberWrite,
     noteBoundedArguments,
     noteOriginWrite,
@@ -428,6 +429,15 @@ export function planHandlerWrites(
         }
       }
 
+      if (astFactory.isMemberExpression(callee)) {
+        // Any method on this instance's own derived copy may edit it, decided
+        // by provenance, not by method name (see noteDerivedCopyEdit).
+        const root = memberRootName(callee);
+        if (root !== null && p.scope.getBinding(root) === undefined && noteDerivedCopyEdit(p, root)) {
+          noteBoundedArguments(p, p.node.arguments);
+          return;
+        }
+      }
       if (
         astFactory.isMemberExpression(callee) &&
         (hasPrimitiveReceiver(ctx, compName, callee) || writesThroughRef(ctx, compName, callee))

@@ -622,6 +622,8 @@ export interface Ctx {
   volatileComponents: Set<string>;
   /** Component-local/module bindings whose current value is owned by opaque code. */
   opaqueBindings: Map<string, Set<string>>;
+  /** Derived copies a handler edits in place, per component; their replay can keep the edit. */
+  editedDerivations: Map<string, Set<string>>;
   /** Member ref sinks per component (`nodes.panel`): writes through them are DOM work. */
   refMemberPaths: Map<string, Set<string>>;
   /** Compiler-owned reactive effects, in source order per component. */
@@ -913,6 +915,7 @@ export function createAnalysisCtx(opts: AnalysisOptions = {}): Ctx {
     volatileComponents: new Set(),
     opaqueBindings: new Map(),
     refMemberPaths: new Map(),
+    editedDerivations: new Map(),
     effects: new Map(),
     moduleEffects: [],
     computeds: new Map(),

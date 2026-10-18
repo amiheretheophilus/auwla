@@ -9,6 +9,7 @@ import type * as t from '../ast/compiler-types';
 import * as astFactory from '../ast/factory';
 import { cloneNode as cloneEstreeNode } from '../ast';
 import { walkAst, type BaseNode } from '../ast';
+import { nodeHasJsx } from '../context';
 import type { JsxChild } from './children';
 
 type ConditionalParent = t.JSXElement | t.JSXFragment;
@@ -201,10 +202,53 @@ function replaceChild(
   if (Array.isArray(children)) children[index] = replacement;
 }
 
+const wrapInFragment = (expression: t.Expression): t.JSXFragment => astFactory.jsxFragment(
+  astFactory.jsxOpeningFragment(), astFactory.jsxClosingFragment(),
+  [astFactory.jsxExpressionContainer(expression)]);
+
+const isConditionalJsx = (node: t.Node | null | undefined): node is t.Expression =>
+  node != null && (astFactory.isConditionalExpression(node) ||
+    astFactory.isLogicalExpression(node) && (node.operator === '&&' || node.operator === '||')) &&
+  nodeHasJsx(node);
+
+/**
+ * `return items.length ? <ul>…</ul> : null` (or `cond && <A/>`) from a
+ * component: conditionals are planned as JSX children, so the bare form is
+ * wrapped in a fragment, which adds no DOM. Only a capitalized function's own
+ * returns are rewritten; callbacks inside it (a `.map` row) keep their shape.
+ */
+function wrapConditionalReturns(programPath: ProgramContainer): void {
+  const lower = (component: t.Function): void => {
+    if (astFactory.isArrowFunctionExpression(component) && !astFactory.isBlockStatement(component.body)) {
+      if (isConditionalJsx(component.body)) component.body = wrapInFragment(component.body);
+      return;
+    }
+    walkAst<BaseNode>(component.body as unknown as BaseNode, {
+      enter(node) {
+        if (astFactory.isFunction(node as unknown as t.Node)) return false;
+        if (node.type !== 'ReturnStatement') return;
+        const statement = node as unknown as t.ReturnStatement;
+        if (isConditionalJsx(statement.argument)) statement.argument = wrapInFragment(statement.argument);
+        return false;
+      },
+    });
+  };
+  const isComponentName = (name: string | undefined) => name !== undefined && /^[A-Z]/.test(name);
+  walkAst<BaseNode>(programPath.node, {
+    enter(node) {
+      const value = node as unknown as t.Node;
+      if (astFactory.isFunctionDeclaration(value) && isComponentName(value.id?.name)) lower(value);
+      else if (astFactory.isVariableDeclarator(value) && astFactory.isIdentifier(value.id) &&
+          isComponentName(value.id.name) && value.init && astFactory.isFunction(value.init)) lower(value.init);
+    },
+  });
+}
+
 /** Lower conditional JSX directives before route and reactivity analysis. */
 export function normalizeConditionalJsxDirectives(
   programPath: ProgramContainer,
 ): void {
+  wrapConditionalReturns(programPath);
   walkAst<BaseNode>(programPath.node, {
     leave(node) {
       if (node.type === 'JSXElement' || node.type === 'JSXFragment') {

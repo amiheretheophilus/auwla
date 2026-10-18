@@ -17,6 +17,8 @@ import {
 } from '../../components/props';
 import { buildDerivationReplay } from '../derivation-replay';
 import { reasonCondition, structuralReasonsFor } from './local-derived';
+import { componentId, md } from '../identifiers';
+import { derivedSourceValues } from '../handler-commits';
 
 interface PreludeStep {
   order: number;
@@ -48,7 +50,14 @@ export function buildRenderPreludeReplay(
       order: order.get(derivation.declaration) ?? Number.MAX_SAFE_INTEGER,
       sequence: sequence++,
       sources: derivation.sources,
-      statement: buildDerivationReplay(ctx, derivation),
+      statement: derivation.bindings.some(name => ctx.editedDerivations.get(component)?.has(name) === true)
+        // An edit of this copy asked to keep it for the update it caused.
+        ? astFactory.ifStatement(
+            astFactory.unaryExpression('!', astFactory.callExpression(md(ctx, 'takeKeptDerived'), [
+              componentId(ctx, component), astFactory.stringLiteral(derivation.bindings[0]!),
+              derivedSourceValues(derivation.sources)])),
+            buildDerivationReplay(ctx, derivation))
+        : buildDerivationReplay(ctx, derivation),
       // Destructuring and custom replays can execute observable operations.
       // Only ordinary primitive assignments share the DOM slot proof.
       includePull: derivation.target.type !== 'Identifier' ||

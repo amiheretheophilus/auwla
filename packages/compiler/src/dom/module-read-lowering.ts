@@ -10,7 +10,7 @@ import {
   type Binding as AstBinding,
   type Identifier as AstIdentifier,
 } from '../ast';
-import { astBindingAt } from '../context';
+import { astBindingAt, nodeHasJsx } from '../context';
 import { type DomContext as Ctx } from './context';
 import { generatedIdentifier, mdd } from './identifiers';
 import {annotateAsyncRead, annotateTransparentSources, transparentExpressionSources} from '../planning/async-reads';
@@ -98,14 +98,11 @@ export function lowerModuleRefReadsEstree(
     const tag = (opening as unknown as t.JSXOpeningElement).name;
     return astFactory.isJSXIdentifier(tag) && /^[A-Z]/.test(tag.name);
   };
-  const isJsxNode = (node: BaseNode) => node.type === 'JSXElement' || node.type === 'JSXFragment';
-  const isConditionalJsx = (expression: t.Expression): boolean => {
-    if (!astFactory.isConditionalExpression(expression) && !(astFactory.isLogicalExpression(expression) &&
-        (expression.operator === '&&' || expression.operator === '||'))) return false;
-    let found = false;
-    walkAst(expression as unknown as BaseNode, { enter(node) { if (isJsxNode(node)) found = true; return found ? false : undefined; } });
-    return found;
-  };
+  const isJsxNode = (node: BaseNode) =>
+    astFactory.isJSXElement(node as unknown as t.Node) || astFactory.isJSXFragment(node as unknown as t.Node);
+  const isConditionalJsx = (expression: t.Expression): boolean =>
+    (astFactory.isConditionalExpression(expression) || astFactory.isLogicalExpression(expression) &&
+      (expression.operator === '&&' || expression.operator === '||')) && nodeHasJsx(expression);
   const collectOutsideJsx = (root: BaseNode) => {
     const found: Array<{ identifier: BaseNode; entry: EstreeModuleSourceEntry }> = [];
     walkAst(root, {

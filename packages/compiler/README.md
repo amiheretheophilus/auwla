@@ -537,6 +537,29 @@ components, effects, and callbacks. Mutation analysis is split by concern:
 | `handlers/execution-sites.ts` | Execution-aware write guards and final commit insertion |
 | `handlers/local-calls.ts` | Reachable local-helper call constraints |
 
+Writes are classified by provenance, never by method name:
+
+- **Derived copies.** A component `const` that reads props or state is a
+  derivation, including an object/array literal built from them
+  (`const tags = [...article.tags]`); only a literal reading nothing reactive is
+  local state. When the alias tracker cannot trace a derivation to any source,
+  it is this instance's own value: an assignment or any method call on it edits
+  that copy. The commit calls `keepDerived(id, name)` before invalidating, and
+  the replay is guarded by `takeKeptDerived(id, name)`, so the update the edit
+  causes keeps the edited copy; any later update re-derives it. A handler that
+  also writes one of the copy's sources does not keep it. An alias
+  (`const user = props.user`) has an origin, and its writes still go to the
+  source.
+- **Ref'd nodes.** `ref={nodes.panel}` records `nodes.panel` in
+  `refMemberPaths`. A write or call through that node (`nodes.panel.innerHTML`,
+  `nodes.panel.classList.add(…)`) is DOM work, not a write to `nodes`. This is
+  the one exception to the setter rule above: the runtime assigned that node, so
+  its setters are the platform's, not the application's.
+- **Effects consume their props.** In a lifecycle callback, a prop passed to a
+  helper is consumption, as an unbounded call already is: a summary cannot tell
+  a method call on a parameter from a mutation, and treating it as a write
+  re-runs the effect that just consumed the prop.
+
 `HandlerPath` is intentionally a class: each path owns its node, parent chain,
 scope lookup, and mutable traversal skip state for one walk. This is the kind
 of lifecycle-bearing object allowed by the hybrid model. Write policy and AST
@@ -617,6 +640,19 @@ The transparent data-source feature is split by compiler phase:
 | `tsrx-boundaries.ts` | TSRX try/pending/catch metadata and boundary lowering |
 | `group-lowering.ts` | JSX Group validation, render-policy lowering, and pass orchestration |
 | `index.ts` | Stable public surface for the feature |
+
+Module-scope sources follow the same rules as component-local ones:
+
+- `export const me = getMe()` with a linked factory (a server function, an app
+  helper returning a source) is described by calling that factory
+  (`describeModuleSource(key, () => getMe())`); only `$fetch`-shaped providers
+  are lowered from a URL target. Its inputs rebind through
+  `rebindModuleSourceFromFactory`.
+- Passed as a prop (`<Avatar profile={me} />`), the component receives the
+  source itself (`sourceRef(key)`), as with a local source.
+- A conditional over one stays a conditional: its branches keep their own read
+  containers, and each condition operand runs only once its sources commit
+  (until then it is undefined, so the falsy branch renders).
 
 The dependency direction is discovery/analysis → transforms → orchestration.
 Emission metadata and policy construction are shared domain services. Avoid
@@ -760,6 +796,11 @@ than one `else-if` is allowed, and `else` is optional:
 <p else-if={status === 'error'}>Could not load.</p>
 <StoryList else />
 ```
+
+A component may also return its conditional directly, as `cond ? <A/> : <B/>`
+or `cond && <A/>`. `normalizeConditionalJsxDirectives` wraps that return in a
+fragment (no DOM) so it is planned as an ordinary conditional child; callbacks
+inside the component, such as a `.map` row, keep their shape.
 
 The compiler removes the properties and lowers the chain to one stable
 conditional region. An `else-if` or `else` without a preceding branch is a

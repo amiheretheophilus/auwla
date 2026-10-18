@@ -35,6 +35,7 @@ export {
   runWithRenderEnvironment,
 } from './kernel';
 export { createStorage, type StorageShim } from './async-storage';
+export { keepDerived, takeKeptDerived } from './derived-edits';
 export type {
   ApplicationRuntime,
   DirtyReasonInput,

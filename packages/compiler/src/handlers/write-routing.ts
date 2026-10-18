@@ -42,6 +42,8 @@ export interface HandlerWriteRouting {
   ): void;
   noteReceiverEffect(path: HandlerPath, origin: ReactiveOrigin): void;
   noteMemberWrite(path: HandlerPath, node: t.MemberExpression): void;
+  /** An in-place edit of this instance's derived copy; false when `root` is not one. */
+  noteDerivedCopyEdit(path: HandlerPath, root: string): boolean;
   noteBoundedArguments(
     path: HandlerPath,
     args: t.CallExpression['arguments'],
@@ -125,6 +127,11 @@ export function createHandlerWriteRouting({
       }
     }
   }
+  // A derived value the instance owns: its derivation keeps a plain binding
+  // (not a stable source holder), so an edit can only change this copy.
+  const ownedDerivations = new Set((compName === null ? [] : (ctx.instanceDerivations.get(compName) ?? []))
+    .filter(derivation => astFactory.isIdentifier(derivation.target) && derivation.stableTarget !== true)
+    .flatMap(derivation => derivation.bindings));
   const isComputedOrigin = (origin: ReactiveOrigin): boolean =>
     origin.stateKind === 'computed' || ctx.state.get(origin.root) === 'computed';
   const listMutationPlans = captureMutationJournals(
@@ -640,6 +647,7 @@ export function createHandlerWriteRouting({
         mutateScope(p, scope => { recordInstanceMutation(scope, rootName, 'content'); });
         return;
       }
+      if (noteDerivedCopyEdit(p, rootName)) return;
       throw p.buildCodeFrameError(
         `memo-dom: cannot mutate per-instance derivation '${rootName}' (R14) — write its source instead`,
       );
@@ -733,6 +741,25 @@ export function createHandlerWriteRouting({
       }
     });
   };
+  /**
+   * `tags.push(t)` or `tags[0] = t` on `const tags = [...article.tags]`. The
+   * alias tracker decides by provenance: a derivation it cannot trace to any
+   * source is this instance's own value, so the write edits that copy and the
+   * update it causes keeps it. An alias (`const user = props.user`) has an
+   * origin, and its writes keep going to the source.
+   */
+  function noteDerivedCopyEdit(p: HandlerPath, rootName: string): boolean {
+    if (!ownedDerivations.has(rootName) ||
+        aliases.resolveExpressionOrigins(p.scope, astFactory.identifier(rootName)).length > 0) return false;
+    let edited = ctx.editedDerivations.get(compName!);
+    if (edited === undefined) ctx.editedDerivations.set(compName!, edited = new Set());
+    edited.add(rootName);
+    mutateScope(p, scope => {
+      recordInstanceMutation(scope, rootName, 'content');
+      scope.keptDerivations.add(rootName);
+    });
+    return true;
+  }
   return {
     locals,
     rootParamIndex,
@@ -742,6 +769,7 @@ export function createHandlerWriteRouting({
     mutateScope,
     recordInstanceMutation,
     noteReceiverEffect,
+    noteDerivedCopyEdit,
     noteMemberWrite,
     noteBoundedArguments,
     noteOriginWrite,

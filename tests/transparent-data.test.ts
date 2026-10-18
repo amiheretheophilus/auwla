@@ -803,7 +803,7 @@ describe('compiler-transparent data values', () => {
         headers: { 'content-type': 'application/json' },
       }),
     );
-    await waitFor(async () => expect(await (() => document.querySelector('.tsrx-error')?.textContent)()).toContain('503'));
+    await waitFor(async () => expect(await (() => document.querySelector('.tsrx-error')?.textContent)()).toContain('offline'));
     expect(document.querySelector('#tsrx-suspended-dashboard')).toBeNull();
 
     document.querySelector<HTMLButtonElement>('.tsrx-error')!.click();

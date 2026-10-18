@@ -16,6 +16,11 @@ import { componentId, generatedIdentifier, md, mdd } from './identifiers';
 
 import type { ScopeWrites } from '../handlers/write-facts';
 
+/** `[article, filter]`: the current values of a derived copy's source roots. */
+export function derivedSourceValues(sources: readonly string[]): t.ArrayExpression {
+  return astFactory.arrayExpression(sources.map(source => astFactory.identifier(source)));
+}
+
 /** Build the static commit form for one analyzed function scope. */
 export function buildScopeCommit(
   ctx: Ctx,
@@ -60,6 +65,21 @@ export function buildScopeCommit(
     instanceCommit = astFactory.expressionStatement(
       astFactory.callExpression(md(ctx, instanceArguments.length === 1 ? 'invalidateEntity' : 'markDirty'), instanceArguments),
     );
+    // The update this edit causes keeps the edited copy instead of re-deriving
+    // it, unless the same handler also wrote one of the copy's sources.
+    const derivations = ctx.instanceDerivations.get(compName) ?? [];
+    const written = new Set([...scope.instanceWrites, ...[...scope.writes].map(key => key.split('.')[0]!)]);
+    const kept = [...scope.keptDerivations].filter(name => !(derivations
+      .find(derivation => derivation.bindings.includes(name))?.sources ?? [])
+      .some(source => source !== name && written.has(source)));
+    if (kept.length > 0 && !scope.rootFallback) {
+      instanceCommit = astFactory.blockStatement([
+        ...kept.sort().map(name => astFactory.expressionStatement(
+          astFactory.callExpression(md(ctx, 'keepDerived'), [componentId(ctx, compName), astFactory.stringLiteral(name),
+            derivedSourceValues(derivations.find(derivation => derivation.bindings.includes(name))?.sources ?? [])]))),
+        instanceCommit,
+      ]);
+    }
   }
   const rowOwnerCommit =
     scope.rowOwnerLocal && rowCtx?.ownerIdVar !== undefined

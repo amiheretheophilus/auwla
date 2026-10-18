@@ -61,6 +61,21 @@ makes it local state, initialized once from the source and owned by you:
 | `let x = source` | reassigned (`x = …`) | local state, initialized once |
 | `let x = source` | mutated (`x.name = …`) | local state, initialized once; the mutation changes the object captured at mount |
 | `const x = source` | mutated (`x.name = …`) | derived alias: follows `source`, and writes go to its current object |
+| `const x = [...source]` (a copy built from `source`) | edited (`x.push(…)`, `x[0] = …`) | derived copy: the edit shows at once; when `source` changes, `x` is copied again |
+
+A `const` keeps following its source in both cases. When it aliases the
+source, edits go to the source. When it is your own copy, edits change the copy,
+and a new source value replaces it with a fresh copy:
+
+```tsx
+function TagEditor({ article }) {
+  const tags = [...article.tags];          // follows article
+  return <>
+    {tags.map(tag => <span>{tag}</span>)}
+    <button onClick={() => tags.push('draft')}>Add</button>   {/* shows at once */}
+  </>;
+}
+```
 
 This is deliberate. A binding cannot follow its source and keep your writes at
 the same time; if it followed, every update to the source would silently

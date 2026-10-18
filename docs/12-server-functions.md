@@ -187,8 +187,16 @@ the client facade decodes the body as it does for other `$fetch` calls. With
 `Response`, the client value is typed `unknown` because TypeScript cannot
 infer its body shape. On a non-2xx response, `$track(call).error` is a
 `RequestError` with `status` and
-the decoded body in `data`. Unexpected thrown exceptions still go through
-`serve({ onError })` rather than exposing their details to clients.
+the decoded body in `data`. When that body is JSON with a `message` string,
+it is the error's message, so a form shows it directly:
+
+```ts
+if (user === null) return json({ message: 'Email or password is invalid' }, { status: 401 });
+```
+
+Return expected failures this way. Unexpected thrown exceptions still go through
+`serve({ onError })` and reach the client as a private 500, never exposing
+their details.
 
 ## Mutations return the data — reconcile, don't refetch
 

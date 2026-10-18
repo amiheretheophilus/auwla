@@ -15,6 +15,8 @@ export interface ScopeWrites {
   instanceStructuralWrites: Set<string>;
   instanceContentWrites: Set<string>;
   transparentWrites: Set<string>;
+  /** Derived copies edited in place; their next replay keeps the edit. */
+  keptDerivations: Set<string>;
   /** A write-free event still refreshes its originating update unit. */
   eventFallback: boolean;
 }
@@ -33,6 +35,7 @@ export function createScopeWrites(): ScopeWrites {
     instanceStructuralWrites: new Set(),
     instanceContentWrites: new Set(),
     transparentWrites: new Set(),
+    keptDerivations: new Set(),
     eventFallback: false,
   };
 }

@@ -12,8 +12,7 @@ const articleSchema = z.object({
 });
 
 function ArticleForm({ article }: { article: ArticleView | null }) {
-  // Written below, so a `let`: local state seeded once from the article.
-  let tags = article === null ? [] : [...article.tagList];
+  const tags = article === null ? [] : [...article.tagList];
   let draftTag = '';
   let body = article?.body ?? '';
   let preview = false;

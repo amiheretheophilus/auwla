@@ -451,13 +451,15 @@ export function scanInstanceDerivations(ctx: Ctx): void {
         ) {
           continue;
         }
+        // A const object literal is local state (`const story = { votes: 0 }`)
+        // only while it reads nothing reactive; one built from props or state
+        // (`const tags = [...article.tags]`) is a derivation, reached below.
         if (
           astFactory.isIdentifier(declaration.id) &&
           ctx.instanceState
             .get(componentName)
             ?.has(declaration.id.name) === true &&
-          (isStoreObject(declaration.init) ||
-            isConstObjectState(declaration.init))
+          isStoreObject(declaration.init)
         ) {
           continue;
         }
@@ -574,6 +576,18 @@ export function scanInstanceDerivations(ctx: Ctx): void {
 
         walkExecuted(ctx, initializer, false, inspect);
         if (directReads.size === 0) continue;
+        // A literal/collection that only holds local state by identity
+        // (`new WeakMap([[token, …]])`) is itself local state. One built from a
+        // prop or another derivation (`[...article.tags]`) follows it.
+        if (
+          astFactory.isIdentifier(declaration.id) &&
+          ctx.instanceState.get(componentName)?.has(declaration.id.name) === true &&
+          isConstObjectState(declaration.init) &&
+          ![...directReads].some(read => derivedBindings.has(read) ||
+            ctx.componentProps.get(componentName)?.bindings.includes(read) === true)
+        ) {
+          continue;
+        }
         walkExecuted(ctx, initializer, true, inspect);
         if (statement.kind !== 'const' && statement.kind !== 'let') continue;
         if (reason !== null) {
