@@ -2,7 +2,7 @@ import { $track } from '@memoized-dom/data';
 import { navigate } from '@memoized-dom/router';
 import { z } from 'zod';
 import { login, register } from '#server-functions';
-import { signIn } from './session';
+import { signedIn } from './session';
 
 const credentials = z.object({
   email: z.string().email('Enter a valid email'),
@@ -25,7 +25,7 @@ export function Login() {
     schema: credentials,
     action: fields => {
       const request = login(fields.email, fields.password);
-      $track(request).onSuccess(profile => { signIn(profile.username); navigate('/'); });
+      $track(request).onSuccess(() => { signedIn(); navigate('/'); });
       return request;
     },
   });
@@ -49,7 +49,7 @@ export function Register() {
     schema: signup,
     action: fields => {
       const request = register(fields.username, fields.email, fields.password);
-      $track(request).onSuccess(profile => { signIn(profile.username); navigate('/'); });
+      $track(request).onSuccess(() => { signedIn(); navigate('/'); });
       return request;
     },
   });

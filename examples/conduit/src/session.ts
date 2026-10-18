@@ -1,15 +1,14 @@
 import { $track } from '@memoized-dom/data';
-import { getMe } from '#server-functions';
+import { getMe, logout } from '#server-functions';
 
 /** The signed-in reader, shared by every page. */
 export const me = getMe();
 
-export function signIn(username: string): void {
-  document.cookie = `conduit_user=${encodeURIComponent(username)}; path=/; max-age=2592000; samesite=lax`;
+/** The server set the session cookie; re-read who is signed in. */
+export function signedIn(): void {
   $track(me).refresh();
 }
 
 export function signOut(): void {
-  document.cookie = 'conduit_user=; path=/; max-age=0';
-  $track(me).refresh();
+  $track(logout()).onSuccess(() => $track(me).refresh());
 }

@@ -230,8 +230,14 @@ export async function decodeResponse(
   }
 
   if (!response.ok) {
+    // `json({ message: 'Email or password is invalid' }, { status: 401 })`:
+    // a body that explains itself is the message people should see.
+    const explained = typeof data === 'object' && data !== null &&
+      typeof (data as { message?: unknown }).message === 'string' &&
+      (data as { message: string }).message.trim() !== ''
+      ? (data as { message: string }).message : null;
     throw new RequestError(
-      `Request failed with status ${response.status}`,
+      explained ?? `Request failed with status ${response.status}`,
       {
         kind: 'http',
         status: response.status,

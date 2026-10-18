@@ -29,6 +29,23 @@ describe('request identity and errors', () => {
     });
   });
 
+  // `json({ message: '…' }, { status: 401 })` from a server function is an
+  // answer for the person: a form shows it instead of "status 401".
+  it('uses the message a non-2xx JSON body explains itself with', async () => {
+    const explained = createDataRuntime({
+      fetch: (async () => json({ message: 'Email or password is invalid' }, 401)) as FetchStub,
+    });
+    const login = explained.$fetch('/_fn/auth/postLogin');
+    await settled(login);
+    expect(login.error?.message).toBe('Email or password is invalid');
+    expect(login.error).toMatchObject({ status: 401, data: { message: 'Email or password is invalid' } });
+
+    const bare = createDataRuntime({ fetch: (async () => json({ error: 'nope' }, 403)) as FetchStub });
+    const other = bare.$fetch('/_fn/auth/other');
+    await settled(other);
+    expect(other.error?.message).toBe('Request failed with status 403');
+  });
+
   it('classifies a malformed non-success body as an HTTP failure', async () => {
     const runtime = createDataRuntime({
       fetch: (async () => new Response('{broken', {
