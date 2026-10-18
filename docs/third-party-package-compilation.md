@@ -161,6 +161,14 @@ Warm builds reuse verified emitted code and metadata; they still inspect inputs
 and resolutions to establish that the cache matches. They do not skip all build
 work. Publication is atomic, and concurrent requests for the same key coalesce.
 
+To measure that actual consumer pipeline, run
+`bun run bench:installed-packages --smoke` to verify the harness, then
+`bun run bench:installed-packages --samples 7` for measurements. It compares
+opaque and opted-in production builds in fresh Node processes, asserts persistent
+cache reuse and source-edit invalidation, and records build/process timings plus
+raw/gzip JavaScript sizes. This is separate from the runtime benchmark; see
+[methodology and limits](../bench/installed-packages/README.md).
+
 Cache identity includes source/manifest bytes, local implementation resolutions,
 external dependency/artifact resolutions, compiler implementation and direct
 dependency fingerprints, runtime resolution, compiler options and Vite environment

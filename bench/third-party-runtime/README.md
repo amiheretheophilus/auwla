@@ -127,6 +127,8 @@ runtime results or presented as rigorous cold-build benchmarks. Bundle sizes
 include the harness and are not a production application size audit.
 This harness exercises the compiler/linker pipeline directly; it does **not**
 measure the Vite `compilePackages` option's collection or persistent cache.
+Use [the installed-package Vite benchmark](../installed-packages/README.md) for
+cold/warm/edited production builds and their raw/gzip JavaScript sizes.
 That experimental consumer option is now available; see
 [installed-package configuration and boundaries](../../docs/third-party-package-compilation.md#consumer-workflow-compile-an-installed-dependency).
 The `throttle-debounce` regressions additionally cover retained callbacks,
