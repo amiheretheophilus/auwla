@@ -21,6 +21,11 @@ manifest, loads its artifact, and watches both files during development. The
 artifact is compiler metadata, not executable code, and does not add a runtime
 import.
 
+For ordinary installed ESM packages which do not publish an artifact, applications
+can opt into [installed-package compilation](./third-party-package-compilation.md#consumer-workflow-compile-an-installed-dependency)
+with `compilePackages: ['package-name']` in the existing Vite plugin options.
+That consumer-side cache is separate from authoring/publishing a library below.
+
 Artifacts are treated as untrusted build input. Their format version, function
 facts, component contracts, argument indexes, property paths, and HTTP method
 metadata are validated before linking. An incompatible or malformed artifact

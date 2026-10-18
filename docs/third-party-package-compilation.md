@@ -1,8 +1,8 @@
 # Compiling ordinary third-party JavaScript
 
-This is an integration experiment, not yet an automatic dependency-compilation
-option in the application Vite plugin. Normal imports still work as opaque
-JavaScript; opaque execution alone does not establish every reactive relationship.
+The Vite plugin offers experimental, opt-in compilation of installed ESM
+packages. Normal imports still work as opaque JavaScript without the option;
+opaque execution alone does not establish every reactive relationship.
 
 ## First real package: dset
 
@@ -112,38 +112,107 @@ The timer tests use a deterministic clock. Production-browser tests use real
 timers and require Chrome/Chromium; set `MMD_CHROME_PATH` if it is not discovered.
 They are explicitly skipped when no browser is available.
 
-## Intended consumer workflow
+## Consumer workflow: compile an installed dependency
 
-An application should explicitly opt a dependency into compilation once, then
-continue using its normal imports. The exact public configuration is not yet
-implemented or settled. This is **not** another library-author build script,
-manual artifact object, per-function list, or required wrapper package.
+Add the package name to the **existing application Vite configuration**. No
+`.lib.config.ts`, package.json changes, wrapper package or manual artifact script
+is needed for an ordinary third-party dependency:
 
-The build tool would own this pipeline:
+```ts
+import { defineConfig } from 'vite';
+import { memoizedDom } from '@memoized-dom/vite';
+
+export default defineConfig({
+  plugins: [memoizedDom({
+    clientEntry: './src/main.ts',
+    compilePackages: ['dset', 'throttle-debounce'],
+  })],
+});
+```
+
+Keep ordinary imports, including supported public subpaths:
+
+```ts
+import { dset } from 'dset';
+import { dset as mergePath } from 'dset/merge';
+import { debounce } from 'throttle-debounce';
+```
+
+The list selects packages, not individual exports or subpaths. Scoped names such
+as `@scope/package` work too. JSON, CSS and other non-JavaScript subpaths keep
+their ordinary Vite loaders. The plugin excludes opted-in packages from Vite's
+dependency optimizer and prevents their SSR externalization so browser/server
+resolution, executable code and compiler metadata stay aligned. Existing type
+declarations remain attached to the original imports.
+
+The build tool owns this pipeline:
 
 1. Resolve the selected installed package from the actual importer, respecting
-   its ESM export conditions, public subpaths and multiple installed copies.
+   its ESM export conditions, explicit public subpaths and multiple installed copies.
 2. Collect the relevant implementation graph without executing the package.
 3. Analyze and, when needed, transform it using the package compiler.
 4. Store emitted JavaScript and finalized metadata in a separate generated cache.
 5. Link each application import to the matching compiled copy and its metadata.
 
-The original `node_modules` stays unchanged. Cache identity must include the
-resolved implementation bytes, relevant dependency resolutions, compiler
-contract/options and target conditions—not just the package name or npm version.
-Development invalidation, production bundling, SSR and runtime ABI checks must
-agree on the same implementation. Existing declarations should remain attached
-to the original public imports; compilation is not a new type-authoring burden.
+The installed package's files and manifest remain unchanged. Output lives under
+`<vite cacheDir>/memoized-dom-packages/<content-key>/`, normally inside
+`node_modules/.vite`. This is generated cache storage, not a modified dependency.
+Warm builds reuse verified emitted code and metadata; they still inspect inputs
+and resolutions to establish that the cache matches. They do not skip all build
+work. Publication is atomic, and concurrent requests for the same key coalesce.
 
-For example, a possible application-level opt-in is
-`memoizedDom({ compilePackages: ['dset'] })` in the existing Vite configuration.
-This spelling is a proposal, **not an available option yet**. The list selects
-packages, not fifty individual helpers or implementation files. Imports such as
-`import { dset } from 'dset/merge'` would remain unchanged.
+Cache identity includes source/manifest bytes, local implementation resolutions,
+external dependency/artifact resolutions, compiler implementation and direct
+dependency fingerprints, runtime resolution, compiler options and Vite environment
+conditions. Browser and server outputs are separate. Runtime ABI declarations
+are checked at the original resolution locations. Changed or corrupted cached
+JavaScript is rejected instead of silently running with stale metadata; clear
+the Vite dependency cache and restart to rebuild it.
+
+Explicit public ESM subpaths are compiled together so their shared implementation
+modules keep one module identity. Package-private callback/timer closures are
+still ordinary per-call JavaScript closures. Other packages remain external:
+their original importer-relative copy is preserved. If their effects need linking,
+they must already ship compiler metadata or also be listed in `compilePackages`.
+The plugin does not recursively transform every transitive npm dependency without
+an opt-in.
+
+During development, original implementation files, manifests and metadata are
+watched, including bounded native watches for selected dependencies that Vite
+otherwise ignores in `node_modules`. A changed implementation gets a new cache
+key and invalidates its managed application importers. Generated cache files are
+not watched as source and are not compiled a second time. Normal application HMR
+still decides whether an update can retain state or needs a reload.
 
 Libraries authored for Memoized DOM continue to use `.lib.config.ts` and
 `memoized-dom package`. Consuming an already published compiler-aware package
 still requires no opt-in or recompile.
+
+A publisher's existing artifact takes precedence even if its package appears in
+`compilePackages`. Its integrity/compatibility failures remain errors; the plugin
+does not bypass them by recompiling the package.
+
+### Current boundaries
+
+This option is experimental and deliberately bounded:
+
+- ESM `.mjs`, or `.js`/`.jsx` in a `type: module` scope. Public JSX must fit the
+  existing Memoized DOM component contract; React components are not converted.
+- Root entries and explicit JavaScript subpaths in `exports`. Wildcard exports
+  and legacy deep imports without an explicit exports map are not supported yet.
+- Static local imports/re-exports, including `export *`, are collected without
+  executing package code. Dynamic imports and `import.meta` are rejected because
+  relocating them safely needs a separate module-identity contract.
+- CommonJS conversion, exported/captured compiler-owned module state, unknown
+  required effects, external-store subscription inference and custom frontends
+  are not supported. These produce diagnostics, not a silent compiled claim.
+- At most 256 public JavaScript entries, 512 implementation modules and 8 MiB
+  implementation source per package; opted-in cross-package cycles and chains
+  deeper than 32 are rejected.
+
+Remove a package from the opt-in list to use its original opaque path. That does
+not remove the need to integrate an external store's notification protocol or
+manage callbacks with the package's own cleanup API.
 
 ## What this experiment does not prove
 
@@ -151,11 +220,12 @@ dset and throttle-debounce cover synchronous argument writes and private
 timer/callback closures, respectively. Neither has a dependency graph or an
 external reactive store protocol. Passing these integrations is not proof that
 arbitrary npm packages can be transformed.
-CommonJS conversion, conditional browser/server implementations, dependency
-graphs and persistent caches still need dedicated integration coverage before a
-public installed-package option is introduced. The library command's authored
-entry/declaration rules have not been expanded to arbitrary installed `.mjs`
-packages by this experiment.
+The installed-package integration now has coverage for conditional browser/server
+implementations, static helper graphs, multiple copies, opted-in dependencies,
+persistent cache hits/invalidation, corrupted output, runtime ABI checks and
+node_modules edits. Those bounded cases do not imply universal npm compatibility.
+The library command's authored entry/declaration rules are separate from this
+consumer-side option.
 
 Dynamic property writes are conservatively summarized at the argument root.
 The compiler does not recover an exact runtime path from a string such as

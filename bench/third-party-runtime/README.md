@@ -125,10 +125,10 @@ Package compilation and bundling happen before runtime timing. Their one-off
 preparation timings and output sizes are recorded separately, not amortized into
 runtime results or presented as rigorous cold-build benchmarks. Bundle sizes
 include the harness and are not a production application size audit.
-The automatic `compilePackages` Vite option is still **proposed**, not
-implemented; this harness exercises the existing compiler/linker pipeline directly.
-
-After collecting results, the next decision is whether the measured savings
-justify the automatic installed-package collection/cache integration. We should
-also test a different package with callbacks or private state before broadening
-compatibility claims.
+This harness exercises the compiler/linker pipeline directly; it does **not**
+measure the Vite `compilePackages` option's collection or persistent cache.
+That experimental consumer option is now available; see
+[installed-package configuration and boundaries](../../docs/third-party-package-compilation.md#consumer-workflow-compile-an-installed-dependency).
+The `throttle-debounce` regressions additionally cover retained callbacks,
+asynchronous writes and cancellation. Neither fixture establishes universal
+npm compatibility or a speedup for every package.

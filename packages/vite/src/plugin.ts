@@ -3,6 +3,7 @@
  */
 import { dirname, join, relative, resolve } from 'node:path';
 import { readFile, readdir } from 'node:fs/promises';
+import { watch, type FSWatcher } from 'node:fs';
 import remapping from '@jridgewell/remapping';
 import type { CompilerSourceMap } from '@memoized-dom/compiler';
 import type {
@@ -13,7 +14,8 @@ import type {
 } from 'vite';
 import type { GraphPluginContext } from './graph/collector';
 import { compileGraph } from './graph/collector';
-import { packageArtifactSource } from './graph/package-artifacts';
+import { discoverPackageArtifact, packageArtifactSource } from './graph/package-artifacts';
+import { InstalledPackages } from './graph/installed-packages';
 import { writeRoutesDeclaration } from './routes';
 import { invalidateManagedModules } from './hmr';
 import {
@@ -80,6 +82,10 @@ export function memoizedDom(
   // graph (e.g. visiting /hacker-news/ while the primary graph is the
   // workspace example). Keyed by the requested source file.
   const lazyStates = new Map<object, Map<string, AdapterState>>();
+  const installedPackages = new Map<string, InstalledPackages>();
+  const installedWatchFiles = new Set<string>();
+  const installedWatchers = new Map<string, FSWatcher>();
+  const installedWatchTimers = new Map<string, ReturnType<typeof setTimeout>>();
   let config: ResolvedConfig | undefined;
   let devServer: import('vite').ViteDevServer | undefined;
   let pageReloadPending = false;
@@ -142,6 +148,8 @@ export function memoizedDom(
     context: GraphPluginContext & { environment?: AdapterTransformContext['environment'] },
   ): GraphPluginContext {
     return {
+      compilePackage: context.compilePackage ?? (options.compilePackages?.length ? (id, specifier, importer) =>
+        installedFor(context.environment?.name ?? 'client').compile(graphContext(context), id, specifier, importer) : undefined),
       async resolve(specifier, importer, resolveOptions) {
         const resolved = await context.resolve(specifier, importer, resolveOptions);
         return resolved === null ? null : { ...resolved,
@@ -150,6 +158,7 @@ export function memoizedDom(
       addWatchFile(watched) {
         context.addWatchFile(watched);
         devServer?.watcher.add(watched);
+        watchInstalledFile(watched);
       },
       error: (error) => context.error(error),
     };
@@ -160,9 +169,15 @@ export function memoizedDom(
     context: MinimalPluginContextWithoutEnvironment,
   ): GraphPluginContext {
     return {
+      compilePackage: options.compilePackages?.length ? (id, specifier, importer) =>
+        installedFor(environment.name).compile(hotGraphContext(environment, context), id, specifier, importer) : undefined,
       async resolve(specifier, importer) {
         const resolved =
-          await environment.pluginContainer.resolveId(specifier, importer);
+          await environment.pluginContainer.resolveId(specifier, importer,
+            options.compilePackages?.length && installedFor(environment.name).selected(specifier) ? {
+              skipCalls: config?.plugins.filter(plugin => plugin.name === 'memoized-dom')
+                .map(plugin => ({ id: specifier, importer, plugin })),
+            } : undefined);
         return resolved === null
           ? null
           : { id: packageArtifactSource(resolved.id, environment.depsOptimizer?.metadata), external: resolved.external };
@@ -170,9 +185,45 @@ export function memoizedDom(
       addWatchFile(watched) {
         environment.pluginContainer.watchFiles.add(watched);
         devServer?.watcher.add(watched);
+        watchInstalledFile(watched);
       },
       error: (error) => context.error(error),
     };
+  }
+
+  // Vite intentionally ignores node_modules even when addWatchFile is used.
+  // Watch only explicitly opted-in source dependencies, never the generated
+  // cache, and feed their native filesystem events into the normal HMR path.
+  function watchInstalledFile(file: string): void {
+    if (!options.compilePackages?.length || !file.replaceAll('\\', '/').includes('/node_modules/') ||
+        [...installedPackages.values()].some(manager => manager.owns(file))) return;
+    file = normalizeFile(file); installedWatchFiles.add(file);
+    if (!devServer) return;
+    const directory = dirname(file);
+    if (installedWatchers.has(directory)) return;
+    const watcher = watch(directory, { persistent: false }, (_event, filename) => {
+      const changed = filename ? normalizeFile(join(directory, String(filename))) : undefined;
+      for (const dependency of installedWatchFiles) {
+        if (dirname(dependency) !== directory || changed && changed !== dependency) continue;
+        const previous = installedWatchTimers.get(dependency); if (previous) clearTimeout(previous);
+        installedWatchTimers.set(dependency, setTimeout(() => {
+          installedWatchTimers.delete(dependency); devServer?.watcher.emit('change', dependency);
+        }, 30));
+      }
+    });
+    watcher.on('error', error => devServer?.config.logger.warn(`memoized-dom: package watcher: ${error.message}`));
+    installedWatchers.set(directory, watcher);
+  }
+
+  function installedFor(environment: string): InstalledPackages {
+    let manager = installedPackages.get(environment);
+    if (!manager) {
+      if (!config) throw new Error('memoized-dom: installed package compilation started before config resolution');
+      manager = new InstalledPackages(options, { cacheDir: config.cacheDir, environment,
+        conditions: config.environments[environment]?.resolve.conditions ?? config.resolve.conditions });
+      installedPackages.set(environment, manager);
+    }
+    return manager;
   }
 
   async function pageDocuments(environmentName: string): Promise<readonly { filename: string; html: string }[]> {
@@ -357,6 +408,7 @@ export function memoizedDom(
       isServerFunctionImplementation(id)
     ) return null;
     const file = cleanViteId(id);
+    if ([...installedPackages.values()].some(manager => manager.owns(file))) return null;
     const state = stateFor(context.environment);
     let managed = entries.includes(file) || state.files.has(file);
 
@@ -475,7 +527,7 @@ export function memoizedDom(
           },
         }),
         optimizeDeps: {
-          exclude: statefulRuntimePackages,
+          exclude: [...statefulRuntimePackages, ...(options.compilePackages ?? [])],
         },
       };
     },
@@ -483,10 +535,11 @@ export function memoizedDom(
       if (name !== 'client' && name !== 'ssr') return;
       return {
         optimizeDeps: {
-          exclude: statefulRuntimePackages,
+          exclude: [...statefulRuntimePackages, ...(options.compilePackages ?? [])],
           // Scan uncompiled JSX without synthesizing a React runtime import.
           rolldownOptions: { transform: { jsx: 'preserve' as const } },
         },
+        ...(name === 'ssr' && options.compilePackages?.length ? { resolve: { noExternal: [...options.compilePackages] } } : {}),
       };
     },
     perEnvironmentWatchChangeDuringDev: true,
@@ -503,6 +556,17 @@ export function memoizedDom(
     },
     configureServer(server) {
       devServer = server;
+      for (const file of installedWatchFiles) watchInstalledFile(file);
+      if (options.compilePackages?.length) {
+        const close = server.close.bind(server);
+        server.close = async () => {
+          for (const watcher of installedWatchers.values()) watcher.close();
+          installedWatchers.clear(); installedWatchFiles.clear();
+          for (const timer of installedWatchTimers.values()) clearTimeout(timer);
+          installedWatchTimers.clear();
+          return close();
+        };
+      }
       const updateEnvironments = server.config.server.hotUpdateEnvironments;
       server.config.server.hotUpdateEnvironments = async (server, hmr) => {
         if (updateEnvironments) await updateEnvironments(server, hmr);
@@ -619,6 +683,15 @@ export function memoizedDom(
         const queryIndex = id.indexOf('?');
         const query = queryIndex === -1 ? '' : id.slice(queryIndex);
         return `${normalizeFile(cleanViteId(id))}${query}`;
+      }
+      if (importer && options.compilePackages?.length && installedFor(this.environment.name).selected(id)) {
+        const context = graphContext(this);
+        const resolved = await context.resolve(id, importer, { skipSelf: true });
+        if (!resolved) this.error(`memoized-dom: cannot resolve opted-in package '${id}' from '${importer}'`);
+        // A publisher's finalized artifact always wins over consumer recompilation.
+        if (await discoverPackageArtifact(resolved.id.replace(/\?v=[\w-]+$/, ''), id, importer)) return null;
+        const compiled = await installedFor(this.environment.name).compile(context, resolved.id, id, importer);
+        if (compiled) return { id: compiled.resolvedFile, external: false };
       }
       return null;
     },

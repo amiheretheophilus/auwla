@@ -22,7 +22,7 @@ const name = (value: unknown): string | undefined => ast(value) ? typeof value.n
 const key = (importer: string, specifier: string) => `${importer}\0${specifier}`;
 
 /** Expand local wildcard barrels rather than publishing incomplete helper facts. */
-function expandStars(sources: Map<string, string>, programs: Map<string, Ast>, resolutions: Map<string, string>): void {
+export function expandStars(sources: Map<string, string>, programs: Map<string, Ast>, resolutions: Map<string, string>): void {
   if (![...programs.values()].some(program => nodes(program.body).some(statement => statement.type === 'ExportAllDeclaration' && statement.exportKind !== 'type'))) return;
   const memo = new Map<string, Map<string, string>>(), active = new Set<string>();
   const exportsOf = (id: string): Map<string, string> => {

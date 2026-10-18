@@ -6,6 +6,12 @@ types, and build for production.
 Reusable libraries use `memoized-dom package` and a single `.lib.config.ts`
 instead; that flow does not load an application Vite configuration.
 
+Applications can also opt ordinary installed ESM dependencies into compilation
+with [`compilePackages`](./third-party-package-compilation.md#consumer-workflow-compile-an-installed-dependency)
+in their existing Vite plugin configuration. The same `dev`/`build` commands
+collect, compile and cache those dependencies; no separate package command is
+needed for them.
+
 ## One command shape
 
 Use the same scripts for browser-only, Bun, Node, and Cloudflare applications:

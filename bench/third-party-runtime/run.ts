@@ -133,7 +133,7 @@ try {
     methodology: { timing: 'Uninstrumented production-runtime execution; setup, data readiness and assertions excluded',
       idle: 'Deterministic simulated visible frames; NOT wall-clock CPU%, FPS, energy, or paint latency',
       updates: 'Synchronous DOM click + commit, no frame pump', updatesFrame: 'One click + one simulated frame per operation',
-      diagnostics: 'Separate untimed run; counters never installed in timing trials', compilePackagesOptionImplemented: false }, rows };
+      diagnostics: 'Separate untimed run; counters never installed in timing trials', installedPackageOptInUsed: false }, rows };
   console.log('\nMedian microseconds per frame/op (P25–P75); below-resolution values are not speedup evidence.');
   console.log('scenario size mode      idle frame        click+commit      click+frame');
   for (const row of rows) {
