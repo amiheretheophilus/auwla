@@ -147,12 +147,12 @@ describe('M5.3 fixes — code generation', () => {
       compile(`function Tree() { return <div><Tree /></div>; }`),
     ).toThrowError(/recursive component/);
 
-    // a component used both statically and as a list row
+    // a component used both statically and as a list row now links as mixed
     expect(() =>
       compile(
         `let items = [1];\nfunction Row() { return <li />; }\nfunction C() { return <div><Row /><ul>{items.map(i => <Row key={i} />)}</ul></div>; }`,
       ),
-    ).toThrowError(/both as a list row and as a static child/);
+    ).not.toThrow();
   });
 });
 

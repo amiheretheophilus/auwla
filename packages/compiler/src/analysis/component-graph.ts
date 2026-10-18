@@ -29,29 +29,6 @@ export function assertTerminatingRecursion(ctx: Ctx): void {
   }
 }
 
-/** Components that can reach themselves through static, conditional or row placement. */
-export function recursiveComponents(ctx: Ctx): Set<string> {
-  const owners = (name: string): string[] => [
-    ...(ctx.listedSites.get(name) ?? []).map(site => site.owner),
-    ...(ctx.conditionalComponentSites.get(name) ?? []).map(site => site.owner),
-    ...(ctx.rowComponentSites.get(name) ?? []).map(site => site.owner),
-    ...(ctx.comps.get(name)?.parents ?? []),
-  ];
-  const recursive = new Set<string>();
-  for (const name of ctx.comps.keys()) {
-    const seen = new Set<string>();
-    const pending = owners(name);
-    while (pending.length > 0) {
-      const owner = pending.pop()!;
-      if (owner === name) { recursive.add(name); break; }
-      if (seen.has(owner) || !ctx.comps.has(owner)) continue;
-      seen.add(owner);
-      pending.push(...owners(owner));
-    }
-  }
-  return recursive;
-}
-
 /**
  * Resolve every static runtime path at which a component may be mounted.
  *
@@ -165,6 +142,8 @@ export function isLightweightListedComponent(
   // normal component ABI in dev so even otherwise-lightweight row candidates
   // can register an instance and be swapped without remounting the page.
   if (ctx.hot) return false;
+  // Also mounted as a static child: one entity ABI serves both placements.
+  if (ctx.linkedMixedComponents.has(name)) return false;
   const imported = ctx.importedComponents.get(name);
   if (imported !== undefined) return imported.listLightweight;
 

@@ -84,6 +84,8 @@ export interface MemoDomOptions {
   linkedComponentPaths?: Record<string, string[]>;
   /** Cross-file keyed-row uses for components declared in this file. */
   linkedComponentRows?: Record<string, LinkedComponentRowUse[]>;
+  /** Declarations in this file placed both as keyed rows and static children. */
+  linkedMixedComponents?: readonly string[];
   /** Caller-resolved state boundaries for each declaration's named props. */
   linkedComponentPropSources?: Record<
     string,
@@ -508,6 +510,8 @@ export interface Ctx {
   linkedComponentPaths: Map<string, string[]>;
   /** Graph-linked keyed-row modes for declarations in this module. */
   linkedComponentRows: Map<string, LinkedComponentRowUse[]>;
+  /** Graph-linked: declared here and placed both as rows and static children. */
+  linkedMixedComponents: Set<string>;
   linkedComponentPropSources: Map<
     string,
     Map<string, LinkedComponentPropSource>
@@ -841,6 +845,7 @@ export function createAnalysisCtx(opts: AnalysisOptions = {}): Ctx {
         [...paths],
       ]),
     ),
+    linkedMixedComponents: new Set(opts.linkedMixedComponents ?? []),
     linkedComponentRows: new Map(
       Object.entries(opts.linkedComponentRows ?? {}).map(([name, uses]) => [
         name,

@@ -651,8 +651,22 @@ Module-scope sources follow the same rules as component-local ones:
 - Passed as a prop (`<Avatar profile={me} />`), the component receives the
   source itself (`sourceRef(key)`), as with a local source.
 - A conditional over one stays a conditional: its branches keep their own read
-  containers, and each condition operand runs only once its sources commit
-  (until then it is undefined, so the falsy branch renders).
+  containers, and each condition operand is guarded as
+  `!resolvedValuesPending([refs]) && operand` (false while loading, so the
+  falsy branch renders). The operand stays in place, so local source reads in it
+  are lowered by read rewriting as usual.
+
+Component-local sources follow two more rules:
+
+- `normalizeSourceChoices` (`analysis/source-calls.ts`, run by
+  `prepareProgramAnalysis`): `cond ? getA(x) : getA(y)` is one source,
+  `getA(cond ? x : y)`; a choice between different factories is a diagnostic.
+- A child component whose props read a loading source is itself a read site:
+  read rewriting puts it in an expression container that becomes an automatic
+  pending/error site, so the child mounts with real values. A prop passing the
+  source itself stays the child's to handle; components inside a branch whose
+  selector already reads a source are covered by that site; components bound to
+  a planned initial-content root keep their planned placement.
 
 The dependency direction is discovery/analysis → transforms → orchestration.
 Emission metadata and policy construction are shared domain services. Avoid
@@ -700,6 +714,13 @@ cleanup path. Lightweight component rows are not automatically DOM-only: they
 can still own mount refs. Their ownership proof is captured before emission and
 preserved as optional `listResourceFree` component metadata across imports and
 explicit import-then-export aliases.
+
+A component may be placed both as a keyed row and as a static child. The linker
+reports such components in `LinkedComponentGraph.mixed`: their paths union both
+placements, their exports clear `listLightweight`, and each declaring module
+receives them as `linkedMixedComponents`, so one entity ABI serves the row region
+and ordinary calls. A row callback must still return one element; a conditional
+row gets a diagnostic pointing at the in-row form.
 
 Component re-exports now retain their canonical component identity, props and
 ownership facts. Discovery seeds component aliases before strict JSX analysis,

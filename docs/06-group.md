@@ -107,6 +107,22 @@ Same rule on failure: if the `me` request errors, **each** of its read sites
 renders the error component — the story list keeps working. One failed
 request doesn't take down the section.
 
+A child component given part of loading data is a read site too:
+
+```tsx
+const article = $fetch<Article>('/api/article/' + route.params.slug);
+
+<Group pending={Skeleton}>
+  <h1>{article.title}</h1>
+  <TagList tags={article.tags} />        {/* Skeleton here, then TagList mounts */}
+  <Comments slug={article.slug} />       {/* its own effects and requests see real values */}
+</Group>
+```
+
+`TagList` and `Comments` mount once `article` commits, with real props; until
+then their place shows the pending policy. Pass the source itself
+(`<Card article={article} />`) when the child should own its loading states.
+
 ## How inheritance works
 
 Group supplies two independent policies. A nested Group replaces only the

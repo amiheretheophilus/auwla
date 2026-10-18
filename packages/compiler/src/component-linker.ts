@@ -43,6 +43,8 @@ export interface LinkedComponentGraph {
   paths: Map<string, string[]>;
   rows: Map<string, LinkedComponentRowUse[]>;
   propSources: Map<string, Map<string, LinkedComponentPropSource>>;
+  /** Components placed both as keyed rows and as static children: they keep the entity ABI. */
+  mixed: Set<string>;
 }
 
 /**
@@ -135,15 +137,11 @@ export function linkComponentGraph(
     }
   }
 
-  for (const [key, modes] of incoming) {
-    // A recursive component is its own entry and its own row; its paths
-    // carry both placements, so the mixed use is resolvable.
-    if (modes.size > 1 && !cycles.has(key)) {
-      throw new Error(
-        `memo-dom: component '${key}' is used both as a keyed row and a static child`,
-      );
-    }
-  }
+  // A component placed both as a keyed row and as a static child (an
+  // `<Author>` in a feed row and on an article page) is resolvable: its paths
+  // carry both placements. It keeps the full entity ABI, which both the row
+  // region and an ordinary call can mount; a recursive component is one case.
+  const mixed = new Set([...incoming].filter(([, modes]) => modes.size > 1).map(([key]) => key));
 
   const pathSets = new Map<string, Set<string>>();
   const inferredRoots = [...nodes.keys()].filter((key) =>
@@ -193,5 +191,5 @@ export function linkComponentGraph(
   }
 
   const propSources = linkComponentPropSources(nodes, roots);
-  return { paths, rows, propSources };
+  return { paths, rows, propSources, mixed };
 }

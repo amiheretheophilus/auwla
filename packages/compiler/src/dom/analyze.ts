@@ -30,7 +30,7 @@ import {
   finalizeInstancePreludes,
   scanInstanceControlFlow,
 } from '../analysis/instance-control-flow';
-import { assertTerminatingRecursion, isListLightweightCandidate, recursiveComponents } from '../analysis/component-graph';
+import { assertTerminatingRecursion, isListLightweightCandidate } from '../analysis/component-graph';
 import { normalizeComponentJsxValues } from '../components/jsx-values';
 import { planPrivateRowProps } from '../planning/private-row-props';
 import { lowerPrivateRowProps } from './private-row-props';
@@ -133,28 +133,9 @@ export function runAnalysis(ctx: Ctx, programPath: ProgramPath): void {
     allocatePresentationParameter(ctx, requirePresentationOwner(ctx, name, 'inherited'));
   }
   assertTerminatingRecursion(ctx);
-  const recursive = recursiveComponents(ctx);
-  const listedComponents = new Set([
-    ...ctx.listedSites.keys(),
-    ...ctx.linkedComponentRows.keys(),
-  ]);
-  for (const comp of listedComponents) {
-    // A recursive component is necessarily placed as both its own entry and
-    // its own rows; pathVariants unions both placements for it.
-    if (ctx.importedComponents.has(comp) || recursive.has(comp)) continue;
-    const sites = ctx.listedSites.get(comp) ?? [];
-    const p = ctx.compPaths.get(comp)!;
-    // used both as a row AND a static child: patterns would drop one usage
-    if (
-      (sites.length > 0 || ctx.linkedComponentRows.has(comp)) &&
-      (ctx.comps.get(comp)!.parents.size > 0 ||
-        (ctx.conditionalComponentSites.get(comp)?.length ?? 0) > 0)
-    ) {
-      throw p.buildCodeFrameError(
-        `memo-dom: <${comp}> is used both as a list row and as a static child — split it into two components (R7 L1)`,
-      );
-    }
-  }
+  // A component used both as a list row and as a static child is linked as
+  // mixed (`linkedMixedComponents`): pathVariants unions both placements and
+  // it keeps the entity ABI. Recursive components are one such case.
   refreshAstAnalysis(ctx, programPath.node);
   analyzeModuleListTargets(ctx);
   analyzeOwnerListStructure(ctx);

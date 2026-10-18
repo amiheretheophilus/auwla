@@ -15,6 +15,7 @@ import { type DomContext as Ctx } from './context';
 import { generatedIdentifier, mdd } from './identifiers';
 import {annotateAsyncRead, annotateTransparentSources, transparentExpressionSources} from '../planning/async-reads';
 import { initialReadPlacement } from './initial-dom';
+import { isComponentPropContainer } from './read-transforms';
 import {
   isActionRefreshTarget,
   isBoundTo,
@@ -90,14 +91,6 @@ export function lowerModuleRefReadsEstree(
     });
     return found;
   };
-  const isComponentPropValue = (container: BaseNode): boolean => {
-    const attribute = ctx.astAnalysis?.parentByNode.get(container) ?? null;
-    if (attribute?.type !== 'JSXAttribute') return false;
-    const opening = ctx.astAnalysis?.parentByNode.get(attribute) ?? null;
-    if (opening?.type !== 'JSXOpeningElement') return false;
-    const tag = (opening as unknown as t.JSXOpeningElement).name;
-    return astFactory.isJSXIdentifier(tag) && /^[A-Z]/.test(tag.name);
-  };
   const isJsxNode = (node: BaseNode) =>
     astFactory.isJSXElement(node as unknown as t.Node) || astFactory.isJSXFragment(node as unknown as t.Node);
   const isConditionalJsx = (expression: t.Expression): boolean =>
@@ -126,27 +119,22 @@ export function lowerModuleRefReadsEstree(
     }
     return [];
   };
-  /** `operand` → `readResolvedValuesForRender([refs], (values) => operand)`. */
+  /**
+   * `operand` → `!resolvedValuesPending([refs]) && operand`, its module reads
+   * lowered in place. The operand stays where it is, so component-local source
+   * reads inside it are still lowered by read rewriting.
+   */
   const wrapReads = (operand: BaseNode): void => {
     const reads = collectOutsideJsx(operand);
     if (reads.length === 0) return;
     const unique = [...new Map(reads.map(({ entry }) => [entry.name, entry])).values()];
-    const replacements = new Map(unique.map(entry => [entry.name, generatedIdentifier(ctx, `${entry.name}Value`)]));
-    const body = cloneEstreeNode(operand, true) as unknown as BaseNode;
-    walkAst(body, {
-      enter(current) {
-        if (current.type !== 'Identifier') return;
-        const name = (current as unknown as AstIdentifier).name;
-        const original = reads.find(read => (read.identifier as unknown as AstIdentifier).name === name);
-        if (original !== undefined) overwriteNode(current, cloneEstreeNode(replacements.get(name)!) as unknown as BaseNode);
-      },
-    });
-    const callback = astFactory.arrowFunctionExpression(
-      unique.map(entry => cloneEstreeNode(replacements.get(entry.name)!)), body as unknown as t.Expression);
-    ctx.compilerOwnedCallbacks.add(callback);
-    overwriteNode(operand, annotateAsyncRead(astFactory.callExpression(mdd(ctx, 'readResolvedValuesForRender'), [
-      astFactory.arrayExpression(unique.map(entry => refCall(entry.key))), callback,
-    ]), unique.map(entry => entry.key), 'undefined') as unknown as BaseNode);
+    for (const { identifier, entry } of reads) replaceRead(identifier, entry, 'readResolvedValueForRender');
+    const lowered = cloneEstreeNode(operand, true) as unknown as t.Expression;
+    overwriteNode(operand, astFactory.logicalExpression('&&',
+      astFactory.unaryExpression('!', annotateAsyncRead(astFactory.callExpression(mdd(ctx, 'resolvedValuesPending'), [
+        astFactory.arrayExpression(unique.map(entry => refCall(entry.key))),
+      ]), unique.map(entry => entry.key), 'undefined')),
+      lowered) as unknown as BaseNode);
   };
   const replaceRead = (
     identifier: BaseNode,
@@ -218,7 +206,7 @@ export function lowerModuleRefReadsEstree(
       // `<Card user={me} />`: the component receives the source itself, as it
       // would a local one, and handles pending/error at its own read sites.
       const direct = entryFor(rawExpression);
-      if (direct !== null && isComponentPropValue(node)) {
+      if (direct !== null && isComponentPropContainer(ctx, node)) {
         overwriteNode(rawExpression, refCall(direct.key) as unknown as BaseNode);
         refresh();
         return false;
@@ -251,6 +239,8 @@ export function lowerModuleRefReadsEstree(
       const remaining = collect(rawExpression);
       if (remaining.length > 0) {
         const direct = entryFor(rawExpression);
+
+
         if(initialReadPlacement(ctx,componentName,rawExpression).structural) {
           for(const {identifier,entry} of remaining) replaceRead(identifier,entry,'readResolvedValueForRender');
         } else if (direct !== null) {

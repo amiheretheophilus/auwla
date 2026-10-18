@@ -249,6 +249,16 @@ export function isInsideRenderGate(ctx: Ctx, identifier: BaseNode): boolean {
   return false;
 }
 
+/** `<Card user={…} />`: the expression container is a component prop's value. */
+export function isComponentPropContainer(ctx: Ctx, container: BaseNode): boolean {
+  const attribute = ctx.astAnalysis?.parentByNode.get(container) ?? null;
+  if (attribute?.type !== 'JSXAttribute') return false;
+  const opening = ctx.astAnalysis?.parentByNode.get(attribute) ?? null;
+  if (opening?.type !== 'JSXOpeningElement') return false;
+  const tag = (opening as unknown as t.JSXOpeningElement).name;
+  return astFactory.isJSXIdentifier(tag) && /^[A-Z]/.test(tag.name);
+}
+
 export function resolvedRenderExpression(
   ctx: Ctx,
   expression: t.Expression,

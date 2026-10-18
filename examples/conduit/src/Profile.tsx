@@ -8,9 +8,9 @@ export function Profile() {
   const profile = getProfile(route.params.username);
   let page = 1;
   const favorites = route.query.get('tab') === 'favorites';
-  const articles = getArticles(false, '',
-    favorites ? '' : route.params.username,
-    favorites ? route.params.username : '', page);
+  const articles = favorites
+    ? getArticles(false, '', '', route.params.username, page)
+    : getArticles(false, '', route.params.username, '', page);
 
   return (
     <Group pending={() => <p class="muted">Loading profile…</p>} error={({ error }) => <p class="error">{error.message}</p>}>

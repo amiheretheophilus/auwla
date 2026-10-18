@@ -223,6 +223,15 @@ function analyzeCallback(
   const plan = prepared ?? planListCallback(call, fail);
   const renderInvocation = planRenderCallbackMap(inputs.callbackProps, call);
   if (plan.jsx === null && renderInvocation === null) {
+    const callback = call.arguments[0];
+    const body = astFactory.isArrowFunctionExpression(callback) && !astFactory.isBlockStatement(callback.body)
+      ? callback.body : null;
+    if (body !== null && (astFactory.isConditionalExpression(body) || astFactory.isLogicalExpression(body))) {
+      return fail(
+        'memo-dom: a list row is one element whose content may change; keep the row and move the condition inside it: ' +
+        'items.map(item => <li key={item.id}>{item.ok ? <A /> : <B />}</li>) — R7 L1',
+      );
+    }
     return fail(
       'memo-dom: list callback body must be one JSX element, a block containing only return <JSX />, or const derivations followed by return <JSX /> — R7 L1',
     );

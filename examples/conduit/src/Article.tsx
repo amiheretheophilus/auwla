@@ -1,5 +1,5 @@
 import { $track, Group } from '@memoized-dom/data';
-import { navigate } from '@memoized-dom/router';
+import { navigate, route } from '@memoized-dom/router';
 import { z } from 'zod';
 import { addComment, deleteArticle, deleteComment, getArticle, getComments } from '#server-functions';
 import { AuthorLine, Avatar, FavoriteButton, FollowButton, Markdown, TagList } from './components';
@@ -80,9 +80,9 @@ function Comments({ slug }: { slug: string }) {
   );
 }
 
-/** The page needs its article before anything renders: prepare it on navigation. */
+
 export function Article() {
-  const article = $routed(({ params }) => getArticle(params.slug));
+  const article = getArticle(route.params.slug);
   return (
     <Group pending={Loading} error={Missing}>
       <div class="article-page">

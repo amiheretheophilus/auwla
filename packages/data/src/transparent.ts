@@ -465,6 +465,8 @@ export function resolvedValueSnapshot<T>(
 export function notifyResolvedValueMutation<T>(
   value: ResolvedValue<T> | ModuleSourceRef,
 ): void {
+  // Plain data from another caller has no source to notify.
+  if (!isSource(value)) return;
   const target = source(value);
   if (isFormSource(target)) {
     notifyFormSource(target);

@@ -54,3 +54,10 @@ it('a component returning cond && <jsx> renders nothing when false', async () =>
   app.click('toggle');
   expect(app.out()).toBe('');
 });
+
+it('a list row returning a conditional is told to move the condition inside the row', () => {
+  expect(() => compileModules({ './main.ts': MAIN, './App.tsx': `
+    export function App(){ let items=[{id:1,ok:true}];
+      return <ul>{items.map(item => item.ok ? <li key={item.id}>yes</li> : <li key={item.id}>no</li>)}</ul>; }` },
+    { runtimePath: '@memoized-dom/runtime/testing' })).toThrow(/move the condition inside it/);
+});

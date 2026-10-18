@@ -294,7 +294,7 @@ describe('R22 - graph validation', () => {
     ).toThrowError(/recursive cross-module component graph/);
   });
 
-  it('rejects one imported factory used both statically and as a row', () => {
+  it('links one imported factory used both statically and as a row', () => {
     expect(() =>
       compileModules({
         './row.tsx': `
@@ -311,6 +311,6 @@ describe('R22 - graph validation', () => {
           }
         `,
       }),
-    ).toThrowError(/used both as a keyed row and a static child/);
+    ).not.toThrow();
   });
 });

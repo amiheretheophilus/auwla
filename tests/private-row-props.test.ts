@@ -161,9 +161,9 @@ it.each([
   expect(output).not.toMatch(/function Row\(_rowProp/);
 });
 
-it('preserves the existing diagnostic for mixed static and listed calls', () => {
+it('keeps the generic contract for a row also mounted as a static child', () => {
   const input = source(row).replace('return <ul>', 'return <main><Row item={items[0]}/><ul>').replace('</ul>;', '</ul></main>;');
-  expect(() => compile(input)).toThrow(/R7 L1/);
+  expect(compile(input)).not.toMatch(/function Row\(_rowProp/);
 });
 
 it('retains the generic contract during hot compilation', () => {

@@ -246,6 +246,55 @@ export function rewriteTransparentDataReads(ctx: Ctx): void {
     gateEventSourceEffects(ctx, component, bindings, eventSources);
     refresh();
 
+    // `<TagList tags={article.tags} />` mounts once `article` commits. A child
+    // component whose props read a loading source is itself a read site: in an
+    // expression container, the walk below gives it an automatic pending/error
+    // site, so the child receives real values. A prop passing the source itself
+    // (`user={article}`) stays the child's to handle.
+    // A component bound to planned initial content already renders with its
+    // request data resolved; its authored placement must stay as planned.
+    const initiallyBound = ctx.initialDomRoot?.component === component ||
+      ctx.initialDomComponents[component] !== undefined;
+    // Inside `{article.ok ? <A/> : <B/>}` the whole conditional is already one
+    // site waiting for `article`; its branches render only once it commits.
+    const insideSourceGatedBranch = (element: BaseNode): boolean => {
+      for (let child = element, current = ctx.astAnalysis?.parentByNode.get(element) ?? null;
+        current !== null && current !== componentNode;
+        child = current, current = ctx.astAnalysis?.parentByNode.get(current) ?? null) {
+        const selector = astFactory.isConditionalExpression(current as unknown as t.Node)
+          ? (current as unknown as t.ConditionalExpression).test
+          : astFactory.isLogicalExpression(current as unknown as t.Node)
+            ? (current as unknown as t.LogicalExpression).left : null;
+        if (selector !== null && (selector as unknown as BaseNode) !== child &&
+            sourceDependencies(ctx, selector as unknown as BaseNode, bindings, derived, eventSources).length > 0) return true;
+      }
+      return false;
+    };
+    const gatedComponents: Array<{ element: BaseNode; parent: BaseNode }> = [];
+    if (!initiallyBound) walkAst(componentNode, {
+      enter(node, parent) {
+        if (node.type !== 'JSXElement' || parent === null ||
+            (parent.type !== 'JSXElement' && parent.type !== 'JSXFragment')) return;
+        const tag = (node as unknown as t.JSXElement).openingElement.name;
+        if (!astFactory.isJSXIdentifier(tag) || !/^[A-Z]/.test(tag.name)) return;
+        const readsSource = (node as unknown as t.JSXElement).openingElement.attributes.some(attribute => {
+          if (!astFactory.isJSXAttribute(attribute) || !astFactory.isJSXExpressionContainer(attribute.value)) return false;
+          const value = attribute.value as unknown as BaseNode;
+          if (isEventOrRefContainer(ctx, value) || isDirectSourceComponentProp(ctx, value, bindings)) return false;
+          const expression = childNode(value, 'expression');
+          return expression !== null && astFactory.isExpression(expression as unknown as t.Node) &&
+            sourceDependencies(ctx, expression, bindings, derived, eventSources).length > 0;
+        });
+        if (readsSource && !insideSourceGatedBranch(node)) gatedComponents.push({ element: node, parent });
+      },
+    });
+    for (const { element, parent } of gatedComponents) {
+      const children = (parent as unknown as { children: t.JSXElement['children'] }).children;
+      const index = children.indexOf(element as unknown as t.JSXElement);
+      if (index !== -1) children[index] = astFactory.jsxExpressionContainer(element as unknown as t.JSXElement);
+    }
+    if (gatedComponents.length > 0) refresh();
+
     walkAst(componentNode, {
       enter(container) {
         const spread = container.type === 'JSXSpreadAttribute';

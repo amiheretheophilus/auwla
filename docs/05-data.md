@@ -137,6 +137,19 @@ one of these transparent values re-runs when its arguments change —
 `const story = getStory(id)` refires whenever `id` does. Inputs in,
 derivation out — same rule everywhere.
 
+A conditional choosing between two calls of the same function is still one
+source; only its inputs change:
+
+```tsx
+const feed = favorites
+  ? getArticles('', username)    // treated as getArticles(favorites ? '' : username,
+  : getArticles(username, '');   //                        favorites ? username : '')
+```
+
+Switching `favorites` refires the request into the same `feed` binding. A
+conditional choosing between *different* functions or `$fetch`/`$read` is a
+compile error: declare each source separately and choose between their values.
+
 ## Request options and the query shape
 
 ```ts

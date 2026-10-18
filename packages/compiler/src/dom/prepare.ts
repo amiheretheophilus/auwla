@@ -20,6 +20,7 @@ import { lowerRouterJsx } from './router';
 import {planRouterJsx} from '../analysis/routes';
 import { installCompilerIntrinsics } from './intrinsics';
 import { scanTransparentSourceImports } from '../analysis/transparent-imports';
+import { normalizeSourceChoices } from '../analysis/source-calls';
 import { lowerReadReplays } from './read-replay';
 import { lowerTransparentGroups } from './group-lowering';
 import { lowerModuleSourceDeclarations } from './source-declarations';
@@ -38,6 +39,7 @@ export function prepareProgramAnalysis(ctx: Ctx, programPath: ProgramPath): void
   scanExternalReactiveImports(ctx, programPath);
   allocateExternalSubscriptions(ctx);
   scanTransparentSourceImports(ctx, programPath);
+  normalizeSourceChoices(ctx, programPath, ctx.transparentSourceFactories);
   let sourceAnalysis = refreshAstAnalysis(ctx, programPath.node);
   const bodylessFetches = ctx.dataRuntimePath === '@memoized-dom/data/internal'
     ? lowerBodylessFetchImports(programPath.node,

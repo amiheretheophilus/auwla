@@ -793,6 +793,15 @@ function compileLinkedModules(
     ],
     applicationRoot,
   );
+  // A component used both as a keyed row and as a static child keeps the
+  // entity ABI everywhere, so importers must not select the lightweight row ABI.
+  for (const manifest of manifests.values()) {
+    for (const exported of Object.values(manifest.exports)) {
+      if (exported.type === 'component' && componentGraph.mixed.has(exported.key)) {
+        (exported as { listLightweight: boolean }).listLightweight = false;
+      }
+    }
+  }
   const output: Record<string, string> = {};
   const maps: Record<string, CompilerSourceMap> = {};
   const metadata: Record<string, CompiledModuleMetadata> = {};
@@ -982,6 +991,9 @@ function compileLinkedModules(
       linkedImports,
       linkedComponentPaths,
       linkedComponentRows,
+      linkedMixedComponents: manifest.components
+        .filter(declaration => componentGraph.mixed.has(declaration.key))
+        .map(declaration => declaration.local),
       linkedComponentPropSources,
       linkedComponentRenderProps,
       linkedRoutes,
