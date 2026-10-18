@@ -35,6 +35,8 @@ that with a pipeline of explicit, immutable stages.
 
 - [ ] Design document for user review (graph node kinds, edge rules, plan shape).
 - [ ] Symbol table stage with no `refresh()`.
+  - [x] Freeze: analysis reads one index, checked at thaw (`8c40eb9`).
+  - [ ] Symbols with ids on the frozen index; facts keyed by symbol, not name.
 - [ ] Semantic graph built from the symbol table; readiness computed on it.
 - [ ] Port readiness emission to read the graph (replaces read-rewriting gating).
 - [ ] Render plan; port DOM backend.
