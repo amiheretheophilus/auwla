@@ -41,6 +41,7 @@
     "example:fullstack:cloudflare:build": "node packages/vite/dist/cli.js build --config examples/fullstack/vite.cloudflare.config.ts",
     "example:fullstack:cloudflare:preview": "vite preview --config examples/fullstack/vite.cloudflare.config.ts",
     "example:fieldnotes": "node packages/vite/dist/cli.js dev --config examples/fieldnotes/vite.config.ts",
+    "example:conduit": "node packages/vite/dist/cli.js dev --config examples/conduit/vite.config.ts",
     "example:server-pages": "node packages/vite/dist/cli.js dev --config examples/server-pages/vite.config.ts",
     "example:server-pages:build": "node packages/vite/dist/cli.js build --config examples/server-pages/vite.config.ts",
     "example:build": "bun run build && node packages/vite/dist/cli.js build --config examples/vite.config.ts",
