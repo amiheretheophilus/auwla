@@ -4,9 +4,15 @@ import puppeteer, { type Page } from 'puppeteer-core';
 const origin = process.argv[2] ?? 'http://127.0.0.1:5400';
 const browser = await puppeteer.launch({ executablePath: 'C:/Program Files/Google/Chrome/Application/chrome.exe', headless: true });
 const problems: string[] = [];
+let currentPage: Page | undefined;
 const step = async (name: string, run: () => Promise<unknown>) => {
   try { await run(); console.log('ok  ', name); }
-  catch (error) { console.log('FAIL', name, '-', String(error).split('\n')[0]); problems.push(name); }
+  catch (error) {
+    console.log('FAIL', name, '-', String(error).split('\n')[0]);
+    problems.push(name);
+    if (process.env.FLOW_DEBUG && currentPage) console.log('  at', new URL(currentPage.url()).pathname, '\n  page:',
+      (await currentPage.evaluate(() => document.querySelector('main, .app')?.textContent?.replace(/\s+/g, ' ').slice(0, 500)).catch(String)));
+  }
 };
 const text = (page: Page, selector: string) => page.$eval(selector, node => node.textContent ?? '');
 const until = (page: Page, check: () => boolean) => page.waitForFunction(check, { timeout: 10_000, polling: 100 });
@@ -22,6 +28,10 @@ const fill = (page: Page, selector: string, text: string) => page.$eval(selector
 
 try {
   const page = await browser.newPage();
+  currentPage = page;
+  // Browser UI (an autofill/save prompt after the sign-in form) can take window
+  // focus, and an unfocused headless page receives no key events.
+  await (await page.createCDPSession()).send('Emulation.setFocusEmulationEnabled', { enabled: true });
   // Render failures arrive as one AggregateError; report each inner error.
   await page.evaluateOnNewDocument(() => {
     window.addEventListener('error', event => {
@@ -89,9 +99,10 @@ try {
     await fill(page, 'input[name=title]', 'Flow script article');
     await fill(page, 'input[name=description]', 'Written by a script');
     await fill(page, 'textarea[name=body]', '# Hello\n\nFrom **the flow**.');
-    await page.focus('input[placeholder="Enter tags"]');
-    await page.keyboard.type('flow');
-    await page.keyboard.press('Enter');
+    // After the sign-in form, Chrome's own UI can capture key events, so deliver
+    // the input and Enter the way the page receives them.
+    await fill(page, 'input[placeholder="Enter tags"]', 'flow');
+    await page.$eval('input[placeholder="Enter tags"]', node => node.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })));
     await until(page, () => document.querySelector('.tag-list.editable')?.textContent?.includes('flow') === true);
     await press(page, '.editor form > button');
     await until(page, () => document.querySelector('.article-page h1')?.textContent === 'Flow script article');
