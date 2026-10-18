@@ -294,18 +294,22 @@ export function resolvedRenderExpression(
 }
 
 /**
- * Gate an effect that consumes an event-created colorless value. The holder
- * is absent before the first event and pending immediately after assignment;
- * the slot invalidates the owner again when it settles, at which point the
- * authored callback runs with honest payloads and may return its cleanup.
+ * Gate an effect that consumes a loading value: the authored callback first
+ * runs once every source it reads has committed, with honest payloads, and may
+ * return its cleanup. A mount-time source is recorded on the site, whose entity
+ * re-runs on each commit. An event-created holder is absent before its first
+ * event and pending immediately after assignment; its slot invalidates the
+ * owner again when it settles. Reads of derivations over a source are inlined,
+ * so a re-run sees the committed value, not the owner's last replay.
  */
-export function gateEventSourceEffects(
+export function gateSourceEffects(
   ctx: Ctx,
   component: string,
   bindings: ReadonlyMap<string, AstBinding>,
+  derived: ReadonlyMap<string, TransparentDerivation>,
   eventSources: ReadonlySet<string>,
+  refresh: () => void,
 ): void {
-  if (eventSources.size === 0) return;
   const emptyDerived = new Map<string, TransparentDerivation>();
   for (const site of ctx.effects.get(component) ?? []) {
     const callback = site.callback;
@@ -313,6 +317,9 @@ export function gateEventSourceEffects(
       !astFactory.isArrowFunctionExpression(callback) &&
       !astFactory.isFunctionExpression(callback)
     ) continue;
+    if (sourceDependencies(ctx, callback as unknown as BaseNode, bindings, derived, eventSources).length === 0) continue;
+    replaceDerivedReads(ctx, callback.body as unknown as BaseNode, derived);
+    refresh();
     const dependencies = sourceDependencies(
       ctx,
       callback as unknown as BaseNode,
@@ -320,7 +327,9 @@ export function gateEventSourceEffects(
       emptyDerived,
       eventSources,
     );
-    if (!dependencies.some(source => eventSources.has(source))) continue;
+    if (dependencies.length === 0) continue;
+    const mounted = dependencies.filter(source => !eventSources.has(source));
+    if (mounted.length > 0) site.transparentSources = mounted;
 
     const replacements = new Map<string, t.Identifier>();
     const parameters = dependencies.map(source => {

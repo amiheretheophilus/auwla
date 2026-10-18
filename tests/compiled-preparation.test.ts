@@ -132,13 +132,15 @@ describe('compiler-owned detached preparation', () => {
     await waitFor(() => expect(requests.some(request => request.url.endsWith('/leaf'))).toBe(true));
     const entity = [...application.state.registry.values()].find(entity => entity.id.endsWith('/Leaf'));
     expect(entity).toBeDefined();
-    const input = (root as Element).querySelector('input');
+    // The input's value reads `user`, so the input appears once `user` commits.
+    expect((root as Element).querySelector('input')).toBeNull();
     expect(preparation.readiness).toBe('pending');
     expect(inRuntime(() => leaf.currentInput())).toBeNull();
     await respond('/leaf', { name: 'Ada' });
     await waitFor(() => expect(preparation.readiness).toBe('ready'));
     expect(inRuntime(() => getEntity(entity!.id))).toBe(entity);
-    expect((root as Element).querySelector('input')).toBe(input);
+    const input = (root as Element).querySelector('input');
+    expect(input?.value).toBe('Ada');
     expect(requests.filter(request => request.url.endsWith('/leaf'))).toHaveLength(1);
     document.body.append(root);
     preparation.activate();
@@ -152,7 +154,7 @@ describe('compiler-owned detached preparation', () => {
     expect(preparation.readiness).toBe('pending');
     await respond(name === 'AttributeOnly' ? '/attribute' : '/prop', { name: 'Grace' });
     await waitFor(() => expect(preparation.readiness).toBe('ready'));
-    expect(name === 'AttributeOnly' ? (root as HTMLInputElement).value : root.textContent).toBe('Grace');
+    expect(name === 'AttributeOnly' ? (root as Element).querySelector<HTMLInputElement>('#attribute')?.value : root.textContent).toBe('Grace');
   });
 
   it('releases a non-entity branch read when that branch disappears', async () => {

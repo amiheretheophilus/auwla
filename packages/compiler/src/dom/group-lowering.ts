@@ -29,6 +29,7 @@ import {
   jsxTagName,
 } from '../analysis/group-origins';
 import { emitPresentationComponent } from './presentation-components';
+import { isEventOrRefContainer } from '../analysis/transparent-reads';
 import type {GroupPresentationPlan} from '../planning/presentation-policy';
 import {
   consumeSuspendDirective,
@@ -118,7 +119,32 @@ function lowerGroupScopes(
       const origins = groupOrigins(ctx, node, data);
       annotateGroupComponentCalls(ctx, content as unknown as BaseNode, origins, policy.pending, policy.error);
       walkAst(content as unknown as BaseNode, {
-        enter(current) {
+        enter(current, container) {
+          // `<a href={'/' + article.slug}>` or `<TagList tags={article.tags} />`:
+          // an element whose attributes read Group data is one site under this
+          // policy, so it appears with real values or shows pending/error in
+          // its place. A component given the source itself handles its own.
+          if (current.type === 'JSXElement' && (container?.type === 'JSXElement' || container?.type === 'JSXFragment')) {
+            const element = current as unknown as t.JSXElement;
+            const component = /^[A-Z]/.test(jsxTagName(element) ?? '');
+            const dependencies = new Set<string>();
+            for (const attribute of element.openingElement.attributes) {
+              if (!astFactory.isJSXAttribute(attribute) || !astFactory.isJSXExpressionContainer(attribute.value)) continue;
+              if (isEventOrRefContainer(ctx, attribute.value as unknown as BaseNode)) continue;
+              const value = attribute.value.expression;
+              if (!astFactory.isExpression(value)) continue;
+              const read = expressionOrigins(ctx, value as unknown as BaseNode, origins);
+              if (component && astFactory.isIdentifier(value) && read.size > 0) continue;
+              for (const source of read) dependencies.add(source);
+            }
+            if (dependencies.size === 0) return;
+            const children = (container as unknown as { children: t.JSXElement['children'] }).children;
+            const index = children.indexOf(element);
+            if (index === -1) return;
+            children[index] = astFactory.jsxExpressionContainer(element);
+            wrapAutomaticSite(ctx, owner, element as unknown as t.Expression, [...dependencies], policy);
+            return false;
+          }
           if (current.type !== 'JSXExpressionContainer') return;
           const parent = ctx.astAnalysis?.parentByNode.get(current);
           if (parent?.type === 'JSXAttribute') return false;

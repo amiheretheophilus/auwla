@@ -16,10 +16,11 @@ import {
   memberKey,
   nodeHasJsx,
   refreshAstAnalysis,
+  type TransparentStateSeed,
 } from '../context';
 import { type DomContext as Ctx } from './context';
 import { mdd } from './identifiers';
-import {annotateAsyncRead, annotateTransparentSources, excludeTransparentSubscriptions} from '../planning/async-reads';
+import {annotateAsyncRead, annotateTransparentSources, asyncReadFact, excludeTransparentSubscriptions} from '../planning/async-reads';
 import { initialReadPlacement } from './initial-dom';
 import { wrapAutomaticSite } from './data-sites';
 import { lowerModuleRefReadsEstree } from './module-read-lowering';
@@ -35,12 +36,14 @@ import {
   isWithinGroupData,
   sourceBindings,
   sourceDependencies,
+  stateSeedDeclarators,
   type TransparentDerivation,
 } from '../analysis/transparent-reads';
+import { analyzeComponentReturns, returnPlanAsConditional } from '../components/return-plan';
 import { summarizeHelper } from '../helper-summaries';
 import { isGeneratedDataCall } from './data-read-recognition';
 import {
-  gateEventSourceEffects,
+  gateSourceEffects,
   isInsideRenderGate,
   replaceDerivedReads,
   replaceSourceReadsWithRenderGates,
@@ -126,18 +129,6 @@ export function rewriteTransparentDataReads(ctx: Ctx): void {
     }
   }
   refresh();
-  // Module-scope sources (RFC §16.4): lower refs to materializing reads
-  // first so plain sites are safe immediately; derivation roots themselves
-  // are skipped by that pass and owned by the derive pass below.
-  for (const [componentName, componentPath] of ctx.compPaths) {
-    lowerModuleRefReadsEstree(
-      ctx,
-      componentName,
-      componentPath.node as unknown as BaseNode,
-      refresh,
-    );
-  }
-  refresh();
   // Module-scope refs join the same derivation machinery as component-local
   const moduleBinding = (
     component: BaseNode,
@@ -147,23 +138,64 @@ export function rewriteTransparentDataReads(ctx: Ctx): void {
     const binding = astBindingAt(ctx, component, name);
     return binding?.kind === 'import' ? binding : undefined;
   };
+  const componentSourceBindings = (component: string, componentNode: BaseNode): Map<string, AstBinding> => {
+    const bindings = sourceBindings(ctx, componentNode, ctx.transparentSources.get(component) ?? new Set<string>());
+    for (const name of ctx.transparentModuleSources.keys()) {
+      const binding = moduleBinding(componentNode, name);
+      if (binding !== undefined) bindings.set(name, binding);
+    }
+    return bindings;
+  };
+
+  // `if (article.hidden) return <A/>; return <B/>;` chooses from loading data.
+  // The chain becomes one returned conditional, a read site that waits for
+  // its sources like `{article.hidden ? <A/> : <B/>}` in markup.
+  let returnsChanged = false;
+  for (const [component, componentPath] of ctx.compPaths) {
+    const componentNode = componentPath.node as unknown as BaseNode;
+    const bindings = componentSourceBindings(component, componentNode);
+    if (bindings.size === 0) continue;
+    const returns = analyzeComponentReturns(componentPath, component);
+    if (!('pick' in returns)) continue;
+    const eventSources = ctx.eventSourceSlots.get(component) ?? new Set<string>();
+    const choosesFromSource = [...returns.statements].some(statement =>
+      astFactory.isIfStatement(statement) &&
+      sourceDependencies(ctx, statement.test as unknown as BaseNode, bindings, new Map(), eventSources).length > 0);
+    if (!choosesFromSource) continue;
+    const conditional = returnPlanAsConditional(returns);
+    if (conditional === null) continue;
+    const body = componentPath.node.body;
+    body.body = [
+      ...body.body.filter(statement => !returns.statements.has(statement)),
+      astFactory.returnStatement(astFactory.jsxFragment(astFactory.jsxOpeningFragment(),
+        astFactory.jsxClosingFragment(), [astFactory.jsxExpressionContainer(conditional)])),
+    ];
+    returnsChanged = true;
+  }
+  if (returnsChanged) refresh();
+
+  // Module-scope sources (RFC §16.4): lower refs to materializing reads
+  // first so plain sites are safe immediately; derivation roots, state seeds
+  // and effects are skipped by that pass and gated by the passes below.
+  for (const [componentName, componentPath] of ctx.compPaths) {
+    lowerModuleRefReadsEstree(
+      ctx,
+      componentName,
+      componentPath.node as unknown as BaseNode,
+      refresh,
+    );
+  }
+  refresh();
 
   for (const [component, componentPath] of ctx.compPaths) {
     const componentNode = componentPath.node as unknown as BaseNode;
     const localNames =
       ctx.transparentSources.get(component) ?? new Set<string>();
-    const bindings = sourceBindings(ctx, componentNode, localNames);
-    // Seed module-scope source bindings so derivation and container passes
-    // treat imported refs like component-local holders (runtime helpers
-    // accept ModuleSourceRef uniformly).
-    let hasModuleRefs = false;
-    for (const name of ctx.transparentModuleSources.keys()) {
-      const binding = moduleBinding(componentNode, name);
-      if (binding === undefined) continue;
-      bindings.set(name, binding);
-      hasModuleRefs = true;
-    }
-    if (localNames.size === 0 && !hasModuleRefs) continue;
+    // Module-scope source bindings join the component-local holders, so
+    // derivation and container passes treat imported refs alike (runtime
+    // helpers accept ModuleSourceRef uniformly).
+    const bindings = componentSourceBindings(component, componentNode);
+    if (localNames.size === 0 && bindings.size === 0) continue;
     const names = localNames;
     const eventSources = ctx.eventSourceSlots.get(component) ?? new Set<string>();
     const tracks = ctx.transparentTrackBindings.get(component) ?? new Map();
@@ -217,6 +249,23 @@ export function rewriteTransparentDataReads(ctx: Ctx): void {
         }
         continue;
       }
+      if (derivation.replay !== undefined) {
+        // `$fetch('/api/comments/' + article.slug)`: the request waits for
+        // `article`. Until it commits the binding holds an idle source; each
+        // commit replays the owner, whose replay rebinds the request.
+        const gate = resolvedRenderExpression(ctx, init, sources, bindings, eventSources, 'deriveResolvedValues');
+        overwriteNode(init as unknown as BaseNode, astFactory.logicalExpression('??', gate,
+          astFactory.callExpression(mdd(ctx, 'createBodylessSource'), [astFactory.nullLiteral()])) as unknown as BaseNode);
+        derivation.replay = { ...derivation.replay, gate: cloneEstreeNode(gate, true) as t.CallExpression };
+        derivation.source = cloneEstreeNode(init, true);
+        const followed = sources.filter(source => !eventSources.has(source));
+        if (followed.length > 0) {
+          const owner = ctx.transparentOwnerSources.get(component) ?? new Set<string>();
+          for (const source of followed) owner.add(source);
+          ctx.transparentOwnerSources.set(component, owner);
+        }
+        continue;
+      }
       const wrapped = resolvedRenderExpression(
         ctx,
         init,
@@ -243,14 +292,37 @@ export function rewriteTransparentDataReads(ctx: Ctx): void {
     }
     refresh();
 
-    gateEventSourceEffects(ctx, component, bindings, eventSources);
+    // `let tab = me === null ? 'global' : 'feed'` is state seeded from a
+    // loading value: it starts once `me` commits, then is ordinary state.
+    const seeds: TransparentStateSeed[] = [];
+    for (const declarator of stateSeedDeclarators(ctx, component, componentPath.node)) {
+      const name = (declarator.id as t.Identifier).name;
+      const init = declarator.init as t.Expression;
+      if (names.has(name)) continue;
+      replaceDerivedReads(ctx, init as unknown as BaseNode, derived);
+      refresh();
+      const dependencies = sourceDependencies(ctx, init as unknown as BaseNode, bindings, derived, eventSources);
+      // An event-created source is absent until its event; nothing to wait for.
+      if (dependencies.length === 0 || dependencies.some(source => eventSources.has(source))) continue;
+      const wrapped = resolvedRenderExpression(ctx, init, dependencies, bindings, eventSources, 'deriveResolvedValues');
+      overwriteNode(init as unknown as BaseNode, wrapped as unknown as BaseNode);
+      seeds.push({ binding: name, sources: dependencies, expression: cloneEstreeNode(wrapped, true) });
+    }
+    if (seeds.length > 0) {
+      ctx.transparentStateSeeds.set(component, seeds);
+      refresh();
+    }
+
+    gateSourceEffects(ctx, component, bindings, derived, eventSources, refresh);
     refresh();
 
-    // `<TagList tags={article.tags} />` mounts once `article` commits. A child
-    // component whose props read a loading source is itself a read site: in an
-    // expression container, the walk below gives it an automatic pending/error
-    // site, so the child receives real values. A prop passing the source itself
-    // (`user={article}`) stays the child's to handle.
+    // `<TagList tags={article.tags} />` and `<a href={'/' + article.slug}>`
+    // appear once `article` commits. An element whose props or attributes read
+    // a loading source is itself a read site: in an expression container, the
+    // walk below gives it an automatic pending/error site, so a child receives
+    // real values and a failed request shows the error policy, not a throw. A
+    // prop passing the source itself (`user={article}`) stays the child's to
+    // handle; content inside a gated element is covered by its gate.
     // A component bound to planned initial content already renders with its
     // request data resolved; its authored placement must stay as planned.
     const initiallyBound = ctx.initialDomRoot?.component === component ||
@@ -270,30 +342,57 @@ export function rewriteTransparentDataReads(ctx: Ctx): void {
       }
       return false;
     };
-    const gatedComponents: Array<{ element: BaseNode; parent: BaseNode }> = [];
+    // `return <a href={article.slug}>` from the component itself, not from a callback.
+    const isComponentReturn = (parent: BaseNode): boolean => {
+      if (parent.type !== 'ReturnStatement') return false;
+      let current = ctx.astAnalysis?.parentByNode.get(parent) ?? null;
+      while (current !== null && !astFactory.isFunction(current as unknown as t.Node)) {
+        current = ctx.astAnalysis?.parentByNode.get(current) ?? null;
+      }
+      return current === componentNode;
+    };
+    const gatedElements: Array<{ element: BaseNode; parent: BaseNode; lowered: string[] }> = [];
     if (!initiallyBound) walkAst(componentNode, {
       enter(node, parent) {
-        if (node.type !== 'JSXElement' || parent === null ||
-            (parent.type !== 'JSXElement' && parent.type !== 'JSXFragment')) return;
+        if (node.type !== 'JSXElement' || parent === null) return;
+        const placed = parent.type === 'JSXElement' || parent.type === 'JSXFragment' || isComponentReturn(parent);
+        if (!placed) return;
         const tag = (node as unknown as t.JSXElement).openingElement.name;
-        if (!astFactory.isJSXIdentifier(tag) || !/^[A-Z]/.test(tag.name)) return;
-        const readsSource = (node as unknown as t.JSXElement).openingElement.attributes.some(attribute => {
-          if (!astFactory.isJSXAttribute(attribute) || !astFactory.isJSXExpressionContainer(attribute.value)) return false;
+        const host = astFactory.isJSXIdentifier(tag) && !/^[A-Z]/.test(tag.name);
+        if (!astFactory.isJSXIdentifier(tag)) return;
+        let readsSource = false;
+        // Module-source reads the module pass already lowered keep their binding name.
+        const lowered = new Set<string>();
+        for (const attribute of (node as unknown as t.JSXElement).openingElement.attributes) {
+          if (!astFactory.isJSXAttribute(attribute) || !astFactory.isJSXExpressionContainer(attribute.value)) continue;
           const value = attribute.value as unknown as BaseNode;
-          if (isEventOrRefContainer(ctx, value) || isDirectSourceComponentProp(ctx, value, bindings)) return false;
+          if (isEventOrRefContainer(ctx, value) || (!host && isDirectSourceComponentProp(ctx, value, bindings))) continue;
           const expression = childNode(value, 'expression');
-          return expression !== null && astFactory.isExpression(expression as unknown as t.Node) &&
-            sourceDependencies(ctx, expression, bindings, derived, eventSources).length > 0;
-        });
-        if (readsSource && !insideSourceGatedBranch(node)) gatedComponents.push({ element: node, parent });
+          if (expression === null || !astFactory.isExpression(expression as unknown as t.Node)) continue;
+          if (sourceDependencies(ctx, expression, bindings, derived, eventSources).length > 0) readsSource = true;
+          walkAst(expression, { enter(read) {
+            const binding = asyncReadFact(read)?.binding;
+            if (binding !== undefined && astBindingAt(ctx, node, binding) !== undefined) lowered.add(binding);
+          } });
+        }
+        if ((!readsSource && lowered.size === 0) || insideSourceGatedBranch(node)) return;
+        gatedElements.push({ element: node, parent, lowered: readsSource ? [] : [...lowered] });
+        return false;
       },
     });
-    for (const { element, parent } of gatedComponents) {
+    for (const { element, parent, lowered } of gatedElements) {
+      const site = astFactory.jsxExpressionContainer(element as unknown as t.JSXElement);
+      if (lowered.length > 0) wrapAutomaticSite(ctx, component, element as unknown as t.Expression, lowered);
+      if (parent.type === 'ReturnStatement') {
+        (parent as unknown as t.ReturnStatement).argument = astFactory.jsxFragment(
+          astFactory.jsxOpeningFragment(), astFactory.jsxClosingFragment(), [site]);
+        continue;
+      }
       const children = (parent as unknown as { children: t.JSXElement['children'] }).children;
       const index = children.indexOf(element as unknown as t.JSXElement);
-      if (index !== -1) children[index] = astFactory.jsxExpressionContainer(element as unknown as t.JSXElement);
+      if (index !== -1) children[index] = site;
     }
-    if (gatedComponents.length > 0) refresh();
+    if (gatedElements.length > 0) refresh();
 
     walkAst(componentNode, {
       enter(container) {

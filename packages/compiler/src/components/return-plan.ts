@@ -274,6 +274,27 @@ function switchPlan(
 }
 
 /**
+ * The same choice as one JSX conditional (`t0 ? <A/> : t1 ? <B/> : <C/>`),
+ * for an if/else or early-return chain; a switch keeps its own picker. The
+ * branch JSX moves into the conditional, keeping facts recorded on its nodes.
+ */
+export function returnPlanAsConditional(plan: ComponentReturnPlan): t.Expression | null {
+  const build = (pick: t.Node): t.Expression | null => {
+    if (astFactory.isNumericLiteral(pick)) {
+      const branch = plan.branches[pick.value];
+      return branch === undefined ? null : branch === null ? astFactory.nullLiteral() : branch;
+    }
+    if (!astFactory.isConditionalExpression(pick)) return null;
+    const consequent = build(pick.consequent);
+    const alternate = build(pick.alternate);
+    return consequent === null || alternate === null
+      ? null
+      : astFactory.conditionalExpression(cloneEstreeNode(pick.test), consequent, alternate);
+  };
+  return build(plan.pick.body);
+}
+
+/**
  * Supported structural forms:
  * - one direct JSX return
  * - a contiguous tail chain of `if (test) return <JSX|null>` plus final return

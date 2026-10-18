@@ -21,6 +21,7 @@ import {
   isBoundTo,
   isEventOrRefContainer,
   isPassthroughArgument,
+  stateSeedDeclarators,
 } from '../analysis/transparent-reads';
 import { isGeneratedDataCall } from './data-read-recognition';
 
@@ -45,9 +46,13 @@ export function lowerModuleRefReadsEstree(
   refresh: () => void,
 ): void {
   const entries: EstreeModuleSourceEntry[] = [];
+  const program = ctx.astAnalysis?.rootScope.block;
   for (const [name, key] of ctx.transparentModuleSources) {
     const binding = astBindingAt(ctx, component, name);
-    if (binding !== undefined) entries.push({ name, key, binding });
+    // A prop or local that shadows the module source's name is not that source.
+    if (binding !== undefined && program !== undefined && astBindingAt(ctx, program, name) === binding) {
+      entries.push({ name, key, binding });
+    }
   }
   if (entries.length === 0) return;
   ctx.usesTransparentData = true;
@@ -121,8 +126,8 @@ export function lowerModuleRefReadsEstree(
   };
   /**
    * `operand` → `!resolvedValuesPending([refs]) && operand`, its module reads
-   * lowered in place. The operand stays where it is, so component-local source
-   * reads inside it are still lowered by read rewriting.
+   * lowered in place. Only for planned initial content, whose sources have
+   * committed before it renders.
    */
   const wrapReads = (operand: BaseNode): void => {
     const reads = collectOutsideJsx(operand);
@@ -136,6 +141,8 @@ export function lowerModuleRefReadsEstree(
       ]), unique.map(entry => entry.key), 'undefined')),
       lowered) as unknown as BaseNode);
   };
+  /** Module-source reads in a choice, left for read rewriting to gate with the choice's other sources. */
+  const choiceReads = new Set<BaseNode>();
   const replaceRead = (
     identifier: BaseNode,
     entry: EstreeModuleSourceEntry,
@@ -215,12 +222,19 @@ export function lowerModuleRefReadsEstree(
       // A conditional child stays a conditional: only its own operands are
       // lowered here; branch JSX keeps its containers, visited next.
       if (isConditionalJsx(expression)) {
-        // The condition runs only once every source it reads has committed
-        // (`me !== null && me.name` must not see a pending `me`); until then it
-        // is undefined and the falsy branch renders.
+        // `{me === null ? <SignIn/> : <Avatar profile={me}/>}` chooses only once
+        // `me` has committed: like a local source, the choice is a read site
+        // showing the pending policy, never a branch picked from missing data.
         const conditions = conditionOperands(expression);
-        for (const condition of conditions) wrapReads(condition);
+        if (initialReadPlacement(ctx, componentName, rawExpression).structural) {
+          for (const condition of conditions) wrapReads(condition);
+        } else {
+          for (const condition of conditions) {
+            for (const { identifier } of collectOutsideJsx(condition)) choiceReads.add(identifier);
+          }
+        }
         for (const { identifier, entry } of collectOutsideJsx(rawExpression)) {
+          if (choiceReads.has(identifier)) continue;
           replaceRead(identifier, entry, isListReceiver(identifier) ? 'readModuleSourceList' : 'readResolvedValueForRender');
         }
         annotateTransparentSources(expression, transparentExpressionSources(expression));
@@ -286,23 +300,41 @@ export function lowerModuleRefReadsEstree(
     },
   });
 
+  // Derivation roots, state seeds and effects wait for their sources; read
+  // rewriting gates them together with the component's local sources.
   const derivationDeclarations = new Set(
     (ctx.instanceDerivations.get(componentName) ?? [])
       .map((derivation) => derivation.declaration as unknown as BaseNode),
   );
-  const insideDerivationInit = (identifier: BaseNode): boolean => {
+  const seedDeclarators = new Set<BaseNode>(
+    stateSeedDeclarators(ctx, componentName, component as unknown as t.FunctionDeclaration)
+      .map(declarator => declarator as unknown as BaseNode),
+  );
+  const effectCallbacks = new Set<BaseNode>(
+    (ctx.effects.get(componentName) ?? []).map(site => site.callback as unknown as BaseNode),
+  );
+  const insideGatedInit = (identifier: BaseNode): boolean => {
     let current = ctx.astAnalysis?.parentByNode.get(identifier) ?? null;
     while (current !== null && !current.type.endsWith('Statement')) {
       if (current.type === 'VariableDeclarator') {
         const declaration = ctx.astAnalysis?.parentByNode.get(current) ?? null;
-        return declaration !== null && derivationDeclarations.has(declaration);
+        return seedDeclarators.has(current) || declaration !== null && derivationDeclarations.has(declaration);
       }
       current = ctx.astAnalysis?.parentByNode.get(current) ?? null;
     }
     return false;
   };
+  const insideEffect = (identifier: BaseNode): boolean => {
+    for (let current = ctx.astAnalysis?.parentByNode.get(identifier) ?? null; current !== null;
+      current = ctx.astAnalysis?.parentByNode.get(current) ?? null) {
+      if (effectCallbacks.has(current)) return true;
+    }
+    return false;
+  };
   const imperative = collect(component).filter(({ identifier }) =>
-    !insideDerivationInit(identifier) &&
+    !choiceReads.has(identifier) &&
+    !insideGatedInit(identifier) &&
+    !insideEffect(identifier) &&
     !isActionRefreshTarget(ctx, identifier) &&
     !isGeneratedDataCall(ctx, identifier)
   );

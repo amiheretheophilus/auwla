@@ -12,12 +12,21 @@ export function buildDerivationReplay(ctx:DomContext,derivation:LocalDerivation)
   if(replay!==undefined) {
     if(!astFactory.isIdentifier(derivation.target))
       throw new Error('memo-dom: stable source replay requires an identifier target');
-    const target=cloneNode(derivation.target);
-    return astFactory.expressionStatement(replay.kind==='provider'
+    const target=derivation.target;
+    const rebind=(call:t.CallExpression):t.Expression=>replay.kind==='provider'
       ? astFactory.callExpression(mdd(ctx,'rebindResolvedValue'),
-          [target,...replay.call.arguments.map(argument=>cloneNode(argument))])
+          [cloneNode(target),...call.arguments.map(argument=>cloneNode(argument))])
       : astFactory.callExpression(mdd(ctx,'rebindResolvedValueFromFactory'),
-          [target,astFactory.arrowFunctionExpression([],cloneNode(replay.call))]));
+          [cloneNode(target),astFactory.arrowFunctionExpression([],cloneNode(call))]);
+    if(replay.gate===undefined) return astFactory.expressionStatement(rebind(replay.call));
+    // The gate's callback receives the committed values in place of the
+    // sources the call reads; the rebind runs inside it.
+    const gate=cloneNode(replay.gate,true);
+    const callback=gate.arguments[1];
+    if(!astFactory.isArrowFunctionExpression(callback)||!astFactory.isCallExpression(callback.body))
+      throw new Error('memo-dom: gated source replay requires a call callback');
+    callback.body=rebind(callback.body);
+    return astFactory.expressionStatement(gate);
   }
   return astFactory.expressionStatement(astFactory.assignmentExpression('=',
     assignmentTarget(derivation.target),cloneNode(derivation.source)));

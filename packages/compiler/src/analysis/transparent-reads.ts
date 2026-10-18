@@ -20,6 +20,28 @@ export interface TransparentDerivation {
   requestStateOnly?: boolean;
 }
 
+/**
+ * `let` state declared in a component body with an initializer. A source read
+ * there seeds the state once the source commits, so the module pass leaves
+ * those reads to read rewriting, as it does derivation roots.
+ */
+export function stateSeedDeclarators(
+  ctx: Ctx,
+  component: string,
+  node: t.FunctionDeclaration,
+): t.VariableDeclarator[] {
+  const state = ctx.instanceState.get(component);
+  if (state === undefined) return [];
+  const derivations = new Set<t.Statement>(
+    (ctx.instanceDerivations.get(component) ?? []).map(derivation => derivation.declaration));
+  return node.body.body.flatMap(statement =>
+    astFactory.isVariableDeclaration(statement) && statement.kind === 'let' && !derivations.has(statement)
+      ? statement.declarations.filter(declarator =>
+          astFactory.isIdentifier(declarator.id) && state.has(declarator.id.name) &&
+          declarator.init != null && !astFactory.isFunction(declarator.init))
+      : []);
+}
+
 export function isBoundTo(
   ctx: Ctx,
   identifier: BaseNode,

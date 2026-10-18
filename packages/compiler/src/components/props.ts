@@ -115,8 +115,17 @@ export interface LocalDerivation {
    * case: subscribers must keep the original resource identity.
    */
   stableTarget?: boolean;
-  /** Stable source identity and authored call; a backend chooses its replay ABI. */
-  replay?: { readonly kind: 'provider' | 'factory'; readonly call: t.CallExpression };
+  /**
+   * Stable source identity and authored call; a backend chooses its replay ABI.
+   * A call reading other sources carries its gate,
+   * `deriveResolvedValues([sources], (values) => call)`: it replays only once
+   * they have committed.
+   */
+  replay?: {
+    readonly kind: 'provider' | 'factory';
+    readonly call: t.CallExpression;
+    readonly gate?: t.CallExpression;
+  };
 }
 
 export interface ControlFlowDerivation {

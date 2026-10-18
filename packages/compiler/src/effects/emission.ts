@@ -12,7 +12,7 @@ import {
 import { refreshAstAnalysis, type EffectSite, type ModuleEffectSite, type ProgramPath } from '../context';
 import { instanceSourceReasons } from '../dom/instance-reasons';
 import { type DomContext as Ctx } from '../dom/context';
-import { generatedIdentifier, md } from '../dom/identifiers';
+import { generatedIdentifier, md, mdd } from '../dom/identifiers';
 import type { EmitScope } from '../dom/scope';
 import {
   activeEffectId,
@@ -224,7 +224,7 @@ export function buildEffectRegistrations(
   factoryId: string,
   sites: EffectSite[],
 ): t.Statement[] {
-  return sites.map((site) =>
+  return sites.flatMap((site) => [
     astFactory.expressionStatement(
       astFactory.callExpression(
         md(
@@ -248,7 +248,19 @@ export function buildEffectRegistrations(
         ],
       ),
     ),
-  );
+    // The gated callback waits for these sources; each commit re-runs it.
+    ...(site.transparentSources === undefined ? [] : [astFactory.expressionStatement(
+      astFactory.callExpression(md(ctx, 'cleanup'), [
+        effectId(factoryId, site.index),
+        astFactory.callExpression(mdd(ctx, 'connectResolvedValues'), [
+          astFactory.arrayExpression(site.transparentSources.map(source => astFactory.identifier(source))),
+          astFactory.arrowFunctionExpression([], astFactory.callExpression(md(ctx, 'invalidateEntity'), [
+            site.condition === null ? effectId(factoryId, site.index) : activeEffectId(factoryId, site.index),
+          ])),
+        ]),
+      ]),
+    )]),
+  ]);
 }
 
 function importMetaHot(): t.MemberExpression {

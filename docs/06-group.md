@@ -123,6 +123,14 @@ const article = $fetch<Article>('/api/article/' + route.params.slug);
 then their place shows the pending policy. Pass the source itself
 (`<Card article={article} />`) when the child should own its loading states.
 
+The same holds for an element whose attributes read loading data:
+`<a href={'/article/' + article.slug}>` appears once `article` commits, and the
+pending or error policy shows in its place. An attribute is never rendered from
+missing data, and a failed request shows the error policy rather than breaking
+the page. A condition is a read site too: `{me === null ? <SignIn /> :
+<Avatar profile={me} />}` shows the pending policy until `me` commits, then
+picks its branch.
+
 ## How inheritance works
 
 Group supplies two independent policies. A nested Group replaces only the

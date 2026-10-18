@@ -164,18 +164,34 @@ export function transparentSourceMounts(
 ): t.Statement[] {
   const transported = ctx.transparentSourceProps.get(component);
   const eventSources = ctx.eventSourceSlots.get(component);
-  return [...(ctx.transparentSources.get(component) ?? [])]
-    .filter((source) =>
-      transported?.has(source) !== true && eventSources?.has(source) !== true
-    )
-    .map((source) =>
-      astFactory.expressionStatement(
-        astFactory.callExpression(md(ctx, 'cleanup'), [
-          cloneNode(owner),
-          astFactory.callExpression(mdd(ctx, 'ownResolvedValue'), [
-            astFactory.identifier(source),
-          ]),
+  const cleanup = (disposer: t.Expression): t.Statement => astFactory.expressionStatement(
+    astFactory.callExpression(md(ctx, 'cleanup'), [cloneNode(owner), disposer]));
+  const sources = (names: Iterable<string>): t.ArrayExpression =>
+    astFactory.arrayExpression([...names].map(name => astFactory.identifier(name)));
+  const invalidate = (): t.ArrowFunctionExpression => astFactory.arrowFunctionExpression([],
+    astFactory.callExpression(md(ctx, 'invalidateEntity'), [cloneNode(owner)]));
+  const followed = ctx.transparentOwnerSources.get(component);
+  return [
+    ...[...(ctx.transparentSources.get(component) ?? [])]
+      .filter((source) =>
+        transported?.has(source) !== true && eventSources?.has(source) !== true
+      )
+      .map((source) => cleanup(
+        astFactory.callExpression(mdd(ctx, 'ownResolvedValue'), [
+          astFactory.identifier(source),
         ]),
-      ),
-    );
+      )),
+    // A request built from another source's data replays with the owner.
+    ...(followed === undefined ? [] : [cleanup(
+      astFactory.callExpression(mdd(ctx, 'connectResolvedValues'), [sources(followed), invalidate()]),
+    )]),
+    ...(ctx.transparentStateSeeds.get(component) ?? []).map(seed => cleanup(
+      astFactory.callExpression(mdd(ctx, 'seedResolvedValues'), [
+        sources(seed.sources),
+        astFactory.arrowFunctionExpression([], astFactory.blockStatement([astFactory.expressionStatement(
+          astFactory.assignmentExpression('=', astFactory.identifier(seed.binding), cloneNode(seed.expression, true)))])),
+        invalidate(),
+      ]),
+    )),
+  ];
 }

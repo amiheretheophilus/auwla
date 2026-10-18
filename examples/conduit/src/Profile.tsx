@@ -14,7 +14,7 @@ export function Profile() {
 
   return (
     <Group pending={() => <p class="muted">Loading profile…</p>} error={({ error }) => <p class="error">{error.message}</p>}>
-      <div class="profile-page">
+      <div class="profile-page" suspend>
         <section class="banner user">
           <Avatar profile={profile} size={100} />
           <h1>{profile.username}</h1>

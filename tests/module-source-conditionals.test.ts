@@ -60,6 +60,7 @@ it.each([
     './App.tsx': `import { $track } from '@memoized-dom/data'; import { me } from './session';
       export function App() { return <main><button id="refresh" onClick={() => $track(me).refresh()} /><nav>${header}</nav></main>; }`,
   });
+  expect(nav()).toBe('');
   await respond(null);
   await waitFor(() => expect(nav()).toBe('<a>Sign in</a>'));
   document.querySelector<HTMLButtonElement>('#refresh')!.click();
@@ -74,9 +75,24 @@ it('a condition that dereferences a loading module source waits instead of throw
     './App.tsx': `import { me } from './session';
       export function App() { return <main><nav>{me !== null && me.name === 'ada' ? <b>owner</b> : <i>reader</i>}</nav></main>; }`,
   });
-  expect(nav()).toBe('<i>reader</i>');
+  expect(nav()).toBe('');
   await respond({ name: 'ada' });
   await waitFor(() => expect(nav()).toBe('<b>owner</b>'));
+});
+
+// Conduit's navbar: while `me` loads, the signed-in branch must not mount a
+// child that reads `me` (on the server it then crashed once `me` was null).
+it('a choice over a loading module source shows the pending policy, then the chosen branch', async () => {
+  await mount('pending-choice', {
+    './session.ts': SESSION,
+    './App.tsx': `import { Group } from '@memoized-dom/data'; import { me } from './session';
+      function Card({ user }: { user: { name: string } }) { return <b>{user.name}</b>; }
+      export function App() { return <main><nav><Group pending={() => <i>…</i>}>
+        {me === null ? <a>Sign in</a> : <Card user={me} />}</Group></nav></main>; }`,
+  });
+  expect(nav()).toBe('<i>…</i>');
+  await respond(null);
+  await waitFor(() => expect(nav()).toBe('<a>Sign in</a>'));
 });
 
 it.each([
@@ -91,6 +107,17 @@ it.each([
   });
   await respond({ name: 'ada' });
   await waitFor(() => expect(nav()).toBe('<b>ada</b>'));
+});
+
+// A prop named like an imported module source is the prop, not that source.
+it('a prop that shadows a module source name reads the value it was given', async () => {
+  await mount('shadowed-prop', {
+    './session.ts': SESSION,
+    './App.tsx': `import { me } from './session';
+      function Card({ me }: { me: { name: string } }) { return <b title={me.name}>{me.name}</b>; }
+      export function App() { return <main><nav><Card me={{ name: 'grace' }} /></nav></main>; }`,
+  });
+  expect(nav()).toBe('<b title="grace">grace</b>');
 });
 
 // A server function, or any app helper returning a source, called at module

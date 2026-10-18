@@ -43,6 +43,24 @@ try {
   page.on('console', message => { if (message.text().startsWith('[render error]')) problems.push(message.text()); });
   page.on('pageerror', error => problems.push('pageerror: ' + String(error).slice(0, 300)));
   if (process.env.FLOW_DEBUG) page.on('response', r => { if (r.request().method() !== 'GET' && r.url().includes('_fn')) console.log('  response', r.status(), new URL(r.url()).pathname, r.request().postData()?.slice(0, 120)); });
+  // A hard refresh gets real HTML from the server, before any script runs.
+  await step('the server renders every page', async () => {
+    const html = async (path: string) => (await (await fetch(origin + path)).text()).replace(/<!--[^>]*-->/g, '');
+    const expectations: Array<[string, string]> = [
+      ['/', 'class="preview"'], ['/login', '<h1>Sign in</h1>'], ['/register', '<h1>Sign up</h1>'],
+      ['/profile/ada', '<h1>ada</h1>'], ['/profile/nobody', 'No such user: nobody'],
+      ['/article/no-such-article', '<h1>Article not found</h1>'], ['/nope', 'Nothing lives here.'],
+    ];
+    const article = (await html('/')).match(/href="(\/article\/[^"]+)"/)?.[1];
+    if (article === undefined) throw new Error('home links to no article');
+    expectations.push([article, 'class="article-body"']);
+    for (const [path, expected] of expectations) {
+      const body = await html(path);
+      if (!body.includes('<div id="root"><div class="app">')) throw new Error(`${path} rendered no server HTML`);
+      if (!body.includes(expected)) throw new Error(`${path} server HTML lacks ${expected}`);
+    }
+  });
+
   await page.goto(origin + '/', { waitUntil: 'domcontentloaded' });
 
   await step('home shows the global feed', () => until(page, () => document.querySelectorAll('.preview').length === 3));

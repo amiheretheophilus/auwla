@@ -188,7 +188,8 @@ the client facade decodes the body as it does for other `$fetch` calls. With
 infer its body shape. On a non-2xx response, `$track(call).error` is a
 `RequestError` with `status` and
 the decoded body in `data`. When that body is JSON with a `message` string,
-it is the error's message, so a form shows it directly:
+it is the error's message, for live functions too, so a form or a Group's error
+policy shows it directly:
 
 ```ts
 if (user === null) return json({ message: 'Email or password is invalid' }, { status: 401 });

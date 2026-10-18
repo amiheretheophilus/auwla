@@ -15,6 +15,7 @@ export {
 export {
   connectResolvedValue,
   connectResolvedValues,
+  seedResolvedValues,
   createEventSourceSlot,
   disposeEventSourceSlot,
   rebindEventSourceSlot,

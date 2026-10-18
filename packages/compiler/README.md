@@ -650,23 +650,35 @@ Module-scope sources follow the same rules as component-local ones:
   `rebindModuleSourceFromFactory`.
 - Passed as a prop (`<Avatar profile={me} />`), the component receives the
   source itself (`sourceRef(key)`), as with a local source.
-- A conditional over one stays a conditional: its branches keep their own read
-  containers, and each condition operand is guarded as
-  `!resolvedValuesPending([refs]) && operand` (false while loading, so the
-  falsy branch renders). The operand stays in place, so local source reads in it
-  are lowered by read rewriting as usual.
+- A conditional over one stays a conditional whose choice waits: module
+  lowering leaves the source names in the condition operands, and read
+  rewriting gates the whole conditional as one automatic site over every source
+  the choice reads, local or module. No branch is picked from missing data (on
+  the server that mounted the signed-in branch for a signed-out visitor). Only a
+  planned initial-content site keeps the in-place
+  `!resolvedValuesPending([refs]) && operand` guard.
+- Only the module-level binding is the source: a prop or local that shadows its
+  name is lowered as that prop or local.
+- Server builds never lift a module source into a request-owned state cell
+  (`cells.ts`); the active data runtime already owns it per request.
 
 Component-local sources follow two more rules:
 
 - `normalizeSourceChoices` (`analysis/source-calls.ts`, run by
   `prepareProgramAnalysis`): `cond ? getA(x) : getA(y)` is one source,
   `getA(cond ? x : y)`; a choice between different factories is a diagnostic.
-- A child component whose props read a loading source is itself a read site:
-  read rewriting puts it in an expression container that becomes an automatic
-  pending/error site, so the child mounts with real values. A prop passing the
-  source itself stays the child's to handle; components inside a branch whose
-  selector already reads a source are covered by that site; components bound to
-  a planned initial-content root keep their planned placement.
+- An element whose props or attributes read a loading source is itself a read
+  site, host or component: `<a href={article.slug}>`, `<TagList
+  tags={article.tags} />`. It goes in an expression container that becomes an
+  automatic pending/error site, so attributes and child props get real values
+  and a failed request shows the error policy instead of throwing. Inside a
+  Group, `group-lowering.ts` gates these elements with the Group's policy; read
+  rewriting gates the rest (including a component's own root return, wrapped in
+  a fragment) with the inherited policy, also for reads the module pass already
+  lowered. A prop passing the source itself stays the child's to handle;
+  elements inside a gated element or a source-selected branch are covered by
+  that site; components bound to a planned initial-content root keep their
+  planned placement.
 
 The dependency direction is discovery/analysis → transforms → orchestration.
 Emission metadata and policy construction are shared domain services. Avoid

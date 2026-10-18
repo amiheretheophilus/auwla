@@ -421,6 +421,9 @@ async function bodySchemaInput(request: Request): Promise<unknown> {
  * never silent on the server: a page that renders empty must say why.
  */
 function reportUnhandledError(request: Request, error: unknown): void {
+  // A request its caller cancelled (a navigation, a finished page render)
+  // did not fail.
+  if (request.signal.aborted || (error as { name?: unknown } | null)?.name === 'AbortError') return;
   const url = new URL(request.url);
   console.error(`[memoized-dom] ${request.method} ${url.pathname} failed:`, error);
 }

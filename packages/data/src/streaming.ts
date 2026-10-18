@@ -60,8 +60,8 @@ function transport(environment: FetchEnvironment, runtime: CoreDataRuntime): Non
         method: descriptor.method, headers, body: descriptor.body, signal,
       });
       if (!response.ok) {
-        if (descriptor.stream === 'page') await decodeResponse(response, descriptor.schema);
-        await response.body?.cancel();
+        // The same RequestError a plain request gets, message from the body.
+        await decodeResponse(response, descriptor.schema);
         throw new RequestError(`Streaming request failed with status ${response.status}`, { kind: 'http', status: response.status });
       }
       if (snapshot) {

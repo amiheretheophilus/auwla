@@ -85,7 +85,7 @@ export function Article() {
   const article = getArticle(route.params.slug);
   return (
     <Group pending={Loading} error={Missing}>
-      <div class="article-page">
+      <div class="article-page" suspend>
         <section class="banner dark">
           <h1>{article.title}</h1>
           <AuthorLine article={article} />

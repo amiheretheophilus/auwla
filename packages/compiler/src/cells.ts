@@ -217,6 +217,9 @@ export function liftModuleStateCells(
 
   for (const [local, kind] of ctx.state) {
     if (kind !== 'let' && kind !== 'store') continue;
+    // A module source is already request-owned through the active data
+    // runtime; a cell would replace it with an empty per-request value.
+    if (ctx.transparentModuleSources?.has(local) === true) continue;
     const key = ctx.stateKeys.get(local);
     if (key === undefined) continue;
     const binding = astBindingAt(ctx, program, local);

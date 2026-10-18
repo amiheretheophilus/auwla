@@ -387,6 +387,15 @@ export interface EffectSite {
   conditionModuleReads: Set<string>;
   conditionLocalReads: Set<string>;
   conditionLocalDerivationReads: Set<string>;
+  /** Mount-time sources the callback waits for; their commits re-run it. */
+  transparentSources?: readonly string[];
+}
+
+/** `let tab = me === null ? …`: the gated seed, assigned once its sources commit. */
+export interface TransparentStateSeed {
+  binding: string;
+  sources: readonly string[];
+  expression: t.Expression;
 }
 
 /** One singleton reactive effect declared directly at module scope. */
@@ -464,6 +473,10 @@ export interface Ctx {
   /** Component-local source holders and track-state aliases. */
   transparentSources: Map<string, Set<string>>;
   transparentTrackBindings: Map<string, Map<string, readonly string[]>>;
+  /** State seeded from sources: assigned once every source has committed. */
+  transparentStateSeeds: Map<string, TransparentStateSeed[]>;
+  /** Sources whose commit replays the owner (a request built from another's data). */
+  transparentOwnerSources: Map<string, Set<string>>;
   /** Module-scope transparent sources: local binding name → canonical key. */
   transparentModuleSources: Map<string, string>;
   /** Direct prop binding -> authored prop name for transported source holders. */
@@ -819,6 +832,8 @@ export function createAnalysisCtx(opts: AnalysisOptions = {}): Ctx {
     transparentGroups: new Set(),
     transparentSources: new Map(),
     transparentTrackBindings: new Map(),
+    transparentStateSeeds: new Map(),
+    transparentOwnerSources: new Map(),
     importedState,
     importedFunctions,
     importedComponents,

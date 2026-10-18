@@ -522,6 +522,34 @@ export function connectResolvedValues(
   };
 }
 
+/**
+ * State seeded from sources (`let tab = me === null ? 'global' : 'feed'`)
+ * starts once every source has committed, then is ordinary state: `seed`
+ * assigns it once and `invalidate` renders the owner. A seed whose sources
+ * had already committed was assigned by its declaration.
+ */
+export function seedResolvedValues(
+  values: readonly ResolvedValue<unknown>[],
+  seed: () => void,
+  invalidate: () => void,
+): () => void {
+  const committed = (): boolean => values.every(value => snapshotOf(value).status === 'success');
+  if (committed()) return () => {};
+  let active = true;
+  const unsubscribes = values.map(value => observeResolvedValue(value, () => {
+    if (!active || !committed()) return;
+    stop();
+    seed();
+    invalidate();
+  }));
+  function stop(): void {
+    if (!active) return;
+    active = false;
+    for (const unsubscribe of unsubscribes) unsubscribe();
+  }
+  return stop;
+}
+
 /** Give one creating component sole disposal authority over a local source. */
 export function ownResolvedValue<T>(
   value: ResolvedValue<T> | ModuleSourceRef,

@@ -49,7 +49,7 @@ export const getTags = define.function({
 export const getArticle = define.function({
   async get({ services, state }, slug: string) {
     await delay(200);
-    return services.store.article(slug, state.user);
+    return answer(() => services.store.article(slug, state.user), 404);
   },
   live: (_context, slug) => ['conduit', 'articles', slug],
 });
@@ -64,7 +64,7 @@ export const getComments = define.function({
 export const getProfile = define.function({
   async get({ services, state }, username: string) {
     await delay(150);
-    return services.store.profile(username, state.user);
+    return answer(() => services.store.profile(username, state.user), 404);
   },
   live: (_context, username) => ['conduit', 'profiles', username],
 });

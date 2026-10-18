@@ -199,6 +199,23 @@ describe('server HTTP router', () => {
     } finally { logged.mockRestore(); }
   });
 
+  // A server render that finishes cancels the nested calls it no longer needs.
+  it('does not log a request its caller cancelled', async () => {
+    const logged = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      const router = createServerRouter({
+        routes: createServerFunctionRoutes([{
+          id: 'slow', method: 'GET', path: '/_fn/slow', parameters: [],
+          handler: () => { throw new DOMException('The operation was aborted.', 'AbortError'); },
+        }]),
+      });
+      const controller = new AbortController();
+      controller.abort();
+      await router.fetch(new Request('https://app.test/_fn/slow', { signal: controller.signal }));
+      expect(logged).not.toHaveBeenCalled();
+    } finally { logged.mockRestore(); }
+  });
+
   it('attaches request-owned server capabilities to routed preparation', async () => {
     registerRoutedPreparation({
       id: 'server-report-preparation',
