@@ -337,7 +337,15 @@ async function renderPage<
     outcome: RenderReport['outcome'],
     detail: { settleMs?: number; error?: unknown } = {},
   ): void => {
-    options.onRender?.({
+    if (options.onRender === undefined) {
+      // A page whose render failed still reaches the browser (an empty outlet
+      // the client mounts fresh, or a 500); without onRender, say why here.
+      if (outcome === 'error' || outcome === 'deadline') {
+        console.error(`[memoized-dom] server render of ${context.url.pathname} failed (${outcome}):`, detail.error);
+      }
+      return;
+    }
+    options.onRender({
       url: context.url,
       delivery,
       outcome,

@@ -110,6 +110,22 @@ describe('SSR delivery', () => {
     expect(harness.apiSignals[0]!.aborted).toBe(true);
   });
 
+  it('logs a failed render on the server when no onRender is configured', async () => {
+    const logged: unknown[][] = [];
+    const original = console.error;
+    console.error = (...args: unknown[]) => { logged.push(args); };
+    try {
+      const app = serve({ define: createDefine() });
+      app.get('/api/user', () => new Promise(() => {}));
+      app.ssr(fixture.serverModule.App, { deadline: 40 });
+      (app as unknown as { installDocumentTemplate(template: string): void }).installDocumentTemplate(TEMPLATE);
+      const response = await app.fetch(new Request('https://app.test/'));
+      expect(await response.text()).toBe(TEMPLATE.replace('<!--ssr-outlet-->', ''));
+      await waitFor(() => expect(logged).toHaveLength(1));
+      expect(String(logged[0]![0])).toContain('server render of / failed (deadline)');
+    } finally { console.error = original; }
+  });
+
   it('stops request-owned work when the client disconnects mid-stream', async () => {
     const harness = createApp();
     const response = await harness.app.fetch(new Request('https://app.test/'));

@@ -181,6 +181,24 @@ describe('server HTTP router', () => {
     expect(onError).not.toHaveBeenCalled();
   });
 
+  it('logs an unhandled failure on the server when no onError is configured', async () => {
+    const logged = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      const router = createServerRouter({
+        routes: createServerFunctionRoutes([{
+          id: 'boom', method: 'GET', path: '/_fn/boom', parameters: [],
+          handler: () => { throw new Error('database unreachable'); },
+        }]),
+      });
+      const response = await router.fetch(new Request('https://app.test/_fn/boom'));
+      expect(response.status).toBe(500);
+      expect(await response.text()).toBe('Internal Server Error');
+      expect(logged).toHaveBeenCalledTimes(1);
+      expect(String(logged.mock.calls[0]![0])).toContain('GET /_fn/boom failed');
+      expect(String(logged.mock.calls[0]![1])).toContain('database unreachable');
+    } finally { logged.mockRestore(); }
+  });
+
   it('attaches request-owned server capabilities to routed preparation', async () => {
     registerRoutedPreparation({
       id: 'server-report-preparation',

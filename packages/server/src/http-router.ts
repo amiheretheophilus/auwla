@@ -416,6 +416,15 @@ async function bodySchemaInput(request: Request): Promise<unknown> {
   }
 }
 
+/**
+ * Without `onError`, the client still gets a private 500, but the failure is
+ * never silent on the server: a page that renders empty must say why.
+ */
+function reportUnhandledError(request: Request, error: unknown): void {
+  const url = new URL(request.url);
+  console.error(`[memoized-dom] ${request.method} ${url.pathname} failed:`, error);
+}
+
 function serverFunctionError(error: ServerFunctionInputError): Response {
   return Response.json({
     error: 'invalid_server_function_input',
@@ -863,14 +872,13 @@ export function createServerRouter<
       platform,
       services,
     }, LIVE_HEARTBEAT_INTERVAL, {value: liveHeartbeatInterval}));
-    if (options.onError !== undefined) {
-      streamErrorReporters.set(context, async error => {
-        // Headers/status are already committed: use onError for server-side
-        // observation, discard its replacement response and release its body.
-        const response = await options.onError!(error, context);
-        await response.body?.cancel();
-      });
-    }
+    streamErrorReporters.set(context, async error => {
+      // Headers/status are already committed: use onError for server-side
+      // observation, discard its replacement response and release its body.
+      if (options.onError === undefined) { reportUnhandledError(request, error); return; }
+      const response = await options.onError(error, context);
+      await response.body?.cancel();
+    });
 
     let terminal: (
       value: ServerContext<TLocals, TPlatform, TServices>,
@@ -903,6 +911,7 @@ export function createServerRouter<
       const response = await runMiddleware(middleware, terminal, context);
       return method === 'HEAD' ? withoutBody(response) : response;
     } catch (error) {
+      if (options.onError === undefined) reportUnhandledError(request, error);
       const response = options.onError === undefined
         ? new Response('Internal Server Error', { status: 500 })
         : await options.onError(error, context);

@@ -35,6 +35,10 @@ const app = serve({
 export default app;
 ```
 
+Without `onError`, a failed request still answers a private
+`500 Internal Server Error`, and the error is logged on the server with its
+method and path, so nothing fails silently.
+
 `state` runs once for each application dispatch. The same mutable object flows
 through that dispatch's global middleware, path middleware, and final route or
 server-function handler. A different dispatch gets a different object.
@@ -107,7 +111,9 @@ for the normal `vite.config.ts`, runtime selection, commands, and hot updates.
 ## `render` and `onRender` — how pages render and how they went
 
 `render` sets application-wide SSR defaults; each `app.ssr()` call can
-override them for its root:
+override them for its root. A render that fails after the document has started
+closes it with an empty outlet (the browser mounts fresh) and is reported to
+`onRender`; without `onRender`, the failure is logged on the server.
 
 ```ts
 const app = serve({
