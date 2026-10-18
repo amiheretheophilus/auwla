@@ -22,6 +22,7 @@ Optional capability packages:
 - `@memoized-dom/data` — `$fetch`, `$read`, `$track`, `$forms`, and `<Group>`
 - `@memoized-dom/router` — client-side routing, navigation, and `$routed`
 - `@memoized-dom/server` — `serve()`, server routes, SSR, and streaming
+- `@memoized-dom/devtools` — the development-only visual inspector
 
 Use `memoized-dom dev` and `memoized-dom build` for every application target.
 The Vite configuration selects browser-only, Bun, Node, or Cloudflare behavior.
@@ -35,9 +36,12 @@ Return server-owned UI through `page(...)` from finite or live server functions.
 See [server-owned components](./docs/server-components-design.md) for authoring,
 local interactivity, forms, ownership, and first-version boundaries.
 
-For debugging, see [live delivery diagnostics](./docs/live-diagnostics.md) and
-[opt-in event/binding/DOM tracing](./docs/runtime-diagnostics.md). Both use the
-development console; application authoring stays unchanged.
+For debugging, press **Alt+Shift+M** during development to open the separate
+[`@memoized-dom/devtools` inspector](./packages/devtools/README.md): Live,
+Events, Regions and Issues, with bounded metadata capture and no application imports.
+Console [live delivery diagnostics](./docs/live-diagnostics.md) and
+[opt-in event/binding/DOM tracing](./docs/runtime-diagnostics.md) remain available
+independently. Application authoring stays unchanged.
 
 ### 2. Configuration
 

@@ -9,18 +9,22 @@ import {
   type Binding as AstBinding,
   type Identifier as AstIdentifier,
 } from '../ast';
-import { astBindingAt } from '../context';
+import { astBindingAt, nodeHasJsx } from '../context';
 import { type DomContext as Ctx } from './context';
 import { generatedIdentifier, mdd } from './identifiers';
-import {annotateAsyncRead} from '../planning/async-reads';
+import {annotateAsyncRead, asyncReadFact} from '../planning/async-reads';
 import {
   isBoundTo,
+  isDirectSourceComponentProp,
+  isEventOrRefContainer,
   isEventSourceHolderReference,
+  isGroupDataContainer,
   isPassthroughArgument,
   sourceDependencies,
   type TransparentDerivation,
 } from '../analysis/transparent-reads';
 import { sourceArray, type RenderGatedExpression } from './data-subscriptions';
+import { matchMapCall } from '../lists';
 
 export function replaceDerivedReads(
   ctx: Ctx,
@@ -162,6 +166,9 @@ function replaceSourceReads(
   const found: Array<{ identifier: BaseNode; replacement: t.Identifier }> = [];
   walkAst(root, {
     enter(node) {
+      // A nested gate already owns payload substitution. Its input array must
+      // keep the original holders, even when an outer selector uses them too.
+      if (asyncReadFact(node) !== undefined) return false;
       if (node.type !== 'Identifier') return;
       const name = (node as unknown as AstIdentifier).name;
       const binding = bindings.get(name);
@@ -198,6 +205,52 @@ export function replaceSourceReadsWithRenderGates(
   bindings: ReadonlyMap<string, AstBinding>,
   eventSources: ReadonlySet<string>,
 ): void {
+  const dependencies = (expression: t.Expression): string[] => sourceDependencies(
+    ctx, expression as unknown as BaseNode, bindings, new Map(), eventSources,
+  );
+  const gateScalar = (expression: t.Expression): t.Expression => {
+    // Preserve lazy control flow: only the selected arm consumes its payload.
+    // A payload-driven selector waits for its own inputs, not both arms.
+    if (astFactory.isConditionalExpression(expression)) {
+      const selectorSources = dependencies(expression.test);
+      expression.consequent = gateScalar(expression.consequent);
+      expression.alternate = gateScalar(expression.alternate);
+      return selectorSources.length === 0 ? expression : resolvedRenderExpression(
+        ctx, expression, selectorSources, bindings, eventSources,
+      );
+    }
+    if (astFactory.isLogicalExpression(expression)) {
+      const selectorSources = dependencies(expression.left);
+      expression.right = gateScalar(expression.right);
+      return selectorSources.length === 0 ? expression : resolvedRenderExpression(
+        ctx, expression, selectorSources, bindings, eventSources,
+      );
+    }
+    const sources = dependencies(expression);
+    return sources.length === 0 ? expression : resolvedRenderExpression(
+      ctx, expression, sources, bindings, eventSources,
+    );
+  };
+  const scalars: t.Expression[] = [];
+  walkAst(root, { enter(node) {
+    if (astFactory.isFunction(node as unknown as t.Node)) return false;
+    // JSX maps belong to structural list lowering. Gating their member callee
+    // as a scalar would turn `items.map(...)` into `gate(...)(...)`, hiding the
+    // list from that planner. The source-read pass below still gates its receiver.
+    if (astFactory.isCallExpression(node as unknown as t.Node) &&
+      matchMapCall(node as unknown as t.CallExpression) && nodeHasJsx(node as unknown as t.Node)) return false;
+    if (node.type === 'JSXExpressionContainer' && (
+      isEventOrRefContainer(ctx, node) || isGroupDataContainer(ctx, node) ||
+      isDirectSourceComponentProp(ctx, node, bindings)
+    )) return false;
+    if (!astFactory.isExpression(node as unknown as t.Node) || nodeHasJsx(node as unknown as t.Node)) return;
+    if (dependencies(node as unknown as t.Expression).length > 0) scalars.push(node as unknown as t.Expression);
+    return false;
+  } });
+  for (const expression of scalars) {
+    const gated = gateScalar(expression);
+    if (gated !== expression) overwriteNode(expression as unknown as BaseNode, gated as unknown as BaseNode);
+  }
   // Collect first, replace after — the replacement call embeds the same
   // identifier, so replacing during traversal would recurse forever.
   const found: BaseNode[] = [];
@@ -211,6 +264,7 @@ export function replaceSourceReadsWithRenderGates(
   };
   walkAst(root, {
     enter(node) {
+      if (asyncReadFact(node) !== undefined) return false;
       if (node.type === 'Identifier') note(node);
     },
   });

@@ -4,6 +4,14 @@ This project does not support legacy APIs. All packages and consumers must use t
 
 Optional helpers for Memoized DOM applications.
 
+## Building and publishing
+
+`bun run build` uses the shared `memoized-dom package` command and `.lib.config.ts`.
+It discovers the source graph and public exports, compiles and bundles it, emits
+declarations, and writes the manifest and finalized compiler metadata in `dist`.
+There is no manual artifact script or module/export list. Publish from `dist`.
+See [library packaging](../../docs/library-packaging.md) for the authoring flow.
+
 ## Request-state projections
 
 Use the small projections when an expression needs one field from `$track`:

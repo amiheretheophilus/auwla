@@ -21,6 +21,11 @@ manifest, loads its artifact, and watches both files during development. The
 artifact is compiler metadata, not executable code, and does not add a runtime
 import.
 
+For ordinary installed ESM packages which do not publish an artifact, applications
+can opt into [installed-package compilation](./third-party-package-compilation.md#consumer-workflow-compile-an-installed-dependency)
+with `compilePackages: ['package-name']` in the existing Vite plugin options.
+That consumer-side cache is separate from authoring/publishing a library below.
+
 Artifacts are treated as untrusted build input. Their format version, function
 facts, component contracts, argument indexes, property paths, and HTTP method
 metadata are validated before linking. An incompatible or malformed artifact
@@ -46,25 +51,38 @@ not configure this and continue to write ordinary imports.
 
 ## Package layout
 
-Publish the generated artifact with the package's normal output:
+Package authors use [the single-file library build](./library-packaging.md):
+
+```ts
+// .lib.config.ts
+export default {
+  entry: './src/index.ts',
+  subpaths: ['./src/public'], // optional public directories
+};
+```
+
+Run `memoized-dom package` and publish the generated output directory. No Vite
+configuration, module/export list, artifact script or compiler-specific source
+manifest fields are needed. Output includes the generated artifact:
 
 ```text
 my-package/
   package.json
   dist/
+    package.json
     index.js
     index.d.ts
     memoized-dom.package.json
 ```
 
-Declare its path in `package.json`:
+The tool writes this declaration in the **generated** `dist/package.json`:
 
 ```json
 {
   "name": "my-package",
-  "files": ["dist"],
   "memoized-dom": {
-    "artifact": "./dist/memoized-dom.package.json"
+    "artifact": "./memoized-dom.package.json",
+    "integrity": true
   }
 }
 ```
@@ -74,10 +92,10 @@ artifact entry name must exactly match the bare import specifier. A package
 which exposes both `my-package` and `my-package/status` needs one entry for each
 specifier it wants the compiler to understand.
 
-## Generating the artifact
+## Low-level compiler host API
 
-Run package compilation after building `@memoized-dom/compiler` and before
-publishing the package. A package may keep this in a build script:
+The following is for custom tool hosts, not the ordinary publishing workflow.
+`memoized-dom package` handles these operations automatically.
 
 ```ts
 import { readFile, writeFile } from 'node:fs/promises';
@@ -96,11 +114,6 @@ const compiled = experimentalCompilePackage(modules, {
     },
   },
 });
-
-await writeFile(
-  new URL('../dist/memoized-dom.package.json', import.meta.url),
-  `${JSON.stringify(compiled.artifact, null, 2)}\n`,
-);
 ```
 
 `exports` is recommended when the public entry also exposes values or types
@@ -130,6 +143,128 @@ Multi-module packages must write the corresponding output modules or bundle
 those compiler-produced modules afterward. Generate declarations separately;
 the semantic artifact does not replace `.d.ts` files. Consumers continue to
 load ordinary ESM through the bundler.
+
+### Finalize the files that will be published
+
+After writing/bundling/minifying all emitted JavaScript, generate the publication
+stamp and write the artifact **last**:
+
+```ts
+import { fileURLToPath } from 'node:url';
+import { experimentalFinalizePackage } from '@memoized-dom/compiler';
+
+const publication = await experimentalFinalizePackage(compiled.artifact, {
+  packageRoot: fileURLToPath(new URL('../', import.meta.url)),
+  outputDirectory: 'dist', // default; use the actual final output directory
+});
+await writeFile(
+  new URL('../dist/memoized-dom.package.json', import.meta.url),
+  `${JSON.stringify(publication, null, 2)}\n`,
+);
+```
+
+The helper generates the hashes; authors do not type integrity metadata. It
+requires `"memoized-dom": { "artifact": "…", "integrity": true }` in the
+package manifest. The flag makes a missing stamp an error, including accidentally
+publishing an older unfinalized artifact. Consumers still use normal imports;
+the current Vite plugin verifies the package automatically before linking it.
+The single-file library build uses this step, and the tarball publication regression installs
+and checks a finalized package.
+
+The stamp binds the validated semantic metadata, the manifest's resolution and
+optimization fields, and the exact final bytes of every `.js`, `.mjs`, and `.cjs`
+file in the output directory, including chunks and conditional export variants.
+Changing code after finalization, dropping a chunk from the tarball, changing
+metadata, or redirecting an export fails with the affected file/reason and a
+rebuild instruction. Dependency-version rewrites performed by packing do not
+invalidate the stamp; runtime dependency compatibility is a separate concern.
+Package-relative paths make moving/installing the package safe. Timestamps and
+absolute publisher paths are not part of the stamp or semantic identity.
+Manifest whitespace and top-level field order do not matter. Conditional
+`exports`/`imports` key order does matter because it controls resolution, so
+reordering those conditions requires finalizing again.
+
+All JavaScript targets for the artifact's public entries must be protected by
+the output directory. Exact subpaths exposed through wildcard exports are
+supported; declared matching alternatives are checked conservatively rather
+than guessing the consumer's conditions. The directory must stay inside the
+package, cannot contain symlinks, and is limited to 4096 JavaScript files.
+Declarations, source maps, and external dependency contents are not hashed.
+
+Verification reads files without executing them. Within a compilation, repeated
+imports reuse verification; each new build/HMR graph rechecks the bytes. Verified
+JavaScript files join the watched semantic inputs, so a mismatched rebuild can
+produce an error overlay and recover after a matching artifact is written.
+Finish JavaScript output first and finalize last; multi-file rebuilds are not an
+atomic publishing transaction.
+
+This is a consistency check, **not** a signature, a security audit, or proof that
+the metadata truthfully describes the code. A publisher can seal an incorrect
+pair, and stripping both the declaration and stamp can impersonate an older
+unsealed package. Older experimental artifacts without the declaration remain
+supported but have no byte-consistency guarantee. Older consumers may not enforce
+the new declaration; use tooling that implements this check. Compatibility is
+checked separately as described below; byte hashes alone cannot establish it.
+
+Low-level filesystem hosts can call
+`experimentalVerifyPackageIntegrity(artifact, packageRoot, resolvedEntry)` before
+passing metadata to `compileModules`. The optional last argument checks the
+actually resolved JavaScript entry; the result lists files to watch. Compiler
+calls supplied only in-memory artifacts cannot verify absent executable files.
+
+### Compiler and runtime compatibility
+
+Package authors keep the same compile → bundle → finalize workflow. The package
+compiler generates the compatibility requirements automatically; applications
+still use ordinary imports. There is no contract object to hand-author and no
+requirement to pin every package to an identical npm version.
+
+Two checks happen before Vite links a newly generated package:
+
+- The compiler validates the semantic contract and runtime ABI required by the
+  artifact. Unknown contracts fail with an upgrade/rebuild diagnostic instead of
+  being interpreted as a known format.
+- If emitted code uses the runtime, Vite resolves that runtime from the package
+  and from its application importer, honoring aliases and external SSR imports.
+  Both resolved runtime packages must explicitly support the required ABI. A
+  compatible app runtime cannot hide an incompatible nested package copy.
+
+For finalized packages, all protected JavaScript files/chunks are checked as
+runtime resolution contexts. For an unsealed package, only its resolved
+entry/package context is available. Runtime package manifests join the semantic watch
+inputs, and each new graph checks again after dependency edits.
+
+The framework runtime declares its supported ABI list in its own `package.json`
+under `memoized-dom.runtimeABI`. Currently the compiler and generated runtime
+contract are version 1. Different package versions declaring support for ABI 1
+are accepted; a missing declaration, unsupported ABI, unresolved runtime, or
+virtual runtime without an inspectable owning manifest produces an error. A
+custom runtime alias must resolve to a real implementation whose owning package
+declares the contract it actually implements—not merely be labeled compatible
+to suppress an error.
+
+This declaration is maintained by framework/runtime implementers, not app or
+component-library users. A newly required helper or changed calling convention
+must advance the generated requirement and the implementation's supported ABI
+list together. Preserve an older ABI in that list only while it really works;
+do not change internal contracts while continuing to advertise the old ABI.
+
+Compatibility requirements participate in the semantic identity and integrity
+stamp, so stripping/changing them from a finalized artifact fails verification.
+Older artifacts without requirements remain accepted for experimental backward
+compatibility, but have no runtime-compatibility guarantee. In-memory compiler
+hosts validate declared compiler contracts; they must check runtime resolution
+themselves because `compileModules` has no filesystem/package resolver.
+These checks require the updated tooling: an older experimental consumer may
+ignore optional compatibility metadata instead of enforcing it.
+
+This is a declared calling-contract check, not proof that an implementation is
+correct. Keep the runtime external when bundling a package. A privately inlined
+runtime cannot be inspected this way. The check does not negotiate arbitrary
+third-party dependencies, data/router/server package contracts, engine support,
+or every cross-version behavior. Those still need appropriate peer dependencies
+and integration tests. The single-file library command automates the supported
+publication flow; these boundaries still apply to its generated output.
 
 ### Barrels and bundling
 
@@ -183,6 +318,8 @@ tree shaking. With Chrome available (`MMD_CHROME_PATH` or a detected local
 installation), it also tests events, request-state subscriptions, retained input
 drafts, slot fallback/projection, and conditional removal/remounting in both
 development and production.
+The request-state helper and its payload share one JSX conditional, exercising
+initial absence and refresh without requiring separate rendering sinks.
 
 The framework dependencies in that fixture use the matching built checkout;
 the library under test is a real installed tarball with no source alias. This
@@ -194,7 +331,8 @@ runtime versions interchangeable.
 
 In a monorepo, build ordering matters: build the compiler before packages which
 generate artifacts. The root Memoized DOM build does this for
-`@memoized-dom/utils`.
+`@memoized-dom/utils`. The Vite CLI is built before utils because utils now uses
+the shared `package` command.
 
 The repository's `bun run bench:package-compilation` command compares compiling
 package source with linking an already generated artifact. It is a compiler
@@ -426,9 +564,9 @@ factory when it attaches a handler. The compiler-generated `host-events-v1`
 capability records that requirement. Older compilers reject this capability
 rather than silently treating the component as inert static HTML. Authors do
 not write that metadata, and handlers never execute while generating HTML.
-Use compatible compiler and runtime builds when generating and consuming these
-experimental packages; their emitted factories still use the runtime's internal
-component and invalidation ABI.
+The generated compatibility requirements and Vite checks described above guard
+the declared component and invalidation ABI. They do not replace integration
+tests for changes to those contracts.
 
 This extends initial binding for components whose body is a direct JSX return.
 It does not yet add initial binding for package-local setup/state, effects,
@@ -496,10 +634,12 @@ JavaScript and matching artifact together.
   forced page reload. JavaScript implementation updates still use Vite's normal
   package-module invalidation path.
 - The artifact and executable JavaScript must come from the same package
-  compilation. Artifact/source integrity hashes are not implemented yet.
-- The semantic digest identifies artifact contents; it is not yet an integrity
-  proof that published JavaScript was built from the same source. Package builds
-  must still publish compiler output and its matching artifact together.
+  compilation. Post-bundle finalization checks their publication consistency;
+  it does not prove that the JavaScript was compiled from the claimed source.
+- The semantic digest identifies metadata, independently of final byte hashes.
+  Package builds must publish matching compiler output and finalized metadata
+  together. Compiler/runtime contract checks are separate from byte integrity;
+  the single-file library command automates the supported publication flow.
 - Package initial HTML and host adoption cover the subsets described above.
   Text-adjacent or multiple same-parent slots, nested fallback slots, and
   package-local setup/state, refs or effects are outside the portable

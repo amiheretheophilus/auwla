@@ -7,6 +7,16 @@ import { encodePageInputs, projectPageInputs } from '../packages/server/src/page
 import { pageBindingInputs } from '../packages/runtime/src/page-content';
 
 afterEach(() => document.body.replaceChildren());
+it('includes development diagnostics in interactive page bindings, never in server or production output', () => {
+  const sources = {'./page.tsx':`export function Page(){let count=0;return <button onClick={()=>count++}>{count}</button>}`};
+  const dev = compileServerPage(sources, './page.tsx', 'Page', 0, {diagnostics:true});
+  expect(dev.delivery.browser).toBe('bindings');
+  expect(dev.browser['./page.tsx']).toContain('traceEvent');
+  expect(dev.browser['./page.tsx']).toContain('highlightStart');
+  expect(Object.values(dev.server).join('\n')).not.toContain('traceEvent');
+  const production = compileServerPage(sources, './page.tsx', 'Page', 0);
+  expect(Object.values(production.browser).join('\n')).not.toContain('traceEvent');
+});
 it('preserves optional undefined props without colliding with user object values',()=>{
   const encoded=encodePageInputs([undefined,{$mmd:'undefined',optional:undefined,rows:[{name:undefined}]}]);
   const decoded=pageBindingInputs(JSON.parse(JSON.stringify({key:'test',...encoded})));

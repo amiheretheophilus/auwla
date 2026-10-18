@@ -5,7 +5,8 @@ import { initialSite } from '../planning/initial-content';
 import { initialNode, initialOrCreate, initialServerAnchor, initialStructuralPlacement, initialBindingHelper } from './initial-dom';
 import { type ComponentPath } from '../context';
 import { type DomContext as Ctx } from './context';
-import { componentId, generatedIdentifier, md } from './identifiers';
+import { componentId, generatedIdentifier, md, mdTrace } from './identifiers';
+import { diagnosticSite } from './diagnostic-source';
 import type { JsxNode } from '../jsx/children';
 import { cacheDecl, newEmitScope, registerStmt, updateDecl, type EmitScope, type RegionSourcePlans } from './scope';
 import type { NodeEmitter } from './node-emitter';
@@ -77,7 +78,7 @@ export function emitConditionalRegion(
       regionId, emitNode, inSvg, regionId, true, scope.usedConds, [], true, scope);
     (branch.body as t.BlockStatement).body.unshift(registerStmt(ctx, cloneEstreeNode(regionId), cloneEstreeNode(ownerId),
       astFactory.arrowFunctionExpression([], astFactory.callExpression(astFactory.memberExpression(
-        astFactory.identifier(regionVariable), astFactory.identifier('update')), []))));
+        astFactory.identifier(regionVariable), astFactory.identifier('update')), [])), false, { kind: 'conditional', anchor: expression }));
     scope.creation.push(astFactory.variableDeclaration('const', [
       astFactory.variableDeclarator(cloneEstreeNode(policy), transparentBoundaryPolicyArgument(ctx, componentName, atomic)),
       astFactory.variableDeclarator(astFactory.identifier(regionVariable), astFactory.callExpression(md(ctx, 'createPreparedRegion'), [
@@ -107,9 +108,14 @@ export function emitConditionalRegion(
     }
   }
 
-  const pick = astFactory.arrowFunctionExpression([], preparationRead(
+  const selector = astFactory.arrowFunctionExpression([], preparationRead(
     ctx, scope, regionId, cloneEstreeNode(site.pickExpr), retention?.sources ?? transparentSources,
   ));
+  // Trace the actual condition check, including direct owner-forwarded replays
+  // which do not invoke the registered entity's update wrapper.
+  const pick = ctx.diagnostics ? astFactory.callExpression(mdTrace(ctx, 'traceUpdate'), [
+    cloneEstreeNode(regionId), selector, astFactory.stringLiteral('conditional'), diagnosticSite(ctx, expression),
+  ]) : selector;
   const initial=scope.initialDom?.plan.conditions[initialSite(expression)];
   if (scope.initialDom && !initial) throw new Error('memo-dom: initial conditional has no placement');
   const branchFactories: t.Expression[] = site.branches.map((jsx,index) => {

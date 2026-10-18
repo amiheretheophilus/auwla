@@ -707,6 +707,13 @@ export function planHandlerWrites(
         for (const effect of sum.parameterWrites) {
           const argument = p.node.arguments[effect.index];
           if (argument === undefined || !astFactory.isExpression(argument)) continue;
+          // A summarized helper mutating a resolved payload must publish the
+          // same resource notification as an authored member/method write.
+          const transparentRoot = transparentRootFor(argument);
+          if (transparentRoot !== null) {
+            mutateScope(p, scope => scope.transparentWrites.add(transparentRoot));
+            continue;
+          }
           const origin = aliases.resolveExpression(p.scope, argument);
           if (origin !== null) {
             if (isComputedOrigin(origin)) continue;

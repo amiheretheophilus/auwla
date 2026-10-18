@@ -19,6 +19,7 @@ import {
 import type { ResolvedAdapterOptions } from '../options';
 import type { InitialPage } from '../initial-html';
 import { applyInitialPage } from '../initial-html';
+import { pageBindingsBoundary } from '../server-pages';
 import {
   acceptsSource,
   cleanViteId,
@@ -33,6 +34,9 @@ import {
   type ServerFunctionBarrelEntry,
 } from '../server-functions';
 import { discoverPackageArtifact } from './package-artifacts';
+import { verifyPackageRuntimeCompatibility } from './package-compatibility';
+import { rewritePackageImports, type CompiledInstalledPackage } from './installed-packages';
+import remapping from '@jridgewell/remapping';
 
 export interface ResolvedImport {
   id: string;
@@ -40,6 +44,7 @@ export interface ResolvedImport {
 }
 
 export interface GraphPluginContext {
+  compilePackage?(resolvedId: string, specifier: string, importer: string): Promise<CompiledInstalledPackage | undefined>;
   resolve(
     specifier: string,
     importer: string,
@@ -108,8 +113,13 @@ export async function compileGraph(
   let renderableContent = false;
   const directStyles = new Map<string, Set<string>>();
   const packageImports = new Map<string, ExperimentalPackageImport>();
+  const installedImports = new Map<string, Map<string, string>>();
   const semanticDependencies = new Set<string>();
   const artifactLookups = new Map<string, ReturnType<typeof discoverPackageArtifact>>();
+  // Scoped to one compilation: shared imports hash a package once, while the
+  // next HMR/build graph rechecks bytes rather than trusting a global cache.
+  const integrityLookups = new Map<string, Promise<readonly string[]>>();
+  const runtimeLookups = new Map<string, Promise<string>>();
 
   async function recordPackageArtifact(
     resolvedId: string,
@@ -120,17 +130,36 @@ export async function compileGraph(
     const key = `${resolvedId}\0${specifier}\0${importerFile}`;
     let lookup = artifactLookups.get(key);
     if (lookup === undefined) {
-      lookup = discoverPackageArtifact(resolvedId, specifier, importerFile);
+      lookup = discoverPackageArtifact(resolvedId, specifier, importerFile, integrityLookups);
       artifactLookups.set(key, lookup);
     }
-    const discovered = await lookup;
+    const discovered = await lookup ?? await context.compilePackage?.(resolvedId, specifier, importerFile);
     if (discovered === undefined) return false;
+    if ('dependencies' in discovered) {
+      const installed = discovered as CompiledInstalledPackage;
+      for (const file of installed.dependencies) {
+        const dependency = normalizeFile(file); context.addWatchFile(dependency); semanticDependencies.add(dependency);
+      }
+      const imports = installedImports.get(importerFile) ?? new Map<string, string>();
+      imports.set(specifier, normalizeFile(installed.resolvedFile)); installedImports.set(importerFile, imports);
+    }
     const manifestFile = normalizeFile(discovered.manifestFile);
     const artifactFile = normalizeFile(discovered.artifactFile);
     context.addWatchFile(manifestFile);
     context.addWatchFile(artifactFile);
     semanticDependencies.add(manifestFile);
     semanticDependencies.add(artifactFile);
+    for (const file of discovered.verifiedFiles) {
+      const dependency = normalizeFile(file);
+      context.addWatchFile(dependency);
+      semanticDependencies.add(dependency);
+    }
+    if (!('dependencies' in discovered)) {
+      for (const file of await verifyPackageRuntimeCompatibility(discovered, importerFile,
+        options.runtimePath ?? '@memoized-dom/runtime', context, runtimeLookups)) {
+        semanticDependencies.add(normalizeFile(file));
+      }
+    }
     packageImports.set(resolutionKey(importerId, specifier), {
       importer: importerId,
       specifier,
@@ -299,6 +328,7 @@ export async function compileGraph(
       : { externalReactiveSources: options.externalReactiveSources }),
     experimentalPackageArtifacts: [
       ...(options.experimentalPackageArtifacts ?? []),
+      ...(renderableContent ? [pageBindingsBoundary] : []),
     ],
     experimentalPackageImports: [...packageImports.values()],
     ...(hot ? { hot: true } : {}),
@@ -410,6 +440,13 @@ export async function compileGraph(
     .map(route => route.componentKey!));
   for (const [file, id] of sourceIds) {
     let code = compiled.output[id]!;
+    let sourceMap = compiled.maps[id]!;
+    const imports = installedImports.get(file);
+    if (imports?.size) {
+      const rewritten = rewritePackageImports(code, id, imports);
+      code = rewritten.code;
+      sourceMap = JSON.parse(remapping([JSON.parse(rewritten.map.toString()), sourceMap], () => null).toString()) as CompilerSourceMap;
+    }
     if (compiled.css?.[id]) {
       css.set(file, compiled.css[id]!);
       styles.add(`${file}?memo-style.css`);
@@ -430,7 +467,7 @@ export async function compileGraph(
           )
         : code,
     );
-    const map = compiled.maps[id]!;
+    const map = sourceMap;
     // Vite attaches this transform map to the absolute module id. Keeping the
     // compiler's project-relative source (`./src/View.tsx`) makes Node resolve
     // it relative to the module directory and produces duplicated stack paths

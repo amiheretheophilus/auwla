@@ -37,14 +37,17 @@
     "@jridgewell/remapping": "^2.3.5",
     "@memoized-dom/adapters": "workspace:*",
     "@memoized-dom/compiler": "workspace:*",
+    "@memoized-dom/devtools": "workspace:*",
     "magic-string": "0.30.21"
   },
   "peerDependencies": {
     "@cloudflare/vite-plugin": "^1.63.1",
     "@memoized-dom/runtime": "workspace:*",
+    "typescript": ">=5.0.0",
     "vite": "^8.0.0"
   },
   "peerDependenciesMeta": {
+    "typescript": { "optional": true },
     "@cloudflare/vite-plugin": { "optional": true }
   },
   "publishConfig": {

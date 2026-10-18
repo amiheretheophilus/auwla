@@ -48,7 +48,7 @@ export function compileServerPage(sources: Readonly<Record<string,string>>, root
   if (!delivery || delivery.browser === 'bindings' && (browser.initialRender.kind === 'browser' || browser.initialRender.kind === 'mixed')) {
     throw new Error('memo-dom: this server page needs an unsupported browser creation program; simplify its bindings or move server-only work into the handler: '+JSON.stringify(browser.initialRender));
   }
-  const server = compileModulesDetailed(modules, {...base,routedEnvironment:'server',moduleStateCells:true});
+  const server = compileModulesDetailed(modules, {...base,diagnostics:false,routedEnvironment:'server',moduleStateCells:true});
   const paths = delivery.browser === 'bindings' ? pageInputPaths(sources,rootModule,component,captureCount,resolveImport,options.frontend) : [];
   const output: Record<string,string> = {};
   if (delivery.browser === 'bindings') for (const [id,code] of Object.entries(browser.output)) {

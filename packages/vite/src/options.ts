@@ -11,6 +11,10 @@ export interface MemoizedDomViteOptions
   serverEntry?: string;
   /** Production host and CLI dev target. Direct createDevServer() calls use their launching runtime. */
   runtime?: 'bun' | 'node' | 'cloudflare';
+  /** Opt installed ESM packages into compiler analysis and a generated dependency cache. */
+  compilePackages?: readonly string[];
+  /** Development inspector launcher. Closed by default; false omits its dev integration. */
+  devtools?: boolean;
   /**
    * Additional source paths allowed outside the Vite project root.
    */
@@ -37,5 +41,14 @@ export function resolveAdapterOptions(
   if (options.clientEntry.trim() === '') {
     throw new Error('memoized-dom: clientEntry must not be empty');
   }
-  return { ...options, entries: [options.clientEntry] };
+  if (options.devtools !== undefined && typeof options.devtools !== 'boolean') throw new Error('memoized-dom: devtools must be a boolean');
+  if (options.compilePackages !== undefined && (!Array.isArray(options.compilePackages) ||
+      !options.compilePackages.every(name => typeof name === 'string' &&
+        /^(?:@[a-z0-9][a-z0-9._-]*\/)?[a-z0-9][a-z0-9._-]*$/i.test(name)))) {
+    throw new Error('memoized-dom: compilePackages must be an array of package names, not paths or subpath entries');
+  }
+  if (options.compilePackages?.length && options.frontend) {
+    throw new Error('memoized-dom: compilePackages currently requires the default frontend for reproducible cache identity');
+  }
+  return { ...options, ...(options.compilePackages ? { compilePackages: [...new Set(options.compilePackages)] } : {}), entries: [options.clientEntry] };
 }

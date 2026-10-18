@@ -1,0 +1,5 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": { "tsBuildInfoFile": "../../.cache/devtools-tests.tsbuildinfo" },
+  "include": ["src", "tests"], "exclude": ["dist"]
+}

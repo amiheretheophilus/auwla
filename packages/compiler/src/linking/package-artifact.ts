@@ -25,6 +25,56 @@ const renderDirectives = new Set([
 const validatedArtifacts = new WeakMap<object, ExperimentalPackageArtifact>();
 const artifactInstances = new WeakMap<object, string>();
 
+// Bump when a semantic contract or generated calling convention changes.
+export const PACKAGE_COMPILER_CONTRACT = 1;
+export const PACKAGE_RUNTIME_ABI = 1;
+
+function compatibility(value: unknown): NonNullable<ExperimentalPackageArtifact['compatibility']> {
+  const input = record(value, 'artifact.compatibility');
+  if (input.compiler !== PACKAGE_COMPILER_CONTRACT) {
+    invalid('artifact.compatibility.compiler', `unsupported compiler contract ${JSON.stringify(input.compiler)}; this compiler supports ${PACKAGE_COMPILER_CONTRACT}; upgrade the compiler or rebuild the package`);
+  }
+  if (input.runtime === undefined) return { compiler: PACKAGE_COMPILER_CONTRACT };
+  const runtime = record(input.runtime, 'artifact.compatibility.runtime');
+  if (typeof runtime.specifier !== 'string' || runtime.specifier.trim() === '' || /[\u0000-\u001f\u007f]/.test(runtime.specifier)) {
+    invalid('artifact.compatibility.runtime.specifier', 'expected a non-empty runtime module specifier');
+  }
+  if (typeof runtime.abi !== 'number' || !Number.isSafeInteger(runtime.abi) || runtime.abi < 1) {
+    invalid('artifact.compatibility.runtime.abi', 'expected a positive integer ABI');
+  }
+  if (runtime.abi !== PACKAGE_RUNTIME_ABI) {
+    invalid('artifact.compatibility.runtime.abi', `unsupported runtime ABI ${runtime.abi}; this compiler supports ${PACKAGE_RUNTIME_ABI}; upgrade the compiler or rebuild the package`);
+  }
+  return { compiler: PACKAGE_COMPILER_CONTRACT, runtime: { specifier: runtime.specifier, abi: runtime.abi } };
+}
+
+/** Portable package-relative output file, never an absolute or traversing path. */
+export function isPackageJavaScriptPath(path: string): boolean {
+  return path.length > 0 && !/[\\\u0000-\u001f\u007f:#?*]/.test(path) &&
+    !path.startsWith('/') && path.split('/').every(part => part !== '' && part !== '.' && part !== '..') &&
+    /\.(?:js|mjs|cjs)$/.test(path);
+}
+
+function integrity(value: unknown): NonNullable<ExperimentalPackageArtifact['integrity']> {
+  const input = record(value, 'artifact.integrity');
+  if (input.algorithm !== 'sha256') invalid('artifact.integrity.algorithm', "expected 'sha256'");
+  const digest = (value: unknown, path: string): string => {
+    if (typeof value !== 'string' || !/^[a-f0-9]{64}$/.test(value)) invalid(path, 'expected a lowercase SHA-256 digest');
+    return value;
+  };
+  const rawFiles = record(input.files, 'artifact.integrity.files');
+  if (Object.keys(rawFiles).length === 0 || Object.keys(rawFiles).length > 4096) {
+    invalid('artifact.integrity.files', 'expected between 1 and 4096 JavaScript files');
+  }
+  const files: Record<string, string> = Object.create(null);
+  for (const [path, hash] of Object.entries(rawFiles)) {
+    if (!isPackageJavaScriptPath(path)) invalid(`artifact.integrity.files[${JSON.stringify(path)}]`, 'expected a normalized package-relative JavaScript path');
+    files[path] = digest(hash, `artifact.integrity.files[${JSON.stringify(path)}]`);
+  }
+  return { algorithm: 'sha256', metadata: digest(input.metadata, 'artifact.integrity.metadata'),
+    manifest: digest(input.manifest, 'artifact.integrity.manifest'), files };
+}
+
 function invalid(path: string, expectation: string): never {
   throw new TypeError(
     `memo-dom: invalid experimental package artifact at ${path}; ${expectation}`,
@@ -311,6 +361,8 @@ export function validateExperimentalPackageArtifact(
   if (artifact.version !== 1) {
     invalid('artifact.version', 'expected format version 1');
   }
+  // Do not interpret a newer contract using the current entry schema.
+  const declaredCompatibility = artifact.compatibility === undefined ? undefined : compatibility(artifact.compatibility);
   const rawEntries = record(artifact.entries, 'artifact.entries');
   const entries: ExperimentalPackageArtifact['entries'] = Object.create(null);
   for (const [specifier, rawEntry] of Object.entries(rawEntries)) {
@@ -346,19 +398,29 @@ export function validateExperimentalPackageArtifact(
     kind: 'memoized-dom-package',
     version: 1,
     entries,
+    ...(declaredCompatibility === undefined ? {} : { compatibility: declaredCompatibility }),
+    ...(artifact.integrity === undefined ? {} : { integrity: integrity(artifact.integrity) }),
   };
   validatedArtifacts.set(artifact, validated);
   return validated;
 }
 
-function canonicalJson(value: unknown): string {
-  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(',')}]`;
+function canonicalPackageJson(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(canonicalPackageJson).join(',')}]`;
   if (value !== null && typeof value === 'object') {
     return `{${Object.keys(value).sort().map(key =>
-      `${JSON.stringify(key)}:${canonicalJson((value as UnknownRecord)[key])}`
+      `${JSON.stringify(key)}:${canonicalPackageJson((value as UnknownRecord)[key])}`
     ).join(',')}}`;
   }
   return JSON.stringify(value);
+}
+
+/** Hash semantic facts only: post-bundle bytes do not change component identity. */
+export function packageMetadataHash(artifact: ExperimentalPackageArtifact): string {
+  return createHash('sha256').update(canonicalPackageJson({
+    kind: artifact.kind, version: artifact.version, entries: artifact.entries,
+    ...(artifact.compatibility === undefined ? {} : { compatibility: artifact.compatibility }),
+  })).digest('hex');
 }
 
 /** Reproducible semantic identity for one validated package artifact. */
@@ -368,10 +430,7 @@ export function experimentalPackageArtifactInstance(value: unknown): string {
     if (cached !== undefined) return cached;
   }
   const artifact = validateExperimentalPackageArtifact(value);
-  const instance = createHash('sha256')
-    .update(canonicalJson(artifact))
-    .digest('hex')
-    .slice(0, 32);
+  const instance = packageMetadataHash(artifact).slice(0, 32);
   artifactInstances.set(artifact, instance);
   if (value !== null && typeof value === 'object') {
     artifactInstances.set(value, instance);

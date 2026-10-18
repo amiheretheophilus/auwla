@@ -93,3 +93,4 @@ export {
   experimentalPackageArtifactInstance,
   validateExperimentalPackageArtifact,
 } from './linking/package-artifact';
+export { experimentalFinalizePackage, experimentalVerifyPackageIntegrity } from './package-integrity';

@@ -3,6 +3,9 @@
   "version": "0.0.9",
   "description": "Dependency-free runtime for compiler-analyzed memoized DOM updates",
   "type": "module",
+  "memoized-dom": {
+    "runtimeABI": [1]
+  },
   "sideEffects": [
     "./dist/server.js",
     "./dist/hydrate.js"

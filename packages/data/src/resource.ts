@@ -6,7 +6,7 @@ import {
 import { SnapshotNotifier } from './notifications';
 import { dispatchResourceWrite } from './resource-write-capability';
 import { LiveProtection, updateStamps, type LiveStamp } from './live-protocol';
-import { liveDiagnosticName } from './live-diagnostics';
+import { liveDiagnosticName, liveDiagnosticId } from './live-diagnostics';
 import {
   disposeFormSource,
   formSourceOperationId,
@@ -74,6 +74,8 @@ export interface FetchEnvironment {
 }
 
 export interface StreamDelivery {
+  /** @internal Development metadata only; never serialized onto the application wire. */
+  readonly diagnosticSourceId?: string;
   value(data: unknown, stamp?: LiveStamp): void;
   state(streaming: boolean, error?: unknown): void;
   updates(stamps: LiveStamp[]): void;
@@ -130,6 +132,7 @@ function equalDescriptor(
 }
 
 class FetchEntry {
+  private readonly diagnosticId = liveDiagnosticId('source');
   updates: LiveStamp[] = [];
   private liveProtection: LiveProtection | undefined;
   get protection(): LiveProtection {
@@ -143,7 +146,7 @@ class FetchEntry {
       this.emit();
     }, {
       source: liveDiagnosticName(this.descriptor.url),
-      method: this.descriptor.method, sourceId: this.operationId,
+      method: this.descriptor.method, sourceId: this.diagnosticId ?? this.operationId,
     });
   }
   readonly consumers = new Set<ResourceController<unknown>>();
@@ -275,6 +278,7 @@ class FetchEntry {
 
     const streaming = this.descriptor.stream !== undefined;
     const streamRequest = streaming ? this.store.environment.stream?.(this.descriptor, controller.signal, {
+      ...(this.diagnosticId ? { diagnosticSourceId: this.diagnosticId } : {}),
       value: (data, stamp) => {
         if (generation !== this.generation || controller.signal.aborted) return;
         if (stamp !== undefined) this.protection.receive(data, stamp);

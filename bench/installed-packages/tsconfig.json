@@ -1,0 +1,6 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": { "tsBuildInfoFile": "./.generated/typecheck.tsbuildinfo", "allowJs": false },
+  "include": ["./*.ts", "../../tests/installed-packages-bench.test.ts"],
+  "exclude": ["./.generated", "./results"]
+}

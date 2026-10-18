@@ -143,6 +143,63 @@ it('does not emit tracing imports or calls unless the compiler development optio
   expect(debug).not.toHaveBeenCalled();
 });
 
+it('maps handlers, text and labelled controls to their exact authored JSX element', () => {
+  const key = Symbol.for('memoized-dom:diagnostics:v1');
+  const realm = globalThis as typeof globalThis & { [key: symbol]: unknown };
+  const previous = realm[key];
+  type Site = { file: string; component: string; line: number; column: number; sectionLine: number; code: string; highlightStart: number; highlightEnd: number };
+  const events: { event: string; location?: Site; kind?: string }[] = [];
+  realm[key] = { trace: true, emit(_domain: string, event: string, data: { location?: Site; kind?: string }) { events.push({ event, location: data.location, kind: data.kind }); } };
+  try {
+    const source = `export function App() {
+  const privateDeclaration = 'server-only-declaration';
+  let count = 0;
+  return <main>
+    <h1>Counter</h1>
+    <button onClick={() => count++}>
+      Local clicks: {count}
+    </button>
+    <section if={count>0}>Visible</section>
+    <label>New title <input name="title" required={count>0} maxLength={count+60}/></label>
+  </main>;
+}`;
+    const root = mount(source), button = root.querySelector('button')!;
+    events.length = 0; button.click(); runtime.commit();
+    const labelled = events.find(item => item.location?.code.includes('New title'))?.location;
+    expect(labelled?.code.trim()).toBe('<label>New title <input name="title" required={count>0} maxLength={count+60}/></label>');
+    expect(labelled?.component).toBe('App'); expect(labelled?.line).toBe(10);
+    const handler = events.find(item => item.event === 'event-started')!.location!;
+    const text = events.find(item => item.event === 'dom-write')!.location!;
+    expect(handler).toMatchObject({ component: 'App', line: 6, column: 13, sectionLine: 6 });
+    expect(handler.code).toContain('<button'); expect(handler.code).toContain('</button>');
+    expect(handler.code).not.toContain('<main>'); expect(handler.code).not.toContain('<h1>');
+    expect(handler.code.slice(handler.highlightStart, handler.highlightEnd)).toBe('onClick={() => count++}');
+    expect(text).toMatchObject({ component: 'App', line: 7, column: 22 });
+    expect(text.code.slice(text.highlightStart, text.highlightEnd)).toBe('count');
+    expect(handler.code).not.toContain('server-only-declaration');
+    const region = events.find(item => item.kind === 'conditional')!;
+    expect(region.location?.component).toBe('App');
+    expect(region.location?.code).toContain('<section if={count>0}>Visible</section>');
+    expect(compile(source)).not.toContain('Local clicks: {count}');
+    expect(JSON.stringify(debug.mock.calls)).not.toContain('highlightStart');
+  } finally { if (previous === undefined) delete realm[key]; else realm[key] = previous; }
+});
+
+it('does not include server preparation bodies or synthetic page modules in authored JSX context', () => {
+  const source = `export function App(){let count=0;
+    const page=$routed(async ({services}) => services.secret.read('private-preparation'));
+    return <main>
+    <h1>{page.title}</h1>
+    <button onClick={()=>count++}>{count}</button>
+  </main>;}`;
+  const code = compile(source, { diagnostics: true });
+  // A safe nested JSX section can still be located; the containing private body cannot.
+  expect(code).not.toContain('code: "<main>');
+  expect(code).not.toMatch(/code: [^\n]*private-preparation/);
+  const generated = compile(counter, { diagnostics: true, moduleId: './App.tsx.binding.tsx' });
+  expect(generated).not.toContain('highlightStart');
+});
+
 it('traces delegated row handlers once and keeps cached row text guards', () => {
   const root = mount(`export function App(){let rows=[{id:'a',count:0}];
     return <ul>{rows.map(row=><li key={row.id}><button onClick={()=>row.count++}>{row.count}</button></li>)}</ul>;}`);
@@ -204,12 +261,14 @@ it('bounds a noisy trace window, reports dropped messages, and resumes without s
     expect(debug).toHaveBeenCalledTimes(201);
     expect(details('dom-write')).toHaveLength(200);
     expect(messages().at(-1)).toBe('[memoized-dom:trace] trace-throttled');
+    expect(details('trace-throttled')[0]).toMatchObject({ component: 'App', operation: 'text', sources: ['count'], trigger: 'dom-write', reason: 'event-budget', messages: 200 });
     debug.mockClear(); clock.mockReturnValue(11_000);
     diagnostics.traceDom('App', 'text', ['count']);
     expect(debug).toHaveBeenCalledTimes(1); expect(details('dom-write')).toHaveLength(1);
     debug.mockClear(); clock.mockReturnValue(12_000);
     for (let index = 0; index < 1000; index++) diagnostics.traceBinding('App', 'binding:0', ['count']);
     expect(details('binding-evaluated')).toHaveLength(100);
+    expect(details('trace-throttled')[0]).toMatchObject({ component: 'App', binding: 'binding:0', sources: ['count'], trigger: 'binding-evaluated', reason: 'evaluation-budget', evaluations: 100 });
     diagnostics.traceEvent('App', 'click', () => {
       diagnostics.traceWrite('App', ['count']); diagnostics.traceText('App', node, 'changed', ['count']);
     })();

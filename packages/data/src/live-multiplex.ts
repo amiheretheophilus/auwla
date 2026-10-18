@@ -7,6 +7,7 @@ import { readStreamFrames, StreamProtocolError, LivePatchBaselineError } from '.
 import { validateValue } from './schema';
 import { responseStreamDecoder } from './response-decoder';
 import { notifyDataRuntimeProgress } from './runtime-lifetime';
+import { liveDiagnosticsEnabled, liveDiagnosticId, liveDiagnosticName, observeLiveDiagnostic, reportLiveDiagnostic } from './live-diagnostics';
 import type { CoreDataRuntime } from './runtime-core';
 import type { FetchEnvironment, StreamDelivery } from './resource';
 
@@ -42,23 +43,46 @@ export function multiplexTransport(environment:FetchEnvironment,runtime:CoreData
     controller?:AbortController;
     token?:string;remote=new Set<string>();revision=1;generation=0;bytes=0;
     scheduled=false;running=false;controlling=false;reconnectReason:unknown;
-    constructor(readonly key:string,readonly origin:string,readonly headers:Headers){}
+    private readonly diagnosticId=liveDiagnosticId('multiplex');
+    private diagnosticState='connecting';private diagnosticAttempt=0;
+    private readonly releaseDiagnostic:()=>void;
+    constructor(readonly key:string,readonly origin:string,readonly headers:Headers){
+      this.releaseDiagnostic=observeLiveDiagnostic(()=>{
+        this.connectionDiagnostic(this.diagnosticState,this.diagnosticAttempt);
+        for(const slot of this.slots.values())this.diagnostic('subscription-opened',slot,{sequence:slot.sequence});
+      });
+    }
+    diagnostic(event:string,slot:Slot,details:Record<string,unknown>={}){
+      if(this.diagnosticId&&liveDiagnosticsEnabled())reportLiveDiagnostic(event,{
+        source:liveDiagnosticName(slot.descriptor.url),method:slot.descriptor.method,sourceId:slot.delivery.diagnosticSourceId,
+        connectionId:this.diagnosticId,subscriptionId:slot.id,transport:'multiplexed',...details,
+      });
+    }
+    connectionDiagnostic(state:string,attempt=0){
+      this.diagnosticState=state;this.diagnosticAttempt=attempt;
+      if(this.diagnosticId&&liveDiagnosticsEnabled())reportLiveDiagnostic('connection-state',{
+        connectionId:this.diagnosticId,transport:'multiplexed',state,attempt,
+      });
+    }
     subscribe(descriptor:Descriptor,signal:AbortSignal,delivery:StreamDelivery):Promise<unknown>{
       const slot:Slot={id:identity(),descriptor,signal,delivery,first:Promise.withResolvers<unknown>(),recoveries:0,bytes:0,chain:Promise.resolve(),remove:()=>{}};
       slot.first.promise.catch(()=>{});
-      slot.remove=()=>{if(this.slots.get(slot.id)!==slot)return;this.slots.delete(slot.id);signal.removeEventListener('abort',slot.remove);slot.first.reject(signal.reason??new DOMException('Aborted','AbortError'));this.schedule();};
+      slot.remove=()=>{if(this.slots.get(slot.id)!==slot)return;this.slots.delete(slot.id);signal.removeEventListener('abort',slot.remove);this.diagnostic('subscription-closed',slot);slot.first.reject(signal.reason??new DOMException('Aborted','AbortError'));this.schedule();};
       this.slots.set(slot.id,slot);signal.addEventListener('abort',slot.remove,{once:true});
+      this.diagnostic('subscription-opened',slot);
       if(signal.aborted)slot.remove();else {if(this.running)delivery.state(true);this.schedule();}
       return slot.first.promise;
     }
     fail(slot:Slot,error:unknown){
       if(this.slots.get(slot.id)!==slot)return;
       this.slots.delete(slot.id);slot.signal.removeEventListener('abort',slot.remove);
+      this.diagnostic('subscription-error',slot,{reason:error instanceof StreamProtocolError?'protocol-error':error instanceof RequestError?'request-error':'stream-error'});
       if(!slot.signal.aborted)slot.delivery.state(false,error);
       slot.first.reject(error);this.schedule();
     }
-    fallback(slot:Slot){
+    fallback(slot:Slot,reason='response-requires-direct-transport'){
       if(this.slots.get(slot.id)!==slot)return;
+      this.diagnostic('subscription-fallback',slot,{reason});
       bypass.add(new URL(slot.descriptor.url,this.origin).pathname);
       this.slots.delete(slot.id);slot.signal.removeEventListener('abort',slot.remove);this.schedule();
       void direct(slot.descriptor,slot.signal,slot.delivery).then(slot.first.resolve,slot.first.reject);
@@ -67,7 +91,7 @@ export function multiplexTransport(environment:FetchEnvironment,runtime:CoreData
       if(this.scheduled)return;this.scheduled=true;
       queueMicrotask(()=>{
         this.scheduled=false;
-        if(!this.slots.size){this.lifetime.abort();this.controller?.abort();channels.delete(this.key);return;}
+        if(!this.slots.size){this.releaseDiagnostic();this.connectionDiagnostic('closed');this.lifetime.abort();this.controller?.abort();channels.delete(this.key);return;}
         if(!this.running){this.running=true;void this.run();}
         else if(this.token)void this.controls();
       });
@@ -128,12 +152,14 @@ export function multiplexTransport(environment:FetchEnvironment,runtime:CoreData
           slot.sequence=seq;slot.recoveries=0;
         }else throw new StreamProtocolError(`Unknown streaming event '${event}'`);
         const input=structuredClone(slot.baseline);
+        this.diagnostic(event==='patch'?'patch-received':'frame-received',slot,{stamp,sequence:slot.sequence});
         const value=slot.descriptor.schema?await abortable(()=>validateValue(slot.descriptor.schema!,input),signal):input;
         if(generation!==this.generation||this.slots.get(id)!==slot||slot.signal.aborted||signal.aborted)return;
         slot.delivery.value(value,stamp);notifyDataRuntimeProgress(runtime);slot.first.resolve(value);
       }).catch(error=>{
         if(this.generation!==generation||this.slots.get(id)!==slot||signal.aborted)return;
         if(error instanceof LivePatchBaselineError&&++slot.recoveries<=1){
+          this.diagnostic('baseline-recovery',slot,{reason:'patch-baseline-mismatch'});
           this.slots.delete(id);slot.id=identity();slot.baseline=undefined;slot.sequence=undefined;this.slots.set(slot.id,slot);this.schedule();
         }else this.fail(slot,error);
       }).finally(()=>{if(generation===this.generation){slot.bytes-=size;this.bytes-=size;}});
@@ -145,16 +171,18 @@ export function multiplexTransport(environment:FetchEnvironment,runtime:CoreData
           const controller=new AbortController();this.controller=controller;this.token=undefined;this.reconnectReason=undefined;
           this.generation++;this.bytes=0;this.revision=1;
           const generation=this.generation,subscribe=this.descriptors(this.slots.keys());this.remote=new Set(subscribe.map(item=>item.id));
+          this.connectionDiagnostic('connecting',failures);
           for(const slot of this.slots.values()){slot.baseline=undefined;slot.sequence=undefined;slot.bytes=0;slot.delivery.state(true);}
           let failure:unknown;
           try{
             const response=await environment.fetch()(this.origin+endpoint,{method:'POST',headers:this.requestHeaders(),signal:controller.signal,
               body:JSON.stringify({version:1,revision:1,subscribe,unsubscribe:[],contentType:this.headers.get('content-type')??undefined})});
             if([404,405].includes(response.status)){
-              await response.body?.cancel();unsupported.add(this.origin);for(const slot of Array.from(this.slots.values()))this.fallback(slot);return;
+              await response.body?.cancel();unsupported.add(this.origin);for(const slot of Array.from(this.slots.values()))this.fallback(slot,'multiplex-unavailable');return;
             }
             if(!response.ok){await response.body?.cancel();throw new RequestError('Live session rejected',{kind:'http',status:response.status});}
             if(response.headers.get('x-mmd-multiplex')!=='1'){await response.body?.cancel();throw new StreamProtocolError('Unsupported live multiplex protocol');}
+            this.connectionDiagnostic('connected');
             await readStreamFrames(response,controller.signal,(event,frame,size)=>this.receive(event,frame,size,generation,controller.signal));
             failure=new Error('Live connection disconnected');
           }catch(error){failure=this.reconnectReason??error;}
@@ -164,6 +192,7 @@ export function multiplexTransport(environment:FetchEnvironment,runtime:CoreData
             for(const slot of Array.from(this.slots.values()))this.fail(slot,failure);return;
           }
           for(const slot of this.slots.values())slot.delivery.state(true);
+          this.connectionDiagnostic('reconnecting',failures+1);
           await delay(Math.min(1000*2**Math.min(failures++,5),30_000),this.lifetime.signal);
         }
       }catch(error){if(!this.lifetime.signal.aborted)for(const slot of Array.from(this.slots.values()))this.fail(slot,error);}

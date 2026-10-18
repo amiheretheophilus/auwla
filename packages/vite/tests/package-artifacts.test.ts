@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'bun:test';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import { experimentalCompilePackage, memoizedEstreeFrontend, parseWithEstreeFrontendOrThrow } from '@memoized-dom/compiler';
 import { compileGraph, type GraphPluginContext } from '../src/graph/collector';
 import { resolveAdapterOptions } from '../src/options';
@@ -69,6 +69,7 @@ describe('package compilation artifacts', () => {
       async resolve(specifier) {
         if (specifier === './App') return { id: component };
         if (specifier === 'adopted-ui') return { id: packageEntry };
+        if (specifier === '@memoized-dom/runtime') return { id: resolve(import.meta.dirname, '../../runtime/src/index.ts') };
         return null;
       },
       addWatchFile() {},

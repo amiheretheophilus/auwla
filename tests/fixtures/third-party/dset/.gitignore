@@ -1,0 +1,2 @@
+# This is upstream source for the integration test, not our build output.
+!dist/

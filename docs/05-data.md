@@ -214,6 +214,27 @@ What `request` gives you:
 Two rules: `$track` is **not a store** (no `.mutate`/`.update` — mutate the
 value itself) and **not a promise** (no `.then` — use `onSuccess`/`onError`).
 
+Request state and payloads can share a JSX conditional:
+
+```tsx
+const stories = $fetch<Story[]>('/api/stories');
+const request = $track(stories);
+return <p>{request.pending ? 'Loading…' : stories.length + ' stories'}</p>;
+```
+
+The state-only arm is available immediately. The compiler waits for data only
+inside the selected payload arm, before evaluating operations such as `.length`
+or a method call. Nested conditionals and `&&`, `||`, and `??` retain their lazy
+branch selection; an unrelated source in an inactive arm does not block the
+chosen content. Initial request errors still follow the surrounding error policy.
+
+Using `request.refreshing` instead of `request.pending` shows the label only
+during a refresh; before the first payload, that expression renders empty.
+The same rules apply when an ordinary local or compiled-package helper computes
+the request-state boolean. Helpers are not recognized by their names, and no new
+annotation or runtime API is required. These are JSX render-read rules, not a
+change to imperative payload reads inside event handlers or arbitrary functions.
+
 `$track` accepts transparent sources. Use `$read` when work starts as a
 promise. Its fulfilled result reads like a `$fetch` value:
 

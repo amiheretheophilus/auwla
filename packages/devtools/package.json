@@ -1,0 +1,21 @@
+{
+  "name": "@memoized-dom/devtools",
+  "version": "0.0.1",
+  "description": "Development-only inspector for Memoized DOM diagnostics",
+  "type": "module",
+  "sideEffects": false,
+  "files": ["dist", "README.md"],
+  "exports": {
+    ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js", "default": "./dist/index.js" },
+    "./bootstrap": { "types": "./dist/bootstrap.d.ts", "import": "./dist/bootstrap.js", "default": "./dist/bootstrap.js" },
+    "./client": { "types": "./dist/client.d.ts", "import": "./dist/client.js", "default": "./dist/client.js" },
+    "./node": { "types": "./dist/node.d.ts", "import": "./dist/node.js", "default": "./dist/node.js" }
+  },
+  "scripts": {
+    "build": "rolldown -c rolldown.config.ts && bun run scripts/assets.ts && tsc -p tsconfig.build.json",
+    "test": "bun test --isolate ./tests && bun check -p tsconfig.test.json"
+  },
+  "engines": { "node": ">=24.11.0" },
+  "devDependencies": { "@fontsource-variable/geist": "^5.3.0", "@fontsource-variable/geist-mono": "^5.3.0" },
+  "publishConfig": { "access": "public" }
+}

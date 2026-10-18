@@ -2,12 +2,12 @@
 
 Development diagnostics explain the existing live protocol without changing
 function signatures, optimistic callbacks, invalidation rules, or delivery.
-There is no additional inspector package, dashboard, subscription, or retained
-event history.
-
-A development UI is intentionally deferred. Its proposed experience, event
-bridge and privacy boundaries are recorded in
-[the development inspector design](./dev-inspector-design.md).
+The separate [`@memoized-dom/devtools` inspector](../packages/devtools/README.md)
+provides a UI over structured metadata: press **Alt+Shift+M** during development.
+It separates physical connections from logical subscriptions and retains bounded
+history only while open. No additional application query or SSE subscription is
+created. Native-server observations use the existing Vite HMR channel and are
+explicitly instance-scoped, not restricted to the viewing browser's requests.
 
 ## Finding the messages
 

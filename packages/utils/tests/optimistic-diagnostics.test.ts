@@ -1,7 +1,7 @@
 import { expect, it, vi } from 'bun:test';
 import { createDataRuntime, runWithDataRuntime, type FetchResource } from '@memoized-dom/data';
 import { createStreamingSource } from '@memoized-dom/data/internal';
-import { optimistic } from '../src';
+import { optimistic } from '@memoized-dom/utils';
 import { waitFor } from '../../../test-support/helpers';
 
 type Note = { id: string; text: string };

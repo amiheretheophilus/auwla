@@ -246,7 +246,7 @@ if (hasSpread) {
       const binding = generatedIdentifier(ctx, `${name}Handler`);
       scope.creation.push(
         astFactory.variableDeclaration('const', [
-          astFactory.variableDeclarator(cloneEstreeNode(binding), traceHandler(ctx, ownerId, name, handler)),
+          astFactory.variableDeclarator(cloneEstreeNode(binding), traceHandler(ctx, ownerId, name, handler, value)),
         ]),
       );
       return binding;
@@ -344,7 +344,7 @@ if (hasSpread) {
       rowContext,
       eventOriginId,
       scope.callbacks,
-    ));
+    ), a);
     const delegatedBinding = scope.delegatedEventBindings.get(attrName);
     scope.creation.push(
       delegatedBinding === undefined
@@ -467,7 +467,7 @@ if (hasSpread) {
   const propName = domPropertyName(attrName, elementSvg);
   // M5.9: inline guarded writes (see slotGuard) — no MD.setX call overhead
   const makeCall = (): t.Statement => {
-    const traced = (write: t.Statement): t.Statement => traceDomWrite(ctx, ownerId, `attribute:${attrName}`, v, write);
+    const traced = (write: t.Statement): t.Statement => traceDomWrite(ctx, ownerId, `attribute:${attrName}`, v, write, a);
     if (attrName === 'class' || attrName === 'className') {
       return slotGuard(
         scope,

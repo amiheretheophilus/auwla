@@ -6,7 +6,7 @@ import {
   createDataRuntime,
   setActiveDataRuntime,
 } from '@memoized-dom/data';
-import { error, pending, refreshing, status, streaming } from '../src';
+import { error, pending, refreshing, status, streaming } from '@memoized-dom/utils';
 import { waitFor } from '../../../test-support/helpers';
 
 function deferred<T>() {

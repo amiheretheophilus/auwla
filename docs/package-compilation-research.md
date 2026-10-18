@@ -479,6 +479,11 @@ into the application graph.
 
 ### Do not automatically transform the entire npm ecosystem
 
+The first [real third-party compilation experiment](./third-party-package-compilation.md)
+now exercises unchanged published dset ESM, inferred deep writes, colorless payload
+mutation and SSR. Automatic installed-dependency compilation remains a separate
+integration step; this does not enable it for every npm import.
+
 Distinguish framework-compiled packages, conservatively analyzable ordinary
 JavaScript, and genuinely opaque/dynamic behavior. An ordinary dependency can
 remain ordinary JavaScript; it should not silently acquire different language
@@ -494,8 +499,18 @@ Compiler internals are not automatically a stable publication format. Decide how
 artifacts express required capabilities, runtime compatibility, and format
 versions; reject incompatible inputs clearly or rebuild from available source.
 Vite discovery and conservative creation fallback are implemented as described
-above. A dedicated library-build CLI and stronger executable/artifact integrity
-checks remain open decisions, not documented APIs.
+above. Post-bundle finalization now binds final JavaScript bytes, semantic
+metadata, and resolution fields; the Vite host verifies them before linking and
+watches the protected outputs. This catches stale/missing/changed published
+files, not dishonest metadata. Generated compiler/runtime contract requirements
+now reject unknown contracts; Vite checks the package's and application's
+resolved runtime ABI declarations, including nested copies, aliases, and
+external SSR resolution. This is not exact npm-version pinning or arbitrary
+dependency negotiation. The single `.lib.config.ts` library build now collects
+the graph, bundles compiler output, emits declarations, generates public export
+paths and the publication manifest, and finalizes the artifact automatically.
+Utils uses this flow instead of maintaining an artifact script. See
+[library packaging](./library-packaging.md).
 
 ## Suggested sequence and acceptance gates
 
@@ -525,17 +540,20 @@ Bun, dev/prod SSR, browser interactions, and unused-export elimination. It
 exposed and closes named-barrel capability loss, optimized-entry metadata
 discovery, import-only SSR discovery, and late external runtime-copy request
 scope attachment. Framework dependencies still use the matching built checkout.
-Release integrity, runtime compatibility negotiation, and a dedicated library
-build command remain open; passing this gate is not a claim that the entire
-publication contract is stable.
+The tarball gate now uses the finalization stamp, including verification after
+the package manager packs/installs and rewrites dependency versions. Declared
+runtime ABI checks and the public one-file packaging command now accompany this
+flow; broader cross-version integration remains open;
+passing this gate is not a claim that the entire publication contract is stable.
 
-A separate rendering follow-up surfaced while building this gate: combining a
-derived request-state helper with a pending payload in one JSX conditional
-(`refreshing ? 'Refreshing' : items.length`) evaluated the absent payload during
-initial SSR. The publication fixture uses independent state and payload sinks
-so it checks both relationships without conflating this conditional-lowering
-issue with installation/linking. Mixed conditional sinks still need a targeted
-regression and diagnosis; the publication gate does not establish that case.
+The mixed JSX conditional issue found by this gate is now fixed generally:
+`refreshing ? 'Refreshing' : items.length` gates the payload expression, not
+just its source identifier. State-only arms remain immediate, and selected
+scalar arms wait only for their own inputs. Regressions cover direct tracking,
+ordinary local helpers, and separately compiled helpers with local and imported
+module sources, nested conditionals, and short-circuit selection. The tarball
+fixture again uses the mixed expression directly in dev/prod SSR and browser
+checks. This does not add helper-name special cases or change imperative reads.
 
 Required regressions include import aliases and re-exports; lexical shadowing;
 nested wrappers; source fields/arrays; mixed state/payload reads; returned facades

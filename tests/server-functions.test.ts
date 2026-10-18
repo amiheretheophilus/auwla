@@ -309,6 +309,7 @@ describe('defined HTTP server functions', () => {
     expect(compiled).toContain('rebindResolvedValueFromFactory(story, () => getStory(id))');
     expect(compiled).toContain('createEventSourceSlot()');
     expect(compiled).toContain('runResolvedValuesEffect([lastVote]');
-    expect(compiled).toContain('readResolvedValueForRender(lastVote).id');
+    expect(compiled).toContain('readResolvedValuesForRender([lastVote]');
+    expect(compiled).not.toContain('readResolvedValueForRender(lastVote).id');
   });
 });

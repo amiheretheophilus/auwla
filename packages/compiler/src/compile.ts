@@ -94,7 +94,7 @@ function transform(
         );
       },
     },
-    opts,
+    { ...opts, ...(opts.diagnostics ? { diagnosticSourceText: source } : {}) },
   );
   const program = stripTypeScript(input.program);
   const printed = printEstree(program, {

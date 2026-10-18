@@ -11,6 +11,7 @@ import { cloneNode } from '../ast';
 import type { DomContext as Ctx } from './context';
 import { generatedIdentifier, md, mdTrace } from './identifiers';
 import { diagnosticSourceArray, diagnosticSources } from './diagnostics';
+import { diagnosticSite } from './diagnostic-source';
 import { reasonCondition } from './components/local-derived';
 import type { ComponentRegionReplay } from '../analysis/region-replay';
 import type { ComponentListSites } from '../planning/list-sites';
@@ -213,6 +214,7 @@ export function updateBody(ctx: Ctx, scope: EmitScope): t.Statement[] {
       astFactory.expressionStatement(astFactory.callExpression(mdTrace(ctx, 'traceBinding'), [
         cloneNode(scope.diagnosticOwner), astFactory.stringLiteral(`binding:${bindingIndex++}`),
         diagnosticSourceArray(expression ? diagnosticSources(expression) : []),
+        diagnosticSite(ctx, expression),
       ])), statement,
     ]);
   };
@@ -284,6 +286,7 @@ export function registerStmt(
   parent: t.Expression,
   render: t.Expression,
   volatile = false,
+  diagnostic?: { kind: 'conditional'; anchor: t.Node },
 ): t.Statement {
   return astFactory.expressionStatement(
     astFactory.callExpression(md(ctx, volatile ? 'register' : 'registerEntity'), [
@@ -291,7 +294,8 @@ export function registerStmt(
         astFactory.objectProperty(astFactory.identifier('id'), id),
         astFactory.objectProperty(astFactory.identifier('parent'), parent),
         astFactory.objectProperty(astFactory.identifier('render'), ctx.diagnostics
-          ? astFactory.callExpression(mdTrace(ctx, 'traceUpdate'), [cloneNode(id), render]) : render),
+          ? astFactory.callExpression(mdTrace(ctx, 'traceUpdate'), [cloneNode(id), render,
+            ...(diagnostic ? [astFactory.stringLiteral(diagnostic.kind), diagnosticSite(ctx, diagnostic.anchor)] : [])]) : render),
         ...(volatile
           ? [astFactory.objectProperty(astFactory.identifier('volatile'), astFactory.booleanLiteral(true))]
           : []),

@@ -11,6 +11,7 @@ import { validateValue } from './schema';
 import { responseStreamDecoder } from './response-decoder';
 import { notifyDataRuntimeProgress } from './runtime-lifetime';
 import { multiplexTransport } from './live-multiplex';
+import { liveDiagnosticsEnabled, liveDiagnosticId, liveDiagnosticName, observeLiveDiagnostic, reportLiveDiagnostic } from './live-diagnostics';
 import type { CoreDataRuntime } from './runtime-core';
 import type { FetchEnvironment } from './resource';
 import type { FetchOptions, ResolvedValue } from './types';
@@ -30,6 +31,21 @@ function delay(ms: number, signal: AbortSignal): Promise<void> {
 /** The first value settles request readiness; the pump belongs to the source lifetime. */
 function transport(environment: FetchEnvironment, runtime: CoreDataRuntime): NonNullable<FetchEnvironment['stream']> {
   return (descriptor, signal, delivery) => {
+    const diagnosticId=descriptor.stream==='live'&&!getActiveEnvironment().mode.startsWith('server-')?liveDiagnosticId('direct'):undefined;
+    let diagnosticState='connecting',diagnosticAttempt=0,diagnosticSequence:number|undefined;
+    const diagnostic=(event:string,details:Record<string,unknown>={})=>{
+      if(diagnosticId&&liveDiagnosticsEnabled())reportLiveDiagnostic(event,{
+        source:liveDiagnosticName(descriptor.url),method:descriptor.method,sourceId:delivery.diagnosticSourceId,
+        connectionId:diagnosticId,transport:'direct',...details,
+      });
+    };
+    const connection=(state:string,attempt=0)=>{
+      diagnosticState=state;diagnosticAttempt=attempt;diagnostic('connection-state',{state,attempt});
+    };
+    const releaseDiagnostic=diagnosticId?observeLiveDiagnostic(()=>{
+      connection(diagnosticState,diagnosticAttempt);diagnostic('subscription-opened',{sequence:diagnosticSequence});
+    }):()=>{};
+    diagnostic('subscription-opened');
     const first = Promise.withResolvers<unknown>();
     const completed = Promise.withResolvers<void>();
     void completed.promise.catch(() => {});
@@ -43,11 +59,13 @@ function transport(environment: FetchEnvironment, runtime: CoreDataRuntime): Non
       if (!seen) { seen = true; first.resolve(data); }
     };
     const fail = (error: unknown) => {
+      diagnostic('subscription-error',{reason:error instanceof StreamProtocolError?'protocol-error':error instanceof RequestError?'request-error':'stream-error'});
       if (!signal.aborted) delivery.state(false, error);
       if (!seen) first.reject(error);
       completed.reject(error);
     };
     const request = async () => {
+      connection('connecting',diagnosticAttempt);
       const headers = new Headers(descriptor.headers);
       const pageDecoder = responseStreamDecoder(descriptor.schema);
       const server = getActiveEnvironment().mode.startsWith('server-');
@@ -90,6 +108,7 @@ function transport(environment: FetchEnvironment, runtime: CoreDataRuntime): Non
         throw new RequestError('Expected a streaming server-function response', { kind: 'decode' });
       }
       delivery.state(true);
+      connection('connected');
       const reader = response.body.getReader();
       const abort = () => { void reader.cancel(signal.reason).catch(() => {}); };
       signal.addEventListener('abort', abort, { once: true });
@@ -131,6 +150,7 @@ function transport(environment: FetchEnvironment, runtime: CoreDataRuntime): Non
               const nextSequence = frameSequence(frame.seq);
               if (sequence !== undefined && nextSequence === sequence + 1) baselineRecoveries = 0;
               sequence = nextSequence;
+              diagnosticSequence=sequence;diagnostic('frame-received',{stamp,sequence});
               baseline = frame.value as LiveJsonValue;
               await deliver(structuredClone(baseline), stamp);
             } else {
@@ -148,6 +168,7 @@ function transport(environment: FetchEnvironment, runtime: CoreDataRuntime): Non
             try { baseline = applyLivePatch(baseline, frame.patch); }
             catch { throw new StreamProtocolError('Invalid live patch operations'); }
             sequence = seq;
+            diagnosticSequence=sequence;diagnostic('patch-received',{stamp,sequence});
             baselineRecoveries = 0;
             await deliver(structuredClone(baseline), stamp);
           } else if (event === 'done') {
@@ -203,6 +224,7 @@ function transport(environment: FetchEnvironment, runtime: CoreDataRuntime): Non
         } catch (error) {
           if (signal.aborted || isAbortError(error)) break;
           if (error instanceof LivePatchBaselineError) {
+            diagnostic('baseline-recovery',{reason:'patch-baseline-mismatch'});
             // Only a safe live GET can resynchronize. Each new connection starts full.
             // Do not spin against a server repeatedly supplying an unusable baseline.
             if (++baselineRecoveries > 1) { fail(error); return; }
@@ -217,12 +239,13 @@ function transport(environment: FetchEnvironment, runtime: CoreDataRuntime): Non
           failures++;
         }
         delivery.state(true);
+        connection('reconnecting',failures+1);
         try { await delay(Math.min(1000 * 2 ** failures, 30_000), signal); }
         catch { break; }
       }
       if (!seen) first.reject(signal.reason ?? new Error('Stream aborted'));
       completed.reject(signal.reason ?? new Error('Stream aborted'));
-    })().catch(fail);
+    })().catch(fail).finally(()=>{releaseDiagnostic();diagnostic('subscription-closed');connection('closed');});
     // Suppress an unobserved rejection until FetchEntry attaches its handler.
     first.promise.catch(() => {});
     return (descriptor.stream === 'page' || getActiveEnvironment().mode.startsWith('server-') && responseStreamDecoder(descriptor.schema)
