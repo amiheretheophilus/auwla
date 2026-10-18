@@ -1,4 +1,4 @@
-import { liveDiagnosticsEnabled, reportLiveDiagnostic } from './live-diagnostics';
+import { liveDiagnosticsEnabled, reportLiveDiagnostic, observeLiveDiagnostic } from './live-diagnostics';
 
 export interface LiveStamp { epoch: string; key: string; revision: number }
 export function liveStamp(value: unknown): LiveStamp | undefined {
@@ -35,6 +35,7 @@ export class LiveProtection {
   private readonly required = new Map<string, LiveStamp>();
   private pending = 0;
   private buffered: { value: unknown; stamp: LiveStamp } | undefined;
+  private releaseDiagnostic: (() => void) | undefined;
   constructor(
     private readonly apply: (value: unknown) => void,
     private readonly source?: { readonly source: string; readonly method: string; readonly sourceId?: string },
@@ -42,7 +43,15 @@ export class LiveProtection {
   private report(event: string, details: Record<string, unknown>): void {
     reportLiveDiagnostic(event, { ...this.source, ...details });
   }
+  private observe(): void {
+    if (!liveDiagnosticsEnabled() || this.releaseDiagnostic) return;
+    this.releaseDiagnostic = observeLiveDiagnostic(() => this.report('source-current', {
+      ...(this.stamp ? { stamp: this.stamp } : {}), pending: this.pending,
+      state: this.buffered ? 'held' : this.pending ? 'protected' : 'applied',
+    }));
+  }
   receive(value: unknown, stamp: LiveStamp): void {
+    this.observe();
     if (this.stamp?.epoch === stamp.epoch && this.stamp.key === stamp.key && this.stamp.revision > stamp.revision) {
       if (liveDiagnosticsEnabled()) this.report('snapshot-rejected', {
         reason: 'older-than-received', stamp, current: this.stamp,
@@ -60,6 +69,7 @@ export class LiveProtection {
     this.flush();
   }
   protect(): (updates?: readonly LiveStamp[]) => void {
+    this.observe();
     this.pending++;
     if (liveDiagnosticsEnabled()) this.report('protection-started', { key: this.stamp?.key, pending: this.pending });
     let released = false;
@@ -115,5 +125,9 @@ export class LiveProtection {
     this.apply(snapshot.value);
     if (liveDiagnosticsEnabled()) this.report('snapshot-applied', { stamp: snapshot.stamp });
   }
-  clear(): void { this.buffered = undefined; }
+  clear(): void {
+    this.buffered = undefined;
+    this.releaseDiagnostic?.(); this.releaseDiagnostic = undefined;
+    if (liveDiagnosticsEnabled()) this.report('source-disposed', {});
+  }
 }

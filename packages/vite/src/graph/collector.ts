@@ -19,6 +19,7 @@ import {
 import type { ResolvedAdapterOptions } from '../options';
 import type { InitialPage } from '../initial-html';
 import { applyInitialPage } from '../initial-html';
+import { pageBindingsBoundary } from '../server-pages';
 import {
   acceptsSource,
   cleanViteId,
@@ -327,6 +328,7 @@ export async function compileGraph(
       : { externalReactiveSources: options.externalReactiveSources }),
     experimentalPackageArtifacts: [
       ...(options.experimentalPackageArtifacts ?? []),
+      ...(renderableContent ? [pageBindingsBoundary] : []),
     ],
     experimentalPackageImports: [...packageImports.values()],
     ...(hot ? { hot: true } : {}),

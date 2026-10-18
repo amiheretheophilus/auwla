@@ -1,8 +1,9 @@
 # Development inspector design
 
-Status: proposed and deferred. This document records the intended developer
-experience and boundaries; no inspector UI or retained diagnostic channel is
-implemented yet.
+Status: initial implementation available in `@memoized-dom/devtools`. The
+separate package owns the UI, self-hosted typography, bounded capture and
+versioned metadata protocol. Vite provides the development-only launcher without
+application imports. See [usage and limits](../packages/devtools/README.md).
 
 ## Why add an inspector
 
@@ -22,8 +23,9 @@ must not introduce a second invalidation, tracking or delivery system.
 ## Intended author experience
 
 During `memoized-dom dev`, the inspector is closed and invisible by default.
-`Alt+Shift+M` opens or closes a development-only panel. A query parameter such
-as `?mmd-inspect` may enable it for browser automation.
+`Alt+Shift+M` opens or closes a development-only panel. `?mmd-inspect` opens it
+automatically, including for browser automation. The panel supports a docked view,
+expanded workbench, filters, metadata export and system/light/dark themes.
 
 No application import, component wrapper, server-function option or middleware
 change should be required. Production builds must omit the panel, its event
@@ -47,7 +49,24 @@ Equal keys do not merge query identity. The view must keep two server functions
 with the same key as separate subscriptions while showing that one invalidation
 matched both.
 
-### Reactivity
+### Events and Regions
+
+There are four tabs only: Live, Events, Regions and Issues. Events lists attached
+handlers before invocation; Regions lists mounted conditional regions before
+their next check. A row flashes when its handler/region runs. Registrations are
+replayed when capture opens and released at owner disposal, including HMR.
+Each tab retains its own selection. Badges count attached sites; activity counts
+are separate and do not imply component rerenders or branch replacement.
+
+The primary detail is authored JSX: component name, file, exact line/column and
+the nearest JSX element (including the label around a labelled input), with
+the handler or expression highlighted. Do not show the whole component. Show
+plain action labels (for example, “Click handler ran” or “Text updated”), not
+raw protocol names and JSON as the first explanation. Keep protocol metadata
+under Internal details. Selecting a record pins it and reveals its code even
+in the narrow dock. Generated steps without original locations say so, rather
+than displaying an invented source address. This source context is development
+only and includes static JSX literals/handler code, not runtime value capture.
 
 Present the existing runtime trace as a causality-oriented timeline:
 
@@ -85,11 +104,15 @@ Console messages remain supported. The live and runtime reporters should also
 publish structured internal events to a bounded development sink. The panel
 subscribes to that sink directly and never parses console output.
 
-Browser events remain local. In Vite development, a server diagnostic sink can
-relay the existing structured server events through the development channel.
+Browser events remain local. The native Bun/Node Vite development host relays
+sanitized server events through the existing HMR channel to opened inspectors.
+Async-local scopes isolate concurrent Vite projects, but server observations
+are instance-wide, not per-browser request data. Names/keys can match another
+viewer's work; the UI does not claim request attribution. Cloudflare's separate
+`workerd` host and non-native SSR hosts currently have browser diagnostics only.
 The application SSE protocol must not carry inspector events merely to support
 the UI. Non-Vite hosts keep console diagnostics unless they explicitly install
-an equivalent development sink.
+an equivalent development sink. Only use the relay on a trusted development server.
 
 The panel should mount in a Shadow DOM so application styles cannot affect it
 and inspector styles cannot affect the application. Event history is a bounded

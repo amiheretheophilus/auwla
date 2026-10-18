@@ -30,6 +30,7 @@ import {
 } from './paths';
 import { AdapterState } from './state';
 import { ServerPages, isPageModule, pageHydrationId } from './server-pages';
+import { configureInspector, inspectorId, resolvedInspectorId, inspectorSource } from './inspector';
 import { hydrationBootstrap, hydrationVirtualId, resolvedHydrationVirtualId } from './hydration';
 import { applyInitialPage } from './initial-html';
 import { initialBootstrapDescriptor } from '@memoized-dom/runtime/server';
@@ -125,7 +126,7 @@ export function memoizedDom(
     serverFunctionClientBarrelSource = generated.clientBarrelSource;
     serverFunctionBarrelEntries = generated.clientBarrelEntries;
     serverServices = generated.services;
-    serverPages = new ServerPages(config.root,options,generated.modules,generated.clientBarrelEntries);
+    serverPages = new ServerPages(config.root,options,generated.modules,generated.clientBarrelEntries,config.command === 'serve');
     await writeServerFunctionDeclarations(config.root, generated.modules, options);
     return generated.files;
   }
@@ -556,6 +557,7 @@ export function memoizedDom(
     },
     configureServer(server) {
       devServer = server;
+      if (options.devtools !== false) configureInspector(server, api);
       for (const file of installedWatchFiles) watchInstalledFile(file);
       if (options.compilePackages?.length) {
         const close = server.close.bind(server);
@@ -628,6 +630,7 @@ export function memoizedDom(
     transformIndexHtml: {
       order: 'pre',
       handler(html, context) {
+        if (config?.command === 'serve' && options.devtools !== false) return { html, tags: [{ tag: 'script', attrs: { type: 'module', src: config.base + '@id/' + inspectorId }, injectTo: 'head' }] };
         if (config?.command !== 'build') return html;
         for (const [environment, state] of states) {
           if ((environment as { name?: string }).name !== 'client' || !state.initialPage) continue;
@@ -646,6 +649,7 @@ export function memoizedDom(
       },
     },
     async resolveId(id, importer) {
+      if (id === inspectorId && config?.command === 'serve' && options.devtools !== false) return resolvedInspectorId;
       if (isPageModule(id)) return '\0'+id.replace(/^\0/,'');
       if (id === applicationVirtualId) return resolvedApplicationVirtualId;
       if (id === integrationVirtualId) return resolvedIntegrationVirtualId;
@@ -696,6 +700,7 @@ export function memoizedDom(
       return null;
     },
     async load(id) {
+      if (id === resolvedInspectorId && config?.command === 'serve' && options.devtools !== false) return { code: inspectorSource(api), map: { mappings: '' } };
       if (isPageModule(id)) {
         await serverPages?.prepare(graphContext(this));
         const code=serverPages?.load(id,this.environment.name === 'ssr');

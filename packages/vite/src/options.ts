@@ -13,6 +13,8 @@ export interface MemoizedDomViteOptions
   runtime?: 'bun' | 'node' | 'cloudflare';
   /** Opt installed ESM packages into compiler analysis and a generated dependency cache. */
   compilePackages?: readonly string[];
+  /** Development inspector launcher. Closed by default; false omits its dev integration. */
+  devtools?: boolean;
   /**
    * Additional source paths allowed outside the Vite project root.
    */
@@ -39,6 +41,7 @@ export function resolveAdapterOptions(
   if (options.clientEntry.trim() === '') {
     throw new Error('memoized-dom: clientEntry must not be empty');
   }
+  if (options.devtools !== undefined && typeof options.devtools !== 'boolean') throw new Error('memoized-dom: devtools must be a boolean');
   if (options.compilePackages !== undefined && (!Array.isArray(options.compilePackages) ||
       !options.compilePackages.every(name => typeof name === 'string' &&
         /^(?:@[a-z0-9][a-z0-9._-]*\/)?[a-z0-9][a-z0-9._-]*$/i.test(name)))) {

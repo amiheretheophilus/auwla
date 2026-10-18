@@ -7,6 +7,7 @@ import { componentId, md, mdTrace } from './identifiers';
 import type { ScopeWrites } from '../handlers/write-facts';
 import type { RowCtx } from './row-context';
 import { imperativeCallback } from './retained-content';
+import { diagnosticSite } from './diagnostic-source';
 
 export function diagnosticSources(expression: t.Expression): string[] {
   const names = new Set<string>();
@@ -23,18 +24,20 @@ export function diagnosticSourceArray(sources: readonly string[]): t.ArrayExpres
 }
 
 export function traceDomWrite(
-  ctx: DomContext, owner: t.Expression, operation: string, expression: t.Expression, write: t.Statement,
+  ctx: DomContext, owner: t.Expression, operation: string, expression: t.Expression, write: t.Statement, anchor: t.Node = expression,
 ): t.Statement {
   if (!ctx.diagnostics) return write;
   return astFactory.blockStatement([write, astFactory.expressionStatement(astFactory.callExpression(mdTrace(ctx, 'traceDom'), [
     cloneNode(owner), astFactory.stringLiteral(operation), diagnosticSourceArray(diagnosticSources(expression)),
+    diagnosticSite(ctx, anchor),
   ]))]);
 }
 
-export function traceHandler(ctx: DomContext, owner: t.Expression, type: string, handler: t.Expression): t.Expression {
+export function traceHandler(ctx: DomContext, owner: t.Expression, type: string, handler: t.Expression, anchor?: t.Node): t.Expression {
   if (ctx.scopedEvents) handler = astFactory.callExpression(md(ctx,'bindRuntimeCallback'), [handler]);
   return imperativeCallback(ctx.diagnostics ? astFactory.callExpression(mdTrace(ctx, 'traceEvent'), [
     cloneNode(owner), astFactory.stringLiteral(type), handler,
+    diagnosticSite(ctx, anchor),
   ]) : handler);
 }
 

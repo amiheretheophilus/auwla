@@ -20,6 +20,7 @@ import { generatedIdentifier, md, requireIdentifiers } from './identifiers';
 import { planAccessReaders } from '../analysis/access-table';
 import { emitAccessTable } from './access-table';
 import { prepareProgramAnalysis } from './prepare';
+import { indexDiagnosticSource } from './diagnostic-source';
 import { liftModuleStateCells } from '../cells';
 import { emitDomComponents } from './dom';
 import { emittedRuntimeHelpers } from './runtime-requirements';
@@ -250,6 +251,7 @@ function prepareProgram(
   ctx: Ctx,
   programPath: ProgramTransformPath,
 ): ModuleRenderPlan {
+  indexDiagnosticSource(ctx, programPath.node as unknown as BaseNode);
   prepareProgramAnalysis(ctx, programPath);
   analyzeRoutedPreparations(ctx, programPath, true);
   rewriteTransparentDataReads(ctx);

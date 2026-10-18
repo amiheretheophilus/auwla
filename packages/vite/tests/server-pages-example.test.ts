@@ -42,6 +42,9 @@ it.skipIf(!chrome)('keeps the documented server-pages example interactive across
   let log='';child.stdout!.on('data',data=>{log+=data;});child.stderr!.on('data',data=>{log+=data;});
   let origin='';
   await waitFor(()=>{const match=log.match(/Memoized DOM \((?:bun|node)\): (http[^\s]+)/);expect(match,log).not.toBeNull();origin=match![1]!;},60_000);
+  const compiledApp = await (await fetch(origin + '/src/App.tsx')).text();
+  expect(compiledApp).not.toContain('volatile: true');
+  expect(compiledApp).toContain('traceUpdate');
 
   const browser=await puppeteer.launch({executablePath:chrome!,headless:true});
   try{

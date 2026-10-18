@@ -87,6 +87,21 @@ after changing runtime selection, native listener options, or plugin code.
 
 Without an explicit subcommand, `memoized-dom` starts development.
 
+### Development inspector
+
+Press **Alt+Shift+M** to toggle the docked inspector, or open `?mmd-inspect`.
+The separate `@memoized-dom/devtools` package provides Live, Reactivity and Issues
+views, an expanded workbench, self-hosted Geist fonts and light/dark themes.
+No application import is required; UI assets load only when opened and are not
+included in production builds. Disable the launcher with `devtools: false` in
+the existing `memoizedDom(...)` options.
+
+The native Bun/Node host also relays sanitized, instance-wide server observations
+over the existing Vite development channel. Cloudflare and other SSR hosts
+currently provide browser diagnostics only. Names and live keys can be sensitive;
+keep the development server and exported reports private. See the
+[inspector guide](../packages/devtools/README.md) for capture limits and privacy.
+
 ## `build`
 
 ```sh

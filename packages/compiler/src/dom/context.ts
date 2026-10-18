@@ -8,8 +8,11 @@ import type { InitialBrowserRoot } from './browser-plan';
 import type { InitialDelivery } from './delivery-plan';
 import type { InitialDomRoot } from './initial-dom';
 import { createDomEmissionState, type DomEmissionState } from './state';
+import type { DiagnosticSourceIndex } from './diagnostic-source';
 
 export interface InternalMemoDomOptions extends AnalysisOptions {
+  /** Authored text is only used to emit bounded JSX context in development. */
+  diagnosticSourceText?: string;
   /** Local declarations retained as callbacks by another application module. */
   retainedModuleCallbacks?: ReadonlySet<string>;
   /** Package factories resolve conservative event invalidation through their runtime owner. */
@@ -27,6 +30,8 @@ export interface InternalMemoDomOptions extends AnalysisOptions {
 }
 
 export interface DomContext extends AnalysisContext {
+  diagnosticSourceText?: string;
+  diagnosticSourceIndex?: DiagnosticSourceIndex;
   retainedModuleCallbacks: ReadonlySet<string>;
   packageEmission: boolean;
   /** Runtime ABI allocation, separate from analyzed source names. */
@@ -51,7 +56,7 @@ export interface DomContext extends AnalysisContext {
 }
 
 export function createCtx(opts:InternalMemoDomOptions={}):DomContext {
-  return {...createAnalysisCtx(opts),packageEmission:opts.packageEmission===true,instanceReasonIds:new Map(),analyzedFunctions:new WeakSet(),
+  return {...createAnalysisCtx(opts),diagnosticSourceText:opts.diagnosticSourceText,packageEmission:opts.packageEmission===true,instanceReasonIds:new Map(),analyzedFunctions:new WeakSet(),
     retainedModuleCallbacks:opts.retainedModuleCallbacks??new Set(),
     callbackPublications:new Set(),handlerHasRootCommit:new WeakMap(),moduleCallbacks:null,initialDelivery:opts.initialDelivery,
     routeCallsiteIds:new WeakMap(),routeContextParams:new Map(),externalReactiveImports:new Map(),

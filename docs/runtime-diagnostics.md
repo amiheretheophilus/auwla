@@ -1,8 +1,10 @@
 # Tracing events, bindings, and DOM updates
 
-The current interface is console tracing. A unified development panel is
-proposed, but not implemented; see
-[the development inspector design](./dev-inspector-design.md).
+Press **Alt+Shift+M** during development to open the separate
+[`@memoized-dom/devtools` inspector](../packages/devtools/README.md). Its Events
+and Regions views list attached sites before interaction and flash when they
+run, without enabling console output. There is no Reactivity tab. Console
+tracing remains available independently using the settings below.
 
 Run `memoized-dom dev`, enable **Verbose** in the browser's Console, and enable
 tracing from that Console:
@@ -91,6 +93,21 @@ later stages. Requests remain concurrent.
 
 ## Coverage and limits
 
+The visual inspector presents authored browser JSX first: component, file,
+line/column and the nearest enclosing JSX element, with the exact expression or
+event attribute highlighted. A labelled input includes its enclosing label;
+unrelated component JSX is not displayed. These addresses come from original compiler AST
+ranges, not guessed runtime labels. Generated steps without an original JSX
+anchor say so. A section is bounded to 24,000 characters plus indentation;
+oversized sections fall back to a smaller enclosing section when available.
+Synthetic page-companion modules currently have no authored JSX context.
+Static JSX literals and handler code are visible in this development-only view
+and its explicit diagnostic export. Surrounding imports/declarations and server
+preparation bodies are excluded; source code is not added to console logs.
+Events and conditional-region checks have separate inspector tabs. A condition
+can be checked without changing branches; the Regions view does not count
+checks as component rerenders or branch replacements.
+
 This is console tracing, not a profiler or a complete DOM mutation inspector.
 It covers compiler-owned explicit JSX event handlers (including explicit
 handlers alongside spreads and delegated row handlers), emitted callback write
@@ -107,8 +124,9 @@ to reactivity analysis or invalidation decisions.
 
 No payloads, text values, input values, event objects, DOM nodes, or state
 snapshots are included. Component paths and binding names can themselves be
-sensitive; keep development logs private. There is no retained trace history,
-DOM observer, state proxy, new subscription, or automatic promise tracking.
+sensitive; keep development logs private. Console tracing retains no history;
+the optional open inspector retains a bounded metadata history. Neither adds a
+DOM observer, state proxy, application subscription, or automatic promise tracking.
 Console failures do not prevent an event or update from completing.
 
 Continuous/volatile updates can be chatty. The console reporter allows at most
@@ -116,6 +134,9 @@ Continuous/volatile updates can be chatty. The console reporter allows at most
 update/binding-evaluation messages so they cannot consume the entire budget
 for events, publications, and DOM writes. It emits one `trace-throttled` notice
 when a budget is exceeded and omits messages exceeding that budget. It
+records the observed component, binding/source labels when available, triggering
+event, budget reason and recorded counters on that notice. These describe the
+boundary where sampling began, not attribution of all preceding work. It
 does not defer application work, queue traces, or start a timer. Narrow filters
 and disable tracing after reproducing an issue. Console work itself adds
 overhead; these logs are not suitable for production performance measurements.

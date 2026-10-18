@@ -37,6 +37,7 @@
     "@jridgewell/remapping": "^2.3.5",
     "@memoized-dom/adapters": "workspace:*",
     "@memoized-dom/compiler": "workspace:*",
+    "@memoized-dom/devtools": "workspace:*",
     "magic-string": "0.30.21"
   },
   "peerDependencies": {

@@ -10,6 +10,7 @@ import { transparentExpressionSources } from '../planning/async-reads';
 import { cachedTextConcat } from './text-concat';
 import { cachedTextValue } from './text-value';
 import { initialNode, initialOrCreate, freshInitialStatement, type InitialDomPath } from './initial-dom';
+import { diagnosticSite } from './diagnostic-source';
 
 // ---------------------------------------------------------------------
 // component transform
@@ -73,7 +74,7 @@ export function emitText(
           ...(ctx.diagnostics ? [cloneEstreeNode(ownerId)] : []),
           astFactory.identifier(varName),
           cloneEstreeNode(prepared),
-          ...(ctx.diagnostics ? [diagnosticSourceArray(diagnosticSources(expr))] : []),
+          ...(ctx.diagnostics ? [diagnosticSourceArray(diagnosticSources(expr)), diagnosticSite(ctx, expr)] : []),
         ]),
       );
     if (!initialPath || adopting) scope.creation.push(freshInitialStatement(scope,setter()));

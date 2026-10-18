@@ -1,7 +1,7 @@
 /** Private, allowlisted page artifacts. Server handler graphs never enter browser compilation. */
 import { readFile } from 'node:fs/promises';
 import { relative } from 'node:path';
-import { compileServerPage, extractServerPages, memoizedEstreeFrontend, parseWithEstreeFrontendOrThrow,
+import { compileServerPage, definePackageBoundaries, extractServerPages, memoizedEstreeFrontend, parseWithEstreeFrontendOrThrow,
   type ServerFunctionModule, type ServerPageImport } from '@memoized-dom/compiler';
 import type { GraphPluginContext } from './graph/collector';
 import { valueImports } from './graph/imports';
@@ -11,6 +11,13 @@ import { resolveServerAlias } from './server-config';
 import type { ResolvedAdapterOptions } from './options';
 
 export const pageBindingsId = 'virtual:memoized-dom/page-bindings';
+/** The loader owns delivery/cache work, not an independently changing UI value.
+ * Use the ordinary boundary contract; do not teach the compiler a Vite name or
+ * suppress opacity for arbitrary source factories/callbacks.
+ */
+export const pageBindingsBoundary = definePackageBoundaries({
+  [pageBindingsId]: { loadPageBinding: {}, preparePageHydration: {} },
+});
 export const pageHydrationId = 'virtual:memoized-dom/page/hydrate.js';
 const prefix = 'virtual:memoized-dom/page/';
 export function isPageModule(id:string): boolean { return id.replace(/^\0/,'') === pageBindingsId || id.replace(/^\0/,'').startsWith(prefix); }
@@ -27,7 +34,8 @@ export class ServerPages {
   private readonly styles = new Set<string>();
   owns(file:string):boolean {return this.files.has(normalizeFile(file));}
   constructor(private readonly root:string, private readonly options:ResolvedAdapterOptions,
-    private readonly definitions:readonly ServerFunctionModule[], private readonly barrel:readonly ServerFunctionBarrelEntry[]) {}
+    private readonly definitions:readonly ServerFunctionModule[], private readonly barrel:readonly ServerFunctionBarrelEntry[],
+    private readonly diagnostics = false) {}
 
   private async resolve(context:GraphPluginContext,specifier:string, importer:string): Promise<string|undefined> {
     if (specifier.startsWith('#server/')) specifier=resolveServerAlias(this.root,specifier,this.options);
@@ -118,7 +126,7 @@ export class ServerPages {
         };
         await collect(rootModule);
         const artifact=compileServerPage(sources,rootModule,page.component,page.captures.length,{frontend,
-          resolveImport:(specifier,importer)=>resolutions.get(importer+'\0'+specifier), renderableContent:true});
+          resolveImport:(specifier,importer)=>resolutions.get(importer+'\0'+specifier), renderableContent:true, diagnostics:this.diagnostics});
         delivery[page.component]=artifact.delivery;
         const virtual=(environment:string,id:string)=>prefix+index+'/'+environment+'/'+encodeURIComponent(id)+'.js';
         for (const [environment,output] of [['server',artifact.server],['client',artifact.browser]] as const) for (const [id,code] of Object.entries(output)) {
