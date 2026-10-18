@@ -54,9 +54,10 @@ export interface HandlerWriteRouting {
 }
 
 /**
- * `nodes.panel.innerHTML = …` or `nodes.panel.classList.add(…)`: the receiver
- * is a node the runtime assigned through `ref={nodes.panel}`. That is DOM work,
- * not a write to the `nodes` state, so it schedules no render.
+ * `nodes.panel.innerHTML = …` or `host.classList.add(…)`: the receiver is a
+ * node the runtime assigned through `ref={nodes.panel}` or `ref={host}`. That
+ * is DOM work, not a write to the ref binding, so it schedules no render; only
+ * rebinding the sink itself is a write.
  */
 export function writesThroughRef(
   ctx: { readonly refMemberPaths: ReadonlyMap<string, ReadonlySet<string>> },
@@ -64,8 +65,9 @@ export function writesThroughRef(
   member: t.MemberExpression,
 ): boolean {
   const paths = compName === null ? undefined : ctx.refMemberPaths.get(compName);
-  if (paths === undefined || !astFactory.isMemberExpression(member.object)) return false;
-  const receiver = memberKey(member.object);
+  if (paths === undefined) return false;
+  const receiver = astFactory.isIdentifier(member.object) ? member.object.name
+    : astFactory.isMemberExpression(member.object) ? memberKey(member.object) : null;
   if (receiver === null) return false;
   for (const path of paths) if (receiver === path || receiver.startsWith(path + '.')) return true;
   return false;

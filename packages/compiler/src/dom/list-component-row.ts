@@ -342,7 +342,7 @@ export function buildComponentRowCreate(
     propObjectExpression = emitOrderedAttributes(attributePlan, {
       attributeValue: (name, value) =>
         name === 'ref' || targetPlan?.refProps.includes(name) === true
-          ? compileRefValue(ctx, componentPath, componentName, value)
+          ? compileRefValue(ctx, componentPath, componentName, value, rowContext)
           : value,
     });
     for (const property of propObjectExpression.properties) {
@@ -430,6 +430,7 @@ export function buildComponentRowCreate(
             componentPath,
             componentName,
             value,
+            rowContext,
           ),
         });
         continue;

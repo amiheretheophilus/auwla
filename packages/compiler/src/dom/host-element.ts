@@ -230,7 +230,7 @@ if (hasSpread) {
   const ordered = emitOrderedAttributes(attributePlan, {
     attributeValue: (name, value) =>
       name === 'ref'
-        ? compileRefValue(ctx, componentPath, componentName, value)
+        ? compileRefValue(ctx, componentPath, componentName, value, rowContext)
         : value,
     eventValue: (name, value) => {
       const handler = buildHandler(
@@ -313,7 +313,7 @@ if (hasSpread) {
       scope,
       astFactory.identifier(varName),
       ownerId,
-      compileRefValue(ctx, componentPath, componentName, value),
+      compileRefValue(ctx, componentPath, componentName, value, rowContext),
     );
     return;
   }

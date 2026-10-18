@@ -9,19 +9,26 @@ import type * as t from '../ast/compiler-types';
 import * as astFactory from '../ast/factory';
 import { cloneNode as cloneEstreeNode } from '../ast';
 import { type BaseNode } from '../ast';
-import { astBindingAt, type ComponentPath } from '../context';
+import { astBindingAt, memberKey, memberRootName, type ComponentPath } from '../context';
 import { type DomContext as Ctx } from './context';
+import type { RowCtx } from './row-context';
+import { instrumentRefCallback } from './handlers';
 import { renderPropReferenceName } from '../analysis/render-prop-reference';
 import { generatedIdentifier, md } from './identifiers';
 import type { EmitScope } from './scope';
 import { imperativeCallback } from './retained-content';
 
-/** Compile one source ref into callback/array values understood by mountRef. */
+/**
+ * Compile one source ref into callback/array values understood by mountRef.
+ * The callbacks' writes commit, so readers of an assignable sink update when
+ * its node mounts or leaves.
+ */
 export function compileRefValue(
   ctx: Ctx,
   componentPath: ComponentPath,
   componentName: string,
   expression: t.Expression,
+  rowCtx?: RowCtx,
 ): t.Expression {
   if (astFactory.isArrayExpression(expression)) {
     return astFactory.arrayExpression(
@@ -37,6 +44,7 @@ export function compileRefValue(
           componentPath,
           componentName,
           element,
+          rowCtx,
         );
       }),
     );
@@ -45,11 +53,22 @@ export function compileRefValue(
   if (isForwardedRef(ctx, componentName, expression)) {
     return cloneEstreeNode(expression, true);
   }
-  if (isMutableIdentifier(ctx, componentPath, expression)) {
-    return assignAdapter(ctx, expression);
+  if (isMutableIdentifier(ctx, componentPath, expression) || astFactory.isMemberExpression(expression)) {
+    const adapter = mutableAdapter(ctx, expression);
+    const root = astFactory.isIdentifier(expression) ? expression.name : memberRootName(expression);
+    if (root !== null && ctx.reactiveRefRoots.get(componentName)?.has(root) === true) {
+      // The mount write and the teardown write each commit; analyzed apart,
+      // each commit follows its write without completion lowering.
+      const body = (adapter.body as t.BlockStatement).body;
+      const teardown = body.pop() as t.ReturnStatement;
+      instrumentRefCallback(ctx, adapter, componentName, rowCtx);
+      instrumentRefCallback(ctx, teardown.argument as t.ArrowFunctionExpression, componentName, rowCtx);
+      (adapter.body as t.BlockStatement).body.push(teardown);
+    }
+    return astFactory.callExpression(md(ctx, 'refAssign'), [adapter]);
   }
-  if (astFactory.isMemberExpression(expression)) {
-    return assignAdapter(ctx, expression);
+  if (astFactory.isArrowFunctionExpression(expression) || astFactory.isFunctionExpression(expression)) {
+    instrumentRefCallback(ctx, expression, componentName, rowCtx);
   }
   return cloneEstreeNode(expression, true);
 }
@@ -136,24 +155,17 @@ function isMutableIdentifier(
 
 /**
  * Assignable-target adapters are pure writes, so emitted code marks them
- * through `refAssign` — the runtime runs them at creation while authored
- * callbacks defer until the node is connected in a settled document.
+ * through `refAssign`: the runtime runs them at creation while authored
+ * callbacks defer until the node is connected in a settled document. A
+ * static path (`box`, `nodes.box`) is written directly, so the write is
+ * routed to its readers; a computed key is captured once at mount.
  */
-function assignAdapter(
-  ctx: Ctx,
-  target: t.Identifier | t.MemberExpression,
-): t.CallExpression {
-  return astFactory.callExpression(md(ctx, 'refAssign'), [
-    mutableAdapter(ctx, target),
-  ]);
-}
-
 function mutableAdapter(
   ctx: Ctx,
   target: t.Identifier | t.MemberExpression,
 ): t.ArrowFunctionExpression {
   const node = generatedIdentifier(ctx, 'refNode');
-  if (astFactory.isMemberExpression(target)) {
+  if (astFactory.isMemberExpression(target) && memberKey(target) === null) {
     const receiver = generatedIdentifier(ctx, 'refTarget');
     const key = target.computed
       ? generatedIdentifier(ctx, 'refKey')

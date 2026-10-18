@@ -79,8 +79,45 @@ Intended behaviour changes, to check against tests:
   (group call policies, prepared list plans). Edit leaves in place wherever authored
   nodes must survive; copy only where code is moved into generated callbacks.
 
+## Slice 2, reactive refs
+
+`ref={box}` is a write to `box`. Markup, derivations and effects that read a ref
+update when its node mounts, is replaced by another branch, or leaves.
+
+- `analysis/instance.ts` `includeRefBindings` (was `excludeRefBindings`): a ref
+  sink root that something renders, derives or effects from is instance state and
+  is recorded in `ctx.reactiveRefRoots`. A ref read only by event handlers stays
+  out of state (unchanged output: `input.focus()` costs no mount update).
+- `dom/refs.ts`: the assign adapter of a reactive ref is analyzed like any
+  callback (`instrumentRefCallback` in `dom/handlers.ts`), so its `box = node` and
+  teardown `box = undefined` commit to their readers. Static member sinks
+  (`nodes.box`) are written directly so the write routes; computed keys keep the
+  captured receiver. Authored ref callbacks are instrumented too: state they write
+  now updates its readers (before, `ref={n => { w = n.offsetWidth }}` never did).
+- `handlers/write-routing.ts` `writesThroughRef`: writes and method calls through a
+  ref node (`host.textContent = …`, `host.classList.add(…)`) are DOM work, for
+  identifier refs as well as member refs. Only rebinding the sink is a write.
+- Runtime `mountRef` holds commit scheduling while eager adapters run outside a
+  commit (`holdScheduling` in `kernel.ts`): the owner is still creating its nodes,
+  so the update waits for the end of the task, whatever the scheduler. A later
+  synchronous commit picks up the held marks. Inside a commit (a branch switch)
+  updates stay synchronous.
+- The adapter's mount write and teardown write are analyzed as two callbacks, so
+  each commit sits right after its write (no completion lowering).
+- `effects/emission.ts`: an effect first runs after its owner's refs mounted, so it
+  already saw those nodes. For an identifier ref it re-runs only when the node is
+  another one (an identity slot set after the mounts). A member ref's root
+  (`nodes`) is ordinary state and keeps the plain reason mark.
+- Tests: `tests/reactive-refs.test.ts` (9 cases).
+- Corpus diff against slice 1 (`corpus-rebase.ts` re-records a corpus with a
+  build): 1,616 same, 16 changed, all refs read by effects or markup gaining their
+  mount commit, and static member adapters written directly.
+- Tried and reverted: committing before a trailing `return` instead of the
+  `_completion` label. `tests/m53.test.ts` asserts the label form.
+- Not reactive yet: module-level ref targets (`export let node` with
+  `ref={node}`); their readers in other modules are not tracked.
+
 ## Next
 
 1. Vite suite and `bench/` on a machine with more memory.
-2. Reactive refs: a ref assignment is a write to the ref binding (see `compileRefValue`).
-3. Then the render plan (see `plan.md`).
+2. Then the render plan (see `plan.md`).

@@ -120,6 +120,13 @@ interface KernelState {
   scheduler: Scheduler;
   scheduled: boolean;
   inCommit: boolean;
+  /**
+   * Set while creation-time work (eager ref adapters) writes state outside a
+   * commit. The owner is still creating its nodes, so its update must not run
+   * until the current task finishes, whatever the scheduler.
+   */
+  holdScheduling: boolean;
+  heldSchedule: boolean;
   /** Cycle diagnostics — non-null only while a commit drain runs. */
   renderingEntity: EntityId | null;
   /** Synchronous forwarding retains polling provenance, scoped to this runtime. */
@@ -150,6 +157,8 @@ function createKernelState(
     scheduler: defaultScheduler,
     scheduled: false,
     inCommit: false,
+    holdScheduling: false,
+    heldSchedule: false,
     renderingEntity: null,
     pullUpdate: false,
     renderCounts: null,
@@ -705,9 +714,36 @@ export function enqueueSubtreeInvalidation(
   if (marked) scheduleCommit(runtime);
 }
 
+/**
+ * @internal Hold commits scheduled from now on until the current task ends,
+ * unless a commit is already running (it drains them). Returns the previous
+ * hold for `releaseScheduling`.
+ */
+export function holdScheduling(): boolean {
+  const k = getActiveApplicationRuntime().state;
+  const previous = k.holdScheduling;
+  if (!k.inCommit) k.holdScheduling = true;
+  return previous;
+}
+
+/** @internal Restore the hold returned by `holdScheduling`. */
+export function releaseScheduling(previous: boolean): void {
+  getActiveApplicationRuntime().state.holdScheduling = previous;
+}
+
 function scheduleCommit(runtime: ApplicationRuntime): void {
   const k = runtime.state;
   if (k.scheduled || k.inCommit) return; // dedupe: 1000 marks → 1 frame
+  if (k.holdScheduling) {
+    // The marks stay dirty; any later synchronous commit picks them up.
+    if (k.heldSchedule) return;
+    k.heldSchedule = true;
+    defaultScheduler(() => {
+      k.heldSchedule = false;
+      if (k.dirty.size > 0) scheduleCommit(runtime);
+    });
+    return;
+  }
   k.scheduled = true;
   k.scheduler(() => runInApplicationRuntime(runtime, commit));
 }

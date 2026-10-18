@@ -83,6 +83,22 @@ export function instrumentSharedCallback(
 }
 
 /**
+ * A ref callback runs at mount and at teardown. Its writes (the assignable
+ * sink adapter's `box = node`, or authored state writes) commit like any
+ * other callback's, so readers of the ref update when the node arrives.
+ */
+export function instrumentRefCallback(
+  ctx: Ctx,
+  target: t.ArrowFunctionExpression | t.FunctionExpression,
+  compName: string,
+  rowCtx?: RowCtx,
+): void {
+  if (ctx.analyzedFunctions.has(target)) return;
+  ctx.analyzedFunctions.add(target);
+  analyzeHandler(ctx, target, compName, rowCtx);
+}
+
+/**
  * Resolve a JSX handler attribute to an analyzable function, augmenting
  * named `const` handlers in place. Returns the expression to assign.
  */

@@ -269,13 +269,17 @@ export function scanInstanceState(ctx: Ctx): void {
   }
 }
 
-/** Exclude JSX ref sinks from reactive instance state. */
-export function excludeRefBindings(ctx: Ctx): void {
+/**
+ * A JSX ref sink is a write: the runtime assigns the node at mount and clears
+ * it at teardown, so `let box` read by markup or a derivation is instance
+ * state like any other written binding. Member sinks keep their paths so
+ * DOM work through the node (`nodes.panel.innerHTML = …`) is not a write.
+ */
+export function includeRefBindings(ctx: Ctx): void {
   for (const [name, componentPath] of ctx.compPaths) {
-    const state = ctx.instanceState.get(name);
-    if (state === undefined || state.size === 0) continue;
     const refs = new Set<string>();
     const members = new Set<string>();
+    const sinks = new Set<BaseNode>();
     const note = (target: BaseNode | null) => {
       const direct = identifierName(target);
       if (direct !== null) { refs.add(direct); return; }
@@ -288,7 +292,8 @@ export function excludeRefBindings(ctx: Ctx): void {
       enter(current) {
         if (current.type !== 'JSXAttribute') return;
         const attribute = current as unknown as t.JSXAttribute;
-        if (jsxAttributeName(attribute.name) !== 'ref') return;
+        if (!isRefSink(ctx, current, jsxAttributeName(attribute.name))) return;
+        sinks.add(current);
         const value = childNode(current, 'value');
         if (value?.type !== 'JSXExpressionContainer') return;
         const expression = childNode(value, 'expression');
@@ -296,9 +301,56 @@ export function excludeRefBindings(ctx: Ctx): void {
         for (const element of childNodes(expression, 'elements')) note(element);
       },
     });
-    for (const ref of refs) state.delete(ref);
+    const component = componentPath.node as unknown as BaseNode;
+    // Only a binding something renders, derives or effects from needs the
+    // mount write; a node used only by event handlers is read when they run.
+    const read = (reference: BaseNode): boolean => {
+      for (let current = parentOf(ctx, reference); current !== null && current !== component; current = parentOf(ctx, current)) {
+        if (sinks.has(current)) return false;
+        if (current.type === 'JSXAttribute' &&
+            /^on[A-Z]/.test(jsxAttributeName((current as unknown as t.JSXAttribute).name))) return false;
+      }
+      return true;
+    };
+    const reactive = new Set<string>();
+    const isRead = (binding: Binding): boolean =>
+      binding.references.some(reference => read(reference as unknown as BaseNode));
+    for (const ref of refs) {
+      const binding = astBindingAt(ctx, component, ref);
+      if (
+        (binding?.kind !== 'let' && binding?.kind !== 'var') ||
+        binding.scope.getFunctionScope()?.block !== component
+      ) continue;
+      // `input.focus()` in a handler is DOM work through the node, not a write.
+      if (!isRead(binding)) {
+        ctx.instanceState.get(name)?.delete(ref);
+        continue;
+      }
+      let state = ctx.instanceState.get(name);
+      if (state === undefined) ctx.instanceState.set(name, state = new Set());
+      state.add(ref);
+      reactive.add(ref);
+    }
+    for (const path of members) {
+      const root = path.split('.')[0]!;
+      const binding = astBindingAt(ctx, component, root);
+      if (binding !== undefined && binding.scope.getFunctionScope()?.block === component && isRead(binding)) {
+        reactive.add(root);
+      }
+    }
+    for (const ref of reactive) if (refs.has(ref)) members.add(ref);
     if (members.size > 0) ctx.refMemberPaths.set(name, members);
+    if (reactive.size > 0) ctx.reactiveRefRoots.set(name, reactive);
   }
+}
+
+/** `ref={…}` on any element, or a component's declared ref prop. */
+function isRefSink(ctx: Ctx, attribute: BaseNode, name: string): boolean {
+  if (name === 'ref') return true;
+  const opening = parentOf(ctx, attribute);
+  const tag = opening === null ? null : childNode(opening, 'name');
+  return tag?.type === 'JSXIdentifier' &&
+    ctx.componentProps.get((tag as unknown as t.JSXIdentifier).name)?.refProps.includes(name) === true;
 }
 
 /** Discover ordered component-local derivations without replaying owned state. */

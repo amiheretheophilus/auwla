@@ -17,7 +17,7 @@
  * processing.
  */
 
-import { getActiveApplicationRuntime, getActiveEnvironment } from './kernel';
+import { getActiveApplicationRuntime, getActiveEnvironment, holdScheduling, releaseScheduling } from './kernel';
 
 export type RefCallback<T extends Node = Node> = (
   node: T,
@@ -79,10 +79,15 @@ export function mountRef<T extends Node>(
   let active = true;
   let mounted = false;
 
+  // Eager adapters run while their owner is still creating nodes; the writes
+  // they commit must not update that owner before it finishes.
   const run = (entries: RefValue<T>[]): void => {
+    const held = holdScheduling();
     try {
       for (const entry of entries) mountValue(node, entry, disposers);
+      releaseScheduling(held);
     } catch (error) {
+      releaseScheduling(held);
       const rollbackErrors = drain(disposers);
       if (rollbackErrors.length > 0) {
         throw new AggregateError(

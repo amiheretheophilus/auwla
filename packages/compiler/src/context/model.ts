@@ -641,8 +641,10 @@ export interface Ctx {
   opaqueBindings: Map<string, Set<string>>;
   /** Derived copies a handler edits in place, per component; their replay can keep the edit. */
   editedDerivations: Map<string, Set<string>>;
-  /** Member ref sinks per component (`nodes.panel`): writes through them are DOM work. */
+  /** Ref sinks per component (`host`, `nodes.panel`): writes through them are DOM work. */
   refMemberPaths: Map<string, Set<string>>;
+  /** Ref sink roots something renders, derives or effects from: their mount is a write. */
+  reactiveRefRoots: Map<string, Set<string>>;
   /** Compiler-owned reactive effects, in source order per component. */
   effects: Map<string, EffectSite[]>;
   /** Module-owned singleton effects, in source order. */
@@ -935,6 +937,7 @@ export function createAnalysisCtx(opts: AnalysisOptions = {}): Ctx {
     volatileComponents: new Set(),
     opaqueBindings: new Map(),
     refMemberPaths: new Map(),
+    reactiveRefRoots: new Map(),
     editedDerivations: new Map(),
     effects: new Map(),
     moduleEffects: [],

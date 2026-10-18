@@ -98,7 +98,7 @@ export function emitComponentCall(
     const ordered = emitOrderedAttributes(attributePlan, {
       attributeValue: (name, value) =>
         name === 'ref' || targetPlan?.refProps.includes(name) === true
-          ? compileRefValue(ctx, componentPath, componentName, value)
+          ? compileRefValue(ctx, componentPath, componentName, value, rowContext)
           : value,
     });
     orderedPropObject = ordered;
@@ -205,7 +205,7 @@ export function emitComponentCall(
     ) {
       propEntries.push({
         name: propName,
-        value: compileRefValue(ctx, componentPath, componentName, v),
+        value: compileRefValue(ctx, componentPath, componentName, v, rowContext),
       });
       continue;
     }

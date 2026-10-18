@@ -23,7 +23,7 @@ import {
 import {
   scanInstanceDerivations,
   scanInstanceState,
-  excludeRefBindings,
+  includeRefBindings,
 } from '../analysis/instance';
 import { scanOpaqueVolatility } from '../analysis/opaque-volatility';
 import {
@@ -103,7 +103,7 @@ export function runAnalysis(ctx: Ctx, programPath: ProgramPath): void {
   // parser-neutral index before binding-aware analysis consumes those nodes.
   refreshAstAnalysis(ctx, programPath.node);
   scanInstanceState(ctx);
-  excludeRefBindings(ctx);
+  includeRefBindings(ctx);
   // Volatility must precede derivation scanning: consts rooted at opaque
   // values ($fetch handles, external clients) qualify as per-instance
   // derivations exactly because their sources change outside the access

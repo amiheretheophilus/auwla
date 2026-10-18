@@ -115,12 +115,59 @@ export function buildLocalEffectInvalidations(
   sites: EffectSite[],
   scope?: EmitScope,
 ): t.Statement {
+  // An effect first runs after its owner's refs mounted, so it already saw
+  // those nodes; it re-runs for a ref only when the node is another one.
+  // Only an identifier ref's binding is the node itself; a member ref's root
+  // (`nodes` in `nodes.host`) is ordinary state and keeps the plain mark.
+  const reactiveRefs = ctx.reactiveRefRoots.get(component);
+  const sinks = ctx.refMemberPaths.get(component);
+  const refRoots = new Set([...reactiveRefs ?? []].filter(root => sinks?.has(root) === true));
+  const buildRefMark = (
+    site: EffectSite,
+    target: t.Expression,
+    refReads: string[],
+    label: string,
+  ): t.Statement => {
+    const checks: t.Expression[] = [];
+    const updates: t.Statement[] = [];
+    for (const ref of refReads) {
+      const slot = generatedIdentifier(ctx, `eff${site.index}_${label}_${ref}`).name;
+      scope!.mounts.push(astFactory.variableDeclaration('let', [
+        astFactory.variableDeclarator(astFactory.identifier(slot), astFactory.identifier(ref)),
+      ]));
+      checks.push(astFactory.binaryExpression('!==', astFactory.identifier(slot), astFactory.identifier(ref)));
+      updates.push(astFactory.expressionStatement(
+        astFactory.assignmentExpression('=', astFactory.identifier(slot), astFactory.identifier(ref))));
+    }
+    const mark: t.Statement = astFactory.ifStatement(or(checks), astFactory.blockStatement([
+      ...updates,
+      astFactory.expressionStatement(astFactory.callExpression(md(ctx, 'invalidateEntity'), [cloneEstreeNode(target, true)])),
+    ]));
+    if (reasonVar === null) return mark;
+    const condition = localEffectCondition(ctx, component, reasonVar, new Set(refReads));
+    const routed = condition === null ? mark : astFactory.ifStatement(condition, mark);
+    return astFactory.ifStatement(astFactory.unaryExpression('!', volatilePullOnly(reasonVar)), routed);
+  };
   const buildMark = (
     site: EffectSite,
+    target: t.Expression,
+    reads: Set<string>,
+    derivationReads: Set<string>,
+    label: string,
+  ): t.Statement | null => {
+      const refReads = scope === undefined ? [] : [...reads].filter(read => refRoots.has(read)).sort();
+      const localReads = new Set([...reads].filter(read => !refReads.includes(read)));
+      const refMark = refReads.length === 0 ? null : buildRefMark(site, target, refReads, label);
+      const plainMark = buildPlainMark(target, localReads, derivationReads, label, site);
+      if (refMark === null) return plainMark;
+      return plainMark === null ? refMark : astFactory.blockStatement([plainMark, refMark]);
+  };
+  const buildPlainMark = (
     target: t.Expression,
     localReads: Set<string>,
     derivationReads: Set<string>,
     label: string,
+    site: EffectSite,
   ): t.Statement | null => {
       if (localReads.size === 0 && derivationReads.size === 0) return null;
       let mark: t.Statement = astFactory.expressionStatement(
