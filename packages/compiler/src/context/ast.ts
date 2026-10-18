@@ -19,9 +19,41 @@ export function refreshAstAnalysis(
   ctx: Ctx,
   root: BaseNode,
 ): ScopeAnalysis {
+  if (ctx.frozenAst) {
+    throw new Error('memo-dom internal: the AST index was rebuilt during analysis; normalize before freezeAst');
+  }
   const analysis = analyzeScope(root);
   ctx.astAnalysis = analysis;
   return analysis;
+}
+
+/**
+ * End normalization: build the one index analysis reads. Until `thawAst`, no
+ * pass may change the tree, so facts keyed by node identity stay valid.
+ */
+export function freezeAst(ctx: Ctx, root: BaseNode): ScopeAnalysis {
+  const analysis = refreshAstAnalysis(ctx, root);
+  ctx.frozenAst = analysis;
+  return analysis;
+}
+
+/** Start lowering, after checking that analysis left the tree as it was frozen. */
+export function thawAst(ctx: Ctx): void {
+  const frozen = ctx.frozenAst;
+  if (!frozen) return;
+  ctx.frozenAst = null;
+  let count = 0;
+  walkAst(frozen.rootScope.block, {
+    enter(node, parent) {
+      count++;
+      if (frozen.parentByNode.get(node) !== parent) {
+        throw new Error(`memo-dom internal: analysis changed the tree at a ${node.type}`);
+      }
+    },
+  });
+  if (count !== frozen.parentByNode.size) {
+    throw new Error('memo-dom internal: analysis removed nodes from the tree');
+  }
 }
 
 /** Lexical scope active at a node in the latest parser-neutral index. */

@@ -2,7 +2,7 @@
 
 import type * as t from '../ast/compiler-types';
 import * as astFactory from '../ast/factory';
-import { analyzeScope, childNode, variableDeclaratorForBinding, walkAst, type BaseNode, type Binding } from '../ast';
+import { analyzeScope, childNode, cloneNode, variableDeclaratorForBinding, walkAst, type BaseNode, type Binding } from '../ast';
 import type { Ctx, ProgramPath } from '../context';
 import { analyzeComponentPropShape } from '../components/prop-shape';
 
@@ -302,16 +302,17 @@ function rewriteSlotPlaceholders(
       if (accessor === undefined) {
         return fail(`memo-dom: missing compiler slot binding '${name || 'default'}'`, element);
       }
+      // Each use is its own node: one node at two places breaks node-keyed facts.
       const fallback = element.children.every(empty)
-        ? accessor
+        ? cloneNode(accessor, true)
         : astFactory.conditionalExpression(
-            astFactory.binaryExpression('==', accessor, astFactory.nullLiteral()),
+            astFactory.binaryExpression('==', cloneNode(accessor, true), astFactory.nullLiteral()),
             astFactory.jsxFragment(
               astFactory.jsxOpeningFragment(),
               astFactory.jsxClosingFragment(),
               element.children,
             ),
-            accessor,
+            cloneNode(accessor, true),
           );
       // Portable package fallbacks retain their authored identity through
       // normalization; the emitter can then select their independent plan.

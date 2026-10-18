@@ -117,7 +117,44 @@ update when its node mounts, is replaced by another branch, or leaves.
 - Not reactive yet: module-level ref targets (`export let node` with
   `ref={node}`); their readers in other modules are not tracked.
 
+## Slice 3, freeze the tree for analysis (plan step "symbol table with no refresh")
+
+Measured first (a probe in `refreshAstAnalysis` over the corpus, 6,557 programs):
+of the index rebuilds, the ones between normalization and lowering never saw a
+changed tree, except two hidden mutations, now fixed:
+
+- `lists/map-site.ts` `allocateMapSite` replaced a row callback's body (the
+  const-only block beta-reduction) in the middle of read collection, so passes
+  before it saw the block and passes after it saw the JSX. Now
+  `lists/normalize-callbacks.ts` does it once, at the end of normalization.
+- `jsx/component-slots.ts` put one slot accessor node at several places
+  (`slot == null ? fallback : slot`, and every repeated slot). One node at two
+  places breaks every node-keyed map; each use is now its own clone.
+
+Then the boundary:
+
+- `freezeAst(ctx, root)` (`context/ast.ts`) ends normalization in
+  `dom/analyze.ts`; all analysis reads that one index. While frozen,
+  `refreshAstAnalysis` throws.
+- `thawAst(ctx)` in `dom/program.ts`, where lowering starts
+  (`analyzeRoutedPreparations(…, true)`), checks that every node still has its
+  frozen parent and none was removed; a violation is an internal error.
+- 16 rebuilds inside analysis are gone.
+- Corpus against slice 2 (re-recorded as `corpus-slice2`): 1,632 identical.
+  Root suite, batched: 2,890 pass, the same 42 interference failures.
+- Unit tests that hand-build a partial `Ctx` have no `frozenAst`; the checks
+  treat a missing field as not frozen.
+- The probe used for the measurement is kept in the scratchpad
+  (`ast.probed.ts`); it fingerprints the tree and node identities per rebuild.
+
+Still mutating outside the window, by design for now: normalization (before
+the freeze) and lowering/emission (after the thaw). Generated code after
+emission still shares nodes (`_initialRow`, `_routeContext`…); the backends will
+build fresh output from the render plan (plan step 5).
+
 ## Next
 
 1. Vite suite and `bench/` on a machine with more memory.
-2. Then the render plan (see `plan.md`).
+2. Resolve: symbols keyed by id on the frozen index (`references`, `writes`),
+   then move analysis facts from names/nodes to symbol ids.
+3. Then the render plan (see `plan.md`).

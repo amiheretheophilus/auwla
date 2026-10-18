@@ -11,7 +11,7 @@
  */
 
 import type { BaseNode } from '../ast';
-import { refreshAstAnalysis, type ProgramPath } from '../context';
+import { freezeAst, refreshAstAnalysis, type ProgramPath } from '../context';
 import { type DomContext as Ctx } from './context';
 import { scanRenderCallbacks } from '../components/render-callbacks';
 import { scanEffects } from '../effects';
@@ -38,6 +38,7 @@ import { analyzeComponentProps } from '../components/props';
 import { normalizeRenderFunctions } from '../components/render-functions';
 import { planCalculatedListSources } from '../planning/calculated-list-sources';
 import { lowerCalculatedListSources } from './calculated-list-sources';
+import { normalizeListCallbacks } from '../lists/normalize-callbacks';
 import {
   planDynamicTags,
   recordDynamicTagPropModes,
@@ -99,9 +100,10 @@ export function runAnalysis(ctx: Ctx, programPath: ProgramPath): void {
   lowerDynamicTags(ctx, dynamicTags);
   recordDynamicTagPropModes(ctx, dynamicTags.propModes);
   lowerCalculatedListSources(ctx, planCalculatedListSources(ctx));
-  // Normalization can replace declarations and expressions. Rebuild the
-  // parser-neutral index before binding-aware analysis consumes those nodes.
-  refreshAstAnalysis(ctx, programPath.node);
+  normalizeListCallbacks(ctx);
+  // Normalization ends here. Analysis reads this one index; the tree stays
+  // as it is until lowering thaws it.
+  freezeAst(ctx, programPath.node);
   scanInstanceState(ctx);
   includeRefBindings(ctx);
   // Volatility must precede derivation scanning: consts rooted at opaque
@@ -136,7 +138,6 @@ export function runAnalysis(ctx: Ctx, programPath: ProgramPath): void {
   // A component used both as a list row and as a static child is linked as
   // mixed (`linkedMixedComponents`): pathVariants unions both placements and
   // it keeps the entity ABI. Recursive components are one such case.
-  refreshAstAnalysis(ctx, programPath.node);
   analyzeModuleListTargets(ctx);
   analyzeOwnerListStructure(ctx);
 }

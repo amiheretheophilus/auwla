@@ -15,7 +15,7 @@ import {
 } from '../ast';
 import { createCtx, type DomContext as Ctx, type InternalMemoDomOptions } from './context';
 import { freshWriteConst } from './constants';
-import { type MemoDomOptions } from '../context';
+import { thawAst, type MemoDomOptions } from '../context';
 import { generatedIdentifier, md, requireIdentifiers } from './identifiers';
 import { planAccessReaders } from '../analysis/access-table';
 import { emitAccessTable } from './access-table';
@@ -253,6 +253,8 @@ function prepareProgram(
 ): ModuleRenderPlan {
   indexDiagnosticSource(ctx, programPath.node as unknown as BaseNode);
   prepareProgramAnalysis(ctx, programPath);
+  // Lowering starts here; it rewrites the tree in place.
+  thawAst(ctx);
   analyzeRoutedPreparations(ctx, programPath, true);
   lowerSourceReads(ctx);
   ctx.moduleCallbacks=planModuleCallbacks(ctx,programPath);

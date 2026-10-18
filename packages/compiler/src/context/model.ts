@@ -492,6 +492,11 @@ export interface Ctx {
   // ---- module analysis (filled by analysis.ts) ----
   /** Parser-neutral lexical scope and parent index for the current AST shape. */
   astAnalysis: ScopeAnalysis | null;
+  /**
+   * Set from the end of normalization until lowering starts: analysis reads
+   * this one index and must not change the tree (see `freezeAst`).
+   */
+  frozenAst: ScopeAnalysis | null;
   state: Map<string, StateKind>;
   /** Local binding name -> canonical state root. */
   stateKeys: Map<string, string>;
@@ -819,6 +824,7 @@ export function createAnalysisCtx(opts: AnalysisOptions = {}): Ctx {
     routeElements: new WeakMap(),
     localRoutes: [],
     astAnalysis: null,
+    frozenAst: null,
     usesRouter: false,
     externalReactiveBindings: new Map(),
     routeReactiveBindings: new Set(),
