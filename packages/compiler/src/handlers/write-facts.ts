@@ -17,6 +17,12 @@ export interface ScopeWrites {
   transparentWrites: Set<string>;
   /** Derived copies edited in place; their next replay keeps the edit. */
   keptDerivations: Set<string>;
+  /**
+   * Roots written only because an edited copy may alias them (`items.slice()`
+   * edited through `sorted`). Their readers update, but the copy is kept; a
+   * direct write of the same root removes it from this set.
+   */
+  aliasWrites: Set<string>;
   /** A write-free event still refreshes its originating update unit. */
   eventFallback: boolean;
 }
@@ -36,16 +42,19 @@ export function createScopeWrites(): ScopeWrites {
     instanceContentWrites: new Set(),
     transparentWrites: new Set(),
     keptDerivations: new Set(),
+    aliasWrites: new Set(),
     eventFallback: false,
   };
 }
 
 export function recordRoutedWrite(scope: ScopeWrites, source: string, structural = false): void {
+  scope.aliasWrites.delete(source.split('.')[0]!);
   scope.writes.add(source);
   (structural ? scope.structuralWrites : scope.contentWrites).add(source);
 }
 
 export function recordInstanceWrite(scope: ScopeWrites, source: string, structural = false): void {
+  scope.aliasWrites.delete(source);
   scope.instanceLocal = true;
   scope.instanceWrites.add(source);
   (structural ? scope.instanceStructuralWrites : scope.instanceContentWrites).add(source);

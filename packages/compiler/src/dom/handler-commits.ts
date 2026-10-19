@@ -66,9 +66,11 @@ export function buildScopeCommit(
       astFactory.callExpression(md(ctx, instanceArguments.length === 1 ? 'invalidateEntity' : 'markDirty'), instanceArguments),
     );
     // The update this edit causes keeps the edited copy instead of re-deriving
-    // it, unless the same handler also wrote one of the copy's sources.
+    // it, unless the same handler also wrote one of the copy's sources. A
+    // source written only as the copy's possible alias does not count.
     const derivations = ctx.instanceDerivations.get(compName) ?? [];
-    const written = new Set([...scope.instanceWrites, ...[...scope.writes].map(key => key.split('.')[0]!)]);
+    const written = new Set([...scope.instanceWrites, ...[...scope.writes].map(key => key.split('.')[0]!)]
+      .filter(root => !scope.aliasWrites.has(root)));
     const kept = [...scope.keptDerivations].filter(name => !(derivations
       .find(derivation => derivation.bindings.includes(name))?.sources ?? [])
       .some(source => source !== name && written.has(source)));

@@ -735,21 +735,32 @@ export function createHandlerWriteRouting({
     });
   };
   /**
-   * `tags.push(t)` or `tags[0] = t` on `const tags = [...article.tags]`. The
-   * alias tracker decides by provenance: a derivation it cannot trace to any
-   * source is this instance's own value, so the write edits that copy and the
-   * update it causes keeps it. An alias (`const user = props.user`) has an
-   * origin, and its writes keep going to the source.
+   * `tags.push(t)` or `tags[0] = t` on `const tags = [...article.tags]`: the
+   * write edits this instance's derived value, and the update it causes keeps
+   * the edit (until a source of the derivation changes). When the alias
+   * tracker finds origins (`items.slice()`, `props.user`), the value may be
+   * the source itself, so the write also goes to those origins; keeping the
+   * edit is right either way, since an alias keeps the same object.
    */
   function noteDerivedCopyEdit(p: HandlerPath, rootName: string): boolean {
-    if (!ownedDerivations.has(rootName) ||
-        aliases.resolveExpressionOrigins(p.scope, astFactory.identifier(rootName)).length > 0) return false;
+    if (!ownedDerivations.has(rootName)) return false;
     let edited = ctx.editedDerivations.get(compName!);
     if (edited === undefined) ctx.editedDerivations.set(compName!, edited = new Set());
     edited.add(rootName);
     mutateScope(p, scope => {
       recordInstanceMutation(scope, rootName, 'content');
       scope.keptDerivations.add(rootName);
+    });
+    const roots = (scope: ScopeWrites): Set<string> =>
+      new Set([...scope.instanceWrites, ...[...scope.writes].map(key => key.split('.')[0]!)]);
+    const before = new Map<ScopeWrites, Set<string>>();
+    mutateScope(p, scope => { before.set(scope, roots(scope)); });
+    for (const origin of aliases.resolveExpressionOrigins(p.scope, astFactory.identifier(rootName))) {
+      noteReceiverEffect(p, origin);
+    }
+    mutateScope(p, scope => {
+      const earlier = before.get(scope) ?? new Set();
+      for (const root of roots(scope)) if (!earlier.has(root) && root !== rootName) scope.aliasWrites.add(root);
     });
     return true;
   }
