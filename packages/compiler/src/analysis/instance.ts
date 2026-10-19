@@ -235,10 +235,19 @@ function summarizeLocalDerivationHelper(
   return summary;
 }
 
-/** Collect mutable or store-like bindings owned by each component instance. */
+/**
+ * Collect mutable or store-like bindings owned by each component instance.
+ *
+ * A written `let`/`var` is state. An object, array or `new` value is a state
+ * root only when its initial value reads nothing reactive (`const items = []`,
+ * `new Map()`); one built from state, props or a derivation (`[a, 2]`,
+ * `{ a }`) is a derivation and is derived again when they change.
+ */
 export function scanInstanceState(ctx: Ctx): void {
   for (const [name, componentPath] of ctx.compPaths) {
     const variables = new Set<string>();
+    // Reactive names visible to a later initializer, in statement order.
+    const reactive = new Set<string>(ctx.componentProps.get(name)?.bindings ?? []);
     for (const statement of componentPath.node.body.body) {
       if (!astFactory.isVariableDeclaration(statement)) continue;
       if (
@@ -249,6 +258,8 @@ export function scanInstanceState(ctx: Ctx): void {
         continue;
       }
       for (const declaration of statement.declarations) {
+        const readsState = declaration.init != null &&
+          initializerReadsReactive(ctx, declaration.init as unknown as BaseNode, reactive);
         for (const name of bindingNames(declaration.id)) {
           const binding = astBindingAt(
             ctx,
@@ -258,17 +269,40 @@ export function scanInstanceState(ctx: Ctx): void {
           if (
             ((statement.kind === 'let' || statement.kind === 'var') &&
               bindingHasVisibleWrite(ctx, binding)) ||
-            (astFactory.isIdentifier(declaration.id) &&
+            (astFactory.isIdentifier(declaration.id) && !readsState &&
               (isStoreObject(declaration.init) ||
                 isConstObjectState(declaration.init)))
           ) {
             variables.add(name);
+            reactive.add(name);
+          } else if (readsState) {
+            reactive.add(name);
           }
         }
       }
     }
     if (variables.size > 0) ctx.instanceState.set(name, variables);
   }
+}
+
+/**
+ * Whether an initializer reads a reactive binding when it runs: one in
+ * `reactive`, or module state. Nested functions are closures, not reads of the
+ * initial value (`new IntersectionObserver(entries => { visible = true; })`).
+ */
+function initializerReadsReactive(ctx: Ctx, init: BaseNode, reactive: ReadonlySet<string>): boolean {
+  let reads = false;
+  walkAst<BaseNode>(init, {
+    enter(current) {
+      if (reads) return false;
+      if (current !== init && FUNCTION_NODES.has(current.type)) return false;
+      if (current.type !== 'Identifier' || !isReferencedIdentifier(ctx, current)) return;
+      const binding = astBindingAt(ctx, current, current.name);
+      if (binding === undefined) return;
+      if (binding.scope.parent === null ? ctx.state.has(current.name) : reactive.has(current.name)) reads = true;
+    },
+  });
+  return reads;
 }
 
 /**

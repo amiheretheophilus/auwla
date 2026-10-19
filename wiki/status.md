@@ -263,9 +263,31 @@ you secretly trying to take a short cut … you can do it"):
 
 Result: the batched root suite has no cross-file failures left.
 
+## Last two patches before the graph
+
+- Stray `key` (React semantics): a literal key is dropped; a dynamic key is a
+  keyed list of one row, `{[k].map(_key => <X key={_key} />)}`, so a changed
+  key remounts (`jsx/stray-keys.ts`, before calculated-list lowering).
+  Elements returned from a nested function keep their key. Tests:
+  `tests/stray-keys.test.ts` (4).
+- Writing that test found: `const pair = [a, 2]`, `const box = { a }`,
+  `new Set([a])` and `{[a].map(…)}` never updated. `scanInstanceState` made
+  every object/array/`new` initializer a state root, created once. Now it is a
+  root only when its initial value reads nothing reactive (props, written
+  state, module state, earlier derivations; callbacks inside it are closures,
+  not reads); otherwise it is a derivation (rule 11). Corpus: 3 changed, all
+  this. Tests: `tests/derived-literals.test.ts` (4).
+
 ## Next
 
-1. Vite suite and `bench/` on a machine with more memory.
-2. Resolve: symbols keyed by id on the frozen index (`references`, `writes`),
+The direction changed on 2026-10-19 (see `decisions.md`): no more patches to
+the old classification passes; bugs become backlog tests.
+
+1. Semantic graph (plan step "Semantic graph built from the symbol table"),
+   first for state/derivation/source/ref/opaque classification. Contract:
+   every existing suite plus `visible-effects`, `written-const-state`,
+   `prop-writes`, `derived-literals`, `stray-keys`, `reactive-refs`.
+2. Vite suite and `bench/` on a machine with more memory.
+3. Resolve: symbols keyed by id on the frozen index (`references`, `writes`),
    then move analysis facts from names/nodes to symbol ids.
 4. Then the render plan (see `plan.md`).

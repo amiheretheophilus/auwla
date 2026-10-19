@@ -41,6 +41,7 @@ import { normalizeRenderFunctions } from '../components/render-functions';
 import { planCalculatedListSources } from '../planning/calculated-list-sources';
 import { lowerCalculatedListSources } from './calculated-list-sources';
 import { normalizeListCallbacks } from '../lists/normalize-callbacks';
+import { normalizeStrayKeys } from '../jsx/stray-keys';
 import {
   planDynamicTags,
   recordDynamicTagPropModes,
@@ -101,6 +102,9 @@ export function runAnalysis(ctx: Ctx, programPath: ProgramPath): void {
   const dynamicTags = planDynamicTags(ctx);
   lowerDynamicTags(ctx, dynamicTags);
   recordDynamicTagPropModes(ctx, dynamicTags.propModes);
+  // A dynamic stray key becomes a one-row list; its inline view is then
+  // lowered like any authored calculated list source.
+  if (normalizeStrayKeys(ctx)) refreshAstAnalysis(ctx, programPath.node);
   lowerCalculatedListSources(ctx, planCalculatedListSources(ctx));
   normalizeListCallbacks(ctx);
   // Normalization ends here. Analysis reads this one index; the tree stays
