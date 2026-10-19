@@ -56,8 +56,8 @@ ordinary JavaScript become cases.
   their tests, plus a small generated batch. A change in `core/` runs everything,
   but on CI. Features never import each other, so the mapping can be trusted.
 - The local generated budget is small, for a slow machine. CI runs a large one.
-- **CI** is GitHub Actions on `snrraptopack/memo-exp`. The repo is public, so it costs
-  nothing. Every push to `compiler-rewrite` runs the full suite and a large generated
+- **CI** _(planned)_ is GitHub Actions on `amiheretheophilus/auwla`. The repo is public,
+  so it costs nothing. Every push to `compiler-rewrite` runs the full suite and a large generated
   batch.
 - **Performance** uses `bench/`, not CI:
   1. A local run checks that the benchmarks pass their correctness gates. Local

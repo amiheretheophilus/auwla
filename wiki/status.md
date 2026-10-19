@@ -4,6 +4,8 @@ Last updated: 2026-10-19.
 
 ## Branches
 
+- Repository: `amiheretheophilus/auwla` (remote `auwla`), from 2026-10-19. The old
+  `snrraptopack/memo-exp` (`origin`) is no longer pushed to.
 - `compiler-rewrite` (working branch, from `compiler-refactor` at `6230c27`):
   the new compiler, designed in `compiler/`. No code yet.
 - `compiler-refactor`: the old compiler's refactor, stopped on 2026-10-19. The
