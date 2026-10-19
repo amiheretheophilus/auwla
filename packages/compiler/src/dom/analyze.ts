@@ -25,6 +25,7 @@ import {
   scanInstanceState,
   includeRefBindings,
   includeWrittenConstState,
+  scanWrittenProps,
 } from '../analysis/instance';
 import { scanOpaqueVolatility } from '../analysis/opaque-volatility';
 import {
@@ -108,6 +109,7 @@ export function runAnalysis(ctx: Ctx, programPath: ProgramPath): void {
   scanInstanceState(ctx);
   includeRefBindings(ctx);
   includeWrittenConstState(ctx);
+  scanWrittenProps(ctx);
   // Volatility must precede derivation scanning: consts rooted at opaque
   // values ($fetch handles, external clients) qualify as per-instance
   // derivations exactly because their sources change outside the access

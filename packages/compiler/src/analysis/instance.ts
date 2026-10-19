@@ -388,6 +388,20 @@ export function includeWrittenConstState(ctx: Ctx): void {
   }
 }
 
+/** Prop bindings the component rebinds: each is a local override of its prop. */
+export function scanWrittenProps(ctx: Ctx): void {
+  for (const [name, componentPath] of ctx.compPaths) {
+    const component = componentPath.node as unknown as BaseNode;
+    const written = new Set<string>();
+    for (const prop of ctx.componentProps.get(name)?.bindings ?? []) {
+      const binding = astBindingAt(ctx, component, prop);
+      if (binding?.kind === 'param' && binding.declarationNode === component &&
+          binding.constantViolations.length > 0) written.add(prop);
+    }
+    if (written.size > 0) ctx.writtenProps.set(name, written);
+  }
+}
+
 /** Whether an initializer builds a value from nothing reactive. */
 function ownsInitialValue(ctx: Ctx, init: BaseNode): boolean {
   let owned = true;

@@ -19,7 +19,7 @@ import { buildBranchCreate, emitNode } from './nodes';
 import { generatedIdentifier, md, mdHot, mdd, requireIdentifiers } from './identifiers';
 import { transformComponentLifecycle } from './lifecycle';
 import {simpleObjectPropBindings,type ComponentPropsPlan,type SimpleObjectPropBinding} from '../components/props';
-import {buildPropDeclaration,buildPropReplay,runtimeParameter,propReasonArguments} from './props';
+import {buildPropDeclaration,buildPropOverrideDeclaration,buildPropReplay,guardPropReplay,runtimeParameter,propReasonArguments,type PropOverride} from './props';
 import { buildRenderPreludeReplay } from './components/render-prelude';
 import { structuralReasonsFor } from './components/local-derived';
 import type { ComponentReturnPlan } from '../components/return-plan';
@@ -342,10 +342,15 @@ export function transformComponent(
       ),
     );
   }
+  const propOverrides: PropOverride[] = [...(ctx.writtenProps.get(name) ?? [])].map(local => ({
+    local,
+    delivered: generatedIdentifier(ctx, `${local}Prop`),
+    kept: generatedIdentifier(ctx, `${local}Kept`),
+  }));
   if (propSlotCount > 0 && !lightweight) {
     scope.updaters.unshift(() =>
       astFactory.blockStatement(
-        buildPropReplay(
+        guardPropReplay(propOverrides, buildPropReplay(
           propPlan,
           propPlan.params.map((_, index) =>
             astFactory.memberExpression(
@@ -354,7 +359,7 @@ export function transformComponent(
               true,
             ),
           ),
-        ),
+        )),
       ),
     );
   }
@@ -442,6 +447,8 @@ export function transformComponent(
       ),
     );
     if (declaration !== null) body.push(declaration);
+    const overrides = buildPropOverrideDeclaration(propOverrides);
+    if (overrides !== null) body.push(overrides);
   }
   body.push(
     ...kept,

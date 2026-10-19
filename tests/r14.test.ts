@@ -67,14 +67,6 @@ describe('R14 - code generation', () => {
     `);
     expect(code).toContain('"./component.tsx#count": ["App"]');
     expect(code).not.toContain('"App/Label"');
-    expect(() =>
-      compile(`
-        let count = 0;
-        function Label(count) {
-          return <button onClick={() => count++}>{count}</button>;
-        }
-      `),
-    ).toThrowError(/cannot update prop 'count'/);
   });
 
   it('emits local derivations before guarded writes and instruments helper timers', () => {

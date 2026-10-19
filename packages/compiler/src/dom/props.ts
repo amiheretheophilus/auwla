@@ -41,6 +41,60 @@ export function buildPropReplay(
 }
 
 /**
+ * A prop binding the component reassigns. `delivered` remembers the value the
+ * prop last delivered; `kept` holds the binding across one replay.
+ */
+export interface PropOverride {
+  readonly local: string;
+  readonly delivered: t.Identifier;
+  readonly kept: t.Identifier;
+}
+
+/** `let _labelProp = label;` right after the initial prop locals. */
+export function buildPropOverrideDeclaration(
+  overrides: readonly PropOverride[],
+): t.VariableDeclaration | null {
+  if (overrides.length === 0) return null;
+  return astFactory.variableDeclaration(
+    'let',
+    overrides.map(({ local, delivered }) =>
+      astFactory.variableDeclarator(cloneCompilerNode(delivered), astFactory.identifier(local)),
+    ),
+  );
+}
+
+/**
+ * Replay props, keeping each local override while its prop still delivers the
+ * value it delivered before; a different value replaces the override.
+ */
+export function guardPropReplay(
+  overrides: readonly PropOverride[],
+  replay: t.Statement[],
+): t.Statement[] {
+  if (overrides.length === 0) return replay;
+  return [
+    astFactory.variableDeclaration(
+      'const',
+      overrides.map(({ local, kept }) =>
+        astFactory.variableDeclarator(cloneCompilerNode(kept), astFactory.identifier(local)),
+      ),
+    ),
+    ...replay,
+    ...overrides.map(({ local, delivered, kept }) =>
+      astFactory.ifStatement(
+        astFactory.binaryExpression('===', astFactory.identifier(local), cloneCompilerNode(delivered)),
+        astFactory.expressionStatement(
+          astFactory.assignmentExpression('=', astFactory.identifier(local), cloneCompilerNode(kept)),
+        ),
+        astFactory.expressionStatement(
+          astFactory.assignmentExpression('=', cloneCompilerNode(delivered), astFactory.identifier(local)),
+        ),
+      ),
+    ),
+  ];
+}
+
+/**
  * Extra `registerProps` arguments mapping each declared prop key to the dirty
  * reasons of the bindings it introduces, plus the reason for undeclared keys
  * (object rest / whole `props` binding). Null when the envelope shape gives

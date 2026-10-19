@@ -270,10 +270,13 @@ export function planHandlerWrites(
           });
           return;
         }
+        // A prop binding is a local: the write overrides it until the parent
+        // sends a different value (see `writtenProps`).
         if (propNames.has(left.name)) {
-          throw p.buildCodeFrameError(
-            `memo-dom: cannot assign prop '${left.name}' — copy it to component-local let state first`,
-          );
+          mutateScope(p, (scope) => {
+            recordInstanceMutation(scope, left.name);
+          });
+          return;
         }
         if (componentLocals.has(left.name)) {
           throw p.buildCodeFrameError(
@@ -345,9 +348,10 @@ export function planHandlerWrites(
           return;
         }
         if (propNames.has(arg.name)) {
-          throw p.buildCodeFrameError(
-            `memo-dom: cannot update prop '${arg.name}' — copy it to component-local let state first`,
-          );
+          mutateScope(p, (scope) => {
+            recordInstanceMutation(scope, arg.name);
+          });
+          return;
         }
         if (componentLocals.has(arg.name)) {
           throw p.buildCodeFrameError(

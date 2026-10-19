@@ -650,6 +650,11 @@ export interface Ctx {
   refMemberPaths: Map<string, Set<string>>;
   /** Ref sink roots something renders, derives or effects from: their mount is a write. */
   reactiveRefRoots: Map<string, Set<string>>;
+  /**
+   * Prop bindings the component reassigns (`label = 'x'`): a local override
+   * that the parent's next different value replaces.
+   */
+  writtenProps: Map<string, Set<string>>;
   /** Compiler-owned reactive effects, in source order per component. */
   effects: Map<string, EffectSite[]>;
   /** Module-owned singleton effects, in source order. */
@@ -944,6 +949,7 @@ export function createAnalysisCtx(opts: AnalysisOptions = {}): Ctx {
     opaqueBindings: new Map(),
     refMemberPaths: new Map(),
     reactiveRefRoots: new Map(),
+    writtenProps: new Map(),
     editedDerivations: new Map(),
     effects: new Map(),
     moduleEffects: [],

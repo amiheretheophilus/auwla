@@ -191,6 +191,8 @@ export function isListLightweightCandidate(ctx: Ctx, name: string): boolean {
   // Pulling rows need a registered entity even when they own no writable state.
   if (ctx.volatileComponents.has(name)) return false;
   if ((ctx.instanceState.get(name)?.size ?? 0) > 0) return false;
+  // A prop override is owned state too: it needs the entity's prop replay guard.
+  if (ctx.writtenProps.has(name)) return false;
   let eligible = true;
   const path = ctx.compPaths.get(name)!;
   walkAst<BaseNode>(path.node, {
