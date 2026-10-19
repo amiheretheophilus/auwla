@@ -72,23 +72,34 @@ for (const item of items) sum += item.price;
 - A new way to write a binding (a new assignment form): `core/resolve/`, which
   finds write sites. The rules here do not change.
 
-## Open questions
+### Which body statements build a value
 
-- **A body statement that only calls a method on a binding.** With no method lists,
-  every call counts as a possible mutation, so in
+A body statement builds a binding when it reassigns it, or changes the value it
+holds. Loops count like `if`: `let sum = 0; for (…) sum += x` is the same derivation
+as `items.reduce(…)`, so it replays (`../decisions.md`, 2026-10-19).
 
-  ```js
-  let picked = [];                          // a handler pushes into it later
-  for (const x of others) picked.includes(x);
-  ```
+Whether a call changes the value is decided like this:
 
-  the loop counts as building `picked`. `picked` then becomes derived from `others`,
-  and goes back to `[]` whenever `others` changes. The loop really only reads it.
-  Pushing into a list in the body, `const rows = []; for (…) rows.push(<li/>)`, has
-  to count as building it, or the list never updates. Today the reference treats
-  both the same way. A read-only-methods optimization would then change behaviour,
-  which optimizations must never do. Possible fix: decide at runtime whether the
-  statement changed the value, by comparing before and after. Not settled.
+- **Known methods**, from the list in `optimize/methods.ts` _(planned)_: the list says
+  whether the method changes its receiver (`push`, `splice`, `sort`, `set`, …) or only
+  reads it (`includes`, `map`, `slice`, `get`, …). No runtime cost.
+- **Anything else** (an unknown method, or the value passed to a function): a runtime
+  check around the statement. The value is deep-copied before, the statement runs,
+  and the copy is compared after. If it changed, the statement builds the value from
+  then on; if not, it only read it. Only these statements pay for the check.
+
+```js
+let picked = [];                                              // a handler pushes into it
+for (const x of others) if (picked.includes(x)) count++;      // known read: builds count, not picked
+
+const rows = [];
+for (const n of items) rows.push(<li key={n}>{n}</li>);       // known change: builds rows
+
+for (const x of others) picked.check(x);                      // unknown: checked at runtime
+```
+
+The list only makes this faster. A method that is not on it is still correct
+(`../rules.md`, rule 3).
 
 ## Cases to test
 

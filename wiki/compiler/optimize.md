@@ -36,7 +36,7 @@ interface Optimization<P> {
 
 | File | Makes faster |
 | --- | --- |
-| `read-only-methods.ts` | calls that do not mutate (`map`, `filter`, `slice`, …) skip invalidation |
+| `methods.ts` | what known methods do to their receiver: change it (`push`, `splice`, `sort`, `set`, …) or only read it (`includes`, `map`, `slice`, `get`, …). A read skips invalidation, and a body statement that only reads a value does not build it. Unknown calls fall back to the runtime before/after check (`state-and-derived.md`) |
 | `keyed-map.ts` | keyed `.map` over state reuses rows |
 | `array-ops.ts` | `push`, `splice`, `sort` update only the rows they touch |
 | `dom-only-rows.ts` | rows with no reactive work are plain DOM |

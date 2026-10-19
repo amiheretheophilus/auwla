@@ -25,8 +25,9 @@ The core holds the stage machinery and the shared types. What a concept means
     (`x.list.push(1)`);
   - the binding passed to a function the compiler cannot see.
 
-  Every method call is a possible mutation. `optimize/read-only-methods.ts`
-  _(planned)_ is the only place that can say a method does not mutate.
+  Every method call is a possible mutation. `optimize/methods.ts` _(planned)_ is the
+  only place that can say what a method does; an unknown call in a body statement is
+  checked at runtime (`state-and-derived.md`).
 - Output: `Resolved`. Nothing later reads names to find bindings; it asks this.
 
 ## graph — `core/graph/`

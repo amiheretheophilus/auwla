@@ -16,7 +16,7 @@ Finds every place that changes state and makes the UI update after it.
   (`onClick={actions.go}`) or a call result (`onClick={make()}`, evaluated at
   render). The old compiler rejected the last two.
 - **Every method call on state is a possible mutation**, so the state's readers
-  update after it. `optimize/read-only-methods.ts` _(planned)_ may say a call does not
+  update after it. `optimize/methods.ts` _(planned)_ may say a call does not
   mutate (`items.map`, `items.slice`), which skips that update. A method not on
   that list keeps the general path. It is never rejected.
 - Passing state to a function the compiler cannot see is also a possible mutation.
