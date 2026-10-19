@@ -1,10 +1,13 @@
 # Status
 
-Last updated: 2026-10-18.
+Last updated: 2026-10-19.
 
 ## Branches
 
-- `compiler-refactor` (working branch). Created from `stress-round-5` at `73f5f34`.
+- `compiler-rewrite` (working branch, from `compiler-refactor` at `6230c27`):
+  the new compiler, designed in `compiler/`. No code yet.
+- `compiler-refactor`: the old compiler's refactor, stopped on 2026-10-19. The
+  sections below record that work.
 - `codex/package-conditional-sync` at `9e35480` (third-party package compilation,
   development inspector, authored JSX diagnostics) is merged in as `616348a`,
   without conflicts. Merged so that branch is not stranded by the refactor.
@@ -280,14 +283,17 @@ Result: the batched root suite has no cross-file failures left.
 
 ## Next
 
-The direction changed on 2026-10-19 (see `decisions.md`): no more patches to
-the old classification passes; bugs become backlog tests.
+The direction changed again on 2026-10-19: the compiler is rewritten as
+`packages/compiler-next/` (see `decisions.md` and `compiler/README.md`). The old
+compiler gets no more patches; bugs become tests.
 
-1. Semantic graph (plan step "Semantic graph built from the symbol table"),
-   first for state/derivation/source/ref/opaque classification. Contract:
-   every existing suite plus `visible-effects`, `written-const-state`,
-   `prop-writes`, `derived-literals`, `stray-keys`, `reactive-refs`.
-2. Vite suite and `bench/` on a machine with more memory.
-3. Resolve: symbols keyed by id on the frozen index (`references`, `writes`),
-   then move analysis facts from names/nodes to symbol ids.
-4. Then the render plan (see `plan.md`).
+1. The user reviews `compiler/`, especially the open questions in
+   `state-and-derived.md` and `testing.md`.
+2. Testing first: the reference renderer, the comparison harness and the generator
+   (`compiler/testing.md`), with `rejections.md` and the tests listed above
+   (`visible-effects`, `written-const-state`, `prop-writes`, `derived-literals`,
+   `stray-keys`, `reactive-refs`) as the first cases. CI on GitHub Actions.
+3. Core: parse and resolve on yuku 0.19 (`compiler/toolchain.md`), then the graph.
+4. Features in slices, each end to end: static markup → state and text → handlers →
+   conditionals → lists → components → sources and readiness → effects and refs →
+   linking.

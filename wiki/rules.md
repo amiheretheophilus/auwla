@@ -29,9 +29,15 @@ Stated by the user on 2026-10-18. They apply to every design and every fix.
     such a rejection is deleted, with the user's agreement (first: `r14.test.ts`,
     reassigning a prop).
 11. **Derived values and writes** (2026-10-19, agreed with the user):
-    - A derived value is written `const`. A primitive one cannot be reassigned
-      (JavaScript itself throws), so nothing is needed.
+    - `let` and `const` alike can be state or derived. The user: "const and let
+      all are state and derived".
+    - A derived value that is later reassigned loses its derivation. The user:
+      "once a variable is derived and later that variable get reassigned since the
+      compiler cant replay it looses it derivation". This replaces the old rule
+      that a written `let` is a snapshot from the start; the exact reading is in
+      `compiler/state-and-derived.md`.
     - A derived object or array can be mutated (`const a = [...old]; a.push(x)`):
       the edit shows, and when the source changes the value is derived again.
-    - A written `let` is state: its initializer is a snapshot taken once.
     - A reassigned prop holds until the parent passes a different value.
+12. **The compiler wiki is the map of the code.** Each group of related files has
+    a page in `compiler/`, changed in the same commit as the code.
