@@ -104,8 +104,12 @@ computation retain its source dependencies.
 The reference owns its request state independently of the production data runtime.
 Both runs get the same deterministic transport. Current fetch fixtures use JSON;
 promise fixtures can resolve or reject. `$track` supports status reads and refresh.
-GET client facades are ordinary functions returning `$fetch`; this does not
-implement server-definition analysis or RPC generation.
+Server function cases import the client module the framework itself generates
+from a `define.function` file (`tests/harness/server-functions.ts`, using the
+real `analyzeServerFunctionModule` and `generateServerFunctionClient`). A GET
+function returns `$fetch(path, { query })`, so it is a source. Any other method
+is an action: the reference's `$fetch` starts the request at the call and returns
+a promise of the response.
 
 Atomic preparation evaluates component bodies into descriptors and retains their
 slots while loading; it creates no DOM and runs no refs or effects. Publication
@@ -139,7 +143,7 @@ request cancellation through `$track` is still separate, unfinished work.
 
 ## Cases to test
 
-`tests/cases/sources.test.ts`: 67 cases, all passing on the reference. The original
+`tests/cases/sources.test.ts`: 69 cases, all passing on the reference. The original
 27 give 18 passes and 9 failures on the old compiler; the null-target case fails
 it (written on review, it caught the reference treating `null` as a new load);
 four destructuring cases give 2 passes and 2 failures (the direct
@@ -148,7 +152,9 @@ of its payload); five cases of sources inside ordinary JavaScript (body loops,
 unknown calls, nested lazy branches, whole sources passed to children, module
 patterns) give 1 pass and 4 failures, and caught four reference gaps; five lazy
 statement cases (`if`, `switch`, fall-through, a lazy early return, a branch in a
-loop) all fail on the old compiler;
+loop) all fail on the old compiler; two server function cases (a GET source
+following its arguments, a POST action awaited in a handler) give 1 pass and 1
+failure;
 the 14 atomic cases give
 8 passes and 6 failures; eleven further atomic lifecycle cases give 6 passes and
 5 failures. These failures must pass on `compiler-next`.
@@ -198,6 +204,7 @@ an early failure can prevent comparison of its later steps. All cases are in
 | `a body if waits only when its branch reading a source runs`; `a body switch waits only for the case that runs`; `a switch case falling through reads the next case too` | The value waits only once the branch reading the source is chosen | Never waits: shows `0`/`here`/`two` and logs `UnresolvedDataReadError` |
 | `an early return with a lazy condition waits only when it reads the source` | `no` while signed out | Shows `loading`: waits for `user` though `!signedIn` already decides |
 | `a loop decides per iteration, so a branch inside it is not chosen ahead` | `loading` until prices arrive | Shows `0` before the prices load |
+| `a POST server function is an action: it runs when called, then a refresh shows its result` | `saved` shows `no`, then `Lin` after the action resolves | `saved` renders empty from mount |
 | `a module derivation waits and follows later source refreshes` | Defer `user.name.toUpperCase()` until ready | Throws `undefined is not an object` during module evaluation |
 | `a destructured seed written before loading keeps its override` | Delay the seed; preserve its early override | Throws `UnresolvedDataReadError` |
 | `suspend ignores unused sources and inactive branches` | Publish `off` immediately | Keeps the entire region on `loading` |
@@ -231,5 +238,7 @@ an unmodeled case is never permitted compiler behavior:
   re-export, closure and alias combinations.
 - Full `$track` lifecycle callbacks/cancellation, fetch validation/non-JSON
   transports, complete error details and remaining request API contracts.
-- Server-definition/transport fixtures and generated source programs with
-  deterministic resolve/reject/refresh/replacement sequences.
+- Open question for the user: a non-GET server function called in a component
+  body (`const saved = createUser(input)`). It is not a source, but as a body
+  call it runs on mount and again when its arguments change. Not tested until
+  decided. Live/generator/`page()` server functions are not modeled.

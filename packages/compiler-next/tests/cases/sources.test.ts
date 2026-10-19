@@ -2,6 +2,7 @@
 import { expect } from 'bun:test';
 import { behaves } from '../harness/run';
 import { requestedUrls, requestSignals } from '../harness/requests';
+import { serverFunctionClient } from '../harness/server-functions';
 
 behaves('a read waits before deriving through a helper', {
   source: `
@@ -1295,5 +1296,87 @@ behaves('a loop decides per iteration, so a branch inside it is not chosen ahead
   steps: [{ respond: '/prices', value: { b: 7 } }, { click: 'button' }],
   check(container, observation) {
     expect(container.querySelector('p')?.textContent).toBe(['loading', '0', '7'][observation]);
+  },
+});
+
+// ---------------------------------------------------------------------------
+// Server functions: a GET function is a source; other methods are actions.
+
+const users = serverFunctionClient('users', `
+  import { define } from '../define';
+  export const getUser = define.function({
+    async get(_context, id) {
+      return { id };
+    },
+  });
+  export const renameUser = define.function({
+    async post(_context, id, name) {
+      return { id, name };
+    },
+  });
+`);
+
+behaves('a GET server function is a source that follows its arguments', {
+  modules: { './server-functions.ts': users },
+  source: `
+    import { Group } from '@memoized-dom/data';
+    import { getUser } from './server-functions';
+    export function App() {
+      let id = 1;
+      const user = getUser(id);
+      return (
+        <Group pending={() => <i>loading</i>}>
+          <p>{user.name}</p>
+          <button onClick={() => { id++; }}>next</button>
+        </Group>
+      );
+    }`,
+  steps: [
+    { respond: '/_fn/users/getUser?id=1', value: { name: 'Ada' } },
+    { click: 'button' },
+    { respond: '/_fn/users/getUser?id=2', value: { name: 'Lin' } },
+  ],
+  check(container, observation) {
+    expect(container.querySelector('p, i')?.textContent).toBe(['loading', 'Ada', 'Ada', 'Lin'][observation]);
+    const expected = observation < 2 ? ['/_fn/users/getUser?id=1'] : ['/_fn/users/getUser?id=1', '/_fn/users/getUser?id=2'];
+    expect(requestedUrls()).toEqual(expected);
+  },
+});
+
+behaves('a POST server function is an action: it runs when called, then a refresh shows its result', {
+  modules: { './server-functions.ts': users },
+  source: `
+    import { $track, Group } from '@memoized-dom/data';
+    import { getUser, renameUser } from './server-functions';
+    export function App() {
+      const user = getUser(1);
+      const request = $track(user);
+      let saved = 'no';
+      async function rename() {
+        const result = await renameUser(1, 'Lin');
+        saved = result.name;
+        request.refresh();
+      }
+      return (
+        <Group pending={() => <i>loading</i>}>
+          <p>{user.name}</p>
+          <span>{saved}</span>
+          <button onClick={rename}>rename</button>
+        </Group>
+      );
+    }`,
+  steps: [
+    { respond: '/_fn/users/getUser?id=1', value: { name: 'Ada' } },
+    { click: 'button' },
+    { respond: '/_fn/users/renameUser', value: { id: 1, name: 'Lin' } },
+    { respond: '/_fn/users/getUser?id=1', value: { name: 'Lin' } },
+  ],
+  check(container, observation) {
+    expect(container.querySelector('p, i')?.textContent).toBe(['loading', 'Ada', 'Ada', 'Ada', 'Lin'][observation]);
+    expect(container.querySelector('span')?.textContent).toBe(['no', 'no', 'no', 'Lin', 'Lin'][observation]);
+    const get = '/_fn/users/getUser?id=1';
+    const rename = '/_fn/users/renameUser';
+    const history = [[get], [get], [get, rename], [get, rename, get], [get, rename, get]];
+    expect(requestedUrls()).toEqual(history[observation]!);
   },
 });

@@ -360,7 +360,7 @@ export function $read(promise: PromiseLike<unknown>, replay?: () => PromiseLike<
   return new Source(replay ?? (() => promise), promise);
 }
 
-export function $fetch(target: string | URL | null, options?: FetchOptions): Source {
+export function $fetch(target: string | URL | null, options?: FetchOptions): Source | Promise<unknown> {
   // "Changing the target to `null` pauses the request and clears the payload."
   if (target === null) {
     const paused = new Source(() => Promise.resolve(null), undefined, true);
@@ -384,15 +384,6 @@ export function $fetch(target: string | URL | null, options?: FetchOptions): Sou
     if (!headers.has('content-type')) headers.set('content-type', 'application/json');
   }
 
-  // Matching GET requests share one source.
-  const key = JSON.stringify([method, url.href, [...headers], options?.key]);
-  const shared = method === 'GET' && options?.cache !== false;
-  const cached = shared ? fetches.get(key) : undefined;
-  if (cached && !cached.isDisposed) {
-    cached.claim();
-    return cached;
-  }
-
   const load = (signal: AbortSignal) => {
     const signals = options?.signal ? AbortSignal.any([signal, options.signal]) : signal;
     return transport(url, { method, headers, body, signal: signals }).then(
@@ -402,6 +393,20 @@ export function $fetch(target: string | URL | null, options?: FetchOptions): Sou
       },
     );
   };
+
+  // Other methods are actions, never sources (decisions.md, 2026-10-18): the
+  // request starts now and the call returns a promise of the response, as in
+  // `await createUser(input)`.
+  if (method !== 'GET') return load(new AbortController().signal);
+
+  // Matching GET requests share one source.
+  const key = JSON.stringify([method, url.href, [...headers], options?.key]);
+  const shared = options?.cache !== false;
+  const cached = shared ? fetches.get(key) : undefined;
+  if (cached && !cached.isDisposed) {
+    cached.claim();
+    return cached;
+  }
 
   // A module-level `$fetch` starts when something first reads it.
   const source = new Source(load, undefined, moduleDeclarations);
