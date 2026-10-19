@@ -1,23 +1,31 @@
 /**
  * Turns an authored module into a reference module (wiki/compiler/testing.md).
  *
- * The reference re-runs every component on every render. That is plain
- * JavaScript, except for values that must outlive one call. Each binding
- * declared at the top of a component gets one of these treatments:
+ * The reference calls every component again on every render, but the component
+ * body is setup code: it runs once. Only derivations are computed again, and only
+ * when what they read changes. So each binding declared at the top of a component
+ * gets one of these treatments:
  *
- * | Where it is used                      | Treatment | Behaviour                                   |
- * | ------------------------------------- | --------- | ------------------------------------------- |
- * | only in the component body            | none      | recomputed on every render                  |
- * | reassigned by code that runs later    | `cell`    | first value is a snapshot, then only writes |
- * | used later, never reassigned          | `memo`    | kept until an input changes                 |
- * | a prop reassigned by later code       | `prop`    | overridden until the parent sends a new one |
+ * | Binding                                      | Treatment | Behaviour                               |
+ * | -------------------------------------------- | --------- | --------------------------------------- |
+ * | reassigned by code that runs later           | `cell`    | first value is a snapshot               |
+ * | reads nothing                                | `cell`    | computed once                           |
+ * | reads something                              | `memo`    | computed again when an input changes    |
+ * | a prop reassigned by code that runs later    | `prop`    | overridden until the parent changes it  |
+ * | a function, a parameter, a destructured name | plain     | recomputed on every render              |
  *
  * "Code that runs later" is any function inside the component: a handler, a
- * callback, a timer. Nothing here looks at names of methods or functions.
+ * callback, a timer. A binding's derivation is its initializer plus the body
+ * statements that write or mutate it (`if (!label) label = 'Anonymous'`).
+ *
+ * Every other body statement is setup: it runs on the first render only. Nothing
+ * here looks at the names of methods or functions; any call that receives a value
+ * counts as a possible mutation.
  */
 import { analyze, type Binding, type Module, type Reference } from 'yuku-analyzer';
-import { b, findAll, is } from 'yuku-ast';
+import { b, findAll, is, walk } from 'yuku-ast';
 import { generate } from 'yuku-codegen';
+import { parse } from 'yuku-parser';
 import type { BlockStatement, Expression, Node, Statement, VariableDeclarator } from 'yuku-parser';
 
 type FunctionNode = Extract<Node, { type: 'FunctionDeclaration' | 'FunctionExpression' | 'ArrowFunctionExpression' }>;
@@ -25,7 +33,6 @@ type FunctionNode = Extract<Node, { type: 'FunctionDeclaration' | 'FunctionExpre
 type Treatment = 'cell' | 'memo' | 'prop';
 
 interface Slot {
-  binding: Binding;
   treatment: Treatment;
   /** Position of the slot in its component instance. */
   index: number;
@@ -46,11 +53,13 @@ const GUARDABLE_STATEMENTS = new Set<string>([
   'DoWhileStatement',
 ]);
 
+const RUNTIME_EXPORTS = ['$h', 'Fragment as $Fragment', '$enter', '$assignRef', '$moduleEffect'];
+
 // ---------------------------------------------------------------------------
 // Entry point
 
 export function toReference(source: string, path: string, runtimeUrl: string): string {
-  const module = analyze(source, { path });
+  const module = analyze(rewriteRefAttributes(source), { path });
   if (module.diagnostics.length > 0) {
     const messages = module.diagnostics.map((diagnostic) => diagnostic.message).join('; ');
     throw new Error(`reference: ${path} does not parse: ${messages}`);
@@ -59,8 +68,9 @@ export function toReference(source: string, path: string, runtimeUrl: string): s
   for (const component of findComponents(module)) {
     new ComponentRewrite(module, component).run();
   }
+  rewriteModuleEffects(module);
 
-  const header = `import { $h, Fragment as $Fragment, $enter } from ${JSON.stringify(runtimeUrl)};\n`;
+  const header = `import { ${RUNTIME_EXPORTS.join(', ')} } from ${JSON.stringify(runtimeUrl)};\n`;
   return lowerJsxAndTypes(header + generate(module.ast).code);
 }
 
@@ -77,6 +87,52 @@ function lowerJsxAndTypes(code: string): string {
     },
   });
   return transpiler.transformSync(code);
+}
+
+// ---------------------------------------------------------------------------
+// Refs, before analysis
+
+/**
+ * `ref={x}` and `ref={nodes.panel}` become
+ * `ref={$assignRef(() => x, ($node) => { x = $node; })}`, so the runtime can fill
+ * and clear the variable. The write is inside a function, so `x` is a binding
+ * reassigned later, which the analysis below sees like any other.
+ */
+function rewriteRefAttributes(source: string): string {
+  const { program } = parse(source, { lang: 'tsx', sourceType: 'module' });
+  walk(program, {
+    JSXAttribute(node) {
+      const isRef = is.JSXIdentifier(node.name) && node.name.name === 'ref';
+      if (!isRef || !is.JSXExpressionContainer(node.value)) return;
+      if (is.JSXEmptyExpression(node.value.expression)) return;
+      node.value.expression = toRefValue(node.value.expression);
+    },
+  });
+  return generate(program).code;
+}
+
+function toRefValue(value: Expression): Expression {
+  if (is.ArrayExpression(value)) {
+    return b.ArrayExpression({
+      elements: value.elements.map((element) => (is.Expression(element) ? toRefValue(element) : element)),
+    });
+  }
+  if (!is.Identifier(value) && !is.MemberExpression(value)) return value;
+
+  const read = thunk(structuredClone(value));
+  const write = b.ArrowFunctionExpression({
+    id: null,
+    params: [b.Identifier({ name: '$node' })],
+    body: b.BlockStatement({
+      body: [b.ExpressionStatement({
+        expression: b.AssignmentExpression({ operator: '=', left: structuredClone(value) as never, right: identifier('$node') }),
+      })],
+    }),
+    expression: false,
+    async: false,
+    generator: false,
+  });
+  return b.CallExpression({ callee: identifier('$assignRef'), arguments: [read, write], optional: false });
 }
 
 // ---------------------------------------------------------------------------
@@ -105,31 +161,68 @@ function functionName(module: Module, fn: FunctionNode): string | undefined {
 
 class ComponentRewrite {
   private readonly body: BlockStatement;
+  private readonly reads: Reads;
+
+  /** Bindings that need a slot. Bindings not in here are plain. */
   private readonly slots = new Map<Binding, Slot>();
-  /** Statement → the slots it belongs to. It runs only when one of them is (re)computed. */
-  private readonly guards = new Map<Statement, Set<Slot>>();
+  /** `const { x, y } = point`: the slot holds the value being destructured. */
+  private readonly patternSlots = new Map<VariableDeclarator, Slot>();
+  /** Body statements that build a binding's value, by binding. */
+  private readonly writers = new Map<Binding, Statement[]>();
+  /** Statement → the slots it belongs to; `setup` means it runs on the first render only. */
+  private readonly guards = new Map<Statement, Set<Slot> | 'setup'>();
+  /** `$effect(...)` and `$cleanup(...)` calls → their runtime calls. */
+  private readonly lifecycleCalls = new Map<Node, Expression>();
+
+  private nextSlot = 0;
 
   constructor(
     private readonly module: Module,
     private readonly component: FunctionNode,
   ) {
     this.body = component.body as BlockStatement;
+    this.reads = new Reads(module);
   }
 
   run(): void {
+    this.findWriters();
     this.chooseSlots();
-    if (this.slots.size === 0) return;
-    this.findGuardedStatements();
+    this.chooseGuards();
 
     // Every new node is built before references are rewritten in place.
     const declarations = this.buildSlotDeclarations();
-    this.rewriteSlotReads();
+    this.buildLifecycleCalls();
+    if (this.slots.size === 0 && this.patternSlots.size === 0 && this.guards.size === 0 && this.lifecycleCalls.size === 0) {
+      return;
+    }
+
+    // Declarations first: an initializer then sits inside its thunk, where the walk
+    // below rewrites it, even when the whole initializer is one name (`= point`).
     for (const { declarator, slot, created } of declarations) {
-      declarator.id = b.Identifier({ name: slot.name });
+      if (is.Identifier(declarator.id)) declarator.id = b.Identifier({ name: slot.name });
       declarator.init = created;
     }
+    this.rewriteUses();
     this.wrapGuardedStatements();
     this.insertPrelude();
+  }
+
+  // --- Which statements build which binding --------------------------------
+
+  private findWriters(): void {
+    for (const binding of this.ownBindings()) {
+      const statements = new Set<Statement>();
+      const declaration = this.topStatementOf(binding.declarations[0]!);
+
+      for (const use of this.usesOf(binding)) {
+        if (this.runsLater(use) || !writesOrMutates(this.module, use)) continue;
+        const statement = this.topStatementOf(use.node);
+        if (statement !== undefined && statement !== declaration && this.canBuild(statement)) {
+          statements.add(statement);
+        }
+      }
+      this.writers.set(binding, [...statements]);
+    }
   }
 
   // --- Choosing a treatment for each binding -------------------------------
@@ -137,10 +230,18 @@ class ComponentRewrite {
   private chooseSlots(): void {
     for (const binding of this.ownBindings()) {
       const treatment = this.treatmentOf(binding);
-      if (treatment === undefined) continue;
-      const index = this.slots.size;
-      this.slots.set(binding, { binding, treatment, index, name: `$s${index}` });
+      if (treatment !== undefined) this.slots.set(binding, this.newSlot(treatment));
     }
+
+    for (const declarator of this.patternDeclarators()) {
+      const treatment = this.reads.inside([declarator.init!], { exclude: undefined }).size > 0 ? 'memo' : 'cell';
+      this.patternSlots.set(declarator, this.newSlot(treatment));
+    }
+  }
+
+  private newSlot(treatment: Treatment): Slot {
+    const index = this.nextSlot++;
+    return { treatment, index, name: `$s${index}` };
   }
 
   /** Parameters and bindings declared directly in the component body. */
@@ -153,20 +254,20 @@ class ComponentRewrite {
   }
 
   private treatmentOf(binding: Binding): Treatment | undefined {
-    const uses = this.usesOf(binding);
-    const usedLater = uses.some((use) => this.runsLater(use));
-    const writtenLater = uses.some((use) => use.isWrite && this.runsLater(use));
+    const writtenLater = this.usesOf(binding).some((use) => use.isWrite && this.runsLater(use));
 
     if (this.isParameter(binding)) {
       return writtenLater && this.isSimpleParameter(binding) ? 'prop' : undefined;
     }
-    if (this.declaratorOf(binding) === undefined || this.functionOf(binding) !== undefined) {
-      // Destructuring declarations and local functions are recomputed each render.
+    const declarator = this.declaratorOf(binding);
+    if (declarator === undefined || this.reads.functionOf(binding) !== undefined) {
       return undefined;
     }
     if (writtenLater) return 'cell';
-    if (usedLater) return 'memo';
-    return undefined;
+
+    const roots: Node[] = [...this.writers.get(binding)!];
+    if (declarator.init) roots.push(declarator.init);
+    return this.reads.inside(roots, { exclude: binding }).size > 0 ? 'memo' : 'cell';
   }
 
   private isParameter(binding: Binding): boolean {
@@ -182,48 +283,84 @@ class ComponentRewrite {
     return this.component.params.some((param) => param === pattern);
   }
 
-  // --- Statements that must not run on every render ------------------------
+  /** `const { x, y } = value` and `const [a, b] = value` at the top of the body. */
+  private patternDeclarators(): VariableDeclarator[] {
+    return this.body.body
+      .filter((statement) => is.VariableDeclaration(statement))
+      .flatMap((statement) => statement.declarations)
+      .filter((declarator) => !is.Identifier(declarator.id) && declarator.init !== null);
+  }
+
+  // --- When each body statement runs ---------------------------------------
 
   /**
-   * A body statement that writes or mutates a slot belongs to that slot's value:
-   * a cell's statement runs on the first render only, a memo's statement runs when
-   * the memo is computed again.
+   * A statement that builds a derived value runs when that value is computed
+   * again. A statement that builds a cell runs on the first render only, like
+   * every other setup statement. A statement that builds a plain binding, or
+   * that contains a `return` or an `$effect`, runs on every render.
    */
-  private findGuardedStatements(): void {
-    for (const slot of this.slots.values()) {
-      if (slot.treatment === 'prop') continue;
-      const declaration = this.topStatementOf(slot.binding.declarations[0]!);
-
-      for (const use of this.usesOf(slot.binding)) {
-        if (this.runsLater(use) || !writesOrMutates(this.module, use)) continue;
-        const statement = this.topStatementOf(use.node);
-        if (statement === undefined || statement === declaration || !this.canGuard(statement)) continue;
-        this.addGuard(statement, slot);
+  private chooseGuards(): void {
+    const owners = new Map<Statement, Set<Binding>>();
+    for (const [binding, statements] of this.writers) {
+      for (const statement of statements) {
+        const bindings = owners.get(statement) ?? new Set<Binding>();
+        bindings.add(binding);
+        owners.set(statement, bindings);
       }
+    }
+
+    for (const statement of this.body.body) {
+      if (!this.canBuild(statement)) continue;
+
+      const built = [...(owners.get(statement as Statement) ?? [])];
+      if (built.length === 0) {
+        this.guards.set(statement as Statement, 'setup');
+        continue;
+      }
+
+      // Plain bindings and props are new on every render, so their statements re-run.
+      const slots = built.map((binding) => this.slots.get(binding));
+      if (slots.some((slot) => slot === undefined || slot.treatment === 'prop')) continue;
+
+      this.guards.set(statement as Statement, new Set(slots as Slot[]));
     }
   }
 
-  private addGuard(statement: Statement, slot: Slot): void {
-    const owners = this.guards.get(statement) ?? new Set<Slot>();
-    owners.add(slot);
-    this.guards.set(statement, owners);
+  /**
+   * Whether a body statement can build a value, and so be wrapped in a guard.
+   * Declarations keep their own scope; a statement with the component's `return`
+   * or an `$effect` must run on every render.
+   */
+  private canBuild(statement: Node): boolean {
+    if (!GUARDABLE_STATEMENTS.has(statement.type)) return false;
+    return !this.containsReturn(statement) && !this.containsLifecycleCall(statement, '$effect');
   }
 
-  /** A guarded declaration would leave its scope; a guarded `return` would be skipped. */
-  private canGuard(statement: Statement): boolean {
-    if (!GUARDABLE_STATEMENTS.has(statement.type)) return false;
-    const returns = findAll(statement, 'ReturnStatement');
-    return returns.every((ret) => this.enclosingFunction(ret) !== this.component);
+  private containsReturn(statement: Node): boolean {
+    return findAll(statement, 'ReturnStatement').some((ret) => this.enclosingFunction(ret) === this.component);
+  }
+
+  private containsLifecycleCall(statement: Node, name: '$effect' | '$cleanup'): boolean {
+    return findAll(statement, 'CallExpression').some((call) => this.isLifecycleCall(call, name));
+  }
+
+  /** A call of the ambient `$effect` / `$cleanup`, directly in this component's body. */
+  private isLifecycleCall(call: Node, name: '$effect' | '$cleanup'): boolean {
+    if (!is.CallExpression(call) || !is.Identifier(call.callee, name)) return false;
+    if (this.module.referenceOf(call.callee)?.binding) return false;
+    return this.enclosingFunction(call) === this.component;
   }
 
   /** `stmt` becomes `if ($ctx.first || $s2.fresh) { stmt }`. */
   private wrapGuardedStatements(): void {
     this.body.body = this.body.body.map((statement) => {
-      const owners = this.guards.get(statement as Statement);
-      if (owners === undefined) return statement;
+      const guard = this.guards.get(statement as Statement);
+      if (guard === undefined) return statement;
 
-      const conditions = [...owners].map((slot) =>
-        slot.treatment === 'cell' ? member('$ctx', 'first') : member(slot.name, 'fresh'));
+      // A memo's statements run when it is computed again; a cell's and setup run once.
+      const conditions = guard === 'setup'
+        ? [member('$ctx', 'first')]
+        : [...guard].map((slot) => (slot.treatment === 'memo' ? member(slot.name, 'fresh') : member('$ctx', 'first')));
       const test = conditions.reduce((left, right) => b.LogicalExpression({ operator: '||', left, right }));
 
       return b.IfStatement({
@@ -234,79 +371,69 @@ class ComponentRewrite {
     });
   }
 
-  // --- Building slot declarations ------------------------------------------
+  // --- Building slot declarations and lifecycle calls ----------------------
 
   /**
    * `let x = init` becomes one of:
    *   `let $s0 = $ctx.cell(0, () => init)`
    *   `let $s0 = $ctx.memo(0, () => [inputs…], () => init)`
+   * and `const { a } = init` becomes `const { a } = $ctx.memo(…).v`.
    */
   private buildSlotDeclarations(): Array<{ declarator: VariableDeclarator; slot: Slot; created: Expression }> {
     const declarations = [];
-    for (const slot of this.slots.values()) {
+
+    for (const [binding, slot] of this.slots) {
       if (slot.treatment === 'prop') continue;
-
-      const declarator = this.declaratorOf(slot.binding)!;
-      const initial = thunk(declarator.init ?? identifier('undefined'));
-      const index = numberLiteral(slot.index);
-
-      let created: Expression;
-      if (slot.treatment === 'cell') {
-        created = ctxCall('cell', [index, initial]);
-      } else {
-        const inputs = thunk(b.ArrayExpression({ elements: this.inputsOf(slot) }));
-        created = ctxCall('memo', [index, inputs, initial]);
-      }
+      const declarator = this.declaratorOf(binding)!;
+      const roots: Node[] = [...this.writers.get(binding)!];
+      if (declarator.init) roots.push(declarator.init);
+      const created = this.slotCall(slot, declarator.init, this.reads.inside(roots, { exclude: binding }));
       declarations.push({ declarator, slot, created });
     }
+
+    for (const [declarator, slot] of this.patternSlots) {
+      const inputs = this.reads.inside([declarator.init!], { exclude: undefined });
+      const created = b.MemberExpression({
+        object: this.slotCall(slot, declarator.init, inputs),
+        property: b.Identifier({ name: 'v' }),
+        computed: false,
+        optional: false,
+      });
+      declarations.push({ declarator, slot, created });
+    }
+
     return declarations;
   }
 
-  /**
-   * What a memo's value is computed from: everything its initializer and its
-   * guarded statements read. A local function stands for what it captures.
-   */
-  private inputsOf(slot: Slot): Expression[] {
-    const roots: Node[] = [];
-    const initializer = this.declaratorOf(slot.binding)!.init;
-    if (initializer) roots.push(initializer);
-    for (const [statement, owners] of this.guards) {
-      if (owners.has(slot)) roots.push(statement);
-    }
-
-    const inputs = new Set<Binding>();
-    const visitedFunctions = new Set<Node>();
-    const addInput = (binding: Binding) => {
-      if (binding === slot.binding || inputs.has(binding)) return;
-      const fn = this.functionOf(binding);
-      if (fn === undefined) {
-        inputs.add(binding);
-        return;
-      }
-      if (visitedFunctions.has(fn)) return;
-      visitedFunctions.add(fn);
-      for (const capture of this.module.capturesOf(fn)) addInput(capture.binding);
-    };
-
-    for (const root of roots) {
-      this.module.walk({
-        Identifier: (_node, ctx) => {
-          const binding = ctx.reference?.binding;
-          if (binding && !this.isDeclaredInside(binding, root)) addInput(binding);
-        },
-      }, root);
-    }
-
-    return [...inputs].map((binding) => this.readOf(binding));
+  private slotCall(slot: Slot, init: Expression | null, inputs: Set<Binding>): Expression {
+    const index = numberLiteral(slot.index);
+    const initial = thunk(init ?? identifier('undefined'));
+    if (slot.treatment === 'cell') return ctxCall('cell', [index, initial]);
+    return ctxCall('memo', [index, this.inputList(inputs), initial]);
   }
 
-  private isDeclaredInside(binding: Binding, root: Node): boolean {
-    return binding.declarations.some((name) => {
-      for (const ancestor of this.module.ancestors(name)) {
-        if (ancestor === root) return true;
+  /**
+   * `$effect(fn)` becomes `$ctx.effect(N, () => [what fn reads], fn)`.
+   * `$cleanup(fn)` becomes `$ctx.cleanup(fn)`.
+   */
+  private buildLifecycleCalls(): void {
+    for (const call of this.module.findAll('CallExpression')) {
+      if (this.isLifecycleCall(call, '$cleanup')) {
+        this.lifecycleCalls.set(call, ctxCall('cleanup', call.arguments as Expression[]));
+        continue;
       }
-      return false;
-    });
+      if (!this.isLifecycleCall(call, '$effect')) continue;
+
+      const callback = call.arguments[0] as Expression;
+      const index = numberLiteral(this.nextSlot++);
+      const inputs = this.inputList(this.reads.ofCallback(callback));
+      this.lifecycleCalls.set(call, ctxCall('effect', [index, inputs, callback]));
+    }
+  }
+
+  /** `() => [a, $s1.v, …]`: reads the current value of each input. */
+  private inputList(inputs: Set<Binding>): Expression {
+    return thunk(b.ArrayExpression({ elements: [...inputs].map((binding) => this.readOf(binding)) }));
   }
 
   /** An expression that reads a binding's current value. */
@@ -316,11 +443,15 @@ class ComponentRewrite {
     return member(slot.name, 'v');
   }
 
-  // --- Rewriting reads, and the prelude ------------------------------------
+  // --- Rewriting the component ---------------------------------------------
 
-  /** Every use of a slot binding becomes `$sN.v`. */
-  private rewriteSlotReads(): void {
+  /** Uses of slot bindings become `$sN.v`; lifecycle calls become runtime calls. */
+  private rewriteUses(): void {
     this.module.walk({
+      CallExpression: (node, ctx) => {
+        const replacement = this.lifecycleCalls.get(node);
+        if (replacement !== undefined) ctx.replace(replacement);
+      },
       Identifier: (_node, ctx) => {
         const slot = this.slotAt(ctx.reference);
         if (slot === undefined) return;
@@ -355,9 +486,9 @@ class ComponentRewrite {
     const enter = b.CallExpression({ callee: identifier('$enter'), arguments: [], optional: false });
     const prelude: Statement[] = [constDeclaration('$ctx', enter)];
 
-    for (const slot of this.slots.values()) {
+    for (const [binding, slot] of this.slots) {
       if (slot.treatment !== 'prop') continue;
-      const fromParent = identifier(slot.binding.name);
+      const fromParent = identifier(binding.name);
       prelude.push(constDeclaration(slot.name, ctxCall('prop', [numberLiteral(slot.index), fromParent])));
     }
     this.body.body.unshift(...prelude);
@@ -375,9 +506,7 @@ class ComponentRewrite {
   }
 
   private enclosingFunction(node: Node): Node | undefined {
-    let current = this.module.parentOf(node);
-    while (current !== null && !is.Function(current)) current = this.module.parentOf(current);
-    return current ?? undefined;
+    return enclosingFunction(this.module, node);
   }
 
   /** The statement of the component body that contains `node`. */
@@ -397,9 +526,94 @@ class ComponentRewrite {
     const parent = name && this.module.parentOf(name);
     return is.VariableDeclarator(parent) && parent.id === name ? parent : undefined;
   }
+}
+
+// ---------------------------------------------------------------------------
+// Module effects
+
+/** `$effect(fn)` at the top of the module becomes `$moduleEffect(() => [what fn reads], fn)`. */
+function rewriteModuleEffects(module: Module): void {
+  const reads = new Reads(module);
+  const replacements = new Map<Node, Expression>();
+
+  for (const call of module.findAll('CallExpression')) {
+    if (!is.Identifier(call.callee, '$effect') || module.referenceOf(call.callee)?.binding) continue;
+    // Effects inside components are rewritten by `ComponentRewrite`.
+    if (enclosingFunction(module, call) !== undefined) continue;
+
+    const callback = call.arguments[0] as Expression;
+    const inputs = [...reads.ofCallback(callback)].map((binding) => identifier(binding.name));
+    replacements.set(call, b.CallExpression({
+      callee: identifier('$moduleEffect'),
+      arguments: [thunk(b.ArrayExpression({ elements: inputs })), callback],
+      optional: false,
+    }));
+  }
+
+  if (replacements.size === 0) return;
+  module.walk({
+    CallExpression: (node, ctx) => {
+      const replacement = replacements.get(node);
+      if (replacement !== undefined) ctx.replace(replacement);
+    },
+  });
+}
+
+// ---------------------------------------------------------------------------
+// What code reads
+
+/** Finds the bindings a piece of code reads. A local function stands for what it reads. */
+class Reads {
+  constructor(private readonly module: Module) {}
+
+  /** Everything read anywhere inside `roots`, including inside callbacks they contain. */
+  inside(roots: Node[], options: { exclude: Binding | undefined }): Set<Binding> {
+    const found = new Set<Binding>();
+    for (const root of roots) this.collect(root, root, false, found, new Set());
+    if (options.exclude) found.delete(options.exclude);
+    return found;
+  }
+
+  /**
+   * What an effect callback reads while it runs: reads directly in its body, and in
+   * local functions it calls. Reads inside callbacks it creates run later, so they
+   * are not inputs (`connection.onMessage(() => unread++)`).
+   */
+  ofCallback(callback: Expression): Set<Binding> {
+    const found = new Set<Binding>();
+    let fn: Node | undefined = callback;
+    if (is.Identifier(callback)) {
+      const binding = this.module.referenceOf(callback)?.binding;
+      fn = binding ? this.functionOf(binding) : undefined;
+    }
+    if (fn !== undefined && is.Function(fn)) this.collect(fn, fn, true, found, new Set([fn]));
+    return found;
+  }
+
+  private collect(root: Node, scope: Node, directOnly: boolean, found: Set<Binding>, visited: Set<Node>): void {
+    const visit = (reference: Reference | null) => {
+      const binding = reference?.binding;
+      if (!binding || reference.isWrite || reference.inTypePosition) return;
+      if (this.isDeclaredInside(binding, scope)) return;
+      if (directOnly && enclosingFunction(this.module, reference.node) !== scope) return;
+
+      const fn = this.functionOf(binding);
+      if (fn === undefined) {
+        found.add(binding);
+      } else if (!visited.has(fn)) {
+        visited.add(fn);
+        this.collect(fn, fn, directOnly, found, visited);
+      }
+    };
+
+    this.module.walk({
+      Identifier: (_node, ctx) => visit(ctx.reference),
+      JSXIdentifier: (_node, ctx) => visit(ctx.reference),
+    }, root);
+  }
 
   /** The function a binding names: `function f() {}` or `const f = () => {}`. */
-  private functionOf(binding: Binding): FunctionNode | undefined {
+  functionOf(binding: Binding): FunctionNode | undefined {
     const name = binding.declarations[0];
     const parent = name && this.module.parentOf(name);
     if (is.FunctionDeclaration(parent) && parent.id === name) {
@@ -410,6 +624,21 @@ class ComponentRewrite {
     }
     return undefined;
   }
+
+  private isDeclaredInside(binding: Binding, root: Node): boolean {
+    return binding.declarations.some((name) => {
+      for (const ancestor of this.module.ancestors(name)) {
+        if (ancestor === root) return true;
+      }
+      return false;
+    });
+  }
+}
+
+function enclosingFunction(module: Module, node: Node): Node | undefined {
+  let current = module.parentOf(node);
+  while (current !== null && !is.Function(current)) current = module.parentOf(current);
+  return current ?? undefined;
 }
 
 // ---------------------------------------------------------------------------
@@ -429,8 +658,8 @@ function member(object: string, property: string): Expression {
   });
 }
 
-/** `$ctx.cell(...)`, `$ctx.memo(...)`, `$ctx.prop(...)` */
-function ctxCall(method: Treatment, args: Expression[]): Expression {
+/** `$ctx.cell(...)`, `$ctx.memo(...)`, `$ctx.prop(...)`, `$ctx.effect(...)`, `$ctx.cleanup(...)` */
+function ctxCall(method: Treatment | 'effect' | 'cleanup', args: Expression[]): Expression {
   return b.CallExpression({ callee: member('$ctx', method), arguments: args, optional: false });
 }
 

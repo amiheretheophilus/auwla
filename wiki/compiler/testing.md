@@ -39,21 +39,25 @@ slow and obviously correct.
 ## Layers
 
 1. **Reference renderer** (`tests/reference/`). Test-only: the framework never
-   renders this way. After every step it calls every component again and builds a
-   new DOM tree, with no diffing. Component calls are matched to their instance by
-   position and `key`, so values that must outlive a render keep it in a slot:
-   - a binding reassigned by later code (handler, callback) is a `cell`: a snapshot,
-     and the body statements that write it run on the first render only;
-   - a binding used by later code but not reassigned is a `memo`: kept until a deep
-     copy of its inputs changes, with the body statements that mutate it;
+   renders this way. After every step it calls every component again. The component
+   body is setup code, so only derivations are computed again:
+   - a binding reassigned by later code (handler, callback) is a `cell`: a snapshot;
+   - a binding that reads nothing is a `cell`: computed once;
+   - a binding that reads something is a `memo`: computed again when a deep copy of
+     its inputs changes, together with the body statements that build it;
    - a prop reassigned by later code is a `prop` slot;
-   - everything else is recomputed.
+   - every other body statement is setup and runs on the first render only.
 
-   That is `state-and-derived.md`, executable.
+   DOM nodes are kept between renders, matched by position, `key` and tag, so refs,
+   typed text and focus survive; each render updates their props and order. After
+   that, refs are installed and effects run, and the app renders again until nothing
+   changes. Component calls are matched to their instance the same way.
 
-   **Limits today:** refs, `$effect`, sources (`$fetch`, `$read`, server functions)
-   and routing are not supported yet. A destructuring declaration is always
-   recomputed. JSX and TypeScript are lowered by Bun's transpiler, because
+   That is `state-and-derived.md`, `refs.md` and `effects.md`, executable.
+
+   **Limits today:** sources (`$fetch`, `$read`, server functions), `Group` and
+   routing are not supported yet. A destructured name is recomputed with the value it
+   comes from. JSX and TypeScript are lowered by Bun's transpiler, because
    `yuku-codegen` drops `enum` instead of converting it.
 2. **Comparison tests.** A case is a component and a list of events. After the first
    render and after each event, the compiled DOM must equal the reference DOM.
@@ -75,8 +79,8 @@ slow and obviously correct.
 
 The first cases are the **Cases to test** section of each concept page, written in
 `tests/cases/<page>.test.ts`. Each one is a case the old compiler rejects or shows
-wrong, or behaviour it must keep. On 2026-10-19, against the old compiler: 20 pass
-and 12 fail, each failure a known old-compiler bug listed on its page.
+wrong, or behaviour it must keep. On 2026-10-19, against the old compiler: 32 pass
+and 15 fail, each failure a known old-compiler bug listed on its page.
 The old compiler has about 305 distinct `memo-dom:` messages. Most are internal
 invariants or contracts of the framework's own APIs (`route-to`, `$routed`, `Group`,
 `page()`, `mount()`, server functions); those stay. Only messages that reject

@@ -72,6 +72,24 @@ for (const item of items) sum += item.price;
 - A new way to write a binding (a new assignment form): `core/resolve/`, which
   finds write sites. The rules here do not change.
 
+## Open questions
+
+- **A body statement that only calls a method on a binding.** With no method lists,
+  every call counts as a possible mutation, so in
+
+  ```js
+  let picked = [];                          // a handler pushes into it later
+  for (const x of others) picked.includes(x);
+  ```
+
+  the loop counts as building `picked`. `picked` then becomes derived from `others`,
+  and goes back to `[]` whenever `others` changes. The loop really only reads it.
+  Pushing into a list in the body, `const rows = []; for (…) rows.push(<li/>)`, has
+  to count as building it, or the list never updates. Today the reference treats
+  both the same way. A read-only-methods optimization would then change behaviour,
+  which optimizations must never do. Possible fix: decide at runtime whether the
+  statement changed the value, by comparing before and after. Not settled.
+
 ## Cases to test
 
 In `packages/compiler-next/tests/cases/state-and-derived.test.ts`. Each must compile

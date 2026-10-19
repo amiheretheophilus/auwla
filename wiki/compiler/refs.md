@@ -30,6 +30,19 @@ Makes element refs reactive, so a user never needs a ref plus an effect
 - In: `Resolved` (bindings used in `ref=`), the JSX sites.
 - Out: `Ref` nodes; `writes` edges from mount and unmount.
 
+## Cases to test
+
+In `packages/compiler-next/tests/cases/refs.test.ts`. All pass today and must keep
+passing:
+
+- a ref used in a handler;
+- markup that reads a ref updates when it mounts;
+- a ref is cleared when its element leaves;
+- a member expression as a ref;
+- a callback ref that writes state;
+- several refs on one element;
+- a ref forwarded through a component.
+
 ## Open questions
 
 - Module-level ref targets (`export let node` with `ref={node}`): readers in other

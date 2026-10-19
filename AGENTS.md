@@ -37,6 +37,8 @@ Read this file first. Then read `wiki/README.md`, which lists the rest in order.
   locally; run the files you changed. Root tests import `dist`, so rebuild the
   package first (`bun run --cwd packages/<name> build`).
 - `packages/compiler-next` tests import `src` directly and need no build.
+- Type-check with `bun check` (in a package, or `bun check -p <tsconfig>`). It reports
+  the same errors as `tsc` in under a second. Do not use `bunx tsc`.
 - Benchmarks live in `bench/`. Run them locally only to check their correctness
   gates; the user times them on another machine.
 - Commit and push after each finished step, to `origin`.
