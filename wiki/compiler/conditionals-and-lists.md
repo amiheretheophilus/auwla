@@ -53,21 +53,23 @@ place.
 
 ## Cases to test
 
-The old compiler rejects the first five:
+In `packages/compiler-next/tests/cases/conditionals-and-lists.test.ts`.
 
-- `load().map(i => <li/>)`;
+The old compiler rejects these:
+
 - `items.map((item, i, all) => …)`;
 - JSX pushed into an array in a `for` loop, rendered as `{rows}`;
-- `<p>{...items}</p>`;
-- `<p key="x">` outside a list.
+- JSX assigned in a body `switch`: `switch (mode) { case 'a': view = <p/>; … }`.
 
-These work today and must keep working:
+These pass today and must keep passing:
 
+- `load().map(…)` over module state;
+- `<p key="x">` outside a list, and a dynamic key that remounts;
 - maps over module constants;
 - filter-then-map;
-- `map(Row)`;
-- `switch` on state;
-- `??` in JSX.
+- `??` in JSX;
+- an early return.
 
-Old messages not yet checked against valid code: "control flow … test is not
+Not written yet: `<p>{...items}</p>` (JSX spread children), `map(Row)`. Old
+messages not yet checked against valid code: "control flow … test is not
 replayable", "conditional cannot choose between two data sources".

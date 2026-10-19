@@ -74,14 +74,29 @@ for (const item of items) sum += item.price;
 
 ## Cases to test
 
-Each must compile and show on the UI what the console shows.
+In `packages/compiler-next/tests/cases/state-and-derived.test.ts`. Each must compile
+and show on the UI what the console shows.
 
-- `let label = user.name; if (!label) label = 'Anonymous';`: the old compiler rejects it.
-- `const items = makeList()`, written, then rendered as a list.
-- writes and read-only methods on a `[1].concat([2])` result;
-- reassigning a prop, and `++` on a prop;
-- `sorted.push(x)` on `const sorted = items.slice()`;
-- writing a module computed;
-- chained and value-position assignments: `a = b = 1`, `last = count++`;
-- derivation writes at module scope (old message: "cannot assign computed");
-- destructuring reactive state (old message: "destructuring snapshots reactive state").
+The old compiler fails these:
+
+- `let label = user.name; if (!label) label = 'Anonymous';`: rejected.
+- A loop in the body, `for (const item of items) sum += item.price`: it does not
+  re-run when `items` changes.
+- `<p>{a}{b} {count}</p>`: adjacent text values are joined with `+`, so two numbers
+  are added (`0` instead of `00`, `2` instead of `11`).
+
+These pass today and must keep passing:
+
+- a counter;
+- a `const` derived from state;
+- a binding reassigned in a handler is a snapshot;
+- an `if`/`else` that assigns in every branch;
+- `sorted.push(x)` on a sorted copy, then the source changes;
+- `const items = makeList()`, written, then rendered as a list;
+- writes on a `[1].concat([2])` result;
+- reassigning a prop with `++`, then the parent sends a new value;
+- writing a module value derived from module state;
+- destructuring reactive state.
+
+Not written yet: derivation writes at module scope (old message: "cannot assign
+computed").

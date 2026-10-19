@@ -1,7 +1,22 @@
 # Testing
 
-**Folders:** `packages/compiler-next/tests/`, `features/*/*.test.ts`,
+**Folders:** `packages/compiler-next/tests/` (built), `features/*/*.test.ts` and
 `optimize/*.test.ts` _(planned)_.
+
+## Files
+
+| File | What it does |
+| --- | --- |
+| `tests/reference/transform.ts` | Turns a module into a reference module: decides which bindings need a slot (built on `yuku-analyzer`, `yuku-ast`, `yuku-codegen`) |
+| `tests/reference/runtime.ts` | Runs the reference: re-renders everything, keeps slots per component instance |
+| `tests/harness/case.ts` | The `Case` and `Step` types, and `defer(name)` for async cases |
+| `tests/harness/run.ts` | `behaves(name, case)`: runs the case on the reference and on a compiler, compares after each step |
+| `tests/harness/compilers.ts` | The compilers a case can run on; `COMPILER=old` (default) is `packages/compiler` |
+| `tests/harness/serialize.ts` | The visible DOM as a comparable string |
+| `tests/cases/<page>.test.ts` | One file per wiki page; holds that page's "Cases to test" |
+
+Run them with `bun test` in `packages/compiler-next` (no build needed), or one file:
+`bun test cases/handlers`.
 
 ## What it does
 
@@ -17,13 +32,23 @@ slow and obviously correct.
 
 ## Layers
 
-1. **Reference renderer** (`tests/reference/` _(planned)_). It re-runs the whole
-   component function after every event and renders it to HTML. State keeps its
-   value between runs: a small transform reads it from a store and saves every write,
-   and body statements that write a snapshot run only on the first run.
-   Derived values are correct by construction, because everything is recomputed. It
-   follows `state-and-derived.md` exactly, so it is also the executable version of
-   those rules.
+1. **Reference renderer** (`tests/reference/`). Test-only: the framework never
+   renders this way. After every step it calls every component again and builds a
+   new DOM tree, with no diffing. Component calls are matched to their instance by
+   position and `key`, so values that must outlive a render keep it in a slot:
+   - a binding reassigned by later code (handler, callback) is a `cell`: a snapshot,
+     and the body statements that write it run on the first render only;
+   - a binding used by later code but not reassigned is a `memo`: kept until a deep
+     copy of its inputs changes, with the body statements that mutate it;
+   - a prop reassigned by later code is a `prop` slot;
+   - everything else is recomputed.
+
+   That is `state-and-derived.md`, executable.
+
+   **Limits today:** refs, `$effect`, sources (`$fetch`, `$read`, server functions)
+   and routing are not supported yet. A destructuring declaration is always
+   recomputed. JSX and TypeScript are lowered by Bun's transpiler, because
+   `yuku-codegen` drops `enum` instead of converting it.
 2. **Comparison tests.** A case is a component and a list of events. After the first
    render and after each event, the compiled DOM must equal the reference DOM.
 3. **Generated programs.** `fast-check` builds random components from JavaScript
@@ -42,8 +67,10 @@ slow and obviously correct.
    flows) run against `compiler-next` through a switch. When they all pass, the old
    compiler is deleted.
 
-The first cases are the **Cases to test** section of each concept page. Each one
-is a case the old compiler rejects or shows wrong, or behaviour it must keep.
+The first cases are the **Cases to test** section of each concept page, written in
+`tests/cases/<page>.test.ts`. Each one is a case the old compiler rejects or shows
+wrong, or behaviour it must keep. On 2026-10-19, against the old compiler: 20 pass
+and 12 fail, each failure a known old-compiler bug listed on its page.
 The old compiler has about 305 distinct `memo-dom:` messages. Most are internal
 invariants or contracts of the framework's own APIs (`route-to`, `$routed`, `Group`,
 `page()`, `mount()`, server functions); those stay. Only messages that reject
@@ -85,5 +112,5 @@ on the same benchmarks:
 
 ## Open questions
 
-- CI for tests (not benchmarks): set it up on `amiheretheophilus/auwla` once the
+- CI for tests (not benchmarks): set it up on `amiheretheophilus/auwla` now that the
   first tests exist?

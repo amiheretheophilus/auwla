@@ -30,10 +30,14 @@ Finds components, and compiles calls to them: props, children and slots.
 
 ## Cases to test
 
+In `packages/compiler-next/tests/cases/components.test.ts`.
+
 The old compiler rejects both:
 
 - `<UI.Box>`, a member tag;
 - `<Child a={1} b={2} />` where `Child` does not declare `b`.
+
+Passes today: a prop follows the parent.
 
 ## Open questions
 

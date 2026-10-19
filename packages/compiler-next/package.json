@@ -1,0 +1,27 @@
+{
+  "name": "@memoized-dom/compiler-next",
+  "version": "0.0.0",
+  "private": true,
+  "description": "The compiler rewrite. See wiki/compiler/README.md.",
+  "type": "module",
+  "engines": {
+    "node": ">=24.11.0"
+  },
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "test": "bun test"
+  },
+  "dependencies": {
+    "yuku-analyzer": "0.19.0",
+    "yuku-ast": "0.19.0",
+    "yuku-codegen": "0.19.0",
+    "yuku-parser": "0.19.0"
+  },
+  "devDependencies": {
+    "@memoized-dom/compiler": "workspace:*",
+    "@memoized-dom/runtime": "workspace:*",
+    "fast-check": "^4.10.2"
+  }
+}

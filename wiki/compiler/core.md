@@ -11,7 +11,8 @@ The core holds the stage machinery and the shared types. What a concept means
 - Chooses the language from the path (`langFromPath`): `js`, `jsx`, `ts`, `tsx`.
   TSRX is not supported.
 - Lowers `enum` and parameter properties, which `yuku-codegen` does not convert.
-  Case to test: `enum Mode { A, B }`, which the old compiler rejects.
+  Case to test: `enum Mode { A, B }`, which the old compiler rejects
+  (`packages/compiler-next/tests/cases/core.test.ts`).
 - Output: source text and language.
 
 ## resolve — `core/resolve/`

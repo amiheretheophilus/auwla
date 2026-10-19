@@ -290,13 +290,17 @@ The direction changed again on 2026-10-19: the compiler is rewritten as
 `packages/compiler-next/` (see `decisions.md` and `compiler/README.md`). The old
 compiler gets no more patches; bugs become tests.
 
-1. The user reviews `compiler/`, especially the open questions in
-   `state-and-derived.md` and `testing.md`.
-2. Testing first: the reference renderer, the comparison harness and the generator
-   (`compiler/testing.md`), with each page's "Cases to test" and the tests listed above
-   (`visible-effects`, `written-const-state`, `prop-writes`, `derived-literals`,
-   `stray-keys`, `reactive-refs`) as the first cases. CI on GitHub Actions.
-3. Core: parse and resolve on yuku 0.19 (`compiler/toolchain.md`), then the graph.
-4. Features in slices, each end to end: static markup → state and text → handlers →
+1. Testing, in progress:
+   - done: the reference renderer, the comparison harness, and 32 cases across
+     `tests/cases/` (`compiler/testing.md`). Against the old compiler, 20 pass and
+     12 fail; every failure is an old-compiler bug listed on its page. Three were
+     new: body loops don't re-run, `{a}{b}` adds numbers, JSX in a body `switch`
+     is rejected;
+   - next: the program generator (`fast-check`); the reference learns refs,
+     `$effect` and sources; port the root tests listed above (`visible-effects`,
+     `written-const-state`, `prop-writes`, `derived-literals`, `stray-keys`,
+     `reactive-refs`) as cases; CI on GitHub Actions if the user wants it.
+2. Core: parse and resolve on yuku 0.19 (`compiler/toolchain.md`), then the graph.
+3. Features in slices, each end to end: static markup → state and text → handlers →
    conditionals → lists → components → sources and readiness → effects and refs →
    linking.

@@ -63,6 +63,11 @@ packages/compiler-next/src/
   optimize/         fast paths; each falls back to the general rule
   link/             several modules compiled together
   diagnostics/
+
+packages/compiler-next/tests/
+  reference/        the plain-JavaScript reference renderer (test-only)
+  harness/          runs a case on the reference and on a compiler, and compares
+  cases/            one <page>.test.ts per wiki page, with that page's cases
 ```
 
 A feature folder holds only the stages it takes part in:
@@ -72,7 +77,7 @@ A feature folder holds only the stages it takes part in:
 | `classify.ts` | graph: the nodes this feature owns |
 | `plan.ts` | plan: the regions or sites it builds |
 | `dom.ts`, `ssr.ts` | emit: its code for each backend |
-| `<feature>.test.ts` | its tests (see `testing.md`) |
+| `<feature>.test.ts` | unit tests of its graph and plan facts. Behaviour cases live in `tests/cases/<page>.test.ts` (see `testing.md`) |
 
 ## Pages
 

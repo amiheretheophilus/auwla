@@ -53,9 +53,16 @@ Finds every place that changes state and makes the UI update after it.
 
 ## Cases to test
 
-- `onClick={actions.go}` and `onClick={make()}`: the old compiler rejects both.
-- A write between two `await`s: the old compiler never shows it.
-- Reassigning module state from a handler; reassigning a module store.
-- Old messages not yet checked against valid code:
+In `packages/compiler-next/tests/cases/handlers.test.ts`.
+
+The old compiler fails these:
+
+- `onClick={actions.go}` and `onClick={make()}`: rejected.
+- A write between two `await`s: it shows `uploading` until the end, never
+  `processing`.
+
+These pass today: reassigning module state from a handler; typing into an input.
+
+Old messages not yet checked against valid code:
   - "handler assigns X which is neither module state nor a handler local";
   - "module-state write cannot produce a value" (server builds).
