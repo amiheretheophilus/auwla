@@ -298,8 +298,10 @@ compiler gets no more patches; bugs become tests.
      is rejected;
    - done: the program generator (`d1f28f8`). Its first run shrank the old
      compiler's `{a}{b}` bug to `<p>{0}{0} {0}</p>`;
-   - next: the reference learns refs,
-     `$effect` and sources; port the root tests listed above (`visible-effects`,
+   - done: the reference learns refs, `$effect`, `$cleanup` and setup code
+     (`6eac795`). 47 cases, 32 pass and 15 fail on the old compiler;
+   - next: sources (`$fetch`, `$read`, server functions) and `Group` in the
+     reference; port the root tests listed above (`visible-effects`,
      `written-const-state`, `prop-writes`, `derived-literals`, `stray-keys`,
      `reactive-refs`) as cases. No CI until the suite reaches thousands of cases.
 2. Core: parse and resolve on yuku 0.19 (`compiler/toolchain.md`), then the graph.
