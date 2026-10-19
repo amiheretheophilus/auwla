@@ -105,8 +105,8 @@ ordinary JavaScript become cases.
 ## Performance baseline
 
 The last full benchmark of the old compiler is `d6e678b`: 8 CPUs and 8 GiB on an
-AMD EPYC VM, Chrome Headless Shell 149. `compiler-next` must not fall below it
-on the same benchmarks:
+AMD EPYC VM, Chrome Headless Shell 149. `compiler-next` must beat it on the same
+benchmarks (`../decisions.md`, 2026-10-19):
 
 - **Octane** (ten frameworks, canonical and keyed reorder): overall average rank
   3.146, second after ripple (1.667), ahead of Solid (3.854).

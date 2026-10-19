@@ -12,8 +12,9 @@ and runs their cleanup.
 - An effect's reads are found like a derived value's: whatever it reads in its body,
   directly or through derived values and helpers it calls. Reads inside callbacks it
   creates are not its reads: they run later (`connection.onMessage(() => unread++)`).
-- **Open:** does `x++` or `x += 1` inside the effect make `x` one of its reads? See
-  the open question below.
+- An update of a binding (`x++`, `x += 1`) is a write, not a read: it does not make
+  the effect re-run when `x` changes. Otherwise every effect that counts something
+  would re-trigger itself (`../decisions.md`, 2026-10-19).
 - The component body is setup code: it runs once. `fetch(...).then(...)` or
   `defer(...)` in the body starts once, and its writes update the UI later.
 - It runs after its owner commits and its refs have mounted, then again whenever a
@@ -40,8 +41,7 @@ The old compiler fails these:
 - `$effect(async () => …)`: rejected.
 - An effect that does `runs++` (or `starts++`), including one inside an `if`: the
   old runtime counts the update as a read, so the effect re-triggers itself until
-  its cycle guard throws. The reference does not count it as a read. This waits
-  on the open question below.
+  its cycle guard throws.
 
 These pass today and must keep passing:
 
@@ -52,9 +52,3 @@ These pass today and must keep passing:
 - an effect at module scope.
 
 Not written yet: `$cleanup` in places the old compiler does not allow.
-
-## Open questions
-
-- Should `x++` / `x += 1` inside an effect subscribe the effect to `x`? If yes, every
-  effect that counts something loops. If no, the effect does not re-run when `x`
-  changes elsewhere either; it only re-runs for its plain reads.

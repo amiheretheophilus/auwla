@@ -49,5 +49,8 @@ Stated by the user on 2026-10-18. They apply to every design and every fix.
 12. **The UI updates when the console would show a change**: at the end of each
     synchronous stretch, including before every `await` (2026-10-19). The user:
     "it needs to follow how it will appear in the console".
-13. **The compiler wiki is the map of the code.** Each group of related files has
+13. **compiler-next beats the old compiler in correctness and in speed**
+    (2026-10-19). The user: "we have to be better than the old compiler both
+    correctness and performance". The `d6e678b` benchmark is the floor.
+14. **The compiler wiki is the map of the code.** Each group of related files has
     a page in `compiler/`, changed in the same commit as the code.

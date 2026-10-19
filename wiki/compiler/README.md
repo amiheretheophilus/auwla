@@ -1,19 +1,21 @@
 # The compiler (rewrite)
 
-**Status: design, no code yet.** The new compiler lives in `packages/compiler-next/`
-_(planned)_ on branch `compiler-rewrite`. `packages/compiler/` is the reference
-implementation until every suite passes on the new one; then it is deleted.
+**Status: tests built, compiler not started.** The new compiler lives in
+`packages/compiler-next/` on branch `compiler-rewrite`; its tests are in
+`packages/compiler-next/tests/`. `packages/compiler/` stays until every suite passes
+on the new one; then it is deleted.
 
 > "the goal is to write normal javascript and get effecient compiled output"
 
 Every valid JavaScript program is accepted, and every effect the console would show
 shows on the UI (`../rules.md`, rule 10).
 
-**Priorities: structure and correctness.** Speed is already there. On the last
-benchmark (`d6e678b`, see `testing.md`) the old compiler ranked second of ten in
-Octane, after ripple and ahead of Solid. The rewrite keeps the runtime and must
-not fall below those numbers, but it does not chase speed. A case gets a correct
-general path first; fast paths are ported afterwards (`optimize.md`).
+**Goal: better than the old compiler, in correctness and in speed.** The user: "we
+have to be better than the old compiler both correctness and performance". On the
+last benchmark (`d6e678b`, see `testing.md`) the old compiler ranked second of ten
+in Octane, after ripple and ahead of Solid; those numbers are the floor to beat.
+Emitted code is judged on speed only. Order of work: a case gets a correct general
+path first, then its fast paths (`optimize.md`).
 
 **Why a rewrite.** In the old compiler, one shared mutable `Ctx` (121 fields, used by
 133 files) is read and written by passes that edit one AST in place. Each concept
