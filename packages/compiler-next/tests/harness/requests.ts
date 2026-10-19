@@ -7,10 +7,12 @@ interface PendingRequest {
 
 const pending: PendingRequest[] = [];
 const history: string[] = [];
+const signals: Array<AbortSignal | null | undefined> = [];
 
-export const fetchForCase: typeof fetch = ((input: string | URL | Request) => {
+export const fetchForCase: typeof fetch = ((input: string | URL | Request, init?: RequestInit) => {
   const url = requestUrl(input instanceof Request ? input.url : String(input));
   history.push(url);
+  signals.push(init?.signal ?? (input instanceof Request ? input.signal : undefined));
   return new Promise<Response>((resolve, reject) => pending.push({ url, resolve, reject }));
 }) as typeof fetch;
 
@@ -22,6 +24,10 @@ function requestUrl(input: string): string {
 
 export function requestedUrls(): readonly string[] {
   return [...history];
+}
+
+export function requestSignals(): readonly (AbortSignal | null | undefined)[] {
+  return [...signals];
 }
 
 function take(url: string): PendingRequest {
@@ -42,4 +48,5 @@ export function rejectRequest(url: string, message: string): void {
 export function clearRequests(): void {
   pending.length = 0;
   history.length = 0;
+  signals.length = 0;
 }

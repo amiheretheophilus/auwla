@@ -1,7 +1,7 @@
 /** Sources and readiness: wiki/compiler/sources.md. Expected values validate the oracle too. */
 import { expect } from 'bun:test';
 import { behaves } from '../harness/run';
-import { requestedUrls } from '../harness/requests';
+import { requestedUrls, requestSignals } from '../harness/requests';
 
 behaves('a read waits before deriving through a helper', {
   source: `
@@ -460,5 +460,257 @@ behaves('a destructured seed written before loading keeps its override', {
   check(container, observation) {
     expect(container.querySelector('p')?.textContent).toBe(['loading', 'manual', 'manual'][observation]);
     expect(container.querySelector('span')?.textContent).toBe(['loading', 'loading', 'admin'][observation]);
+  },
+});
+
+behaves('suspend publishes static content immediately and emits no directive attribute', {
+  source: `
+    import { Group } from '@memoized-dom/data';
+    export function App() { return <Group suspend pending={() => <i>loading</i>}>
+      <section suspend><h1>Ready</h1><p>Once</p></section></Group>; }`,
+  check(container) {
+    expect(container.textContent).toBe('ReadyOnce');
+    expect(container.querySelector('[suspend], group')).toBeNull();
+  },
+});
+
+behaves('suspend discovers child-owned sources and publishes all siblings together', {
+  source: `
+    import { $fetch, Group } from '@memoized-dom/data';
+    function Child() { const user = $fetch('/child'); return <p id="child">{user.name}</p>; }
+    export function App() {
+      const user = $fetch('/parent');
+      return <Group suspend pending={() => <i>loading</i>}>
+        <h1>Static</h1><p id="parent">{user.name}</p><Child /></Group>;
+    }`,
+  steps: [{ respond: '/parent', value: { name: 'Parent' } }, { respond: '/child', value: { name: 'Child' } }],
+  check(container, observation) {
+    expect(requestedUrls()).toEqual(['/parent', '/child']);
+    expect(container.textContent).toBe(['loading', 'loading', 'StaticParentChild'][observation]!);
+    expect(container.querySelector('h1') !== null).toBe(observation === 2);
+  },
+});
+
+behaves('suspend on a component includes its ordinary descendants', {
+  source: `
+    import { $read, Group } from '@memoized-dom/data';
+    function Child({ user }) { return <article>{user.name}</article>; }
+    function Parent({ user }) { return <section><h1>Shell</h1><Child user={user} /></section>; }
+    export function App() {
+      const user = $read(defer('user'));
+      return <Group pending={() => <i>loading</i>}><Parent suspend user={user} /></Group>;
+    }`,
+  steps: [{ resolve: 'user', value: { name: 'Ada' } }],
+  check(container, observation) {
+    expect(container.querySelector('section') !== null).toBe(observation === 1);
+    expect(container.textContent).toBe(['loading', 'ShellAda'][observation]!);
+  },
+});
+
+behaves('suspend on an element keeps its surrounding component mounted', {
+  source: `
+    import { $read, Group } from '@memoized-dom/data';
+    function Child({ user }) { return <section><h1>Shell</h1><article suspend>{user.name}</article></section>; }
+    export function App() {
+      const user = $read(defer('user'));
+      return <Group pending={() => <i>loading</i>}><Child user={user} /></Group>;
+    }`,
+  steps: [{ resolve: 'user', value: { name: 'Ada' } }],
+  check(container, observation) {
+    expect(container.querySelector('h1')?.textContent).toBe('Shell');
+    expect(container.querySelector('article')?.textContent).toBe([undefined, 'Ada'][observation]);
+    expect(container.textContent).toBe(['Shellloading', 'ShellAda'][observation]!);
+  },
+});
+
+behaves('suspend ignores unused sources and inactive branches', {
+  source: `
+    import { $read, Group } from '@memoized-dom/data';
+    function Child() {
+      const unused = $read(defer('unused'));
+      const hidden = $read(defer('hidden'));
+      const show = false;
+      return <p>{show ? hidden.name : 'off'}</p>;
+    }
+    export function App() { return <Group suspend pending={() => <i>loading</i>}><Child /></Group>; }`,
+  check(container) { expect(container.textContent).toBe('off'); },
+});
+
+behaves('suspend does not claim an independent ordinary sibling source', {
+  source: `
+    import { $read, Group } from '@memoized-dom/data';
+    function Child({ user, unused }) { return <article>{user.name}</article>; }
+    export function App() {
+      const summary = $read(defer('summary'));
+      const user = $read(defer('user'));
+      return <Group pending={() => <i>loading</i>}><h1>Shell</h1><p>{summary.text}</p>
+        <Child suspend user={user} unused={summary} /></Group>;
+    }`,
+  steps: [{ resolve: 'user', value: { name: 'Ada' } }, { resolve: 'summary', value: { text: 'Summary' } }],
+  check(container, observation) {
+    expect(container.querySelector('h1')?.textContent).toBe('Shell');
+    expect(container.querySelector('article')?.textContent).toBe([undefined, 'Ada', 'Ada'][observation]);
+    expect(container.querySelector('p')?.textContent).toBe(['loading', 'loading', 'Summary'][observation]);
+  },
+});
+
+behaves('suspend delays refs and effects until the whole subtree is connected', {
+  source: `
+    import { $read, Group } from '@memoized-dom/data';
+    let mounts = 0; let starts = 0; let connected = false; let stops = 0; let clears = 0;
+    function Child() {
+      let box;
+      $effect(() => { starts++; connected = box.isConnected && !!document.querySelector('#static'); return () => { stops++; }; });
+      return <section ref={[box, () => { mounts++; return () => { clears++; }; }]}>child</section>;
+    }
+    export function App() {
+      const user = $read(defer('user')); let show = true;
+      return <main><output>{mounts}:{starts}:{connected ? 'yes' : 'no'}:{stops}:{clears}</output>
+        <button onClick={() => { show = false; }}>hide</button>
+        {show && <Group suspend pending={() => <i>loading</i>}><h1 id="static">Static</h1><Child /><p>{user.name}</p></Group>}</main>;
+    }`,
+  steps: [{ resolve: 'user', value: { name: 'Ada' } }, { click: 'button' }],
+  check(container, observation) {
+    expect(container.querySelector('output')?.textContent).toBe(['0:0:no:0:0', '1:1:yes:0:0', '1:1:yes:1:1'][observation]);
+    expect(container.querySelector('section') !== null).toBe(observation === 1);
+  },
+});
+
+behaves('suspend waits for a source consumed only by an active effect', {
+  source: `
+    import { $read, Group } from '@memoized-dom/data';
+    let seen = 'none';
+    function Child() {
+      const user = $read(defer('user'));
+      $effect(() => { seen = user.name; });
+      return <p>child</p>;
+    }
+    export function App() { return <main><output>{seen}</output>
+      <Group suspend pending={() => <i>loading</i>}><Child /></Group></main>; }`,
+  steps: [{ resolve: 'user', value: { name: 'Ada' } }],
+  check(container, observation) {
+    expect(container.querySelector('p')?.textContent).toBe([undefined, 'child'][observation]);
+    expect(container.querySelector('output')?.textContent).toBe(['none', 'Ada'][observation]);
+  },
+});
+
+behaves('suspend abandons child work and ignores late completions after remount', {
+  source: `
+    import { $fetch, Group } from '@memoized-dom/data';
+    let mounts = 0; let starts = 0;
+    function Child() {
+      const user = $fetch('/user');
+      $effect(() => { starts++; });
+      return <p ref={() => { mounts++; }}>{user.name}</p>;
+    }
+    export function App() {
+      let show = true;
+      return <main><output>{mounts}:{starts}</output><button onClick={() => { show = !show; }}>toggle</button>
+        {show ? <Group suspend pending={() => <i>loading</i>}><Child /></Group> : <b>hidden</b>}</main>;
+    }`,
+  steps: [
+    { click: 'button' }, { click: 'button' },
+    { respond: '/user', value: { name: 'Stale' } }, { respond: '/user', value: { name: 'Fresh' } },
+  ],
+  check(container, observation) {
+    expect(requestedUrls()).toHaveLength(observation < 2 ? 1 : 2);
+    expect(requestSignals()[0]?.aborted).toBe(observation >= 1);
+    expect(container.querySelector('p')?.textContent).toBe([undefined, undefined, undefined, undefined, 'Fresh'][observation]);
+    expect(container.querySelector('output')?.textContent).toBe(observation === 4 ? '1:1' : '0:0');
+  },
+});
+
+behaves('suspend releases an abandoned GET owner without cancelling a shared consumer', {
+  source: `
+    import { $fetch, Group } from '@memoized-dom/data';
+    function Child() { const user = $fetch('/user'); return <article>{user.name}</article>; }
+    export function App() {
+      const user = $fetch('/user'); let show = true;
+      return <Group pending={() => <i>loading</i>}><p>{user.name}</p>
+        <button onClick={() => { show = false; }}>hide</button>{show && <Child suspend />}</Group>;
+    }`,
+  steps: [{ click: 'button' }, { respond: '/user', value: { name: 'Ada' } }],
+  check(container, observation) {
+    expect(requestedUrls()).toEqual(['/user']);
+    expect(requestSignals()[0]?.aborted).toBe(false);
+    expect(container.querySelector('p')?.textContent).toBe(['loading', 'loading', 'Ada'][observation]);
+    expect(container.querySelector('article')).toBeNull();
+  },
+});
+
+behaves('suspend retries every failed external dependency as one boundary', {
+  source: `
+    import { $read, Group } from '@memoized-dom/data';
+    export function App() {
+      const left = $read(defer('left')); const right = $read(defer('right'));
+      return <Group suspend pending={() => <i>loading</i>}
+        error={({ error, retry }) => <button onClick={retry}>{error.message}</button>}>
+        <h1>Static</h1><p>{left.name}:{right.name}</p></Group>;
+    }`,
+  steps: [
+    { reject: 'left', message: 'left failed' }, { reject: 'right', message: 'right failed' }, { click: 'button' },
+    { resolve: 'left', value: { name: 'L' } }, { resolve: 'right', value: { name: 'R' } },
+  ],
+  check(container, observation) {
+    expect(container.textContent).toBe(['loading', 'left failed', 'left failed', 'loading', 'loading', 'StaticL:R'][observation]!);
+    expect(container.querySelector('h1') !== null).toBe(observation === 5);
+  },
+});
+
+behaves('suspend rolls back failed child owners and creates fresh work on retry', {
+  source: `
+    import { $fetch, Group } from '@memoized-dom/data';
+    let starts = 0; let mounts = 0;
+    function Child() {
+      const user = $fetch('/user');
+      $effect(() => { starts++; });
+      return <p ref={() => { mounts++; }}>{user.name}</p>;
+    }
+    export function App() { return <main><output>{starts}:{mounts}</output>
+      <Group suspend pending={() => <i>loading</i>}
+        error={({ error, retry }) => <button onClick={retry}>{error.message}</button>}><h1>Static</h1><Child /></Group></main>; }`,
+  steps: [{ respond: '/user', value: { message: 'offline' }, status: 503 }, { click: 'button' }, { respond: '/user', value: { name: 'Ada' } }],
+  check(container, observation) {
+    expect(requestedUrls()).toHaveLength(observation < 2 ? 1 : 2);
+    expect(container.querySelector('output')?.textContent).toBe(observation === 3 ? '1:1' : '0:0');
+    expect(container.querySelector('h1') !== null).toBe(observation === 3);
+    expect(container.querySelector('i, button, p')?.textContent).toBe(['loading', 'offline', 'loading', 'Ada'][observation]);
+  },
+});
+
+behaves('suspend inherits its outer policy and withholds nested pending policies', {
+  source: `
+    import { $read, Group } from '@memoized-dom/data';
+    function Child() {
+      const user = $read(defer('user'));
+      return <Group pending={() => <i>inner</i>}><article suspend>{user.name}</article></Group>;
+    }
+    export function App() { return <Group pending={() => <i>outer</i>}>
+      <Group suspend><h1>Static</h1><Child /></Group></Group>; }`,
+  steps: [{ resolve: 'user', value: { name: 'Ada' } }],
+  check(container, observation) {
+    expect(container.textContent).toBe(['outer', 'StaticAda'][observation]!);
+    expect(container.querySelectorAll('i')).toHaveLength(observation === 0 ? 1 : 0);
+  },
+});
+
+behaves('suspend keeps committed DOM identity during refresh and source replacement', {
+  source: `
+    import { $read, $track, Group } from '@memoized-dom/data';
+    export function App() {
+      let user = $read(defer('user')); const state = $track(user);
+      return <main><button id="refresh" onClick={() => state.refresh()}>refresh</button>
+        <button id="replace" onClick={() => { user = $read(defer('replacement')); }}>replace</button>
+        <Group pending={() => <i>loading</i>}><article suspend>{user.name}</article></Group></main>;
+    }`,
+  steps: [
+    { resolve: 'user', value: { name: 'Ada' } }, { click: '#refresh' }, { resolve: 'user', value: { name: 'Grace' } },
+    { click: '#replace' }, { resolve: 'replacement', value: { name: 'Lin' } },
+  ],
+  check(container, observation) {
+    expect(container.querySelector('article')?.textContent).toBe([undefined, 'Ada', 'Ada', 'Grace', 'Grace', 'Lin'][observation]);
+    if (observation === 1) container.querySelector('article')!.setAttribute('data-kept', 'yes');
+    if (observation > 1) expect(container.querySelector('article')?.getAttribute('data-kept')).toBe('yes');
+    expect(container.querySelector('i') !== null).toBe(observation === 0);
   },
 });

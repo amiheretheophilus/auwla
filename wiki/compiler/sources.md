@@ -15,6 +15,7 @@ All paths below are under `packages/compiler-next/`. This is test code only.
 | --- | --- |
 | `tests/reference/sources.ts` | Independent `$fetch`, `$read`, source state, refresh and readiness values |
 | `tests/reference/readiness.ts` | Source imports, guarded expressions, module derivations and payload reads, using yuku |
+| `tests/reference/preparation.ts` | Walks the active subtree without DOM, collecting waiting consumers and prepared component output |
 | `tests/reference/transform.ts` | Component slots, delayed seeds, native destructuring, guarded statements and early returns |
 | `tests/reference/runtime.ts` | Waiting effects, `Group` policies and presentation at consuming sites |
 | `tests/harness/requests.ts` | Deterministic JSON responses, network failures and request history |
@@ -45,9 +46,11 @@ All paths below are under `packages/compiler-next/`. This is test code only.
 - An ordinary `Group` adds no DOM and keeps static content mounted. Each consuming
   site settles independently. `pending` and `error` inherit separately through
   groups and component calls; an empty group passes both through.
-- A `suspend` region prepares its active subtree off-screen and publishes together.
+- A `suspend` region prepares its active subtree off-screen and publishes together on initial mount.
   Its refs/effects run only on publication. Inactive branches and unused sources
-  do not block publication. This is not yet in the reference.
+  do not block publication. Child-owned sources and sources consumed by active
+  effects participate; unused component props do not. Nested fallbacks are withheld
+  under the outer atomic boundary's policy.
 - Committed content stays visible during refresh and replacement by a pending
   source. New assignments win over older completions; failures still reach the
   error policy. A remounted owner has its own initial presentation.
@@ -71,6 +74,17 @@ promise fixtures can resolve or reject. `$track` supports status reads and refre
 GET client facades are ordinary functions returning `$fetch`; this does not
 implement server-definition analysis or RPC generation.
 
+Atomic preparation evaluates component bodies into descriptors and retains their
+slots while loading; it creates no DOM and runs no refs or effects. Publication
+uses the prepared outputs, connects the whole subtree, installs refs, then runs
+effects. Refresh and source replacement keep the committed nodes and content.
+
+Component instances claim their sources. Abandoning a draft releases its owners,
+aborts unshared fetch work and ignores late completions. A remaining GET consumer
+keeps its shared source alive. A failed draft is released without mounting;
+retry refreshes failed external sources and recreates child-owned work. Explicit
+request cancellation through `$track` is still separate, unfinished work.
+
 ## Inputs and outputs
 
 - In: `Resolved`, linked module summaries (`linking.md`).
@@ -83,8 +97,9 @@ implement server-definition analysis or RPC generation.
 
 ## Cases to test
 
-`tests/cases/sources.test.ts`: 27 cases, all passing on the reference. The old
-compiler passes 18 and fails 9. These failures must pass on `compiler-next`.
+`tests/cases/sources.test.ts`: 41 cases, all passing on the reference. The original
+27 give 18 passes and 9 failures on the old compiler; the 14 atomic cases give
+8 passes and 6 failures. These failures must pass on `compiler-next`.
 
 Verified on the reference:
 
@@ -97,20 +112,33 @@ Verified on the reference:
 - committed content during replacement, latest-assignment wins and remounting;
 - matching GET consumers, unused module fetch declarations and lazy top-level
   conditional expressions/derivations.
+- Atomic Group/component/element activation, child-owned requests, withheld static
+  siblings and nested fallbacks, connected refs before effects, effect-only source
+  consumers, abandonment/remount and stale completions, shared GET ownership,
+  failures/retry, and committed DOM identity during refresh/replacement.
 
 The old compiler's nine failures cover: writes before plain or destructured seeds
 load; effects through derived sources; a same-module source helper; captured
 sources through an imported helper; module derivations; status reads while pending;
 and inactive source branches in JSX and through a derivation.
 
+The atomic comparison adds six failing cases: inactive source branches block
+publication; a source consumed only by an effect does not withhold publication;
+multiple failed external dependencies do not all retry; and three lifecycle cases
+loop effects that increment module counters (publication, remount, and retry).
+The latter share an existing effect-subscription bug, rather than being three
+distinct new bugs. All 14 cases have both generated `reference/` and `compiled/`
+outputs under `tests/out/<case>/`.
+
 ## Remaining reference work
 
 The source reference is not complete. Finish these before beginning the compiler;
 an unmodeled case is never permitted compiler behavior:
 
-- Atomic `suspend` preparation/publication: child-owned sources, abandoned work,
-  refs/effects, errors and retry. The reference explicitly reports `suspend` as
-  unsupported instead of silently emitting an HTML attribute.
+- Extend atomic cases with source-dependent branches that reveal new descendants,
+  keyed draft replacement/cleanup, nested error policies and module-owned sources
+  across abandonment. The first 14 cases cover initial preparation/publication;
+  they do not exhaust atomic lifecycle combinations.
 - Lazy source branches nested inside larger calls/operators, source-dependent body
   loops/unknown calls, whole props-object projections, and module patterns/control
   flow. Current guards can wait too broadly in these forms.

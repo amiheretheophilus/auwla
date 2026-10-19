@@ -13,7 +13,8 @@
  *
  * Values that must outlive one render live in slots of the component instance.
  */
-import { $waiting, Group, Source, Waiting } from './sources';
+import { $waiting, enterSourceOwner, Group, Source, Waiting } from './sources';
+import { childPosition, elementPosition, isElement, Preparation } from './preparation';
 export { $fetch, $read, $track, $value, $waiting, $when, $sourceState, Group } from './sources';
 
 // ---------------------------------------------------------------------------
@@ -34,10 +35,6 @@ export const Fragment = Symbol('Fragment');
 export function $h(tag: Element['tag'], props: Record<string, unknown> | null, ...children: unknown[]): Element {
   const { $referenceSite: site, ...values } = props ?? {};
   return { tag, props: values, children, site };
-}
-
-function isElement(value: unknown): value is Element {
-  return typeof value === 'object' && value !== null && 'tag' in value && 'props' in value && 'children' in value;
 }
 
 // ---------------------------------------------------------------------------
@@ -134,6 +131,7 @@ interface EffectSlot {
 }
 
 export class Instance {
+  readonly sources = new Set<Source>();
   /** True during the instance's first render. */
   first = true;
   /** How many times the instance has rendered. A memo that reads it is computed on every render. */
@@ -280,11 +278,19 @@ export class Instance {
     return ran;
   }
 
+  /** Source-dependent effects belong to the active subtree, but cannot run off-screen. */
+  waitingEffects(): Waiting | undefined {
+    return $waiting([...this.effects].flatMap(([index, slot]) =>
+      this.calledEffects.has(index) ? slot.readInputs() : []));
+  }
+
   unmount(): void {
     for (const slot of this.effects.values()) slot.teardown?.();
     this.effects.clear();
     for (const cleanup of this.cleanups.reverse()) cleanup();
     this.cleanups.length = 0;
+    for (const source of this.sources) source.release(this.sources);
+    this.sources.clear();
   }
 }
 
@@ -494,6 +500,11 @@ interface Policies {
   error?: Component;
 }
 
+interface SuspendedBoundary {
+  published: boolean;
+  failed?: Waiting;
+}
+
 class Renderer {
   private nodes = new Map<string, NodeRecord>();
   private readonly instances = new Map<string, Instance>();
@@ -505,6 +516,10 @@ class Renderer {
   private refsToInstall: Array<{ record: HostRecord; value: unknown }> = [];
   private readonly lastReady = new Map<string, unknown>();
   private renderedSites = new Set<string>();
+  private readonly boundaries = new Map<string, SuspendedBoundary>();
+  private renderedBoundaries = new Set<string>();
+  private preparedInstances = new Set<string>();
+  private preparedOutputs = new Map<string, unknown>();
 
   constructor(
     private readonly root: Component,
@@ -535,6 +550,7 @@ class Renderer {
     this.nodes.clear();
     this.instances.clear();
     this.lastReady.clear();
+    this.boundaries.clear();
     this.container.replaceChildren();
   }
 
@@ -543,6 +559,9 @@ class Renderer {
     this.renderedInstances = new Set();
     this.refsToInstall = [];
     this.renderedSites = new Set();
+    this.renderedBoundaries = new Set();
+    this.preparedInstances = new Set();
+    this.preparedOutputs = new Map();
 
     const children = this.renderNode($h(this.root, null), 'root', false);
     syncChildren(this.container, children);
@@ -552,13 +571,16 @@ class Renderer {
       if (!this.renderedNodes.has(position) && record.kind === 'element') record.teardownRef?.();
     }
     for (const [id, instance] of this.instances) {
-      if (this.renderedInstances.has(id)) continue;
+      if (this.renderedInstances.has(id) || this.preparedInstances.has(id)) continue;
       instance.unmount();
       this.instances.delete(id);
     }
     this.nodes = this.renderedNodes;
     for (const position of this.lastReady.keys()) {
       if (!this.renderedSites.has(position)) this.lastReady.delete(position);
+    }
+    for (const position of this.boundaries.keys()) {
+      if (!this.renderedBoundaries.has(position)) this.boundaries.delete(position);
     }
 
     // Refs are installed once the DOM exists.
@@ -568,7 +590,7 @@ class Renderer {
 
   private runEffects(): boolean {
     let ran = false;
-    for (const instance of this.instances.values()) ran = instance.runEffects() || ran;
+    for (const id of this.renderedInstances) ran = this.instances.get(id)!.runEffects() || ran;
     return this.moduleEffects.run() || ran;
   }
 
@@ -585,20 +607,14 @@ class Renderer {
 
     if (!isElement(node)) return [this.renderText(String(node), position)];
 
-    if (node.site !== undefined) position += `/site=${String(node.site)}`;
+    position = elementPosition(node, position);
+    if (node.props.suspend === true) return this.renderSuspended(node, position, inSvg, policies);
+    return this.renderElement(node, position, inSvg, policies);
+  }
 
-    if (node.props.suspend === true) {
-      throw new Error('reference: suspend preparation is not implemented yet');
-    }
-
-    // A key also matters when a component returns a keyed root directly.
-    if (node.props.key !== undefined && node.props.key !== null) position += `/key=${String(node.props.key)}`;
-
+  private renderElement(node: Element, position: string, inSvg: boolean, policies: Policies): Node[] {
     if (node.tag === Group) {
-      const inherited = { ...policies };
-      if ('pending' in node.props) inherited.pending = node.props.pending as Component | undefined;
-      if ('error' in node.props) inherited.error = node.props.error as Component | undefined;
-      return this.renderChildren(node.children, position, inSvg, inherited);
+      return this.renderChildren(node.children, position, inSvg, this.groupPolicies(node, policies));
     }
 
     if (node.tag === Fragment) return this.renderChildren(node.children, position, inSvg, policies);
@@ -610,16 +626,67 @@ class Renderer {
     return [this.renderHostElement(node, node.tag, position, inSvg, policies)];
   }
 
-  private renderWaiting(waiting: Waiting, position: string, inSvg: boolean, policies: Policies): Node[] {
+  private renderSuspended(node: Element, position: string, inSvg: boolean, policies: Policies): Node[] {
+    this.renderedBoundaries.add(position);
+    let boundary = this.boundaries.get(position);
+    if (!boundary) {
+      boundary = { published: false };
+      this.boundaries.set(position, boundary);
+    }
+    const inherited = node.tag === Group ? this.groupPolicies(node, policies) : policies;
+    if (boundary.published) return this.renderElement(node, position, inSvg, policies);
+    if (boundary.failed) return this.renderBoundaryFailure(boundary, position, inSvg, inherited);
+
+    const preparation = new Preparation((element, component, path) => {
+      const { id, output, instance } = this.evaluateComponent(element, component, path);
+      return { id, output, waiting: instance.waitingEffects() };
+    });
+    preparation.element(node, position);
+    const waiting = preparation.waiting;
+    if (waiting) {
+      if (waiting.sources.some((source) => source.error)) {
+        boundary.failed = waiting;
+        // A failed draft never owned mounted refs or effects. Release its work now.
+        for (const id of preparation.instances) {
+          this.instances.get(id)!.unmount();
+          this.instances.delete(id);
+        }
+        return this.renderBoundaryFailure(boundary, position, inSvg, inherited);
+      }
+      for (const id of preparation.instances) this.preparedInstances.add(id);
+      return this.renderWaiting(waiting, position, inSvg, inherited, false);
+    }
+    boundary.published = true;
+    for (const [id, output] of preparation.outputs) this.preparedOutputs.set(id, output);
+    return this.renderElement(node, position, inSvg, policies);
+  }
+
+  private renderBoundaryFailure(boundary: SuspendedBoundary, position: string, inSvg: boolean, policies: Policies): Node[] {
+    const waiting = boundary.failed!;
+    const retry = () => {
+      boundary.failed = undefined;
+      return Promise.all(waiting.sources.filter((source) => source.error && !source.isDisposed).map((source) => source.refresh()));
+    };
+    return this.renderWaiting(waiting, position, inSvg, policies, false, retry);
+  }
+
+  private groupPolicies(node: Element, policies: Policies): Policies {
+    return {
+      pending: 'pending' in node.props ? node.props.pending as Component | undefined : policies.pending,
+      error: 'error' in node.props ? node.props.error as Component | undefined : policies.error,
+    };
+  }
+
+  private renderWaiting(waiting: Waiting, position: string, inSvg: boolean, policies: Policies, retain = true, retryOverride?: () => unknown): Node[] {
     const failed = waiting.sources.filter((source) => source.error !== null);
     if (failed.length > 0) {
       if (!policies.error) return [];
       const cause = failed[0]!.error!;
       const error = { kind: 'request', requestKind: cause.kind, message: cause.message, status: cause.status, cause };
-      const retry = () => Promise.all(failed.map((source) => source.refresh()));
+      const retry = retryOverride ?? (() => Promise.all(failed.map((source) => source.refresh())));
       return this.renderNode($h(policies.error, { error, retry }), `${position}/error`, inSvg);
     }
-    if (this.lastReady.has(position)) {
+    if (retain && this.lastReady.has(position)) {
       return this.renderNode(this.lastReady.get(position), position, inSvg, policies);
     }
     return policies.pending
@@ -629,9 +696,7 @@ class Renderer {
 
   private renderChildren(children: unknown[], position: string, inSvg: boolean, policies: Policies): Node[] {
     return children.flatMap((child, index) => {
-      const key = isElement(child) ? child.props.key : undefined;
-      const segment = key === undefined || key === null ? `#${index}` : `key=${String(key)}`;
-      return this.renderNode(child, `${position}/${segment}`, inSvg, policies);
+      return this.renderNode(child, childPosition(child, index, position), inSvg, policies);
     });
   }
 
@@ -646,26 +711,37 @@ class Renderer {
 
   private renderComponent(node: Element, component: Component, position: string, inSvg: boolean, policies: Policies): Node[] {
     const id = `${position}:${component.name}`;
+    const output = this.preparedOutputs.has(id)
+      ? this.preparedOutputs.get(id)
+      : this.evaluateComponent(node, component, position).output;
+    this.renderedInstances.add(id);
+    return this.renderNode(output, `${id}>`, inSvg, policies);
+  }
+
+  private evaluateComponent(node: Element, component: Component, position: string): { id: string; output: unknown; instance: Instance } {
+    const id = `${position}:${component.name}`;
     let instance = this.instances.get(id);
     if (instance === undefined) {
       instance = new Instance();
       this.instances.set(id, instance);
     }
-    this.renderedInstances.add(id);
 
     const props: Record<string, unknown> = { ...node.props };
     delete props.key;
+    delete props.suspend;
     if (node.children.length === 1) props.children = node.children[0];
     if (node.children.length > 1) props.children = node.children;
 
     const outer = rendering;
     rendering = instance;
+    const leaveSourceOwner = enterSourceOwner(instance.sources);
     instance.beginRender();
     const output = component(props);
+    leaveSourceOwner();
     rendering = outer;
     instance.first = false;
 
-    return this.renderNode(output, `${id}>`, inSvg, policies);
+    return { id, output, instance };
   }
 
   private renderHostElement(node: Element, tag: string, position: string, inSvg: boolean, policies: Policies): Node {
@@ -719,7 +795,7 @@ function updateProps(record: HostRecord, props: Record<string, unknown>): void {
   const handlers = new Map<string, EventListener>();
 
   for (const [name, value] of Object.entries(props)) {
-    if (name === 'key' || name === 'ref' || name === 'children') continue;
+    if (name === 'key' || name === 'ref' || name === 'children' || name === 'suspend') continue;
 
     if (name.startsWith('on')) {
       if (typeof value === 'function') handlers.set(name.slice(2).toLowerCase(), value as EventListener);

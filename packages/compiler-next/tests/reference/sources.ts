@@ -19,6 +19,14 @@ let transport: typeof fetch;
 let ownedSources = new Set<Source>();
 let moduleDeclarations = false;
 let fetches = new Map<string, Source>();
+let sourceOwner: Set<Source> | undefined;
+
+/** Component-owned work survives preparation, and is released when that owner leaves. */
+export function enterSourceOwner(owner: Set<Source>): () => void {
+  const previous = sourceOwner;
+  sourceOwner = owner;
+  return () => { sourceOwner = previous; };
+}
 
 /** Each comparison run owns its sources, including declarations at module scope. */
 export function beginSources(fetcher: typeof fetch): () => void {
@@ -52,14 +60,31 @@ export class Source {
   error: RequestError | null = null;
   private generation = 0;
   private disposed = false;
+  private controller: AbortController | undefined;
+  private readonly owners = new Set<Set<Source>>();
+  private readonly moduleOwned = moduleDeclarations;
 
-  constructor(private readonly load: () => PromiseLike<unknown>, first?: PromiseLike<unknown>, lazy = false) {
+  constructor(private readonly load: (signal: AbortSignal) => PromiseLike<unknown>, first?: PromiseLike<unknown>, lazy = false) {
     ownedSources.add(this);
-    if (!lazy) void this.start(first ?? load());
+    this.claim();
+    if (!lazy) void this.start(first);
+  }
+
+  get isDisposed(): boolean { return this.disposed; }
+
+  claim(): void {
+    if (!sourceOwner) return;
+    sourceOwner.add(this);
+    this.owners.add(sourceOwner);
+  }
+
+  release(owner: Set<Source>): void {
+    this.owners.delete(owner);
+    if (!this.moduleOwned && this.owners.size === 0) this.dispose();
   }
 
   ensureStarted(): void {
-    if (this.status === 'idle') void this.start(this.load());
+    if (this.status === 'idle') void this.start();
   }
 
   get executionId(): string {
@@ -75,15 +100,17 @@ export class Source {
   }
 
   refresh(): Promise<unknown> {
-    return this.start(this.load());
+    return this.start();
   }
 
-  private start(promise: PromiseLike<unknown>): Promise<unknown> {
+  private start(first?: PromiseLike<unknown>): Promise<unknown> {
+    this.controller?.abort();
+    this.controller = new AbortController();
     const generation = ++this.generation;
     this.status = 'pending';
     this.error = null;
     this.version++;
-    const work = Promise.resolve(promise).then(
+    const work = Promise.resolve(first ?? this.load(this.controller.signal)).then(
       (data) => {
         if (!this.disposed && generation === this.generation) {
           this.data = data;
@@ -113,6 +140,7 @@ export class Source {
   dispose(): void {
     this.disposed = true;
     this.generation++;
+    this.controller?.abort();
   }
 }
 
@@ -124,7 +152,10 @@ export class Waiting {
 export function $waiting(values: readonly unknown[]): Waiting | undefined {
   const sources = new Set<Source>();
   for (const value of values) {
-    if (value instanceof Source) value.ensureStarted();
+    if (value instanceof Source) {
+      value.claim();
+      value.ensureStarted();
+    }
     if (value instanceof Waiting) {
       for (const source of value.sources) sources.add(source);
     } else if (value instanceof Source && (!value.hasValue || value.error !== null)) {
@@ -178,8 +209,14 @@ export function $fetch(target: string | URL | null, options?: FetchOptions): Sou
   }
   const key = JSON.stringify([method, url.href, [...headers], options?.key]);
   const shared = method === 'GET' && options?.cache !== false;
-  if (shared && fetches.has(key)) return fetches.get(key)!;
-  const load = () => transport(url, { method, headers, body, signal: options?.signal }).then(
+  const cached = shared ? fetches.get(key) : undefined;
+  if (cached && !cached.isDisposed) {
+    cached.claim();
+    return cached;
+  }
+  const load = (signal: AbortSignal) => transport(url, {
+    method, headers, body, signal: options?.signal ? AbortSignal.any([signal, options.signal]) : signal,
+  }).then(
     (response) => response.json().then(
       (body) => {
         if (!response.ok) {

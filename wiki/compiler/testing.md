@@ -11,6 +11,7 @@
 | `tests/reference/runtime.ts` | Runs the reference: re-renders everything, keeps slots per component instance |
 | `tests/reference/sources.ts` | Independent source state, readiness values, JSON fetches and promise reads |
 | `tests/reference/readiness.ts` | Source-aware expressions, imports and module derivations |
+| `tests/reference/preparation.ts` | Atomic initial preparation without DOM, shared position matching and active source collection |
 | `tests/reference/reads.ts` | Dependency queries using yuku bindings and references |
 | `tests/reference/ast.ts` | Shared yuku AST builders for the test transforms |
 | `tests/harness/case.ts` | The `Case` and `Step` types, optional `check(container, observation)` assertions, and `defer(name)` for async cases |
@@ -29,7 +30,12 @@ Run them with `bun test` in `packages/compiler-next` (no build needed), or one f
 (default 25), `FC_SEED=<seed>` to repeat a run, `SAVE_CORPUS=1` to keep the shrunk
 failure.
 
-`REFERENCE_ONLY=1 bun test cases` runs the reference without compiling. Each case's
+`REFERENCE_ONLY=1 bun test cases` runs the reference without compiling. Use it to
+develop the oracle, then run each new case in the default comparison mode before
+calling the slice finished. That writes both `tests/out/<case>/reference/App.tsx`
+and `tests/out/<case>/compiled/App.tsx` (plus any additional modules). A compiler
+rejection is a recorded failure and cannot produce compiled output; runtime or
+assertion failures still leave both versions available to inspect. Each case's
 optional `check` runs after mount (observation 0) and after each step, on both
 renderers in the default mode. The ported regressions use it to assert known text
 and DOM identity independently of the comparison, so two wrong renderers cannot
@@ -98,9 +104,9 @@ agreed rule, fix the reference rather than copying its mistake into the compiler
 
    That is `state-and-derived.md`, `refs.md` and `effects.md`, executable.
 
-   Sources and ordinary `Group` policies now have an independently asserted
-   baseline (`sources.md`). That page lists verified cases and remaining gaps,
-   including atomic `suspend`. Routing and SSR are not modeled. JSX and TypeScript
+   Sources, ordinary `Group` policies and the first atomic `suspend` lifecycle
+   cases now have an independently asserted baseline (`sources.md`). That page
+   lists verified cases and remaining gaps. Routing and SSR are not modeled. JSX and TypeScript
    are lowered by Bun's transpiler, because `yuku-codegen` drops `enum` instead of
    converting it.
 2. **Comparison tests.** A case is a component and a list of events. After the first
@@ -131,7 +137,9 @@ visible effects, keys and reactive refs (existing cases cover overlapping forms)
 The source slice adds 27 cases (`sources.md`), with 18 passing and 9 failing on
 the old compiler; an async-helper regression also checks that `return await`
 remains valid. These are separate from the earlier 83-case comparison above.
-The reference now runs 111 cases with its explicit assertions passing. This is
+The atomic slice adds 14 cases: 8 pass and 6 fail on the old compiler, with both
+generated versions available for every case. The reference now has 125 cases;
+the original 111 and all 14 additions pass their explicit assertions. This is
 still reference development, not permission to start the compiler.
 The old compiler has about 305 distinct `memo-dom:` messages. Most are internal
 invariants or contracts of the framework's own APIs (`route-to`, `$routed`, `Group`,

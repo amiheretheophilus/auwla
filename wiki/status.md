@@ -324,8 +324,16 @@ are nailed first.
      status/refresh and replacement. Shared builders, dependency queries and
      readiness transforms have their own reference files. An async-helper case
      preserves `return await`. All 111 reference cases and `bun check` pass.
-   - next: complete reference work on `compiler/sources.md`, starting with atomic
-     `suspend` preparation and publication. Then extend generated programs with
+   - done: the first atomic `suspend` reference slice: 14 new cases pass on the
+     reference; the old compiler passes 8 and fails 6. Every new case has both
+     generated reference and old-compiler output in `tests/out/`. Preparation keeps
+     child-owned work and component slots without publishing DOM, refs or effects;
+     abandonment releases fetch owners without cancelling shared consumers, and
+     error retry recreates failed child work. Existing source/effect/ref cases
+     also pass on the reference: 125 cases across 8 files pass; `bun check` passes
+     for 24 files. Generated outputs remain local, as in the existing harness.
+   - next: complete reference work on `compiler/sources.md`, including more atomic
+     branch/ownership combinations and the remaining readiness forms/APIs. Then extend generated programs with
      sources and failure/refresh/replacement sequences. No compiler work yet.
      No CI until the suite reaches thousands of cases.
 2. Later, after the reference/wiki are ready: parse and resolve on yuku 0.19
