@@ -371,6 +371,10 @@ are nailed first.
      Rewrote `sources.ts` and `readiness.ts` for reading, restored the comments
      lost when `Reads` and the builders moved files, and updated the statement
      guard comment in `transform.ts`. 176 reference cases pass; `bun check` passes.
+   - done: destructured sources are reactive (new request, refresh, mutation; a
+     written name is a snapshot). Four cases; the direct `= $fetch(url)` form
+     caught a reference bug, fixed by giving the destructured value its own memo.
+     The old compiler fails two. 180 reference cases pass.
    - next: complete reference work on `compiler/sources.md` and the remaining class
      cases on `compiler/state-and-derived.md`, including captured/private
      dependencies and the remaining readiness forms/APIs. Then extend generated programs with

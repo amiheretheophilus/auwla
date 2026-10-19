@@ -57,7 +57,10 @@ All paths below are under `packages/compiler-next/`. This is test code only.
 - A `null` target sends no request and the payload is `null` at once, not pending
   (`docs/05-data.md`: "pauses the request and clears the payload").
 - Destructuring a source is valid; the pattern runs when the payload exists
-  (`../decisions.md`, 2026-10-19; the docs' `MMD-S004` error is gone).
+  (`../decisions.md`, 2026-10-19; the docs' `MMD-S004` error is gone). The names are
+  derived like any other: they follow a new request, a refresh and a mutation of
+  the payload. A name written later is a snapshot; its siblings stay derived.
+  `const { name } = $fetch(url)` works like `const user = $fetch(url); const { name } = user`.
 
 ## Reference implementation
 
@@ -110,9 +113,12 @@ request cancellation through `$track` is still separate, unfinished work.
 
 ## Cases to test
 
-`tests/cases/sources.test.ts`: 53 cases, all passing on the reference. The original
+`tests/cases/sources.test.ts`: 57 cases, all passing on the reference. The original
 27 give 18 passes and 9 failures on the old compiler; the null-target case fails
 it (written on review, it caught the reference treating `null` as a new load);
+four destructuring cases give 2 passes and 2 failures (the direct
+`= $fetch(url)` case caught the reference destructuring the source object instead
+of its payload);
 the 14 atomic cases give
 8 passes and 6 failures; eleven further atomic lifecycle cases give 6 passes and
 5 failures. These failures must pass on `compiler-next`.
@@ -146,6 +152,8 @@ an early failure can prevent comparison of its later steps. All cases are in
 | Case | Expected | Old compiler result |
 | --- | --- | --- |
 | `a null target pauses the request and clears the payload` | Setting the target to `null` shows `none` with no new request | Shows `loading` |
+| `destructuring a fetch call directly follows a changed request input` | `loading`, then `Ada`, then `Grace` after the id changes | Empty text at mount: it destructures before the payload exists |
+| `a written destructured name is a snapshot while its sibling stays derived` | `name` keeps `manual` while `role` follows a refresh to `owner` | Throws `UnresolvedDataReadError` (`user` read before it committed) |
 | `a write before a source seed is ready wins over the seed` | An early write shows and keeps `manual` | Keeps showing `loading` |
 | `an effect waits through a derived source value` | `ADA 1` after resolution | `not run 0`; the effect never runs |
 | `a chained request does not start with an unresolved argument` | Wait, request comments, then render its array | Throws `list 'App/when0/comments' requires an array; received object` |

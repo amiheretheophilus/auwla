@@ -483,6 +483,108 @@ behaves('a destructured seed written before loading keeps its override', {
   },
 });
 
+behaves('destructured names follow a changed request input', {
+  source: `
+    import { $fetch, Group } from '@memoized-dom/data';
+    export function App() {
+      let id = 1;
+      const user = $fetch('/user/' + id);
+      const { name, tags: [first] } = user;
+      return (
+        <Group pending={() => <i>loading</i>}>
+          <p>{name}:{first}</p>
+          <button onClick={() => { id++; }}>next</button>
+        </Group>
+      );
+    }`,
+  steps: [
+    { respond: '/user/1', value: { name: 'Ada', tags: ['a'] } },
+    { click: 'button' },
+    { respond: '/user/2', value: { name: 'Grace', tags: ['g'] } },
+  ],
+  check(container, observation) {
+    const expected = ['loading:loading', 'Ada:a', 'Ada:a', 'Grace:g'];
+    expect(container.querySelector('p')?.textContent).toBe(expected[observation]);
+  },
+});
+
+behaves('destructuring a fetch call directly follows a changed request input', {
+  source: `
+    import { $fetch, Group } from '@memoized-dom/data';
+    export function App() {
+      let id = 1;
+      const { name } = $fetch('/user/' + id);
+      return (
+        <Group pending={() => <i>loading</i>}>
+          <p>{name}</p>
+          <button onClick={() => { id++; }}>next</button>
+        </Group>
+      );
+    }`,
+  steps: [
+    { respond: '/user/1', value: { name: 'Ada' } },
+    { click: 'button' },
+    { respond: '/user/2', value: { name: 'Grace' } },
+  ],
+  check(container, observation) {
+    expect(container.querySelector('p')?.textContent).toBe(['loading', 'Ada', 'Ada', 'Grace'][observation]);
+  },
+});
+
+behaves('destructured names follow a payload mutation and a refresh', {
+  source: `
+    import { $fetch, $track, Group } from '@memoized-dom/data';
+    export function App() {
+      const user = $fetch('/user');
+      const request = $track(user);
+      const { name } = user;
+      return (
+        <Group pending={() => <i>loading</i>}>
+          <p>{name}</p>
+          <button id="rename" onClick={() => { user.name = 'Grace'; }}>rename</button>
+          <button id="refresh" onClick={() => request.refresh()}>refresh</button>
+        </Group>
+      );
+    }`,
+  steps: [
+    { respond: '/user', value: { name: 'Ada' } },
+    { click: '#rename' },
+    { click: '#refresh' },
+    { respond: '/user', value: { name: 'Lin' } },
+  ],
+  check(container, observation) {
+    expect(container.querySelector('p')?.textContent).toBe(['loading', 'Ada', 'Grace', 'Grace', 'Lin'][observation]);
+  },
+});
+
+behaves('a written destructured name is a snapshot while its sibling stays derived', {
+  source: `
+    import { $fetch, $track, Group } from '@memoized-dom/data';
+    export function App() {
+      const user = $fetch('/user');
+      const request = $track(user);
+      let { name, role } = user;
+      return (
+        <Group pending={() => <i>loading</i>}>
+          <p>{name}</p>
+          <span>{role}</span>
+          <button id="pick" onClick={() => { name = 'manual'; }}>pick</button>
+          <button id="refresh" onClick={() => request.refresh()}>refresh</button>
+        </Group>
+      );
+    }`,
+  steps: [
+    { respond: '/user', value: { name: 'Ada', role: 'admin' } },
+    { click: '#pick' },
+    { click: '#refresh' },
+    { respond: '/user', value: { name: 'Lin', role: 'owner' } },
+  ],
+  check(container, observation) {
+    expect(container.querySelector('p')?.textContent).toBe(['loading', 'Ada', 'manual', 'manual', 'manual'][observation]);
+    expect(container.querySelector('span')?.textContent).toBe(['loading', 'admin', 'admin', 'admin', 'owner'][observation]);
+  },
+});
+
 behaves('suspend publishes static content immediately and emits no directive attribute', {
   source: `
     import { Group } from '@memoized-dom/data';

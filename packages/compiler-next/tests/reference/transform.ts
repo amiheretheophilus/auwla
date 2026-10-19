@@ -51,6 +51,14 @@ interface Slot {
   name: string;
 }
 
+/** The two memos behind `const { a, b } = init`, before each alias's own slot. */
+interface PatternSlots {
+  /** The value of `init`: the payload, or a source when `init` is a `$fetch(…)` call. */
+  value: Slot;
+  /** `{ a, b }`: the authored pattern run on that value, once it is ready. */
+  names: Slot;
+}
+
 /** What one body statement does to the component's bindings. */
 interface StatementPlan {
   /** Bindings it changes for sure. */
@@ -220,8 +228,8 @@ class ComponentRewrite {
 
   /** Bindings that need a slot. Bindings not in here are plain. */
   private readonly slots = new Map<Binding, Slot>();
-  /** `const { x, y } = point`: the slot holds the value being destructured. */
-  private readonly patternSlots = new Map<VariableDeclarator, Slot>();
+  /** `const { x, y } = point`: the value being destructured, and the names it gives. */
+  private readonly patternSlots = new Map<VariableDeclarator, PatternSlots>();
   private readonly patternOrigins = new Map<Binding, Node>();
   /** Body statements that may build a binding. */
   private readonly plans = new Map<Statement, StatementPlan>();
@@ -271,7 +279,9 @@ class ComponentRewrite {
       if (treatment !== undefined) this.slots.set(binding, this.newSlot(treatment));
     }
     for (const declarator of this.patternDeclarators()) {
-      this.patternSlots.set(declarator, this.newSlot('memo'));
+      const value = this.newSlot('memo');
+      const names = this.newSlot('memo');
+      this.patternSlots.set(declarator, { value, names });
       for (const binding of this.bindingsInPattern(declarator.id)) {
         const writtenLater = this.usesOf(binding).some((use) => use.isWrite && this.runsLater(use));
         this.patternOrigins.set(binding, declarator.id);
@@ -513,7 +523,8 @@ class ComponentRewrite {
    * `let x = init` becomes one of:
    *   `let $s0 = $ctx.cell(0, () => init)`
    *   `let $s0 = $ctx.memo(0, () => [inputs…], () => init)`
-   * and `const { a } = init` becomes `const { a } = $ctx.memo(…).v`.
+   * and `const { a } = init` becomes memos for the value, the pattern and each
+   * name (`patternValue`).
    */
   private buildSlotDeclarations(): Array<{ declarator: VariableDeclarator; slot: Slot; created: Expression }> {
     const declarations = [];
@@ -537,45 +548,101 @@ class ComponentRewrite {
       declarations.push({ declarator, slot, created });
     }
 
-    for (const [declarator, slot] of this.patternSlots) {
-      const pattern = declarator.id;
-      const bindings = this.bindingsInPattern(pattern);
-      const roots = [declarator.init!, pattern];
-      const inputs = this.inputList(this.reads.inside(roots, undefined), roots);
-      const destructure = b.VariableDeclaration({
-        kind: 'const', declarations: [b.VariableDeclarator({ id: pattern, init: declarator.init })],
-      });
-      const values = b.ObjectExpression({ properties: bindings.map((binding) => b.Property({
-        key: b.Identifier({ name: binding.name }), value: identifier(binding.name),
-        kind: 'init', method: false, shorthand: false, computed: false,
-      }) as Extract<Node, { type: 'ObjectExpression' }>['properties'][number]) });
-      const compute = blockThunk([destructure, b.ReturnStatement({ argument: values })]);
-      const prepared = runtimeCall('$when', [inputs, compute]);
-      const created = ctxCall('memo', [numberLiteral(slot.index), structuredClone(inputs), thunk(prepared)]);
-      declarations.push({ declarator, slot, created });
+    for (const [declarator, slots] of this.patternSlots) {
+      const valueDeclarator = this.patternValue(declarator, slots.value);
+      const created = this.patternNames(declarator, slots);
+      declarations.push({ declarator, slot: slots.names, created });
 
-      const aliases = bindings.map((binding) => {
-        const alias = this.slots.get(binding)!;
-        const readPattern = () => thunk(b.ArrayExpression({ elements: [member(slot.name, 'v')] }));
-        const field = b.MemberExpression({
-          object: runtimeCall('$value', [member(slot.name, 'v')]),
-          property: b.Identifier({ name: binding.name }), computed: false, optional: false,
-        });
-        const initial = thunk(runtimeCall('$when', [readPattern(), thunk(field)]));
-        return b.VariableDeclarator({
-          id: b.Identifier({ name: alias.name }),
-          init: alias.treatment === 'cell'
-            ? ctxCall('cell', [numberLiteral(alias.index), initial])
-            : ctxCall('memo', [numberLiteral(alias.index), readPattern(), initial]),
-        });
+      const aliases = this.bindingsInPattern(declarator.id).map((binding) => {
+        return this.patternAlias(binding, slots.names);
       });
+
       const declaration = this.module.parentOf(declarator);
       if (is.VariableDeclaration(declaration)) {
-        declaration.declarations.splice(declaration.declarations.indexOf(declarator) + 1, 0, ...aliases);
+        const at = declaration.declarations.indexOf(declarator);
+        declaration.declarations.splice(at, 1, valueDeclarator, declarator, ...aliases);
       }
     }
 
     return declarations;
+  }
+
+  /**
+   * `const { name } = init` is three steps, each a memo:
+   *
+   *   $s0 = $ctx.memo(0, () => [reads of init], () => init)
+   *   $s1 = $ctx.memo(1, () => [$s0.v, reads of defaults], () => {
+   *     const { name } = $value($s0.v);
+   *     return { name };
+   *   })
+   *   $s2 = $ctx.memo(2, () => [$s1.v], () => $s1.v.name)
+   *
+   * The value gets its own memo so that a source made by `init` itself
+   * (`= $fetch(url)`) is an input of the pattern: its payload is destructured once it
+   * arrives, and again after a refresh, a new request or a mutation.
+   */
+  private patternValue(declarator: VariableDeclarator, slot: Slot): VariableDeclarator {
+    const init = declarator.init!;
+    const inputs = this.inputList(this.reads.inside([init], undefined), [init]);
+    const prepared = waitForExpression(init, (part) => {
+      return this.inputList(this.reads.inside([part], undefined), [part]);
+    });
+    return b.VariableDeclarator({
+      id: b.Identifier({ name: slot.name }),
+      init: ctxCall('memo', [numberLiteral(slot.index), inputs, thunk(prepared)]),
+    });
+  }
+
+  private patternNames(declarator: VariableDeclarator, slots: PatternSlots): Expression {
+    const pattern = declarator.id;
+    const value = member(slots.value.name, 'v');
+
+    // The pattern can read too: `{ name = fallback }`.
+    const patternReads = [...this.reads.inside([pattern], undefined)];
+    const readInputs = () => {
+      const reads = patternReads.map((binding) => statusInput(binding, this.readOf(binding), [pattern], this.rawUses));
+      return thunk(b.ArrayExpression({ elements: [structuredClone(value), ...reads] }));
+    };
+
+    // The authored pattern runs natively; its names are returned as one object.
+    const destructure = b.VariableDeclaration({
+      kind: 'const',
+      declarations: [b.VariableDeclarator({ id: pattern, init: runtimeCall('$value', [value]) })],
+    });
+    const names = b.ObjectExpression({
+      properties: this.bindingsInPattern(pattern).map((binding) => b.Property({
+        key: b.Identifier({ name: binding.name }),
+        value: identifier(binding.name),
+        kind: 'init',
+        method: false,
+        shorthand: false,
+        computed: false,
+      }) as Extract<Node, { type: 'ObjectExpression' }>['properties'][number]),
+    });
+    const compute = blockThunk([destructure, b.ReturnStatement({ argument: names })]);
+
+    const prepared = runtimeCall('$when', [readInputs(), compute]);
+    return ctxCall('memo', [numberLiteral(slots.names.index), readInputs(), thunk(prepared)]);
+  }
+
+  /** One alias: a memo of its field, or a cell when code that runs later writes it. */
+  private patternAlias(binding: Binding, names: Slot): VariableDeclarator {
+    const alias = this.slots.get(binding)!;
+    const readNames = () => thunk(b.ArrayExpression({ elements: [member(names.name, 'v')] }));
+    const field = b.MemberExpression({
+      object: runtimeCall('$value', [member(names.name, 'v')]),
+      property: b.Identifier({ name: binding.name }),
+      computed: false,
+      optional: false,
+    });
+    const initial = thunk(runtimeCall('$when', [readNames(), thunk(field)]));
+    const index = numberLiteral(alias.index);
+    return b.VariableDeclarator({
+      id: b.Identifier({ name: alias.name }),
+      init: alias.treatment === 'cell'
+        ? ctxCall('cell', [index, initial])
+        : ctxCall('memo', [index, readNames(), initial]),
+    });
   }
 
   /**
