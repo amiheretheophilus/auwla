@@ -15,3 +15,4 @@
 | 2026-10-18 | Only GET server functions are sources in render; other server functions are actions (still rejected in render). | Matches the current rule; a mutation must not run because a component rendered. |
 | 2026-10-18 | Refactor slices verify by differential compilation (corpus diff) plus the test suites. | Behaviour is the contract; the diff shows every changed output for review. |
 | 2026-10-18 | A mount-time ref update lands at the end of the creating task, not synchronously inside creation. | The owner is still creating its nodes; updating it then reads bindings that do not exist yet. Updates inside a commit stay synchronous. |
+| 2026-10-18 | A written `const` is state like a written `let`; a method chain on an array literal is ordinary state once written. Optimization facts (static lists) never reject code. | User rules: reactivity does not depend on `let`/`const` ("this is not svelte"); normal JavaScript compiles. |

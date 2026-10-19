@@ -18,7 +18,6 @@ import {
   type ReactiveOrigin,
 } from '../mutation-analysis';
 import { summarizeHelper } from '../helper-summaries';
-import { isStaticDerivedListConst } from '../lists/static-derived';
 import {
   componentPropProjectionOrigins,
 } from '../components/prop-projections';
@@ -259,13 +258,6 @@ export function planHandlerWrites(
           }
           return;
         }
-        if (
-          isStaticDerivedListConst(ctx, left.name, compName)
-        ) {
-          throw p.buildCodeFrameError(
-            `memo-dom: cannot reassign '${left.name}' - it is derived from a static source and will never change`,
-          );
-        }
         if (instDerived?.has(left.name)) {
           throw p.buildCodeFrameError(
             `memo-dom: cannot assign per-instance derivation '${left.name}' (R14) — write its source instead`,
@@ -341,13 +333,6 @@ export function planHandlerWrites(
       const arg = p.node.argument;
       if (astFactory.isIdentifier(arg)) {
         if (locals.has(arg.name)) return;
-        if (
-          isStaticDerivedListConst(ctx, arg.name, compName)
-        ) {
-          throw p.buildCodeFrameError(
-            `memo-dom: cannot update '${arg.name}' - it is derived from a static source and will never change`,
-          );
-        }
         if (instDerived?.has(arg.name)) {
           throw p.buildCodeFrameError(
             `memo-dom: cannot update per-instance derivation '${arg.name}' (R14) — write its source instead`,
@@ -447,20 +432,6 @@ export function planHandlerWrites(
         // remain opaque and conservatively invalidating.
         noteBoundedArguments(p, p.node.arguments);
         return;
-      }
-
-      // A method call on a static-derived const is a mutation attempt on a
-      // frozen value (push/splice/shift/...) - always an error.
-      if (astFactory.isMemberExpression(callee)) {
-        const receiverRoot = memberRootName(callee);
-        if (
-          receiverRoot !== null &&
-          isStaticDerivedListConst(ctx, receiverRoot, compName)
-        ) {
-          throw p.buildCodeFrameError(
-            `memo-dom: cannot mutate '${receiverRoot}' - it is derived from a static source and will never change`,
-          );
-        }
       }
 
       // Every method call on a reactive receiver has a bounded receiver

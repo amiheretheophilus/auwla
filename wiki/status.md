@@ -152,6 +152,39 @@ the freeze) and lowering/emission (after the thaw). Generated code after
 emission still shares nodes (`_initialRow`, `_routeContext`…); the backends will
 build fresh output from the render plan (plan step 5).
 
+## Written `const` is state (rule 1, bounded)
+
+Found while probing name-keyed facts (shadowing probes all passed; these did not):
+
+- `const items = makeList()` or `Array.from(…)`, pushed to in a handler and
+  rendered as a list, was rejected ("list views must come from reactive …
+  state"); the `let` spelling worked. `scanInstanceState` only counted a
+  written `let`/`var`, or a `const` whose initializer is an array, `new` or a
+  static object literal.
+- `const items = [1].concat([2])` (any method chain on an array literal) was
+  "frozen": any write, and even a read-only method call such as
+  `xs.join(',')` in a handler, was a compile error ("derived from a static
+  source and will never change"), for `let` as well.
+
+Fix:
+
+- `includeWrittenConstState` (`analysis/instance.ts`): a written `const` is
+  instance state when its initial value is owned outright (reads no props,
+  locals, imports, sources or module state; helpers only if they read no
+  state) and something renders, derives or effects from it. Sources
+  (`profile.refetch()`), derivations and handles used only by handlers or
+  cleanups (`sub.unsubscribe()`) keep their current handling. The full rule
+  waits for the graph, which knows sources and derivations.
+- The static-derived list fast path applies only to a binding never written;
+  the four "static source" errors are gone, with `isStaticDerivedListConst`
+  and `findConstInitializer`.
+- "Written" for both rules is `writtenOutsideListSites` (`lists/source-shapes.ts`):
+  a visible write other than the list site rendering the binding
+  (`{rows.map(…)}` is a method call, but it is the read that renders it).
+  Caught by `tests/list-site-plan.test.ts` when the first version disabled the
+  fast path for every static list.
+- Tests: `tests/written-const-state.test.ts` (13). Corpus: 1,632 identical.
+
 ## Next
 
 1. Vite suite and `bench/` on a machine with more memory.

@@ -28,6 +28,8 @@ import {
 } from '../components/props';
 import { jsxAttributeName } from '../jsx/attributes';
 import { summarizeHelper } from '../helper-summaries';
+import { isIntrinsicLifecycleCall } from '../intrinsics';
+import { writtenOutsideListSites } from '../lists/source-shapes';
 
 interface LocalDerivationHelperSummary {
   reads: Set<string>;
@@ -351,6 +353,83 @@ function isRefSink(ctx: Ctx, attribute: BaseNode, name: string): boolean {
   const tag = opening === null ? null : childNode(opening, 'name');
   return tag?.type === 'JSXIdentifier' &&
     ctx.componentProps.get((tag as unknown as t.JSXIdentifier).name)?.refProps.includes(name) === true;
+}
+
+/**
+ * A written `const` is state like a written `let`: the keyword never decides
+ * reactivity. Bounded for now to an initial value the instance owns outright
+ * (it reads no props, locals, imports, sources or module state), so sources
+ * and derivations keep their own handling, and to a binding something renders,
+ * derives or effects from (`sub.unsubscribe()` in a cleanup is not a render read).
+ */
+export function includeWrittenConstState(ctx: Ctx): void {
+  for (const [name, componentPath] of ctx.compPaths) {
+    const component = componentPath.node as unknown as BaseNode;
+    for (const statement of componentPath.node.body.body) {
+      if (!astFactory.isVariableDeclaration(statement) || statement.kind !== 'const') continue;
+      for (const declaration of statement.declarations) {
+        if (!astFactory.isIdentifier(declaration.id) || declaration.init == null) continue;
+        const local = declaration.id.name;
+        if (ctx.instanceState.get(name)?.has(local) === true) continue;
+        const binding = astBindingAt(ctx, declaration as unknown as BaseNode, local);
+        const init = declaration.init as unknown as BaseNode;
+        if (
+          binding === undefined ||
+          FUNCTION_NODES.has(init.type) ||
+          !writtenOutsideListSites(ctx, binding) ||
+          !ownsInitialValue(ctx, init) ||
+          !binding.references.some(reference => isRenderRead(ctx, component, reference as unknown as BaseNode))
+        ) continue;
+        let state = ctx.instanceState.get(name);
+        if (state === undefined) ctx.instanceState.set(name, state = new Set());
+        state.add(local);
+      }
+    }
+  }
+}
+
+/** Whether an initializer builds a value from nothing reactive. */
+function ownsInitialValue(ctx: Ctx, init: BaseNode): boolean {
+  let owned = true;
+  walkAst<BaseNode>(init, {
+    enter(current) {
+      if (!owned) return false;
+      if (current.type !== 'Identifier' || !isReferencedIdentifier(ctx, current)) return;
+      const binding = astBindingAt(ctx, current, current.name);
+      // Globals (`Array.from`) and the initializer's own callback bindings.
+      if (binding === undefined || isWithin(ctx, binding.identifier as unknown as BaseNode, init)) return;
+      if (binding.scope.parent !== null || binding.kind === 'import' || ctx.state.has(current.name)) {
+        owned = false;
+        return;
+      }
+      if (binding.declarationNode.type === 'FunctionDeclaration') {
+        const summary = ctx.helpers.has(current.name) ? summarizeHelper(ctx, current.name) : null;
+        if (summary === null || summary.reads.size > 0 || summary.opaqueReads === true || summary.unbounded) owned = false;
+        return;
+      }
+      // A module value that is not state, unless it is a function we cannot see into.
+      const declarator = variableDeclaratorFor(ctx, binding);
+      const value = declarator === null ? null : childNode(declarator, 'init');
+      if (value === null || FUNCTION_NODES.has(value.type)) owned = false;
+    },
+  });
+  return owned;
+}
+
+/**
+ * Whether a reference runs when the owner renders: in the body, in markup
+ * (not an event handler), or in an effect. A function on the way counts only
+ * when markup or an effect encloses it.
+ */
+function isRenderRead(ctx: Ctx, component: BaseNode, reference: BaseNode): boolean {
+  let insideFunction = false;
+  for (let current = parentOf(ctx, reference); current !== null && current !== component; current = parentOf(ctx, current)) {
+    if (current.type === 'JSXAttribute' &&
+        /^on[A-Z]/.test(jsxAttributeName((current as unknown as t.JSXAttribute).name))) return false;
+    if (FUNCTION_NODES.has(current.type)) insideFunction = true;
+    else if (current.type === 'JSXExpressionContainer' || isIntrinsicLifecycleCall(ctx, current, 'effect')) insideFunction = false;
+  }
+  return !insideFunction;
 }
 
 /** Discover ordered component-local derivations without replaying owned state. */

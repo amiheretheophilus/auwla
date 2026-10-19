@@ -14,7 +14,6 @@ import {
   type AliasTracker,
   type ReactiveOrigin,
 } from '../mutation-analysis';
-import { isStaticDerivedListConst } from '../lists/static-derived';
 import { applyLinkedPropEffect } from '../components/prop-effects';
 import {
   directListItemMutationKey,
@@ -580,14 +579,6 @@ export function createHandlerWriteRouting({
     const ownerStructural = rootName !== null && structuralWrites.get(p.node) === rootName;
     if (!ownerStructural && hasKnownAccessor(ctx, rootFn, node)) {
       mutateScope(p, scope => { scope.rootFallback = true; });
-    }
-    if (
-      rootName !== null &&
-      isStaticDerivedListConst(ctx, rootName, compName)
-    ) {
-      throw p.buildCodeFrameError(
-        `memo-dom: cannot mutate '${rootName}' - it is derived from a static source and will never change`,
-      );
     }
     const transparentRoot = transparentRootFor(node);
     if (transparentRoot !== null) {

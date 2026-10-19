@@ -1,12 +1,12 @@
 /** Capture list sources and composition contracts before factories are consumed. */
 import type * as t from '../ast/compiler-types';
 import {childNodes, childNode, nodeField, cloneNode, walkAst, type BaseNode} from '../ast';
-import type {Ctx, MapCallExpression} from '../context';
+import {astBindingAt, type Ctx, type MapCallExpression} from '../context';
 import {captureMutationJournals} from '../analysis/list-mutation-journals';
 import type {KeyedListMutationPlan} from '../context';
 import {captureRenderCallbackProps} from '../components/render-callbacks';
 import {isStaticDerivedChain} from '../lists/static-derived';
-import {matchMapCall, transparentListExpression} from '../lists/source-shapes';
+import {matchMapCall, transparentListExpression, writtenOutsideListSites} from '../lists/source-shapes';
 import type {ParentRow} from '../lists/map-site';
 import type {ListCallbackPlan} from '../lists/callback-plan';
 import {planListSite, type ListSiteInputs, type ListSitePlan, type ListSourceIdentity} from '../lists/site-plan';
@@ -37,7 +37,10 @@ export function captureListSiteInputs(ctx: Ctx, name: string): ListSiteInputs {
         // Match existing findConstInitializer precedence: first initialized declaration wins.
         if (seen.has(binding)) continue;
         seen.add(binding);
-        if (isStaticDerivedChain(init)) staticDerived.set(binding, cloneNode(transparentListExpression(init)) as t.Expression);
+        // A written binding holds rows the program changes: ordinary state.
+        if (isStaticDerivedChain(init) && !writtenOutsideListSites(ctx, astBindingAt(ctx, declaration, binding))) {
+          staticDerived.set(binding, cloneNode(transparentListExpression(init)) as t.Expression);
+        }
       }
     }
   }

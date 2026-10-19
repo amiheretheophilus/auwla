@@ -1,12 +1,13 @@
 import type * as t from '../ast/compiler-types';
 import * as astFactory from '../ast/factory';
-import type {MapCallExpression} from '../context/model';
+import type {Ctx, MapCallExpression} from '../context/model';
 import {
   isNode,
   nodeField as field,
   type BaseNode,
+  type Binding,
 } from '../ast';
-import { unwrapTypeExpression } from '../context';
+import { bindingHasVisibleWrite, unwrapTypeExpression } from '../context';
 
 /** Is this expression a `.map(...)` call, including optional chains? */
 export function matchMapCall(expr: t.Node): MapCallExpression | null {
@@ -26,6 +27,24 @@ export function matchMapCall(expr: t.Node): MapCallExpression | null {
     astFactory.isIdentifier(callee.property, { name: 'map' })
     ? current
     : null;
+}
+
+/** Whether a binding has a visible write other than a list site rendering it (`{rows.map(…)}`). */
+export function writtenOutsideListSites(ctx: Ctx, binding: Binding | undefined): boolean {
+  if (binding === undefined) return false;
+  const parents = ctx.astAnalysis?.parentByNode;
+  const rendersList = (reference: BaseNode): boolean => {
+    const member = parents?.get(reference) ?? null;
+    const call = member === null ? null : parents?.get(member) ?? null;
+    if (call === null || matchMapCall(call as unknown as t.Node) !== (call as unknown) || field(call, 'callee') !== member) return false;
+    const container = parents?.get(call) ?? null;
+    const site = container?.type === 'ChainExpression' ? parents?.get(container) ?? null : container;
+    return site?.type === 'JSXExpressionContainer';
+  };
+  return bindingHasVisibleWrite(ctx, {
+    ...binding,
+    references: binding.references.filter(reference => !rendersList(reference as unknown as BaseNode)),
+  });
 }
 
 /** Remove transparent TypeScript wrappers around a collection expression. */
