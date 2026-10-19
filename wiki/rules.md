@@ -22,3 +22,16 @@ Stated by the user on 2026-10-18. They apply to every design and every fix.
 8. **Readiness:** every resolved value (server function, `$fetch`, `$read`)
    is waited on by everything that depends on it while it is loading.
 9. **Refs are reactive**, so users never need a ref plus an effect.
+10. **Every JavaScript expression is accepted, and its effect shows on the UI**
+    (2026-10-19). The user: "we accept every javascript expression and every
+    expression that we can see it effect in the console means we need to see it
+    on the ui". A compile error for valid JavaScript is a bug; a test that asserts
+    such a rejection is deleted, with the user's agreement (first: `r14.test.ts`,
+    reassigning a prop).
+11. **Derived values and writes** (2026-10-19, agreed with the user):
+    - A derived value is written `const`. A primitive one cannot be reassigned
+      (JavaScript itself throws), so nothing is needed.
+    - A derived object or array can be mutated (`const a = [...old]; a.push(x)`):
+      the edit shows, and when the source changes the value is derived again.
+    - A written `let` is state: its initializer is a snapshot taken once.
+    - A reassigned prop holds until the parent passes a different value.

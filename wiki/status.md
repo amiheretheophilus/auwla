@@ -185,9 +185,61 @@ Fix:
   fast path for every static list.
 - Tests: `tests/written-const-state.test.ts` (13). Corpus: 1,632 identical.
 
+## Prop writes (user: "it a bug")
+
+`({ label }) => … onClick={() => { label = 'x' }}` was rejected ("copy it to
+component-local let state first"). Now a prop binding is a local:
+
+- `scanWrittenProps` (`analysis/instance.ts`) records rebound prop bindings in
+  `ctx.writtenProps`; such a component is never a lightweight row.
+- Handler assignment/update of a prop routes like instance state
+  (`recordInstanceMutation`, the prop's own reason).
+- The prop replay at the top of `_update` is guarded (`guardPropReplay`,
+  `dom/props.ts`): the override survives while the prop still delivers the
+  value it delivered before (`_labelProp`); a different value replaces it.
+- Tests: `tests/prop-writes.test.ts` (4, including keyed rows). Corpus identical.
+- `tests/r14.test.ts:77` asserts the old rejection; left as it is (rule:
+  failing tests are not edited) and reported to the user.
+
+## Edited derived copies show on the UI
+
+`const sorted = items.slice(); … sorted.push(0)` did not update the UI: the
+alias tracker cannot prove `slice()` copies, so `noteDerivedCopyEdit` refused to
+keep the edit and the update re-derived `sorted` from `items`, losing it.
+
+- `noteDerivedCopyEdit` (`handlers/write-routing.ts`) always keeps the edit of
+  an owned derivation, and also writes to the origins it may alias.
+- `ScopeWrites.aliasWrites` (`handlers/write-facts.ts`): roots written only as
+  such a possible alias; the keep filter in `dom/handler-commits.ts` ignores
+  them. A direct write of the same root removes it, so `items.push(); sorted.push()`
+  still re-derives.
+- Corpus: 3 changed, all this fix (`visible.custom()`, `alias.push()`,
+  `(flag ? items : other).push()` now keep the edit, origin commits unchanged).
+- Tests: `tests/visible-effects.test.ts` (13). The audit of other valid-JS
+  rejections is in `rejections.md`.
+
+## Runtime: a dropped commit froze every later update
+
+Most of the 42 "interference" failures were one runtime bug. `scheduleCommit`
+sets `scheduled` and waits for the scheduler to call `commit`; a scheduler that
+never calls back (`tests/private-multi-row-props.test.ts` installs
+`setScheduler(() => {})` on purpose) left `scheduled` true forever, so every
+later write was deduplicated into a commit that never came. Swapping the
+scheduler did not clear it.
+
+- `replaceScheduler` (`runtime/src/kernel.ts`), used by `setScheduler` and
+  `resetScheduler`: a commit the previous scheduler still owes is handed to the
+  new one. A late run of the old callback finds nothing dirty.
+- Root suite, batched: **2,952 pass, 10 fail** (was 2,917 / 45). The 10 left are
+  hydration, mount-boundary and disposal tests; each passes alone, so they are
+  the next interference to find.
+- New baseline for comparisons: `slice3f/failures.txt` in the scratchpad.
+
 ## Next
 
 1. Vite suite and `bench/` on a machine with more memory.
-2. Resolve: symbols keyed by id on the frozen index (`references`, `writes`),
+2. Find the remaining 10 cross-file failures (same method: pair each earlier
+   file in the batch with the failing one).
+3. Resolve: symbols keyed by id on the frozen index (`references`, `writes`),
    then move analysis facts from names/nodes to symbol ids.
-3. Then the render plan (see `plan.md`).
+4. Then the render plan (see `plan.md`).

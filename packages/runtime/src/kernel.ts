@@ -311,7 +311,20 @@ export function runInApplicationRuntime<T>(
 
 /** Swap the scheduling policy of the ACTIVE runtime (tests, SSR, hosts). */
 export function setScheduler(fn: Scheduler): void {
-  getActiveApplicationRuntime().state.scheduler = fn;
+  replaceScheduler(getActiveApplicationRuntime(), fn);
+}
+
+/**
+ * A commit the previous scheduler still owes may never run (one that drops
+ * work, or one that was replaced before its turn). Hand it to the new
+ * scheduler; a late run of the old callback finds nothing dirty.
+ */
+function replaceScheduler(runtime: ApplicationRuntime, fn: Scheduler): void {
+  const k = runtime.state;
+  k.scheduler = fn;
+  if (!k.scheduled || k.inCommit) return;
+  k.scheduled = false;
+  if (k.dirty.size > 0) scheduleCommit(runtime);
 }
 
 /** The capability descriptor of the ACTIVE runtime. */
@@ -370,7 +383,7 @@ export function getExtensionStore<T>(key: string, create: () => T): T {
 }
 
 export function resetScheduler(): void {
-  getActiveApplicationRuntime().state.scheduler = defaultScheduler;
+  replaceScheduler(getActiveApplicationRuntime(), defaultScheduler);
 }
 
 // ---------------------------------------------------------------------------
