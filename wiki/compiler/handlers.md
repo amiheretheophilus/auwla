@@ -20,8 +20,23 @@ Finds every place that changes state and makes the UI update after it.
   mutate (`items.map`, `items.slice`), which skips that update. A method not on
   that list keeps the general path. It is never rejected.
 - Passing state to a function the compiler cannot see is also a possible mutation.
-- Writes are batched. The UI updates once the handler finishes, including after
-  each `await` in an async handler.
+- **The UI shows what the console would show.** Writes in one synchronous stretch
+  are batched. The UI updates when that stretch ends:
+  - when the handler returns;
+  - before each `await`, because the handler pauses there;
+  - at the end of each `.then`, `setTimeout` or listener callback.
+
+  The user: "it needs to follow how it will appear in the console".
+
+  ```js
+  async function run() {
+    step = 'uploading';
+    await upload();      // UI: uploading
+    step = 'processing';
+    await process();     // UI: processing  (the old compiler skips this one)
+    step = 'done';       // UI: done
+  }
+  ```
 - Each `writes` edge gets a reason id. A site updates only for reasons on its paths.
   This is an optimization (`optimize/reason-routing.ts` _(planned)_); without it the
   general path updates every reader of the binding.

@@ -31,13 +31,17 @@ Stated by the user on 2026-10-18. They apply to every design and every fix.
 11. **Derived values and writes** (2026-10-19, agreed with the user):
     - `let` and `const` alike can be state or derived. The user: "const and let
       all are state and derived".
-    - A derived value that is later reassigned loses its derivation. The user:
-      "once a variable is derived and later that variable get reassigned since the
-      compiler cant replay it looses it derivation". This replaces the old rule
-      that a written `let` is a snapshot from the start; the exact reading is in
-      `compiler/state-and-derived.md`.
-    - A derived object or array can be mutated (`const a = [...old]; a.push(x)`):
-      the edit shows, and when the source changes the value is derived again.
+    - A binding that is reassigned anywhere is state: its initializer is a
+      snapshot taken once, and it never re-derives. The user: "the total first
+      value becomes a snapshot meaning price and qty change will no re derive it
+      again as there is a reassignment". A `const` cannot be reassigned, so a
+      `const` with a reactive initializer is always derived.
+    - Mutation is not reassignment. A derived object or array can be mutated
+      (`const a = [...old]; a.push(x)`): the edit shows, and when the source
+      changes the value is derived again. Details in `compiler/state-and-derived.md`.
     - A reassigned prop holds until the parent passes a different value.
-12. **The compiler wiki is the map of the code.** Each group of related files has
+12. **The UI updates when the console would show a change**: at the end of each
+    synchronous stretch, including before every `await` (2026-10-19). The user:
+    "it needs to follow how it will appear in the console".
+13. **The compiler wiki is the map of the code.** Each group of related files has
     a page in `compiler/`, changed in the same commit as the code.

@@ -22,7 +22,8 @@
 | 2026-10-19 | Compiler docs live in `wiki/compiler/`, one page per group of related files. | User: "a file that talks about a group of related file what they do". |
 | 2026-10-19 | Use the yuku toolchain (`yuku-ast`, `yuku-analyzer`, `yuku-codegen`) instead of hand-written scope analysis, builders and printing. | User asked to check yuku for libraries "instead of manually wiring things up"; see `compiler/toolchain.md`. |
 | 2026-10-19 | Tests compare compiled output with a plain-JavaScript reference renderer, on generated programs; incremental locally, full on GitHub Actions. | User: we cannot list every valid case; the machine is slow. See `compiler/testing.md`. |
-| 2026-10-19 | `let`/`const` are both state or derived; a derived value that is reassigned loses its derivation. | User, quoted in `rules.md` rule 11. |
+| 2026-10-19 | `let`/`const` are both state or derived. A binding reassigned anywhere is state: its initializer is a snapshot. A mutated derived object stays derived. | User, quoted in `rules.md` rule 11: "the total first value becomes a snapshot"; on the mutated `sorted` list, "this is fine". |
+| 2026-10-19 | The UI updates at the end of every synchronous stretch, including before each `await`. | User: "it needs to follow how it will appear in the console". |
 | 2026-10-19 | Keep the current names (`memo-dom:`, `mmd_*`, `memoized-dom/*`) for now; the rename to auwla is done later, across all packages at once. | User: "just keep the name we wil do the name changes later". |
 | 2026-10-19 | `compiler-next` does not support TSRX. | User: "you can leave tsrx". |
 | 2026-10-19 | Priorities are structure and correctness, not speed. The `d6e678b` benchmark is the performance floor; the runtime is kept. | User: "even in this discard codebase we were one of the fastest... what we need is tsructured and correctness". Octane rank 2 of 10 (`compiler/testing.md`). |
