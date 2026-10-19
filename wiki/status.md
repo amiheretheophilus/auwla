@@ -296,7 +296,9 @@ compiler gets no more patches; bugs become tests.
      12 fail; every failure is an old-compiler bug listed on its page. Three were
      new: body loops don't re-run, `{a}{b}` adds numbers, JSX in a body `switch`
      is rejected;
-   - next: the program generator (`fast-check`); the reference learns refs,
+   - done: the program generator (`d1f28f8`). Its first run shrank the old
+     compiler's `{a}{b}` bug to `<p>{0}{0} {0}</p>`;
+   - next: the reference learns refs,
      `$effect` and sources; port the root tests listed above (`visible-effects`,
      `written-const-state`, `prop-writes`, `derived-literals`, `stray-keys`,
      `reactive-refs`) as cases. No CI until the suite reaches thousands of cases.

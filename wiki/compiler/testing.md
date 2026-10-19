@@ -14,9 +14,15 @@
 | `tests/harness/compilers.ts` | The compilers a case can run on; `COMPILER=old` (default) is `packages/compiler` |
 | `tests/harness/serialize.ts` | The visible DOM as a comparable string |
 | `tests/cases/<page>.test.ts` | One file per wiki page; holds that page's "Cases to test" |
+| `tests/generator/program.ts` | fast-check arbitraries: a random program as plain data (state, derived values, views, buttons, clicks) |
+| `tests/generator/print.ts` | Prints a program as `App.tsx` and its steps; checks it parses with `yuku-parser` |
+| `tests/generator/generated.test.ts` | Runs random programs, shrinks a failure, reports it with a seed |
+| `tests/generator/corpus.test.ts` | Runs every saved failure in `tests/corpus/` |
 
 Run them with `bun test` in `packages/compiler-next` (no build needed), or one file:
-`bun test cases/handlers`.
+`bun test cases/handlers`. Generated programs: `FC_RUNS=200 bun test generator`
+(default 25), `FC_SEED=<seed>` to repeat a run, `SAVE_CORPUS=1` to keep the shrunk
+failure.
 
 ## What it does
 
