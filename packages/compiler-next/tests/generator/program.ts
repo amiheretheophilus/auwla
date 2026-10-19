@@ -21,6 +21,8 @@ export type NumberExpression =
   | { kind: 'length'; list: number }
   | { kind: 'sum'; list: number }
   | { kind: 'property'; index: number; field: 'a' | 'b' }
+  /** `s0.value`: a field of a loaded source. `0` where sources cannot be read. */
+  | { kind: 'source-value'; index: number }
   | { kind: 'add'; left: NumberExpression; right: NumberExpression }
   | { kind: 'times'; operand: NumberExpression; factor: number }
   | { kind: 'max'; left: NumberExpression; right: NumberExpression }
@@ -37,7 +39,9 @@ export type ListExpression =
   | { kind: 'list'; index: number }
   | { kind: 'mapped'; index: number; factor: number }
   | { kind: 'evens'; index: number }
-  | { kind: 'sorted'; index: number };
+  | { kind: 'sorted'; index: number }
+  /** `s0.items`: a list inside a loaded source. `[]` where sources cannot be read. */
+  | { kind: 'source-items'; index: number };
 
 /** A value computed in the component body. */
 export type Derived =
@@ -46,7 +50,9 @@ export type Derived =
   /** `let d = expression; if (test) d = otherwise;` */
   | { kind: 'defaulted'; value: NumberExpression; test: Condition; otherwise: NumberExpression }
   /** `let d = 0; for (const x of list) d += x;` */
-  | { kind: 'loop'; list: number };
+  | { kind: 'loop'; list: number }
+  /** `let d = 0; for (const x of s0.items) d += x;` */
+  | { kind: 'source-loop'; index: number };
 
 /** Something rendered inside `<main>`. */
 export type View =
@@ -80,6 +86,15 @@ export interface Program {
   actions: Action[];
   /** Buttons to click, in order, by index into `actions`. */
   clicks: number[];
+  /** `const s0 = $fetch('/s0')`, and the payload each request responds with. */
+  sources: SourcePayload[];
+  /** For each source, how many clicks happen before its response arrives. */
+  responses: number[];
+}
+
+export interface SourcePayload {
+  value: number;
+  items: number[];
 }
 
 // ---------------------------------------------------------------------------
@@ -99,6 +114,7 @@ const expressions = fc.letrec<{ number: NumberExpression; condition: Condition }
     fc.record({ kind: fc.constant('length' as const), list: index }),
     fc.record({ kind: fc.constant('sum' as const), list: index }),
     fc.record({ kind: fc.constant('property' as const), index, field }),
+    fc.record({ kind: fc.constant('source-value' as const), index }),
     fc.record({ kind: fc.constant('add' as const), left: tie('number'), right: tie('number') }),
     fc.record({ kind: fc.constant('times' as const), operand: tie('number'), factor }),
     fc.record({ kind: fc.constant('max' as const), left: tie('number'), right: tie('number') }),
@@ -121,12 +137,14 @@ const listExpression: fc.Arbitrary<ListExpression> = fc.oneof(
   fc.record({ kind: fc.constant('mapped' as const), index, factor }),
   fc.record({ kind: fc.constant('evens' as const), index }),
   fc.record({ kind: fc.constant('sorted' as const), index }),
+  fc.record({ kind: fc.constant('source-items' as const), index }),
 );
 
 const derived: fc.Arbitrary<Derived> = fc.oneof(
   fc.record({ kind: fc.constant('const' as const), value: numberExpression }),
   fc.record({ kind: fc.constant('defaulted' as const), value: numberExpression, test: condition, otherwise: numberExpression }),
   fc.record({ kind: fc.constant('loop' as const), list: index }),
+  fc.record({ kind: fc.constant('source-loop' as const), index }),
 );
 
 const view: fc.Arbitrary<View> = fc.oneof(
@@ -149,7 +167,7 @@ const action: fc.Arbitrary<Action> = fc.oneof(
   fc.record({ kind: fc.constant('reassign-derived' as const), index, value: numberExpression }),
 );
 
-export const program: fc.Arbitrary<Program> = fc.record({
+const parts = {
   numbers: fc.array(smallInteger, { minLength: 1, maxLength: 3 }),
   lists: fc.array(fc.array(smallInteger, { maxLength: 4 }), { minLength: 1, maxLength: 2 }),
   objects: fc.array(fc.record({ a: smallInteger, b: smallInteger }), { minLength: 1, maxLength: 2 }),
@@ -157,4 +175,23 @@ export const program: fc.Arbitrary<Program> = fc.record({
   views: fc.array(view, { minLength: 1, maxLength: 4 }),
   actions: fc.array(action, { minLength: 1, maxLength: 3 }),
   clicks: fc.array(fc.nat({ max: 2 }), { minLength: 1, maxLength: 4 }),
+};
+
+/** A program without sources: everything is there from the first render. */
+export const program: fc.Arbitrary<Program> = fc.record({
+  ...parts,
+  sources: fc.constant([]),
+  responses: fc.constant([]),
+});
+
+const sourcePayload: fc.Arbitrary<SourcePayload> = fc.record({
+  value: smallInteger,
+  items: fc.array(smallInteger, { maxLength: 4 }),
+});
+
+/** A program whose sources load while the user clicks. */
+export const sourcedProgram: fc.Arbitrary<Program> = fc.record({
+  ...parts,
+  sources: fc.array(sourcePayload, { minLength: 1, maxLength: 2 }),
+  responses: fc.array(fc.nat({ max: 4 }), { minLength: 2, maxLength: 2 }),
 });

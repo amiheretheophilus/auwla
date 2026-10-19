@@ -95,12 +95,21 @@ class CellSlot {
   private value: unknown;
   initialized = false;
   written = false;
+  /**
+   * Written by code that runs after the body (a handler, an effect). The body
+   * statements that build its first value then never run: in JavaScript they
+   * ran before that write.
+   */
+  writtenLater = false;
+  /** Statements that build it still wait for a source (`$ready`). */
+  pending: Waiting | undefined;
 
   get v(): unknown { return this.value; }
   set v(value: unknown) {
     noteReplacement(this.value, value);
     this.value = value;
     this.written = true;
+    if (rendering === null) this.writtenLater = true;
   }
 
   seed(value: unknown): void {
@@ -123,6 +132,17 @@ interface MemoSlot {
   inputs: unknown;
   /** Sources discovered when a helper returned a waiting computation. */
   sources: readonly Source[];
+  /** Statements that build it still wait for a source (`$ready`). */
+  pending: Waiting | undefined;
+}
+
+/**
+ * A slot's value as an input of rendering, derivations and effects: waiting
+ * while statements that build it wait for a source. Handlers read `slot.v`, the
+ * value JavaScript has now.
+ */
+export function $ready(slot: { v: unknown; pending: Waiting | undefined }): unknown {
+  return slot.pending ?? slot.v;
 }
 
 interface EffectSlot {
@@ -150,14 +170,19 @@ export class Instance {
   /** `observe` indexes that have run at least once. */
   private readonly observed = new Set<number>();
 
-  /** State: computed once, then changed only by writes. */
-  cell(index: number, initial: () => unknown): CellSlot {
+  /**
+   * State: computed once, then changed only by writes. `readPending` lists what
+   * the body statements that build its first value read.
+   */
+  cell(index: number, initial: () => unknown, readPending?: () => unknown[]): CellSlot {
     let slot = this.slots.get(index) as CellSlot | undefined;
     if (slot === undefined) {
       slot = new CellSlot();
       this.slots.set(index, slot);
     }
     if (!slot.initialized && !slot.written) slot.seed(initial());
+    const building = readPending !== undefined && !slot.writtenLater;
+    slot.pending = building ? $waiting(readPending()) : undefined;
     return slot;
   }
 
@@ -174,8 +199,11 @@ export class Instance {
     return slot;
   }
 
-  /** A derived value: computed again only when one of its inputs changes. */
-  memo(index: number, readInputs: () => unknown[], compute: () => unknown): MemoSlot {
+  /**
+   * A derived value: computed again only when one of its inputs changes.
+   * `readPending` lists what the body statements that build it read.
+   */
+  memo(index: number, readInputs: () => unknown[], compute: () => unknown, readPending?: () => unknown[]): MemoSlot {
     let slot = this.slots.get(index) as MemoSlot | undefined;
     const values = readInputs();
     const inputs = deepCopy([...values, ...(slot?.sources ?? [])]);
@@ -183,7 +211,7 @@ export class Instance {
     if (slot === undefined) {
       const value = compute();
       const sources = value instanceof Waiting ? value.sources : [];
-      slot = { v: value, fresh: true, inputs: deepCopy([...values, ...sources]), sources };
+      slot = { v: value, fresh: true, inputs: deepCopy([...values, ...sources]), sources, pending: undefined };
       this.slots.set(index, slot);
     } else if (!deepEqual(slot.inputs, inputs)) {
       // Updated in place, because handlers from earlier renders hold this slot.
@@ -196,6 +224,7 @@ export class Instance {
     } else {
       slot.fresh = false;
     }
+    slot.pending = readPending === undefined ? undefined : $waiting(readPending());
     return slot;
   }
 
@@ -255,7 +284,16 @@ export class Instance {
     return this.statementsRun.has(index);
   }
 
-  statement(index: number, readInputs: () => unknown[], run: () => void): void {
+  /**
+   * A body statement runs once its sources are ready. `builds` are the state
+   * cells whose first value it builds: if code that runs later wrote one of them
+   * first, the statement is skipped, since in JavaScript it ran before that write.
+   */
+  statement(index: number, readInputs: () => unknown[], run: () => void, builds: CellSlot[] = []): void {
+    if (builds.some((cell) => cell.writtenLater)) {
+      this.statementsRun.add(index);
+      return;
+    }
     if ($waiting(readInputs())) return;
     run();
     this.statementsRun.add(index);

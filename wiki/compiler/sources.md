@@ -65,9 +65,17 @@ All paths below are under `packages/compiler-next/`. This is test code only.
   choose differently, so the loop waits for everything it reads.
 - A source inside an object waits where it is read: `props.user.name` waits for
   `props.user`, the way `user.name` waits for `user`.
-- A body statement that passes a value to an unknown call (`collect(names, users)`)
-  may build it, so the value waits for that statement's sources until the call has
-  run and is seen not to change it.
+- A body statement that passes a value to a call, or calls a method on it
+  (`collect(names, users)`, `items.reduce(…)`), may build it. Until that statement
+  has run once, the value waits for the statement's sources; after that it waits
+  only if the call was seen to change it. This does not depend on a method list
+  (`optimize/methods.ts` may skip the runtime check, never change what waits).
+- Waiting is about what the page shows, not about the value. Rendering,
+  derivations and effects wait; a handler reads and writes the real value
+  JavaScript has (`let items = [1, 2]` is `[1, 2]`, and `items.pop()` works).
+- A snapshot written by a handler before its source loads keeps that write: the
+  body statements that build its first value are skipped, since in JavaScript
+  they ran before the handler (`../decisions.md`, 2026-10-19).
 - A `null` target sends no request and the payload is `null` at once, not pending
   (`docs/05-data.md`: "pauses the request and clears the payload").
 - Destructuring a source is valid; the pattern runs when the payload exists
@@ -92,7 +100,10 @@ by the authored expression), so a test with side effects runs twice. `$path`
 follows `a.b.c` through plain objects and arrays (data properties only, never a
 getter) to find a waiting value inside one. `Source.replacesLoaded` marks a
 replacement; `$ctx.mayChange` keeps an unknown call's reads as inputs until it is
-seen not to change the value. Module derivations and module patterns are
+seen not to change the value. A slot always holds its real value; `slot.pending`
+records that statements building it still wait, and guards and effects read it
+through `$ready(slot)`. `CellSlot.writtenLater` marks a write from a handler or
+an effect; `$ctx.statement` then skips the statements building that cell. Module derivations and module patterns are
 built the same way as a component's (`ModuleMemos`).
 
 A seed keeps a separate "written" flag, so even a user write of `undefined`
@@ -143,7 +154,7 @@ request cancellation through `$track` is still separate, unfinished work.
 
 ## Cases to test
 
-`tests/cases/sources.test.ts`: 69 cases, all passing on the reference. The original
+`tests/cases/sources.test.ts`: 71 cases, all passing on the reference. The original
 27 give 18 passes and 9 failures on the old compiler; the null-target case fails
 it (written on review, it caught the reference treating `null` as a new load);
 four destructuring cases give 2 passes and 2 failures (the direct
@@ -154,7 +165,8 @@ patterns) give 1 pass and 4 failures, and caught four reference gaps; five lazy
 statement cases (`if`, `switch`, fall-through, a lazy early return, a branch in a
 loop) all fail on the old compiler; two server function cases (a GET source
 following its arguments, a POST action awaited in a handler) give 1 pass and 1
-failure;
+failure; two cases found by the generated source programs (below) both fail on
+the old compiler;
 the 14 atomic cases give
 8 passes and 6 failures; eleven further atomic lifecycle cases give 6 passes and
 5 failures. These failures must pass on `compiler-next`.
@@ -205,6 +217,15 @@ an early failure can prevent comparison of its later steps. All cases are in
 | `an early return with a lazy condition waits only when it reads the source` | `no` while signed out | Shows `loading`: waits for `user` though `!signedIn` already decides |
 | `a loop decides per iteration, so a branch inside it is not chosen ahead` | `loading` until prices arrive | Shows `0` before the prices load |
 | `a POST server function is an action: it runs when called, then a refresh shows its result` | `saved` shows `no`, then `Lin` after the action resolves | `saved` renders empty from mount |
+| `a handler uses the real value while a statement that may change it waits`; `a snapshot written before its source loads keeps the write` | Wait, then `1`/`clicked` | Throws `UnresolvedDataReadError` (`settings` read before it committed) |
+
+**Generated programs** (`tests/generator/sources.test.ts`). Each random program
+is printed twice: with `const s0 = $fetch('/s0')` answered at random points
+between the clicks, and with `const s0 = { value, items }` inline. Once all
+responses arrive, both must show the same page; an exception in a handler fails
+the run. Its first runs found the two reference bugs in the cases above (a waiting
+value replaced the real one, so a handler threw; a late statement overwrote a
+handler's write). 200 programs now pass.
 | `a module derivation waits and follows later source refreshes` | Defer `user.name.toUpperCase()` until ready | Throws `undefined is not an object` during module evaluation |
 | `a destructured seed written before loading keeps its override` | Delay the seed; preserve its early override | Throws `UnresolvedDataReadError` |
 | `suspend ignores unused sources and inactive branches` | Publish `off` immediately | Keeps the entire region on `loading` |

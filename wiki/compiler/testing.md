@@ -15,7 +15,8 @@
 | `tests/reference/reads.ts` | Dependency queries using yuku bindings and references |
 | `tests/reference/ast.ts` | Shared yuku AST builders for the test transforms |
 | `tests/harness/case.ts` | The `Case` and `Step` types, optional `check(container, observation)` assertions, and `defer(name)` for async cases |
-| `tests/harness/run.ts` | `behaves(name, case)`: runs the case on the reference and on a compiler, compares after each step |
+| `tests/harness/run.ts` | `behaves(name, case)`: runs the case on the reference and on a compiler, compares after each step. An exception in an event handler fails the run (the DOM only reports it as a window `error` event). `disposeRuns()` cleans up after a failed run |
+| `tests/harness/server-functions.ts` | Server function client modules, generated from `define.function` files by the framework's own generator |
 | `tests/harness/compilers.ts` | The compilers a case can run on; `COMPILER=old` (default) is `packages/compiler` |
 | `tests/harness/compile-worker.ts` | Optional separate-process old compilation for cases that can synchronously loop |
 | `tests/harness/serialize.ts` | The visible DOM as a comparable string |
@@ -25,6 +26,7 @@
 | `tests/generator/print.ts` | Prints a program as `App.tsx` and its steps; checks it parses with `yuku-parser` |
 | `tests/generator/generated.test.ts` | Runs random programs, shrinks a failure, reports it with a seed |
 | `tests/generator/corpus.test.ts` | Runs every saved failure in `tests/corpus/` |
+| `tests/generator/sources.test.ts` | Random programs with sources, checked without a compiler: answered late or inline from the start, they must end on the same page (`sources.md`) |
 
 Run them with `bun test` in `packages/compiler-next` (no build needed), or one file:
 `bun test cases/handlers`. Generated programs: `FC_RUNS=200 bun test generator`

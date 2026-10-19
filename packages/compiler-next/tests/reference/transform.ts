@@ -94,7 +94,7 @@ const GUARDABLE_STATEMENTS = new Set<string>([
 
 const RUNTIME_EXPORTS = [
   '$h', 'Fragment as $Fragment', '$enter', '$assignRef', '$moduleEffect', '$moduleMemo',
-  '$when', '$value', '$waiting', '$sourceState', '$branch', '$switch', '$path',
+  '$when', '$value', '$waiting', '$sourceState', '$branch', '$switch', '$path', '$ready',
 ];
 
 // ---------------------------------------------------------------------------
@@ -452,9 +452,13 @@ class ComponentRewrite {
       const wrapped = plan.observeIndex === undefined ? statement : this.observed(statement, plan);
       const inputs = this.guardInputs(statement);
       const run = blockThunk([wrapped]);
-      const guarded = b.ExpressionStatement({
-        expression: ctxCall('statement', [numberLiteral(index), inputs, run]),
-      }) as Statement;
+      const builtCells = [...plan.builds]
+        .map((binding) => this.slots.get(binding))
+        .filter((slot) => slot?.treatment === 'cell')
+        .map((slot) => identifier(slot!.name));
+      const args = [numberLiteral(index), inputs, run];
+      if (builtCells.length > 0) args.push(b.ArrayExpression({ elements: builtCells }));
+      const guarded = b.ExpressionStatement({ expression: ctxCall('statement', args) }) as Statement;
 
       const everyRender = [...plan.builds].some((binding) => {
         const slot = this.slots.get(binding);
@@ -541,14 +545,16 @@ class ComponentRewrite {
       if (slot.treatment === 'prop' || this.patternOrigins.has(binding)) continue;
       const declarator = this.declaratorOf(binding)!;
       const initialValue = declarator.init ?? identifier('undefined');
-      let prepared = waitForExpression(initialValue, this.readsOf());
-      const builderInputs = this.builderInputs(binding);
-      if (builderInputs !== undefined) prepared = runtimeCall('$when', [builderInputs, thunk(prepared)]);
-      const initial = thunk(prepared);
+      const initial = thunk(waitForExpression(initialValue, this.readsOf()));
+      // The slot holds the initializer's value at once; while statements that build
+      // it wait for a source, rendering waits too (`$ready`).
+      const pending = this.builderInputs(binding);
       const index = numberLiteral(slot.index);
-      const created = slot.treatment === 'cell'
-        ? ctxCall('cell', [index, initial])
-        : ctxCall('memo', [index, this.inputsOf(binding, declarator.init), initial]);
+      const args = slot.treatment === 'cell'
+        ? [index, initial]
+        : [index, this.inputsOf(binding, declarator.init), initial];
+      if (pending !== undefined) args.push(pending);
+      const created = ctxCall(slot.treatment === 'cell' ? 'cell' : 'memo', args);
       declarations.push({ declarator, slot, created });
     }
 
@@ -688,7 +694,10 @@ class ComponentRewrite {
 
       const callback = call.arguments[0] as Expression;
       const index = numberLiteral(this.nextSlot++);
-      const inputs = this.inputList(this.reads.ofCallback(callback), [callback]);
+      const elements = [...this.reads.ofCallback(callback)].map((binding) => {
+        return statusInput(binding, this.guardRead(binding), [callback], this.rawUses);
+      });
+      const inputs = thunk(b.ArrayExpression({ elements }));
       this.lifecycleCalls.set(call, ctxCall('effect', [index, inputs, callback]));
     }
   }
@@ -718,7 +727,18 @@ class ComponentRewrite {
 
   /** Reads for `$when` guards: each binding through its slot, and each `a.b.c` path from one. */
   private readsOf(keep: (binding: Binding) => boolean = () => true): ReadsOf {
-    return readsWithPaths(this.reads, (binding) => this.readOf(binding), this.rawUses, keep);
+    return readsWithPaths(this.reads, (binding) => this.guardRead(binding), this.rawUses, keep);
+  }
+
+  /**
+   * A binding as a guard or effect input: `$ready($s2)` when body statements build
+   * it (it waits while they wait for a source), otherwise its value.
+   */
+  private guardRead(binding: Binding): Expression {
+    const slot = this.slots.get(binding);
+    const built = [...this.plans.values()].some((plan) => plan.builds.has(binding) || plan.mayBuild.includes(binding));
+    if (slot === undefined || slot.treatment === 'prop' || !built) return this.readOf(binding);
+    return runtimeCall('$ready', [identifier(slot.name)]);
   }
 
   /** `() => [inputs]` of a guard on `root`, branch by branch (`inputsOf`). */

@@ -383,6 +383,13 @@ are nailed first.
      are memos. Only a replacement keeps old content now (decision row); two
      `2dfaa72` expectations changed with it. The old compiler fails four of the
      five. 185 reference cases pass.
+   - done: the rest of the source list. `if`/`switch` statements are lazy (5
+     cases); server function fixtures from the real client generator (2 cases);
+     generated source programs checked against their inline twins (no compiler
+     needed). The generator found two reference bugs, now cases: a waiting value
+     replaced the real one (a handler threw), and a late statement overwrote a
+     handler's write. The harness now fails a case when an event handler throws.
+     194 reference cases and 200 generated source programs pass.
    - next: complete reference work on `compiler/sources.md` and the remaining class
      cases on `compiler/state-and-derived.md`, including captured/private
      dependencies and the remaining readiness forms/APIs. Then extend generated programs with

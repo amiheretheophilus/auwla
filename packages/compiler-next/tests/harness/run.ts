@@ -18,13 +18,20 @@ const OUT = join(import.meta.dirname, '..', 'out');
 const RUNTIME_URL = pathToFileURL(join(import.meta.dirname, '..', 'reference', 'runtime.ts')).href;
 
 const cleanups = new Set<() => void>();
-afterEach(() => {
+afterEach(disposeRuns);
+
+/**
+ * Dispose every app, source and pending request, even after a failed run.
+ * Called after each test, and by the generators after each program: a program
+ * that threw must not leave requests for the next one to answer.
+ */
+export function disposeRuns(): void {
   clearCompiledApps();
   for (const cleanup of [...cleanups].reverse()) cleanup();
   cleanups.clear();
   clearDeferred();
   clearRequests();
-});
+}
 
 /** A failed assertion must not leave an app, effects or DOM in the next case. */
 function track(cleanup: () => void): () => void {
@@ -59,7 +66,8 @@ export async function observeBoth(name: string, testCase: Case): Promise<{ refer
   return { reference, compiled };
 }
 
-async function runOnReference(name: string, testCase: Case): Promise<Observations> {
+/** Run a case on the reference only. */
+export async function runOnReference(name: string, testCase: Case): Promise<Observations> {
   const disposeSources = track(beginSources(fetchForCase));
   const disposeModules = track(beginReferenceScope());
   const authored = { ...testCase.modules, './App.tsx': testCase.source };
@@ -69,10 +77,12 @@ async function runOnReference(name: string, testCase: Case): Promise<Observation
   finishSourceDeclarations();
 
   const container = attachContainer();
+  const errors = watchErrors();
   const app = renderApp(module.App as Component, container);
   const unmount = track(() => app.unmount());
   await settle();
   app.render();
+  errors.check('initial render');
   const observations = [observe('initial render', container)];
   testCase.check?.(container, 0);
 
@@ -80,6 +90,7 @@ async function runOnReference(name: string, testCase: Case): Promise<Observation
     perform(step, container);
     await settle();
     app.render();
+    errors.check(describeStep(step));
     observations.push(observe(describeStep(step), container));
     testCase.check?.(container, observations.length - 1);
   }
@@ -99,15 +110,18 @@ async function runOnCompiler(name: string, testCase: Case, compiler: Compiler): 
   const module = await importFiles(name, 'compiled', files, 'App.tsx');
 
   const container = attachContainer();
+  const errors = watchErrors();
   const app = compiler.mount(module, container);
   const unmount = track(() => app.unmount());
   await settle();
+  errors.check('initial render');
   const observations = [observe('initial render', container)];
   testCase.check?.(container, 0);
 
   for (const step of testCase.steps ?? []) {
     perform(step, container);
     await settle();
+    errors.check(describeStep(step));
     observations.push(observe(describeStep(step), container));
     testCase.check?.(container, observations.length - 1);
   }
@@ -154,6 +168,25 @@ function perform(step: Step, container: HTMLElement): void {
 
 function observe(label: string, container: HTMLElement): string {
   return `after ${label}:\n${serialize(container)}`;
+}
+
+/**
+ * An exception in an event handler does not reach the code that clicked: the DOM
+ * reports it as a window `error` event and carries on. A case must fail on it.
+ */
+function watchErrors(): { check(label: string): void } {
+  const errors: unknown[] = [];
+  const listener = (event: Event) => errors.push((event as ErrorEvent).error ?? event);
+  window.addEventListener('error', listener);
+  track(() => window.removeEventListener('error', listener));
+  return {
+    check(label) {
+      if (errors.length === 0) return;
+      const error = errors[0];
+      const message = error instanceof Error ? error.message : String(error);
+      throw new Error(`an event handler threw after ${label}: ${message}`, { cause: error });
+    },
+  };
 }
 
 /** Let promises and timers that are already due run. */

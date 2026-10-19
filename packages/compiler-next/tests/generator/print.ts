@@ -5,8 +5,17 @@
  * reads earlier ones, and a shrunk program is still valid.
  */
 import { parse } from 'yuku-parser';
-import type { Case } from '../harness/case';
-import type { Action, Condition, Derived, ListExpression, NumberExpression, Program, View } from './program';
+import type { Case, Step } from '../harness/case';
+import type {
+  Action,
+  Condition,
+  Derived,
+  ListExpression,
+  NumberExpression,
+  Program,
+  SourcePayload,
+  View,
+} from './program';
 
 interface Scope {
   numbers: number;
@@ -14,11 +23,31 @@ interface Scope {
   objects: number;
   /** Derived values visible here. */
   derived: number;
+  /** Sources that can be read here. Handlers never read them: a source may still be loading. */
+  sources: number;
 }
 
-export function printProgram(program: Program): Case {
-  const lines: string[] = ['export function App() {'];
+/**
+ * How sources are printed:
+ * - `loading`: `const s0 = $fetch('/s0')`; the steps respond to each request
+ *   between the clicks;
+ * - `inline`: `const s0 = { value, items }`, the same data there from the start;
+ *   the steps are only the clicks.
+ *
+ * Once every response has arrived, both must show the same page.
+ */
+export type SourceMode = 'loading' | 'inline';
 
+export function printProgram(program: Program, mode: SourceMode = 'loading'): Case {
+  const hasSources = program.sources.length > 0;
+  const lines: string[] = [];
+  if (hasSources) lines.push("import { $fetch, Group } from '@memoized-dom/data';", '');
+  lines.push('export function App() {');
+
+  program.sources.forEach((payload, i) => {
+    const value = mode === 'loading' ? `$fetch('/s${i}')` : printPayload(payload);
+    lines.push(`  const s${i} = ${value};`);
+  });
   program.numbers.forEach((value, i) => lines.push(`  let n${i} = ${value};`));
   program.lists.forEach((items, i) => lines.push(`  let l${i} = [${items.join(', ')}];`));
   program.objects.forEach((object, i) => lines.push(`  let o${i} = { a: ${object.a}, b: ${object.b} };`));
@@ -28,24 +57,51 @@ export function printProgram(program: Program): Case {
     lists: program.lists.length,
     objects: program.objects.length,
     derived: 0,
+    sources: program.sources.length,
   };
   program.derived.forEach((value, i) => {
     lines.push(...printDerived(value, i, scope));
     scope.derived = i + 1;
   });
 
-  lines.push('  return (', '    <main>');
-  program.views.forEach((value, i) => lines.push(`      ${printView(value, i, scope)}`));
+  // A derived value can come from a loading source, so with sources, handlers read neither.
+  const handlerScope: Scope = hasSources ? { ...scope, sources: 0, derived: 0 } : scope;
+  const indent = hasSources ? '        ' : '      ';
+  lines.push('  return (');
+  if (hasSources) lines.push('    <Group pending={() => <i>…</i>}>');
+  lines.push(`${indent.slice(2)}<main>`);
+  program.views.forEach((value, i) => lines.push(`${indent}${printView(value, i, scope)}`));
   program.actions.forEach((value, i) => {
-    lines.push(`      <button id="a${i}" onClick={() => { ${printAction(value, scope, program.derived)} }}>a${i}</button>`);
+    const body = printAction(value, handlerScope, program.derived);
+    lines.push(`${indent}<button id="a${i}" onClick={() => { ${body} }}>a${i}</button>`);
   });
-  lines.push('    </main>', '  );', '}');
+  lines.push(`${indent.slice(2)}</main>`);
+  if (hasSources) lines.push('    </Group>');
+  lines.push('  );', '}');
 
   const source = lines.join('\n');
   assertParses(source);
+  return { source, steps: printSteps(program, mode) };
+}
 
-  const steps = program.clicks.map((click) => ({ click: `#a${click % program.actions.length}` }));
-  return { source, steps };
+function printPayload(payload: SourcePayload): string {
+  return `{ value: ${payload.value}, items: [${payload.items.join(', ')}] }`;
+}
+
+/** The clicks, with each source's response inserted after `responses[i]` clicks. */
+function printSteps(program: Program, mode: SourceMode): Step[] {
+  const clicks: Step[] = program.clicks.map((click) => ({ click: `#a${click % program.actions.length}` }));
+  if (mode === 'inline') return clicks;
+
+  const steps: Step[] = [];
+  const respondAfter = program.sources.map((_, i) => Math.min(program.responses[i] ?? 0, clicks.length));
+  for (let position = 0; position <= clicks.length; position++) {
+    program.sources.forEach((payload, i) => {
+      if (respondAfter[i] === position) steps.push({ respond: `/s${i}`, value: payload });
+    });
+    if (position < clicks.length) steps.push(clicks[position]!);
+  }
+  return steps;
 }
 
 function assertParses(source: string): void {
@@ -73,6 +129,11 @@ function printDerived(value: Derived, i: number, scope: Scope): string[] {
       return [
         `  let ${name} = 0;`,
         `  for (const x of ${listName(value.list, scope)}) ${name} += x;`,
+      ];
+    case 'source-loop':
+      return [
+        `  let ${name} = 0;`,
+        `  for (const x of ${sourceItems(value.index, scope)}) ${name} += x;`,
       ];
   }
 }
@@ -138,6 +199,8 @@ function printNumber(value: NumberExpression, scope: Scope): string {
       return `${listName(value.list, scope)}.reduce((total, x) => total + x, 0)`;
     case 'property':
       return `${objectName(value.index, scope)}.${value.field}`;
+    case 'source-value':
+      return scope.sources === 0 ? '0' : `s${value.index % scope.sources}.value`;
     case 'add':
       return `(${printNumber(value.left, scope)} + ${printNumber(value.right, scope)})`;
     case 'times':
@@ -163,6 +226,7 @@ function printCondition(value: Condition, scope: Scope): string {
 }
 
 function printList(value: ListExpression, scope: Scope): string {
+  if (value.kind === 'source-items') return sourceItems(value.index, scope);
   const list = listName(value.index, scope);
   switch (value.kind) {
     case 'list':
@@ -174,6 +238,10 @@ function printList(value: ListExpression, scope: Scope): string {
     case 'sorted':
       return `[...${list}].sort((x, y) => x - y)`;
   }
+}
+
+function sourceItems(i: number, scope: Scope): string {
+  return scope.sources === 0 ? '[]' : `s${i % scope.sources}.items`;
 }
 
 function numberName(i: number, scope: Scope): string {

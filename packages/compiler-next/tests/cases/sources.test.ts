@@ -1380,3 +1380,52 @@ behaves('a POST server function is an action: it runs when called, then a refres
     expect(requestedUrls()).toEqual(history[observation]!);
   },
 });
+
+// ---------------------------------------------------------------------------
+// Found by the generated source programs (tests/generator/sources.test.ts).
+
+behaves('a handler uses the real value while a statement that may change it waits', {
+  source: `
+    import { $fetch, Group } from '@memoized-dom/data';
+    export function App() {
+      const settings = $fetch('/settings');
+      let items = [1, 2];
+      let total = 0;
+      if (settings.on) total = items.reduce((sum, x) => sum + x, 0);
+      return (
+        <Group pending={() => <i>loading</i>}>
+          <p>{items.length}</p>
+          <span>{total}</span>
+          <button onClick={() => { items.pop(); }}>pop</button>
+        </Group>
+      );
+    }`,
+  steps: [{ click: 'button' }, { respond: '/settings', value: { on: true } }],
+  check(container, observation) {
+    // `items.reduce(…)` may change `items` as far as anyone knows before it runs,
+    // so `items` waits with it; the handler still pops the real array.
+    expect(container.querySelector('p')?.textContent).toBe(['loading', 'loading', '1'][observation]);
+    expect(container.querySelector('span')?.textContent).toBe(['loading', 'loading', '1'][observation]);
+  },
+});
+
+behaves('a snapshot written before its source loads keeps the write', {
+  source: `
+    import { $fetch, Group } from '@memoized-dom/data';
+    export function App() {
+      const settings = $fetch('/settings');
+      let label = 'start';
+      if (settings.on) label = 'from source';
+      return (
+        <Group pending={() => <i>loading</i>}>
+          <p>{label}</p>
+          <button onClick={() => { label = 'clicked'; }}>set</button>
+        </Group>
+      );
+    }`,
+  steps: [{ click: 'button' }, { respond: '/settings', value: { on: true } }],
+  check(container, observation) {
+    // In JavaScript the body ran before the click, so the click's write is last.
+    expect(container.querySelector('p')?.textContent).toBe(['loading', 'clicked', 'clicked'][observation]);
+  },
+});
