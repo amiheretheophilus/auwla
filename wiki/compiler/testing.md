@@ -148,8 +148,14 @@ The keyed-draft assertion first exposed a reference settling bug; it passes afte
 the fix and then exposes a missing setup write notification in the old output.
 Four recovery assertions also caught stale failure retention in the reference;
 they pass after the fix and expose corresponding failures in the old compiler.
-All 136 reference cases pass their explicit assertions; `bun check` passes for
-24 files. This is
+The mixed class/state/JSX slice adds twenty cases: fourteen on
+`state-and-derived.md` (old compiler: thirteen pass, one fails) and six on
+`components.md` (three pass, three fail). Every case has explicit assertions;
+nineteen have both generated versions and one is rejected by the old compiler.
+Reference snapshots inspect data descriptors without invoking unused getters,
+and track static and symbol-backed data. The assertions first caught three
+reference gaps, then exposed the old compiler's four failures. All 156 reference
+cases pass; `bun check` passes for 24 files. This is
 still reference development, not permission to start the compiler.
 The old compiler has about 305 distinct `memo-dom:` messages. Most are internal
 invariants or contracts of the framework's own APIs (`route-to`, `$routed`, `Group`,

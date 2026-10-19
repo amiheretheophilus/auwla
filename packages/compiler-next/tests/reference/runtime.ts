@@ -417,8 +417,11 @@ function deepCopy(value: unknown, copies = new Map<object, unknown>(), sourceIde
     return sourceIdentityOnly ? { source: value.id } : { source: value.id, version: value.version, data: copy(value.data) };
   }
   if (value instanceof Waiting) return { waiting: value.sources.map(copy) };
-  if (typeof value === 'function') return FUNCTION;
-  if (value === null || typeof value !== 'object') return value;
+  if (typeof value === 'function' && !Reflect.ownKeys(value).some((key) => {
+    const descriptor = Object.getOwnPropertyDescriptor(value, key)!;
+    return descriptor.enumerable && 'value' in descriptor;
+  })) return FUNCTION;
+  if (value === null || (typeof value !== 'object' && typeof value !== 'function')) return value;
   if (value instanceof Node || value instanceof AssignRef) return value;
   if (copies.has(value)) return copies.get(value);
 
@@ -445,12 +448,21 @@ function deepCopy(value: unknown, copies = new Map<object, unknown>(), sourceIde
     return items;
   }
 
-  const fields: Record<string, unknown> = {};
-  copies.set(value, fields);
-  for (const [key, field] of Object.entries(value)) {
-    fields[key] = sourceIdentityOnly && isElement(value) && key === 'tag' ? field : copy(field);
+  // Inspect data descriptors, never getter results. Reads belong to authored
+  // code; taking a dependency snapshot must not execute an unused accessor.
+  // Static fields are data on the constructor function; symbols and hidden
+  // backing fields are data too, even though Object.entries omits them.
+  const fields: unknown[] = [];
+  const snapshot = { callable: typeof value === 'function', fields };
+  copies.set(value, snapshot);
+  for (const key of Reflect.ownKeys(value)) {
+    const descriptor = Object.getOwnPropertyDescriptor(value, key)!;
+    if (!('value' in descriptor)) continue;
+    if (typeof value === 'function' && !descriptor.enumerable) continue;
+    const field = descriptor.value;
+    fields.push([key, sourceIdentityOnly && isElement(value) && key === 'tag' ? field : copy(field)]);
   }
-  return fields;
+  return snapshot;
 }
 
 function deepEqual(left: unknown, right: unknown, visited = new Set<unknown>()): boolean {

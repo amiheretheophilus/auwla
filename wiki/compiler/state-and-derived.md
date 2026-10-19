@@ -150,3 +150,37 @@ refresh before component rendering.
 
 Not written yet: derivation writes at module scope (old message: "cannot assign
 computed").
+
+### Mixed state, classes and accessors
+
+Fourteen `complex state:` cases combine module and component state with native
+class behavior. They have explicit assertions after each interaction. The old
+compiler passes thirteen and fails one:
+
+| Case | Expected | Old compiler result |
+| --- | --- | --- |
+| `complex state: static class fields and getters feed component derivations` | Both summaries change from `3` to `5`, then `7` | Both stay on `3` after the first static-field write |
+
+The passing cases cover shared module instances alongside independent component
+instances; constructors with reactive arguments and constructor snapshots;
+preserving instance edits across unrelated writes; getters, setters, postfix
+results and clamping; inheritance, `super` and overridden methods; object-literal
+accessors; an imported class store combined with module and component values;
+constructors returning ordinary objects; direct private-field reads/writes through
+accessors and methods; computed accessors and destructured snapshots; setters
+updating several fields seen by sibling components; unused own getters; and
+symbol-backed accessor derivations.
+
+The reference's own-property snapshots (`tests/reference/runtime.ts`) inspect data
+descriptors, including symbols and non-enumerable backing fields, without
+invoking own getters. Constructor functions with static data are snapshotted too.
+Three unchanged assertions caught reference bugs before comparison: static fields
+were ignored, symbol data was ignored, and snapshots executed an unused getter.
+All fourteen cases now reach the old compiler and have both generated versions.
+
+This is not exhaustive class coverage. Still to model and test: cached derivations
+whose only input changes are private fields or values captured by getters; further
+prototype/descriptor changes; and Proxy/WeakMap-backed state. The tested private
+case reads the accessor directly in JSX; it does not validate private-only memo
+invalidation. These remain correctness requirements, never permitted failures
+for the rewrite. JSX combinations with class instances are on `components.md`.

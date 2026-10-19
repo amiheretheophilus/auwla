@@ -39,7 +39,27 @@ The old compiler rejects both:
 
 Passes today: a prop follows the parent.
 
+Six `complex JSX:` cases combine state with fragments, render callbacks, JSX stored
+in variables, helper-produced JSX, nested arrays, conditional nodes, spread props,
+class-backed keyed rows, and dynamic component tags. Explicit checks verify text,
+tag changes, keyed order and retained DOM after row edits/reordering/insertion.
+Three pass on the old compiler and three fail:
+
+| Case | Expected | Old compiler result |
+| --- | --- | --- |
+| `complex JSX: render callbacks combine fragments module state and local state` | Call `render(value)` and update its fragment with module/local changes | Rejects JSX prop `render` as "not rendered by the callee", although the callee calls it |
+| `complex JSX: spread props carry class values and setter callbacks to children` | A child callback invokes the setter and changes `A:1` to `A:2` | Keeps showing `A:1` |
+| `complex JSX: keyed class-backed rows retain local state through reordering and insertion` | Editing row `a` changes it from `a:v1` to `a:v2`, then state and DOM survive reorder/insert | First edit leaves `a:v1`; later old-compiler steps are not reached |
+
+The reference passes all six. Five have both generated versions in `tests/out/`;
+the render-callback rejection has its reference output and the diagnostic above,
+with no old compiled module. All three failures must pass on `compiler-next`.
+Class/accessor rules, cases and reference snapshot details are on
+`state-and-derived.md`.
+
 ## Open questions
 
 - Which component forms does the old compiler support that are not listed here
   (`page(...)`, presentation components)? Port each with a test.
+- Extend generated JSX programs with these combinations, including stateful member
+  tags, nested slots, changing captured values, and row removal/remount.

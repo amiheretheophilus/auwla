@@ -342,7 +342,17 @@ are nailed first.
      expected/actual rows on `compiler/sources.md`, including the earlier failures.
      Both generated versions are present for all eleven additions. All 136
      reference cases across 8 files pass; `bun check` passes for 24 files.
-   - next: complete reference work on `compiler/sources.md`, including captured
+   - done: twenty mixed class/state/JSX cases requested by the user: fourteen class,
+     constructor and accessor cases, plus six JSX combinations. The old compiler
+     passes sixteen and fails four (static-field derivations, render callbacks,
+     setter callbacks through spread props, class-backed keyed rows). Exact
+     expected/actual failures are on `compiler/state-and-derived.md` and
+     `compiler/components.md`. Fixed reference snapshots that missed static/symbol
+     data and invoked unused getters, keeping all assertions. Nineteen cases have
+     both generated versions; the render-callback case is rejected before emit.
+     All 156 reference cases across 8 files pass; `bun check` passes for 24 files.
+   - next: complete reference work on `compiler/sources.md` and the remaining class
+     cases on `compiler/state-and-derived.md`, including captured/private
      dependencies and the remaining readiness forms/APIs. Then extend generated programs with
      sources and failure/refresh/replacement sequences. No compiler work yet.
      No CI until the suite reaches thousands of cases.

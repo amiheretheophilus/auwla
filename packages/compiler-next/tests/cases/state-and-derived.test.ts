@@ -384,3 +384,237 @@ behaves('each keyed row keeps its own prop override', {
     expect(container.querySelector('ul')?.textContent).toBe(['eaeb', 'eAeb', 'eAebec'][observation]);
   },
 });
+
+behaves('complex state: module instances are shared while component instances stay independent', {
+  source: `
+    class Counter { constructor(value) { this.value = value; } get doubled() { return this.value * 2; } add() { this.value++; } }
+    const shared = new Counter(10);
+    function Panel({ id }) {
+      const local = new Counter(1);
+      const total = shared.doubled + local.doubled;
+      return <section id={id}><output>{shared.value}:{local.value}:{total}</output>
+        <button id={id + '-local'} onClick={() => local.add()}>local</button>
+        <button id={id + '-shared'} onClick={() => shared.add()}>shared</button></section>;
+    }
+    export function App() { return <main><Panel id="a" /><Panel id="b" /></main>; }`,
+  steps: [{ click: '#a-local' }, { click: '#b-shared' }, { click: '#b-local' }],
+  check(container, observation) {
+    expect(container.querySelector('#a output')?.textContent).toBe(['10:1:22', '10:2:24', '11:2:26', '11:2:26'][observation]);
+    expect(container.querySelector('#b output')?.textContent).toBe(['10:1:22', '10:1:22', '11:1:24', '11:2:26'][observation]);
+  },
+});
+
+behaves('complex state: constructor arguments rederive instances while unrelated writes preserve edits', {
+  source: `
+    let constructions = 0;
+    class Counter { constructor(value) { constructions++; this.value = value; } add() { this.value++; } }
+    export function App() {
+      let seed = 1; let other = 0;
+      const counter = new Counter(seed);
+      return <main><p>{counter.value}:{constructions}:{other}</p>
+        <button id="edit" onClick={() => counter.add()}>edit</button>
+        <button id="other" onClick={() => other++}>other</button>
+        <button id="seed" onClick={() => seed++}>seed</button></main>;
+    }`,
+  steps: [{ click: '#edit' }, { click: '#other' }, { click: '#seed' }],
+  check(container, observation) {
+    expect(container.querySelector('p')?.textContent).toBe(['1:1:0', '2:1:0', '2:1:1', '2:2:1'][observation]);
+  },
+});
+
+behaves('complex state: a reassigned class instance keeps its constructor snapshot', {
+  source: `
+    class Counter { constructor(value) { this.value = value; } }
+    export function App() {
+      let seed = 1; let counter = new Counter(seed);
+      return <main><p>{seed}:{counter.value}</p>
+        <button id="seed" onClick={() => seed++}>seed</button>
+        <button id="replace" onClick={() => { counter = new Counter(99); }}>replace</button></main>;
+    }`,
+  steps: [{ click: '#seed' }, { click: '#replace' }, { click: '#seed' }],
+  check(container, observation) { expect(container.querySelector('p')?.textContent).toBe(['1:1', '2:1', '2:99', '3:99'][observation]); },
+});
+
+behaves('complex state: getters setters and postfix writes preserve JavaScript results', {
+  source: `
+    class Meter {
+      constructor(value) { this.raw = value; }
+      get value() { return this.raw; }
+      set value(next) { this.raw = Math.max(0, next); }
+      get doubled() { return this.raw * 2; }
+    }
+    export function App() {
+      const meter = new Meter(2); let previous = -1;
+      const doubled = meter.doubled;
+      return <main><p>{meter.value}:{doubled}:{previous}</p>
+        <button id="inc" onClick={() => { previous = meter.value++; }}>inc</button>
+        <button id="clamp" onClick={() => { meter.value = -5; }}>clamp</button></main>;
+    }`,
+  steps: [{ click: '#inc' }, { click: '#clamp' }, { click: '#inc' }],
+  check(container, observation) { expect(container.querySelector('p')?.textContent).toBe(['2:4:-1', '3:6:2', '0:0:2', '1:2:0'][observation]); },
+});
+
+behaves('complex state: inherited constructors accessors and overridden methods update derivations', {
+  source: `
+    class Base {
+      constructor(value) { this.raw = value; }
+      get value() { return this.raw; }
+      set value(next) { this.raw = next; }
+      add(amount) { this.value += amount; }
+    }
+    class Counter extends Base {
+      constructor(value) { super(value); this.factor = 2; }
+      get total() { return super.value * this.factor; }
+      add(amount = 1) { super.add(amount * this.factor); }
+    }
+    export function App() {
+      const counter = new Counter(3); const total = counter.total;
+      return <main><p>{counter.value}:{total}</p><button onClick={() => counter.add()}>add</button></main>;
+    }`,
+  steps: [{ click: 'button' }, { click: 'button' }],
+  check(container, observation) { expect(container.querySelector('p')?.textContent).toBe(['3:6', '5:10', '7:14'][observation]); },
+});
+
+behaves('complex state: static class fields and getters feed component derivations', {
+  source: `
+    class Totals { static count = 1; static get doubled() { return this.count * 2; } static add() { this.count++; } }
+    function Summary() { const shown = Totals.doubled + 1; return <output>{shown}</output>; }
+    export function App() { return <main><Summary /><Summary /><button onClick={() => Totals.add()}>add</button></main>; }`,
+  steps: [{ click: 'button' }, { click: 'button' }],
+  check(container, observation) {
+    expect([...container.querySelectorAll('output')].map(node => node.textContent)).toEqual([['3', '3'], ['5', '5'], ['7', '7']][observation]!);
+  },
+});
+
+behaves('complex state: object getters and setters update derived values and child props', {
+  source: `
+    function Label({ value }) { return <output>{value}</output>; }
+    export function App() {
+      const model = { raw: 2, get value() { return this.raw; }, set value(next) { this.raw = next; }, get doubled() { return this.raw * 2; } };
+      const label = model.doubled + '!';
+      return <main><Label value={label} /><p>{model.value}</p><button onClick={() => { model.value += 3; }}>add</button></main>;
+    }`,
+  steps: [{ click: 'button' }],
+  check(container, observation) {
+    expect(container.querySelector('output')?.textContent).toBe(['4!', '10!'][observation]);
+    expect(container.querySelector('p')?.textContent).toBe(['2', '5'][observation]);
+  },
+});
+
+behaves('complex state: an imported class store combines module and component changes', {
+  modules: {
+    './store.ts': `
+      class Cart { constructor() { this.qty = 1; this.price = 5; } get total() { return this.qty * this.price; } add() { this.qty++; } }
+      export const cart = new Cart(); export let tax = 1;
+      export function increase() { cart.add(); } export function setTax(value) { tax = value; }`,
+  },
+  source: `
+    import { cart, tax, increase, setTax } from './store';
+    function Summary({ discount }) { const total = cart.total + tax - discount; return <output>{total}</output>; }
+    export function App() {
+      let discount = 0;
+      return <main><Summary discount={discount} /><p>{cart.qty}:{tax}</p>
+        <button id="cart" onClick={increase}>cart</button><button id="tax" onClick={() => setTax(3)}>tax</button>
+        <button id="discount" onClick={() => { discount = 2; }}>discount</button></main>;
+    }`,
+  steps: [{ click: '#cart' }, { click: '#tax' }, { click: '#discount' }],
+  check(container, observation) {
+    expect(container.querySelector('output')?.textContent).toBe(['6', '11', '13', '11'][observation]);
+    expect(container.querySelector('p')?.textContent).toBe(['1:1', '2:1', '2:3', '2:3'][observation]);
+  },
+});
+
+behaves('complex state: constructors may return an ordinary object with methods', {
+  source: `
+    class Factory { constructor(value) { return { value, add() { this.value++; }, get label() { return 'v' + this.value; } }; } }
+    export function App() {
+      const model = new Factory(1); const label = model.label;
+      return <main><p>{label}</p><button onClick={() => model.add()}>add</button></main>;
+    }`,
+  steps: [{ click: 'button' }],
+  check(container, observation) { expect(container.querySelector('p')?.textContent).toBe(['v1', 'v2'][observation]); },
+});
+
+behaves('complex state: private fields remain usable through getters setters and methods', {
+  source: `
+    class Counter {
+      #value;
+      constructor(value) { this.#value = value; }
+      get value() { return this.#value; }
+      set value(next) { this.#value = next; }
+      add() { this.#value++; }
+    }
+    export function App() {
+      const counter = new Counter(1);
+      return <main><p>{counter.value}</p><button id="add" onClick={() => counter.add()}>add</button>
+        <button id="set" onClick={() => { counter.value = 10; }}>set</button></main>;
+    }`,
+  steps: [{ click: '#add' }, { click: '#set' }],
+  check(container, observation) { expect(container.querySelector('p')?.textContent).toBe(['1', '2', '10'][observation]); },
+});
+
+behaves('complex state: computed accessors and destructuring retain getter values and snapshots', {
+  source: `
+    const field = 'value';
+    class Counter {
+      constructor(value) { this.raw = value; }
+      get [field]() { return this.raw; }
+      set [field](next) { this.raw = next; }
+    }
+    export function App() {
+      const counter = new Counter(2); const { value: derived } = counter; let saved = counter[field];
+      return <main><p>{derived}:{saved}</p><button id="add" onClick={() => { counter[field] += 2; }}>add</button>
+        <button id="save" onClick={() => { saved = counter[field]; }}>save</button></main>;
+    }`,
+  steps: [{ click: '#add' }, { click: '#save' }, { click: '#add' }],
+  check(container, observation) { expect(container.querySelector('p')?.textContent).toBe(['2:2', '4:2', '4:4', '6:4'][observation]); },
+});
+
+behaves('complex state: module setters can change several fields seen by sibling components', {
+  source: `
+    class Range {
+      constructor() { this.low = 1; this.high = 3; }
+      set center(next) { const width = this.high - this.low; this.low = next - width / 2; this.high = next + width / 2; }
+      get label() { return this.low + '-' + this.high; }
+    }
+    const range = new Range();
+    function Summary() { const label = range.label; return <output>{label}</output>; }
+    export function App() { return <main><Summary /><Summary /><button onClick={() => { range.center = 5; }}>move</button></main>; }`,
+  steps: [{ click: 'button' }],
+  check(container, observation) {
+    expect([...container.querySelectorAll('output')].map(node => node.textContent)).toEqual([['1-3', '1-3'], ['4-6', '4-6']][observation]!);
+  },
+});
+
+behaves('complex state: dependency snapshots never invoke an unused own getter', {
+  source: `
+    class Counter {
+      constructor() {
+        this.value = 1;
+        Object.defineProperty(this, 'unused', { enumerable: true, get() { throw new Error('unused getter executed'); } });
+      }
+      add() { this.value++; }
+    }
+    export function App() {
+      const counter = new Counter(); const label = counter.value * 2;
+      return <main><p>{label}</p><button onClick={() => counter.add()}>add</button></main>;
+    }`,
+  steps: [{ click: 'button' }],
+  check(container, observation) { expect(container.querySelector('p')?.textContent).toBe(['2', '4'][observation]); },
+});
+
+behaves('complex state: symbol-backed accessors update cached derivations', {
+  source: `
+    const field = Symbol('value');
+    class Counter {
+      constructor() { this[field] = 1; }
+      get value() { return this[field]; }
+      set value(next) { this[field] = next; }
+    }
+    export function App() {
+      const counter = new Counter(); const doubled = counter.value * 2;
+      return <main><p>{counter.value}:{doubled}</p><button onClick={() => { counter.value++; }}>add</button></main>;
+    }`,
+  steps: [{ click: 'button' }, { click: 'button' }],
+  check(container, observation) { expect(container.querySelector('p')?.textContent).toBe(['1:2', '2:4', '3:6'][observation]); },
+});
