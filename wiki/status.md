@@ -299,7 +299,7 @@ compiler gets no more patches; bugs become tests.
    - next: the program generator (`fast-check`); the reference learns refs,
      `$effect` and sources; port the root tests listed above (`visible-effects`,
      `written-const-state`, `prop-writes`, `derived-literals`, `stray-keys`,
-     `reactive-refs`) as cases; CI on GitHub Actions if the user wants it.
+     `reactive-refs`) as cases. No CI until the suite reaches thousands of cases.
 2. Core: parse and resolve on yuku 0.19 (`compiler/toolchain.md`), then the graph.
 3. Features in slices, each end to end: static markup → state and text → handlers →
    conditionals → lists → components → sources and readiness → effects and refs →
