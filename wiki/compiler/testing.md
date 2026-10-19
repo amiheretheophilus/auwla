@@ -54,10 +54,11 @@ compiler rejected.
 - **CI** is GitHub Actions on `snrraptopack/memo-exp`. The repo is public, so it costs
   nothing. Every push to `compiler-rewrite` runs the full suite and a large generated
   batch.
-- **Performance:**
-  - shared runners give noisy timings, so a job runs the base and the change
-    alternately and reports the relative difference;
-  - stable numbers need a self-hosted runner on the separate VM.
+- **Performance** uses `bench/`, not CI:
+  1. A local run checks that the benchmarks pass their correctness gates. Local
+     timings are noisy and are not compared.
+  2. The user then runs `bench/` on a different machine. Those numbers are the ones
+     compared against the baseline below.
 
 ## Performance baseline
 
@@ -79,5 +80,5 @@ on the same benchmarks:
 
 ## Open questions
 
-- CI access: a fine-grained token limited to this repo, or a bot account?
-- What is the separate VM, and can it be a self-hosted runner?
+- CI for tests (not benchmarks): is it wanted, and with a fine-grained token limited
+  to this repo, or a bot account?
