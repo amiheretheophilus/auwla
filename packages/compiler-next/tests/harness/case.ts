@@ -9,6 +9,8 @@ export interface Case {
   /** The authored module, `App.tsx`. */
   source: string;
   steps?: Step[];
+  /** Additional assertions, on each renderer: 0 is mount, then one per step. */
+  check?: (container: HTMLElement, observation: number) => void;
 }
 
 export type Step =

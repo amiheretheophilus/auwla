@@ -73,7 +73,7 @@ const RUNTIME_EXPORTS = ['$h', 'Fragment as $Fragment', '$enter', '$assignRef', 
 // Entry point
 
 export function toReference(source: string, path: string, runtimeUrl: string): string {
-  const module = analyze(rewriteRefAttributes(source), { path });
+  const module = analyze(prepareJsx(source), { path });
   if (module.diagnostics.length > 0) {
     const messages = module.diagnostics.map((diagnostic) => diagnostic.message).join('; ');
     throw new Error(`reference: ${path} does not parse: ${messages}`);
@@ -104,17 +104,29 @@ function lowerJsxAndTypes(code: string): string {
 }
 
 // ---------------------------------------------------------------------------
-// Refs, before analysis
+// JSX sites and refs, before analysis
 
 /**
+ * Preserve the authored JSX site's identity, so separate branches own separate
+ * nodes even when their tags match. `$h` consumes the private site prop.
+ *
  * `ref={x}` and `ref={nodes.panel}` become
  * `ref={$assignRef(() => x, ($node) => { x = $node; })}`, so the runtime can fill
  * and clear the variable. The write is inside a function, so `x` is a binding
  * reassigned later, which the analysis below sees like any other.
  */
-function rewriteRefAttributes(source: string): string {
+function prepareJsx(source: string): string {
   const { program } = parse(source, { lang: 'tsx', sourceType: 'module' });
+  let site = 0;
   walk(program, {
+    JSXOpeningElement(node) {
+      // Separate branches can return the same tag at the same position. They
+      // still own different nodes (and refs), so preserve the authored site.
+      node.attributes.push(b.JSXAttribute({
+        name: b.JSXIdentifier({ name: '$referenceSite' }),
+        value: b.JSXExpressionContainer({ expression: numberLiteral(site++) }),
+      }));
+    },
     JSXAttribute(node) {
       const isRef = is.JSXIdentifier(node.name) && node.name.name === 'ref';
       if (!isRef || !is.JSXExpressionContainer(node.value)) return;

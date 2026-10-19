@@ -2,22 +2,45 @@
  * Runs a case on the reference renderer and on a compiler, and compares what
  * the user sees after the first render and after every step.
  */
-import { expect, it } from 'bun:test';
+import { afterEach, expect, it } from 'bun:test';
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { renderApp, type Component } from '../reference/runtime';
 import { toReference } from '../reference/transform';
 import { clearDeferred, describeStep, resolveDeferred, type Case, type Step } from './case';
-import { selectedCompiler, type Compiler } from './compilers';
+import { clearCompiledApps, selectedCompiler, type Compiler } from './compilers';
 import { serialize } from './serialize';
 
 const OUT = join(import.meta.dirname, '..', 'out');
 const RUNTIME_URL = pathToFileURL(join(import.meta.dirname, '..', 'reference', 'runtime.ts')).href;
 
+const cleanups = new Set<() => void>();
+afterEach(() => {
+  clearCompiledApps();
+  for (const cleanup of [...cleanups].reverse()) cleanup();
+  cleanups.clear();
+  clearDeferred();
+});
+
+/** A failed assertion must not leave an app, effects or DOM in the next case. */
+function track(cleanup: () => void): () => void {
+  const release = () => {
+    cleanups.delete(release);
+    cleanup();
+  };
+  cleanups.add(release);
+  return release;
+}
+
 /** Register a test: the compiled app must look like the reference after every step. */
 export function behaves(name: string, testCase: Case): void {
   it(name, async () => {
+    // Validate the oracle's explicit checks before a new compiler is available.
+    if (process.env.REFERENCE_ONLY === '1') {
+      await runOnReference(name, testCase);
+      return;
+    }
     const { reference, compiled } = await observeBoth(name, testCase);
     expect(compiled).toEqual(reference);
   });
@@ -39,15 +62,19 @@ async function runOnReference(name: string, testCase: Case): Promise<Observation
 
   const container = attachContainer();
   const app = renderApp(module.App as Component, container);
+  const unmount = track(() => app.unmount());
   const observations = [observe('initial render', container)];
+  testCase.check?.(container, 0);
 
   for (const step of testCase.steps ?? []) {
     perform(step, container);
     await settle();
     app.render();
     observations.push(observe(describeStep(step), container));
+    testCase.check?.(container, observations.length - 1);
   }
 
+  unmount();
   container.remove();
   clearDeferred();
   return observations;
@@ -59,16 +86,19 @@ async function runOnCompiler(name: string, testCase: Case, compiler: Compiler): 
 
   const container = attachContainer();
   const app = compiler.mount(module, container);
+  const unmount = track(() => app.unmount());
   await settle();
   const observations = [observe('initial render', container)];
+  testCase.check?.(container, 0);
 
   for (const step of testCase.steps ?? []) {
     perform(step, container);
     await settle();
     observations.push(observe(describeStep(step), container));
+    testCase.check?.(container, observations.length - 1);
   }
 
-  app.unmount();
+  unmount();
   container.remove();
   clearDeferred();
   return observations;
@@ -108,6 +138,7 @@ async function settle(): Promise<void> {
 function attachContainer(): HTMLElement {
   const container = document.createElement('div');
   document.body.append(container);
+  track(() => container.remove());
   return container;
 }
 

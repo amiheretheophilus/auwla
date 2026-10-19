@@ -9,7 +9,7 @@
 | --- | --- |
 | `tests/reference/transform.ts` | Turns a module into a reference module: decides which bindings need a slot (built on `yuku-analyzer`, `yuku-ast`, `yuku-codegen`) |
 | `tests/reference/runtime.ts` | Runs the reference: re-renders everything, keeps slots per component instance |
-| `tests/harness/case.ts` | The `Case` and `Step` types, and `defer(name)` for async cases |
+| `tests/harness/case.ts` | The `Case` and `Step` types, optional `check(container, observation)` assertions, and `defer(name)` for async cases |
 | `tests/harness/run.ts` | `behaves(name, case)`: runs the case on the reference and on a compiler, compares after each step |
 | `tests/harness/compilers.ts` | The compilers a case can run on; `COMPILER=old` (default) is `packages/compiler` |
 | `tests/harness/serialize.ts` | The visible DOM as a comparable string |
@@ -23,6 +23,13 @@ Run them with `bun test` in `packages/compiler-next` (no build needed), or one f
 `bun test cases/handlers`. Generated programs: `FC_RUNS=200 bun test generator`
 (default 25), `FC_SEED=<seed>` to repeat a run, `SAVE_CORPUS=1` to keep the shrunk
 failure.
+
+`REFERENCE_ONLY=1 bun test cases` runs the reference without compiling. Each case's
+optional `check` runs after mount (observation 0) and after each step, on both
+renderers in the default mode. The ported regressions use it to assert known text
+and DOM identity independently of the comparison, so two wrong renderers cannot
+agree unnoticed. On PowerShell, set `$env:REFERENCE_ONLY = '1'` before the command;
+remove it with `Remove-Item Env:REFERENCE_ONLY` to restore comparisons.
 
 ## What it does
 
@@ -53,10 +60,20 @@ slow and obviously correct.
    reference uses no method list: it sees what really happened. If the statement
    changed the value, it builds it from then on.
 
-   DOM nodes are kept between renders, matched by position, `key` and tag, so refs,
+   DOM nodes are kept between renders, matched by authored JSX site, position, key
+   and tag, so refs,
    typed text and focus survive; each render updates their props and order. After
    that, refs are installed and effects run, and the app renders again until nothing
    changes. Component calls are matched to their instance the same way.
+
+   Separate JSX branches own separate nodes even when their tags match. A key on
+   a returned root also participates in matching. Unchanged authored children leave
+   imperative DOM work intact. Effects compare inputs after refs mount and save
+   them after their synchronous writes, so they do not immediately re-trigger
+   themselves. Removing an effect also schedules another pass for cleanup writes.
+   Ten passes without settling is an error, never a silently accepted result.
+   The harness disposes apps and removes DOM even after a failed assertion or a
+   failed compiled mount.
 
    That is `state-and-derived.md`, `refs.md` and `effects.md`, executable.
 
@@ -84,8 +101,11 @@ slow and obviously correct.
 
 The first cases are the **Cases to test** section of each concept page, written in
 `tests/cases/<page>.test.ts`. Each one is a case the old compiler rejects or shows
-wrong, or behaviour it must keep. On 2026-10-19, against the old compiler: 32 pass
-and 18 fail, each failure a known old-compiler bug listed on its page.
+wrong, or behaviour it must keep. On 2026-10-19, against the old compiler: 64 pass
+and 19 fail, each failure an old-compiler bug listed on its page. All 83 cases
+run on the reference; its explicit text and node-identity checks pass. The 33 added
+cases port the root regressions for written values, derived literals, prop writes,
+visible effects, keys and reactive refs (existing cases cover overlapping forms).
 The old compiler has about 305 distinct `memo-dom:` messages. Most are internal
 invariants or contracts of the framework's own APIs (`route-to`, `$routed`, `Group`,
 `page()`, `mount()`, server functions); those stay. Only messages that reject

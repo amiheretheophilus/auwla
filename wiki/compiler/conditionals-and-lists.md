@@ -69,7 +69,14 @@ These pass today and must keep passing:
 - filter-then-map;
 - `??` in JSX;
 - an early return.
+- an inline array list reading state;
+- `map(Row)` with a function reference;
+- literal keys on interactive markup;
+- keyed components retaining state on unrelated updates and remounting on key
+  changes, including a key on a returned component root;
+- keyed host nodes being replaced (asserted by DOM identity);
+- keys in conditional branches and component roots.
 
-Not written yet: `<p>{...items}</p>` (JSX spread children), `map(Row)`. Old
+Not written yet: `<p>{...items}</p>` (JSX spread children). Old
 messages not yet checked against valid code: "control flow … test is not
 replayable", "conditional cannot choose between two data sources".

@@ -302,10 +302,17 @@ compiler gets no more patches; bugs become tests.
      (`6eac795`). 47 cases, 32 pass and 15 fail on the old compiler;
    - done: the reference sees at runtime whether a body statement's call changed
      a value (`$ctx.observe`). 50 cases, 32 pass and 18 fail on the old compiler;
+   - done: ported the remaining root regression forms from `visible-effects`,
+     `written-const-state`, `prop-writes`, `derived-literals`, `stray-keys` and
+     `reactive-refs`, grouped on their concept pages. 83 cases: the reference runs
+     all of them and passes the explicit text/DOM-identity checks; the old compiler
+     passes 64 and fails 19. The extra failure is a self-triggering effect that logs
+     ref identities to a module array. Reference fixes preserve imperative ref DOM,
+     distinct JSX branches and returned-root keys, read effect inputs after refs
+     mount, and replay cleanup writes. `bun check` passes. Harness cleanup also
+     runs after failed assertions and failed compiled mounts.
    - next: sources (`$fetch`, `$read`, server functions) and `Group` in the
-     reference; port the root tests listed above (`visible-effects`,
-     `written-const-state`, `prop-writes`, `derived-literals`, `stray-keys`,
-     `reactive-refs`) as cases. No CI until the suite reaches thousands of cases.
+     reference. No CI until the suite reaches thousands of cases.
 2. Core: parse and resolve on yuku 0.19 (`compiler/toolchain.md`), then the graph.
 3. Features in slices, each end to end: static markup → state and text → handlers →
    conditionals → lists → components → sources and readiness → effects and refs →

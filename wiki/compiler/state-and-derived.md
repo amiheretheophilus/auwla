@@ -130,6 +130,18 @@ These pass today and must keep passing:
 - reassigning a prop with `++`, then the parent sends a new value;
 - writing a module value derived from module state;
 - destructuring reactive state.
+- values returned by helpers, `concat`, an object spread member and `Array.from`,
+  with both `let` and `const`, rendered as text or keyed rows;
+- mutation of computed-key objects and helper-returned objects;
+- a handler reading a method chain on an array literal;
+- array, object and `new Set` initializers reading state;
+- reassigning a module object;
+- mutating a derived copy, then mutating its source;
+- prop overrides surviving unrelated prop updates, updating derivations, and
+  remaining independent in keyed rows.
+
+The ported root regressions also assert the known text after each step on both
+renderers (`Case.check`), independently of their DOM comparison.
 
 Not written yet: derivation writes at module scope (old message: "cannot assign
 computed").

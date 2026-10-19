@@ -6,7 +6,7 @@
  *
  * - every render calls every component again. The component body is setup code:
  *   `transform.ts` makes everything except derivations run on the first render only;
- * - DOM nodes are kept between renders, matched by position, `key` and tag, so refs,
+ * - DOM nodes are kept between renders, matched by authored site, position, key and tag, so refs,
  *   typed text and focus survive. Each render updates their props and order;
  * - after the DOM is updated, refs are installed and effects run. If that changed
  *   anything, the app renders again, until nothing changes.
@@ -21,6 +21,7 @@ export interface Element {
   tag: string | typeof Fragment | Component;
   props: Record<string, unknown>;
   children: unknown[];
+  site: unknown;
 }
 
 export type Component = (props: Record<string, unknown>) => unknown;
@@ -29,7 +30,8 @@ export const Fragment = Symbol('Fragment');
 
 /** The JSX factory of transformed modules. */
 export function $h(tag: Element['tag'], props: Record<string, unknown> | null, ...children: unknown[]): Element {
-  return { tag, props: props ?? {}, children };
+  const { $referenceSite: site, ...values } = props ?? {};
+  return { tag, props: values, children, site };
 }
 
 function isElement(value: unknown): value is Element {
@@ -109,8 +111,9 @@ interface MemoSlot {
 interface EffectSlot {
   inputs: unknown;
   teardown: (() => void) | undefined;
-  /** Set during a render when the effect must run in the next commit. */
-  pending: (() => unknown) | undefined;
+  readInputs: () => unknown[];
+  callback: () => unknown;
+  hasRun: boolean;
 }
 
 export class Instance {
@@ -171,14 +174,19 @@ export class Instance {
   /** `$effect(callback)`: runs after the commit when it is new or its inputs changed. */
   effect(index: number, readInputs: () => unknown[], callback: () => unknown): void {
     this.calledEffects.add(index);
-    const inputs = deepCopy(readInputs());
     const slot = this.effects.get(index);
 
     if (slot === undefined) {
-      this.effects.set(index, { inputs, teardown: undefined, pending: callback });
-    } else if (!deepEqual(slot.inputs, inputs)) {
-      slot.inputs = inputs;
-      slot.pending = callback;
+      this.effects.set(index, {
+        inputs: undefined,
+        teardown: undefined,
+        readInputs,
+        callback,
+        hasRun: false,
+      });
+    } else {
+      slot.readInputs = readInputs;
+      slot.callback = callback;
     }
   }
 
@@ -219,14 +227,19 @@ export class Instance {
         // Not called this render (its `if` is false now): destroyed.
         slot.teardown?.();
         this.effects.delete(index);
+        ran = true;
         continue;
       }
-      if (slot.pending === undefined) continue;
-      const callback = slot.pending;
-      slot.pending = undefined;
+      // Inputs are read after refs mount, at the same time as the callback.
+      const inputs = deepCopy(slot.readInputs());
+      if (slot.hasRun && deepEqual(slot.inputs, inputs)) continue;
+      slot.hasRun = true;
       slot.teardown?.();
       slot.teardown = undefined;
-      settleTeardown(callback(), (teardown) => (slot.teardown = teardown));
+      settleTeardown(slot.callback(), (teardown) => (slot.teardown = teardown));
+      // The effect already saw its own synchronous writes. They update the UI,
+      // but do not immediately re-trigger this effect.
+      slot.inputs = deepCopy(slot.readInputs());
       ran = true;
     }
     return ran;
@@ -290,9 +303,15 @@ class ModuleEffects {
       effect.teardown?.();
       effect.teardown = undefined;
       settleTeardown(effect.callback(), (teardown) => (effect.teardown = teardown));
+      effect.inputs = deepCopy(effect.readInputs());
       ran = true;
     }
     return ran;
+  }
+
+  unmount(): void {
+    for (const effect of this.effects) effect.teardown?.();
+    this.effects.length = 0;
   }
 }
 
@@ -378,6 +397,8 @@ interface HostRecord {
   properties: Map<string, unknown>;
   handlers: Map<string, EventListener>;
   teardownRef: (() => void) | undefined;
+  /** The last authored children; imperative DOM work survives an unchanged view. */
+  children: Node[];
 }
 
 interface TextRecord {
@@ -413,6 +434,18 @@ class Renderer {
       const effectsRan = this.runEffects();
       if (!refsInstalled && !effectsRan && this.container.innerHTML === before) return;
     }
+    throw new Error('reference: render did not settle after 10 passes');
+  }
+
+  unmount(): void {
+    for (const record of this.nodes.values()) {
+      if (record.kind === 'element') record.teardownRef?.();
+    }
+    for (const instance of this.instances.values()) instance.unmount();
+    this.moduleEffects.unmount();
+    this.nodes.clear();
+    this.instances.clear();
+    this.container.replaceChildren();
   }
 
   private renderOnce(): boolean {
@@ -454,6 +487,11 @@ class Renderer {
     if (Array.isArray(node)) return this.renderChildren(node, position, inSvg);
 
     if (!isElement(node)) return [this.renderText(String(node), position)];
+
+    if (node.site !== undefined) position += `/site=${String(node.site)}`;
+
+    // A key also matters when a component returns a keyed root directly.
+    if (node.props.key !== undefined && node.props.key !== null) position += `/key=${String(node.props.key)}`;
 
     if (node.tag === Fragment) return this.renderChildren(node.children, position, inSvg);
 
@@ -513,13 +551,26 @@ class Renderer {
       record = previous;
     } else {
       const element = svg ? document.createElementNS(SVG_NAMESPACE, tag) : document.createElement(tag);
-      record = { kind: 'element', node: element, attributes: new Map(), properties: new Map(), handlers: new Map(), teardownRef: undefined };
+      record = {
+        kind: 'element',
+        node: element,
+        attributes: new Map(),
+        properties: new Map(),
+        handlers: new Map(),
+        teardownRef: undefined,
+        children: [],
+      };
       if ('ref' in node.props) this.refsToInstall.push({ record, value: node.props.ref });
     }
 
     updateProps(record, node.props);
     const children = this.renderChildren(node.children, position, svg && tag !== 'foreignObject');
-    syncChildren(record.node, children);
+    const childrenChanged = children.length !== record.children.length
+      || children.some((child, index) => child !== record.children[index]);
+    if (childrenChanged) {
+      syncChildren(record.node, children);
+      record.children = children;
+    }
 
     this.renderedNodes.set(id, record);
     return record.node;
@@ -586,10 +637,11 @@ export interface ReferenceApp {
   container: HTMLElement;
   /** Render again from the current state, until nothing changes. */
   render(): void;
+  unmount(): void;
 }
 
 export function renderApp(root: Component, container: HTMLElement): ReferenceApp {
   const renderer = new Renderer(root, container);
   renderer.update();
-  return { container, render: () => renderer.update() };
+  return { container, render: () => renderer.update(), unmount: () => renderer.unmount() };
 }

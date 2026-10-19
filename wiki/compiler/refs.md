@@ -42,6 +42,16 @@ passing:
 - a callback ref that writes state;
 - several refs on one element;
 - a ref forwarded through a component.
+- a derivation reading a ref on mount;
+- ref readers following replacement, removal and remount;
+- imperative text written through a ref surviving unrelated renders;
+- each keyed row reading its own mounted ref.
+
+The old compiler fails the added case that logs ref identities to a module array
+inside an effect: mutating that array re-triggers the effect until the runtime's
+cycle guard throws. The reference runs once for mount and once for replacement;
+the case asserts both results explicitly. Separate JSX branches keep separate node
+identities even when both use the same tag.
 
 ## Open questions
 

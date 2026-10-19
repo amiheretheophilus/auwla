@@ -32,13 +32,18 @@ const oldCompiler: Compiler = {
     container.append(App('App', null));
     return {
       unmount() {
-        for (const id of registeredIds()) unregisterSubtree(id);
-        resetScheduler();
+        clearCompiledApps();
         container.replaceChildren();
       },
     };
   },
 };
+
+/** Also used after a failed mount, which cannot return its unmount callback. */
+export function clearCompiledApps(): void {
+  for (const id of registeredIds()) unregisterSubtree(id);
+  resetScheduler();
+}
 
 export function selectedCompiler(): Compiler {
   const choice = process.env.COMPILER ?? 'old';

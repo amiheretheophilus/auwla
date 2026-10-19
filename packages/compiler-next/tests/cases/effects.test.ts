@@ -1,6 +1,7 @@
 /**
  * Cases for wiki/compiler/effects.md.
  */
+import { expect } from 'bun:test';
 import { behaves } from '../harness/run';
 
 behaves('setup code in the body runs once', {
@@ -69,6 +70,9 @@ behaves('an effect inside an if exists while the condition holds', {
       return <main><p>{starts} {stops}</p><button onClick={() => (on = !on)}>toggle</button></main>;
     }`,
   steps: [{ click: 'button' }, { click: 'button' }],
+  check(container, observation) {
+    expect(container.querySelector('p')?.textContent).toBe(['0 0', '1 0', '1 1'][observation]);
+  },
 });
 
 behaves('an async effect', {
