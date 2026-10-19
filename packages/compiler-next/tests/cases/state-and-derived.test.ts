@@ -73,6 +73,61 @@ behaves('a loop in the body re-runs', {
   steps: [{ click: 'button' }],
 });
 
+behaves('a body loop that only reads a list keeps what handlers pushed into it', {
+  source: `
+    export function App() {
+      let others = [1, 2];
+      let picked = [];
+      let count = 0;
+      for (const x of others) if (picked.includes(x)) count++;
+      return (
+        <main>
+          <p>{picked.join(',')} {count}</p>
+          <button id="pick" onClick={() => picked.push(1)}>pick</button>
+          <button id="more" onClick={() => others.push(1)}>more</button>
+        </main>
+      );
+    }`,
+  steps: [{ click: '#pick' }, { click: '#more' }],
+});
+
+behaves('an unknown method that changes a value builds it', {
+  source: `
+    class Bag {
+      items = [];
+      add(x) { this.items.push(x); }
+    }
+    export function App() {
+      let source = [1, 2];
+      const bag = new Bag();
+      for (const n of source) bag.add(n);
+      return <main><p>{bag.items.join(',')}</p><button onClick={() => source.push(3)}>add</button></main>;
+    }`,
+  steps: [{ click: 'button' }],
+});
+
+behaves('an unknown method that only reads a value does not build it', {
+  source: `
+    class Bag {
+      items = [];
+      has(x) { return this.items.includes(x); }
+    }
+    export function App() {
+      let others = [1, 2];
+      const picked = new Bag();
+      let count = 0;
+      for (const x of others) if (picked.has(x)) count++;
+      return (
+        <main>
+          <p>{picked.items.join(',')} {count}</p>
+          <button id="pick" onClick={() => picked.items.push(2)}>pick</button>
+          <button id="more" onClick={() => others.push(2)}>more</button>
+        </main>
+      );
+    }`,
+  steps: [{ click: '#pick' }, { click: '#more' }],
+});
+
 behaves('a mutated derived copy keeps the edit until its source changes', {
   source: `
     export function App() {

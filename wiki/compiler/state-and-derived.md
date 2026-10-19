@@ -113,6 +113,10 @@ The old compiler fails these:
   re-run when `items` changes.
 - `<p>{a}{b} {count}</p>`: adjacent text values are joined with `+`, so two numbers
   are added (`0` instead of `00`, `2` instead of `11`).
+- A body loop that only reads a list (`if (picked.includes(x)) count++`): `count`
+  never updates (same cause as the loop above).
+- A body loop that calls an unknown method: `bag.add(n)` that changes `bag`, and
+  `picked.has(x)` that only reads it. Neither updates.
 
 These pass today and must keep passing:
 

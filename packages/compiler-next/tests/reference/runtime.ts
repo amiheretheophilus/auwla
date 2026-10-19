@@ -116,11 +116,15 @@ interface EffectSlot {
 export class Instance {
   /** True during the instance's first render. */
   first = true;
+  /** How many times the instance has rendered. A memo that reads it is computed on every render. */
+  render = 0;
   private readonly slots = new Map<number, CellSlot | PropSlot | MemoSlot>();
   private readonly effects = new Map<number, EffectSlot>();
   /** Effects called during the current render; the others are destroyed. */
   private readonly calledEffects = new Set<number>();
   private readonly cleanups: Array<() => void> = [];
+  /** `"statement:position"` pairs from `observe`: that statement changed that value. */
+  private readonly confirmations = new Set<string>();
 
   /** State: computed once, then changed only by writes. */
   cell(index: number, initial: () => unknown): CellSlot {
@@ -183,8 +187,27 @@ export class Instance {
     this.cleanups.push(fn);
   }
 
+  /**
+   * Run body statement `index`, which calls something that may change the values
+   * `readValues` returns. Each value that did change is confirmed: from then on the
+   * statement builds it (`confirmed(index, position)`).
+   */
+  observe(index: number, readValues: () => unknown[], run: () => void): void {
+    const before = readValues().map((value) => deepCopy(value));
+    run();
+    readValues().forEach((value, position) => {
+      if (!deepEqual(before[position], deepCopy(value))) this.confirmations.add(`${index}:${position}`);
+    });
+  }
+
+  /** Whether statement `index` was seen to change the value at `position`. */
+  confirmed(index: number, position: number): boolean {
+    return this.confirmations.has(`${index}:${position}`);
+  }
+
   /** Called before each render of the instance. */
   beginRender(): void {
+    this.render++;
     this.calledEffects.clear();
   }
 

@@ -6,21 +6,25 @@
  * when what they read changes. So each binding declared at the top of a component
  * gets one of these treatments:
  *
- * | Binding                                      | Treatment | Behaviour                               |
- * | -------------------------------------------- | --------- | --------------------------------------- |
- * | reassigned by code that runs later           | `cell`    | first value is a snapshot               |
- * | reads nothing                                | `cell`    | computed once                           |
- * | reads something                              | `memo`    | computed again when an input changes    |
- * | a prop reassigned by code that runs later    | `prop`    | overridden until the parent changes it  |
- * | a function, a parameter, a destructured name | plain     | recomputed on every render              |
+ * | Binding                                      | Treatment | Behaviour                              |
+ * | -------------------------------------------- | --------- | -------------------------------------- |
+ * | reassigned by code that runs later           | `cell`    | first value is a snapshot              |
+ * | any other `let x` / `const x`                | `memo`    | computed again when an input changes   |
+ * | a prop reassigned by code that runs later    | `prop`    | overridden until the parent changes it |
+ * | a function, a parameter, a destructured name | plain     | recomputed on every render             |
  *
- * "Code that runs later" is any function inside the component: a handler, a
- * callback, a timer. A binding's derivation is its initializer plus the body
- * statements that write or mutate it (`if (!label) label = 'Anonymous'`).
+ * A memo with no inputs is computed once. "Code that runs later" is any function
+ * inside the component: a handler, a callback, a timer.
  *
- * Every other body statement is setup: it runs on the first render only. Nothing
- * here looks at the names of methods or functions; any call that receives a value
- * counts as a possible mutation.
+ * A binding's derivation is its initializer plus the body statements that build it.
+ * A statement builds a binding when it changes it:
+ *
+ * - definitely: `x = …`, `x.a = …`, `x.n++`, `delete x.a`;
+ * - possibly: `x.anything(…)` or `f(x)`. The reference never guesses from names:
+ *   the statement runs inside `$ctx.observe(...)`, which compares the value before
+ *   and after. Once it is seen to change the value, it builds it.
+ *
+ * Every other body statement is setup: it runs on the first render only.
  */
 import { analyze, type Binding, type Module, type Reference } from 'yuku-analyzer';
 import { b, findAll, is, walk } from 'yuku-ast';
@@ -38,6 +42,16 @@ interface Slot {
   index: number;
   /** Local name that holds the slot, `$s0`, `$s1`, … */
   name: string;
+}
+
+/** What one body statement does to the component's bindings. */
+interface StatementPlan {
+  /** Bindings it changes for sure. */
+  builds: Set<Binding>;
+  /** Memo bindings it may change through a call. Their order is their `observe` position. */
+  mayBuild: Binding[];
+  /** Index for `$ctx.observe`, when `mayBuild` is not empty. */
+  observeIndex: number | undefined;
 }
 
 /** Statement types that can be wrapped in an `if` without changing scoping. */
@@ -167,14 +181,13 @@ class ComponentRewrite {
   private readonly slots = new Map<Binding, Slot>();
   /** `const { x, y } = point`: the slot holds the value being destructured. */
   private readonly patternSlots = new Map<VariableDeclarator, Slot>();
-  /** Body statements that build a binding's value, by binding. */
-  private readonly writers = new Map<Binding, Statement[]>();
-  /** Statement → the slots it belongs to; `setup` means it runs on the first render only. */
-  private readonly guards = new Map<Statement, Set<Slot> | 'setup'>();
+  /** Body statements that may build a binding. */
+  private readonly plans = new Map<Statement, StatementPlan>();
   /** `$effect(...)` and `$cleanup(...)` calls → their runtime calls. */
   private readonly lifecycleCalls = new Map<Node, Expression>();
 
   private nextSlot = 0;
+  private nextObserve = 0;
 
   constructor(
     private readonly module: Module,
@@ -185,16 +198,13 @@ class ComponentRewrite {
   }
 
   run(): void {
-    this.findWriters();
     this.chooseSlots();
-    this.chooseGuards();
+    this.planStatements();
 
     // Every new node is built before references are rewritten in place.
     const declarations = this.buildSlotDeclarations();
+    const statements = this.buildStatements();
     this.buildLifecycleCalls();
-    if (this.slots.size === 0 && this.patternSlots.size === 0 && this.guards.size === 0 && this.lifecycleCalls.size === 0) {
-      return;
-    }
 
     // Declarations first: an initializer then sits inside its thunk, where the walk
     // below rewrites it, even when the whole initializer is one name (`= point`).
@@ -202,27 +212,9 @@ class ComponentRewrite {
       if (is.Identifier(declarator.id)) declarator.id = b.Identifier({ name: slot.name });
       declarator.init = created;
     }
+    this.body.body = statements;
     this.rewriteUses();
-    this.wrapGuardedStatements();
     this.insertPrelude();
-  }
-
-  // --- Which statements build which binding --------------------------------
-
-  private findWriters(): void {
-    for (const binding of this.ownBindings()) {
-      const statements = new Set<Statement>();
-      const declaration = this.topStatementOf(binding.declarations[0]!);
-
-      for (const use of this.usesOf(binding)) {
-        if (this.runsLater(use) || !writesOrMutates(this.module, use)) continue;
-        const statement = this.topStatementOf(use.node);
-        if (statement !== undefined && statement !== declaration && this.canBuild(statement)) {
-          statements.add(statement);
-        }
-      }
-      this.writers.set(binding, [...statements]);
-    }
   }
 
   // --- Choosing a treatment for each binding -------------------------------
@@ -232,10 +224,8 @@ class ComponentRewrite {
       const treatment = this.treatmentOf(binding);
       if (treatment !== undefined) this.slots.set(binding, this.newSlot(treatment));
     }
-
     for (const declarator of this.patternDeclarators()) {
-      const treatment = this.reads.inside([declarator.init!], { exclude: undefined }).size > 0 ? 'memo' : 'cell';
-      this.patternSlots.set(declarator, this.newSlot(treatment));
+      this.patternSlots.set(declarator, this.newSlot('memo'));
     }
   }
 
@@ -259,15 +249,10 @@ class ComponentRewrite {
     if (this.isParameter(binding)) {
       return writtenLater && this.isSimpleParameter(binding) ? 'prop' : undefined;
     }
-    const declarator = this.declaratorOf(binding);
-    if (declarator === undefined || this.reads.functionOf(binding) !== undefined) {
+    if (this.declaratorOf(binding) === undefined || this.reads.functionOf(binding) !== undefined) {
       return undefined;
     }
-    if (writtenLater) return 'cell';
-
-    const roots: Node[] = [...this.writers.get(binding)!];
-    if (declarator.init) roots.push(declarator.init);
-    return this.reads.inside(roots, { exclude: binding }).size > 0 ? 'memo' : 'cell';
+    return writtenLater ? 'cell' : 'memo';
   }
 
   private isParameter(binding: Binding): boolean {
@@ -291,39 +276,46 @@ class ComponentRewrite {
       .filter((declarator) => !is.Identifier(declarator.id) && declarator.init !== null);
   }
 
-  // --- When each body statement runs ---------------------------------------
+  // --- What each body statement builds -------------------------------------
 
-  /**
-   * A statement that builds a derived value runs when that value is computed
-   * again. A statement that builds a cell runs on the first render only, like
-   * every other setup statement. A statement that builds a plain binding, or
-   * that contains a `return` or an `$effect`, runs on every render.
-   */
-  private chooseGuards(): void {
-    const owners = new Map<Statement, Set<Binding>>();
-    for (const [binding, statements] of this.writers) {
-      for (const statement of statements) {
-        const bindings = owners.get(statement) ?? new Set<Binding>();
-        bindings.add(binding);
-        owners.set(statement, bindings);
+  private planStatements(): void {
+    for (const binding of this.ownBindings()) {
+      const declaration = this.topStatementOf(binding.declarations[0]!);
+
+      for (const use of this.usesOf(binding)) {
+        if (this.runsLater(use)) continue;
+        const statement = this.topStatementOf(use.node);
+        if (statement === undefined || statement === declaration || !this.canBuild(statement)) continue;
+
+        const plan = this.planOf(statement);
+        const change = changeOf(this.module, use);
+        if (change === 'definite') {
+          plan.builds.add(binding);
+        } else if (change === 'possible') {
+          // Only a memo needs to know: a cell runs its statements once anyway, and a
+          // plain binding runs them on every render.
+          if (this.slots.get(binding)?.treatment === 'memo') {
+            if (!plan.mayBuild.includes(binding)) plan.mayBuild.push(binding);
+          } else {
+            plan.builds.add(binding);
+          }
+        }
       }
     }
 
-    for (const statement of this.body.body) {
-      if (!this.canBuild(statement)) continue;
-
-      const built = [...(owners.get(statement as Statement) ?? [])];
-      if (built.length === 0) {
-        this.guards.set(statement as Statement, 'setup');
-        continue;
-      }
-
-      // Plain bindings and props are new on every render, so their statements re-run.
-      const slots = built.map((binding) => this.slots.get(binding));
-      if (slots.some((slot) => slot === undefined || slot.treatment === 'prop')) continue;
-
-      this.guards.set(statement as Statement, new Set(slots as Slot[]));
+    for (const plan of this.plans.values()) {
+      plan.mayBuild = plan.mayBuild.filter((binding) => !plan.builds.has(binding));
+      if (plan.mayBuild.length > 0) plan.observeIndex = this.nextObserve++;
     }
+  }
+
+  private planOf(statement: Statement): StatementPlan {
+    let plan = this.plans.get(statement);
+    if (plan === undefined) {
+      plan = { builds: new Set(), mayBuild: [], observeIndex: undefined };
+      this.plans.set(statement, plan);
+    }
+    return plan;
   }
 
   /**
@@ -351,24 +343,62 @@ class ComponentRewrite {
     return this.enclosingFunction(call) === this.component;
   }
 
-  /** `stmt` becomes `if ($ctx.first || $s2.fresh) { stmt }`. */
-  private wrapGuardedStatements(): void {
-    this.body.body = this.body.body.map((statement) => {
-      const guard = this.guards.get(statement as Statement);
-      if (guard === undefined) return statement;
+  // --- When each body statement runs ---------------------------------------
 
-      // A memo's statements run when it is computed again; a cell's and setup run once.
-      const conditions = guard === 'setup'
-        ? [member('$ctx', 'first')]
-        : [...guard].map((slot) => (slot.treatment === 'memo' ? member(slot.name, 'fresh') : member('$ctx', 'first')));
-      const test = conditions.reduce((left, right) => b.LogicalExpression({ operator: '||', left, right }));
+  /**
+   * Setup statements run on the first render only. A statement that builds a memo
+   * runs again when that memo is computed again; one that may build a memo also
+   * runs inside `$ctx.observe`. A statement that builds a plain binding or a prop,
+   * or that cannot be guarded, runs on every render.
+   *
+   *   stmt   →   if ($ctx.first || $s2.fresh || ($ctx.confirmed(0, 0) && $s3.fresh)) {
+   *                $ctx.observe(0, () => [$s3.v], () => { stmt });
+   *              }
+   */
+  private buildStatements(): Statement[] {
+    return this.body.body.map((original) => {
+      const statement = original as Statement;
+      if (!this.canBuild(statement)) return statement;
 
-      return b.IfStatement({
-        test,
-        consequent: b.BlockStatement({ body: [statement as Statement] }),
-        alternate: null,
+      const plan = this.plans.get(statement) ?? { builds: new Set<Binding>(), mayBuild: [], observeIndex: undefined };
+      const wrapped = plan.observeIndex === undefined ? statement : this.observed(statement, plan);
+
+      const everyRender = [...plan.builds].some((binding) => {
+        const slot = this.slots.get(binding);
+        return slot === undefined || slot.treatment === 'prop';
       });
+      if (everyRender) return wrapped;
+
+      const conditions = [member('$ctx', 'first')];
+      for (const binding of plan.builds) {
+        const slot = this.slots.get(binding)!;
+        if (slot.treatment === 'memo') conditions.push(member(slot.name, 'fresh'));
+      }
+      plan.mayBuild.forEach((binding, position) => {
+        const confirmed = ctxCall('confirmed', [numberLiteral(plan.observeIndex!), numberLiteral(position)]);
+        const fresh = member(this.slots.get(binding)!.name, 'fresh');
+        conditions.push(b.LogicalExpression({ operator: '&&', left: confirmed, right: fresh }));
+      });
+
+      const test = conditions.reduce((left, right) => b.LogicalExpression({ operator: '||', left, right }));
+      return b.IfStatement({ test, consequent: b.BlockStatement({ body: [wrapped] }), alternate: null });
     });
+  }
+
+  /** `$ctx.observe(N, () => [$s3.v, …], () => { stmt });` */
+  private observed(statement: Statement, plan: StatementPlan): Statement {
+    const values = b.ArrayExpression({ elements: plan.mayBuild.map((binding) => this.readOf(binding)) });
+    const run = b.ArrowFunctionExpression({
+      id: null,
+      params: [],
+      body: b.BlockStatement({ body: [statement] }),
+      expression: false,
+      async: false,
+      generator: false,
+    });
+    const call = ctxCall('observe', [numberLiteral(plan.observeIndex!), thunk(values), run]);
+    // The builder's type also covers directives (`'use strict'`); this is a plain statement.
+    return b.ExpressionStatement({ expression: call }) as Statement;
   }
 
   // --- Building slot declarations and lifecycle calls ----------------------
@@ -385,31 +415,50 @@ class ComponentRewrite {
     for (const [binding, slot] of this.slots) {
       if (slot.treatment === 'prop') continue;
       const declarator = this.declaratorOf(binding)!;
-      const roots: Node[] = [...this.writers.get(binding)!];
-      if (declarator.init) roots.push(declarator.init);
-      const created = this.slotCall(slot, declarator.init, this.reads.inside(roots, { exclude: binding }));
+      const initial = thunk(declarator.init ?? identifier('undefined'));
+      const index = numberLiteral(slot.index);
+      const created = slot.treatment === 'cell'
+        ? ctxCall('cell', [index, initial])
+        : ctxCall('memo', [index, this.inputsOf(binding, declarator.init), initial]);
       declarations.push({ declarator, slot, created });
     }
 
     for (const [declarator, slot] of this.patternSlots) {
-      const inputs = this.reads.inside([declarator.init!], { exclude: undefined });
-      const created = b.MemberExpression({
-        object: this.slotCall(slot, declarator.init, inputs),
-        property: b.Identifier({ name: 'v' }),
-        computed: false,
-        optional: false,
-      });
+      const inputs = this.inputList(this.reads.inside([declarator.init!], undefined));
+      const memo = ctxCall('memo', [numberLiteral(slot.index), inputs, thunk(declarator.init!)]);
+      const created = b.MemberExpression({ object: memo, property: b.Identifier({ name: 'v' }), computed: false, optional: false });
       declarations.push({ declarator, slot, created });
     }
 
     return declarations;
   }
 
-  private slotCall(slot: Slot, init: Expression | null, inputs: Set<Binding>): Expression {
-    const index = numberLiteral(slot.index);
-    const initial = thunk(init ?? identifier('undefined'));
-    if (slot.treatment === 'cell') return ctxCall('cell', [index, initial]);
-    return ctxCall('memo', [index, this.inputList(inputs), initial]);
+  /**
+   * `() => [inputs…]` of a memo: what its initializer and the statements that build
+   * it read. A statement that may build it adds its reads once it is confirmed:
+   * `...($ctx.confirmed(0, 1) ? [reads] : [])`.
+   */
+  private inputsOf(binding: Binding, init: Expression | null): Expression {
+    const roots: Node[] = init ? [init] : [];
+    const maybe: Array<{ statement: Statement; plan: StatementPlan }> = [];
+    for (const [statement, plan] of this.plans) {
+      if (plan.builds.has(binding)) roots.push(statement);
+      if (plan.mayBuild.includes(binding)) maybe.push({ statement, plan });
+    }
+
+    const elements: Expression[] = this.readable(binding, this.reads.inside(roots, binding));
+    for (const { statement, plan } of maybe) {
+      const position = plan.mayBuild.indexOf(binding);
+      const reads = this.readable(binding, this.reads.inside([statement], binding));
+      const test = ctxCall('confirmed', [numberLiteral(plan.observeIndex!), numberLiteral(position)]);
+      const choice = b.ConditionalExpression({
+        test,
+        consequent: b.ArrayExpression({ elements: reads }),
+        alternate: b.ArrayExpression({ elements: [] }),
+      });
+      elements.push(b.SpreadElement({ argument: choice }) as never);
+    }
+    return thunk(b.ArrayExpression({ elements }));
   }
 
   /**
@@ -429,6 +478,29 @@ class ComponentRewrite {
       const inputs = this.inputList(this.reads.ofCallback(callback));
       this.lifecycleCalls.set(call, ctxCall('effect', [index, inputs, callback]));
     }
+  }
+
+  /**
+   * The inputs a memo can read where it is declared. An input declared later in the
+   * body cannot be read there (it is in its temporal dead zone), so it is replaced by
+   * `$ctx.render`, the render count: the memo is then computed on every render, which
+   * is always correct.
+   */
+  private readable(binding: Binding, inputs: Set<Binding>): Expression[] {
+    const declaredAt = binding.declarations[0]!.start;
+    const elements: Expression[] = [];
+    let declaredLater = false;
+
+    for (const input of inputs) {
+      const isOwn = this.slots.has(input) || this.ownBindings().includes(input);
+      if (isOwn && !this.isParameter(input) && input.declarations[0]!.start > declaredAt) {
+        declaredLater = true;
+        continue;
+      }
+      elements.push(this.readOf(input));
+    }
+    if (declaredLater) elements.push(member('$ctx', 'render'));
+    return elements;
   }
 
   /** `() => [a, $s1.v, …]`: reads the current value of each input. */
@@ -567,17 +639,18 @@ class Reads {
   constructor(private readonly module: Module) {}
 
   /** Everything read anywhere inside `roots`, including inside callbacks they contain. */
-  inside(roots: Node[], options: { exclude: Binding | undefined }): Set<Binding> {
+  inside(roots: Node[], exclude: Binding | undefined): Set<Binding> {
     const found = new Set<Binding>();
     for (const root of roots) this.collect(root, root, false, found, new Set());
-    if (options.exclude) found.delete(options.exclude);
+    if (exclude) found.delete(exclude);
     return found;
   }
 
   /**
    * What an effect callback reads while it runs: reads directly in its body, and in
    * local functions it calls. Reads inside callbacks it creates run later, so they
-   * are not inputs (`connection.onMessage(() => unread++)`).
+   * are not inputs (`connection.onMessage(() => unread++)`). Updates (`runs++`) are
+   * writes, not reads.
    */
   ofCallback(callback: Expression): Set<Binding> {
     const found = new Set<Binding>();
@@ -658,8 +731,10 @@ function member(object: string, property: string): Expression {
   });
 }
 
-/** `$ctx.cell(...)`, `$ctx.memo(...)`, `$ctx.prop(...)`, `$ctx.effect(...)`, `$ctx.cleanup(...)` */
-function ctxCall(method: Treatment | 'effect' | 'cleanup', args: Expression[]): Expression {
+type CtxMethod = Treatment | 'effect' | 'cleanup' | 'observe' | 'confirmed';
+
+/** `$ctx.cell(...)`, `$ctx.memo(...)`, `$ctx.observe(...)`, … */
+function ctxCall(method: CtxMethod, args: Expression[]): Expression {
   return b.CallExpression({ callee: member('$ctx', method), arguments: args, optional: false });
 }
 
@@ -691,15 +766,20 @@ function constDeclaration(name: string, init: Expression): Statement {
 // Uses
 
 /**
- * Whether a use writes the binding or may change the value it holds:
- * `x = 1`, `x.a = 1`, `x.n++`, `delete x.a`, `x.push(1)`, `f(x)`.
- * Any call counts, whatever the method or function is.
+ * How a use may change the value a binding holds:
+ *
+ * - `definite`: `x = 1`, `x += 1`, `x.a = 1`, `x.n++`, `delete x.a`;
+ * - `possible`: `x.push(1)`, `x.anything()`, `f(x)`, `new F(x)`. Whether it really
+ *   changes the value is seen at runtime;
+ * - `none`: a plain read.
  */
-function writesOrMutates(module: Module, use: Reference): boolean {
-  if (use.isWrite) return true;
+function changeOf(module: Module, use: Reference): 'definite' | 'possible' | 'none' {
+  if (use.isWrite) return 'definite';
 
   const parent = module.parentOf(use.node);
-  if (is.CallExpression(parent) && parent.arguments.includes(use.node as never)) return true;
+  if ((is.CallExpression(parent) || is.NewExpression(parent)) && parent.arguments.includes(use.node as never)) {
+    return 'possible';
+  }
 
   // Walk up `x.a.b` to the outermost member expression.
   let target: Node = use.node;
@@ -708,11 +788,11 @@ function writesOrMutates(module: Module, use: Reference): boolean {
     target = above;
     above = module.parentOf(target);
   }
-  if (target === use.node) return false;
+  if (target === use.node) return 'none';
 
-  if (is.AssignmentExpression(above) && above.left === target) return true;
-  if (is.UpdateExpression(above)) return true;
-  if (is.UnaryExpression(above) && above.operator === 'delete') return true;
-  if (is.CallExpression(above) && above.callee === target) return true;
-  return false;
+  if (is.AssignmentExpression(above) && above.left === target) return 'definite';
+  if (is.UpdateExpression(above)) return 'definite';
+  if (is.UnaryExpression(above) && above.operator === 'delete') return 'definite';
+  if (is.CallExpression(above) && above.callee === target) return 'possible';
+  return 'none';
 }

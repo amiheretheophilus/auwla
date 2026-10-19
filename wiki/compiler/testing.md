@@ -42,11 +42,16 @@ slow and obviously correct.
    renders this way. After every step it calls every component again. The component
    body is setup code, so only derivations are computed again:
    - a binding reassigned by later code (handler, callback) is a `cell`: a snapshot;
-   - a binding that reads nothing is a `cell`: computed once;
-   - a binding that reads something is a `memo`: computed again when a deep copy of
-     its inputs changes, together with the body statements that build it;
+   - any other `let x` / `const x` is a `memo`: computed again when a deep copy of
+     its inputs changes, together with the body statements that build it (with no
+     inputs it is computed once);
    - a prop reassigned by later code is a `prop` slot;
    - every other body statement is setup and runs on the first render only.
+
+   A statement that calls something with a value (`x.anything()`, `f(x)`) runs inside
+   `$ctx.observe`, which deep-copies the value before and compares it after. The
+   reference uses no method list: it sees what really happened. If the statement
+   changed the value, it builds it from then on.
 
    DOM nodes are kept between renders, matched by position, `key` and tag, so refs,
    typed text and focus survive; each render updates their props and order. After
@@ -80,7 +85,7 @@ slow and obviously correct.
 The first cases are the **Cases to test** section of each concept page, written in
 `tests/cases/<page>.test.ts`. Each one is a case the old compiler rejects or shows
 wrong, or behaviour it must keep. On 2026-10-19, against the old compiler: 32 pass
-and 15 fail, each failure a known old-compiler bug listed on its page.
+and 18 fail, each failure a known old-compiler bug listed on its page.
 The old compiler has about 305 distinct `memo-dom:` messages. Most are internal
 invariants or contracts of the framework's own APIs (`route-to`, `$routed`, `Group`,
 `page()`, `mount()`, server functions); those stay. Only messages that reject
