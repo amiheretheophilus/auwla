@@ -85,5 +85,5 @@ on the same benchmarks:
 
 ## Open questions
 
-- CI for tests (not benchmarks): is it wanted, and with a fine-grained token limited
-  to this repo, or a bot account?
+- CI for tests (not benchmarks): set it up on `amiheretheophilus/auwla` once the
+  first tests exist?
