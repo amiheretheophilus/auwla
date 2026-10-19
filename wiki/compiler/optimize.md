@@ -25,9 +25,12 @@ interface Optimization<P> {
    from a name (`../rules.md`, rule 3).
 3. **Each optimization is proven by testing:** every comparison test runs with
    optimizations on and off, and both must match the reference (`testing.md`).
-4. **List optimizations also need `bench/`:** the numbers must not regress.
+4. **List optimizations also need `bench/`:** the numbers must not regress below the
+   `d6e678b` baseline (`testing.md`).
 5. **Optimizations run after the plan is built and before emission**, in the order
    listed in `optimize/index.ts` _(planned)_.
+6. **Correct first.** A case gets its general path, with tests, before any fast path
+   for it is ported.
 
 ## Planned optimizations
 

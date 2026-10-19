@@ -59,6 +59,24 @@ compiler rejected.
     alternately and reports the relative difference;
   - stable numbers need a self-hosted runner on the separate VM.
 
+## Performance baseline
+
+The last full benchmark of the old compiler is `d6e678b`: 8 CPUs and 8 GiB on an
+AMD EPYC VM, Chrome Headless Shell 149. `compiler-next` must not fall below it
+on the same benchmarks:
+
+- **Octane** (ten frameworks, canonical and keyed reorder): overall average rank
+  3.146, second after ripple (1.667), ahead of Solid (3.854).
+- **js-framework**, ms: run 4.9, replace 9.3, update 0.4, select 0.1, swap 0.6,
+  runlots 43.7, clear 50.1.
+- **The `bun run bench` DOM matrices** (module, component and mixed state; mutable
+  and immutable updates).
+- **Compiled third-party runtime:**
+  - zero idle renders;
+  - 128 update renders for 128 writes in the local and fetch cases;
+  - the shared case records 16,384 update renders for 128 writes. That is a known
+    precision gap, for `optimize/reason-routing.ts`.
+
 ## Open questions
 
 - CI access: a fine-grained token limited to this repo, or a bot account?

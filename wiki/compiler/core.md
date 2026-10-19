@@ -8,11 +8,10 @@ The core holds the stage machinery and the shared types. What a concept means
 
 ## parse — `core/parse/`
 
-- Chooses the language from the path (`langFromPath`).
-- Lowers a TSRX file to TSX text (port of `packages/compiler/src/ast/tsrx/`) and
-  extracts its CSS.
+- Chooses the language from the path (`langFromPath`): `js`, `jsx`, `ts`, `tsx`.
+  TSRX is not supported.
 - Lowers `enum` and parameter properties, which `yuku-codegen` does not convert.
-- Output: source text, language, CSS.
+- Output: source text and language.
 
 ## resolve — `core/resolve/`
 

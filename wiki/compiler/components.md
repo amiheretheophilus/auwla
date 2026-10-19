@@ -30,5 +30,5 @@ Finds components, and compiles calls to them: props, children and slots.
 
 ## Open questions
 
-- Which component forms does the old compiler support that are not listed here (TSRX
-  components, `page(...)`, presentation components)? Port each with a test.
+- Which component forms does the old compiler support that are not listed here
+  (`page(...)`, presentation components)? Port each with a test.

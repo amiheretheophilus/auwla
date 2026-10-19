@@ -9,6 +9,12 @@ implementation until every suite passes on the new one; then it is deleted.
 Every valid JavaScript program is accepted, and every effect the console would show
 shows on the UI (`../rules.md`, rule 10).
 
+**Priorities: structure and correctness.** Speed is already there. On the last
+benchmark (`d6e678b`, see `testing.md`) the old compiler ranked second of ten in
+Octane, after ripple and ahead of Solid. The rewrite keeps the runtime and must
+not fall below those numbers, but it does not chase speed. A case gets a correct
+general path first; fast paths are ported afterwards (`optimize.md`).
+
 **Why a rewrite.** In the old compiler, one shared mutable `Ctx` (121 fields, used by
 133 files) is read and written by passes that edit one AST in place. Each concept
 is spread over several passes, and facts are keyed by AST nodes, so 31
@@ -19,7 +25,7 @@ is spread over several passes, and facts are keyed by AST nodes, so 31
 
 ```
 source text
-  → parse     core/parse                       pick the language; lower TSRX to TSX text
+  → parse     core/parse                       pick the language (js, jsx, ts, tsx)
   → resolve   core/resolve                     yuku-analyzer: bindings, references, writes, captures, imports
   → graph     core/graph + features/*/classify one node per binding, effect, handler and render site
   → plan      core/plan  + features/*/plan     the render plan: regions and sites
