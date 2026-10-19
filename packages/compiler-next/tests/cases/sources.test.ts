@@ -33,6 +33,26 @@ behaves('a fetch waits before rendering and starts once', {
   },
 });
 
+behaves('a null target pauses the request and clears the payload', {
+  source: `
+    import { $fetch, Group } from '@memoized-dom/data';
+    export function App() {
+      let id = 1;
+      const user = $fetch(id === null ? null : '/user/' + id);
+      return (
+        <Group pending={() => <i>loading</i>}>
+          <p>{user === null ? 'none' : user.name}</p>
+          <button onClick={() => { id = null; }}>clear</button>
+        </Group>
+      );
+    }`,
+  steps: [{ respond: '/user/1', value: { name: 'Ada' } }, { click: 'button' }],
+  check(container, observation) {
+    expect(container.querySelector('p')?.textContent).toBe(['loading', 'Ada', 'none'][observation]);
+    expect(requestedUrls()).toEqual(['/user/1']);
+  },
+});
+
 behaves('state seeded from a source waits then becomes a snapshot', {
   source: `
     import { $read, Group } from '@memoized-dom/data';

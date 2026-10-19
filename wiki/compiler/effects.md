@@ -53,7 +53,7 @@ These pass today and must keep passing:
 
 The reference compares effect inputs after refs mount, and records them after the
 callback's synchronous writes. Those writes update the UI without immediately
-re-triggering the same effect. When a conditional effect leaves, its cleanup's
+re-triggering the same effect (`../decisions.md`, 2026-10-19). When a conditional effect leaves, its cleanup's
 writes get another render too; the case asserts the start and stop counts. See
 `refs.md` for the ref-identity log case.
 

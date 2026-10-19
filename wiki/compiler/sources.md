@@ -54,6 +54,10 @@ All paths below are under `packages/compiler-next/`. This is test code only.
 - Committed content stays visible during refresh and replacement by a pending
   source. New assignments win over older completions; failures still reach the
   error policy. A remounted owner has its own initial presentation.
+- A `null` target sends no request and the payload is `null` at once, not pending
+  (`docs/05-data.md`: "pauses the request and clears the payload").
+- Destructuring a source is valid; the pattern runs when the payload exists
+  (`../decisions.md`, 2026-10-19; the docs' `MMD-S004` error is gone).
 
 ## Reference implementation
 
@@ -106,8 +110,10 @@ request cancellation through `$track` is still separate, unfinished work.
 
 ## Cases to test
 
-`tests/cases/sources.test.ts`: 52 cases, all passing on the reference. The original
-27 give 18 passes and 9 failures on the old compiler; the 14 atomic cases give
+`tests/cases/sources.test.ts`: 53 cases, all passing on the reference. The original
+27 give 18 passes and 9 failures on the old compiler; the null-target case fails
+it (written on review, it caught the reference treating `null` as a new load);
+the 14 atomic cases give
 8 passes and 6 failures; eleven further atomic lifecycle cases give 6 passes and
 5 failures. These failures must pass on `compiler-next`.
 
@@ -139,6 +145,7 @@ an early failure can prevent comparison of its later steps. All cases are in
 
 | Case | Expected | Old compiler result |
 | --- | --- | --- |
+| `a null target pauses the request and clears the payload` | Setting the target to `null` shows `none` with no new request | Shows `loading` |
 | `a write before a source seed is ready wins over the seed` | An early write shows and keeps `manual` | Keeps showing `loading` |
 | `an effect waits through a derived source value` | `ADA 1` after resolution | `not run 0`; the effect never runs |
 | `a chained request does not start with an unresolved argument` | Wait, request comments, then render its array | Throws `list 'App/when0/comments' requires an array; received object` |

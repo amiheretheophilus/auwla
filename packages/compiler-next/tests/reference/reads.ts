@@ -1,14 +1,15 @@
-/** Dependency queries on yuku's binding and reference model. Test-only. */
+/** What code reads, on yuku's binding and reference model. Test-only. */
 import type { Binding, Module, Reference } from 'yuku-analyzer';
 import { is } from 'yuku-ast';
 import type { Expression, Node } from 'yuku-parser';
 
 type FunctionNode = Extract<Node, { type: 'FunctionDeclaration' | 'FunctionExpression' | 'ArrowFunctionExpression' }>;
 
+/** Finds the bindings a piece of code reads. A local function stands for what it reads. */
 export class Reads {
   constructor(private readonly module: Module) {}
 
-  /** Reads anywhere in the roots, including the callbacks they contain. */
+  /** Everything read anywhere inside `roots`, including inside callbacks they contain. */
   inside(roots: Node[], exclude: Binding | undefined): Set<Binding> {
     const found = new Set<Binding>();
     for (const root of roots) this.collect(root, root, false, found, new Set());
@@ -16,7 +17,12 @@ export class Reads {
     return found;
   }
 
-  /** Reads while a callback runs. Closures it creates run later; updates are writes. */
+  /**
+   * What an effect callback reads while it runs: reads directly in its body, and in
+   * local functions it calls. Reads inside callbacks it creates run later, so they
+   * are not inputs (`connection.onMessage(() => unread++)`). Updates (`runs++`) are
+   * writes, not reads.
+   */
   ofCallback(callback: Expression): Set<Binding> {
     const found = new Set<Binding>();
     let fn: Node | undefined = callback;
@@ -43,17 +49,23 @@ export class Reads {
         this.collect(fn, fn, directOnly, found, visited);
       }
     };
+
     this.module.walk({
       Identifier: (_node, ctx) => visit(ctx.reference),
       JSXIdentifier: (_node, ctx) => visit(ctx.reference),
     }, root);
   }
 
+  /** The function a binding names: `function f() {}` or `const f = () => {}`. */
   functionOf(binding: Binding): FunctionNode | undefined {
     const name = binding.declarations[0];
     const parent = name && this.module.parentOf(name);
-    if (is.FunctionDeclaration(parent) && parent.id === name) return parent;
-    if (is.VariableDeclarator(parent) && parent.id === name && is.Function(parent.init)) return parent.init as FunctionNode;
+    if (is.FunctionDeclaration(parent) && parent.id === name) {
+      return parent;
+    }
+    if (is.VariableDeclarator(parent) && parent.id === name && is.Function(parent.init)) {
+      return parent.init as FunctionNode;
+    }
     return undefined;
   }
 

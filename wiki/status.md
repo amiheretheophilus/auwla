@@ -363,6 +363,14 @@ are nailed first.
      both outputs; five reject before emit and one exceeds the diagnostic deadline.
      All 175 reference cases across 8 files pass; package `bun check` passes for
      25 files. Production compiler implementation remains on hold.
+   - done: review of `9d98d41`…`b7f2d26` (made by another agent while this one was
+     rate-limited). Fixed `$fetch(null)`: it was a new pending load; the docs say
+     it clears the payload at once (new case; the old compiler fails it too).
+     Recorded two semantics that were in the reference without a decision row
+     (an effect's own writes do not re-run it; destructuring a source is valid).
+     Rewrote `sources.ts` and `readiness.ts` for reading, restored the comments
+     lost when `Reads` and the builders moved files, and updated the statement
+     guard comment in `transform.ts`. 176 reference cases pass; `bun check` passes.
    - next: complete reference work on `compiler/sources.md` and the remaining class
      cases on `compiler/state-and-derived.md`, including captured/private
      dependencies and the remaining readiness forms/APIs. Then extend generated programs with

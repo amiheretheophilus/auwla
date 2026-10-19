@@ -24,7 +24,8 @@
  *   the statement runs inside `$ctx.observe(...)`, which compares the value before
  *   and after. Once it is seen to change the value, it builds it.
  *
- * Every other body statement is setup: it runs on the first render only.
+ * Every other body statement is setup: it runs once, on the first render where
+ * the sources it reads are ready.
  * Destructured aliases follow the same cell/memo rules. JavaScript evaluates the
  * native pattern once per input change, after its source is ready.
  */
@@ -401,14 +402,20 @@ class ComponentRewrite {
   // --- When each body statement runs ---------------------------------------
 
   /**
-   * Setup statements run on the first render only. A statement that builds a memo
-   * runs again when that memo is computed again; one that may build a memo also
-   * runs inside `$ctx.observe`. A statement that builds a plain binding or a prop,
-   * or that cannot be guarded, runs on every render.
+   * Setup statements run once, on the first render where their inputs are ready
+   * (`$ctx.statement` skips a statement while a source it reads is loading, and
+   * `$ctx.ran` remembers that it ran). A statement that builds a memo runs again
+   * when that memo is computed again; one that may build a memo also runs inside
+   * `$ctx.observe`. A statement that builds a plain binding or a prop runs on every
+   * render. One that cannot be guarded is left as written.
    *
-   *   stmt   →   if ($ctx.first || $s2.fresh || ($ctx.confirmed(0, 0) && $s3.fresh)) {
-   *                $ctx.observe(0, () => [$s3.v], () => { stmt });
+   *   stmt   →   if (!$ctx.ran(4) || $s2.fresh || ($ctx.confirmed(0, 0) && $s3.fresh)) {
+   *                $ctx.statement(4, () => [inputs], () => {
+   *                  $ctx.observe(0, () => [$s3.v], () => { stmt });
+   *                });
    *              }
+   *
+   * An `if` that returns early waits for its test (`earlyReturn`).
    */
   private buildStatements(): Statement[] {
     return this.body.body.flatMap((original): Statement[] => {
@@ -417,11 +424,17 @@ class ComponentRewrite {
       if (!this.canBuild(statement)) return [statement];
 
       const index = this.nextStatement++;
-      const plan = this.plans.get(statement) ?? { builds: new Set<Binding>(), mayBuild: [], observeIndex: undefined };
+      const plan = this.plans.get(statement) ?? {
+        builds: new Set<Binding>(),
+        mayBuild: [],
+        observeIndex: undefined,
+      };
       const wrapped = plan.observeIndex === undefined ? statement : this.observed(statement, plan);
       const inputs = this.inputList(this.reads.inside([statement], undefined), [statement]);
       const run = blockThunk([wrapped]);
-      const guarded = b.ExpressionStatement({ expression: ctxCall('statement', [numberLiteral(index), inputs, run]) }) as Statement;
+      const guarded = b.ExpressionStatement({
+        expression: ctxCall('statement', [numberLiteral(index), inputs, run]),
+      }) as Statement;
 
       const everyRender = [...plan.builds].some((binding) => {
         const slot = this.slots.get(binding);
@@ -429,7 +442,12 @@ class ComponentRewrite {
       });
       if (everyRender) return [guarded];
 
-      const conditions = [b.UnaryExpression({ operator: '!', prefix: true, argument: ctxCall('ran', [numberLiteral(index)]) }) as Expression];
+      const notRanYet = b.UnaryExpression({
+        operator: '!',
+        prefix: true,
+        argument: ctxCall('ran', [numberLiteral(index)]),
+      }) as Expression;
+      const conditions = [notRanYet];
       for (const binding of plan.builds) {
         const slot = this.slots.get(binding)!;
         if (slot.treatment === 'memo') conditions.push(member(slot.name, 'fresh'));

@@ -408,19 +408,32 @@ export function $moduleMemo(readInputs: () => unknown[], update: () => unknown, 
 // ---------------------------------------------------------------------------
 // Deep copies: "an input changed" means its value changed, however deep.
 
-/** Stands for any function: functions are compared through what they capture. */
+/** Stands for any function: two functions compare equal. What they capture is read elsewhere. */
 const FUNCTION = Symbol('function');
 
+function hasOwnData(fn: Function): boolean {
+  return Reflect.ownKeys(fn).some((key) => {
+    const descriptor = Object.getOwnPropertyDescriptor(fn, key)!;
+    return descriptor.enumerable && 'value' in descriptor;
+  });
+}
+
+/**
+ * `sourceIdentityOnly`: a source is copied as its id alone, so a status change is
+ * not a change. A failed `suspend` boundary uses it to tell a new attempt (other
+ * sources or props) from the same failed one.
+ */
 function deepCopy(value: unknown, copies = new Map<object, unknown>(), sourceIdentityOnly = false): unknown {
   const copy = (entry: unknown) => deepCopy(entry, copies, sourceIdentityOnly);
+
   if (value instanceof Source) {
-    return sourceIdentityOnly ? { source: value.id } : { source: value.id, version: value.version, data: copy(value.data) };
+    if (sourceIdentityOnly) return { source: value.id };
+    return { source: value.id, version: value.version, data: copy(value.data) };
   }
   if (value instanceof Waiting) return { waiting: value.sources.map(copy) };
-  if (typeof value === 'function' && !Reflect.ownKeys(value).some((key) => {
-    const descriptor = Object.getOwnPropertyDescriptor(value, key)!;
-    return descriptor.enumerable && 'value' in descriptor;
-  })) return FUNCTION;
+
+  // A function with data on it (a class with static fields) is copied like an object.
+  if (typeof value === 'function' && !hasOwnData(value)) return FUNCTION;
   if (value === null || (typeof value !== 'object' && typeof value !== 'function')) return value;
   if (value instanceof Node || value instanceof AssignRef) return value;
   if (copies.has(value)) return copies.get(value);
@@ -651,6 +664,12 @@ class Renderer {
     return [this.renderHostElement(node, node.tag, position, inSvg, policies)];
   }
 
+  /**
+   * `suspend` (`docs/06-group.md`): until the region first publishes, its active
+   * subtree is prepared without DOM. It publishes all at once when nothing in it
+   * waits, shows the error policy if something failed, and the pending policy
+   * otherwise. After publishing it renders like any element.
+   */
   private renderSuspended(node: Element, position: string, inSvg: boolean, policies: Policies): Node[] {
     this.renderedBoundaries.add(position);
     let boundary = this.boundaries.get(position);
@@ -696,11 +715,17 @@ class Renderer {
     return this.renderElement(node, position, inSvg, policies);
   }
 
-  private renderBoundaryFailure(boundary: SuspendedBoundary, position: string, inSvg: boolean, policies: Policies): Node[] {
+  private renderBoundaryFailure(
+    boundary: SuspendedBoundary,
+    position: string,
+    inSvg: boolean,
+    policies: Policies,
+  ): Node[] {
     const waiting = boundary.failed!;
     const retry = () => {
       boundary.failed = undefined;
-      return Promise.all(waiting.sources.filter((source) => source.error && !source.isDisposed).map((source) => source.refresh()));
+      const failed = waiting.sources.filter((source) => source.error && !source.isDisposed);
+      return Promise.all(failed.map((source) => source.refresh()));
     };
     return this.renderWaiting(waiting, position, inSvg, policies, false, retry);
   }
@@ -712,12 +737,31 @@ class Renderer {
     };
   }
 
-  private renderWaiting(waiting: Waiting, position: string, inSvg: boolean, policies: Policies, retain = true, retryOverride?: () => unknown): Node[] {
+  /**
+   * A site whose value is waiting shows, in order: the error policy if a source
+   * failed; the last value it showed, if any (a refresh keeps committed content);
+   * the pending policy. `retain` is false inside a `suspend` region, which shows
+   * no partial content before it publishes.
+   */
+  private renderWaiting(
+    waiting: Waiting,
+    position: string,
+    inSvg: boolean,
+    policies: Policies,
+    retain = true,
+    retryOverride?: () => unknown,
+  ): Node[] {
     const failed = waiting.sources.filter((source) => source.error !== null);
     if (failed.length > 0) {
       if (!policies.error) return [];
       const cause = failed[0]!.error!;
-      const error = { kind: 'request', requestKind: cause.kind, message: cause.message, status: cause.status, cause };
+      const error = {
+        kind: 'request',
+        requestKind: cause.kind,
+        message: cause.message,
+        status: cause.status,
+        cause,
+      };
       const retry = retryOverride ?? (() => Promise.all(failed.map((source) => source.refresh())));
       return this.renderNode($h(policies.error, { error, retry }), `${position}/error`, inSvg);
     }
@@ -753,7 +797,12 @@ class Renderer {
     return this.renderNode(output, `${id}>`, inSvg, policies);
   }
 
-  private evaluateComponent(node: Element, component: Component, position: string): { id: string; output: unknown; instance: Instance } {
+  /** Call the component with its instance's slots. Used by rendering and by `suspend` preparation. */
+  private evaluateComponent(
+    node: Element,
+    component: Component,
+    position: string,
+  ): { id: string; output: unknown; instance: Instance } {
     const id = this.componentId(node, component, position);
     let instance = this.instances.get(id);
     if (instance === undefined) {
