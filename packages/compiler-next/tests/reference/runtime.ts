@@ -13,12 +13,14 @@
  *
  * Values that must outlive one render live in slots of the component instance.
  */
+import { $waiting, Group, Source, Waiting } from './sources';
+export { $fetch, $read, $track, $value, $waiting, $when, $sourceState, Group } from './sources';
 
 // ---------------------------------------------------------------------------
 // JSX
 
 export interface Element {
-  tag: string | typeof Fragment | Component;
+  tag: string | typeof Fragment | typeof Group | Component;
   props: Record<string, unknown>;
   children: unknown[];
   site: unknown;
@@ -90,8 +92,21 @@ function installRef(value: unknown, node: Node): (() => void) | undefined {
 // ---------------------------------------------------------------------------
 // Component instances and their slots
 
-interface CellSlot {
-  v: unknown;
+class CellSlot {
+  private value: unknown;
+  initialized = false;
+  written = false;
+
+  get v(): unknown { return this.value; }
+  set v(value: unknown) {
+    this.value = value;
+    this.written = true;
+  }
+
+  seed(value: unknown): void {
+    this.value = value;
+    this.initialized = !(value instanceof Waiting);
+  }
 }
 
 interface PropSlot {
@@ -106,6 +121,8 @@ interface MemoSlot {
   fresh: boolean;
   /** Deep copy of the inputs it was computed from. */
   inputs: unknown;
+  /** Sources discovered when a helper returned a waiting computation. */
+  sources: readonly Source[];
 }
 
 interface EffectSlot {
@@ -128,14 +145,16 @@ export class Instance {
   private readonly cleanups: Array<() => void> = [];
   /** `"statement:position"` pairs from `observe`: that statement changed that value. */
   private readonly confirmations = new Set<string>();
+  private readonly statementsRun = new Set<number>();
 
   /** State: computed once, then changed only by writes. */
   cell(index: number, initial: () => unknown): CellSlot {
     let slot = this.slots.get(index) as CellSlot | undefined;
     if (slot === undefined) {
-      slot = { v: initial() };
+      slot = new CellSlot();
       this.slots.set(index, slot);
     }
+    if (!slot.initialized && !slot.written) slot.seed(initial());
     return slot;
   }
 
@@ -154,17 +173,21 @@ export class Instance {
 
   /** A derived value: computed again only when one of its inputs changes. */
   memo(index: number, readInputs: () => unknown[], compute: () => unknown): MemoSlot {
-    const inputs = deepCopy(readInputs());
     let slot = this.slots.get(index) as MemoSlot | undefined;
+    const values = readInputs();
+    const inputs = deepCopy([...values, ...(slot?.sources ?? [])]);
 
     if (slot === undefined) {
-      slot = { v: compute(), fresh: true, inputs };
+      const value = compute();
+      const sources = value instanceof Waiting ? value.sources : [];
+      slot = { v: value, fresh: true, inputs: deepCopy([...values, ...sources]), sources };
       this.slots.set(index, slot);
     } else if (!deepEqual(slot.inputs, inputs)) {
       // Updated in place, because handlers from earlier renders hold this slot.
       slot.v = compute();
       slot.fresh = true;
-      slot.inputs = inputs;
+      if (slot.v instanceof Waiting) slot.sources = slot.v.sources;
+      slot.inputs = deepCopy([...values, ...slot.sources]);
     } else {
       slot.fresh = false;
     }
@@ -213,6 +236,16 @@ export class Instance {
     return this.confirmations.has(`${index}:${position}`);
   }
 
+  ran(index: number): boolean {
+    return this.statementsRun.has(index);
+  }
+
+  statement(index: number, readInputs: () => unknown[], run: () => void): void {
+    if ($waiting(readInputs())) return;
+    run();
+    this.statementsRun.add(index);
+  }
+
   /** Called before each render of the instance. */
   beginRender(): void {
     this.render++;
@@ -231,7 +264,9 @@ export class Instance {
         continue;
       }
       // Inputs are read after refs mount, at the same time as the callback.
-      const inputs = deepCopy(slot.readInputs());
+      const values = slot.readInputs();
+      if ($waiting(values)) continue;
+      const inputs = deepCopy(values);
       if (slot.hasRun && deepEqual(slot.inputs, inputs)) continue;
       slot.hasRun = true;
       slot.teardown?.();
@@ -284,8 +319,32 @@ interface ModuleEffect {
   teardown: (() => void) | undefined;
 }
 
+interface ModuleMemo {
+  readInputs: () => unknown[];
+  update: () => unknown;
+  inputs: unknown;
+  sources: readonly Source[];
+}
+
 class ModuleEffects {
   private readonly effects: ModuleEffect[] = [];
+  private readonly memos: ModuleMemo[] = [];
+
+  addMemo(readInputs: () => unknown[], update: () => unknown, value: unknown): void {
+    const sources = value instanceof Waiting ? value.sources : [];
+    this.memos.push({ readInputs, update, sources, inputs: deepCopy([...readInputs(), ...sources]) });
+  }
+
+  refreshMemos(): void {
+    for (const memo of this.memos) {
+      const values = memo.readInputs();
+      const inputs = deepCopy([...values, ...memo.sources]);
+      if (deepEqual(memo.inputs, inputs)) continue;
+      const value = memo.update();
+      if (value instanceof Waiting) memo.sources = value.sources;
+      memo.inputs = deepCopy([...values, ...memo.sources]);
+    }
+  }
 
   add(readInputs: () => unknown[], callback: () => unknown): void {
     this.effects.push({ readInputs, callback, inputs: undefined, hasRun: false, teardown: undefined });
@@ -295,7 +354,9 @@ class ModuleEffects {
   run(): boolean {
     let ran = false;
     for (const effect of this.effects) {
-      const inputs = deepCopy(effect.readInputs());
+      const values = effect.readInputs();
+      if ($waiting(values)) continue;
+      const inputs = deepCopy(values);
       if (effect.hasRun && deepEqual(effect.inputs, inputs)) continue;
 
       effect.hasRun = true;
@@ -312,14 +373,30 @@ class ModuleEffects {
   unmount(): void {
     for (const effect of this.effects) effect.teardown?.();
     this.effects.length = 0;
+    this.memos.length = 0;
   }
 }
 
 /** Module effects registered since the last `renderApp`: the app being set up owns them. */
 let unclaimedModuleEffects = new ModuleEffects();
 
+/** Own module work even if importing or mounting this case fails. */
+export function beginReferenceScope(): () => void {
+  const previous = unclaimedModuleEffects;
+  const current = new ModuleEffects();
+  unclaimedModuleEffects = current;
+  return () => {
+    current.unmount();
+    unclaimedModuleEffects = previous;
+  };
+}
+
 export function $moduleEffect(readInputs: () => unknown[], callback: () => unknown): void {
   unclaimedModuleEffects.add(readInputs, callback);
+}
+
+export function $moduleMemo(readInputs: () => unknown[], update: () => unknown, initial: unknown): void {
+  unclaimedModuleEffects.addMemo(readInputs, update, initial);
 }
 
 // ---------------------------------------------------------------------------
@@ -329,6 +406,10 @@ export function $moduleEffect(readInputs: () => unknown[], callback: () => unkno
 const FUNCTION = Symbol('function');
 
 function deepCopy(value: unknown, copies = new Map<object, unknown>()): unknown {
+  if (value instanceof Source) {
+    return { source: value.id, version: value.version, data: deepCopy(value.data, copies) };
+  }
+  if (value instanceof Waiting) return { waiting: value.sources.map((source) => deepCopy(source, copies)) };
   if (typeof value === 'function') return FUNCTION;
   if (value === null || typeof value !== 'object') return value;
   if (value instanceof Node || value instanceof AssignRef) return value;
@@ -408,6 +489,11 @@ interface TextRecord {
 
 type NodeRecord = HostRecord | TextRecord;
 
+interface Policies {
+  pending?: Component;
+  error?: Component;
+}
+
 class Renderer {
   private nodes = new Map<string, NodeRecord>();
   private readonly instances = new Map<string, Instance>();
@@ -417,6 +503,8 @@ class Renderer {
   private renderedNodes = new Map<string, NodeRecord>();
   private renderedInstances = new Set<string>();
   private refsToInstall: Array<{ record: HostRecord; value: unknown }> = [];
+  private readonly lastReady = new Map<string, unknown>();
+  private renderedSites = new Set<string>();
 
   constructor(
     private readonly root: Component,
@@ -429,6 +517,7 @@ class Renderer {
   /** Render, install refs and run effects, again and again until nothing changes. */
   update(): void {
     for (let round = 0; round < 10; round++) {
+      this.moduleEffects.refreshMemos();
       const before = this.container.innerHTML;
       const refsInstalled = this.renderOnce();
       const effectsRan = this.runEffects();
@@ -445,6 +534,7 @@ class Renderer {
     this.moduleEffects.unmount();
     this.nodes.clear();
     this.instances.clear();
+    this.lastReady.clear();
     this.container.replaceChildren();
   }
 
@@ -452,6 +542,7 @@ class Renderer {
     this.renderedNodes = new Map();
     this.renderedInstances = new Set();
     this.refsToInstall = [];
+    this.renderedSites = new Set();
 
     const children = this.renderNode($h(this.root, null), 'root', false);
     syncChildren(this.container, children);
@@ -466,6 +557,9 @@ class Renderer {
       this.instances.delete(id);
     }
     this.nodes = this.renderedNodes;
+    for (const position of this.lastReady.keys()) {
+      if (!this.renderedSites.has(position)) this.lastReady.delete(position);
+    }
 
     // Refs are installed once the DOM exists.
     for (const { record, value } of this.refsToInstall) record.teardownRef = installRef(value, record.node);
@@ -481,30 +575,63 @@ class Renderer {
   // --- One render ------------------------------------------------------------
 
   /** The DOM nodes for one JSX value, at a position in the tree. */
-  private renderNode(node: unknown, position: string, inSvg: boolean): Node[] {
+  private renderNode(node: unknown, position: string, inSvg: boolean, policies: Policies = {}): Node[] {
+    this.renderedSites.add(position);
+    if (node instanceof Waiting) return this.renderWaiting(node, position, inSvg, policies);
+    if (!isElement(node) || !$waiting(Object.values(node.props))) this.lastReady.set(position, node);
     if (node === null || node === undefined || typeof node === 'boolean') return [];
 
-    if (Array.isArray(node)) return this.renderChildren(node, position, inSvg);
+    if (Array.isArray(node)) return this.renderChildren(node, position, inSvg, policies);
 
     if (!isElement(node)) return [this.renderText(String(node), position)];
 
     if (node.site !== undefined) position += `/site=${String(node.site)}`;
 
+    if (node.props.suspend === true) {
+      throw new Error('reference: suspend preparation is not implemented yet');
+    }
+
     // A key also matters when a component returns a keyed root directly.
     if (node.props.key !== undefined && node.props.key !== null) position += `/key=${String(node.props.key)}`;
 
-    if (node.tag === Fragment) return this.renderChildren(node.children, position, inSvg);
+    if (node.tag === Group) {
+      const inherited = { ...policies };
+      if ('pending' in node.props) inherited.pending = node.props.pending as Component | undefined;
+      if ('error' in node.props) inherited.error = node.props.error as Component | undefined;
+      return this.renderChildren(node.children, position, inSvg, inherited);
+    }
 
-    if (typeof node.tag === 'function') return this.renderComponent(node, node.tag, position, inSvg);
+    if (node.tag === Fragment) return this.renderChildren(node.children, position, inSvg, policies);
 
-    return [this.renderHostElement(node, node.tag, position, inSvg)];
+    if (typeof node.tag === 'function') return this.renderComponent(node, node.tag, position, inSvg, policies);
+
+    const blocked = $waiting(Object.values(node.props));
+    if (blocked) return this.renderWaiting(blocked, position, inSvg, policies);
+    return [this.renderHostElement(node, node.tag, position, inSvg, policies)];
   }
 
-  private renderChildren(children: unknown[], position: string, inSvg: boolean): Node[] {
+  private renderWaiting(waiting: Waiting, position: string, inSvg: boolean, policies: Policies): Node[] {
+    const failed = waiting.sources.filter((source) => source.error !== null);
+    if (failed.length > 0) {
+      if (!policies.error) return [];
+      const cause = failed[0]!.error!;
+      const error = { kind: 'request', requestKind: cause.kind, message: cause.message, status: cause.status, cause };
+      const retry = () => Promise.all(failed.map((source) => source.refresh()));
+      return this.renderNode($h(policies.error, { error, retry }), `${position}/error`, inSvg);
+    }
+    if (this.lastReady.has(position)) {
+      return this.renderNode(this.lastReady.get(position), position, inSvg, policies);
+    }
+    return policies.pending
+      ? this.renderNode($h(policies.pending, null), `${position}/pending`, inSvg)
+      : [];
+  }
+
+  private renderChildren(children: unknown[], position: string, inSvg: boolean, policies: Policies): Node[] {
     return children.flatMap((child, index) => {
       const key = isElement(child) ? child.props.key : undefined;
       const segment = key === undefined || key === null ? `#${index}` : `key=${String(key)}`;
-      return this.renderNode(child, `${position}/${segment}`, inSvg);
+      return this.renderNode(child, `${position}/${segment}`, inSvg, policies);
     });
   }
 
@@ -517,7 +644,7 @@ class Renderer {
     return record.node;
   }
 
-  private renderComponent(node: Element, component: Component, position: string, inSvg: boolean): Node[] {
+  private renderComponent(node: Element, component: Component, position: string, inSvg: boolean, policies: Policies): Node[] {
     const id = `${position}:${component.name}`;
     let instance = this.instances.get(id);
     if (instance === undefined) {
@@ -538,10 +665,10 @@ class Renderer {
     rendering = outer;
     instance.first = false;
 
-    return this.renderNode(output, `${id}>`, inSvg);
+    return this.renderNode(output, `${id}>`, inSvg, policies);
   }
 
-  private renderHostElement(node: Element, tag: string, position: string, inSvg: boolean): Node {
+  private renderHostElement(node: Element, tag: string, position: string, inSvg: boolean, policies: Policies): Node {
     const svg = inSvg || tag === 'svg';
     const id = `${position}:<${tag}>`;
     const previous = this.nodes.get(id);
@@ -564,7 +691,7 @@ class Renderer {
     }
 
     updateProps(record, node.props);
-    const children = this.renderChildren(node.children, position, svg && tag !== 'foreignObject');
+    const children = this.renderChildren(node.children, position, svg && tag !== 'foreignObject', policies);
     const childrenChanged = children.length !== record.children.length
       || children.some((child, index) => child !== record.children[index]);
     if (childrenChanged) {

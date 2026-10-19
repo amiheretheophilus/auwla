@@ -11,7 +11,7 @@
  * | reassigned by code that runs later           | `cell`    | first value is a snapshot              |
  * | any other `let x` / `const x`                | `memo`    | computed again when an input changes   |
  * | a prop reassigned by code that runs later    | `prop`    | overridden until the parent changes it |
- * | a function, a parameter, a destructured name | plain     | recomputed on every render             |
+ * | a function or unmodified parameter          | plain     | recomputed on every render             |
  *
  * A memo with no inputs is computed once. "Code that runs later" is any function
  * inside the component: a handler, a callback, a timer.
@@ -25,12 +25,18 @@
  *   and after. Once it is seen to change the value, it builds it.
  *
  * Every other body statement is setup: it runs on the first render only.
+ * Destructured aliases follow the same cell/memo rules. JavaScript evaluates the
+ * native pattern once per input change, after its source is ready.
  */
 import { analyze, type Binding, type Module, type Reference } from 'yuku-analyzer';
 import { b, findAll, is, walk } from 'yuku-ast';
 import { generate } from 'yuku-codegen';
 import { parse } from 'yuku-parser';
 import type { BlockStatement, Expression, Node, Statement, VariableDeclarator } from 'yuku-parser';
+import { blockThunk, constDeclaration, identifier, member, numberLiteral, runtimeCall, thunk } from './ast';
+import { enclosingFunction, Reads } from './reads';
+import { buildModuleMemos, isDataCall, planModuleMemos, prepareModuleReads, rewriteDataImports,
+  shouldWaitAtAttribute, statusInput, waitForExpression } from './readiness';
 
 type FunctionNode = Extract<Node, { type: 'FunctionDeclaration' | 'FunctionExpression' | 'ArrowFunctionExpression' }>;
 
@@ -67,7 +73,10 @@ const GUARDABLE_STATEMENTS = new Set<string>([
   'DoWhileStatement',
 ]);
 
-const RUNTIME_EXPORTS = ['$h', 'Fragment as $Fragment', '$enter', '$assignRef', '$moduleEffect'];
+const RUNTIME_EXPORTS = [
+  '$h', 'Fragment as $Fragment', '$enter', '$assignRef', '$moduleEffect', '$moduleMemo',
+  '$when', '$value', '$waiting', '$sourceState',
+];
 
 // ---------------------------------------------------------------------------
 // Entry point
@@ -79,10 +88,25 @@ export function toReference(source: string, path: string, runtimeUrl: string): s
     throw new Error(`reference: ${path} does not parse: ${messages}`);
   }
 
-  for (const component of findComponents(module)) {
-    new ComponentRewrite(module, component).run();
+  const readCalls = module.findAll('CallExpression').filter((call) => isDataCall(module, call, '$read'));
+  const moduleMemos = planModuleMemos(module);
+  const rawUses = new Set<Node>();
+  for (const call of module.findAll('CallExpression')) {
+    if (isDataCall(module, call, '$track') && call.arguments[0]) rawUses.add(call.arguments[0]);
+  }
+  const handledSites = new Set<Node>();
+  const components = findComponents(module);
+  for (const component of components) {
+    new ComponentRewrite(module, component, rawUses, handledSites).run();
   }
   rewriteModuleEffects(module);
+  prepareModuleReads(module, rawUses, handledSites, new Set(components));
+  // Clone only after uses were lowered, so replay closes over live slots.
+  for (const call of readCalls) {
+    if (call.arguments.length === 1) call.arguments.push(thunk(structuredClone(call.arguments[0]) as Expression));
+  }
+  buildModuleMemos(module, moduleMemos, rawUses);
+  rewriteDataImports(module, runtimeUrl);
 
   const header = `import { ${RUNTIME_EXPORTS.join(', ')} } from ${JSON.stringify(runtimeUrl)};\n`;
   return lowerJsxAndTypes(header + generate(module.ast).code);
@@ -193,6 +217,7 @@ class ComponentRewrite {
   private readonly slots = new Map<Binding, Slot>();
   /** `const { x, y } = point`: the slot holds the value being destructured. */
   private readonly patternSlots = new Map<VariableDeclarator, Slot>();
+  private readonly patternOrigins = new Map<Binding, Node>();
   /** Body statements that may build a binding. */
   private readonly plans = new Map<Statement, StatementPlan>();
   /** `$effect(...)` and `$cleanup(...)` calls → their runtime calls. */
@@ -200,10 +225,13 @@ class ComponentRewrite {
 
   private nextSlot = 0;
   private nextObserve = 0;
+  private nextStatement = 0;
 
   constructor(
     private readonly module: Module,
     private readonly component: FunctionNode,
+    private readonly rawUses: Set<Node>,
+    private readonly handledSites: Set<Node>,
   ) {
     this.body = component.body as BlockStatement;
     this.reads = new Reads(module);
@@ -217,11 +245,12 @@ class ComponentRewrite {
     const declarations = this.buildSlotDeclarations();
     const statements = this.buildStatements();
     this.buildLifecycleCalls();
+    this.buildRenderSites();
 
     // Declarations first: an initializer then sits inside its thunk, where the walk
     // below rewrites it, even when the whole initializer is one name (`= point`).
     for (const { declarator, slot, created } of declarations) {
-      if (is.Identifier(declarator.id)) declarator.id = b.Identifier({ name: slot.name });
+      declarator.id = b.Identifier({ name: slot.name });
       declarator.init = created;
     }
     this.body.body = statements;
@@ -238,6 +267,11 @@ class ComponentRewrite {
     }
     for (const declarator of this.patternDeclarators()) {
       this.patternSlots.set(declarator, this.newSlot('memo'));
+      for (const binding of this.bindingsInPattern(declarator.id)) {
+        const writtenLater = this.usesOf(binding).some((use) => use.isWrite && this.runsLater(use));
+        this.patternOrigins.set(binding, declarator.id);
+        this.slots.set(binding, this.newSlot(writtenLater ? 'cell' : 'memo'));
+      }
     }
   }
 
@@ -286,6 +320,11 @@ class ComponentRewrite {
       .filter((statement) => is.VariableDeclaration(statement))
       .flatMap((statement) => statement.declarations)
       .filter((declarator) => !is.Identifier(declarator.id) && declarator.init !== null);
+  }
+
+  private bindingsInPattern(pattern: Node): Binding[] {
+    return this.ownBindings().filter((binding) => binding.declarations.some((name) =>
+      name.start >= pattern.start && name.end <= pattern.end));
   }
 
   // --- What each body statement builds -------------------------------------
@@ -368,20 +407,25 @@ class ComponentRewrite {
    *              }
    */
   private buildStatements(): Statement[] {
-    return this.body.body.map((original) => {
+    return this.body.body.flatMap((original): Statement[] => {
       const statement = original as Statement;
-      if (!this.canBuild(statement)) return statement;
+      if (is.IfStatement(statement) && this.containsReturn(statement)) return this.earlyReturn(statement);
+      if (!this.canBuild(statement)) return [statement];
 
+      const index = this.nextStatement++;
       const plan = this.plans.get(statement) ?? { builds: new Set<Binding>(), mayBuild: [], observeIndex: undefined };
       const wrapped = plan.observeIndex === undefined ? statement : this.observed(statement, plan);
+      const inputs = this.inputList(this.reads.inside([statement], undefined), [statement]);
+      const run = blockThunk([wrapped]);
+      const guarded = b.ExpressionStatement({ expression: ctxCall('statement', [numberLiteral(index), inputs, run]) }) as Statement;
 
       const everyRender = [...plan.builds].some((binding) => {
         const slot = this.slots.get(binding);
         return slot === undefined || slot.treatment === 'prop';
       });
-      if (everyRender) return wrapped;
+      if (everyRender) return [guarded];
 
-      const conditions = [member('$ctx', 'first')];
+      const conditions = [b.UnaryExpression({ operator: '!', prefix: true, argument: ctxCall('ran', [numberLiteral(index)]) }) as Expression];
       for (const binding of plan.builds) {
         const slot = this.slots.get(binding)!;
         if (slot.treatment === 'memo') conditions.push(member(slot.name, 'fresh'));
@@ -393,8 +437,36 @@ class ComponentRewrite {
       });
 
       const test = conditions.reduce((left, right) => b.LogicalExpression({ operator: '||', left, right }));
-      return b.IfStatement({ test, consequent: b.BlockStatement({ body: [wrapped] }), alternate: null });
+      return [b.IfStatement({ test, consequent: b.BlockStatement({ body: [guarded] }), alternate: null })];
     });
+  }
+
+  /** A pending early-return condition must wait, rather than act truthy or false. */
+  private earlyReturn(statement: Extract<Statement, { type: 'IfStatement' }>): Statement[] {
+    const name = `$return${this.nextStatement++}`;
+    const test = statement.test;
+    const inputs = this.inputList(this.reads.inside([test], undefined), [test]);
+    const waiting = runtimeCall('$waiting', [b.ArrayExpression({ elements: [identifier(name)] })]);
+    const pause = b.IfStatement({
+      test: waiting,
+      consequent: b.ReturnStatement({ argument: identifier(name) }),
+      alternate: null,
+    });
+    statement.test = runtimeCall('$value', [identifier(name)]);
+    return [constDeclaration(name, runtimeCall('$when', [inputs, thunk(test)])), pause, statement];
+  }
+
+  private buildRenderSites(): void {
+    this.module.walk({
+      JSXExpressionContainer: (node, ctx) => {
+        if (is.JSXEmptyExpression(node.expression) || !shouldWaitAtAttribute(ctx.parent)) return;
+        this.handledSites.add(node);
+        if (is.Function(node.expression)) return;
+        const expression = node.expression;
+        node.expression = waitForExpression(expression, (part) =>
+          this.inputList(this.reads.inside([part], undefined), [part]));
+      },
+    }, this.component);
   }
 
   /** `$ctx.observe(N, () => [$s3.v, …], () => { stmt });` */
@@ -425,9 +497,17 @@ class ComponentRewrite {
     const declarations = [];
 
     for (const [binding, slot] of this.slots) {
-      if (slot.treatment === 'prop') continue;
+      if (slot.treatment === 'prop' || this.patternOrigins.has(binding)) continue;
       const declarator = this.declaratorOf(binding)!;
-      const initial = thunk(declarator.init ?? identifier('undefined'));
+      const initialValue = declarator.init ?? identifier('undefined');
+      let prepared = waitForExpression(initialValue, (part) =>
+        this.inputList(this.reads.inside([part], undefined), [part]));
+      const builders = [...this.plans].filter(([, plan]) => plan.builds.has(binding)).map(([statement]) => statement);
+      if (builders.length > 0) {
+        const inputs = this.inputList(this.reads.inside(builders, binding), builders);
+        prepared = runtimeCall('$when', [inputs, thunk(prepared)]);
+      }
+      const initial = thunk(prepared);
       const index = numberLiteral(slot.index);
       const created = slot.treatment === 'cell'
         ? ctxCall('cell', [index, initial])
@@ -436,10 +516,41 @@ class ComponentRewrite {
     }
 
     for (const [declarator, slot] of this.patternSlots) {
-      const inputs = this.inputList(this.reads.inside([declarator.init!], undefined));
-      const memo = ctxCall('memo', [numberLiteral(slot.index), inputs, thunk(declarator.init!)]);
-      const created = b.MemberExpression({ object: memo, property: b.Identifier({ name: 'v' }), computed: false, optional: false });
+      const pattern = declarator.id;
+      const bindings = this.bindingsInPattern(pattern);
+      const roots = [declarator.init!, pattern];
+      const inputs = this.inputList(this.reads.inside(roots, undefined), roots);
+      const destructure = b.VariableDeclaration({
+        kind: 'const', declarations: [b.VariableDeclarator({ id: pattern, init: declarator.init })],
+      });
+      const values = b.ObjectExpression({ properties: bindings.map((binding) => b.Property({
+        key: b.Identifier({ name: binding.name }), value: identifier(binding.name),
+        kind: 'init', method: false, shorthand: false, computed: false,
+      }) as Extract<Node, { type: 'ObjectExpression' }>['properties'][number]) });
+      const compute = blockThunk([destructure, b.ReturnStatement({ argument: values })]);
+      const prepared = runtimeCall('$when', [inputs, compute]);
+      const created = ctxCall('memo', [numberLiteral(slot.index), structuredClone(inputs), thunk(prepared)]);
       declarations.push({ declarator, slot, created });
+
+      const aliases = bindings.map((binding) => {
+        const alias = this.slots.get(binding)!;
+        const readPattern = () => thunk(b.ArrayExpression({ elements: [member(slot.name, 'v')] }));
+        const field = b.MemberExpression({
+          object: runtimeCall('$value', [member(slot.name, 'v')]),
+          property: b.Identifier({ name: binding.name }), computed: false, optional: false,
+        });
+        const initial = thunk(runtimeCall('$when', [readPattern(), thunk(field)]));
+        return b.VariableDeclarator({
+          id: b.Identifier({ name: alias.name }),
+          init: alias.treatment === 'cell'
+            ? ctxCall('cell', [numberLiteral(alias.index), initial])
+            : ctxCall('memo', [numberLiteral(alias.index), readPattern(), initial]),
+        });
+      });
+      const declaration = this.module.parentOf(declarator);
+      if (is.VariableDeclaration(declaration)) {
+        declaration.declarations.splice(declaration.declarations.indexOf(declarator) + 1, 0, ...aliases);
+      }
     }
 
     return declarations;
@@ -458,10 +569,10 @@ class ComponentRewrite {
       if (plan.mayBuild.includes(binding)) maybe.push({ statement, plan });
     }
 
-    const elements: Expression[] = this.readable(binding, this.reads.inside(roots, binding));
+    const elements: Expression[] = this.readable(binding, this.reads.inside(roots, binding), roots);
     for (const { statement, plan } of maybe) {
       const position = plan.mayBuild.indexOf(binding);
-      const reads = this.readable(binding, this.reads.inside([statement], binding));
+      const reads = this.readable(binding, this.reads.inside([statement], binding), [statement]);
       const test = ctxCall('confirmed', [numberLiteral(plan.observeIndex!), numberLiteral(position)]);
       const choice = b.ConditionalExpression({
         test,
@@ -487,7 +598,7 @@ class ComponentRewrite {
 
       const callback = call.arguments[0] as Expression;
       const index = numberLiteral(this.nextSlot++);
-      const inputs = this.inputList(this.reads.ofCallback(callback));
+      const inputs = this.inputList(this.reads.ofCallback(callback), [callback]);
       this.lifecycleCalls.set(call, ctxCall('effect', [index, inputs, callback]));
     }
   }
@@ -498,7 +609,7 @@ class ComponentRewrite {
    * `$ctx.render`, the render count: the memo is then computed on every render, which
    * is always correct.
    */
-  private readable(binding: Binding, inputs: Set<Binding>): Expression[] {
+  private readable(binding: Binding, inputs: Set<Binding>, roots: Node[]): Expression[] {
     const declaredAt = binding.declarations[0]!.start;
     const elements: Expression[] = [];
     let declaredLater = false;
@@ -509,15 +620,16 @@ class ComponentRewrite {
         declaredLater = true;
         continue;
       }
-      elements.push(this.readOf(input));
+      elements.push(statusInput(input, this.readOf(input), roots, this.rawUses));
     }
     if (declaredLater) elements.push(member('$ctx', 'render'));
     return elements;
   }
 
   /** `() => [a, $s1.v, …]`: reads the current value of each input. */
-  private inputList(inputs: Set<Binding>): Expression {
-    return thunk(b.ArrayExpression({ elements: [...inputs].map((binding) => this.readOf(binding)) }));
+  private inputList(inputs: Set<Binding>, roots: Node[] = []): Expression {
+    const elements = [...inputs].map((binding) => statusInput(binding, this.readOf(binding), roots, this.rawUses));
+    return thunk(b.ArrayExpression({ elements }));
   }
 
   /** An expression that reads a binding's current value. */
@@ -537,13 +649,17 @@ class ComponentRewrite {
         if (replacement !== undefined) ctx.replace(replacement);
       },
       Identifier: (_node, ctx) => {
-        const slot = this.slotAt(ctx.reference);
-        if (slot === undefined) return;
+        const reference = ctx.reference;
+        if (!reference?.binding || reference.inTypePosition) return;
+        const nativePattern = this.patternOrigins.get(reference.binding);
+        if (nativePattern && reference.node.start >= nativePattern.start && reference.node.end <= nativePattern.end) return;
+        const slot = this.slotAt(reference);
         // `{ x }` must become `{ x: $s0.v }`, not `{ $s0.v }`.
         if (is.Property(ctx.parent) && ctx.parent.shorthand && ctx.key === 'value') {
           ctx.parent.shorthand = false;
         }
-        ctx.replace(member(slot.name, 'v'));
+        const value = slot ? member(slot.name, 'v') : identifier(reference.binding.name);
+        ctx.replace(reference.isWrite || this.rawUses.has(reference.node) ? value : runtimeCall('$value', [value]));
       },
       JSXIdentifier: (_node, ctx) => {
         const slot = this.slotAt(ctx.reference);
@@ -644,134 +760,13 @@ function rewriteModuleEffects(module: Module): void {
 }
 
 // ---------------------------------------------------------------------------
-// What code reads
+// Component runtime calls
 
-/** Finds the bindings a piece of code reads. A local function stands for what it reads. */
-class Reads {
-  constructor(private readonly module: Module) {}
-
-  /** Everything read anywhere inside `roots`, including inside callbacks they contain. */
-  inside(roots: Node[], exclude: Binding | undefined): Set<Binding> {
-    const found = new Set<Binding>();
-    for (const root of roots) this.collect(root, root, false, found, new Set());
-    if (exclude) found.delete(exclude);
-    return found;
-  }
-
-  /**
-   * What an effect callback reads while it runs: reads directly in its body, and in
-   * local functions it calls. Reads inside callbacks it creates run later, so they
-   * are not inputs (`connection.onMessage(() => unread++)`). Updates (`runs++`) are
-   * writes, not reads.
-   */
-  ofCallback(callback: Expression): Set<Binding> {
-    const found = new Set<Binding>();
-    let fn: Node | undefined = callback;
-    if (is.Identifier(callback)) {
-      const binding = this.module.referenceOf(callback)?.binding;
-      fn = binding ? this.functionOf(binding) : undefined;
-    }
-    if (fn !== undefined && is.Function(fn)) this.collect(fn, fn, true, found, new Set([fn]));
-    return found;
-  }
-
-  private collect(root: Node, scope: Node, directOnly: boolean, found: Set<Binding>, visited: Set<Node>): void {
-    const visit = (reference: Reference | null) => {
-      const binding = reference?.binding;
-      if (!binding || reference.isWrite || reference.inTypePosition) return;
-      if (this.isDeclaredInside(binding, scope)) return;
-      if (directOnly && enclosingFunction(this.module, reference.node) !== scope) return;
-
-      const fn = this.functionOf(binding);
-      if (fn === undefined) {
-        found.add(binding);
-      } else if (!visited.has(fn)) {
-        visited.add(fn);
-        this.collect(fn, fn, directOnly, found, visited);
-      }
-    };
-
-    this.module.walk({
-      Identifier: (_node, ctx) => visit(ctx.reference),
-      JSXIdentifier: (_node, ctx) => visit(ctx.reference),
-    }, root);
-  }
-
-  /** The function a binding names: `function f() {}` or `const f = () => {}`. */
-  functionOf(binding: Binding): FunctionNode | undefined {
-    const name = binding.declarations[0];
-    const parent = name && this.module.parentOf(name);
-    if (is.FunctionDeclaration(parent) && parent.id === name) {
-      return parent;
-    }
-    if (is.VariableDeclarator(parent) && parent.id === name && is.Function(parent.init)) {
-      return parent.init as FunctionNode;
-    }
-    return undefined;
-  }
-
-  private isDeclaredInside(binding: Binding, root: Node): boolean {
-    return binding.declarations.some((name) => {
-      for (const ancestor of this.module.ancestors(name)) {
-        if (ancestor === root) return true;
-      }
-      return false;
-    });
-  }
-}
-
-function enclosingFunction(module: Module, node: Node): Node | undefined {
-  let current = module.parentOf(node);
-  while (current !== null && !is.Function(current)) current = module.parentOf(current);
-  return current ?? undefined;
-}
-
-// ---------------------------------------------------------------------------
-// Node builders, on top of yuku-ast's `b`
-
-function identifier(name: string): Expression {
-  return b.Identifier({ name });
-}
-
-/** `object.property` */
-function member(object: string, property: string): Expression {
-  return b.MemberExpression({
-    object: identifier(object),
-    property: b.Identifier({ name: property }),
-    computed: false,
-    optional: false,
-  });
-}
-
-type CtxMethod = Treatment | 'effect' | 'cleanup' | 'observe' | 'confirmed';
+type CtxMethod = Treatment | 'effect' | 'cleanup' | 'observe' | 'confirmed' | 'ran' | 'statement';
 
 /** `$ctx.cell(...)`, `$ctx.memo(...)`, `$ctx.observe(...)`, … */
 function ctxCall(method: CtxMethod, args: Expression[]): Expression {
   return b.CallExpression({ callee: member('$ctx', method), arguments: args, optional: false });
-}
-
-/** `() => body` */
-function thunk(body: Expression): Expression {
-  return b.ArrowFunctionExpression({
-    id: null,
-    params: [],
-    body,
-    expression: true,
-    async: false,
-    generator: false,
-  });
-}
-
-function numberLiteral(value: number): Expression {
-  return b.Literal({ value, raw: String(value) });
-}
-
-/** `const name = init;` */
-function constDeclaration(name: string, init: Expression): Statement {
-  return b.VariableDeclaration({
-    kind: 'const',
-    declarations: [b.VariableDeclarator({ id: b.Identifier({ name }), init })],
-  });
 }
 
 // ---------------------------------------------------------------------------

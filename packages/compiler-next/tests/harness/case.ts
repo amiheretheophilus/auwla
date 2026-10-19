@@ -8,6 +8,8 @@
 export interface Case {
   /** The authored module, `App.tsx`. */
   source: string;
+  /** Additional authored modules, addressed by relative path. */
+  modules?: Record<string, string>;
   steps?: Step[];
   /** Additional assertions, on each renderer: 0 is mount, then one per step. */
   check?: (container: HTMLElement, observation: number) => void;
@@ -19,11 +21,17 @@ export type Step =
   /** Type a value into an input, as a user would: set `.value`, then fire `input`. */
   | { input: string; value: string }
   /** Resolve the promise the module got from `defer(name)`. */
-  | { resolve: string; value?: unknown };
+  | { resolve: string; value?: unknown }
+  | { reject: string; message: string }
+  | { respond: string; value?: unknown; status?: number }
+  | { rejectRequest: string; message: string };
 
 export function describeStep(step: Step): string {
   if ('click' in step) return `click ${step.click}`;
   if ('input' in step) return `type ${JSON.stringify(step.value)} into ${step.input}`;
+  if ('reject' in step) return `reject ${step.reject}`;
+  if ('respond' in step) return `respond ${step.respond}`;
+  if ('rejectRequest' in step) return `reject request ${step.rejectRequest}`;
   return `resolve ${step.resolve}`;
 }
 
@@ -31,19 +39,36 @@ export function describeStep(step: Step): string {
 // `defer(name)`: a promise the case resolves with a step, so async code can be
 // observed while it waits. Modules call it as a global.
 
-const pending = new Map<string, (value: unknown) => void>();
+interface Deferred {
+  resolve(value: unknown): void;
+  reject(error: Error): void;
+}
+const pending = new Map<string, Deferred[]>();
 
 function defer(name: string): Promise<unknown> {
-  return new Promise((resolve) => pending.set(name, resolve));
+  return new Promise((resolve, reject) => {
+    const queue = pending.get(name) ?? [];
+    queue.push({ resolve, reject });
+    pending.set(name, queue);
+  });
 }
 
 (globalThis as Record<string, unknown>).defer = defer;
 
+function takeDeferred(name: string): Deferred {
+  const queue = pending.get(name);
+  const deferred = queue?.shift();
+  if (deferred === undefined) throw new Error(`case: nothing is waiting on defer('${name}')`);
+  if (queue!.length === 0) pending.delete(name);
+  return deferred;
+}
+
 export function resolveDeferred(name: string, value: unknown): void {
-  const resolve = pending.get(name);
-  if (resolve === undefined) throw new Error(`case: nothing is waiting on defer('${name}')`);
-  pending.delete(name);
-  resolve(value);
+  takeDeferred(name).resolve(value);
+}
+
+export function rejectDeferred(name: string, message: string): void {
+  takeDeferred(name).reject(new Error(message));
 }
 
 export function clearDeferred(): void {

@@ -9,10 +9,15 @@
 | --- | --- |
 | `tests/reference/transform.ts` | Turns a module into a reference module: decides which bindings need a slot (built on `yuku-analyzer`, `yuku-ast`, `yuku-codegen`) |
 | `tests/reference/runtime.ts` | Runs the reference: re-renders everything, keeps slots per component instance |
+| `tests/reference/sources.ts` | Independent source state, readiness values, JSON fetches and promise reads |
+| `tests/reference/readiness.ts` | Source-aware expressions, imports and module derivations |
+| `tests/reference/reads.ts` | Dependency queries using yuku bindings and references |
+| `tests/reference/ast.ts` | Shared yuku AST builders for the test transforms |
 | `tests/harness/case.ts` | The `Case` and `Step` types, optional `check(container, observation)` assertions, and `defer(name)` for async cases |
 | `tests/harness/run.ts` | `behaves(name, case)`: runs the case on the reference and on a compiler, compares after each step |
 | `tests/harness/compilers.ts` | The compilers a case can run on; `COMPILER=old` (default) is `packages/compiler` |
 | `tests/harness/serialize.ts` | The visible DOM as a comparable string |
+| `tests/harness/requests.ts` | Queued JSON responses/rejections and normalized request history |
 | `tests/cases/<page>.test.ts` | One file per wiki page; holds that page's "Cases to test" |
 | `tests/generator/program.ts` | fast-check arbitraries: a random program as plain data (state, derived values, views, buttons, clicks) |
 | `tests/generator/print.ts` | Prints a program as `App.tsx` and its steps; checks it parses with `yuku-parser` |
@@ -30,6 +35,12 @@ renderers in the default mode. The ported regressions use it to assert known tex
 and DOM identity independently of the comparison, so two wrong renderers cannot
 agree unnoticed. On PowerShell, set `$env:REFERENCE_ONLY = '1'` before the command;
 remove it with `Remove-Item Env:REFERENCE_ONLY` to restore comparisons.
+
+Cases may provide extra `modules` for imports. Steps include `respond` (JSON body
+and optional HTTP status), `rejectRequest`, and `reject` for a named `defer`.
+Each run owns and disposes its module work, sources and transport. Relative and
+same-origin absolute request URLs compare by path and query. Use `--timeout 30000`
+when this machine is busy; the default five-second per-case timeout can expire.
 
 ## What it does
 
@@ -61,7 +72,9 @@ agreed rule, fix the reference rather than copying its mistake into the compiler
      its inputs changes, together with the body statements that build it (with no
      inputs it is computed once);
    - a prop reassigned by later code is a `prop` slot;
-   - every other body statement is setup and runs on the first render only.
+   - destructured aliases have the same cell/memo rules, with one native pattern
+     evaluation per changed input;
+   - every other body statement is setup and runs once, after its inputs are ready.
 
    A statement that calls something with a value (`x.anything()`, `f(x)`) runs inside
    `$ctx.observe`, which deep-copies the value before and compares it after. The
@@ -85,10 +98,11 @@ agreed rule, fix the reference rather than copying its mistake into the compiler
 
    That is `state-and-derived.md`, `refs.md` and `effects.md`, executable.
 
-   **Limits today:** sources (`$fetch`, `$read`, server functions), `Group` and
-   routing are not supported yet. A destructured name is recomputed with the value it
-   comes from. JSX and TypeScript are lowered by Bun's transpiler, because
-   `yuku-codegen` drops `enum` instead of converting it.
+   Sources and ordinary `Group` policies now have an independently asserted
+   baseline (`sources.md`). That page lists verified cases and remaining gaps,
+   including atomic `suspend`. Routing and SSR are not modeled. JSX and TypeScript
+   are lowered by Bun's transpiler, because `yuku-codegen` drops `enum` instead of
+   converting it.
 2. **Comparison tests.** A case is a component and a list of events. After the first
    render and after each event, the compiled DOM must equal the reference DOM.
 3. **Generated programs.** `fast-check` builds random components from JavaScript
@@ -97,23 +111,28 @@ agreed rule, fix the reference rather than copying its mistake into the compiler
    smallest program that still fails. That program is saved to `tests/corpus/` and
    runs in every later run.
 4. **Feature tests** next to each feature, for its graph and plan facts.
-5. **Optimizations on and off.** Every comparison test runs twice; both runs must
-   match the reference (`optimize.md`).
-6. **Strict checks** on every compile:
-   - valid input never gives a compile error;
-   - output never contains `try`, `catch` or `finally` that were not authored;
-   - output parses with `yuku-parser`.
+5. **Optimizations on and off** _(planned for compiler-next)_. Each comparison
+   will run twice; both runs must match the reference (`optimize.md`).
+6. **Strict checks.** A compile error on valid input already fails a case. Explicit
+   checks for newly introduced `try`/`catch`/`finally` and output parsing with
+   `yuku-parser` are still planned for the compiler adapter. Imported output
+   currently has to parse through Bun to run.
 7. **Acceptance.** The old suites (root `tests/`, package tests, Vite, the Conduit
    flows) run against `compiler-next` through a switch. When they all pass, the old
    compiler is deleted.
 
 The first cases are the **Cases to test** section of each concept page, written in
 `tests/cases/<page>.test.ts`. Each one is a case the old compiler rejects or shows
-wrong, or behaviour it must keep. On 2026-10-19, against the old compiler: 64 pass
-and 19 fail, each failure an old-compiler bug listed on its page. All 83 cases
+wrong, or behaviour it must keep. The earlier 83-case comparison (`9d98d41`) gave
+64 pass and 19 fail on the old compiler, each failure a bug listed on its page. Those 83 cases
 run on the reference; its explicit text and node-identity checks pass. The 33 added
 cases port the root regressions for written values, derived literals, prop writes,
 visible effects, keys and reactive refs (existing cases cover overlapping forms).
+The source slice adds 27 cases (`sources.md`), with 18 passing and 9 failing on
+the old compiler; an async-helper regression also checks that `return await`
+remains valid. These are separate from the earlier 83-case comparison above.
+The reference now runs 111 cases with its explicit assertions passing. This is
+still reference development, not permission to start the compiler.
 The old compiler has about 305 distinct `memo-dom:` messages. Most are internal
 invariants or contracts of the framework's own APIs (`route-to`, `$routed`, `Group`,
 `page()`, `mount()`, server functions); those stay. Only messages that reject

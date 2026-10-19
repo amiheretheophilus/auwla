@@ -143,5 +143,10 @@ These pass today and must keep passing:
 The ported root regressions also assert the known text after each step on both
 renderers (`Case.check`), independently of their DOM comparison.
 
+The reference now gives destructured aliases the same cell/memo treatment: the
+authored pattern runs natively once per changed input, and an alias written later
+keeps a snapshot. Source/default/rest cases are on `sources.md`. Module derivations
+refresh before component rendering.
+
 Not written yet: derivation writes at module scope (old message: "cannot assign
 computed").

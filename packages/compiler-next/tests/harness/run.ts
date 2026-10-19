@@ -4,11 +4,13 @@
  */
 import { afterEach, expect, it } from 'bun:test';
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { renderApp, type Component } from '../reference/runtime';
+import { beginReferenceScope, renderApp, type Component } from '../reference/runtime';
 import { toReference } from '../reference/transform';
-import { clearDeferred, describeStep, resolveDeferred, type Case, type Step } from './case';
+import { beginSources, finishSourceDeclarations } from '../reference/sources';
+import { clearDeferred, describeStep, rejectDeferred, resolveDeferred, type Case, type Step } from './case';
+import { clearRequests, fetchForCase, rejectRequest, respond } from './requests';
 import { clearCompiledApps, selectedCompiler, type Compiler } from './compilers';
 import { serialize } from './serialize';
 
@@ -21,6 +23,7 @@ afterEach(() => {
   for (const cleanup of [...cleanups].reverse()) cleanup();
   cleanups.clear();
   clearDeferred();
+  clearRequests();
 });
 
 /** A failed assertion must not leave an app, effects or DOM in the next case. */
@@ -57,12 +60,19 @@ export async function observeBoth(name: string, testCase: Case): Promise<{ refer
 }
 
 async function runOnReference(name: string, testCase: Case): Promise<Observations> {
-  const code = toReference(testCase.source, 'App.tsx', RUNTIME_URL);
-  const module = await importFiles(name, 'reference', { 'App.js': code }, 'App.js');
+  const disposeSources = track(beginSources(fetchForCase));
+  const disposeModules = track(beginReferenceScope());
+  const authored = { ...testCase.modules, './App.tsx': testCase.source };
+  const files = Object.fromEntries(Object.entries(authored).map(([path, source]) =>
+    [path, toReference(source, path, RUNTIME_URL)]));
+  const module = await importFiles(name, 'reference', files, 'App.tsx');
+  finishSourceDeclarations();
 
   const container = attachContainer();
   const app = renderApp(module.App as Component, container);
   const unmount = track(() => app.unmount());
+  await settle();
+  app.render();
   const observations = [observe('initial render', container)];
   testCase.check?.(container, 0);
 
@@ -75,13 +85,17 @@ async function runOnReference(name: string, testCase: Case): Promise<Observation
   }
 
   unmount();
+  disposeModules();
+  disposeSources();
   container.remove();
   clearDeferred();
+  clearRequests();
   return observations;
 }
 
 async function runOnCompiler(name: string, testCase: Case, compiler: Compiler): Promise<Observations> {
-  const files = compiler.compile(testCase.source);
+  const disposeSources = track(compiler.prepare());
+  const files = compiler.compile(testCase.source, testCase.modules);
   const module = await importFiles(name, 'compiled', files, 'App.tsx');
 
   const container = attachContainer();
@@ -99,14 +113,28 @@ async function runOnCompiler(name: string, testCase: Case, compiler: Compiler): 
   }
 
   unmount();
+  disposeSources();
   container.remove();
   clearDeferred();
+  clearRequests();
   return observations;
 }
 
 // ---------------------------------------------------------------------------
 
 function perform(step: Step, container: HTMLElement): void {
+  if ('respond' in step) {
+    respond(step.respond, step.value, step.status);
+    return;
+  }
+  if ('rejectRequest' in step) {
+    rejectRequest(step.rejectRequest, step.message);
+    return;
+  }
+  if ('reject' in step) {
+    rejectDeferred(step.reject, step.message);
+    return;
+  }
   if ('resolve' in step) {
     resolveDeferred(step.resolve, step.value);
     return;
@@ -147,7 +175,11 @@ async function importFiles(name: string, kind: string, files: Record<string, str
   const directory = join(OUT, slug(name), kind);
   rmSync(directory, { recursive: true, force: true });
   mkdirSync(directory, { recursive: true });
-  for (const [file, code] of Object.entries(files)) writeFileSync(join(directory, file), code);
+  for (const [file, code] of Object.entries(files)) {
+    const path = join(directory, file);
+    mkdirSync(dirname(path), { recursive: true });
+    writeFileSync(path, code);
+  }
   return (await import(pathToFileURL(join(directory, entry)).href)) as Record<string, unknown>;
 }
 

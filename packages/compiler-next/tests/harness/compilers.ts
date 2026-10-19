@@ -4,6 +4,8 @@
  */
 import { compileModules } from '@memoized-dom/compiler';
 import { registeredIds, resetScheduler, setScheduler, unregisterSubtree } from '@memoized-dom/runtime/testing';
+import { createDataRuntime, setActiveDataRuntime } from '@memoized-dom/data';
+import { fetchForCase } from './requests';
 
 export interface CompiledApp {
   /** Remove the app and everything the runtime registered for it. */
@@ -12,8 +14,9 @@ export interface CompiledApp {
 
 export interface Compiler {
   name: string;
+  prepare(): () => void;
   /** Compile `App.tsx`. Returns the output files by name. */
-  compile(source: string): Record<string, string>;
+  compile(source: string, modules?: Record<string, string>): Record<string, string>;
   /** Mount the compiled `App` into `container`. */
   mount(module: Record<string, unknown>, container: HTMLElement): CompiledApp;
 }
@@ -21,8 +24,17 @@ export interface Compiler {
 const oldCompiler: Compiler = {
   name: 'packages/compiler',
 
-  compile(source) {
-    return compileModules({ './App.tsx': source }, { runtimePath: '@memoized-dom/runtime/testing' });
+  prepare() {
+    const runtime = createDataRuntime({ fetch: fetchForCase });
+    const previous = setActiveDataRuntime(runtime);
+    return () => {
+      runtime.clear();
+      setActiveDataRuntime(previous);
+    };
+  },
+
+  compile(source, modules) {
+    return compileModules({ ...modules, './App.tsx': source }, { runtimePath: '@memoized-dom/runtime/testing' });
   },
 
   mount(module, container) {

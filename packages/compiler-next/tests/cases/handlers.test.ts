@@ -1,6 +1,7 @@
 /**
  * Cases for wiki/compiler/handlers.md.
  */
+import { expect } from 'bun:test';
 import { behaves } from '../harness/run';
 
 behaves('a member expression as a handler', {
@@ -60,4 +61,18 @@ behaves('typing into an input', {
       );
     }`,
   steps: [{ input: 'input', value: 'hi' }],
+});
+
+behaves('an async helper preserves return await', {
+  source: `
+    async function load() { return await defer('load'); }
+    export function App() {
+      let result = 'waiting';
+      return <main><p>{result}</p>
+        <button onClick={() => { load().then(value => { result = value; }); }}>load</button></main>;
+    }`,
+  steps: [{ click: 'button' }, { resolve: 'load', value: 'ready' }],
+  check(container, observation) {
+    expect(container.querySelector('p')?.textContent).toBe(['waiting', 'waiting', 'ready'][observation]);
+  },
 });

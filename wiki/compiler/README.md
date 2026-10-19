@@ -1,9 +1,13 @@
 # The compiler (rewrite)
 
-**Status: tests built, compiler not started.** The new compiler lives in
+**Status: reference and wiki being validated; compiler not started.** The new compiler lives in
 `packages/compiler-next/` on branch `compiler-rewrite`; its tests are in
 `packages/compiler-next/tests/`. `packages/compiler/` stays until every suite passes
 on the new one; then it is deleted.
+
+Finish the reference and wiki first, as requested by the user. The first source
+and ordinary `Group` baseline is verified; remaining reference work is on
+`sources.md`. Do not begin the production compiler while that work is unfinished.
 
 > "the goal is to write normal javascript and get effecient compiled output"
 

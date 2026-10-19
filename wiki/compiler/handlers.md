@@ -63,6 +63,10 @@ The old compiler fails these:
 
 These pass today: reassigning module state from a handler; typing into an input.
 
+The reference also asserts an async helper using `return await defer(...)`.
+Readiness guards must preserve its async body rather than move the `await` into a
+synchronous thunk.
+
 Old messages not yet checked against valid code:
   - "handler assigns X which is neither module state nor a handler local";
   - "module-state write cannot produce a value" (server builds).

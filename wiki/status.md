@@ -291,8 +291,10 @@ The direction changed again on 2026-10-19: the compiler is rewritten as
 compiler gets no more patches; bugs become tests.
 
 JavaScript and the agreed rules define correctness. The old compiler is only a
-comparison target and performance baseline: its 19 current case failures must
-pass on `compiler-next`. The test reference is checked against those same rules.
+comparison target and performance baseline: its failing cases must pass on
+`compiler-next`. The test reference is checked against those same rules. The user
+has explicitly kept compiler implementation on hold until the reference and wiki
+are nailed first.
 
 1. Testing, in progress:
    - done: the reference renderer, the comparison harness, and 32 cases across
@@ -315,9 +317,19 @@ pass on `compiler-next`. The test reference is checked against those same rules.
      distinct JSX branches and returned-root keys, read effect inputs after refs
      mount, and replay cleanup writes. `bun check` passes. Harness cleanup also
      runs after failed assertions and failed compiled mounts.
-   - next: sources (`$fetch`, `$read`, server functions) and `Group` in the
-     reference. No CI until the suite reaches thousands of cases.
-2. Core: parse and resolve on yuku 0.19 (`compiler/toolchain.md`), then the graph.
+   - done: the first source/readiness baseline. 27 new source cases pass on the
+     independent reference; 18 pass and 9 fail on the old compiler. Covers reads,
+     JSON fetches, GET client facades, helpers/imports, module derivations, seeds,
+     destructuring, effects, early returns, ordinary Group policies, errors/retry,
+     status/refresh and replacement. Shared builders, dependency queries and
+     readiness transforms have their own reference files. An async-helper case
+     preserves `return await`. All 111 reference cases and `bun check` pass.
+   - next: complete reference work on `compiler/sources.md`, starting with atomic
+     `suspend` preparation and publication. Then extend generated programs with
+     sources and failure/refresh/replacement sequences. No compiler work yet.
+     No CI until the suite reaches thousands of cases.
+2. Later, after the reference/wiki are ready: parse and resolve on yuku 0.19
+   (`compiler/toolchain.md`), then the graph.
 3. Features in slices, each end to end: static markup → state and text → handlers →
    conditionals → lists → components → sources and readiness → effects and refs →
    linking.
