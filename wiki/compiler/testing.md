@@ -41,7 +41,15 @@ JavaScript case by hand.
 The right answer comes from JavaScript itself: "every expression that we can see it
 effect in the console means we need to see it on the ui" (`../rules.md`, rule 10).
 So every test compares the compiled component with a **reference renderer** that is
-slow and obviously correct.
+deliberately simple and slow, implementing JavaScript and the user's agreed
+reactivity rules.
+
+**The old compiler does not define correctness.** It is a comparison target and a
+performance baseline. Its failures expose bugs the rewrite must fix; they are
+never expected failures for `compiler-next`. All valid-JavaScript cases, including
+the 19 that currently fail on the old compiler, must pass on the new compiler.
+The test reference can also contain bugs: when it disagrees with JavaScript or an
+agreed rule, fix the reference rather than copying its mistake into the compiler.
 
 ## Layers
 

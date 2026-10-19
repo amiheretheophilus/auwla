@@ -290,6 +290,10 @@ The direction changed again on 2026-10-19: the compiler is rewritten as
 `packages/compiler-next/` (see `decisions.md` and `compiler/README.md`). The old
 compiler gets no more patches; bugs become tests.
 
+JavaScript and the agreed rules define correctness. The old compiler is only a
+comparison target and performance baseline: its 19 current case failures must
+pass on `compiler-next`. The test reference is checked against those same rules.
+
 1. Testing, in progress:
    - done: the reference renderer, the comparison harness, and 32 cases across
      `tests/cases/` (`compiler/testing.md`). Against the old compiler, 20 pass and
