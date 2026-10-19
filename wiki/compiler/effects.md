@@ -16,7 +16,7 @@ and runs their cleanup.
 - `$effect` inside `if`, a loop or a helper is accepted. Its reads include the
   condition.
 - An `async` callback is accepted: it runs, and its cleanup is whatever it resolves
-  to, or none (`../rejections.md`).
+  to, or none.
 - Writes inside an effect are writes like any handler's (`handlers.md`).
 - An effect with a non-empty `pending(n)` first runs when its sources commit
   (`sources.md`).
@@ -25,3 +25,9 @@ and runs their cleanup.
 
 - In: `Resolved`, the graph.
 - Out: `Effect` nodes with `reads` and `writes` edges.
+
+## Cases to test
+
+- `$effect(async () => …)`: the old compiler rejects it.
+- `$effect` inside `if`: works today.
+- `$cleanup` in places the old compiler does not allow (not yet checked).

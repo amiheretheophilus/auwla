@@ -50,3 +50,24 @@ place.
 
 - A new list operation that can be done faster: an optimization, never a change to
   the general rule.
+
+## Cases to test
+
+The old compiler rejects the first five:
+
+- `load().map(i => <li/>)`;
+- `items.map((item, i, all) => …)`;
+- JSX pushed into an array in a `for` loop, rendered as `{rows}`;
+- `<p>{...items}</p>`;
+- `<p key="x">` outside a list.
+
+These work today and must keep working:
+
+- maps over module constants;
+- filter-then-map;
+- `map(Row)`;
+- `switch` on state;
+- `??` in JSX.
+
+Old messages not yet checked against valid code: "control flow … test is not
+replayable", "conditional cannot choose between two data sources".

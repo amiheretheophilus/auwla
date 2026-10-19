@@ -42,8 +42,12 @@ slow and obviously correct.
    flows) run against `compiler-next` through a switch. When they all pass, the old
    compiler is deleted.
 
-`../rejections.md` is the first seed for the corpus: each entry is a case the old
-compiler rejected.
+The first cases are the **Cases to test** section of each concept page. Each one
+is a case the old compiler rejects or shows wrong, or behaviour it must keep.
+The old compiler has about 305 distinct `memo-dom:` messages. Most are internal
+invariants or contracts of the framework's own APIs (`route-to`, `$routed`, `Group`,
+`page()`, `mount()`, server functions); those stay. Only messages that reject
+ordinary JavaScript become cases.
 
 ## Running
 

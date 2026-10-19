@@ -43,7 +43,7 @@ Other libraries:
   `core/resolve/` (see `handlers.md`).
 - **`strip` does not convert `enum`, `namespace`, `export =` or parameter
   properties.** It reports them and leaves them out. `enum` and parameter
-  properties are valid code we must accept (`../rejections.md`), so
+  properties are valid code we must accept (the old compiler rejects `enum`), so
   `core/parse/` lowers them before printing.
 - Output text differs from esrap's. Tests compare behaviour, not text, so that does
   not matter.

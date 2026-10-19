@@ -38,3 +38,12 @@ Finds values that load over time and makes everything computed from them wait.
 
 - A new kind of source: one recognizer in `classify.ts`. Readiness follows from
   the graph and needs no new code.
+
+## Cases to test
+
+- A helper in the same module that returns `$fetch`: the old compiler does not see
+  it as a source.
+- Destructuring a source (old code `[MMD-S004]`, not yet checked).
+- A seeded `let` written before its source loads: the old compiler overwrites the
+  write.
+- `tests/body-readiness.test.ts`: seeds, early returns, effects and chained requests.

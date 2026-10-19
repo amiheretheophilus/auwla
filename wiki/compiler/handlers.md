@@ -50,3 +50,12 @@ Finds every place that changes state and makes the UI update after it.
 
 - A new way code can change state (a new syntax form): `core/resolve/` mutation
   sites. Handlers pick it up without changes here.
+
+## Cases to test
+
+- `onClick={actions.go}` and `onClick={make()}`: the old compiler rejects both.
+- A write between two `await`s: the old compiler never shows it.
+- Reassigning module state from a handler; reassigning a module store.
+- Old messages not yet checked against valid code:
+  - "handler assigns X which is neither module state nor a handler local";
+  - "module-state write cannot produce a value" (server builds).

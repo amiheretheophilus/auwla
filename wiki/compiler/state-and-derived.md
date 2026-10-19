@@ -71,3 +71,17 @@ for (const item of items) sum += item.price;
 
 - A new way to write a binding (a new assignment form): `core/resolve/`, which
   finds write sites. The rules here do not change.
+
+## Cases to test
+
+Each must compile and show on the UI what the console shows.
+
+- `let label = user.name; if (!label) label = 'Anonymous';`: the old compiler rejects it.
+- `const items = makeList()`, written, then rendered as a list.
+- writes and read-only methods on a `[1].concat([2])` result;
+- reassigning a prop, and `++` on a prop;
+- `sorted.push(x)` on `const sorted = items.slice()`;
+- writing a module computed;
+- chained and value-position assignments: `a = b = 1`, `last = count++`;
+- derivation writes at module scope (old message: "cannot assign computed");
+- destructuring reactive state (old message: "destructuring snapshots reactive state").

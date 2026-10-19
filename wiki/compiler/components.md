@@ -28,6 +28,13 @@ Finds components, and compiles calls to them: props, children and slots.
 - In: `Resolved`, linked summaries for imported components (`linking.md`).
 - Out: `ComponentCall` regions; `Prop` nodes for each component.
 
+## Cases to test
+
+The old compiler rejects both:
+
+- `<UI.Box>`, a member tag;
+- `<Child a={1} b={2} />` where `Child` does not declare `b`.
+
 ## Open questions
 
 - Which component forms does the old compiler support that are not listed here

@@ -219,7 +219,7 @@ keep the edit and the update re-derived `sorted` from `items`, losing it.
 - Corpus: 3 changed, all this fix (`visible.custom()`, `alias.push()`,
   `(flag ? items : other).push()` now keep the edit, origin commits unchanged).
 - Tests: `tests/visible-effects.test.ts` (13). The audit of other valid-JS
-  rejections is in `rejections.md`.
+  rejections is now in the "Cases to test" sections of `compiler/`.
 
 ## Runtime: a dropped commit froze every later update
 
@@ -290,7 +290,7 @@ compiler gets no more patches; bugs become tests.
 1. The user reviews `compiler/`, especially the open questions in
    `state-and-derived.md` and `testing.md`.
 2. Testing first: the reference renderer, the comparison harness and the generator
-   (`compiler/testing.md`), with `rejections.md` and the tests listed above
+   (`compiler/testing.md`), with each page's "Cases to test" and the tests listed above
    (`visible-effects`, `written-const-state`, `prop-writes`, `derived-literals`,
    `stray-keys`, `reactive-refs`) as the first cases. CI on GitHub Actions.
 3. Core: parse and resolve on yuku 0.19 (`compiler/toolchain.md`), then the graph.
