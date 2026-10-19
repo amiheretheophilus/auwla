@@ -18,14 +18,20 @@ const RUNTIME_URL = pathToFileURL(join(import.meta.dirname, '..', 'reference', '
 /** Register a test: the compiled app must look like the reference after every step. */
 export function behaves(name: string, testCase: Case): void {
   it(name, async () => {
-    const reference = await runOnReference(name, testCase);
-    const compiled = await runOnCompiler(name, testCase, selectedCompiler());
+    const { reference, compiled } = await observeBoth(name, testCase);
     expect(compiled).toEqual(reference);
   });
 }
 
 /** One entry per observation: what happened, then the HTML. */
-type Observations = string[];
+export type Observations = string[];
+
+/** Run a case on the reference and on the selected compiler. */
+export async function observeBoth(name: string, testCase: Case): Promise<{ reference: Observations; compiled: Observations }> {
+  const reference = await runOnReference(name, testCase);
+  const compiled = await runOnCompiler(name, testCase, selectedCompiler());
+  return { reference, compiled };
+}
 
 async function runOnReference(name: string, testCase: Case): Promise<Observations> {
   const code = toReference(testCase.source, 'App.tsx', RUNTIME_URL);
