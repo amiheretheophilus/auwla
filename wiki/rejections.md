@@ -35,7 +35,7 @@ is ordinary JavaScript/JSX, each case checked by compiling it
 | `$effect(async () => …)` | effect callback must be synchronous | Async body: run it; the teardown is whatever it resolves to, or none. |
 | `enum Mode { A, B }` | runtime TypeScript syntax 'TSEnumDeclaration' | Lower enums to objects (as TypeScript does). |
 | `<p>{...items}</p>` | spread children are not supported | Render the array. |
-| `let label = user.name; if (!label) label = 'Anonymous';` | reactive control-flow derivation 'label' reads its own previous value | Found 2026-10-19. The `if`/`else` form that assigns in every branch compiles and re-runs. |
+| `let label = user.name; if (!label) label = 'Anonymous';` | reactive control-flow derivation 'label' reads its own previous value | Found 2026-10-19. Should be derived: the declaration and the `if` re-run together when `user` changes (`rules.md`, rule 11). The `if`/`else` form already works. |
 
 ## Wrong on the UI today (not rejected)
 

@@ -19,7 +19,8 @@ slow and obviously correct.
 
 1. **Reference renderer** (`tests/reference/` _(planned)_). It re-runs the whole
    component function after every event and renders it to HTML. State keeps its
-   value between runs: a small transform reads it from a store and saves every write.
+   value between runs: a small transform reads it from a store and saves every write,
+   and body statements that write a snapshot run only on the first run.
    Derived values are correct by construction, because everything is recomputed. It
    follows `state-and-derived.md` exactly, so it is also the executable version of
    those rules.

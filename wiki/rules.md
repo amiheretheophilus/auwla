@@ -6,7 +6,10 @@ Stated by the user on 2026-10-18. They apply to every design and every fix.
 
 1. **Normal JavaScript gets reactivity.** Users write ordinary `let`/`const`,
    functions and methods. The compiler derives reactivity from what values
-   depend on, never from how the code is spelled.
+   depend on, never from how the code is spelled. It adds no meaning of its own:
+   JavaScript runs as written, and the compiler only decides what to re-run and
+   when to update the UI. The user: "that is how javascrpt works we just have to
+   let them replay in the browser ui".
 2. **`let` vs `const` does not decide reactivity.** "this is not svelte".
    `const` is recommended for derived values because it is stricter; `let` works too.
 3. **No method whitelists or blacklists for semantics.** Method lists exist only
@@ -31,11 +34,14 @@ Stated by the user on 2026-10-18. They apply to every design and every fix.
 11. **Derived values and writes** (2026-10-19, agreed with the user):
     - `let` and `const` alike can be state or derived. The user: "const and let
       all are state and derived".
-    - A binding that is reassigned anywhere is state: its initializer is a
-      snapshot taken once, and it never re-derives. The user: "the total first
-      value becomes a snapshot meaning price and qty change will no re derive it
-      again as there is a reassignment". A `const` cannot be reassigned, so a
+    - A binding reassigned later (in a handler, effect or callback) is state: its
+      first value is a snapshot, and it never re-derives. The user: "the total
+      first value becomes a snapshot meaning price and qty change will no re derive
+      it again as there is a reassignment". A `const` cannot be reassigned, so a
       `const` with a reactive initializer is always derived.
+    - Writes in the component body (`let label = user.name; if (!label) label =
+      'Anonymous';`) are part of the derivation and re-run with it. The user: "it
+      should work since it somehow being part of a reactivity derivation".
     - Mutation is not reassignment. A derived object or array can be mutated
       (`const a = [...old]; a.push(x)`): the edit shows, and when the source
       changes the value is derived again. Details in `compiler/state-and-derived.md`.
