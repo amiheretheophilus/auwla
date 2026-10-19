@@ -411,11 +411,12 @@ export function $moduleMemo(readInputs: () => unknown[], update: () => unknown, 
 /** Stands for any function: functions are compared through what they capture. */
 const FUNCTION = Symbol('function');
 
-function deepCopy(value: unknown, copies = new Map<object, unknown>()): unknown {
+function deepCopy(value: unknown, copies = new Map<object, unknown>(), sourceIdentityOnly = false): unknown {
+  const copy = (entry: unknown) => deepCopy(entry, copies, sourceIdentityOnly);
   if (value instanceof Source) {
-    return { source: value.id, version: value.version, data: deepCopy(value.data, copies) };
+    return sourceIdentityOnly ? { source: value.id } : { source: value.id, version: value.version, data: copy(value.data) };
   }
-  if (value instanceof Waiting) return { waiting: value.sources.map((source) => deepCopy(source, copies)) };
+  if (value instanceof Waiting) return { waiting: value.sources.map(copy) };
   if (typeof value === 'function') return FUNCTION;
   if (value === null || typeof value !== 'object') return value;
   if (value instanceof Node || value instanceof AssignRef) return value;
@@ -426,27 +427,29 @@ function deepCopy(value: unknown, copies = new Map<object, unknown>()): unknown 
   if (value instanceof Map) {
     const entries: unknown[] = [];
     copies.set(value, entries);
-    for (const [key, entry] of value) entries.push([deepCopy(key, copies), deepCopy(entry, copies)]);
+    for (const [key, entry] of value) entries.push([copy(key), copy(entry)]);
     return { map: entries };
   }
 
   if (value instanceof Set) {
     const entries: unknown[] = [];
     copies.set(value, entries);
-    for (const entry of value) entries.push(deepCopy(entry, copies));
+    for (const entry of value) entries.push(copy(entry));
     return { set: entries };
   }
 
   if (Array.isArray(value)) {
     const items: unknown[] = [];
     copies.set(value, items);
-    for (const item of value) items.push(deepCopy(item, copies));
+    for (const item of value) items.push(copy(item));
     return items;
   }
 
   const fields: Record<string, unknown> = {};
   copies.set(value, fields);
-  for (const [key, field] of Object.entries(value)) fields[key] = deepCopy(field, copies);
+  for (const [key, field] of Object.entries(value)) {
+    fields[key] = sourceIdentityOnly && isElement(value) && key === 'tag' ? field : copy(field);
+  }
   return fields;
 }
 
@@ -503,6 +506,7 @@ interface Policies {
 interface SuspendedBoundary {
   published: boolean;
   failed?: Waiting;
+  failedInputs?: unknown;
 }
 
 class Renderer {
@@ -520,6 +524,8 @@ class Renderer {
   private renderedBoundaries = new Set<string>();
   private preparedInstances = new Set<string>();
   private preparedOutputs = new Map<string, unknown>();
+  /** Setup/cleanup may write values rendered earlier, even while fallback DOM is unchanged. */
+  private lifecycleChanged = false;
 
   constructor(
     private readonly root: Component,
@@ -534,9 +540,9 @@ class Renderer {
     for (let round = 0; round < 10; round++) {
       this.moduleEffects.refreshMemos();
       const before = this.container.innerHTML;
-      const refsInstalled = this.renderOnce();
+      const lifecycleChanged = this.renderOnce();
       const effectsRan = this.runEffects();
-      if (!refsInstalled && !effectsRan && this.container.innerHTML === before) return;
+      if (!lifecycleChanged && !effectsRan && this.container.innerHTML === before) return;
     }
     throw new Error('reference: render did not settle after 10 passes');
   }
@@ -562,18 +568,23 @@ class Renderer {
     this.renderedBoundaries = new Set();
     this.preparedInstances = new Set();
     this.preparedOutputs = new Map();
+    this.lifecycleChanged = false;
 
     const children = this.renderNode($h(this.root, null), 'root', false);
     syncChildren(this.container, children);
 
     // Nodes and instances that were not rendered are gone.
     for (const [position, record] of this.nodes) {
-      if (!this.renderedNodes.has(position) && record.kind === 'element') record.teardownRef?.();
+      if (!this.renderedNodes.has(position) && record.kind === 'element' && record.teardownRef) {
+        record.teardownRef();
+        this.lifecycleChanged = true;
+      }
     }
     for (const [id, instance] of this.instances) {
       if (this.renderedInstances.has(id) || this.preparedInstances.has(id)) continue;
       instance.unmount();
       this.instances.delete(id);
+      this.lifecycleChanged = true;
     }
     this.nodes = this.renderedNodes;
     for (const position of this.lastReady.keys()) {
@@ -585,7 +596,7 @@ class Renderer {
 
     // Refs are installed once the DOM exists.
     for (const { record, value } of this.refsToInstall) record.teardownRef = installRef(value, record.node);
-    return this.refsToInstall.length > 0;
+    return this.refsToInstall.length > 0 || this.lifecycleChanged;
   }
 
   private runEffects(): boolean {
@@ -635,7 +646,15 @@ class Renderer {
     }
     const inherited = node.tag === Group ? this.groupPolicies(node, policies) : policies;
     if (boundary.published) return this.renderElement(node, position, inSvg, policies);
-    if (boundary.failed) return this.renderBoundaryFailure(boundary, position, inSvg, inherited);
+    // Source identities and active descriptors decide whether this is still the
+    // failed attempt. Status changes alone must not recreate child requests.
+    const inputs = deepCopy(node, new Map(), true);
+    if (boundary.failed) {
+      if (boundary.failed.sources.some((source) => source.error) && deepEqual(boundary.failedInputs, inputs)) {
+        return this.renderBoundaryFailure(boundary, position, inSvg, inherited);
+      }
+      boundary.failed = undefined;
+    }
 
     const preparation = new Preparation((element, component, path) => {
       const { id, output, instance } = this.evaluateComponent(element, component, path);
@@ -646,10 +665,12 @@ class Renderer {
     if (waiting) {
       if (waiting.sources.some((source) => source.error)) {
         boundary.failed = waiting;
+        boundary.failedInputs = inputs;
         // A failed draft never owned mounted refs or effects. Release its work now.
         for (const id of preparation.instances) {
           this.instances.get(id)!.unmount();
           this.instances.delete(id);
+          this.lifecycleChanged = true;
         }
         return this.renderBoundaryFailure(boundary, position, inSvg, inherited);
       }
@@ -724,6 +745,7 @@ class Renderer {
     if (instance === undefined) {
       instance = new Instance();
       this.instances.set(id, instance);
+      this.lifecycleChanged = true;
     }
 
     const props: Record<string, unknown> = { ...node.props };

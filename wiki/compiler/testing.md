@@ -98,6 +98,9 @@ agreed rule, fix the reference rather than copying its mistake into the compiler
    imperative DOM work intact. Effects compare inputs after refs mount and save
    them after their synchronous writes, so they do not immediately re-trigger
    themselves. Removing an effect also schedules another pass for cleanup writes.
+   Creating/discarding a prepared component or tearing down a ref also schedules
+   another pass, so setup/cleanup writes reach earlier readers even when the
+   visible pending fallback stays identical.
    Ten passes without settling is an error, never a silently accepted result.
    The harness disposes apps and removes DOM even after a failed assertion or a
    failed compiled mount.
@@ -138,8 +141,15 @@ The source slice adds 27 cases (`sources.md`), with 18 passing and 9 failing on
 the old compiler; an async-helper regression also checks that `return await`
 remains valid. These are separate from the earlier 83-case comparison above.
 The atomic slice adds 14 cases: 8 pass and 6 fail on the old compiler, with both
-generated versions available for every case. The reference now has 125 cases;
-the original 111 and all 14 additions pass their explicit assertions. This is
+generated versions available for every case. Eleven further atomic lifecycle
+cases compare branch discovery, keyed drafts, nested/shared error policies,
+module ownership, remounting and failed-input recovery: 6 pass and 5 fail on the old compiler.
+The keyed-draft assertion first exposed a reference settling bug; it passes after
+the fix and then exposes a missing setup write notification in the old output.
+Four recovery assertions also caught stale failure retention in the reference;
+they pass after the fix and expose corresponding failures in the old compiler.
+All 136 reference cases pass their explicit assertions; `bun check` passes for
+24 files. This is
 still reference development, not permission to start the compiler.
 The old compiler has about 305 distinct `memo-dom:` messages. Most are internal
 invariants or contracts of the framework's own APIs (`route-to`, `$routed`, `Group`,

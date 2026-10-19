@@ -714,3 +714,210 @@ behaves('suspend keeps committed DOM identity during refresh and source replacem
     expect(container.querySelector('i') !== null).toBe(observation === 0);
   },
 });
+
+behaves('suspend lifecycle: discovers descendants after a source-dependent branch becomes ready', {
+  source: `
+    import { $fetch, Group } from '@memoized-dom/data';
+    function Child() { const user = $fetch('/child'); return <p>{user.name}</p>; }
+    function Parent() {
+      const gate = $fetch('/gate');
+      if (!gate.show) return <b>off</b>;
+      return <section><h1>Static</h1><Child /></section>;
+    }
+    export function App() { return <Group suspend pending={() => <i>loading</i>}><Parent /></Group>; }`,
+  steps: [{ respond: '/gate', value: { show: true } }, { respond: '/child', value: { name: 'Ada' } }],
+  check(container, observation) {
+    expect(requestedUrls()).toEqual(observation === 0 ? ['/gate'] : ['/gate', '/child']);
+    expect(container.textContent).toBe(['loading', 'loading', 'StaticAda'][observation]!);
+    expect(container.querySelector('section') !== null).toBe(observation === 2);
+  },
+});
+
+behaves('suspend lifecycle: replaces a keyed draft and releases its setup exactly once', {
+  source: `
+    import { $fetch, Group } from '@memoized-dom/data';
+    let setups = 0; let cleanups = 0; let starts = 0; let stops = 0;
+    function Child({ id }) {
+      setups++;
+      $cleanup(() => { cleanups++; });
+      const user = $fetch('/user/' + id);
+      $effect(() => { starts++; return () => { stops++; }; });
+      return <p>{user.name}</p>;
+    }
+    export function App() {
+      let id = 1;
+      return <main><output>{setups}:{cleanups}:{starts}:{stops}</output><button onClick={() => { id = 2; }}>next</button>
+        <Group suspend pending={() => <i>loading</i>}><Child key={id} id={id} /></Group></main>;
+    }`,
+  steps: [
+    { click: 'button' }, { respond: '/user/1', value: { name: 'Stale' } }, { respond: '/user/2', value: { name: 'Fresh' } },
+  ],
+  check(container, observation) {
+    expect(container.querySelector('output')?.textContent).toBe(['1:0:0:0', '2:1:0:0', '2:1:0:0', '2:1:1:0'][observation]);
+    expect(requestSignals()[0]?.aborted).toBe(observation > 0);
+    expect(container.querySelector('p')?.textContent).toBe([undefined, undefined, undefined, 'Fresh'][observation]);
+  },
+});
+
+behaves('suspend lifecycle: uses the outer error policy for a failed nested preparation', {
+  source: `
+    import { $read, Group } from '@memoized-dom/data';
+    function Child() {
+      const user = $read(defer('user'));
+      return <Group error={({ error }) => <b>inner:{error.message}</b>}><article suspend>{user.name}</article></Group>;
+    }
+    export function App() { return <Group pending={() => <i>outer pending</i>}
+      error={({ error }) => <b>outer:{error.message}</b>}><Group suspend><h1>Static</h1><Child /></Group></Group>; }`,
+  steps: [{ reject: 'user', message: 'offline' }],
+  check(container, observation) {
+    expect(container.textContent).toBe(['outer pending', 'outer:offline'][observation]!);
+    expect(container.querySelector('h1, article')).toBeNull();
+  },
+});
+
+behaves('suspend lifecycle: abandonment preserves a module source for a later consumer', {
+  modules: { './session.ts': `import { $fetch } from '@memoized-dom/data'; export const user = $fetch('/session');` },
+  source: `
+    import { Group } from '@memoized-dom/data';
+    import { user } from './session';
+    function Child() { return <p>{user.name}</p>; }
+    export function App() {
+      let show = true;
+      return <main><button onClick={() => { show = !show; }}>toggle</button>
+        {show && <Group suspend pending={() => <i>loading</i>}><Child /></Group>}</main>;
+    }`,
+  steps: [{ click: 'button' }, { respond: '/session', value: { name: 'Ada' } }, { click: 'button' }],
+  check(container, observation) {
+    expect(requestedUrls()).toEqual(['/session']);
+    expect(requestSignals()[0]?.aborted).toBe(false);
+    expect(container.querySelector('p')?.textContent).toBe([undefined, undefined, undefined, 'Ada'][observation]);
+  },
+});
+
+behaves('suspend lifecycle: a shared failure uses separate ordinary and atomic policies', {
+  source: `
+    import { $read, Group } from '@memoized-dom/data';
+    function Child({ user }) { return <article>{user.name}</article>; }
+    export function App() {
+      const user = $read(defer('user'));
+      return <Group pending={() => <i>ordinary pending</i>} error={({ error }) => <b>ordinary:{error.message}</b>}>
+        <h1>Shell</h1><p>{user.name}</p><Group pending={() => <i>atomic pending</i>}
+          error={({ error }) => <b>atomic:{error.message}</b>}><Child suspend user={user} /></Group></Group>;
+    }`,
+  steps: [{ reject: 'user', message: 'offline' }],
+  check(container, observation) {
+    expect(container.querySelector('h1')?.textContent).toBe('Shell');
+    expect(container.querySelector('p')?.textContent).toBe(['ordinary pending', 'ordinary:offline'][observation]);
+    expect(container.querySelector('article')).toBeNull();
+    expect(container.textContent).toBe(['Shellordinary pendingatomic pending', 'Shellordinary:offlineatomic:offline'][observation]!);
+  },
+});
+
+behaves('suspend lifecycle: removing an active pending branch releases its child and publishes', {
+  source: `
+    import { $fetch, Group } from '@memoized-dom/data';
+    function Child() { const user = $fetch('/user'); return <article>{user.name}</article>; }
+    function Parent({ show }) { return <section><h1>Static</h1>{show ? <Child /> : <p>off</p>}</section>; }
+    export function App() {
+      let show = true;
+      return <main><button onClick={() => { show = false; }}>hide</button>
+        <Group suspend pending={() => <i>loading</i>}><Parent show={show} /></Group></main>;
+    }`,
+  steps: [{ click: 'button' }, { respond: '/user', value: { name: 'Stale' } }],
+  check(container, observation) {
+    expect(container.querySelector('section')?.textContent).toBe([undefined, 'Staticoff', 'Staticoff'][observation]);
+    expect(requestSignals()[0]?.aborted).toBe(observation > 0);
+    expect(container.querySelector('article')).toBeNull();
+  },
+});
+
+behaves('suspend lifecycle: remount after an error starts fresh child work', {
+  source: `
+    import { $fetch, Group } from '@memoized-dom/data';
+    function Child() { const user = $fetch('/user'); return <p>{user.name}</p>; }
+    export function App() {
+      let show = true;
+      return <main><button id="toggle" onClick={() => { show = !show; }}>toggle</button>
+        {show && <Group suspend pending={() => <i>loading</i>} error={({ error }) => <b>{error.message}</b>}><Child /></Group>}</main>;
+    }`,
+  steps: [
+    { respond: '/user', value: { message: 'offline' }, status: 503 }, { click: '#toggle' }, { click: '#toggle' },
+    { respond: '/user', value: { name: 'Ada' } },
+  ],
+  check(container, observation) {
+    expect(requestedUrls()).toHaveLength(observation < 3 ? 1 : 2);
+    expect(container.querySelector('i, b, p')?.textContent).toBe(['loading', 'offline', undefined, 'loading', 'Ada'][observation]);
+  },
+});
+
+behaves('suspend lifecycle: a new external source replaces failed preparation without remounting', {
+  source: `
+    import { $read, Group } from '@memoized-dom/data';
+    export function App() {
+      let user = $read(defer('initial'));
+      return <main><button id="replace" onClick={() => { user = $read(defer('replacement')); }}>replace</button>
+        <Group suspend pending={() => <i>loading</i>} error={({ error }) => <b>{error.message}</b>}>
+          <h1>Static</h1><p>{user.name}</p></Group></main>;
+    }`,
+  steps: [
+    { reject: 'initial', message: 'offline' }, { click: '#replace' }, { resolve: 'replacement', value: { name: 'Ada' } },
+  ],
+  check(container, observation) {
+    expect(container.querySelector('i, b, p')?.textContent).toBe(['loading', 'offline', 'loading', 'Ada'][observation]);
+    expect(container.querySelector('h1') !== null).toBe(observation === 3);
+  },
+});
+
+behaves('suspend lifecycle: removing a failed branch publishes the remaining active content', {
+  source: `
+    import { $read, Group } from '@memoized-dom/data';
+    export function App() {
+      const user = $read(defer('user')); let show = true;
+      return <main><button id="hide" onClick={() => { show = false; }}>hide</button>
+        <Group suspend pending={() => <i>loading</i>} error={({ error }) => <b>{error.message}</b>}>
+          <h1>Static</h1>{show ? <p>{user.name}</p> : <p>off</p>}</Group></main>;
+    }`,
+  steps: [{ reject: 'user', message: 'offline' }, { click: '#hide' }],
+  check(container, observation) {
+    expect(container.querySelector('i, b, p')?.textContent).toBe(['loading', 'offline', 'off'][observation]);
+    expect(container.querySelector('h1') !== null).toBe(observation === 2);
+  },
+});
+
+behaves('suspend lifecycle: changed child inputs replace failed work while unrelated renders do not retry', {
+  source: `
+    import { $fetch, Group } from '@memoized-dom/data';
+    function Child({ id }) { const user = $fetch('/user/' + id); return <p>{user.name}</p>; }
+    export function App() {
+      let id = 1; let count = 0;
+      return <main><output>{count}</output><button id="count" onClick={() => count++}>count</button>
+        <button id="next" onClick={() => { id = 2; }}>next</button>
+        <Group suspend pending={() => <i>loading</i>} error={({ error }) => <b>{error.message}</b>}>
+          <Child id={id} /></Group></main>;
+    }`,
+  steps: [
+    { respond: '/user/1', value: { message: 'offline' }, status: 503 }, { click: '#count' },
+    { click: '#next' }, { respond: '/user/2', value: { name: 'Ada' } },
+  ],
+  check(container, observation) {
+    expect(requestedUrls()).toEqual(observation < 3 ? ['/user/1'] : ['/user/1', '/user/2']);
+    expect(container.querySelector('i, b, p')?.textContent).toBe(['loading', 'offline', 'offline', 'loading', 'Ada'][observation]);
+    expect(container.querySelector('output')?.textContent).toBe(observation < 2 ? '0' : '1');
+  },
+});
+
+behaves('suspend lifecycle: external refresh recovers the same failed source passed to a child', {
+  source: `
+    import { $read, $track, Group } from '@memoized-dom/data';
+    function Child({ user }) { return <p>{user.name}</p>; }
+    export function App() {
+      const user = $read(defer('user')); const state = $track(user);
+      return <main><button id="refresh" onClick={() => state.refresh()}>refresh</button>
+        <Group pending={() => <i>loading</i>} error={({ error }) => <b>{error.message}</b>}>
+          <Child suspend user={user} /></Group></main>;
+    }`,
+  steps: [{ reject: 'user', message: 'offline' }, { click: '#refresh' }, { resolve: 'user', value: { name: 'Ada' } }],
+  check(container, observation) {
+    expect(container.querySelector('i, b, p')?.textContent).toBe(['loading', 'offline', 'loading', 'Ada'][observation]);
+  },
+});

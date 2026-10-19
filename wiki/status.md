@@ -332,8 +332,18 @@ are nailed first.
      error retry recreates failed child work. Existing source/effect/ref cases
      also pass on the reference: 125 cases across 8 files pass; `bun check` passes
      for 24 files. Generated outputs remain local, as in the existing harness.
-   - next: complete reference work on `compiler/sources.md`, including more atomic
-     branch/ownership combinations and the remaining readiness forms/APIs. Then extend generated programs with
+   - done: eleven more paired atomic lifecycle cases. Six pass on the old compiler;
+     five fail: keyed draft setup notifications (`1:0:0:0` expected, `0:0:0:0`
+     shown), replacement of failed external sources, removal of failed branches,
+     changed child inputs and external refresh after failure.
+     Fixed the reference's missed setup/cleanup writes when a draft changes but
+     fallback DOM stays the same, and its stale error retention after input changes
+     or external refresh. Failure details for all source cases now have
+     expected/actual rows on `compiler/sources.md`, including the earlier failures.
+     Both generated versions are present for all eleven additions. All 136
+     reference cases across 8 files pass; `bun check` passes for 24 files.
+   - next: complete reference work on `compiler/sources.md`, including captured
+     dependencies and the remaining readiness forms/APIs. Then extend generated programs with
      sources and failure/refresh/replacement sequences. No compiler work yet.
      No CI until the suite reaches thousands of cases.
 2. Later, after the reference/wiki are ready: parse and resolve on yuku 0.19

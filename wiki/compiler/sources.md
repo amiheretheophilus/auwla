@@ -78,6 +78,15 @@ Atomic preparation evaluates component bodies into descriptors and retains their
 slots while loading; it creates no DOM and runs no refs or effects. Publication
 uses the prepared outputs, connects the whole subtree, installs refs, then runs
 effects. Refresh and source replacement keep the committed nodes and content.
+Creating or discarding a prepared instance also schedules another reference pass:
+its setup/cleanup may change values rendered earlier, while fallback DOM remains
+identical. The keyed-draft case caught this reference bug; its assertion was kept.
+Failure belongs to the attempted inputs. A failed boundary compares active
+descriptors, source identities and child props before reusing its failure. Changed
+inputs or an external refresh restart preparation; unrelated renders retain the
+failure without replaying child requests. Status changes alone do not replace an
+attempt. Recovery cases caught the reference retaining stale errors; their
+assertions were also kept.
 
 Component instances claim their sources. Abandoning a draft releases its owners,
 aborts unshared fetch work and ignores late completions. A remaining GET consumer
@@ -97,9 +106,10 @@ request cancellation through `$track` is still separate, unfinished work.
 
 ## Cases to test
 
-`tests/cases/sources.test.ts`: 41 cases, all passing on the reference. The original
+`tests/cases/sources.test.ts`: 52 cases, all passing on the reference. The original
 27 give 18 passes and 9 failures on the old compiler; the 14 atomic cases give
-8 passes and 6 failures. These failures must pass on `compiler-next`.
+8 passes and 6 failures; eleven further atomic lifecycle cases give 6 passes and
+5 failures. These failures must pass on `compiler-next`.
 
 Verified on the reference:
 
@@ -116,29 +126,51 @@ Verified on the reference:
   siblings and nested fallbacks, connected refs before effects, effect-only source
   consumers, abandonment/remount and stale completions, shared GET ownership,
   failures/retry, and committed DOM identity during refresh/replacement.
+- Source-dependent branches revealing new descendants, keyed draft setup/cleanup
+  and stale completions, nested error policies, module ownership across abandonment,
+  shared failures with separate policies, removal of a pending branch, and remount
+  after failure. Recovery also covers failed external input replacement, removal
+  of failed branches, changed child props and external refresh of the same source;
+  unrelated renders do not retry. All eleven lifecycle cases have both versions.
 
-The old compiler's nine failures cover: writes before plain or destructured seeds
-load; effects through derived sources; a same-module source helper; captured
-sources through an imported helper; module derivations; status reads while pending;
-and inactive source branches in JSX and through a derivation.
+**Old compiler failures.** These are the first observed failures in each case;
+an early failure can prevent comparison of its later steps. All cases are in
+`tests/cases/sources.test.ts`. Rows group cases only where the observed bug matches.
 
-The atomic comparison adds six failing cases: inactive source branches block
-publication; a source consumed only by an effect does not withhold publication;
-multiple failed external dependencies do not all retry; and three lifecycle cases
-loop effects that increment module counters (publication, remount, and retry).
-The latter share an existing effect-subscription bug, rather than being three
-distinct new bugs. All 14 cases have both generated `reference/` and `compiled/`
-outputs under `tests/out/<case>/`.
+| Case | Expected | Old compiler result |
+| --- | --- | --- |
+| `a write before a source seed is ready wins over the seed` | An early write shows and keeps `manual` | Keeps showing `loading` |
+| `an effect waits through a derived source value` | `ADA 1` after resolution | `not run 0`; the effect never runs |
+| `a chained request does not start with an unresolved argument` | Wait, request comments, then render its array | Throws `list 'App/when0/comments' requires an array; received object` |
+| `a module source and an imported helper preserve readiness` | Wait, then show `ADA` | Rejects the derivation: helper `userName` supposedly writes reactive state |
+| `status reads stay available and refresh keeps committed content` | Status shows `pending` immediately | Shows `loading` |
+| `an unused source and an inactive branch do not block an active site` | Inactive branch shows `off` | Shows `loading` |
+| `a conditional derivation waits only for its chosen branch` | Inactive derivation shows `off` | Shows `loading` |
+| `a module derivation waits and follows later source refreshes` | Defer `user.name.toUpperCase()` until ready | Throws `undefined is not an object` during module evaluation |
+| `a destructured seed written before loading keeps its override` | Delay the seed; preserve its early override | Throws `UnresolvedDataReadError` |
+| `suspend ignores unused sources and inactive branches` | Publish `off` immediately | Keeps the entire region on `loading` |
+| `suspend waits for a source consumed only by an active effect` | Withhold `child` until that source resolves | Publishes `child` while its effect is still waiting |
+| `suspend retries every failed external dependency as one boundary` | Retry both failures and show `loading` | Remains on `right failed`; also reports rejected errors |
+| `suspend delays refs and effects until the whole subtree is connected`; `suspend abandons child work and ignores late completions after remount`; `suspend rolls back failed child owners and creates fresh work on retry` | Run each published effect once | Module-counter increments subscribe the effect to itself and reach the render-cycle guard (three failing cases) |
+| `suspend lifecycle: replaces a keyed draft and releases its setup exactly once` | Initial setup is visible as `1:0:0:0`, then replacement setup/cleanup are visible exactly once | Initial UI remains `0:0:0:0`; emitted `setups++` has no write notification |
+| `suspend lifecycle: a new external source replaces failed preparation without remounting` | Replacing the source leaves the old failure and shows `loading`, then `Ada` | Keeps showing `offline` after replacement |
+| `suspend lifecycle: removing a failed branch publishes the remaining active content` | Removing the failed branch publishes `Staticoff` | Keeps showing `offline` |
+| `suspend lifecycle: changed child inputs replace failed work while unrelated renders do not retry` | A new child `id` starts `/user/2`; an unrelated counter change starts no request | Changing `id` leaves only `/user/1` in the request history |
+| `suspend lifecycle: external refresh recovers the same failed source passed to a child` | Refresh leaves the failure and shows `loading`, then `Ada` | Keeps showing `offline` after refresh |
+
+The first 25 atomic cases have both generated `reference/` and `compiled/` outputs
+under `tests/out/<case>/`. An old compile rejection leaves no compiled module;
+runtime and assertion failures retain the emitted code for inspection.
 
 ## Remaining reference work
 
 The source reference is not complete. Finish these before beginning the compiler;
 an unmodeled case is never permitted compiler behavior:
 
-- Extend atomic cases with source-dependent branches that reveal new descendants,
-  keyed draft replacement/cleanup, nested error policies and module-owned sources
-  across abandonment. The first 14 cases cover initial preparation/publication;
-  they do not exhaust atomic lifecycle combinations.
+- Further atomic lifecycle combinations: captured state changes inside failed
+  children without changed props, and more interleavings of shared owners and
+  source generations. The verified 25 cases
+  do not exhaust these combinations.
 - Lazy source branches nested inside larger calls/operators, source-dependent body
   loops/unknown calls, whole props-object projections, and module patterns/control
   flow. Current guards can wait too broadly in these forms.
