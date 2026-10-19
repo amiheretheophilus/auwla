@@ -13,9 +13,11 @@
  *
  * Values that must outlive one render live in slots of the component instance.
  */
-import { $waiting, enterSourceOwner, Group, Source, Waiting } from './sources';
+import { $waiting, enterSourceOwner, Group, noteReplacement, Source, Waiting } from './sources';
 import { childPosition, elementPosition, isElement, Preparation } from './preparation';
-export { $fetch, $read, $track, $value, $waiting, $when, $sourceState, Group } from './sources';
+export {
+  $branch, $fetch, $path, $read, $track, $value, $waiting, $when, $sourceState, Group,
+} from './sources';
 
 // ---------------------------------------------------------------------------
 // JSX
@@ -96,6 +98,7 @@ class CellSlot {
 
   get v(): unknown { return this.value; }
   set v(value: unknown) {
+    noteReplacement(this.value, value);
     this.value = value;
     this.written = true;
   }
@@ -144,6 +147,8 @@ export class Instance {
   /** `"statement:position"` pairs from `observe`: that statement changed that value. */
   private readonly confirmations = new Set<string>();
   private readonly statementsRun = new Set<number>();
+  /** `observe` indexes that have run at least once. */
+  private readonly observed = new Set<number>();
 
   /** State: computed once, then changed only by writes. */
   cell(index: number, initial: () => unknown): CellSlot {
@@ -182,7 +187,9 @@ export class Instance {
       this.slots.set(index, slot);
     } else if (!deepEqual(slot.inputs, inputs)) {
       // Updated in place, because handlers from earlier renders hold this slot.
+      const previous = slot.v;
       slot.v = compute();
+      noteReplacement(previous, slot.v);
       slot.fresh = true;
       if (slot.v instanceof Waiting) slot.sources = slot.v.sources;
       slot.inputs = deepCopy([...values, ...slot.sources]);
@@ -224,6 +231,7 @@ export class Instance {
   observe(index: number, readValues: () => unknown[], run: () => void): void {
     const before = readValues().map((value) => deepCopy(value));
     run();
+    this.observed.add(index);
     readValues().forEach((value, position) => {
       if (!deepEqual(before[position], deepCopy(value))) this.confirmations.add(`${index}:${position}`);
     });
@@ -232,6 +240,15 @@ export class Instance {
   /** Whether statement `index` was seen to change the value at `position`. */
   confirmed(index: number, position: number): boolean {
     return this.confirmations.has(`${index}:${position}`);
+  }
+
+  /**
+   * Whether statement `index` may change the value at `position`: it was seen to,
+   * or it has not run yet (it waits for a source), so nobody knows. Until then the
+   * value waits for what the statement reads.
+   */
+  mayChange(index: number, position: number): boolean {
+    return !this.observed.has(index) || this.confirmed(index, position);
   }
 
   ran(index: number): boolean {
@@ -328,6 +345,8 @@ interface ModuleEffect {
 interface ModuleMemo {
   readInputs: () => unknown[];
   update: () => unknown;
+  /** The value it last computed. */
+  value: unknown;
   inputs: unknown;
   sources: readonly Source[];
 }
@@ -338,7 +357,8 @@ class ModuleEffects {
 
   addMemo(readInputs: () => unknown[], update: () => unknown, value: unknown): void {
     const sources = value instanceof Waiting ? value.sources : [];
-    this.memos.push({ readInputs, update, sources, inputs: deepCopy([...readInputs(), ...sources]) });
+    const inputs = deepCopy([...readInputs(), ...sources]);
+    this.memos.push({ readInputs, update, value, sources, inputs });
   }
 
   refreshMemos(): void {
@@ -347,6 +367,8 @@ class ModuleEffects {
       const inputs = deepCopy([...values, ...memo.sources]);
       if (deepEqual(memo.inputs, inputs)) continue;
       const value = memo.update();
+      noteReplacement(memo.value, value);
+      memo.value = value;
       if (value instanceof Waiting) memo.sources = value.sources;
       memo.inputs = deepCopy([...values, ...memo.sources]);
     }
@@ -739,9 +761,11 @@ class Renderer {
 
   /**
    * A site whose value is waiting shows, in order: the error policy if a source
-   * failed; the last value it showed, if any (a refresh keeps committed content);
-   * the pending policy. `retain` is false inside a `suspend` region, which shows
-   * no partial content before it publishes.
+   * failed; the last value it showed, when every source it waits for replaces a
+   * loaded one (an input change is a refresh); the pending policy. A source that
+   * never loaded is an initial load, even at a site that showed something else
+   * before. `retain` is false inside a `suspend` region, which shows no partial
+   * content before it publishes.
    */
   private renderWaiting(
     waiting: Waiting,
@@ -765,7 +789,7 @@ class Renderer {
       const retry = retryOverride ?? (() => Promise.all(failed.map((source) => source.refresh())));
       return this.renderNode($h(policies.error, { error, retry }), `${position}/error`, inSvg);
     }
-    if (retain && this.lastReady.has(position)) {
+    if (retain && waiting.replacing && this.lastReady.has(position)) {
       return this.renderNode(this.lastReady.get(position), position, inSvg, policies);
     }
     return policies.pending

@@ -170,8 +170,9 @@ native/member/factory tags, and recursive components/helpers. The old compiler
 passes five and fails fourteen (including one bounded compilation timeout).
 Thirteen have paired output; five reject before emit and one times out. The
 reference's two component identity/classification bugs were fixed without changing
-the assertions. A review added the `$fetch(null)` case and four source
-destructuring cases (`sources.md`). All 180 reference cases pass; package `bun check` passes for 25 files. This is
+the assertions. A review added the `$fetch(null)` case, four source
+destructuring cases and five cases of sources inside ordinary JavaScript
+(`sources.md`). All 185 reference cases pass; package `bun check` passes for 25 files. This is
 still reference development, not permission to start the compiler.
 The old compiler has about 305 distinct `memo-dom:` messages. Most are internal
 invariants or contracts of the framework's own APIs (`route-to`, `$routed`, `Group`,

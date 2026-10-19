@@ -9,11 +9,43 @@ type FunctionNode = Extract<Node, { type: 'FunctionDeclaration' | 'FunctionExpre
 export class Reads {
   constructor(private readonly module: Module) {}
 
-  /** Everything read anywhere inside `roots`, including inside callbacks they contain. */
-  inside(roots: Node[], exclude: Binding | undefined): Set<Binding> {
+  /**
+   * Everything read anywhere inside `roots`, including inside callbacks they
+   * contain. Reads inside `skip` (parts of a root) are left out.
+   */
+  inside(roots: Node[], exclude: Binding | undefined, skip: Node[] = []): Set<Binding> {
     const found = new Set<Binding>();
-    for (const root of roots) this.collect(root, root, false, found, new Set());
+    for (const root of roots) this.collect(root, root, false, found, new Set(), skip);
     if (exclude) found.delete(exclude);
+    return found;
+  }
+
+  /**
+   * Static member paths read from a binding inside `root`: `props.user.name` gives
+   * `{ binding: props, path: ['user', 'name'] }`. A loading value can sit inside an
+   * object (a prop the parent is still waiting for); the path finds it.
+   */
+  paths(root: Node, skip: Node[] = []): Array<{ binding: Binding; path: string[] }> {
+    const found: Array<{ binding: Binding; path: string[] }> = [];
+
+    const visit = (reference: Reference | null) => {
+      const binding = reference?.binding;
+      if (!binding || reference.isWrite || reference.inTypePosition) return;
+      if (this.isDeclaredInside(binding, root) || isWithin(reference.node, skip)) return;
+      if (this.functionOf(binding) !== undefined) return;
+
+      const path: string[] = [];
+      let node: Node = reference.node;
+      let parent = this.module.parentOf(node);
+      while (is.MemberExpression(parent) && parent.object === node && !parent.computed && is.Identifier(parent.property)) {
+        path.push(parent.property.name);
+        node = parent;
+        parent = this.module.parentOf(node);
+      }
+      if (path.length > 0) found.push({ binding, path });
+    };
+
+    this.module.walk({ Identifier: (_node, ctx) => visit(ctx.reference) }, root);
     return found;
   }
 
@@ -34,11 +66,19 @@ export class Reads {
     return found;
   }
 
-  private collect(root: Node, scope: Node, directOnly: boolean, found: Set<Binding>, visited: Set<Node>): void {
+  private collect(
+    root: Node,
+    scope: Node,
+    directOnly: boolean,
+    found: Set<Binding>,
+    visited: Set<Node>,
+    skip: Node[] = [],
+  ): void {
     const visit = (reference: Reference | null) => {
       const binding = reference?.binding;
       if (!binding || reference.isWrite || reference.inTypePosition) return;
       if (this.isDeclaredInside(binding, scope)) return;
+      if (isWithin(reference.node, skip)) return;
       if (directOnly && enclosingFunction(this.module, reference.node) !== scope) return;
 
       const fn = this.functionOf(binding);
@@ -77,6 +117,10 @@ export class Reads {
       return false;
     });
   }
+}
+
+function isWithin(node: Node, parts: Node[]): boolean {
+  return parts.some((part) => node.start >= part.start && node.end <= part.end);
 }
 
 export function enclosingFunction(module: Module, node: Node): Node | undefined {

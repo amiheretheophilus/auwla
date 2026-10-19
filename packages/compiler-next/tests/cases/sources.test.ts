@@ -325,7 +325,9 @@ behaves('an unused source and an inactive branch do not block an active site', {
     }`,
   steps: [{ click: 'button' }, { resolve: 'user', value: { name: 'Ada' } }],
   check(container, observation) {
-    expect(container.querySelector('p')?.textContent).toBe(['off', 'off', 'Ada'][observation]);
+    // `user` never loaded: choosing its branch is an initial load, so the site shows
+    // the pending policy, not the other branch's 'off' (decisions.md, 2026-10-19).
+    expect(container.querySelector('p')?.textContent).toBe(['off', 'loading', 'Ada'][observation]);
   },
 });
 
@@ -341,7 +343,7 @@ behaves('a conditional derivation waits only for its chosen branch', {
     }`,
   steps: [{ click: 'button' }, { resolve: 'user', value: { name: 'Ada' } }],
   check(container, observation) {
-    expect(container.querySelector('p')?.textContent).toBe(['off', 'off', 'Ada'][observation]);
+    expect(container.querySelector('p')?.textContent).toBe(['off', 'loading', 'Ada'][observation]);
   },
 });
 
@@ -1041,5 +1043,126 @@ behaves('suspend lifecycle: external refresh recovers the same failed source pas
   steps: [{ reject: 'user', message: 'offline' }, { click: '#refresh' }, { resolve: 'user', value: { name: 'Ada' } }],
   check(container, observation) {
     expect(container.querySelector('i, b, p')?.textContent).toBe(['loading', 'offline', 'loading', 'Ada'][observation]);
+  },
+});
+
+// ---------------------------------------------------------------------------
+// Sources inside ordinary JavaScript: loops, unknown calls, lazy branches inside
+// larger expressions, whole sources passed to children, module patterns.
+
+behaves('a body loop over a source waits, then follows mutation and refresh', {
+  source: `
+    import { $fetch, $track, Group } from '@memoized-dom/data';
+    export function App() {
+      const cart = $fetch('/cart');
+      const request = $track(cart);
+      let total = 0;
+      for (const item of cart.items) total += item.price;
+      return (
+        <Group pending={() => <i>loading</i>}>
+          <p>{total}</p>
+          <button id="add" onClick={() => { cart.items.push({ price: 5 }); }}>add</button>
+          <button id="refresh" onClick={() => request.refresh()}>refresh</button>
+        </Group>
+      );
+    }`,
+  steps: [
+    { respond: '/cart', value: { items: [{ price: 1 }, { price: 2 }] } },
+    { click: '#add' },
+    { click: '#refresh' },
+    { respond: '/cart', value: { items: [{ price: 10 }] } },
+  ],
+  check(container, observation) {
+    expect(container.querySelector('p, i')?.textContent).toBe(['loading', '3', '8', '8', '10'][observation]);
+  },
+});
+
+behaves('an unknown helper filling an array from a source waits and replays', {
+  source: `
+    import { $fetch, Group } from '@memoized-dom/data';
+    function collect(into, list) {
+      for (const entry of list) into.push(entry.name);
+    }
+    export function App() {
+      const users = $fetch('/users');
+      const names = [];
+      collect(names, users);
+      return (
+        <Group pending={() => <i>loading</i>}>
+          <p>{names.join(',')}</p>
+          <button onClick={() => { users.push({ name: 'Lin' }); }}>add</button>
+        </Group>
+      );
+    }`,
+  steps: [{ respond: '/users', value: [{ name: 'Ada' }] }, { click: 'button' }],
+  check(container, observation) {
+    expect(container.querySelector('p, i')?.textContent).toBe(['loading', 'Ada', 'Ada,Lin'][observation]);
+  },
+});
+
+behaves('a lazy branch inside a larger expression waits only when chosen', {
+  source: `
+    import { $fetch, Group } from '@memoized-dom/data';
+    export function App() {
+      const user = $fetch('/user');
+      let signedIn = false;
+      return (
+        <Group pending={() => <i>loading</i>}>
+          <p>{'Hi ' + (signedIn ? user.name : 'guest')}</p>
+          <span>{String(signedIn && user.name)}</span>
+          <button onClick={() => { signedIn = true; }}>sign in</button>
+        </Group>
+      );
+    }`,
+  steps: [{ click: 'button' }, { respond: '/user', value: { name: 'Ada' } }],
+  check(container, observation) {
+    const expected = ['Hi guestfalsesign in', 'loadingloadingsign in', 'Hi AdaAdasign in'];
+    expect(container.textContent).toBe(expected[observation]!);
+  },
+});
+
+behaves('a whole source passed to children waits there and follows a refresh', {
+  source: `
+    import { $fetch, $track, Group } from '@memoized-dom/data';
+    function Card(props) {
+      return <p>{props.user.name}</p>;
+    }
+    function Badge({ user }) {
+      const initial = user.name[0];
+      return <b>{initial}</b>;
+    }
+    export function App() {
+      const user = $fetch('/user');
+      const request = $track(user);
+      return (
+        <Group pending={() => <i>loading</i>}>
+          <Card user={user} />
+          <Badge user={user} />
+          <button onClick={() => request.refresh()}>refresh</button>
+        </Group>
+      );
+    }`,
+  steps: [{ respond: '/user', value: { name: 'Ada' } }, { click: 'button' }, { respond: '/user', value: { name: 'Lin' } }],
+  check(container, observation) {
+    const expected = ['loadingloadingrefresh', 'AdaArefresh', 'AdaArefresh', 'LinLrefresh'];
+    expect(container.textContent).toBe(expected[observation]!);
+  },
+});
+
+behaves('a source destructured at module scope waits and is imported', {
+  modules: {
+    './session.ts': `
+      import { $fetch } from '@memoized-dom/data';
+      export const { name, roles: [role] } = $fetch('/session');`,
+  },
+  source: `
+    import { Group } from '@memoized-dom/data';
+    import { name, role } from './session';
+    export function App() {
+      return <Group pending={() => <i>loading</i>}><p>{name}:{role}</p></Group>;
+    }`,
+  steps: [{ respond: '/session', value: { name: 'Ada', roles: ['admin'] } }],
+  check(container, observation) {
+    expect(container.textContent).toBe(['loading:loading', 'Ada:admin'][observation]!);
   },
 });

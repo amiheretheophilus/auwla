@@ -82,6 +82,13 @@ export class Source {
   data: unknown;
   hasValue = false;
   error: RequestError | null = null;
+  /**
+   * It took the place of a source that had loaded, in the same binding (a new
+   * request after an input change, or a reassignment). Sites keep showing what
+   * they showed while it loads: "an input change is a refresh, not a new initial
+   * load" (`docs/05-data.md`).
+   */
+  replacesLoaded = false;
 
   /** Counts requests. Only the latest request may commit (the latest input wins). */
   private generation = 0;
@@ -197,6 +204,17 @@ function toRequestError(cause: unknown): RequestError {
 /** A computation that could not run. Its sources say whether it is pending or failed. */
 export class Waiting {
   constructor(readonly sources: readonly Source[]) {}
+
+  /** Every source it waits for replaces a loaded one: old content stays on screen. */
+  get replacing(): boolean {
+    return this.sources.every((source) => source.replacesLoaded);
+  }
+}
+
+/** A binding's value changed from `previous` to `next`. */
+export function noteReplacement(previous: unknown, next: unknown): void {
+  if (!(previous instanceof Source) || !(next instanceof Source) || previous === next) return;
+  if (previous.hasValue || previous.replacesLoaded) next.replacesLoaded = true;
 }
 
 /** The sources among `values` that have no payload yet, or failed. `undefined` when all are ready. */
@@ -220,6 +238,60 @@ export function $waiting(values: readonly unknown[]): Waiting | undefined {
 /** Evaluate authored code only when all of its inputs have values. */
 export function $when(readInputs: () => unknown[], compute: () => unknown): unknown {
   return $waiting(readInputs()) ?? compute();
+}
+
+/**
+ * The inputs of `a ? b : c`, `a && b`, `a || b` and `a ?? b`, as JavaScript would
+ * read them: the test's inputs, then those of the branch that runs. An unchosen
+ * branch never makes the expression wait.
+ *
+ * Limit of the reference: the test is evaluated here and again by the authored
+ * expression, so a test with side effects runs twice.
+ */
+export function $branch(
+  operator: '?' | '&&' | '||' | '??',
+  readTest: () => unknown[],
+  test: () => unknown,
+  readFirst: () => unknown[],
+  readSecond: () => unknown[] = () => [],
+): unknown[] {
+  const testInputs = readTest();
+  if ($waiting(testInputs)) return testInputs;
+
+  const value = test();
+  let first: boolean;
+  if (operator === '?' || operator === '&&') {
+    first = Boolean(value);
+  } else if (operator === '||') {
+    first = !value;
+  } else {
+    first = value === null || value === undefined;
+  }
+  return [...testInputs, ...(first ? readFirst() : readSecond())];
+}
+
+/**
+ * `props.user.name` as an input: follows the path through plain data and stops at
+ * a loading value, so `$waiting` finds a source a parent passed inside an object.
+ * Reads only data properties of plain objects and arrays: never a getter.
+ */
+export function $path(value: unknown, keys: string[]): unknown {
+  let current = value;
+  for (const key of keys) {
+    if (current instanceof Waiting || current instanceof Source) return current;
+    if (!isPlainData(current)) return undefined;
+    const descriptor = Object.getOwnPropertyDescriptor(current, key);
+    if (descriptor === undefined || !('value' in descriptor)) return undefined;
+    current = descriptor.value;
+  }
+  return current;
+}
+
+function isPlainData(value: unknown): value is object {
+  if (typeof value !== 'object' || value === null) return false;
+  if (Array.isArray(value)) return true;
+  const prototype = Object.getPrototypeOf(value);
+  return prototype === Object.prototype || prototype === null;
 }
 
 /** The payload of a source. Only called inside a computation `$when` already checked. */

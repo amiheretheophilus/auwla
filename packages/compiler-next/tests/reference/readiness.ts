@@ -9,7 +9,7 @@
 import type { Binding, Module } from 'yuku-analyzer';
 import { b, findAll, is } from 'yuku-ast';
 import type { Expression, Node, Statement, VariableDeclarator } from 'yuku-parser';
-import { identifier, runtimeCall, thunk } from './ast';
+import { blockThunk, constDeclaration, identifier, runtimeCall, thunk } from './ast';
 import { enclosingFunction, Reads } from './reads';
 
 /** Whether `node` calls `name` imported from `@memoized-dom/data` (under any local name). */
@@ -46,135 +46,284 @@ export function shouldWaitAtAttribute(parent: Node | null): boolean {
   return !['ref', 'pending', 'error', '$referenceSite'].includes(name);
 }
 
+// ---------------------------------------------------------------------------
+// Waiting for an expression's inputs
+
 /**
- * Wrap an expression so it waits for its inputs. JavaScript's lazy branches are
- * kept: in `a ? b : c` only the test and the chosen arm wait, and in `a && b` the
- * right side waits only when it runs.
+ * The inputs read inside `root`, as expressions that read their current values,
+ * leaving out the parts in `skip`. Each caller reads bindings its own way (a
+ * component through its slots).
  */
-export function waitForExpression(expression: Expression, inputsOf: (part: Expression) => Expression): Expression {
+export type ReadsOf = (root: Node, skip: Node[]) => Expression[];
+
+/**
+ * A `ReadsOf` from yuku's references: each binding, and each `a.b.c` path read
+ * from one. `keep` drops bindings that cannot be inputs here.
+ */
+export function readsWithPaths(
+  reads: Reads,
+  readOf: (binding: Binding) => Expression,
+  rawUses: Set<Node>,
+  keep: (binding: Binding) => boolean = () => true,
+): ReadsOf {
+  return (root, skip) => {
+    const bindings = [...reads.inside([root], undefined, skip)].filter(keep);
+    const elements = bindings.map((binding) => statusInput(binding, readOf(binding), [root], rawUses));
+    for (const { binding, path } of reads.paths(root, skip)) {
+      if (!keep(binding)) continue;
+      const keys = b.ArrayExpression({ elements: path.map(stringLiteral) });
+      elements.push(runtimeCall('$path', [readOf(binding), keys]));
+    }
+    return elements;
+  };
+}
+
+/** `$when(() => [inputs], () => expression)`: the expression runs once its inputs are ready. */
+export function waitForExpression(expression: Expression, readsOf: ReadsOf): Expression {
   if (is.JSXElement(expression) || is.JSXFragment(expression)) return expression;
+  return runtimeCall('$when', [thunk(inputsOf(expression, readsOf)), thunk(expression)]);
+}
 
-  if (is.ConditionalExpression(expression)) {
-    const choice = b.ConditionalExpression({
-      test: expression.test,
-      consequent: waitForExpression(expression.consequent, inputsOf),
-      alternate: waitForExpression(expression.alternate, inputsOf),
-    });
-    return runtimeCall('$when', [inputsOf(expression.test), thunk(choice)]);
+/**
+ * `[reads…, ...$branch(…)]`: what evaluating `expression` reads, the way
+ * JavaScript reads it. In `a ? b : c`, `a && b`, `a || b` and `a ?? b`, at any depth,
+ * only the branch that runs is an input (`$branch`). JSX values are left out: each
+ * `{…}` inside them waits on its own.
+ */
+export function inputsOf(expression: Node, readsOf: ReadsOf): Expression {
+  const { branches, views } = lazyParts(expression);
+  const elements = readsOf(expression, [...branches, ...views]);
+  for (const branch of branches) {
+    elements.push(b.SpreadElement({ argument: branchInputs(branch, readsOf) }) as never);
   }
+  return b.ArrayExpression({ elements });
+}
 
-  if (is.LogicalExpression(expression)) {
-    const choice = b.LogicalExpression({
-      operator: expression.operator,
-      left: expression.left,
-      right: waitForExpression(expression.right, inputsOf),
-    });
-    return runtimeCall('$when', [inputsOf(expression.left), thunk(choice)]);
+type Branch = Extract<Node, { type: 'ConditionalExpression' | 'LogicalExpression' }>;
+
+function branchInputs(branch: Branch, readsOf: ReadsOf): Expression {
+  const inputs = (part: Node) => thunk(inputsOf(part, readsOf));
+
+  if (is.ConditionalExpression(branch)) {
+    return runtimeCall('$branch', [
+      stringLiteral('?'),
+      inputs(branch.test),
+      thunk(branch.test),
+      inputs(branch.consequent),
+      inputs(branch.alternate),
+    ]);
   }
+  return runtimeCall('$branch', [
+    stringLiteral(branch.operator),
+    inputs(branch.left),
+    thunk(branch.left),
+    inputs(branch.right),
+  ]);
+}
 
-  return runtimeCall('$when', [inputsOf(expression), thunk(expression)]);
+/** The outermost branches and JSX values inside `root`, outside nested functions. */
+function lazyParts(root: Node): { branches: Branch[]; views: Node[] } {
+  const branches: Branch[] = [];
+  const views: Node[] = [];
+
+  const visit = (node: Node) => {
+    if (is.ConditionalExpression(node) || is.LogicalExpression(node)) {
+      branches.push(node);
+    } else if (is.JSXElement(node) || is.JSXFragment(node)) {
+      views.push(node);
+    } else if (!is.Function(node)) {
+      for (const child of childNodes(node)) visit(child);
+    }
+  };
+
+  visit(root);
+  return { branches, views };
+}
+
+function childNodes(node: Node): Node[] {
+  const children: Node[] = [];
+  for (const value of Object.values(node)) {
+    const candidates = Array.isArray(value) ? value : [value];
+    for (const candidate of candidates) {
+      if (isNode(candidate)) children.push(candidate);
+    }
+  }
+  return children;
+}
+
+function isNode(value: unknown): value is Node {
+  return typeof value === 'object' && value !== null && typeof (value as { type?: unknown }).type === 'string';
+}
+
+function stringLiteral(value: string): Expression {
+  return b.Literal({ value, raw: JSON.stringify(value) });
 }
 
 // ---------------------------------------------------------------------------
 // Module derivations: `export const title = user.name.toUpperCase()`
 
-interface ModuleMemoPlan {
-  binding: Binding;
-  declarator: VariableDeclarator;
-  declaration: Extract<Statement, { type: 'VariableDeclaration' }>;
-  /** The reads of the initializer, and of each lazy part of it (see `waitForExpression`). */
-  inputs: Map<Expression, Binding[]>;
+/**
+ * Module-scope derivations: a top-level `let`/`const` that is never reassigned
+ * and reads something. `const title = f(user)` becomes
+ *
+ *     const $compute_title = () => $when(() => [user], () => f(user));
+ *     let title = $compute_title();
+ *     $moduleMemo(() => [user], () => title = $compute_title(), title);
+ *
+ * and `const { name } = init` becomes three such memos, as in a component: the
+ * value of `init`, the pattern run on its payload, then `name`. The runtime
+ * computes a memo again, in order, before each render when its inputs changed.
+ *
+ * Built before payload reads are rewritten (`prepareModuleReads`), which then
+ * rewrites the authored code wherever these memos placed it.
+ */
+export function buildModuleMemos(module: Module, rawUses: Set<Node>): void {
+  const builder = new ModuleMemos(module, rawUses);
+  for (const statement of module.ast.body) builder.visit(statement);
+  const body = module.ast.body.flatMap((statement) => builder.around(statement));
+  module.ast.body = body as typeof module.ast.body;
 }
 
-/**
- * Find module-scope derivations: a top-level `let`/`const` that is never
- * reassigned and reads something. Planned before any authored reference is
- * replaced, because the plan needs the analyzer's view of the original code.
- */
-export function planModuleMemos(module: Module): ModuleMemoPlan[] {
-  const reads = new Reads(module);
-  const plans: ModuleMemoPlan[] = [];
+type VariableDeclaration = Extract<Statement, { type: 'VariableDeclaration' }>;
 
-  for (const binding of module.bindings) {
-    const name = binding.declarations[0];
-    const declarator = name && module.parentOf(name);
-    if (!is.VariableDeclarator(declarator) || declarator.id !== name) continue;
-    if (!declarator.init || is.Function(declarator.init)) continue;
+class ModuleMemos {
+  private readonly reads: Reads;
+  private readonly before = new Map<Node, Statement[]>();
+  private readonly after = new Map<Node, Statement[]>();
+  private nextPattern = 0;
 
-    const declaration = module.parentOf(declarator);
-    if (!is.VariableDeclaration(declaration)) continue;
-
-    const owner = module.parentOf(declaration);
-    const exported = is.ExportNamedDeclaration(owner) && module.parentOf(owner) === module.ast;
-    const topLevel = owner === module.ast || exported;
-    if (!topLevel) continue;
-    if (binding.references.some((reference) => reference.isWrite)) continue;
-
-    const inputs = new Map<Expression, Binding[]>();
-    const record = (expression: Expression) => {
-      inputs.set(expression, [...reads.inside([expression], binding)]);
-      if (is.ConditionalExpression(expression)) {
-        record(expression.test);
-        record(expression.consequent);
-        record(expression.alternate);
-      } else if (is.LogicalExpression(expression)) {
-        record(expression.left);
-        record(expression.right);
-      }
-    };
-    record(declarator.init);
-
-    const readsSomething = inputs.get(declarator.init)!.length > 0;
-    if (readsSomething) plans.push({ binding, declarator, declaration, inputs });
+  constructor(private readonly module: Module, private readonly rawUses: Set<Node>) {
+    this.reads = new Reads(module);
   }
 
-  return plans;
-}
+  visit(statement: Node): void {
+    const declaration = is.ExportNamedDeclaration(statement) ? statement.declaration : statement;
+    if (!is.VariableDeclaration(declaration)) return;
 
-/**
- * `const title = f(user)` becomes
- *
- *     let title = $when(() => [user], () => f(user));
- *     $moduleMemo(() => [user], () => title = $when(…), title);
- *
- * The runtime calls the update before each render when an input changed.
- */
-export function buildModuleMemos(module: Module, plans: ModuleMemoPlan[], rawUses: Set<Node>): void {
-  const registrations = new Map<Node, Statement[]>();
+    for (const declarator of [...declaration.declarations]) {
+      if (!declarator.init || is.Function(declarator.init)) continue;
+      const bindings = this.bindingsIn(declarator.id);
+      if (bindings.some((binding) => binding.references.some((reference) => reference.isWrite))) continue;
+      if (this.reads.inside([declarator.init], bindings[0]).size === 0) continue;
 
-  for (const plan of plans) {
-    const inputList = (bindings: Binding[], root: Expression) => {
-      const elements = bindings.map((binding) => statusInput(binding, identifier(binding.name), [root], rawUses));
-      return thunk(b.ArrayExpression({ elements }));
-    };
+      if (is.Identifier(declarator.id)) {
+        this.name(statement, declarator, bindings[0]!);
+      } else {
+        this.pattern(statement, declaration, declarator);
+      }
+      // Updates reassign it.
+      declaration.kind = 'let';
+    }
+  }
 
-    const initial = plan.declarator.init!;
-    const readInputs = inputList(plan.inputs.get(initial)!, initial);
-    const prepared = waitForExpression(initial, (part) => inputList(plan.inputs.get(part)!, part));
-    plan.declarator.init = prepared;
-    // The update reassigns it.
-    if (plan.declaration.kind === 'const') plan.declaration.kind = 'let';
+  /** The statements to emit for one top-level statement, in order. */
+  around(statement: Node): Node[] {
+    return [...(this.before.get(statement) ?? []), statement, ...(this.after.get(statement) ?? [])];
+  }
 
+  private name(statement: Node, declarator: VariableDeclarator, binding: Binding): void {
+    const init = declarator.init!;
+    const compute = `$compute_${binding.name}`;
+    this.add(this.before, statement, constDeclaration(compute, thunk(waitForExpression(init, this.readsOf(binding)))));
+    declarator.init = runtimeCall(compute, []);
+    this.add(this.after, statement, this.register(binding.name, compute, this.memoInputs(init, binding)));
+  }
+
+  private pattern(statement: Node, declaration: VariableDeclaration, declarator: VariableDeclarator): void {
+    const index = this.nextPattern++;
+    const pattern = declarator.id;
+    const names = this.bindingsIn(pattern);
+
+    // 1. The value of `init`: the payload, or a source when `init` makes one.
+    const value = `$pattern${index}_value`;
+    this.declareMemo(statement, value, waitForExpression(declarator.init!, this.readsOf()), this.memoInputs(declarator.init!));
+
+    // 2. The authored pattern, run natively on the payload.
+    const patternReads = this.readsOf()(pattern, []);
+    const patternInputs = b.ArrayExpression({ elements: [identifier(value), ...patternReads] });
+    const destructure = b.VariableDeclaration({
+      kind: 'const',
+      declarations: [b.VariableDeclarator({ id: pattern, init: runtimeCall('$value', [identifier(value)]) })],
+    });
+    const returned = b.ObjectExpression({
+      properties: names.map((binding) => b.Property({
+        key: b.Identifier({ name: binding.name }),
+        value: identifier(binding.name),
+        kind: 'init',
+        method: false,
+        shorthand: false,
+        computed: false,
+      }) as Extract<Node, { type: 'ObjectExpression' }>['properties'][number]),
+    });
+    const destructured = `$pattern${index}`;
+    const run = runtimeCall('$when', [thunk(patternInputs), blockThunk([destructure, b.ReturnStatement({ argument: returned })])]);
+    this.declareMemo(statement, destructured, run, structuredClone(patternInputs));
+
+    // 3. Each name, in the authored declaration (so `export` still exports it).
+    const aliases = names.map((binding) => {
+      const field = b.MemberExpression({
+        object: runtimeCall('$value', [identifier(destructured)]),
+        property: b.Identifier({ name: binding.name }),
+        computed: false,
+        optional: false,
+      });
+      const inputs = b.ArrayExpression({ elements: [identifier(destructured)] });
+      const compute = `$compute_${binding.name}`;
+      this.add(this.before, statement, constDeclaration(compute, thunk(runtimeCall('$when', [thunk(inputs), thunk(field)]))));
+      this.add(this.after, statement, this.register(binding.name, compute, structuredClone(inputs)));
+      return b.VariableDeclarator({ id: b.Identifier({ name: binding.name }), init: runtimeCall(compute, []) });
+    });
+    const at = declaration.declarations.indexOf(declarator);
+    declaration.declarations.splice(at, 1, ...aliases);
+  }
+
+  /** `const $compute_x = () => value; let x = $compute_x(); $moduleMemo(…);`, before `statement`. */
+  private declareMemo(statement: Node, name: string, value: Expression, inputs: Expression): void {
+    const compute = `$compute_${name}`;
+    this.add(this.before, statement, constDeclaration(compute, thunk(value)));
+    this.add(this.before, statement, b.VariableDeclaration({
+      kind: 'let',
+      declarations: [b.VariableDeclarator({ id: b.Identifier({ name }), init: runtimeCall(compute, []) })],
+    }));
+    this.add(this.before, statement, this.register(name, compute, inputs));
+  }
+
+  /** `$moduleMemo(() => inputs, () => name = compute(), name);` */
+  private register(name: string, compute: string, inputs: Expression): Statement {
     const update = thunk(b.AssignmentExpression({
       operator: '=',
-      left: b.Identifier({ name: plan.binding.name }),
-      right: structuredClone(prepared),
+      left: b.Identifier({ name }),
+      right: runtimeCall(compute, []),
     }));
-    const register = b.ExpressionStatement({
-      expression: runtimeCall('$moduleMemo', [readInputs, update, identifier(plan.binding.name)]),
+    return b.ExpressionStatement({
+      expression: runtimeCall('$moduleMemo', [thunk(inputs), update, identifier(name)]),
     }) as Statement;
-
-    // Registered right after its declaration (or its `export`).
-    const parent = module.parentOf(plan.declaration);
-    const statement = is.ExportNamedDeclaration(parent) ? parent : plan.declaration;
-    const entries = registrations.get(statement) ?? [];
-    entries.push(register);
-    registrations.set(statement, entries);
   }
 
-  module.ast.body = module.ast.body.flatMap((statement) => {
-    return [statement, ...(registrations.get(statement) ?? [])];
-  });
+  /** Every binding `init` reads: the memo is computed again when any of them changes. */
+  private memoInputs(init: Node, exclude?: Binding): Expression {
+    const elements = [...this.reads.inside([init], exclude)].map((binding) => {
+      return statusInput(binding, identifier(binding.name), [init], this.rawUses);
+    });
+    return b.ArrayExpression({ elements });
+  }
+
+  private readsOf(exclude?: Binding): ReadsOf {
+    const keep = (binding: Binding) => binding !== exclude;
+    return readsWithPaths(this.reads, (binding) => identifier(binding.name), this.rawUses, keep);
+  }
+
+  private bindingsIn(pattern: Node): Binding[] {
+    return this.module.bindings.filter((binding) => binding.declarations.some((name) => {
+      return name.start >= pattern.start && name.end <= pattern.end;
+    }));
+  }
+
+  private add(statements: Map<Node, Statement[]>, statement: Node, added: Statement): void {
+    const list = statements.get(statement) ?? [];
+    list.push(added);
+    statements.set(statement, list);
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -196,6 +345,7 @@ export function prepareModuleReads(
   components: Set<Node>,
 ): void {
   const reads = new Reads(module);
+  const readsOf = readsWithPaths(reads, (binding) => identifier(binding.name), rawUses);
 
   module.walk({
     ReturnStatement(node) {
@@ -208,21 +358,14 @@ export function prepareModuleReads(
         .some((part) => enclosingFunction(module, part) === owner);
       if (suspends) return;
 
-      const elements = [...reads.inside([expression], undefined)].map((binding) => identifier(binding.name));
-      node.argument = runtimeCall('$when', [thunk(b.ArrayExpression({ elements })), thunk(expression)]);
+      node.argument = waitForExpression(expression, readsOf);
     },
 
     JSXExpressionContainer(node, ctx) {
       if (handledSites.has(node)) return;
       if (is.JSXEmptyExpression(node.expression) || is.Function(node.expression)) return;
       if (!shouldWaitAtAttribute(ctx.parent)) return;
-
-      node.expression = waitForExpression(node.expression, (part) => {
-        const elements = [...reads.inside([part], undefined)].map((binding) => {
-          return statusInput(binding, identifier(binding.name), [part], rawUses);
-        });
-        return thunk(b.ArrayExpression({ elements }));
-      });
+      node.expression = waitForExpression(node.expression, readsOf);
     },
 
     Identifier(_node, ctx) {

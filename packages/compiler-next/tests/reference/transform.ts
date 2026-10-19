@@ -36,8 +36,18 @@ import { parse } from 'yuku-parser';
 import type { BlockStatement, Expression, Node, Statement, VariableDeclarator } from 'yuku-parser';
 import { blockThunk, constDeclaration, identifier, member, numberLiteral, runtimeCall, thunk } from './ast';
 import { enclosingFunction, Reads } from './reads';
-import { buildModuleMemos, isDataCall, planModuleMemos, prepareModuleReads, rewriteDataImports,
-  shouldWaitAtAttribute, statusInput, waitForExpression } from './readiness';
+import {
+  buildModuleMemos,
+  inputsOf,
+  isDataCall,
+  prepareModuleReads,
+  readsWithPaths,
+  rewriteDataImports,
+  shouldWaitAtAttribute,
+  statusInput,
+  waitForExpression,
+  type ReadsOf,
+} from './readiness';
 
 type FunctionNode = Extract<Node, { type: 'FunctionDeclaration' | 'FunctionExpression' | 'ArrowFunctionExpression' }>;
 
@@ -84,7 +94,7 @@ const GUARDABLE_STATEMENTS = new Set<string>([
 
 const RUNTIME_EXPORTS = [
   '$h', 'Fragment as $Fragment', '$enter', '$assignRef', '$moduleEffect', '$moduleMemo',
-  '$when', '$value', '$waiting', '$sourceState',
+  '$when', '$value', '$waiting', '$sourceState', '$branch', '$path',
 ];
 
 // ---------------------------------------------------------------------------
@@ -98,11 +108,12 @@ export function toReference(source: string, path: string, runtimeUrl: string): s
   }
 
   const readCalls = module.findAll('CallExpression').filter((call) => isDataCall(module, call, '$read'));
-  const moduleMemos = planModuleMemos(module);
+  // `$track(user)` reads the source itself, not its payload.
   const rawUses = new Set<Node>();
   for (const call of module.findAll('CallExpression')) {
     if (isDataCall(module, call, '$track') && call.arguments[0]) rawUses.add(call.arguments[0]);
   }
+  buildModuleMemos(module, rawUses);
   const handledSites = new Set<Node>();
   const components = findComponents(module);
   for (const component of components) {
@@ -114,7 +125,6 @@ export function toReference(source: string, path: string, runtimeUrl: string): s
   for (const call of readCalls) {
     if (call.arguments.length === 1) call.arguments.push(thunk(structuredClone(call.arguments[0]) as Expression));
   }
-  buildModuleMemos(module, moduleMemos, rawUses);
   rewriteDataImports(module, runtimeUrl);
 
   const header = `import { ${RUNTIME_EXPORTS.join(', ')} } from ${JSON.stringify(runtimeUrl)};\n`;
@@ -440,7 +450,7 @@ class ComponentRewrite {
         observeIndex: undefined,
       };
       const wrapped = plan.observeIndex === undefined ? statement : this.observed(statement, plan);
-      const inputs = this.inputList(this.reads.inside([statement], undefined), [statement]);
+      const inputs = this.guardInputs(statement);
       const run = blockThunk([wrapped]);
       const guarded = b.ExpressionStatement({
         expression: ctxCall('statement', [numberLiteral(index), inputs, run]),
@@ -477,7 +487,7 @@ class ComponentRewrite {
   private earlyReturn(statement: Extract<Statement, { type: 'IfStatement' }>): Statement[] {
     const name = `$return${this.nextStatement++}`;
     const test = statement.test;
-    const inputs = this.inputList(this.reads.inside([test], undefined), [test]);
+    const inputs = this.guardInputs(test);
     const waiting = runtimeCall('$waiting', [b.ArrayExpression({ elements: [identifier(name)] })]);
     const pause = b.IfStatement({
       test: waiting,
@@ -494,9 +504,7 @@ class ComponentRewrite {
         if (is.JSXEmptyExpression(node.expression) || !shouldWaitAtAttribute(ctx.parent)) return;
         this.handledSites.add(node);
         if (is.Function(node.expression)) return;
-        const expression = node.expression;
-        node.expression = waitForExpression(expression, (part) =>
-          this.inputList(this.reads.inside([part], undefined), [part]));
+        node.expression = waitForExpression(node.expression, this.readsOf());
       },
     }, this.component);
   }
@@ -533,13 +541,9 @@ class ComponentRewrite {
       if (slot.treatment === 'prop' || this.patternOrigins.has(binding)) continue;
       const declarator = this.declaratorOf(binding)!;
       const initialValue = declarator.init ?? identifier('undefined');
-      let prepared = waitForExpression(initialValue, (part) =>
-        this.inputList(this.reads.inside([part], undefined), [part]));
-      const builders = [...this.plans].filter(([, plan]) => plan.builds.has(binding)).map(([statement]) => statement);
-      if (builders.length > 0) {
-        const inputs = this.inputList(this.reads.inside(builders, binding), builders);
-        prepared = runtimeCall('$when', [inputs, thunk(prepared)]);
-      }
+      let prepared = waitForExpression(initialValue, this.readsOf());
+      const builderInputs = this.builderInputs(binding);
+      if (builderInputs !== undefined) prepared = runtimeCall('$when', [builderInputs, thunk(prepared)]);
       const initial = thunk(prepared);
       const index = numberLiteral(slot.index);
       const created = slot.treatment === 'cell'
@@ -584,9 +588,7 @@ class ComponentRewrite {
   private patternValue(declarator: VariableDeclarator, slot: Slot): VariableDeclarator {
     const init = declarator.init!;
     const inputs = this.inputList(this.reads.inside([init], undefined), [init]);
-    const prepared = waitForExpression(init, (part) => {
-      return this.inputList(this.reads.inside([part], undefined), [part]);
-    });
+    const prepared = waitForExpression(init, this.readsOf());
     return b.VariableDeclarator({
       id: b.Identifier({ name: slot.name }),
       init: ctxCall('memo', [numberLiteral(slot.index), inputs, thunk(prepared)]),
@@ -598,9 +600,8 @@ class ComponentRewrite {
     const value = member(slots.value.name, 'v');
 
     // The pattern can read too: `{ name = fallback }`.
-    const patternReads = [...this.reads.inside([pattern], undefined)];
     const readInputs = () => {
-      const reads = patternReads.map((binding) => statusInput(binding, this.readOf(binding), [pattern], this.rawUses));
+      const reads = this.readsOf()(pattern, []);
       return thunk(b.ArrayExpression({ elements: [structuredClone(value), ...reads] }));
     };
 
@@ -713,6 +714,54 @@ class ComponentRewrite {
     }
     if (declaredLater) elements.push(member('$ctx', 'render'));
     return elements;
+  }
+
+  /** Reads for `$when` guards: each binding through its slot, and each `a.b.c` path from one. */
+  private readsOf(keep: (binding: Binding) => boolean = () => true): ReadsOf {
+    return readsWithPaths(this.reads, (binding) => this.readOf(binding), this.rawUses, keep);
+  }
+
+  /** `() => [inputs]` of a guard on `root`, branch by branch (`inputsOf`). */
+  private guardInputs(root: Node): Expression {
+    return thunk(inputsOf(root, this.readsOf()));
+  }
+
+  /**
+   * A value built by body statements waits for what they read too. A statement
+   * that only may build it (it passes the value to a call) counts until it is seen
+   * not to change it: `...($ctx.mayChange(0, 1) ? [reads] : [])`. Reads declared
+   * after the value cannot be read where it is declared, so they are left out.
+   */
+  private builderInputs(binding: Binding): Expression | undefined {
+    const declaredAt = binding.declarations[0]!.start;
+    const readsOf = this.readsOf((input) => input !== binding && !this.isDeclaredAfter(input, declaredAt));
+    const elements: Expression[] = [];
+    let built = false;
+
+    for (const [statement, plan] of this.plans) {
+      if (plan.builds.has(binding)) {
+        built = true;
+        elements.push(...readsOf(statement, []));
+      }
+      const position = plan.mayBuild.indexOf(binding);
+      if (position >= 0) {
+        built = true;
+        const test = ctxCall('mayChange', [numberLiteral(plan.observeIndex!), numberLiteral(position)]);
+        const choice = b.ConditionalExpression({
+          test,
+          consequent: b.ArrayExpression({ elements: readsOf(statement, []) }),
+          alternate: b.ArrayExpression({ elements: [] }),
+        });
+        elements.push(b.SpreadElement({ argument: choice }) as never);
+      }
+    }
+
+    return built ? thunk(b.ArrayExpression({ elements })) : undefined;
+  }
+
+  private isDeclaredAfter(input: Binding, position: number): boolean {
+    const isOwn = this.slots.has(input) || this.ownBindings().includes(input);
+    return isOwn && !this.isParameter(input) && input.declarations[0]!.start > position;
   }
 
   /** `() => [a, $s1.v, …]`: reads the current value of each input. */
@@ -851,7 +900,7 @@ function rewriteModuleEffects(module: Module): void {
 // ---------------------------------------------------------------------------
 // Component runtime calls
 
-type CtxMethod = Treatment | 'effect' | 'cleanup' | 'observe' | 'confirmed' | 'ran' | 'statement';
+type CtxMethod = Treatment | 'effect' | 'cleanup' | 'observe' | 'confirmed' | 'mayChange' | 'ran' | 'statement';
 
 /** `$ctx.cell(...)`, `$ctx.memo(...)`, `$ctx.observe(...)`, … */
 function ctxCall(method: CtxMethod, args: Expression[]): Expression {

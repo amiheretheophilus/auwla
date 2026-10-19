@@ -54,6 +54,17 @@ All paths below are under `packages/compiler-next/`. This is test code only.
 - Committed content stays visible during refresh and replacement by a pending
   source. New assignments win over older completions; failures still reach the
   error policy. A remounted owner has its own initial presentation.
+- Only a **replacement** keeps old content: a new request in the same binding
+  after one loaded (an input change, a reassignment). A site that starts reading
+  a source that never loaded (a branch now chosen) shows the pending policy, not
+  what it showed before (`../decisions.md`, 2026-10-19).
+- Branches are lazy at any depth: in `'Hi ' + (signedIn ? user.name : 'guest')`
+  and `f(a && b)`, only the branch that runs makes the site wait.
+- A source inside an object waits where it is read: `props.user.name` waits for
+  `props.user`, the way `user.name` waits for `user`.
+- A body statement that passes a value to an unknown call (`collect(names, users)`)
+  may build it, so the value waits for that statement's sources until the call has
+  run and is seen not to change it.
 - A `null` target sends no request and the payload is `null` at once, not pending
   (`docs/05-data.md`: "pauses the request and clears the payload").
 - Destructuring a source is valid; the pattern runs when the payload exists
@@ -68,6 +79,16 @@ All paths below are under `packages/compiler-next/`. This is test code only.
 returns a `Waiting` value carrying its sources, rather than evaluating against
 `undefined` or throwing a suspension signal. `$value` reads the payload in ready
 computations. No `try`/`catch`/`finally` is introduced.
+
+The inputs of an expression are built branch by branch (`inputsOf` in
+`readiness.ts`): `$branch` reads a test's inputs, evaluates the test, then lists
+the chosen branch's inputs. Limit: the test is evaluated twice (once there, once
+by the authored expression), so a test with side effects runs twice. `$path`
+follows `a.b.c` through plain objects and arrays (data properties only, never a
+getter) to find a waiting value inside one. `Source.replacesLoaded` marks a
+replacement; `$ctx.mayChange` keeps an unknown call's reads as inputs until it is
+seen not to change the value. Module derivations and module patterns are
+built the same way as a component's (`ModuleMemos`).
 
 A seed keeps a separate "written" flag, so even a user write of `undefined`
 prevents a later load from replacing it. Destructuring evaluates the authored
@@ -113,12 +134,14 @@ request cancellation through `$track` is still separate, unfinished work.
 
 ## Cases to test
 
-`tests/cases/sources.test.ts`: 57 cases, all passing on the reference. The original
+`tests/cases/sources.test.ts`: 62 cases, all passing on the reference. The original
 27 give 18 passes and 9 failures on the old compiler; the null-target case fails
 it (written on review, it caught the reference treating `null` as a new load);
 four destructuring cases give 2 passes and 2 failures (the direct
 `= $fetch(url)` case caught the reference destructuring the source object instead
-of its payload);
+of its payload); five cases of sources inside ordinary JavaScript (body loops,
+unknown calls, nested lazy branches, whole sources passed to children, module
+patterns) give 1 pass and 4 failures, and caught four reference gaps;
 the 14 atomic cases give
 8 passes and 6 failures; eleven further atomic lifecycle cases give 6 passes and
 5 failures. These failures must pass on `compiler-next`.
@@ -161,6 +184,10 @@ an early failure can prevent comparison of its later steps. All cases are in
 | `status reads stay available and refresh keeps committed content` | Status shows `pending` immediately | Shows `loading` |
 | `an unused source and an inactive branch do not block an active site` | Inactive branch shows `off` | Shows `loading` |
 | `a conditional derivation waits only for its chosen branch` | Inactive derivation shows `off` | Shows `loading` |
+| `a body loop over a source waits, then follows mutation and refresh` | `loading`, then `3`, `8` after a push, `10` after a refresh | Throws `UnresolvedDataReadError` (`cart` read before it committed) |
+| `an unknown helper filling an array from a source waits and replays` | `loading`, then `Ada`, then `Ada,Lin` | Throws `UnresolvedDataReadError` (`users`) |
+| `a lazy branch inside a larger expression waits only when chosen` | `Hi guest` and `false` at mount | Both sites show `loading` |
+| `a source destructured at module scope waits and is imported` | `loading:loading`, then `Ada:admin` | Rejects with `MMD-S004` |
 | `a module derivation waits and follows later source refreshes` | Defer `user.name.toUpperCase()` until ready | Throws `undefined is not an object` during module evaluation |
 | `a destructured seed written before loading keeps its override` | Delay the seed; preserve its early override | Throws `UnresolvedDataReadError` |
 | `suspend ignores unused sources and inactive branches` | Publish `off` immediately | Keeps the entire region on `loading` |
@@ -186,9 +213,12 @@ an unmodeled case is never permitted compiler behavior:
   children without changed props, and more interleavings of shared owners and
   source generations. The verified 25 cases
   do not exhaust these combinations.
-- Lazy source branches nested inside larger calls/operators, source-dependent body
-  loops/unknown calls, whole props-object projections, and module patterns/control
-  flow. Current guards can wait too broadly in these forms.
+- Statement-level laziness: `if (flag) total = user.x` waits for `user` even
+  when `flag` is false (statement guards read every input of the statement).
+  Same for `switch` and loops. Module-scope control flow and module patterns
+  with a name written later are not modeled.
+- Computed paths (`props[key].name`) and sources inside class instances or
+  Maps: `$path` follows static names through plain data only.
 - Imported helpers whose sources are already warm on their first call, plus more
   re-export, closure and alias combinations.
 - Full `$track` lifecycle callbacks/cancellation, fetch validation/non-JSON

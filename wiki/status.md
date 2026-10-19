@@ -375,6 +375,14 @@ are nailed first.
      written name is a snapshot). Four cases; the direct `= $fetch(url)` form
      caught a reference bug, fixed by giving the destructured value its own memo.
      The old compiler fails two. 180 reference cases pass.
+   - done: five cases of sources inside ordinary JavaScript (body loop, unknown
+     helper, nested lazy branch, whole source to children, module pattern). They
+     caught four reference gaps, now fixed: branches are lazy at any depth
+     (`$branch`), `props.user.name` finds a waiting prop (`$path`), an unknown call
+     keeps a value waiting until it is seen not to change it, and module patterns
+     are memos. Only a replacement keeps old content now (decision row); two
+     `2dfaa72` expectations changed with it. The old compiler fails four of the
+     five. 185 reference cases pass.
    - next: complete reference work on `compiler/sources.md` and the remaining class
      cases on `compiler/state-and-derived.md`, including captured/private
      dependencies and the remaining readiness forms/APIs. Then extend generated programs with
