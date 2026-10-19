@@ -10,6 +10,8 @@ export interface Case {
   source: string;
   /** Additional authored modules, addressed by relative path. */
   modules?: Record<string, string>;
+  /** Isolate known synchronous compiler loops; a deadline is a failure, never an expected result. */
+  compileTimeoutMs?: number;
   steps?: Step[];
   /** Additional assertions, on each renderer: 0 is mount, then one per step. */
   check?: (container: HTMLElement, observation: number) => void;

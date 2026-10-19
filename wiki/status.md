@@ -351,6 +351,18 @@ are nailed first.
      data and invoked unused getters, keeping all assertions. Nineteen cases have
      both generated versions; the render-callback case is rejected before emit.
      All 156 reference cases across 8 files pass; `bun check` passes for 24 files.
+   - done: nineteen explicit spread/rest, tag and recursion cases. The old compiler
+     passes five and fails fourteen: copied-value re-derivation, rest updates,
+     namespace/factory tags, JSX spread children, recursive helper rejection and a
+     recursive JSX-helper compilation timeout. Exact expected/actual results live
+     on `compiler/state-and-derived.md`, `compiler/components.md`, and
+     `compiler/conditionals-and-lists.md`. Fixed reference stateful-member detection
+     and function identity for same-name components; assertions remain unchanged.
+     A per-case isolated compilation deadline prevents the known synchronous
+     compiler hang from blocking the comparison runner. Thirteen additions have
+     both outputs; five reject before emit and one exceeds the diagnostic deadline.
+     All 175 reference cases across 8 files pass; package `bun check` passes for
+     25 files. Production compiler implementation remains on hold.
    - next: complete reference work on `compiler/sources.md` and the remaining class
      cases on `compiler/state-and-derived.md`, including captured/private
      dependencies and the remaining readiness forms/APIs. Then extend generated programs with

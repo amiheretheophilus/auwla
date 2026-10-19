@@ -524,6 +524,8 @@ interface SuspendedBoundary {
 class Renderer {
   private nodes = new Map<string, NodeRecord>();
   private readonly instances = new Map<string, Instance>();
+  private readonly componentTypes = new WeakMap<Component, number>();
+  private nextComponentType = 0;
   private readonly moduleEffects: ModuleEffects;
 
   /** Filled during a render. */
@@ -743,7 +745,7 @@ class Renderer {
   }
 
   private renderComponent(node: Element, component: Component, position: string, inSvg: boolean, policies: Policies): Node[] {
-    const id = `${position}:${component.name}`;
+    const id = this.componentId(node, component, position);
     const output = this.preparedOutputs.has(id)
       ? this.preparedOutputs.get(id)
       : this.evaluateComponent(node, component, position).output;
@@ -752,7 +754,7 @@ class Renderer {
   }
 
   private evaluateComponent(node: Element, component: Component, position: string): { id: string; output: unknown; instance: Instance } {
-    const id = `${position}:${component.name}`;
+    const id = this.componentId(node, component, position);
     let instance = this.instances.get(id);
     if (instance === undefined) {
       instance = new Instance();
@@ -776,6 +778,18 @@ class Renderer {
     instance.first = false;
 
     return { id, output, instance };
+  }
+
+  private componentId(node: Element, component: Component, position: string): string {
+    // Policy calls are synthesized by the renderer. Their closures are refreshed
+    // with the parent's render; their established presentation slot stays put.
+    if (node.site === undefined) return `${position}:${component.name}`;
+    let type = this.componentTypes.get(component);
+    if (type === undefined) {
+      type = this.nextComponentType++;
+      this.componentTypes.set(component, type);
+    }
+    return `${position}:${component.name}@${type}`;
   }
 
   private renderHostElement(node: Element, tag: string, position: string, inSvg: boolean, policies: Policies): Node {

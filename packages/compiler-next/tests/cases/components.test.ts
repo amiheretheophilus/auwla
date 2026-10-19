@@ -127,3 +127,106 @@ behaves('complex JSX: dynamic component tags keep class-derived props current', 
     expect(child?.textContent).toBe(['1', '2', '2', '3'][observation]);
   },
 });
+
+behaves('spread/rest: component rest props forward through spreads with explicit overrides', {
+  source: `
+    function Field({ value, ...attributes }) { return <input {...attributes} value={value} />; }
+    function Wrapper({ label, ...rest }) { return <label><span>{label}</span><Field {...rest} title={label} /></label>; }
+    export function App() {
+      let value = 'a'; let label = 'A';
+      return <main><Wrapper id="field" label={label} value={value} title="overridden" onInput={event => { value = event.target.value; }} />
+        <output>{value}</output><button id="label" onClick={() => { label = 'B'; }}>label</button></main>;
+    }`,
+  steps: [{ input: '#field', value: 'typed' }, { click: '#label' }],
+  check(container, observation) {
+    expect((container.querySelector('#field') as HTMLInputElement).value).toBe(['a', 'typed', 'typed'][observation]!);
+    expect(container.querySelector('#field')?.getAttribute('title')).toBe(['A', 'A', 'B'][observation]);
+    expect(container.querySelector('output')?.textContent).toBe(['a', 'typed', 'typed'][observation]);
+  },
+});
+
+behaves('tag patterns: dynamic native tags change element type while keeping reactive props', {
+  source: `
+    export function App() {
+      let Tag = 'h2'; let count = 1;
+      return <main><section><Tag data-count={count}>{count}</Tag></section>
+        <button id="count" onClick={() => count++}>count</button><button id="tag" onClick={() => { Tag = 'p'; }}>tag</button></main>;
+    }`,
+  steps: [{ click: '#count' }, { click: '#tag' }, { click: '#count' }],
+  check(container, observation) {
+    const child = container.querySelector('section')!.firstElementChild!;
+    expect(child.tagName.toLowerCase()).toBe(['h2', 'h2', 'p', 'p'][observation]!);
+    expect(child.textContent).toBe(['1', '2', '2', '3'][observation]!);
+    expect(child.getAttribute('data-count')).toBe(['1', '2', '2', '3'][observation]!);
+  },
+});
+
+behaves('tag patterns: member components preserve their own local state', {
+  source: `
+    const Panels = { Counter: ({ start }) => {
+      let count = start;
+      return <section><p>{count}</p><button id="child" onClick={() => count++}>child</button></section>;
+    } };
+    export function App() {
+      let other = 0;
+      return <main><Panels.Counter start={1} /><output>{other}</output><button id="other" onClick={() => other++}>other</button></main>;
+    }`,
+  steps: [{ click: '#child' }, { click: '#other' }, { click: '#child' }],
+  check(container, observation) {
+    expect(container.querySelector('p')?.textContent).toBe(['1', '2', '2', '3'][observation]);
+    expect(container.querySelector('output')?.textContent).toBe(['0', '0', '1', '1'][observation]);
+  },
+});
+
+behaves('tag patterns: distinct components with the same name do not share local state', {
+  source: `
+    function make(label) { return function Counter() {
+      let count = 0;
+      return <section><p>{label}:{count}</p><button id="child" onClick={() => count++}>child</button></section>;
+    }; }
+    const First = make('A'); const Second = make('B');
+    export function App() {
+      let alternate = false; const Tag = alternate ? Second : First;
+      return <main><Tag /><button id="switch" onClick={() => { alternate = !alternate; }}>switch</button></main>;
+    }`,
+  steps: [{ click: '#child' }, { click: '#switch' }, { click: '#child' }, { click: '#switch' }],
+  check(container, observation) { expect(container.querySelector('p')?.textContent).toBe(['A:0', 'A:1', 'B:0', 'B:1', 'A:0'][observation]); },
+});
+
+behaves('recursive patterns: recursive components keep per-node state and remount removed descendants', {
+  source: `
+    function Branch({ node }) {
+      let open = true; let count = 0;
+      return <li data-id={node.id}><span>{node.name}:{count}</span>
+        <button id={'inc-' + node.id} onClick={() => count++}>inc</button>
+        <button id={'toggle-' + node.id} onClick={() => { open = !open; }}>toggle</button>
+        {open && <ul>{node.children.map(child => <Branch key={child.id} node={child} />)}</ul>}</li>;
+    }
+    export function App() {
+      const tree = { id: 'r', name: 'R', children: [{ id: 'a', name: 'A', children: [] }] };
+      return <main><ul><Branch node={tree} /></ul><button id="rename" onClick={() => { tree.children[0].name = 'AA'; }}>rename</button>
+        <button id="add" onClick={() => tree.children.push({ id: 'b', name: 'B', children: [] })}>add</button></main>;
+    }`,
+  steps: [{ click: '#inc-a' }, { click: '#rename' }, { click: '#toggle-r' }, { click: '#add' }, { click: '#toggle-r' }],
+  check(container, observation) {
+    expect([...container.querySelectorAll('li > span')].map(node => node.textContent)).toEqual([
+      ['R:0', 'A:0'], ['R:0', 'A:1'], ['R:0', 'AA:1'], ['R:0'], ['R:0'], ['R:0', 'AA:0', 'B:0'],
+    ][observation]!);
+  },
+});
+
+behaves('recursive patterns: recursive JSX helpers update nested arrays and replacement branches', {
+  compileTimeoutMs: 15000,
+  source: `
+    function draw(nodes) { return nodes.map(node => <li key={node.id}><span>{node.name}</span>
+      {node.children.length > 0 ? <ul>{draw(node.children)}</ul> : null}</li>); }
+    export function App() {
+      let nodes = [{ id: 'a', name: 'A', children: [{ id: 'b', name: 'B', children: [] }] }];
+      const view = draw(nodes);
+      return <main><ul id="tree">{view}</ul><button id="rename" onClick={() => { nodes[0].children[0].name = 'BB'; }}>rename</button>
+        <button id="add" onClick={() => nodes[0].children.push({ id: 'c', name: 'C', children: [] })}>add</button>
+        <button id="replace" onClick={() => { nodes = [{ id: 'd', name: 'D', children: [] }]; }}>replace</button></main>;
+    }`,
+  steps: [{ click: '#rename' }, { click: '#add' }, { click: '#replace' }],
+  check(container, observation) { expect(container.querySelector('#tree')?.textContent).toBe(['AB', 'ABB', 'ABBC', 'D'][observation]); },
+});

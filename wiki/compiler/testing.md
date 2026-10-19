@@ -17,6 +17,7 @@
 | `tests/harness/case.ts` | The `Case` and `Step` types, optional `check(container, observation)` assertions, and `defer(name)` for async cases |
 | `tests/harness/run.ts` | `behaves(name, case)`: runs the case on the reference and on a compiler, compares after each step |
 | `tests/harness/compilers.ts` | The compilers a case can run on; `COMPILER=old` (default) is `packages/compiler` |
+| `tests/harness/compile-worker.ts` | Optional separate-process old compilation for cases that can synchronously loop |
 | `tests/harness/serialize.ts` | The visible DOM as a comparable string |
 | `tests/harness/requests.ts` | Queued JSON responses/rejections and normalized request history |
 | `tests/cases/<page>.test.ts` | One file per wiki page; holds that page's "Cases to test" |
@@ -47,6 +48,14 @@ and optional HTTP status), `rejectRequest`, and `reject` for a named `defer`.
 Each run owns and disposes its module work, sources and transport. Relative and
 same-origin absolute request URLs compare by path and query. Use `--timeout 30000`
 when this machine is busy; the default five-second per-case timeout can expire.
+
+A case can set `compileTimeoutMs` to isolate old compilation with an OS-enforced
+deadline. `COMPILER_TIMEOUT_MS` overrides it for a selected diagnostic run. This
+handles synchronous compiler loops, which prevent Bun's test timer from firing.
+A deadline is reported as failure; it never skips or passes a fixture. The
+recursive JSX-helper case uses 15,000 ms. The child receives the same module text
+and compile options as the ordinary adapter, and emits JSON only when compilation
+finishes. This deadline is containment for debugging, not a performance benchmark.
 
 ## What it does
 
@@ -154,8 +163,15 @@ The mixed class/state/JSX slice adds twenty cases: fourteen on
 nineteen have both generated versions and one is rejected by the old compiler.
 Reference snapshots inspect data descriptors without invoking unused getters,
 and track static and symbol-backed data. The assertions first caught three
-reference gaps, then exposed the old compiler's four failures. All 156 reference
-cases pass; `bun check` passes for 24 files. This is
+reference gaps, then exposed the old compiler's four failures.
+Nineteen further spread/rest/tag/recursion cases add exact array/object copy
+mutations, shallow aliases, rest declarations/parameters/props, JSX spread children,
+native/member/factory tags, and recursive components/helpers. The old compiler
+passes five and fails fourteen (including one bounded compilation timeout).
+Thirteen have paired output; five reject before emit and one times out. The
+reference's two component identity/classification bugs were fixed without changing
+the assertions. All 175 reference cases pass; package `bun check` passes for 25
+files. This is
 still reference development, not permission to start the compiler.
 The old compiler has about 305 distinct `memo-dom:` messages. Most are internal
 invariants or contracts of the framework's own APIs (`route-to`, `$routed`, `Group`,
@@ -165,6 +181,8 @@ ordinary JavaScript become cases.
 ## Running
 
 - Tests import `src` directly. No build is needed before running them.
+- Run `bun check` in `packages/compiler-next`, rather than at the repository root,
+  where unrelated generated example output is included.
 - `bun run test:changed` _(planned)_ maps `git diff` to feature folders and runs only
   their tests, plus a small generated batch. A change in `core/` runs everything,
   but on CI. Features never import each other, so the mapping can be trusted.

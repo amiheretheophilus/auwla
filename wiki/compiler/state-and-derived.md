@@ -184,3 +184,33 @@ prototype/descriptor changes; and Proxy/WeakMap-backed state. The tested private
 case reads the accessor directly in JSX; it does not validate private-only memo
 invalidation. These remain correctness requirements, never permitted failures
 for the rewrite. JSX combinations with class instances are on `components.md`.
+
+### Spread, rest and recursive helpers
+
+Eleven more cases check ordinary copy/rest patterns and recursive computation.
+The ten `spread/rest:` cases cover the exact `const a = [...b]` and `{ ...b }`
+forms: local mutations survive unrelated writes and reset when their source
+changes. Both copies remain shallow. A write through a shared nested reference
+also changes the source, so the derived copy replays under rule 11. Native array
+and object rest, computed exclusions, symbols, defaults, reassigned rest snapshots,
+rest parameters/spread arguments, and module-to-component copy chains are covered.
+The `recursive patterns:` case uses mutually recursive helpers over a nested tree.
+
+The reference passes all eleven. The old compiler passes rest parameters with
+spread arguments and nested rest/default patterns; nine cases fail:
+
+| Case | Expected | Old compiler result |
+| --- | --- | --- |
+| `spread/rest: array copy mutations survive unrelated writes until the source changes` | After editing `a`, changing `b` rebuilds `a` as `1,2,3` | `a` stays `1,2,9` while `b` is `1,2,3` |
+| `spread/rest: object copy writes additions and deletions reset only with its source` | Source mutation restores `a.qty = 2`, `label = 'base'`, and removes the local extra field | Keeps `qty = 9`, missing label and the local extra field |
+| `spread/rest: array spread is shallow and nested mutations still reach the original` | Shared nested mutation changes both sources and replays `a` to just `2` | Nested value changes, but `a` incorrectly retains its appended `9` |
+| `spread/rest: object spread shares nested references while isolating top-level writes` | Shared nested mutation replays `a.count` to source value `1` | Keeps local `a.count = 9` |
+| `spread/rest: array destructuring rest can be mutated and rederived` | Pushing `9` into `tail` shows `2,3,9` immediately | Still shows `2,3` |
+| `spread/rest: computed object rest excludes selected keys and retains symbols` | Setting `rest.other = 9` shows `9`, retaining its symbol and excluded-key behavior | Still shows `2` |
+| `spread/rest: a reassigned rest binding is a snapshot while other aliases remain derived` | Source mutation updates `selected` from `1` to `2`, keeping `rest` a snapshot | `selected` remains `1`; later override assertions are not reached |
+| `spread/rest: module and component copies each preserve local edits until their input changes` | Updating `moduleCopy` to `1,9` replays `localCopy` to `1,9` | `localCopy` keeps its stale `1,8` edit |
+| `recursive patterns: mutually recursive helpers rederive from nested state` | Native recursion computes `3`, `4`, `8`, then `16` as nested state/module factor change | Rejects recursive helper `sum` as something that "cannot be analyzed" |
+
+All assertions are unchanged. Ten cases have both generated versions; the
+mutually recursive helper is rejected before emit. Further recursive/aliasing
+programs belong in the generator too, not just hand-written examples.

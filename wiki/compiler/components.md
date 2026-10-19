@@ -57,9 +57,38 @@ with no old compiled module. All three failures must pass on `compiler-next`.
 Class/accessor rules, cases and reference snapshot details are on
 `state-and-derived.md`.
 
+Six further cases check rest-prop forwarding with explicit spread overrides,
+dynamic native tags, stateful member tags, distinct same-name factory components,
+recursive components with per-node state/remount, and recursive JSX helpers.
+All six pass the reference. The old compiler passes rest-prop forwarding, native
+tag switching and the recursive component; three cases fail:
+
+| Case | Expected | Old compiler result |
+| --- | --- | --- |
+| `tag patterns: member components preserve their own local state` | `<Panels.Counter>` keeps edits across unrelated parent updates | Rejects `Panels` as containing JSX but not being a plain function |
+| `tag patterns: distinct components with the same name do not share local state` | Switching between factory-created `Counter` functions resets each mount's state | Rejects dynamic `Tag` as having no finite string or linked-component candidates |
+| `recursive patterns: recursive JSX helpers update nested arrays and replacement branches` | Native recursion renders `AB`, `ABB`, `ABBC`, then `D` | Compilation does not finish; repeated isolated runs exceed the 15,000 ms guard |
+
+The last fixture has `compileTimeoutMs: 15000`: a synchronous compiler loop cannot
+be interrupted by Bun's in-process test timer. This is a diagnostic deadline, not
+a benchmark or an expected failure. The original unbounded run was stopped, and
+the fixture source/assertions remain intact. All three failures must pass on the
+rewrite. The three passing cases have both outputs; the failures have reference
+output plus rejection/timeout diagnostics, with no compiled module.
+
+Two assertions also caught reference bugs. Capitalized object-property functions
+with JSX block bodies now receive component slots; previously a member component
+reset on every render. Authored component calls now match function identity as
+well as site/position/key, so different functions named `Counter` do not share
+state. Synthesized presentation callbacks retain their established policy slots
+as their parent closures are refreshed. Cases and fixes are in
+`tests/reference/transform.ts` and `tests/reference/runtime.ts`.
+
 ## Open questions
 
 - Which component forms does the old compiler support that are not listed here
   (`page(...)`, presentation components)? Port each with a test.
 - Extend generated JSX programs with these combinations, including stateful member
-  tags, nested slots, changing captured values, and row removal/remount.
+  tags, recursive trees, nested slots, changing captured values, and row removal/remount.
+- Expand locally declared component, computed-member and factory combinations;
+  the current cases do not establish every callable/tag pattern.

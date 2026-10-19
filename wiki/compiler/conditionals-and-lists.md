@@ -77,6 +77,16 @@ These pass today and must keep passing:
 - keyed host nodes being replaced (asserted by DOM identity);
 - keys in conditional branches and component roots.
 
-Not written yet: `<p>{...items}</p>` (JSX spread children). Old
-messages not yet checked against valid code: "control flow … test is not
+Two `spread/rest:` cases now cover JSX spread children and pass explicit text/DOM
+checks on the reference. Both fail on the old compiler:
+
+| Case | Expected | Old compiler result |
+| --- | --- | --- |
+| `spread/rest: JSX spread children update and preserve keyed nodes` | Spread stored JSX rows, append a row, and keep the first keyed node | Rejects the stored map with "list rendering must be a direct JSX child" before reaching the spread behavior |
+| `spread/rest: JSX spread primitive children retain order and update` | `<p>{...items}</p>` shows `12`, then `123` | Rejects "spread children are not supported" |
+
+Both retain reference output. Compilation rejects them before producing an old
+module. These are valid JSX cases required to pass on `compiler-next`.
+
+Old messages not yet checked against valid code: "control flow … test is not
 replayable", "conditional cannot choose between two data sources".

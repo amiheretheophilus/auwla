@@ -618,3 +618,157 @@ behaves('complex state: symbol-backed accessors update cached derivations', {
   steps: [{ click: 'button' }, { click: 'button' }],
   check(container, observation) { expect(container.querySelector('p')?.textContent).toBe(['1:2', '2:4', '3:6'][observation]); },
 });
+
+behaves('spread/rest: array copy mutations survive unrelated writes until the source changes', {
+  source: `
+    export function App() {
+      let b = [1, 2]; const a = [...b]; let other = 0;
+      return <main><p>{a.join(',')}|{b.join(',')}|{other}</p>
+        <button id="copy" onClick={() => a.push(9)}>copy</button><button id="other" onClick={() => other++}>other</button>
+        <button id="source" onClick={() => b.push(3)}>source</button><button id="replace" onClick={() => { b = [4]; }}>replace</button></main>;
+    }`,
+  steps: [{ click: '#copy' }, { click: '#other' }, { click: '#source' }, { click: '#replace' }],
+  check(container, observation) {
+    expect(container.querySelector('p')?.textContent).toBe(['1,2|1,2|0', '1,2,9|1,2|0', '1,2,9|1,2|1', '1,2,3|1,2,3|1', '4|4|1'][observation]);
+  },
+});
+
+behaves('spread/rest: object copy writes additions and deletions reset only with its source', {
+  source: `
+    export function App() {
+      const b = { qty: 1, label: 'base' }; const a = { ...b }; let other = 0;
+      return <main><p>{a.qty}:{a.label ?? '-'}:{a.extra ?? '-'}|{b.qty}:{b.label}|{other}</p>
+        <button id="copy" onClick={() => { a.qty = 9; a.extra = 'local'; delete a.label; }}>copy</button>
+        <button id="other" onClick={() => other++}>other</button><button id="source" onClick={() => b.qty++}>source</button></main>;
+    }`,
+  steps: [{ click: '#copy' }, { click: '#other' }, { click: '#source' }],
+  check(container, observation) {
+    expect(container.querySelector('p')?.textContent).toBe(['1:base:-|1:base|0', '9:-:local|1:base|0', '9:-:local|1:base|1', '2:base:-|2:base|1'][observation]);
+  },
+});
+
+behaves('spread/rest: array spread is shallow and nested mutations still reach the original', {
+  source: `
+    export function App() {
+      const b = [{ value: 1 }]; const a = [...b];
+      return <main><p>{a.map(item => item.value).join(',')}|{b.map(item => item.value).join(',')}|{a[0] === b[0] ? 'shared' : 'copied'}</p>
+        <button id="append" onClick={() => a.push({ value: 9 })}>append</button>
+        <button id="nested" onClick={() => a[0].value++}>nested</button></main>;
+    }`,
+  steps: [{ click: '#append' }, { click: '#nested' }],
+  check(container, observation) {
+    expect(container.querySelector('p')?.textContent).toBe(['1|1|shared', '1,9|1|shared', '2|2|shared'][observation]);
+  },
+});
+
+behaves('spread/rest: object spread shares nested references while isolating top-level writes', {
+  source: `
+    export function App() {
+      const b = { count: 1, nested: { value: 2 } }; const a = { ...b };
+      return <main><p>{a.count}:{a.nested.value}|{b.count}:{b.nested.value}|{a.nested === b.nested ? 'shared' : 'copied'}</p>
+        <button id="top" onClick={() => { a.count = 9; }}>top</button><button id="nested" onClick={() => a.nested.value++}>nested</button></main>;
+    }`,
+  steps: [{ click: '#top' }, { click: '#nested' }],
+  check(container, observation) {
+    expect(container.querySelector('p')?.textContent).toBe(['1:2|1:2|shared', '9:2|1:2|shared', '1:3|1:3|shared'][observation]);
+  },
+});
+
+behaves('spread/rest: array destructuring rest can be mutated and rederived', {
+  source: `
+    export function App() {
+      const values = [1, 2, 3]; const [head, ...tail] = values;
+      return <main><p>{head}|{tail.join(',')}|{values.join(',')}</p>
+        <button id="tail" onClick={() => tail.push(9)}>tail</button><button id="source" onClick={() => values.push(4)}>source</button></main>;
+    }`,
+  steps: [{ click: '#tail' }, { click: '#source' }],
+  check(container, observation) {
+    expect(container.querySelector('p')?.textContent).toBe(['1|2,3|1,2,3', '1|2,3,9|1,2,3', '1|2,3,4|1,2,3,4'][observation]);
+  },
+});
+
+behaves('spread/rest: computed object rest excludes selected keys and retains symbols', {
+  source: `
+    const token = Symbol('token'); const key = 'selected';
+    export function App() {
+      const source = { selected: 1, other: 2, [token]: 'S' }; const { [key]: selected, ...rest } = source;
+      return <main><p>{selected}|{rest.other}:{rest[token]}:{Object.keys(rest).join(',')}</p>
+        <button id="rest" onClick={() => { rest.other = 9; }}>rest</button><button id="source" onClick={() => { source.other = 3; }}>source</button></main>;
+    }`,
+  steps: [{ click: '#rest' }, { click: '#source' }],
+  check(container, observation) {
+    expect(container.querySelector('p')?.textContent).toBe(['1|2:S:other', '1|9:S:other', '1|3:S:other'][observation]);
+  },
+});
+
+behaves('spread/rest: a reassigned rest binding is a snapshot while other aliases remain derived', {
+  source: `
+    export function App() {
+      const source = { selected: 1, other: 2 }; let { selected, ...rest } = source;
+      return <main><p>{selected}|{rest.other ?? '-'}:{rest.manual ?? '-'}</p>
+        <button id="source" onClick={() => { source.selected++; source.other++; }}>source</button>
+        <button id="rest" onClick={() => { rest = { manual: 9 }; }}>rest</button></main>;
+    }`,
+  steps: [{ click: '#source' }, { click: '#rest' }, { click: '#source' }],
+  check(container, observation) {
+    expect(container.querySelector('p')?.textContent).toBe(['1|2:-', '2|2:-', '2|-:9', '3|-:9'][observation]);
+  },
+});
+
+behaves('spread/rest: rest parameters and spread arguments combine module and local changes', {
+  source: `
+    let factor = 2;
+    function total(multiplier, ...values) { return multiplier * values.reduce((sum, value) => sum + value, 0); }
+    export function App() {
+      const values = [1, 2]; const result = total(factor, ...values);
+      return <main><p>{result}</p><button id="values" onClick={() => values.push(3)}>values</button>
+        <button id="factor" onClick={() => { factor = 3; }}>factor</button></main>;
+    }`,
+  steps: [{ click: '#values' }, { click: '#factor' }],
+  check(container, observation) { expect(container.querySelector('p')?.textContent).toBe(['6', '12', '18'][observation]); },
+});
+
+behaves('spread/rest: module and component copies each preserve local edits until their input changes', {
+  source: `
+    const source = [1]; const moduleCopy = [...source];
+    export function App() {
+      const localCopy = [...moduleCopy];
+      return <main><p>{source.join(',')}|{moduleCopy.join(',')}|{localCopy.join(',')}</p>
+        <button id="local" onClick={() => localCopy.push(8)}>local</button>
+        <button id="module" onClick={() => moduleCopy.push(9)}>module</button>
+        <button id="source" onClick={() => source.push(2)}>source</button></main>;
+    }`,
+  steps: [{ click: '#local' }, { click: '#module' }, { click: '#source' }],
+  check(container, observation) {
+    expect(container.querySelector('p')?.textContent).toBe(['1|1|1', '1|1|1,8', '1|1,9|1,9', '1,2|1,2|1,2'][observation]);
+  },
+});
+
+behaves('spread/rest: nested rest patterns preserve defaults and react to deep writes', {
+  source: `
+    export function App() {
+      const payload = { profile: { role: 'reader' }, items: [1, 2], version: 1 };
+      const { profile: { name = 'Anonymous', ...meta }, items: [first, ...tail], ...remaining } = payload;
+      return <main><p>{name}:{meta.role}|{first}:{tail.join(',')}|{remaining.version}</p>
+        <button onClick={() => { payload.profile.name = 'Ada'; payload.profile.role = 'admin'; payload.items.push(3); payload.version++; }}>update</button></main>;
+    }`,
+  steps: [{ click: 'button' }],
+  check(container, observation) {
+    expect(container.querySelector('p')?.textContent).toBe(['Anonymous:reader|1:2|1', 'Ada:admin|1:2,3|2'][observation]);
+  },
+});
+
+behaves('recursive patterns: mutually recursive helpers rederive from nested state', {
+  source: `
+    let factor = 1;
+    function sum(node) { return node.value + childrenTotal(node.children); }
+    function childrenTotal(nodes) { return nodes.reduce((total, node) => total + sum(node), 0); }
+    export function App() {
+      const tree = { value: 1, children: [{ value: 2, children: [] }] }; const total = sum(tree) * factor;
+      return <main><p>{total}</p><button id="nested" onClick={() => tree.children[0].value++}>nested</button>
+        <button id="add" onClick={() => tree.children.push({ value: 4, children: [] })}>add</button>
+        <button id="factor" onClick={() => { factor = 2; }}>factor</button></main>;
+    }`,
+  steps: [{ click: '#nested' }, { click: '#add' }, { click: '#factor' }],
+  check(container, observation) { expect(container.querySelector('p')?.textContent).toBe(['3', '4', '8', '16'][observation]); },
+});

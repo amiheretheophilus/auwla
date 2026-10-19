@@ -95,7 +95,7 @@ async function runOnReference(name: string, testCase: Case): Promise<Observation
 
 async function runOnCompiler(name: string, testCase: Case, compiler: Compiler): Promise<Observations> {
   const disposeSources = track(compiler.prepare());
-  const files = compiler.compile(testCase.source, testCase.modules);
+  const files = compiler.compile(testCase.source, testCase.modules, testCase.compileTimeoutMs);
   const module = await importFiles(name, 'compiled', files, 'App.tsx');
 
   const container = attachContainer();

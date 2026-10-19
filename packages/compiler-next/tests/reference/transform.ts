@@ -203,6 +203,10 @@ function functionName(module: Module, fn: FunctionNode): string | undefined {
   if (fn.id) return fn.id.name;
   const parent = module.parentOf(fn);
   if (is.VariableDeclarator(parent) && is.Identifier(parent.id)) return parent.id.name;
+  if (is.Property(parent) && parent.value === fn && !parent.computed) {
+    if (is.Identifier(parent.key)) return parent.key.name;
+    if (is.Literal(parent.key) && typeof parent.key.value === 'string') return parent.key.value;
+  }
   return undefined;
 }
 

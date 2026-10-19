@@ -233,3 +233,27 @@ behaves('a key on a returned component root remounts without a keyed parent', {
     expect(container.querySelector('p')?.textContent).toBe(['a:0', 'a:1', 'aa:0'][observation]);
   },
 });
+
+behaves('spread/rest: JSX spread children update and preserve keyed nodes', {
+  source: `
+    export function App() {
+      const items = [1, 2]; const children = items.map(item => <b key={item}>{item}</b>);
+      return <main><section>{...children}</section><button onClick={() => items.push(3)}>add</button></main>;
+    }`,
+  steps: [{ click: 'button' }],
+  check(container, observation) {
+    expect(container.querySelector('section')?.textContent).toBe(['12', '123'][observation]);
+    if (observation === 0) container.querySelector('b')!.setAttribute('data-retained', 'yes');
+    if (observation === 1) expect(container.querySelector('b')?.getAttribute('data-retained')).toBe('yes');
+  },
+});
+
+behaves('spread/rest: JSX spread primitive children retain order and update', {
+  source: `
+    export function App() {
+      const items = [1, 2];
+      return <main><p>{...items}</p><button onClick={() => items.push(3)}>add</button></main>;
+    }`,
+  steps: [{ click: 'button' }],
+  check(container, observation) { expect(container.querySelector('p')?.textContent).toBe(['12', '123'][observation]); },
+});
