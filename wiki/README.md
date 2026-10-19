@@ -1,7 +1,11 @@
 # Wiki
 
 Notes for the compiler rewrite (branch `compiler-rewrite`). A new session reads
-these pages first, in this order, then continues from `status.md`.
+`../AGENTS.md` first, then these pages in this order, then continues from
+`status.md`.
+
+**Push only to `amiheretheophilus/auwla` (remote `origin`).** Never push to
+`snrraptopack/memo-exp`: its account has a billing lock and CI cannot run there.
 
 | Page | What it holds |
 | --- | --- |
