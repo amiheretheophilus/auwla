@@ -37,7 +37,8 @@ beforeEach(()=>{
   _internals().registry.forEach((_,id)=>unregister(id));
   setScheduler(run=>run());document.body.replaceChildren();
 });
-afterEach(()=>{vi.restoreAllMocks();resetScheduler();});
+// Leave no rows or entities behind for later files.
+afterEach(()=>{vi.restoreAllMocks();_internals().registry.forEach((_,id)=>unregister(id));document.body.replaceChildren();resetScheduler();});
 
 async function mount(kind:string,value:unknown) {
   const specifier=`./fixtures/out/primitive-expression-${kind}.compiled.ts`;

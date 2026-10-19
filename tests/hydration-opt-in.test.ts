@@ -45,9 +45,19 @@ writeFileSync(output, compile(SOURCE, { runtimePath: '@memoized-dom/runtime' }))
 
 let mounted: MountedApplication | undefined;
 
+// The hydration bridge is realm-wide: when an earlier file in this process
+// loaded '@memoized-dom/runtime/hydrate', remove its entry for these tests so
+// they see a page whose program never installed it, and put it back after.
+const bridge = (globalThis as unknown as Record<symbol, { hydrate?: unknown } | undefined>)[
+  Symbol.for('memoized-dom:hydration-runtime-bridge')
+];
+let installedHydrate: unknown;
+
 beforeEach(() => {
   document.body.replaceChildren();
   setScheduler((run) => run());
+  installedHydrate = bridge?.hydrate;
+  if (bridge !== undefined) delete bridge.hydrate;
 });
 
 afterEach(() => {
@@ -55,6 +65,7 @@ afterEach(() => {
   mounted = undefined;
   resetScheduler();
   vi.restoreAllMocks();
+  if (bridge !== undefined && installedHydrate !== undefined) bridge.hydrate = installedHydrate;
 });
 
 describe('hydration opt-in fallback', () => {

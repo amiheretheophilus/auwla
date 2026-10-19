@@ -216,6 +216,8 @@ describe('module-scope sources through Group/$track/derivations', () => {
       unregister('App');
       data.clear();
       setActiveDataRuntime(previousData);
+      // Leave no `#root` behind for later files that mount by element id.
+      document.body.replaceChildren();
     }
   });
 
@@ -304,6 +306,8 @@ describe('module-scope sources through Group/$track/derivations', () => {
       unregister('App');
       data.clear();
       setActiveDataRuntime(previousData);
+      // Leave no `#root` behind for later files that mount by element id.
+      document.body.replaceChildren();
     }
   });
 

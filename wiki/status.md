@@ -235,11 +235,37 @@ scheduler did not clear it.
   the next interference to find.
 - New baseline for comparisons: `slice3f/failures.txt` in the scratchpad.
 
+## The other cross-file failures (tests that leaked state)
+
+Found with `prefix.sh` (scratchpad): the smallest batch prefix that makes a
+file fail, then which files of it are needed. Fixed by making the *leaking*
+test (always a passing one) clean up after itself; no failing test edited:
+
+- `hydration-installation`: left a throwing stub `hydrate` and source-built
+  capabilities on the realm-wide hydration bridge. Restores both now.
+- `module-source-group-integration`: left `<div id="root">`; `mount('root')`
+  in `mount-api` found it. Clears the body in its `finally`.
+- `todo-compiler-comparison`, `primitive-expression-cache`: left rendered DOM
+  and entities after the last test (cleared only *before* each test).
+
+Two failing tests were wrong about the process they run in, and were changed
+with the user's agreement ("if you know changing how a test is won't lead to
+you secretly trying to take a short cut … you can do it"):
+
+- `hydration-opt-in` asserts a page whose program never installed the hydrate
+  entry, but the bridge is realm-wide (by design) and an earlier file may
+  have installed it. The file now removes the entry for its tests and puts
+  it back; what it verifies is unchanged.
+- `kernel-leaf-teardown` "consumes disposal-hook iterators…" asserted its hook
+  ran before cleanup's. Hooks run in install order and cleanup installs its
+  hook on first use; no order between unrelated hooks is promised. It now
+  checks both ran once, in either order.
+
+Result: the batched root suite has no cross-file failures left.
+
 ## Next
 
 1. Vite suite and `bench/` on a machine with more memory.
-2. Find the remaining 10 cross-file failures (same method: pair each earlier
-   file in the batch with the failing one).
-3. Resolve: symbols keyed by id on the frozen index (`references`, `writes`),
+2. Resolve: symbols keyed by id on the frozen index (`references`, `writes`),
    then move analysis facts from names/nodes to symbol ids.
 4. Then the render plan (see `plan.md`).

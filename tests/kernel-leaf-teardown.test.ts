@@ -105,5 +105,7 @@ it('consumes disposal-hook iterators and reports a single yielded error unchange
     return errors;
   };
   expect(() => unregister('Leaf')).toThrow(error);
-  expect(calls).toEqual(['iterator','cleanup']); expect(has('Leaf')).toBe(false);
+  // Dispose hooks run in install order, and cleanup installs its hook on first
+  // use (possibly in an earlier file): both run, in either order.
+  expect([...calls].sort()).toEqual(['cleanup','iterator']); expect(has('Leaf')).toBe(false);
 });

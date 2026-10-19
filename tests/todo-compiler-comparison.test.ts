@@ -39,6 +39,9 @@ describe('real TODO compiler regression', () => {
   });
 
   afterEach(() => {
+    // Leave no rendered TODO app or entities behind for later files.
+    _internals().registry.forEach((_, id) => unregister(id));
+    document.body.innerHTML = '';
     resetScheduler();
   });
 
