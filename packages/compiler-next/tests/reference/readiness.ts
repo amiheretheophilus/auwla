@@ -50,11 +50,18 @@ export function shouldWaitAtAttribute(parent: Node | null): boolean {
 // Waiting for an expression's inputs
 
 /**
- * The inputs read inside `root`, as expressions that read their current values,
- * leaving out the parts in `skip`. Each caller reads bindings its own way (a
- * component through its slots).
+ * How a caller lists inputs. Each caller reads bindings its own way (a component
+ * through its slots).
  */
-export type ReadsOf = (root: Node, skip: Node[]) => Expression[];
+export interface ReadsOf {
+  /** The inputs read inside `root`, leaving out the parts in `skip`. */
+  (root: Node, skip: Node[]): Expression[];
+  /**
+   * Whether `test` can be evaluated before `root` runs, to choose a branch: it
+   * reads nothing declared or written inside `root`, and only allowed inputs.
+   */
+  evaluable(test: Node, root: Node): boolean;
+}
 
 /**
  * A `ReadsOf` from yuku's references: each binding, and each `a.b.c` path read
@@ -66,7 +73,7 @@ export function readsWithPaths(
   rawUses: Set<Node>,
   keep: (binding: Binding) => boolean = () => true,
 ): ReadsOf {
-  return (root, skip) => {
+  const readsOf = (root: Node, skip: Node[]) => {
     const bindings = [...reads.inside([root], undefined, skip)].filter(keep);
     const elements = bindings.map((binding) => statusInput(binding, readOf(binding), [root], rawUses));
     for (const { binding, path } of reads.paths(root, skip)) {
@@ -76,6 +83,12 @@ export function readsWithPaths(
     }
     return elements;
   };
+
+  const evaluable = (test: Node, root: Node) => {
+    return reads.directReads(test).every((binding) => keep(binding) && !reads.isLocalTo(binding, root));
+  };
+
+  return Object.assign(readsOf, { evaluable });
 }
 
 /** `$when(() => [inputs], () => expression)`: the expression runs once its inputs are ready. */
@@ -85,34 +98,60 @@ export function waitForExpression(expression: Expression, readsOf: ReadsOf): Exp
 }
 
 /**
- * `[reads…, ...$branch(…)]`: what evaluating `expression` reads, the way
- * JavaScript reads it. In `a ? b : c`, `a && b`, `a || b` and `a ?? b`, at any depth,
- * only the branch that runs is an input (`$branch`). JSX values are left out: each
- * `{…}` inside them waits on its own.
+ * `[reads…, ...$branch(…)]`: what running `root` reads, the way JavaScript reads
+ * it. In `a ? b : c`, `a && b`, `a || b`, `a ?? b`, `if` and `switch`, at any depth,
+ * only the branch that runs is an input (`$branch`, `$switch`). JSX values are
+ * left out: each `{…}` inside them waits on its own.
+ *
+ * A branch is only chosen ahead when its test can be evaluated before `root`
+ * runs (`ReadsOf.evaluable`), and never inside a loop, whose iterations can
+ * choose differently. Otherwise all of its reads are inputs.
  */
-export function inputsOf(expression: Node, readsOf: ReadsOf): Expression {
-  const { branches, views } = lazyParts(expression);
-  const elements = readsOf(expression, [...branches, ...views]);
+export function inputsOf(root: Node, readsOf: ReadsOf, scope: Node = root): Expression {
+  const { branches, views } = lazyParts(root, readsOf, scope);
+  const elements = readsOf(root, [...branches, ...views]);
   for (const branch of branches) {
-    elements.push(b.SpreadElement({ argument: branchInputs(branch, readsOf) }) as never);
+    elements.push(b.SpreadElement({ argument: branchInputs(branch, readsOf, scope) }) as never);
   }
   return b.ArrayExpression({ elements });
 }
 
-type Branch = Extract<Node, { type: 'ConditionalExpression' | 'LogicalExpression' }>;
+type Branch = Extract<Node, {
+  type: 'ConditionalExpression' | 'LogicalExpression' | 'IfStatement' | 'SwitchStatement';
+}>;
 
-function branchInputs(branch: Branch, readsOf: ReadsOf): Expression {
-  const inputs = (part: Node) => thunk(inputsOf(part, readsOf));
+function branchInputs(branch: Branch, readsOf: ReadsOf, scope: Node): Expression {
+  const inputs = (part: Node | null) => {
+    if (part === null) return thunk(b.ArrayExpression({ elements: [] }));
+    return thunk(inputsOf(part, readsOf, scope));
+  };
 
-  if (is.ConditionalExpression(branch)) {
+  if (is.ConditionalExpression(branch) || is.IfStatement(branch)) {
     return runtimeCall('$branch', [
       stringLiteral('?'),
       inputs(branch.test),
       thunk(branch.test),
       inputs(branch.consequent),
-      inputs(branch.alternate),
+      inputs(branch.alternate ?? null),
     ]);
   }
+
+  if (is.SwitchStatement(branch)) {
+    const cases = branch.cases.map((switchCase) => b.ObjectExpression({
+      properties: [
+        property('readTest', switchCase.test ? inputs(switchCase.test) : nullLiteral()),
+        property('test', switchCase.test ? thunk(switchCase.test) : nullLiteral()),
+        property('readBody', inputs(switchCase)),
+        property('ends', booleanLiteral(endsCase(switchCase.consequent))),
+      ],
+    }));
+    return runtimeCall('$switch', [
+      inputs(branch.discriminant),
+      thunk(branch.discriminant),
+      b.ArrayExpression({ elements: cases }),
+    ]);
+  }
+
   return runtimeCall('$branch', [
     stringLiteral(branch.operator),
     inputs(branch.left),
@@ -121,23 +160,62 @@ function branchInputs(branch: Branch, readsOf: ReadsOf): Expression {
   ]);
 }
 
-/** The outermost branches and JSX values inside `root`, outside nested functions. */
-function lazyParts(root: Node): { branches: Branch[]; views: Node[] } {
+/** A case that ends in `break`, `return`, `throw` or `continue` does not fall through. */
+function endsCase(body: Node[]): boolean {
+  const last = body.at(-1);
+  if (last === undefined) return false;
+  if (is.BlockStatement(last)) return endsCase(last.body);
+  return ['BreakStatement', 'ReturnStatement', 'ThrowStatement', 'ContinueStatement'].includes(last.type);
+}
+
+const LOOPS = new Set(['ForStatement', 'ForInStatement', 'ForOfStatement', 'WhileStatement', 'DoWhileStatement']);
+
+/** The outermost branches and JSX values inside `root`, outside nested functions and loops. */
+function lazyParts(root: Node, readsOf: ReadsOf, scope: Node): { branches: Branch[]; views: Node[] } {
   const branches: Branch[] = [];
   const views: Node[] = [];
 
   const visit = (node: Node) => {
-    if (is.ConditionalExpression(node) || is.LogicalExpression(node)) {
-      branches.push(node);
+    if (isLazyBranch(node, readsOf, scope)) {
+      branches.push(node as Branch);
     } else if (is.JSXElement(node) || is.JSXFragment(node)) {
       views.push(node);
-    } else if (!is.Function(node)) {
+    } else if (!is.Function(node) && !LOOPS.has(node.type)) {
       for (const child of childNodes(node)) visit(child);
     }
   };
 
   visit(root);
   return { branches, views };
+}
+
+function isLazyBranch(node: Node, readsOf: ReadsOf, scope: Node): boolean {
+  if (is.ConditionalExpression(node) || is.IfStatement(node)) return readsOf.evaluable(node.test, scope);
+  if (is.LogicalExpression(node)) return readsOf.evaluable(node.left, scope);
+  if (is.SwitchStatement(node)) {
+    const tests = node.cases.flatMap((switchCase) => switchCase.test ? [switchCase.test] : []);
+    return [node.discriminant, ...tests].every((test) => readsOf.evaluable(test, scope));
+  }
+  return false;
+}
+
+function property(name: string, value: Expression) {
+  return b.Property({
+    key: b.Identifier({ name }),
+    value,
+    kind: 'init',
+    method: false,
+    shorthand: false,
+    computed: false,
+  }) as Extract<Node, { type: 'ObjectExpression' }>['properties'][number];
+}
+
+function nullLiteral(): Expression {
+  return b.Literal({ value: null, raw: 'null' });
+}
+
+function booleanLiteral(value: boolean): Expression {
+  return b.Literal({ value, raw: String(value) });
 }
 
 function childNodes(node: Node): Node[] {

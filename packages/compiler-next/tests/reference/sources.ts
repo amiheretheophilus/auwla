@@ -270,6 +270,47 @@ export function $branch(
   return [...testInputs, ...(first ? readFirst() : readSecond())];
 }
 
+interface SwitchCase {
+  /** `null` for `default`. */
+  readTest: (() => unknown[]) | null;
+  test: (() => unknown) | null;
+  readBody: () => unknown[];
+  /** The body ends in `break`/`return`/…, so it does not fall through. */
+  ends: boolean;
+}
+
+/**
+ * The inputs of a `switch`, as JavaScript would read them: the discriminant's,
+ * each case test's until one matches, then the bodies that run (falling through
+ * until one ends).
+ */
+export function $switch(readDiscriminant: () => unknown[], discriminant: () => unknown, cases: SwitchCase[]): unknown[] {
+  const inputs = readDiscriminant();
+  if ($waiting(inputs)) return inputs;
+  const value = discriminant();
+
+  let start = -1;
+  for (let index = 0; index < cases.length; index++) {
+    const { readTest, test } = cases[index]!;
+    if (readTest === null || test === null) continue;
+    const testInputs = readTest();
+    inputs.push(...testInputs);
+    if ($waiting(testInputs)) return inputs;
+    if (test() === value) {
+      start = index;
+      break;
+    }
+  }
+  if (start < 0) start = cases.findIndex((switchCase) => switchCase.test === null);
+  if (start < 0) return inputs;
+
+  for (let index = start; index < cases.length; index++) {
+    inputs.push(...cases[index]!.readBody());
+    if (cases[index]!.ends) break;
+  }
+  return inputs;
+}
+
 /**
  * `props.user.name` as an input: follows the path through plain data and stops at
  * a loading value, so `$waiting` finds a source a parent passed inside an object.

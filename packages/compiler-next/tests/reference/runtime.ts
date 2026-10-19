@@ -16,7 +16,7 @@
 import { $waiting, enterSourceOwner, Group, noteReplacement, Source, Waiting } from './sources';
 import { childPosition, elementPosition, isElement, Preparation } from './preparation';
 export {
-  $branch, $fetch, $path, $read, $track, $value, $waiting, $when, $sourceState, Group,
+  $branch, $fetch, $path, $read, $switch, $track, $value, $waiting, $when, $sourceState, Group,
 } from './sources';
 
 // ---------------------------------------------------------------------------

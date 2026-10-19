@@ -59,7 +59,10 @@ All paths below are under `packages/compiler-next/`. This is test code only.
   a source that never loaded (a branch now chosen) shows the pending policy, not
   what it showed before (`../decisions.md`, 2026-10-19).
 - Branches are lazy at any depth: in `'Hi ' + (signedIn ? user.name : 'guest')`
-  and `f(a && b)`, only the branch that runs makes the site wait.
+  and `f(a && b)`, only the branch that runs makes the site wait. Statements too:
+  `if (useScore) total = user.score` and a `switch` case (with fall-through) wait
+  only when they run. Inside a loop nothing is chosen ahead: each iteration can
+  choose differently, so the loop waits for everything it reads.
 - A source inside an object waits where it is read: `props.user.name` waits for
   `props.user`, the way `user.name` waits for `user`.
 - A body statement that passes a value to an unknown call (`collect(names, users)`)
@@ -82,7 +85,9 @@ computations. No `try`/`catch`/`finally` is introduced.
 
 The inputs of an expression are built branch by branch (`inputsOf` in
 `readiness.ts`): `$branch` reads a test's inputs, evaluates the test, then lists
-the chosen branch's inputs. Limit: the test is evaluated twice (once there, once
+the chosen branch's inputs; `$switch` does the same for a `switch`. A test is only
+evaluated ahead when it reads nothing declared or written inside the guarded code
+(`ReadsOf.evaluable`). Limit: the test is evaluated twice (once there, once
 by the authored expression), so a test with side effects runs twice. `$path`
 follows `a.b.c` through plain objects and arrays (data properties only, never a
 getter) to find a waiting value inside one. `Source.replacesLoaded` marks a
@@ -134,14 +139,16 @@ request cancellation through `$track` is still separate, unfinished work.
 
 ## Cases to test
 
-`tests/cases/sources.test.ts`: 62 cases, all passing on the reference. The original
+`tests/cases/sources.test.ts`: 67 cases, all passing on the reference. The original
 27 give 18 passes and 9 failures on the old compiler; the null-target case fails
 it (written on review, it caught the reference treating `null` as a new load);
 four destructuring cases give 2 passes and 2 failures (the direct
 `= $fetch(url)` case caught the reference destructuring the source object instead
 of its payload); five cases of sources inside ordinary JavaScript (body loops,
 unknown calls, nested lazy branches, whole sources passed to children, module
-patterns) give 1 pass and 4 failures, and caught four reference gaps;
+patterns) give 1 pass and 4 failures, and caught four reference gaps; five lazy
+statement cases (`if`, `switch`, fall-through, a lazy early return, a branch in a
+loop) all fail on the old compiler;
 the 14 atomic cases give
 8 passes and 6 failures; eleven further atomic lifecycle cases give 6 passes and
 5 failures. These failures must pass on `compiler-next`.
@@ -188,6 +195,9 @@ an early failure can prevent comparison of its later steps. All cases are in
 | `an unknown helper filling an array from a source waits and replays` | `loading`, then `Ada`, then `Ada,Lin` | Throws `UnresolvedDataReadError` (`users`) |
 | `a lazy branch inside a larger expression waits only when chosen` | `Hi guest` and `false` at mount | Both sites show `loading` |
 | `a source destructured at module scope waits and is imported` | `loading:loading`, then `Ada:admin` | Rejects with `MMD-S004` |
+| `a body if waits only when its branch reading a source runs`; `a body switch waits only for the case that runs`; `a switch case falling through reads the next case too` | The value waits only once the branch reading the source is chosen | Never waits: shows `0`/`here`/`two` and logs `UnresolvedDataReadError` |
+| `an early return with a lazy condition waits only when it reads the source` | `no` while signed out | Shows `loading`: waits for `user` though `!signedIn` already decides |
+| `a loop decides per iteration, so a branch inside it is not chosen ahead` | `loading` until prices arrive | Shows `0` before the prices load |
 | `a module derivation waits and follows later source refreshes` | Defer `user.name.toUpperCase()` until ready | Throws `undefined is not an object` during module evaluation |
 | `a destructured seed written before loading keeps its override` | Delay the seed; preserve its early override | Throws `UnresolvedDataReadError` |
 | `suspend ignores unused sources and inactive branches` | Publish `off` immediately | Keeps the entire region on `loading` |
@@ -213,10 +223,8 @@ an unmodeled case is never permitted compiler behavior:
   children without changed props, and more interleavings of shared owners and
   source generations. The verified 25 cases
   do not exhaust these combinations.
-- Statement-level laziness: `if (flag) total = user.x` waits for `user` even
-  when `flag` is false (statement guards read every input of the statement).
-  Same for `switch` and loops. Module-scope control flow and module patterns
-  with a name written later are not modeled.
+- Module-scope control flow (`let x = 0; if (flag) x = user.y` at module scope)
+  and module patterns with a name written later are not modeled.
 - Computed paths (`props[key].name`) and sources inside class instances or
   Maps: `$path` follows static names through plain data only.
 - Imported helpers whose sources are already warm on their first call, plus more

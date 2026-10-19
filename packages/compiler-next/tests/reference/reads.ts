@@ -96,6 +96,25 @@ export class Reads {
     }, root);
   }
 
+  /** Bindings read directly in `part`, not through the functions it calls. */
+  directReads(part: Node): Binding[] {
+    const found = new Set<Binding>();
+    const visit = (reference: Reference | null) => {
+      if (reference?.binding && !reference.isWrite && !reference.inTypePosition) found.add(reference.binding);
+    };
+    this.module.walk({
+      Identifier: (_node, ctx) => visit(ctx.reference),
+      JSXIdentifier: (_node, ctx) => visit(ctx.reference),
+    }, part);
+    return [...found];
+  }
+
+  /** Whether `binding` is declared, or written, inside `root`. */
+  isLocalTo(binding: Binding, root: Node): boolean {
+    if (binding.declarations.some((name) => isWithin(name, [root]))) return true;
+    return binding.references.some((reference) => reference.isWrite && isWithin(reference.node, [root]));
+  }
+
   /** The function a binding names: `function f() {}` or `const f = () => {}`. */
   functionOf(binding: Binding): FunctionNode | undefined {
     const name = binding.declarations[0];

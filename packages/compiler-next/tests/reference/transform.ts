@@ -94,7 +94,7 @@ const GUARDABLE_STATEMENTS = new Set<string>([
 
 const RUNTIME_EXPORTS = [
   '$h', 'Fragment as $Fragment', '$enter', '$assignRef', '$moduleEffect', '$moduleMemo',
-  '$when', '$value', '$waiting', '$sourceState', '$branch', '$path',
+  '$when', '$value', '$waiting', '$sourceState', '$branch', '$switch', '$path',
 ];
 
 // ---------------------------------------------------------------------------
@@ -741,7 +741,7 @@ class ComponentRewrite {
     for (const [statement, plan] of this.plans) {
       if (plan.builds.has(binding)) {
         built = true;
-        elements.push(...readsOf(statement, []));
+        elements.push(b.SpreadElement({ argument: inputsOf(statement, readsOf) }) as never);
       }
       const position = plan.mayBuild.indexOf(binding);
       if (position >= 0) {
@@ -749,7 +749,7 @@ class ComponentRewrite {
         const test = ctxCall('mayChange', [numberLiteral(plan.observeIndex!), numberLiteral(position)]);
         const choice = b.ConditionalExpression({
           test,
-          consequent: b.ArrayExpression({ elements: readsOf(statement, []) }),
+          consequent: inputsOf(statement, readsOf),
           alternate: b.ArrayExpression({ elements: [] }),
         });
         elements.push(b.SpreadElement({ argument: choice }) as never);

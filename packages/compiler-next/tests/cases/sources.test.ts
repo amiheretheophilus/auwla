@@ -1166,3 +1166,134 @@ behaves('a source destructured at module scope waits and is imported', {
     expect(container.textContent).toBe(['loading:loading', 'Ada:admin'][observation]!);
   },
 });
+
+// ---------------------------------------------------------------------------
+// Statements are lazy like expressions: an `if` or `switch` branch that does not
+// run does not make anything wait.
+
+behaves('a body if waits only when its branch reading a source runs', {
+  source: `
+    import { $fetch, Group } from '@memoized-dom/data';
+    export function App() {
+      const user = $fetch('/user');
+      let useScore = false;
+      let total = 0;
+      if (useScore) total = user.score;
+      return (
+        <Group pending={() => <i>loading</i>}>
+          <p>{total}</p>
+          <button onClick={() => { useScore = true; }}>score</button>
+        </Group>
+      );
+    }`,
+  steps: [{ click: 'button' }, { respond: '/user', value: { score: 5 } }],
+  check(container, observation) {
+    expect(container.querySelector('p')?.textContent).toBe(['0', 'loading', '5'][observation]);
+  },
+});
+
+behaves('a body switch waits only for the case that runs', {
+  source: `
+    import { $fetch, Group } from '@memoized-dom/data';
+    export function App() {
+      const user = $fetch('/user');
+      let mode = 'local';
+      let label = 'none';
+      switch (mode) {
+        case 'local':
+          label = 'here';
+          break;
+        case 'remote':
+          label = user.name;
+          break;
+        default:
+          label = 'unknown';
+      }
+      return (
+        <Group pending={() => <i>loading</i>}>
+          <p>{label}</p>
+          <button id="remote" onClick={() => { mode = 'remote'; }}>remote</button>
+          <button id="other" onClick={() => { mode = 'other'; }}>other</button>
+        </Group>
+      );
+    }`,
+  steps: [{ click: '#remote' }, { respond: '/user', value: { name: 'Ada' } }, { click: '#other' }],
+  check(container, observation) {
+    expect(container.querySelector('p')?.textContent).toBe(['here', 'loading', 'Ada', 'unknown'][observation]);
+  },
+});
+
+behaves('a switch case falling through reads the next case too', {
+  source: `
+    import { $fetch, Group } from '@memoized-dom/data';
+    export function App() {
+      const user = $fetch('/user');
+      let level = 2;
+      let parts = [];
+      switch (level) {
+        case 1:
+          parts.push(user.name);
+        case 2:
+          parts.push('two');
+          break;
+      }
+      return (
+        <Group pending={() => <i>loading</i>}>
+          <p>{parts.join('+')}</p>
+          <button onClick={() => { level = 1; }}>one</button>
+        </Group>
+      );
+    }`,
+  steps: [{ click: 'button' }, { respond: '/user', value: { name: 'Ada' } }],
+  check(container, observation) {
+    expect(container.querySelector('p')?.textContent).toBe(['two', 'loading', 'Ada+two'][observation]);
+  },
+});
+
+behaves('an early return with a lazy condition waits only when it reads the source', {
+  source: `
+    import { $fetch, Group } from '@memoized-dom/data';
+    function Gate({ signedIn }) {
+      const user = $fetch('/user');
+      if (!signedIn || user.banned) return <p>no</p>;
+      return <p>{user.name}</p>;
+    }
+    export function App() {
+      let signedIn = false;
+      return (
+        <main>
+          <Group pending={() => <i>loading</i>}>
+            <Gate signedIn={signedIn} />
+          </Group>
+          <button onClick={() => { signedIn = true; }}>sign in</button>
+        </main>
+      );
+    }`,
+  steps: [{ click: 'button' }, { respond: '/user', value: { name: 'Ada', banned: false } }],
+  check(container, observation) {
+    expect(container.querySelector('p, i')?.textContent).toBe(['no', 'loading', 'Ada'][observation]);
+  },
+});
+
+behaves('a loop decides per iteration, so a branch inside it is not chosen ahead', {
+  source: `
+    import { $fetch, Group } from '@memoized-dom/data';
+    export function App() {
+      const prices = $fetch('/prices');
+      let items = [{ name: 'a', priced: false }];
+      let total = 0;
+      for (const item of items) {
+        if (item.priced) total += prices[item.name];
+      }
+      return (
+        <Group pending={() => <i>loading</i>}>
+          <p>{total}</p>
+          <button onClick={() => { items.push({ name: 'b', priced: true }); }}>add</button>
+        </Group>
+      );
+    }`,
+  steps: [{ respond: '/prices', value: { b: 7 } }, { click: 'button' }],
+  check(container, observation) {
+    expect(container.querySelector('p')?.textContent).toBe(['loading', '0', '7'][observation]);
+  },
+});
