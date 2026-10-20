@@ -13,6 +13,7 @@
 | `tests/reference/readiness.ts` | Source-aware expressions, imports and module derivations |
 | `tests/reference/preparation.ts` | Atomic initial preparation without DOM, shared position matching and active source collection |
 | `tests/reference/reads.ts` | Dependency queries using yuku bindings and references |
+| `tests/reference/callbacks.ts` | Detects function boundaries so callback creation does not read its captures |
 | `tests/reference/ast.ts` | Shared yuku AST builders for the test transforms |
 | `tests/harness/case.ts` | The `Case` and `Step` types, optional `check(container, observation)` assertions, and `defer(name)` for async cases |
 | `tests/harness/run.ts` | `behaves(name, case)`: runs the case on the reference and on a compiler, compares after each step. An exception in an event handler fails the run (the DOM only reports it as a window `error` event). `disposeRuns()` cleans up after a failed run |
@@ -86,12 +87,11 @@ agreed rule, fix the reference rather than copying its mistake into the compiler
 1. **Reference renderer** (`tests/reference/`). Test-only: the framework never
    renders this way. After every step it calls every component again. The component
    body is setup code, so only derivations are computed again:
-   - a binding reassigned by later code (handler, callback) is a `cell`: a snapshot;
-   - any other `let x` / `const x` is a `memo`: computed again when a deep copy of
+   - every `let x` / `const x` is a `memo`: computed again when a deep copy of
      its inputs changes, together with the body statements that build it (with no
-     inputs it is computed once);
-   - a prop reassigned by later code is a `prop` slot;
-   - destructured aliases have the same cell/memo rules, with one native pattern
+     inputs it is computed once), until an actual later assignment takes control;
+   - a prop captured or reassigned by a callback has a live `prop` slot;
+   - destructured aliases follow the same rule, with one native pattern
      evaluation per changed input;
    - every other body statement is setup and runs once, after its inputs are ready.
 
@@ -99,6 +99,14 @@ agreed rule, fix the reference rather than copying its mistake into the compiler
    `$ctx.observe`, which deep-copies the value before and compares it after. The
    reference uses no method list: it sees what really happened. If the statement
    changed the value, it builds it from then on.
+
+   Actual synchronous callback reads and writes are recorded by the reference
+   slots. This discovers immediate callback dependencies without a host API name
+   list. Module reads remain native live bindings, recorded through `$captureRead`;
+   native assignment targets preserve logical assignment and postfix results.
+   Readiness is checked when a body callback is invoked, not when it is stored.
+   `cases/callbacks.test.ts` owns the callback regression cases; their rules and
+   old-compiler failures live on `state-and-derived.md`.
 
    DOM nodes are kept between renders, matched by authored JSX site, position, key
    and tag, so refs,
@@ -182,6 +190,12 @@ The old compiler has about 305 distinct `memo-dom:` messages. Most are internal
 invariants or contracts of the framework's own APIs (`route-to`, `$routed`, `Group`,
 `page()`, `mount()`, server functions); those stay. Only messages that reject
 ordinary JavaScript become cases.
+
+The 2026-10-20 callback decision is verified by 22 explicit callback cases, all
+passing on the reference and failing on the old compiler, with paired output for
+each. Exact differences and remaining coverage live on `state-and-derived.md`.
+All 219 current reference cases pass, with a clean package type check (42 files).
+The 200 generated source programs also passed during this slice.
 
 ## Running
 

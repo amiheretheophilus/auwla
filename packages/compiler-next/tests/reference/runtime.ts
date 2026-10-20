@@ -91,49 +91,88 @@ function installRef(value: unknown, node: Node): (() => void) | undefined {
 // ---------------------------------------------------------------------------
 // Component instances and their slots
 
-class CellSlot {
-  private value: unknown;
-  initialized = false;
-  written = false;
-  /**
-   * Written by code that runs after the body (a handler, an effect). The body
-   * statements that build its first value then never run: in JavaScript they
-   * ran before that write.
-   */
-  writtenLater = false;
-  /** Statements that build it still wait for a source (`$ready`). */
-  pending: Waiting | undefined;
+interface ReadValue {
+  peek(): unknown;
+}
 
-  get v(): unknown { return this.value; }
+function readValues(reads: Iterable<ReadValue>): unknown[] {
+  return [...reads].map((read) => read.peek());
+}
+
+/** Reads and writes observed during one actual synchronous computation. */
+interface Computation {
+  reads: Set<ReadValue>;
+  writes: Set<MemoSlot>;
+  pending?: Waiting;
+}
+
+let computation: Computation | undefined;
+const externalReads = new Map<string, ReadValue>();
+
+/** Module bindings remain native variables; record only reads that actually execute. */
+export function $captureRead(key: string, read: () => unknown): unknown {
+  let dependency = externalReads.get(key);
+  if (dependency === undefined) {
+    dependency = { peek: read };
+    externalReads.set(key, dependency);
+  }
+  computation?.reads.add(dependency);
+  return read();
+}
+
+class MemoSlot {
+  private value: unknown;
+  writtenLater = false;
+
+  constructor(readonly owner: Instance) {}
+
+  get v(): unknown {
+    computation?.reads.add(this);
+    return this.value;
+  }
+
   set v(value: unknown) {
+    // A shared body statement may still rebuild another value. Its write must
+    // not take this binding back from a handler that already took control.
+    if (rendering === this.owner && this.writtenLater) return;
     noteReplacement(this.value, value);
     this.value = value;
-    this.written = true;
-    if (rendering === null) this.writtenLater = true;
+    computation?.writes.add(this);
+    if (rendering === this.owner) return;
+
+    // Compare owners, not just "is some component rendering?". A child can
+    // invoke a callback that writes its parent's binding.
+    this.writtenLater = true;
+    this.pending = undefined;
   }
 
   seed(value: unknown): void {
     this.value = value;
-    this.initialized = !(value instanceof Waiting);
   }
-}
 
-interface PropSlot {
-  v: unknown;
-  /** The last value the parent passed. */
-  fromParent: unknown;
-}
+  /** Reading saved dependencies must not record new authored reads. */
+  peek(): unknown {
+    return this.value;
+  }
 
-interface MemoSlot {
-  v: unknown;
   /** True on the render where the value was computed again. */
-  fresh: boolean;
+  fresh = false;
   /** Deep copy of the inputs it was computed from. */
   inputs: unknown;
   /** Sources discovered when a helper returned a waiting computation. */
-  sources: readonly Source[];
+  sources: readonly Source[] = [];
   /** Statements that build it still wait for a source (`$ready`). */
   pending: Waiting | undefined;
+  /** A callback used by the initializer may discover readiness only when called. */
+  callbackSources: readonly Source[] = [];
+  reads = new Set<ReadValue>();
+}
+
+class PropSlot extends MemoSlot {
+  constructor(owner: Instance, public fromParent: unknown) {
+    super(owner);
+    this.seed(fromParent);
+  }
 }
 
 /**
@@ -151,6 +190,7 @@ interface EffectSlot {
   readInputs: () => unknown[];
   callback: () => unknown;
   hasRun: boolean;
+  reads: Set<ReadValue>;
 }
 
 export class Instance {
@@ -159,7 +199,7 @@ export class Instance {
   first = true;
   /** How many times the instance has rendered. A memo that reads it is computed on every render. */
   render = 0;
-  private readonly slots = new Map<number, CellSlot | PropSlot | MemoSlot>();
+  private readonly slots = new Map<number, MemoSlot>();
   private readonly effects = new Map<number, EffectSlot>();
   /** Effects called during the current render; the others are destroyed. */
   private readonly calledEffects = new Set<number>();
@@ -169,31 +209,17 @@ export class Instance {
   private readonly statementsRun = new Set<number>();
   /** `observe` indexes that have run at least once. */
   private readonly observed = new Set<number>();
-
-  /**
-   * State: computed once, then changed only by writes. `readPending` lists what
-   * the body statements that build its first value read.
-   */
-  cell(index: number, initial: () => unknown, readPending?: () => unknown[]): CellSlot {
-    let slot = this.slots.get(index) as CellSlot | undefined;
-    if (slot === undefined) {
-      slot = new CellSlot();
-      this.slots.set(index, slot);
-    }
-    if (!slot.initialized && !slot.written) slot.seed(initial());
-    const building = readPending !== undefined && !slot.writtenLater;
-    slot.pending = building ? $waiting(readPending()) : undefined;
-    return slot;
-  }
+  private readonly computations = new Map<number, Computation>();
 
   /** A prop the component reassigns: the override holds until the parent passes a different value. */
   prop(index: number, fromParent: unknown): PropSlot {
     let slot = this.slots.get(index) as PropSlot | undefined;
     if (slot === undefined) {
-      slot = { v: fromParent, fromParent };
+      slot = new PropSlot(this, fromParent);
       this.slots.set(index, slot);
     } else if (!Object.is(slot.fromParent, fromParent)) {
-      slot.v = fromParent;
+      slot.seed(fromParent);
+      slot.writtenLater = false;
       slot.fromParent = fromParent;
     }
     return slot;
@@ -205,27 +231,76 @@ export class Instance {
    */
   memo(index: number, readInputs: () => unknown[], compute: () => unknown, readPending?: () => unknown[]): MemoSlot {
     let slot = this.slots.get(index) as MemoSlot | undefined;
-    const values = readInputs();
+    if (slot?.writtenLater) {
+      slot.fresh = false;
+      slot.pending = undefined;
+      return slot;
+    }
+    const dependencies = this.dependenciesOf(slot);
+    const values = [...readInputs(), ...readValues(dependencies)];
     const inputs = deepCopy([...values, ...(slot?.sources ?? [])]);
 
     if (slot === undefined) {
-      const value = compute();
-      const sources = value instanceof Waiting ? value.sources : [];
-      slot = { v: value, fresh: true, inputs: deepCopy([...values, ...sources]), sources, pending: undefined };
+      slot = new MemoSlot(this);
       this.slots.set(index, slot);
-    } else if (!deepEqual(slot.inputs, inputs)) {
-      // Updated in place, because handlers from earlier renders hold this slot.
-      const previous = slot.v;
-      slot.v = compute();
-      noteReplacement(previous, slot.v);
+    }
+    if (slot.inputs === undefined || !deepEqual(slot.inputs, inputs)) {
+      const outer = computation;
+      const trace: Computation = { reads: new Set(), writes: new Set() };
+      computation = trace;
+      const value = compute();
+      computation = outer;
+      noteReplacement(slot.peek(), value);
+      slot.seed(value);
       slot.fresh = true;
-      if (slot.v instanceof Waiting) slot.sources = slot.v.sources;
-      slot.inputs = deepCopy([...values, ...slot.sources]);
+      slot.reads = trace.reads;
+      slot.callbackSources = trace.pending?.sources ?? [];
+      for (const read of trace.reads) dependencies.add(read);
+      if (value instanceof Waiting) slot.sources = value.sources;
+      slot.inputs = deepCopy([...readInputs(), ...readValues(dependencies), ...slot.sources]);
     } else {
       slot.fresh = false;
     }
-    slot.pending = readPending === undefined ? undefined : $waiting(readPending());
+    const waitingInputs = readPending?.() ?? [];
+    waitingInputs.push(...slot.callbackSources);
+    for (const trace of this.computations.values()) {
+      if (trace.pending === undefined || !trace.writes.has(slot)) continue;
+      waitingInputs.push(...trace.pending.sources);
+    }
+    slot.pending = $waiting(waitingInputs);
     return slot;
+  }
+
+  private dependenciesOf(slot: MemoSlot | undefined): Set<ReadValue> {
+    const dependencies = new Set(slot?.reads);
+    if (slot === undefined) return dependencies;
+
+    for (const trace of this.computations.values()) {
+      if (!trace.writes.has(slot)) continue;
+      for (const read of trace.reads) {
+        // `total += item.price` reads the accumulator as part of building it;
+        // that read must not make the derivation depend on its own output.
+        if (!(read instanceof MemoSlot) || !trace.writes.has(read)) dependencies.add(read);
+      }
+    }
+    return dependencies;
+  }
+
+  /** Guard an actual body invocation, never the act of registering a callback. */
+  callback(readInputs: () => unknown[], run: () => unknown, targets: MemoSlot[]): unknown {
+    if (rendering !== this) return run();
+    const pending = $waiting(readInputs());
+    if (pending !== undefined && computation !== undefined) {
+      computation.pending = pending;
+    }
+
+    for (const target of targets) {
+      if (target.writtenLater) continue;
+      target.pending = pending;
+      if (pending !== undefined) computation?.writes.add(target);
+    }
+    if (pending !== undefined) return pending;
+    return run();
   }
 
   /** `$effect(callback)`: runs after the commit when it is new or its inputs changed. */
@@ -240,6 +315,7 @@ export class Instance {
         readInputs,
         callback,
         hasRun: false,
+        reads: new Set(),
       });
     } else {
       slot.readInputs = readInputs;
@@ -284,18 +360,31 @@ export class Instance {
     return this.statementsRun.has(index);
   }
 
+  /** Immediate callbacks can build a value even when no static call summary exists. */
+  due(index: number): boolean {
+    const writes = this.computations.get(index)?.writes;
+    if (writes === undefined) return false;
+    return [...writes].some((slot) => slot.fresh && !slot.writtenLater);
+  }
+
   /**
-   * A body statement runs once its sources are ready. `builds` are the state
-   * cells whose first value it builds: if code that runs later wrote one of them
-   * first, the statement is skipped, since in JavaScript it ran before that write.
+   * A body statement runs once its sources are ready. Skip it after later code
+   * has taken over every value it builds. If another target still derives, keep
+   * replaying the statement; each slot setter protects its own later override.
    */
-  statement(index: number, readInputs: () => unknown[], run: () => void, builds: CellSlot[] = []): void {
-    if (builds.some((cell) => cell.writtenLater)) {
+  statement(index: number, readInputs: () => unknown[], run: () => void, builds: MemoSlot[] = []): void {
+    const targets = [...builds, ...(this.computations.get(index)?.writes ?? [])];
+    if (targets.length > 0 && targets.every((slot) => slot.writtenLater)) {
       this.statementsRun.add(index);
       return;
     }
     if ($waiting(readInputs())) return;
+    const outer = computation;
+    const trace: Computation = { reads: new Set(), writes: new Set() };
+    computation = trace;
     run();
+    computation = outer;
+    this.computations.set(index, trace);
     this.statementsRun.add(index);
   }
 
@@ -317,17 +406,25 @@ export class Instance {
         continue;
       }
       // Inputs are read after refs mount, at the same time as the callback.
-      const values = slot.readInputs();
+      const values = [...slot.readInputs(), ...readValues(slot.reads)];
       if ($waiting(values)) continue;
       const inputs = deepCopy(values);
       if (slot.hasRun && deepEqual(slot.inputs, inputs)) continue;
       slot.hasRun = true;
       slot.teardown?.();
       slot.teardown = undefined;
-      settleTeardown(slot.callback(), (teardown) => (slot.teardown = teardown));
+      const outer = computation;
+      const trace: Computation = { reads: new Set(), writes: new Set() };
+      computation = trace;
+      const result = slot.callback();
+      computation = outer;
+      slot.reads = new Set([...trace.reads].filter((read) => {
+        return !(read instanceof MemoSlot) || !trace.writes.has(read);
+      }));
+      settleTeardown(result, (teardown) => (slot.teardown = teardown));
       // The effect already saw its own synchronous writes. They update the UI,
       // but do not immediately re-trigger this effect.
-      slot.inputs = deepCopy(slot.readInputs());
+      slot.inputs = deepCopy([...slot.readInputs(), ...readValues(slot.reads)]);
       ran = true;
     }
     return ran;
@@ -387,20 +484,24 @@ interface ModuleMemo {
   value: unknown;
   inputs: unknown;
   sources: readonly Source[];
+  writtenLater: boolean;
 }
 
 class ModuleEffects {
   private readonly effects: ModuleEffect[] = [];
   private readonly memos: ModuleMemo[] = [];
 
-  addMemo(readInputs: () => unknown[], update: () => unknown, value: unknown): void {
+  addMemo(readInputs: () => unknown[], update: () => unknown, value: unknown): ModuleMemo {
     const sources = value instanceof Waiting ? value.sources : [];
     const inputs = deepCopy([...readInputs(), ...sources]);
-    this.memos.push({ readInputs, update, value, sources, inputs });
+    const memo = { readInputs, update, value, sources, inputs, writtenLater: false };
+    this.memos.push(memo);
+    return memo;
   }
 
   refreshMemos(): void {
     for (const memo of this.memos) {
+      if (memo.writtenLater) continue;
       const values = memo.readInputs();
       const inputs = deepCopy([...values, ...memo.sources]);
       if (deepEqual(memo.inputs, inputs)) continue;
@@ -448,6 +549,9 @@ let unclaimedModuleEffects = new ModuleEffects();
 
 /** Own module work even if importing or mounting this case fails. */
 export function beginReferenceScope(): () => void {
+  computation = undefined;
+  rendering = null;
+  externalReads.clear();
   const previous = unclaimedModuleEffects;
   const current = new ModuleEffects();
   unclaimedModuleEffects = current;
@@ -461,8 +565,24 @@ export function $moduleEffect(readInputs: () => unknown[], callback: () => unkno
   unclaimedModuleEffects.add(readInputs, callback);
 }
 
-export function $moduleMemo(readInputs: () => unknown[], update: () => unknown, initial: unknown): void {
-  unclaimedModuleEffects.addMemo(readInputs, update, initial);
+export function $moduleMemo(
+  readInputs: () => unknown[],
+  update: () => unknown,
+  initial: unknown,
+  read?: () => unknown,
+  write?: (value: unknown) => void,
+): { v: unknown } {
+  const memo = unclaimedModuleEffects.addMemo(readInputs, update, initial);
+  return {
+    get v() {
+      return read?.();
+    },
+    set v(value: unknown) {
+      memo.writtenLater = true;
+      noteReplacement(read?.(), value);
+      write?.(value);
+    },
+  };
 }
 
 // ---------------------------------------------------------------------------

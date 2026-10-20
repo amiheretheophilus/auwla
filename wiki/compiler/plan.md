@@ -62,9 +62,11 @@ files that must pass in full at its exit.
 
 ## Phase 2: the graph
 
-Before coding: ask the user about callbacks the body runs at once
-(`items.forEach(x => total += x)`), which resolve times as `later` (`core.md`,
-resolve, "Known limit").
+- [x] Verify the reference tests for the 2026-10-20 callback decision
+  (`state-and-derived.md`, "Callbacks"). 22 callback cases and all 219 reference
+  cases pass; the old compiler fails all 22 callback cases. Values derive until
+  an actual later reassignment; immediate callback invocations can build a
+  derivation. Resolve's lexical `later` flag is not a semantic classification.
 
 - [ ] `src/core/graph/`: node kinds `Constant`, `State`, `Derived`, `Prop`, `Source`,
   `Ref`, `Opaque`, with `reads` edges and `pending(n)` (`core.md`).
@@ -76,9 +78,10 @@ resolve, "Known limit").
   record which state a call writes, so `store.inc()` is a write of `store`.
 - [ ] Graph tests next to each feature: one per row of the classification table
   and per rule bullet on `state-and-derived.md`.
-- **Exit:** the graph classifies every binding in every case source as the
-  reference does (a test can compare against `tests/reference/transform.ts`'s
-  slot choice).
+- **Exit:** the graph records each binding's initial computation and the writes
+  that can take control at runtime. A nested write never makes the initial value
+  a snapshot. Verify classifications and transition sites against the behavior
+  cases; reference slot allocation alone is not a semantic classification.
 
 ## Phase 3: first slice, end to end (static markup, state, text, handlers)
 

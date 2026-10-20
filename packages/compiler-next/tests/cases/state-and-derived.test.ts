@@ -23,7 +23,7 @@ behaves('a const derived from state follows it', {
   steps: [{ click: 'button' }],
 });
 
-behaves('a binding reassigned in a handler is a snapshot', {
+behaves('a binding derives until a handler reassigns it', {
   source: `
     export function App() {
       let price = 10;
@@ -38,6 +38,9 @@ behaves('a binding reassigned in a handler is a snapshot', {
       );
     }`,
   steps: [{ click: '#more' }, { click: '#reset' }, { click: '#more' }],
+  check(container, observation) {
+    expect(container.querySelector('p')?.textContent).toBe(['10', '20', '0', '0'][observation]);
+  },
 });
 
 behaves('body writes are part of the derivation', {
@@ -422,7 +425,7 @@ behaves('complex state: constructor arguments rederive instances while unrelated
   },
 });
 
-behaves('complex state: a reassigned class instance keeps its constructor snapshot', {
+behaves('complex state: a class instance derives until replacement', {
   source: `
     class Counter { constructor(value) { this.value = value; } }
     export function App() {
@@ -432,7 +435,7 @@ behaves('complex state: a reassigned class instance keeps its constructor snapsh
         <button id="replace" onClick={() => { counter = new Counter(99); }}>replace</button></main>;
     }`,
   steps: [{ click: '#seed' }, { click: '#replace' }, { click: '#seed' }],
-  check(container, observation) { expect(container.querySelector('p')?.textContent).toBe(['1:1', '2:1', '2:99', '3:99'][observation]); },
+  check(container, observation) { expect(container.querySelector('p')?.textContent).toBe(['1:1', '2:2', '2:99', '3:99'][observation]); },
 });
 
 behaves('complex state: getters setters and postfix writes preserve JavaScript results', {
@@ -567,7 +570,7 @@ behaves('complex state: computed accessors and destructuring retain getter value
         <button id="save" onClick={() => { saved = counter[field]; }}>save</button></main>;
     }`,
   steps: [{ click: '#add' }, { click: '#save' }, { click: '#add' }],
-  check(container, observation) { expect(container.querySelector('p')?.textContent).toBe(['2:2', '4:2', '4:4', '6:4'][observation]); },
+  check(container, observation) { expect(container.querySelector('p')?.textContent).toBe(['2:2', '4:4', '4:4', '6:4'][observation]); },
 });
 
 behaves('complex state: module setters can change several fields seen by sibling components', {
@@ -711,7 +714,7 @@ behaves('spread/rest: a reassigned rest binding is a snapshot while other aliase
     }`,
   steps: [{ click: '#source' }, { click: '#rest' }, { click: '#source' }],
   check(container, observation) {
-    expect(container.querySelector('p')?.textContent).toBe(['1|2:-', '2|2:-', '2|-:9', '3|-:9'][observation]);
+    expect(container.querySelector('p')?.textContent).toBe(['1|2:-', '2|3:-', '2|-:9', '3|-:9'][observation]);
   },
 });
 

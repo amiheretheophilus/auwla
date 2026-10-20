@@ -54,8 +54,10 @@ The core holds the stage machinery and the shared types. What a concept means
 - Known limit, for Phase 2: a callback the body runs at once
   (`items.forEach(x => total += x)`, an immediately invoked function) is timed
   `later`, so `total` would be a snapshot. In JavaScript it runs with the body. The
-  graph must decide this from the call, without a method list deciding semantics
-  (`../rules.md`, rule 3). Ask the user before choosing.
+  graph must not infer a snapshot from this lexical flag. The user decided on
+  2026-10-20: a binding derives until an actual later write; invocation context
+  distinguishes body computation from later code, without a method name list.
+  Validate the reference first (`state-and-derived.md`, "Callbacks").
 
 ## graph — `core/graph/`
 

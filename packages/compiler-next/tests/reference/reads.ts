@@ -2,6 +2,7 @@
 import type { Binding, Module, Reference } from 'yuku-analyzer';
 import { is } from 'yuku-ast';
 import type { Expression, Node } from 'yuku-parser';
+import { crossesFunction } from './callbacks';
 
 type FunctionNode = Extract<Node, { type: 'FunctionDeclaration' | 'FunctionExpression' | 'ArrowFunctionExpression' }>;
 
@@ -10,8 +11,10 @@ export class Reads {
   constructor(private readonly module: Module) {}
 
   /**
-   * Everything read anywhere inside `roots`, including inside callbacks they
-   * contain. Reads inside `skip` (parts of a root) are left out.
+   * Static reads inside `roots`, following direct calls to local functions.
+   * A nested function's body is excluded: creating it does not read its captures.
+   * Runtime tracing adds those reads if a caller actually invokes the callback.
+   * Reads inside `skip` (parts of a root) are left out.
    */
   inside(roots: Node[], exclude: Binding | undefined, skip: Node[] = []): Set<Binding> {
     const found = new Set<Binding>();
@@ -32,6 +35,7 @@ export class Reads {
       const binding = reference?.binding;
       if (!binding || reference.isWrite || reference.inTypePosition) return;
       if (this.isDeclaredInside(binding, root) || isWithin(reference.node, skip)) return;
+      if (crossesFunction(this.module, reference.node, root)) return;
       if (this.functionOf(binding) !== undefined) return;
 
       const path: string[] = [];
@@ -51,9 +55,9 @@ export class Reads {
 
   /**
    * What an effect callback reads while it runs: reads directly in its body, and in
-   * local functions it calls. Reads inside callbacks it creates run later, so they
-   * are not inputs (`connection.onMessage(() => unread++)`). Updates (`runs++`) are
-   * writes, not reads.
+   * local functions it calls. Creating a nested callback does not subscribe the
+   * effect to that callback's captures. If it runs immediately, runtime tracing
+   * records its inputs. Updates (`runs++`) are writes, not reads.
    */
   ofCallback(callback: Expression): Set<Binding> {
     const found = new Set<Binding>();
@@ -79,15 +83,20 @@ export class Reads {
       if (!binding || reference.isWrite || reference.inTypePosition) return;
       if (this.isDeclaredInside(binding, scope)) return;
       if (isWithin(reference.node, skip)) return;
+      // A nested callback reads its captures when invoked, not when created.
+      if (crossesFunction(this.module, reference.node, root)) return;
       if (directOnly && enclosingFunction(this.module, reference.node) !== scope) return;
 
       const fn = this.functionOf(binding);
       if (fn === undefined) {
         found.add(binding);
-      } else if (!visited.has(fn)) {
-        visited.add(fn);
-        this.collect(fn, fn, directOnly, found, visited);
+        return;
       }
+
+      const parent = this.module.parentOf(reference.node);
+      if (visited.has(fn) || !is.CallExpression(parent) || parent.callee !== reference.node) return;
+      visited.add(fn);
+      this.collect(fn, fn, directOnly, found, visited);
     };
 
     this.module.walk({

@@ -1,6 +1,6 @@
 # Status
 
-Last updated: 2026-10-19.
+Last updated: 2026-10-20.
 
 ## Branches
 
@@ -8,7 +8,8 @@ Last updated: 2026-10-19.
   only there. The old `snrraptopack/memo-exp` is remote `memo-exp`, with its push URL
   disabled. Its account has a billing lock, so CI cannot run there. See `../AGENTS.md`.
 - `compiler-rewrite` (working branch, from `compiler-refactor` at `6230c27`):
-  the new compiler, designed in `compiler/`. No code yet.
+  the new compiler, designed in `compiler/`. Phase 1 skeleton is built; the
+  reference callback baseline is verified and Phase 2 graph is next.
 - `compiler-refactor`: the old compiler's refactor, stopped on 2026-10-19. The
   sections below record that work.
 - `codex/package-conditional-sync` at `9e35480` (third-party package compilation,
@@ -400,8 +401,17 @@ are nailed first.
      body call is a compile error (tests listed in `compiler/sources.md`). Remaining
      reference limits are listed per page and get cases as compiler slices reach
      them. No CI until the suite reaches thousands of cases.
-2. Next: `compiler/plan.md`, Phase 2 (Phase 0 done: output decided; Phase 1 done
-   2026-10-20: `src/` with parse, resolve, `compileModules`, `COMPILER=next`; 20
-   unit tests pass). Phase 2 starts with a question for the user about callbacks
-   the body runs at once. The plan lists every phase, its steps and exit checks;
-   continue at its first unchecked box.
+   - done: the 2026-10-20 callback decision. Bindings derive until an actual later
+     reassignment; immediate invocations build derivations, without an API name
+     list. 22 callback cases pass on the reference and fail on the old compiler;
+     all have paired output. The reference tracks executed reads/writes, preserves
+     source waits, supports module takeover and keeps sibling derivations active.
+     Four older expectations changed with the approved rule; details and remaining
+     coverage are on `compiler/state-and-derived.md`. All 219 reference cases pass,
+     the package type check is clean (42 files), and the 200 generated source
+     programs passed during this slice.
+2. Next: `compiler/plan.md`, Phase 2 graph (Phase 0 done: output decided; Phase 1
+   done in `e57fc73`: parse, resolve, `compileModules`, `COMPILER=next`; 20 unit
+   tests passed). The callback reference prerequisite is complete. Continue at
+   the first unchecked box; runtime takeover must not be inferred from resolve's
+   lexical `later` flag.

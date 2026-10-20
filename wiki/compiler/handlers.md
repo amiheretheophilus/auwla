@@ -8,6 +8,10 @@ Finds every place that changes state and makes the UI update after it.
 
 ## Rules
 
+- A later callback's actual binding reassignment ends that binding's derivation;
+  registering the callback does not. The rule is uniform for known and unknown
+  callers, with no callback API name list (`state-and-derived.md`, "Callbacks").
+
 - **Any function that writes a reactive binding is a handler**: an event callback,
   an effect body, a callback ref, a helper called from them, a `setTimeout`
   callback. `capturesOf(fn)` lists the outer bindings it reassigns. Mutation sites
@@ -54,6 +58,8 @@ Finds every place that changes state and makes the UI update after it.
 ## Cases to test
 
 In `packages/compiler-next/tests/cases/handlers.test.ts`.
+Callback takeover cases are in `tests/cases/callbacks.test.ts`; their expected and
+old-compiler results are on `state-and-derived.md`, "Callback verification".
 
 The old compiler fails these:
 

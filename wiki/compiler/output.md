@@ -98,6 +98,14 @@ and their fast paths, write commits.
    method (`push`, `sort`… from `optimize/methods.ts`) does the same after the call.
    An unknown call that receives a value gets the runtime check (copy before,
    compare after), only on that statement.
+
+   The 2026-10-20 callback decision adds one requirement to this model: an executed
+   later reassignment disables the binding's derivation. Before that write, it still
+   follows its inputs. Callback registration does not disable it. Body invocations
+   continue to build derived values, including through opaque callers. The emitted
+   representation of that execution context and takeover flag belongs to Phase 3;
+   the reference's accessor slots and deep copies are not the production shape.
+
 4. **No `try`/`catch`/`finally`** in output.
 5. **Readiness** from the graph's `pending` sets; spots show their `Group`
    policies (`sources.md`).

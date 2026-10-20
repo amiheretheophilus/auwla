@@ -9,8 +9,15 @@
 import type { Binding, Module } from 'yuku-analyzer';
 import { b, findAll, is } from 'yuku-ast';
 import type { Expression, Node, Statement, VariableDeclarator } from 'yuku-parser';
-import { blockThunk, constDeclaration, identifier, runtimeCall, thunk } from './ast';
+import { blockThunk, constDeclaration, identifier, member, runtimeCall, thunk } from './ast';
 import { enclosingFunction, Reads } from './reads';
+
+/** Read a module binding without changing its native live-binding behavior. */
+export function captureModuleRead(module: Module, binding: Binding, value: Expression): Expression {
+  if (!is.Program(binding.scope.node)) return value;
+  const key = `${module.path}:${binding.declarations[0]!.start}:${binding.name}`;
+  return runtimeCall('$captureRead', [stringLiteral(key), thunk(value)]);
+}
 
 /** Whether `node` calls `name` imported from `@memoized-dom/data` (under any local name). */
 export function isDataCall(module: Module, node: Node, name: string): boolean {
@@ -260,6 +267,7 @@ export function buildModuleMemos(module: Module, rawUses: Set<Node>): void {
   for (const statement of module.ast.body) builder.visit(statement);
   const body = module.ast.body.flatMap((statement) => builder.around(statement));
   module.ast.body = body as typeof module.ast.body;
+  builder.rewriteWrites();
 }
 
 type VariableDeclaration = Extract<Statement, { type: 'VariableDeclaration' }>;
@@ -269,6 +277,7 @@ class ModuleMemos {
   private readonly before = new Map<Node, Statement[]>();
   private readonly after = new Map<Node, Statement[]>();
   private nextPattern = 0;
+  private readonly targets = new Map<Binding, string>();
 
   constructor(private readonly module: Module, private readonly rawUses: Set<Node>) {
     this.reads = new Reads(module);
@@ -281,7 +290,6 @@ class ModuleMemos {
     for (const declarator of [...declaration.declarations]) {
       if (!declarator.init || is.Function(declarator.init)) continue;
       const bindings = this.bindingsIn(declarator.id);
-      if (bindings.some((binding) => binding.references.some((reference) => reference.isWrite))) continue;
       if (this.reads.inside([declarator.init], bindings[0]).size === 0) continue;
 
       if (is.Identifier(declarator.id)) {
@@ -294,6 +302,20 @@ class ModuleMemos {
     }
   }
 
+  /** A native assignment target preserves logical assignments, patterns and update results. */
+  rewriteWrites(): void {
+    this.module.walk({
+      Identifier: (_node, ctx) => {
+        const reference = ctx.reference;
+        if (!reference?.binding || !reference.isWrite) return;
+        const target = this.targets.get(reference.binding);
+        if (!target) return;
+        if (is.Property(ctx.parent) && ctx.parent.shorthand) ctx.parent.shorthand = false;
+        ctx.replace(member(target, 'v'));
+      },
+    });
+  }
+
   /** The statements to emit for one top-level statement, in order. */
   around(statement: Node): Node[] {
     return [...(this.before.get(statement) ?? []), statement, ...(this.after.get(statement) ?? [])];
@@ -304,7 +326,7 @@ class ModuleMemos {
     const compute = `$compute_${binding.name}`;
     this.add(this.before, statement, constDeclaration(compute, thunk(waitForExpression(init, this.readsOf(binding)))));
     declarator.init = runtimeCall(compute, []);
-    this.add(this.after, statement, this.register(binding.name, compute, this.memoInputs(init, binding)));
+    this.add(this.after, statement, this.register(binding.name, compute, this.memoInputs(init, binding), binding));
   }
 
   private pattern(statement: Node, declaration: VariableDeclaration, declarator: VariableDeclarator): void {
@@ -348,7 +370,7 @@ class ModuleMemos {
       const inputs = b.ArrayExpression({ elements: [identifier(destructured)] });
       const compute = `$compute_${binding.name}`;
       this.add(this.before, statement, constDeclaration(compute, thunk(runtimeCall('$when', [thunk(inputs), thunk(field)]))));
-      this.add(this.after, statement, this.register(binding.name, compute, structuredClone(inputs)));
+      this.add(this.after, statement, this.register(binding.name, compute, structuredClone(inputs), binding));
       return b.VariableDeclarator({ id: b.Identifier({ name: binding.name }), init: runtimeCall(compute, []) });
     });
     const at = declaration.declarations.indexOf(declarator);
@@ -366,16 +388,34 @@ class ModuleMemos {
     this.add(this.before, statement, this.register(name, compute, inputs));
   }
 
-  /** `$moduleMemo(() => inputs, () => name = compute(), name);` */
-  private register(name: string, compute: string, inputs: Expression): Statement {
+  /** Register recomputation and, for a binding, a target that observes authored writes. */
+  private register(name: string, compute: string, inputs: Expression, binding?: Binding): Statement {
     const update = thunk(b.AssignmentExpression({
       operator: '=',
       left: b.Identifier({ name }),
       right: runtimeCall(compute, []),
     }));
-    return b.ExpressionStatement({
-      expression: runtimeCall('$moduleMemo', [thunk(inputs), update, identifier(name)]),
-    }) as Statement;
+    const args = [thunk(inputs), update, identifier(name)];
+    if (!binding) {
+      return b.ExpressionStatement({ expression: runtimeCall('$moduleMemo', args) }) as Statement;
+    }
+
+    const target = `$target_${name}`;
+    this.targets.set(binding, target);
+    const write = b.ArrowFunctionExpression({
+      id: null,
+      params: [b.Identifier({ name: '$next' })],
+      body: b.AssignmentExpression({
+        operator: '=',
+        left: b.Identifier({ name }),
+        right: identifier('$next'),
+      }),
+      expression: true,
+      async: false,
+      generator: false,
+    });
+    args.push(thunk(identifier(name)), write);
+    return constDeclaration(target, runtimeCall('$moduleMemo', args));
   }
 
   /** Every binding `init` reads: the memo is computed again when any of them changes. */
@@ -454,7 +494,8 @@ export function prepareModuleReads(
       if (is.Property(ctx.parent) && ctx.parent.shorthand && ctx.key === 'value') {
         ctx.parent.shorthand = false;
       }
-      ctx.replace(runtimeCall('$value', [identifier(reference.binding.name)]));
+      const value = captureModuleRead(module, reference.binding, identifier(reference.binding.name));
+      ctx.replace(runtimeCall('$value', [value]));
     },
   });
 }

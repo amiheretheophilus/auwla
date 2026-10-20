@@ -2,6 +2,7 @@
 
 | Date | Decision | Reason |
 | --- | --- | --- |
+| 2026-10-20 | Uniformly derive until the first actual later reassignment, then hold the assigned value. This supersedes snapshot-from-initialization for handlers, effects and all callbacks, whether their caller is known or opaque. Immediate callbacks participating in the owning body's computation build its derivation. Callback registration and untaken assignments do not freeze a value; mutation is still distinct from reassignment. No host API name list decides callback timing. | User approved the recommendation: "okay please let do it that way rather so first document, do the refrence tests then let continue". Document and verify the reference before continuing the graph. |
 | 2026-10-18 | Do a full compiler restructure, not targeted patches. | User: "i need a massive refactor not just some pattern"; the codebase is "too error prone". |
 | 2026-10-18 | Merge `codex/package-conditional-sync` (`9e35480`) into `compiler-refactor` before the refactor. | User: so "the other branch" does not "have difficult" later. |
 | 2026-10-18 | Commit failing tests as they are; never edit a failing case to pass. | User: "commit dont edit your failing tests cases". |

@@ -14,27 +14,29 @@ JavaScript, and needs no rule here.
 
 ## Rules
 
-`let` and `const` mean the same thing: either can be state or derived. Two facts
-decide the kind: what the binding's value is computed from, and whether it is
-reassigned **later**, by code that runs after the component body.
+`let` and `const` mean the same thing: either can be state or derived. A binding
+follows the inputs of its computation until an actual later reassignment takes
+control of it (approved 2026-10-20, superseding snapshots from initialization).
 
-| Computed from | Reassigned later? | Kind |
+| Computed from | Has actually been reassigned later? | Kind |
 | --- | --- | --- |
 | nothing reactive | no | **constant**: computed once, never updates |
 | nothing reactive | yes | **state**: holds its value until reassigned |
 | something reactive | no | **derived**: re-run when what it reads changes |
-| something reactive | yes | **state**: its first value is a snapshot; it never re-derives |
+| something reactive | yes | **state**: holds the later assigned value; no further derivation |
 
 - **Reactive** means it reads a prop, state, derived value, source, ref or opaque node.
 - **Reassigned later** means `x = …`, `x += …`, `x++` or `for (x of …)` in code that
   runs after the body: a handler, an effect, a callback ref, a timer or promise
-  callback, or a function called from one of them. The compiler cannot replay those
-  writes, so the binding stops being derived. The user: "the total first value
-  becomes a snapshot … as there is a reassignment".
+  callback, or a function called from one of them. The executed write stops the
+  binding being derived, even when it assigns the same value. A callback that
+  never runs, an untaken assignment branch, and a short-circuit assignment that
+  does not write leave the binding derived.
 - **Writes in the component body are part of the derivation.** The declaration and
   every body statement that writes the binding (`if`, `switch`, loops) re-run
   together, in source order, when anything they read changes.
-- A snapshot's body statements run once, with its initializer, as JavaScript does.
+- After a later reassignment, the initializer and body writes that built that
+  binding stop replaying. A delayed source must not overwrite the user's write.
 - **Mutation is not reassignment.** `x.push(1)`, `x.a = 1` and `delete x.a` keep the
   binding's kind. The edit shows; on a derived value it lasts until the value is
   derived again (`tests/derived-const-mutation.test.ts`).
@@ -47,7 +49,7 @@ reassigned **later**, by code that runs after the component body.
 ```js
 const total = price * qty;            // derived: follows price and qty
 
-let total = price * qty;              // reassigned in a handler → snapshot, computed once
+let total = price * qty;              // follows price and qty until this click writes it
 <button onClick={() => (total = 0)} />
 
 let label = user.name;                // derived: the declaration and the if
@@ -59,6 +61,35 @@ if (user.name) label = user.name; else label = 'Anonymous';
 let sum = 0;                          // derived: the loop re-runs when items changes
 for (const item of items) sum += item.price;
 ```
+
+### Callbacks
+
+Timing belongs to an invocation, not a function's name or syntactic location.
+A callback invoked while building its owning body's value contributes to that
+derivation. The same function invoked later performs a later write. This includes
+callbacks that run immediately and are also retained for future calls.
+
+No list of timers, promise methods, observers or array methods determines these
+semantics. Known behavior may remove bookkeeping only when the general result is
+preserved. Unknown callers get the same runtime treatment.
+
+The runtime must distinguish the owner whose derivation is executing: a callback
+writing another component's state during a child render is not rebuilding the
+parent's derivation. An async continuation after an `await` is later-running code.
+Effects, refs and cleanup execute outside the body's derivation.
+
+Reads and writes in callbacks that have not executed do not become dependencies
+of the registration statement. Executed immediate callbacks contribute their
+reads and writes. Detecting a reassignment must preserve assignment expression
+results, prefix/postfix updates, destructuring, short-circuiting and exceptions.
+Object mutation does not end derivation. Prop overrides still yield to a new
+parent value.
+
+The reference uses memo setters to observe actual reassignment and compares the
+invocation's component owner with the binding's owner. It records executed reads
+through callbacks, props and module helpers, including immediate callbacks inside
+effects. Source readiness is checked at body callback invocation. This bookkeeping
+is test-only; production output continues to use the model in `output.md`.
 
 ## Inputs and outputs
 
@@ -122,7 +153,6 @@ These pass today and must keep passing:
 
 - a counter;
 - a `const` derived from state;
-- a binding reassigned in a handler is a snapshot;
 - an `if`/`else` that assigns in every branch;
 - `sorted.push(x)` on a sorted copy, then the source changes;
 - `const items = makeList()`, written, then rendered as a list;
@@ -143,13 +173,47 @@ These pass today and must keep passing:
 The ported root regressions also assert the known text after each step on both
 renderers (`Case.check`), independently of their DOM comparison.
 
-The reference now gives destructured aliases the same cell/memo treatment: the
-authored pattern runs natively once per changed input, and an alias written later
-keeps a snapshot. Source/default/rest cases are on `sources.md`. Module derivations
+The reference gives destructured aliases independent memos: the authored pattern
+runs natively once per changed input, and an alias stops following it on its actual
+later reassignment. Source/default/rest cases are on `sources.md`. Module derivations
 refresh before component rendering.
 
-Not written yet: derivation writes at module scope (old message: "cannot assign
-computed").
+Module derived bindings now support later reassignment, including imported live
+bindings. Module body control flow and derivations inside arbitrary factory
+closures still need the broader reference coverage already listed on `sources.md`.
+
+### Callback verification (2026-10-20)
+
+`tests/cases/callbacks.test.ts` has 22 explicit cases. All pass on the reference;
+all fail on the old compiler. Both reference and old compiled versions were
+generated for all 22 under `tests/out/callbacks-*/`.
+
+| Cases (the `callbacks:` prefix is omitted) | First expected result the old compiler misses | Old result |
+| --- | --- | --- |
+| registered handler; setup-and-later callback; aliased timer; async continuation; effect writing branch; child calling parent; props/module helper reads | `30` after the input changes, before a later write | `20` |
+| equal assignment | `22` before the equal assignment freezes it | `20` |
+| inline arrow; named callback/alias; IIFE; synchronous `.then`; shadowed `setTimeout` | `9` after changing the factor | `6` |
+| short-circuit assignments | `2:2:2` after skipped writes | `1:1:1` |
+| destructuring and postfix | `2:4:0` before reassignment | `1:2:0` |
+| object mutation before reassignment | `2` when the input changes after a local mutation | `99` |
+| imported module binding | `15:30` | `15:20` |
+| shared statement building two values | `2:4` | `1:2` |
+| immediate callback reading a source | Pending UI; an early override subsequently stays `99` | Throws `UnresolvedDataReadError` at mount |
+| stored source reader | `4` before the stored callback runs | `2` |
+| immediate callback inside an effect | `30:1` after the price changes; later takeover becomes `80:2` | `20:1` |
+| returned callback values with captured sources | Pending UI, then `6,12` once the source resolves | Throws `TypeError` reading `values.join` while `values` is undefined |
+
+Four existing expectations intentionally changed with the user's approved rule:
+the handler example now shows `20` before reset (old: `10`); the class constructor
+shows `2:2` before replacement (old: `2:1`); the getter alias shows `4:4` before
+save (old: `4:2`); the rest alias shows `2|3:-` before replacement (old: `1|2:-`).
+The first example previously had no explicit check; it now checks every step.
+The other source, mutation, prop-override and lifecycle expectations were kept.
+
+Remaining coverage: generator callbacks across `yield`; readiness inside async
+callbacks before their first `await`; module body callback builders; callback
+dependencies in arbitrary factory closures. These are reference limits, not
+exceptions to the uniform rule. Do not assume the current passing set proves them.
 
 ### Mixed state, classes and accessors
 
@@ -207,7 +271,7 @@ spread arguments and nested rest/default patterns; nine cases fail:
 | `spread/rest: object spread shares nested references while isolating top-level writes` | Shared nested mutation replays `a.count` to source value `1` | Keeps local `a.count = 9` |
 | `spread/rest: array destructuring rest can be mutated and rederived` | Pushing `9` into `tail` shows `2,3,9` immediately | Still shows `2,3` |
 | `spread/rest: computed object rest excludes selected keys and retains symbols` | Setting `rest.other = 9` shows `9`, retaining its symbol and excluded-key behavior | Still shows `2` |
-| `spread/rest: a reassigned rest binding is a snapshot while other aliases remain derived` | Source mutation updates `selected` from `1` to `2`, keeping `rest` a snapshot | `selected` remains `1`; later override assertions are not reached |
+| `spread/rest: a reassigned rest binding is a snapshot while other aliases remain derived` | Before takeover, source mutation updates `selected` to `2` and `rest.other` to `3` | Both remain `1` and `2`; later override assertions are not reached |
 | `spread/rest: module and component copies each preserve local edits until their input changes` | Updating `moduleCopy` to `1,9` replays `localCopy` to `1,9` | `localCopy` keeps its stale `1,8` edit |
 | `recursive patterns: mutually recursive helpers rederive from nested state` | Native recursion computes `3`, `4`, `8`, then `16` as nested state/module factor change | Rejects recursive helper `sum` as something that "cannot be analyzed" |
 

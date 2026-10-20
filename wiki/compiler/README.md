@@ -1,13 +1,13 @@
 # The compiler (rewrite)
 
-**Status: reference and wiki being validated; compiler not started.** The new compiler lives in
+**Status: Phase 1 skeleton built; Phase 2 graph next.** The new compiler lives in
 `packages/compiler-next/` on branch `compiler-rewrite`; its tests are in
 `packages/compiler-next/tests/`. `packages/compiler/` stays until every suite passes
 on the new one; then it is deleted.
 
-Finish the reference and wiki first, as requested by the user. The first source,
-ordinary `Group`, and atomic `suspend` baselines are verified; remaining reference work is on
-`sources.md`. Do not begin the production compiler while that work is unfinished.
+The source, ordinary `Group`, atomic `suspend`, and callback baselines are verified.
+All 219 reference cases pass. Remaining reference limits are on the concept pages;
+extend their coverage as the compiler reaches those slices. Continue in `plan.md`.
 
 > "the goal is to write normal javascript and get effecient compiled output"
 

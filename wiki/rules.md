@@ -34,11 +34,13 @@ Stated by the user on 2026-10-18. They apply to every design and every fix.
 11. **Derived values and writes** (2026-10-19, agreed with the user):
     - `let` and `const` alike can be state or derived. The user: "const and let
       all are state and derived".
-    - A binding reassigned later (in a handler, effect or callback) is state: its
-      first value is a snapshot, and it never re-derives. The user: "the total
-      first value becomes a snapshot meaning price and qty change will no re derive
-      it again as there is a reassignment". A `const` cannot be reassigned, so a
-      `const` with a reactive initializer is always derived.
+    - A binding follows its inputs until its first actual reassignment by
+      later-running code (handler, effect or callback). That write takes control:
+      it holds the assigned value and stops re-deriving. Merely creating or
+      registering a callback does not freeze it. This uniformly replaces the
+      earlier "snapshot from initialization" decision (2026-10-20).
+      A `const` cannot be reassigned, so a `const` with a reactive initializer
+      remains derived.
     - Writes in the component body (`let label = user.name; if (!label) label =
       'Anonymous';`) are part of the derivation and re-run with it. The user: "it
       should work since it somehow being part of a reactivity derivation".
