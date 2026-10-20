@@ -98,6 +98,13 @@ is test-only; production output continues to use the model in `output.md`.
 - Out: `Constant`, `State` and `Derived` nodes with their `reads` edges. A `Derived`
   node lists the body statements that build it, in source order.
 
+The shared graph contract is built (`core/graph/model.ts`, described in `core.md`):
+features supply a `BindingFacts` record keyed by the analyzer binding, with its
+initial kind, initializer, builders and read references. The graph retains
+resolve's write sites separately. Feature classification, invocation analysis and
+function summaries are the next Phase 2 step; the shared graph tests do not
+validate those semantics yet.
+
 ## Where to add things
 
 - A new way to write a binding (a new assignment form): `core/resolve/`, which

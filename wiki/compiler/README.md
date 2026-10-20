@@ -1,6 +1,6 @@
 # The compiler (rewrite)
 
-**Status: Phase 1 skeleton built; Phase 2 graph next.** The new compiler lives in
+**Status: Phase 2 shared graph built; feature classification next.** The new compiler lives in
 `packages/compiler-next/` on branch `compiler-rewrite`; its tests are in
 `packages/compiler-next/tests/`. `packages/compiler/` stays until every suite passes
 on the new one; then it is deleted.

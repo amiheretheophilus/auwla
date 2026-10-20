@@ -6,7 +6,7 @@
  * the write sites yuku does not track (`writes.ts`). Later stages ask `Resolved`
  * about bindings and never look names up themselves.
  */
-import { Analyzer, type Binding, type Module } from 'yuku-analyzer';
+import { Analyzer, BindingFlags, type Binding, type Module } from 'yuku-analyzer';
 import type { CompileModulesOptions } from '../../options';
 import { CompileError } from '../diagnostics';
 import type { ParsedModule } from '../parse';
@@ -14,6 +14,7 @@ import { importResolver } from './imports';
 import { findWrites, type WriteSite } from './writes';
 
 export type { PathKey, WriteKind, WriteSite } from './writes';
+export type { Binding, Reference } from 'yuku-analyzer';
 export { declaringRunner, runnerOf } from './writes';
 
 export interface ResolvedModule {
@@ -29,6 +30,11 @@ export interface Resolved {
   readonly analyzer: Analyzer;
   /** In the order the caller gave them. */
   readonly modules: readonly ResolvedModule[];
+}
+
+/** Type-only imports are visible to value-space lookup in yuku, but are erased. */
+export function isRuntimeBinding(binding: Binding): boolean {
+  return binding.visibleIn('value') && !binding.has(BindingFlags.TypeImport);
 }
 
 export function resolve(parsed: readonly ParsedModule[], options: CompileModulesOptions): Resolved {

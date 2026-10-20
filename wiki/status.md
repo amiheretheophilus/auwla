@@ -9,7 +9,8 @@ Last updated: 2026-10-20.
   disabled. Its account has a billing lock, so CI cannot run there. See `../AGENTS.md`.
 - `compiler-rewrite` (working branch, from `compiler-refactor` at `6230c27`):
   the new compiler, designed in `compiler/`. Phase 1 skeleton is built; the
-  reference callback baseline is verified and Phase 2 graph is next.
+  reference callback baseline and shared graph are verified; Phase 2 feature
+  classification is next.
 - `compiler-refactor`: the old compiler's refactor, stopped on 2026-10-19. The
   sections below record that work.
 - `codex/package-conditional-sync` at `9e35480` (third-party package compilation,
@@ -410,8 +411,15 @@ are nailed first.
      coverage are on `compiler/state-and-derived.md`. All 219 reference cases pass,
      the package type check is clean (42 files), and the 200 generated source
      programs passed during this slice.
-2. Next: `compiler/plan.md`, Phase 2 graph (Phase 0 done: output decided; Phase 1
-   done in `e57fc73`: parse, resolve, `compileModules`, `COMPILER=next`; 20 unit
-   tests passed). The callback reference prerequisite is complete. Continue at
-   the first unchecked box; runtime takeover must not be inferred from resolve's
-   lexical `later` flag.
+2. Phase 2 shared graph built: all seven binding kinds, execution owners, read
+   paths, write sites, initial computations and cycle-safe reactive/pending
+   queries. Named imports link through re-exports; unclassified bindings and
+   unresolved reads stay opaque. The AST is unchanged. 19 graph tests pass;
+   with resolve and pipeline tests, 31 pass. Package `bun check` passes for 46
+   files. `compiler/core.md` describes the API and its limits.
+3. Next: `compiler/plan.md`, Phase 2 feature classification in `features/state`,
+   `derived` and `props`, function summaries, and integration from `pipeline.ts`.
+   The shared graph currently consumes supplied facts; it does not infer them.
+   Runtime takeover must not be inferred from resolve's lexical `later` flag.
+   Phase 1 (`e57fc73`) behavior is unchanged: non-JSX modules compile; JSX emission
+   starts in Phase 3. No additional behavior cases pass on compiler-next yet.

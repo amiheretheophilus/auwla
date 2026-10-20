@@ -68,8 +68,11 @@ files that must pass in full at its exit.
   an actual later reassignment; immediate callback invocations can build a
   derivation. Resolve's lexical `later` flag is not a semantic classification.
 
-- [ ] `src/core/graph/`: node kinds `Constant`, `State`, `Derived`, `Prop`, `Source`,
+- [x] `src/core/graph/`: node kinds `Constant`, `State`, `Derived`, `Prop`, `Source`,
   `Ref`, `Opaque`, with `reads` edges and `pending(n)` (`core.md`).
+  Built as the shared graph layer, with 19 tests. Accepts feature facts and keeps
+  execution owners and write sites separately from initial computations. The
+  next step supplies classification and connects it to `pipeline.ts`.
 - [ ] `src/features/state/`, `derived/`, `props/` classify bindings by the table in
   `state-and-derived.md`, including body statements that build a value (`if`,
   `switch`, loops) and calls that may change one. State lives anywhere

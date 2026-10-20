@@ -40,9 +40,10 @@ export interface WriteSite {
   /** The assignment, update, `delete`, or call expression. */
   readonly node: Node;
   /**
-   * `body`: runs with the code that declares the binding (its function's body, or
-   * module top level). `later`: runs in a function inside it, a handler, effect,
-   * callback or method, after that code.
+   * Lexical placement only. `body` shares the declaring runner; `later` has a
+   * different runner, such as a nested callback or instance field initializer.
+   * A callback can still execute immediately. This flag must not classify a
+   * binding as a snapshot; invocation context decides whether a write takes over.
    */
   readonly timing: 'body' | 'later';
   /** The function (or instance field) whose run performs the write; null at module top level. */
