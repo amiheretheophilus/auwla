@@ -1,6 +1,9 @@
 # Compiled output
 
-**Status: proposal. Needs the user's yes before Phase 3 of `plan.md`.**
+**Status: decided on 2026-10-20** (`../decisions.md`): the proposal below, no
+signals. The user: "adopting means doing normal mutation stuff will require proxy
+which the old one didnt have any issue with". Details of the emitted shape are the
+Phase 3 design step of `plan.md`.
 
 The user: "we have to be at least on par with the current one in terms of perf
 whilst being more correct". Emitted code is judged on speed only (`../decisions.md`).
@@ -137,6 +140,5 @@ the runtime (per write key) or as emitted locals is a Phase 3 design step.
 
 ## Open
 
-- The user's yes on the proposal, or another choice.
 - Where versions live (runtime write keys or emitted locals), decided by
   measuring in Phase 3.

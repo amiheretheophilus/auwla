@@ -34,8 +34,9 @@ files that must pass in full at its exit.
 
 ## Phase 0: decide the output
 
-- [ ] The user approves the output architecture in `output.md`, or picks another.
-  Record it in `../decisions.md`.
+- [x] The user approves the output architecture in `output.md`, or picks another.
+  Record it in `../decisions.md`. Done 2026-10-20: the old runtime model with
+  version-checked memos; no signals.
 
 ## Phase 1: skeleton and harness
 
