@@ -1438,6 +1438,34 @@ behaves('a POST server function is an action: it runs when called, then a refres
   },
 });
 
+// A non-GET server function runs only from code that runs later: a handler, a
+// form, `$effect`, a callback (decisions.md, 2026-10-20). A call in a component
+// or module body is a compile error; that is a compiler test (sources.md).
+
+behaves('a POST server function in an effect runs when the effect runs', {
+  modules: { './server-functions.ts': users },
+  source: `
+    import { renameUser } from './server-functions';
+    export function App() {
+      let name = 'Ada';
+      $effect(() => {
+        renameUser(1, name);
+      });
+      return (
+        <main>
+          <p>{name}</p>
+          <button onClick={() => { name = 'Lin'; }}>rename</button>
+        </main>
+      );
+    }`,
+  steps: [{ click: 'button' }],
+  check(container, observation) {
+    const rename = '/_fn/users/renameUser';
+    expect(requestedUrls()).toEqual([[rename], [rename, rename]][observation]!);
+    expect(container.querySelector('p')?.textContent).toBe(['Ada', 'Lin'][observation]!);
+  },
+});
+
 // ---------------------------------------------------------------------------
 // Found by the generated source programs (tests/generator/sources.test.ts).
 

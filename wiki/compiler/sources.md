@@ -30,6 +30,19 @@ All paths below are under `packages/compiler-next/`. This is test code only.
 - Server functions that are not GET are actions. They are never sources, because a
   mutation must not run just because a component rendered
   (`../decisions.md`, 2026-10-18).
+- An action is called only from code that runs later: an event handler, a form,
+  `$effect`, a callback or timer, or a function called from one of them. A call
+  in a component body or at module scope, directly or through a helper the body
+  calls, is a compile error (`../decisions.md`, 2026-10-20):
+
+  ```
+  memo-dom: `createUser` is a POST server function: call it from an event handler
+  or $effect. To load data, use a GET function.
+  ```
+
+  This is a contract of the framework's server functions, not a restriction on
+  JavaScript. Where the compiler cannot trace a call (an opaque function), the
+  data runtime throws in development when an action starts during a render.
 - **Readiness** (`../rules.md`, rule 8): a node with a non-empty `pending(n)`
   (`core.md`) waits for those sources, everywhere:
   - a derived value is "not ready";
@@ -158,7 +171,7 @@ request cancellation through `$track` is still separate, unfinished work.
 
 ## Cases to test
 
-`tests/cases/sources.test.ts`: 73 cases, all passing on the reference. The original
+`tests/cases/sources.test.ts`: 74 cases, all passing on the reference. The original
 27 give 18 passes and 9 failures on the old compiler; the null-target case fails
 it (written on review, it caught the reference treating `null` as a new load);
 four destructuring cases give 2 passes and 2 failures (the direct
@@ -167,9 +180,9 @@ of its payload); five cases of sources inside ordinary JavaScript (body loops,
 unknown calls, nested lazy branches, whole sources passed to children, module
 patterns) give 1 pass and 4 failures, and caught four reference gaps; five lazy
 statement cases (`if`, `switch`, fall-through, a lazy early return, a branch in a
-loop) all fail on the old compiler; two server function cases (a GET source
-following its arguments, a POST action awaited in a handler) give 1 pass and 1
-failure; two cases found by the generated source programs (below) both fail on
+loop) all fail on the old compiler; three server function cases (a GET source
+following its arguments, a POST action awaited in a handler, a POST in
+`$effect`) give 2 passes and 1 failure; two cases found by the generated source programs (below) both fail on
 the old compiler; two more `suspend` lifecycle cases (a captured value changing
 in a failed child, a removed region sharing a GET) give 1 pass and 1 failure;
 the 14 atomic cases give
@@ -266,7 +279,20 @@ behaviour. Each gets a case when a compiler slice touches it:
   re-export, closure and alias combinations.
 - Full `$track` lifecycle callbacks/cancellation, fetch validation/non-JSON
   transports, complete error details and remaining request API contracts.
-- Open question for the user: a non-GET server function called in a component
-  body (`const saved = createUser(input)`). It is not a source, but as a body
-  call it runs on mount and again when its arguments change. Not tested until
-  decided. Live/generator/`page()` server functions are not modeled.
+- Live/generator/`page()` server functions are not modeled.
+
+## Compiler tests to write (not reference cases)
+
+The reference compiles nothing, so these are feature tests in
+`features/sources/` once the compiler exists. Each must be a compile error with
+the message above:
+
+- a POST/PUT/PATCH/DELETE function called directly in a component body;
+- the same at module scope;
+- through a local or imported helper the body calls;
+- inside a body `if`, a derived initializer, or a destructuring default.
+
+And each must compile: a call in an event handler, a form action, `$effect`, a
+`setTimeout` callback, and an async function called from a handler. Plus a
+runtime test: an action started through an opaque function during a render
+throws in development.
