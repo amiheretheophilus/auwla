@@ -400,6 +400,8 @@ are nailed first.
      body call is a compile error (tests listed in `compiler/sources.md`). Remaining
      reference limits are listed per page and get cases as compiler slices reach
      them. No CI until the suite reaches thousands of cases.
-2. Next: `compiler/plan.md`, Phase 1 (Phase 0 done: output decided on
-   2026-10-20). The plan lists every phase, its steps and exit checks; continue at
-   its first unchecked box.
+2. Next: `compiler/plan.md`, Phase 2 (Phase 0 done: output decided; Phase 1 done
+   2026-10-20: `src/` with parse, resolve, `compileModules`, `COMPILER=next`; 20
+   unit tests pass). Phase 2 starts with a question for the user about callbacks
+   the body runs at once. The plan lists every phase, its steps and exit checks;
+   continue at its first unchecked box.

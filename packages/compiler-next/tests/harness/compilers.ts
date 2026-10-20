@@ -1,8 +1,11 @@
 /**
- * The compilers a case can run against. `COMPILER=old` (the default until
- * compiler-next produces output) uses `packages/compiler`.
+ * The compilers a case can run against: `COMPILER=old` (the default until
+ * compiler-next compiles JSX) uses `packages/compiler`; `COMPILER=next` uses
+ * `packages/compiler-next/src`. Both emit code for the same runtime, so they
+ * mount the same way.
  */
 import { compileModules } from '@memoized-dom/compiler';
+import { compileModules as compileModulesNext } from '../../src';
 import { registeredIds, resetScheduler, setScheduler, unregisterSubtree } from '@memoized-dom/runtime/testing';
 import { createDataRuntime, setActiveDataRuntime } from '@memoized-dom/data';
 import { spawnSync } from 'node:child_process';
@@ -72,6 +75,15 @@ const oldCompiler: Compiler = {
   },
 };
 
+const nextCompiler: Compiler = {
+  ...oldCompiler,
+  name: 'packages/compiler-next',
+
+  compile(source, modules) {
+    return compileModulesNext({ ...modules, './App.tsx': source }, { runtimePath: '@memoized-dom/runtime/testing' });
+  },
+};
+
 /** Also used after a failed mount, which cannot return its unmount callback. */
 export function clearCompiledApps(): void {
   for (const id of registeredIds()) unregisterSubtree(id);
@@ -81,5 +93,6 @@ export function clearCompiledApps(): void {
 export function selectedCompiler(): Compiler {
   const choice = process.env.COMPILER ?? 'old';
   if (choice === 'old') return oldCompiler;
-  throw new Error(`COMPILER=${choice}: compiler-next does not produce output yet`);
+  if (choice === 'next') return nextCompiler;
+  throw new Error(`COMPILER=${choice}: use 'old' or 'next'`);
 }

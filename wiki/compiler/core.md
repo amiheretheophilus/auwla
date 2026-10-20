@@ -6,29 +6,56 @@
 The core holds the stage machinery and the shared types. What a concept means
 (state, a list, a ref) lives in its feature folder, not here.
 
-## parse — `core/parse/`
+## parse — `core/parse/` (built, Phase 1)
 
-- Chooses the language from the path (`langFromPath`): `js`, `jsx`, `ts`, `tsx`.
-  TSRX is not supported.
-- Lowers `enum` and parameter properties, which `yuku-codegen` does not convert.
-  Case to test: `enum Mode { A, B }`, which the old compiler rejects
+| File | What it does |
+| --- | --- |
+| `index.ts` | `parseModule(path, source)`: language from the path (`langFromPath`), syntax errors as `CompileError` with line and column, JSX detection |
+| `lower-typescript.ts` | lowers `enum` (numbered members, reverse mapping, member names in initializers, `const enum`; `declare enum` removed) and constructor parameter properties, as `tsc` emits them, by editing the text |
+| `parse.test.ts` | unit tests |
+
+- Output: `ParsedModule` with the lowered source text. The analyzer parses that
+  text again, because its model is a snapshot of the text (`toolchain.md`).
+- yuku positions (`start`, `end`, diagnostics) are UTF-16 offsets, like JavaScript
+  string indexes, so text edits slice by them directly. Tested with non-ASCII text.
+- Not lowered yet: a runtime `namespace` and `export =`. Printing reports them as
+  a `CompileError` rather than dropping them; they are valid TypeScript and must be
+  lowered before acceptance (Phase 10).
+- Case to test: `enum Mode { A, B }`, which the old compiler rejects
   (`packages/compiler-next/tests/cases/core.test.ts`).
-- Output: source text and language.
 
-## resolve — `core/resolve/`
+## resolve — `core/resolve/` (built, Phase 1)
 
-- Runs `yuku-analyzer` once per file and returns a `Resolved` view: module,
-  bindings, references, imports, exports.
-- Adds the one fact yuku does not have, **mutation sites** per binding:
-  - member assignment and update (`x.a = 1`, `x.n++`, `delete x.a`);
-  - a method call on the binding (`x.push(1)`) or on a path inside it
-    (`x.list.push(1)`);
-  - the binding passed to a function the compiler cannot see.
+| File | What it does |
+| --- | --- |
+| `index.ts` | `resolve(parsed, options)`: one `yuku-analyzer` project for every module, linked; returns `Resolved` |
+| `imports.ts` | which compiled module an import names: relative paths with extension and `index` probing, `options.resolveImport` first; packages are outside |
+| `writes.ts` | write sites per binding, and `runnerOf` / `declaringRunner` |
+| `resolve.test.ts` | unit tests |
 
-  Every method call is a possible mutation. `optimize/methods.ts` _(planned)_ is the
-  only place that can say what a method does; an unknown call in a body statement is
-  checked at runtime (`state-and-derived.md`).
-- Output: `Resolved`. Nothing later reads names to find bindings; it asks this.
+- yuku gives bindings, references (with `isWrite`), scopes, imports, exports and
+  `definition()` across files. Nothing later reads names to find bindings.
+- `writes.ts` adds the fact yuku does not have: **every place a binding may
+  change**, attributed to the binding at its root, at any scope (component,
+  module, helper, factory closure, class):
+  - `assign` (`x = 1`, `[x] = pair`, `for (x of xs)`) and `update` (`x++`);
+  - `member` (`x.a.b = 1`, `x.n++`, `x[i] = 1`), `delete` (`delete x.a`);
+  - `call`: a method call on the binding or a path in it (`x.list.push(1)`); every
+    method call is a possible mutation;
+  - `argument`: the binding or a path in it passed to a call or `new`.
+
+  Each site has a `path` from the root (`null` for a computed key), and a
+  `timing`: `body` when it runs with the code that declares the binding, `later`
+  when it runs in a function inside it (handler, effect, callback, method) or an
+  instance field initializer. Static fields and static blocks run with the class.
+  `optimize/methods.ts` _(planned)_ is the only place that can say what a method
+  does; an unknown call in a body statement is checked at runtime
+  (`state-and-derived.md`).
+- Known limit, for Phase 2: a callback the body runs at once
+  (`items.forEach(x => total += x)`, an immediately invoked function) is timed
+  `later`, so `total` would be a snapshot. In JavaScript it runs with the body. The
+  graph must decide this from the call, without a method list deciding semantics
+  (`../rules.md`, rule 3). Ask the user before choosing.
 
 ## graph — `core/graph/`
 

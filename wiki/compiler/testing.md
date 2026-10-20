@@ -31,7 +31,9 @@
 Run them with `bun test` in `packages/compiler-next` (no build needed), or one file:
 `bun test cases/handlers`. Generated programs: `FC_RUNS=200 bun test generator`
 (default 25), `FC_SEED=<seed>` to repeat a run, `SAVE_CORPUS=1` to keep the shrunk
-failure.
+failure. `COMPILER=next` runs the cases on compiler-next instead of the old
+compiler (`plan.md` tracks how many pass). Unit tests of compiler stages live next
+to the code (`src/**/*.test.ts`); `bun test src` runs only those.
 
 `REFERENCE_ONLY=1 bun test cases` runs the reference without compiling. Use it to
 develop the oracle, then run each new case in the default comparison mode before

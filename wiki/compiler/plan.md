@@ -40,21 +40,31 @@ files that must pass in full at its exit.
 
 ## Phase 1: skeleton and harness
 
-- [ ] `src/index.ts` exports `compileModules(files, options)` with the same signature
+- [x] `src/index.ts` exports `compileModules(files, options)` with the same signature
   and options as `packages/compiler/src/linker.ts`, so the harness and later the
-  Vite plugin can switch without changes.
-- [ ] `src/pipeline.ts` calls the stages in order; each stage is a function from
+  Vite plugin can switch without changes. Options so far: `runtimePath`,
+  `resolveImport` (`src/options.ts`); the others arrive with their phase, and
+  unknown ones are ignored.
+- [x] `src/pipeline.ts` calls the stages in order; each stage is a function from
   the previous result to its own (`core.md`).
-- [ ] `src/core/parse/`: source text and language → yuku AST, diagnostics as errors.
-- [ ] `src/core/resolve/`: on `yuku-analyzer`. Per binding, **at any scope**
+- [x] `src/core/parse/`: source text and language → yuku AST, diagnostics as errors.
+  Also lowers `enum` and parameter properties.
+- [x] `src/core/resolve/`: on `yuku-analyzer`. Per binding, **at any scope**
   (component, module, helper, factory closure, class): declaration, reads, writes
   including member writes and mutating calls attributed to their root binding,
   and for each write whether it runs later (handler, effect, callback, timer) or
   in the body; imports and exports. Unit tests in `src/core/resolve/`.
-- [ ] `tests/harness/compilers.ts`: add `next`, selected with `COMPILER=next`.
+- [x] `tests/harness/compilers.ts`: add `next`, selected with `COMPILER=next`.
 - **Exit:** a module with no JSX compiles and runs unchanged; `bun check` passes.
+  Passed 2026-10-20: `src/pipeline.test.ts` (an enum, a class with parameter
+  properties, imports between modules). Unit tests live next to the code in
+  `src/`, so `bunfig.toml`'s test root is the package.
 
 ## Phase 2: the graph
+
+Before coding: ask the user about callbacks the body runs at once
+(`items.forEach(x => total += x)`), which resolve times as `later` (`core.md`,
+resolve, "Known limit").
 
 - [ ] `src/core/graph/`: node kinds `Constant`, `State`, `Derived`, `Prop`, `Source`,
   `Ref`, `Opaque`, with `reads` edges and `pending(n)` (`core.md`).
@@ -136,6 +146,7 @@ files that must pass in full at its exit.
 
 - [ ] SSR and HTML backends from the same plan; hydration; routing (`$routed`,
   `page()`).
+- [ ] Lower a runtime TypeScript `namespace` and `export =` (`core.md`, parse).
 - [ ] Acceptance (`testing.md`, layer 7): the root `tests/`, package tests, the
   Vite suite and the Conduit flows run against compiler-next through a switch.
 - [ ] The user runs the full benchmark on the VM; every number at least matches
