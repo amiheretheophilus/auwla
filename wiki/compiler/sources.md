@@ -129,11 +129,15 @@ effects. Refresh and source replacement keep the committed nodes and content.
 Creating or discarding a prepared instance also schedules another reference pass:
 its setup/cleanup may change values rendered earlier, while fallback DOM remains
 identical. The keyed-draft case caught this reference bug; its assertion was kept.
-Failure belongs to the attempted inputs. A failed boundary compares active
-descriptors, source identities and child props before reusing its failure. Changed
-inputs or an external refresh restart preparation; unrelated renders retain the
-failure without replaying child requests. Status changes alone do not replace an
-attempt. Recovery cases caught the reference retaining stale errors; their
+Failure belongs to the attempted inputs. A failed region keeps its prepared
+instances and is prepared again on every render with them: a child whose inputs
+did not change reuses its failed source (no new request), so the failure stays; a
+child that now reads something else (new props, or a changed value it captures)
+makes a new request, a new attempt. An external refresh turns the failed source
+pending, which also ends the failure. Retry discards the failed instances, so
+child work is created again, and refreshes failed sources owned outside.
+(Before review, failures were reused by comparing the region's descriptors and
+props, which missed captured values; the case is below.) Recovery cases caught the reference retaining stale errors; their
 assertions were also kept.
 
 Component instances claim their sources. Abandoning a draft releases its owners,
@@ -154,7 +158,7 @@ request cancellation through `$track` is still separate, unfinished work.
 
 ## Cases to test
 
-`tests/cases/sources.test.ts`: 71 cases, all passing on the reference. The original
+`tests/cases/sources.test.ts`: 73 cases, all passing on the reference. The original
 27 give 18 passes and 9 failures on the old compiler; the null-target case fails
 it (written on review, it caught the reference treating `null` as a new load);
 four destructuring cases give 2 passes and 2 failures (the direct
@@ -166,7 +170,8 @@ statement cases (`if`, `switch`, fall-through, a lazy early return, a branch in 
 loop) all fail on the old compiler; two server function cases (a GET source
 following its arguments, a POST action awaited in a handler) give 1 pass and 1
 failure; two cases found by the generated source programs (below) both fail on
-the old compiler;
+the old compiler; two more `suspend` lifecycle cases (a captured value changing
+in a failed child, a removed region sharing a GET) give 1 pass and 1 failure;
 the 14 atomic cases give
 8 passes and 6 failures; eleven further atomic lifecycle cases give 6 passes and
 5 failures. These failures must pass on `compiler-next`.
@@ -217,6 +222,7 @@ an early failure can prevent comparison of its later steps. All cases are in
 | `an early return with a lazy condition waits only when it reads the source` | `no` while signed out | Shows `loading`: waits for `user` though `!signedIn` already decides |
 | `a loop decides per iteration, so a branch inside it is not chosen ahead` | `loading` until prices arrive | Shows `0` before the prices load |
 | `a POST server function is an action: it runs when called, then a refresh shows its result` | `saved` shows `no`, then `Lin` after the action resolves | `saved` renders empty from mount |
+| `suspend lifecycle: a failed child retries when a value it captures changes, without new props` | Changing module `userId` requests `/user/2`, shows `loading`, then `Ada` | Keeps showing `offline` |
 | `a handler uses the real value while a statement that may change it waits`; `a snapshot written before its source loads keeps the write` | Wait, then `1`/`clicked` | Throws `UnresolvedDataReadError` (`settings` read before it committed) |
 
 **Generated programs** (`tests/generator/sources.test.ts`). Each random program
@@ -242,15 +248,16 @@ The first 25 atomic cases have both generated `reference/` and `compiled/` outpu
 under `tests/out/<case>/`. An old compile rejection leaves no compiled module;
 runtime and assertion failures retain the emitted code for inspection.
 
-## Remaining reference work
+## Known limits of the reference
 
-The source reference is not complete. Finish these before beginning the compiler;
-an unmodeled case is never permitted compiler behavior:
+The list from review is covered: lazy statements, server function fixtures,
+generated source programs, and the captured-value `suspend` retry. Tests cannot
+list every program (the user: "we just need to adapt to a better structure");
+the compiler's general rules (`core.md`: one graph, `Opaque` instead of errors)
+carry the rest. These are limits of the test reference, not permitted compiler
+behaviour. Each gets a case when a compiler slice touches it:
 
-- Further atomic lifecycle combinations: captured state changes inside failed
-  children without changed props, and more interleavings of shared owners and
-  source generations. The verified 25 cases
-  do not exhaust these combinations.
+- More interleavings of shared owners and source generations under `suspend`.
 - Module-scope control flow (`let x = 0; if (flag) x = user.y` at module scope)
   and module patterns with a name written later are not modeled.
 - Computed paths (`props[key].name`) and sources inside class instances or

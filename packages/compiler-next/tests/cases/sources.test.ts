@@ -1047,6 +1047,63 @@ behaves('suspend lifecycle: external refresh recovers the same failed source pas
   },
 });
 
+behaves('suspend lifecycle: a failed child retries when a value it captures changes, without new props', {
+  source: `
+    import { $fetch, Group } from '@memoized-dom/data';
+    let userId = 1;
+    function Profile() {
+      const user = $fetch('/user/' + userId);
+      return <p>{user.name}</p>;
+    }
+    export function App() {
+      return (
+        <main>
+          <Group pending={() => <i>loading</i>} error={({ error }) => <b>{error.message}</b>}>
+            <section suspend><Profile /></section>
+          </Group>
+          <button onClick={() => { userId = 2; }}>next</button>
+        </main>
+      );
+    }`,
+  steps: [
+    { respond: '/user/1', value: { message: 'offline' }, status: 503 },
+    { click: 'button' },
+    { respond: '/user/2', value: { name: 'Ada' } },
+  ],
+  check(container, observation) {
+    expect(container.querySelector('i, b, p')?.textContent).toBe(['loading', 'offline', 'loading', 'Ada'][observation]);
+    const expected = observation < 2 ? ['/user/1'] : ['/user/1', '/user/2'];
+    expect(requestedUrls()).toEqual(expected);
+  },
+});
+
+behaves('suspend lifecycle: a region removed while loading does not cancel a GET another region shares', {
+  source: `
+    import { $fetch, Group } from '@memoized-dom/data';
+    function Name() {
+      const user = $fetch('/user');
+      return <p>{user.name}</p>;
+    }
+    export function App() {
+      let both = true;
+      return (
+        <main>
+          <Group pending={() => <i>loading</i>}>
+            {both && <section id="first" suspend><Name /></section>}
+            <section id="second" suspend><Name /></section>
+          </Group>
+          <button onClick={() => { both = false; }}>drop</button>
+        </main>
+      );
+    }`,
+  steps: [{ click: 'button' }, { respond: '/user', value: { name: 'Ada' } }],
+  check(container, observation) {
+    expect(container.querySelector('#first') === null).toBe(true);
+    expect(container.querySelector('#second')?.textContent ?? 'none').toBe(['none', 'none', 'Ada'][observation]!);
+    expect(requestedUrls()).toEqual(['/user']);
+  },
+});
+
 // ---------------------------------------------------------------------------
 // Sources inside ordinary JavaScript: loops, unknown calls, lazy branches inside
 // larger expressions, whole sources passed to children, module patterns.

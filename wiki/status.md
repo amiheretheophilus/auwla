@@ -390,13 +390,16 @@ are nailed first.
      replaced the real one (a handler threw), and a late statement overwrote a
      handler's write. The harness now fails a case when an event handler throws.
      194 reference cases and 200 generated source programs pass.
-   - next: complete reference work on `compiler/sources.md` and the remaining class
-     cases on `compiler/state-and-derived.md`, including captured/private
-     dependencies and the remaining readiness forms/APIs. Then extend generated programs with
-     sources and failure/refresh/replacement sequences. No compiler work yet.
-     No CI until the suite reaches thousands of cases.
-2. Later, after the reference/wiki are ready: parse and resolve on yuku 0.19
-   (`compiler/toolchain.md`), then the graph.
+   - done: a failed `suspend` region keeps its instances and is prepared again
+     each render, so a child whose captured value changed retries (the old
+     descriptor comparison missed it). 196 reference cases pass. The rest of
+     `compiler/sources.md` is now "known limits", not blockers.
+   - next: waiting on the user. Three agent decisions in `decisions.md` need a yes
+     or no (pending only for never-loaded sources; values wait with statements
+     that may change them; a body call of a non-GET server function). Remaining
+     reference limits are listed per page and get cases as compiler slices reach
+     them. No CI until the suite reaches thousands of cases.
+2. Next: parse and resolve on yuku 0.19 (`compiler/toolchain.md`), then the graph.
 3. Features in slices, each end to end: static markup → state and text → handlers →
    conditionals → lists → components → sources and readiness → effects and refs →
    linking.

@@ -478,16 +478,10 @@ function hasOwnData(fn: Function): boolean {
   });
 }
 
-/**
- * `sourceIdentityOnly`: a source is copied as its id alone, so a status change is
- * not a change. A failed `suspend` boundary uses it to tell a new attempt (other
- * sources or props) from the same failed one.
- */
-function deepCopy(value: unknown, copies = new Map<object, unknown>(), sourceIdentityOnly = false): unknown {
-  const copy = (entry: unknown) => deepCopy(entry, copies, sourceIdentityOnly);
+function deepCopy(value: unknown, copies = new Map<object, unknown>()): unknown {
+  const copy = (entry: unknown) => deepCopy(entry, copies);
 
   if (value instanceof Source) {
-    if (sourceIdentityOnly) return { source: value.id };
     return { source: value.id, version: value.version, data: copy(value.data) };
   }
   if (value instanceof Waiting) return { waiting: value.sources.map(copy) };
@@ -533,7 +527,7 @@ function deepCopy(value: unknown, copies = new Map<object, unknown>(), sourceIde
     if (!('value' in descriptor)) continue;
     if (typeof value === 'function' && !descriptor.enumerable) continue;
     const field = descriptor.value;
-    fields.push([key, sourceIdentityOnly && isElement(value) && key === 'tag' ? field : copy(field)]);
+    fields.push([key, copy(field)]);
   }
   return snapshot;
 }
@@ -590,8 +584,10 @@ interface Policies {
 
 interface SuspendedBoundary {
   published: boolean;
+  /** The failed attempt, shown with the error policy. */
   failed?: Waiting;
-  failedInputs?: unknown;
+  /** Instances prepared by the failed attempt; retry discards them. */
+  instances?: string[];
 }
 
 class Renderer {
@@ -739,37 +735,27 @@ class Renderer {
     }
     const inherited = node.tag === Group ? this.groupPolicies(node, policies) : policies;
     if (boundary.published) return this.renderElement(node, position, inSvg, policies);
-    // Source identities and active descriptors decide whether this is still the
-    // failed attempt. Status changes alone must not recreate child requests.
-    const inputs = deepCopy(node, new Map(), true);
-    if (boundary.failed) {
-      if (boundary.failed.sources.some((source) => source.error) && deepEqual(boundary.failedInputs, inputs)) {
-        return this.renderBoundaryFailure(boundary, position, inSvg, inherited);
-      }
-      boundary.failed = undefined;
-    }
 
+    // Prepared again on every render, with the instances of earlier attempts. A
+    // child whose inputs did not change reuses its sources, so an unrelated render
+    // sends no request and a failure stays. A child that now reads something else
+    // (new props, a changed captured value) makes a new request: a new attempt.
     const preparation = new Preparation((element, component, path) => {
       const { id, output, instance } = this.evaluateComponent(element, component, path);
       return { id, output, waiting: instance.waitingEffects() };
     });
     preparation.element(node, position);
+    for (const id of preparation.instances) this.preparedInstances.add(id);
+
     const waiting = preparation.waiting;
-    if (waiting) {
-      if (waiting.sources.some((source) => source.error)) {
-        boundary.failed = waiting;
-        boundary.failedInputs = inputs;
-        // A failed draft never owned mounted refs or effects. Release its work now.
-        for (const id of preparation.instances) {
-          this.instances.get(id)!.unmount();
-          this.instances.delete(id);
-          this.lifecycleChanged = true;
-        }
-        return this.renderBoundaryFailure(boundary, position, inSvg, inherited);
-      }
-      for (const id of preparation.instances) this.preparedInstances.add(id);
-      return this.renderWaiting(waiting, position, inSvg, inherited, false);
+    if (waiting !== undefined && waiting.sources.some((source) => source.error)) {
+      boundary.failed = waiting;
+      boundary.instances = [...preparation.instances];
+      return this.renderBoundaryFailure(boundary, position, inSvg, inherited);
     }
+    boundary.failed = undefined;
+    if (waiting !== undefined) return this.renderWaiting(waiting, position, inSvg, inherited, false);
+
     boundary.published = true;
     for (const [id, output] of preparation.outputs) this.preparedOutputs.set(id, output);
     return this.renderElement(node, position, inSvg, policies);
@@ -782,7 +768,15 @@ class Renderer {
     policies: Policies,
   ): Node[] {
     const waiting = boundary.failed!;
+    // Retry starts over: the failed attempt's instances (and the sources only they
+    // own) are discarded, so child work is created again; failed sources owned
+    // outside the region are refreshed.
     const retry = () => {
+      for (const id of boundary.instances ?? []) {
+        this.instances.get(id)?.unmount();
+        this.instances.delete(id);
+      }
+      boundary.instances = undefined;
       boundary.failed = undefined;
       const failed = waiting.sources.filter((source) => source.error && !source.isDisposed);
       return Promise.all(failed.map((source) => source.refresh()));
