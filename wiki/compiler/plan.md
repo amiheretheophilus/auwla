@@ -46,9 +46,11 @@ files that must pass in full at its exit.
 - [ ] `src/pipeline.ts` calls the stages in order; each stage is a function from
   the previous result to its own (`core.md`).
 - [ ] `src/core/parse/`: source text and language → yuku AST, diagnostics as errors.
-- [ ] `src/core/resolve/`: on `yuku-analyzer`. Per binding: declaration, reads,
-  writes, and for each write whether it runs later (handler, effect, callback,
-  timer) or in the body; imports and exports. Unit tests in `src/core/resolve/`.
+- [ ] `src/core/resolve/`: on `yuku-analyzer`. Per binding, **at any scope**
+  (component, module, helper, factory closure, class): declaration, reads, writes
+  including member writes and mutating calls attributed to their root binding,
+  and for each write whether it runs later (handler, effect, callback, timer) or
+  in the body; imports and exports. Unit tests in `src/core/resolve/`.
 - [ ] `tests/harness/compilers.ts`: add `next`, selected with `COMPILER=next`.
 - **Exit:** a module with no JSX compiles and runs unchanged; `bun check` passes.
 
@@ -58,7 +60,10 @@ files that must pass in full at its exit.
   `Ref`, `Opaque`, with `reads` edges and `pending(n)` (`core.md`).
 - [ ] `src/features/state/`, `derived/`, `props/` classify bindings by the table in
   `state-and-derived.md`, including body statements that build a value (`if`,
-  `switch`, loops) and calls that may change one.
+  `switch`, loops) and calls that may change one. State lives anywhere
+  (`output.md`, "State lives anywhere"): module scope, closures in helpers and
+  factories, class fields, objects reached from any binding. Function summaries
+  record which state a call writes, so `store.inc()` is a write of `store`.
 - [ ] Graph tests next to each feature: one per row of the classification table
   and per rule bullet on `state-and-derived.md`.
 - **Exit:** the graph classifies every binding in every case source as the
@@ -68,7 +73,10 @@ files that must pass in full at its exit.
 ## Phase 3: first slice, end to end (static markup, state, text, handlers)
 
 - [ ] Design step: the emitted shape for state, memos and handlers per `output.md`,
-  including where versions live. Write it on `output.md` before coding.
+  including where versions live for each row of its "State lives anywhere" table.
+  Write it on `output.md` before coding. Module state, factory closures and
+  class instances are in this slice, not later: the `complex state:` cases on
+  `state-and-derived.md` belong to its exit.
 - [ ] `src/core/plan/`: `Template`, `TextSite`, `AttributeSite`, `PropertySite`,
   `EventSite`.
 - [ ] `src/core/emit/` + `src/features/*/dom.ts`: DOM backend on

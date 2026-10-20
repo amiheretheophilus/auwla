@@ -126,8 +126,28 @@ export function App(_id, _parent) {
 ```
 
 Version checks also replace part of today's reason routing: a spot or memo can
-skip work by comparing numbers instead of re-evaluating. Whether versions live in
-the runtime (per write key) or as emitted locals is a Phase 3 design step.
+skip work by comparing numbers instead of re-evaluating.
+
+## State lives anywhere, not only in components
+
+The sketch above is the simplest place. A version belongs to a **binding**,
+wherever it is declared, and a write is attributed to the binding at its root:
+
+| Where the state lives | Example | How a write reaches its readers |
+| --- | --- | --- |
+| a component | `let count = 0` in `App` | the binding's version; the component's `_update` |
+| module scope, any module | `export let todos = []` in `store.ts`, written in `List.tsx` | a version owned by the module, keyed like today's write keys (`store.ts#todos`); linking (`linking.md`) tells each module who reads it |
+| a closure in a helper or factory | `function createStore() { let n = 0; return { inc() { n++ } } }` | the write is inside `inc`; the graph's summary of `createStore` says calling `inc` writes the store, so a call site commits `store` |
+| a class instance or static field | `counter.value++`, `Config.limit = 5` | a member write commits its root binding (`counter`, `Config`) |
+| an object or array reached from a binding | `user.address.city = 'x'`, `items.push(x)`, `alias.push(x)` | mutation commits the root binding; when the root cannot be known (an alias passed through unknown code), the reads of every possible root are refreshed, as `markDirtySubtree` does today |
+| a prop | `({ label }) => … label = 'x'` | a local override until the parent passes a new value (`state-and-derived.md`) |
+
+So versions live with the binding's owner: in the runtime, keyed by write key,
+for module and shared state; emitted locals are only an optimization for state
+that provably never leaves one component. That design is the Phase 3 step. A
+write the compiler cannot attribute (third-party code mutating something it was
+given) is `Opaque`: its readers update after the handler or effect that called
+it, never silently stale.
 
 ## Alternatives considered
 
@@ -140,5 +160,5 @@ the runtime (per write key) or as emitted locals is a Phase 3 design step.
 
 ## Open
 
-- Where versions live (runtime write keys or emitted locals), decided by
+- The exact version mechanism for each row of the table above, decided by
   measuring in Phase 3.
