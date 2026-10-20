@@ -91,6 +91,8 @@ One page per group of related files:
 
 | Page | Covers |
 | --- | --- |
+| [plan.md](plan.md) | **the order of work**: phases, steps, exit checks. Start here to continue |
+| [output.md](output.md) | what the compiler emits: the old output, the reference, the proposal |
 | [toolchain.md](toolchain.md) | yuku packages and other libraries, and what each replaces |
 | [core.md](core.md) | parse, resolve, graph, plan, emit |
 | [state-and-derived.md](state-and-derived.md) | props, state, derived values: the classification rules |

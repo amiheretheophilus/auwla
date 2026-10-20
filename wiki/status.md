@@ -400,7 +400,6 @@ are nailed first.
      body call is a compile error (tests listed in `compiler/sources.md`). Remaining
      reference limits are listed per page and get cases as compiler slices reach
      them. No CI until the suite reaches thousands of cases.
-2. Next: parse and resolve on yuku 0.19 (`compiler/toolchain.md`), then the graph.
-3. Features in slices, each end to end: static markup → state and text → handlers →
-   conditionals → lists → components → sources and readiness → effects and refs →
-   linking.
+2. Next: `compiler/plan.md`, Phase 0. The user decides the output architecture
+   (`compiler/output.md`); then Phase 1. The plan lists every phase, its steps and
+   exit checks; continue at its first unchecked box.
