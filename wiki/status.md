@@ -394,9 +394,9 @@ are nailed first.
      each render, so a child whose captured value changed retries (the old
      descriptor comparison missed it). 196 reference cases pass. The rest of
      `compiler/sources.md` is now "known limits", not blockers.
-   - next: waiting on the user. Three agent decisions in `decisions.md` need a yes
-     or no (pending only for never-loaded sources; values wait with statements
-     that may change them; a body call of a non-GET server function). Remaining
+   - The user confirmed on 2026-10-20: pending only for never-loaded sources, and
+     values wait with statements that may change them. Still open: a body call of
+     a non-GET server function (`compiler/sources.md`). Remaining
      reference limits are listed per page and get cases as compiler slices reach
      them. No CI until the suite reaches thousands of cases.
 2. Next: parse and resolve on yuku 0.19 (`compiler/toolchain.md`), then the graph.
