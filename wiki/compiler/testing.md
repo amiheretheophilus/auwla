@@ -14,6 +14,7 @@
 | `tests/reference/preparation.ts` | Atomic initial preparation without DOM, shared position matching and active source collection |
 | `tests/reference/reads.ts` | Dependency queries using yuku bindings and references |
 | `tests/reference/callbacks.ts` | Detects function boundaries so callback creation does not read its captures |
+| `tests/reference/closures.ts` | State in helper and factory closures: a dependency cell per invocation, recorded when a created function reads the binding |
 | `tests/reference/ast.ts` | Shared yuku AST builders for the test transforms |
 | `tests/harness/case.ts` | The `Case` and `Step` types, optional `check(container, observation)` assertions, and `defer(name)` for async cases |
 | `tests/harness/run.ts` | `behaves(name, case)`: runs the case on the reference and on a compiler, compares after each step. An exception in an event handler fails the run (the DOM only reports it as a window `error` event). `disposeRuns()` cleans up after a failed run |

@@ -157,6 +157,99 @@ write the compiler cannot attribute (third-party code mutating something it was
 given) is `Opaque`: its readers update after the handler or effect that called
 it, never silently stale.
 
+## Phase 3 design (principles approved 2026-10-21)
+
+The user approved these on the condition that they stay correct and miss no
+unknown caller that reads reactive state: "yeah do it as long as it stays correct
+and we dont miss any unknown caller that is somewhat reactive". Exact names and
+helpers are settled while building the slices in `plan.md`, by measuring.
+
+### 1. Versions and memos
+
+Every reactive binding has a version that its writes bump. A derived value
+remembers the versions it was computed from and is recomputed in `_update` only
+when one changed (the sketch above). A version is a plain local when only the
+component's own code reads it; it is a runtime cell (`{ v: number }`) when a
+function that leaves the component reads it (rule 5) or when it lives outside a
+component (the table above).
+
+### 2. Derive until takeover
+
+A derived binding with candidate takeover sites (`BindingNode.takeovers`) gets a
+"taken" flag. Only those sites set it, and only when they run outside the
+owner's setup. The runtime keeps one value, the owner whose setup is running:
+
+```js
+// let total = price * 2;  items.forEach(i => { total += i; });  onClick={() => total = 0}
+const _update = () => {
+  if (!_totalTaken && _totalFrom !== _price) { total = price * 2; /* replay builders */ … }
+};
+items.forEach(i => {
+  total += i;
+  if (!_MD.building(_id)) _totalTaken = true;   // during setup it builds; later it takes over
+});
+_reset.onclick = () => { total = 0; _totalTaken = true; _total++; _MD.invalidateEntity(_id); };
+```
+
+The check is one comparison, emitted only at candidate sites. No API name decides it.
+
+### 3. Possible builders
+
+A statement that may build a value (`mySort(copy)`, `items.forEach(cb)` with an
+unknown `forEach`, `console.log(x)`) runs once with its observation: a callback it
+was given reports a write during the call, or a copy taken before is compared
+after. If the value changed, a per-statement flag makes `_update` replay it; if
+not, it never runs again (`state-and-derived.md`, "Timers and other setup side
+effects").
+
+### 4. Unknown calls are never re-run because the component updated
+
+A computation re-runs only when one of its inputs changed. `const id =
+setInterval(…)` has no reactive input, so it runs once, as in the console. This
+replaces "re-read every opaque node when the owner updates" for calls.
+
+### 5. No missed reactive reads through unknown callers
+
+An unknown call can reach visible code that reads reactive state: a method on an
+object (`pricing.total()`), functions taken out of a factory (`const { read } =
+makeCounter()`), a getter on an object passed as a prop, a callback a host
+function runs at once (`Array.from(items, x => x * factor)`). Static analysis
+cannot follow all of these, so the runtime does:
+
+- The graph finds every **escaping function**: a function whose value is stored,
+  passed, returned or exported, rather than only called directly. Getters and
+  methods count.
+- If an escaping function reads reactive bindings, its body starts with one check:
+  when a computation is running, it reports the version cells of what it reads.
+  `_MD.tracking !== null && _MD.track(_price, _qty)`.
+- A computation that contains an unknown call runs with tracking on, and keeps
+  the reported cells as extra inputs, compared by version in `_update`.
+
+So every reactive binding the compiler can see reaches a computation either as a
+static input or as a reported read. What stays unseen is state inside host APIs
+and uncompiled package code; like an unwritten global, it is not an input
+(`../decisions.md`, 2026-10-21). Packages that the compiler compiles (Phase 9)
+are visible code.
+
+Cost: one null check in escaping functions that read state, and version capture
+only for computations that contain unknown calls. Functions called directly
+(`multiply(price)`) are expanded statically and pay nothing.
+
+### 6. No `try`/`finally` around tracking
+
+Setting and restoring the running computation must not use `finally`
+(`../rules.md`). If a computation throws, the runtime resets the tracking state at
+the start of the next update batch, so the error cannot leak into another
+computation.
+
+### Cases that hold the design to this
+
+`cases/callbacks.test.ts`: the timer cases, and the "unknown callers" cases: a
+method on an object, factory functions taken out by destructuring, a getter on a
+prop object, a host function running a callback at once, and a call with a side
+effect running once across unrelated updates. All pass on the reference; the old
+compiler fails the first, second and fourth.
+
 ## Alternatives considered
 
 - **Signals** (Solid style: every value an object, reads become calls). A new
@@ -169,4 +262,4 @@ it, never silently stale.
 ## Open
 
 - The exact version mechanism for each row of the table above, decided by
-  measuring in Phase 3.
+  measuring in Phase 3 (rule 1 above gives the default).

@@ -280,6 +280,19 @@ Four timer and side-effect cases were added on 2026-10-21. They use the harness'
 | a `setTimeout` write takes over a derived value when it fires | fails: `20` after the price changes, expected `30` (the old snapshot rule) |
 | passing a value to an unknown call that only reads it runs once | passes |
 
+Five "unknown callers" cases were added the same day (`output.md`, "Phase 3
+design", rule 5). An unknown call must not re-run on unrelated updates, yet must
+follow the visible reactive state it reaches. All pass on the reference, which
+now tracks state in helper and factory closures (`tests/reference/closures.ts`):
+
+| Case | Old compiler |
+| --- | --- |
+| a method on an object follows the state it reads | fails: `20:0` after the price changes, expected `30:0` |
+| factory functions taken out by destructuring follow their closure | fails: `2` after `inc()`, expected `4` |
+| a getter on an object passed as a prop follows the parent state | passes |
+| a host function that runs a callback at once follows its captures | fails: `2,4` after the factor changes, expected `3,6` |
+| a call with a side effect runs once across unrelated updates | passes |
+
 Remaining coverage: generator callbacks across `yield`; readiness inside async
 callbacks before their first `await`; module body callback builders; callback
 dependencies in arbitrary factory closures. These are reference limits, not

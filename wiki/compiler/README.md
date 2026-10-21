@@ -1,12 +1,12 @@
 # The compiler (rewrite)
 
-**Status: Phase 2 graph and classification built; its test checklist next, then Phase 3.** The new compiler lives in
+**Status: Phase 2 graph and classification built; Phase 3 design approved, slices next.** The new compiler lives in
 `packages/compiler-next/` on branch `compiler-rewrite`; its tests are in
 `packages/compiler-next/tests/`. `packages/compiler/` stays until every suite passes
 on the new one; then it is deleted.
 
 The source, ordinary `Group`, atomic `suspend`, and callback baselines are verified.
-All 223 reference cases pass. Remaining reference limits are on the concept pages;
+All 228 reference cases pass. Remaining reference limits are on the concept pages;
 extend their coverage as the compiler reaches those slices. Continue in `plan.md`.
 
 > "the goal is to write normal javascript and get effecient compiled output"

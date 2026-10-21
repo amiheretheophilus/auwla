@@ -120,6 +120,17 @@ export function $captureRead(key: string, read: () => unknown): unknown {
   return read();
 }
 
+/** A binding in a helper or factory, read by a function it created (`closures.ts`): one cell per invocation. */
+export function $closureCell(read: () => unknown): ReadValue {
+  return { peek: read };
+}
+
+/** Record the cell in the running computation. A hoisted `var` cell can still be undefined. */
+export function $closureRead(cell: ReadValue | undefined, read: () => unknown): unknown {
+  if (cell !== undefined) computation?.reads.add(cell);
+  return read();
+}
+
 class MemoSlot {
   private value: unknown;
   writtenLater = false;

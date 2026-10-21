@@ -10,9 +10,10 @@ Last updated: 2026-10-21.
 - `compiler-rewrite` (working branch, from `compiler-refactor` at `6230c27`):
   the new compiler, designed in `compiler/`. Phase 1 skeleton is built. Phase 2:
   the graph and the props/state/derived classification are built and wired into
-  `compileModules` (80 unit tests); the reference passes all 223 cases, including
-  the timer cases. Next: check the Phase 2 graph tests off against
-  `compiler/state-and-derived.md`, then Phase 3 (`compiler/plan.md`).
+  `compileModules` (80 unit tests). Phase 3 design written and approved
+  (`compiler/output.md`, "Phase 3 design"); the reference passes all 228 cases,
+  including timer and unknown-caller cases, and now tracks closure state. Next:
+  escaping functions in the graph, then the Phase 3 slices (`compiler/plan.md`).
 - `compiler-refactor`: the old compiler's refactor, stopped on 2026-10-19. The
   sections below record that work.
 - `codex/package-conditional-sync` at `9e35480` (third-party package compilation,

@@ -342,6 +342,78 @@ behaves('callbacks: passing a value to an unknown call that only reads it runs o
   check: show(['2:1', '4:1', '6:1']),
 });
 
+// Unknown callers (2026-10-21). An unknown call is never re-run just because the
+// component updated, yet a value it computes from visible reactive state must
+// still follow that state, however the call reaches the code that reads it.
+
+behaves('unknown callers: a method on an object follows the state it reads', {
+  source: `
+    export function App() {
+      let price = 10; let clicks = 0;
+      const pricing = { total() { return price * 2; } };
+      const shown = pricing.total();
+      return <main><p>{shown}:{clicks}</p>
+        <button id="price" onClick={() => price += 5}>price</button>
+        <button id="other" onClick={() => clicks++}>other</button></main>;
+    }`,
+  steps: [{ click: '#price' }, { click: '#other' }, { click: '#price' }],
+  check: show(['20:0', '30:0', '30:1', '40:1']),
+});
+
+behaves('unknown callers: factory functions taken out by destructuring follow their closure', {
+  source: `
+    function makeCounter() {
+      let n = 1;
+      return { read: () => n, inc: () => { n++; } };
+    }
+    export function App() {
+      const { read, inc } = makeCounter();
+      const doubled = read() * 2;
+      return <main><p>{doubled}</p><button onClick={() => inc()}>inc</button></main>;
+    }`,
+  steps: [{ click: 'button' }, { click: 'button' }],
+  check: show(['2', '4', '6']),
+});
+
+behaves('unknown callers: a getter on an object passed as a prop follows the parent state', {
+  source: `
+    function Child({ model }) {
+      const label = model.label;
+      return <p>{label}</p>;
+    }
+    export function App() {
+      let name = 'Ada';
+      const model = { get label() { return 'Hi ' + name; } };
+      return <main><Child model={model} /><button onClick={() => name = 'Bo'}>rename</button></main>;
+    }`,
+  steps: [{ click: 'button' }],
+  check: show(['Hi Ada', 'Hi Bo']),
+});
+
+behaves('unknown callers: a host function that runs a callback at once follows its captures', {
+  source: `
+    export function App() {
+      let factor = 2;
+      const values = Array.from([1, 2], (x) => x * factor);
+      return <main><p>{values.join(',')}</p><button onClick={() => factor++}>factor</button></main>;
+    }`,
+  steps: [{ click: 'button' }, { click: 'button' }],
+  check: show(['2,4', '3,6', '4,8']),
+});
+
+behaves('unknown callers: a call with a side effect runs once across unrelated updates', {
+  source: `
+    let created = 0;
+    const registry = { create(label) { created++; return label + created; } };
+    export function App() {
+      let clicks = 0;
+      const id = registry.create('item');
+      return <main><p>{id}:{clicks}</p><button onClick={() => clicks++}>click</button></main>;
+    }`,
+  steps: [{ click: 'button' }, { click: 'button' }],
+  check: show(['item1:0', 'item1:1', 'item1:2']),
+});
+
 behaves('callbacks: returned callback values derive and wait for captured sources', {
   source: `
     import { $read, Group } from '@memoized-dom/data';

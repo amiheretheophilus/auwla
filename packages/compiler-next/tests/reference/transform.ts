@@ -34,6 +34,7 @@ import { generate } from 'yuku-codegen';
 import { parse } from 'yuku-parser';
 import type { BlockStatement, Expression, Node, Statement, VariableDeclarator } from 'yuku-parser';
 import { blockThunk, constDeclaration, identifier, member, numberLiteral, runtimeCall, thunk } from './ast';
+import { ClosureCells } from './closures';
 import { enclosingFunction, Reads } from './reads';
 import {
   buildModuleMemos,
@@ -95,7 +96,7 @@ const GUARDABLE_STATEMENTS = new Set<string>([
 const RUNTIME_EXPORTS = [
   '$h', 'Fragment as $Fragment', '$enter', '$assignRef', '$moduleEffect', '$moduleMemo',
   '$when', '$value', '$waiting', '$sourceState', '$branch', '$switch', '$path', '$ready',
-  '$captureRead',
+  '$captureRead', '$closureCell', '$closureRead',
 ];
 
 // ---------------------------------------------------------------------------
@@ -117,11 +118,13 @@ export function toReference(source: string, path: string, runtimeUrl: string): s
   buildModuleMemos(module, rawUses);
   const handledSites = new Set<Node>();
   const components = findComponents(module);
+  const closures = new ClosureCells(module, new Set(components));
   for (const component of components) {
     new ComponentRewrite(module, component, rawUses, handledSites).run();
   }
   rewriteModuleEffects(module);
-  prepareModuleReads(module, rawUses, handledSites, new Set(components));
+  prepareModuleReads(module, rawUses, handledSites, new Set(components), closures);
+  closures.declare();
   // Clone only after uses were lowered, so replay closes over live slots.
   for (const call of readCalls) {
     if (call.arguments.length === 1) call.arguments.push(thunk(structuredClone(call.arguments[0]) as Expression));

@@ -93,16 +93,26 @@ files that must pass in full at its exit.
 
 ## Phase 3: first slice, end to end (static markup, state, text, handlers)
 
-- [ ] Design step: the emitted shape for state, memos and handlers per `output.md`,
+- [x] Design step: the emitted shape for state, memos and handlers per `output.md`,
   including where versions live for each row of its "State lives anywhere" table.
   Write it on `output.md` before coding. Module state, factory closures and
   class instances are in this slice, not later: the `complex state:` cases on
   `state-and-derived.md` belong to its exit.
-  Answer here what "re-read an opaque node when its owner updates" means for a
-  computation that contains calls: `const id = setInterval(…)` is opaque, yet
-  must not run again on an unrelated update (`core.md`, shared rule 3; the timer
-  cases in `cases/callbacks`). Also how the emitted code observes a possible
-  builder's first run (`state-and-derived.md`, "Timers and other setup side effects").
+  Done 2026-10-21: `output.md`, "Phase 3 design". Unknown calls are never re-run
+  because the owner updated; escaping functions report hidden reads; possible
+  builders are observed on their first run.
+- [ ] Graph: find escaping functions and the reactive bindings each reads
+  (`output.md`, "Phase 3 design", rule 5), with unit tests.
+- Build in slices, each proved by its cases on `COMPILER=next`, with the pass
+  count recorded in `../status.md`:
+  - [ ] static markup (templates);
+  - [ ] state, text and handler writes (counters);
+  - [ ] versioned memos and replayed body builders;
+  - [ ] takeover flags and the setup flag (`cases/callbacks`);
+  - [ ] mutation commits and the unknown-call check;
+  - [ ] escaping-function tracking (the `unknown callers:` cases);
+  - [ ] module state, imports, factory closures and classes (`complex state:`);
+  - [ ] `await` in handlers.
 - [ ] `src/core/plan/`: `Template`, `TextSite`, `AttributeSite`, `PropertySite`,
   `EventSite`.
 - [ ] `src/core/emit/` + `src/features/*/dom.ts`: DOM backend on

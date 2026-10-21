@@ -10,6 +10,7 @@ import type { Binding, Module } from 'yuku-analyzer';
 import { b, findAll, is } from 'yuku-ast';
 import type { Expression, Node, Statement, VariableDeclarator } from 'yuku-parser';
 import { blockThunk, constDeclaration, identifier, member, runtimeCall, thunk } from './ast';
+import type { ClosureCells } from './closures';
 import { enclosingFunction, Reads } from './reads';
 
 /** Read a module binding without changing its native live-binding behavior. */
@@ -461,6 +462,7 @@ export function prepareModuleReads(
   rawUses: Set<Node>,
   handledSites: Set<Node>,
   components: Set<Node>,
+  closures: ClosureCells,
 ): void {
   const reads = new Reads(module);
   const readsOf = readsWithPaths(reads, (binding) => identifier(binding.name), rawUses);
@@ -494,7 +496,8 @@ export function prepareModuleReads(
       if (is.Property(ctx.parent) && ctx.parent.shorthand && ctx.key === 'value') {
         ctx.parent.shorthand = false;
       }
-      const value = captureModuleRead(module, reference.binding, identifier(reference.binding.name));
+      const native = identifier(reference.binding.name);
+      const value = closures.wrap(reference, captureModuleRead(module, reference.binding, native));
       ctx.replace(runtimeCall('$value', [value]));
     },
   });

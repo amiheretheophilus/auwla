@@ -135,12 +135,11 @@ Refs and sources join in their phases.
    feature work; a capture is not a read merely because a callback is created.
    An opaque read can hide further sources, so this query alone does not prove
    readiness. See `sources.md`.
-3. **Opaque:** an opaque node is re-read when its owner updates. It is never rejected.
-   Re-reading must not re-execute a call for its side effects: `const id =
-   setInterval(…)` is opaque (an unknown call) but must not register a second
-   interval when the component updates. How Phase 3 re-reads an opaque computation
-   that contains calls is a question for its design step (`plan.md`); the timer
-   cases on `state-and-derived.md` pin the required behaviour.
+3. **Opaque:** what the compiler cannot prove is never rejected. An opaque
+   computation is not re-run just because its owner updated: an unknown call runs
+   again only when one of its inputs changes (`const id = setInterval(…)` runs
+   once). Reads hidden behind unknown callers are reported at runtime by the
+   escaping functions that make them (`output.md`, "Phase 3 design", rule 5).
 
 Verified: all seven kinds; shadowed names and separate module/function owners;
 type erasure; reference/path retention; opaque globals; named imports through
