@@ -4,6 +4,7 @@
  */
 import type { Node } from 'yuku-parser';
 import type { Binding, PathKey, Reference, Resolved, ResolvedModule, WriteSite } from '../resolve';
+import type { FunctionSummary } from '../resolve/functions';
 
 export type BindingKind = 'Constant' | 'State' | 'Derived' | 'Prop' | 'Source' | 'Ref' | 'Opaque';
 
@@ -22,11 +23,17 @@ export interface BodyBuilder {
   readonly statement: Node;
   /** Unknown calls must first be observed to determine whether they changed the value. */
   readonly certainty: 'definite' | 'possible';
+  /** The statement may invoke a callback now or retain it for later execution. */
+  readonly invocation?: 'runtime';
 }
 
 export interface InitialComputation {
   readonly initializer: Node | null;
+  /** Native declaration/parameter pattern, shared by its aliases. */
+  readonly pattern?: Node;
   readonly builders: readonly BodyBuilder[];
+  /** Static reads are incomplete; retain runtime checks when this computation runs. */
+  readonly opaque?: boolean;
 }
 
 /**
@@ -46,6 +53,7 @@ export interface BindingFacts {
   readonly kind: BindingKind;
   readonly initial?: InitialComputation;
   readonly reads?: readonly ReadFact[];
+  readonly takeovers?: readonly WriteSite[];
 }
 
 export interface ReadEdge {
@@ -71,6 +79,8 @@ export interface BindingNode {
   readonly initial: InitialComputation | null;
   readonly reads: readonly ReadEdge[];
   readonly writes: readonly WriteEdge[];
+  /** Candidate reassignments, never evidence that takeover has already happened. */
+  readonly takeovers: readonly WriteSite[];
 }
 
 /** A runtime global or another unbound read: retain it as opaque, never drop it. */
@@ -78,6 +88,11 @@ export interface UnresolvedNode {
   readonly kind: 'Opaque';
   readonly binding: null;
   readonly reference: Reference;
+  /**
+   * Whether the program writes this global. A global it never writes (`Math`,
+   * `setInterval`, `document`) is not an input (`../resolve/globals.ts`).
+   */
+  readonly reactive: boolean;
   readonly owner: GraphOwner;
   readonly reads: readonly ReadEdge[];
   readonly writes: readonly WriteEdge[];
@@ -98,4 +113,5 @@ export interface SemanticGraph {
   readonly nodes: readonly GraphNode[];
   readonly bindings: ReadonlyMap<Binding, BindingNode>;
   readonly unresolved: ReadonlyMap<Reference, UnresolvedNode>;
+  readonly functions: readonly FunctionSummary[];
 }

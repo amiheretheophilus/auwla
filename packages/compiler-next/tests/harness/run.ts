@@ -2,14 +2,14 @@
  * Runs a case on the reference renderer and on a compiler, and compares what
  * the user sees after the first render and after every step.
  */
-import { afterEach, expect, it } from 'bun:test';
+import { afterEach, expect, it, jest } from 'bun:test';
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { beginReferenceScope, renderApp, type Component } from '../reference/runtime';
 import { toReference } from '../reference/transform';
 import { beginSources, finishSourceDeclarations } from '../reference/sources';
-import { clearDeferred, describeStep, rejectDeferred, resolveDeferred, type Case, type Step } from './case';
+import { clearDeferred, describeStep, rejectDeferred, resolveDeferred, usesClock, type Case, type Step } from './case';
 import { clearRequests, fetchForCase, rejectRequest, respond } from './requests';
 import { clearCompiledApps, selectedCompiler, type Compiler } from './compilers';
 import { serialize } from './serialize';
@@ -68,6 +68,7 @@ export async function observeBoth(name: string, testCase: Case): Promise<{ refer
 
 /** Run a case on the reference only. */
 export async function runOnReference(name: string, testCase: Case): Promise<Observations> {
+  const clock = startClock(testCase);
   const disposeSources = track(beginSources(fetchForCase));
   const disposeModules = track(beginReferenceScope());
   const authored = { ...testCase.modules, './App.tsx': testCase.source };
@@ -80,7 +81,7 @@ export async function runOnReference(name: string, testCase: Case): Promise<Obse
   const errors = watchErrors();
   const app = renderApp(module.App as Component, container);
   const unmount = track(() => app.unmount());
-  await settle();
+  await settle(clock);
   app.render();
   errors.check('initial render');
   const observations = [observe('initial render', container)];
@@ -88,7 +89,7 @@ export async function runOnReference(name: string, testCase: Case): Promise<Obse
 
   for (const step of testCase.steps ?? []) {
     perform(step, container);
-    await settle();
+    await settle(clock);
     app.render();
     errors.check(describeStep(step));
     observations.push(observe(describeStep(step), container));
@@ -101,10 +102,12 @@ export async function runOnReference(name: string, testCase: Case): Promise<Obse
   container.remove();
   clearDeferred();
   clearRequests();
+  clock.stop();
   return observations;
 }
 
 async function runOnCompiler(name: string, testCase: Case, compiler: Compiler): Promise<Observations> {
+  const clock = startClock(testCase);
   const disposeSources = track(compiler.prepare());
   const files = compiler.compile(testCase.source, testCase.modules, testCase.compileTimeoutMs);
   const module = await importFiles(name, 'compiled', files, 'App.tsx');
@@ -113,14 +116,14 @@ async function runOnCompiler(name: string, testCase: Case, compiler: Compiler): 
   const errors = watchErrors();
   const app = compiler.mount(module, container);
   const unmount = track(() => app.unmount());
-  await settle();
+  await settle(clock);
   errors.check('initial render');
   const observations = [observe('initial render', container)];
   testCase.check?.(container, 0);
 
   for (const step of testCase.steps ?? []) {
     perform(step, container);
-    await settle();
+    await settle(clock);
     errors.check(describeStep(step));
     observations.push(observe(describeStep(step), container));
     testCase.check?.(container, observations.length - 1);
@@ -131,12 +134,17 @@ async function runOnCompiler(name: string, testCase: Case, compiler: Compiler): 
   container.remove();
   clearDeferred();
   clearRequests();
+  clock.stop();
   return observations;
 }
 
 // ---------------------------------------------------------------------------
 
 function perform(step: Step, container: HTMLElement): void {
+  if ('advance' in step) {
+    jest.advanceTimersByTime(step.advance);
+    return;
+  }
   if ('respond' in step) {
     respond(step.respond, step.value, step.status);
     return;
@@ -189,10 +197,33 @@ function watchErrors(): { check(label: string): void } {
   };
 }
 
+interface Clock {
+  readonly fake: boolean;
+  stop(): void;
+}
+
+/**
+ * A case with an `advance` step runs on fake timers, installed before its
+ * modules load, so a timer set at module or component setup is faked too.
+ */
+function startClock(testCase: Case): Clock {
+  if (!usesClock(testCase.steps)) return { fake: false, stop() {} };
+  jest.useFakeTimers();
+  const stop = track(() => jest.useRealTimers());
+  return { fake: true, stop };
+}
+
 /** Let promises and timers that are already due run. */
-async function settle(): Promise<void> {
+async function settle(clock: Clock): Promise<void> {
   for (let round = 0; round < 3; round++) {
-    await new Promise((resolve) => setTimeout(resolve, 0));
+    if (clock.fake) {
+      // Fake timers do not advance by themselves: run the ones already due,
+      // then let promises run. `setImmediate` is not faked.
+      jest.advanceTimersByTime(0);
+      await new Promise((resolve) => setImmediate(resolve));
+    } else {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    }
   }
 }
 

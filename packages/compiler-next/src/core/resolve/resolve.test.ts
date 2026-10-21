@@ -88,6 +88,51 @@ describe('write sites', () => {
       { kind: 'assign', path: [], timing: 'body' },
     ]);
   });
+
+  it('keeps full operations for nested patterns and loop assignment targets', () => {
+    const [entry] = resolveModules({
+      // `last = value` reads `value`; passing it to a call would add an `argument` site.
+      './m.tsx': 'let value, last; ({ nested: [value = 1] } = input); for ([value] of pairs) last = value;',
+    });
+    const binding = entry!.module.bindings.find((candidate) => candidate.name === 'value')!;
+    const writes = entry!.writes.get(binding)!;
+    expect(writes.map((site) => site.node.type)).toEqual(['AssignmentExpression', 'ForOfStatement']);
+  });
+});
+
+describe('global writes', () => {
+  function globalsOf(source: string) {
+    const parsed = [parseModule('./m.tsx', source)];
+    return resolve(parsed, {}).globals;
+  }
+
+  it('records reassigned globals and properties written on a global', () => {
+    const globals = globalsOf(`
+      counter = counter + 1;
+      document.title = 'x';
+      window.flag = true;
+      delete self.cache;`);
+    expect([...globals.names].sort()).toEqual(['cache', 'counter', 'document', 'flag', 'self', 'window']);
+    expect(globals.any).toBe(false);
+  });
+
+  it('does not count reads or host method calls as writes', () => {
+    const globals = globalsOf(`
+      const id = setInterval(() => {}, 10);
+      console.log(Math.round(Math.random() * 10));
+      localStorage.setItem('k', document.title);`);
+    expect(globals.names.size).toBe(0);
+    expect(globals.any).toBe(false);
+  });
+
+  it('a computed write through the global object may change any global', () => {
+    expect(globalsOf('window[name] = 1;').any).toBe(true);
+    expect(globalsOf('globalThis.ready = 1;').names.has('ready')).toBe(true);
+  });
+
+  it('a declared binding with a global name is not a global', () => {
+    expect(globalsOf('let document = {}; document.title = 1;').names.size).toBe(0);
+  });
 });
 
 describe('imports', () => {

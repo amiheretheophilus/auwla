@@ -1,6 +1,6 @@
 # Status
 
-Last updated: 2026-10-20.
+Last updated: 2026-10-21.
 
 ## Branches
 
@@ -8,9 +8,11 @@ Last updated: 2026-10-20.
   only there. The old `snrraptopack/memo-exp` is remote `memo-exp`, with its push URL
   disabled. Its account has a billing lock, so CI cannot run there. See `../AGENTS.md`.
 - `compiler-rewrite` (working branch, from `compiler-refactor` at `6230c27`):
-  the new compiler, designed in `compiler/`. Phase 1 skeleton is built; the
-  reference callback baseline and shared graph are verified; Phase 2 feature
-  classification is next.
+  the new compiler, designed in `compiler/`. Phase 1 skeleton is built. Phase 2:
+  the graph and the props/state/derived classification are built and wired into
+  `compileModules` (80 unit tests); the reference passes all 223 cases, including
+  the timer cases. Next: check the Phase 2 graph tests off against
+  `compiler/state-and-derived.md`, then Phase 3 (`compiler/plan.md`).
 - `compiler-refactor`: the old compiler's refactor, stopped on 2026-10-19. The
   sections below record that work.
 - `codex/package-conditional-sync` at `9e35480` (third-party package compilation,

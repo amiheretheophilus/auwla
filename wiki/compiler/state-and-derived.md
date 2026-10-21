@@ -1,6 +1,7 @@
 # Props, state and derived values
 
-**Folders:** `features/props/`, `features/state/`, `features/derived/` _(planned)_.
+**Folders:** `features/props/`, `features/state/`, `features/derived/` (graph
+classification built in Phase 2; plan and emit _(planned)_).
 
 ## What it does
 
@@ -26,6 +27,19 @@ control of it (approved 2026-10-20, superseding snapshots from initialization).
 | something reactive | yes | **state**: holds the later assigned value; no further derivation |
 
 - **Reactive** means it reads a prop, state, derived value, source, ref or opaque node.
+- **A global the program never writes is not an input** (`../decisions.md`,
+  2026-10-21). `Math.PI * r`, `document.title`, `setInterval` and `console` are
+  read as they are. A global the program writes (`count = 1` without a
+  declaration, `window.count = 1`, `document.title = 'x'`) is an input. Method
+  calls on a global (`localStorage.setItem`, `Math.random()`) are not writes.
+  The rule is in `core/resolve/globals.ts`.
+- **An import is the binding it names.** Importing a module constant gives a
+  constant; importing module state gives state. A package import is opaque.
+- **Opaque property reads.** A property read may run a getter or a proxy trap that
+  reads other values, so it is opaque, except on a global the program never
+  writes and on constant plain data: a never-written binding initialized with an
+  object or array literal of literals, without accessors or spreads
+  (`const sizes = ['s', 'm']`). The rule is in `core/resolve/members.ts`.
 - **Reassigned later** means `x = …`, `x += …`, `x++` or `for (x of …)` in code that
   runs after the body: a handler, an effect, a callback ref, a timer or promise
   callback, or a function called from one of them. The executed write stops the
@@ -85,6 +99,36 @@ results, prefix/postfix updates, destructuring, short-circuiting and exceptions.
 Object mutation does not end derivation. Prop overrides still yield to a new
 parent value.
 
+### Timers and other setup side effects
+
+A body statement that only *possibly* builds a value runs once, as the console
+runs it. It joins the value's derivation only if that first run changed the value:
+a callback it was given wrote the value during the call, or the deep-copy check
+(below, "Which body statements build a value") saw a change. Otherwise it is never
+replayed, not when its inputs change and not when the owner updates.
+
+```js
+let seconds = 3;
+const id = setInterval(() => { if (seconds > 0) seconds--; }, 1000);
+$cleanup(() => clearInterval(id));
+```
+
+1. Mount: the page shows `3`. `setInterval` did not call the callback during the
+   call, so the statement is not a builder. One interval exists.
+2. A click elsewhere updates the component. The statement does not run again: still
+   one interval.
+3. One second later the callback writes `seconds`: the page shows `2`, then `1`, `0`.
+4. Unmount: `$cleanup` clears the interval.
+
+No `$effect` is needed, and nothing names `setInterval`: the same holds for any
+function given a callback. `console.log(doubled)` and `recorder.record(doubled)`
+run once for the same reason; they read `doubled` and do not change it.
+
+The compiler records these statements as `possible` builders (`BodyBuilder`
+in `core/graph/model.ts`; `invocation: 'runtime'` when a callback decides). A
+possible builder does not make its binding opaque; it sets `initial.opaque`, which
+tells the emitted code to observe that statement's first run.
+
 The reference uses memo setters to observe actual reassignment and compares the
 invocation's component owner with the binding's owner. It records executed reads
 through callbacks, props and module helpers, including immediate callbacks inside
@@ -98,12 +142,21 @@ is test-only; production output continues to use the model in `output.md`.
 - Out: `Constant`, `State` and `Derived` nodes with their `reads` edges. A `Derived`
   node lists the body statements that build it, in source order.
 
-The shared graph contract is built (`core/graph/model.ts`, described in `core.md`):
-features supply a `BindingFacts` record keyed by the analyzer binding, with its
-initial kind, initializer, builders and read references. The graph retains
-resolve's write sites separately. Feature classification, invocation analysis and
-function summaries are the next Phase 2 step; the shared graph tests do not
-validate those semantics yet.
+The graph classification is built (`core/graph/classify.ts`, described in
+`core.md`):
+
+| File | What it does |
+| --- | --- |
+| `features/props/classify.ts` | parameters of components: capitalized functions that own markup, or functions used as a JSX tag |
+| `features/derived/computations.ts` | each binding's initial computation: initializer, pattern, body builders (definite or possible), reads, and candidate takeovers (later assignments) |
+| `features/state/classify.ts` | the initial kind: `Prop`, `Constant`, `State` or `Opaque`; imports start as placeholders |
+| `features/derived/classify.ts` | spreads reactivity through reads (a worklist, so cycles end); gives imports their definition's kind |
+| `*.test.ts` next to each | one test per rule above, on real parsed code |
+
+A candidate takeover is never evidence that takeover happened: the runtime decides
+when the write executes. Receiver mapping for `this` writes (`store.inc()` changing
+the fields `inc` writes) is recorded in function summaries but not yet mapped to
+the receiver's binding; the call itself is already a write of `store`.
 
 ## Where to add things
 
@@ -216,6 +269,16 @@ shows `2:2` before replacement (old: `2:1`); the getter alias shows `4:4` before
 save (old: `4:2`); the rest alias shows `2|3:-` before replacement (old: `1|2:-`).
 The first example previously had no explicit check; it now checks every step.
 The other source, mutation, prop-override and lifecycle expectations were kept.
+
+Four timer and side-effect cases were added on 2026-10-21. They use the harness's
+`{ advance: ms }` step (`testing.md`) and pass on the reference:
+
+| Case | Old compiler |
+| --- | --- |
+| a `setInterval` countdown works without an effect and registers once | passes |
+| `$cleanup` stops a component timer when it unmounts | passes |
+| a `setTimeout` write takes over a derived value when it fires | fails: `20` after the price changes, expected `30` (the old snapshot rule) |
+| passing a value to an unknown call that only reads it runs once | passes |
 
 Remaining coverage: generator callbacks across `yield`; readiness inside async
 callbacks before their first `await`; module body callback builders; callback

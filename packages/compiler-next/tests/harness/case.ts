@@ -26,10 +26,21 @@ export type Step =
   | { resolve: string; value?: unknown }
   | { reject: string; message: string }
   | { respond: string; value?: unknown; status?: number }
-  | { rejectRequest: string; message: string };
+  | { rejectRequest: string; message: string }
+  /**
+   * Let time pass: run the timers (`setTimeout`, `setInterval`) due within this
+   * many milliseconds. A case with this step runs on fake timers from the start,
+   * so its timers fire only when a step says so.
+   */
+  | { advance: number };
+
+export function usesClock(steps: readonly Step[] | undefined): boolean {
+  return (steps ?? []).some((step) => 'advance' in step);
+}
 
 export function describeStep(step: Step): string {
   if ('click' in step) return `click ${step.click}`;
+  if ('advance' in step) return `wait ${step.advance}ms`;
   if ('input' in step) return `type ${JSON.stringify(step.value)} into ${step.input}`;
   if ('reject' in step) return `reject ${step.reject}`;
   if ('respond' in step) return `respond ${step.respond}`;

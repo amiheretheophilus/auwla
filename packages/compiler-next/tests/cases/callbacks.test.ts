@@ -282,6 +282,66 @@ behaves('callbacks: an effect tracks an immediately invoked callback without sub
   check: show(['20:1', '30:1', '80:2', '80:2']),
 });
 
+// Timers and setup side effects (2026-10-21). A statement that only possibly
+// builds a value runs once, like the console runs it; it is replayed only if
+// its first run changed the value.
+
+behaves('callbacks: a setInterval countdown works without an effect and registers once', {
+  source: `
+    export function App() {
+      let seconds = 3; let clicks = 0;
+      const id = setInterval(() => { if (seconds > 0) seconds--; }, 1000);
+      $cleanup(() => clearInterval(id));
+      return <main><p>{seconds}:{clicks}</p><button onClick={() => clicks++}>click</button></main>;
+    }`,
+  // A click before the first tick must not register a second interval: two
+  // intervals would show 1 after the next second instead of 2.
+  steps: [{ click: 'button' }, { advance: 1000 }, { click: 'button' },
+    { advance: 1000 }, { advance: 1000 }, { advance: 1000 }],
+  check: show(['3:0', '3:1', '2:1', '2:2', '1:2', '0:2', '0:2']),
+});
+
+behaves('callbacks: $cleanup stops a component timer when it unmounts', {
+  source: `
+    let ticks = 0;
+    function Clock() {
+      const id = setInterval(() => { ticks++; }, 1000);
+      $cleanup(() => clearInterval(id));
+      return <i>clock</i>;
+    }
+    export function App() {
+      let show = true;
+      return <main>{show && <Clock />}<p>{ticks}</p><button onClick={() => show = false}>hide</button></main>;
+    }`,
+  steps: [{ advance: 1000 }, { advance: 1000 }, { click: 'button' }, { advance: 1000 }, { advance: 1000 }],
+  check: show(['0', '1', '2', '2', '2', '2']),
+});
+
+behaves('callbacks: a setTimeout write takes over a derived value when it fires', {
+  source: `
+    export function App() {
+      let price = 10; let total = price * 2;
+      setTimeout(() => { total = 0; }, 1000);
+      return <main><p>{total}</p><button onClick={() => price += 5}>price</button></main>;
+    }`,
+  steps: [{ click: 'button' }, { advance: 1000 }, { click: 'button' }],
+  check: show(['20', '30', '0', '0']),
+});
+
+behaves('callbacks: passing a value to an unknown call that only reads it runs once', {
+  source: `
+    const seen = [];
+    const recorder = { record(value) { seen.push(value); } };
+    export function App() {
+      let count = 1;
+      const doubled = count * 2;
+      recorder.record(doubled);
+      return <main><p>{doubled}:{seen.length}</p><button onClick={() => count++}>inc</button></main>;
+    }`,
+  steps: [{ click: 'button' }, { click: 'button' }],
+  check: show(['2:1', '4:1', '6:1']),
+});
+
 behaves('callbacks: returned callback values derive and wait for captured sources', {
   source: `
     import { $read, Group } from '@memoized-dom/data';

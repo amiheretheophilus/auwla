@@ -73,14 +73,19 @@ files that must pass in full at its exit.
   Built as the shared graph layer, with 19 tests. Accepts feature facts and keeps
   execution owners and write sites separately from initial computations. The
   next step supplies classification and connects it to `pipeline.ts`.
-- [ ] `src/features/state/`, `derived/`, `props/` classify bindings by the table in
+- [x] `src/features/state/`, `derived/`, `props/` classify bindings by the table in
   `state-and-derived.md`, including body statements that build a value (`if`,
   `switch`, loops) and calls that may change one. State lives anywhere
   (`output.md`, "State lives anywhere"): module scope, closures in helpers and
   factories, class fields, objects reached from any binding. Function summaries
   record which state a call writes, so `store.inc()` is a write of `store`.
+  Done 2026-10-21 and wired into `pipeline.ts`. Globals the program never writes
+  are not inputs; imports take their definition's kind; possible builders are
+  decided at runtime. Still open: mapping `this` writes in a method to the
+  receiver's fields (the call is already a write of the receiver).
 - [ ] Graph tests next to each feature: one per row of the classification table
-  and per rule bullet on `state-and-derived.md`.
+  and per rule bullet on `state-and-derived.md`. Most exist (`features/*/classify.test.ts`,
+  `core/graph/size.test.ts`); check each row and bullet off against them.
 - **Exit:** the graph records each binding's initial computation and the writes
   that can take control at runtime. A nested write never makes the initial value
   a snapshot. Verify classifications and transition sites against the behavior
@@ -93,6 +98,11 @@ files that must pass in full at its exit.
   Write it on `output.md` before coding. Module state, factory closures and
   class instances are in this slice, not later: the `complex state:` cases on
   `state-and-derived.md` belong to its exit.
+  Answer here what "re-read an opaque node when its owner updates" means for a
+  computation that contains calls: `const id = setInterval(…)` is opaque, yet
+  must not run again on an unrelated update (`core.md`, shared rule 3; the timer
+  cases in `cases/callbacks`). Also how the emitted code observes a possible
+  builder's first run (`state-and-derived.md`, "Timers and other setup side effects").
 - [ ] `src/core/plan/`: `Template`, `TextSite`, `AttributeSite`, `PropertySite`,
   `EventSite`.
 - [ ] `src/core/emit/` + `src/features/*/dom.ts`: DOM backend on

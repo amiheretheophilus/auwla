@@ -3,7 +3,7 @@
  * Allocate nodes before connecting them so forward edges and cycles are ordinary.
  */
 import type { Node } from 'yuku-parser';
-import { declaringRunner, isRuntimeBinding, runnerOf } from '../resolve';
+import { declaringRunner, isRuntimeBinding, isWrittenGlobal, runnerOf } from '../resolve';
 import type { Binding, Reference, Resolved, ResolvedModule } from '../resolve';
 import type {
   BindingFacts, BindingNode, GraphNode, GraphOwner, InitialComputation,
@@ -59,6 +59,7 @@ export function buildGraph(
         initial: copyInitial(feature?.initial),
         reads: [],
         writes: [],
+        takeovers: [...(feature?.takeovers ?? [])],
       };
       bindings.set(binding, node);
       nodes.push(node);
@@ -76,6 +77,7 @@ export function buildGraph(
       kind: 'Opaque',
       binding: null,
       reference,
+      reactive: isWrittenGlobal(resolved.globals, reference.name),
       owner: ownerOf(module, runnerOf(module.module, reference.node)),
       reads: [],
       writes: [],
@@ -123,13 +125,15 @@ export function buildGraph(
   for (const node of nodes) ownerNodes.get(node.owner)!.push(node);
   const groups: OwnerGraph[] = [...ownerNodes].map(([owner, owned]) => ({ owner, nodes: owned }));
 
-  return { resolved, owners: groups, nodes, bindings, unresolved };
+  return { resolved, owners: groups, nodes, bindings, unresolved, functions: [] };
 }
 
 function copyInitial(initial: InitialComputation | undefined): InitialComputation | null {
   if (initial === undefined) return null;
   return {
     initializer: initial.initializer,
+    pattern: initial.pattern,
+    opaque: initial.opaque,
     builders: initial.builders
       .map((builder) => ({ ...builder }))
       .sort((left, right) => left.statement.start - right.statement.start),

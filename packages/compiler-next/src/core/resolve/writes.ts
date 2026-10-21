@@ -76,7 +76,7 @@ function writeAt(module: Module, reference: Reference, binding: Binding): WriteS
   };
 
   if (reference.isWrite) {
-    const parent = outerParent(module, reference.node);
+    const parent = assignmentOperation(module, reference.node);
     const kind = is.UpdateExpression(parent) ? 'update' : 'assign';
     const node = parent ?? reference.node;
     return { kind, binding, reference, path: [], node, ...timing(node) };
@@ -119,6 +119,19 @@ function writeAt(module: Module, reference: Reference, binding: Binding): WriteS
 
 // ---------------------------------------------------------------------------
 // Helpers
+
+/** A destructured target belongs to the whole assignment, not its inner pattern. */
+function assignmentOperation(module: Module, node: Node): Node | null {
+  let parent = outerParent(module, node);
+  while (parent !== null) {
+    if (is.AssignmentExpression(parent) || is.UpdateExpression(parent)
+      || is.ForOfStatement(parent) || is.ForInStatement(parent)) return parent;
+    if (!is.ArrayPattern(parent) && !is.ObjectPattern(parent) && !is.Property(parent)
+      && !is.AssignmentPattern(parent) && !is.RestElement(parent)) return parent;
+    parent = outerParent(module, parent);
+  }
+  return null;
+}
 
 /** Wrappers that do not change which value an expression is. */
 function isTransparent(node: Node): boolean {

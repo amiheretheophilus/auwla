@@ -50,6 +50,10 @@ remove it with `Remove-Item Env:REFERENCE_ONLY` to restore comparisons.
 
 Cases may provide extra `modules` for imports. Steps include `respond` (JSON body
 and optional HTTP status), `rejectRequest`, and `reject` for a named `defer`.
+`{ advance: ms }` lets time pass: a case with this step runs on Bun's fake timers
+from before its modules load, so `setTimeout` and `setInterval` callbacks fire
+only when a step advances the clock (the timer cases in `cases/callbacks.test.ts`).
+The DOM preload keeps Bun's native timers, so fake timers work with happy-dom.
 Each run owns and disposes its module work, sources and transport. Relative and
 same-origin absolute request URLs compare by path and query. Use `--timeout 30000`
 when this machine is busy; the default five-second per-case timeout can expire.

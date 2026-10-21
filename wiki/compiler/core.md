@@ -31,6 +31,9 @@ The core holds the stage machinery and the shared types. What a concept means
 | `index.ts` | `resolve(parsed, options)`: one linked `yuku-analyzer` project; returns `Resolved`. Exposes binding/reference types and `isRuntimeBinding` for later stages |
 | `imports.ts` | which compiled module an import names: relative paths with extension and `index` probing, `options.resolveImport` first; packages are outside |
 | `writes.ts` | write sites per binding, and `runnerOf` / `declaringRunner` |
+| `globals.ts` | which host globals the program writes; every other global is not an input (`state-and-derived.md`) |
+| `members.ts` | whether a property read may run hidden code (a getter, a proxy): not on unwritten globals or constant plain data |
+| `functions.ts` | one summary per function (captured reads, writes, calls, `this` use), built in one pass per module; `functionValue` follows immutable aliases and imports to a function |
 | `resolve.test.ts` | unit tests |
 
 - yuku gives bindings, references (with `isWrite`), scopes, imports, exports and
@@ -58,7 +61,7 @@ The core holds the stage machinery and the shared types. What a concept means
 - `isRuntimeBinding` excludes erased types and type-only imports. yuku's
   `visibleIn('value')` alone includes type-only import aliases.
 
-## graph — `core/graph/` (shared layer built, Phase 2)
+## graph — `core/graph/` (built and wired into `compileModules`, Phase 2)
 
 One project graph groups bindings by lexical execution owner: each module,
 function, or instance field initializer. That includes components, ordinary
@@ -70,7 +73,12 @@ separate invocations will need separate storage.
 | `model.ts` | Read-only contracts for binding kinds, initial computations, body builders, read/write edges and execution owners |
 | `index.ts` | `buildGraph(resolved, facts)`: allocates all runtime bindings, then connects feature-supplied reads, import aliases and resolve's write sites |
 | `rules.ts` | Iterative, cycle-safe `isReactive(node)` and `pending(node, follows?)` queries |
+| `classify.ts` | `classifyGraph(resolved)`: the feature order, then `buildGraph`. Called by `pipeline.ts` |
+| `inputs.ts` | `InputQueries`: what evaluating a node reads and writes, through visible helpers; each root, call and function is analysed once and cached |
+| `classification.ts` | `BindingComputation`, the fact the derived feature hands to the state feature |
+| `test-helpers.ts` | `inspect(source)`: classify real code in feature tests |
 | `graph.test.ts` | 19 shared-layer tests using real parsed bindings and references; feature classifications are supplied explicitly |
+| `size.test.ts` | classification time must grow linearly with the module |
 
 Unclassified bindings and unresolved runtime reads are `Opaque`. Binding nodes
 are keyed by yuku `Binding`; unresolved nodes by `Reference`, so shadowed names
@@ -84,10 +92,13 @@ preserves every write site and its runner separately from the initial computatio
 no potential write changes the supplied initial kind. The authored AST and
 analyzer identities remain untouched.
 
-**Not wired into `compileModules` yet.** The next Phase 2 step supplies feature
-classification and invokes this stage from `pipeline.ts`. This shared layer does
-not infer read sets, component props, callback invocation behavior or function
-summaries. It does not emit code.
+`pipeline.ts` runs `classifyGraph` after resolve. Its output is not used to emit
+code yet (Phase 3).
+
+**Speed.** A query must never scan the whole module once per binding, call or
+function: before `InputQueries` and the one-pass summaries, 200 one-line
+components took 23 seconds to classify; now 800 take under half a second.
+`size.test.ts` guards this.
 
 | Node | Owner | Comes from |
 | --- | --- | --- |
@@ -107,14 +118,16 @@ planned for their feature slices. Current writes point from a runner to a bindin
 through the original `WriteSite`; reads point to another graph node with an
 optional property path (`article.tags`).
 
-**Classification order.** `core/graph/classify.ts` _(planned)_ asks the features in one
+**Classification order.** `core/graph/classify.ts` asks the features in one
 fixed order, and the first that claims a binding owns it:
 props → refs → sources → state/derived → opaque. The order is written only there.
+Refs and sources join in their phases.
 
 **Shared rules.** Each is written once, in `core/graph/rules.ts`:
 
 1. **Reactive:** a node is reactive when it reads, directly or through other nodes, a
-   `Prop`, `State`, `Derived`, `Source`, `Ref` or `Opaque` node.
+   `Prop`, `State`, `Derived`, `Source`, `Ref` or `Opaque` node. An unresolved
+   global is reactive only if the program writes it (`resolve/globals.ts`).
 2. **Pending:** `pending(n)` includes `n` when it is a source and every source
    reachable through its reads. It is a candidate set, not an instruction to wait
    for inactive branches. `pending(n, follows)` lets readiness planning exclude
@@ -123,6 +136,11 @@ props → refs → sources → state/derived → opaque. The order is written on
    An opaque read can hide further sources, so this query alone does not prove
    readiness. See `sources.md`.
 3. **Opaque:** an opaque node is re-read when its owner updates. It is never rejected.
+   Re-reading must not re-execute a call for its side effects: `const id =
+   setInterval(…)` is opaque (an unknown call) but must not register a second
+   interval when the component updates. How Phase 3 re-reads an opaque computation
+   that contains calls is a question for its design step (`plan.md`); the timer
+   cases on `state-and-derived.md` pin the required behaviour.
 
 Verified: all seven kinds; shadowed names and separate module/function owners;
 type erasure; reference/path retention; opaque globals; named imports through

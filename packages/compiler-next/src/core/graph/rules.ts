@@ -23,13 +23,19 @@ export function pending(
 /**
  * An opaque value may change when its owner updates. State, props, derived
  * values, sources and refs are reactive roots; constants inherit reactivity
- * through their reads. Features use this query while settling classifications.
+ * through their reads. A global the program never writes is not an input.
+ * Features use this query while settling classifications.
  */
 export function isReactive(node: GraphNode): boolean {
   for (const dependency of reachable(node, () => true)) {
-    if (dependency.kind !== 'Constant') return true;
+    if (isReactiveRoot(dependency)) return true;
   }
   return false;
+}
+
+function isReactiveRoot(node: GraphNode): boolean {
+  if (node.binding === null) return node.reactive;
+  return node.kind !== 'Constant';
 }
 
 function* reachable(
