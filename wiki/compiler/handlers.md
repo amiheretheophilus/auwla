@@ -90,9 +90,12 @@ permanently closed before the actual call. Abandoned observations use weak
 references after their guaranteed recovery microtask. Shared async owners leave
 their setup scope when suspending, so their caller can continue building.
 
-**Still pending in Phase 3:** remaining reflection coverage, especially hostile
-proxies. Nested-block storage, shared storage and explicit await boundaries are
-built; the full Phase 3 exit is not yet claimed.
+The Phase 3 gate passes under the agreed view scope. A native regression covers
+Object.setPrototypeOf, Object.defineProperty and Reflect.deleteProperty without
+invoking an unused getter. **Known conformance gap:** snapshots and alias scans
+still invoke proxy reflection traps; hostile/revoked proxies and WeakMap-backed
+state need further coverage and fixes. These are not accepted failure semantics.
+Nested-block storage, shared storage and explicit await boundaries are built.
 
 ## Rules
 

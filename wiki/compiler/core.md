@@ -219,7 +219,7 @@ and replay, including static components whose body may invoke another owner's
 callback. Shared module/factory storage, tracking and mutation checks are built;
 explicit async boundaries are built. Nested component calls, conditional/list regions, refs and spreads
 still require their planned slices. The printer currently returns code, not source
-maps. No complete Phase 3 exit is claimed.
+maps. The Phase 3 exit passes under the agreed view scope (`plan.md`).
 
 **Verified:** `tests/cases/static-markup.test.ts` has 18 comparison cases with
 independent DOM assertions: nesting, whitespace/entities, attributes and aliases,

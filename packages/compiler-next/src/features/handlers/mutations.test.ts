@@ -9,6 +9,17 @@ import { compileModules } from '../../pipeline';
 let sequence = 0;
 afterEach(clearCompiledApps);
 
+it('observes descriptor and prototype edits without invoking an unused getter', async () => {
+  const { root, module } = await compile(`const item = Object.create({ count: 1 });
+    Object.defineProperty(item, 'unused', { get() { throw Error('unused'); } });`,
+    `Object.setPrototypeOf(item, { count: 3 });
+     Object.defineProperty(item, 'other', { value: 7, configurable: true });
+     Reflect.deleteProperty(item, 'other');`);
+  root.querySelector('button')!.click();
+  expect(root.querySelector('p')!.textContent).toBe('3:-');
+  expect(module.log).toEqual([]);
+});
+
 async function compile(body: string, handlers: string) {
   const code = compileModules({ './App.tsx': `export const log = []; export let run;
     export function App() { ${body}

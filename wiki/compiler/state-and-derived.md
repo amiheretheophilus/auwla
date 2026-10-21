@@ -108,7 +108,8 @@ fields, inherited accessors and constructor-returned objects retain native behav
 bindings, hidden reads, possible builders and property/call mutations are built.
 Hostile proxies and further reflection coverage remain open (`handlers.md`). Explicit pre-await flushing is built
 and verified by native suspension checks (`handlers.md`). The
-full Phase 3 exit and later-phase component/list cases remain unchecked.
+Phase 3 exit passes under the agreed view scope; later component/list cases remain
+failing and are explicitly deferred to their implementation phases.
 
 ## What it does
 

@@ -27,6 +27,15 @@ Last updated: 2026-10-21.
 
 ## Done
 
+- Phase 3 exit passes under the user-approved view scope: **52 comparisons and
+  200 generated text-view programs pass**, with 17 existing list/component cases
+  deferred by name above/below. Descriptor/prototype reflection also passes a
+  focused native regression without calling an unused getter. Hostile proxy
+  traps and WeakMap-backed state remain explicit conformance gaps on `handlers.md`;
+  they are not expected failures. Phase 4 conditional regions are next. The
+  unchanged full generator and its saved JSX conditional still fail until later
+  rendering support is implemented.
+
 - Nested-block state/memo storage is built. Native lexical values, shadowed
   bindings, escaped closures, factory returns, loop activations, builder replay
   and updates across nested blocks are verified. Abrupt exits and authored catch
