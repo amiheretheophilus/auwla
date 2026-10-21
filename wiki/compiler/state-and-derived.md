@@ -59,11 +59,30 @@ with stable binding keys; dynamic memo edges participate in dirty propagation
 before replay. Nested collectors restore their callers and settle self writes.
 Authored catch boundaries and failed/abandoned builds restore tracking too.
 
-**Current boundary:** component-body storage, local escaping reads, possible
-builders and property/call mutations are built. Nested-block memo storage, shared
-cells and escaping reads of module/factory/class storage remain pending. Local
-takeover is implemented; module/closure takeover follows shared storage. This is
-not the full Phase 3 exit.
+`features/state/shared-plan.ts` plans module bindings and top-level captured
+bindings of factory invocations. `shared-dom.ts` retains native storage and emits
+version readers, owner scopes and shared write commits; `core/emit/shared.ts`
+composes these with memo/takeover and handler emission. Module readers are live
+exports imported directly from the defining compiled module, including through
+reexports. Factory readers close over that invocation's versions and taken flags.
+Shared derivations refresh during a consuming build; native intermediate reads
+inside an event remain unchanged until its update boundary.
+
+Runtime computation subscriptions connect shared version keys to each consumer's
+captured application/batch. Disposal releases them; one computation changing
+dependencies does not unsubscribe another computation owned by the same entity.
+`runtime/src/shared-writes.ts` publishes shared versions. Shared mutation roots
+use weak ownership, preserving aliases without retaining unused factories.
+
+`features/handlers/receivers.ts` handles `this`, private and `super` store targets.
+Private/super accesses remain in lexical arrow closures inside their class;
+successful stores notify roots sharing the receiver. Class instances, static
+fields, inherited accessors and constructor-returned objects retain native behavior.
+
+**Current boundary:** component/module storage, top-level captured factory
+bindings, hidden reads, possible builders and property/call mutations are built.
+Nested-block memo storage and explicit pre-await flushing remain pending. The
+full Phase 3 exit and later-phase component/list cases remain unchecked.
 
 ## What it does
 
@@ -216,6 +235,12 @@ The graph classification is built (`core/graph/classify.ts`, described in
 | `features/derived/plan.ts` | native declarations, definite builders, shared-statement groups and their version inputs |
 | `features/derived/dom.ts` | source-ordered, version-guarded replay and writable memo storage |
 | `features/derived/takeover.ts` | local takeover flags and native store targets, checked against runtime execution ownership |
+| `features/state/shared-plan.ts` | native module/factory storage owners and live reader exports |
+| `features/state/shared-dom.ts` | per-owner versions, readers, source-ordered setup completion and shared refresh |
+| `features/state/shared-dom.test.ts` | shared module consumers in separate applications, identity reuse and disposal |
+| `core/emit/shared.ts` | composes shared state, memo, mutation and takeover emission |
+| `features/handlers/receivers.ts` | native receiver/private/super store targets |
+| `packages/runtime/src/shared-writes.ts` | publishes shared version changes and watches shared mutation roots |
 | `features/derived/plan.test.ts` | pattern identity, definite versus possible builders, and untouched authored syntax |
 | `features/derived/dom.test.ts` | native execution: call counts, loops, shared builders, declaration writes, pattern evaluation, const errors and callbacks created during replay |
 | `features/derived/takeover.test.ts` | downstream call counts after takeover, helper invocation timing, partial patterns, sibling builders, loop targets and nested component ownership |

@@ -11,5 +11,9 @@ export function copy<T>(value: T, replacements: ReadonlyMap<Node, Node> = new Ma
   for (const [key, child] of Object.entries(value)) {
     output[key] = copy(child, replacements);
   }
+  if (output.type === 'Property' && output.shorthand && output.value !== undefined) {
+    const property = output.value as { type?: string };
+    if (property.type !== 'Identifier' && property.type !== 'AssignmentPattern') output.shorthand = false;
+  }
   return output as T;
 }

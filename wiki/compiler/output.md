@@ -169,9 +169,12 @@ helpers are settled while building the slices in `plan.md`, by measuring.
 Every reactive binding has a version that its writes bump. A derived value
 remembers the versions it was computed from and is recomputed in `_update` only
 when one changed (the sketch above). A version is a plain local when only the
-component's own code reads it; it is a runtime cell (`{ v: number }`) when a
-function that leaves the component reads it (rule 5) or when it lives outside a
-component (the table above).
+component's own code reads it. The implemented shared representation also keeps a
+plain version number next to the native binding, with a stable object key and
+reader closure when a function leaves the owner or the binding lives outside a
+component. Runtime subscriptions connect those keys to consuming component
+batches. Values themselves stay native variables; module readers are exported
+live functions, factory readers close over one invocation (`state-and-derived.md`).
 
 ### 2. Derive until takeover
 

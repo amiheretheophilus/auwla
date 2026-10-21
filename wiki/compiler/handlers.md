@@ -15,6 +15,7 @@ Finds every place that changes state and makes the UI update after it.
 | `dom.test.ts` | Executes compiled modules to verify write semantics, scope, per-instance state and site replay |
 | `mutations.ts` | Emits direct member-store targets and delete notifications; replay uses silent versions |
 | `mutations.test.ts` | Native computed-key order, receiver/logical semantics, partial patterns and member loop targets |
+| `receivers.ts` | Plans and emits this/private/super store targets with lexical class access |
 | `packages/runtime/src/mutation.ts` | Member target preserving native key conversion, getter/setter receiver and successful-store notification |
 | `packages/runtime/tests/mutation.test.ts` | Descriptor snapshots, cyclic/native data, partial-call recovery and key order |
 | `packages/runtime/src/write-batch.ts` | Captures the application and entity, batches listener writes until return, and queues a microtask for unwrapped callbacks and error recovery |
@@ -68,12 +69,13 @@ Component roots are watched by object identity through data fields; changed
 objects notify aliases and shallow copies that actually share them. Disposal
 removes those roots. Classification keeps potential source roots reactive, while
 runtime identity decides which versions change. Seven mutation comparisons pass.
-Receiver writes through `this`/private fields, shared storage and proxy-specific
-reflection behavior still need coverage; no method fast paths exist yet.
+Receiver writes through `this`, private fields and `super` now report changes to
+their receiver's roots. Module/factory versions and shared roots notify subscribed
+consumers (`state-and-derived.md`). Proxy-specific reflection behavior still needs
+coverage; no method fast paths exist yet.
 
-**Still pending in Phase 3:** shared module and
-factory/class storage, escaping reads outside component storage and
-explicit pre-`await` flushing. The microtask fallback does not establish the
+**Still pending in Phase 3:** explicit pre-`await` flushing and remaining exit
+coverage. The microtask fallback does not establish the
 pre-`await` guarantee. Only component-owned binding assignments are emitted in
 this slice; graph facts for other owners remain for their planned slices.
 

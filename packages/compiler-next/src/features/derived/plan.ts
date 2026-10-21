@@ -6,22 +6,25 @@ import { variableDeclaration, type InputQueries } from '../../core/graph/inputs'
 import type { MemoGroupPlan, MemoPlan } from '../../core/plan/model';
 
 export function planMemos(
-  graph: SemanticGraph, queries: InputQueries, components: ReadonlySet<Node>,
-): ReadonlyMap<Node, readonly MemoGroupPlan[]> {
+  graph: SemanticGraph, queries: InputQueries, components: ReadonlySet<Node | null>,
+): ReadonlyMap<Node | null, readonly MemoGroupPlan[]> {
   const declarations = new Map<VariableDeclarator, BindingNode[]>();
   for (const node of graph.bindings.values()) {
     const owner = node.owner.runner;
-    if (owner === null || !components.has(owner) || !is.Function(owner)) continue;
+    if (!components.has(owner) || (owner !== null && !is.Function(owner))) continue;
     const declarator = variableDeclaration(node.binding);
     if (declarator === null) continue;
     const declaration = node.binding.module.parentOf(declarator);
-    if (!is.VariableDeclaration(declaration) || node.binding.module.parentOf(declaration) !== owner.body) continue;
+    if (!is.VariableDeclaration(declaration)) continue;
+    let parent = node.binding.module.parentOf(declaration);
+    if (is.ExportNamedDeclaration(parent)) parent = node.binding.module.parentOf(parent);
+    if (owner === null ? !is.Program(parent) : parent !== owner.body) continue;
     const targets = declarations.get(declarator) ?? [];
     targets.push(node);
     declarations.set(declarator, targets);
   }
 
-  const owners = new Map<Node, MemoPlan[]>();
+  const owners = new Map<Node | null, MemoPlan[]>();
   for (const [declarator, targets] of declarations) {
     if (!targets.some((target) => target.kind === 'Derived' || target.kind === 'Opaque' || target.initial?.builders.some((builder) => builder.certainty === 'possible'))) continue;
     const first = targets[0]!;
@@ -88,7 +91,7 @@ export function planMemos(
       builderTargets: new Map([...builderTargets].map(([node, outputs]) => [node, [...outputs]])),
       possibleBuilders: new Map([...possibleBuilders].map(([node, outputs]) => [node, [...outputs]])),
     };
-    const owner = first.owner.runner!;
+    const owner = first.owner.runner;
     const list = owners.get(owner) ?? [];
     list.push(memo);
     owners.set(owner, list);
@@ -155,7 +158,8 @@ function groupMemos(memos: readonly MemoPlan[], queries: InputQueries): MemoGrou
       }
     }
     return {
-      dynamic: [...group.steps].some((step) => queries.inputsOf(group.computations[0]!.targets[0]!.binding.module, step).opaque),
+      dynamic: [...inputs].some((input) => input.owner.runner !== group.computations[0]!.targets[0]!.owner.runner)
+        || [...group.steps].some((step) => queries.inputsOf(group.computations[0]!.targets[0]!.binding.module, step).opaque),
       computations: group.computations,
       inputs: [...inputs],
       upstream,

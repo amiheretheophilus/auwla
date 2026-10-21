@@ -37,6 +37,7 @@ export function emitMutations(
         }));
       } else {
         if (!is.MemberExpression(member)) continue;
+        if (is.PrivateIdentifier(member.property)) continue;
         const target = copy(member, replacements);
         replacements.set(member, expression('$$runtime.mutationTarget($$object, $$key, $$notify).value', {
           runtime, object: target.object,

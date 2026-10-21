@@ -97,6 +97,7 @@ const RUNTIME_EXPORTS = [
   '$h', 'Fragment as $Fragment', '$enter', '$assignRef', '$moduleEffect', '$moduleMemo',
   '$when', '$value', '$waiting', '$sourceState', '$branch', '$switch', '$path', '$ready',
   '$captureRead', '$closureCell', '$closureRead',
+  '$privateTarget',
 ];
 
 // ---------------------------------------------------------------------------
@@ -165,7 +166,31 @@ function lowerJsxAndTypes(code: string): string {
 function prepareJsx(source: string): string {
   const { program } = parse(source, { lang: 'tsx', sourceType: 'module' });
   let site = 0;
+  let privateTarget = 0;
   walk(program, {
+    MemberExpression(node, ctx) {
+      if (!is.PrivateIdentifier(node.property)) return;
+      const parent = ctx.parent;
+      const writes = (is.AssignmentExpression(parent) && parent.left === node)
+        || (is.UpdateExpression(parent) && parent.argument === node);
+      if (!writes) return;
+      const object = b.Identifier({ name: `$privateObject${privateTarget++}` });
+      const value = b.Identifier({ name: `$privateValue${privateTarget++}` });
+      const target = { ...node, object };
+      const write = b.ArrowFunctionExpression({
+        id: null, params: [value], async: false, generator: false, expression: true,
+        body: b.AssignmentExpression({ operator: '=', left: structuredClone(target), right: value }),
+      });
+      const factory = b.ArrowFunctionExpression({
+        id: null, params: [object], async: false, generator: false, expression: true,
+        body: runtimeCall('$privateTarget', [thunk(target), write, object]),
+      });
+      ctx.replace(b.MemberExpression({
+        object: b.CallExpression({ callee: factory, arguments: [node.object], optional: false }),
+        property: b.Identifier({ name: 'v' }), computed: false, optional: false,
+      }));
+      ctx.skip();
+    },
     JSXOpeningElement(node) {
       // Separate branches can return the same tag at the same position. They
       // still own different nodes (and refs), so preserve the authored site.

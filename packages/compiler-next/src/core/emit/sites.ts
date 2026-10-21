@@ -17,12 +17,13 @@ export function emitSites(
     names: Names;
     runtime: string;
     batch: string | null;
+    entity: string;
     versions: ReadonlyMap<BindingNode, string>;
     replacements: ReadonlyMap<Node, Node>;
     ref(index: number): string;
   },
 ): SitesEmit {
-  const { names, runtime, batch, versions, replacements } = context;
+  const { names, runtime, batch, versions, replacements, entity } = context;
   const mount: Statement[] = [];
   const update: Statement[] = [];
   const last = new Map<string, Site>();
@@ -34,7 +35,7 @@ export function emitSites(
     const expression = copy(site.expression, replacements);
     const computation = plan.dynamicSites.has(site.expression) ? names.fresh('_siteComputation') : null;
     if (computation !== null) {
-      mount.push(statement('const $$computation = $$runtime.createComputation();', { computation, runtime }));
+      mount.push(statement('const $$computation = $$runtime.createComputation($$batch.mark, $$entity);', { computation, runtime, batch: batch!, entity }));
       mount.push(statement('$$computation.begin();', { computation }));
     }
     mount.push(statement('let $$value = $$expression;', { value, expression }));

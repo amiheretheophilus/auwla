@@ -268,6 +268,17 @@ export function buildModuleMemos(module: Module, rawUses: Set<Node>): void {
   for (const statement of module.ast.body) builder.visit(statement);
   const body = module.ast.body.flatMap((statement) => builder.around(statement));
   module.ast.body = body as typeof module.ast.body;
+  for (const fn of module.findAll(['FunctionDeclaration', 'FunctionExpression', 'ArrowFunctionExpression'])) {
+    if (!is.BlockStatement(fn.body) || findAll(fn.body, ['JSXElement', 'JSXFragment']).length > 0) continue;
+    const statements = fn.body.body;
+    for (const statement of statements) {
+      if (!is.VariableDeclaration(statement)) continue;
+      const captured = module.bindings.some((binding) => binding.declarations.some((name) => name.start >= statement.start && name.end <= statement.end)
+        && binding.references.some((reference) => enclosingFunction(module, reference.node) !== fn));
+      if (captured) builder.visit(statement);
+    }
+    fn.body.body = statements.flatMap((statement) => builder.around(statement)) as typeof statements;
+  }
   builder.rewriteWrites();
 }
 

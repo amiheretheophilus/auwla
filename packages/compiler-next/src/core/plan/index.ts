@@ -18,6 +18,9 @@ import { planLocalState } from '../../features/state/plan';
 import { planMutations, planReadonlyBindings, planWrites } from '../../features/handlers/plan';
 import { planMemos } from '../../features/derived/plan';
 import type { MemoGroupPlan } from './model';
+import type { SharedOwnerPlan, SharedReadPlan } from './model';
+import { planSharedReads, sharedSetup } from '../../features/state/shared-plan';
+import { planReceiverTargets } from '../../features/handlers/receivers';
 
 export type { ComponentPlan, ModulePlan, Site, Template, TemplateNode } from './model';
 
@@ -27,8 +30,10 @@ export function planModules(
   components: ReadonlySet<Node>,
 ): ModulePlan[] {
   const state = planLocalState(graph, components);
-  const memos = planMemos(graph, queries, components);
-  return graph.resolved.modules.map((entry) => planModule(graph, queries, components, entry, state, memos));
+  const sharedReads = planSharedReads(graph, components);
+  const owners = new Set<Node | null>([...components, ...[...sharedReads.keys()].map((binding) => binding.owner.runner)]);
+  const memos = planMemos(graph, queries, owners);
+  return graph.resolved.modules.map((entry) => planModule(graph, queries, components, entry, state, memos, sharedReads));
 }
 
 function planModule(
@@ -37,7 +42,8 @@ function planModule(
   components: ReadonlySet<Node>,
   entry: ResolvedModule,
   state: ReadonlyMap<Node, readonly BindingNode[]>,
-  memos: ReadonlyMap<Node, readonly MemoGroupPlan[]>,
+  memos: ReadonlyMap<Node | null, readonly MemoGroupPlan[]>,
+  sharedReads: ReadonlyMap<BindingNode, SharedReadPlan>,
 ): ModulePlan {
   const module = entry.module;
   const context: TemplateContext = {
@@ -58,7 +64,11 @@ function planModule(
     for (const site of component.sites) {
       const inputs = new Set<BindingNode>();
       if (site.expression.end !== 0) {
-        if (queries.inputsOf(module, site.expression).opaque) dynamicSites.add(site.expression);
+        const facts = queries.inputsOf(module, site.expression);
+        if (facts.opaque || facts.reads.some((read) => {
+          const binding = read.binding ?? read.reference.binding;
+          return binding !== null && graph.bindings.get(binding)?.owner.runner !== fn;
+        })) dynamicSites.add(site.expression);
         for (const read of queries.inputsOf(module, site.expression).reads) {
           const binding = read.binding ?? read.reference.binding;
           const node = binding === null ? undefined : graph.bindings.get(binding);
@@ -107,7 +117,30 @@ function planModule(
     const plan = owner === null ? undefined : plans.get(owner);
     if (plan === undefined) unsupported(context, jsx, 'markup outside a component', 6);
   }
-  return { module: entry, components: plans };
+  const sharedOwners: SharedOwnerPlan[] = [];
+  const shared = [...sharedReads.keys()].filter((binding) => binding.binding.module === module);
+  for (const owner of new Set(shared.map((binding) => binding.owner.runner))) {
+    if (owner !== null && (!is.Function(owner) || !is.BlockStatement(owner.body))) continue;
+    const bindings = shared.filter((binding) => binding.owner.runner === owner);
+    const computations = (memos.get(owner) ?? []).filter((group) => group.computations[0]!.targets[0]!.binding.module === module);
+    const targets = computations.flatMap((group) => group.computations.flatMap((memo) => memo.targets));
+    const local = [...new Set([...bindings, ...targets])];
+    const writes = planWrites(local);
+    const mutations = planMutations(local);
+    const replayed = (operation: Node) => runnerOf(module, operation) === owner
+      && computations.some((group) => group.steps.some((root) => operation.start >= root.start && operation.end <= root.end));
+    const readonlyBindings = planReadonlyBindings(local);
+    sharedOwners.push({
+      fn: owner as SharedOwnerPlan['fn'], state: local,
+      setup: owner === null ? sharedSetup(module.ast.body, new Set(computations.flatMap((group) => group.computations.map((memo) => memo.declarator))))
+        : (owner.body as Extract<Node, { type: 'BlockStatement' }>).body as Statement[],
+      memos: computations, writes, mutations,
+      replayWrites: writes.filter((write) => replayed(write.operation)),
+      replayMutations: mutations.filter((write) => replayed(write.operation)), readonlyBindings,
+      takeovers: targets.filter((target) => target.takeovers.length > 0 && !readonlyBindings.includes(target)),
+    });
+  }
+  return { module: entry, components: plans, sharedOwners, sharedReads, receiverTargets: planReceiverTargets(module) };
 }
 
 function planComponent(fn: FunctionNode, context: TemplateContext) {

@@ -2,6 +2,12 @@
 import { getExtensionStore, onEntityDispose, type Entity } from './kernel';
 
 interface Root { readonly read: () => unknown; readonly notify: () => void }
+const sharedRoots = new Set<WeakRef<object>>();
+const rootsOfShared = new WeakMap<object, readonly Root[]>();
+export function registerSharedMutationRoots(owner: object, bindings: readonly Root[]): void {
+  if (!rootsOfShared.has(owner)) sharedRoots.add(new WeakRef(owner));
+  rootsOfShared.set(owner, bindings);
+}
 function roots() {
   return getExtensionStore('mmd:mutation-roots', () => new Map<string, { entity: Entity; roots: readonly Root[] }>());
 }
@@ -31,6 +37,13 @@ function notifyAliases(changed: ReadonlySet<object>): void {
   const callbacks = new Set<() => void>();
   for (const entry of roots().values()) {
     for (const root of entry.roots) reachable(root.read(), (object) => {
+      if (changed.has(object)) callbacks.add(root.notify);
+    });
+  }
+  for (const reference of sharedRoots) {
+    const owner = reference.deref();
+    if (owner === undefined) { sharedRoots.delete(reference); continue; }
+    for (const root of rootsOfShared.get(owner) ?? []) reachable(root.read(), (object) => {
       if (changed.has(object)) callbacks.add(root.notify);
     });
   }
@@ -140,4 +153,12 @@ export function deleteMutation(object: any, key: any, notify: () => void): boole
   notify();
   notifyAliases(new Set([object]));
   return result;
+}
+
+/** Private and super references stay lexically inside their declaring class. */
+export function receiverMutationTarget(read: () => any, write: (value: any) => void, object: object) {
+  return {
+    get value() { return read(); },
+    set value(value: unknown) { write(value); notifyAliases(new Set([object])); },
+  };
 }

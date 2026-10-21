@@ -109,4 +109,26 @@ export interface MutationPlan {
 export interface ModulePlan {
   readonly module: ResolvedModule;
   readonly components: ReadonlyMap<Node, ComponentPlan>;
+  readonly sharedOwners: readonly SharedOwnerPlan[];
+  readonly sharedReads: ReadonlyMap<BindingNode, SharedReadPlan>;
+  readonly receiverTargets: readonly Node[];
+}
+
+export interface SharedReadPlan {
+  readonly binding: BindingNode;
+  readonly name: string;
+  readonly path: string;
+}
+
+export interface SharedOwnerPlan {
+  readonly fn: FunctionNode | null;
+  readonly state: readonly BindingNode[];
+  readonly setup: readonly Statement[];
+  readonly memos: readonly MemoGroupPlan[];
+  readonly writes: readonly WritePlan[];
+  readonly mutations: readonly MutationPlan[];
+  readonly replayWrites: readonly WritePlan[];
+  readonly replayMutations: readonly MutationPlan[];
+  readonly readonlyBindings: readonly BindingNode[];
+  readonly takeovers: readonly BindingNode[];
 }

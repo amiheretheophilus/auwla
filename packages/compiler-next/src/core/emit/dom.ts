@@ -15,17 +15,20 @@ import { emitMemos } from '../../features/derived/dom';
 import { emitTakeovers } from '../../features/derived/takeover';
 import { emitRecovery } from './recovery';
 import { emitMutations } from '../../features/handlers/mutations';
+import { emitShared } from './shared';
 
 /** Preserve module syntax and exports, replacing planned functions on a fresh tree. */
 export function emitDom(plan: ModulePlan, options: CompileModulesOptions): Node {
   const module = plan.module.module;
-  if (plan.components.size === 0 && findAll(module.ast, 'TryStatement').length === 0) return copy(module.ast);
+  if (plan.components.size === 0 && plan.sharedOwners.length === 0 && findAll(module.ast, 'TryStatement').length === 0) return copy(module.ast);
 
   const names = new Names(module);
   const runtime = names.fresh('_MD');
   const runtimePath = JSON.stringify(options.runtimePath ?? DEFAULT_RUNTIME_PATH);
   const hoisted: Statement[] = [statement(`import * as $$runtime from ${runtimePath};`, { runtime })];
-  const replacements = new Map<Node, Node>();
+  const shared = emitShared(plan, names, runtime);
+  const replacements = shared.replacements;
+  hoisted.push(...shared.imports);
 
   for (const component of plan.components.values()) {
     const markup = component.template.markup === null ? null : names.fresh('_markup');
@@ -35,10 +38,15 @@ export function emitDom(plan: ModulePlan, options: CompileModulesOptions): Node 
         html: stringLiteral(component.template.markup!),
       }));
     }
-    replacements.set(component.fn, emitComponent(component, names, runtime, markup));
+    replacements.set(component.fn, emitComponent(component, names, runtime, markup, replacements));
   }
 
   const output = copy(module.ast, replacements);
+  const sharedBody = shared.moduleBody();
+  if (sharedBody !== null) {
+    const directives = sharedBody.filter((node) => is.ExpressionStatement(node) && typeof node.directive === 'string');
+    output.body = [...directives, ...sharedBody.filter((node) => !directives.includes(node))] as typeof output.body;
+  }
   // A module's directive prologue must remain before generated declarations.
   let insertion = 0;
   for (const entry of output.body) {
@@ -49,12 +57,14 @@ export function emitDom(plan: ModulePlan, options: CompileModulesOptions): Node 
   return emitRecovery(output, names, runtime);
 }
 
-function emitComponent(plan: ComponentPlan, names: Names, runtime: string, markup: string | null): Node {
+function emitComponent(plan: ComponentPlan, names: Names, runtime: string, markup: string | null,
+  external: ReadonlyMap<Node, Node>,
+): Node {
   const document = names.fresh('_document');
   const id = names.fresh('_id');
   const parent = names.fresh('_parent');
   const state = emitLocalState(plan.state, names);
-  const batch = plan.state.length === 0 ? null : names.fresh('_writes');
+  const batch = plan.state.length === 0 && plan.dynamicSites.size === 0 ? null : names.fresh('_writes');
   const update = names.fresh('_update');
   const entity = names.fresh('_entity');
   const scope = names.fresh('_scope');
@@ -63,6 +73,7 @@ function emitComponent(plan: ComponentPlan, names: Names, runtime: string, marku
   const takeovers = emitTakeovers(plan.takeovers, state.versions, names, scope, batch!);
   const trackKeys = new Map<import('../graph').BindingNode, string>();
   const readonly = new Map([
+    ...external,
     ...takeovers.replacements,
     ...emitConstWrites(plan.readonlyBindings, names, runtime),
   ]);
@@ -88,7 +99,8 @@ function emitComponent(plan: ComponentPlan, names: Names, runtime: string, marku
   }
   const replayMutations = emitMutations(plan.replayMutations, state.versions, names, runtime, null, replayBase);
   const replay = emitWrites(plan.replayWrites, state.versions, names, null, replayMutations.replacements, handled);
-  const memos = emitMemos(plan, state.versions, names, writes.replacements, replay.replacements, takeovers, runtime, trackKeys);
+  const memos = emitMemos(plan, state.versions, names, writes.replacements, replay.replacements, takeovers, runtime, trackKeys,
+    batch === null ? undefined : { batch, entity });
   const body: Statement[] = [
     ...state.declarations,
     ...[...trackKeys.values()].map((key) => statement('const $$key = {};', { key })),
@@ -125,7 +137,7 @@ function emitComponent(plan: ComponentPlan, names: Names, runtime: string, marku
   }
 
   const sites = emitSites(plan, {
-    names, runtime, batch, versions: state.versions, replacements: writes.replacements,
+    names, runtime, batch, entity, versions: state.versions, replacements: writes.replacements,
     ref: (index) => texts.get(index) ?? template.ref(index),
   });
   body.push(...sites.mount);

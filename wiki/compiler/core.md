@@ -185,6 +185,7 @@ Features build their own pieces. Optimizations replace pieces (`optimize.md`).
 | File | What it does |
 | --- | --- |
 | `dom.ts` | Copies module syntax, hoists markup, composes state/write feature emission, registers the component update and initializes sites |
+| `shared.ts` | Composes native shared-owner versions, memo/takeover emission and cross-module readers before replacing component functions |
 | `sites.ts` | Emits mount values and per-site version checks; skips unchanged DOM values and updates native listeners when their value changes |
 | `packages/runtime/src/computation.ts` | Captures executed hidden version reads for opaque memos/sites, with stable keys and nested restoration |
 | `template.ts` | Calls runtime `materializeMarkup`, or creates nodes directly when HTML parsing would alter the tree |
@@ -206,8 +207,8 @@ and definite body builders replay before site updates in `_update`. State/write
 and replay meaning lives in the feature plans and emitters (`state-and-derived.md`,
 `handlers.md`). Every component enters/leaves runtime build ownership during setup
 and replay, including static components whose body may invoke another owner's
-callback. Shared cells, tracking, mutation checks and explicit async
-boundaries remain pending. Nested component calls, conditional/list regions, refs and spreads
+callback. Shared module/factory storage, tracking and mutation checks are built;
+explicit async boundaries remain pending. Nested component calls, conditional/list regions, refs and spreads
 still require their planned slices. The printer currently returns code, not source
 maps. No complete Phase 3 exit is claimed.
 

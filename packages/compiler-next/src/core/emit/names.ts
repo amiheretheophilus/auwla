@@ -19,4 +19,6 @@ export class Names {
     this.#taken.add(name);
     return name;
   }
+
+  reserve(name: string): void { this.#taken.add(name); }
 }

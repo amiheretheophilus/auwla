@@ -83,6 +83,27 @@ it('keeps application ownership separate', () => {
   });
 });
 
+it('uses the active application for a shared owner created outside either application', () => {
+  const owner = createBuildScope(true);
+  const first = create(), second = create();
+  runWithApplicationRuntime(first, () => {
+    const frame = owner.enter();
+    const nested = createBuildScope();
+    const inner = nested.enter();
+    expect(owner.building()).toBe(false);
+    expect(owner.active()).toBe(true);
+    runWithApplicationRuntime(second, () => {
+      expect(owner.active()).toBe(false);
+      const other = owner.enter();
+      expect(owner.building()).toBe(true);
+      owner.leave(other);
+    });
+    nested.leave(inner);
+    expect(owner.building()).toBe(true);
+    owner.leave(frame);
+  });
+});
+
 it('discards abandoned setup frames before a later continuation', async () => {
   const runtime = create();
   const scope = runWithApplicationRuntime(runtime, createBuildScope);

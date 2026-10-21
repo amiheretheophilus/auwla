@@ -9,11 +9,12 @@ import { expression, statement } from '../../core/emit/quote';
 import type { TakeoverEmit } from './takeover';
 
 export function emitMemos(
-  plan: ComponentPlan, versions: ReadonlyMap<BindingNode, string>, names: Names,
+  plan: Pick<ComponentPlan, 'setup' | 'memos'>, versions: ReadonlyMap<BindingNode, string>, names: Names,
   mountReplacements: ReadonlyMap<Node, Node>, replayReplacements: ReadonlyMap<Node, Node>,
   takeovers: TakeoverEmit,
   runtime: string,
   trackKeys: ReadonlyMap<BindingNode, string>,
+  notify?: { readonly batch: string; readonly entity: string },
 ) {
   const setup: Statement[] = [];
   const snapshots: Statement[] = [];
@@ -176,7 +177,11 @@ export function emitMemos(
   }
   // Collectors are declared before any initializer uses them.
   for (const computation of tracking.values()) {
-    setup.push(statement('const $$computation = $$runtime.createComputation();', { computation, runtime }));
+    setup.push(statement(notify === undefined
+      ? 'const $$computation = $$runtime.createComputation();'
+      : 'const $$computation = $$runtime.createComputation($$batch.mark, $$entity);', {
+      computation, runtime, ...notify,
+    }));
   }
   const before = (root: Node) => (collectors.get(root) ?? [])
     .map(({ computation, first }) => statement(`$$computation.begin(${first});`, { computation }));

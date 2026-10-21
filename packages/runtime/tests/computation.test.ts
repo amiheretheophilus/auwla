@@ -1,5 +1,5 @@
 import { expect, it } from 'bun:test';
-import { captureComputationScope, createComputation, trackRead } from '../src/computation';
+import { captureComputationScope, createComputation, publishVersions, trackRead } from '../src/computation';
 
 it('captures executed hidden reads, settles self writes and replaces branch dependencies', () => {
   let version = 0, other = 0;
@@ -35,4 +35,21 @@ it('keeps nested collectors independent and restores the caller after failure', 
   expect(outer.changed()).toBe(false);
   outerVersion++;
   expect(outer.changed()).toBe(true);
+});
+
+it('retains another computation subscription when the same owner changes dependencies', () => {
+  const key = {};
+  let version = 0, notifications = 0;
+  const notify = () => notifications++;
+  const first = createComputation(notify), second = createComputation(notify);
+  first.begin(); trackRead(() => version, 0, key); first.end();
+  second.begin(); trackRead(() => version, 0, key); second.end();
+  second.begin(); second.end();
+  version++;
+  publishVersions([key]);
+  expect(notifications).toBe(1);
+  expect(first.changed()).toBe(true);
+  first.dispose(); second.dispose();
+  publishVersions([key]);
+  expect(notifications).toBe(1);
 });

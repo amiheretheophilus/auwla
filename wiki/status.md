@@ -27,6 +27,21 @@ Last updated: 2026-10-21.
 
 ## Done
 
+- Phase 3 shared storage: module bindings and top-level captured factory bindings
+  keep native values, per-owner versions/readers, memo replay and takeover.
+  Reexports resolve to live readers of the defining module. Shared subscriptions
+  notify consumers in their own applications and are removed on disposal.
+  Receiver stores preserve this/private/super access and notify aliases.
+  **25 focused compiler tests pass**, including four new shared comparisons and
+  a native two-application disposal regression. **21 runtime tests pass**.
+  Ten selected existing module/class/recursive comparisons pass after fixing
+  lazy shared-memo propagation. Two new cases also exposed reference gaps:
+  factory derivations now register per invocation, and private stores carry a
+  test-only version for snapshots. **174 reference cases pass**, with no authored
+  fixture or expectation changes. Explicit pre-await flushing and the Phase 3
+  exit audit remain next; component/list/prop cases belong to later phases.
+  Runtime build passes; type checks pass for 102 compiler-next and 67 runtime files.
+
 - Phase 3 local call observation and hidden reads: opaque calls detect data
   mutations, preserve results and recover partial edits; identity roots notify
   aliases and shared nested data. Possible body builders join replay only after

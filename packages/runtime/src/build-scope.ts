@@ -19,11 +19,15 @@ export interface BuildScope {
   enter(): BuildFrame;
   leave(frame: BuildFrame): void;
   building(): boolean;
+  active(): boolean;
+  finish<T>(frame: BuildFrame, value: T): T;
 }
 
 function buildStore(): BuildStore {
   return getExtensionStore('mmd:build-scope', () => ({ current: null, epoch: 0, queued: false }));
 }
+
+export function isBuilding(): boolean { return buildStore().current !== null; }
 
 function reset(store: BuildStore): void {
   store.current = null;
@@ -53,31 +57,46 @@ export function captureBuildScope(): () => void {
 }
 
 /** Each invocation has its own identity, even when an entity id is reused. */
-export function createBuildScope(): BuildScope {
+export function createBuildScope(shared = false): BuildScope {
   const runtime = getActiveApplicationRuntime();
   const store = buildStore();
   const owner = {};
   return {
     enter() {
-      const frame: BuildFrame = { owner, previous: store.current, epoch: store.epoch };
-      store.current = frame;
-      if (!store.queued) {
-        store.queued = true;
+      const active = shared ? buildStore() : store;
+      const frame: BuildFrame = { owner, previous: active.current, epoch: active.epoch };
+      active.current = frame;
+      if (!active.queued) {
+        active.queued = true;
         // A throwing setup cannot execute its leave. Discard abandoned frames
         // at the next synchronous boundary without wrapping authored code.
         globalThis.queueMicrotask(() => {
-          store.queued = false;
-          reset(store);
+          active.queued = false;
+          reset(active);
         });
       }
       return frame;
     },
     leave(frame) {
-      if (frame.epoch !== store.epoch) return;
-      store.current = frame.previous;
+      const active = shared ? buildStore() : store;
+      if (frame.epoch !== active.epoch) return;
+      active.current = frame.previous;
     },
     building() {
-      return getActiveApplicationRuntime() === runtime && store.current?.owner === owner;
+      const active = shared ? buildStore() : store;
+      return (shared || getActiveApplicationRuntime() === runtime) && active.current?.owner === owner;
+    },
+    active() {
+      const active = shared ? buildStore() : store;
+      if (!shared && getActiveApplicationRuntime() !== runtime) return false;
+      for (let frame = active.current; frame !== null; frame = frame.previous) {
+        if (frame.owner === owner && frame.epoch === active.epoch) return true;
+      }
+      return false;
+    },
+    finish(frame, value) {
+      this.leave(frame);
+      return value;
     },
   };
 }

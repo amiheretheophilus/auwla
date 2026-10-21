@@ -129,11 +129,15 @@ files that must pass in full at its exit.
   - [ ] mutation commits and the unknown-call check. Direct property assignment,
     update, delete, native pattern/loop targets, call observation, aliases and
     possible builders are built for component storage. Receiver/private-field
-    writes and shared roots join the storage slice before this box is complete.
+    writes and shared roots are built too. Remaining exit coverage, including
+    reflection on proxy values, is still being checked.
   - [ ] escaping-function tracking (the `unknown callers:` cases). Component-local
     hidden reads, opaque initializer/site dependencies and dynamic memo edges
-    are built; factory/module/class versions remain in the shared-storage slice.
-  - [ ] module state, imports, factory closures and classes (`complex state:`);
+    are built; factory/module/class versions and subscriptions are built too.
+    The prop-getter comparison needs Phase 6 components.
+  - [ ] module state, imports, factory closures and classes (`complex state:`).
+    Native versions/readers, shared memo replay/takeover, reexports and receiver
+    stores are built. Focused cases pass; the remaining Phase 3 audit is open.
   - [ ] `await` in handlers.
 - [x] `src/core/plan/`: `Template`, `TextSite`, `AttributeSite`, `PropertySite`,
   `EventSite`.

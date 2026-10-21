@@ -108,6 +108,18 @@ interface Computation {
 
 let computation: Computation | undefined;
 const externalReads = new Map<string, ReadValue>();
+const privateVersions = new WeakMap<object, number>();
+
+/** Native private stores cannot be inspected by a descriptor snapshot. */
+export function $privateTarget(read: () => unknown, write: (value: unknown) => void, object: object) {
+  return {
+    get v() { return read(); },
+    set v(value: unknown) {
+      write(value);
+      privateVersions.set(object, (privateVersions.get(object) ?? 0) + 1);
+    },
+  };
+}
 
 /** Module bindings remain native variables; record only reads that actually execute. */
 export function $captureRead(key: string, read: () => unknown): unknown {
@@ -576,10 +588,12 @@ class ModuleEffects {
 
 /** Module effects registered since the last `renderApp`: the app being set up owns them. */
 let unclaimedModuleEffects = new ModuleEffects();
+let runningModuleEffects: ModuleEffects | undefined;
 
 /** Own module work even if importing or mounting this case fails. */
 export function beginReferenceScope(): () => void {
   computation = undefined;
+  runningModuleEffects = undefined;
   rendering = null;
   externalReads.clear();
   const previous = unclaimedModuleEffects;
@@ -602,7 +616,7 @@ export function $moduleMemo(
   read?: () => unknown,
   write?: (value: unknown) => void,
 ): { v: unknown } {
-  const memo = unclaimedModuleEffects.addMemo(readInputs, update, initial);
+  const memo = (runningModuleEffects ?? unclaimedModuleEffects).addMemo(readInputs, update, initial);
   return {
     get v() {
       return read?.();
@@ -637,7 +651,7 @@ function deepCopy(value: unknown, copies = new Map<object, unknown>()): unknown 
   if (value instanceof Waiting) return { waiting: value.sources.map(copy) };
 
   // A function with data on it (a class with static fields) is copied like an object.
-  if (typeof value === 'function' && !hasOwnData(value)) return FUNCTION;
+  if (typeof value === 'function' && !hasOwnData(value) && !privateVersions.has(value)) return FUNCTION;
   if (value === null || (typeof value !== 'object' && typeof value !== 'function')) return value;
   if (value instanceof Node || value instanceof AssignRef) return value;
   if (copies.has(value)) return copies.get(value);
@@ -670,7 +684,7 @@ function deepCopy(value: unknown, copies = new Map<object, unknown>()): unknown 
   // Static fields are data on the constructor function; symbols and hidden
   // backing fields are data too, even though Object.entries omits them.
   const fields: unknown[] = [];
-  const snapshot = { callable: typeof value === 'function', fields };
+  const snapshot = { callable: typeof value === 'function', privateVersion: privateVersions.get(value), fields };
   copies.set(value, snapshot);
   for (const key of Reflect.ownKeys(value)) {
     const descriptor = Object.getOwnPropertyDescriptor(value, key)!;
@@ -770,13 +784,19 @@ class Renderer {
 
   /** Render, install refs and run effects, again and again until nothing changes. */
   update(): void {
+    const outer = runningModuleEffects;
+    runningModuleEffects = this.moduleEffects;
     for (let round = 0; round < 10; round++) {
       this.moduleEffects.refreshMemos();
       const before = this.container.innerHTML;
       const lifecycleChanged = this.renderOnce();
       const effectsRan = this.runEffects();
-      if (!lifecycleChanged && !effectsRan && this.container.innerHTML === before) return;
+      if (!lifecycleChanged && !effectsRan && this.container.innerHTML === before) {
+        runningModuleEffects = outer;
+        return;
+      }
     }
+    runningModuleEffects = outer;
     throw new Error('reference: render did not settle after 10 passes');
   }
 
