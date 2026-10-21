@@ -1,10 +1,43 @@
 # Handlers, writes and mutation
 
-**Folder:** `features/handlers/` _(planned)_.
+**Folder:** `features/handlers/` (component-local assignment/update planning and emission built).
 
 ## What it does
 
 Finds every place that changes state and makes the UI update after it.
+
+## Files and current slice
+
+| File | What it does |
+| --- | --- |
+| `plan.ts` | Groups graph write sites by native assignment/update/loop operation and binding identity |
+| `dom.ts` | Preserves native operations and their results, bumps local versions and marks a pending commit |
+| `dom.test.ts` | Executes compiled modules to verify write semantics, scope, per-instance state and site replay |
+| `packages/runtime/src/write-batch.ts` | Captures the application and entity, batches listener writes until return, and queues a microtask for unwrapped callbacks and error recovery |
+| `packages/runtime/tests/write-batch.test.ts` | Scheduler independence, nested listeners, native receivers/results, exceptions, disposal and application isolation |
+
+Simple assignments and updates call a generated helper **after** the native
+operation succeeds; the helper returns that operation's value. Logical assignment
+uses its native short-circuit condition, so a skipped assignment does not bump a
+version. Destructuring uses private setter targets at the original target's lexical
+scope, while JavaScript still evaluates the pattern, defaults, rest and result.
+Each completed target reports separately: a later throwing getter cannot hide an
+earlier write. Loop targets report each completed assignment.
+
+Native listeners preserve their receiver, arguments and return value. Their outer
+return flushes pending writes, even with an immediate test scheduler; nested
+listeners on the same component do not flush an intermediate value. Timers and
+promise callbacks use the queued microtask boundary. Setup writes do not schedule
+DOM work before registration. Notifications retain the originating application
+and entity identity, so a delayed callback cannot update a replacement instance.
+Error recovery resets the listener depth at the next microtask without adding
+`try`/`catch`/`finally` around authored code.
+
+**Still pending in Phase 3:** mutation/unknown-call checks, shared module and
+factory/class storage, takeover/setup ownership, escaping-read tracking and
+explicit pre-`await` flushing. The microtask fallback does not establish the
+pre-`await` guarantee. Only component-owned binding assignments are emitted in
+this slice; graph facts for other owners remain for their planned slices.
 
 ## Rules
 
@@ -58,6 +91,14 @@ Finds every place that changes state and makes the UI update after it.
 ## Cases to test
 
 In `packages/compiler-next/tests/cases/handlers.test.ts`.
+The local assignment slice also has nine `tests/cases/counters.test.ts` comparison
+cases, all passing: independent counters, helper batching, expression results,
+logical assignments, patterns, loop targets, timers, live properties/attributes/
+handler selection, and repeated attributes. Seven direct execution tests cover
+unrelated/no-op writes, typed text, instance isolation, shadows, partial throwing
+patterns, defaults/rest and block scope. Eight runtime batching tests pass.
+Existing `typing into an input` and `an async helper preserves return await` pass
+on compiler-next; the full handlers file is not yet a Phase 3 exit pass.
 Callback takeover cases are in `tests/cases/callbacks.test.ts`; their expected and
 old-compiler results are on `state-and-derived.md`, "Callback verification".
 

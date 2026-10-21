@@ -161,7 +161,7 @@ evaluation: parent attributes evaluate before child expressions.
 | File | What it does |
 | --- | --- |
 | `model.ts` | `ModulePlan`, `ComponentPlan`, `Template` and text/attribute/property/event site contracts |
-| `index.ts` | Plans component setup and returned markup; asks the graph whether each site reads reactive inputs |
+| `index.ts` | Plans component setup and returned markup, retains each site's binding inputs and invokes state/write feature planning |
 | `template.ts` | Builds the node sequence, static markup and expression sites; keeps repeated attributes in authored order |
 | `jsx.ts` | JSX whitespace, attribute aliases, namespaces and conservative template-parsing eligibility |
 | `plan.test.ts` | Node addressing, expression order, graph reactivity, fallback creation and unchanged authored AST |
@@ -184,7 +184,8 @@ Features build their own pieces. Optimizations replace pieces (`optimize.md`).
 
 | File | What it does |
 | --- | --- |
-| `dom.ts` | Copies module syntax, hoists markup, replaces planned component functions and initializes their sites |
+| `dom.ts` | Copies module syntax, hoists markup, composes state/write feature emission, registers the component update and initializes sites |
+| `sites.ts` | Emits mount values and per-site version checks; skips unchanged DOM values and updates native listeners when their value changes |
 | `template.ts` | Calls runtime `materializeMarkup`, or creates nodes directly when HTML parsing would alter the tree |
 | `names.ts` | Allocates generated names against all authored bindings and references |
 | `quote.ts` | Parses and copies generated statement snippets, filling AST holes; syntax that cannot parse at module scope uses builders directly |
@@ -198,11 +199,13 @@ template eligibility is an optimization, not a restriction on accepted tags.
 Text expressions replace comment placeholders so adjacent values retain separate
 nodes. Empty or multi-root fragments return a `DocumentFragment`.
 
-**Current boundary:** setup and sites run once at mount. Native listeners are
-installed, but state commits, `_update`, memo replay, tracking and async boundaries
-are not emitted yet. Nested component calls, conditional/list regions, refs and
-spreads still require their planned slices. The printer currently returns code,
-not source maps. No Phase 3 exit is claimed from the template slice alone.
+**Current boundary:** setup runs once; sites initialize at mount and respond to
+component-local assignments through version checks in `_update`. State/write
+meaning lives in the feature emitters (`state-and-derived.md`, `handlers.md`).
+Memo replay, shared cells, tracking, mutation checks and explicit async boundaries
+remain pending. Nested component calls, conditional/list regions, refs and spreads
+still require their planned slices. The printer currently returns code, not source
+maps. No complete Phase 3 exit is claimed.
 
 **Verified:** `tests/cases/static-markup.test.ts` has 18 comparison cases with
 independent DOM assertions: nesting, whitespace/entities, attributes and aliases,

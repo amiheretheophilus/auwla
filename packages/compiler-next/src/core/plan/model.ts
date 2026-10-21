@@ -5,6 +5,7 @@
 import type { Expression, Node, Statement } from 'yuku-parser';
 import type { ResolvedModule } from '../resolve';
 import type { FunctionNode } from '../resolve/functions';
+import type { BindingNode } from '../graph';
 
 /** One node of a template, in the creation order `materializeMarkup` returns (post-order). */
 export type TemplateNode =
@@ -56,6 +57,15 @@ export interface ComponentPlan {
   readonly setup: readonly Statement[];
   readonly template: Template;
   readonly sites: readonly Site[];
+  readonly state: readonly BindingNode[];
+  readonly writes: readonly WritePlan[];
+  /** Directly visible inputs, keyed by the original expression's identity. */
+  readonly siteInputs: ReadonlyMap<Expression, readonly BindingNode[]>;
+}
+
+export interface WritePlan {
+  readonly operation: Node;
+  readonly targets: readonly BindingNode[];
 }
 
 export interface ModulePlan {

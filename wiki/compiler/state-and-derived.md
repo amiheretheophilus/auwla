@@ -1,7 +1,21 @@
 # Props, state and derived values
 
 **Folders:** `features/props/`, `features/state/`, `features/derived/` (graph
-classification built in Phase 2; plan and emit _(planned)_).
+classification built in Phase 2; component-local assignment versions built in
+Phase 3; derived memo emission remains planned).
+
+`features/state/plan.ts` selects component-owned bindings with assignment/update
+sites from the graph. `features/state/dom.ts` allocates a local numeric version per
+binding; values stay native JavaScript variables. `core/emit/sites.ts` saves the
+versions a site read and reevaluates only when one changes, preserving unchanged
+DOM properties such as typed input text. Unknown calls with no known changed
+input are not replayed merely because another value was written.
+
+This is the counter slice: shared cells, dynamic escaping reads, derived memo
+replay and takeover flags are still pending. It does not yet satisfy the full
+state-and-derived exit suite. The existing `a counter` case passes on compiler-next;
+the nine focused counter cases and handler execution checks are listed in
+`handlers.md`.
 
 ## What it does
 

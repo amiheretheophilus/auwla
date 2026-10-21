@@ -13,8 +13,9 @@ Last updated: 2026-10-21.
   `compileModules` (80 unit tests). Phase 3 design written and approved
   (`compiler/output.md`, "Phase 3 design"); the reference passes all 228 cases,
   including timer and unknown-caller cases, and now tracks closure state.
-  Escaping functions are built (`cd25f77`). The Phase 3 template slice now builds
-  static DOM from the render plan; state/text updates and handler writes are next.
+  Escaping functions are built (`cd25f77`). Phase 3 builds static DOM from the
+  render plan (`0eec154`) and now emits local assignment versions, guarded site
+  updates and batched commits. Versioned memos and body replay are next.
 - `compiler-refactor`: the old compiler's refactor, stopped on 2026-10-19. The
   sections below record that work.
 - `codex/package-conditional-sync` at `9e35480` (third-party package compilation,
@@ -23,6 +24,19 @@ Last updated: 2026-10-21.
 - The user put the agent in charge of the refactor on 2026-10-18 ("you are in charge now").
 
 ## Done
+
+- Phase 3 local counters: state and handler feature plans/emitters consume graph
+  identities; sites update from local version changes. The runtime batches local
+  writes and retains application/instance identity. Native assignment results,
+  short-circuiting, pattern defaults/rest, partial writes before an exception and
+  lexical shadows are verified. Rules and remaining limits: `compiler/handlers.md`.
+  Verification: 9 new counter comparison cases plus the existing counter, enum,
+  input-typing and promise-callback cases pass on `COMPILER=next`; the 18 static
+  markup cases still pass. Seven handler execution tests, 10 plan/pipeline tests
+  and eight runtime batching tests pass. Package `bun check`: 83 compiler-next
+  files and 63 runtime files, no errors; runtime build passes. No root suite or
+  full Phase 3 acceptance run. Memo replay, takeover, mutation checks, dynamic
+  tracking, shared state and pre-`await` flushing remain their next slices.
 
 - Phase 3 static markup: completed the existing uncommitted plan/template files
   and connected graph → plan → DOM emit in `compileModules`. Hoisted templates,
@@ -435,8 +449,8 @@ are nailed first.
    with resolve and pipeline tests, 31 pass. Package `bun check` passes for 46
    files. `compiler/core.md` describes the API and its limits.
 3. Phase 2 classification and integration are built (`0d474a7`), followed by the
-   Phase 3 design and escaping-function graph (`4abca67`, `cd25f77`). The template
-   slice above is verified. Next in `compiler/plan.md`: state/text updates and
-   handler writes, then versioned memos and body builders. Runtime takeover must
+   Phase 3 design and escaping-function graph (`4abca67`, `cd25f77`). Template and
+   local counter slices above are verified. Next in `compiler/plan.md`: versioned
+   memos and body builders. Runtime takeover must
    not be inferred from resolve's lexical `later` flag. The Phase 2 per-rule test
    audit remains unchecked; this session continued Phase 3 at the user's request.

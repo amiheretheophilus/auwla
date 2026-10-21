@@ -109,8 +109,10 @@ files that must pass in full at its exit.
   count recorded in `../status.md`:
   - [x] static markup (templates). Built on the existing uncommitted plan/template
     files: 18 behavior cases pass on `COMPILER=next`, plus 10 plan/pipeline checks.
-    Sites initialize once; state updates and write commits are the next slice.
-  - [ ] state, text and handler writes (counters);
+  - [x] state, text and handler writes (counters). Local assignment versions,
+    per-site update checks and batched write commits. Nine focused counter cases
+    pass on `COMPILER=next`, plus the existing counter, enum, typing and promise
+    callback cases. Native execution and runtime tests are listed in `handlers.md`.
   - [ ] versioned memos and replayed body builders;
   - [ ] takeover flags and the setup flag (`cases/callbacks`);
   - [ ] mutation commits and the unknown-call check;

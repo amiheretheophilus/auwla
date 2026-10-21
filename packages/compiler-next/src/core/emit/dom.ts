@@ -1,4 +1,4 @@
-/** DOM emission from the render plan. State/write emission joins in the next slice. */
+/** DOM emission from the render plan, with feature-owned state and write emission. */
 import { b, is } from 'yuku-ast';
 import type { Node, Statement } from 'yuku-parser';
 import type { CompileModulesOptions } from '../../options';
@@ -8,6 +8,9 @@ import { copy } from './copy';
 import { Names } from './names';
 import { statement, stringLiteral } from './quote';
 import { emitTemplate } from './template';
+import { emitLocalState } from '../../features/state/dom';
+import { emitWrites } from '../../features/handlers/dom';
+import { emitSites } from './sites';
 
 /** Preserve module syntax and exports, replacing planned functions on a fresh tree. */
 export function emitDom(plan: ModulePlan, options: CompileModulesOptions): Node {
@@ -46,10 +49,25 @@ function emitComponent(plan: ComponentPlan, names: Names, runtime: string, marku
   const document = names.fresh('_document');
   const id = names.fresh('_id');
   const parent = names.fresh('_parent');
+  const state = emitLocalState(plan.state, names);
+  const batch = plan.state.length === 0 ? null : names.fresh('_writes');
+  const update = names.fresh('_update');
+  const entity = names.fresh('_entity');
+  const writes = batch === null
+    ? { replacements: new Map<Node, Node>(), declarations: [] }
+    : emitWrites(plan.writes, state.versions, names, batch);
   const body: Statement[] = [
-    ...copy(plan.setup),
-    statement('const $$document = $$runtime.getActiveEnvironment().document;', { document, runtime }),
+    ...state.declarations,
+    ...writes.declarations,
   ];
+  if (batch !== null) {
+    body.push(statement('const $$entity = { id: $$id, parent: $$parent, render: $$update };', { entity, id, parent, update }));
+    body.push(statement('const $$batch = $$runtime.createWriteBatch($$entity);', { batch, runtime, entity }));
+  }
+  body.push(
+    ...copy(plan.setup, writes.replacements),
+    statement('const $$document = $$runtime.getActiveEnvironment().document;', { document, runtime }),
+  );
   const used = new Set(plan.template.roots);
   for (const site of plan.sites) used.add(site.node);
   const template = emitTemplate(plan.template, used, { names, runtime, document, markup });
@@ -65,36 +83,18 @@ function emitComponent(plan: ComponentPlan, names: Names, runtime: string, marku
     body.push(statement('$$placeholder.replaceWith($$text);', { placeholder: template.ref(site.node), text }));
   }
 
-  // This slice evaluates sites once at mount. The following state slice supplies
-  // update statements and commit instrumentation; no owner-wide replay is added.
-  const events = new Map<string, { node: string; event: string; handler: string }>();
-  for (const site of plan.sites) {
-    const node = template.ref(site.node);
-    const value = copy(site.expression);
-    if (site.kind === 'text') {
-      body.push(statement('$$runtime.setTextData($$node, $$value);', { runtime, node: texts.get(site.node)!, value }));
-    } else if (site.kind === 'property') {
-      body.push(statement('$$node[$$name] = $$value;', { node, name: stringLiteral(site.name), value }));
-    } else if (site.kind === 'attribute') {
-      const attribute = names.fresh('_attribute');
-      body.push(statement('const $$attribute = $$value;', { attribute, value }));
-      body.push(statement(`if ($$attribute != null && $$attribute !== false) {
-        $$node.setAttribute($$name, $$attribute === true ? "" : $$runtime.textValue($$attribute));
-      } else {
-        $$node.removeAttribute($$name);
-      }`, { attribute, node, runtime, name: stringLiteral(site.name) }));
-    } else {
-      const handler = names.fresh('_handler');
-      body.push(statement('const $$handler = $$value;', { handler, value }));
-      // Evaluate every attribute, but install only the last handler for a name,
-      // as the JSX props object does for repeated event attributes.
-      events.set(`${site.node}:${site.event}`, { node, event: site.event, handler });
-    }
-  }
-  for (const { node, event, handler } of events.values()) {
-    body.push(statement('if (typeof $$handler === "function") $$node.addEventListener($$event, $$handler);', {
-      handler, node, event: stringLiteral(event),
+  const sites = emitSites(plan, {
+    names, runtime, batch, versions: state.versions, replacements: writes.replacements,
+    ref: (index) => texts.get(index) ?? template.ref(index),
+  });
+  body.push(...sites.mount);
+  if (batch !== null) {
+    body.push(b.FunctionDeclaration({
+      id: b.Identifier({ name: update }), params: [],
+      body: b.BlockStatement({ body: [...sites.update] }), async: false, generator: false, expression: false,
     }));
+    body.push(statement('$$runtime.registerEntity($$entity);', { runtime, entity }));
+    body.push(statement('$$batch.activate();', { batch }));
   }
 
   const roots = plan.template.roots.map((index) => texts.get(index) ?? template.ref(index));

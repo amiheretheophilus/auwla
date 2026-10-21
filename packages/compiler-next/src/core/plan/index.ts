@@ -7,13 +7,15 @@
  */
 import { is, walk } from 'yuku-ast';
 import type { Expression, Node, Statement } from 'yuku-parser';
-import { isReactive, type SemanticGraph } from '../graph';
+import { isReactive, type BindingNode, type SemanticGraph } from '../graph';
 import type { InputQueries } from '../graph/inputs';
 import { isWrittenGlobal, runnerOf, type ResolvedModule } from '../resolve';
 import type { FunctionNode } from '../resolve/functions';
 import type { ComponentPlan, ModulePlan } from './model';
 import { buildTemplate, containsJsx, unsupported, type TemplateContext } from './template';
 import { unwrap } from './jsx';
+import { planLocalState } from '../../features/state/plan';
+import { planWrites } from '../../features/handlers/plan';
 
 export type { ComponentPlan, ModulePlan, Site, Template, TemplateNode } from './model';
 
@@ -22,7 +24,8 @@ export function planModules(
   queries: InputQueries,
   components: ReadonlySet<Node>,
 ): ModulePlan[] {
-  return graph.resolved.modules.map((entry) => planModule(graph, queries, components, entry));
+  const state = planLocalState(graph, components);
+  return graph.resolved.modules.map((entry) => planModule(graph, queries, components, entry, state));
 }
 
 function planModule(
@@ -30,6 +33,7 @@ function planModule(
   queries: InputQueries,
   components: ReadonlySet<Node>,
   entry: ResolvedModule,
+  state: ReadonlyMap<Node, readonly BindingNode[]>,
 ): ModulePlan {
   const module = entry.module;
   const context: TemplateContext = {
@@ -40,7 +44,22 @@ function planModule(
 
   const plans = new Map<Node, ComponentPlan>();
   for (const fn of module.findAll(['FunctionDeclaration', 'FunctionExpression', 'ArrowFunctionExpression'])) {
-    if (components.has(fn)) plans.set(fn, planComponent(fn, context));
+    if (!components.has(fn)) continue;
+    const local = state.get(fn) ?? [];
+    const component = planComponent(fn, context);
+    const siteInputs = new Map<Expression, readonly BindingNode[]>();
+    for (const site of component.sites) {
+      const inputs = new Set<BindingNode>();
+      if (site.expression.end !== 0) {
+        for (const read of queries.inputsOf(module, site.expression).reads) {
+          const binding = read.binding ?? read.reference.binding;
+          const node = binding === null ? undefined : graph.bindings.get(binding);
+          if (node !== undefined) inputs.add(node);
+        }
+      }
+      siteInputs.set(site.expression, [...inputs]);
+    }
+    plans.set(fn, { ...component, state: local, writes: planWrites(local), siteInputs });
   }
 
   // Markup that no planned component returns belongs to a later phase.
@@ -52,7 +71,7 @@ function planModule(
   return { module: entry, components: plans };
 }
 
-function planComponent(fn: FunctionNode, context: TemplateContext): ComponentPlan {
+function planComponent(fn: FunctionNode, context: TemplateContext) {
   const { setup, markup } = splitBody(fn, context);
   for (const statement of setup) {
     if (containsJsx(statement)) unsupported(context, statement, 'markup in setup code', 4);

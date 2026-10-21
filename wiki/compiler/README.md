@@ -1,13 +1,15 @@
 # The compiler (rewrite)
 
-**Status: Phase 2 graph and classification built; Phase 3 static markup slice built.** The new compiler lives in
+**Status: Phase 2 graph and classification built; Phase 3 markup and local counter slices built.** The new compiler lives in
 `packages/compiler-next/` on branch `compiler-rewrite`; its tests are in
 `packages/compiler-next/tests/`. `packages/compiler/` stays until every suite passes
 on the new one; then it is deleted.
 
 The source, ordinary `Group`, atomic `suspend`, and callback baselines are verified.
 The previous 228-case reference baseline is verified; 18 new static-markup cases
-now also pass against compiler-next. State/text updates and handler writes are next.
+now also pass against compiler-next. Nine focused local counter cases and four
+existing counter/enum/input/promise cases pass too. Versioned memos and body replay
+are next.
 Remaining reference limits are on the concept pages;
 extend their coverage as the compiler reaches those slices. Continue in `plan.md`.
 
