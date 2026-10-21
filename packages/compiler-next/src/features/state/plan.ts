@@ -2,12 +2,14 @@
 import type { Node } from 'yuku-parser';
 import type { BindingNode, SemanticGraph } from '../../core/graph';
 import { variableDeclaration } from '../../core/graph/inputs';
+import { storageOwner } from '../../core/plan/storage';
 
 export function planLocalState(graph: SemanticGraph, components: ReadonlySet<Node>): ReadonlyMap<Node, readonly BindingNode[]> {
   const owners = new Map<Node, BindingNode[]>();
   for (const node of graph.bindings.values()) {
     const owner = node.owner.runner;
     if (owner === null || !components.has(owner)) continue;
+    if (storageOwner(node) !== owner) continue;
     if (node.writes.length === 0 && variableDeclaration(node.binding) === null) continue;
     const bindings = owners.get(owner) ?? [];
     bindings.push(node);

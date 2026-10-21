@@ -1,6 +1,20 @@
 import { expect, it } from 'bun:test';
 import { captureComputationScope, createComputation, publishVersions, trackRead } from '../src/computation';
 
+it('propagates shared invalidation through nested owners without recursively notifying a cycle', () => {
+  const input = {}, output = {};
+  let notifications = 0;
+  const upstream = createComputation(() => publishVersions([input, output]));
+  const downstream = createComputation(() => notifications++);
+  upstream.begin(); trackRead(() => 0, 0, input); upstream.end();
+  downstream.begin(); trackRead(() => 0, 0, output); downstream.end();
+  publishVersions([input]);
+  expect(notifications).toBe(1);
+  publishVersions([input]);
+  expect(notifications).toBe(2);
+  upstream.dispose(); downstream.dispose();
+});
+
 it('captures executed hidden reads, settles self writes and replaces branch dependencies', () => {
   let version = 0, other = 0;
   const a = () => version, b = () => other;

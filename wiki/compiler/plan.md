@@ -83,9 +83,11 @@ files that must pass in full at its exit.
   are not inputs; imports take their definition's kind; possible builders are
   decided at runtime. Still open: mapping `this` writes in a method to the
   receiver's fields (the call is already a write of the receiver).
-- [ ] Graph tests next to each feature: one per row of the classification table
+- [x] Graph tests next to each feature: one per row of the classification table
   and per rule bullet on `state-and-derived.md`. Most exist (`features/*/classify.test.ts`,
-  `core/graph/size.test.ts`); check each row and bullet off against them.
+  `core/graph/size.test.ts`); audited 2026-10-21. The state tests now explicitly
+  cover every let/const, literal/reactive, later-write/no-write combination.
+  The mapping of rule bullets to tests is on `state-and-derived.md`.
 - **Exit:** the graph records each binding's initial computation and the writes
   that can take control at runtime. A nested write never makes the initial value
   a snapshot. Verify classifications and transition sites against the behavior
@@ -117,8 +119,9 @@ files that must pass in full at its exit.
     declarations/patterns, source-ordered shared statements, output versions and
     native const write errors. Six focused comparisons, four existing behavior
     cases, ten execution tests and three plan tests pass. Possible builders join
-    the mutation-observation slice; nested-block memo storage remains open on
-    `state-and-derived.md`.
+    the mutation-observation slice. Nested-block storage now uses lexical
+    activations, with seven native cases plus caught-setup recovery verified
+    (`state-and-derived.md`).
   - [x] local takeover flags and runtime setup/replay ownership. Twelve selected
     `cases/callbacks` comparisons and the existing handler-takeover case pass;
     eight native execution tests and four runtime scope tests cover partial

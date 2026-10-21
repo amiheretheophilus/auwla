@@ -52,7 +52,7 @@ export function emitSharedState(plan: ModulePlan, names: Names, runtime: string,
           return $$version;
         }, $$binding, $$key);
       }`, { reader: read.name, ready, scope, refresh, runtime, version, binding: binding.binding.name, key }));
-      if (owner.fn === null) declarations.push(statement('export { $$reader };', { reader: read.name }));
+      if (owner.fn === null && owner.block === null) declarations.push(statement('export { $$reader };', { reader: read.name }));
       for (const reference of binding.binding.references) {
         if (reference.isWrite || reference.inTypePosition) continue;
         const parent = plan.module.module.parentOf(reference.node);
@@ -60,7 +60,7 @@ export function emitSharedState(plan: ModulePlan, names: Names, runtime: string,
         replacements.set(reference.node, expression('$$reader()', { reader: read.name }));
       }
     }
-    declarations.push(statement('const $$scope = $$runtime.createBuildScope(true);', { scope, runtime }));
+    declarations.push(statement(`const $$scope = $$runtime.createBuildScope(true, ${owner.block !== null});`, { scope, runtime }));
     declarations.push(statement('let $$ready = false;', { ready }));
     declarations.push(statement('const $$batch = $$runtime.createSharedWrites($$keys);', {
       batch, runtime, keys: b.ArrayExpression({ elements: [...keys.values()].map((key) => expression('$$key', { key })) }),
@@ -143,13 +143,30 @@ export function finishSharedOwner(
       for (const node of findAll(root, 'ReturnStatement')) {
         if (!authored.has(`${node.start}:${node.end}`)) continue;
         const argument = node.argument === null ? expression('void 0') : copy(node.argument, returns);
-        returns.set(node, b.ReturnStatement({ argument: expression('$$complete($$argument)', { complete, argument }) }));
+        const returned = copy(node);
+        returned.argument = expression('$$complete($$argument)', { complete, argument });
+        returns.set(node, returned);
       }
+    }
+  }
+  if (owner.plan.block !== null) {
+    const block = owner.plan.block;
+    const module = owner.plan.state[0]!.binding.module;
+    for (const node of module.findAll(['BreakStatement', 'ContinueStatement'])) {
+      if (node.start < block.start || node.end > block.end || runnerOf(module, node) !== owner.plan.fn) continue;
+      const target = [...module.ancestors(node)].find((parent) => node.label !== null
+        ? is.LabeledStatement(parent) && parent.label.name === node.label.name
+        : is.ForStatement(parent) || is.ForInStatement(parent) || is.ForOfStatement(parent)
+          || is.WhileStatement(parent) || is.DoWhileStatement(parent)
+          || (is.BreakStatement(node) && is.SwitchStatement(parent)));
+      if (target === undefined || (target.start >= block.start && target.end <= block.end)) continue;
+      returns.set(node, b.BlockStatement({ body: [statement('$$complete(void 0);', { complete }), copy(node)] }));
     }
   }
   const body: Statement[] = [
     ...declarations,
-    statement('const $$frame = $$scope.enter();', { frame, scope }),
+    statement(owner.plan.block === null ? 'const $$frame = $$scope.enter();'
+      : 'const $$frame = $$scope.enter(() => $$complete(void 0));', { frame, scope, complete }),
   ];
   for (const node of setup) {
     body.push(copy(node, returns));

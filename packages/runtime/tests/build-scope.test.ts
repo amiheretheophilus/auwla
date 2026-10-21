@@ -16,6 +16,43 @@ function create() {
   return runtime;
 }
 
+it('shares the invocation owner with a lexical block while tracking its own active frame', () => {
+  const runtime = create();
+  runWithApplicationRuntime(runtime, () => {
+    const parent = createBuildScope();
+    const outer = parent.enter();
+    const block = createBuildScope(true, true);
+    expect(block.active()).toBe(false);
+    const inner = block.enter();
+    expect(parent.building()).toBe(true);
+    expect(block.building()).toBe(true);
+    expect(block.active()).toBe(true);
+    block.leave(inner);
+    expect(block.active()).toBe(false);
+    expect(parent.building()).toBe(true);
+    parent.leave(outer);
+  });
+});
+
+it('settles escaped block storage once when an authored catch restores the parent', () => {
+  const runtime = create();
+  runWithApplicationRuntime(runtime, () => {
+    const parent = createBuildScope();
+    const outer = parent.enter();
+    const restore = captureBuildScope();
+    const block = createBuildScope(true, true);
+    let completed = 0;
+    const inner = block.enter(() => { completed++; block.leave(inner); });
+    restore();
+    expect(completed).toBe(1);
+    expect(block.active()).toBe(false);
+    expect(parent.building()).toBe(true);
+    restore();
+    expect(completed).toBe(1);
+    parent.leave(outer);
+  });
+});
+
 it('restores the captured owner after nested setup fails, including no owner', () => {
   const runtime = create();
   runWithApplicationRuntime(runtime, () => {

@@ -14,7 +14,7 @@ export function emitMemos(
   takeovers: TakeoverEmit,
   runtime: string,
   trackKeys: ReadonlyMap<BindingNode, string>,
-  notify?: { readonly batch: string; readonly entity: string },
+  notify?: { readonly batch: string; readonly entity?: string },
 ) {
   const setup: Statement[] = [];
   const snapshots: Statement[] = [];
@@ -28,6 +28,7 @@ export function emitMemos(
   const observationBefore = new Map<Node, Statement[]>();
   const observationAfter = new Map<Node, Statement[]>();
   const initialTracking = new Map<Node, { computation: string; changed: Expression }>();
+  const sharedBuilders = new Map<Node, Statement>();
   for (const group of plan.memos) {
     for (const [step, targets] of group.possibleOutputs) {
       const used = names.fresh('_builderUsed');
@@ -53,7 +54,7 @@ export function emitMemos(
       if (is.VariableDeclarator(step)) {
         const computation = names.fresh('_initializerComputation');
         const create = notify === undefined ? 'const $$computation = $$runtime.createComputation();'
-          : 'const $$computation = $$runtime.createComputation($$batch.mark, $$entity);';
+          : `const $$computation = $$runtime.createComputation($$batch.mark${notify.entity === undefined ? '' : ', $$entity'});`;
         setup.push(statement(create, { computation, runtime, ...notify }));
         const conditions: Expression[] = [expression('$$computation.changed()', { computation })];
         const memo = group.computations.find((memo) => memo.declarator === step);
@@ -141,7 +142,16 @@ export function emitMemos(
     }
     for (const builder of group.steps) {
       if (is.VariableDeclarator(builder)) continue;
-      steps.set(builder, { group, body: [copy(builder, replayReplacements) as Statement] });
+      let body = copy(builder, replayReplacements) as Statement;
+      // Keep an authored exception boundary in one place when setup and replay
+      // execute the same builder. An arrow retains lexical this/arguments/super.
+      if (is.TryStatement(builder) && canShareBuilder(builder)) {
+        const run = names.fresh('_build');
+        setup.push(statement('const $$run = () => { $$body };', { run, body }));
+        body = statement('$$run();', { run });
+        sharedBuilders.set(builder, body);
+      }
+      steps.set(builder, { group, body: [body] });
     }
   }
 
@@ -209,7 +219,7 @@ export function emitMemos(
   for (const computation of tracking.values()) {
     setup.push(statement(notify === undefined
       ? 'const $$computation = $$runtime.createComputation();'
-      : 'const $$computation = $$runtime.createComputation($$batch.mark, $$entity);', {
+      : `const $$computation = $$runtime.createComputation($$batch.mark${notify.entity === undefined ? '' : ', $$entity'});`, {
       computation, runtime, ...notify,
     }));
   }
@@ -228,7 +238,7 @@ export function emitMemos(
   };
   for (const original of plan.setup) {
     if (!is.VariableDeclaration(original)) {
-      setup.push(...before(original), ...(observationBefore.get(original) ?? []), copy(original, mountReplacements), ...(observationAfter.get(original) ?? []), ...after(original));
+      setup.push(...before(original), ...(observationBefore.get(original) ?? []), sharedBuilders.get(original) ?? copy(original, mountReplacements), ...(observationAfter.get(original) ?? []), ...after(original));
       continue;
     }
     // Splitting a declaration preserves evaluation order and the enclosing
@@ -263,4 +273,19 @@ export function emitMemos(
     });
   });
   return { setup, snapshots, update: [...checks, ...replay, ...finish] };
+}
+
+function canShareBuilder(root: Node): boolean {
+  let safe = true;
+  walk(root, { enter(node, context) {
+    if (is.Function(node)) { context.skip(); return; }
+    if (is.ReturnStatement(node) || is.AwaitExpression(node) || is.YieldExpression(node)
+      || (is.VariableDeclaration(node) && node.kind === 'var')
+      || (is.CallExpression(node) && is.Identifier(node.callee) && node.callee.name === 'eval')
+      || is.BreakStatement(node) || is.ContinueStatement(node)) {
+      safe = false;
+      context.stop();
+    }
+  } });
+  return safe;
 }

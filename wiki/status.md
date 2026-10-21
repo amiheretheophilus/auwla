@@ -27,6 +27,19 @@ Last updated: 2026-10-21.
 
 ## Done
 
+- Nested-block state/memo storage is built. Native lexical values, shadowed
+  bindings, escaped closures, factory returns, loop activations, builder replay
+  and updates across nested blocks are verified. Abrupt exits and authored catch
+  recovery settle escaped storage without generated exception wrappers. Shared
+  collectors isolate setup dependencies and forward invalidation across owners.
+  **Eight new native compiler regressions pass**. The Phase 3 rerun still has
+  **52 supported passes and the same 17 later-phase failures**. The completed
+  classification audit passes **43 tests**, including an eight-case table matrix.
+  The text-view generator passes another **200 programs, seed 20261021** after
+  these changes. **26 runtime tests pass**; runtime rebuild and package checks
+  pass (**106 compiler-next files**, **67 runtime files**).
+  Remaining reflection/proxy coverage stays open; no expectations changed.
+
 - Phase 3 audit and initializer fixes: **52 supported exit comparisons pass**;
   the other **17 require later list/component support**, listed below. The
   separate text-view state generator passes **200 programs, seed 20261021**.

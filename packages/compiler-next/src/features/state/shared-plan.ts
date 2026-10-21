@@ -5,6 +5,7 @@ import type { BindingNode, SemanticGraph } from '../../core/graph';
 import { variableDeclaration } from '../../core/graph/inputs';
 import { importedDefinition, runnerOf } from '../../core/resolve';
 import type { SharedReadPlan } from '../../core/plan/model';
+import { storageOwner } from '../../core/plan/storage';
 
 export function planSharedReads(graph: SemanticGraph, components: ReadonlySet<Node>): ReadonlyMap<BindingNode, SharedReadPlan> {
   const reads = new Map<BindingNode, SharedReadPlan>();
@@ -12,18 +13,18 @@ export function planSharedReads(graph: SemanticGraph, components: ReadonlySet<No
     const taken = new Set([...entry.module.bindings.map((binding) => binding.name), ...entry.module.references.map((reference) => reference.name)]);
     for (const binding of graph.bindings.values()) {
       if (binding.binding.module !== entry.module || importedDefinition(binding.binding) !== null) continue;
-      const owner = binding.owner.runner;
-      if (owner !== null && (components.has(owner) || !is.Function(owner) || !is.BlockStatement(owner.body))) continue;
+      const owner = storageOwner(binding);
+      if (owner !== null && (components.has(owner) || (!is.BlockStatement(owner) && (!is.Function(owner) || !is.BlockStatement(owner.body))))) continue;
       const declarator = variableDeclaration(binding.binding);
       if (declarator?.init !== null && declarator?.init !== undefined && components.has(declarator.init)) continue;
       const parent = entry.module.parentOf(binding.binding.declarations[0]!);
       if (declarator === null && !is.Class(parent)) continue;
-      if (owner !== null && !binding.binding.references.some((reference) => runnerOf(entry.module, reference.node) !== owner)) continue;
+      if (owner !== null && !is.BlockStatement(owner) && !binding.binding.references.some((reference) => runnerOf(entry.module, reference.node) !== owner)) continue;
       if (declarator !== null) {
         const declaration = entry.module.parentOf(declarator);
         let block = declaration === null ? null : entry.module.parentOf(declaration);
         if (is.ExportNamedDeclaration(block)) block = entry.module.parentOf(block);
-        if (owner === null ? !is.Program(block) : block !== owner.body) continue;
+        if (owner === null ? !is.Program(block) : block !== (is.BlockStatement(owner) ? owner : owner.body)) continue;
       }
       const base = `_read_${binding.binding.name}`;
       let name = base;

@@ -90,8 +90,8 @@ permanently closed before the actual call. Abandoned observations use weak
 references after their guaranteed recovery microtask. Shared async owners leave
 their setup scope when suspending, so their caller can continue building.
 
-**Still pending in Phase 3:** the exit audit, nested-block memo storage and
-remaining reflection coverage. Shared storage and explicit await boundaries are
+**Still pending in Phase 3:** remaining reflection coverage, especially hostile
+proxies. Nested-block storage, shared storage and explicit await boundaries are
 built; the full Phase 3 exit is not yet claimed.
 
 ## Rules

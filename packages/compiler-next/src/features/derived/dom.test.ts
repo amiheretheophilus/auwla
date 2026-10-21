@@ -35,6 +35,148 @@ async function compile(source: string) {
   return { module, root, click };
 }
 
+it('keeps native nested-block storage reactive through escaped closures', async () => {
+  const { root, click } = await compile(`export function App() {
+    let read, increment, take;
+    {
+      let count = 1;
+      let twice = count * 2;
+      read = () => twice;
+      increment = () => count++;
+      take = () => twice = 50;
+    }
+    return <main><p>{read()}</p><button id="inc" onClick={increment}>inc</button>
+      <button id="take" onClick={take}>take</button></main>;
+  }`);
+  expect(root.querySelector('p')!.textContent).toBe('2');
+  click('#inc');
+  expect(root.querySelector('p')!.textContent).toBe('4');
+  click('#take');
+  expect(root.querySelector('p')!.textContent).toBe('50');
+  click('#inc');
+  expect(root.querySelector('p')!.textContent).toBe('50');
+});
+
+it('refreshes a block memo from outer state without recreating its local state', async () => {
+  const { root, click } = await compile(`export function App() {
+    let factor = 2, read, increment;
+    {
+      let count = 1;
+      const product = count * factor;
+      read = () => product;
+      increment = () => count++;
+    }
+    return <main><p>{read()}</p><button id="inc" onClick={increment}>inc</button>
+      <button id="factor" onClick={() => factor++}>factor</button></main>;
+  }`);
+  click('#inc');
+  expect(root.querySelector('p')!.textContent).toBe('4');
+  click('#factor');
+  expect(root.querySelector('p')!.textContent).toBe('6');
+  click('#inc');
+  expect(root.querySelector('p')!.textContent).toBe('9');
+});
+
+it('retains separate lexical activations and completes scopes on loop exits', async () => {
+  const { root, click } = await compile(`export function App() {
+    const reads = [], increments = [];
+    for (let i = 0; i < 3; i++) {
+      let count = i + 1;
+      const twice = count * 2;
+      reads.push(() => twice);
+      increments.push(() => count++);
+      if (i === 0) continue;
+      if (i === 1) break;
+    }
+    return <main><p>{reads.map(read => read()).join(':')}</p>
+      <button id="a" onClick={() => increments[0]()}>a</button>
+      <button id="b" onClick={() => increments[1]()}>b</button></main>;
+  }`);
+  expect(root.querySelector('p')!.textContent).toBe('2:4');
+  click('#a');
+  expect(root.querySelector('p')!.textContent).toBe('4:4');
+  click('#b');
+  expect(root.querySelector('p')!.textContent).toBe('4:6');
+});
+
+it('refreshes block factory closures returned before the block ends', async () => {
+  const { root, click } = await compile(`function make(seed) {
+    if (seed) {
+      let count = seed;
+      const twice = count * 2;
+      return { read: () => twice, inc: () => count++ };
+    }
+  }
+  export function App() {
+    const a = make(1), b = make(3);
+    return <main><p>{a.read()}:{b.read()}</p>
+      <button id="a" onClick={() => a.inc()}>a</button>
+      <button id="b" onClick={() => b.inc()}>b</button></main>;
+  }`);
+  expect(root.querySelector('p')!.textContent).toBe('2:6');
+  click('#a');
+  expect(root.querySelector('p')!.textContent).toBe('4:6');
+  click('#b');
+  expect(root.querySelector('p')!.textContent).toBe('4:8');
+});
+
+it('replays block builders and keeps shadows and shallow aliases native', async () => {
+  const { root, click } = await compile(`export function App() {
+    let seed = 1, read, edit;
+    {
+      const source = { n: 2 };
+      const copy = { ...source };
+      let total = seed;
+      if (seed) total += copy.n;
+      read = () => total;
+      edit = () => source.n++;
+    }
+    return <main><p>{read()}</p><button id="edit" onClick={edit}>edit</button>
+      <button id="seed" onClick={() => seed++}>seed</button></main>;
+  }`);
+  expect(root.querySelector('p')!.textContent).toBe('3');
+  click('#edit');
+  expect(root.querySelector('p')!.textContent).toBe('4');
+  click('#seed');
+  expect(root.querySelector('p')!.textContent).toBe('5');
+});
+
+it('keeps shadowed block bindings distinct and propagates across nested blocks', async () => {
+  const { root, click } = await compile(`export function App() {
+    let read, increment;
+    let count = 100;
+    {
+      let count = 1;
+      const twice = count * 2;
+      {
+        const label = twice + 1;
+        read = () => label;
+      }
+      increment = () => count++;
+    }
+    return <main><p>{count}:{read()}</p><button onClick={increment}>inc</button></main>;
+  }`);
+  expect(root.querySelector('p')!.textContent).toBe('100:3');
+  click();
+  expect(root.querySelector('p')!.textContent).toBe('100:5');
+});
+
+it('tracks module block closures without exposing block-local exports', async () => {
+  const { root, click } = await compile(`let read, increment;
+    {
+      let count = 1;
+      const twice = count * 2;
+      read = () => twice;
+      increment = () => count++;
+    }
+    export function App() {
+      return <main><p>{read()}</p><button onClick={increment}>inc</button></main>;
+    }`);
+  expect(root.querySelector('p')!.textContent).toBe('2');
+  click();
+  expect(root.querySelector('p')!.textContent).toBe('4');
+});
+
 it('recomputes a chain in order and skips unrelated updates and setup calls', async () => {
   const { module, root, click } = await compile(`
     export const log = [];

@@ -162,6 +162,7 @@ evaluation: parent attributes evaluate before child expressions.
 | --- | --- |
 | `model.ts` | `ModulePlan`, `ComponentPlan`, `Template`, memo groups, writes and text/attribute/property/event site contracts |
 | `index.ts` | Plans component setup and returned markup, retains each site's binding inputs and invokes state/write/memo feature planning; selects writable takeover candidates and distinguishes direct replay writes from nested callback writes |
+| `storage.ts` | Selects the lexical activation retaining a binding: module, function or nested block; var retains its function owner |
 | `template.ts` | Builds the node sequence, static markup and expression sites; keeps repeated attributes in authored order |
 | `jsx.ts` | JSX whitespace, attribute aliases, namespaces and conservative template-parsing eligibility |
 | `plan.test.ts` | Node addressing, expression order, graph reactivity, fallback creation and unchanged authored AST |

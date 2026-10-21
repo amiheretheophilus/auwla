@@ -3,6 +3,24 @@ import { inspect } from '../../core/graph/test-helpers';
 
 describe('initial state and takeover', () => {
   for (const keyword of ['let', 'const']) {
+    for (const reactive of [false, true]) {
+      for (const written of [false, true]) {
+        it(`${keyword}: ${reactive ? 'reactive' : 'literal'} initializer with ${written ? 'a later write' : 'no later write'}`, () => {
+          const result = inspect(`function App({ seed }) {
+            ${keyword} value = ${reactive ? 'seed * 2' : '2'};
+            ${written ? 'function change() { value = 9; }' : ''}
+            return <p>{value}</p>;
+          }`);
+          // Classification records the initial computation and the candidate
+          // transition separately; only an executed store can take control.
+          expect(result.node('value').kind).toBe(reactive ? 'Derived' : written ? 'State' : 'Constant');
+          expect(result.node('value').takeovers).toHaveLength(written ? 1 : 0);
+          expect(result.reads('value')).toEqual(reactive ? ['seed'] : []);
+        });
+      }
+    }
+  }
+  for (const keyword of ['let', 'const']) {
     it(`${keyword} can be constant, mutable state or derived`, () => {
       const result = inspect(`
         function App() {

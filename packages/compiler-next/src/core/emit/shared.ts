@@ -50,12 +50,16 @@ export function emitShared(plan: ModulePlan, names: Names, runtime: string) {
     }
     const replay = emitMutations(owner.plan.replayMutations, owner.versions, names, runtime, null, replayBase);
     const memos = emitMemos(owner.plan, owner.versions, names, replacements, replay.replacements,
-      takeovers.get(owner)!, runtime, owner.keys);
+      takeovers.get(owner)!, runtime, owner.keys, { batch: owner.batch });
     const body = finishSharedOwner(owner, memos.setup, memos.snapshots, memos.update, names);
     return [...owner.declarations, ...takeovers.get(owner)!.declarations,
       ...(mutationDeclarations.get(owner) ?? []), ...replay.declarations, ...body];
   };
-  for (const owner of [...state.owners].sort((a, b) => (b.plan.fn?.start ?? -1) - (a.plan.fn?.start ?? -1))) {
+  for (const owner of [...state.owners].sort((a, b) => (b.plan.block?.start ?? b.plan.fn?.start ?? -1) - (a.plan.block?.start ?? a.plan.fn?.start ?? -1))) {
+    if (owner.plan.block !== null) {
+      replacements.set(owner.plan.block, b.BlockStatement({ body: emitOwner(owner) }));
+      continue;
+    }
     if (owner.plan.fn === null) continue;
     const fn = copy(owner.plan.fn);
     fn.params = copy(owner.plan.fn.params, replacements);
@@ -64,7 +68,7 @@ export function emitShared(plan: ModulePlan, names: Names, runtime: string) {
     fn.body = b.BlockStatement({ body: [...directives, ...body.filter((node) => !directives.includes(node))] });
     replacements.set(owner.plan.fn, fn);
   }
-  const moduleOwner = state.owners.find((owner) => owner.plan.fn === null);
+  const moduleOwner = state.owners.find((owner) => owner.plan.fn === null && owner.plan.block === null);
   return {
     replacements, imports: state.imports,
     moduleBody: () => moduleOwner === undefined ? null : emitOwner(moduleOwner),

@@ -75,9 +75,23 @@ reexports. Factory readers close over that invocation's versions and taken flags
 Shared derivations refresh during a consuming build; native intermediate reads
 inside an event remain unchanged until its update boundary.
 
+Nested lexical blocks now have their own storage activations, selected by
+`core/plan/storage.ts`. Declarations stay in their authored block; readers and
+replay closures close over its native values. Separate loop iterations and factory
+invocations retain independent versions. Block setup shares its enclosing build
+owner, while a separate frame identity prevents recursive refresh. Return, break
+and continue complete the blocks they leave; authored catch recovery and abandoned
+setup settle escaped storage too, without adding exception wrappers. Safe authored
+try builders are shared between setup/replay through a lexical arrow; builders
+with returns, suspension, var, direct eval or outward jumps retain native placement.
+Seven native execution cases and one caught-error case cover these paths.
+
 Runtime computation subscriptions connect shared version keys to each consumer's
 captured application/batch. Disposal releases them; one computation changing
 dependencies does not unsubscribe another computation owned by the same entity.
+Shared memo collectors isolate setup reads from callers and propagate invalidation
+to downstream owners before lazy refresh. One publication wave notifies each
+subscription once, including cycles; authored recovery resets abandoned waves.
 `runtime/src/shared-writes.ts` publishes shared versions. Shared mutation roots
 use weak ownership, preserving aliases without retaining unused factories.
 Shared notifications identify the binding actually written as well as all owner
@@ -90,9 +104,9 @@ Private/super accesses remain in lexical arrow closures inside their class;
 successful stores notify roots sharing the receiver. Class instances, static
 fields, inherited accessors and constructor-returned objects retain native behavior.
 
-**Current boundary:** component/module storage, top-level captured factory
+**Current boundary:** component/module storage, captured factory and block
 bindings, hidden reads, possible builders and property/call mutations are built.
-Nested-block memo storage remains pending. Explicit pre-await flushing is built
+Hostile proxies and further reflection coverage remain open (`handlers.md`). Explicit pre-await flushing is built
 and verified by native suspension checks (`handlers.md`). The
 full Phase 3 exit and later-phase component/list cases remain unchecked.
 
@@ -107,6 +121,17 @@ only decides **what to re-run and when to update the UI**. Aliasing, in-place
 JavaScript, and needs no rule here.
 
 ## Rules
+
+Classification audit: `features/state/classify.test.ts` covers every row of the
+table below for both let and const (literal/reactive initializer, with/without
+a later write). The graph retains the initial Derived kind plus takeover sites;
+native takeover tests verify the executed transition. `derived/classify.test.ts`
+covers globals, imports, opaque accessors/callees, control-flow builders, immediate
+and registered callbacks, mutations, patterns and recursive helpers.
+`props/classify.test.ts` covers prop aliases/defaults/rest, overrides and helper
+parameters. `core/graph` tests cover Source/Ref inputs and propagation; their
+production feature classifiers arrive with their implementation phases. Timing,
+source readiness and prop reset behavior retain their concept-page behavior cases.
 
 `let` and `const` mean the same thing: either can be state or derived. A binding
 follows the inputs of its computation until an actual later reassignment takes

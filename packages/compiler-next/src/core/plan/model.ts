@@ -123,6 +123,8 @@ export interface SharedReadPlan {
 
 export interface SharedOwnerPlan {
   readonly fn: FunctionNode | null;
+  /** A nested lexical activation; null for a whole function/module. */
+  readonly block: Extract<Node, { type: 'BlockStatement' }> | null;
   readonly state: readonly BindingNode[];
   readonly setup: readonly Statement[];
   readonly memos: readonly MemoGroupPlan[];

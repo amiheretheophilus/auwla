@@ -4,21 +4,22 @@ import type { Node, Statement, VariableDeclaration, VariableDeclarator } from 'y
 import type { BindingNode, SemanticGraph } from '../../core/graph';
 import { variableDeclaration, type InputQueries } from '../../core/graph/inputs';
 import type { MemoGroupPlan, MemoPlan } from '../../core/plan/model';
+import { storageOwner } from '../../core/plan/storage';
 
 export function planMemos(
   graph: SemanticGraph, queries: InputQueries, components: ReadonlySet<Node | null>,
 ): ReadonlyMap<Node | null, readonly MemoGroupPlan[]> {
   const declarations = new Map<VariableDeclarator, BindingNode[]>();
   for (const node of graph.bindings.values()) {
-    const owner = node.owner.runner;
-    if (!components.has(owner) || (owner !== null && !is.Function(owner))) continue;
+    const owner = storageOwner(node);
+    if (!components.has(owner) || (owner !== null && !is.Function(owner) && !is.BlockStatement(owner))) continue;
     const declarator = variableDeclaration(node.binding);
     if (declarator === null) continue;
     const declaration = node.binding.module.parentOf(declarator);
     if (!is.VariableDeclaration(declaration)) continue;
     let parent = node.binding.module.parentOf(declaration);
     if (is.ExportNamedDeclaration(parent)) parent = node.binding.module.parentOf(parent);
-    if (owner === null ? !is.Program(parent) : parent !== owner.body) continue;
+    if (owner === null ? !is.Program(parent) : parent !== (is.BlockStatement(owner) ? owner : owner.body)) continue;
     const targets = declarations.get(declarator) ?? [];
     targets.push(node);
     declarations.set(declarator, targets);
@@ -104,7 +105,7 @@ export function planMemos(
       builderTargets: new Map([...builderTargets].map(([node, outputs]) => [node, [...outputs]])),
       possibleBuilders: new Map([...possibleBuilders].map(([node, outputs]) => [node, [...outputs]])),
     };
-    const owner = first.owner.runner;
+    const owner = storageOwner(first);
     const list = owners.get(owner) ?? [];
     list.push(memo);
     owners.set(owner, list);
@@ -171,7 +172,7 @@ function groupMemos(memos: readonly MemoPlan[], queries: InputQueries): MemoGrou
       }
     }
     return {
-      dynamic: [...inputs].some((input) => input.owner.runner !== group.computations[0]!.targets[0]!.owner.runner)
+      dynamic: [...inputs].some((input) => storageOwner(input) !== storageOwner(group.computations[0]!.targets[0]!))
         || [...group.steps].some((step) => queries.inputsOf(group.computations[0]!.targets[0]!.binding.module, step).opaque),
       computations: group.computations,
       inputs: [...inputs],

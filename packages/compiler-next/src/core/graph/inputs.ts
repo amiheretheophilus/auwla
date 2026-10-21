@@ -223,6 +223,7 @@ export function bodyStatement(module: Module, node: Node, owner: Node | null): N
   let child = node;
   let parent = module.parentOf(child);
   while (parent !== null) {
+    if (parent === owner && is.BlockStatement(parent)) return child;
     if (is.Program(parent)) return owner === null ? child : null;
     if (is.BlockStatement(parent) && module.parentOf(parent) === owner) return child;
     if (is.Function(parent)) return null;

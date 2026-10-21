@@ -32,7 +32,7 @@ export function collectComputations(
       const owner = declaringRunner(module, binding);
       for (const site of writes) {
         if (site.runner !== owner) continue;
-        const statement = bodyStatement(module, site.node, owner);
+        const statement = bodyStatement(module, site.node, builderOwner(binding));
         if (statement === null || declaresInside(binding, statement)) continue;
         // A return consumes a value; it is not part of building that value.
         if (is.ReturnStatement(statement)) continue;
@@ -43,13 +43,13 @@ export function collectComputations(
 
     for (const call of module.findAll(['CallExpression', 'NewExpression'])) {
       const owner = runnerOf(module, call);
-      const statement = bodyStatement(module, call, owner);
-      if (statement === null || is.ReturnStatement(statement)) continue;
       const facts = queries.callFacts(module, call);
       for (const site of facts.writes) {
         const binding = site.binding;
         // A child invocation writing a parent's state does not rebuild the parent.
         if (binding.module !== module || declaringRunner(module, binding) !== owner) continue;
+        const statement = bodyStatement(module, call, builderOwner(binding));
+        if (statement === null || is.ReturnStatement(statement)) continue;
         if (declaresInside(binding, statement)) continue;
         const certainty = site.kind === 'call' || site.kind === 'argument' ? 'possible' : 'definite';
         addBuilder(binding, statement, certainty);
@@ -65,6 +65,8 @@ export function collectComputations(
         for (const site of [...summary.writes, ...invoked.writes]) {
           const binding = site.binding;
           if (binding.module !== module || declaringRunner(module, binding) !== owner) continue;
+          const statement = bodyStatement(module, call, builderOwner(binding));
+          if (statement === null || is.ReturnStatement(statement)) continue;
           if (!declaresInside(binding, statement)) addBuilder(binding, statement, 'possible', 'runtime');
         }
       }
@@ -139,4 +141,12 @@ function declaresInside(binding: Binding, node: Node): boolean {
   return binding.declarations.some((declaration) => {
     return declaration.start >= node.start && declaration.end <= node.end;
   });
+}
+
+function builderOwner(binding: Binding): Node | null {
+  const runner = declaringRunner(binding.module, binding);
+  const declarator = variableDeclaration(binding);
+  const declaration = declarator === null ? null : binding.module.parentOf(declarator);
+  const block = declaration === null ? null : binding.module.parentOf(declaration);
+  return is.VariableDeclaration(declaration) && declaration.kind !== 'var' && is.BlockStatement(block) ? block : runner;
 }

@@ -4,7 +4,7 @@ import { getExtensionStore, onCommitFinished, onEntityDispose, type Entity } fro
 type Version = () => number;
 interface Dependency { readonly read: Version; seen: number }
 interface Frame { readonly dependencies: Map<object, Dependency>; readonly writes: Set<object>; readonly previous: Frame | null }
-function store() { return getExtensionStore('mmd:computation', () => ({ current: null as Frame | null })); }
+function store() { return getExtensionStore('mmd:computation', () => ({ current: null as Frame | null, notifying: null as Set<() => void> | null })); }
 const subscribers = new WeakMap<object, Set<() => void>>();
 function owned() { return getExtensionStore('mmd:owned-computations', () => new Map<string, Set<() => void>>()); }
 onEntityDispose((id) => {
@@ -13,10 +13,20 @@ onEntityDispose((id) => {
 });
 
 export function publishVersions(keys: readonly object[], written?: object): void {
-  if (written !== undefined) store().current?.writes.add(written);
+  const state = store();
+  if (written !== undefined) state.current?.writes.add(written);
+  const outer = state.notifying === null;
+  const notified = state.notifying ?? new Set<() => void>();
+  state.notifying = notified;
+  if (outer) globalThis.queueMicrotask(() => { if (state.notifying === notified) state.notifying = null; });
   const notifications = new Set<() => void>();
   for (const key of keys) for (const notify of subscribers.get(key) ?? []) notifications.add(notify);
-  for (const notify of notifications) notify();
+  for (const notify of notifications) {
+    if (notified.has(notify)) continue;
+    notified.add(notify);
+    notify();
+  }
+  if (outer) state.notifying = null;
 }
 
 export function trackRead<T>(version: Version, value: T, key: object = version): T {
@@ -24,15 +34,16 @@ export function trackRead<T>(version: Version, value: T, key: object = version):
   return value;
 }
 
-export function resetComputationScope(): void { store().current = null; }
+export function resetComputationScope(): void { store().current = null; store().notifying = null; }
 
 export function captureComputationScope(): () => void {
   const state = store();
   const frame = state.current;
-  return () => { state.current = frame; };
+  const notifying = state.notifying;
+  return () => { state.current = frame; state.notifying = notifying; };
 }
 
-onCommitFinished((failed) => { if (failed) store().current = null; });
+onCommitFinished((failed) => { if (failed) resetComputationScope(); });
 
 export function createComputation(notify?: () => void, entity?: Entity) {
   const invalidate = notify === undefined ? undefined : () => notify();

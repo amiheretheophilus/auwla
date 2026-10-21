@@ -21,6 +21,7 @@ import type { MemoGroupPlan } from './model';
 import type { SharedOwnerPlan, SharedReadPlan } from './model';
 import { planSharedReads, sharedSetup } from '../../features/state/shared-plan';
 import { planReceiverTargets } from '../../features/handlers/receivers';
+import { storageOwner } from './storage';
 
 export type { ComponentPlan, ModulePlan, Site, Template, TemplateNode } from './model';
 
@@ -31,7 +32,7 @@ export function planModules(
 ): ModulePlan[] {
   const state = planLocalState(graph, components);
   const sharedReads = planSharedReads(graph, components);
-  const owners = new Set<Node | null>([...components, ...[...sharedReads.keys()].map((binding) => binding.owner.runner)]);
+  const owners = new Set<Node | null>([...components, ...[...sharedReads.keys()].map(storageOwner)]);
   const memos = planMemos(graph, queries, owners);
   return graph.resolved.modules.map((entry) => planModule(graph, queries, components, entry, state, memos, sharedReads));
 }
@@ -53,6 +54,8 @@ function planModule(
   };
 
   const plans = new Map<Node, ComponentPlan>();
+  const lexicalBlocks = new Set([...sharedReads.keys()].filter((binding) => binding.binding.module === module)
+    .map(storageOwner).filter((owner) => is.BlockStatement(owner)));
   for (const fn of module.findAll(['FunctionDeclaration', 'FunctionExpression', 'ArrowFunctionExpression'])) {
     if (!components.has(fn)) continue;
     const computations = memos.get(fn) ?? [];
@@ -67,7 +70,8 @@ function planModule(
         const facts = queries.inputsOf(module, site.expression);
         if (facts.opaque || facts.reads.some((read) => {
           const binding = read.binding ?? read.reference.binding;
-          return binding !== null && graph.bindings.get(binding)?.owner.runner !== fn;
+          const node = binding === null ? undefined : graph.bindings.get(binding);
+          return node !== undefined && storageOwner(node) !== fn;
         })) dynamicSites.add(site.expression);
         for (const read of queries.inputsOf(module, site.expression).reads) {
           const binding = read.binding ?? read.reference.binding;
@@ -99,6 +103,13 @@ function planModule(
       if (read.target.binding === null || !local.includes(read.target as BindingNode) || read.reference === null) return [];
       return [{ node: read.reference.node, binding: read.target as BindingNode }];
     }));
+    for (const binding of local) {
+      for (const reference of binding.binding.references) {
+        if (reference.isWrite || reference.inTypePosition) continue;
+        if (![...module.ancestors(reference.node)].some((ancestor) => lexicalBlocks.has(ancestor as Extract<Node, { type: 'BlockStatement' }>))) continue;
+        if (!trackedReads.some((read) => read.node === reference.node)) trackedReads.push({ node: reference.node, binding });
+      }
+    }
     const mutationRoots = local.filter((binding) => {
       const declarator = variableDeclaration(binding.binding);
       if (declarator === null) return false;
@@ -119,21 +130,23 @@ function planModule(
   }
   const sharedOwners: SharedOwnerPlan[] = [];
   const shared = [...sharedReads.keys()].filter((binding) => binding.binding.module === module);
-  for (const owner of new Set(shared.map((binding) => binding.owner.runner))) {
-    if (owner !== null && (!is.Function(owner) || !is.BlockStatement(owner.body))) continue;
-    const bindings = shared.filter((binding) => binding.owner.runner === owner);
-    const computations = (memos.get(owner) ?? []).filter((group) => group.computations[0]!.targets[0]!.binding.module === module);
+  for (const owner of new Set(shared.map(storageOwner))) {
+    if (owner !== null && !is.BlockStatement(owner) && (!is.Function(owner) || !is.BlockStatement(owner.body))) continue;
+    const bindings = shared.filter((binding) => storageOwner(binding) === owner);
+    const computations = (memos.get(owner) ?? []).filter((group) => group.computations[0]!.targets[0]!.binding.module === module)
+      .map((group) => ({ ...group, dynamic: true }));
     const targets = computations.flatMap((group) => group.computations.flatMap((memo) => memo.targets));
     const local = [...new Set([...bindings, ...targets])];
     const writes = planWrites(local);
     const mutations = planMutations(local);
-    const replayed = (operation: Node) => runnerOf(module, operation) === owner
+    const runner = bindings[0]!.owner.runner;
+    const replayed = (operation: Node) => runnerOf(module, operation) === runner
       && computations.some((group) => group.steps.some((root) => operation.start >= root.start && operation.end <= root.end));
     const readonlyBindings = planReadonlyBindings(local);
     sharedOwners.push({
-      fn: owner as SharedOwnerPlan['fn'], state: local,
+      fn: runner as SharedOwnerPlan['fn'], block: is.BlockStatement(owner) ? owner : null, state: local,
       setup: owner === null ? sharedSetup(module.ast.body, new Set(computations.flatMap((group) => group.computations.map((memo) => memo.declarator))))
-        : (owner.body as Extract<Node, { type: 'BlockStatement' }>).body as Statement[],
+        : (is.BlockStatement(owner) ? owner.body : (owner.body as Extract<Node, { type: 'BlockStatement' }>).body) as Statement[],
       memos: computations, writes, mutations,
       replayWrites: writes.filter((write) => replayed(write.operation)),
       replayMutations: mutations.filter((write) => replayed(write.operation)), readonlyBindings,
