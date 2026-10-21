@@ -10,8 +10,15 @@ import { buildGraph } from '.';
 import { escapingFacts } from './escaping';
 import { InputQueries } from './inputs';
 import type { SemanticGraph } from './model';
+import type { FunctionNode } from '../resolve/functions';
 
-export function classifyGraph(resolved: Resolved): SemanticGraph {
+/** Planning reuses the same dependency caches and component identities. */
+export interface ClassifiedGraph extends SemanticGraph {
+  readonly queries: InputQueries;
+  readonly components: ReadonlySet<FunctionNode>;
+}
+
+export function classifyGraph(resolved: Resolved): ClassifiedGraph {
   const properties = propertyReads(resolved);
   const summaries = summarizeFunctions(resolved, properties);
   const queries = new InputQueries(summaries, properties);
@@ -22,5 +29,10 @@ export function classifyGraph(resolved: Resolved): SemanticGraph {
   const state = classifyState(resolved, computations, props);
   const facts = classifyDerived(state, resolved.globals);
   const escaping = escapingFacts(resolved, queries, components);
-  return { ...buildGraph(resolved, facts, escaping), functions: [...summaries.values()] };
+  return {
+    ...buildGraph(resolved, facts, escaping),
+    functions: [...summaries.values()],
+    queries,
+    components,
+  };
 }

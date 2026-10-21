@@ -12,8 +12,9 @@ Last updated: 2026-10-21.
   the graph and the props/state/derived classification are built and wired into
   `compileModules` (80 unit tests). Phase 3 design written and approved
   (`compiler/output.md`, "Phase 3 design"); the reference passes all 228 cases,
-  including timer and unknown-caller cases, and now tracks closure state. Next:
-  escaping functions in the graph, then the Phase 3 slices (`compiler/plan.md`).
+  including timer and unknown-caller cases, and now tracks closure state.
+  Escaping functions are built (`cd25f77`). The Phase 3 template slice now builds
+  static DOM from the render plan; state/text updates and handler writes are next.
 - `compiler-refactor`: the old compiler's refactor, stopped on 2026-10-19. The
   sections below record that work.
 - `codex/package-conditional-sync` at `9e35480` (third-party package compilation,
@@ -22,6 +23,19 @@ Last updated: 2026-10-21.
 - The user put the agent in charge of the refactor on 2026-10-18 ("you are in charge now").
 
 ## Done
+
+- Phase 3 static markup: completed the existing uncommitted plan/template files
+  and connected graph → plan → DOM emit in `compileModules`. Hoisted templates,
+  direct creation when parsing would change the tree, fragments, initial sites,
+  namespaces and collision-free names. Authored ASTs remain unchanged. No runtime
+  package changes. Details and limits: `compiler/core.md`.
+  Verification: `COMPILER=next bun test src/core/plan/plan.test.ts
+  src/pipeline.test.ts tests/cases/static-markup.test.ts`: **28 pass, 0 fail**,
+  including **18 behavior cases**. Package `bun check`: **76 files, no errors**.
+  The root suite was not run. One initial check was mistakenly run at the root
+  and reported unrelated generated-example errors; the package check above is
+  the relevant validation. State commits and reactive updates are not implemented
+  by this slice, so the Phase 3 exit and its generator gate remain unchecked.
 
 - `73f5f34`: readiness. Code that depends on a loading source waits for it:
   state seeds, early returns, effects (also through derivations), chained requests,
@@ -420,9 +434,9 @@ are nailed first.
    unresolved reads stay opaque. The AST is unchanged. 19 graph tests pass;
    with resolve and pipeline tests, 31 pass. Package `bun check` passes for 46
    files. `compiler/core.md` describes the API and its limits.
-3. Next: `compiler/plan.md`, Phase 2 feature classification in `features/state`,
-   `derived` and `props`, function summaries, and integration from `pipeline.ts`.
-   The shared graph currently consumes supplied facts; it does not infer them.
-   Runtime takeover must not be inferred from resolve's lexical `later` flag.
-   Phase 1 (`e57fc73`) behavior is unchanged: non-JSX modules compile; JSX emission
-   starts in Phase 3. No additional behavior cases pass on compiler-next yet.
+3. Phase 2 classification and integration are built (`0d474a7`), followed by the
+   Phase 3 design and escaping-function graph (`4abca67`, `cd25f77`). The template
+   slice above is verified. Next in `compiler/plan.md`: state/text updates and
+   handler writes, then versioned memos and body builders. Runtime takeover must
+   not be inferred from resolve's lexical `later` flag. The Phase 2 per-rule test
+   audit remains unchecked; this session continued Phase 3 at the user's request.

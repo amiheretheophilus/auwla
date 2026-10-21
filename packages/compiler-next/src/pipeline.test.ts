@@ -47,8 +47,16 @@ describe('compileModules', () => {
     expect(output['./dir/b.ts']).not.toContain('number');
   });
 
-  it('says which phase compiles JSX', () => {
-    const compile = () => compileModules({ './App.tsx': 'export const App = () => <p />;' });
-    expect(compile).toThrow('Phase 3');
+  it('compiles static JSX to a fresh DOM tree for each invocation', async () => {
+    const output = compileModules({ './App.tsx': 'export const App = () => <p>Hello</p>;' }, {
+      runtimePath: '@memoized-dom/runtime/testing',
+    });
+    const module = await importCompiled('static-markup', output, 'App.js');
+    const first = module.App('first', null) as HTMLElement;
+    const second = module.App('second', null) as HTMLElement;
+    expect(first.outerHTML).toBe('<p>Hello</p>');
+    expect(second.outerHTML).toBe(first.outerHTML);
+    expect(first).not.toBe(second);
+    expect(first.firstChild).not.toBe(second.firstChild);
   });
 });

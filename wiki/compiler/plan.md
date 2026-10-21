@@ -107,7 +107,9 @@ files that must pass in full at its exit.
   `this` is kept with `receiver: true` for the classes slice.
 - Build in slices, each proved by its cases on `COMPILER=next`, with the pass
   count recorded in `../status.md`:
-  - [ ] static markup (templates);
+  - [x] static markup (templates). Built on the existing uncommitted plan/template
+    files: 18 behavior cases pass on `COMPILER=next`, plus 10 plan/pipeline checks.
+    Sites initialize once; state updates and write commits are the next slice.
   - [ ] state, text and handler writes (counters);
   - [ ] versioned memos and replayed body builders;
   - [ ] takeover flags and the setup flag (`cases/callbacks`);
@@ -115,10 +117,11 @@ files that must pass in full at its exit.
   - [ ] escaping-function tracking (the `unknown callers:` cases);
   - [ ] module state, imports, factory closures and classes (`complex state:`);
   - [ ] `await` in handlers.
-- [ ] `src/core/plan/`: `Template`, `TextSite`, `AttributeSite`, `PropertySite`,
+- [x] `src/core/plan/`: `Template`, `TextSite`, `AttributeSite`, `PropertySite`,
   `EventSite`.
 - [ ] `src/core/emit/` + `src/features/*/dom.ts`: DOM backend on
   `@memoized-dom/runtime`, built with `yuku-ast` builders, printed by `yuku-codegen`.
+  The module/template emitter is built; feature emission follows in the slices above.
 - [ ] Handlers: writes, updates, `await` in handlers (UI updates before each await,
   `handlers.md`), member and call handlers.
 - **Exit:** `cases/state-and-derived`, `cases/handlers` and `cases/core` pass on

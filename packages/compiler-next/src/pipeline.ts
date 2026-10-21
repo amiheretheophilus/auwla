@@ -4,14 +4,15 @@
  *
  *   parse → resolve → graph → plan → optimize → emit
  *
- * Phase 2 adds the semantic graph. A module without
- * JSX is printed as it is; JSX is compiled from Phase 3.
+ * Phase 3 adds template planning and DOM emission. Modules without JSX retain
+ * their authored behavior; the plan replaces only component functions.
  */
-import { CompileError } from './core/diagnostics';
+import { emitDom } from './core/emit/dom';
 import { printJavaScript } from './core/emit/print';
 import { classifyGraph } from './core/graph/classify';
 import { parseModule } from './core/parse';
 import { resolve } from './core/resolve';
+import { planModules } from './core/plan';
 import type { CompileModulesOptions } from './options';
 
 /** Compiles a set of modules that may import each other. Returns JavaScript by path. */
@@ -22,13 +23,13 @@ export function compileModules(
   const parsed = Object.entries(modules).map(([path, source]) => parseModule(path, source));
   const resolved = resolve(parsed, options);
   const graph = classifyGraph(resolved);
+  const plans = planModules(graph, graph.queries, graph.components);
 
   const output: Record<string, string> = {};
-  for (const module of graph.resolved.modules) {
-    if (module.hasJsx) {
-      throw new CompileError('compiler-next compiles JSX from Phase 3 of wiki/compiler/plan.md', module.path);
-    }
-    output[module.path] = printJavaScript(module.module.ast, module.path, module.module.source);
+  for (const plan of plans) {
+    const tree = emitDom(plan, options);
+    const module = plan.module;
+    output[module.path] = printJavaScript(tree, module.path, module.module.source);
   }
   return output;
 }

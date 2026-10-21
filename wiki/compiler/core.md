@@ -1,7 +1,7 @@
 # Core stages
 
 **Folders:** `core/parse/`, `core/resolve/`, `core/graph/`, `core/plan/`,
-`core/emit/` _(planned)_.
+`core/emit/` (DOM template slice built).
 
 The core holds the stage machinery and the shared types. What a concept means
 (state, a list, a ref) lives in its feature folder, not here.
@@ -74,7 +74,7 @@ separate invocations will need separate storage.
 | `model.ts` | Read-only contracts for binding kinds, initial computations, body builders, read/write edges and execution owners |
 | `index.ts` | `buildGraph(resolved, facts)`: allocates all runtime bindings, then connects feature-supplied reads, import aliases and resolve's write sites |
 | `rules.ts` | Iterative, cycle-safe `isReactive(node)` and `pending(node, follows?)` queries |
-| `classify.ts` | `classifyGraph(resolved)`: the feature order, then `buildGraph`. Called by `pipeline.ts` |
+| `classify.ts` | `classifyGraph(resolved)`: the feature order, then `buildGraph`. Returns the graph plus the dependency query cache and known component identities for planning |
 | `inputs.ts` | `InputQueries`: what evaluating a node reads and writes, through visible helpers; each root, call and function is analysed once and cached |
 | `classification.ts` | `BindingComputation`, the fact the derived feature hands to the state feature |
 | `escaping.ts` | what each escaping function reads (its body and the helpers it calls directly, not its own parameters or locals); `buildGraph` keeps the reactive reads as `SemanticGraph.escaping`. Components are excluded |
@@ -94,8 +94,8 @@ preserves every write site and its runner separately from the initial computatio
 no potential write changes the supplied initial kind. The authored AST and
 analyzer identities remain untouched.
 
-`pipeline.ts` runs `classifyGraph` after resolve. Its output is not used to emit
-code yet (Phase 3).
+`pipeline.ts` runs `classifyGraph` after resolve, then `planModules` and `emitDom`.
+Planning reuses classification's dependency cache and component identities.
 
 **Speed.** A query must never scan the whole module once per binding, call or
 function: before `InputQueries` and the one-pass summaries, 200 one-line
@@ -153,21 +153,63 @@ reactivity propagation; branch-filtered pending sets and callback creation.
 
 A tree of regions built from the JSX. Each site names the graph nodes it reads.
 
+The first Phase 3 slice plans intrinsic markup returned directly by a component
+(including expression-bodied arrows, fragments and markup inside expression
+containers). It separates post-order DOM node indices from source-order site
+evaluation: parent attributes evaluate before child expressions.
+
+| File | What it does |
+| --- | --- |
+| `model.ts` | `ModulePlan`, `ComponentPlan`, `Template` and text/attribute/property/event site contracts |
+| `index.ts` | Plans component setup and returned markup; asks the graph whether each site reads reactive inputs |
+| `template.ts` | Builds the node sequence, static markup and expression sites; keeps repeated attributes in authored order |
+| `jsx.ts` | JSX whitespace, attribute aliases, namespaces and conservative template-parsing eligibility |
+| `plan.test.ts` | Node addressing, expression order, graph reactivity, fallback creation and unchanged authored AST |
+
 - `Template`: static DOM shape, hoisted.
 - `TextSite`, `AttributeSite`, `PropertySite`, `EventSite`.
-- `Conditional { branches: [test, Plan][] }`.
-- `List { source, key, row: Plan }`.
-- `ComponentCall { component, props, slots }`.
-- `Boundary { sources, pending, error }`, for loading and error UI.
+- `Conditional { branches: [test, Plan][] }` _(planned)_.
+- `List { source, key, row: Plan }` _(planned)_.
+- `ComponentCall { component, props, slots }` _(planned)_.
+- `Boundary { sources, pending, error }` _(planned)_, for loading and error UI.
 
 Features build their own pieces. Optimizations replace pieces (`optimize.md`).
 
 ## emit — `core/emit/`
 
-- Backends: DOM (browser), SSR (server HTML), HTML (static initial content).
+- Backends: DOM template creation is built; SSR and HTML are planned.
 - They read only the plan and the graph. They never look at authored syntax.
 - They build new AST with `yuku-ast` builders and print with `yuku-codegen`
   (`strip: true`, source map).
+
+| File | What it does |
+| --- | --- |
+| `dom.ts` | Copies module syntax, hoists markup, replaces planned component functions and initializes their sites |
+| `template.ts` | Calls runtime `materializeMarkup`, or creates nodes directly when HTML parsing would alter the tree |
+| `names.ts` | Allocates generated names against all authored bindings and references |
+| `quote.ts` | Parses and copies generated statement snippets, filling AST holes; syntax that cannot parse at module scope uses builders directly |
+| `copy.ts` | Copies authored syntax with identity-keyed replacements, without changing analyzer nodes |
+| `print.ts` | Prints JavaScript through `yuku-codegen`, erasing TypeScript |
+
+Ordinary HTML uses hoisted markup and cached template cloning. Tables, raw-text
+elements, parser-sensitive nesting, SVG and unproven tags use direct creation.
+This fallback preserves the authored tree and SVG/foreignObject namespaces;
+template eligibility is an optimization, not a restriction on accepted tags.
+Text expressions replace comment placeholders so adjacent values retain separate
+nodes. Empty or multi-root fragments return a `DocumentFragment`.
+
+**Current boundary:** setup and sites run once at mount. Native listeners are
+installed, but state commits, `_update`, memo replay, tracking and async boundaries
+are not emitted yet. Nested component calls, conditional/list regions, refs and
+spreads still require their planned slices. The printer currently returns code,
+not source maps. No Phase 3 exit is claimed from the template slice alone.
+
+**Verified:** `tests/cases/static-markup.test.ts` has 18 comparison cases with
+independent DOM assertions: nesting, whitespace/entities, attributes and aliases,
+fragments, adjacent primitive values, properties, tables, invalid HTML nesting,
+SVG namespaces, raw text, name collisions, expression order, native event delivery,
+repeated attributes and type-wrapped markup. Seven plan tests and three pipeline
+tests pass with them; the pipeline also verifies separate DOM trees per invocation.
 
 ## Where to add things
 
