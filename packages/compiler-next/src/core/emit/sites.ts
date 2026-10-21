@@ -32,7 +32,13 @@ export function emitSites(
     const node = context.ref(site.node);
     const value = names.fresh('_value');
     const expression = copy(site.expression, replacements);
+    const computation = plan.dynamicSites.has(site.expression) ? names.fresh('_siteComputation') : null;
+    if (computation !== null) {
+      mount.push(statement('const $$computation = $$runtime.createComputation();', { computation, runtime }));
+      mount.push(statement('$$computation.begin();', { computation }));
+    }
     mount.push(statement('let $$value = $$expression;', { value, expression }));
+    if (computation !== null) mount.push(statement('$$computation.end();', { computation }));
     const used = last.get(siteKey(site)) === site;
     const listener = used && site.kind === 'event' ? names.fresh('_listener') : null;
     if (listener !== null) mount.push(statement('let $$listener;', { listener }));
@@ -43,7 +49,7 @@ export function emitSites(
       const version = versions.get(binding);
       if (version !== undefined) inputs.add(version);
     }
-    if (inputs.size === 0) continue;
+    if (inputs.size === 0 && computation === null) continue;
 
     const snapshots = [...inputs].map((version) => ({ version, seen: names.fresh('_seen') }));
     for (const { version, seen } of snapshots) {
@@ -51,6 +57,10 @@ export function emitSites(
     }
     const next = names.fresh('_next');
     const body: Statement[] = [statement('const $$next = $$expression;', { next, expression })];
+    if (computation !== null) {
+      body.unshift(statement('$$computation.begin();', { computation }));
+      body.push(statement('$$computation.end();', { computation }));
+    }
     const writes = used ? writeValue(site, next, node, runtime, batch, listener) : [];
     writes.push(statement('$$value = $$next;', { value, next }));
     // Equality also keeps an unchanged prop from replacing text a user typed.
@@ -61,7 +71,9 @@ export function emitSites(
     }
     body.push(changed);
     for (const { version, seen } of snapshots) body.push(statement('$$seen = $$version;', { seen, version }));
-    const guard = statement(`if (${snapshots.map(({ version, seen }) => `${version} !== ${seen}`).join(' || ')}) {}`);
+    const conditions = snapshots.map(({ version, seen }) => `${version} !== ${seen}`);
+    if (computation !== null) conditions.push(`${computation}.changed()`);
+    const guard = statement(`if (${conditions.join(' || ')}) {}`);
     if (guard.type === 'IfStatement' && guard.consequent.type === 'BlockStatement') guard.consequent.body = body;
     update.push(guard);
   }

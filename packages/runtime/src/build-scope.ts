@@ -1,5 +1,7 @@
 /** Runtime invocation ownership for compiler-next setup and memo replay. */
 import { getActiveApplicationRuntime, getExtensionStore, onCommitFinished } from './kernel';
+import { captureComputationScope, resetComputationScope } from './computation';
+import { captureMutationScope } from './mutation';
 
 interface BuildStore {
   current: BuildFrame | null;
@@ -26,6 +28,7 @@ function buildStore(): BuildStore {
 function reset(store: BuildStore): void {
   store.current = null;
   store.epoch++;
+  resetComputationScope();
 }
 
 onCommitFinished((failed) => {
@@ -37,9 +40,15 @@ export function captureBuildScope(): () => void {
   const store = buildStore();
   const current = store.current;
   const epoch = store.epoch;
+  const restoreComputation = captureComputationScope();
+  const restoreMutations = captureMutationScope();
   return () => {
     // An async continuation must not revive an owner from a finished turn.
-    if (store.epoch === epoch) store.current = current;
+    if (store.epoch === epoch) {
+      store.current = current;
+      restoreComputation();
+      restoreMutations();
+    }
   };
 }
 

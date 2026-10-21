@@ -27,6 +27,18 @@ Last updated: 2026-10-21.
 
 ## Done
 
+- Phase 3 local call observation and hidden reads: opaque calls detect data
+  mutations, preserve results and recover partial edits; identity roots notify
+  aliases and shared nested data. Possible body builders join replay only after
+  their first run changes an output. Opaque initializers/sites capture executed
+  escaping reads, and dynamic memo edges propagate in the same update.
+  Verified: seven mutation and two tracking comparisons plus 23 focused memo,
+  ownership and takeover checks (**32 tests**); runtime observation/tracking,
+  ownership and batching (**19 tests**). State/derived classification still
+  passes (**30 tests**). Existing local callback comparisons pass. Broader state
+  cases still expose the planned shared-storage/class and later component/list
+  work. No expectations changed; no full root suite was run.
+
 - Phase 3 direct property mutations: member assignments, updates, patterns,
   loop targets and delete commit root versions without binding takeover.
   Computed key order, getter/setter receivers and partial stores are verified.

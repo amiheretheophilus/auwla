@@ -186,6 +186,7 @@ Features build their own pieces. Optimizations replace pieces (`optimize.md`).
 | --- | --- |
 | `dom.ts` | Copies module syntax, hoists markup, composes state/write feature emission, registers the component update and initializes sites |
 | `sites.ts` | Emits mount values and per-site version checks; skips unchanged DOM values and updates native listeners when their value changes |
+| `packages/runtime/src/computation.ts` | Captures executed hidden version reads for opaque memos/sites, with stable keys and nested restoration |
 | `template.ts` | Calls runtime `materializeMarkup`, or creates nodes directly when HTML parsing would alter the tree |
 | `names.ts` | Allocates generated names against all authored bindings and references |
 | `quote.ts` | Parses and copies generated statement snippets, filling AST holes; syntax that cannot parse at module scope uses builders directly |

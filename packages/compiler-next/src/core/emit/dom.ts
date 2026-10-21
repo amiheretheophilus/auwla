@@ -6,7 +6,7 @@ import { DEFAULT_RUNTIME_PATH } from '../../options';
 import type { ComponentPlan, ModulePlan } from '../plan';
 import { copy } from './copy';
 import { Names } from './names';
-import { statement, stringLiteral } from './quote';
+import { expression, statement, stringLiteral } from './quote';
 import { emitTemplate } from './template';
 import { emitLocalState } from '../../features/state/dom';
 import { emitConstWrites, emitWrites } from '../../features/handlers/dom';
@@ -61,10 +61,18 @@ function emitComponent(plan: ComponentPlan, names: Names, runtime: string, marku
   const setupFrame = names.fresh('_setupFrame');
   const updateFrame = names.fresh('_updateFrame');
   const takeovers = emitTakeovers(plan.takeovers, state.versions, names, scope, batch!);
+  const trackKeys = new Map<import('../graph').BindingNode, string>();
   const readonly = new Map([
     ...takeovers.replacements,
     ...emitConstWrites(plan.readonlyBindings, names, runtime),
   ]);
+  for (const read of plan.trackedReads) {
+    const key = trackKeys.get(read.binding) ?? names.fresh('_readKey');
+    trackKeys.set(read.binding, key);
+    readonly.set(read.node, expression('$$runtime.trackRead(() => $$version, $$binding, $$key)', {
+      runtime, version: state.versions.get(read.binding)!, binding: read.binding.binding.name, key,
+    }));
+  }
   const handled = new Set(plan.takeovers);
   const mutations = emitMutations(plan.mutations, state.versions, names, runtime, batch, readonly);
   const writes = batch === null
@@ -80,9 +88,10 @@ function emitComponent(plan: ComponentPlan, names: Names, runtime: string, marku
   }
   const replayMutations = emitMutations(plan.replayMutations, state.versions, names, runtime, null, replayBase);
   const replay = emitWrites(plan.replayWrites, state.versions, names, null, replayMutations.replacements, handled);
-  const memos = emitMemos(plan, state.versions, names, writes.replacements, replay.replacements, takeovers);
+  const memos = emitMemos(plan, state.versions, names, writes.replacements, replay.replacements, takeovers, runtime, trackKeys);
   const body: Statement[] = [
     ...state.declarations,
+    ...[...trackKeys.values()].map((key) => statement('const $$key = {};', { key })),
     ...takeovers.declarations,
     ...mutations.declarations,
     ...replayMutations.declarations,
@@ -121,6 +130,12 @@ function emitComponent(plan: ComponentPlan, names: Names, runtime: string, marku
   });
   body.push(...sites.mount);
   if (batch !== null) {
+    const roots = plan.mutationRoots.map((binding) => expression('({ read: () => $$binding, notify: () => { $$version++; if (!$$scope.building()) $$batch.mark(); } })', {
+      binding: binding.binding.name, version: state.versions.get(binding)!, batch, scope,
+    }));
+    body.push(statement('$$runtime.watchMutationRoots($$entity, $$roots);', {
+      runtime, entity, roots: b.ArrayExpression({ elements: roots }),
+    }));
     body.push(b.FunctionDeclaration({
       id: b.Identifier({ name: update }), params: [],
       body: b.BlockStatement({ body: [

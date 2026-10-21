@@ -47,12 +47,23 @@ their own scope. A synchronously caught nested setup failure therefore does not
 misclassify the parent's next builder write as takeover. Expired captures cannot
 revive ownership after a microtask boundary.
 
-**Current boundary:** component-body declarations and definite builders only.
-Nested-block memo storage, shared cells, dynamic escaping reads, possible-builder
-observation and call mutation commits remain pending. Direct member stores and
-deletes now commit root versions without takeover (`handlers.md`). Local takeover is implemented;
-module/closure takeover and callbacks discovered only through mutation observation
-follow with those slices. This is not the full Phase 3 exit.
+Possible body builders retain per-statement observation flags. Their first run
+joins replay only when it changes a candidate output; a read-only receiver stays
+held while an immediately invoked callback can build another output. Shared
+statements retain their definite outputs even when another possible output did
+not change. Setup-only calls do not repeat on unrelated updates.
+
+`packages/runtime/src/computation.ts` captures executed hidden reads through
+compiled escaping functions. Opaque initializers and sites retain version readers
+with stable binding keys; dynamic memo edges participate in dirty propagation
+before replay. Nested collectors restore their callers and settle self writes.
+Authored catch boundaries and failed/abandoned builds restore tracking too.
+
+**Current boundary:** component-body storage, local escaping reads, possible
+builders and property/call mutations are built. Nested-block memo storage, shared
+cells and escaping reads of module/factory/class storage remain pending. Local
+takeover is implemented; module/closure takeover follows shared storage. This is
+not the full Phase 3 exit.
 
 ## What it does
 

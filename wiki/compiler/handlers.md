@@ -16,6 +16,7 @@ Finds every place that changes state and makes the UI update after it.
 | `mutations.ts` | Emits direct member-store targets and delete notifications; replay uses silent versions |
 | `mutations.test.ts` | Native computed-key order, receiver/logical semantics, partial patterns and member loop targets |
 | `packages/runtime/src/mutation.ts` | Member target preserving native key conversion, getter/setter receiver and successful-store notification |
+| `packages/runtime/tests/mutation.test.ts` | Descriptor snapshots, cyclic/native data, partial-call recovery and key order |
 | `packages/runtime/src/write-batch.ts` | Captures the application and entity, batches listener writes until return, and queues a microtask for unwrapped callbacks and error recovery |
 | `packages/runtime/tests/write-batch.test.ts` | Scheduler independence, nested listeners, native receivers/results, exceptions, disposal and application isolation |
 
@@ -57,11 +58,21 @@ Native member targets notify each successful pattern/loop store independently;
 computed keys convert once before the RHS. A mutation never takes over the root
 binding or makes a const assignment illegal. Definite property builders replay
 silently with their inputs. Three comparison cases in `cases/mutations.test.ts`
-verify derived readers, retained edits and body replay. Aliases and calls still
-need observation; no method fast paths have been introduced.
+verify derived readers, retained edits and body replay. Opaque receiver/argument
+calls now observe data before and after the native call. Descriptor snapshots
+avoid unused getters and include cycles, symbols, hidden fields, Map/Set, Date
+and binary data. A throwing call is completed at an authored catch boundary or
+the next microtask. Calls retain their native result and receiver.
 
-**Still pending in Phase 3:** unknown-call checks, shared module and
-factory/class storage, escaping-read tracking and
+Component roots are watched by object identity through data fields; changed
+objects notify aliases and shallow copies that actually share them. Disposal
+removes those roots. Classification keeps potential source roots reactive, while
+runtime identity decides which versions change. Seven mutation comparisons pass.
+Receiver writes through `this`/private fields, shared storage and proxy-specific
+reflection behavior still need coverage; no method fast paths exist yet.
+
+**Still pending in Phase 3:** shared module and
+factory/class storage, escaping reads outside component storage and
 explicit pre-`await` flushing. The microtask fallback does not establish the
 pre-`await` guarantee. Only component-owned binding assignments are emitted in
 this slice; graph facts for other owners remain for their planned slices.

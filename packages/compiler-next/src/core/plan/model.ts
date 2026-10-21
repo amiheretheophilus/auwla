@@ -67,25 +67,32 @@ export interface ComponentPlan {
   /** Directly visible inputs, keyed by the original expression's identity. */
   readonly siteInputs: ReadonlyMap<Expression, readonly BindingNode[]>;
   readonly memos: readonly MemoGroupPlan[];
+  readonly trackedReads: readonly { readonly node: Node; readonly binding: BindingNode }[];
+  readonly dynamicSites: ReadonlySet<Expression>;
+  readonly mutationRoots: readonly BindingNode[];
 }
 
 /** Statements shared by computations run once; their outputs reset together. */
 export interface MemoGroupPlan {
+  readonly dynamic: boolean;
   readonly computations: readonly MemoPlan[];
   readonly inputs: readonly BindingNode[];
   readonly upstream: readonly { readonly group: number; readonly binding: BindingNode }[];
   readonly steps: readonly (Statement | VariableDeclarator)[];
   readonly outputs: ReadonlyMap<Node, readonly BindingNode[]>;
+  readonly possibleOutputs: ReadonlyMap<Node, readonly BindingNode[]>;
 }
 
 /** One native declaration/pattern and the statements that build its values. */
 export interface MemoPlan {
+  readonly intrinsic: boolean;
   readonly declaration: VariableDeclaration;
   readonly declarator: VariableDeclarator;
   readonly targets: readonly BindingNode[];
   readonly inputs: readonly BindingNode[];
   readonly builders: readonly (Statement | VariableDeclarator)[];
   readonly builderTargets: ReadonlyMap<Node, readonly BindingNode[]>;
+  readonly possibleBuilders: ReadonlyMap<Node, readonly BindingNode[]>;
 }
 
 export interface WritePlan {
@@ -96,7 +103,7 @@ export interface WritePlan {
 export interface MutationPlan {
   readonly operation: Node;
   readonly targets: readonly { readonly binding: BindingNode; readonly member: Node }[];
-  readonly kind: 'store' | 'delete';
+  readonly kind: 'store' | 'delete' | 'call';
 }
 
 export interface ModulePlan {

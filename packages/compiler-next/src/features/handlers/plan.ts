@@ -31,18 +31,19 @@ export function planWrites(bindings: readonly BindingNode[]): readonly WritePlan
 }
 
 export function planMutations(bindings: readonly BindingNode[]): readonly MutationPlan[] {
-  const operations = new Map<Node, { kind: 'store' | 'delete'; targets: { binding: BindingNode; member: Node }[] }>();
+  const operations = new Map<Node, { kind: 'store' | 'delete' | 'call'; targets: { binding: BindingNode; member: Node }[] }>();
   for (const binding of bindings) {
     const module = binding.binding.module;
     for (const { site } of binding.writes) {
-      if (site.kind !== 'member' && site.kind !== 'delete') continue;
+      if (site.kind === 'assign' || site.kind === 'update') continue;
       let member: Node = site.reference.node;
       for (const parent of module.ancestors(member)) {
         if (parent === site.node) break;
         if (is.MemberExpression(parent)) member = parent;
       }
-      const entry = operations.get(site.node) ?? { kind: site.kind === 'delete' ? 'delete' : 'store', targets: [] };
-      entry.targets.push({ binding, member });
+      const kind = site.kind === 'call' || site.kind === 'argument' ? 'call' : site.kind === 'delete' ? 'delete' : 'store';
+      const entry = operations.get(site.node) ?? { kind, targets: [] };
+      if (!entry.targets.some((target) => target.binding === binding)) entry.targets.push({ binding, member });
       operations.set(site.node, entry);
     }
   }

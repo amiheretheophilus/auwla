@@ -127,9 +127,12 @@ files that must pass in full at its exit.
     synchronous caught-nested-setup recovery is now verified by five execution
     cases, including catch-pattern defaults and nested finally/rethrow paths.
   - [ ] mutation commits and the unknown-call check. Direct property assignment,
-    update, delete and native pattern/loop targets are built and verified; call
-    observation, aliases and possible builders remain in this step.
-  - [ ] escaping-function tracking (the `unknown callers:` cases);
+    update, delete, native pattern/loop targets, call observation, aliases and
+    possible builders are built for component storage. Receiver/private-field
+    writes and shared roots join the storage slice before this box is complete.
+  - [ ] escaping-function tracking (the `unknown callers:` cases). Component-local
+    hidden reads, opaque initializer/site dependencies and dynamic memo edges
+    are built; factory/module/class versions remain in the shared-storage slice.
   - [ ] module state, imports, factory closures and classes (`complex state:`);
   - [ ] `await` in handlers.
 - [x] `src/core/plan/`: `Template`, `TextSite`, `AttributeSite`, `PropertySite`,

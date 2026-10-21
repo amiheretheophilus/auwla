@@ -8,7 +8,7 @@
 import { is, walk } from 'yuku-ast';
 import type { Expression, Node, Statement } from 'yuku-parser';
 import { isReactive, type BindingNode, type SemanticGraph } from '../graph';
-import type { InputQueries } from '../graph/inputs';
+import { variableDeclaration, type InputQueries } from '../graph/inputs';
 import { isWrittenGlobal, runnerOf, type ResolvedModule } from '../resolve';
 import type { FunctionNode } from '../resolve/functions';
 import type { ComponentPlan, ModulePlan } from './model';
@@ -54,9 +54,11 @@ function planModule(
     const local = [...new Set([...(state.get(fn) ?? []), ...targets])];
     const component = planComponent(fn, context);
     const siteInputs = new Map<Expression, readonly BindingNode[]>();
+    const dynamicSites = new Set<Expression>();
     for (const site of component.sites) {
       const inputs = new Set<BindingNode>();
       if (site.expression.end !== 0) {
+        if (queries.inputsOf(module, site.expression).opaque) dynamicSites.add(site.expression);
         for (const read of queries.inputsOf(module, site.expression).reads) {
           const binding = read.binding ?? read.reference.binding;
           const node = binding === null ? undefined : graph.bindings.get(binding);
@@ -83,9 +85,19 @@ function planModule(
         return write.operation.start >= root.start && write.operation.end <= root.end;
       }));
     });
+    const trackedReads = graph.escaping.flatMap((escaping) => escaping.reads.flatMap((read) => {
+      if (read.target.binding === null || !local.includes(read.target as BindingNode) || read.reference === null) return [];
+      return [{ node: read.reference.node, binding: read.target as BindingNode }];
+    }));
+    const mutationRoots = local.filter((binding) => {
+      const declarator = variableDeclaration(binding.binding);
+      if (declarator === null) return false;
+      const declaration = module.parentOf(declarator);
+      return declaration !== null && module.parentOf(declaration) === fn.body;
+    });
     plans.set(fn, {
       ...component, state: local, writes, replayWrites, mutations, replayMutations,
-      readonlyBindings, takeovers, siteInputs, memos: computations,
+      readonlyBindings, takeovers, siteInputs, memos: computations, trackedReads, dynamicSites, mutationRoots,
     });
   }
 
