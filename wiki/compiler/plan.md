@@ -126,7 +126,9 @@ files that must pass in full at its exit.
     takeover and possible builders follow their storage/observation slices;
     synchronous caught-nested-setup recovery is now verified by five execution
     cases, including catch-pattern defaults and nested finally/rethrow paths.
-  - [ ] mutation commits and the unknown-call check;
+  - [ ] mutation commits and the unknown-call check. Direct property assignment,
+    update, delete and native pattern/loop targets are built and verified; call
+    observation, aliases and possible builders remain in this step.
   - [ ] escaping-function tracking (the `unknown callers:` cases);
   - [ ] module state, imports, factory closures and classes (`complex state:`);
   - [ ] `await` in handlers.

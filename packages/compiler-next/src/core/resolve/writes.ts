@@ -102,6 +102,10 @@ function writeAt(module: Module, reference: Reference, binding: Binding): WriteS
     if (is.UnaryExpression(parent) && parent.operator === 'delete') {
       return { kind: 'delete', binding, reference, path, node: parent, ...timing(parent) };
     }
+    const operation = assignmentOperation(module, chain);
+    if (is.AssignmentExpression(operation) || is.ForOfStatement(operation) || is.ForInStatement(operation)) {
+      return { kind: 'member', binding, reference, path, node: operation, ...timing(operation) };
+    }
     if (is.CallExpression(parent) && unwrapped(parent.callee) === chain) {
       const receiver = path.slice(0, -1);
       const method = path.at(-1)!;

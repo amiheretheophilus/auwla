@@ -14,6 +14,7 @@ import { emitSites } from './sites';
 import { emitMemos } from '../../features/derived/dom';
 import { emitTakeovers } from '../../features/derived/takeover';
 import { emitRecovery } from './recovery';
+import { emitMutations } from '../../features/handlers/mutations';
 
 /** Preserve module syntax and exports, replacing planned functions on a fresh tree. */
 export function emitDom(plan: ModulePlan, options: CompileModulesOptions): Node {
@@ -65,18 +66,26 @@ function emitComponent(plan: ComponentPlan, names: Names, runtime: string, marku
     ...emitConstWrites(plan.readonlyBindings, names, runtime),
   ]);
   const handled = new Set(plan.takeovers);
+  const mutations = emitMutations(plan.mutations, state.versions, names, runtime, batch, readonly);
   const writes = batch === null
     ? { replacements: new Map<Node, Node>(), declarations: [] }
-    : emitWrites(plan.writes, state.versions, names, batch, readonly, handled);
+    : emitWrites(plan.writes, state.versions, names, batch, mutations.replacements, handled);
   // Only writes executed by replay itself are silent. A function created by a
   // replayed initializer may run later and must keep its ordinary write commits.
   const replayBase = new Map(writes.replacements);
   for (const write of plan.replayWrites) replayBase.delete(write.operation);
-  const replay = emitWrites(plan.replayWrites, state.versions, names, null, replayBase, handled);
+  for (const write of plan.replayMutations) {
+    replayBase.delete(write.operation);
+    for (const target of write.targets) replayBase.delete(target.member);
+  }
+  const replayMutations = emitMutations(plan.replayMutations, state.versions, names, runtime, null, replayBase);
+  const replay = emitWrites(plan.replayWrites, state.versions, names, null, replayMutations.replacements, handled);
   const memos = emitMemos(plan, state.versions, names, writes.replacements, replay.replacements, takeovers);
   const body: Statement[] = [
     ...state.declarations,
     ...takeovers.declarations,
+    ...mutations.declarations,
+    ...replayMutations.declarations,
     ...writes.declarations,
     ...replay.declarations,
   ];

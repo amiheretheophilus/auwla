@@ -27,6 +27,13 @@ Last updated: 2026-10-21.
 
 ## Done
 
+- Phase 3 direct property mutations: member assignments, updates, patterns,
+  loop targets and delete commit root versions without binding takeover.
+  Computed key order, getter/setter receivers and partial stores are verified.
+  **36 focused compiler tests pass**, including three new comparison cases and
+  four new native execution tests. Unknown-call observation and aliases remain
+  next; this does not complete the mutation slice.
+
 - Fixed synchronous ownership recovery after caught nested setup failures.
   Existing authored catch/finally boundaries restore the dynamically captured
   owner, before catch-pattern evaluation, without adding exception wrappers.

@@ -60,6 +60,8 @@ export interface ComponentPlan {
   readonly state: readonly BindingNode[];
   readonly writes: readonly WritePlan[];
   readonly replayWrites: readonly WritePlan[];
+  readonly mutations: readonly MutationPlan[];
+  readonly replayMutations: readonly MutationPlan[];
   readonly readonlyBindings: readonly BindingNode[];
   readonly takeovers: readonly BindingNode[];
   /** Directly visible inputs, keyed by the original expression's identity. */
@@ -89,6 +91,12 @@ export interface MemoPlan {
 export interface WritePlan {
   readonly operation: Node;
   readonly targets: readonly BindingNode[];
+}
+
+export interface MutationPlan {
+  readonly operation: Node;
+  readonly targets: readonly { readonly binding: BindingNode; readonly member: Node }[];
+  readonly kind: 'store' | 'delete';
 }
 
 export interface ModulePlan {

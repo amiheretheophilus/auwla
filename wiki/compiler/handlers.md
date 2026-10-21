@@ -13,6 +13,9 @@ Finds every place that changes state and makes the UI update after it.
 | `plan.ts` | Groups graph write sites by native assignment/update/loop operation and binding identity; identifies readonly targets |
 | `dom.ts` | Preserves native operations and their results, bumps local versions, marks pending commits and preserves const errors |
 | `dom.test.ts` | Executes compiled modules to verify write semantics, scope, per-instance state and site replay |
+| `mutations.ts` | Emits direct member-store targets and delete notifications; replay uses silent versions |
+| `mutations.test.ts` | Native computed-key order, receiver/logical semantics, partial patterns and member loop targets |
+| `packages/runtime/src/mutation.ts` | Member target preserving native key conversion, getter/setter receiver and successful-store notification |
 | `packages/runtime/src/write-batch.ts` | Captures the application and entity, batches listener writes until return, and queues a microtask for unwrapped callbacks and error recovery |
 | `packages/runtime/tests/write-batch.test.ts` | Scheduler independence, nested listeners, native receivers/results, exceptions, disposal and application isolation |
 
@@ -49,7 +52,15 @@ and entity identity, so a delayed callback cannot update a replacement instance.
 Error recovery resets the listener depth at the next microtask without adding
 `try`/`catch`/`finally` around authored code.
 
-**Still pending in Phase 3:** mutation/unknown-call checks, shared module and
+Direct property assignment/update/delete now bumps the root binding's version.
+Native member targets notify each successful pattern/loop store independently;
+computed keys convert once before the RHS. A mutation never takes over the root
+binding or makes a const assignment illegal. Definite property builders replay
+silently with their inputs. Three comparison cases in `cases/mutations.test.ts`
+verify derived readers, retained edits and body replay. Aliases and calls still
+need observation; no method fast paths have been introduced.
+
+**Still pending in Phase 3:** unknown-call checks, shared module and
 factory/class storage, escaping-read tracking and
 explicit pre-`await` flushing. The microtask fallback does not establish the
 pre-`await` guarantee. Only component-owned binding assignments are emitted in

@@ -76,6 +76,7 @@ export { materializeMarkup } from './markup';
 export { createWriteBatch, rejectConstAssignment } from './write-batch';
 export type { WriteBatch } from './write-batch';
 export { createBuildScope, captureBuildScope } from './build-scope';
+export { mutationTarget } from './mutation';
 export type { BuildScope, BuildFrame } from './build-scope';
 export { adoptInitialRoot } from './initial-root';
 export { bindInitialNodes } from './initial-bindings';

@@ -49,7 +49,8 @@ revive ownership after a microtask boundary.
 
 **Current boundary:** component-body declarations and definite builders only.
 Nested-block memo storage, shared cells, dynamic escaping reads, possible-builder
-observation and mutation commits remain pending. Local takeover is implemented;
+observation and call mutation commits remain pending. Direct member stores and
+deletes now commit root versions without takeover (`handlers.md`). Local takeover is implemented;
 module/closure takeover and callbacks discovered only through mutation observation
 follow with those slices. This is not the full Phase 3 exit.
 

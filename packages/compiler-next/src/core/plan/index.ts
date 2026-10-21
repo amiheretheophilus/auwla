@@ -15,7 +15,7 @@ import type { ComponentPlan, ModulePlan } from './model';
 import { buildTemplate, containsJsx, unsupported, type TemplateContext } from './template';
 import { unwrap } from './jsx';
 import { planLocalState } from '../../features/state/plan';
-import { planReadonlyBindings, planWrites } from '../../features/handlers/plan';
+import { planMutations, planReadonlyBindings, planWrites } from '../../features/handlers/plan';
 import { planMemos } from '../../features/derived/plan';
 import type { MemoGroupPlan } from './model';
 
@@ -66,6 +66,7 @@ function planModule(
       siteInputs.set(site.expression, [...inputs]);
     }
     const writes = planWrites(local);
+    const mutations = planMutations(local);
     const readonlyBindings = planReadonlyBindings(local);
     const takeovers = targets.filter((target) => {
       return target.takeovers.length > 0 && !readonlyBindings.includes(target);
@@ -76,8 +77,14 @@ function planModule(
         return write.operation.start >= root.start && write.operation.end <= root.end;
       }));
     });
+    const replayMutations = mutations.filter((write) => {
+      if (runnerOf(module, write.operation) !== fn) return false;
+      return computations.some((group) => group.steps.some((root) => {
+        return write.operation.start >= root.start && write.operation.end <= root.end;
+      }));
+    });
     plans.set(fn, {
-      ...component, state: local, writes, replayWrites,
+      ...component, state: local, writes, replayWrites, mutations, replayMutations,
       readonlyBindings, takeovers, siteInputs, memos: computations,
     });
   }
