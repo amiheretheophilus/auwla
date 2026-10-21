@@ -3,7 +3,7 @@ import {
   createApplicationRuntime, invalidateEntity, registerEntity, runWithApplicationRuntime, setScheduler,
   type ApplicationRuntime,
 } from '../src/kernel';
-import { createBuildScope } from '../src/build-scope';
+import { captureBuildScope, createBuildScope } from '../src/build-scope';
 
 const runtimes: ApplicationRuntime[] = [];
 afterEach(() => {
@@ -15,6 +15,37 @@ function create() {
   runtimes.push(runtime);
   return runtime;
 }
+
+it('restores the captured owner after nested setup fails, including no owner', () => {
+  const runtime = create();
+  runWithApplicationRuntime(runtime, () => {
+    const parent = createBuildScope();
+    const child = createBuildScope();
+    const outside = captureBuildScope();
+    parent.enter();
+    const restore = captureBuildScope();
+    child.enter();
+    restore();
+    expect(parent.building()).toBe(true);
+    expect(child.building()).toBe(false);
+    outside();
+    expect(parent.building()).toBe(false);
+  });
+});
+
+it('does not restore a captured owner after its synchronous turn', async () => {
+  const runtime = create();
+  const scope = runWithApplicationRuntime(runtime, createBuildScope);
+  const restore = runWithApplicationRuntime(runtime, () => {
+    scope.enter();
+    return captureBuildScope();
+  });
+  await Promise.resolve();
+  runWithApplicationRuntime(runtime, () => {
+    restore();
+    expect(scope.building()).toBe(false);
+  });
+});
 
 it('uses the currently executing owner and restores nested setup ownership', () => {
   const runtime = create();

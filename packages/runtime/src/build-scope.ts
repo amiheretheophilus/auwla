@@ -32,6 +32,17 @@ onCommitFinished((failed) => {
   if (failed) reset(buildStore());
 });
 
+/** Restore the dynamic owner at an authored catch/finally boundary. */
+export function captureBuildScope(): () => void {
+  const store = buildStore();
+  const current = store.current;
+  const epoch = store.epoch;
+  return () => {
+    // An async continuation must not revive an owner from a finished turn.
+    if (store.epoch === epoch) store.current = current;
+  };
+}
+
 /** Each invocation has its own identity, even when an entity id is reused. */
 export function createBuildScope(): BuildScope {
   const runtime = getActiveApplicationRuntime();

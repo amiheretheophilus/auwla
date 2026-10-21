@@ -124,7 +124,8 @@ files that must pass in full at its exit.
     eight native execution tests and four runtime scope tests cover partial
     stores, sibling replay, nested owners and exception boundaries. Module/closure
     takeover and possible builders follow their storage/observation slices;
-    synchronous caught-nested-setup recovery remains open on `state-and-derived.md`.
+    synchronous caught-nested-setup recovery is now verified by five execution
+    cases, including catch-pattern defaults and nested finally/rethrow paths.
   - [ ] mutation commits and the unknown-call check;
   - [ ] escaping-function tracking (the `unknown callers:` cases);
   - [ ] module state, imports, factory closures and classes (`complex state:`);

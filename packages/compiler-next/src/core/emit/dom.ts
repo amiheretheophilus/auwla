@@ -1,5 +1,5 @@
 /** DOM emission from the render plan, with feature-owned state and write emission. */
-import { b, is } from 'yuku-ast';
+import { b, findAll, is } from 'yuku-ast';
 import type { Node, Statement } from 'yuku-parser';
 import type { CompileModulesOptions } from '../../options';
 import { DEFAULT_RUNTIME_PATH } from '../../options';
@@ -13,11 +13,12 @@ import { emitConstWrites, emitWrites } from '../../features/handlers/dom';
 import { emitSites } from './sites';
 import { emitMemos } from '../../features/derived/dom';
 import { emitTakeovers } from '../../features/derived/takeover';
+import { emitRecovery } from './recovery';
 
 /** Preserve module syntax and exports, replacing planned functions on a fresh tree. */
 export function emitDom(plan: ModulePlan, options: CompileModulesOptions): Node {
   const module = plan.module.module;
-  if (plan.components.size === 0) return copy(module.ast);
+  if (plan.components.size === 0 && findAll(module.ast, 'TryStatement').length === 0) return copy(module.ast);
 
   const names = new Names(module);
   const runtime = names.fresh('_MD');
@@ -44,7 +45,7 @@ export function emitDom(plan: ModulePlan, options: CompileModulesOptions): Node 
     insertion++;
   }
   output.body.splice(insertion, 0, ...hoisted);
-  return output;
+  return emitRecovery(output, names, runtime);
 }
 
 function emitComponent(plan: ComponentPlan, names: Names, runtime: string, markup: string | null): Node {

@@ -40,9 +40,12 @@ An initializer or builder with no active outputs is skipped altogether.
 per application, independently of lexical nesting and entity id. Setup and replay
 enter/leave that scope; a nested component temporarily owns it. Failed commits
 clear ownership, and a queued microtask clears frames abandoned by throwing setup,
-without generated exception wrappers. An error caught synchronously inside
-authored setup does not restore an abandoned nested frame until the owning setup
-leaves or the next boundary clears it; that recovery case remains open.
+without generated exception wrappers. `core/emit/recovery.ts` captures ownership
+before each authored `try` and restores it at its existing `catch`/`finally` entry,
+including in helpers without JSX. Catch patterns evaluate after restoration in
+their own scope. A synchronously caught nested setup failure therefore does not
+misclassify the parent's next builder write as takeover. Expired captures cannot
+revive ownership after a microtask boundary.
 
 **Current boundary:** component-body declarations and definite builders only.
 Nested-block memo storage, shared cells, dynamic escaping reads, possible-builder
@@ -205,7 +208,8 @@ The graph classification is built (`core/graph/classify.ts`, described in
 | `features/derived/dom.test.ts` | native execution: call counts, loops, shared builders, declaration writes, pattern evaluation, const errors and callbacks created during replay |
 | `features/derived/takeover.test.ts` | downstream call counts after takeover, helper invocation timing, partial patterns, sibling builders, loop targets and nested component ownership |
 | `packages/runtime/src/build-scope.ts` | application-scoped invocation ownership for setup/replay, with nested restoration and exception-boundary recovery |
-| `packages/runtime/tests/build-scope.test.ts` | nested owners, application separation, abandoned setup and failed replay |
+| `packages/runtime/tests/build-scope.test.ts` | nested owners, application separation, abandoned setup, failed replay and captured-owner recovery |
+| `features/derived/recovery.test.ts` | caught nested setup, finally, rethrows and catch-pattern defaults preserve derivation; no exception wrappers added |
 | `features/state/plan.ts`, `features/state/dom.ts` | component-owned assignment storage and numeric versions |
 | `*.test.ts` next to each | one test per rule above, on real parsed code |
 

@@ -27,14 +27,22 @@ Last updated: 2026-10-21.
 
 ## Done
 
+- Fixed synchronous ownership recovery after caught nested setup failures.
+  Existing authored catch/finally boundaries restore the dynamically captured
+  owner, before catch-pattern evaluation, without adding exception wrappers.
+  Five new execution regressions pass alongside eight takeover and three pipeline
+  checks (**16 compiler tests**); **14 runtime tests** pass. Runtime build and
+  type checks pass (**92 compiler-next files**, **64 runtime files**).
+  No existing expectations changed. Mutation commits are the next Phase 3 step.
+
 - Phase 3 local takeover: actual successful assignments outside the binding
   owner's setup/replay stop derivation. Temporary native targets preserve logical
   assignment, loop, postfix and partial-pattern behavior. Shared builders preserve
   taken values while active siblings continue. Direct dependency propagation stops
   at taken bindings, so downstream calls do not replay on former input changes.
   Runtime ownership is per invocation and application, with nested-owner restoration
-  and exception-boundary recovery. Current limits, including synchronous recovery
-  after a caught nested setup error: `compiler/state-and-derived.md`.
+  and exception-boundary recovery. Synchronous caught-error recovery is fixed
+  above; remaining limits are on `compiler/state-and-derived.md`.
   Verification: **90 compiler checks pass**: 73 memo/counter/template, native
   execution, plan and pipeline checks, 12 selected callback comparisons (four new),
   and five existing state-and-derived comparisons. **12 runtime tests pass**

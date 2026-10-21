@@ -199,8 +199,10 @@ sets the flag after a successful native assignment; in the owning build scope it
 instead preserves any value already taken over. This also protects one output of
 a shared builder while another keeps deriving. Direct memo edges stop propagating
 upstream changes through a taken binding. Exception recovery clears failed commit
-ownership and abandoned setup frames at the next microtask; the synchronous
-caught-nested-setup case is tracked on `state-and-derived.md`.
+ownership and abandoned setup frames at the next microtask. Existing authored
+`catch`/`finally` boundaries restore the ownership captured before their `try`,
+so synchronous nested-setup recovery happens before the parent continues.
+No exception wrappers are added (`core/emit/recovery.ts`).
 
 ### 3. Possible builders
 

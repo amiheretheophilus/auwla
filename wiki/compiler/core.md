@@ -190,6 +190,7 @@ Features build their own pieces. Optimizations replace pieces (`optimize.md`).
 | `names.ts` | Allocates generated names against all authored bindings and references |
 | `quote.ts` | Parses and copies generated statement snippets, filling AST holes; syntax that cannot parse at module scope uses builders directly |
 | `copy.ts` | Copies authored syntax with identity-keyed replacements, without changing analyzer nodes |
+| `recovery.ts` | Captures dynamic ownership around existing authored try statements and restores it before catch patterns/bodies and finally; adds no exception wrappers |
 | `print.ts` | Prints JavaScript through `yuku-codegen`, erasing TypeScript |
 
 Ordinary HTML uses hoisted markup and cached template cloning. Tables, raw-text
