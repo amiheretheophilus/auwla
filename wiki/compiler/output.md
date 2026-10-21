@@ -193,6 +193,15 @@ _reset.onclick = () => { total = 0; _totalTaken = true; _total++; _MD.invalidate
 
 The check is one comparison, emitted only at candidate sites. No API name decides it.
 
+The local implementation uses `createBuildScope()` (`runtime/src/build-scope.ts`)
+and temporary accessor targets (`features/derived/takeover.ts`). The final store
+sets the flag after a successful native assignment; in the owning build scope it
+instead preserves any value already taken over. This also protects one output of
+a shared builder while another keeps deriving. Direct memo edges stop propagating
+upstream changes through a taken binding. Exception recovery clears failed commit
+ownership and abandoned setup frames at the next microtask; the synchronous
+caught-nested-setup case is tracked on `state-and-derived.md`.
+
 ### 3. Possible builders
 
 A statement that may build a value (`mySort(copy)`, `items.forEach(cb)` with an

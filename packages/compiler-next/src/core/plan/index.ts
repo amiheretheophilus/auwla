@@ -66,6 +66,10 @@ function planModule(
       siteInputs.set(site.expression, [...inputs]);
     }
     const writes = planWrites(local);
+    const readonlyBindings = planReadonlyBindings(local);
+    const takeovers = targets.filter((target) => {
+      return target.takeovers.length > 0 && !readonlyBindings.includes(target);
+    });
     const replayWrites = writes.filter((write) => {
       if (runnerOf(module, write.operation) !== fn) return false;
       return computations.some((group) => group.steps.some((root) => {
@@ -74,7 +78,7 @@ function planModule(
     });
     plans.set(fn, {
       ...component, state: local, writes, replayWrites,
-      readonlyBindings: planReadonlyBindings(local), siteInputs, memos: computations,
+      readonlyBindings, takeovers, siteInputs, memos: computations,
     });
   }
 

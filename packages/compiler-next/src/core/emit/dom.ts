@@ -12,6 +12,7 @@ import { emitLocalState } from '../../features/state/dom';
 import { emitConstWrites, emitWrites } from '../../features/handlers/dom';
 import { emitSites } from './sites';
 import { emitMemos } from '../../features/derived/dom';
+import { emitTakeovers } from '../../features/derived/takeover';
 
 /** Preserve module syntax and exports, replacing planned functions on a fresh tree. */
 export function emitDom(plan: ModulePlan, options: CompileModulesOptions): Node {
@@ -54,18 +55,27 @@ function emitComponent(plan: ComponentPlan, names: Names, runtime: string, marku
   const batch = plan.state.length === 0 ? null : names.fresh('_writes');
   const update = names.fresh('_update');
   const entity = names.fresh('_entity');
-  const readonly = emitConstWrites(plan.readonlyBindings, names, runtime);
+  const scope = names.fresh('_scope');
+  const setupFrame = names.fresh('_setupFrame');
+  const updateFrame = names.fresh('_updateFrame');
+  const takeovers = emitTakeovers(plan.takeovers, state.versions, names, scope, batch!);
+  const readonly = new Map([
+    ...takeovers.replacements,
+    ...emitConstWrites(plan.readonlyBindings, names, runtime),
+  ]);
+  const handled = new Set(plan.takeovers);
   const writes = batch === null
     ? { replacements: new Map<Node, Node>(), declarations: [] }
-    : emitWrites(plan.writes, state.versions, names, batch, readonly);
+    : emitWrites(plan.writes, state.versions, names, batch, readonly, handled);
   // Only writes executed by replay itself are silent. A function created by a
   // replayed initializer may run later and must keep its ordinary write commits.
   const replayBase = new Map(writes.replacements);
   for (const write of plan.replayWrites) replayBase.delete(write.operation);
-  const replay = emitWrites(plan.replayWrites, state.versions, names, null, replayBase);
-  const memos = emitMemos(plan, state.versions, names, writes.replacements, replay.replacements);
+  const replay = emitWrites(plan.replayWrites, state.versions, names, null, replayBase, handled);
+  const memos = emitMemos(plan, state.versions, names, writes.replacements, replay.replacements, takeovers);
   const body: Statement[] = [
     ...state.declarations,
+    ...takeovers.declarations,
     ...writes.declarations,
     ...replay.declarations,
   ];
@@ -74,6 +84,8 @@ function emitComponent(plan: ComponentPlan, names: Names, runtime: string, marku
     body.push(statement('const $$batch = $$runtime.createWriteBatch($$entity);', { batch, runtime, entity }));
   }
   body.push(
+    statement('const $$scope = $$runtime.createBuildScope();', { scope, runtime }),
+    statement('const $$setupFrame = $$scope.enter();', { setupFrame, scope }),
     ...memos.setup,
     ...memos.snapshots,
     statement('const $$document = $$runtime.getActiveEnvironment().document;', { document, runtime }),
@@ -101,11 +113,17 @@ function emitComponent(plan: ComponentPlan, names: Names, runtime: string, marku
   if (batch !== null) {
     body.push(b.FunctionDeclaration({
       id: b.Identifier({ name: update }), params: [],
-      body: b.BlockStatement({ body: [...memos.update, ...sites.update] }), async: false, generator: false, expression: false,
+      body: b.BlockStatement({ body: [
+        statement('const $$updateFrame = $$scope.enter();', { updateFrame, scope }),
+        ...memos.update, ...sites.update,
+        statement('$$scope.leave($$updateFrame);', { scope, updateFrame }),
+      ] }), async: false, generator: false, expression: false,
     }));
     body.push(statement('$$runtime.registerEntity($$entity);', { runtime, entity }));
     body.push(statement('$$batch.activate();', { batch }));
   }
+
+  body.push(statement('$$scope.leave($$setupFrame);', { scope, setupFrame }));
 
   const roots = plan.template.roots.map((index) => texts.get(index) ?? template.ref(index));
   if (roots.length === 1) {

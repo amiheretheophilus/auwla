@@ -27,6 +27,13 @@ export function planMemos(
     const first = targets[0]!;
     const module = first.binding.module;
     const builders = new Set<Statement | VariableDeclarator>();
+    const builderTargets = new Map<Node, Set<BindingNode>>();
+    const addBuilder = (node: Statement | VariableDeclarator, target: BindingNode) => {
+      builders.add(node);
+      const outputs = builderTargets.get(node) ?? new Set<BindingNode>();
+      outputs.add(target);
+      builderTargets.set(node, outputs);
+    };
     for (const target of targets) {
       for (const builder of target.initial?.builders ?? []) {
         if (builder.certainty !== 'definite') continue;
@@ -39,10 +46,10 @@ export function planMemos(
             const writesTarget = target.writes.some(({ site }) => {
               return (site.node.start >= entry.start && site.node.end <= entry.end) || invoked.includes(site);
             });
-            if (writesTarget) builders.add(entry);
+            if (writesTarget) addBuilder(entry, target);
           }
         } else {
-          builders.add(builder.statement as Statement);
+          addBuilder(builder.statement as Statement, target);
         }
       }
     }
@@ -62,6 +69,7 @@ export function planMemos(
       declaration: module.parentOf(declarator) as VariableDeclaration,
       declarator, targets, inputs: [...inputs],
       builders: [...builders].sort((left, right) => left.start - right.start),
+      builderTargets: new Map([...builderTargets].map(([node, outputs]) => [node, [...outputs]])),
     };
     const owner = first.owner.runner!;
     const list = owners.get(owner) ?? [];
@@ -103,27 +111,30 @@ function groupMemos(memos: readonly MemoPlan[]): MemoGroupPlan[] {
   }
   return groups.map((group) => {
     const inputs = new Set<BindingNode>();
-    const visited = new Set<Group>();
-    const collect = (current: Group) => {
-      if (visited.has(current)) return;
-      visited.add(current);
-      for (const memo of current.computations) {
-        for (const input of memo.inputs) {
-          const owner = owners.get(input);
-          if (owner === group) continue;
-          inputs.add(input);
-          // A builder can read a memo declared after its accumulator. Include
-          // that memo's inputs so replay resets the accumulator before either
-          // of them runs. Sites still need only the direct output versions.
-          if (owner !== undefined) collect(owner);
-        }
+    for (const memo of group.computations) {
+      for (const input of memo.inputs) {
+        if (owners.get(input) !== group) inputs.add(input);
       }
-    };
-    collect(group);
+    }
+    const upstream = [...inputs].flatMap((binding) => {
+      const owner = owners.get(binding);
+      return owner === undefined ? [] : [{ group: groups.indexOf(owner), binding }];
+    });
+    const outputs = new Map<Node, Set<BindingNode>>();
+    for (const memo of group.computations) {
+      for (const step of [memo.declarator, ...memo.builders]) {
+        const targets = outputs.get(step) ?? new Set<BindingNode>();
+        const written = step === memo.declarator ? memo.targets : memo.builderTargets.get(step)!;
+        for (const target of written) targets.add(target);
+        outputs.set(step, targets);
+      }
+    }
     return {
       computations: group.computations,
       inputs: [...inputs],
+      upstream,
       steps: [...group.steps].sort((left, right) => left.start - right.start),
+      outputs: new Map([...outputs].map(([step, targets]) => [step, [...targets]])),
     };
   });
 }

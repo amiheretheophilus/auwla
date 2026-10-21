@@ -50,3 +50,28 @@ it('retains authored identities through planning and emission of replay', () => 
   emitDom(plan, {});
   expect(JSON.stringify(original)).toBe(before);
 });
+
+it('retains direct memo edges so a taken binding can stop upstream propagation', () => {
+  const { component } = inspect(`export function App() {
+    let count = 1;
+    let twice = count * 2;
+    const final = twice + 1;
+    return <button onClick={() => { count++; twice = 10; }}>{final}</button>;
+  }`);
+  const group = component.memos.find((entry) => entry.computations.some((memo) => memo.targets.some((target) => target.binding.name === 'final')))!;
+  expect(group.inputs.map((input) => input.binding.name)).toEqual(['twice']);
+  expect(group.upstream.map((edge) => edge.binding.binding.name)).toEqual(['twice']);
+  expect(component.takeovers.map((target) => target.binding.name)).toEqual(['twice']);
+});
+
+it('distinguishes a pattern initializer outputs from an individual alias builder', () => {
+  const { component } = inspect(`export function App() {
+    let seed = 1;
+    let { a, b } = { a: seed, b: seed * 2 };
+    if (seed) a++;
+    return <button onClick={() => { seed++; a = 99; }}>{a}:{b}</button>;
+  }`);
+  const group = component.memos.find((entry) => entry.computations.some((memo) => memo.targets.some((target) => target.binding.name === 'a')))!;
+  const builder = group.steps.find((step) => step.type === 'IfStatement')!;
+  expect(group.outputs.get(builder)!.map((target) => target.binding.name)).toEqual(['a']);
+});

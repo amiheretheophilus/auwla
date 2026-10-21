@@ -1,6 +1,6 @@
 # The compiler (rewrite)
 
-**Status: Phase 2 graph and classification built; Phase 3 markup, local counters and memo replay built.** The new compiler lives in
+**Status: Phase 2 graph and classification built; Phase 3 markup, local counters, memo replay and local takeover built.** The new compiler lives in
 `packages/compiler-next/` on branch `compiler-rewrite`; its tests are in
 `packages/compiler-next/tests/`. `packages/compiler/` stays until every suite passes
 on the new one; then it is deleted.
@@ -10,7 +10,8 @@ The previous 228-case reference baseline is verified; 18 new static-markup cases
 now also pass against compiler-next. Nine focused local counter cases and four
 existing counter/enum/input/promise cases pass too. Local versioned memos and
 definite body builders now have ten passing comparison cases plus focused native
-execution checks. Takeover/setup ownership is next.
+execution checks. Local takeover/setup ownership is verified on selected callback
+cases; mutation commits and possible-builder observation are next.
 Remaining reference limits are on the concept pages;
 extend their coverage as the compiler reaches those slices. Continue in `plan.md`.
 

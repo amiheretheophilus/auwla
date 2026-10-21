@@ -33,6 +33,7 @@ export function emitConstWrites(bindings: readonly BindingNode[], names: Names, 
 export function emitWrites(
   writes: readonly WritePlan[], versions: ReadonlyMap<BindingNode, string>, names: Names, batch: string | null,
   initial: ReadonlyMap<Node, Node> = new Map(),
+  handled: ReadonlySet<BindingNode> = new Set(),
 ): WritesEmit {
   const replacements = new Map(initial);
   const declarations: Statement[] = [];
@@ -63,13 +64,20 @@ export function emitWrites(
   });
   for (const write of ordered) {
     const original = write.operation;
+    const targets = write.targets.filter((target) => !handled.has(target));
+    if (targets.length === 0) {
+      const operation = copy(original, replacements);
+      expandShorthand(operation);
+      replacements.set(original, operation);
+      continue;
+    }
     const left = is.AssignmentExpression(original) || is.ForOfStatement(original) || is.ForInStatement(original)
       ? original.left : null;
     if (is.ArrayPattern(left) || is.ObjectPattern(left)) {
       // Each native target must report its own completed assignment. Wrapping
       // the whole pattern would lose writes if a later getter/default throws.
       const targetReplacements = new Map(replacements);
-      for (const target of write.targets) {
+      for (const target of targets) {
         const value = names.fresh('_assigned');
         const helper = helperFor([target]);
         // Build the setter at the original target, not at the component top:
@@ -85,18 +93,12 @@ export function emitWrites(
         }
       }
       const operation = copy(original, targetReplacements);
-      walk(operation, {
-        Property(node) {
-          // `{ x }` is now `{ x: _target.value }`; defaults likewise retain
-          // their original key but no longer use shorthand syntax.
-          if (node.shorthand) node.shorthand = false;
-        },
-      });
+      expandShorthand(operation);
       replacements.set(original, operation);
       continue;
     }
 
-    const helper = helperFor(write.targets);
+    const helper = helperFor(targets);
     const operation = copy(write.operation, replacements);
     if (is.ForOfStatement(operation) || is.ForInStatement(operation)) {
       const body = is.BlockStatement(operation.body) ? operation.body.body : [operation.body];
@@ -119,4 +121,13 @@ export function emitWrites(
     }
   }
   return { replacements, declarations };
+}
+
+function expandShorthand(operation: Node): void {
+  walk(operation, {
+    Property(node) {
+      // `{ x }` is now `{ x: _target.value }`; defaults keep the original key.
+      if (node.shorthand) node.shorthand = false;
+    },
+  });
 }

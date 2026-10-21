@@ -61,6 +61,7 @@ export interface ComponentPlan {
   readonly writes: readonly WritePlan[];
   readonly replayWrites: readonly WritePlan[];
   readonly readonlyBindings: readonly BindingNode[];
+  readonly takeovers: readonly BindingNode[];
   /** Directly visible inputs, keyed by the original expression's identity. */
   readonly siteInputs: ReadonlyMap<Expression, readonly BindingNode[]>;
   readonly memos: readonly MemoGroupPlan[];
@@ -70,7 +71,9 @@ export interface ComponentPlan {
 export interface MemoGroupPlan {
   readonly computations: readonly MemoPlan[];
   readonly inputs: readonly BindingNode[];
+  readonly upstream: readonly { readonly group: number; readonly binding: BindingNode }[];
   readonly steps: readonly (Statement | VariableDeclarator)[];
+  readonly outputs: ReadonlyMap<Node, readonly BindingNode[]>;
 }
 
 /** One native declaration/pattern and the statements that build its values. */
@@ -80,6 +83,7 @@ export interface MemoPlan {
   readonly targets: readonly BindingNode[];
   readonly inputs: readonly BindingNode[];
   readonly builders: readonly (Statement | VariableDeclarator)[];
+  readonly builderTargets: ReadonlyMap<Node, readonly BindingNode[]>;
 }
 
 export interface WritePlan {

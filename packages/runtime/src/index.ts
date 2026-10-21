@@ -75,6 +75,8 @@ export type { EffectCallback, EffectCondition } from './effect';
 export { materializeMarkup } from './markup';
 export { createWriteBatch, rejectConstAssignment } from './write-batch';
 export type { WriteBatch } from './write-batch';
+export { createBuildScope } from './build-scope';
+export type { BuildScope, BuildFrame } from './build-scope';
 export { adoptInitialRoot } from './initial-root';
 export { bindInitialNodes } from './initial-bindings';
 export { bindInitialListNodes } from './initial-list-bindings';

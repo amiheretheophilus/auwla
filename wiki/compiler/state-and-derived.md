@@ -15,9 +15,10 @@ input are not replayed merely because another value was written.
 destructuring, and their definite body builders. Computations sharing a statement
 form one group: all its outputs reset together and the statement replays once.
 Initializers and builders retain their original order, even when another memo
-appears between them. Group checks include upstream memo inputs when needed to
-reset an accumulator before a later-declared input recomputes. Sites still read
-only their direct input versions.
+appears between them. Plans retain direct inputs and upstream memo edges. Before
+replay, dirty flags propagate across active edges until settled, so an accumulator
+resets before a later-declared input recomputes. A taken binding stops propagation
+from its former inputs; sites still read only their direct input versions.
 
 `features/derived/dom.ts` emits those checks before replay and saves input versions
 after the computations finish. Each memo output has its own version. `const` memo
@@ -26,10 +27,28 @@ after native RHS evaluation and update coercion (`handlers.md`). Direct replay
 writes bump versions without scheduling another batch. Functions created during
 replay retain normal write notifications when called later.
 
+`features/derived/takeover.ts` gives writable memo bindings with candidate later
+assignments a local taken flag. Native assignment targets use temporary accessors:
+only a successful store outside that binding owner's build scope takes control.
+Equal assignments count; skipped logical assignments, empty loops, failed RHS
+evaluation and uncompleted pattern targets do not. During replay, stores to taken
+bindings are suppressed. A shared statement can still build active siblings;
+each step retains its exact outputs, including individual destructured aliases.
+An initializer or builder with no active outputs is skipped altogether.
+
+`packages/runtime/src/build-scope.ts` tracks the executing component invocation
+per application, independently of lexical nesting and entity id. Setup and replay
+enter/leave that scope; a nested component temporarily owns it. Failed commits
+clear ownership, and a queued microtask clears frames abandoned by throwing setup,
+without generated exception wrappers. An error caught synchronously inside
+authored setup does not restore an abandoned nested frame until the owning setup
+leaves or the next boundary clears it; that recovery case remains open.
+
 **Current boundary:** component-body declarations and definite builders only.
 Nested-block memo storage, shared cells, dynamic escaping reads, possible-builder
-observation, mutation commits and takeover flags remain pending. In particular,
-later reassignment does not yet disable replay. This is not the full Phase 3 exit.
+observation and mutation commits remain pending. Local takeover is implemented;
+module/closure takeover and callbacks discovered only through mutation observation
+follow with those slices. This is not the full Phase 3 exit.
 
 ## What it does
 
@@ -181,8 +200,12 @@ The graph classification is built (`core/graph/classify.ts`, described in
 | `features/derived/classify.ts` | spreads reactivity through reads (a worklist, so cycles end); gives imports their definition's kind |
 | `features/derived/plan.ts` | native declarations, definite builders, shared-statement groups and their version inputs |
 | `features/derived/dom.ts` | source-ordered, version-guarded replay and writable memo storage |
+| `features/derived/takeover.ts` | local takeover flags and native store targets, checked against runtime execution ownership |
 | `features/derived/plan.test.ts` | pattern identity, definite versus possible builders, and untouched authored syntax |
 | `features/derived/dom.test.ts` | native execution: call counts, loops, shared builders, declaration writes, pattern evaluation, const errors and callbacks created during replay |
+| `features/derived/takeover.test.ts` | downstream call counts after takeover, helper invocation timing, partial patterns, sibling builders, loop targets and nested component ownership |
+| `packages/runtime/src/build-scope.ts` | application-scoped invocation ownership for setup/replay, with nested restoration and exception-boundary recovery |
+| `packages/runtime/tests/build-scope.test.ts` | nested owners, application separation, abandoned setup and failed replay |
 | `features/state/plan.ts`, `features/state/dom.ts` | component-owned assignment storage and numeric versions |
 | `*.test.ts` next to each | one test per rule above, on real parsed code |
 
@@ -226,6 +249,16 @@ The list only makes this faster. A method that is not on it is still correct
 (`../rules.md`, rule 3).
 
 ## Cases to test
+
+**Verified takeover slice:** twelve selected `tests/cases/callbacks.test.ts`
+comparisons cover registered/untaken handlers, equal assignments, aliased timers,
+async continuations, logical assignments, postfix/pattern results, shared builders,
+destructured siblings, and immediate opaque invocation without takeover. The
+existing `a binding derives until a handler reassigns it` also passes. Eight native
+execution tests cover the store/notification details; four runtime scope tests
+cover nested owners, applications, throwing setup and failed replay. Full callback
+acceptance still includes mutation, sources, components, effects and dynamic reads
+that belong to the remaining slices.
 
 **Verified memo slice:** six `tests/cases/memos.test.ts` comparisons cover chains,
 loops with break/continue, switch, pattern defaults/rest and shared builders.

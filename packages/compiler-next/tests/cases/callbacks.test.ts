@@ -6,6 +6,53 @@ const show = (expected: string[]) => (container: HTMLElement, observation: numbe
   expect(container.querySelector('p')?.textContent).toBe(expected[observation]);
 };
 
+behaves('takeover: a visible builder helper takes control only when called later', {
+  source: `export function App() {
+    let seed = 1; let total = 0;
+    function build() { total += seed; }
+    build();
+    return <main><p>{total}</p><button id="seed" onClick={() => seed++}>more</button>
+      <button id="take" onClick={build}>take</button></main>;
+  }`,
+  steps: [{ click: '#seed' }, { click: '#take' }, { click: '#seed' }],
+  check: show(['1', '2', '4', '4']),
+});
+
+behaves('takeover: a destructured sibling continues deriving', {
+  source: `export function App() {
+    let point = { a: 1, b: 2 };
+    let { a, b } = point;
+    return <main><p>{a}:{b}</p><button id="point" onClick={() => point = { a: 3, b: 4 }}>move</button>
+      <button id="take" onClick={() => a = 99}>take</button></main>;
+  }`,
+  steps: [{ click: '#take' }, { click: '#point' }],
+  check: show(['1:2', '99:2', '99:4']),
+});
+
+behaves('takeover: a shared direct builder retains the taken value', {
+  source: `export function App() {
+    let seed = 1; let a = 0, b = 0;
+    if (seed) { a = seed; b = seed * 2; }
+    return <main><p>{a}:{b}</p><button id="seed" onClick={() => seed++}>more</button>
+      <button id="take" onClick={() => a = 99}>take</button></main>;
+  }`,
+  steps: [{ click: '#seed' }, { click: '#take' }, { click: '#seed' }],
+  check: show(['1:2', '2:4', '99:4', '99:6']),
+});
+
+behaves('takeover: an immediate opaque invocation does not freeze an initializer', {
+  source: `export function App() {
+    let seed = 1; let total = seed * 2;
+    const invoke = { now(fn) { fn(); } };
+    function same() { total = total; }
+    invoke.now(same);
+    return <main><p>{total}</p><button id="seed" onClick={() => seed++}>more</button>
+      <button id="take" onClick={same}>take</button></main>;
+  }`,
+  steps: [{ click: '#seed' }, { click: '#take' }, { click: '#seed' }],
+  check: show(['2', '4', '4', '4']),
+});
+
 behaves('callbacks: a registered handler derives until its actual assignment', {
   source: `
     export function App() {

@@ -119,7 +119,12 @@ files that must pass in full at its exit.
     cases, ten execution tests and three plan tests pass. Possible builders join
     the mutation-observation slice; nested-block memo storage remains open on
     `state-and-derived.md`.
-  - [ ] takeover flags and the setup flag (`cases/callbacks`);
+  - [x] local takeover flags and runtime setup/replay ownership. Twelve selected
+    `cases/callbacks` comparisons and the existing handler-takeover case pass;
+    eight native execution tests and four runtime scope tests cover partial
+    stores, sibling replay, nested owners and exception boundaries. Module/closure
+    takeover and possible builders follow their storage/observation slices;
+    synchronous caught-nested-setup recovery remains open on `state-and-derived.md`.
   - [ ] mutation commits and the unknown-call check;
   - [ ] escaping-function tracking (the `unknown callers:` cases);
   - [ ] module state, imports, factory closures and classes (`complex state:`);

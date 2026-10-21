@@ -33,6 +33,13 @@ the generated program for a direct assignment to a const. The same write emitter
 supports silent version bumps for direct memo replay; callbacks created there
 keep their normal commit helpers.
 
+Writable memo targets with takeover candidates use the derived feature's store
+accessors instead of a second write wrapper. Native JavaScript still evaluates
+assignments, updates, loops and patterns; each successful target store decides
+whether to mark takeover and notify. Writes during that owner's setup/replay build
+the value without taking over, and taken targets ignore replay stores while sibling
+targets remain active (`state-and-derived.md`).
+
 Native listeners preserve their receiver, arguments and return value. Their outer
 return flushes pending writes, even with an immediate test scheduler; nested
 listeners on the same component do not flush an intermediate value. Timers and
@@ -43,7 +50,7 @@ Error recovery resets the listener depth at the next microtask without adding
 `try`/`catch`/`finally` around authored code.
 
 **Still pending in Phase 3:** mutation/unknown-call checks, shared module and
-factory/class storage, takeover/setup ownership, escaping-read tracking and
+factory/class storage, escaping-read tracking and
 explicit pre-`await` flushing. The microtask fallback does not establish the
 pre-`await` guarantee. Only component-owned binding assignments are emitted in
 this slice; graph facts for other owners remain for their planned slices.
