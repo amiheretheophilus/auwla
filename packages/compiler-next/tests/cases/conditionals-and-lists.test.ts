@@ -4,6 +4,17 @@
 import { expect } from 'bun:test';
 import { behaves } from '../harness/run';
 
+behaves('conditional: an early return preserves state across returning branches', {
+  source: `export function App() {
+    let show = false, count = 1;
+    if (!show) return <button id="open" onClick={() => show = true}>open</button>;
+    return <main><p>{count}</p><button id="inc" onClick={() => count++}>inc</button>
+      <button id="close" onClick={() => show = false}>close</button></main>;
+  }`,
+  steps: [{ click: '#open' }, { click: '#inc' }, { click: '#close' }, { click: '#open' }],
+  check(root, index) { expect(root.querySelector('p')?.textContent ?? 'open').toBe(['open', '1', '2', 'open', '2'][index]!); },
+});
+
 behaves('conditional: selected branch retains its nodes while text updates', {
   source: `export function App() {
     let show = true, count = 1;

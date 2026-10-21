@@ -27,6 +27,13 @@ Last updated: 2026-10-21.
 
 ## Done
 
+- Phase 4 root returns: bare ternary/logical returns and expression-bodied arrows
+  now render through anchored root fragments. Return-only if/else tails fold into
+  selection plans while retaining setup state and shared fallthrough identities.
+  **54 focused compiler tests and five conditional comparisons pass**, including
+  four new native checks and one new comparison. Package type check passes for
+  **112 files**. General branch setup, stored JSX and switch forms remain next.
+
 - Phase 4 expression conditionals are built: native ternary/logical selection,
   retained branch DOM and guarded sites, lazy inactive branches, correct primitive
   fallbacks, nested/root fragments, inherited SVG namespaces and branch disposal.

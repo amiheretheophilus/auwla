@@ -1,11 +1,10 @@
 /**
  * plan: graph → one `ModulePlan` per module (`wiki/compiler/core.md`, "plan").
  *
- * Phase 3 plans a component whose body is setup statements followed by one
- * `return` of markup. Markup anywhere else (a conditional return, a variable, a
- * helper) is compiled by later phases, which say so in their error.
+ * Setup keeps native storage. Phase 4 also plans expression returns and return-only
+ * if/else tails as lazy regions, retaining the authored graph and syntax identities.
  */
-import { is, walk } from 'yuku-ast';
+import { b, is } from 'yuku-ast';
 import type { Expression, Node, Statement } from 'yuku-parser';
 import { isReactive, type BindingNode, type SemanticGraph } from '../graph';
 import { variableDeclaration, type InputQueries } from '../graph/inputs';
@@ -22,6 +21,7 @@ import type { SharedOwnerPlan, SharedReadPlan } from './model';
 import { planSharedReads, sharedSetup } from '../../features/state/shared-plan';
 import { planReceiverTargets } from '../../features/handlers/receivers';
 import { storageOwner } from './storage';
+import { planReturns } from '../../features/conditionals/returns';
 
 export type { ComponentPlan, ModulePlan, Site, Template, TemplateNode } from './model';
 
@@ -175,38 +175,18 @@ function splitBody(fn: FunctionNode, context: TemplateContext) {
   if (body === null) return unsupported(context, fn, 'a component without a body', 6);
 
   if (!is.BlockStatement(body)) {
-    const markup = unwrap(body as Expression);
-    if (!is.JSXElement(markup) && !is.JSXFragment(markup)) {
-      return unsupported(context, body, 'a component that returns something other than markup', 4);
-    }
-    return { setup: [] as Statement[], markup: markup as Markup };
+    return { setup: [] as Statement[], markup: returnedMarkup(body as Expression) };
   }
 
-  const last = body.body.at(-1);
-  const argument = is.ReturnStatement(last) && last.argument !== null ? unwrap(last.argument) : null;
-  if (argument === null || (!is.JSXElement(argument) && !is.JSXFragment(argument))) {
-    return unsupported(context, last ?? fn, 'a component that does not end by returning markup', 4);
-  }
-  const setup = body.body.slice(0, -1) as Statement[];
-  const earlyReturn = setup.some((statement) => is.ReturnStatement(statement) || containsReturn(statement, fn));
-  if (earlyReturn) unsupported(context, fn, 'early returns', 4);
-  return { setup, markup: argument as Markup };
-}
+  const returned = planReturns(body.body as Statement[], (node) => unsupported(context, node, 'setup statements after a conditional return', 4));
+  return { setup: returned.setup, markup: returnedMarkup(returned.expression) };
 
-/** A `return` of the component itself inside a setup statement, not one in a nested function. */
-function containsReturn(statement: Node, fn: FunctionNode): boolean {
-  let found = false;
-  walk(statement, {
-    enter(node, ctx) {
-      if (is.Function(node) && node !== fn) {
-        ctx.skip();
-      } else if (is.ReturnStatement(node)) {
-        found = true;
-        ctx.stop();
-      }
-    },
-  });
-  return found;
+  function returnedMarkup(expression: Expression): Markup {
+    const value = unwrap(expression);
+    if (is.JSXElement(value) || is.JSXFragment(value)) return value;
+    return b.JSXFragment({ openingFragment: b.JSXOpeningFragment({}), closingFragment: b.JSXClosingFragment({}),
+      children: [b.JSXExpressionContainer({ expression })] });
+  }
 }
 
 /**

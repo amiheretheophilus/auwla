@@ -158,9 +158,9 @@ reactivity propagation; branch-filtered pending sets and callback creation.
 
 A tree of regions built from the JSX. Each site names the graph nodes it reads.
 
-The first Phase 3 slice plans intrinsic markup returned directly by a component
-(including expression-bodied arrows, fragments and markup inside expression
-containers). It separates post-order DOM node indices from source-order site
+The DOM plan covers intrinsic markup, expression/arrow returns and return-only
+if/else tails (through `features/conditionals/returns.ts`), fragments and markup
+inside expression containers. It separates post-order DOM node indices from source-order site
 evaluation: parent attributes evaluate before child expressions.
 
 | File | What it does |

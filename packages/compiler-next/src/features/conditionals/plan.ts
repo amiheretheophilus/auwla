@@ -10,6 +10,7 @@ export function planConditional(expression: Expression, context: {
   unsupported(node: Node): never;
 }) {
   const branches: ConditionalBranch[] = [];
+  const markupBranches = new Map<Node, number>();
   const selectorInputs: Expression[] = [];
   const primitive = () => {
     const index = branches.length;
@@ -19,7 +20,10 @@ export function planConditional(expression: Expression, context: {
   const select = (original: Expression): ConditionalSelection => {
     const node = unwrap(original);
     if (is.JSXElement(node) || is.JSXFragment(node)) {
+      const existing = markupBranches.get(node);
+      if (existing !== undefined) return { kind: 'branch', index: existing, value: null };
       const index = branches.length;
+      markupBranches.set(node, index);
       branches.push(context.template(node));
       return { kind: 'branch', index, value: null };
     }

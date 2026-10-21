@@ -168,7 +168,9 @@ files that must pass in full at its exit.
 - [x] Conditional expression regions: `?:`, `&&`, `||`, `??` with ordinary
   left operands. Retained branch templates/sites, lazy selectors, primitive
   fallbacks, nested/fragment roots, SVG namespaces and disposal are built.
-- [ ] Stored/assigned JSX, JSX on logical left operands, early returns, body
+- [x] Bare expression/arrow returns and return-only if/else tails. Setup state
+  survives branch swaps; a common fallthrough branch retains its identity.
+- [ ] Stored/assigned JSX, JSX on logical left operands, general early returns, body
   `switch` and `if` assigning JSX (`conditionals-and-lists.md`).
 - **Exit:** the conditional cases in `cases/conditionals-and-lists` pass.
 

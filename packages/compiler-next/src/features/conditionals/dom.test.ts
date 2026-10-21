@@ -34,6 +34,68 @@ async function compile(source: string) {
   return { root, module, click: (selector: string) => root.querySelector<HTMLButtonElement>(selector)!.click() };
 }
 
+it('updates a bare returned conditional and preserves its root range on a swap', async () => {
+  const { root, module, click } = await compile(`export let show = true, count = 1;
+    export function toggle() { show = !show; }
+    export function App() { return show ? <button id="inc" onClick={() => count++}>{count}</button> : <i>off</i>; }`);
+  const button = root.querySelector('button');
+  click('#inc');
+  expect(root.querySelector('button')).toBe(button);
+  expect(root.textContent).toBe('2');
+  module.toggle();
+  await Promise.resolve();
+  expect(root.textContent).toBe('off');
+  module.toggle();
+  await Promise.resolve();
+  expect(root.textContent).toBe('2');
+  expect(root.querySelector('button')).not.toBe(button);
+});
+
+it('accepts expression-bodied arrows returning logical markup or zero', async () => {
+  const { root, module, click } = await compile(`export let count = 0;
+    export function start() { count = 1; }
+    export const App = () => count && <button id="clear" onClick={() => count = 0}>{count}</button>;`);
+  expect(root.textContent).toBe('0');
+  module.start();
+  await Promise.resolve();
+  expect(root.querySelector('button')!.textContent).toBe('1');
+  click('#clear');
+  expect(root.textContent).toBe('0');
+});
+
+it('folds early returns while retaining component state across branch swaps', async () => {
+  const { root, click } = await compile(`export function App() {
+    let show = false, count = 1;
+    if (!show) return <button id="open" onClick={() => show = true}>open</button>;
+    return <main><p>{count}</p><button id="inc" onClick={() => count++}>inc</button>
+      <button id="close" onClick={() => show = false}>close</button></main>;
+  }`);
+  expect(root.textContent).toBe('open');
+  click('#open');
+  click('#inc');
+  expect(root.querySelector('p')!.textContent).toBe('2');
+  click('#close');
+  expect(root.textContent).toBe('open');
+  click('#open');
+  expect(root.querySelector('p')!.textContent).toBe('2');
+});
+
+it('retains the same fallthrough markup reached by different nested return paths', async () => {
+  const { root, click } = await compile(`export function App() {
+    let a = false, b = false;
+    if (a) { if (b) return <button id="back" onClick={() => b = false}>selected</button>; }
+    return <main><p>fallback</p><button id="a" onClick={() => a = !a}>a</button>
+      <button id="b" onClick={() => b = !b}>b</button></main>;
+  }`);
+  const p = root.querySelector('p');
+  click('#a');
+  expect(root.querySelector('p')).toBe(p);
+  click('#b');
+  expect(root.textContent).toBe('selected');
+  click('#back');
+  expect(root.querySelector('p')!.textContent).toBe('fallback');
+});
+
 it('retains a selected branch, updates its sites and replaces it only on a switch', async () => {
   const { root, click } = await compile(`export function App() {
     let show = true, count = 1;

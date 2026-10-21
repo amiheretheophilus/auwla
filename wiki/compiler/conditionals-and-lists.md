@@ -14,6 +14,7 @@ place.
 | --- | --- |
 | `features/conditionals/plan.ts` | Plans native ternary/logical selection, primitive fallbacks and independently retained branch templates |
 | `features/conditionals/dom.ts` | Emits lazy selection, preserving each logical left operand's single evaluation and its actual falsy value |
+| `features/conditionals/returns.ts` | Separates setup from a return-only if/else tail and folds its paths into lazy selection without editing authored syntax |
 | `features/conditionals/plan.test.ts` | Selector/branch dependencies and unchanged authored AST identities |
 | `features/conditionals/dom.test.ts` | Branch identity, lazy attributes, primitive fallbacks, nested/fragment placement and SVG namespaces |
 | `core/emit/sites.ts` | Composes branch templates/sites, guards selector reads separately, updates the active branch and disposes retired collectors/regions |
@@ -27,9 +28,15 @@ and mounts new nodes. Parent disposal drains regions, and retired collectors lea
 their parent's ownership set. Primitive fallbacks retain values such as zero.
 Branch templates inherit their surrounding namespace and parser constraints.
 Root regions use movable fragments so their anchors stay with returned content.
+Bare conditional returns and expression-bodied arrows use the same path. A
+return-only if/else tail preserves its setup's state across branch swaps. A shared
+fallthrough JSX leaf has one branch identity even when reached along different
+paths. Four additional native checks and an early-return comparison pass.
 
-Still pending in Phase 4: stored/assigned JSX, control-flow returns and JSX on the
-left of a logical operator. Lists and component calls remain their later phases.
+Still pending in Phase 4: stored/assigned JSX, switch returns, setup statements
+interleaved with conditional returns, and JSX on the left of a logical operator.
+These valid forms still need implementation; lists and component calls remain
+their later phases.
 
 ## Rules
 
