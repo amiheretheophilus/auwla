@@ -3,7 +3,7 @@ import {
   createApplicationRuntime, registerEntity, runWithApplicationRuntime, setScheduler, unregisterSubtree,
   type ApplicationRuntime, type Entity,
 } from '../src/kernel';
-import { createWriteBatch } from '../src/write-batch';
+import { createWriteBatch, flushWritesBeforeAwait } from '../src/write-batch';
 
 const runtimes: ApplicationRuntime[] = [];
 afterEach(() => {
@@ -24,6 +24,19 @@ function setup() {
 }
 
 describe('local write batches', () => {
+  it('flushes before suspension even inside a nested listener and preserves the operand', () => {
+    const { batch, renders } = setup();
+    batch.activate();
+    const operand = Promise.resolve(7);
+    const inner = batch.listener(() => {
+      batch.mark();
+      expect(flushWritesBeforeAwait(operand)).toBe(operand);
+      expect(renders()).toBe(1);
+    });
+    const outer = batch.listener(() => { inner(); batch.mark(); });
+    outer();
+    expect(renders()).toBe(2);
+  });
   it('ignores setup writes and batches event writes even with an immediate scheduler', async () => {
     const { batch, renders } = setup();
     batch.mark();

@@ -73,7 +73,7 @@ export { registerConditionalEffect, registerEffect } from './effect';
 export type { EffectCallback, EffectCondition } from './effect';
 
 export { materializeMarkup } from './markup';
-export { createWriteBatch, rejectConstAssignment } from './write-batch';
+export { createWriteBatch, rejectConstAssignment, flushWritesBeforeAwait, resumeWritesAfterAwait } from './write-batch';
 export type { WriteBatch } from './write-batch';
 export { createBuildScope, captureBuildScope, isBuilding } from './build-scope';
 export { mutationTarget, deleteMutation, receiverMutationTarget, observeMutation, watchMutationRoots } from './mutation';

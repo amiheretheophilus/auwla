@@ -16,11 +16,12 @@ import { emitTakeovers } from '../../features/derived/takeover';
 import { emitRecovery } from './recovery';
 import { emitMutations } from '../../features/handlers/mutations';
 import { emitShared } from './shared';
+import { emitAwaitBoundaries } from './await';
 
 /** Preserve module syntax and exports, replacing planned functions on a fresh tree. */
 export function emitDom(plan: ModulePlan, options: CompileModulesOptions): Node {
   const module = plan.module.module;
-  if (plan.components.size === 0 && plan.sharedOwners.length === 0 && findAll(module.ast, 'TryStatement').length === 0) return copy(module.ast);
+  if (plan.components.size === 0 && plan.sharedOwners.length === 0 && findAll(module.ast, ['TryStatement', 'AwaitExpression']).length === 0) return copy(module.ast);
 
   const names = new Names(module);
   const runtime = names.fresh('_MD');
@@ -54,7 +55,7 @@ export function emitDom(plan: ModulePlan, options: CompileModulesOptions): Node 
     insertion++;
   }
   output.body.splice(insertion, 0, ...hoisted);
-  return emitRecovery(output, names, runtime);
+  return emitAwaitBoundaries(emitRecovery(output, names, runtime), runtime);
 }
 
 function emitComponent(plan: ComponentPlan, names: Names, runtime: string, markup: string | null,

@@ -138,13 +138,15 @@ files that must pass in full at its exit.
   - [ ] module state, imports, factory closures and classes (`complex state:`).
     Native versions/readers, shared memo replay/takeover, reexports and receiver
     stores are built. Focused cases pass; the remaining Phase 3 audit is open.
-  - [ ] `await` in handlers.
+  - [x] `await` in handlers. Native suspension boundaries flush pending local and
+    shared writes after operand evaluation. Five immediate-boundary execution
+    checks, all six handler comparisons and nine runtime batching checks pass.
 - [x] `src/core/plan/`: `Template`, `TextSite`, `AttributeSite`, `PropertySite`,
   `EventSite`.
 - [ ] `src/core/emit/` + `src/features/*/dom.ts`: DOM backend on
   `@memoized-dom/runtime`, built with `yuku-ast` builders, printed by `yuku-codegen`.
   The module/template emitter is built; feature emission follows in the slices above.
-- [ ] Handlers: writes, updates, `await` in handlers (UI updates before each await,
+- [x] Handlers: writes, updates, `await` in handlers (UI updates before each await,
   `handlers.md`), member and call handlers.
 - **Exit:** `cases/state-and-derived`, `cases/handlers` and `cases/core` pass on
   `COMPILER=next`, except cases needing later phases (lists, components), which

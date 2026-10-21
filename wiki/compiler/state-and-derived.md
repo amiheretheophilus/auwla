@@ -81,7 +81,8 @@ fields, inherited accessors and constructor-returned objects retain native behav
 
 **Current boundary:** component/module storage, top-level captured factory
 bindings, hidden reads, possible builders and property/call mutations are built.
-Nested-block memo storage and explicit pre-await flushing remain pending. The
+Nested-block memo storage remains pending. Explicit pre-await flushing is built
+and verified by native suspension checks (`handlers.md`). The
 full Phase 3 exit and later-phase component/list cases remain unchecked.
 
 ## What it does

@@ -93,45 +93,77 @@ function snapshot(value: unknown, shallow = false): unknown[] {
   return result;
 }
 
-interface Observation { finish<T>(result: T): T }
+interface Observation { finish<T>(result: T): T; recover(): void }
 function observations() {
-  return getExtensionStore('mmd:mutations', () => new Set<Observation>());
+  return getExtensionStore('mmd:mutations', () => new Set<WeakRef<Observation>>());
+}
+
+export function recoverMutations(): void {
+  const pending = observations();
+  for (const reference of pending) {
+    const observation = reference.deref();
+    if (observation === undefined) pending.delete(reference);
+    else observation.recover();
+  }
+}
+
+export function resumeMutations(): void {
+  for (const reference of observations()) {
+    const observation = reference.deref();
+    if (observation !== undefined) globalThis.queueMicrotask(() => observation.recover());
+  }
 }
 
 export function captureMutationScope(): () => void {
   const pending = observations();
   const before = new Set(pending);
-  return () => { for (const observation of pending) if (!before.has(observation)) observation.finish(undefined); };
+  return () => {
+    for (const reference of pending) {
+      const observation = reference.deref();
+      if (observation === undefined) pending.delete(reference);
+      else if (!before.has(reference)) observation.recover();
+    }
+  };
 }
 
 export function observeMutation(reads: readonly (() => unknown)[], notify: readonly (() => void)[]): Observation {
-  const before = reads.map((read) => snapshot(read()));
+  let before = reads.map((read) => snapshot(read()));
   const objects = new Map<object, unknown[]>();
   for (const read of reads) reachable(read(), (object) => {
     if (!objects.has(object)) objects.set(object, snapshot(object, true));
   });
   const pending = observations();
+  let complete = false;
   const observation: Observation = {
     finish(result) {
-      if (!pending.delete(observation)) return result;
-      reads.forEach((read, index) => {
-        const after = snapshot(read());
+      if (complete) return result;
+      this.recover();
+      complete = true;
+      pending.delete(reference);
+      return result;
+    },
+    recover() {
+      if (complete) return;
+      const next = reads.map((read) => snapshot(read()));
+      next.forEach((after, index) => {
         const prior = before[index]!;
         if (prior.length !== after.length || prior.some((value, i) => !Object.is(value, after[i]))) notify[index]!();
       });
+      before = next;
       const changed = new Set<object>();
       for (const [object, prior] of objects) {
         const after = snapshot(object, true);
         if (prior.length !== after.length || prior.some((value, i) => !Object.is(value, after[i]))) changed.add(object);
+        objects.set(object, after);
       }
       notifyAliases(changed);
-      return result;
     },
   };
-  pending.add(observation);
+  const reference = new WeakRef(observation);
+  pending.add(reference);
   // A call that throws cannot execute finish. Preserve completed edits at the
   // next boundary; authored catches perform the same recovery synchronously.
-  globalThis.queueMicrotask(() => observation.finish(undefined));
+  globalThis.queueMicrotask(() => observation.recover());
   return observation;
 }
 

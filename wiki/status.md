@@ -27,6 +27,16 @@ Last updated: 2026-10-21.
 
 ## Done
 
+- Phase 3 explicit await boundaries: pending writes flush after evaluating each
+  operand, before native suspension, including nested listeners and shared writes.
+  Calls with awaited arguments retain mutation observation on resumption and
+  after exceptions. Async factory suspension restores its caller's owner.
+  **Five new native execution checks pass**; all six handler comparisons, four
+  shared-state comparisons and five ownership-recovery checks pass (**20 compiler
+  checks**). **22 focused runtime tests pass**. Runtime build and type checks pass
+  (**104 compiler-next files**, **67 runtime files**). No expectations changed.
+  Next: complete the Phase 3 exit audit and remaining storage/reflection gaps.
+
 - Phase 3 shared storage: module bindings and top-level captured factory bindings
   keep native values, per-owner versions/readers, memo replay and takeover.
   Reexports resolve to live readers of the defining module. Shared subscriptions

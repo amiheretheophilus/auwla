@@ -3,6 +3,22 @@ import {
   getActiveApplicationRuntime, getEntity, invalidateEntity, runWithApplicationRuntime,
   type Entity,
 } from './kernel';
+import { recoverMutations, resumeMutations } from './mutation';
+
+const pendingBoundaries = new Set<() => void>();
+
+/** Preserve the operand while committing the synchronous stretch before await. */
+export function flushWritesBeforeAwait<T>(value: T): T {
+  recoverMutations();
+  for (const flush of [...pendingBoundaries]) flush();
+  return value;
+}
+
+/** A call containing an awaited argument can still throw after resumption. */
+export function resumeWritesAfterAwait<T>(value: T): T {
+  resumeMutations();
+  return value;
+}
 
 /** Authored writes remain illegal when compiler-owned const memos are refreshed. */
 export function rejectConstAssignment(): never {
@@ -25,14 +41,16 @@ export function createWriteBatch(entity: Entity): WriteBatch {
   let queued = false;
   let depth = 0;
 
-  const flush = () => {
-    if (!active || !dirty || depth !== 0) return;
+  const flush = (force = false) => {
+    if (!active || !dirty || (!force && depth !== 0)) return;
     dirty = false;
+    pendingBoundaries.delete(boundary);
     runWithApplicationRuntime(runtime, () => {
       // A delayed callback must not notify a new instance with the same id.
       if (getEntity(entity.id) === entity) invalidateEntity(entity.id);
     });
   };
+  const boundary = () => flush(true);
 
   const queue = () => {
     if (queued) return;
@@ -42,6 +60,7 @@ export function createWriteBatch(entity: Entity): WriteBatch {
       // Recover after any throwing listener, even if it threw before its first
       // write. No authored code needs an exception wrapper.
       depth = 0;
+      runWithApplicationRuntime(runtime, recoverMutations);
       flush();
     });
   };
@@ -53,6 +72,7 @@ export function createWriteBatch(entity: Entity): WriteBatch {
     mark() {
       if (!active) return;
       dirty = true;
+      pendingBoundaries.add(boundary);
       queue();
     },
     flush,

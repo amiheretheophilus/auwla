@@ -16,6 +16,8 @@ Finds every place that changes state and makes the UI update after it.
 | `mutations.ts` | Emits direct member-store targets and delete notifications; replay uses silent versions |
 | `mutations.test.ts` | Native computed-key order, receiver/logical semantics, partial patterns and member loop targets |
 | `receivers.ts` | Plans and emits this/private/super store targets with lexical class access |
+| `core/emit/await.ts` | Preserves native await expressions while flushing writes after operand evaluation and scheduling resumed observation recovery |
+| `await.test.ts` | Native immediate-suspension checks, return await, operands/receivers, awaited call arguments and suspended factory ownership |
 | `packages/runtime/src/mutation.ts` | Member target preserving native key conversion, getter/setter receiver and successful-store notification |
 | `packages/runtime/tests/mutation.test.ts` | Descriptor snapshots, cyclic/native data, partial-call recovery and key order |
 | `packages/runtime/src/write-batch.ts` | Captures the application and entity, batches listener writes until return, and queues a microtask for unwrapped callbacks and error recovery |
@@ -74,10 +76,17 @@ their receiver's roots. Module/factory versions and shared roots notify subscrib
 consumers (`state-and-derived.md`). Proxy-specific reflection behavior still needs
 coverage; no method fast paths exist yet.
 
-**Still pending in Phase 3:** explicit pre-`await` flushing and remaining exit
-coverage. The microtask fallback does not establish the
-pre-`await` guarantee. Only component-owned binding assignments are emitted in
-this slice; graph facts for other owners remain for their planned slices.
+Before each native `await`, the operand evaluates once and pending write batches
+flush even inside nested listeners. The same value then reaches native await;
+resumption schedules observation recovery for calls whose arguments suspended.
+Observations retain updated baselines across recovery rather than becoming
+permanently closed before the actual call. Abandoned observations use weak
+references after their guaranteed recovery microtask. Shared async owners leave
+their setup scope when suspending, so their caller can continue building.
+
+**Still pending in Phase 3:** the exit audit, nested-block memo storage and
+remaining reflection coverage. Shared storage and explicit await boundaries are
+built; the full Phase 3 exit is not yet claimed.
 
 ## Rules
 

@@ -125,14 +125,24 @@ export function finishSharedOwner(
   if (owner.plan.fn !== null) {
     const module = owner.plan.state[0]!.binding.module;
     const authored = new Set<string>();
+    const awaits = new Set<string>();
+    for (const node of module.findAll('AwaitExpression')) {
+      if (runnerOf(module, node) === owner.plan.fn) awaits.add(`${node.start}:${node.end}`);
+    }
     for (const node of module.findAll('ReturnStatement')) {
       if (runnerOf(module, node) !== owner.plan.fn) continue;
       authored.add(`${node.start}:${node.end}`);
     }
     for (const root of setup) {
+      for (const node of findAll(root, 'AwaitExpression').reverse()) {
+        if (!awaits.has(`${node.start}:${node.end}`)) continue;
+        const awaited = copy(node, returns);
+        awaited.argument = expression('$$scope.finish($$frame, $$argument)', { scope, frame, argument: awaited.argument });
+        returns.set(node, awaited);
+      }
       for (const node of findAll(root, 'ReturnStatement')) {
         if (!authored.has(`${node.start}:${node.end}`)) continue;
-        const argument = node.argument ?? expression('void 0');
+        const argument = node.argument === null ? expression('void 0') : copy(node.argument, returns);
         returns.set(node, b.ReturnStatement({ argument: expression('$$complete($$argument)', { complete, argument }) }));
       }
     }
