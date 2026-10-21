@@ -175,6 +175,7 @@ evaluation: parent attributes evaluate before child expressions.
 - `Template`: static DOM shape, hoisted.
 - `TextSite`, `AttributeSite`, `PropertySite`, `EventSite`.
 - `ConditionalSite`: native selection tree, selector inputs and branch templates/sites (expression form built).
+- `RenderValuePlan`: stored JSX, with source-ordered captured sites and HTML/SVG template variants in `ModulePlan.values`.
 - `List { source, key, row: Plan }` _(planned)_.
 - `ComponentCall { component, props, slots }` _(planned)_.
 - `Boundary { sources, pending, error }` _(planned)_, for loading and error UI.
@@ -194,6 +195,8 @@ Features build their own pieces. Optimizations replace pieces (`optimize.md`).
 | `shared.ts` | Composes native shared-owner versions, memo/takeover emission and cross-module readers before replacing component functions |
 | `await.ts` | Adds write boundaries around native await operands and resumption, preserving suspension and rejection |
 | `sites.ts` | Emits mount values and per-site version checks; skips unchanged DOM values and updates native listeners when their value changes |
+| `render-value.ts` | Separates a stored JSX program's mount/update/disposal from the native expression that captures its inputs |
+| `packages/runtime/src/render-value.ts` | Keeps program metadata in a WeakMap and gives each consuming slot its own anchored DOM range |
 | `packages/runtime/src/computation.ts` | Captures executed hidden version reads for opaque memos/sites, with stable keys and nested restoration |
 | `template.ts` | Calls runtime `materializeMarkup`, or creates nodes directly when HTML parsing would alter the tree |
 | `names.ts` | Allocates generated names against all authored bindings and references |
@@ -215,6 +218,13 @@ This fallback preserves the authored tree and SVG/foreignObject namespaces;
 template eligibility is an optimization, not a restriction on accepted tags.
 Text expressions replace comment placeholders so adjacent values retain separate
 nodes. Empty or multi-root fragments return a `DocumentFragment`.
+Root value slots use movable fragments too: a stored value can expand beyond its
+text anchor. Unclaimed JSX becomes a captured program after component templates
+are planned; the authored AST and lexical capture expressions remain unchanged.
+
+The current emitters keep each operation on its own line and use named helpers
+for site inputs, guarded statements, render entries and program declarations.
+Comments describe ownership and evaluation-order constraints at their boundaries.
 
 **Current boundary:** setup initializes native values once; planned local memos
 and definite body builders replay before site updates in `_update`. State/write
@@ -222,7 +232,7 @@ and replay meaning lives in the feature plans and emitters (`state-and-derived.m
 `handlers.md`). Every component enters/leaves runtime build ownership during setup
 and replay, including static components whose body may invoke another owner's
 callback. Shared module/factory storage, tracking and mutation checks are built;
-explicit async boundaries are built. Nested component calls, conditional/list regions, refs and spreads
+explicit async boundaries, conditional regions and stored JSX are built. Nested component calls, list regions, refs and spreads
 still require their planned slices. The printer currently returns code, not source
 maps. The Phase 3 exit passes under the agreed view scope (`plan.md`).
 

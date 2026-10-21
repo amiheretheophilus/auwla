@@ -14,7 +14,7 @@ import {
   escapeText, eventName, intrinsicTag, parsesAsWritten, unwrap,
 } from './jsx';
 import type { Site, StaticAttribute, Template, TemplateNode, UnplacedSite } from './model';
-import { planConditional } from '../../features/conditionals/plan';
+import { canPlanConditional, planConditional } from '../../features/conditionals/plan';
 
 export interface TemplateContext {
   readonly path: string;
@@ -22,6 +22,10 @@ export interface TemplateContext {
   readonly source: string;
   /** Whether an expression reads something that can change. */
   reactive(expression: Expression): boolean;
+  /** Exclude JSX already owned by a template from the later stored-value pass. */
+  claimMarkup?(node: Node): void;
+  /** Capture child expressions at creation instead of planning lazy DOM selectors. */
+  readonly captureValues?: boolean;
 }
 
 type JsxRoot = Extract<Node, { type: 'JSXElement' | 'JSXFragment' }>;
@@ -78,6 +82,7 @@ class TemplateBuilder {
       if (is.JSXText(child)) {
         run.text += cleanJsxText(child.value);
       } else if (is.JSXFragment(child)) {
+        this.context.claimMarkup?.(child);
         this.collect(child.children, ancestors, namespace, run);
       } else if (is.JSXExpressionContainer(child)) {
         if (is.JSXEmptyExpression(child.expression)) continue;
@@ -104,14 +109,16 @@ class TemplateBuilder {
   }
 
   private textSite(expression: Expression, ancestors: readonly string[], namespace: Namespace): number {
-    if (containsJsx(expression)) {
+    const value = unwrap(expression);
+    if (!this.context.captureValues && containsJsx(expression)
+      && (is.ConditionalExpression(value) || is.LogicalExpression(value)) && canPlanConditional(expression, containsJsx)) {
       const conditional = planConditional(expression, {
         hasMarkup: containsJsx,
         template: (node) => buildTemplate(node, this.context, ancestors, namespace),
         unsupported: (node) => unsupported(this.context, node, 'JSX call/list expressions', 5),
       });
       const node = this.add({ kind: 'placeholder' });
-      this.sites.push({ kind: 'conditional', node, expression, reactive: this.context.reactive(expression), ...conditional });
+      this.sites.push({ kind: 'conditional', node, expression, namespace, reactive: this.context.reactive(expression), ...conditional });
       return node;
     }
     const node = this.add({ kind: 'placeholder' });
@@ -120,6 +127,7 @@ class TemplateBuilder {
   }
 
   private element(element: JsxElement, ancestors: readonly string[], parentNamespace: Namespace): number {
+    this.context.claimMarkup?.(element);
     const tag = intrinsicTag(element);
     if (tag === null) return unsupported(this.context, element, 'components', 6);
     if (!parsesAsWritten(tag, ancestors)) this.parsable = false;

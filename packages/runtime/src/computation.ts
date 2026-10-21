@@ -2,31 +2,78 @@
 import { getExtensionStore, onCommitFinished, onEntityDispose, type Entity } from './kernel';
 
 type Version = () => number;
-interface Dependency { readonly read: Version; seen: number }
-interface Frame { readonly dependencies: Map<object, Dependency>; readonly writes: Set<object>; readonly previous: Frame | null }
-function store() { return getExtensionStore('mmd:computation', () => ({ current: null as Frame | null, notifying: null as Set<() => void> | null })); }
+interface Dependency {
+  readonly read: Version;
+  seen: number;
+}
+
+interface Frame {
+  readonly dependencies: Map<object, Dependency>;
+  readonly writes: Set<object>;
+  readonly previous: Frame | null;
+}
+
+interface ComputationStore {
+  current: Frame | null;
+  notifying: Set<() => void> | null;
+}
+
+function store(): ComputationStore {
+  return getExtensionStore('mmd:computation', () => ({
+    current: null,
+    notifying: null,
+  }));
+}
+
 const subscribers = new WeakMap<object, Set<() => void>>();
-function owned() { return getExtensionStore('mmd:owned-computations', () => new Map<string, Set<() => void>>()); }
+
+function owned() {
+  return getExtensionStore('mmd:owned-computations', () => new Map<string, Set<() => void>>());
+}
+
 onEntityDispose((id) => {
-  for (const dispose of owned().get(id) ?? []) dispose();
+  for (const dispose of owned().get(id) ?? []) {
+    dispose();
+  }
   owned().delete(id);
 });
 
 export function publishVersions(keys: readonly object[], written?: object): void {
   const state = store();
-  if (written !== undefined) state.current?.writes.add(written);
+  if (written !== undefined) {
+    state.current?.writes.add(written);
+  }
+
+  // A shared memo can publish another version while its subscriber runs. Keep
+  // one notification set for the whole wave so cycles cannot notify forever.
   const outer = state.notifying === null;
   const notified = state.notifying ?? new Set<() => void>();
   state.notifying = notified;
-  if (outer) globalThis.queueMicrotask(() => { if (state.notifying === notified) state.notifying = null; });
+  if (outer) {
+    // A throwing subscriber skips the synchronous reset below.
+    globalThis.queueMicrotask(() => {
+      if (state.notifying === notified) {
+        state.notifying = null;
+      }
+    });
+  }
+
   const notifications = new Set<() => void>();
-  for (const key of keys) for (const notify of subscribers.get(key) ?? []) notifications.add(notify);
+  for (const key of keys) {
+    for (const notify of subscribers.get(key) ?? []) {
+      notifications.add(notify);
+    }
+  }
   for (const notify of notifications) {
-    if (notified.has(notify)) continue;
+    if (notified.has(notify)) {
+      continue;
+    }
     notified.add(notify);
     notify();
   }
-  if (outer) state.notifying = null;
+  if (outer) {
+    state.notifying = null;
+  }
 }
 
 export function trackRead<T>(version: Version, value: T, key: object = version): T {
@@ -34,16 +81,27 @@ export function trackRead<T>(version: Version, value: T, key: object = version):
   return value;
 }
 
-export function resetComputationScope(): void { store().current = null; store().notifying = null; }
+export function resetComputationScope(): void {
+  const state = store();
+  state.current = null;
+  state.notifying = null;
+}
 
 export function captureComputationScope(): () => void {
   const state = store();
   const frame = state.current;
   const notifying = state.notifying;
-  return () => { state.current = frame; state.notifying = notifying; };
+  return () => {
+    state.current = frame;
+    state.notifying = notifying;
+  };
 }
 
-onCommitFinished((failed) => { if (failed) resetComputationScope(); });
+onCommitFinished((failed) => {
+  if (failed) {
+    resetComputationScope();
+  }
+});
 
 export function createComputation(notify?: () => void, entity?: Entity) {
   const invalidate = notify === undefined ? undefined : () => notify();
@@ -52,11 +110,20 @@ export function createComputation(notify?: () => void, entity?: Entity) {
   const subscriptions = new Set<object>();
   let frame: Frame | null = null;
   let owner: Set<() => void> | undefined;
+
   const unsubscribe = () => {
-    if (invalidate !== undefined) for (const key of subscriptions) subscribers.get(key)?.delete(invalidate);
+    if (invalidate !== undefined) {
+      for (const key of subscriptions) {
+        subscribers.get(key)?.delete(invalidate);
+      }
+    }
     subscriptions.clear();
   };
-  const dispose = () => { unsubscribe(); owner?.delete(dispose); };
+  const dispose = () => {
+    unsubscribe();
+    owner?.delete(dispose);
+  };
+
   if (entity !== undefined) {
     const owners = owned();
     const list = owners.get(entity.id) ?? new Set<() => void>();
@@ -64,20 +131,32 @@ export function createComputation(notify?: () => void, entity?: Entity) {
     owner = list;
     owners.set(entity.id, list);
   }
+
   return {
     begin(reset = true) {
-      if (reset) { dependencies = new Map(); writes = new Set(); }
+      if (reset) {
+        dependencies = new Map();
+        writes = new Set();
+      }
       const state = store();
       frame = { dependencies, writes, previous: state.current };
       state.current = frame;
     },
     end(settle = true) {
       const state = store();
-      if (frame !== null) state.current = frame.previous;
+      if (frame !== null) {
+        state.current = frame.previous;
+      }
       frame = null;
       if (settle) {
-        for (const key of writes) dependencies.delete(key);
-        for (const dependency of dependencies.values()) dependency.seen = dependency.read();
+        // A computation's own outputs must not become inputs that replay it.
+        // Other reads of the same owner remain dependencies through their keys.
+        for (const key of writes) {
+          dependencies.delete(key);
+        }
+        for (const dependency of dependencies.values()) {
+          dependency.seen = dependency.read();
+        }
         if (invalidate !== undefined) {
           unsubscribe();
           for (const key of dependencies.keys()) {
@@ -90,10 +169,16 @@ export function createComputation(notify?: () => void, entity?: Entity) {
       }
     },
     changed() {
-      for (const dependency of dependencies.values()) if (dependency.read() !== dependency.seen) return true;
+      for (const dependency of dependencies.values()) {
+        if (dependency.read() !== dependency.seen) {
+          return true;
+        }
+      }
       return false;
     },
-    dependsOn(key: object) { return dependencies.has(key); },
+    dependsOn(key: object) {
+      return dependencies.has(key);
+    },
     dispose,
   };
 }

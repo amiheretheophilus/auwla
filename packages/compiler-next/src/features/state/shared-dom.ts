@@ -25,7 +25,9 @@ export function emitSharedState(plan: ModulePlan, names: Names, runtime: string,
   const imports: Statement[] = [];
   const owners: SharedOwnerEmit[] = [];
   for (const read of plan.sharedReads.values()) {
-    if (read.binding.binding.module === plan.module.module) names.reserve(read.name);
+    if (read.binding.binding.module === plan.module.module) {
+      names.reserve(read.name);
+    }
   }
   for (const owner of plan.sharedOwners) {
     const versions = new Map<BindingNode, string>();
@@ -44,7 +46,11 @@ export function emitSharedState(plan: ModulePlan, names: Names, runtime: string,
       declarations.push(statement('let $$version = 0;', { version }));
       declarations.push(statement('const $$key = {};', { key }));
       const read = plan.sharedReads.get(binding);
-      if (read === undefined) continue;
+      if (read === undefined) {
+        continue;
+      }
+      // A reader refreshes an inactive shared owner before exposing its version
+      // or value. Re-entering its active setup would instead replay itself.
       declarations.push(statement(`function $$reader() {
         if ($$runtime.isBuilding() && $$ready && !$$scope.active()) $$refresh();
         return $$runtime.trackRead(() => {
@@ -52,11 +58,17 @@ export function emitSharedState(plan: ModulePlan, names: Names, runtime: string,
           return $$version;
         }, $$binding, $$key);
       }`, { reader: read.name, ready, scope, refresh, runtime, version, binding: binding.binding.name, key }));
-      if (owner.fn === null && owner.block === null) declarations.push(statement('export { $$reader };', { reader: read.name }));
+      if (owner.fn === null && owner.block === null) {
+        declarations.push(statement('export { $$reader };', { reader: read.name }));
+      }
       for (const reference of binding.binding.references) {
-        if (reference.isWrite || reference.inTypePosition) continue;
+        if (reference.isWrite || reference.inTypePosition) {
+          continue;
+        }
         const parent = plan.module.module.parentOf(reference.node);
-        if (is.ExportSpecifier(parent)) continue;
+        if (is.ExportSpecifier(parent)) {
+          continue;
+        }
         replacements.set(reference.node, expression('$$reader()', { reader: read.name }));
       }
     }
@@ -70,9 +82,13 @@ export function emitSharedState(plan: ModulePlan, names: Names, runtime: string,
   const importedReaders = new Map<BindingNode, string>();
   for (const binding of plan.module.module.bindings) {
     const definition = importedDefinition(binding);
-    if (definition === null) continue;
+    if (definition === null) {
+      continue;
+    }
     const read = [...plan.sharedReads.values()].find((read) => read.binding.binding === definition);
-    if (read === undefined) continue;
+    if (read === undefined) {
+      continue;
+    }
     let reader = importedReaders.get(read.binding);
     if (reader === undefined) {
       reader = names.fresh('_importedRead');
@@ -80,7 +96,10 @@ export function emitSharedState(plan: ModulePlan, names: Names, runtime: string,
       imports.push(statement(`import { ${read.name} as ${reader} } from ${JSON.stringify(relativeModule(plan.module.path, read.path))};`));
     }
     for (const reference of binding.references) {
-      if (reference.isWrite || reference.inTypePosition || is.ExportSpecifier(plan.module.module.parentOf(reference.node))) continue;
+      const parent = plan.module.module.parentOf(reference.node);
+      if (reference.isWrite || reference.inTypePosition || is.ExportSpecifier(parent)) {
+        continue;
+      }
       replacements.set(reference.node, expression('$$reader()', { reader }));
     }
   }
@@ -89,17 +108,27 @@ export function emitSharedState(plan: ModulePlan, names: Names, runtime: string,
 
 /** Finalize snapshots before any authored return without moving its evaluation. */
 export function finishSharedOwner(
-  owner: SharedOwnerEmit, setup: readonly Statement[], snapshots: readonly Statement[],
-  update: readonly Statement[], names: Names,
+  owner: SharedOwnerEmit,
+  setup: readonly Statement[],
+  snapshots: readonly Statement[],
+  update: readonly Statement[],
+  names: Names,
 ) {
   const { scope, frame, ready, refresh, batch } = owner;
   const declarations: Statement[] = [];
   const initialize: Statement[] = [];
   for (const original of snapshots) {
-    if (!is.VariableDeclaration(original)) continue;
+    if (!is.VariableDeclaration(original)) {
+      continue;
+    }
     for (const entry of original.declarations) {
-      declarations.push(b.VariableDeclaration({ kind: 'let', declarations: [b.VariableDeclarator({ id: copy(entry.id), init: null })] }));
-      if (entry.init !== null) initialize.push(statement('$$target = $$value;', { target: entry.id, value: entry.init }));
+      declarations.push(b.VariableDeclaration({
+        kind: 'let',
+        declarations: [b.VariableDeclarator({ id: copy(entry.id), init: null })],
+      }));
+      if (entry.init !== null) {
+        initialize.push(statement('$$target = $$value;', { target: entry.id, value: entry.init }));
+      }
     }
   }
   const complete = names.fresh('_completeShared');
@@ -108,7 +137,9 @@ export function finishSharedOwner(
     complete, value, ready, scope, frame,
   }));
   const completion = declarations.at(-1)!;
-  if (is.FunctionDeclaration(completion)) completion.body!.body.unshift(...initialize);
+  if (is.FunctionDeclaration(completion)) {
+    completion.body!.body.unshift(...initialize);
+  }
   declarations.push(b.FunctionDeclaration({
     id: b.Identifier({ name: refresh }), params: [], async: false, generator: false, expression: false,
     body: b.BlockStatement({ body: [
@@ -127,21 +158,29 @@ export function finishSharedOwner(
     const authored = new Set<string>();
     const awaits = new Set<string>();
     for (const node of module.findAll('AwaitExpression')) {
-      if (runnerOf(module, node) === owner.plan.fn) awaits.add(`${node.start}:${node.end}`);
+      if (runnerOf(module, node) === owner.plan.fn) {
+        awaits.add(`${node.start}:${node.end}`);
+      }
     }
     for (const node of module.findAll('ReturnStatement')) {
-      if (runnerOf(module, node) !== owner.plan.fn) continue;
+      if (runnerOf(module, node) !== owner.plan.fn) {
+        continue;
+      }
       authored.add(`${node.start}:${node.end}`);
     }
     for (const root of setup) {
       for (const node of findAll(root, 'AwaitExpression').reverse()) {
-        if (!awaits.has(`${node.start}:${node.end}`)) continue;
+        if (!awaits.has(`${node.start}:${node.end}`)) {
+          continue;
+        }
         const awaited = copy(node, returns);
         awaited.argument = expression('$$scope.finish($$frame, $$argument)', { scope, frame, argument: awaited.argument });
         returns.set(node, awaited);
       }
       for (const node of findAll(root, 'ReturnStatement')) {
-        if (!authored.has(`${node.start}:${node.end}`)) continue;
+        if (!authored.has(`${node.start}:${node.end}`)) {
+          continue;
+        }
         const argument = node.argument === null ? expression('void 0') : copy(node.argument, returns);
         const returned = copy(node);
         returned.argument = expression('$$complete($$argument)', { complete, argument });
@@ -153,13 +192,17 @@ export function finishSharedOwner(
     const block = owner.plan.block;
     const module = owner.plan.state[0]!.binding.module;
     for (const node of module.findAll(['BreakStatement', 'ContinueStatement'])) {
-      if (node.start < block.start || node.end > block.end || runnerOf(module, node) !== owner.plan.fn) continue;
-      const target = [...module.ancestors(node)].find((parent) => node.label !== null
-        ? is.LabeledStatement(parent) && parent.label.name === node.label.name
-        : is.ForStatement(parent) || is.ForInStatement(parent) || is.ForOfStatement(parent)
-          || is.WhileStatement(parent) || is.DoWhileStatement(parent)
-          || (is.BreakStatement(node) && is.SwitchStatement(parent)));
-      if (target === undefined || (target.start >= block.start && target.end <= block.end)) continue;
+      const outsideBlock = node.start < block.start || node.end > block.end;
+      if (outsideBlock || runnerOf(module, node) !== owner.plan.fn) {
+        continue;
+      }
+
+      const target = [...module.ancestors(node)].find((parent) => isJumpTarget(node, parent));
+      if (target === undefined || (target.start >= block.start && target.end <= block.end)) {
+        continue;
+      }
+      // Only a jump leaving this lexical activation completes it. A break from
+      // a loop nested inside the block still belongs to the same setup.
       returns.set(node, b.BlockStatement({ body: [statement('$$complete(void 0);', { complete }), copy(node)] }));
     }
   }
@@ -174,11 +217,13 @@ export function finishSharedOwner(
       const name = binding.binding.declarations[0]!;
       const entry = node as unknown as Node;
       const declaration = is.ExportNamedDeclaration(entry) ? entry.declaration : entry;
-      if (declaration === null) continue;
-      const ids = is.VariableDeclaration(declaration)
-        ? declaration.declarations.flatMap((entry) => findAll(entry.id, 'Identifier'))
-        : is.ClassDeclaration(declaration) && declaration.id !== null ? [declaration.id] : [];
-      if (!ids.some((id) => id.name === binding.binding.name && id.start === name.start)) continue;
+      if (declaration === null) {
+        continue;
+      }
+      const ids = declaredIdentifiers(declaration);
+      if (!ids.some((id) => id.name === binding.binding.name && id.start === name.start)) {
+        continue;
+      }
       body.push(statement('$$batch.watch([{ read: () => $$binding, notify: () => { $$version++; $$batch.mark($$key); } }]);', {
         batch, binding: binding.binding.name, version: owner.versions.get(binding)!, key: owner.keys.get(binding)!,
       }));
@@ -188,11 +233,38 @@ export function finishSharedOwner(
   return body;
 }
 
+function isJumpTarget(jump: Extract<Node, { type: 'BreakStatement' | 'ContinueStatement' }>, parent: Node): boolean {
+  if (jump.label !== null) {
+    return is.LabeledStatement(parent) && parent.label.name === jump.label.name;
+  }
+  if (is.BreakStatement(jump) && is.SwitchStatement(parent)) {
+    return true;
+  }
+  return is.ForStatement(parent)
+    || is.ForInStatement(parent)
+    || is.ForOfStatement(parent)
+    || is.WhileStatement(parent)
+    || is.DoWhileStatement(parent);
+}
+
+function declaredIdentifiers(declaration: Node) {
+  if (is.VariableDeclaration(declaration)) {
+    return declaration.declarations.flatMap((entry) => findAll(entry.id, 'Identifier'));
+  }
+  if (is.ClassDeclaration(declaration) && declaration.id !== null) {
+    return [declaration.id];
+  }
+  return [];
+}
+
 function relativeModule(importer: string, target: string): string {
   const from = importer.replace(/^\.\//, '').split('/');
   from.pop();
   const to = target.replace(/^\.\//, '').split('/');
-  while (from.length > 0 && from[0] === to[0]) { from.shift(); to.shift(); }
+  while (from.length > 0 && from[0] === to[0]) {
+    from.shift();
+    to.shift();
+  }
   const path = [...from.map(() => '..'), ...to].join('/').replace(/\.tsx?$/, '');
   return path.startsWith('.') ? path : `./${path}`;
 }

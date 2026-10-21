@@ -94,6 +94,15 @@ computation, with input snapshots captured after the statement finishes. The
 reference transform/runtime were corrected with those expectations unchanged;
 details and current compiler boundaries are on `state-and-derived.md`.
 
+Stored JSX exposed another reference setup bug: a settling render repeated a new
+initializer after a later body assignment changed its input. `finishSetup` seeds
+only newly created memo snapshots at the end of the component body, before refs
+and effects. The explicit creation-time-value assertion remains unchanged.
+The five affected reference files pass 200 cases. The scoped conditional generator
+passes 200 programs with seed 20261021 after stored-value support. The unchanged
+full generator still fails on lists; its nonempty-list regression is preserved as
+`tests/corpus/generated-20261023.json` for Phase 5.
+
 ## Layers
 
 1. **Reference renderer** (`tests/reference/`). Test-only: the framework never

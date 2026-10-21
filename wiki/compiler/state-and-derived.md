@@ -256,6 +256,13 @@ through callbacks, props and module helpers, including immediate callbacks insid
 effects. Source readiness is checked at body callback invocation. This bookkeeping
 is test-only; production output continues to use the model in `output.md`.
 
+New reference slots seed input snapshots after their creating component body
+finishes. For `const view = <b>{count}</b>; count = 2`, JSX keeps the value captured
+before the assignment; an initial settling render must not replay its initializer.
+Subsequent changes still rederive it normally. The stored-JSX comparison retains
+its explicit initial/later assertions; 200 reference cases across the five affected
+state/callback/source/shared/conditional files pass.
+
 ## Inputs and outputs
 
 - In: `Resolved` (initializer references, write sites and where they run,
@@ -269,6 +276,7 @@ The graph classification is built (`core/graph/classify.ts`, described in
 | File | What it does |
 | --- | --- |
 | `features/props/classify.ts` | parameters of components: capitalized functions that own markup, or functions used as a JSX tag |
+| `features/props/returns.ts` | Recognizes returned JSX through resolved aliases, assignment values and visible helper returns, including imports; node identities and a visited set keep scopes distinct and cycles finite |
 | `features/derived/computations.ts` | each binding's initial computation: initializer, pattern, body builders (definite or possible), reads, and candidate takeovers (later assignments) |
 | `features/state/classify.ts` | the initial kind: `Prop`, `Constant`, `State` or `Opaque`; imports start as placeholders |
 | `features/derived/classify.ts` | spreads reactivity through reads (a worklist, so cycles end); gives imports their definition's kind |

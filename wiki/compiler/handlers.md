@@ -49,7 +49,11 @@ targets remain active (`state-and-derived.md`).
 
 Native listeners preserve their receiver, arguments and return value. Their outer
 return flushes pending writes, even with an immediate test scheduler; nested
-listeners on the same component do not flush an intermediate value. Timers and
+listeners do not flush an intermediate value. Listener depth is shared across
+batches: an event that changes shared state flushes every pending consumer at its
+outer return, including consumers in another application. Per-batch depth still
+controls that batch's direct flush. The cross-application nested-listener runtime
+test verifies neither consumer renders early and both render once on return. Timers and
 promise callbacks use the queued microtask boundary. Setup writes do not schedule
 DOM work before registration. Notifications retain the originating application
 and entity identity, so a delayed callback cannot update a replacement instance.

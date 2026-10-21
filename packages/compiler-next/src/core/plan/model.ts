@@ -9,7 +9,13 @@ import type { BindingNode } from '../graph';
 
 /** One node of a template, in the creation order `materializeMarkup` returns (post-order). */
 export type TemplateNode =
-  | { readonly kind: 'element'; readonly tag: string; readonly namespace: 'html' | 'svg'; readonly attributes: readonly StaticAttribute[]; readonly children: readonly number[] }
+  | {
+    readonly kind: 'element';
+    readonly tag: string;
+    readonly namespace: 'html' | 'svg';
+    readonly attributes: readonly StaticAttribute[];
+    readonly children: readonly number[];
+  }
   | { readonly kind: 'text'; readonly text: string }
   /** Where a dynamic text goes; replaced by a text node at mount. */
   | { readonly kind: 'placeholder' };
@@ -41,21 +47,52 @@ interface SiteBase {
   readonly reactive: boolean;
 }
 
-export interface TextSite extends SiteBase { readonly kind: 'text' }
-export interface AttributeSite extends SiteBase { readonly kind: 'attribute'; readonly name: string }
-export interface PropertySite extends SiteBase { readonly kind: 'property'; readonly name: string }
-export interface EventSite extends SiteBase { readonly kind: 'event'; readonly event: string }
+export interface TextSite extends SiteBase {
+  readonly kind: 'text';
+}
+
+export interface AttributeSite extends SiteBase {
+  readonly kind: 'attribute';
+  readonly name: string;
+}
+
+export interface PropertySite extends SiteBase {
+  readonly kind: 'property';
+  readonly name: string;
+}
+
+export interface EventSite extends SiteBase {
+  readonly kind: 'event';
+  readonly event: string;
+}
+
 export interface ConditionalSite extends SiteBase {
   readonly kind: 'conditional';
+  readonly namespace: 'html' | 'svg';
   readonly selection: ConditionalSelection;
   readonly branches: readonly ConditionalBranch[];
   readonly selectorInputs: readonly Expression[];
 }
 
 export type ConditionalSelection =
-  | { readonly kind: 'branch'; readonly index: number; readonly value: Expression | null }
-  | { readonly kind: 'test'; readonly test: Expression; readonly consequent: ConditionalSelection; readonly alternate: ConditionalSelection }
-  | { readonly kind: 'logical'; readonly operator: '&&' | '||' | '??'; readonly left: Expression; readonly right: ConditionalSelection; readonly fallback: number };
+  | {
+    readonly kind: 'branch';
+    readonly index: number;
+    readonly value: Expression | null;
+  }
+  | {
+    readonly kind: 'test';
+    readonly test: Expression;
+    readonly consequent: ConditionalSelection;
+    readonly alternate: ConditionalSelection;
+  }
+  | {
+    readonly kind: 'logical';
+    readonly operator: '&&' | '||' | '??';
+    readonly left: Expression;
+    readonly right: ConditionalSelection;
+    readonly fallback: number;
+  };
 
 export interface ConditionalBranch {
   /** Null for a selected primitive; its value comes from the selector. */
@@ -130,6 +167,16 @@ export interface ModulePlan {
   readonly sharedOwners: readonly SharedOwnerPlan[];
   readonly sharedReads: ReadonlyMap<BindingNode, SharedReadPlan>;
   readonly receiverTargets: readonly Node[];
+  readonly values: readonly RenderValuePlan[];
+}
+
+export interface RenderValuePlan {
+  /** Identity of the JSX creation expression, shared across its consumers. */
+  readonly node: Extract<Node, { type: 'JSXElement' | 'JSXFragment' }>;
+  readonly template: Template;
+  readonly svgTemplate: Template;
+  /** Source order is also the capture-array order used by the emitted program. */
+  readonly sites: readonly Site[];
 }
 
 export interface SharedReadPlan {

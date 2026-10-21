@@ -17,11 +17,18 @@ import { emitRecovery } from './recovery';
 import { emitMutations } from '../../features/handlers/mutations';
 import { emitShared } from './shared';
 import { emitAwaitBoundaries } from './await';
+import { emitRenderValue } from './render-value';
 
 /** Preserve module syntax and exports, replacing planned functions on a fresh tree. */
 export function emitDom(plan: ModulePlan, options: CompileModulesOptions): Node {
   const module = plan.module.module;
-  if (plan.components.size === 0 && plan.sharedOwners.length === 0 && findAll(module.ast, ['TryStatement', 'AwaitExpression']).length === 0) return copy(module.ast);
+  const hasRenderWork = plan.components.size > 0 || plan.sharedOwners.length > 0 || plan.values.length > 0;
+  if (!hasRenderWork) {
+    const hasBoundaries = findAll(module.ast, ['TryStatement', 'AwaitExpression']).length > 0;
+    if (!hasBoundaries) {
+      return copy(module.ast);
+    }
+  }
 
   const names = new Names(module);
   const runtime = names.fresh('_MD');
@@ -30,6 +37,11 @@ export function emitDom(plan: ModulePlan, options: CompileModulesOptions): Node 
   const shared = emitShared(plan, names, runtime);
   const replacements = shared.replacements;
   hoisted.push(...shared.imports);
+  for (const value of plan.values) {
+    const emitted = emitRenderValue(value, names, runtime);
+    hoisted.push(emitted.declaration);
+    replacements.set(value.node, emitted.replacement);
+  }
 
   for (const component of plan.components.values()) {
     const markup = component.template.markup === null ? null : names.fresh('_markup');
@@ -51,21 +63,31 @@ export function emitDom(plan: ModulePlan, options: CompileModulesOptions): Node 
   // A module's directive prologue must remain before generated declarations.
   let insertion = 0;
   for (const entry of output.body) {
-    if (!is.ExpressionStatement(entry) || typeof entry.directive !== 'string') break;
+    if (!is.ExpressionStatement(entry) || typeof entry.directive !== 'string') {
+      break;
+    }
     insertion++;
   }
   output.body.splice(insertion, 0, ...hoisted);
   return emitAwaitBoundaries(emitRecovery(output, names, runtime), runtime);
 }
 
-function emitComponent(plan: ComponentPlan, names: Names, runtime: string, markup: string | null,
+function emitComponent(
+  plan: ComponentPlan,
+  names: Names,
+  runtime: string,
+  markup: string | null,
   external: ReadonlyMap<Node, Node>,
 ): Node {
   const document = names.fresh('_document');
   const id = names.fresh('_id');
   const parent = names.fresh('_parent');
   const state = emitLocalState(plan.state, names);
-  const batch = plan.state.length === 0 && plan.dynamicSites.size === 0 && !plan.sites.some((site) => site.kind === 'conditional') ? null : names.fresh('_writes');
+  // Value slots can own nested DOM even when the component has no local state.
+  // Their listeners and disposal still need the component's batch and entity.
+  const ownsRegions = plan.sites.some((site) => site.kind === 'conditional' || site.kind === 'text');
+  const needsBatch = plan.state.length > 0 || plan.dynamicSites.size > 0 || ownsRegions;
+  const batch = needsBatch ? names.fresh('_writes') : null;
   const update = names.fresh('_update');
   const entity = names.fresh('_entity');
   const scope = names.fresh('_scope');

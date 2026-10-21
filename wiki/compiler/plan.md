@@ -170,8 +170,12 @@ files that must pass in full at its exit.
   fallbacks, nested/fragment roots, SVG namespaces and disposal are built.
 - [x] Bare expression/arrow returns and return-only if/else tails. Setup state
   survives branch swaps; a common fallthrough branch retains its identity.
-- [ ] Stored/assigned JSX, JSX on logical left operands, general early returns, body
-  `switch` and `if` assigning JSX (`conditionals-and-lists.md`).
+- [x] Stored/assigned JSX, helper-returned values, JSX on logical left operands,
+  and body `switch`/`if` assigning JSX (`conditionals-and-lists.md`). Native capture
+  order, retained templates, independent consumers and HTML/SVG destinations are
+  verified. The rewrite's dense planner/emitter/runtime helpers were expanded and
+  documented before continuing feature work, at the user's request.
+- [ ] General early returns with interleaved setup, and switch returns.
 - **Exit:** the conditional cases in `cases/conditionals-and-lists` pass.
 
 ## Phase 5: lists

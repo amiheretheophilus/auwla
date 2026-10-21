@@ -24,6 +24,24 @@ function setup() {
 }
 
 describe('local write batches', () => {
+  it('flushes all shared consumers at the outer listener boundary across applications', () => {
+    const first = setup();
+    const second = setup();
+    first.batch.activate();
+    second.batch.activate();
+    const inner = second.batch.listener(() => {
+      first.batch.mark();
+      second.batch.mark();
+    });
+    first.batch.listener(() => {
+      inner();
+      expect(first.renders()).toBe(0);
+      expect(second.renders()).toBe(0);
+      second.batch.mark();
+    })();
+    expect(first.renders()).toBe(1);
+    expect(second.renders()).toBe(1);
+  });
   it('flushes before suspension even inside a nested listener and preserves the operand', () => {
     const { batch, renders } = setup();
     batch.activate();

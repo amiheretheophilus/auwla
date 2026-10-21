@@ -10,14 +10,15 @@ import { isReactive, type BindingNode, type SemanticGraph } from '../graph';
 import { variableDeclaration, type InputQueries } from '../graph/inputs';
 import { isWrittenGlobal, runnerOf, type ResolvedModule } from '../resolve';
 import type { FunctionNode } from '../resolve/functions';
-import type { ComponentPlan, ModulePlan } from './model';
-import { buildTemplate, containsJsx, unsupported, type TemplateContext } from './template';
+import type {
+  ComponentPlan, MemoGroupPlan, ModulePlan, RenderValuePlan, SharedOwnerPlan,
+  SharedReadPlan, Site,
+} from './model';
+import { buildTemplate, unsupported, type TemplateContext } from './template';
 import { unwrap } from './jsx';
 import { planLocalState } from '../../features/state/plan';
 import { planMutations, planReadonlyBindings, planWrites } from '../../features/handlers/plan';
 import { planMemos } from '../../features/derived/plan';
-import type { MemoGroupPlan } from './model';
-import type { SharedOwnerPlan, SharedReadPlan } from './model';
 import { planSharedReads, sharedSetup } from '../../features/state/shared-plan';
 import { planReceiverTargets } from '../../features/handlers/receivers';
 import { storageOwner } from './storage';
@@ -47,43 +48,28 @@ function planModule(
   sharedReads: ReadonlyMap<BindingNode, SharedReadPlan>,
 ): ModulePlan {
   const module = entry.module;
+  const claimed = new Set<Node>();
   const context: TemplateContext = {
     path: entry.path,
     source: module.source,
     reactive: (expression) => readsReactive(graph, queries, entry, expression),
+    claimMarkup: (node) => {
+      claimed.add(node);
+    },
   };
 
   const plans = new Map<Node, ComponentPlan>();
-  const lexicalBlocks = new Set([...sharedReads.keys()].filter((binding) => binding.binding.module === module)
-    .map(storageOwner).filter((owner) => is.BlockStatement(owner)));
+  const moduleBindings = [...sharedReads.keys()].filter((binding) => binding.binding.module === module);
+  const lexicalBlocks = new Set(moduleBindings.map(storageOwner).filter(is.BlockStatement));
   for (const fn of module.findAll(['FunctionDeclaration', 'FunctionExpression', 'ArrowFunctionExpression'])) {
-    if (!components.has(fn)) continue;
+    if (!components.has(fn)) {
+      continue;
+    }
     const computations = memos.get(fn) ?? [];
     const targets = computations.flatMap((group) => group.computations.flatMap((memo) => memo.targets));
     const local = [...new Set([...(state.get(fn) ?? []), ...targets])];
     const component = planComponent(fn, context);
-    const siteInputs = new Map<Expression, readonly BindingNode[]>();
-    const dynamicSites = new Set<Expression>();
-    const allSites = (sites: readonly import('./model').Site[]): import('./model').Site[] => sites.flatMap((site) =>
-      site.kind === 'conditional' ? [site, ...site.branches.flatMap((branch) => allSites(branch.sites))] : [site]);
-    for (const site of allSites(component.sites)) {
-      const inputs = new Set<BindingNode>();
-      for (const expression of site.kind === 'conditional' ? site.selectorInputs : [site.expression]) {
-        if (expression.end === 0) continue;
-        const facts = queries.inputsOf(module, expression);
-        if (facts.opaque || facts.reads.some((read) => {
-          const binding = read.binding ?? read.reference.binding;
-          const node = binding === null ? undefined : graph.bindings.get(binding);
-          return node !== undefined && storageOwner(node) !== fn;
-        })) dynamicSites.add(site.expression);
-        for (const read of facts.reads) {
-          const binding = read.binding ?? read.reference.binding;
-          const node = binding === null ? undefined : graph.bindings.get(binding);
-          if (node !== undefined) inputs.add(node);
-        }
-      }
-      siteInputs.set(site.expression, [...inputs]);
-    }
+    const { siteInputs, dynamicSites } = planSiteInputs(component.sites, fn, graph, queries, entry);
     const writes = planWrites(local);
     const mutations = planMutations(local);
     const readonlyBindings = planReadonlyBindings(local);
@@ -91,51 +77,88 @@ function planModule(
       return target.takeovers.length > 0 && !readonlyBindings.includes(target);
     });
     const replayWrites = writes.filter((write) => {
-      if (runnerOf(module, write.operation) !== fn) return false;
+      if (runnerOf(module, write.operation) !== fn) {
+        return false;
+      }
       return computations.some((group) => group.steps.some((root) => {
         return write.operation.start >= root.start && write.operation.end <= root.end;
       }));
     });
     const replayMutations = mutations.filter((write) => {
-      if (runnerOf(module, write.operation) !== fn) return false;
+      if (runnerOf(module, write.operation) !== fn) {
+        return false;
+      }
       return computations.some((group) => group.steps.some((root) => {
         return write.operation.start >= root.start && write.operation.end <= root.end;
       }));
     });
     const trackedReads = graph.escaping.flatMap((escaping) => escaping.reads.flatMap((read) => {
-      if (read.target.binding === null || !local.includes(read.target as BindingNode) || read.reference === null) return [];
+      if (read.target.binding === null || !local.includes(read.target as BindingNode) || read.reference === null) {
+        return [];
+      }
       return [{ node: read.reference.node, binding: read.target as BindingNode }];
     }));
     for (const binding of local) {
       for (const reference of binding.binding.references) {
-        if (reference.isWrite || reference.inTypePosition) continue;
-        if (![...module.ancestors(reference.node)].some((ancestor) => lexicalBlocks.has(ancestor as Extract<Node, { type: 'BlockStatement' }>))) continue;
-        if (!trackedReads.some((read) => read.node === reference.node)) trackedReads.push({ node: reference.node, binding });
+        if (reference.isWrite || reference.inTypePosition) {
+          continue;
+        }
+        const insideLexicalBlock = [...module.ancestors(reference.node)].some((ancestor) => {
+          return is.BlockStatement(ancestor) && lexicalBlocks.has(ancestor);
+        });
+        if (!insideLexicalBlock) {
+          continue;
+        }
+        if (!trackedReads.some((read) => read.node === reference.node)) {
+          trackedReads.push({ node: reference.node, binding });
+        }
       }
     }
     const mutationRoots = local.filter((binding) => {
       const declarator = variableDeclaration(binding.binding);
-      if (declarator === null) return false;
+      if (declarator === null) {
+        return false;
+      }
       const declaration = module.parentOf(declarator);
       return declaration !== null && module.parentOf(declaration) === fn.body;
     });
     plans.set(fn, {
-      ...component, state: local, writes, replayWrites, mutations, replayMutations,
-      readonlyBindings, takeovers, siteInputs, memos: computations, trackedReads, dynamicSites, mutationRoots,
+      ...component,
+      state: local,
+      writes,
+      replayWrites,
+      mutations,
+      replayMutations,
+      readonlyBindings,
+      takeovers,
+      siteInputs,
+      memos: computations,
+      trackedReads,
+      dynamicSites,
+      mutationRoots,
     });
   }
 
-  // Markup that no planned component returns belongs to a later phase.
+  // Remaining JSX is a native stored/passed/returned value. Capture its site
+  // inputs where it is evaluated, retaining lexical scope and evaluation order.
+  const values: RenderValuePlan[] = [];
   for (const jsx of module.findAll(['JSXElement', 'JSXFragment'])) {
-    const owner = runnerOf(module, jsx);
-    const plan = owner === null ? undefined : plans.get(owner);
-    if (plan === undefined) unsupported(context, jsx, 'markup outside a component', 6);
+    if (claimed.has(jsx)) {
+      continue;
+    }
+    const value = buildTemplate(jsx, { ...context, captureValues: true });
+    const svg = buildTemplate(jsx, { ...context, captureValues: true }, [], 'svg');
+    values.push({ node: jsx, ...value, svgTemplate: { ...svg.template, markup: null } });
   }
   const sharedOwners: SharedOwnerPlan[] = [];
-  const shared = [...sharedReads.keys()].filter((binding) => binding.binding.module === module);
+  const shared = moduleBindings;
   for (const owner of new Set(shared.map(storageOwner))) {
-    if (owner !== null && !is.BlockStatement(owner) && (!is.Function(owner) || !is.BlockStatement(owner.body))) continue;
+    if (owner !== null && !is.BlockStatement(owner) && (!is.Function(owner) || !is.BlockStatement(owner.body))) {
+      continue;
+    }
     const bindings = shared.filter((binding) => storageOwner(binding) === owner);
+    // A shared setup must collect its own executed reads instead of adding them
+    // to the component or factory computation that happened to invoke it.
     const computations = (memos.get(owner) ?? []).filter((group) => group.computations[0]!.targets[0]!.binding.module === module)
       .map((group) => ({ ...group, dynamic: true }));
     const targets = computations.flatMap((group) => group.computations.flatMap((memo) => memo.targets));
@@ -143,27 +166,103 @@ function planModule(
     const writes = planWrites(local);
     const mutations = planMutations(local);
     const runner = bindings[0]!.owner.runner;
-    const replayed = (operation: Node) => runnerOf(module, operation) === runner
-      && computations.some((group) => group.steps.some((root) => operation.start >= root.start && operation.end <= root.end));
+    const replayed = (operation: Node) => {
+      return runnerOf(module, operation) === runner && computations.some((group) => {
+        return group.steps.some((root) => operation.start >= root.start && operation.end <= root.end);
+      });
+    };
     const readonlyBindings = planReadonlyBindings(local);
+    let setup: readonly Statement[];
+    if (owner === null) {
+      const memoDeclarations = computations.flatMap((group) => {
+        return group.computations.map((memo) => memo.declarator);
+      });
+      setup = sharedSetup(module.ast.body, new Set(memoDeclarations));
+    } else if (is.BlockStatement(owner)) {
+      setup = owner.body as Statement[];
+    } else {
+      setup = (owner.body as Extract<Node, { type: 'BlockStatement' }>).body as Statement[];
+    }
+
     sharedOwners.push({
-      fn: runner as SharedOwnerPlan['fn'], block: is.BlockStatement(owner) ? owner : null, state: local,
-      setup: owner === null ? sharedSetup(module.ast.body, new Set(computations.flatMap((group) => group.computations.map((memo) => memo.declarator))))
-        : (is.BlockStatement(owner) ? owner.body : (owner.body as Extract<Node, { type: 'BlockStatement' }>).body) as Statement[],
-      memos: computations, writes, mutations,
+      fn: runner as SharedOwnerPlan['fn'],
+      block: is.BlockStatement(owner) ? owner : null,
+      state: local,
+      setup,
+      memos: computations,
+      writes,
+      mutations,
       replayWrites: writes.filter((write) => replayed(write.operation)),
-      replayMutations: mutations.filter((write) => replayed(write.operation)), readonlyBindings,
+      replayMutations: mutations.filter((write) => replayed(write.operation)),
+      readonlyBindings,
       takeovers: targets.filter((target) => target.takeovers.length > 0 && !readonlyBindings.includes(target)),
     });
   }
-  return { module: entry, components: plans, sharedOwners, sharedReads, receiverTargets: planReceiverTargets(module) };
+  return {
+    module: entry,
+    components: plans,
+    sharedOwners,
+    sharedReads,
+    receiverTargets: planReceiverTargets(module),
+    values,
+  };
+}
+
+function allSites(sites: readonly Site[]): Site[] {
+  const result: Site[] = [];
+  for (const site of sites) {
+    result.push(site);
+    if (site.kind === 'conditional') {
+      for (const branch of site.branches) {
+        result.push(...allSites(branch.sites));
+      }
+    }
+  }
+  return result;
+}
+
+function planSiteInputs(
+  sites: readonly Site[],
+  owner: FunctionNode,
+  graph: SemanticGraph,
+  queries: InputQueries,
+  entry: ResolvedModule,
+) {
+  const siteInputs = new Map<Expression, readonly BindingNode[]>();
+  const dynamicSites = new Set<Expression>();
+
+  for (const site of allSites(sites)) {
+    const inputs = new Set<BindingNode>();
+    // Branch text and attributes have their own guards. Including them here
+    // would repeat a selector even when only the selected branch's text changed.
+    const expressions = site.kind === 'conditional' ? site.selectorInputs : [site.expression];
+    for (const expression of expressions) {
+      if (expression.end === 0) {
+        continue;
+      }
+      const facts = queries.inputsOf(entry.module, expression);
+      if (facts.opaque) {
+        dynamicSites.add(site.expression);
+      }
+      for (const read of facts.reads) {
+        const binding = read.binding ?? read.reference.binding;
+        const node = binding === null ? undefined : graph.bindings.get(binding);
+        if (node === undefined) {
+          continue;
+        }
+        inputs.add(node);
+        if (storageOwner(node) !== owner) {
+          dynamicSites.add(site.expression);
+        }
+      }
+    }
+    siteInputs.set(site.expression, [...inputs]);
+  }
+  return { siteInputs, dynamicSites };
 }
 
 function planComponent(fn: FunctionNode, context: TemplateContext) {
   const { setup, markup } = splitBody(fn, context);
-  for (const statement of setup) {
-    if (containsJsx(statement)) unsupported(context, statement, 'markup in setup code', 4);
-  }
   const { template, sites } = buildTemplate(markup, context);
   return { fn, setup, template, sites };
 }
@@ -172,20 +271,29 @@ function planComponent(fn: FunctionNode, context: TemplateContext) {
 function splitBody(fn: FunctionNode, context: TemplateContext) {
   type Markup = Extract<Node, { type: 'JSXElement' | 'JSXFragment' }>;
   const body = fn.body;
-  if (body === null) return unsupported(context, fn, 'a component without a body', 6);
+  if (body === null) {
+    return unsupported(context, fn, 'a component without a body', 6);
+  }
 
   if (!is.BlockStatement(body)) {
     return { setup: [] as Statement[], markup: returnedMarkup(body as Expression) };
   }
 
-  const returned = planReturns(body.body as Statement[], (node) => unsupported(context, node, 'setup statements after a conditional return', 4));
+  const returned = planReturns(body.body as Statement[], (node) => {
+    return unsupported(context, node, 'setup statements after a conditional return', 4);
+  });
   return { setup: returned.setup, markup: returnedMarkup(returned.expression) };
 
   function returnedMarkup(expression: Expression): Markup {
     const value = unwrap(expression);
-    if (is.JSXElement(value) || is.JSXFragment(value)) return value;
-    return b.JSXFragment({ openingFragment: b.JSXOpeningFragment({}), closingFragment: b.JSXClosingFragment({}),
-      children: [b.JSXExpressionContainer({ expression })] });
+    if (is.JSXElement(value) || is.JSXFragment(value)) {
+      return value;
+    }
+    return b.JSXFragment({
+      openingFragment: b.JSXOpeningFragment({}),
+      closingFragment: b.JSXClosingFragment({}),
+      children: [b.JSXExpressionContainer({ expression })],
+    });
   }
 }
 

@@ -5,15 +5,19 @@ import type { Binding, Resolved } from '../../core/resolve';
 import { declaringRunner, isParameter } from '../../core/resolve';
 import { functionValue } from '../../core/resolve/functions';
 import type { FunctionNode } from '../../core/resolve/functions';
+import { returnedMarkup } from './returns';
 
 /** Functions used as a JSX tag, and capitalized functions that own markup. */
 export function componentFunctions(resolved: Resolved): ReadonlySet<FunctionNode> {
   const components = new Set<FunctionNode>();
+  const returnsMarkup = returnedMarkup(resolved);
   for (const entry of resolved.modules) {
     const module = entry.module;
     for (const opening of module.findAll('JSXOpeningElement')) {
       const fn = functionValue(module, opening.name);
-      if (fn !== null) components.add(fn);
+      if (fn !== null) {
+        components.add(fn);
+      }
     }
 
     // Markup belongs to its nearest function. Nested map/render callbacks own
@@ -31,9 +35,14 @@ export function componentFunctions(resolved: Resolved): ReadonlySet<FunctionNode
     for (const fn of module.findAll(['FunctionDeclaration', 'FunctionExpression', 'ArrowFunctionExpression'])) {
       const parent = module.parentOf(fn);
       const name = fn.id ?? (is.VariableDeclarator(parent) && is.Identifier(parent.id) ? parent.id : null);
-      if (name === null || !/^[A-Z]/.test(name.name)) continue;
-      // Match the existing component convention: a capitalized function that returns markup.
-      if (ownsMarkup.has(fn)) components.add(fn);
+      if (name === null || !/^[A-Z]/.test(name.name)) {
+        continue;
+      }
+      // A component can return a stored value through a helper without owning
+      // any JSX directly. Keep the same capitalized-function convention.
+      if (ownsMarkup.has(fn) || returnsMarkup(fn, module)) {
+        components.add(fn);
+      }
     }
   }
   return components;
@@ -47,12 +56,20 @@ export function propBindings(
   const props = new Set<Binding>();
   for (const entry of resolved.modules) {
     for (const binding of entry.module.bindings) {
-      if (!isParameter(binding)) continue;
+      if (!isParameter(binding)) {
+        continue;
+      }
       const owner = declaringRunner(entry.module, binding);
-      if (owner === null || !is.Function(owner) || !components.has(owner as FunctionNode)) continue;
+      if (owner === null || !is.Function(owner) || !components.has(owner as FunctionNode)) {
+        continue;
+      }
       const first = owner.params[0];
-      if (first === undefined) continue;
-      if (binding.declarations.some((name) => name.start >= first.start && name.end <= first.end)) props.add(binding);
+      if (first === undefined) {
+        continue;
+      }
+      if (binding.declarations.some((name) => name.start >= first.start && name.end <= first.end)) {
+        props.add(binding);
+      }
     }
   }
   return props;

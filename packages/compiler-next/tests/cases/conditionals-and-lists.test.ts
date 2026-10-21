@@ -4,6 +4,17 @@
 import { expect } from 'bun:test';
 import { behaves } from '../harness/run';
 
+behaves('conditional: stored JSX preserves creation-time values and follows later changes', {
+  source: `export function App() {
+    let count = 1;
+    const view = <b>{count}</b>;
+    count = 2;
+    return <main>{view}<button onClick={() => count++}>inc</button></main>;
+  }`,
+  steps: [{ click: 'button' }],
+  check(root, index) { expect(root.querySelector('b')!.textContent).toBe(['1', '3'][index]!); },
+});
+
 behaves('conditional: an early return preserves state across returning branches', {
   source: `export function App() {
     let show = false, count = 1;

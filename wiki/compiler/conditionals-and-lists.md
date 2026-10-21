@@ -18,6 +18,8 @@ place.
 | `features/conditionals/plan.test.ts` | Selector/branch dependencies and unchanged authored AST identities |
 | `features/conditionals/dom.test.ts` | Branch identity, lazy attributes, primitive fallbacks, nested/fragment placement and SVG namespaces |
 | `core/emit/sites.ts` | Composes branch templates/sites, guards selector reads separately, updates the active branch and disposes retired collectors/regions |
+| `core/emit/render-value.ts` | Hoists a compiled binding program for stored JSX and captures its inputs at the authored expression |
+| `packages/runtime/src/render-value.ts` | Mounts captured programs independently per consumer, updates matching programs in place and disposes replaced ranges |
 | `packages/runtime/src/cond.ts` | Existing anchored branch lifecycle; an optional insertion point preserves surrounding sibling order |
 
 Ternary branches and `&&`, `||`, `??` with ordinary left operands are built.
@@ -33,10 +35,20 @@ return-only if/else tail preserves its setup's state across branch swaps. A shar
 fallthrough JSX leaf has one branch identity even when reached along different
 paths. Four additional native checks and an early-return comparison pass.
 
-Still pending in Phase 4: stored/assigned JSX, switch returns, setup statements
-interleaved with conditional returns, and JSX on the left of a logical operator.
-These valid forms still need implementation; lists and component calls remain
-their later phases.
+Stored/assigned JSX, helper returns, body `if`/`switch` assignments and JSX on
+logical left operands now use captured render values. Creating JSX evaluates its
+inputs in native order; each consumer mounts independent DOM from a hoisted
+program. Updating captures from the same authored JSX retains nodes, while
+selecting another program disposes the old range. Namespace selection happens at
+mount, so one stored value can be consumed in HTML and SVG. Nested values stay
+lazy under native JavaScript control flow.
+
+The planner and emitter use named helpers for selection, return folding, capture
+emission and guarded writes. Comments explain why selector inputs exclude branch
+sites, why fallthrough leaves share identity and why range cleanup uses anchors.
+
+Still pending in Phase 4: switch returns and setup statements interleaved with
+conditional returns. Lists and component calls remain their later phases.
 
 ## Rules
 
@@ -88,12 +100,15 @@ In `packages/compiler-next/tests/cases/conditionals-and-lists.test.ts`.
 
 The unchanged full generator saved `tests/corpus/generated-20261021.json`:
 `{(0 > 0) ? <b>{0}</b> : <i>{0}</i>}` now passes unchanged on compiler-next.
-Four `conditional:` comparisons in this file pass alongside six native execution
-checks and one plan check. The full generator still requires Phase 5 list support.
+Six `conditional:` comparisons in this file pass alongside eighteen native
+execution checks and one plan check. The full generator still requires Phase 5 list support.
 The scoped conditional generator passes 200 programs with seed 20261021. Its
 additional state regression, `tests/corpus/conditional-state-20261021.json`, now
 passes after correcting resolver target positions (`core.md`). The unchanged full
-generator saves a Phase 5 map-chain failure as `generated-20261022.json`.
+generator saved a Phase 5 map-chain failure as `generated-20261022.json` (its
+shrunk empty-list case now passes alongside the two saved conditional cases); the later
+run saves a nonempty list mismatch as `generated-20261023.json`. Both remain
+unchanged in the corpus; the full generator is not passing.
 
 The old compiler rejects these:
 

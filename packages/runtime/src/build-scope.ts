@@ -30,7 +30,9 @@ function buildStore(): BuildStore {
   return getExtensionStore('mmd:build-scope', () => ({ current: null, epoch: 0, queued: false }));
 }
 
-export function isBuilding(): boolean { return buildStore().current !== null; }
+export function isBuilding(): boolean {
+  return buildStore().current !== null;
+}
 
 function reset(store: BuildStore): void {
   settleAbandoned(store, null);
@@ -40,11 +42,15 @@ function reset(store: BuildStore): void {
 }
 
 function settleAbandoned(store: BuildStore, stop: BuildFrame | null): void {
-  for (let frame = store.current; frame !== null && frame !== stop; frame = frame.previous) frame.onAbandon?.();
+  for (let frame = store.current; frame !== null && frame !== stop; frame = frame.previous) {
+    frame.onAbandon?.();
+  }
 }
 
 onCommitFinished((failed) => {
-  if (failed) reset(buildStore());
+  if (failed) {
+    reset(buildStore());
+  }
 });
 
 /** Restore the dynamic owner at an authored catch/finally boundary. */
@@ -69,6 +75,8 @@ export function captureBuildScope(): () => void {
 export function createBuildScope(shared = false, inheritOwner = false): BuildScope {
   const runtime = getActiveApplicationRuntime();
   const store = buildStore();
+  // A lexical block shares its surrounding setup's write ownership, but needs
+  // a distinct scope identity to tell whether that particular block is active.
   const owner = inheritOwner ? store.current?.owner ?? {} : {};
   const scope = {};
   return {
@@ -90,7 +98,9 @@ export function createBuildScope(shared = false, inheritOwner = false): BuildSco
     },
     leave(frame) {
       const active = frameStores.get(frame)!;
-      if (frame.epoch !== active.epoch) return;
+      if (frame.epoch !== active.epoch) {
+        return;
+      }
       active.current = frame.previous;
     },
     building() {
@@ -99,9 +109,13 @@ export function createBuildScope(shared = false, inheritOwner = false): BuildSco
     },
     active() {
       const active = shared ? buildStore() : store;
-      if (!shared && getActiveApplicationRuntime() !== runtime) return false;
+      if (!shared && getActiveApplicationRuntime() !== runtime) {
+        return false;
+      }
       for (let frame = active.current; frame !== null; frame = frame.previous) {
-        if (frame.scope === scope && frame.epoch === active.epoch) return true;
+        if (frame.scope === scope && frame.epoch === active.epoch) {
+          return true;
+        }
       }
       return false;
     },

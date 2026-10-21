@@ -34,6 +34,130 @@ async function compile(source: string) {
   return { root, module, click: (selector: string) => root.querySelector<HTMLButtonElement>(selector)!.click() };
 }
 
+it('captures stored JSX at native evaluation time and updates its retained DOM', async () => {
+  const { root, click } = await compile(`export function App() {
+    let count = 1;
+    const view = <section><p>{count}</p><input value="start" /></section>;
+    count = 2;
+    return <main>{view}<button id="inc" onClick={() => count++}>inc</button></main>;
+  }`);
+  expect(root.querySelector('p')!.textContent).toBe('1');
+  const section = root.querySelector('section');
+  root.querySelector('input')!.value = 'typed';
+  click('#inc');
+  expect(root.querySelector('p')!.textContent).toBe('3');
+  expect(root.querySelector('section')).toBe(section);
+  expect(root.querySelector('input')!.value).toBe('typed');
+});
+
+it('keeps stored JSX takeover until another native assignment replaces it', async () => {
+  const { root, click } = await compile(`export function App() {
+    let count = 1;
+    let view = <b>{count}</b>;
+    return <main>{view}<button id="inc" onClick={() => count++}>inc</button>
+      <button id="hold" onClick={() => view = <i>held</i>}>hold</button></main>;
+  }`);
+  click('#inc');
+  expect(root.querySelector('b')!.textContent).toBe('2');
+  click('#hold');
+  click('#inc');
+  expect(root.querySelector('b')).toBeNull();
+  expect(root.querySelector('i')!.textContent).toBe('held');
+});
+
+it('replays switch assignments of JSX and keeps a stable selected template', async () => {
+  const { root, click } = await compile(`export function App() {
+    let mode = 'a', count = 1;
+    let view;
+    switch (mode) { case 'a': view = <b>{count}</b>; break; default: view = <i>off</i>; }
+    return <main>{view}<button id="inc" onClick={() => count++}>inc</button>
+      <button id="toggle" onClick={() => mode = mode === 'a' ? 'b' : 'a'}>toggle</button></main>;
+  }`);
+  const b = root.querySelector('b');
+  click('#inc');
+  expect(root.querySelector('b')).toBe(b);
+  expect(root.querySelector('b')!.textContent).toBe('2');
+  click('#toggle');
+  expect(root.querySelector('i')!.textContent).toBe('off');
+  click('#toggle');
+  expect(root.querySelector('b')!.textContent).toBe('2');
+});
+
+it('gives each consumer independent DOM when a helper returns the same JSX value', async () => {
+  const { root, click } = await compile(`function make(value) { return <b>{value}</b>; }
+    export function App() {
+      let count = 1;
+      const view = make(count);
+      return <main>{view}{view}<button id="inc" onClick={() => count++}>inc</button></main>;
+    }`);
+  const [a, b] = root.querySelectorAll('b');
+  expect(a).not.toBe(b);
+  click('#inc');
+  expect(root.querySelectorAll('b')[0]).toBe(a);
+  expect(root.querySelectorAll('b')[1]).toBe(b);
+  expect(a!.textContent).toBe('2');
+  expect(b!.textContent).toBe('2');
+});
+
+it('recognizes a root component returning a module JSX alias through a helper', async () => {
+  const { root } = await compile(`const view = <b>stored</b>;
+    function getView() { return view; }
+    export function App() { return getView(); }`);
+  expect(root.querySelector('b')!.textContent).toBe('stored');
+});
+
+it('updates independent consumers of a module JSX memo', async () => {
+  const { root, module, click } = await compile(`let count = 1;
+    const view = <b>{count}</b>;
+    export function App() {
+      return <main>{view}<button id="inc" onClick={() => count++}>inc</button></main>;
+    }`);
+  root.append(module.App('conditional-second', null));
+  const [a, b] = root.querySelectorAll('b');
+  expect(a).not.toBe(b);
+  click('#inc');
+  expect(root.querySelectorAll('b')[0]).toBe(a);
+  expect(root.querySelectorAll('b')[1]).toBe(b);
+  expect(a!.textContent).toBe('2');
+  expect(b!.textContent).toBe('2');
+});
+
+it('renders stored values in conditional leaves and inherits each consumer namespace', async () => {
+  const { root, click } = await compile(`export function App() {
+    let count = 1, show = true;
+    const view = <circle r={count} />;
+    return <main><svg>{show ? view : <path d="M0 0" />}</svg><aside>{view}</aside>
+      <button id="inc" onClick={() => count++}>inc</button>
+      <button id="toggle" onClick={() => show = !show}>toggle</button></main>;
+  }`);
+  const circle = root.querySelector('svg circle')!;
+  expect(circle.namespaceURI).toBe('http://www.w3.org/2000/svg');
+  expect(root.querySelector('aside circle')!.namespaceURI).toBe('http://www.w3.org/1999/xhtml');
+  click('#inc');
+  expect(root.querySelector('svg circle')).toBe(circle);
+  expect(circle.getAttribute('r')).toBe('2');
+  click('#toggle');
+  expect(root.querySelector('svg path')!.namespaceURI).toBe('http://www.w3.org/2000/svg');
+});
+
+it('keeps nested stored JSX lazy and evaluates JSX logical operands in native order', async () => {
+  const { root, module, click } = await compile(`export const log = [];
+    function record(label) { log.push(label); return label; }
+    export function App() {
+      let show = false, count = 1;
+      const view = <section>{show ? <b title={record('b')}>{count}</b> : <i title={record('i')}>off</i>}</section>;
+      return <main>{view}{<span title={record('left')} /> && <p>{count}</p>}
+        <button id="toggle" onClick={() => show = !show}>toggle</button></main>;
+    }`);
+  expect(module.log).toEqual(['i', 'left']);
+  expect(root.querySelector('span')).toBeNull();
+  const section = root.querySelector('section');
+  click('#toggle');
+  expect(root.querySelector('section')).toBe(section);
+  expect(root.querySelector('b')!.textContent).toBe('1');
+  expect(module.log).toEqual(['i', 'left', 'b']);
+});
+
 it('updates a bare returned conditional and preserves its root range on a swap', async () => {
   const { root, module, click } = await compile(`export let show = true, count = 1;
     export function toggle() { show = !show; }

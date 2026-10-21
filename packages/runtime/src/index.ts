@@ -148,5 +148,6 @@ export {
 export { patchDomProps, setDomValue } from './dom-props';
 export { classValue, setClassValue, setStyleValue } from './dom-values';
 export { createCondRegion } from './cond';
+export { createRenderValue, createValueSlot } from './render-value';
 export { registerProps, setProps } from './props';
 export type { CondRegion, CondEntry, CondBranchFactory } from './cond';

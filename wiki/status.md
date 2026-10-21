@@ -27,12 +27,32 @@ Last updated: 2026-10-21.
 
 ## Done
 
+- Readability pass through the recent compiler/runtime rewrite: expanded compound
+  statements and traversal branches, extracted named helpers for site inputs,
+  return searches, jump targets and render program construction, and documented
+  capture timing, ownership, notification waves and anchor cleanup. This responds
+  to the user's concern that the code was too compact and lacked comments.
+  Stored JSX work already in progress is included: native capture order, helper
+  returns, body switch assignments, independent consumers and HTML/SVG mounting.
+  Shared writes flush all applications at the outer listener return. The reference
+  seeds new memo snapshots after setup, preserving initial captures without
+  changing assertions. Verification: **58 focused compiler tests, eight conditional
+  comparisons and 30 runtime tests pass**. Compiler/runtime checks pass for
+  **114/68 files**, and runtime rebuild passes. The older `an early return` case
+  still fails when it reaches a JSX list; its failure is retained for Phase 5.
+  Before this readability pass, **200 affected reference cases and 200 scoped
+  generated programs passed**. The unchanged full
+  generator's nonempty-list failure is saved as `generated-20261023.json` for
+  Phase 5. Next: general interleaved early returns and switch returns; Phase 4 is
+  not complete.
+
 - Phase 4 root returns: bare ternary/logical returns and expression-bodied arrows
   now render through anchored root fragments. Return-only if/else tails fold into
   selection plans while retaining setup state and shared fallthrough identities.
   **54 focused compiler tests and five conditional comparisons pass**, including
   four new native checks and one new comparison. Package type check passes for
-  **112 files**. General branch setup, stored JSX and switch forms remain next.
+  **112 files**. General branch setup and switch returns remain next; stored JSX
+  is covered by the later slice above.
 
 - Phase 4 expression conditionals are built: native ternary/logical selection,
   retained branch DOM and guarded sites, lazy inactive branches, correct primitive

@@ -264,6 +264,16 @@ prop object, a host function running a callback at once, and a call with a side
 effect running once across unrelated updates. All pass on the reference; the old
 compiler fails the first, second and fourth.
 
+### Stored JSX values
+
+JSX assigned, passed or returned through an ordinary helper captures its site
+values at that expression's native evaluation point. The compiler hoists a DOM
+binding program and emits `createRenderValue(program, captures)` at the expression.
+Each consuming slot mounts separate DOM, selects HTML/SVG from its destination,
+updates captures in place for the same program and disposes replaced ranges.
+Values remain ordinary lexical variables; this adds no signals or generic virtual
+tree reconciliation. Array children still need the Phase 5 list implementation.
+
 ## Alternatives considered
 
 - **Signals** (Solid style: every value an object, reads become calls). A new

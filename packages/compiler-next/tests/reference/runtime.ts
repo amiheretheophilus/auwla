@@ -147,7 +147,8 @@ class MemoSlot {
   private value: unknown;
   writtenLater = false;
 
-  constructor(readonly owner: Instance) {}
+  readonly created: number;
+  constructor(readonly owner: Instance) { this.created = owner.render; }
 
   get v(): unknown {
     computation?.reads.add(this);
@@ -434,6 +435,22 @@ export class Instance {
   beginRender(): void {
     this.render++;
     this.calledEffects.clear();
+  }
+
+  /** Initial setup runs in native order; a settling render must not execute it twice. */
+  finishSetup(): void {
+    for (const slot of this.slots.values()) {
+      if (slot.created !== this.render || slot.readInputs === undefined || slot.writtenLater) {
+        continue;
+      }
+      // Later body statements may change an input after an initializer captured
+      // its value. Seed the baseline after setup so settling does not replay it.
+      slot.inputs = deepCopy([
+        ...slot.readInputs(),
+        ...readValues(this.dependenciesOf(slot)),
+        ...slot.sources,
+      ]);
+    }
   }
 
   /** Run the effects that are due. Returns whether any ran. */
@@ -1048,6 +1065,7 @@ class Renderer {
     const leaveSourceOwner = enterSourceOwner(instance.sources);
     instance.beginRender();
     const output = component(props);
+    instance.finishSetup();
     leaveSourceOwner();
     rendering = outer;
     instance.first = false;

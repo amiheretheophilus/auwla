@@ -1,0 +1,139 @@
+/** A stored JSX expression captures native values for a compiled binding program. */
+import { b } from 'yuku-ast';
+import type { Expression, Node, Statement } from 'yuku-parser';
+import type { RenderValuePlan, Template } from '../plan/model';
+import type { Names } from './names';
+import { expression, statement, stringLiteral } from './quote';
+import { emitTemplate, prepareTemplateSites } from './template';
+import { emitSites } from './sites';
+
+export function emitRenderValue(plan: RenderValuePlan, names: Names, runtime: string) {
+  const program = names.fresh('_renderProgram');
+  const values = names.fresh('_values');
+  const next = names.fresh('_values');
+  const owner = names.fresh('_owner');
+  const id = names.fresh('_valueId');
+  const entity = names.fresh('_valueEntity');
+  const batch = names.fresh('_valueWrites');
+  const document = names.fresh('_document');
+  const namespace = names.fresh('_namespace');
+
+  function emitVariant(shape: Template): Statement[] {
+    const markup = shape.markup === null ? null : names.fresh('_valueMarkup');
+    const used = new Set(shape.roots);
+    for (const site of plan.sites) {
+      used.add(site.node);
+    }
+
+    const context = { names, runtime, document, markup };
+    const template = emitTemplate(shape, used, context);
+    const slots = prepareTemplateSites(shape, plan.sites, template, context);
+    const sites = emitSites(
+      { sites: plan.sites, siteInputs: new Map(), dynamicSites: new Set() },
+      {
+        names,
+        runtime,
+        document,
+        id,
+        entity,
+        batch,
+        values,
+        namespace,
+        versions: new Map(),
+        replacements: new Map(),
+        ref: slots.ref,
+      },
+    );
+    const roots = shape.roots.map(slots.root);
+    const entry = renderEntry(roots, next, [
+      statement('$$values = $$next;', { values, next }),
+      ...sites.update,
+    ], sites.dispose);
+
+    const declarations = markup === null ? [] : [
+      statement('const $$markup = $$html;', { markup, html: stringLiteral(shape.markup!) }),
+    ];
+    return [
+      ...declarations,
+      ...template.statements,
+      ...slots.statements,
+      ...sites.mount,
+      b.ReturnStatement({ argument: entry }),
+    ];
+  }
+
+  // Stored JSX can be consumed in either namespace. Choose at mount time,
+  // when the consuming slot knows where its independent DOM will live.
+  const svg = emitVariant(plan.svgTemplate);
+  const html = emitVariant(plan.template);
+  const mountBody = [
+    statement('const $$document = $$runtime.getActiveEnvironment().document;', { document, runtime }),
+    statement('const $$id = $$owner.id;', { id, owner }),
+    statement('const $$entity = $$owner.entity;', { entity, owner }),
+    statement('const $$batch = $$owner.batch;', { batch, owner }),
+    statement('const $$namespace = $$owner.namespace;', { namespace, owner }),
+    b.IfStatement({
+      test: expression('$$namespace === "svg"', { namespace }),
+      consequent: b.BlockStatement({ body: svg }),
+      alternate: null,
+    }),
+    ...html,
+  ];
+  const declaration = programDeclaration(program, values, owner, mountBody);
+
+  // Captures stay at the authored expression, outside the hoisted program.
+  // Moving them into mount would change lexical access and evaluation order.
+  const value = expression('$$runtime.createRenderValue($$program, $$values)', {
+    runtime,
+    program,
+    values: b.ArrayExpression({ elements: plan.sites.map((site) => site.expression) }),
+  });
+  return { declaration: declaration as Statement, replacement: value as Node };
+}
+
+function renderEntry(
+  roots: readonly string[],
+  next: string,
+  update: readonly Statement[],
+  dispose: readonly Statement[],
+): Expression {
+  const entry = expression('({ nodes: $$nodes, update($$next) {}, dispose() {} })', {
+    nodes: b.ArrayExpression({ elements: roots.map((root) => b.Identifier({ name: root })) }),
+    next,
+  });
+  if (entry.type !== 'ObjectExpression') {
+    return entry;
+  }
+
+  for (const property of entry.properties) {
+    if (property.type !== 'Property'
+      || property.key.type !== 'Identifier'
+      || property.value.type !== 'FunctionExpression') {
+      continue;
+    }
+    property.value.body!.body = [...(property.key.name === 'update' ? update : dispose)];
+  }
+  return entry;
+}
+
+function programDeclaration(program: string, values: string, owner: string, body: Statement[]): Statement {
+  const declaration = statement('const $$program = { mount($$values, $$owner) {} };', {
+    program,
+    values,
+    owner,
+  });
+  if (declaration.type !== 'VariableDeclaration') {
+    return declaration;
+  }
+
+  const object = declaration.declarations[0]!.init;
+  if (object?.type !== 'ObjectExpression') {
+    return declaration;
+  }
+
+  const mount = object.properties[0]!;
+  if (mount.type === 'Property' && mount.value.type === 'FunctionExpression') {
+    mount.value.body!.body = body;
+  }
+  return declaration;
+}

@@ -42,6 +42,14 @@ export function prepareTemplateSites(template: Template, sites: readonly Site[],
       texts.set(site.node, text);
       statements.push(statement('const $$text = $$document.createTextNode("");', { text, document: context.document }));
       statements.push(statement('$$slot.replaceWith($$text);', { slot: emitted.ref(site.node), text }));
+      if (template.roots.includes(site.node)) {
+          // A root value can expand into several nodes. Move its whole range
+          // into the caller's tree instead of returning only its text anchor.
+        const fragment = context.names.fresh('_valueRoot');
+        roots.set(site.node, fragment);
+        statements.push(statement('const $$fragment = $$document.createDocumentFragment();', { fragment, document: context.document }));
+        statements.push(statement('$$fragment.appendChild($$text);', { fragment, text }));
+      }
     } else if (site.kind === 'conditional' && template.roots.includes(site.node)) {
       const fragment = context.names.fresh('_regionRoot');
       roots.set(site.node, fragment);

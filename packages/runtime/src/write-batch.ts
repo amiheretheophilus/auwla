@@ -6,11 +6,16 @@ import {
 import { recoverMutations, resumeMutations } from './mutation';
 
 const pendingBoundaries = new Set<() => void>();
+// Shared state can dirty several application batches during one listener.
+// Wait for the outermost listener across all batches before publishing them.
+let listenerDepth = 0;
 
 /** Preserve the operand while committing the synchronous stretch before await. */
 export function flushWritesBeforeAwait<T>(value: T): T {
   recoverMutations();
-  for (const flush of [...pendingBoundaries]) flush();
+  for (const flush of [...pendingBoundaries]) {
+    flush();
+  }
   return value;
 }
 
@@ -42,24 +47,31 @@ export function createWriteBatch(entity: Entity): WriteBatch {
   let depth = 0;
 
   const flush = (force = false) => {
-    if (!active || !dirty || (!force && depth !== 0)) return;
+    if (!active || !dirty || (!force && depth !== 0)) {
+      return;
+    }
     dirty = false;
     pendingBoundaries.delete(boundary);
     runWithApplicationRuntime(runtime, () => {
       // A delayed callback must not notify a new instance with the same id.
-      if (getEntity(entity.id) === entity) invalidateEntity(entity.id);
+      if (getEntity(entity.id) === entity) {
+        invalidateEntity(entity.id);
+      }
     });
   };
   const boundary = () => flush(true);
 
   const queue = () => {
-    if (queued) return;
+    if (queued) {
+      return;
+    }
     queued = true;
     globalThis.queueMicrotask(() => {
       queued = false;
       // Recover after any throwing listener, even if it threw before its first
       // write. No authored code needs an exception wrapper.
       depth = 0;
+      listenerDepth = 0;
       runWithApplicationRuntime(runtime, recoverMutations);
       flush();
     });
@@ -70,7 +82,9 @@ export function createWriteBatch(entity: Entity): WriteBatch {
       active = true;
     },
     mark() {
-      if (!active) return;
+      if (!active) {
+        return;
+      }
       dirty = true;
       pendingBoundaries.add(boundary);
       queue();
@@ -80,9 +94,15 @@ export function createWriteBatch(entity: Entity): WriteBatch {
       return function (this: unknown, ...args: unknown[]) {
         queue();
         depth++;
+        listenerDepth++;
         const result = Reflect.apply(callback, this, args);
         depth--;
-        flush();
+        listenerDepth--;
+        if (listenerDepth === 0) {
+          for (const boundary of [...pendingBoundaries]) {
+            boundary();
+          }
+        }
         return result;
       } as typeof callback;
     },

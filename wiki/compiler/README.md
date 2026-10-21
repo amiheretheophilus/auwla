@@ -19,7 +19,11 @@ storage/reflection coverage are recorded on their concept pages and `../status.m
 Phase 4 expression conditionals are built; their scoped generator passes 200
 programs, and the original saved conditional passes unchanged. The full generator
 now stops on a saved Phase 5 list. Its gate remains scheduled after conditional/list
-support by agreement with the user. Assigned JSX and control-flow returns are next.
+support by agreement with the user. Stored/assigned JSX, helper returns, logical
+left JSX and body switch assignments are built. Return-only if/else tails are
+built; switch returns and returns interleaved with setup remain next. The current
+planner/emitter/runtime helpers use expanded control flow and comments explaining
+capture timing, ownership and retained DOM.
 Remaining reference limits are on the concept pages;
 extend their coverage as the compiler reaches those slices. Continue in `plan.md`.
 
