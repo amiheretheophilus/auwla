@@ -101,8 +101,10 @@ files that must pass in full at its exit.
   Done 2026-10-21: `output.md`, "Phase 3 design". Unknown calls are never re-run
   because the owner updated; escaping functions report hidden reads; possible
   builders are observed on their first run.
-- [ ] Graph: find escaping functions and the reactive bindings each reads
-  (`output.md`, "Phase 3 design", rule 5), with unit tests.
+- [x] Graph: find escaping functions and the reactive bindings each reads
+  (`output.md`, "Phase 3 design", rule 5), with unit tests. Done 2026-10-21:
+  `core/resolve/escapes.ts`, `core/graph/escaping.ts`, 8 tests. A method using
+  `this` is kept with `receiver: true` for the classes slice.
 - Build in slices, each proved by its cases on `COMPILER=next`, with the pass
   count recorded in `../status.md`:
   - [ ] static markup (templates);

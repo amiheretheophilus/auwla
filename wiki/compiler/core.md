@@ -34,6 +34,7 @@ The core holds the stage machinery and the shared types. What a concept means
 | `globals.ts` | which host globals the program writes; every other global is not an input (`state-and-derived.md`) |
 | `members.ts` | whether a property read may run hidden code (a getter, a proxy): not on unwritten globals or constant plain data |
 | `functions.ts` | one summary per function (captured reads, writes, calls, `this` use), built in one pass per module; `functionValue` follows immutable aliases and imports to a function |
+| `escapes.ts` | escaping functions: stored, passed, returned, exported, aliased, methods and accessors; not those only ever called directly (`output.md`, "Phase 3 design", rule 5) |
 | `resolve.test.ts` | unit tests |
 
 - yuku gives bindings, references (with `isWrite`), scopes, imports, exports and
@@ -76,6 +77,7 @@ separate invocations will need separate storage.
 | `classify.ts` | `classifyGraph(resolved)`: the feature order, then `buildGraph`. Called by `pipeline.ts` |
 | `inputs.ts` | `InputQueries`: what evaluating a node reads and writes, through visible helpers; each root, call and function is analysed once and cached |
 | `classification.ts` | `BindingComputation`, the fact the derived feature hands to the state feature |
+| `escaping.ts` | what each escaping function reads (its body and the helpers it calls directly, not its own parameters or locals); `buildGraph` keeps the reactive reads as `SemanticGraph.escaping`. Components are excluded |
 | `test-helpers.ts` | `inspect(source)`: classify real code in feature tests |
 | `graph.test.ts` | 19 shared-layer tests using real parsed bindings and references; feature classifications are supplied explicitly |
 | `size.test.ts` | classification time must grow linearly with the module |

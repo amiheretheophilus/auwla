@@ -4,7 +4,7 @@
  */
 import type { Node } from 'yuku-parser';
 import type { Binding, PathKey, Reference, Resolved, ResolvedModule, WriteSite } from '../resolve';
-import type { FunctionSummary } from '../resolve/functions';
+import type { FunctionNode, FunctionSummary } from '../resolve/functions';
 
 export type BindingKind = 'Constant' | 'State' | 'Derived' | 'Prop' | 'Source' | 'Ref' | 'Opaque';
 
@@ -101,6 +101,32 @@ export interface UnresolvedNode {
 export type GraphNode = BindingNode | UnresolvedNode;
 export type SourceNode = BindingNode & { readonly kind: 'Source' };
 
+/**
+ * A feature's fact about an escaping function (`../resolve/escapes.ts`): what
+ * its body reads, directly or through helpers it calls directly.
+ */
+export interface FunctionFacts {
+  readonly fn: FunctionNode;
+  readonly module: ResolvedModule;
+  readonly reads: readonly ReadFact[];
+  /** It reads through `this`, which the runtime maps to the receiver. */
+  readonly receiver: boolean;
+}
+
+/**
+ * A function unknown code may call during a computation. When it runs inside
+ * one, it reports `reads` to it, so a value computed through an unknown caller
+ * still follows them (`output.md`, "Phase 3 design", rule 5).
+ */
+export interface EscapingFunction {
+  readonly fn: FunctionNode;
+  /** Where the function is created. */
+  readonly owner: GraphOwner;
+  /** Only reactive targets: reading a constant needs no report. */
+  readonly reads: readonly ReadEdge[];
+  readonly receiver: boolean;
+}
+
 export interface OwnerGraph {
   readonly owner: GraphOwner;
   readonly nodes: readonly GraphNode[];
@@ -114,4 +140,6 @@ export interface SemanticGraph {
   readonly bindings: ReadonlyMap<Binding, BindingNode>;
   readonly unresolved: ReadonlyMap<Reference, UnresolvedNode>;
   readonly functions: readonly FunctionSummary[];
+  /** Escaping functions that read reactive state or use a receiver; others need no report. */
+  readonly escaping: readonly EscapingFunction[];
 }

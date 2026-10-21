@@ -6,14 +6,15 @@ import type { Node } from 'yuku-parser';
 import { declaringRunner, isRuntimeBinding, isWrittenGlobal, runnerOf } from '../resolve';
 import type { Binding, Reference, Resolved, ResolvedModule } from '../resolve';
 import type {
-  BindingFacts, BindingNode, GraphNode, GraphOwner, InitialComputation,
-  OwnerGraph, ReadEdge, ReadFact, SemanticGraph, UnresolvedNode, WriteEdge,
+  BindingFacts, BindingNode, EscapingFunction, FunctionFacts, GraphNode, GraphOwner,
+  InitialComputation, OwnerGraph, ReadEdge, ReadFact, SemanticGraph, UnresolvedNode, WriteEdge,
 } from './model';
+import { isReactive } from './rules';
 
 export type {
-  BindingFacts, BindingKind, BindingNode, BodyBuilder, GraphNode, GraphOwner,
-  InitialComputation, OwnerGraph, ReadEdge, ReadFact, SemanticGraph, SourceNode,
-  UnresolvedNode, WriteEdge,
+  BindingFacts, BindingKind, BindingNode, BodyBuilder, EscapingFunction, FunctionFacts,
+  GraphNode, GraphOwner, InitialComputation, OwnerGraph, ReadEdge, ReadFact, SemanticGraph,
+  SourceNode, UnresolvedNode, WriteEdge,
 } from './model';
 export { isReactive, pending } from './rules';
 
@@ -26,6 +27,7 @@ interface BindingDraft extends BindingNode {
 export function buildGraph(
   resolved: Resolved,
   facts: ReadonlyMap<Binding, BindingFacts>,
+  functionFacts: readonly FunctionFacts[] = [],
 ): SemanticGraph {
   const modules = new Map(resolved.modules.map((module) => [module.module, module]));
   const owners = new Map<ResolvedModule, Map<Node | null, GraphOwner>>();
@@ -118,6 +120,16 @@ export function buildGraph(
     }));
   }
 
+  // After every binding is connected, so reactivity can be settled; before
+  // grouping, so an unresolved read found here still joins its owner.
+  const escaping: EscapingFunction[] = [];
+  for (const fact of functionFacts) {
+    const reads = fact.reads.map(readEdge).filter((edge) => isReactive(edge.target));
+    if (reads.length === 0 && !fact.receiver) continue;
+    const owner = ownerOf(fact.module, runnerOf(fact.module.module, fact.fn));
+    escaping.push({ fn: fact.fn, owner, reads, receiver: fact.receiver });
+  }
+
   const ownerNodes = new Map<GraphOwner, GraphNode[]>();
   for (const runners of owners.values()) {
     for (const owner of runners.values()) ownerNodes.set(owner, []);
@@ -125,7 +137,7 @@ export function buildGraph(
   for (const node of nodes) ownerNodes.get(node.owner)!.push(node);
   const groups: OwnerGraph[] = [...ownerNodes].map(([owner, owned]) => ({ owner, nodes: owned }));
 
-  return { resolved, owners: groups, nodes, bindings, unresolved, functions: [] };
+  return { resolved, owners: groups, nodes, bindings, unresolved, functions: [], escaping };
 }
 
 function copyInitial(initial: InitialComputation | undefined): InitialComputation | null {

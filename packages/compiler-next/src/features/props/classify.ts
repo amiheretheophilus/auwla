@@ -6,7 +6,8 @@ import { declaringRunner, isParameter } from '../../core/resolve';
 import { functionValue } from '../../core/resolve/functions';
 import type { FunctionNode } from '../../core/resolve/functions';
 
-export function propBindings(resolved: Resolved): ReadonlySet<Binding> {
+/** Functions used as a JSX tag, and capitalized functions that own markup. */
+export function componentFunctions(resolved: Resolved): ReadonlySet<FunctionNode> {
   const components = new Set<FunctionNode>();
   for (const entry of resolved.modules) {
     const module = entry.module;
@@ -35,7 +36,14 @@ export function propBindings(resolved: Resolved): ReadonlySet<Binding> {
       if (ownsMarkup.has(fn)) components.add(fn);
     }
   }
+  return components;
+}
 
+/** The parameters of components: the props object, or the names destructured from it. */
+export function propBindings(
+  resolved: Resolved,
+  components: ReadonlySet<FunctionNode>,
+): ReadonlySet<Binding> {
   const props = new Set<Binding>();
   for (const entry of resolved.modules) {
     for (const binding of entry.module.bindings) {
