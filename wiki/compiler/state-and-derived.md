@@ -2,7 +2,7 @@
 
 **Folders:** `features/props/`, `features/state/`, `features/derived/` (graph
 classification built in Phase 2; component-local assignment versions built in
-Phase 3; derived memo emission remains planned).
+Phase 3; local versioned memos and definite body replay built).
 
 `features/state/plan.ts` selects component-owned bindings with assignment/update
 sites from the graph. `features/state/dom.ts` allocates a local numeric version per
@@ -11,11 +11,25 @@ versions a site read and reevaluates only when one changes, preserving unchanged
 DOM properties such as typed input text. Unknown calls with no known changed
 input are not replayed merely because another value was written.
 
-This is the counter slice: shared cells, dynamic escaping reads, derived memo
-replay and takeover flags are still pending. It does not yet satisfy the full
-state-and-derived exit suite. The existing `a counter` case passes on compiler-next;
-the nine focused counter cases and handler execution checks are listed in
-`handlers.md`.
+`features/derived/plan.ts` plans top-level component declarations, including native
+destructuring, and their definite body builders. Computations sharing a statement
+form one group: all its outputs reset together and the statement replays once.
+Initializers and builders retain their original order, even when another memo
+appears between them. Group checks include upstream memo inputs when needed to
+reset an accumulator before a later-declared input recomputes. Sites still read
+only their direct input versions.
+
+`features/derived/dom.ts` emits those checks before replay and saves input versions
+after the computations finish. Each memo output has its own version. `const` memo
+storage is writable by the compiler; authored assignments still throw TypeError
+after native RHS evaluation and update coercion (`handlers.md`). Direct replay
+writes bump versions without scheduling another batch. Functions created during
+replay retain normal write notifications when called later.
+
+**Current boundary:** component-body declarations and definite builders only.
+Nested-block memo storage, shared cells, dynamic escaping reads, possible-builder
+observation, mutation commits and takeover flags remain pending. In particular,
+later reassignment does not yet disable replay. This is not the full Phase 3 exit.
 
 ## What it does
 
@@ -165,6 +179,11 @@ The graph classification is built (`core/graph/classify.ts`, described in
 | `features/derived/computations.ts` | each binding's initial computation: initializer, pattern, body builders (definite or possible), reads, and candidate takeovers (later assignments) |
 | `features/state/classify.ts` | the initial kind: `Prop`, `Constant`, `State` or `Opaque`; imports start as placeholders |
 | `features/derived/classify.ts` | spreads reactivity through reads (a worklist, so cycles end); gives imports their definition's kind |
+| `features/derived/plan.ts` | native declarations, definite builders, shared-statement groups and their version inputs |
+| `features/derived/dom.ts` | source-ordered, version-guarded replay and writable memo storage |
+| `features/derived/plan.test.ts` | pattern identity, definite versus possible builders, and untouched authored syntax |
+| `features/derived/dom.test.ts` | native execution: call counts, loops, shared builders, declaration writes, pattern evaluation, const errors and callbacks created during replay |
+| `features/state/plan.ts`, `features/state/dom.ts` | component-owned assignment storage and numeric versions |
 | `*.test.ts` next to each | one test per rule above, on real parsed code |
 
 A candidate takeover is never evidence that takeover happened: the runtime decides
@@ -207,6 +226,17 @@ The list only makes this faster. A method that is not on it is still correct
 (`../rules.md`, rule 3).
 
 ## Cases to test
+
+**Verified memo slice:** six `tests/cases/memos.test.ts` comparisons cover chains,
+loops with break/continue, switch, pattern defaults/rest and shared builders.
+The existing const-derived, body-write, if/else and destructuring cases also pass
+on compiler-next. Ten direct execution tests and three plan tests cover the
+ordering and call-count details above without relying on the reference renderer.
+
+The two shared-builder comparisons exposed a reference feedback loop. Its
+`transform.ts` now gives definite shared targets their common external inputs;
+`runtime.ts` excludes their internal reads and captures the settled inputs after
+the shared statement. Their expected outputs were not changed.
 
 In `packages/compiler-next/tests/cases/state-and-derived.test.ts`. Each must compile
 and show on the UI what the console shows.

@@ -160,8 +160,8 @@ evaluation: parent attributes evaluate before child expressions.
 
 | File | What it does |
 | --- | --- |
-| `model.ts` | `ModulePlan`, `ComponentPlan`, `Template` and text/attribute/property/event site contracts |
-| `index.ts` | Plans component setup and returned markup, retains each site's binding inputs and invokes state/write feature planning |
+| `model.ts` | `ModulePlan`, `ComponentPlan`, `Template`, memo groups, writes and text/attribute/property/event site contracts |
+| `index.ts` | Plans component setup and returned markup, retains each site's binding inputs and invokes state/write/memo feature planning; distinguishes direct replay writes from nested callback writes |
 | `template.ts` | Builds the node sequence, static markup and expression sites; keeps repeated attributes in authored order |
 | `jsx.ts` | JSX whitespace, attribute aliases, namespaces and conservative template-parsing eligibility |
 | `plan.test.ts` | Node addressing, expression order, graph reactivity, fallback creation and unchanged authored AST |
@@ -199,11 +199,11 @@ template eligibility is an optimization, not a restriction on accepted tags.
 Text expressions replace comment placeholders so adjacent values retain separate
 nodes. Empty or multi-root fragments return a `DocumentFragment`.
 
-**Current boundary:** setup runs once; sites initialize at mount and respond to
-component-local assignments through version checks in `_update`. State/write
-meaning lives in the feature emitters (`state-and-derived.md`, `handlers.md`).
-Memo replay, shared cells, tracking, mutation checks and explicit async boundaries
-remain pending. Nested component calls, conditional/list regions, refs and spreads
+**Current boundary:** setup initializes native values once; planned local memos
+and definite body builders replay before site updates in `_update`. State/write
+and replay meaning lives in the feature plans and emitters (`state-and-derived.md`,
+`handlers.md`). Shared cells, tracking, takeover, mutation checks and explicit async
+boundaries remain pending. Nested component calls, conditional/list regions, refs and spreads
 still require their planned slices. The printer currently returns code, not source
 maps. No complete Phase 3 exit is claimed.
 

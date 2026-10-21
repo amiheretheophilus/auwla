@@ -15,7 +15,9 @@ import type { ComponentPlan, ModulePlan } from './model';
 import { buildTemplate, containsJsx, unsupported, type TemplateContext } from './template';
 import { unwrap } from './jsx';
 import { planLocalState } from '../../features/state/plan';
-import { planWrites } from '../../features/handlers/plan';
+import { planReadonlyBindings, planWrites } from '../../features/handlers/plan';
+import { planMemos } from '../../features/derived/plan';
+import type { MemoGroupPlan } from './model';
 
 export type { ComponentPlan, ModulePlan, Site, Template, TemplateNode } from './model';
 
@@ -25,7 +27,8 @@ export function planModules(
   components: ReadonlySet<Node>,
 ): ModulePlan[] {
   const state = planLocalState(graph, components);
-  return graph.resolved.modules.map((entry) => planModule(graph, queries, components, entry, state));
+  const memos = planMemos(graph, queries, components);
+  return graph.resolved.modules.map((entry) => planModule(graph, queries, components, entry, state, memos));
 }
 
 function planModule(
@@ -34,6 +37,7 @@ function planModule(
   components: ReadonlySet<Node>,
   entry: ResolvedModule,
   state: ReadonlyMap<Node, readonly BindingNode[]>,
+  memos: ReadonlyMap<Node, readonly MemoGroupPlan[]>,
 ): ModulePlan {
   const module = entry.module;
   const context: TemplateContext = {
@@ -45,7 +49,9 @@ function planModule(
   const plans = new Map<Node, ComponentPlan>();
   for (const fn of module.findAll(['FunctionDeclaration', 'FunctionExpression', 'ArrowFunctionExpression'])) {
     if (!components.has(fn)) continue;
-    const local = state.get(fn) ?? [];
+    const computations = memos.get(fn) ?? [];
+    const targets = computations.flatMap((group) => group.computations.flatMap((memo) => memo.targets));
+    const local = [...new Set([...(state.get(fn) ?? []), ...targets])];
     const component = planComponent(fn, context);
     const siteInputs = new Map<Expression, readonly BindingNode[]>();
     for (const site of component.sites) {
@@ -59,7 +65,17 @@ function planModule(
       }
       siteInputs.set(site.expression, [...inputs]);
     }
-    plans.set(fn, { ...component, state: local, writes: planWrites(local), siteInputs });
+    const writes = planWrites(local);
+    const replayWrites = writes.filter((write) => {
+      if (runnerOf(module, write.operation) !== fn) return false;
+      return computations.some((group) => group.steps.some((root) => {
+        return write.operation.start >= root.start && write.operation.end <= root.end;
+      }));
+    });
+    plans.set(fn, {
+      ...component, state: local, writes, replayWrites,
+      readonlyBindings: planReadonlyBindings(local), siteInputs, memos: computations,
+    });
   }
 
   // Markup that no planned component returns belongs to a later phase.

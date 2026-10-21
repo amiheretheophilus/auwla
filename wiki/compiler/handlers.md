@@ -10,8 +10,8 @@ Finds every place that changes state and makes the UI update after it.
 
 | File | What it does |
 | --- | --- |
-| `plan.ts` | Groups graph write sites by native assignment/update/loop operation and binding identity |
-| `dom.ts` | Preserves native operations and their results, bumps local versions and marks a pending commit |
+| `plan.ts` | Groups graph write sites by native assignment/update/loop operation and binding identity; identifies readonly targets |
+| `dom.ts` | Preserves native operations and their results, bumps local versions, marks pending commits and preserves const errors |
 | `dom.test.ts` | Executes compiled modules to verify write semantics, scope, per-instance state and site replay |
 | `packages/runtime/src/write-batch.ts` | Captures the application and entity, batches listener writes until return, and queues a microtask for unwrapped callbacks and error recovery |
 | `packages/runtime/tests/write-batch.test.ts` | Scheduler independence, nested listeners, native receivers/results, exceptions, disposal and application isolation |
@@ -23,6 +23,15 @@ version. Destructuring uses private setter targets at the original target's lexi
 scope, while JavaScript still evaluates the pattern, defaults, rest and result.
 Each completed target reports separately: a later throwing getter cannot hide an
 earlier write. Loop targets report each completed assignment.
+
+Const targets use generated accessors: compound updates read and coerce the
+current value, and the setter checks the binding's temporal dead zone before
+calling runtime `rejectConstAssignment`. The runtime throws TypeError, unaffected
+by an authored binding named `TypeError`. This preserves authored write errors
+when a derived const uses writable compiler storage, and avoids bundlers rejecting
+the generated program for a direct assignment to a const. The same write emitter
+supports silent version bumps for direct memo replay; callbacks created there
+keep their normal commit helpers.
 
 Native listeners preserve their receiver, arguments and return value. Their outer
 return flushes pending writes, even with an immediate test scheduler; nested

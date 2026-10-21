@@ -12,10 +12,29 @@ export interface WritesEmit {
   readonly declarations: readonly Statement[];
 }
 
-export function emitWrites(
-  writes: readonly WritePlan[], versions: ReadonlyMap<BindingNode, string>, names: Names, batch: string,
-): WritesEmit {
+/** Keep authored const writes read-only even when a memo needs writable storage. */
+export function emitConstWrites(bindings: readonly BindingNode[], names: Names, runtime: string) {
   const replacements = new Map<Node, Node>();
+  for (const target of bindings) {
+    for (const { site } of target.writes) {
+      if (site.kind !== 'assign' && site.kind !== 'update') continue;
+      const value = names.fresh('_assigned');
+      // PutValue happens after the RHS. Read inside the setter so a write in
+      // the TDZ still throws ReferenceError at that point, before TypeError.
+      replacements.set(site.reference.node, expression(`({
+        get value() { return $$binding; },
+        set value($$value) { $$binding; $$runtime.rejectConstAssignment(); }
+      }).value`, { binding: target.binding.name, runtime, value }));
+    }
+  }
+  return replacements;
+}
+
+export function emitWrites(
+  writes: readonly WritePlan[], versions: ReadonlyMap<BindingNode, string>, names: Names, batch: string | null,
+  initial: ReadonlyMap<Node, Node> = new Map(),
+): WritesEmit {
+  const replacements = new Map(initial);
   const declarations: Statement[] = [];
   const helpers = new Map<string, string>();
 
@@ -28,7 +47,7 @@ export function emitWrites(
     helpers.set(key, helper);
     const value = names.fresh('_value');
     const body: Statement[] = changed.map((version) => statement('$$version++;', { version }));
-    body.push(statement('$$batch.mark();', { batch }));
+    if (batch !== null) body.push(statement('$$batch.mark();', { batch }));
     body.push(b.ReturnStatement({ argument: b.Identifier({ name: value }) }));
     declarations.push(b.FunctionDeclaration({
       id: b.Identifier({ name: helper }), params: [b.Identifier({ name: value })],
@@ -55,12 +74,13 @@ export function emitWrites(
         const helper = helperFor([target]);
         // Build the setter at the original target, not at the component top:
         // block-scoped targets must retain their own lexical environment.
-        const receiver = expression(`({ set value($$value) {
-          $$binding = $$value;
-          $$helper($$value);
-        } }).value`, { value, binding: target.binding.name, helper });
         for (const { site } of target.writes) {
           if (site.node !== original) continue;
+          const binding = initial.get(site.reference.node) ?? b.Identifier({ name: target.binding.name });
+          const receiver = expression(`({ set value($$value) {
+            $$binding = $$value;
+            $$helper($$value);
+          } }).value`, { value, binding, helper });
           targetReplacements.set(site.reference.node, receiver);
         }
       }

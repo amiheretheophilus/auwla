@@ -2,7 +2,7 @@
  * The render plan (`wiki/compiler/core.md`, "plan"): what each component builds
  * and which spots in it change. Emit reads only this and the graph.
  */
-import type { Expression, Node, Statement } from 'yuku-parser';
+import type { Expression, Node, Statement, VariableDeclaration, VariableDeclarator } from 'yuku-parser';
 import type { ResolvedModule } from '../resolve';
 import type { FunctionNode } from '../resolve/functions';
 import type { BindingNode } from '../graph';
@@ -59,8 +59,27 @@ export interface ComponentPlan {
   readonly sites: readonly Site[];
   readonly state: readonly BindingNode[];
   readonly writes: readonly WritePlan[];
+  readonly replayWrites: readonly WritePlan[];
+  readonly readonlyBindings: readonly BindingNode[];
   /** Directly visible inputs, keyed by the original expression's identity. */
   readonly siteInputs: ReadonlyMap<Expression, readonly BindingNode[]>;
+  readonly memos: readonly MemoGroupPlan[];
+}
+
+/** Statements shared by computations run once; their outputs reset together. */
+export interface MemoGroupPlan {
+  readonly computations: readonly MemoPlan[];
+  readonly inputs: readonly BindingNode[];
+  readonly steps: readonly (Statement | VariableDeclarator)[];
+}
+
+/** One native declaration/pattern and the statements that build its values. */
+export interface MemoPlan {
+  readonly declaration: VariableDeclaration;
+  readonly declarator: VariableDeclarator;
+  readonly targets: readonly BindingNode[];
+  readonly inputs: readonly BindingNode[];
+  readonly builders: readonly (Statement | VariableDeclarator)[];
 }
 
 export interface WritePlan {

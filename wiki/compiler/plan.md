@@ -113,7 +113,12 @@ files that must pass in full at its exit.
     per-site update checks and batched write commits. Nine focused counter cases
     pass on `COMPILER=next`, plus the existing counter, enum, typing and promise
     callback cases. Native execution and runtime tests are listed in `handlers.md`.
-  - [ ] versioned memos and replayed body builders;
+  - [x] versioned local memos and definite body builders. Component-body
+    declarations/patterns, source-ordered shared statements, output versions and
+    native const write errors. Six focused comparisons, four existing behavior
+    cases, ten execution tests and three plan tests pass. Possible builders join
+    the mutation-observation slice; nested-block memo storage remains open on
+    `state-and-derived.md`.
   - [ ] takeover flags and the setup flag (`cases/callbacks`);
   - [ ] mutation commits and the unknown-call check;
   - [ ] escaping-function tracking (the `unknown callers:` cases);

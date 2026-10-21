@@ -687,14 +687,37 @@ class ComponentRewrite {
    * `...($ctx.confirmed(0, 1) ? [reads] : [])`.
    */
   private inputsOf(binding: Binding, init: Expression | null): Expression {
+    // One statement cannot rebuild only half of its accumulators. Its targets
+    // share the external inputs of their initializers and body builders; reads
+    // between those targets are internal to the computation, not feedback.
+    const group = new Set([binding]);
+    let expanded = true;
+    while (expanded) {
+      expanded = false;
+      for (const plan of this.plans.values()) {
+        if (![...plan.builds].some((target) => group.has(target))) continue;
+        for (const target of plan.builds) {
+          if (group.has(target)) continue;
+          group.add(target);
+          expanded = true;
+        }
+      }
+    }
     const roots: Node[] = init ? [init] : [];
+    for (const target of group) {
+      if (target === binding) continue;
+      const initial = this.declaratorOf(target)?.init;
+      if (initial != null) roots.push(initial);
+    }
     const maybe: Array<{ statement: Statement; plan: StatementPlan }> = [];
     for (const [statement, plan] of this.plans) {
-      if (plan.builds.has(binding)) roots.push(statement);
+      if ([...plan.builds].some((target) => group.has(target))) roots.push(statement);
       if (plan.mayBuild.includes(binding)) maybe.push({ statement, plan });
     }
 
-    const elements: Expression[] = this.readable(binding, this.reads.inside(roots, binding), roots);
+    const dependencies = this.reads.inside(roots, binding);
+    for (const target of group) dependencies.delete(target);
+    const elements: Expression[] = this.readable(binding, dependencies, roots);
     for (const { statement, plan } of maybe) {
       const position = plan.mayBuild.indexOf(binding);
       const reads = this.readable(binding, this.reads.inside([statement], binding), [statement]);

@@ -3,6 +3,16 @@ import { is } from 'yuku-ast';
 import type { Node } from 'yuku-parser';
 import type { BindingNode } from '../../core/graph';
 import type { WritePlan } from '../../core/plan/model';
+import { variableDeclaration } from '../../core/graph/inputs';
+
+export function planReadonlyBindings(bindings: readonly BindingNode[]): readonly BindingNode[] {
+  return bindings.filter((target) => {
+    const declarator = variableDeclaration(target.binding);
+    if (declarator === null) return false;
+    const declaration = target.binding.module.parentOf(declarator);
+    return is.VariableDeclaration(declaration) && declaration.kind === 'const';
+  });
+}
 
 export function planWrites(bindings: readonly BindingNode[]): readonly WritePlan[] {
   const operations = new Map<Node, Set<BindingNode>>();

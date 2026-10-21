@@ -4,6 +4,11 @@ import {
   type Entity,
 } from './kernel';
 
+/** Authored writes remain illegal when compiler-owned const memos are refreshed. */
+export function rejectConstAssignment(): never {
+  throw new TypeError('Assignment to constant variable.');
+}
+
 export interface WriteBatch {
   /** Creation-time writes seed values; activation starts later notifications. */
   activate(): void;

@@ -15,7 +15,8 @@ Last updated: 2026-10-21.
   including timer and unknown-caller cases, and now tracks closure state.
   Escaping functions are built (`cd25f77`). Phase 3 builds static DOM from the
   render plan (`0eec154`) and now emits local assignment versions, guarded site
-  updates and batched commits. Versioned memos and body replay are next.
+  updates and batched commits (`b956aa2`). Local versioned memos and definite body
+  replay are now verified; takeover/setup ownership is next.
 - `compiler-refactor`: the old compiler's refactor, stopped on 2026-10-19. The
   sections below record that work.
 - `codex/package-conditional-sync` at `9e35480` (third-party package compilation,
@@ -24,6 +25,21 @@ Last updated: 2026-10-21.
 - The user put the agent in charge of the refactor on 2026-10-18 ("you are in charge now").
 
 ## Done
+
+- Phase 3 local memos: component-body declarations and patterns replay with
+  definite builders in source order. Shared statements run once and reset their
+  outputs together; memo outputs have versions for downstream sites. Authored
+  const writes retain their errors. A shared-builder feedback bug in the reference
+  was fixed without changing expected behavior. Scope and remaining boundaries:
+  `compiler/state-and-derived.md`.
+  Verification: **63 passing compiler checks** across the new memo comparison,
+  execution and plan files, existing counters/templates, handler execution and
+  core plan/pipeline files; **4 existing derived-value comparisons** also pass on
+  `COMPILER=next`. **8 runtime batching tests** pass after rebuilding runtime.
+  **167 reference cases** pass across state-and-derived, callbacks and sources.
+  Package type checks pass: **88 compiler-next files**, **63 runtime files**.
+  No full root suite or Phase 3 exit run. Next: takeover flags/setup ownership,
+  then mutation observation, dynamic reads, shared storage and pre-await flushing.
 
 - Phase 3 local counters: state and handler feature plans/emitters consume graph
   identities; sites update from local version changes. The runtime batches local
@@ -35,8 +51,8 @@ Last updated: 2026-10-21.
   markup cases still pass. Seven handler execution tests, 10 plan/pipeline tests
   and eight runtime batching tests pass. Package `bun check`: 83 compiler-next
   files and 63 runtime files, no errors; runtime build passes. No root suite or
-  full Phase 3 acceptance run. Memo replay, takeover, mutation checks, dynamic
-  tracking, shared state and pre-`await` flushing remain their next slices.
+  full Phase 3 acceptance run. Memo replay is verified above; takeover, mutation
+  checks, dynamic tracking, shared state and pre-`await` flushing remain.
 
 - Phase 3 static markup: completed the existing uncommitted plan/template files
   and connected graph → plan → DOM emit in `compileModules`. Hoisted templates,
@@ -450,7 +466,7 @@ are nailed first.
    files. `compiler/core.md` describes the API and its limits.
 3. Phase 2 classification and integration are built (`0d474a7`), followed by the
    Phase 3 design and escaping-function graph (`4abca67`, `cd25f77`). Template and
-   local counter slices above are verified. Next in `compiler/plan.md`: versioned
-   memos and body builders. Runtime takeover must
+   local counter and memo slices above are verified. Next in `compiler/plan.md`:
+   takeover flags and setup ownership. Runtime takeover must
    not be inferred from resolve's lexical `later` flag. The Phase 2 per-rule test
    audit remains unchecked; this session continued Phase 3 at the user's request.

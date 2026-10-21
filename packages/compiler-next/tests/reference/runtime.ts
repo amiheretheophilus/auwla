@@ -177,6 +177,8 @@ class MemoSlot {
   /** A callback used by the initializer may discover readiness only when called. */
   callbackSources: readonly Source[] = [];
   reads = new Set<ReadValue>();
+  /** Refresh a shared builder's inputs after all of its outputs have settled. */
+  readInputs: (() => unknown[]) | undefined;
 }
 
 class PropSlot extends MemoSlot {
@@ -255,6 +257,7 @@ export class Instance {
       slot = new MemoSlot(this);
       this.slots.set(index, slot);
     }
+    slot.readInputs = readInputs;
     if (slot.inputs === undefined || !deepEqual(slot.inputs, inputs)) {
       const outer = computation;
       const trace: Computation = { reads: new Set(), writes: new Set() };
@@ -266,9 +269,8 @@ export class Instance {
       slot.fresh = true;
       slot.reads = trace.reads;
       slot.callbackSources = trace.pending?.sources ?? [];
-      for (const read of trace.reads) dependencies.add(read);
       if (value instanceof Waiting) slot.sources = value.sources;
-      slot.inputs = deepCopy([...readInputs(), ...readValues(dependencies), ...slot.sources]);
+      slot.inputs = deepCopy([...readInputs(), ...readValues(this.dependenciesOf(slot)), ...slot.sources]);
     } else {
       slot.fresh = false;
     }
@@ -292,6 +294,15 @@ export class Instance {
         // `total += item.price` reads the accumulator as part of building it;
         // that read must not make the derivation depend on its own output.
         if (!(read instanceof MemoSlot) || !trace.writes.has(read)) dependencies.add(read);
+      }
+    }
+    // An initializer can read another output of a shared builder. Once that
+    // statement has run, neither output is an external dependency of the group.
+    // Keep later overrides: they are inputs now, rather than rebuilt outputs.
+    for (const trace of this.computations.values()) {
+      if (!trace.writes.has(slot)) continue;
+      for (const target of trace.writes) {
+        if (!target.writtenLater) dependencies.delete(target);
       }
     }
     return dependencies;
@@ -396,6 +407,14 @@ export class Instance {
     run();
     computation = outer;
     this.computations.set(index, trace);
+    if (trace.writes.size > 1) {
+      for (const target of trace.writes) {
+        if (target.readInputs === undefined || target.writtenLater) continue;
+        target.inputs = deepCopy([
+          ...target.readInputs(), ...readValues(this.dependenciesOf(target)), ...target.sources,
+        ]);
+      }
+    }
     this.statementsRun.add(index);
   }
 

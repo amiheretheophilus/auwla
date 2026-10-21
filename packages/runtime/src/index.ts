@@ -73,7 +73,7 @@ export { registerConditionalEffect, registerEffect } from './effect';
 export type { EffectCallback, EffectCondition } from './effect';
 
 export { materializeMarkup } from './markup';
-export { createWriteBatch } from './write-batch';
+export { createWriteBatch, rejectConstAssignment } from './write-batch';
 export type { WriteBatch } from './write-batch';
 export { adoptInitialRoot } from './initial-root';
 export { bindInitialNodes } from './initial-bindings';

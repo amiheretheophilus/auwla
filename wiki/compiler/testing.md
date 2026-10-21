@@ -87,6 +87,13 @@ the 19 that currently fail on the old compiler, must pass on the new compiler.
 The test reference can also contain bugs: when it disagrees with JavaScript or an
 agreed rule, fix the reference rather than copying its mistake into the compiler.
 
+The memo slice adds six comparisons in `cases/memos.test.ts` and direct native
+execution checks in `src/features/derived/dom.test.ts`. Shared-builder cases caught
+a feedback loop in the reference: co-written outputs must be internal to the
+computation, with input snapshots captured after the statement finishes. The
+reference transform/runtime were corrected with those expectations unchanged;
+details and current compiler boundaries are on `state-and-derived.md`.
+
 ## Layers
 
 1. **Reference renderer** (`tests/reference/`). Test-only: the framework never

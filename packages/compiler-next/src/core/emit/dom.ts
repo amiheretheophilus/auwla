@@ -9,8 +9,9 @@ import { Names } from './names';
 import { statement, stringLiteral } from './quote';
 import { emitTemplate } from './template';
 import { emitLocalState } from '../../features/state/dom';
-import { emitWrites } from '../../features/handlers/dom';
+import { emitConstWrites, emitWrites } from '../../features/handlers/dom';
 import { emitSites } from './sites';
+import { emitMemos } from '../../features/derived/dom';
 
 /** Preserve module syntax and exports, replacing planned functions on a fresh tree. */
 export function emitDom(plan: ModulePlan, options: CompileModulesOptions): Node {
@@ -53,19 +54,28 @@ function emitComponent(plan: ComponentPlan, names: Names, runtime: string, marku
   const batch = plan.state.length === 0 ? null : names.fresh('_writes');
   const update = names.fresh('_update');
   const entity = names.fresh('_entity');
+  const readonly = emitConstWrites(plan.readonlyBindings, names, runtime);
   const writes = batch === null
     ? { replacements: new Map<Node, Node>(), declarations: [] }
-    : emitWrites(plan.writes, state.versions, names, batch);
+    : emitWrites(plan.writes, state.versions, names, batch, readonly);
+  // Only writes executed by replay itself are silent. A function created by a
+  // replayed initializer may run later and must keep its ordinary write commits.
+  const replayBase = new Map(writes.replacements);
+  for (const write of plan.replayWrites) replayBase.delete(write.operation);
+  const replay = emitWrites(plan.replayWrites, state.versions, names, null, replayBase);
+  const memos = emitMemos(plan, state.versions, names, writes.replacements, replay.replacements);
   const body: Statement[] = [
     ...state.declarations,
     ...writes.declarations,
+    ...replay.declarations,
   ];
   if (batch !== null) {
     body.push(statement('const $$entity = { id: $$id, parent: $$parent, render: $$update };', { entity, id, parent, update }));
     body.push(statement('const $$batch = $$runtime.createWriteBatch($$entity);', { batch, runtime, entity }));
   }
   body.push(
-    ...copy(plan.setup, writes.replacements),
+    ...memos.setup,
+    ...memos.snapshots,
     statement('const $$document = $$runtime.getActiveEnvironment().document;', { document, runtime }),
   );
   const used = new Set(plan.template.roots);
@@ -91,7 +101,7 @@ function emitComponent(plan: ComponentPlan, names: Names, runtime: string, marku
   if (batch !== null) {
     body.push(b.FunctionDeclaration({
       id: b.Identifier({ name: update }), params: [],
-      body: b.BlockStatement({ body: [...sites.update] }), async: false, generator: false, expression: false,
+      body: b.BlockStatement({ body: [...memos.update, ...sites.update] }), async: false, generator: false, expression: false,
     }));
     body.push(statement('$$runtime.registerEntity($$entity);', { runtime, entity }));
     body.push(statement('$$batch.activate();', { batch }));
