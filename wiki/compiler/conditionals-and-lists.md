@@ -55,6 +55,10 @@ place.
 
 In `packages/compiler-next/tests/cases/conditionals-and-lists.test.ts`.
 
+The unchanged full generator saved `tests/corpus/generated-20261021.json`:
+`{(0 > 0) ? <b>{0}</b> : <i>{0}</i>}` is currently rejected as JSX in an
+expression. This remains a failing Phase 4 regression, not an accepted rejection.
+
 The old compiler rejects these:
 
 - `items.map((item, i, all) => …)`;

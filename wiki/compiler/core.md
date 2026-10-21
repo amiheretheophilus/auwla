@@ -196,6 +196,13 @@ Features build their own pieces. Optimizations replace pieces (`optimize.md`).
 | `recovery.ts` | Captures dynamic ownership around existing authored try statements and restores it before catch patterns/bodies and finally; adds no exception wrappers |
 | `print.ts` | Prints JavaScript through `yuku-codegen`, erasing TypeScript |
 
+`copy.ts` retains authored origins in external weak maps while composing feature
+rewrites. Later local rewrites can reach callbacks already copied into a shared
+call wrapper, without reapplying a wrapper to its own payload. Completed component
+trees are sealed with `finishCopy` before the final module copy, preserving their
+combined local/shared operations. Noncomputed property keys remain syntax;
+rewritten shorthand values expand when needed.
+
 Ordinary HTML uses hoisted markup and cached template cloning. Tables, raw-text
 elements, parser-sensitive nesting, SVG and unproven tags use direct creation.
 This fallback preserves the authored tree and SVG/foreignObject namespaces;

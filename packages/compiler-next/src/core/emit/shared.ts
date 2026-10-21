@@ -17,7 +17,7 @@ export function emitShared(plan: ModulePlan, names: Names, runtime: string) {
   const state = emitSharedState(plan, names, runtime, receivers);
   let replacements = new Map(state.replacements);
   const takeovers = new Map(state.owners.map((owner) => [owner, emitTakeovers(
-    owner.plan.takeovers, owner.versions, names, owner.scope, owner.batch,
+    owner.plan.takeovers, owner.versions, names, owner.scope, owner.batch, owner.keys,
   )]));
   for (const owner of state.owners) {
     for (const [node, replacement] of takeovers.get(owner)!.replacements) replacements.set(node, replacement);
@@ -27,9 +27,9 @@ export function emitShared(plan: ModulePlan, names: Names, runtime: string) {
       const value = names.fresh('_assigned');
       const receiver = expression(`({
         get value() { return $$binding; },
-        set value($$value) { $$binding = $$value; $$version++; if (!$$scope.building()) $$batch.mark(); }
+        set value($$value) { $$binding = $$value; $$version++; if (!$$scope.building()) $$batch.mark($$key); }
       }).value`, {
-        binding: binding.binding.name, value, version: owner.versions.get(binding)!, scope: owner.scope, batch: owner.batch,
+        binding: binding.binding.name, value, version: owner.versions.get(binding)!, scope: owner.scope, batch: owner.batch, key: owner.keys.get(binding)!,
       });
       for (const { site } of binding.writes) {
         if (site.kind === 'assign' || site.kind === 'update') replacements.set(site.reference.node, receiver);
@@ -38,7 +38,7 @@ export function emitShared(plan: ModulePlan, names: Names, runtime: string) {
   }
   const mutationDeclarations = new Map<(typeof state.owners)[number], readonly Statement[]>();
   for (const owner of state.owners) {
-    const mutations = emitMutations(owner.plan.mutations, owner.versions, names, runtime, owner.batch, replacements);
+    const mutations = emitMutations(owner.plan.mutations, owner.versions, names, runtime, owner.batch, replacements, owner.keys);
     replacements = new Map(mutations.replacements);
     mutationDeclarations.set(owner, mutations.declarations);
   }

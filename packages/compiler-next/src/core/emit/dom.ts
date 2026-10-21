@@ -4,7 +4,7 @@ import type { Node, Statement } from 'yuku-parser';
 import type { CompileModulesOptions } from '../../options';
 import { DEFAULT_RUNTIME_PATH } from '../../options';
 import type { ComponentPlan, ModulePlan } from '../plan';
-import { copy } from './copy';
+import { copy, finishCopy } from './copy';
 import { Names } from './names';
 import { expression, statement, stringLiteral } from './quote';
 import { emitTemplate } from './template';
@@ -39,7 +39,7 @@ export function emitDom(plan: ModulePlan, options: CompileModulesOptions): Node 
         html: stringLiteral(component.template.markup!),
       }));
     }
-    replacements.set(component.fn, emitComponent(component, names, runtime, markup, replacements));
+    replacements.set(component.fn, finishCopy(emitComponent(component, names, runtime, markup, replacements)));
   }
 
   const output = copy(module.ast, replacements);

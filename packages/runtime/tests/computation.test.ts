@@ -53,3 +53,19 @@ it('retains another computation subscription when the same owner changes depende
   publishVersions([key]);
   expect(notifications).toBe(1);
 });
+
+it('excludes its own mutated output while retaining another input in the same shared owner', () => {
+  const input = {}, output = {};
+  let inputVersion = 0, outputVersion = 0;
+  const computation = createComputation();
+  computation.begin();
+  trackRead(() => inputVersion, 1, input);
+  trackRead(() => outputVersion, [], output);
+  outputVersion++;
+  publishVersions([input, output], output);
+  computation.end();
+  outputVersion++;
+  expect(computation.changed()).toBe(false);
+  inputVersion++;
+  expect(computation.changed()).toBe(true);
+});

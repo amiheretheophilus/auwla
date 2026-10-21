@@ -27,6 +27,7 @@ export function emitMemos(
   const possibleFlags = new Map<Node, string>();
   const observationBefore = new Map<Node, Statement[]>();
   const observationAfter = new Map<Node, Statement[]>();
+  const initialTracking = new Map<Node, { computation: string; changed: Expression }>();
   for (const group of plan.memos) {
     for (const [step, targets] of group.possibleOutputs) {
       const used = names.fresh('_builderUsed');
@@ -49,6 +50,25 @@ export function emitMemos(
         callbacks: b.ArrayExpression({ elements: callbacks }),
       })]);
       observationAfter.set(step, [statement('$$observation.finish();', { observation })]);
+      if (is.VariableDeclarator(step)) {
+        const computation = names.fresh('_initializerComputation');
+        const create = notify === undefined ? 'const $$computation = $$runtime.createComputation();'
+          : 'const $$computation = $$runtime.createComputation($$batch.mark, $$entity);';
+        setup.push(statement(create, { computation, runtime, ...notify }));
+        const conditions: Expression[] = [expression('$$computation.changed()', { computation })];
+        const memo = group.computations.find((memo) => memo.declarator === step);
+        for (const input of memo?.initialInputs ?? []) {
+          const version = versions.get(input);
+          if (version === undefined) continue;
+          const seen = names.fresh('_initializerFrom');
+          snapshots.push(statement('let $$seen = $$version;', { seen, version }));
+          conditions.push(expression('$$seen !== $$version', { seen, version }));
+          finish.push(statement('$$seen = $$version;', { seen, version }));
+        }
+        initialTracking.set(step, {
+          computation, changed: conditions.reduce((left, right) => b.LogicalExpression({ operator: '||', left, right })),
+        });
+      }
     }
   }
 
@@ -66,6 +86,10 @@ export function emitMemos(
     const changed = names.fresh('_recompute');
     dirty.set(group, changed);
     const conditions = [];
+    for (const step of group.steps) {
+      const collector = initialTracking.get(step);
+      if (collector !== undefined) conditions.push(expression('$$computation.changed()', { computation: collector.computation }));
+    }
     if (group.dynamic) {
       const computation = names.fresh('_computation');
       tracking.set(group, computation);
@@ -144,11 +168,17 @@ export function emitMemos(
         for (const target of memo.targets) {
           const key = trackKeys.get(target);
           if (key === undefined) continue;
-          propagation.push(statement(`if (!$$changed && $$upstream && $$active && $$computation.dependsOn($$key)) {
+          const collectors = [computation, ...group.steps.flatMap((step) => {
+            const collector = initialTracking.get(step);
+            return collector === undefined ? [] : [collector.computation];
+          })];
+          const depends = collectors.map((computation) => expression('$$computation.dependsOn($$key)', { computation, key }))
+            .reduce((left, right) => b.LogicalExpression({ operator: '||', left, right }));
+          propagation.push(statement(`if (!$$changed && $$upstream && $$active && $$depends) {
             $$changed = true; $$propagate = true;
           }`, {
             changed: dirty.get(group)!, upstream: dirty.get(upstreamGroup)!,
-            active: active([target]), computation, key, propagate,
+            active: active([target]), depends, propagate,
           }));
         }
       }
@@ -183,10 +213,19 @@ export function emitMemos(
       computation, runtime, ...notify,
     }));
   }
-  const before = (root: Node) => (collectors.get(root) ?? [])
-    .map(({ computation, first }) => statement(`$$computation.begin(${first});`, { computation }));
-  const after = (root: Node) => (collectors.get(root) ?? [])
-    .map(({ computation, last }) => statement(`$$computation.end(${last});`, { computation }));
+  const before = (root: Node) => {
+    const result = (collectors.get(root) ?? []).map(({ computation, first }) => statement(`$$computation.begin(${first});`, { computation }));
+    const initializer = initialTracking.get(root);
+    if (initializer !== undefined) result.push(statement('$$computation.begin();', { computation: initializer.computation }));
+    return result;
+  };
+  const after = (root: Node) => {
+    const result: Statement[] = [];
+    const initializer = initialTracking.get(root);
+    if (initializer !== undefined) result.push(statement('$$computation.end();', { computation: initializer.computation }));
+    result.push(...(collectors.get(root) ?? []).map(({ computation, last }) => statement(`$$computation.end(${last});`, { computation })));
+    return result;
+  };
   for (const original of plan.setup) {
     if (!is.VariableDeclaration(original)) {
       setup.push(...before(original), ...(observationBefore.get(original) ?? []), copy(original, mountReplacements), ...(observationAfter.get(original) ?? []), ...after(original));
@@ -198,17 +237,24 @@ export function emitMemos(
       const declaration = copy(original, mountReplacements);
       declaration.declarations = [copy(declarator, mountReplacements)];
       if (planned.has(declarator) && declaration.kind === 'const') declaration.kind = 'let';
-      setup.push(...before(declarator), declaration, ...after(declarator));
+      setup.push(...before(declarator), ...(observationBefore.get(declarator) ?? []), declaration,
+        ...(observationAfter.get(declarator) ?? []), ...after(declarator));
     }
   }
   const replay = [...steps].sort(([left], [right]) => left.start - right.start).map(([original, step]) => {
     const outputs = step.group.outputs.get(original)!;
     const possible = step.group.possibleOutputs.get(original) ?? [];
     const definite = outputs.filter((target) => !possible.includes(target));
-    const eligible = possibleFlags.has(original)
+    let eligible = possibleFlags.has(original)
       ? expression('$$definite || ($$used && $$possible)', {
         definite: active(definite), used: possibleFlags.get(original)!, possible: active(possible),
       }) : active(outputs);
+    const initializer = initialTracking.get(original);
+    if (initializer !== undefined) {
+      eligible = expression('($$used && $$possible) || ($$changed && $$definite)', {
+        used: possibleFlags.get(original)!, possible: active(possible), changed: initializer.changed, definite: active(definite),
+      });
+    }
     return b.IfStatement({
       test: expression('$$changed && $$active', {
         changed: dirty.get(step.group)!, active: eligible,

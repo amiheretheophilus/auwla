@@ -3,7 +3,7 @@ import { getExtensionStore, onCommitFinished, onEntityDispose, type Entity } fro
 
 type Version = () => number;
 interface Dependency { readonly read: Version; seen: number }
-interface Frame { readonly dependencies: Map<object, Dependency>; readonly previous: Frame | null }
+interface Frame { readonly dependencies: Map<object, Dependency>; readonly writes: Set<object>; readonly previous: Frame | null }
 function store() { return getExtensionStore('mmd:computation', () => ({ current: null as Frame | null })); }
 const subscribers = new WeakMap<object, Set<() => void>>();
 function owned() { return getExtensionStore('mmd:owned-computations', () => new Map<string, Set<() => void>>()); }
@@ -12,7 +12,8 @@ onEntityDispose((id) => {
   owned().delete(id);
 });
 
-export function publishVersions(keys: readonly object[]): void {
+export function publishVersions(keys: readonly object[], written?: object): void {
+  if (written !== undefined) store().current?.writes.add(written);
   const notifications = new Set<() => void>();
   for (const key of keys) for (const notify of subscribers.get(key) ?? []) notifications.add(notify);
   for (const notify of notifications) notify();
@@ -36,6 +37,7 @@ onCommitFinished((failed) => { if (failed) store().current = null; });
 export function createComputation(notify?: () => void, entity?: Entity) {
   const invalidate = notify === undefined ? undefined : () => notify();
   let dependencies = new Map<object, Dependency>();
+  let writes = new Set<object>();
   const subscriptions = new Set<object>();
   let frame: Frame | null = null;
   const dispose = () => {
@@ -50,9 +52,9 @@ export function createComputation(notify?: () => void, entity?: Entity) {
   }
   return {
     begin(reset = true) {
-      if (reset) dependencies = new Map();
+      if (reset) { dependencies = new Map(); writes = new Set(); }
       const state = store();
-      frame = { dependencies, previous: state.current };
+      frame = { dependencies, writes, previous: state.current };
       state.current = frame;
     },
     end(settle = true) {
@@ -60,6 +62,7 @@ export function createComputation(notify?: () => void, entity?: Entity) {
       if (frame !== null) state.current = frame.previous;
       frame = null;
       if (settle) {
+        for (const key of writes) dependencies.delete(key);
         for (const dependency of dependencies.values()) dependency.seen = dependency.read();
         if (invalidate !== undefined) {
           dispose();

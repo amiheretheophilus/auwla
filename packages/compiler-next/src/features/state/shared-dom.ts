@@ -162,8 +162,8 @@ export function finishSharedOwner(
         ? declaration.declarations.flatMap((entry) => findAll(entry.id, 'Identifier'))
         : is.ClassDeclaration(declaration) && declaration.id !== null ? [declaration.id] : [];
       if (!ids.some((id) => id.name === binding.binding.name && id.start === name.start)) continue;
-      body.push(statement('$$batch.watch([{ read: () => $$binding, notify: () => { $$version++; $$batch.mark(); } }]);', {
-        batch, binding: binding.binding.name, version: owner.versions.get(binding)!,
+      body.push(statement('$$batch.watch([{ read: () => $$binding, notify: () => { $$version++; $$batch.mark($$key); } }]);', {
+        batch, binding: binding.binding.name, version: owner.versions.get(binding)!, key: owner.keys.get(binding)!,
       }));
     }
   }

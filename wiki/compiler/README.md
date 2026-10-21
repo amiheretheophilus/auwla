@@ -13,7 +13,11 @@ definite body builders now have ten passing comparison cases plus focused native
 execution checks. Local takeover/setup ownership is verified on selected callback
 cases. Property/call mutation observation, possible builders, hidden reads and
 shared module/factory/class versions are now built and checked in focused cases.
-Explicit await boundaries and the Phase 3 exit audit are next.
+Explicit await boundaries are built. The Phase 3 audit passes 52 supported cases
+and 200 text-view generated programs; later list/component exceptions and remaining
+storage/reflection coverage are recorded on their concept pages and `../status.md`.
+The full generator remains failing on a saved Phase 4 conditional, with its gate
+scheduled after conditional/list support by agreement with the user.
 Remaining reference limits are on the concept pages;
 extend their coverage as the compiler reaches those slices. Continue in `plan.md`.
 

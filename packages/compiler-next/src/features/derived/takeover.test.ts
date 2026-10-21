@@ -167,3 +167,32 @@ it('stops a builder of one pattern alias while another alias still derives', asy
   expect(text()).toBe('99:4');
   expect(module.log).toEqual(['a']);
 });
+
+it('resets an accumulator built by an opaque call in a variable initializer', async () => {
+  const { click, text } = await compile(`const invoke = { now(fn) { fn(); return 7; } };
+    export function App() {
+      let seed = 1, total = 0;
+      const result = invoke.now(() => { total += seed; });
+      return <main><p>{total}:{result}</p><button id="seed" onClick={() => seed++}>more</button></main>;
+    }`);
+  expect(text()).toBe('1:7');
+  click('#seed');
+  expect(text()).toBe('2:7');
+  click('#seed');
+  expect(text()).toBe('3:7');
+});
+
+it('does not repeat a registration initializer when its callback did not build the output', async () => {
+  const { module, click, text } = await compile(`
+    export const registrations = []; let saved;
+    const registry = { register(fn) { registrations.push('registered'); saved = fn; return 7; } };
+    export function App() {
+      let seed = 1, total = seed * 2;
+      const handle = registry.register(() => { total = 99; });
+      return <main><p>{total}:{handle}</p><button id="seed" onClick={() => seed++}>more</button></main>;
+    }`);
+  click('#seed');
+  click('#seed');
+  expect(text()).toBe('6:7');
+  expect(module.registrations).toEqual(['registered']);
+});

@@ -150,7 +150,12 @@ files that must pass in full at its exit.
   `handlers.md`), member and call handlers.
 - **Exit:** `cases/state-and-derived`, `cases/handlers` and `cases/core` pass on
   `COMPILER=next`, except cases needing later phases (lists, components), which
-  are listed in `../status.md`. The plain generator passes 200 programs.
+  are listed in `../status.md`. The text-view state generator
+  (`tests/generator/state.test.ts`) passes 200 programs. The unchanged full
+  generator also generates conditional/list views: preserve its failures and
+  require its 200-program pass at the Phase 5 exit, after those features exist
+  (user-approved gate ordering, 2026-10-21). Remaining in-scope storage/reflection
+  work stays open; this exception does not excuse state failures.
 
 ## Phase 4: conditionals
 
@@ -169,6 +174,8 @@ files that must pass in full at its exit.
 - **Exit:** `cases/conditionals-and-lists` passes in full. `bench/dom` and the
   js-framework app pass their correctness gates locally; the user times them
   against `d6e678b` (`testing.md`). No regression is accepted.
+  The unchanged full plain generator passes 200 programs, including every saved
+  conditional/list failure in `tests/corpus/`.
 
 ## Phase 6: components
 

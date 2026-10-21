@@ -14,6 +14,7 @@ export interface TakeoverEmit {
 export function emitTakeovers(
   bindings: readonly BindingNode[], versions: ReadonlyMap<BindingNode, string>,
   names: Names, scope: string, batch: string,
+  keys: ReadonlyMap<BindingNode, string> = new Map(),
 ): TakeoverEmit {
   const flags = new Map<BindingNode, string>();
   const targets = new Map<BindingNode, Expression>();
@@ -35,9 +36,11 @@ export function emitTakeovers(
         if ($$building && $$taken) return;
         $$binding = $$value;
         $$version++;
-        if (!$$building) { $$taken = true; $$batch.mark(); }
+        if (!$$building) { $$taken = true; $$commit; }
       }
-    }).value`, { binding: target.binding.name, value, building, scope, taken, version, batch });
+    }).value`, { binding: target.binding.name, value, building, scope, taken, version,
+      commit: keys.has(target) ? expression('$$batch.mark($$key)', { batch, key: keys.get(target)! }) : expression('$$batch.mark()', { batch }),
+    });
     targets.set(target, receiver);
     for (const { site } of target.writes) {
       if (site.kind === 'assign' || site.kind === 'update') replacements.set(site.reference.node, receiver);

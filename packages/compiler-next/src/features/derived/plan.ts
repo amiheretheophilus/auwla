@@ -41,10 +41,15 @@ export function planMemos(
     for (const target of targets) {
       for (const builder of target.initial?.builders ?? []) {
         if (builder.certainty !== 'definite') {
-          if (!is.VariableDeclaration(builder.statement)) {
-            const outputs = possibleBuilders.get(builder.statement) ?? new Set<BindingNode>();
+          const steps = is.VariableDeclaration(builder.statement)
+            ? builder.statement.declarations.filter((entry) => entry.init !== null && (
+              target.writes.some(({ site }) => site.node.start >= entry.start && site.node.end <= entry.end)
+              || (builder.invocation === 'runtime' && queries.inputsOf(module, entry).opaque)
+            )) : [builder.statement];
+          for (const step of steps) {
+            const outputs = possibleBuilders.get(step) ?? new Set<BindingNode>();
             outputs.add(target);
-            possibleBuilders.set(builder.statement, outputs);
+            possibleBuilders.set(step, outputs);
           }
           continue;
         }
@@ -65,6 +70,7 @@ export function planMemos(
       }
     }
     const inputs = new Set<BindingNode>();
+    const initialInputs = new Set<BindingNode>();
     const roots: Node[] = [declarator.id, ...builders];
     if (declarator.init !== null) roots.unshift(declarator.init);
     const intrinsic = roots.some((root) => queries.inputsOf(module, root).reads.some((read) => {
@@ -73,6 +79,13 @@ export function planMemos(
       return dependency !== undefined && !targets.includes(dependency)
         && (dependency.writes.length > 0 || dependency.kind === 'Derived');
     }));
+    for (const root of [declarator.id, ...(declarator.init === null ? [] : [declarator.init])]) {
+      for (const read of queries.inputsOf(module, root).reads) {
+        const binding = read.binding ?? read.reference.binding;
+        const dependency = binding === null ? undefined : graph.bindings.get(binding);
+        if (dependency !== undefined && !targets.includes(dependency)) initialInputs.add(dependency);
+      }
+    }
     roots.push(...possibleBuilders.keys());
     for (const root of roots) {
       for (const read of queries.inputsOf(module, root).reads) {
@@ -86,7 +99,7 @@ export function planMemos(
     const memo: MemoPlan = {
       intrinsic,
       declaration: module.parentOf(declarator) as VariableDeclaration,
-      declarator, targets, inputs: [...inputs],
+      declarator, targets, inputs: [...inputs], initialInputs: [...initialInputs],
       builders: [...builders].sort((left, right) => left.start - right.start),
       builderTargets: new Map([...builderTargets].map(([node, outputs]) => [node, [...outputs]])),
       possibleBuilders: new Map([...possibleBuilders].map(([node, outputs]) => [node, [...outputs]])),

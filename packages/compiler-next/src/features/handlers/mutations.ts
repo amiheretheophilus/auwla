@@ -10,6 +10,7 @@ import { expression, statement, stringLiteral } from '../../core/emit/quote';
 export function emitMutations(
   plans: readonly MutationPlan[], versions: ReadonlyMap<BindingNode, string>, names: Names,
   runtime: string, batch: string | null, initial: ReadonlyMap<Node, Node>,
+  keys: ReadonlyMap<BindingNode, string> = new Map(),
 ) {
   const replacements = new Map(initial);
   const declarations: Statement[] = [];
@@ -21,7 +22,8 @@ export function emitMutations(
       const notify = names.fresh('_mutated');
       const version = versions.get(binding)!;
       declarations.push(statement('function $$notify() { $$version++; $$commit; }', {
-        notify, version, commit: batch === null ? expression('void 0') : expression('$$batch.mark()', { batch }),
+        notify, version, commit: batch === null ? expression('void 0')
+          : keys.has(binding) ? expression('$$batch.mark($$key)', { batch, key: keys.get(binding)! }) : expression('$$batch.mark()', { batch }),
       }));
       if (plan.kind === 'call') {
         notifications.push(expression('$$notify', { notify }));

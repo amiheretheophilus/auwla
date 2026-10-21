@@ -27,6 +27,39 @@ Last updated: 2026-10-21.
 
 ## Done
 
+- Phase 3 audit and initializer fixes: **52 supported exit comparisons pass**;
+  the other **17 require later list/component support**, listed below. The
+  separate text-view state generator passes **200 programs, seed 20261021**.
+  The unchanged full generator fails on a JSX conditional, saved in
+  `tests/corpus/generated-20261021.json`; it has not passed. The user approved
+  requiring that full 200-program gate after Phase 5 instead of before Phase 4.
+  Possible builders in initializers now retain independent inputs; callback
+  registration does not repeat when a sibling builder changes. Copy composition
+  retains callback writes/reads across shared/local wrappers. Collectors exclude
+  their own shared writes without losing other owner inputs. **57 focused compiler
+  tests and 23 runtime tests pass**; type checks pass for **105 compiler-next**
+  and **67 runtime files**. Remaining Phase 3 storage/reflection coverage is still
+  open on the concept pages; this is not a claim that all Phase 3 work is complete.
+
+### Phase 3 exit cases deferred to their implementation phases
+
+All are existing cases in `tests/cases/state-and-derived.test.ts`; none count as
+passing, and their fixtures/expectations remain unchanged.
+
+- Phase 5 lists (nine): `a mutated derived copy keeps the edit until its source
+  changes`; `a call result that is written`; the five `a written value from ...`
+  cases (helper, concat, spread member, Array.from, let helper);
+  `a handler reads an array-literal method chain`; `each keyed row keeps its own
+  prop override` (also requires Phase 6).
+- Phase 6 components (eight): `a reassigned prop holds until the parent sends a
+  new value`; `a prop override survives updates to another prop`; `prop writes
+  update derivations while local state keeps its snapshot`; the five
+  `complex state:` cases for shared module/independent component instances,
+  static fields/getters, object getters/setters with child props, imported class
+  stores with component changes, and module setters seen by sibling components.
+
+### Earlier verified slices
+
 - Phase 3 explicit await boundaries: pending writes flush after evaluating each
   operand, before native suspension, including nested listeners and shared writes.
   Calls with awaited arguments retain mutation observation on resumption and

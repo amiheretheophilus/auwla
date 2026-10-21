@@ -76,6 +76,12 @@ their receiver's roots. Module/factory versions and shared roots notify subscrib
 consumers (`state-and-derived.md`). Proxy-specific reflection behavior still needs
 coverage; no method fast paths exist yet.
 
+Shared mutation notifications carry the exact written binding key. Hidden-read
+collectors exclude that computation's own outputs, while other shared inputs
+remain subscribed (`state-and-derived.md`). Call wrappers composed at module and
+component scope preserve callback instrumentation through authored copy origins
+(`core.md`).
+
 Before each native `await`, the operand evaluates once and pending write batches
 flush even inside nested listeners. The same value then reaches native await;
 resumption schedules observation recovery for calls whose arguments suspended.

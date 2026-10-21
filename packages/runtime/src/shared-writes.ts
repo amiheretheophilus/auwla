@@ -5,7 +5,7 @@ import { registerSharedMutationRoots } from './mutation';
 export function createSharedWrites(keys: readonly object[]) {
   const watched: { read: () => unknown; notify: () => void }[] = [];
   return {
-    mark() { publishVersions(keys); },
+    mark(written?: object) { publishVersions(keys, written); },
     watch(roots: readonly { read: () => unknown; notify: () => void }[]) {
       watched.push(...roots);
       registerSharedMutationRoots(this, watched);

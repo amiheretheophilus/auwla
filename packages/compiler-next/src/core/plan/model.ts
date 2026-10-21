@@ -90,6 +90,7 @@ export interface MemoPlan {
   readonly declarator: VariableDeclarator;
   readonly targets: readonly BindingNode[];
   readonly inputs: readonly BindingNode[];
+  readonly initialInputs: readonly BindingNode[];
   readonly builders: readonly (Statement | VariableDeclarator)[];
   readonly builderTargets: ReadonlyMap<Node, readonly BindingNode[]>;
   readonly possibleBuilders: ReadonlyMap<Node, readonly BindingNode[]>;

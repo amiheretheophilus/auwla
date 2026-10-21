@@ -53,6 +53,13 @@ held while an immediately invoked callback can build another output. Shared
 statements retain their definite outputs even when another possible output did
 not change. Setup-only calls do not repeat on unrelated updates.
 
+Calls in variable initializers use the same observation. Each initializer retains
+its own static and executed hidden inputs, separately from the other statements
+in its memo group. A callback registration therefore stays single-run when a
+different builder's input changes; an initializer that actually builds an output
+replays with that output. Two native regressions in `derived/takeover.test.ts`
+cover an opaque immediate caller and an opaque registration returning a value.
+
 `packages/runtime/src/computation.ts` captures executed hidden reads through
 compiled escaping functions. Opaque initializers and sites retain version readers
 with stable binding keys; dynamic memo edges participate in dirty propagation
@@ -73,6 +80,10 @@ captured application/batch. Disposal releases them; one computation changing
 dependencies does not unsubscribe another computation owned by the same entity.
 `runtime/src/shared-writes.ts` publishes shared versions. Shared mutation roots
 use weak ownership, preserving aliases without retaining unused factories.
+Shared notifications identify the binding actually written as well as all owner
+keys needing invalidation. A collector excludes its own written outputs from
+its inputs while retaining other inputs in that owner; appending to a diagnostic
+log does not subscribe the computation to later appends.
 
 `features/handlers/receivers.ts` handles `this`, private and `super` store targets.
 Private/super accesses remain in lexical arrow closures inside their class;

@@ -211,6 +211,16 @@ The 200 generated source programs also passed during this slice.
 
 ## Running
 
+Phase 3 also runs `tests/generator/state.test.ts`: it uses the original program
+generator, filtering only views to text/adjacent text. Numbers, arrays, objects,
+derivations, builders, actions and clicks remain generated. **200 programs pass
+with seed 20261021.** This is separate coverage, not a pass of the full generator.
+The unchanged `tests/generator/generated.test.ts` currently fails on JSX inside a
+conditional; its minimized program is committed as
+`tests/corpus/generated-20261021.json`. Keep that failure and all expectations.
+By the user-approved phase ordering, 200 full-generator programs are required
+after conditional/list support at the Phase 5 exit.
+
 - Tests import `src` directly. No build is needed before running them.
 - Run `bun check` in `packages/compiler-next`, rather than at the repository root,
   where unrelated generated example output is included.
