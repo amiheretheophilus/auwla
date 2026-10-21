@@ -215,11 +215,21 @@ Phase 3 also runs `tests/generator/state.test.ts`: it uses the original program
 generator, filtering only views to text/adjacent text. Numbers, arrays, objects,
 derivations, builders, actions and clicks remain generated. **200 programs pass
 with seed 20261021.** This is separate coverage, not a pass of the full generator.
-The unchanged `tests/generator/generated.test.ts` currently fails on JSX inside a
-conditional; its minimized program is committed as
-`tests/corpus/generated-20261021.json`. Keep that failure and all expectations.
+The unchanged `tests/generator/generated.test.ts` first failed on JSX inside a
+conditional (`tests/corpus/generated-20261021.json`), now passing after the
+expression-conditional slice. A rerun with seed 20261022 stops on a Phase 5 list
+expression, saved as `tests/corpus/generated-20261022.json`. Preserve both programs
+and all expectations; the full generator has not passed.
 By the user-approved phase ordering, 200 full-generator programs are required
 after conditional/list support at the Phase 5 exit.
+
+Phase 4 adds `tests/generator/conditionals.test.ts`, using the unchanged program
+generator with only list views filtered out. It retains text, adjacent, ternary
+and logical JSX views and all state/actions. **200 programs pass with seed
+20261021.** This run found a resolver bug: assignment RHS members were incorrectly
+recorded as property writes, merging unrelated replay groups. The minimized
+program is `tests/corpus/conditional-state-20261021.json` and passes unchanged
+after the fix. This scoped run does not replace the Phase 5 full-generator gate.
 
 - Tests import `src` directly. No build is needed before running them.
 - Run `bun check` in `packages/compiler-next`, rather than at the repository root,

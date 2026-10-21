@@ -1,0 +1,8 @@
+{
+  "source": "export function App() {\n  let n0 = 0;\n  let l0 = [];\n  let o0 = { a: 0, b: 0 };\n  return (\n    <main>\n      <ul id=\"v0\">{l0.map((x) => x * 2).map((x, i) => <li key={i}>{x * 2}</li>)}</ul>\n      <button id=\"a0\" onClick={() => {  }}>a0</button>\n    </main>\n  );\n}",
+  "steps": [
+    {
+      "click": "#a0"
+    }
+  ]
+}

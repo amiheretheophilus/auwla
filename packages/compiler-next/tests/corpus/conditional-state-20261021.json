@@ -1,0 +1,7 @@
+{
+  "source": "export function App() {\n  let n0 = 0;\n  let l0 = [];\n  let l1 = [];\n  let o0 = { a: 0, b: 0 };\n  let d0 = o0.a;\n  if ((0 > 0)) d0 = (0 + l0.reduce((total, x) => total + x, 0));\n  let d1 = 0;\n  if (l0.includes(0)) d1 = l1.length;\n  return (\n    <main>\n      {(0 > (-1)) && <em>{l1.length}</em>}\n      <p id=\"v1\">{0}</p>\n      <button id=\"a0\" onClick={() => { o0 = { a: 0, b: 0 }; }}>a0</button>\n      <button id=\"a1\" onClick={() => { l1.push(0); }}>a1</button>\n    </main>\n  );\n}",
+  "steps": [
+    { "click": "#a1" },
+    { "click": "#a0" }
+  ]
+}

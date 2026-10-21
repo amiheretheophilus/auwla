@@ -126,12 +126,18 @@ function writeAt(module: Module, reference: Reference, binding: Binding): WriteS
 
 /** A destructured target belongs to the whole assignment, not its inner pattern. */
 function assignmentOperation(module: Module, node: Node): Node | null {
+  let child = node;
   let parent = outerParent(module, node);
   while (parent !== null) {
-    if (is.AssignmentExpression(parent) || is.UpdateExpression(parent)
-      || is.ForOfStatement(parent) || is.ForInStatement(parent)) return parent;
+    if (is.AssignmentExpression(parent) || is.ForOfStatement(parent) || is.ForInStatement(parent)) {
+      return unwrapped(parent.left) === child ? parent : null;
+    }
+    if (is.UpdateExpression(parent)) return unwrapped(parent.argument) === child ? parent : null;
+    if (is.Property(parent) && unwrapped(parent.value) !== child) return null;
+    if (is.AssignmentPattern(parent) && unwrapped(parent.left) !== child) return null;
     if (!is.ArrayPattern(parent) && !is.ObjectPattern(parent) && !is.Property(parent)
       && !is.AssignmentPattern(parent) && !is.RestElement(parent)) return parent;
+    child = parent;
     parent = outerParent(module, parent);
   }
   return null;

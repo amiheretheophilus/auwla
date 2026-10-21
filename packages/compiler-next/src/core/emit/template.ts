@@ -4,7 +4,7 @@
  * are created one by one in the same order, so sites address them the same way.
  */
 import type { Statement } from 'yuku-parser';
-import type { Template } from '../plan';
+import type { Site, Template } from '../plan';
 import type { Names } from './names';
 import { numberLiteral, statement, statements, stringLiteral } from './quote';
 
@@ -29,6 +29,31 @@ export function emitTemplate(template: Template, used: ReadonlySet<number>, cont
   return context.markup === null
     ? createNodes(template, context)
     : materialize(template, used, context);
+}
+
+/** Text slots become text nodes; a root region needs a movable fragment owner. */
+export function prepareTemplateSites(template: Template, sites: readonly Site[], emitted: TemplateEmit, context: TemplateNames) {
+  const statements: Statement[] = [];
+  const texts = new Map<number, string>();
+  const roots = new Map<number, string>();
+  for (const site of sites) {
+    if (site.kind === 'text') {
+      const text = context.names.fresh('_text');
+      texts.set(site.node, text);
+      statements.push(statement('const $$text = $$document.createTextNode("");', { text, document: context.document }));
+      statements.push(statement('$$slot.replaceWith($$text);', { slot: emitted.ref(site.node), text }));
+    } else if (site.kind === 'conditional' && template.roots.includes(site.node)) {
+      const fragment = context.names.fresh('_regionRoot');
+      roots.set(site.node, fragment);
+      statements.push(statement('const $$fragment = $$document.createDocumentFragment();', { fragment, document: context.document }));
+      statements.push(statement('$$fragment.appendChild($$slot);', { fragment, slot: emitted.ref(site.node) }));
+    }
+  }
+  return {
+    statements,
+    ref: (index: number) => texts.get(index) ?? emitted.ref(index),
+    root: (index: number) => roots.get(index) ?? texts.get(index) ?? emitted.ref(index),
+  };
 }
 
 function materialize(template: Template, used: ReadonlySet<number>, context: TemplateNames): TemplateEmit {

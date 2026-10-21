@@ -64,16 +64,19 @@ function planModule(
     const component = planComponent(fn, context);
     const siteInputs = new Map<Expression, readonly BindingNode[]>();
     const dynamicSites = new Set<Expression>();
-    for (const site of component.sites) {
+    const allSites = (sites: readonly import('./model').Site[]): import('./model').Site[] => sites.flatMap((site) =>
+      site.kind === 'conditional' ? [site, ...site.branches.flatMap((branch) => allSites(branch.sites))] : [site]);
+    for (const site of allSites(component.sites)) {
       const inputs = new Set<BindingNode>();
-      if (site.expression.end !== 0) {
-        const facts = queries.inputsOf(module, site.expression);
+      for (const expression of site.kind === 'conditional' ? site.selectorInputs : [site.expression]) {
+        if (expression.end === 0) continue;
+        const facts = queries.inputsOf(module, expression);
         if (facts.opaque || facts.reads.some((read) => {
           const binding = read.binding ?? read.reference.binding;
           const node = binding === null ? undefined : graph.bindings.get(binding);
           return node !== undefined && storageOwner(node) !== fn;
         })) dynamicSites.add(site.expression);
-        for (const read of queries.inputsOf(module, site.expression).reads) {
+        for (const read of facts.reads) {
           const binding = read.binding ?? read.reference.binding;
           const node = binding === null ? undefined : graph.bindings.get(binding);
           if (node !== undefined) inputs.add(node);

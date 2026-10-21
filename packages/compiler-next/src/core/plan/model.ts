@@ -45,8 +45,25 @@ export interface TextSite extends SiteBase { readonly kind: 'text' }
 export interface AttributeSite extends SiteBase { readonly kind: 'attribute'; readonly name: string }
 export interface PropertySite extends SiteBase { readonly kind: 'property'; readonly name: string }
 export interface EventSite extends SiteBase { readonly kind: 'event'; readonly event: string }
+export interface ConditionalSite extends SiteBase {
+  readonly kind: 'conditional';
+  readonly selection: ConditionalSelection;
+  readonly branches: readonly ConditionalBranch[];
+  readonly selectorInputs: readonly Expression[];
+}
 
-export type Site = TextSite | AttributeSite | PropertySite | EventSite;
+export type ConditionalSelection =
+  | { readonly kind: 'branch'; readonly index: number; readonly value: Expression | null }
+  | { readonly kind: 'test'; readonly test: Expression; readonly consequent: ConditionalSelection; readonly alternate: ConditionalSelection }
+  | { readonly kind: 'logical'; readonly operator: '&&' | '||' | '??'; readonly left: Expression; readonly right: ConditionalSelection; readonly fallback: number };
+
+export interface ConditionalBranch {
+  /** Null for a selected primitive; its value comes from the selector. */
+  readonly template: Template | null;
+  readonly sites: readonly Site[];
+}
+
+export type Site = TextSite | AttributeSite | PropertySite | EventSite | ConditionalSite;
 
 /** Distribute over the union so each site's own fields are retained. */
 export type UnplacedSite = Site extends infer S ? S extends Site ? Omit<S, 'node'> : never : never;

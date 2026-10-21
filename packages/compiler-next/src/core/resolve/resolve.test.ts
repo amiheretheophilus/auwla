@@ -57,6 +57,17 @@ describe('write sites', () => {
     expect(writesOf('let items = [1]; const n = items.length + items[0];', 'items')).toEqual([]);
   });
 
+  it('does not turn RHS members, pattern keys/defaults or loop sources into store targets', () => {
+    const source = `let item = {}, result;
+      result = item.value;
+      ({ [item.key]: result = item.fallback } = input);
+      for (result of item.values) {}
+      item.count = result;`;
+    expect(writesOf(source, 'item')).toEqual([
+      { kind: 'member', path: ['count'], timing: 'body' },
+    ]);
+  });
+
   it('module state written in a function is a later write', () => {
     expect(writesOf('export let todos = []; export function add(t) { todos.push(t); }', 'todos')).toEqual([
       { kind: 'call', path: [], method: 'push', timing: 'later' },

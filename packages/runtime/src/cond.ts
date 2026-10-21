@@ -51,6 +51,7 @@ export function createCondRegion(
   identity?: () => unknown,
   initial?: { readonly open: Node; readonly end: Node; readonly index?: number },
   retain?: { readonly content: number; readonly pending: readonly number[] },
+  before?: Node,
 ): CondRegion {
   // Hydration protocol (hydration-markers.md §2/§3): an opening `mmd:g`
   // marker before the branch content and a uniform `/mmd` close after it.
@@ -70,8 +71,8 @@ export function createCondRegion(
       throw new Error('memo-dom: initial conditional anchors do not belong to their parent');
     }
   } else if (adoptedRange === undefined) {
-    parent.appendChild(openAnchor);
-    parent.appendChild(anchor);
+    parent.insertBefore(openAnchor, before ?? null);
+    parent.insertBefore(anchor, before ?? null);
   } else {
     controller!.recordFragmentRange(parent, adoptedRange);
   }

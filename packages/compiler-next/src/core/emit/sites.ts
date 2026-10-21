@@ -1,14 +1,19 @@
 /** Initial site values and version-guarded updates, in authored evaluation order. */
+import { b } from 'yuku-ast';
 import type { Node, Statement } from 'yuku-parser';
 import type { BindingNode } from '../graph';
 import type { ComponentPlan, Site } from '../plan';
+import type { ConditionalBranch } from '../plan/model';
 import { copy } from './copy';
 import type { Names } from './names';
-import { statement, statements, stringLiteral } from './quote';
+import { expression, statement, statements, stringLiteral } from './quote';
+import { emitSelection } from '../../features/conditionals/dom';
+import { emitTemplate, prepareTemplateSites } from './template';
 
 export interface SitesEmit {
   readonly mount: readonly Statement[];
   readonly update: readonly Statement[];
+  readonly dispose: readonly Statement[];
 }
 
 export function emitSites(
@@ -18,6 +23,8 @@ export function emitSites(
     runtime: string;
     batch: string | null;
     entity: string;
+    id: string;
+    document: string;
     versions: ReadonlyMap<BindingNode, string>;
     replacements: ReadonlyMap<Node, Node>;
     ref(index: number): string;
@@ -26,31 +33,48 @@ export function emitSites(
   const { names, runtime, batch, versions, replacements, entity } = context;
   const mount: Statement[] = [];
   const update: Statement[] = [];
+  const dispose: Statement[] = [];
   const last = new Map<string, Site>();
   for (const site of plan.sites) last.set(siteKey(site), site);
 
   for (const site of plan.sites) {
     const node = context.ref(site.node);
     const value = names.fresh('_value');
-    const expression = copy(site.expression, replacements);
+    const selection = site.kind === 'conditional' ? emitSelection(site.selection, names, replacements) : null;
+    if (selection !== null) mount.push(...selection.declarations);
+    const expression = selection?.expression ?? copy(site.expression, replacements);
     const computation = plan.dynamicSites.has(site.expression) ? names.fresh('_siteComputation') : null;
     if (computation !== null) {
       mount.push(statement('const $$computation = $$runtime.createComputation($$batch.mark, $$entity);', { computation, runtime, batch: batch!, entity }));
       mount.push(statement('$$computation.begin();', { computation }));
+      dispose.push(statement('$$computation.dispose();', { computation }));
     }
     mount.push(statement('let $$value = $$expression;', { value, expression }));
     if (computation !== null) mount.push(statement('$$computation.end();', { computation }));
     const used = last.get(siteKey(site)) === site;
     const listener = used && site.kind === 'event' ? names.fresh('_listener') : null;
     if (listener !== null) mount.push(statement('let $$listener;', { listener }));
-    if (used) mount.push(...writeValue(site, value, node, runtime, batch, listener));
+    let region: string | null = null;
+    if (site.kind === 'conditional') {
+      region = names.fresh('_conditional');
+      const factories = site.branches.map((branch) => emitBranch(branch, value, plan, context));
+      mount.push(statement('const $$region = $$runtime.createCondRegion($$slot.parentNode, $$id + $$suffix, () => $$value.index, $$branches, void 0, void 0, void 0, $$slot);', {
+        region, runtime, slot: node, id: context.id, suffix: stringLiteral(`:${region}`), value,
+        branches: b.ArrayExpression({ elements: factories }),
+      }));
+      mount.push(statement('$$slot.remove();', { slot: node }));
+      dispose.push(statement('$$region.dispose();', { region }));
+    } else if (used) mount.push(...writeValue(site, value, node, runtime, batch, listener));
 
     const inputs = new Set<string>();
     for (const binding of plan.siteInputs.get(site.expression) ?? []) {
       const version = versions.get(binding);
       if (version !== undefined) inputs.add(version);
     }
-    if (inputs.size === 0 && computation === null) continue;
+    if (inputs.size === 0 && computation === null) {
+      if (region !== null) update.push(statement('$$region.update();', { region }));
+      continue;
+    }
 
     const snapshots = [...inputs].map((version) => ({ version, seen: names.fresh('_seen') }));
     for (const { version, seen } of snapshots) {
@@ -77,12 +101,51 @@ export function emitSites(
     const guard = statement(`if (${conditions.join(' || ')}) {}`);
     if (guard.type === 'IfStatement' && guard.consequent.type === 'BlockStatement') guard.consequent.body = body;
     update.push(guard);
+    if (region !== null) update.push(statement('$$region.update();', { region }));
   }
-  return { mount, update };
+  return { mount, update, dispose };
+}
+
+function emitBranch(branch: ConditionalBranch, selected: string, plan: ComponentPlan, context: Parameters<typeof emitSites>[1]) {
+  const { names, runtime, document } = context;
+  let body: Statement[];
+  let roots: string[];
+  let update: readonly Statement[];
+  let dispose: readonly Statement[] = [];
+  if (branch.template === null) {
+    const text = names.fresh('_branchText');
+    roots = [text];
+    body = [statement('const $$text = $$document.createTextNode($$runtime.textValue($$selected.value));', { text, document, runtime, selected })];
+    update = [statement('$$runtime.setTextData($$text, $$selected.value);', { runtime, text, selected })];
+  } else {
+    const markup = branch.template.markup === null ? null : names.fresh('_branchMarkup');
+    const used = new Set(branch.template.roots);
+    for (const site of branch.sites) used.add(site.node);
+    const templateContext = { names, runtime, document, markup };
+    const template = emitTemplate(branch.template, used, templateContext);
+    const slots = prepareTemplateSites(branch.template, branch.sites, template, templateContext);
+    const sites = emitSites({ ...plan, sites: branch.sites }, { ...context, ref: slots.ref });
+    roots = branch.template.roots.map(slots.root);
+    body = [...(markup === null ? [] : [statement('const $$markup = $$html;', { markup, html: stringLiteral(branch.template.markup!) })]),
+      ...template.statements, ...slots.statements, ...sites.mount];
+    update = sites.update;
+    dispose = sites.dispose;
+  }
+  const entry = expression('({ nodes: $$nodes, update() {}, dispose() {} })', {
+    nodes: b.ArrayExpression({ elements: roots.map((root) => b.Identifier({ name: root })) }),
+  });
+  if (entry.type === 'ObjectExpression') {
+    for (const property of entry.properties) {
+      if (property.type !== 'Property' || property.key.type !== 'Identifier' || property.value.type !== 'FunctionExpression') continue;
+      property.value.body!.body = [...(property.key.name === 'update' ? update : dispose)];
+    }
+  }
+  body.push(b.ReturnStatement({ argument: entry }));
+  return b.ArrowFunctionExpression({ id: null, params: [], body: b.BlockStatement({ body }), async: false, generator: false, expression: false });
 }
 
 function siteKey(site: Site): string {
-  if (site.kind === 'text') return `${site.node}:text`;
+  if (site.kind === 'text' || site.kind === 'conditional') return `${site.node}:${site.kind}`;
   if (site.kind === 'event') return `${site.node}:event:${site.event}`;
   return `${site.node}:${site.kind}:${site.name}`;
 }
@@ -90,6 +153,7 @@ function siteKey(site: Site): string {
 function writeValue(
   site: Site, value: string, node: string, runtime: string, batch: string | null, listener: string | null,
 ): Statement[] {
+  if (site.kind === 'conditional') return [];
   if (site.kind === 'text') {
     return [statement('$$runtime.setTextData($$node, $$value);', { runtime, node, value })];
   }

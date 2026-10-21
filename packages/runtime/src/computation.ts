@@ -51,14 +51,17 @@ export function createComputation(notify?: () => void, entity?: Entity) {
   let writes = new Set<object>();
   const subscriptions = new Set<object>();
   let frame: Frame | null = null;
-  const dispose = () => {
+  let owner: Set<() => void> | undefined;
+  const unsubscribe = () => {
     if (invalidate !== undefined) for (const key of subscriptions) subscribers.get(key)?.delete(invalidate);
     subscriptions.clear();
   };
+  const dispose = () => { unsubscribe(); owner?.delete(dispose); };
   if (entity !== undefined) {
     const owners = owned();
     const list = owners.get(entity.id) ?? new Set<() => void>();
     list.add(dispose);
+    owner = list;
     owners.set(entity.id, list);
   }
   return {
@@ -76,7 +79,7 @@ export function createComputation(notify?: () => void, entity?: Entity) {
         for (const key of writes) dependencies.delete(key);
         for (const dependency of dependencies.values()) dependency.seen = dependency.read();
         if (invalidate !== undefined) {
-          dispose();
+          unsubscribe();
           for (const key of dependencies.keys()) {
             const listeners = subscribers.get(key) ?? new Set<() => void>();
             listeners.add(invalidate);

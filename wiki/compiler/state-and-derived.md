@@ -89,6 +89,8 @@ Seven native execution cases and one caught-error case cover these paths.
 Runtime computation subscriptions connect shared version keys to each consumer's
 captured application/batch. Disposal releases them; one computation changing
 dependencies does not unsubscribe another computation owned by the same entity.
+Disposing a retired branch collector also removes its disposer from the parent's
+ownership set; updating a live collector only replaces its subscriptions.
 Shared memo collectors isolate setup reads from callers and propagate invalidation
 to downstream owners before lazy refresh. One publication wave notifies each
 subscription once, including cycles; authored recovery resets abandoned waves.

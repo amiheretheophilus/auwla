@@ -16,8 +16,10 @@ shared module/factory/class versions are now built and checked in focused cases.
 Explicit await boundaries are built. The Phase 3 audit passes 52 supported cases
 and 200 text-view generated programs; later list/component exceptions and remaining
 storage/reflection coverage are recorded on their concept pages and `../status.md`.
-The full generator remains failing on a saved Phase 4 conditional, with its gate
-scheduled after conditional/list support by agreement with the user.
+Phase 4 expression conditionals are built; their scoped generator passes 200
+programs, and the original saved conditional passes unchanged. The full generator
+now stops on a saved Phase 5 list. Its gate remains scheduled after conditional/list
+support by agreement with the user. Assigned JSX and control-flow returns are next.
 Remaining reference limits are on the concept pages;
 extend their coverage as the compiler reaches those slices. Continue in `plan.md`.
 

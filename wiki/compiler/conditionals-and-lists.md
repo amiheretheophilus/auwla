@@ -1,11 +1,35 @@
 # Conditionals and lists
 
-**Folders:** `features/conditionals/`, `features/lists/` _(planned)_.
+**Folders:** `features/conditionals/` (expression selectors built),
+`features/lists/` _(planned)_.
 
 ## What it does
 
 Turns JSX that changes shape (branches, repeated rows) into regions that update in
 place.
+
+## Current implementation
+
+| File | What it does |
+| --- | --- |
+| `features/conditionals/plan.ts` | Plans native ternary/logical selection, primitive fallbacks and independently retained branch templates |
+| `features/conditionals/dom.ts` | Emits lazy selection, preserving each logical left operand's single evaluation and its actual falsy value |
+| `features/conditionals/plan.test.ts` | Selector/branch dependencies and unchanged authored AST identities |
+| `features/conditionals/dom.test.ts` | Branch identity, lazy attributes, primitive fallbacks, nested/fragment placement and SVG namespaces |
+| `core/emit/sites.ts` | Composes branch templates/sites, guards selector reads separately, updates the active branch and disposes retired collectors/regions |
+| `packages/runtime/src/cond.ts` | Existing anchored branch lifecycle; an optional insertion point preserves surrounding sibling order |
+
+Ternary branches and `&&`, `||`, `??` with ordinary left operands are built.
+Selector dependencies exclude the JSX leaves' attributes/text, so changing branch
+text does not repeat an unchanged condition call. A stable branch updates its
+guarded sites and preserves DOM state; a different branch disposes the old sites
+and mounts new nodes. Parent disposal drains regions, and retired collectors leave
+their parent's ownership set. Primitive fallbacks retain values such as zero.
+Branch templates inherit their surrounding namespace and parser constraints.
+Root regions use movable fragments so their anchors stay with returned content.
+
+Still pending in Phase 4: stored/assigned JSX, control-flow returns and JSX on the
+left of a logical operator. Lists and component calls remain their later phases.
 
 ## Rules
 
@@ -56,8 +80,13 @@ place.
 In `packages/compiler-next/tests/cases/conditionals-and-lists.test.ts`.
 
 The unchanged full generator saved `tests/corpus/generated-20261021.json`:
-`{(0 > 0) ? <b>{0}</b> : <i>{0}</i>}` is currently rejected as JSX in an
-expression. This remains a failing Phase 4 regression, not an accepted rejection.
+`{(0 > 0) ? <b>{0}</b> : <i>{0}</i>}` now passes unchanged on compiler-next.
+Four `conditional:` comparisons in this file pass alongside six native execution
+checks and one plan check. The full generator still requires Phase 5 list support.
+The scoped conditional generator passes 200 programs with seed 20261021. Its
+additional state regression, `tests/corpus/conditional-state-20261021.json`, now
+passes after correcting resolver target positions (`core.md`). The unchanged full
+generator saves a Phase 5 map-chain failure as `generated-20261022.json`.
 
 The old compiler rejects these:
 

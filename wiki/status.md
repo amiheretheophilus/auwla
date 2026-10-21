@@ -27,6 +27,21 @@ Last updated: 2026-10-21.
 
 ## Done
 
+- Phase 4 expression conditionals are built: native ternary/logical selection,
+  retained branch DOM and guarded sites, lazy inactive branches, correct primitive
+  fallbacks, nested/root fragments, inherited SVG namespaces and branch disposal.
+  **Six native checks, four comparisons, one plan check and the unchanged saved
+  generator regression pass**. The full generator is not claimed as passing;
+  list support is still required. Stored/assigned JSX and control-flow returns
+  remain next in Phase 4. No fixture expectations changed.
+  **200 generated conditional/text programs pass, seed 20261021**. They exposed
+  an assignment-RHS member incorrectly classified as a write, resetting unrelated
+  array state; the resolver fix and `conditional-state-20261021.json` now pass.
+  The unchanged full generator now stops on a Phase 5 list, preserved as
+  `generated-20261022.json`. **131 focused compiler tests, 26 runtime tests and
+  five existing root conditional/hydration checks pass**. Package checks pass
+  (**111 compiler-next files**, **67 runtime files**); runtime rebuild passes.
+
 - Phase 3 exit passes under the user-approved view scope: **52 comparisons and
   200 generated text-view programs pass**, with 17 existing list/component cases
   deferred by name above/below. Descriptor/prototype reflection also passes a

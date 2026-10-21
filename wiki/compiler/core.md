@@ -59,6 +59,11 @@ The core holds the stage machinery and the shared types. What a concept means
   is still lexically timed `later`. The graph preserves that placement as a write
   fact and does not infer a snapshot from it. Invocation context decides whether
   the write takes control (`state-and-derived.md`, "Callbacks").
+- Assignment-target traversal follows only left/pattern target positions.
+  RHS members, computed pattern keys, default RHS expressions and loop sources
+  stay reads. A generated conditional program exposed a false property-write
+  edge that reset an unrelated array; the saved regression and resolver unit
+  check now pass.
 - `isRuntimeBinding` excludes erased types and type-only imports. yuku's
   `visibleIn('value')` alone includes type-only import aliases.
 
@@ -169,7 +174,7 @@ evaluation: parent attributes evaluate before child expressions.
 
 - `Template`: static DOM shape, hoisted.
 - `TextSite`, `AttributeSite`, `PropertySite`, `EventSite`.
-- `Conditional { branches: [test, Plan][] }` _(planned)_.
+- `ConditionalSite`: native selection tree, selector inputs and branch templates/sites (expression form built).
 - `List { source, key, row: Plan }` _(planned)_.
 - `ComponentCall { component, props, slots }` _(planned)_.
 - `Boundary { sources, pending, error }` _(planned)_, for loading and error UI.

@@ -14,6 +14,7 @@ import {
   escapeText, eventName, intrinsicTag, parsesAsWritten, unwrap,
 } from './jsx';
 import type { Site, StaticAttribute, Template, TemplateNode, UnplacedSite } from './model';
+import { planConditional } from '../../features/conditionals/plan';
 
 export interface TemplateContext {
   readonly path: string;
@@ -33,9 +34,9 @@ interface ChildRun {
   text: string;
 }
 
-export function buildTemplate(root: JsxRoot, context: TemplateContext): { template: Template; sites: Site[] } {
+export function buildTemplate(root: JsxRoot, context: TemplateContext, ancestors: readonly string[] = [], namespace: Namespace = 'html'): { template: Template; sites: Site[] } {
   const builder = new TemplateBuilder(context);
-  const roots = builder.children([root], [], 'html');
+  const roots = builder.children([root], ancestors, namespace);
   const nodes = builder.nodes;
   const markup = builder.parsable ? roots.map((index) => serialize(nodes, index)).join('') : null;
   return { template: { nodes, roots, markup }, sites: builder.sites };
@@ -86,7 +87,7 @@ class TemplateBuilder {
           continue;
         }
         this.flushText(run);
-        run.indices.push(this.textSite(child.expression));
+        run.indices.push(this.textSite(child.expression, ancestors, namespace));
       } else if (is.JSXElement(child)) {
         this.flushText(run);
         run.indices.push(this.element(child, ancestors, namespace));
@@ -102,9 +103,16 @@ class TemplateBuilder {
     run.text = '';
   }
 
-  private textSite(expression: Expression): number {
+  private textSite(expression: Expression, ancestors: readonly string[], namespace: Namespace): number {
     if (containsJsx(expression)) {
-      unsupported(this.context, expression, 'markup inside an expression (conditionals and lists)', 4);
+      const conditional = planConditional(expression, {
+        hasMarkup: containsJsx,
+        template: (node) => buildTemplate(node, this.context, ancestors, namespace),
+        unsupported: (node) => unsupported(this.context, node, 'JSX call/list expressions', 5),
+      });
+      const node = this.add({ kind: 'placeholder' });
+      this.sites.push({ kind: 'conditional', node, expression, reactive: this.context.reactive(expression), ...conditional });
+      return node;
     }
     const node = this.add({ kind: 'placeholder' });
     this.sites.push({ kind: 'text', node, expression, reactive: this.context.reactive(expression) });

@@ -7,7 +7,7 @@ import type { ComponentPlan, ModulePlan } from '../plan';
 import { copy, finishCopy } from './copy';
 import { Names } from './names';
 import { expression, statement, stringLiteral } from './quote';
-import { emitTemplate } from './template';
+import { emitTemplate, prepareTemplateSites } from './template';
 import { emitLocalState } from '../../features/state/dom';
 import { emitConstWrites, emitWrites } from '../../features/handlers/dom';
 import { emitSites } from './sites';
@@ -65,7 +65,7 @@ function emitComponent(plan: ComponentPlan, names: Names, runtime: string, marku
   const id = names.fresh('_id');
   const parent = names.fresh('_parent');
   const state = emitLocalState(plan.state, names);
-  const batch = plan.state.length === 0 && plan.dynamicSites.size === 0 ? null : names.fresh('_writes');
+  const batch = plan.state.length === 0 && plan.dynamicSites.size === 0 && !plan.sites.some((site) => site.kind === 'conditional') ? null : names.fresh('_writes');
   const update = names.fresh('_update');
   const entity = names.fresh('_entity');
   const scope = names.fresh('_scope');
@@ -128,20 +128,22 @@ function emitComponent(plan: ComponentPlan, names: Names, runtime: string, marku
   body.push(...template.statements);
 
   // Placeholders keep neighbouring values as distinct text nodes after parsing.
-  const texts = new Map<number, string>();
-  for (const site of plan.sites) {
-    if (site.kind !== 'text') continue;
-    const text = names.fresh('_text');
-    texts.set(site.node, text);
-    body.push(statement('const $$text = $$document.createTextNode("");', { text, document }));
-    body.push(statement('$$placeholder.replaceWith($$text);', { placeholder: template.ref(site.node), text }));
-  }
+  const slots = prepareTemplateSites(plan.template, plan.sites, template, { names, runtime, document, markup });
+  body.push(...slots.statements);
 
   const sites = emitSites(plan, {
-    names, runtime, batch, entity, versions: state.versions, replacements: writes.replacements,
-    ref: (index) => texts.get(index) ?? template.ref(index),
+    names, runtime, batch, entity, id, document, versions: state.versions, replacements: writes.replacements,
+    ref: slots.ref,
   });
   body.push(...sites.mount);
+  if (sites.dispose.length > 0) {
+    const cleanup = statement('$$runtime.cleanup($$id, () => {});', { runtime, id });
+    if (cleanup.type === 'ExpressionStatement' && cleanup.expression.type === 'CallExpression') {
+      const callback = cleanup.expression.arguments[1]!;
+      if (callback.type === 'ArrowFunctionExpression' && callback.body.type === 'BlockStatement') callback.body.body = [...sites.dispose];
+    }
+    body.push(cleanup);
+  }
   if (batch !== null) {
     const roots = plan.mutationRoots.map((binding) => expression('({ read: () => $$binding, notify: () => { $$version++; if (!$$scope.building()) $$batch.mark(); } })', {
       binding: binding.binding.name, version: state.versions.get(binding)!, batch, scope,
@@ -163,7 +165,7 @@ function emitComponent(plan: ComponentPlan, names: Names, runtime: string, marku
 
   body.push(statement('$$scope.leave($$setupFrame);', { scope, setupFrame }));
 
-  const roots = plan.template.roots.map((index) => texts.get(index) ?? template.ref(index));
+  const roots = plan.template.roots.map(slots.root);
   if (roots.length === 1) {
     body.push(b.ReturnStatement({ argument: b.Identifier({ name: roots[0]! }) }));
   } else {

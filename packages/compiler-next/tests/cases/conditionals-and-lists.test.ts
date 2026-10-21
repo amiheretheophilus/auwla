@@ -4,6 +4,48 @@
 import { expect } from 'bun:test';
 import { behaves } from '../harness/run';
 
+behaves('conditional: selected branch retains its nodes while text updates', {
+  source: `export function App() {
+    let show = true, count = 1;
+    return <main>{show ? <b>{count}</b> : <i>off</i>}
+      <button id="inc" onClick={() => count++}>inc</button>
+      <button id="toggle" onClick={() => show = !show}>toggle</button></main>;
+  }`,
+  steps: [{ click: '#inc' }, { click: '#toggle' }, { click: '#toggle' }],
+  check(root, index) {
+    expect(root.querySelector('b, i')!.textContent).toBe(['1', '2', 'off', '2'][index]!);
+  },
+});
+
+behaves('conditional: logical markup preserves zero and updates a retained branch', {
+  source: `export function App() {
+    let count = 0;
+    return <main><p>{count && <b>{count}</b>}</p><button onClick={() => count++}>inc</button></main>;
+  }`,
+  steps: [{ click: 'button' }, { click: 'button' }],
+  check(root, index) { expect(root.querySelector('p')!.textContent).toBe(String(index)); },
+});
+
+behaves('conditional: nested fragment regions preserve authored order', {
+  source: `export function App() {
+    let a = true, b = false;
+    return <main>start{a ? <><p>{b ? <b>yes</b> : <i>no</i>}</p><span>end</span></> : 'off'}
+      <button id="a" onClick={() => a = !a}>a</button><button id="b" onClick={() => b = !b}>b</button></main>;
+  }`,
+  steps: [{ click: '#b' }, { click: '#a' }, { click: '#a' }],
+  check(root, index) { expect(root.textContent).toBe(['startnoendab', 'startyesendab', 'startoffab', 'startyesendab'][index]!); },
+});
+
+behaves('conditional: nullish and or markup use different fallback tests', {
+  source: `export function App() {
+    let value = null;
+    return <main><p>{value ?? <b>none</b>}:{value || <i>empty</i>}</p>
+      <button onClick={() => value = 0}>set</button></main>;
+  }`,
+  steps: [{ click: 'button' }],
+  check(root, index) { expect(root.querySelector('p')!.textContent).toBe(['none:empty', '0:empty'][index]!); },
+});
+
 behaves('a list from a call result', {
   source: `
     let items = [1, 2];
