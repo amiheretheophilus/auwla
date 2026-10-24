@@ -51,9 +51,11 @@ export interface TextSite extends SiteBase {
   readonly kind: 'text';
   /**
    * The expression can only produce a primitive, so the site writes its text
-   * node directly. Otherwise a value slot also accepts stored JSX.
+   * node directly. Otherwise a value slot also accepts stored JSX and arrays.
    */
   readonly primitive: boolean;
+  /** `{...items}`: each item is a child, so the site shows `[...items]`. */
+  readonly spread?: boolean;
 }
 
 export interface AttributeSite extends SiteBase {
@@ -207,6 +209,8 @@ export interface RenderValuePlan {
   readonly svgTemplate: Template;
   /** Source order is also the capture-array order used by the emitted program. */
   readonly sites: readonly Site[];
+  /** The root element's `key`, captured with the value; a list matches rows by it. */
+  readonly key: Expression | null;
 }
 
 export interface SharedReadPlan {

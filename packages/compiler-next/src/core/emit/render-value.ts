@@ -1,7 +1,7 @@
 /** A stored JSX expression captures native values for a compiled binding program. */
 import { b } from 'yuku-ast';
 import type { Expression, Node, Statement } from 'yuku-parser';
-import type { RenderValuePlan, Template } from '../plan/model';
+import type { RenderValuePlan, Site, Template } from '../plan/model';
 import type { Names } from './names';
 import { expression, statement, stringLiteral } from './quote';
 import { emitTemplate, prepareTemplateSites } from './template';
@@ -83,12 +83,19 @@ export function emitRenderValue(plan: RenderValuePlan, names: Names, runtime: st
 
   // Captures stay at the authored expression, outside the hoisted program.
   // Moving them into mount would change lexical access and evaluation order.
-  const value = expression('$$runtime.createRenderValue($$program, $$values)', {
-    runtime,
-    program,
-    values: b.ArrayExpression({ elements: plan.sites.map((site) => site.expression) }),
-  });
+  const captured = b.ArrayExpression({ elements: plan.sites.map((site) => siteValue(site)) });
+  const value = plan.key === null
+    ? expression('$$runtime.createRenderValue($$program, $$values)', { runtime, program, values: captured })
+    : expression('$$runtime.createRenderValue($$program, $$values, $$key)', { runtime, program, values: captured, key: plan.key });
   return { declaration: declaration as Statement, replacement: value as Node };
+}
+
+/** What a site captures: its expression, or `[...items]` for spread children. */
+export function siteValue(site: Site): Expression {
+  if (site.kind === 'text' && site.spread === true) {
+    return expression('[...$$items]', { items: site.expression });
+  }
+  return site.expression;
 }
 
 function renderEntry(

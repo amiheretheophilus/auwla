@@ -39,7 +39,7 @@ interface ChildRun {
 }
 
 export function buildTemplate(root: JsxRoot, context: TemplateContext, ancestors: readonly string[] = [], namespace: Namespace = 'html'): { template: Template; sites: Site[] } {
-  const builder = new TemplateBuilder(context);
+  const builder = new TemplateBuilder(context, root);
   const roots = builder.children([root], ancestors, namespace);
   const nodes = builder.nodes;
   const markup = builder.parsable ? roots.map((index) => serialize(nodes, index)).join('') : null;
@@ -62,7 +62,7 @@ class TemplateBuilder {
   /** False when the HTML parser would build a different tree from the markup. */
   parsable = true;
 
-  constructor(private readonly context: TemplateContext) {}
+  constructor(private readonly context: TemplateContext, private readonly root: JsxRoot) {}
 
   /**
    * The nodes for a list of JSX children, in document order. Neighbouring static
@@ -93,13 +93,33 @@ class TemplateBuilder {
         }
         this.flushText(run);
         run.indices.push(this.textSite(child.expression, ancestors, namespace));
+      } else if (is.JSXElement(child) && this.isKeyedRow(child)) {
+        // Shown through a value slot, so a new key mounts a new element.
+        this.flushText(run);
+        run.indices.push(this.textSite(child as Expression, ancestors, namespace));
       } else if (is.JSXElement(child)) {
         this.flushText(run);
         run.indices.push(this.element(child, ancestors, namespace));
-      } else {
-        unsupported(this.context, child, 'spread children', 5);
+      } else if (is.JSXSpreadChild(child)) {
+        // `{...items}` shows each item as a child: a list.
+        this.flushText(run);
+        run.indices.push(this.textSite(child.expression, ancestors, namespace, true));
       }
     }
+  }
+
+  /**
+   * A key outside a list follows React: an element whose key can change is a
+   * keyed list of one row, so a changed key remounts it. A key that cannot
+   * change is left out. A captured value's own root key travels with the value.
+   */
+  private isKeyedRow(element: JsxElement): boolean {
+    const key = keyExpression(element);
+    if (key === null) return false;
+    if (this.context.captureValues) {
+      return element !== this.root && constantAttribute(key) === undefined;
+    }
+    return this.context.reactive(key);
   }
 
   private flushText(run: ChildRun): void {
@@ -108,14 +128,13 @@ class TemplateBuilder {
     run.text = '';
   }
 
-  private textSite(expression: Expression, ancestors: readonly string[], namespace: Namespace): number {
+  private textSite(expression: Expression, ancestors: readonly string[], namespace: Namespace, spread = false): number {
     const value = unwrap(expression);
-    if (!this.context.captureValues && containsJsx(expression)
+    if (!spread && !this.context.captureValues && containsJsx(expression)
       && (is.ConditionalExpression(value) || is.LogicalExpression(value)) && canPlanConditional(expression, containsJsx)) {
       const conditional = planConditional(expression, {
         hasMarkup: containsJsx,
         template: (node) => buildTemplate(node, this.context, ancestors, namespace),
-        unsupported: (node) => unsupported(this.context, node, 'JSX call/list expressions', 5),
       });
       const node = this.add({ kind: 'placeholder' });
       this.sites.push({ kind: 'conditional', node, expression, namespace, reactive: this.context.reactive(expression), ...conditional });
@@ -127,7 +146,8 @@ class TemplateBuilder {
       node,
       expression,
       reactive: this.context.reactive(expression),
-      primitive: alwaysPrimitive(expression),
+      primitive: !spread && alwaysPrimitive(expression),
+      spread,
     });
     return node;
   }
@@ -172,10 +192,6 @@ class TemplateBuilder {
     if (!is.JSXAttribute(attribute)) return;
 
     const name = jsxAttributeName(attribute);
-    // A key that never changes never remounts, so leaving it out is correct.
-    if (name === 'key' && this.context.reactive(attributeExpression(attribute.value))) {
-      unsupported(this.context, attribute, 'keys that can change (lists and remounts)', 5);
-    }
     if (RESERVED_ATTRIBUTES.has(name)) return;
     if (name === 'ref') unsupported(this.context, attribute, 'refs', 7);
 
@@ -210,6 +226,16 @@ class TemplateBuilder {
     this.nodes.push(node);
     return this.nodes.length - 1;
   }
+}
+
+/** The value of an element's `key` attribute, or null when it has none. */
+export function keyExpression(element: JsxElement): Expression | null {
+  for (const attribute of element.openingElement.attributes) {
+    if (is.JSXAttribute(attribute) && jsxAttributeName(attribute) === 'key') {
+      return attributeExpression(attribute.value);
+    }
+  }
+  return null;
 }
 
 function jsxAttributeName(attribute: Extract<Node, { type: 'JSXAttribute' }>): string {

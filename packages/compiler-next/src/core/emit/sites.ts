@@ -9,6 +9,7 @@ import type { Names } from './names';
 import { expression as buildExpression, statement, statements, stringLiteral } from './quote';
 import { emitSelection, type EmitOnce } from '../../features/conditionals/dom';
 import { emitTemplate, prepareTemplateSites } from './template';
+import { siteValue } from './render-value';
 
 export interface SitesEmit {
   readonly mount: readonly Statement[];
@@ -61,7 +62,7 @@ export function emitSites(
 
     let expression: Expression;
     if (context.values === undefined) {
-      expression = selection?.expression ?? copy(site.expression, replacements);
+      expression = selection?.expression ?? copy(siteValue(site), replacements);
     } else {
       // A stored JSX program receives captures; mounting it must not evaluate
       // its authored expressions a second time.

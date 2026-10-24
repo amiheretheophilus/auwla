@@ -22,7 +22,6 @@ export function canPlanConditional(expression: Expression, hasMarkup: (node: Nod
 export interface ConditionalContext {
   hasMarkup(node: Node): boolean;
   template(node: Extract<Node, { type: 'JSXElement' | 'JSXFragment' }>): { template: Template; sites: Site[] };
-  unsupported(node: Node): never;
 }
 
 export function planConditional(expression: Expression, context: ConditionalContext) {
@@ -119,9 +118,7 @@ class SelectionPlanner {
         fallback: this.primitiveBranch(),
       };
     }
-    if (this.context.hasMarkup(node)) {
-      return this.context.unsupported(node);
-    }
+    // Anything else, markup in a call or a list included, is shown as a value.
     return this.value(original);
   }
 }

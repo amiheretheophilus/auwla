@@ -14,7 +14,7 @@ import type {
   ComponentPlan, MemoGroupPlan, ModulePlan, RenderValuePlan, SharedOwnerPlan,
   SharedReadPlan, Site, Template,
 } from './model';
-import { buildTemplate, containsJsx, unsupported, type TemplateContext } from './template';
+import { buildTemplate, containsJsx, keyExpression, unsupported, type TemplateContext } from './template';
 import { planReturnProgram } from '../../features/conditionals/plan';
 import { unwrap } from './jsx';
 import { planLocalState } from '../../features/state/plan';
@@ -59,12 +59,13 @@ function planModule(
       claimed.add(node);
     },
   };
-  rejectLaterPhases(entry, context);
+  const functions = module.findAll(['FunctionDeclaration', 'FunctionExpression', 'ArrowFunctionExpression']);
+  rejectLaterPhases(entry, context, new Set(functions.filter((fn) => components.has(fn))));
 
   const plans = new Map<Node, ComponentPlan>();
   const moduleBindings = [...sharedReads.keys()].filter((binding) => binding.binding.module === module);
   const lexicalBlocks = new Set(moduleBindings.map(storageOwner).filter(is.BlockStatement));
-  for (const fn of module.findAll(['FunctionDeclaration', 'FunctionExpression', 'ArrowFunctionExpression'])) {
+  for (const fn of functions) {
     if (!components.has(fn)) {
       continue;
     }
@@ -151,7 +152,8 @@ function planModule(
     }
     const value = buildTemplate(jsx, { ...context, captureValues: true });
     const svg = buildTemplate(jsx, { ...context, captureValues: true }, [], 'svg');
-    values.push({ node: jsx, ...value, svgTemplate: { ...svg.template, markup: null } });
+    const key = is.JSXElement(jsx) ? keyExpression(jsx) : null;
+    values.push({ node: jsx, ...value, svgTemplate: { ...svg.template, markup: null }, key });
   }
   const sharedOwners: SharedOwnerPlan[] = [];
   const shared = moduleBindings;
@@ -288,7 +290,6 @@ function planComponent(fn: FunctionNode, context: TemplateContext, module: Resol
   const program = planReturnProgram(returned.tail, {
     hasMarkup: containsJsx,
     template: (node) => buildTemplate(node, context),
-    unsupported: (node) => unsupported(context, node, 'JSX call/list expressions', 5),
   });
   // The body itself keys the selector site: it is the program's one identity.
   const site: Site = {

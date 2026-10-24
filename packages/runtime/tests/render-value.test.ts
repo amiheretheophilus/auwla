@@ -89,9 +89,65 @@ it('does not probe an ordinary object or proxy for private render metadata', () 
   output.slot.dispose();
 });
 
-it('refuses an array child until lists exist, instead of joining it into text', () => {
+/** A program that renders `<li>` with its first value, counting mounts. */
+function item(log: string[]): RenderProgram {
+  return {
+    mount(values) {
+      log.push(`mount:${String(values[0])}`);
+      const node = document.createElement('li');
+      node.textContent = String(values[0]);
+      return {
+        nodes: [node],
+        update(next) { node.textContent = String(next[0]); },
+        dispose() { log.push(`dispose:${node.textContent}`); },
+      };
+    },
+  };
+}
+
+it('renders an array as rows, keeping keyed rows through reorder, insert and removal', () => {
+  const log: string[] = [];
+  const program = item(log);
+  const row = (key: string) => createRenderValue(program, [key], key);
   const output = slot();
-  expect(() => output.slot.write(['a', 'b'])).toThrow('from Phase 5');
-  expect(output.root.textContent).toBe('');
+  output.slot.write([row('a'), row('b'), row('c')]);
+  const [a, b, c] = [...output.root.querySelectorAll('li')];
+  expect(output.root.textContent).toBe('abc');
+
+  output.slot.write([row('c'), row('a'), row('d'), row('b')]);
+  expect(output.root.textContent).toBe('cadb');
+  const after = [...output.root.querySelectorAll('li')];
+  expect([after[0], after[1], after[3]]).toEqual([c, a, b]);
+
+  output.slot.write([row('d')]);
+  expect(output.root.textContent).toBe('d');
+  expect(log).toEqual(['mount:a', 'mount:b', 'mount:c', 'mount:d', 'dispose:c', 'dispose:a', 'dispose:b']);
   output.slot.dispose();
+  expect(output.root.textContent).toBe('');
+});
+
+it('matches unkeyed rows by position, and renders nested arrays and primitives', () => {
+  const log: string[] = [];
+  const program = item(log);
+  const output = slot();
+  output.slot.write([createRenderValue(program, [1]), 'x', [2, [3]], null, false, 0]);
+  expect(output.root.textContent).toBe('1x230');
+  const first = output.root.querySelector('li');
+  output.slot.write([createRenderValue(program, [5]), 'y']);
+  expect(output.root.textContent).toBe('5y');
+  expect(output.root.querySelector('li')).toBe(first);
+  output.slot.write('text');
+  expect(output.root.textContent).toBe('text');
+  expect(log).toEqual(['mount:1', 'dispose:5']);
+});
+
+it('mounts again when one value keeps its program but changes its key', () => {
+  const log: string[] = [];
+  const program = item(log);
+  const output = slot();
+  output.slot.write(createRenderValue(program, ['v1'], 1));
+  output.slot.write(createRenderValue(program, ['v1!'], 1));
+  output.slot.write(createRenderValue(program, ['v2'], 2));
+  expect(output.root.textContent).toBe('v2');
+  expect(log).toEqual(['mount:v1', 'dispose:v1!', 'mount:v2']);
 });
