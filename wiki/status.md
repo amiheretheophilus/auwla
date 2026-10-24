@@ -27,6 +27,21 @@ Last updated: 2026-10-24.
 
 ## Done
 
+- Phase 4 audit and Phase 5 general rule (2026-10-24). The user asked to finish
+  earlier phases well before new work. Eighteen new `conditional:` comparisons
+  found two bugs, both fixed: a `var` in a returning block was local to the
+  selector, and a return-only tail that could not be one markup selection
+  (text-only returns, an array return) never updated. All 30 `conditional:`
+  cases pass. Two reference problems are recorded for the user
+  (`compiler/conditionals-and-lists.md`, "Early returns"). The general list rule
+  (`759c689`) is built; its fast paths and the bench gate wait, since the bench
+  app renders rows as components (Phase 6).
+  `COMPILER=next bun test tests/cases`: **179 pass, 129 fail**, every failure
+  naming a later phase (data imports 71, components 28, `$effect`/`$cleanup`
+  19, refs 10, spread attributes 1). 186 compiler-next unit tests pass. The
+  plain and conditional generators pass 200 programs; the reference-only sources
+  generator passes 200 when run alone (it hit its time limit once after the full
+  suite).
 - Phase 4 finished (2026-10-24): setup between early returns, `switch` returns
   and returns inside loops compile to a selector program
   (`compiler/conditionals-and-lists.md`, "Early returns"). Six new comparison

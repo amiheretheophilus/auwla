@@ -74,15 +74,39 @@ compiles to a selector program (`features/conditionals/returns.ts`, `plan.ts`,
   branch, which is created outside `_select`. It is a captured render value in a
   value branch instead, updated in place while its program stays the same.
 - When the body can end without a return, an extra branch shows nothing.
+- A `var` inside those statements belongs to the component's scope, so later
+  returns and handlers see it: it is declared there and assigned where it was
+  written. Each run of `_select` is one run of the authored body, so it starts
+  with each such `var` undefined again, as the reference does.
+- A return-only tail folds into one `?:` expression only when that selects
+  markup. Otherwise (text-only returns, an array return) it is a program too: a
+  folded expression is new syntax without an authored position, so its inputs
+  could not be found and the view would never update.
 
 Known gap: a hoisted name is `undefined` before its segment runs, where
 JavaScript would throw a TDZ error if a handler read it that early.
 
-Six comparison cases cover this (`conditional:` in
+**Reference problems, for the user to decide** (`../open-issues.md`):
+
+- A returning statement that mutates data (`if (n > 0) { seen.push(n); return … }`)
+  runs again on every render in the reference, so a render caused by unrelated
+  state pushes again, and the reference never settles. compiler-next runs it when
+  the selector's inputs change. No case is kept until the rule is decided.
+- The reference wraps a once-only setup statement in a thunk, so a `var` it
+  declares (`for (var i = 0; …)`) is not visible to later returns:
+  `ReferenceError`. compiler-next hoists it correctly.
+
+Six comparison cases cover the program (`conditional:` in
 `cases/conditionals-and-lists.test.ts`): setup after a return, a derived value
 after a return, setup between two returns, a switch, block-local markup, and a
-return inside a loop. The old compiler fails three of them. Lists and component
-calls remain their later phases.
+return inside a loop. The old compiler fails three of them. The 2026-10-24 audit
+added eighteen more: deferred setup that writes state, returns of null, text,
+numbers, arrays and markup, `try`/labels around returns, `var` scoping, sibling
+order through many toggles, nested regions, SVG branches, falsy `&&` operands,
+a stored value consumed twice, fragment roots, derived values between returns,
+nested setup between returns, shared fallthrough, switch fallthrough, and
+logical/nullish selections. The audit found two bugs, now fixed: the `var`
+scope, and a folded tail that never updated.
 
 ## Rules
 
@@ -104,7 +128,16 @@ calls remain their later phases.
   - JSX pushed into an array in a `for` loop, then rendered as `{rows}`;
   - `{...items}` spread children.
 
-  The old compiler rejected all four.
+  The old compiler rejected all four. Built 2026-10-24 (`759c689`) in the value
+  slot (`runtime/src/render-value.ts`): an array is a list of rows, each a child
+  slot whose range runs from an opening comment to its text anchor. A row
+  matches by its element's `key` (captured with the stored JSX), or by position
+  without one, as the reference matches children. A matched row is written
+  again: the same program updates in place, and another program or a new key
+  mounts anew. Unmatched rows are removed, and ranges move into order from the
+  end. Nested arrays are nested lists. Markup a conditional cannot template (a
+  call or a list) is a value branch. A component used for its value
+  (`items.map(Row)`) fails with Phase 6 until components return markup.
 - **Fast paths** live in `optimize/` and keep list performance (`../rules.md`,
   rule 6):
   - keyed `.map` over state, reusing rows;
@@ -114,7 +147,9 @@ calls remain their later phases.
   Every current list optimization stays until a plan pass reproduces it, and the
   `bench/` numbers are the gate (`../decisions.md`).
 - **A `key` outside a list row** (React semantics): a literal key is ignored; a
-  dynamic key makes a keyed list of one row, so a changed key remounts.
+  dynamic key makes a keyed list of one row, so a changed key remounts. Built:
+  in a component template, an element whose key can change is shown through a
+  keyed value slot; in stored JSX, a nested element with a non-literal key is.
 - Inside a row, the item and index are props of the row. A row's sites update
   like a component's.
 

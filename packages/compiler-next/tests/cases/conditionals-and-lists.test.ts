@@ -413,3 +413,204 @@ behaves('spread/rest: JSX spread primitive children retain order and update', {
   steps: [{ click: 'button' }],
   check(container, observation) { expect(container.querySelector('p')?.textContent).toBe(['12', '123'][observation]); },
 });
+
+// --- Phase 4 audit (2026-10-24): early returns and regions under pressure ---
+
+behaves('conditional: deferred setup writes state when first reached', {
+  source: `export function App() {
+    let ready = false, count = 0;
+    if (!ready) return <button id="ready" onClick={() => ready = true}>ready</button>;
+    count++;
+    return <p id="p" onClick={() => count++}>{count}</p>;
+  }`,
+  steps: [{ click: '#ready' }, { click: '#p' }],
+});
+
+behaves('conditional: returns of null, text, a number, an array and markup', {
+  source: `export function App() {
+    let mode = 0;
+    setInterval(() => { mode = (mode + 1) % 5; }, 100);
+    if (mode === 0) return null;
+    if (mode === 1) return 'text';
+    if (mode === 2) return 42;
+    if (mode === 3) return [<b key="a">a</b>, <i key="b">b</i>];
+    return <main>markup</main>;
+  }`,
+  steps: [{ advance: 100 }, { advance: 100 }, { advance: 100 }, { advance: 100 }, { advance: 100 }],
+});
+
+behaves('conditional: return-only branches that cannot be one markup selection still update', {
+  source: `export function App() {
+    let mode = 0;
+    const b = <button onClick={() => mode++}>n</button>;
+    if (mode === 0) return ['zero', b];
+    if (mode === 1) return [<b key="a">a</b>, b];
+    return <main>{b}markup</main>;
+  }`,
+  steps: [{ click: 'button' }, { click: 'button' }],
+});
+
+behaves('conditional: text-only returns update', {
+  source: `export function App() {
+    let on = false;
+    setInterval(() => { on = !on; }, 100);
+    if (on) return 'on';
+    return 'off';
+  }`,
+  steps: [{ advance: 100 }, { advance: 100 }],
+});
+
+behaves('conditional: a return inside try and a labeled block', {
+  source: `export function App() {
+    let n = 0;
+    out: {
+      if (n === 1) break out;
+      try {
+        if (n === 0) return <button onClick={() => n++}>zero</button>;
+      } finally {
+        n = n;
+      }
+    }
+    return <button onClick={() => n++}>{n}</button>;
+  }`,
+  steps: [{ click: 'button' }, { click: 'button' }],
+});
+
+behaves('conditional: a var in a returning block is visible to a later return, and undefined again on the next run', {
+  source: `export function App() {
+    let n = 0;
+    if (n > 1) { var note = 'big'; return <p onClick={() => n = 0}>{note} {n}</p>; }
+    for (var key in { a: 1 }) if (n === 1 && key === 'b') return null;
+    return <button onClick={() => n++}>{n} {String(note)} {key}</button>;
+  }`,
+  steps: [{ click: 'button' }, { click: 'button' }, { click: 'p' }],
+});
+
+behaves('conditional: regions keep sibling order through many toggles', {
+  source: `export function App() {
+    let x = false, y = false;
+    return <main><p>a{x && <b>X</b>}c{y ? <i>Y</i> : 'z'}d{x ? <><u>1</u><s>2</s></> : null}e</p>
+      <button id="x" onClick={() => x = !x}>x</button><button id="y" onClick={() => y = !y}>y</button></main>;
+  }`,
+  steps: [{ click: '#x' }, { click: '#y' }, { click: '#x' }, { click: '#x' }, { click: '#y' }],
+});
+
+behaves('conditional: a nested conditional changes while its outer branch stays', {
+  source: `export function App() {
+    let outer = true, inner = 0;
+    return <main>{outer ? <section>{inner % 2 === 0 ? <b>{inner}</b> : <i>{inner}</i>}</section> : <p>off</p>}
+      <button id="i" onClick={() => inner++}>i</button><button id="o" onClick={() => outer = !outer}>o</button></main>;
+  }`,
+  steps: [{ click: '#i' }, { click: '#i' }, { click: '#o' }, { click: '#i' }, { click: '#o' }],
+});
+
+behaves('conditional: svg branches are created in the svg namespace', {
+  source: `export function App() {
+    let round = true;
+    return <main><svg>{round ? <circle r="1" /> : <rect width="1" />}</svg>
+      <button onClick={() => round = !round}>t</button></main>;
+  }`,
+  steps: [{ click: 'button' }],
+  check(root) {
+    expect(root.querySelector('svg')!.firstElementChild!.namespaceURI).toBe('http://www.w3.org/2000/svg');
+  },
+});
+
+behaves('conditional: falsy left operands of && show what JavaScript returns', {
+  source: `export function App() {
+    let i = 0;
+    const values = [0, NaN, '', false, null, undefined, 1];
+    const v = values[i];
+    return <main><p>[{v && <b>yes</b>}]</p><button onClick={() => i = (i + 1) % values.length}>n</button></main>;
+  }`,
+  steps: [{ click: 'button' }, { click: 'button' }, { click: 'button' }, { click: 'button' }, { click: 'button' }, { click: 'button' }],
+});
+
+behaves('conditional: a stored JSX value consumed twice', {
+  source: `export function App() {
+    let n = 0;
+    const view = <b onClick={() => n++}>{n}</b>;
+    return <main>{view}<hr />{view}</main>;
+  }`,
+  steps: [{ click: 'b' }, { click: 'b' }],
+});
+
+behaves('conditional: a first return of a fragment, then a single element', {
+  source: `export function App() {
+    let many = true;
+    if (many) return <><b>1</b><b>2</b><button onClick={() => many = false}>one</button></>;
+    return <button onClick={() => many = true}>many</button>;
+  }`,
+  steps: [{ click: 'button' }, { click: 'button' }],
+});
+
+behaves('conditional: a derived value between returns reads state written by the first branch', {
+  source: `export function App() {
+    let items = [];
+    if (items.length === 0) return <button id="add" onClick={() => items = [...items, 'x']}>add</button>;
+    const count = items.length;
+    const label = count + ' item' + (count === 1 ? '' : 's');
+    return <p id="more" onClick={() => items = [...items, 'y']}>{label}</p>;
+  }`,
+  steps: [{ click: '#add' }, { click: '#more' }, { click: '#more' }],
+});
+
+behaves('conditional: setup in a nested if without a return runs once between returns', {
+  source: `export function App() {
+    let step = 0;
+    const log = [];
+    if (step === 0) return <button id="b" onClick={() => step++}>start</button>;
+    if (step > 0) { log.push('once'); }
+    return <p id="b" onClick={() => step++}>{step} {log.length}</p>;
+  }`,
+  steps: [{ click: '#b' }, { click: '#b' }, { click: '#b' }],
+});
+
+behaves('conditional: a return-only tail selects text and markup with a shared fallthrough', {
+  source: `export function App() {
+    let a = false, b = false;
+    if (a) {
+      if (b) return <i id="x" onClick={() => b = false}>ab</i>;
+    } else if (b) {
+      return 'only b';
+    }
+    return <main><button id="a" onClick={() => a = !a}>a</button><button id="b" onClick={() => b = !b}>b</button></main>;
+  }`,
+  steps: [{ click: '#b' }],
+});
+
+behaves('conditional: a switch case returns a nested ternary and falls through', {
+  source: `export function App() {
+    let tab = 'a', on = false;
+    switch (tab) {
+      case 'a':
+        return on ? <b id="t" onClick={() => tab = 'b'}>on</b> : <i id="t" onClick={() => on = true}>off</i>;
+      case 'b':
+        if (on) return <u id="t" onClick={() => on = false}>b on</u>;
+        // falls through
+      default:
+        return <s id="t" onClick={() => tab = 'a'}>default</s>;
+    }
+  }`,
+  steps: [{ click: '#t' }, { click: '#t' }, { click: '#t' }, { click: '#t' }],
+});
+
+behaves('conditional: stored conditional JSX and an early return share state', {
+  source: `export function App() {
+    let n = 0;
+    const badge = n > 1 ? <b>many</b> : <i>few</i>;
+    if (n === 0) return <button onClick={() => n++}>start</button>;
+    return <main>{badge}<button onClick={() => n++}>{n}</button></main>;
+  }`,
+  steps: [{ click: 'button' }, { click: 'button' }, { click: 'button' }],
+});
+
+behaves('conditional: logical and nullish selections read values from a deferred segment', {
+  source: `export function App() {
+    let user = null, shown = false;
+    if (!shown) return <button onClick={() => { shown = true; user = { name: 'Ada' }; }}>show</button>;
+    const name = user?.name ?? null;
+    return <main>{name && <b>{name}</b>}{name ?? <i>none</i>}<button onClick={() => user = null}>clear</button></main>;
+  }`,
+  steps: [{ click: 'button' }, { click: 'button' }],
+});

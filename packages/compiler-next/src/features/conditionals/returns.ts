@@ -4,7 +4,7 @@
  */
 import { b, is, walk } from 'yuku-ast';
 import type { Expression, Node, Statement } from 'yuku-parser';
-import type { ProgramStep } from '../../core/plan/model';
+import type { FunctionScoped, ProgramStep } from '../../core/plan/model';
 import type { ReturnTail } from './plan';
 
 type ReturnNode = Extract<Node, { type: 'ReturnStatement' }>;
@@ -42,16 +42,23 @@ export type ReturnsPlan =
 /**
  * `readsBlockLocal(markup, block)` tells whether a returned expression reads a
  * variable declared inside `block` but outside the expression itself.
+ * `selectsMarkup(expression)` tells whether a folded expression plans as a
+ * markup selection. One that does not is still a program: a folded expression
+ * is new syntax with no authored position, so its inputs could not be found.
  */
 export function planReturns(
   body: readonly Statement[],
   readsBlockLocal: (markup: Expression, block: Statement) => boolean,
+  selectsMarkup: (expression: Expression) => boolean,
 ): ReturnsPlan {
   const first = body.findIndex(hasReturn);
   const setup = first < 0 ? [...body] : body.slice(0, first);
   const tail = first < 0 ? [] : body.slice(first);
   if (tail.every(isReturnOnly)) {
-    return { kind: 'expression', setup, expression: fold(tail, empty()) };
+    const expression = fold(tail, empty());
+    if (expression.end > 0 || selectsMarkup(expression)) {
+      return { kind: 'expression', setup, expression };
+    }
   }
 
   // As the reference runs a body: a top-level statement without a return is
@@ -61,6 +68,7 @@ export function planReturns(
   const deferred = new Map<Statement, number>();
   const returns: ReturnTail['returns'][number][] = [];
   const inputs: Expression[] = [];
+  const functionScoped: FunctionScoped[] = [];
   let segment: Statement[] | null = null;
   let segments = 0;
   for (const statement of tail) {
@@ -81,8 +89,36 @@ export function planReturns(
       returns.push({ node, readsBlockLocal: argument !== null && readsBlockLocal(argument, statement) });
     }
     inputs.push(...statementInputs(statement));
+    functionScoped.push(...varDeclarations(statement));
   }
-  return { kind: 'program', setup: [...setup, ...deferred.keys()], deferred, tail: { steps, returns, inputs } };
+  return {
+    kind: 'program',
+    setup: [...setup, ...deferred.keys()],
+    deferred,
+    tail: { steps, returns, inputs, functionScoped },
+  };
+}
+
+type VarDeclaration = Extract<Node, { type: 'VariableDeclaration' }>;
+
+/** `var` declarations of the component itself, not of a nested function, with where each sits. */
+function varDeclarations(root: Node): FunctionScoped[] {
+  const heads = new Map<Node, FunctionScoped['position']>();
+  const found: FunctionScoped[] = [];
+  walk(root, {
+    enter(node, context) {
+      if (is.Function(node)) {
+        context.skip();
+        return;
+      }
+      if (is.ForStatement(node) && node.init !== null) heads.set(node.init, 'for-init');
+      if (is.ForInStatement(node) || is.ForOfStatement(node)) heads.set(node.left, 'for-left');
+      if (is.VariableDeclaration(node) && node.kind === 'var') {
+        found.push({ declaration: node as VarDeclaration, position: heads.get(node) ?? 'statement' });
+      }
+    },
+  });
+  return found;
 }
 
 /** Return-only control flow: `if`/`else`, blocks and returns. */

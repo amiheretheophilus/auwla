@@ -112,7 +112,19 @@ export type ConditionalSelection =
     readonly returns: ReadonlyMap<Node, ConditionalSelection>;
     /** Chosen when control reaches the end of the component; null when it cannot. */
     readonly fallthrough: number | null;
+    /**
+     * `var` declarations inside the native statements. They belong to the
+     * component's scope, not the selector's, so later returns and handlers see them.
+     */
+    readonly functionScoped: readonly FunctionScoped[];
   };
+
+/** A `var` declaration inside a selector program, and where it sits. */
+export interface FunctionScoped {
+  readonly declaration: Extract<Node, { type: 'VariableDeclaration' }>;
+  /** A statement, a `for` loop's init, or a `for…in`/`for…of` left side. */
+  readonly position: 'statement' | 'for-init' | 'for-left';
+}
 
 export type ProgramStep =
   /** Top-level statements that run once, the first time control reaches them. */

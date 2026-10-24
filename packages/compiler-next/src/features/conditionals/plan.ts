@@ -1,7 +1,9 @@
 /** Native lazy selectors, with independently retained branch templates. */
 import { is } from 'yuku-ast';
 import type { Expression, Node } from 'yuku-parser';
-import type { ConditionalBranch, ConditionalSelection, ProgramStep, Site, Template } from '../../core/plan/model';
+import type {
+  ConditionalBranch, ConditionalSelection, FunctionScoped, ProgramStep, Site, Template,
+} from '../../core/plan/model';
 import { unwrap } from '../../core/plan/jsx';
 
 export function canPlanConditional(expression: Expression, hasMarkup: (node: Node) => boolean): boolean {
@@ -37,6 +39,8 @@ export interface ReturnTail {
   readonly returns: readonly { readonly node: Extract<Node, { type: 'ReturnStatement' }>; readonly readsBlockLocal: boolean }[];
   /** What a native statement computes before it returns, apart from return arguments. */
   readonly inputs: readonly Expression[];
+  /** `var` declarations inside the native statements. */
+  readonly functionScoped: readonly FunctionScoped[];
 }
 
 export function planReturnProgram(tail: ReturnTail, context: ConditionalContext) {
@@ -62,6 +66,7 @@ export function planReturnProgram(tail: ReturnTail, context: ConditionalContext)
     steps: tail.steps,
     returns,
     fallthrough: endsInReturn ? null : planner.primitiveBranch(),
+    functionScoped: tail.functionScoped,
   };
   return { selection, branches: planner.branches, selectorInputs: planner.selectorInputs };
 }

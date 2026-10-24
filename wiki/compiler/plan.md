@@ -186,13 +186,17 @@ array child). Remove each check when its phase is built.
   2026-10-24: a selector program (`conditionals-and-lists.md`, "Early returns"),
   six new comparison cases and two plan tests.
 - **Exit:** the conditional cases in `cases/conditionals-and-lists` pass. Passed
-  2026-10-24: all 12 `conditional:` cases pass on `COMPILER=next`.
+  2026-10-24: all 12 `conditional:` cases pass on `COMPILER=next`. An audit the
+  same day added eighteen more and fixed the two bugs they found
+  (`conditionals-and-lists.md`, "Early returns"); all 30 pass.
 
 ## Phase 5: lists
 
-- [ ] The general rule: any child value that is an array is a list, keyed or by
+- [x] The general rule: any child value that is an array is a list, keyed or by
   position; `map` with all three arguments, call results, JSX pushed in loops,
-  spread children.
+  spread children. Done 2026-10-24 (`759c689`): every list case not needing
+  components passes, and the full plain generator passes 200 programs on two
+  random seeds, including the saved list failures in `tests/corpus/`.
 - [ ] Then the fast paths in `optimize/` (`optimize.md`): keyed `map`, targeted
   `push`/`splice`/`sort`, DOM-only rows, selection. Each runs with optimizations
   on and off; both must match the reference.

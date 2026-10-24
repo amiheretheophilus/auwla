@@ -15,7 +15,7 @@ import type {
   SharedReadPlan, Site, Template,
 } from './model';
 import { buildTemplate, containsJsx, keyExpression, unsupported, type TemplateContext } from './template';
-import { planReturnProgram } from '../../features/conditionals/plan';
+import { canPlanConditional, planReturnProgram } from '../../features/conditionals/plan';
 import { unwrap } from './jsx';
 import { planLocalState } from '../../features/state/plan';
 import { planMutations, planReadonlyBindings, planWrites } from '../../features/handlers/plan';
@@ -282,7 +282,14 @@ function planComponent(fn: FunctionNode, context: TemplateContext, module: Resol
     return { fn, setup: [] as Statement[], deferred: noDeferred, ...buildTemplate(returnedMarkup(body as Expression), context) };
   }
 
-  const returned = planReturns(body.body as Statement[], (markup, block) => readsBlockLocal(module, markup, block));
+  const returned = planReturns(
+    body.body as Statement[],
+    (markup, block) => readsBlockLocal(module, markup, block),
+    (expression) => {
+      const value = unwrap(expression);
+      return is.ConditionalExpression(value) && containsJsx(value) && canPlanConditional(value, containsJsx);
+    },
+  );
   if (returned.kind === 'expression') {
     return { fn, setup: returned.setup, deferred: noDeferred, ...buildTemplate(returnedMarkup(returned.expression), context) };
   }
@@ -316,7 +323,10 @@ function planComponent(fn: FunctionNode, context: TemplateContext, module: Resol
   }
 }
 
-/** Whether `markup` reads a variable declared inside `block` but outside `markup`. */
+/**
+ * Whether `markup` reads a variable declared inside `block` but outside
+ * `markup`. A `var` belongs to the component's scope, so it does not count.
+ */
 function readsBlockLocal(module: ResolvedModule['module'], markup: Expression, block: Statement): boolean {
   return findAll(markup, ['Identifier', 'JSXIdentifier']).some((name) => {
     const declared = module.referenceOf(name)?.binding?.declarations[0];
@@ -325,8 +335,16 @@ function readsBlockLocal(module: ResolvedModule['module'], markup: Expression, b
     }
     const inBlock = declared.start >= block.start && declared.end <= block.end;
     const inMarkup = declared.start >= markup.start && declared.end <= markup.end;
-    return inBlock && !inMarkup;
+    return inBlock && !inMarkup && !declaredWithVar(module, declared);
   });
+}
+
+function declaredWithVar(module: ResolvedModule['module'], name: Node): boolean {
+  for (const ancestor of module.ancestors(name)) {
+    if (is.VariableDeclaration(ancestor)) return ancestor.kind === 'var';
+    if (is.Function(ancestor) || is.BlockStatement(ancestor)) return false;
+  }
+  return false;
 }
 
 /**

@@ -6,6 +6,7 @@ import type { ComponentPlan, MemoGroupPlan } from '../../core/plan/model';
 import type { Names } from '../../core/emit/names';
 import { copy } from '../../core/emit/copy';
 import { expression, statement } from '../../core/emit/quote';
+import { patternNames } from '../../core/emit/patterns';
 import type { TakeoverEmit } from './takeover';
 
 /**
@@ -345,21 +346,9 @@ function hoistDeclaration(declaration: Extract<Statement, { type: 'VariableDecla
 function hoistClass(body: Statement, setup: Statement[]): Statement[] {
   if (!is.ClassDeclaration(body) || body.id === null) return [body];
   setup.push(statement(`let ${body.id.name};`, {}));
+  // A class declaration and a class expression have the same fields.
   const value = { ...body, type: 'ClassExpression' } as unknown as Expression;
   return [statement('$$name = $$value;', { name: body.id.name, value })];
-}
-
-/** The names a binding pattern declares. A replaced target declares none. */
-function patternNames(pattern: Node | null): string[] {
-  if (pattern === null) return [];
-  if (is.Identifier(pattern)) return [pattern.name];
-  if (is.ObjectPattern(pattern)) {
-    return pattern.properties.flatMap((property) => patternNames(is.RestElement(property) ? property.argument : property.value));
-  }
-  if (is.ArrayPattern(pattern)) return pattern.elements.flatMap((element) => patternNames(element));
-  if (is.AssignmentPattern(pattern)) return patternNames(pattern.left);
-  if (is.RestElement(pattern)) return patternNames(pattern.argument);
-  return [];
 }
 
 function canShareBuilder(root: Node): boolean {
