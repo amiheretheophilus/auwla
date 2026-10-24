@@ -1,0 +1,92 @@
+# The slow checks for compiler-next (wiki/compiler/testing.md). They take
+# about 20 minutes on the development machine, so they run here: every case on
+# the reference and on compiler-next, and the generators at 200 programs.
+name: compiler-next
+
+on:
+  push:
+    branches: [compiler-rewrite]
+    paths:
+      - packages/compiler-next/**
+      - packages/runtime/**
+      - packages/data/**
+      - packages/compiler/**
+      - .github/workflows/compiler-next.yml
+  workflow_dispatch:
+
+concurrency:
+  group: compiler-next-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  unit:
+    name: types, unit and runtime tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: canary
+      - run: bun install --frozen-lockfile
+      - run: bun run build
+      - run: bun check
+        working-directory: packages/compiler-next
+      - run: bun test src
+        working-directory: packages/compiler-next
+      - run: bun test ./packages/runtime/tests
+
+  reference:
+    name: every case on the reference
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: canary
+      - run: bun install --frozen-lockfile
+      - run: bun run build
+      - run: REFERENCE_ONLY=1 bun test tests/cases
+        working-directory: packages/compiler-next
+
+  cases:
+    name: every case on compiler-next (failures must name their phase)
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: canary
+      - run: bun install --frozen-lockfile
+      - run: bun run build
+      # Cases for later phases fail by design; the gate fails the job only
+      # when a failure does not name the phase that builds it.
+      - run: COMPILER=next bun test tests/cases > cases.log 2>&1 || true
+        working-directory: packages/compiler-next
+      - run: bun scripts/phase-gate.ts cases.log
+        working-directory: packages/compiler-next
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cases-log
+          path: packages/compiler-next/cases.log
+
+  generators:
+    name: generators at 200 programs
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: canary
+      - run: bun install --frozen-lockfile
+      - run: bun run build
+      - run: COMPILER=next FC_RUNS=200 bun test tests/generator
+        working-directory: packages/compiler-next

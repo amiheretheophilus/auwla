@@ -5,6 +5,7 @@
 import { b, is, walk } from 'yuku-ast';
 import type { Expression, Node, Statement } from 'yuku-parser';
 import type { FunctionScoped, ProgramStep } from '../../core/plan/model';
+import type { BindingNode } from '../../core/graph';
 import type { ReturnTail } from './plan';
 
 type ReturnNode = Extract<Node, { type: 'ReturnStatement' }>;
@@ -39,18 +40,24 @@ export type ReturnsPlan =
     readonly tail: ReturnTail;
   };
 
-/**
- * `readsBlockLocal(markup, block)` tells whether a returned expression reads a
- * variable declared inside `block` but outside the expression itself.
- * `selectsMarkup(expression)` tells whether a folded expression plans as a
- * markup selection. One that does not is still a program: a folded expression
- * is new syntax with no authored position, so its inputs could not be found.
- */
-export function planReturns(
-  body: readonly Statement[],
-  readsBlockLocal: (markup: Expression, block: Statement) => boolean,
-  selectsMarkup: (expression: Expression) => boolean,
-): ReturnsPlan {
+/** What return planning asks of the module and graph. */
+export interface ReturnsContext {
+  /** Whether returned markup reads a variable of `block` that a template branch could not see. */
+  readsBlockLocal(markup: Expression, block: Statement): boolean;
+  /** Whether a statement uses any variable declared inside `block` but outside the statement. */
+  usesBlockLocal(node: Node, block: Statement): boolean;
+  /**
+   * Whether a folded expression plans as a markup selection. One that does not
+   * is still a program: a folded expression is new syntax with no authored
+   * position, so its inputs could not be found.
+   */
+  selectsMarkup(expression: Expression): boolean;
+  /** The reactive bindings a statement reads, and whether some reads are hidden. */
+  inputsOf(statement: Statement): { readonly inputs: readonly BindingNode[]; readonly opaque: boolean };
+}
+
+export function planReturns(body: readonly Statement[], context: ReturnsContext): ReturnsPlan {
+  const { usesBlockLocal, selectsMarkup } = context;
   const first = body.findIndex(hasReturn);
   const setup = first < 0 ? [...body] : body.slice(0, first);
   const tail = first < 0 ? [] : body.slice(first);
@@ -83,10 +90,13 @@ export function planReturns(
       continue;
     }
     segment = null;
-    steps.push({ kind: 'native', statement });
+    const guards = returningGuards(statement, statement, usesBlockLocal).map((guarded) => {
+      return { statement: guarded, ...context.inputsOf(guarded) };
+    });
+    steps.push({ kind: 'native', statement, guards });
     for (const node of componentReturns(statement)) {
       const argument = node.argument ?? null;
-      returns.push({ node, readsBlockLocal: argument !== null && readsBlockLocal(argument, statement) });
+      returns.push({ node, readsBlockLocal: argument !== null && context.readsBlockLocal(argument, statement) });
     }
     inputs.push(...statementInputs(statement));
     functionScoped.push(...varDeclarations(statement));
@@ -119,6 +129,74 @@ function varDeclarations(root: Node): FunctionScoped[] {
     },
   });
   return found;
+}
+
+/** Statement kinds that can run inside a guard without changing their scoping. */
+const GUARDABLE = new Set([
+  'ExpressionStatement', 'IfStatement', 'SwitchStatement', 'BlockStatement',
+  'ForStatement', 'ForInStatement', 'ForOfStatement', 'WhileStatement', 'DoWhileStatement',
+]);
+
+function isLoop(node: Node): boolean {
+  return is.ForStatement(node) || is.ForInStatement(node) || is.ForOfStatement(node)
+    || is.WhileStatement(node) || is.DoWhileStatement(node);
+}
+
+/**
+ * The plain statements inside a returning statement that run only when their
+ * inputs change (`wiki/decisions.md`, 2026-10-24). Not those that use the
+ * block's own variables, which the return needs every time; not those in a
+ * loop, which run many times per run; not those that a guard would change
+ * (`break`, `continue`, `var`, `await`, `yield`).
+ */
+function returningGuards(node: Node, root: Statement, usesBlockLocal: ReturnsContext['usesBlockLocal']): Statement[] {
+  if (is.Function(node) || isLoop(node)) {
+    return [];
+  }
+  const found: Statement[] = [];
+  for (const statement of childStatements(node)) {
+    if (hasReturn(statement)) {
+      found.push(...returningGuards(statement, root, usesBlockLocal));
+    } else if (GUARDABLE.has(statement.type) && movable(statement) && !usesBlockLocal(statement, root)) {
+      found.push(statement);
+    }
+  }
+  return found;
+}
+
+/** The statements directly inside one: block and case bodies, `try` parts, branches. */
+function childStatements(node: Node): Statement[] {
+  const blockBody = (entry: Node): Statement[] => is.BlockStatement(entry) ? entry.body as Statement[] : [entry as Statement];
+  if (is.BlockStatement(node)) return node.body as Statement[];
+  if (is.SwitchStatement(node)) return node.cases.flatMap((entry) => entry.consequent as Statement[]);
+  if (is.TryStatement(node)) {
+    return [
+      ...node.block.body as Statement[],
+      ...(node.handler === null ? [] : node.handler.body.body as Statement[]),
+      ...(node.finalizer === null ? [] : node.finalizer.body as Statement[]),
+    ];
+  }
+  if (is.IfStatement(node)) {
+    return [...blockBody(node.consequent), ...(node.alternate === null ? [] : blockBody(node.alternate))];
+  }
+  if (is.LabeledStatement(node)) return blockBody(node.body);
+  return [];
+}
+
+function movable(statement: Statement): boolean {
+  let result = true;
+  walk(statement, {
+    enter(node, context) {
+      if (is.Function(node)) {
+        context.skip();
+      } else if (is.BreakStatement(node) || is.ContinueStatement(node) || is.AwaitExpression(node)
+        || is.YieldExpression(node) || (is.VariableDeclaration(node) && node.kind === 'var')) {
+        result = false;
+        context.stop();
+      }
+    },
+  });
+  return result;
 }
 
 /** Return-only control flow: `if`/`else`, blocks and returns. */
