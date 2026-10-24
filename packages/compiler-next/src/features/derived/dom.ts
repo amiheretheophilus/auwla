@@ -8,6 +8,16 @@ import { copy } from '../../core/emit/copy';
 import { expression, statement } from '../../core/emit/quote';
 import type { TakeoverEmit } from './takeover';
 
+/**
+ * Setup statements after a component's first return run inside its selector,
+ * once each segment is reached (`conditionals-and-lists.md`, "Early returns").
+ * `flags[segment]` is true once that segment has run.
+ */
+export interface DeferredSetup {
+  readonly statements: ReadonlyMap<Statement, number>;
+  readonly flags: readonly string[];
+}
+
 export function emitMemos(
   plan: Pick<ComponentPlan, 'setup' | 'memos'>, versions: ReadonlyMap<BindingNode, string>, names: Names,
   mountReplacements: ReadonlyMap<Node, Node>, replayReplacements: ReadonlyMap<Node, Node>,
@@ -15,11 +25,24 @@ export function emitMemos(
   runtime: string,
   trackKeys: ReadonlyMap<BindingNode, string>,
   notify?: { readonly batch: string; readonly entity?: string },
+  deferred: DeferredSetup = { statements: new Map(), flags: [] },
 ) {
   const setup: Statement[] = [];
   const snapshots: Statement[] = [];
   const checks: Statement[] = [];
   const finish: Statement[] = [];
+  const finishByGroup = new Map<MemoGroupPlan, Statement[]>();
+  const settle = (group: MemoGroupPlan, statement: Statement) => {
+    finish.push(statement);
+    finishByGroup.set(group, [...(finishByGroup.get(group) ?? []), statement]);
+  };
+  // The deferred statement around a node, if any.
+  const deferredAround = (node: Node): Statement | undefined => {
+    for (const statement of deferred.statements.keys()) {
+      if (node.start >= statement.start && node.end <= statement.end) return statement;
+    }
+    return undefined;
+  };
   const steps = new Map<Node, { group: MemoGroupPlan; body: Statement[] }>();
   const dirty = new Map<MemoGroupPlan, string>();
   const tracking = new Map<MemoGroupPlan, string>();
@@ -64,7 +87,7 @@ export function emitMemos(
           const seen = names.fresh('_initializerFrom');
           snapshots.push(statement('let $$seen = $$version;', { seen, version }));
           conditions.push(expression('$$seen !== $$version', { seen, version }));
-          finish.push(statement('$$seen = $$version;', { seen, version }));
+          settle(group, statement('$$seen = $$version;', { seen, version }));
         }
         initialTracking.set(step, {
           computation, changed: conditions.reduce((left, right) => b.LogicalExpression({ operator: '||', left, right })),
@@ -102,7 +125,7 @@ export function emitMemos(
       const seen = names.fresh('_from');
       snapshots.push(statement('let $$seen = $$version;', { seen, version }));
       conditions.push(expression('$$seen !== $$version', { seen, version }));
-      finish.push(statement('$$seen = $$version;', { seen, version }));
+      settle(group, statement('$$seen = $$version;', { seen, version }));
     }
     for (const memo of group.computations) {
       for (const target of memo.targets) {
@@ -117,7 +140,7 @@ export function emitMemos(
         const external = taken === undefined ? expression('false') : expression('$$taken', { taken });
         const held = enabled === undefined ? external : expression('$$external || !$$enabled', { external, enabled });
         conditions.push(expression('($$held) && $$seen !== $$version', { held, seen, version }));
-        finish.push(statement('$$seen = $$version;', { seen, version }));
+        settle(group, statement('$$seen = $$version;', { seen, version }));
       }
     }
     const condition = conditions.reduce((left, right) => b.LogicalExpression({ operator: '||', left, right }), expression('false'));
@@ -236,19 +259,43 @@ export function emitMemos(
     result.push(...(collectors.get(root) ?? []).map(({ computation, last }) => statement(`$$computation.end(${last});`, { computation })));
     return result;
   };
+  // A deferred segment settles a group's snapshots when it completes the
+  // group's last step, so reaching it does not count as a later change.
+  const settledBy = new Map<Statement, MemoGroupPlan[]>();
+  for (const group of plan.memos) {
+    const around = group.steps.map(deferredAround);
+    if (around.length === 0 || around.some((statement) => statement === undefined)) continue;
+    const last = around.reduce((latest, statement) => statement!.start > latest!.start ? statement : latest)!;
+    settledBy.set(last, [...(settledBy.get(last) ?? []), group]);
+  }
+
+  const deferredCode = new Map<Statement, Statement[]>();
   for (const original of plan.setup) {
-    if (!is.VariableDeclaration(original)) {
-      setup.push(...before(original), ...(observationBefore.get(original) ?? []), sharedBuilders.get(original) ?? copy(original, mountReplacements), ...(observationAfter.get(original) ?? []), ...after(original));
-      continue;
+    const isDeferred = deferred.statements.has(original);
+    const target: Statement[] = isDeferred ? [] : setup;
+    if (isDeferred) deferredCode.set(original, target);
+
+    if (isDeferred && is.FunctionDeclaration(original)) {
+      // JavaScript creates a declared function on entry to its scope.
+      setup.push(copy(original, mountReplacements));
+    } else if (!is.VariableDeclaration(original)) {
+      const body = sharedBuilders.get(original) ?? copy(original, mountReplacements);
+      target.push(...before(original), ...(observationBefore.get(original) ?? []),
+        ...(isDeferred ? hoistClass(body, setup) : [body]), ...(observationAfter.get(original) ?? []), ...after(original));
+    } else {
+      // Splitting a declaration preserves evaluation order and the enclosing
+      // lexical scope, including TDZs and defaults referring to earlier names.
+      for (const declarator of original.declarations) {
+        const declaration = copy(original, mountReplacements);
+        declaration.declarations = [copy(declarator, mountReplacements)];
+        if (planned.has(declarator) && declaration.kind === 'const') declaration.kind = 'let';
+        target.push(...before(declarator), ...(observationBefore.get(declarator) ?? []),
+          ...(isDeferred ? hoistDeclaration(declaration, setup) : [declaration]),
+          ...(observationAfter.get(declarator) ?? []), ...after(declarator));
+      }
     }
-    // Splitting a declaration preserves evaluation order and the enclosing
-    // lexical scope, including TDZs and defaults referring to earlier names.
-    for (const declarator of original.declarations) {
-      const declaration = copy(original, mountReplacements);
-      declaration.declarations = [copy(declarator, mountReplacements)];
-      if (planned.has(declarator) && declaration.kind === 'const') declaration.kind = 'let';
-      setup.push(...before(declarator), ...(observationBefore.get(declarator) ?? []), declaration,
-        ...(observationAfter.get(declarator) ?? []), ...after(declarator));
+    for (const group of settledBy.get(original) ?? []) {
+      target.push(...(finishByGroup.get(group) ?? []));
     }
   }
   const replay = [...steps].sort(([left], [right]) => left.start - right.start).map(([original, step]) => {
@@ -265,14 +312,54 @@ export function emitMemos(
         used: possibleFlags.get(original)!, possible: active(possible), changed: initializer.changed, definite: active(definite),
       });
     }
+    let test = expression('$$changed && $$active', {
+      changed: dirty.get(step.group)!, active: eligible,
+    });
+    // A step after a return computes nothing until control first reaches it.
+    const around = deferredAround(original);
+    if (around !== undefined) {
+      test = expression('$$reached && $$test', { reached: deferred.flags[deferred.statements.get(around)!]!, test });
+    }
     return b.IfStatement({
-      test: expression('$$changed && $$active', {
-        changed: dirty.get(step.group)!, active: eligible,
-      }),
+      test,
       consequent: b.BlockStatement({ body: [...before(original), ...step.body, ...after(original)] }), alternate: null,
     });
   });
-  return { setup, snapshots, update: [...checks, ...replay, ...finish] };
+  return { setup, snapshots, deferred: deferredCode, update: [...checks, ...replay, ...finish] };
+}
+
+/**
+ * A deferred declaration's names live in the component's scope, where every
+ * branch and handler can see them. The declaration becomes an assignment.
+ */
+function hoistDeclaration(declaration: Extract<Statement, { type: 'VariableDeclaration' }>, setup: Statement[]): Statement[] {
+  const declarator = declaration.declarations[0]!;
+  const declared = patternNames(declarator.id);
+  if (declared.length > 0) {
+    setup.push(statement(`${declaration.kind === 'var' ? 'var' : 'let'} ${declared.join(', ')};`, {}));
+  }
+  return [statement('($$target = $$value);', { target: declarator.id, value: declarator.init ?? expression('void 0') })];
+}
+
+/** A deferred class declaration: its name is hoisted, its class assigned when reached. */
+function hoistClass(body: Statement, setup: Statement[]): Statement[] {
+  if (!is.ClassDeclaration(body) || body.id === null) return [body];
+  setup.push(statement(`let ${body.id.name};`, {}));
+  const value = { ...body, type: 'ClassExpression' } as unknown as Expression;
+  return [statement('$$name = $$value;', { name: body.id.name, value })];
+}
+
+/** The names a binding pattern declares. A replaced target declares none. */
+function patternNames(pattern: Node | null): string[] {
+  if (pattern === null) return [];
+  if (is.Identifier(pattern)) return [pattern.name];
+  if (is.ObjectPattern(pattern)) {
+    return pattern.properties.flatMap((property) => patternNames(is.RestElement(property) ? property.argument : property.value));
+  }
+  if (is.ArrayPattern(pattern)) return pattern.elements.flatMap((element) => patternNames(element));
+  if (is.AssignmentPattern(pattern)) return patternNames(pattern.left);
+  if (is.RestElement(pattern)) return patternNames(pattern.argument);
+  return [];
 }
 
 function canShareBuilder(root: Node): boolean {

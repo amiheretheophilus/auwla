@@ -124,9 +124,22 @@ function emitComponent(
   }
   const replayMutations = emitMutations(plan.replayMutations, state.versions, names, runtime, null, replayBase);
   const replay = emitWrites(plan.replayWrites, state.versions, names, null, replayMutations.replacements, handled);
+  // One flag per setup segment after a return: whether control reached it.
+  const reached = [...new Set(plan.deferred.values())].map(() => names.fresh('_reached'));
   const memos = emitMemos(plan, state.versions, names, writes.replacements, replay.replacements, takeovers, runtime, trackKeys,
-    batch === null ? undefined : { batch, entity });
+    batch === null ? undefined : { batch, entity }, { statements: plan.deferred, flags: reached });
+  const once = (statements: readonly Statement[]): Statement[] => {
+    const flag = reached[plan.deferred.get(statements[0]!)!]!;
+    return [b.IfStatement({
+      test: expression('!$$flag', { flag }),
+      consequent: b.BlockStatement({
+        body: [statement('$$flag = true;', { flag }), ...statements.flatMap((entry) => memos.deferred.get(entry) ?? [])],
+      }),
+      alternate: null,
+    })];
+  };
   const body: Statement[] = [
+    ...reached.map((flag) => statement('let $$flag = false;', { flag })),
     ...state.declarations,
     ...[...trackKeys.values()].map((key) => statement('const $$key = {};', { key })),
     ...takeovers.declarations,
@@ -157,7 +170,7 @@ function emitComponent(
 
   const sites = emitSites(plan, {
     names, runtime, batch, entity, id, document, versions: state.versions, replacements: writes.replacements,
-    ref: slots.ref,
+    ref: slots.ref, once,
   });
   body.push(...sites.mount);
   if (sites.dispose.length > 0) {

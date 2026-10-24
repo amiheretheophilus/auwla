@@ -7,7 +7,7 @@ import type { ConditionalBranch } from '../plan/model';
 import { copy } from './copy';
 import type { Names } from './names';
 import { expression as buildExpression, statement, statements, stringLiteral } from './quote';
-import { emitSelection } from '../../features/conditionals/dom';
+import { emitSelection, type EmitOnce } from '../../features/conditionals/dom';
 import { emitTemplate, prepareTemplateSites } from './template';
 
 export interface SitesEmit {
@@ -30,6 +30,8 @@ interface SitesContext {
   versions: ReadonlyMap<BindingNode, string>;
   replacements: ReadonlyMap<Node, Node>;
   ref(index: number): string;
+  /** Deferred setup inside a component's selector program. */
+  once?: EmitOnce;
 }
 
 export function emitSites(
@@ -51,7 +53,7 @@ export function emitSites(
     const node = context.ref(site.node);
     const value = names.fresh('_value');
     const selection = site.kind === 'conditional'
-      ? emitSelection(site.selection, names, replacements)
+      ? emitSelection(site.selection, names, replacements, context.once)
       : null;
     if (selection !== null) {
       mount.push(...selection.declarations);

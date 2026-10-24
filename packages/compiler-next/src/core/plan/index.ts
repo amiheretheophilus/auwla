@@ -4,7 +4,7 @@
  * Setup keeps native storage. Phase 4 also plans expression returns and return-only
  * if/else tails as lazy regions, retaining the authored graph and syntax identities.
  */
-import { b, is } from 'yuku-ast';
+import { b, findAll, is } from 'yuku-ast';
 import type { Expression, Node, Statement } from 'yuku-parser';
 import { isReactive, type BindingNode, type SemanticGraph } from '../graph';
 import { variableDeclaration, type InputQueries } from '../graph/inputs';
@@ -12,9 +12,10 @@ import { isWrittenGlobal, runnerOf, type ResolvedModule } from '../resolve';
 import type { FunctionNode } from '../resolve/functions';
 import type {
   ComponentPlan, MemoGroupPlan, ModulePlan, RenderValuePlan, SharedOwnerPlan,
-  SharedReadPlan, Site,
+  SharedReadPlan, Site, Template,
 } from './model';
-import { buildTemplate, unsupported, type TemplateContext } from './template';
+import { buildTemplate, containsJsx, unsupported, type TemplateContext } from './template';
+import { planReturnProgram } from '../../features/conditionals/plan';
 import { unwrap } from './jsx';
 import { planLocalState } from '../../features/state/plan';
 import { planMutations, planReadonlyBindings, planWrites } from '../../features/handlers/plan';
@@ -70,7 +71,7 @@ function planModule(
     const computations = memos.get(fn) ?? [];
     const targets = computations.flatMap((group) => group.computations.flatMap((memo) => memo.targets));
     const local = [...new Set([...(state.get(fn) ?? []), ...targets])];
-    const component = planComponent(fn, context);
+    const component = planComponent(fn, context, module);
     const { siteInputs, dynamicSites } = planSiteInputs(component.sites, fn, graph, queries, entry);
     const writes = planWrites(local);
     const mutations = planMutations(local);
@@ -263,28 +264,43 @@ function planSiteInputs(
   return { siteInputs, dynamicSites };
 }
 
-function planComponent(fn: FunctionNode, context: TemplateContext) {
-  const { setup, markup } = splitBody(fn, context);
-  const { template, sites } = buildTemplate(markup, context);
-  return { fn, setup, template, sites };
-}
-
-/** `{ …setup; return <markup />; }`, or an arrow whose body is the markup. */
-function splitBody(fn: FunctionNode, context: TemplateContext) {
+/**
+ * `{ …setup; return <markup />; }`, an arrow whose body is the markup, or a
+ * body whose returns interleave with setup (a selector program).
+ */
+function planComponent(fn: FunctionNode, context: TemplateContext, module: ResolvedModule['module']) {
   type Markup = Extract<Node, { type: 'JSXElement' | 'JSXFragment' }>;
   const body = fn.body;
   if (body === null) {
     return unsupported(context, fn, 'a component without a body', 6);
   }
+  const noDeferred = new Map<Statement, number>();
 
   if (!is.BlockStatement(body)) {
-    return { setup: [] as Statement[], markup: returnedMarkup(body as Expression) };
+    return { fn, setup: [] as Statement[], deferred: noDeferred, ...buildTemplate(returnedMarkup(body as Expression), context) };
   }
 
-  const returned = planReturns(body.body as Statement[], (node) => {
-    return unsupported(context, node, 'setup statements after a conditional return', 4);
+  const returned = planReturns(body.body as Statement[], (markup, block) => readsBlockLocal(module, markup, block));
+  if (returned.kind === 'expression') {
+    return { fn, setup: returned.setup, deferred: noDeferred, ...buildTemplate(returnedMarkup(returned.expression), context) };
+  }
+
+  const program = planReturnProgram(returned.tail, {
+    hasMarkup: containsJsx,
+    template: (node) => buildTemplate(node, context),
+    unsupported: (node) => unsupported(context, node, 'JSX call/list expressions', 5),
   });
-  return { setup: returned.setup, markup: returnedMarkup(returned.expression) };
+  // The body itself keys the selector site: it is the program's one identity.
+  const site: Site = {
+    kind: 'conditional',
+    node: 0,
+    expression: body as unknown as Expression,
+    namespace: 'html',
+    reactive: true,
+    ...program,
+  };
+  const template: Template = { nodes: [{ kind: 'placeholder' }], roots: [0], markup: '<!---->' };
+  return { fn, setup: returned.setup, deferred: returned.deferred, template, sites: [site] };
 
   function returnedMarkup(expression: Expression): Markup {
     const value = unwrap(expression);
@@ -297,6 +313,19 @@ function splitBody(fn: FunctionNode, context: TemplateContext) {
       children: [b.JSXExpressionContainer({ expression })],
     });
   }
+}
+
+/** Whether `markup` reads a variable declared inside `block` but outside `markup`. */
+function readsBlockLocal(module: ResolvedModule['module'], markup: Expression, block: Statement): boolean {
+  return findAll(markup, ['Identifier', 'JSXIdentifier']).some((name) => {
+    const declared = module.referenceOf(name)?.binding?.declarations[0];
+    if (declared === undefined) {
+      return false;
+    }
+    const inBlock = declared.start >= block.start && declared.end <= block.end;
+    const inMarkup = declared.start >= markup.start && declared.end <= markup.end;
+    return inBlock && !inMarkup;
+  });
 }
 
 /**

@@ -6,7 +6,15 @@ import type { Names } from '../../core/emit/names';
 import { copy } from '../../core/emit/copy';
 import { expression, numberLiteral, statement } from '../../core/emit/quote';
 
-export function emitSelection(selection: ConditionalSelection, names: Names, replacements: ReadonlyMap<Node, Node>) {
+/** The emitted code of deferred setup statements, run once when first reached. */
+export type EmitOnce = (statements: readonly Statement[]) => Statement[];
+
+export function emitSelection(
+  selection: ConditionalSelection,
+  names: Names,
+  replacements: ReadonlyMap<Node, Node>,
+  once?: EmitOnce,
+) {
   const declarations: Statement[] = [];
   function choice(index: number, value: Expression = expression('void 0')): Expression {
     return expression('({ index: $$index, value: $$value })', {
@@ -27,6 +35,9 @@ export function emitSelection(selection: ConditionalSelection, names: Names, rep
         alternate: select(node.alternate),
       });
     }
+    if (node.kind === 'program') {
+      return program(node);
+    }
 
     // JavaScript returns the left value when it short-circuits. Keep that exact
     // value (including zero), and never evaluate the left operand twice.
@@ -45,6 +56,39 @@ export function emitSelection(selection: ConditionalSelection, names: Names, rep
         }),
       ],
     });
+  }
+
+  /**
+   * The component tail as a native arrow, so `this`, `arguments` and block
+   * scopes behave as written. Each authored return gives its branch choice.
+   */
+  function program(node: Extract<ConditionalSelection, { kind: 'program' }>): Expression {
+    const local = new Map(replacements);
+    for (const [returned, selected] of node.returns) {
+      local.set(returned, b.ReturnStatement({ argument: select(selected) }));
+    }
+    const body: Statement[] = [];
+    for (const step of node.steps) {
+      if (step.kind === 'native') {
+        body.push(copy(step.statement, local));
+      } else if (once !== undefined) {
+        body.push(...once(step.statements));
+      }
+    }
+    if (node.fallthrough !== null) {
+      body.push(b.ReturnStatement({ argument: choice(node.fallthrough) }));
+    }
+    const run = names.fresh('_select');
+    const arrow = b.ArrowFunctionExpression({
+      id: null,
+      params: [],
+      body: b.BlockStatement({ body }),
+      async: false,
+      generator: false,
+      expression: false,
+    });
+    declarations.push(statement('const $$run = $$arrow;', { run, arrow }));
+    return expression('$$run()', { run });
   }
 
   const value = select(selection);

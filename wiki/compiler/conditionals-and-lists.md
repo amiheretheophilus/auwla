@@ -47,8 +47,42 @@ The planner and emitter use named helpers for selection, return folding, capture
 emission and guarded writes. Comments explain why selector inputs exclude branch
 sites, why fallthrough leaves share identity and why range cleanup uses anchors.
 
-Still pending in Phase 4: switch returns and setup statements interleaved with
-conditional returns. Lists and component calls remain their later phases.
+### Early returns
+
+A body whose returns interleave with setup, or sit in a `switch` or a loop,
+compiles to a selector program (`features/conditionals/returns.ts`, `plan.ts`,
+`dom.ts`). It follows how the reference runs a body:
+
+- Statements before the first return are setup, as before.
+- After that, a top-level statement without a return runs once, the first time
+  control reaches it. Consecutive ones form a segment with one `_reached` flag.
+  Their declarations are hoisted to the component's scope as `let` (or `var`),
+  so every branch and handler sees them; the declaration becomes an assignment.
+  A function declaration is hoisted whole, as JavaScript does.
+- A memo declared in a segment replays only after its segment has run. Reaching
+  the segment settles the memo's snapshots, so the first run is not counted as
+  a change. A derived value after a return still follows its inputs:
+  `let label = 'middle ' + step` shows the current `step`.
+- A statement that contains a return (`if`, `switch`, a loop) is copied as
+  written into a native arrow, `_select`, and runs each time the selector's
+  inputs change. Each authored `return` gives its branch choice.
+- The selector's inputs are the tests, discriminants, loop headers and plain
+  statements of those statements. Return arguments record their own inputs, and
+  once-only setup is not an input.
+- A returned expression that reads a variable declared in the tail's own blocks
+  (`case 0: { const label = …; return <p>{label}</p>; }`) cannot be a template
+  branch, which is created outside `_select`. It is a captured render value in a
+  value branch instead, updated in place while its program stays the same.
+- When the body can end without a return, an extra branch shows nothing.
+
+Known gap: a hoisted name is `undefined` before its segment runs, where
+JavaScript would throw a TDZ error if a handler read it that early.
+
+Six comparison cases cover this (`conditional:` in
+`cases/conditionals-and-lists.test.ts`): setup after a return, a derived value
+after a return, setup between two returns, a switch, block-local markup, and a
+return inside a loop. The old compiler fails three of them. Lists and component
+calls remain their later phases.
 
 ## Rules
 

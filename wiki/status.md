@@ -27,6 +27,12 @@ Last updated: 2026-10-24.
 
 ## Done
 
+- Phase 4 finished (2026-10-24): setup between early returns, `switch` returns
+  and returns inside loops compile to a selector program
+  (`compiler/conditionals-and-lists.md`, "Early returns"). Six new comparison
+  cases pass on the reference and on compiler-next; the old compiler fails three.
+  `COMPILER=next bun test tests/cases`: **140 pass, 150 fail**, every failure
+  naming a later phase. 185 compiler-next unit tests pass.
 - Review of the Phase 3 and Phase 4 commits (2026-10-24). Fixed:
   - A read that only feeds arithmetic or a comparison no longer makes a constant
     reactive (`68b6bba` made `const LIMIT = 3` state; `handlers.md`).

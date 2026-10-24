@@ -182,8 +182,11 @@ array child). Remove each check when its phase is built.
   order, retained templates, independent consumers and HTML/SVG destinations are
   verified. The rewrite's dense planner/emitter/runtime helpers were expanded and
   documented before continuing feature work, at the user's request.
-- [ ] General early returns with interleaved setup, and switch returns.
-- **Exit:** the conditional cases in `cases/conditionals-and-lists` pass.
+- [x] General early returns with interleaved setup, and switch returns. Done
+  2026-10-24: a selector program (`conditionals-and-lists.md`, "Early returns"),
+  six new comparison cases and two plan tests.
+- **Exit:** the conditional cases in `cases/conditionals-and-lists` pass. Passed
+  2026-10-24: all 12 `conditional:` cases pass on `COMPILER=next`.
 
 ## Phase 5: lists
 

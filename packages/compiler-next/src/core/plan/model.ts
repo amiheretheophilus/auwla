@@ -97,7 +97,26 @@ export type ConditionalSelection =
     readonly left: Expression;
     readonly right: ConditionalSelection;
     readonly fallback: number;
+  }
+  | {
+    /**
+     * A component tail whose returns interleave with setup statements, or sit
+     * in a `switch` or a loop. It runs as a native function that returns a
+     * branch choice (`conditionals-and-lists.md`, "Early returns").
+     */
+    readonly kind: 'program';
+    readonly steps: readonly ProgramStep[];
+    /** Each authored `return` of the component, and what its argument selects. */
+    readonly returns: ReadonlyMap<Node, ConditionalSelection>;
+    /** Chosen when control reaches the end of the component; null when it cannot. */
+    readonly fallthrough: number | null;
   };
+
+export type ProgramStep =
+  /** Top-level statements that run once, the first time control reaches them. */
+  | { readonly kind: 'once'; readonly statements: readonly Statement[] }
+  /** A statement containing a return. It runs again on every selection. */
+  | { readonly kind: 'native'; readonly statement: Statement };
 
 export interface ConditionalBranch {
   /** Null for a selected primitive; its value comes from the selector. */
@@ -112,8 +131,14 @@ export type UnplacedSite = Site extends infer S ? S extends Site ? Omit<S, 'node
 
 export interface ComponentPlan {
   readonly fn: FunctionNode;
-  /** The authored statements before the returned markup, run once as setup. */
+  /**
+   * The authored statements that run once as setup: those before the first
+   * return, then the top-level ones between returns. Those in `deferred` run
+   * when control first reaches them, inside the selector.
+   */
   readonly setup: readonly Statement[];
+  /** Setup statements after the first return, each with its segment's index. */
+  readonly deferred: ReadonlyMap<Statement, number>;
   readonly template: Template;
   readonly sites: readonly Site[];
   readonly state: readonly BindingNode[];

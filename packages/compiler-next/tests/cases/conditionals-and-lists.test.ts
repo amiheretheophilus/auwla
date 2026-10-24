@@ -26,6 +26,98 @@ behaves('conditional: an early return preserves state across returning branches'
   check(root, index) { expect(root.querySelector('p')?.textContent ?? 'open').toBe(['open', '1', '2', 'open', '2'][index]!); },
 });
 
+behaves('conditional: setup after an early return runs once, when first reached', {
+  source: `export function App() {
+    let show = false;
+    const log = [];
+    if (!show) return <button id="open" onClick={() => show = true}>open</button>;
+    let count = 0;
+    log.push('setup');
+    return <main><p>{count} {log.length}</p><button id="inc" onClick={() => count++}>inc</button>
+      <button id="close" onClick={() => show = false}>close</button></main>;
+  }`,
+  steps: [{ click: '#open' }, { click: '#inc' }, { click: '#close' }, { click: '#open' }],
+  check(root, index) {
+    expect(root.querySelector('p')?.textContent ?? 'open').toBe(['open', '0 1', '1 1', 'open', '1 1'][index]!);
+  },
+});
+
+behaves('conditional: a derived value after an early return follows its input once reached', {
+  source: `export function App() {
+    let n = 1, show = false;
+    if (!show) return <button id="show" onClick={() => show = true}>show</button>;
+    const doubled = n * 2;
+    return <p id="out" onClick={() => n++}>{doubled}</p>;
+  }`,
+  steps: [{ click: '#show' }, { click: '#out' }, { click: '#out' }],
+  check(root, index) {
+    expect(root.textContent).toBe(['show', '2', '4', '6'][index]!);
+  },
+});
+
+behaves('conditional: setup between two early returns', {
+  source: `export function App() {
+    let step = 0;
+    if (step === 0) return <button id="next" onClick={() => step++}>start</button>;
+    let label = 'middle ' + step;
+    if (step === 1) return <button id="next" onClick={() => step++}>{label}</button>;
+    return <p id="done" onClick={() => step = 0}>done, {label}</p>;
+  }`,
+  steps: [{ click: '#next' }, { click: '#next' }, { click: '#done' }, { click: '#next' }],
+  check(root, index) {
+    expect(root.textContent).toBe(['start', 'middle 1', 'done, middle 2', 'start', 'middle 1'][index]!);
+  },
+});
+
+behaves('conditional: a switch returns one branch per case', {
+  source: `export function App() {
+    let tab = 'a';
+    switch (tab) {
+      case 'a': return <p id="a" onClick={() => tab = 'b'}>A</p>;
+      case 'b': return <p id="b" onClick={() => tab = 'c'}>B</p>;
+      default: return <p id="c" onClick={() => tab = 'a'}>C</p>;
+    }
+  }`,
+  steps: [{ click: 'p' }, { click: 'p' }, { click: 'p' }],
+  check(root, index) {
+    expect(root.textContent).toBe(['A', 'B', 'C', 'A'][index]!);
+  },
+});
+
+behaves('conditional: a returned value reads a block-local declaration', {
+  source: `export function App() {
+    let n = 1;
+    switch (n % 2) {
+      case 0: {
+        const label = 'even ' + n;
+        return <p onClick={() => n++}>{label}</p>;
+      }
+      default: {
+        const label = 'odd ' + n;
+        return <p onClick={() => n++}>{label}</p>;
+      }
+    }
+  }`,
+  steps: [{ click: 'p' }, { click: 'p' }],
+  check(root, index) {
+    expect(root.textContent).toBe(['odd 1', 'even 2', 'odd 3'][index]!);
+  },
+});
+
+behaves('conditional: a loop returns from inside its body', {
+  source: `export function App() {
+    let items = [{ name: 'a', bad: false }];
+    for (const item of items) {
+      if (item.bad) return <p id="bad" onClick={() => items = items.slice(0, 1)}>bad {item.name}</p>;
+    }
+    return <button onClick={() => items = [...items, { name: 'b', bad: true }]}>{items.length}</button>;
+  }`,
+  steps: [{ click: 'button' }, { click: '#bad' }],
+  check(root, index) {
+    expect(root.textContent).toBe(['1', 'bad b', '1'][index]!);
+  },
+});
+
 behaves('conditional: selected branch retains its nodes while text updates', {
   source: `export function App() {
     let show = true, count = 1;
