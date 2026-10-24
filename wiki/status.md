@@ -8,16 +8,11 @@ Last updated: 2026-10-24.
   only there. The old `snrraptopack/memo-exp` is remote `memo-exp`, with its push URL
   disabled. Its account has a billing lock, so CI cannot run there. See `../AGENTS.md`.
 - `compiler-rewrite` (working branch, from `compiler-refactor` at `6230c27`):
-  the new compiler, designed in `compiler/`. Phase 1 skeleton is built. Phase 2:
-  the graph and the props/state/derived classification are built and wired into
-  `compileModules` (80 unit tests). Phase 3 design written and approved
-  (`compiler/output.md`, "Phase 3 design"); the reference passes all 228 cases,
-  including timer and unknown-caller cases, and now tracks closure state.
-  Escaping functions are built (`cd25f77`). Phase 3 builds static DOM from the
-  render plan (`0eec154`) and now emits local assignment versions, guarded site
-  updates and batched commits (`b956aa2`). Local versioned memos and definite body
-  replay (`36677ff`) and local takeover/setup ownership are now verified. Mutation
-  commits and possible-builder observation are next.
+  the new compiler, designed in `compiler/`. Phases 1–4, the Phase 5 general list
+  rule and Phase 6 component/props integration are built. The full audit passes
+  with later-phase failures explicitly diagnosed. Component/root and benchmark
+  correctness evidence is below. The Phase 6 exit still needs the user's Octane
+  VM timings; Phase 5 fast paths follow that gate.
 - `compiler-refactor`: the old compiler's refactor, stopped on 2026-10-19. The
   sections below record that work.
 - `codex/package-conditional-sync` at `9e35480` (third-party package compilation,
@@ -49,9 +44,14 @@ Last updated: 2026-10-24.
   benchmark apps. The latter verify 1,000-row correctness and identity using the
   test DOM, not browser timings. Octane now accepts an explicit compiler source
   entry; the user can measure the rewrite rather than the old default compiler.
-  The final audit of this root-entry follow-up is pending. The full upstream
-  browser suite needs its absent submodule/dependencies here; Octane timing on
-  the user's VM remains the Phase 6 exit gate before Phase 5 fast paths.
+  The follow-up is `5ca4cdec`; final audit
+  [40129337301](https://github.com/amiheretheophilus/auwla/actions/runs/40129337301)
+  passes all four jobs: **217 compiler-next cases**, the same **100 explicitly
+  deferred Phase 7/8 failures**, **317 reference cases**, **198 compiler unit
+  tests**, **37 runtime tests**, and all nine generator/corpus checks with
+  `FC_RUNS=200`. The full upstream browser suite needs its absent submodule/
+  dependencies here; Octane timing on the user's VM remains the Phase 6 exit
+  gate before Phase 5 fast paths. No performance improvement is claimed.
 
 - Decision A and the `var` fixes (2026-10-24, `../decisions.md`). A plain
   statement inside a returning block runs again only when what it reads changed,

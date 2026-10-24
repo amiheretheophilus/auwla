@@ -1,31 +1,22 @@
 # The compiler (rewrite)
 
-**Status: Phase 2 graph and classification built; Phase 3 markup, local counters, memo replay and local takeover built.** The new compiler lives in
+**Status: general state, conditionals, lists, components and props are built.** The new compiler lives in
 `packages/compiler-next/` on branch `compiler-rewrite`; its tests are in
 `packages/compiler-next/tests/`. `packages/compiler/` stays until every suite passes
 on the new one; then it is deleted.
 
-The source, ordinary `Group`, atomic `suspend`, and callback baselines are verified.
-The previous 228-case reference baseline is verified; 18 new static-markup cases
-now also pass against compiler-next. Nine focused local counter cases and four
-existing counter/enum/input/promise cases pass too. Local versioned memos and
-definite body builders now have ten passing comparison cases plus focused native
-execution checks. Local takeover/setup ownership is verified on selected callback
-cases. Property/call mutation observation, possible builders, hidden reads and
-shared module/factory/class versions are now built and checked in focused cases.
-Explicit await boundaries are built. The Phase 3 audit passes 52 supported cases
-and 200 text-view generated programs; later list/component exceptions and remaining
-storage/reflection coverage are recorded on their concept pages and `../status.md`.
-Phase 4 expression conditionals are built; their scoped generator passes 200
-programs, and the original saved conditional passes unchanged. The full generator
-now stops on a saved Phase 5 list. Its gate remains scheduled after conditional/list
-support by agreement with the user. Stored/assigned JSX, helper returns, logical
-left JSX and body switch assignments are built. Return-only if/else tails are
-built; switch returns and returns interleaved with setup remain next. The current
-planner/emitter/runtime helpers use expanded control flow and comments explaining
-capture timing, ownership and retained DOM.
-Remaining reference limits are on the concept pages;
-extend their coverage as the compiler reaches those slices. Continue in `plan.md`.
+Phases 1–4 and the Phase 5 general list rule are implemented. Phase 6 adds ordered
+component props, children, native/member/dynamic tags, factories, recursion,
+prop overrides, component values and real application-root mounting. Both the
+inline-row and component-row benchmark sources pass local 1,000-row correctness
+checks. The full case/reference and generated-program audit passes; exact counts
+and commits are in `../status.md`.
+
+The remaining case failures explicitly name Phase 7 (effects, cleanup and refs)
+or Phase 8 (sources/readiness). The reference already covers those semantics.
+Performance is not established: the user runs Octane on the benchmark VM before
+the Phase 6 exit, followed by Phase 5 fast paths and its performance gate.
+Remaining conformance gaps stay on their concept pages. Continue in `plan.md`.
 
 > "the goal is to write normal javascript and get effecient compiled output"
 

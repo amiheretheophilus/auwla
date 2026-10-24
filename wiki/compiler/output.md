@@ -313,7 +313,7 @@ reference's direct call returns its markup. A call whose result is discarded
 ### 3. Props in the child
 
 Parameter patterns leave the signature. Their bindings are declared at
-setup from `_props.value`, and each gets a version, so reads of a prop update like
+setup from `_props.arguments` (whose first value is `_props.value`), and each gets a version, so reads of a prop update like
 reads of state. When the parent sends new props, the cell calls the child's
 receiver, which destructures them into temporaries (defaults and rest included,
 natively) and, for each binding whose value from the parent changed
