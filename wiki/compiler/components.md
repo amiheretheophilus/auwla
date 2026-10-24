@@ -1,10 +1,54 @@
 # Components
 
-**Folder:** `features/components/` _(planned)_.
+**Folders:** `features/components/`, `features/props/` (general path built).
 
 ## What it does
 
 Finds components, and compiles calls to them: props, children and slots.
+
+## Files
+
+| File | What it owns |
+| --- | --- |
+| `features/components/plan.ts` | Recognizes component calls and spread-bearing hosts that use ordered props |
+| `features/components/dom.ts` | Tag evaluation, ordered attributes/spreads, children, and component-value creation |
+| `features/components/dom.test.ts` | Native ordering, reserved props, disposal, SVG, direct arguments, opaque tags and shared tag reads |
+| `features/props/classify.ts` | Component identities and native parameter bindings |
+| `features/props/dom.ts` | Native parameter patterns, defaults/rest, per-binding parent snapshots and prop reception |
+| `packages/runtime/src/components.ts` | Props cells, callable adapters, compiled/native tag mounting, generic host props and subtree disposal |
+| `tests/generator/components.test.ts` | Generated named/member/factory components with keyed edits, moves, prop updates and removal |
+
+## General path
+
+A call is a render value shown through the existing value slot. The same callable
+and key retain an instance; changing either disposes it and mounts another. Each
+consumer of stored JSX has its own DOM and component state. Compiled callable
+metadata lives in weak collections, outside authored objects. A tag whose body
+was not classified as a component is invoked natively, with a collector for its
+hidden reads, and its returned value is shown through a slot.
+
+Attributes and spreads evaluate once in source order after the tag. The runtime
+extracts `key` for identity and excludes `key`/`suspend` from child props. Explicit
+children replace a spread's `children`, using a single value or an array. Native
+tag props reuse `patchDomProps`, including listeners batched in the owning
+application. SVG flows from the consuming slot through component roots and
+conditional fragments; `foreignObject` restarts HTML.
+
+The child keeps native variables and numeric versions. A receiver evaluates the
+native parameter patterns into temporaries. A different parent value replaces
+that binding and bumps its version; an unchanged value preserves a local
+override. Stable object references still notify readers after mutations. Direct
+call adapters retain every argument, including map's index/array and rest
+parameters. A discarded direct call runs setup without mounting returned markup.
+
+Nested declarations are emitted before their enclosing component is sealed, so
+captured parent reads/writes receive the parent's version instrumentation. Local
+versions read across an owner boundary publish notifications after the owner
+settles. Disposal removes the child entity and its owned collectors and slots.
+
+The reference retains a nested function declaration per setup invocation. Its
+previous per-render recreation prevented nested components from settling; the
+new nested-component assertion remains unchanged.
 
 ## Rules
 
@@ -37,7 +81,12 @@ The old compiler rejects both:
 - `<UI.Box>`, a member tag;
 - `<Child a={1} b={2} />` where `Child` does not declare `b`.
 
-Passes today: a prop follows the parent.
+All twenty current component comparisons pass on compiler-next, including five
+new direct-call/import, nested-owner, parameter-pattern and independent-slot
+cases. All 64 state/derived comparisons also pass, including deferred prop and
+keyed-override cases. Nine native regressions cover observations that do not
+depend on the reference. The broad CI audit and Octane gate are tracked in
+`../status.md`; this is not a performance claim.
 
 Six `complex JSX:` cases combine state with fragments, render callbacks, JSX stored
 in variables, helper-produced JSX, nested arrays, conditional nodes, spread props,
@@ -88,7 +137,9 @@ as their parent closures are refreshed. Cases and fixes are in
 
 - Which component forms does the old compiler support that are not listed here
   (`page(...)`, presentation components)? Port each with a test.
-- Extend generated JSX programs with these combinations, including stateful member
-  tags, recursive trees, nested slots, changing captured values, and row removal/remount.
+- Extend the generated combinations with recursive trees, nested slots, native
+  callbacks, computed members and changing captured values. The current component
+  generator covers named/member/factory tags, keyed state, spread/explicit props,
+  reordering and row removal.
 - Expand locally declared component, computed-member and factory combinations;
   the current cases do not establish every callable/tag pattern.

@@ -1085,6 +1085,21 @@ class ComponentRewrite {
     const enter = b.CallExpression({ callee: identifier('$enter'), arguments: [], optional: false });
     const prelude: Statement[] = [constDeclaration('$ctx', enter)];
 
+    // Re-running the oracle's body must not manufacture a new component type
+    // on every settling pass. The retained closure reads this instance's slots.
+    for (const entry of this.body.body) {
+      if (!is.FunctionDeclaration(entry) || entry.id === null) {
+        continue;
+      }
+      prelude.push(b.ExpressionStatement({
+        expression: b.AssignmentExpression({
+          operator: '=',
+          left: identifier(entry.id.name) as never,
+          right: ctxCall('retainFunction', [numberLiteral(this.nextSlot++), identifier(entry.id.name)]),
+        }),
+      }) as Statement);
+    }
+
     for (const [binding, slot] of this.slots) {
       if (slot.treatment !== 'prop') continue;
       const fromParent = identifier(binding.name);
@@ -1162,7 +1177,7 @@ function rewriteModuleEffects(module: Module): void {
 // Component runtime calls
 
 type CtxMethod = Treatment | 'effect' | 'cleanup' | 'observe' | 'confirmed' | 'mayChange' | 'ran' | 'due' | 'statement' | 'callback'
-  | 'returning';
+  | 'returning' | 'retainFunction';
 
 /** `$ctx.memo(...)`, `$ctx.prop(...)`, `$ctx.observe(...)`, … */
 function ctxCall(method: CtxMethod, args: Expression[]): Expression {

@@ -24,6 +24,15 @@ function setup() {
 }
 
 describe('local write batches', () => {
+  it('drains batches dirtied by another commit before returning from a listener', () => {
+    const first = setup();
+    const second = setup();
+    first.entity.render = () => second.batch.mark();
+    first.batch.activate();
+    second.batch.activate();
+    first.batch.listener(() => first.batch.mark())();
+    expect(second.renders()).toBe(1);
+  });
   it('flushes all shared consumers at the outer listener boundary across applications', () => {
     const first = setup();
     const second = setup();

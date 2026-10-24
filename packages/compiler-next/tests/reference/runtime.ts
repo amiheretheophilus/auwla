@@ -236,6 +236,17 @@ export class Instance {
   /** `observe` indexes that have run at least once. */
   private readonly observed = new Set<number>();
   private readonly computations = new Map<number, Computation>();
+  private readonly functions = new Map<number, Function>();
+
+  /** Setup creates a nested declaration once, just as it creates local state. */
+  retainFunction<T extends Function>(index: number, value: T): T {
+    const previous = this.functions.get(index);
+    if (previous !== undefined) {
+      return previous as T;
+    }
+    this.functions.set(index, value);
+    return value;
+  }
 
   /** A prop the component reassigns: the override holds until the parent passes a different value. */
   prop(index: number, fromParent: unknown): PropSlot {

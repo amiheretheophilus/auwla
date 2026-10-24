@@ -212,8 +212,12 @@ array child). Remove each check when its phase is built.
 
 - [ ] `ComponentCall` with props as one object, children and slots, member and
   dynamic tags, factories, recursion, prop overrides (`components.md`).
+  General path built and locally checked: 20 component comparisons, all 64
+  state/derived comparisons and nine native regressions. Broad audit pending.
 - [ ] A component used for its value (`items.map(Row)`, `const view = Row(x)`)
-  returns markup, as the reference's does (now a Phase 6 error).
+  returns markup, as the reference's does.
+  Adapters are built; direct arguments, imported calls, map arguments/defaults/
+  rest and discarded setup are locally checked. The Phase 6 guard is removed.
 - **Exit:** `cases/components` passes; Octane run by the user. Then Phase 5's
   fast paths and its benchmark gate.
 

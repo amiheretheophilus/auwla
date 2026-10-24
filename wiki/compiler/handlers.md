@@ -23,6 +23,11 @@ Finds every place that changes state and makes the UI update after it.
 | `packages/runtime/src/write-batch.ts` | Captures the application and entity, batches listener writes until return, and queues a microtask for unwrapped callbacks and error recovery |
 | `packages/runtime/tests/write-batch.test.ts` | Scheduler independence, nested listeners, native receivers/results, exceptions, disposal and application isolation |
 
+The outer listener and pre-await boundary drain newly dirtied batches as well as
+the initial set. A parent commit can deliver props that dirty a child; that child
+settles before the same listener returns. A focused runtime regression and the
+native SVG component update check cover this propagation.
+
 Simple assignments and updates call a generated helper **after** the native
 operation succeeds; the helper returns that operation's value. Logical assignment
 uses its native short-circuit condition, so a skipped assignment does not bump a

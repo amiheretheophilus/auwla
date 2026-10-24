@@ -34,7 +34,10 @@ export function componentFunctions(resolved: Resolved): ReadonlySet<FunctionNode
 
     for (const fn of module.findAll(['FunctionDeclaration', 'FunctionExpression', 'ArrowFunctionExpression'])) {
       const parent = module.parentOf(fn);
-      const name = fn.id ?? (is.VariableDeclarator(parent) && is.Identifier(parent.id) ? parent.id : null);
+      let name = fn.id ?? (is.VariableDeclarator(parent) && is.Identifier(parent.id) ? parent.id : null);
+      if (name === null && is.Property(parent) && !parent.computed && is.Identifier(parent.key)) {
+        name = parent.key;
+      }
       if (name === null || !/^[A-Z]/.test(name.name)) {
         continue;
       }
@@ -63,13 +66,7 @@ export function propBindings(
       if (owner === null || !is.Function(owner) || !components.has(owner as FunctionNode)) {
         continue;
       }
-      const first = owner.params[0];
-      if (first === undefined) {
-        continue;
-      }
-      if (binding.declarations.some((name) => name.start >= first.start && name.end <= first.end)) {
-        props.add(binding);
-      }
+      props.add(binding);
     }
   }
   return props;

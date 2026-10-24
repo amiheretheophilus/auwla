@@ -6,6 +6,19 @@
 The core holds the stage machinery and the shared types. What a concept means
 (state, a list, a ref) lives in its feature folder, not here.
 
+Component integration adds ordered call expressions and callable references to
+`core/plan/model.ts`. The template planner routes component/dynamic tags and
+spread hosts through value slots. `core/emit/dom.ts` composes the component and
+props feature emitters; nested component trees remain open to their enclosing
+instance's lexical rewrites until that composition is complete. Static and
+dynamic `ref` attributes retain their Phase 7 diagnostic.
+
+`core/emit/template.ts` keeps cached markup cloning for HTML and creates nodes
+with the consuming namespace for inherited SVG. Namespace propagation is one
+walk of the template, with HTML boundaries at `foreignObject`.
+`core/emit/sites.ts` captures a conditional region's actual namespace before
+removing its placeholder, so later branch mounts inherit it too.
+
 ## parse — `core/parse/` (built, Phase 1)
 
 | File | What it does |

@@ -230,6 +230,8 @@ export interface ModulePlan {
   readonly sharedReads: ReadonlyMap<BindingNode, SharedReadPlan>;
   readonly receiverTargets: readonly Node[];
   readonly values: readonly RenderValuePlan[];
+  readonly calls: readonly Extract<Node, { type: 'JSXElement' }>[];
+  readonly componentReferences: ReadonlySet<Node>;
 }
 
 export interface RenderValuePlan {

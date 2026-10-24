@@ -3,10 +3,11 @@
  * cloned (`materializeMarkup`); without (`Template.markup` is null), the nodes
  * are created one by one in the same order, so sites address them the same way.
  */
-import type { Statement } from 'yuku-parser';
+import { b } from 'yuku-ast';
+import type { Expression, Statement } from 'yuku-parser';
 import type { Site, Template } from '../plan';
 import type { Names } from './names';
-import { numberLiteral, statement, statements, stringLiteral } from './quote';
+import { expression, numberLiteral, statement, statements, stringLiteral } from './quote';
 
 const SVG_NAMESPACE = 'http://www.w3.org/2000/svg';
 
@@ -22,6 +23,8 @@ export interface TemplateNames {
   readonly document: string;
   /** The module-level constant holding the markup, when there is markup. */
   readonly markup: string | null;
+  /** A component inherits the namespace where its returned roots are consumed. */
+  readonly namespace?: string | Expression;
 }
 
 /** Create the nodes that `used` lists; with markup, the others exist but get no variable. */
@@ -66,10 +69,25 @@ export function prepareTemplateSites(template: Template, sites: readonly Site[],
 
 function materialize(template: Template, used: ReadonlySet<number>, context: TemplateNames): TemplateEmit {
   const nodes = context.names.fresh('_nodes');
-  const output = [statement(`const ${nodes} = $$runtime.materializeMarkup($$markup);`, {
-    runtime: context.runtime,
-    markup: context.markup!,
-  })];
+  let create = expression('$$runtime.materializeMarkup($$markup)', {
+    runtime: context.runtime, markup: context.markup!,
+  });
+  if (context.namespace !== undefined) {
+    const svg = createNodes(template, context);
+    const body = [...svg.statements, b.ReturnStatement({
+      argument: b.ArrayExpression({
+        elements: template.nodes.map((_, index) => b.Identifier({ name: svg.ref(index) })),
+      }),
+    })];
+    const factory = b.ArrowFunctionExpression({
+      id: null, params: [], body: b.BlockStatement({ body }),
+      async: false, generator: false, expression: false,
+    });
+    create = expression('$$namespace === "svg" ? $$factory() : $$html', {
+      namespace: context.namespace, factory, html: create,
+    });
+  }
+  const output = [statement('const $$nodes = $$create;', { nodes, create })];
 
   const refs = new Map<number, string>();
   for (const index of [...used].sort((left, right) => left - right)) {
@@ -84,6 +102,7 @@ function createNodes(template: Template, context: TemplateNames): TemplateEmit {
   const output: Statement[] = [];
   const refs = template.nodes.map((_, index) => context.names.fresh(nodeName(template, index)));
   const holes = { document: context.document };
+  const inherited = inheritedNodes(template);
 
   template.nodes.forEach((node, index) => {
     const name = refs[index]!;
@@ -97,9 +116,15 @@ function createNodes(template: Template, context: TemplateNames): TemplateEmit {
     }
 
     const tag = stringLiteral(node.tag);
-    output.push(node.namespace === 'svg'
-      ? statement(`const ${name} = $$document.createElementNS($$namespace, $$tag);`, { ...holes, namespace: stringLiteral(SVG_NAMESPACE), tag })
-      : statement(`const ${name} = $$document.createElement($$tag);`, { ...holes, tag }));
+    let create = node.namespace === 'svg'
+      ? expression('$$document.createElementNS($$svg, $$tag)', { ...holes, svg: stringLiteral(SVG_NAMESPACE), tag })
+      : expression('$$document.createElement($$tag)', { ...holes, tag });
+    if (node.namespace === 'html' && context.namespace !== undefined && inherited.has(index)) {
+      create = expression('$$namespace === "svg" ? $$document.createElementNS($$svg, $$tag) : $$html', {
+        ...holes, namespace: context.namespace, svg: stringLiteral(SVG_NAMESPACE), tag, html: create,
+      });
+    }
+    output.push(statement('const $$name = $$create;', { name, create }));
     for (const attribute of node.attributes) {
       output.push(statement(`${name}.setAttribute($$name, $$value);`, {
         name: stringLiteral(attribute.name),
@@ -112,6 +137,28 @@ function createNodes(template: Template, context: TemplateNames): TemplateEmit {
     }
   });
   return { statements: output, ref: (index) => refs[index]! };
+}
+
+/** A foreignObject explicitly restarts HTML, including in an inherited SVG tree. */
+function inheritedNodes(template: Template): ReadonlySet<number> {
+  const inherited = new Set<number>();
+  function visit(index: number, inherits: boolean): void {
+    if (inherits) {
+      inherited.add(index);
+    }
+    const node = template.nodes[index]!;
+    if (node.kind !== 'element') {
+      return;
+    }
+    const childrenInherit = inherits && node.tag !== 'foreignObject';
+    for (const child of node.children) {
+      visit(child, childrenInherit);
+    }
+  }
+  for (const root of template.roots) {
+    visit(root, true);
+  }
+  return inherited;
 }
 
 /** `_button`, `_text`: readable names for generated node variables. */

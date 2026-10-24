@@ -39,10 +39,10 @@ function capturedOf(value: unknown): CapturedRender | undefined {
   return value !== null && typeof value === 'object' ? captures.get(value) : undefined;
 }
 
-function childNamespace(parent: Node, owner: RenderOwner): 'html' | 'svg' {
+export function renderNamespace(parent: Node, namespace: 'html' | 'svg' = 'html'): 'html' | 'svg' {
   // A detached fragment has no element from which to infer its namespace.
   if (parent.nodeType !== 1) {
-    return owner.namespace ?? 'html';
+    return namespace;
   }
 
   const element = parent as Element;
@@ -127,7 +127,7 @@ export function createValueSlot(text: Text, owner: RenderOwner) {
     clear();
     open('mmd:value');
     const parent = text.parentNode!;
-    const namespace = childNamespace(parent, owner);
+    const namespace = renderNamespace(parent, owner.namespace);
     entry = captured.program.mount(captured.values, { ...owner, namespace });
     currentProgram = captured.program;
     currentKey = captured.key;

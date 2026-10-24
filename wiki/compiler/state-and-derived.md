@@ -11,6 +11,14 @@ versions a site read and reevaluates only when one changes, preserving unchanged
 DOM properties such as typed input text. Unknown calls with no known changed
 input are not replayed merely because another value was written.
 
+Phase 6 includes every component parameter binding in local versions, including
+unused or unwritten props, defaults, aliases, nested patterns and rest parameters.
+`features/props/dom.ts` retains each binding's last parent value separately from
+its current local value. An unchanged parent value preserves an override; a new
+one replaces it. Object mutations still invalidate consumers without requiring a
+new object identity. Component details and direct-call coverage live on
+`components.md`.
+
 `features/derived/plan.ts` plans top-level component declarations, including native
 destructuring, and their definite body builders. Computations sharing a statement
 form one group: all its outputs reset together and the statement replays once.

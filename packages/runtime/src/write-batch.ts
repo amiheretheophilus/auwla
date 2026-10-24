@@ -13,10 +13,18 @@ let listenerDepth = 0;
 /** Preserve the operand while committing the synchronous stretch before await. */
 export function flushWritesBeforeAwait<T>(value: T): T {
   recoverMutations();
-  for (const flush of [...pendingBoundaries]) {
-    flush();
-  }
+  flushPendingWrites();
   return value;
+}
+
+/** A parent commit can send props that dirty a child in the same stretch. */
+function flushPendingWrites(): void {
+  while (pendingBoundaries.size > 0) {
+    const pending = [...pendingBoundaries];
+    for (const flush of pending) {
+      flush();
+    }
+  }
 }
 
 /** A call containing an awaited argument can still throw after resumption. */
@@ -99,9 +107,7 @@ export function createWriteBatch(entity: Entity): WriteBatch {
         depth--;
         listenerDepth--;
         if (listenerDepth === 0) {
-          for (const boundary of [...pendingBoundaries]) {
-            boundary();
-          }
+          flushPendingWrites();
         }
         return result;
       } as typeof callback;

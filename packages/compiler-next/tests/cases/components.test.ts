@@ -4,6 +4,89 @@
 import { expect } from 'bun:test';
 import { behaves } from '../harness/run';
 
+behaves('component values: direct calls and map callbacks keep native arguments', {
+  source: `
+    function Row(value) { return <li>{value}</li>; }
+    export function App() {
+      let items = [1, 2];
+      const first = Row(items[0]);
+      return <main><ol>{first}</ol><ul>{items.map(Row)}</ul>
+        <button onClick={() => items.push(3)}>add</button></main>;
+    }`,
+  steps: [{ click: 'button' }],
+  check(container, observation) {
+    expect(container.querySelector('ol')?.textContent).toBe('1');
+    expect(container.querySelector('ul')?.textContent).toBe(['12', '123'][observation]);
+  },
+});
+
+behaves('component values: imported direct calls use the defining component', {
+  modules: {
+    './Row.tsx': `export function Row({ value }) { return <li>{value}</li>; }`,
+  },
+  source: `
+    import { Row } from './Row';
+    export function App() {
+      let value = 1;
+      const view = Row({ value });
+      return <main><ul>{view}</ul><button onClick={() => value++}>next</button></main>;
+    }`,
+  steps: [{ click: 'button' }],
+  check(container, observation) {
+    expect(container.querySelector('li')?.textContent).toBe(['1', '2'][observation]);
+  },
+});
+
+behaves('component ownership: nested components read the creating instance', {
+  source: `
+    export function App() {
+      let count = 1;
+      function Child() { return <p>{count}</p>; }
+      return <main><Child /><button onClick={() => count++}>next</button></main>;
+    }`,
+  steps: [{ click: 'button' }, { click: 'button' }],
+  check(container, observation) {
+    expect(container.querySelector('p')?.textContent).toBe(['1', '2', '3'][observation]);
+  },
+});
+
+behaves('component props: nested defaults rest and aliases update independently', {
+  source: `
+    function Child({ nested: { value: label = 'default' }, ...rest }) {
+      return <p>{label}:{rest.other}</p>;
+    }
+    export function App() {
+      let nested = {}; let other = 0;
+      return <main><Child nested={nested} other={other} />
+        <button id="value" onClick={() => { nested.value = 'set'; }}>value</button>
+        <button id="other" onClick={() => other++}>other</button></main>;
+    }`,
+  steps: [{ click: '#value' }, { click: '#other' }],
+  check(container, observation) {
+    expect(container.querySelector('p')?.textContent).toBe(['default:0', 'set:0', 'set:1'][observation]);
+  },
+});
+
+behaves('component slots: two consumers own independent state and DOM', {
+  source: `
+    function Counter({ label }) {
+      let count = 0;
+      return <button class="child" onClick={() => count++}>{label}:{count}</button>;
+    }
+    function Frame({ children }) { return <section>{children}</section>; }
+    export function App() {
+      let label = 'A';
+      const content = <Counter label={label} />;
+      return <main><Frame>{content}</Frame><Frame>{content}</Frame>
+        <button id="label" onClick={() => { label = 'B'; }}>label</button></main>;
+    }`,
+  steps: [{ click: 'section:first-child .child' }, { click: '#label' }],
+  check(container, observation) {
+    expect([...container.querySelectorAll('.child')].map((node) => node.textContent))
+      .toEqual([['A:0', 'A:0'], ['A:1', 'A:0'], ['B:1', 'B:0']][observation]!);
+  },
+});
+
 behaves('a member expression as a tag', {
   source: `
     const UI = { Box: ({ children }) => <div class="box">{children}</div> };

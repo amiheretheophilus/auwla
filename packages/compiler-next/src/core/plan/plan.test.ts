@@ -109,9 +109,9 @@ describe('features of later phases fail with their phase', () => {
     expect(() => inspect(`import type { Source } from '@memoized-dom/data'; export const App = () => <p />;`)).not.toThrow();
   });
 
-  it('rejects a component used for its value, but not one called for its setup', () => {
+  it('plans components used as callback values and direct calls', () => {
     const helper = 'function Row(n) { return <li>{n}</li>; }';
-    expect(() => inspect(`${helper} export function App() { return <ul>{[1].map(Row)}</ul>; }`)).toThrow('from Phase 6');
+    expect(() => inspect(`${helper} export function App() { return <ul>{[1].map(Row)}</ul>; }`)).not.toThrow();
     expect(() => inspect(`${helper} export function App() { Row(1); return <ul />; }`)).not.toThrow();
   });
 });

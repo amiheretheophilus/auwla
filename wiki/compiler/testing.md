@@ -28,6 +28,7 @@
 | `tests/generator/print.ts` | Prints a program as `App.tsx` and its steps; checks it parses with `yuku-parser` |
 | `tests/generator/generated.test.ts` | Runs random programs, shrinks a failure, reports it with a seed |
 | `tests/generator/corpus.test.ts` | Runs every saved failure in `tests/corpus/` |
+| `tests/generator/components.test.ts` | Generated named/member/factory tags, keyed local state, explicit/spread props, reordering and removal; compares both renderers and asserts expected text and retained DOM |
 | `tests/generator/sources.test.ts` | Random programs with sources, checked without a compiler: answered late or inline from the start, they must end on the same page (`sources.md`) |
 
 Run them with `bun test` in `packages/compiler-next` (no build needed), or one file:

@@ -107,7 +107,12 @@ export function emitSites(
     }
     if (site.kind === 'conditional') {
       region = names.fresh('_conditional');
-      const branchContext = { ...context, namespace: stringLiteral(site.namespace) };
+      const namespace = names.fresh('_branchNamespace');
+      mount.push(statement('const $$namespace = $$runtime.renderNamespace($$slot.parentNode, $$inherited);', {
+        namespace, runtime, slot: node,
+        inherited: context.namespace ?? stringLiteral(site.namespace),
+      }));
+      const branchContext = { ...context, namespace };
       const factories = site.branches.map((branch) => emitBranch(branch, value, plan, branchContext));
       mount.push(statement('const $$region = $$runtime.createCondRegion($$slot.parentNode, $$id + $$suffix, () => $$value.index, $$branches, void 0, void 0, void 0, $$slot);', {
         region,
@@ -215,7 +220,7 @@ function emitBranch(branch: ConditionalBranch, selected: string, plan: SitesPlan
     for (const site of branch.sites) {
       used.add(site.node);
     }
-    const templateContext = { names, runtime, document, markup };
+    const templateContext = { names, runtime, document, markup, namespace: context.namespace };
     const template = emitTemplate(branch.template, used, templateContext);
     const slots = prepareTemplateSites(branch.template, branch.sites, template, templateContext);
     const sites = emitSites({ ...plan, sites: branch.sites }, { ...context, ref: slots.ref });

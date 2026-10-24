@@ -272,7 +272,60 @@ binding program and emits `createRenderValue(program, captures)` at the expressi
 Each consuming slot mounts separate DOM, selects HTML/SVG from its destination,
 updates captures in place for the same program and disposes replaced ranges.
 Values remain ordinary lexical variables; this adds no signals or generic virtual
-tree reconciliation. Array children still need the Phase 5 list implementation.
+tree reconciliation. Array children are lists (Phase 5's general rule).
+
+## Phase 6 design (2026-10-24)
+
+Follows from rules already approved; nothing here needs a new semantic choice.
+`components.md` holds the rules and cases.
+
+### 1. A component call is a value
+
+`<Label text={name}>hi</Label>` is a render value, like stored JSX:
+`createComponentValue(Label, props, key)`. The value slot that shows it mounts
+the component; a write with the same component and key updates its props in
+place; another component (a factory, a dynamic tag) or another key mounts anew.
+A string tag (`<Tag>` holding `'h1'`) mounts a host element whose attributes,
+events and children are set generically. One path covers static, member and
+dynamic tags, keys and remounting, and a component in a list row. Phase 5's fast
+paths later compile the common shapes more directly.
+
+`props` is built in source order: attributes and spreads as written, without
+`key`; `children` is the single child, or an array of several, as the reference
+builds it. Handlers and render callbacks are ordinary values.
+
+### 2. The calling convention stays
+
+A compiled component starts with `Name(_id, _parent, _props)`, as the runtime's `mount`,
+the test harness and the bench builds call it. `_props` is a props cell from
+the runtime (`createPropsCell`), or undefined at the root, which reads as `{}`.
+The value slot calls it with a fresh child id under its owner, followed by its
+consuming namespace. An internal setup-only argument supports discarded calls
+without mounting their output. A props cell also retains the complete native
+argument list for direct calls, map callbacks and rest parameters.
+
+A component used for its value (`items.map(Row)`, `const view = Row(x)`) gets
+`componentValue(Row)` at that reference instead: a function returning
+`createComponentValue(Row, props)`. Calling it shows the component, as the
+reference's direct call returns its markup. A call whose result is discarded
+(`Row();`) still calls the component, which only runs its setup.
+
+### 3. Props in the child
+
+Parameter patterns leave the signature. Their bindings are declared at
+setup from `_props.value`, and each gets a version, so reads of a prop update like
+reads of state. When the parent sends new props, the cell calls the child's
+receiver, which destructures them into temporaries (defaults and rest included,
+natively) and, for each binding whose value from the parent changed
+(`Object.is`), assigns it and bumps its version. A prop the child wrote keeps its
+value until the parent sends a different one (`state-and-derived.md`, `Prop`).
+The receiver then marks the child's batch.
+
+`features/components/dom.ts` builds ordered props; `features/props/dom.ts` emits
+native pattern setup/reception. Runtime `components.ts` keeps compiled callable
+metadata in weak collections and supplies an ordinary-callable fallback for
+opaque tags. The fallback collects executed reads and owns the returned value's
+slot. Local cross-owner reads publish versions after their owner settles.
 
 ## Alternatives considered
 

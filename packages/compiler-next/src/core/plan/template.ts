@@ -15,6 +15,7 @@ import {
 } from './jsx';
 import type { Site, StaticAttribute, Template, TemplateNode, UnplacedSite } from './model';
 import { canPlanConditional, planConditional } from '../../features/conditionals/plan';
+import { isComponentCall } from '../../features/components/plan';
 
 export interface TemplateContext {
   readonly path: string;
@@ -93,7 +94,7 @@ class TemplateBuilder {
         }
         this.flushText(run);
         run.indices.push(this.textSite(child.expression, ancestors, namespace));
-      } else if (is.JSXElement(child) && this.isKeyedRow(child)) {
+      } else if (is.JSXElement(child) && (isComponentCall(child) || this.isKeyedRow(child))) {
         // Shown through a value slot, so a new key mounts a new element.
         this.flushText(run);
         run.indices.push(this.textSite(child as Expression, ancestors, namespace));
@@ -196,9 +197,6 @@ class TemplateBuilder {
     if (name === 'ref') unsupported(this.context, attribute, 'refs', 7);
 
     const value = attribute.value;
-    if (value !== null && (is.JSXElement(value) || is.JSXFragment(value))) {
-      unsupported(this.context, value, 'markup as an attribute value', 6);
-    }
     const expression = attributeExpression(value);
 
     const event = eventName(name);
@@ -218,7 +216,6 @@ class TemplateBuilder {
       if (constant !== null) attributes.push({ name: attributeName(name), value: constant });
       return;
     }
-    if (containsJsx(expression)) unsupported(this.context, expression, 'markup inside an attribute value', 6);
     sites.push({ kind: 'attribute', name: attributeName(name), expression, reactive: this.context.reactive(expression) });
   }
 

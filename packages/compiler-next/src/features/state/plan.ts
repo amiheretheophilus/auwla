@@ -10,7 +10,7 @@ export function planLocalState(graph: SemanticGraph, components: ReadonlySet<Nod
     const owner = node.owner.runner;
     if (owner === null || !components.has(owner)) continue;
     if (storageOwner(node) !== owner) continue;
-    if (node.writes.length === 0 && variableDeclaration(node.binding) === null) continue;
+    if (node.kind !== 'Prop' && node.writes.length === 0 && variableDeclaration(node.binding) === null) continue;
     const bindings = owners.get(owner) ?? [];
     bindings.push(node);
     owners.set(owner, bindings);

@@ -9,7 +9,7 @@ import type { Expression, Node, Statement } from 'yuku-parser';
 import { isReactive, type BindingNode, type SemanticGraph } from '../graph';
 import { variableDeclaration, type InputQueries } from '../graph/inputs';
 import { isWrittenGlobal, runnerOf, type ResolvedModule } from '../resolve';
-import type { FunctionNode } from '../resolve/functions';
+import { functionValue, type FunctionNode } from '../resolve/functions';
 import type {
   ComponentPlan, MemoGroupPlan, ModulePlan, RenderValuePlan, SharedOwnerPlan,
   SharedReadPlan, Site, Template,
@@ -25,6 +25,7 @@ import { planReceiverTargets } from '../../features/handlers/receivers';
 import { storageOwner } from './storage';
 import { planReturns } from '../../features/conditionals/returns';
 import { rejectLaterPhases } from './later-phases';
+import { isComponentCall } from '../../features/components/plan';
 
 export type { ComponentPlan, ModulePlan, Site, Template, TemplateNode } from './model';
 
@@ -60,7 +61,7 @@ function planModule(
     },
   };
   const functions = module.findAll(['FunctionDeclaration', 'FunctionExpression', 'ArrowFunctionExpression']);
-  rejectLaterPhases(entry, context, new Set(functions.filter((fn) => components.has(fn))));
+  rejectLaterPhases(entry, context);
 
   const plans = new Map<Node, ComponentPlan>();
   const moduleBindings = [...sharedReads.keys()].filter((binding) => binding.binding.module === module);
@@ -107,10 +108,12 @@ function planModule(
         if (reference.isWrite || reference.inTypePosition) {
           continue;
         }
+        const reader = runnerOf(module, reference.node);
+        const insideChild = reader !== null && reader !== fn && components.has(reader);
         const insideLexicalBlock = [...module.ancestors(reference.node)].some((ancestor) => {
           return is.BlockStatement(ancestor) && lexicalBlocks.has(ancestor);
         });
-        if (!insideLexicalBlock) {
+        if (!insideLexicalBlock && !insideChild) {
           continue;
         }
         if (!trackedReads.some((read) => read.node === reference.node)) {
@@ -146,8 +149,13 @@ function planModule(
   // Remaining JSX is a native stored/passed/returned value. Capture its site
   // inputs where it is evaluated, retaining lexical scope and evaluation order.
   const values: RenderValuePlan[] = [];
+  const calls: Extract<Node, { type: 'JSXElement' }>[] = [];
   for (const jsx of module.findAll(['JSXElement', 'JSXFragment'])) {
     if (claimed.has(jsx)) {
+      continue;
+    }
+    if (isComponentCall(jsx)) {
+      calls.push(jsx);
       continue;
     }
     const value = buildTemplate(jsx, { ...context, captureValues: true });
@@ -210,6 +218,11 @@ function planModule(
     sharedReads,
     receiverTargets: planReceiverTargets(module),
     values,
+    calls,
+    componentReferences: new Set(module.references.flatMap((reference) => {
+      const fn = functionValue(module, reference.node);
+      return fn !== null && components.has(fn) ? [reference.node] : [];
+    })),
   };
 }
 

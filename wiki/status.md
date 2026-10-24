@@ -27,6 +27,20 @@ Last updated: 2026-10-24.
 
 ## Done
 
+- Phase 6 general component/props integration (2026-10-24; broad audit pending).
+  Ordered call values cover named/member/dynamic/native tags, factories,
+  recursive components, children, spread props and keyed identity. Parameter
+  bindings receive versions and independent parent snapshots, preserving local
+  prop overrides. Direct-call adapters retain all arguments and native defaults/
+  rest; discarded calls run setup without mounting output. Native checks found
+  and fixed reserved-prop leakage, inherited SVG/foreignObject handling, lost
+  module tag reads and delayed child batch commits. Local cross-owner reads now
+  notify their consumers. The reference retains nested setup function identity.
+  Local verification: **84 component/state comparisons, nine native component
+  tests, 22 affected runtime tests and ten generated component programs pass**.
+  Compiler-next and runtime type checks pass. Full cases/reference/generators
+  will run in the manual CI audit; Octane remains the user's performance gate.
+
 - Decision A and the `var` fixes (2026-10-24, `../decisions.md`). A plain
   statement inside a returning block runs again only when what it reads changed,
   or on re-entry; the reference (`$ctx.returning`) and compiler-next (version

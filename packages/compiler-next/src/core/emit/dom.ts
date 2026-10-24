@@ -18,11 +18,14 @@ import { emitMutations } from '../../features/handlers/mutations';
 import { emitShared } from './shared';
 import { emitAwaitBoundaries } from './await';
 import { emitRenderValue } from './render-value';
+import { emitComponentCall } from '../../features/components/dom';
+import { emitProps } from '../../features/props/dom';
 
 /** Preserve module syntax and exports, replacing planned functions on a fresh tree. */
 export function emitDom(plan: ModulePlan, options: CompileModulesOptions): Node {
   const module = plan.module.module;
-  const hasRenderWork = plan.components.size > 0 || plan.sharedOwners.length > 0 || plan.values.length > 0;
+  const hasRenderWork = plan.components.size > 0 || plan.sharedOwners.length > 0
+    || plan.values.length > 0 || plan.calls.length > 0 || plan.componentReferences.size > 0;
   if (!hasRenderWork) {
     const hasBoundaries = findAll(module.ast, ['TryStatement', 'AwaitExpression']).length > 0;
     if (!hasBoundaries) {
@@ -36,6 +39,29 @@ export function emitDom(plan: ModulePlan, options: CompileModulesOptions): Node 
   const hoisted: Statement[] = [statement(`import * as $$runtime from ${runtimePath};`, { runtime })];
   const shared = emitShared(plan, names, runtime);
   const replacements = shared.replacements;
+  for (const reference of module.references) {
+    if (reference.isWrite || reference.inTypePosition) {
+      continue;
+    }
+    if (!plan.componentReferences.has(reference.node)) {
+      continue;
+    }
+    const parent = module.parentOf(reference.node);
+    if (is.JSXOpeningElement(parent) || is.JSXClosingElement(parent) || is.JSXMemberExpression(parent)
+      || is.ExportSpecifier(parent) || is.ExportDefaultDeclaration(parent)) {
+      continue;
+    }
+    const discarded = is.CallExpression(parent) && parent.callee === reference.node
+      && is.ExpressionStatement(module.parentOf(parent));
+    replacements.set(reference.node, expression(discarded
+      ? '$$runtime.componentSetup($$component)'
+      : '$$runtime.componentValue($$component)', {
+      runtime, component: reference.node,
+    }));
+  }
+  for (const call of plan.calls) {
+    replacements.set(call, emitComponentCall(call, runtime, plan.componentReferences.has(call.openingElement.name)));
+  }
   hoisted.push(...shared.imports);
   for (const value of plan.values) {
     const emitted = emitRenderValue(value, names, runtime);
@@ -43,7 +69,10 @@ export function emitDom(plan: ModulePlan, options: CompileModulesOptions): Node 
     replacements.set(value.node, emitted.replacement);
   }
 
-  for (const component of plan.components.values()) {
+  // A parent setup can contain a component declaration. Compose the nested
+  // function first, before finishCopy seals the parent's emitted tree.
+  const components = [...plan.components.values()].sort((left, right) => right.fn.start - left.fn.start);
+  for (const component of components) {
     const markup = component.template.markup === null ? null : names.fresh('_markup');
     if (markup !== null) {
       hoisted.push(statement('const $$markup = $$html;', {
@@ -51,7 +80,16 @@ export function emitDom(plan: ModulePlan, options: CompileModulesOptions): Node 
         html: stringLiteral(component.template.markup!),
       }));
     }
-    replacements.set(component.fn, finishCopy(emitComponent(component, names, runtime, markup, replacements)));
+    let emitted = emitComponent(component, names, runtime, markup, replacements);
+    if (!is.FunctionDeclaration(component.fn)) {
+      emitted = expression('$$runtime.defineComponent($$component)', { runtime, component: emitted });
+    }
+    const insideComponent = [...module.ancestors(component.fn)].some((ancestor) => {
+      return ancestor !== component.fn && plan.components.has(ancestor);
+    });
+    // Nested components still need their enclosing instance's lexical read
+    // and write rewrites. Seal only after that enclosing composition is done.
+    replacements.set(component.fn, insideComponent ? emitted : finishCopy(emitted));
   }
 
   const output = copy(module.ast, replacements);
@@ -95,6 +133,9 @@ function emitComponent(
   const scope = names.fresh('_scope');
   const setupFrame = names.fresh('_setupFrame');
   const updateFrame = names.fresh('_updateFrame');
+  const namespace = names.fresh('_namespace');
+  const setupOnly = names.fresh('_setupOnly');
+  const props = emitProps(plan, state.versions, names, runtime, batch, external);
   const takeovers = emitTakeovers(plan.takeovers, state.versions, names, scope, batch!);
   const trackKeys = new Map<import('../graph').BindingNode, string>();
   const readonly = new Map([
@@ -112,7 +153,7 @@ function emitComponent(
   const handled = new Set(plan.takeovers);
   const mutations = emitMutations(plan.mutations, state.versions, names, runtime, batch, readonly);
   const writes = batch === null
-    ? { replacements: new Map<Node, Node>(), declarations: [] }
+    ? { replacements: mutations.replacements, declarations: [] }
     : emitWrites(plan.writes, state.versions, names, batch, mutations.replacements, handled);
   // Only writes executed by replay itself are silent. A function created by a
   // replayed initializer may run later and must keep its ordinary write commits.
@@ -155,13 +196,24 @@ function emitComponent(
   body.push(
     statement('const $$scope = $$runtime.createBuildScope();', { scope, runtime }),
     statement('const $$setupFrame = $$scope.enter();', { setupFrame, scope }),
+    ...props.setup,
     ...memos.setup,
     ...memos.snapshots,
+    ...props.receive,
+    b.IfStatement({
+      test: b.Identifier({ name: setupOnly }),
+      consequent: b.BlockStatement({ body: [
+        ...(batch === null ? [] : [statement('$$runtime.registerEntity($$entity);', { runtime, entity })]),
+        statement('$$scope.leave($$setupFrame);', { scope, setupFrame }),
+        b.ReturnStatement({ argument: null }),
+      ] }),
+      alternate: null,
+    }),
     statement('const $$document = $$runtime.getActiveEnvironment().document;', { document, runtime }),
   );
   const used = new Set(plan.template.roots);
   for (const site of plan.sites) used.add(site.node);
-  const template = emitTemplate(plan.template, used, { names, runtime, document, markup });
+  const template = emitTemplate(plan.template, used, { names, runtime, document, markup, namespace });
   body.push(...template.statements);
 
   // Placeholders keep neighbouring values as distinct text nodes after parsing.
@@ -170,9 +222,27 @@ function emitComponent(
 
   const sites = emitSites(plan, {
     names, runtime, batch, entity, id, document, versions: state.versions, replacements: writes.replacements,
-    ref: slots.ref, once,
+    ref: slots.ref, once, namespace,
   });
   body.push(...sites.mount);
+  // A callback can read this instance while another component collects its
+  // dependencies. Publish local versions after the owner's update settles so
+  // those consumers receive the same notifications as shared-state readers.
+  const publications = [...trackKeys].map(([binding, key]) => ({
+    key,
+    version: state.versions.get(binding)!,
+    seen: names.fresh('_publishedVersion'),
+  }));
+  for (const { version, seen } of publications) {
+    body.push(statement('let $$seen = $$version;', { seen, version }));
+  }
+  const publish: Statement[] = [];
+  for (const { version, seen, key } of publications) {
+    publish.push(statement(`if ($$seen !== $$version) {
+      $$seen = $$version;
+      $$runtime.publishVersions([$$key]);
+    }`, { seen, version, runtime, key }));
+  }
   if (sites.dispose.length > 0) {
     const cleanup = statement('$$runtime.cleanup($$id, () => {});', { runtime, id });
     if (cleanup.type === 'ExpressionStatement' && cleanup.expression.type === 'CallExpression') {
@@ -192,7 +262,7 @@ function emitComponent(
       id: b.Identifier({ name: update }), params: [],
       body: b.BlockStatement({ body: [
         statement('const $$updateFrame = $$scope.enter();', { updateFrame, scope }),
-        ...memos.update, ...sites.update,
+        ...memos.update, ...sites.update, ...publish,
         statement('$$scope.leave($$updateFrame);', { scope, updateFrame }),
       ] }), async: false, generator: false, expression: false,
     }));
@@ -213,7 +283,7 @@ function emitComponent(
   }
 
   const fn = copy(plan.fn);
-  fn.params = [b.Identifier({ name: id }), b.Identifier({ name: parent }), ...fn.params];
+  fn.params = [id, parent, props.parameter, namespace, setupOnly].map((name) => b.Identifier({ name }));
   fn.body = b.BlockStatement({ body });
   if (fn.type === 'ArrowFunctionExpression') fn.expression = false;
   return fn;
