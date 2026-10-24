@@ -37,6 +37,12 @@ Read this file first. Then read `wiki/README.md`, which lists the rest in order.
   locally; run the files you changed. Root tests import `dist`, so rebuild the
   package first (`bun run --cwd packages/<name> build`).
 - `packages/compiler-next` tests import `src` directly and need no build.
+- The slow compiler-next checks run on GitHub Actions
+  (`.github/workflows/compiler-next.yml`), not locally: every case on the
+  reference, every case on compiler-next (`scripts/phase-gate.ts`: each failure
+  must name its phase), and the generators at 200 programs. They finish in about
+  a minute there, against about 20 minutes on the user's machine. Push, then
+  `gh run watch <id> --exit-status`. Locally, run only the files a change affects.
 - Type-check with `bun check` (in a package, or `bun check -p <tsconfig>`). It reports
   the same errors as `tsc` in under a second. Do not use `bunx tsc`.
 - Benchmarks live in `bench/`. Run them locally only to check their correctness
