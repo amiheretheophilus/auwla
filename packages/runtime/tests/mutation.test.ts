@@ -1,5 +1,63 @@
 import { expect, it } from 'bun:test';
-import { captureMutationScope, mutationTarget, observeMutation } from '../src/mutation';
+import {
+  captureMutationScope, deleteMutation, mutationTarget, observeMutation, registerSharedMutationRoots,
+} from '../src/mutation';
+
+/** A root that holds `value` and counts its notifications. */
+function root(initial: unknown) {
+  const watched = { value: initial, notified: 0 };
+  const entry = { read: () => watched.value, notify: () => { watched.notified++; } };
+  registerSharedMutationRoots({}, [entry]);
+  return watched;
+}
+
+/** `object[key] = value` as compiled code writes it, for a root it is not read through. */
+function store(object: object, key: PropertyKey, value: unknown): void {
+  mutationTarget(object, key, () => {}).value = value;
+}
+
+it('notifies only the roots whose data includes the edited object', () => {
+  const shared = { done: false };
+  const list = root([shared, { done: false }]);
+  const copy = root({ item: shared });
+  const other = root({ item: { done: false } });
+  store(shared, 'done', true);
+  expect([list.notified, copy.notified, other.notified]).toEqual([1, 1, 0]);
+  store(list.value as object, 'length', 1);
+  expect([list.notified, copy.notified, other.notified]).toEqual([2, 1, 0]);
+});
+
+it('follows objects that compiled stores add, and forgets the ones they remove', () => {
+  const added = { n: 0 };
+  const removed = { n: 0 };
+  const holder = root({ slot: removed });
+  store(holder.value as object, 'slot', added);
+  expect(holder.notified).toBe(1);
+  store(added, 'n', 1);
+  expect(holder.notified).toBe(2);
+  store(removed, 'n', 1);
+  expect(holder.notified).toBe(2);
+  deleteMutation(holder.value, 'slot', () => {});
+  expect(holder.notified).toBe(3);
+  store(added, 'n', 2);
+  expect(holder.notified).toBe(3);
+});
+
+it('walks a root again when its binding holds a new value or an opaque call reshaped it', () => {
+  const first = { n: 0 };
+  const second = { n: 0 };
+  const holder = root([first]);
+  store(first, 'n', 1);
+  holder.value = [second];
+  store(second, 'n', 1);
+  expect(holder.notified).toBe(2);
+  const pushed = { n: 0 };
+  const list = holder.value as object[];
+  observeMutation([() => list], [() => {}]).finish(list.push(pushed));
+  expect(holder.notified).toBe(3);
+  store(pushed, 'n', 1);
+  expect(holder.notified).toBe(4);
+});
 
 it('observes cyclic data, symbols, hidden fields and native collections without invoking getters', () => {
   const key = Symbol();

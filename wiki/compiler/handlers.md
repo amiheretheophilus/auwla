@@ -79,6 +79,23 @@ when its value can become part of the mutated binding: an operand of arithmetic,
 a comparison, `typeof`, template text or a conditional's test produces a new
 primitive, so `const local = value * LIMIT` leaves `LIMIT` constant
 (`features/state/classify.ts`, `mayFlowIntoValue`). Seven mutation comparisons pass.
+
+Finding the roots that share an edited object must not cost the size of all
+mounted data on every write. `runtime/src/mutation.ts` keeps, per root, the set of
+objects it reached when it was last walked. A compiled store adds what it wrote.
+A store that may drop an object marks the set stale, and so do a delete and a
+receiver write. A root that now holds another value is walked again. An opaque
+call or an uncompiled setter forgets the set of each root it touched. So a miss
+is exact. A hit on a stale set walks that root again before notifying, so a
+removed object never notifies its old root. A typical write (`row.label = x`)
+costs one set lookup per root.
+Known limit: uncompiled code that adds an object to watched data outside an
+observed call is not seen until that root is walked again.
+
+An opaque call takes one shallow snapshot of each object its reads reach, before
+and after. A read is notified when one of its objects changed or the read now
+gives another value. This answers the same question as a deep snapshot of each
+read, without taking two more.
 Receiver writes through `this`, private fields and `super` now report changes to
 their receiver's roots. Module/factory versions and shared roots notify subscribed
 consumers (`state-and-derived.md`). Proxy-specific reflection behavior still needs

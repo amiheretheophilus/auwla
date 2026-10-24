@@ -44,10 +44,13 @@ Last updated: 2026-10-24.
   6 array children (5), 19 `$effect`/`$cleanup` and 10 refs (7), 2 spread
   children (5), 1 spread attribute (6). 182 compiler-next unit tests and 4
   value-slot runtime tests pass; `bun check` passes.
-  Not changed, noted for later: every text site creates a value slot even when
-  its value is always primitive, and the runtime mutation check walks everything
-  reachable from each mounted root after every mutation. Both are performance
-  questions for the `bench/` run.
+  Then, before benchmarking, two costs the review found were removed:
+  - A text site whose syntax guarantees a primitive writes its text node directly,
+    without a value slot (`2db5c16`).
+  - The mutation runtime no longer walks all data reachable from every mounted
+    root on each write. Each root keeps a cached reach set, and an opaque call
+    takes shallow snapshots only (`handlers.md`). 34 runtime tests pass,
+    including three new alias tests.
 - Readability pass through the recent compiler/runtime rewrite: expanded compound
   statements and traversal branches, extracted named helpers for site inputs,
   return searches, jump targets and render program construction, and documented
