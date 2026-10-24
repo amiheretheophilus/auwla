@@ -34,8 +34,10 @@ export function collectComputations(
         if (site.runner !== owner) continue;
         const statement = bodyStatement(module, site.node, builderOwner(binding));
         if (statement === null || ownedBy(binding, statement)) continue;
-        // A return consumes a value; it is not part of building that value.
-        if (is.ReturnStatement(statement)) continue;
+        // A return consumes a value; it is not part of building that value. A
+        // statement that returns belongs to the component's selector, whose
+        // guards re-run it (`conditionals-and-lists.md`, "Early returns").
+        if (containsReturn(statement)) continue;
         const certainty = site.kind === 'call' || site.kind === 'argument' ? 'possible' : 'definite';
         addBuilder(binding, statement, certainty);
       }
@@ -49,7 +51,7 @@ export function collectComputations(
         // A child invocation writing a parent's state does not rebuild the parent.
         if (binding.module !== module || declaringRunner(module, binding) !== owner) continue;
         const statement = bodyStatement(module, call, builderOwner(binding));
-        if (statement === null || is.ReturnStatement(statement)) continue;
+        if (statement === null || containsReturn(statement)) continue;
         if (ownedBy(binding, statement)) continue;
         const certainty = site.kind === 'call' || site.kind === 'argument' ? 'possible' : 'definite';
         addBuilder(binding, statement, certainty);
@@ -66,7 +68,7 @@ export function collectComputations(
           const binding = site.binding;
           if (binding.module !== module || declaringRunner(module, binding) !== owner) continue;
           const statement = bodyStatement(module, call, builderOwner(binding));
-          if (statement === null || is.ReturnStatement(statement)) continue;
+          if (statement === null || containsReturn(statement)) continue;
           if (!ownedBy(binding, statement)) addBuilder(binding, statement, 'possible', 'runtime');
         }
       }

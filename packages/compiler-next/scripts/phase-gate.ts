@@ -7,8 +7,9 @@
  *   bun scripts/phase-gate.ts cases.log
  *
  * Bun prints a failing test's output, then its `(fail)` line; a passing test
- * prints its `(pass)` line only on a terminal. So each `(fail)` line closes the
- * output since the previous marker.
+ * prints its `(pass)` line only on a terminal or in CI. So each `(fail)` line
+ * closes the output since the previous marker. In CI Bun ends with a recap
+ * (`130 tests failed:`) that repeats the `(fail)` lines; reading stops there.
  */
 import { readFileSync } from 'node:fs';
 
@@ -23,6 +24,7 @@ const phases = new Map<string, number>();
 const unexplained: string[] = [];
 let block: string[] = [];
 for (const line of lines) {
+  if (/^\d+ tests? failed:$/.test(line.trim())) break;
   if (line.startsWith('(pass)')) {
     block = [];
     continue;
