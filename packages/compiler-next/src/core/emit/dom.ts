@@ -85,7 +85,9 @@ function emitComponent(
   const state = emitLocalState(plan.state, names);
   // Value slots can own nested DOM even when the component has no local state.
   // Their listeners and disposal still need the component's batch and entity.
-  const ownsRegions = plan.sites.some((site) => site.kind === 'conditional' || site.kind === 'text');
+  const ownsRegions = plan.sites.some((site) => {
+    return site.kind === 'conditional' || (site.kind === 'text' && !site.primitive);
+  });
   const needsBatch = plan.state.length > 0 || plan.dynamicSites.size > 0 || ownsRegions;
   const batch = needsBatch ? names.fresh('_writes') : null;
   const update = names.fresh('_update');

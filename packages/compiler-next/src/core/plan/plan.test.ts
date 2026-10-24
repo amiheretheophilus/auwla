@@ -81,6 +81,21 @@ describe('template planning and emission', () => {
   });
 });
 
+describe('primitive text sites', () => {
+  it('writes text directly only when the syntax guarantees a primitive', () => {
+    const source = `export function App() {
+      let count = 0;
+      let label = 'x';
+      return <p onClick={() => count++}>{count + 1}{\`n\${count}\`}{count > 1 ? 'many' : 'few'}{!count}{label}{count && label}</p>;
+    }`;
+    const { plan, component } = inspect(source);
+    const texts = component.sites.filter((site) => site.kind === 'text');
+    expect(texts.map((site) => site.primitive)).toEqual([true, true, true, true, false, false]);
+    const code = printJavaScript(emitDom(plan, { runtimePath: '@memoized-dom/runtime/testing' }), 'App.tsx', source);
+    expect(code.match(/createValueSlot\(/g)).toHaveLength(2);
+  });
+});
+
 describe('features of later phases fail with their phase', () => {
   it('rejects the ambient lifecycle calls, but not a local function with the same name', () => {
     expect(() => inspect('export function App() { $effect(() => {}); return <p />; }')).toThrow('`$effect` from Phase 7');

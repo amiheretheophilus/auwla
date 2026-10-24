@@ -122,7 +122,13 @@ class TemplateBuilder {
       return node;
     }
     const node = this.add({ kind: 'placeholder' });
-    this.sites.push({ kind: 'text', node, expression, reactive: this.context.reactive(expression) });
+    this.sites.push({
+      kind: 'text',
+      node,
+      expression,
+      reactive: this.context.reactive(expression),
+      primitive: alwaysPrimitive(expression),
+    });
     return node;
   }
 
@@ -231,6 +237,22 @@ function constantAttribute(expression: Expression): string | null | undefined {
   if (value === true) return '';
   if (typeof value === 'string' || typeof value === 'number') return String(value);
   return undefined;
+}
+
+/**
+ * Whether the expression's own syntax guarantees a primitive result. Every
+ * unary, binary and update operator returns one, as do template text and
+ * non-regex literals. A choice is primitive when every result it can pick is.
+ */
+function alwaysPrimitive(expression: Expression): boolean {
+  const value = unwrap(expression);
+  if (is.Literal(value)) return !('regex' in value);
+  if (is.TemplateLiteral(value)) return true;
+  if (is.BinaryExpression(value) || is.UnaryExpression(value) || is.UpdateExpression(value)) return true;
+  if (is.LogicalExpression(value)) return alwaysPrimitive(value.left) && alwaysPrimitive(value.right);
+  if (is.ConditionalExpression(value)) return alwaysPrimitive(value.consequent) && alwaysPrimitive(value.alternate);
+  if (is.SequenceExpression(value)) return alwaysPrimitive(value.expressions.at(-1)!);
+  return false;
 }
 
 function serialize(nodes: readonly TemplateNode[], index: number): string {

@@ -89,7 +89,7 @@ export function emitSites(
     }
     let region: string | null = null;
     let valueSlot: string | null = null;
-    if (site.kind === 'text') {
+    if (site.kind === 'text' && !site.primitive) {
       valueSlot = names.fresh('_valueSlot');
       mount.push(statement('const $$slot = $$runtime.createValueSlot($$text, { id: $$id, batch: $$batch, entity: $$entity, namespace: $$namespace });', {
         slot: valueSlot,

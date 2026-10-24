@@ -49,6 +49,11 @@ interface SiteBase {
 
 export interface TextSite extends SiteBase {
   readonly kind: 'text';
+  /**
+   * The expression can only produce a primitive, so the site writes its text
+   * node directly. Otherwise a value slot also accepts stored JSX.
+   */
+  readonly primitive: boolean;
 }
 
 export interface AttributeSite extends SiteBase {
