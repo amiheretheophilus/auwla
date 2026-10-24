@@ -6,7 +6,7 @@ import type { ComponentPlan, MemoGroupPlan } from '../../core/plan/model';
 import type { Names } from '../../core/emit/names';
 import { copy } from '../../core/emit/copy';
 import { expression, statement } from '../../core/emit/quote';
-import { patternNames } from '../../core/emit/patterns';
+import { liftVarDeclarations, patternNames } from '../../core/emit/patterns';
 import type { TakeoverEmit } from './takeover';
 
 /**
@@ -81,8 +81,12 @@ export function emitMemos(
           : `const $$computation = $$runtime.createComputation($$batch.mark${notify.entity === undefined ? '' : ', $$entity'});`;
         setup.push(statement(create, { computation, runtime, ...notify }));
         const conditions: Expression[] = [expression('$$computation.changed()', { computation })];
+        // The value replays when anything its derivation reads changed: its
+        // initializer and its builders (`let d = a; if (o.b) d = 0;` follows
+        // `o.b`). Not merely because its group did, which would repeat an
+        // initializer's side effects for an unrelated input.
         const memo = group.computations.find((memo) => memo.declarator === step);
-        for (const input of memo?.initialInputs ?? []) {
+        for (const input of memo?.inputs ?? []) {
           const version = versions.get(input);
           if (version === undefined) continue;
           const seen = names.fresh('_initializerFrom');
@@ -146,7 +150,19 @@ export function emitMemos(
     }
     const condition = conditions.reduce((left, right) => b.LogicalExpression({ operator: '||', left, right }), expression('false'));
     checks.push(statement('let $$changed = $$condition;', { changed, condition }));
+    // A `var` declared inside its builder changes when that builder replays.
+    const declaredBy = new Map<Node, Statement[]>();
     for (const memo of group.computations) {
+      if (!memo.nested) continue;
+      const declaring = memo.builders.find((builder) => {
+        return memo.declarator.start >= builder.start && memo.declarator.end <= builder.end;
+      })!;
+      const bumps = memo.targets.filter((target) => !takeovers.targets.has(target))
+        .map((target) => statement('$$version++;', { version: versions.get(target)! }));
+      declaredBy.set(declaring, [...(declaredBy.get(declaring) ?? []), ...bumps]);
+    }
+    for (const memo of group.computations) {
+      if (memo.nested) continue;
       const replacements = new Map(replayReplacements);
       for (const target of memo.targets) {
         const receiver = takeovers.targets.get(target);
@@ -167,6 +183,8 @@ export function emitMemos(
     for (const builder of group.steps) {
       if (is.VariableDeclarator(builder)) continue;
       let body = copy(builder, replayReplacements) as Statement;
+      // Replay runs in `_update`; a `var` here is the component's, declared by setup.
+      liftVarDeclarations(body);
       // Keep an authored exception boundary in one place when setup and replay
       // execute the same builder. An arrow retains lexical this/arguments/super.
       if (is.TryStatement(builder) && canShareBuilder(builder)) {
@@ -175,7 +193,7 @@ export function emitMemos(
         body = statement('$$run();', { run });
         sharedBuilders.set(builder, body);
       }
-      steps.set(builder, { group, body: [body] });
+      steps.set(builder, { group, body: [body, ...(declaredBy.get(builder) ?? [])] });
     }
   }
 
@@ -281,6 +299,11 @@ export function emitMemos(
       setup.push(copy(original, mountReplacements));
     } else if (!is.VariableDeclaration(original)) {
       const body = sharedBuilders.get(original) ?? copy(original, mountReplacements);
+      if (isDeferred) {
+        // It runs inside the selector, but its `var`s belong to the component.
+        const declared = liftVarDeclarations(body);
+        if (declared.length > 0) setup.push(statement(`var ${declared.join(', ')};`, {}));
+      }
       target.push(...before(original), ...(observationBefore.get(original) ?? []),
         ...(isDeferred ? hoistClass(body, setup) : [body]), ...(observationAfter.get(original) ?? []), ...after(original));
     } else {

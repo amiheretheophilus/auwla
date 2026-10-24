@@ -460,6 +460,36 @@ behaves('conditional: text-only returns update', {
   steps: [{ advance: 100 }, { advance: 100 }],
 });
 
+behaves('conditional: a statement in a returning block runs again only when what it reads changes', {
+  source: `export function App() {
+    let n = 0, other = 0;
+    const seen = [];
+    if (n > 0) {
+      seen.push(n);
+      return <main><p>{seen.join(',')} {other}</p>
+        <button id="other" onClick={() => other++}>other</button>
+        <button id="n" onClick={() => n++}>n</button>
+        <button id="zero" onClick={() => n = 0}>zero</button></main>;
+    }
+    return <button id="go" onClick={() => n++}>go</button>;
+  }`,
+  steps: [{ click: '#go' }, { click: '#other' }, { click: '#n' }, { click: '#other' }, { click: '#zero' }, { click: '#go' }],
+  check(root, index) {
+    const text = root.querySelector('p')?.textContent ?? 'go';
+    expect(text).toBe(['go', '1 0', '1 1', '1,2 1', '1,2 2', 'go', '1,2,1 2'][index]!);
+  },
+});
+
+behaves('conditional: a var in setup between returns is visible to the next return', {
+  source: `export function App() {
+    let n = 2;
+    if (n > 5) return <p>big</p>;
+    for (var i = 0, total = 0; i < n; i++) total += i;
+    return <button onClick={() => n++}>{total} {i}</button>;
+  }`,
+  steps: [{ click: 'button' }],
+});
+
 behaves('conditional: a return inside try and a labeled block', {
   source: `export function App() {
     let n = 0;

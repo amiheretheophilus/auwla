@@ -86,15 +86,21 @@ compiles to a selector program (`features/conditionals/returns.ts`, `plan.ts`,
 Known gap: a hoisted name is `undefined` before its segment runs, where
 JavaScript would throw a TDZ error if a handler read it that early.
 
-**Reference problems, for the user to decide** (`../open-issues.md`):
-
-- A returning statement that mutates data (`if (n > 0) { seen.push(n); return … }`)
-  runs again on every render in the reference, so a render caused by unrelated
-  state pushes again, and the reference never settles. compiler-next runs it when
-  the selector's inputs change. No case is kept until the rule is decided.
-- The reference wraps a once-only setup statement in a thunk, so a `var` it
-  declares (`for (var i = 0; …)`) is not visible to later returns:
-  `ReferenceError`. compiler-next hoists it correctly.
+- **Statements inside a returning block** (`../decisions.md`, 2026-10-24): a
+  plain statement there (`if (n > 0) { seen.push(n); return … }`) runs when
+  control reaches it and what it reads changed since it last ran, or when it was
+  not reached on the previous run. Its own writes do not count, so it cannot
+  loop. Statements that declare or use the block's own variables run on every
+  run of the block, since the return needs them, and so does anything in a loop.
+  compiler-next wraps each such statement in a version guard inside `_select`
+  (`ReturningGuard`); hidden reads behind an unknown call are collected while it
+  runs and shared with the selector's collector (`computation.share()`). The
+  reference does the same with `$ctx.returning`. Before this, the reference ran
+  them on every render and never settled.
+- A `var` in once-only setup after a return (`for (var i = 0; …)`) is declared in
+  the component's scope and derives with its statement, as `let` does
+  (`state-and-derived.md`). The reference used to lose it: its setup thunk kept
+  the `var`, and it gave no `var` a slot.
 
 Six comparison cases cover the program (`conditional:` in
 `cases/conditionals-and-lists.test.ts`): setup after a return, a derived value

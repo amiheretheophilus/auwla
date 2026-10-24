@@ -775,3 +775,29 @@ behaves('recursive patterns: mutually recursive helpers rederive from nested sta
   steps: [{ click: '#nested' }, { click: '#add' }, { click: '#factor' }],
   check(container, observation) { expect(container.querySelector('p')?.textContent).toBe(['3', '4', '8', '16'][observation]); },
 });
+
+// Found by the full generator (seed -785770448): the initializer also read `l0`
+// through an unknown call, and replayed only when its own reads changed, so the
+// `if` builder replayed over the stale value when `o0.b` changed.
+behaves('derived: a value whose initializer calls a method replays from its initializer when a builder input changes', {
+  source: `export function App() {
+    let l0 = [];
+    let o0 = { b: 7 };
+    let o1 = { a: 1 };
+    let d2 = l0.reduce((total, x) => total + x, 0) > 0 ? 0 : o1.a * 3;
+    if (o0.b % 2 !== 0) d2 = l0.reduce((total, x) => total + x, 0) * 2;
+    return <main><p>{d2}</p><button onClick={() => { o0.b = 0; }}>even</button></main>;
+  }`,
+  steps: [{ click: 'button' }],
+  check(container, observation) { expect(container.querySelector('p')?.textContent).toBe(['0', '3'][observation]!); },
+});
+
+behaves('derived: a var declared in a loop header derives with its loop, as let does', {
+  source: `export function App() {
+    let n = 2;
+    for (var i = 0, total = 0; i < n; i++) total += i;
+    return <button onClick={() => n++}>{total} {i}</button>;
+  }`,
+  steps: [{ click: 'button' }, { click: 'button' }],
+  check(container, observation) { expect(container.textContent).toBe(['1 2', '3 3', '6 4'][observation]!); },
+});

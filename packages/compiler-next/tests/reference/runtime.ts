@@ -431,6 +431,24 @@ export class Instance {
     this.statementsRun.add(index);
   }
 
+  /** Statement `index` inside a returning block: the render it was last reached in, and what it read after it ran. */
+  private readonly returningRuns = new Map<number, { render: number; inputs: unknown }>();
+
+  /**
+   * A plain statement inside a block that returns (`wiki/decisions.md`,
+   * 2026-10-24): it runs when reached and what it reads changed since it last
+   * ran, or when it was not reached on the previous render. The inputs are
+   * recorded after it runs, so its own writes do not make it run again.
+   */
+  returning(index: number, readInputs: () => unknown[], run: () => void): void {
+    const previous = this.returningRuns.get(index);
+    const stays = previous !== undefined
+      && previous.render === this.render - 1
+      && deepEqual(previous.inputs, deepCopy(readInputs()));
+    if (!stays) run();
+    this.returningRuns.set(index, { render: this.render, inputs: deepCopy(readInputs()) });
+  }
+
   /** Called before each render of the instance. */
   beginRender(): void {
     this.render++;

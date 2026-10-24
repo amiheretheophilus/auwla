@@ -1,5 +1,5 @@
 /** Initializers and body builders, kept separately from later takeover candidates. */
-import { is } from 'yuku-ast';
+import { is, walk } from 'yuku-ast';
 import type { Node } from 'yuku-parser';
 import type { Binding, Resolved } from '../../core/resolve';
 import { declaringRunner, isRuntimeBinding, runnerOf } from '../../core/resolve';
@@ -33,7 +33,7 @@ export function collectComputations(
       for (const site of writes) {
         if (site.runner !== owner) continue;
         const statement = bodyStatement(module, site.node, builderOwner(binding));
-        if (statement === null || declaresInside(binding, statement)) continue;
+        if (statement === null || ownedBy(binding, statement)) continue;
         // A return consumes a value; it is not part of building that value.
         if (is.ReturnStatement(statement)) continue;
         const certainty = site.kind === 'call' || site.kind === 'argument' ? 'possible' : 'definite';
@@ -50,7 +50,7 @@ export function collectComputations(
         if (binding.module !== module || declaringRunner(module, binding) !== owner) continue;
         const statement = bodyStatement(module, call, builderOwner(binding));
         if (statement === null || is.ReturnStatement(statement)) continue;
-        if (declaresInside(binding, statement)) continue;
+        if (ownedBy(binding, statement)) continue;
         const certainty = site.kind === 'call' || site.kind === 'argument' ? 'possible' : 'definite';
         addBuilder(binding, statement, certainty);
       }
@@ -67,7 +67,7 @@ export function collectComputations(
           if (binding.module !== module || declaringRunner(module, binding) !== owner) continue;
           const statement = bodyStatement(module, call, builderOwner(binding));
           if (statement === null || is.ReturnStatement(statement)) continue;
-          if (!declaresInside(binding, statement)) addBuilder(binding, statement, 'possible', 'runtime');
+          if (!ownedBy(binding, statement)) addBuilder(binding, statement, 'possible', 'runtime');
         }
       }
     }
@@ -80,6 +80,12 @@ export function collectComputations(
       const declaration = variableDeclaration(binding);
       const parameter = parameterPattern(binding);
       const builders = candidates.get(binding) ?? [];
+      // A `var` declared inside a body statement is computed by that whole
+      // statement (`for (var i = 0; i < n; i++)`): it declares and builds it.
+      const declaring = nestedVarStatement(binding);
+      if (declaring !== null && !builders.some((builder) => builder.statement === declaring)) {
+        builders.push({ statement: declaring, certainty: 'definite' });
+      }
       const reads: ReadFact[] = [];
       const seen = new Set<ReadFact['reference']>();
       // `opaque`: the computation itself has reads the compiler cannot see.
@@ -135,6 +141,47 @@ export function collectComputations(
     }
   }
   return computations;
+}
+
+/**
+ * Whether writes inside `statement` belong to a binding the statement itself
+ * declares, and so build nothing outside it. Not so for a `var`, which
+ * outlives the statement that declares it.
+ */
+function ownedBy(binding: Binding, statement: Node): boolean {
+  return declaresInside(binding, statement) && nestedVarStatement(binding) !== statement;
+}
+
+/**
+ * The body statement around a `var` declared below the top of its body
+ * (in a loop header, a block or a branch), or null. Not one that returns: its
+ * `var`s belong to each run of the component's selector
+ * (`conditionals-and-lists.md`, "Early returns").
+ */
+export function nestedVarStatement(binding: Binding): Node | null {
+  const declarator = variableDeclaration(binding);
+  const declaration = declarator === null ? null : binding.module.parentOf(declarator);
+  if (!is.VariableDeclaration(declaration) || declaration.kind !== 'var') return null;
+  const statement = bodyStatement(binding.module, declaration, builderOwner(binding));
+  if (statement === null || statement === declaration || containsReturn(statement)) return null;
+  // `export var x` is still at the top of its module.
+  if (is.ExportNamedDeclaration(statement) && statement.declaration === declaration) return null;
+  return statement;
+}
+
+function containsReturn(root: Node): boolean {
+  let found = false;
+  walk(root, {
+    enter(node, context) {
+      if (is.Function(node)) {
+        context.skip();
+      } else if (is.ReturnStatement(node)) {
+        found = true;
+        context.stop();
+      }
+    },
+  });
+  return found;
 }
 
 function declaresInside(binding: Binding, node: Node): boolean {

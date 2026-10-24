@@ -72,7 +72,7 @@ function planModule(
     const computations = memos.get(fn) ?? [];
     const targets = computations.flatMap((group) => group.computations.flatMap((memo) => memo.targets));
     const local = [...new Set([...(state.get(fn) ?? []), ...targets])];
-    const component = planComponent(fn, context, module);
+    const component = planComponent(fn, context, graph, queries, entry);
     const { siteInputs, dynamicSites } = planSiteInputs(component.sites, fn, graph, queries, entry);
     const writes = planWrites(local);
     const mutations = planMutations(local);
@@ -270,7 +270,13 @@ function planSiteInputs(
  * `{ …setup; return <markup />; }`, an arrow whose body is the markup, or a
  * body whose returns interleave with setup (a selector program).
  */
-function planComponent(fn: FunctionNode, context: TemplateContext, module: ResolvedModule['module']) {
+function planComponent(
+  fn: FunctionNode,
+  context: TemplateContext,
+  graph: SemanticGraph,
+  queries: InputQueries,
+  entry: ResolvedModule,
+) {
   type Markup = Extract<Node, { type: 'JSXElement' | 'JSXFragment' }>;
   const body = fn.body;
   if (body === null) {
@@ -282,14 +288,25 @@ function planComponent(fn: FunctionNode, context: TemplateContext, module: Resol
     return { fn, setup: [] as Statement[], deferred: noDeferred, ...buildTemplate(returnedMarkup(body as Expression), context) };
   }
 
-  const returned = planReturns(
-    body.body as Statement[],
-    (markup, block) => readsBlockLocal(module, markup, block),
-    (expression) => {
+  const module = entry.module;
+  const returned = planReturns(body.body as Statement[], {
+    readsBlockLocal: (markup, block) => usesBlockLocal(module, markup, block, false),
+    usesBlockLocal: (node, block) => usesBlockLocal(module, node, block, true),
+    selectsMarkup: (expression) => {
       const value = unwrap(expression);
       return is.ConditionalExpression(value) && containsJsx(value) && canPlanConditional(value, containsJsx);
     },
-  );
+    inputsOf: (statement) => {
+      const facts = queries.inputsOf(module, statement);
+      const inputs = new Set<BindingNode>();
+      for (const read of facts.reads) {
+        const binding = read.binding ?? read.reference.binding;
+        const node = binding === null ? undefined : graph.bindings.get(binding);
+        if (node !== undefined) inputs.add(node);
+      }
+      return { inputs: [...inputs], opaque: facts.opaque };
+    },
+  });
   if (returned.kind === 'expression') {
     return { fn, setup: returned.setup, deferred: noDeferred, ...buildTemplate(returnedMarkup(returned.expression), context) };
   }
@@ -324,18 +341,20 @@ function planComponent(fn: FunctionNode, context: TemplateContext, module: Resol
 }
 
 /**
- * Whether `markup` reads a variable declared inside `block` but outside
- * `markup`. A `var` belongs to the component's scope, so it does not count.
+ * Whether `node` uses a variable declared inside `block` but outside `node`.
+ * For returned markup a `var` does not count: it belongs to the component's
+ * scope, where a template branch can see it. For a guarded statement it does:
+ * its value comes from the block's own run.
  */
-function readsBlockLocal(module: ResolvedModule['module'], markup: Expression, block: Statement): boolean {
-  return findAll(markup, ['Identifier', 'JSXIdentifier']).some((name) => {
+function usesBlockLocal(module: ResolvedModule['module'], node: Node, block: Statement, countVar: boolean): boolean {
+  return findAll(node, ['Identifier', 'JSXIdentifier']).some((name) => {
     const declared = module.referenceOf(name)?.binding?.declarations[0];
     if (declared === undefined) {
       return false;
     }
     const inBlock = declared.start >= block.start && declared.end <= block.end;
-    const inMarkup = declared.start >= markup.start && declared.end <= markup.end;
-    return inBlock && !inMarkup && !declaredWithVar(module, declared);
+    const inNode = declared.start >= node.start && declared.end <= node.end;
+    return inBlock && !inNode && (countVar || !declaredWithVar(module, declared));
   });
 }
 

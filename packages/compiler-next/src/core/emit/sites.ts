@@ -54,7 +54,7 @@ export function emitSites(
     const node = context.ref(site.node);
     const value = names.fresh('_value');
     const selection = site.kind === 'conditional'
-      ? emitSelection(site.selection, names, replacements, context.once)
+      ? emitSelection(site.selection, { names, runtime, replacements, versions, once: context.once })
       : null;
     if (selection !== null) {
       mount.push(...selection.declarations);

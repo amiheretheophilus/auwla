@@ -199,7 +199,9 @@ array child). Remove each check when its phase is built.
   random seeds, including the saved list failures in `tests/corpus/`.
 - [ ] Then the fast paths in `optimize/` (`optimize.md`): keyed `map`, targeted
   `push`/`splice`/`sort`, DOM-only rows, selection. Each runs with optimizations
-  on and off; both must match the reference.
+  on and off; both must match the reference. **Done after Phase 6**
+  (`../decisions.md`, 2026-10-24): the benchmark needs both the inline-row and the
+  component-row apps, and the second needs components.
 - **Exit:** `cases/conditionals-and-lists` passes in full. `bench/dom` and the
   js-framework app pass their correctness gates locally; the user times them
   against `d6e678b` (`testing.md`). No regression is accepted.
@@ -210,7 +212,10 @@ array child). Remove each check when its phase is built.
 
 - [ ] `ComponentCall` with props as one object, children and slots, member and
   dynamic tags, factories, recursion, prop overrides (`components.md`).
-- **Exit:** `cases/components` passes; Octane run by the user.
+- [ ] A component used for its value (`items.map(Row)`, `const view = Row(x)`)
+  returns markup, as the reference's does (now a Phase 6 error).
+- **Exit:** `cases/components` passes; Octane run by the user. Then Phase 5's
+  fast paths and its benchmark gate.
 
 ## Phase 7: effects, cleanup, refs
 

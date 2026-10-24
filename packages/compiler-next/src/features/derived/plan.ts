@@ -5,6 +5,7 @@ import type { BindingNode, SemanticGraph } from '../../core/graph';
 import { variableDeclaration, type InputQueries } from '../../core/graph/inputs';
 import type { MemoGroupPlan, MemoPlan } from '../../core/plan/model';
 import { storageOwner } from '../../core/plan/storage';
+import { nestedVarStatement } from './computations';
 
 export function planMemos(
   graph: SemanticGraph, queries: InputQueries, components: ReadonlySet<Node | null>,
@@ -19,7 +20,8 @@ export function planMemos(
     if (!is.VariableDeclaration(declaration)) continue;
     let parent = node.binding.module.parentOf(declaration);
     if (is.ExportNamedDeclaration(parent)) parent = node.binding.module.parentOf(parent);
-    if (owner === null ? !is.Program(parent) : parent !== (is.BlockStatement(owner) ? owner : owner.body)) continue;
+    const atTop = owner === null ? is.Program(parent) : parent === (is.BlockStatement(owner) ? owner : owner.body);
+    if (!atTop && nestedVarStatement(node.binding) === null) continue;
     const targets = declarations.get(declarator) ?? [];
     targets.push(node);
     declarations.set(declarator, targets);
@@ -71,7 +73,6 @@ export function planMemos(
       }
     }
     const inputs = new Set<BindingNode>();
-    const initialInputs = new Set<BindingNode>();
     const roots: Node[] = [declarator.id, ...builders];
     if (declarator.init !== null) roots.unshift(declarator.init);
     const intrinsic = roots.some((root) => queries.inputsOf(module, root).reads.some((read) => {
@@ -80,13 +81,6 @@ export function planMemos(
       return dependency !== undefined && !targets.includes(dependency)
         && (dependency.writes.length > 0 || dependency.kind === 'Derived');
     }));
-    for (const root of [declarator.id, ...(declarator.init === null ? [] : [declarator.init])]) {
-      for (const read of queries.inputsOf(module, root).reads) {
-        const binding = read.binding ?? read.reference.binding;
-        const dependency = binding === null ? undefined : graph.bindings.get(binding);
-        if (dependency !== undefined && !targets.includes(dependency)) initialInputs.add(dependency);
-      }
-    }
     roots.push(...possibleBuilders.keys());
     for (const root of roots) {
       for (const read of queries.inputsOf(module, root).reads) {
@@ -100,7 +94,9 @@ export function planMemos(
     const memo: MemoPlan = {
       intrinsic,
       declaration: module.parentOf(declarator) as VariableDeclaration,
-      declarator, targets, inputs: [...inputs], initialInputs: [...initialInputs],
+      declarator,
+      nested: nestedVarStatement(first.binding) !== null,
+      targets, inputs: [...inputs],
       builders: [...builders].sort((left, right) => left.start - right.start),
       builderTargets: new Map([...builderTargets].map(([node, outputs]) => [node, [...outputs]])),
       possibleBuilders: new Map([...possibleBuilders].map(([node, outputs]) => [node, [...outputs]])),
@@ -122,7 +118,8 @@ interface Group {
 function groupMemos(memos: readonly MemoPlan[], queries: InputQueries): MemoGroupPlan[] {
   const groups: Group[] = [];
   for (const memo of memos) {
-    const group: Group = { computations: [memo], steps: new Set([memo.declarator, ...memo.builders, ...memo.possibleBuilders.keys()] as (Statement | VariableDeclarator)[]) };
+    const declared = memo.nested ? [] : [memo.declarator];
+    const group: Group = { computations: [memo], steps: new Set([...declared, ...memo.builders, ...memo.possibleBuilders.keys()] as (Statement | VariableDeclarator)[]) };
     for (let index = 0; index < groups.length;) {
       const other = groups[index]!;
       if (![...other.steps].some((step) => group.steps.has(step))) {
@@ -157,7 +154,7 @@ function groupMemos(memos: readonly MemoPlan[], queries: InputQueries): MemoGrou
     const outputs = new Map<Node, Set<BindingNode>>();
     const possibleOutputs = new Map<Node, Set<BindingNode>>();
     for (const memo of group.computations) {
-      for (const step of [memo.declarator, ...memo.builders]) {
+      for (const step of [...(memo.nested ? [] : [memo.declarator]), ...memo.builders]) {
         const targets = outputs.get(step) ?? new Set<BindingNode>();
         const written = step === memo.declarator ? memo.targets : memo.builderTargets.get(step)!;
         for (const target of written) targets.add(target);

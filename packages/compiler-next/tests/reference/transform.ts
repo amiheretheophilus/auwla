@@ -28,7 +28,7 @@
  * Destructured aliases follow the same memo rules. JavaScript evaluates the
  * native pattern once per input change, after its source is ready.
  */
-import { analyze, type Binding, type Module, type Reference } from 'yuku-analyzer';
+import { analyze, BindingFlags, type Binding, type Module, type Reference } from 'yuku-analyzer';
 import { b, findAll, is, walk } from 'yuku-ast';
 import { generate } from 'yuku-codegen';
 import { parse } from 'yuku-parser';
@@ -247,6 +247,22 @@ function findComponents(module: Module): FunctionNode[] {
   });
 }
 
+/** The statement lists directly inside a statement: block bodies, case bodies, try parts. */
+function statementLists(node: Node): Node[][] {
+  if (is.BlockStatement(node)) return [node.body];
+  if (is.SwitchStatement(node)) return node.cases.map((entry) => entry.consequent);
+  if (is.SwitchCase(node)) return [node.consequent];
+  if (is.TryStatement(node)) {
+    return [node.block.body, ...(node.handler === null ? [] : [node.handler.body.body]), ...(node.finalizer === null ? [] : [node.finalizer.body])];
+  }
+  if (is.IfStatement(node)) {
+    return [node.consequent, node.alternate].filter((branch) => branch !== null && is.BlockStatement(branch))
+      .map((branch) => (branch as BlockStatement).body);
+  }
+  if (is.LabeledStatement(node) && is.BlockStatement(node.body)) return [node.body.body];
+  return [];
+}
+
 function functionName(module: Module, fn: FunctionNode): string | undefined {
   if (fn.id) return fn.id.name;
   const parent = module.parentOf(fn);
@@ -335,11 +351,12 @@ class ComponentRewrite {
   }
 
   /** Parameters and bindings declared directly in the component body. */
+  /** Parameters, top-level declarations, and `var`s anywhere in the body (they are function-scoped). */
   private ownBindings(): Binding[] {
     return this.module.bindings.filter((binding) => {
       const scopeNode = binding.scope.node;
-      const isParameter = scopeNode === this.component && binding.scope.kind === 'function';
-      return isParameter || scopeNode === this.body;
+      const inFunctionScope = scopeNode === this.component && binding.scope.kind === 'function';
+      return inFunctionScope || scopeNode === this.body;
     });
   }
 
@@ -353,11 +370,15 @@ class ComponentRewrite {
     if (this.declaratorOf(binding) === undefined || this.reads.functionOf(binding) !== undefined) {
       return undefined;
     }
+    // A `var` inside a statement that returns belongs to each render, as in
+    // plain JavaScript: the statement runs again and declares it again.
+    const top = this.topStatementOf(binding.declarations[0]!);
+    if (top !== undefined && this.containsReturn(top)) return undefined;
     return 'memo';
   }
 
   private isParameter(binding: Binding): boolean {
-    return binding.scope.node === this.component;
+    return binding.scope.node === this.component && binding.has(BindingFlags.Parameter);
   }
 
   /** `function C(count)` or `function C({ count })`, not a nested pattern. */
@@ -469,8 +490,10 @@ class ComponentRewrite {
   private buildStatements(): Statement[] {
     return this.body.body.flatMap((original): Statement[] => {
       const statement = original as Statement;
+      if (this.containsReturn(statement)) this.guardReturningBlock(statement, statement);
       if (is.IfStatement(statement) && this.containsReturn(statement)) return this.earlyReturn(statement);
       if (!this.canBuild(statement)) return [statement];
+      const hoisted = this.hoistVars(statement);
 
       const index = this.nextStatement++;
       const plan = this.plans.get(statement) ?? {
@@ -493,7 +516,7 @@ class ComponentRewrite {
         const slot = this.slots.get(binding);
         return slot === undefined || slot.treatment === 'prop';
       });
-      if (everyRender) return [guarded];
+      if (everyRender) return [...hoisted, guarded];
 
       const notRanYet = b.UnaryExpression({
         operator: '!',
@@ -512,7 +535,144 @@ class ComponentRewrite {
       });
 
       const test = conditions.reduce((left, right) => b.LogicalExpression({ operator: '||', left, right }));
-      return [b.IfStatement({ test, consequent: b.BlockStatement({ body: [guarded] }), alternate: null })];
+      return [...hoisted, b.IfStatement({ test, consequent: b.BlockStatement({ body: [guarded] }), alternate: null })];
+    });
+  }
+
+  /**
+   * A guarded statement runs inside a thunk, where a `var` would belong to the
+   * thunk. JavaScript scopes it to the component: declare it here, and leave an
+   * assignment where it was written. The declarators themselves move, so a
+   * `var` that has a slot is still declared through it (`buildSlotDeclarations`
+   * fills them in later) and persists across renders. Rewrites `statement` in place.
+   */
+  private hoistVars(statement: Statement): Statement[] {
+    const declarators: VariableDeclarator[] = [];
+    const replace = (declaration: Extract<Node, { type: 'VariableDeclaration' }>, position: 'statement' | 'init' | 'left'): Node => {
+      const assignments: Expression[] = [];
+      for (const declarator of declaration.declarations) {
+        if (declarator.init !== null) {
+          // A declared name is not a use, so the later rewrite would not reach
+          // it: write a slot's value directly.
+          const target = this.slotValue(declarator.id) ?? declarator.id;
+          assignments.push(b.AssignmentExpression({ operator: '=', left: target as never, right: declarator.init }) as Expression);
+        }
+        // The declarator moves; its initializer stays where it was written.
+        declarator.init = null;
+        declarators.push(declarator);
+      }
+      if (position === 'left') {
+        const id = declaration.declarations[0]!.id;
+        return this.slotValue(id) ?? id;
+      }
+      const value = assignments.length === 0 ? null
+        : assignments.length === 1 ? assignments[0]! : b.SequenceExpression({ expressions: assignments });
+      if (position === 'init') return value ?? identifier('undefined');
+      return value === null ? b.EmptyStatement({}) : b.ExpressionStatement({ expression: value });
+    };
+    const isVar = (node: Node | null): node is Extract<Node, { type: 'VariableDeclaration' }> => {
+      return node !== null && is.VariableDeclaration(node) && node.kind === 'var';
+    };
+    walk(statement, {
+      enter(node, context) {
+        if (is.Function(node)) {
+          context.skip();
+          return;
+        }
+        if (is.ForStatement(node) && isVar(node.init)) node.init = replace(node.init, 'init') as never;
+        if ((is.ForInStatement(node) || is.ForOfStatement(node)) && isVar(node.left)) node.left = replace(node.left, 'left') as never;
+        for (const list of statementLists(node)) {
+          list.forEach((entry, index) => {
+            if (isVar(entry)) list[index] = replace(entry, 'statement') as Statement;
+          });
+        }
+      },
+    });
+    if (declarators.length === 0) return [];
+    return [b.VariableDeclaration({ kind: 'var', declare: false, declarations: declarators }) as Statement];
+  }
+
+  /** `$sN.v` for a declared name that has a memo slot. */
+  private slotValue(id: Node): Expression | undefined {
+    if (!is.Identifier(id)) return undefined;
+    const binding = this.module.bindingOf(id);
+    const slot = binding === null ? undefined : this.slots.get(binding);
+    return slot?.treatment === 'memo' ? member(slot.name, 'v') : undefined;
+  }
+
+  /**
+   * The decision of 2026-10-24 (`wiki/decisions.md`): inside a block that
+   * returns, a plain statement runs again only when what it reads changed, or
+   * when it was not reached the time before. Wraps each eligible statement of
+   * `node` in `$ctx.returning`. A statement that uses the block's own local
+   * variables runs every time, since the return needs it; so does anything in
+   * a loop, whose statements run many times per render.
+   */
+  private guardReturningBlock(node: Node, root: Statement): void {
+    if (is.Function(node) || is.ForStatement(node) || is.ForInStatement(node) || is.ForOfStatement(node)
+      || is.WhileStatement(node) || is.DoWhileStatement(node)) {
+      return;
+    }
+    for (const list of statementLists(node)) {
+      list.forEach((entry, index) => {
+        const statement = entry as Statement;
+        if (this.containsReturn(statement)) {
+          this.guardReturningBlock(statement, root);
+        } else if (this.canGuardInReturningBlock(statement, root)) {
+          list[index] = this.returningGuard(statement);
+        }
+      });
+    }
+    // A single statement in a branch position, such as `if (a) b(); else return`.
+    if (is.IfStatement(node)) {
+      if (!is.BlockStatement(node.consequent)) node.consequent = this.guardSingle(node.consequent as Statement, root) as never;
+      if (node.alternate !== null && !is.BlockStatement(node.alternate)) {
+        node.alternate = this.guardSingle(node.alternate as Statement, root) as never;
+      }
+    }
+    if (is.LabeledStatement(node)) node.body = this.guardSingle(node.body as Statement, root) as never;
+  }
+
+  private guardSingle(statement: Statement, root: Statement): Statement {
+    if (this.containsReturn(statement)) {
+      this.guardReturningBlock(statement, root);
+      return statement;
+    }
+    return this.canGuardInReturningBlock(statement, root) ? this.returningGuard(statement) : statement;
+  }
+
+  private returningGuard(statement: Statement): Statement {
+    const index = this.nextStatement++;
+    const call = ctxCall('returning', [numberLiteral(index), this.guardInputs(statement), blockThunk([statement])]);
+    return b.ExpressionStatement({ expression: call }) as Statement;
+  }
+
+  private canGuardInReturningBlock(statement: Statement, root: Statement): boolean {
+    if (!GUARDABLE_STATEMENTS.has(statement.type)) return false;
+    if (this.containsLifecycleCall(statement, '$effect')) return false;
+    let movable = true;
+    walk(statement, {
+      enter(node, context) {
+        if (is.Function(node)) {
+          context.skip();
+          return;
+        }
+        // A thunk changes what these mean.
+        if (is.BreakStatement(node) || is.ContinueStatement(node) || is.AwaitExpression(node) || is.YieldExpression(node)
+          || (is.VariableDeclaration(node) && node.kind === 'var')) {
+          movable = false;
+          context.stop();
+        }
+      },
+    });
+    if (!movable) return false;
+    // Uses of a variable declared in the returning statement, outside this one.
+    return !findAll(statement, ['Identifier']).some((name) => {
+      const declared = this.module.referenceOf(name)?.binding?.declarations[0];
+      if (declared === undefined) return false;
+      const inRoot = declared.start >= root.start && declared.end <= root.end;
+      const inStatement = declared.start >= statement.start && declared.end <= statement.end;
+      return inRoot && !inStatement;
     });
   }
 
@@ -1001,7 +1161,8 @@ function rewriteModuleEffects(module: Module): void {
 // ---------------------------------------------------------------------------
 // Component runtime calls
 
-type CtxMethod = Treatment | 'effect' | 'cleanup' | 'observe' | 'confirmed' | 'mayChange' | 'ran' | 'due' | 'statement' | 'callback';
+type CtxMethod = Treatment | 'effect' | 'cleanup' | 'observe' | 'confirmed' | 'mayChange' | 'ran' | 'due' | 'statement' | 'callback'
+  | 'returning';
 
 /** `$ctx.memo(...)`, `$ctx.prop(...)`, `$ctx.observe(...)`, … */
 function ctxCall(method: CtxMethod, args: Expression[]): Expression {

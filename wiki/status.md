@@ -27,6 +27,19 @@ Last updated: 2026-10-24.
 
 ## Done
 
+- Decision A and the `var` fixes (2026-10-24, `../decisions.md`). A plain
+  statement inside a returning block runs again only when what it reads changed,
+  or on re-entry; the reference (`$ctx.returning`) and compiler-next (version
+  guards in `_select`, `computation.share()`) agree. `var` now behaves like
+  `let`: the reference gives a once-only setup `var` a slot and hoists it out of
+  its thunk; compiler-next hoists nested `var`s out of the selector and derives a
+  `var` declared in a loop header with its loop. The full generator found an
+  older Phase 3 bug, now fixed: an initializer that calls an unknown method
+  replayed only on its own reads, not its builders' (`state-and-derived.md`).
+  Reference: all 311 cases pass. `COMPILER=next`: **183 pass, 129 fail**, every
+  failure naming a later phase. 186 unit tests, 34 runtime tests, and the plain,
+  conditional, state and corpus generators (200 programs each, plus the failing
+  seed) pass. Next: Phase 6, then Phase 5's fast paths and bench gate.
 - Phase 4 audit and Phase 5 general rule (2026-10-24). The user asked to finish
   earlier phases well before new work. Eighteen new `conditional:` comparisons
   found two bugs, both fixed: a `var` in a returning block was local to the

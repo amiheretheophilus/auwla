@@ -129,8 +129,22 @@ export interface FunctionScoped {
 export type ProgramStep =
   /** Top-level statements that run once, the first time control reaches them. */
   | { readonly kind: 'once'; readonly statements: readonly Statement[] }
-  /** A statement containing a return. It runs again on every selection. */
-  | { readonly kind: 'native'; readonly statement: Statement };
+  /**
+   * A statement containing a return. It runs again on every selection, except
+   * its `guards` (`wiki/decisions.md`, 2026-10-24).
+   */
+  | { readonly kind: 'native'; readonly statement: Statement; readonly guards: readonly ReturningGuard[] };
+
+/**
+ * A plain statement inside a block that returns. It runs when reached and its
+ * inputs changed since it last ran, or when it was not reached on the previous
+ * run. Opaque inputs cannot be compared, so such a statement always runs.
+ */
+export interface ReturningGuard {
+  readonly statement: Statement;
+  readonly inputs: readonly BindingNode[];
+  readonly opaque: boolean;
+}
 
 export interface ConditionalBranch {
   /** Null for a selected primitive; its value comes from the selector. */
@@ -186,9 +200,13 @@ export interface MemoPlan {
   readonly intrinsic: boolean;
   readonly declaration: VariableDeclaration;
   readonly declarator: VariableDeclarator;
+  /**
+   * A `var` declared inside one of its builders (`for (var i = 0; …)`). The
+   * builder declares it again on every replay, so the declarator is no step.
+   */
+  readonly nested: boolean;
   readonly targets: readonly BindingNode[];
   readonly inputs: readonly BindingNode[];
-  readonly initialInputs: readonly BindingNode[];
   readonly builders: readonly (Statement | VariableDeclarator)[];
   readonly builderTargets: ReadonlyMap<Node, readonly BindingNode[]>;
   readonly possibleBuilders: ReadonlyMap<Node, readonly BindingNode[]>;

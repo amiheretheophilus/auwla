@@ -1,5 +1,5 @@
 /** Binding patterns as emitted code needs them: their names, and as assignments. */
-import { b, is } from 'yuku-ast';
+import { b, is, walk } from 'yuku-ast';
 import type { Expression, Node } from 'yuku-parser';
 import { expression } from './quote';
 
@@ -14,6 +14,50 @@ export function patternNames(pattern: Node | null): string[] {
   if (is.AssignmentPattern(pattern)) return patternNames(pattern.left);
   if (is.RestElement(pattern)) return patternNames(pattern.argument);
   return [];
+}
+
+/**
+ * Rewrites the `var` declarations inside an emitted statement (not inside its
+ * nested functions) as assignments, and returns the names they declared. Code
+ * that moves a statement into a new function declares those names outside it,
+ * where JavaScript scopes them. Mutates `root`, which must be emitted output.
+ */
+export function liftVarDeclarations(root: Node): string[] {
+  const declared: string[] = [];
+  const lift = (declaration: VarDeclaration, position: 'statement' | 'init' | 'left'): Node => {
+    for (const declarator of declaration.declarations) declared.push(...patternNames(declarator.id));
+    if (position === 'left') return declaration.declarations[0]!.id;
+    const assignments = declarationAssignments(declaration);
+    if (position === 'init') return assignments ?? expression('void 0');
+    return assignments === null ? b.EmptyStatement({}) : b.ExpressionStatement({ expression: assignments });
+  };
+  walk(root, {
+    enter(node, context) {
+      if (is.Function(node)) {
+        context.skip();
+        return;
+      }
+      if (is.ForStatement(node) && isVar(node.init)) node.init = lift(node.init, 'init') as never;
+      if ((is.ForInStatement(node) || is.ForOfStatement(node)) && isVar(node.left)) node.left = lift(node.left, 'left') as never;
+      const lists = is.BlockStatement(node) ? [node.body] : is.SwitchCase(node) ? [node.consequent] : [];
+      for (const list of lists as Node[][]) {
+        list.forEach((entry, index) => {
+          if (isVar(entry)) list[index] = lift(entry, 'statement');
+        });
+      }
+      if (is.IfStatement(node)) {
+        if (isVar(node.consequent)) node.consequent = lift(node.consequent, 'statement') as never;
+        if (isVar(node.alternate)) node.alternate = lift(node.alternate, 'statement') as never;
+      }
+    },
+  });
+  return declared;
+}
+
+type VarDeclaration = Extract<Node, { type: 'VariableDeclaration' }>;
+
+function isVar(node: Node | null | undefined): node is VarDeclaration {
+  return node !== null && node !== undefined && is.VariableDeclaration(node) && node.kind === 'var';
 }
 
 /**

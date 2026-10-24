@@ -179,6 +179,18 @@ export function createComputation(notify?: () => void, entity?: Entity) {
     dependsOn(key: object) {
       return dependencies.has(key);
     },
+    /**
+     * Report this computation's dependencies to the one running around it. A
+     * nested computation that skipped its work this time still makes the outer
+     * one depend on what that work read.
+     */
+    share() {
+      const current = store().current;
+      if (current === null) return;
+      for (const [key, dependency] of dependencies) {
+        current.dependencies.set(key, { read: dependency.read, seen: dependency.read() });
+      }
+    },
     dispose,
   };
 }

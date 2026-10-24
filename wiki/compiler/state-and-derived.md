@@ -337,6 +337,25 @@ for (const x of others) picked.check(x);                      // unknown: checke
 The list only makes this faster. A method that is not on it is still correct
 (`../rules.md`, rule 3).
 
+A `var` declared below the top of the body (`for (var i = 0, total = 0; i < n; i++)
+total += i`) belongs to the component, so it derives like a `let`: the statement
+that declares it is its builder and replays as a whole, with the declaration as
+assignments (`features/derived/computations.ts`, `nestedVarStatement`;
+`MemoPlan.nested`). Its declarator is no step of its own. A `var` inside a
+statement that returns is not derived: it belongs to each run of the selector
+(`conditionals-and-lists.md`, "Early returns"). Case:
+`derived: a var declared in a loop header derives with its loop, as let does`.
+
+An initializer that is also a possible builder of another value (it passes
+something to an unknown call, as `const handle = registry.register(cb)` does)
+replays only when its own value's derivation reads something that changed: its
+initializer's reads and its builders' reads (`MemoPlan.inputs`). Not merely
+because its group recomputed, which would repeat the call's side effects. Before
+2026-10-24 only the initializer's reads counted, so `let d = l.reduce(…) > 0 ? 0 : 3;
+if (o.b % 2) d = …` replayed the `if` over a stale `d` when `o.b` changed (found by
+the full generator, seed -785770448; case `derived: a value whose initializer calls
+a method replays from its initializer when a builder input changes`).
+
 ## Cases to test
 
 **Verified takeover slice:** twelve selected `tests/cases/callbacks.test.ts`
