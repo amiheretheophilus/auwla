@@ -18,6 +18,8 @@ const OUT = join(import.meta.dirname, '..', 'out');
 const RUNTIME_URL = pathToFileURL(join(import.meta.dirname, '..', 'reference', 'runtime.ts')).href;
 
 const cleanups = new Set<() => void>();
+// Bun registers a hook in a shared module only for the first test file that
+// imports it, so `behaves` also disposes leftovers before each case.
 afterEach(disposeRuns);
 
 /**
@@ -46,6 +48,7 @@ function track(cleanup: () => void): () => void {
 /** Register a test: the compiled app must look like the reference after every step. */
 export function behaves(name: string, testCase: Case): void {
   it(name, async () => {
+    disposeRuns();
     // Validate the oracle's explicit checks before a new compiler is available.
     if (process.env.REFERENCE_ONLY === '1') {
       await runOnReference(name, testCase);
@@ -60,7 +63,11 @@ export function behaves(name: string, testCase: Case): void {
 export type Observations = string[];
 
 /** Run a case on the reference and on the selected compiler. */
-export async function observeBoth(name: string, testCase: Case): Promise<{ reference: Observations; compiled: Observations }> {
+export async function observeBoth(
+  name: string,
+  testCase: Case
+): Promise<{ reference: Observations; compiled: Observations }> {
+
   const reference = await runOnReference(name, testCase);
   const compiled = await runOnCompiler(name, testCase, selectedCompiler());
   return { reference, compiled };
@@ -68,6 +75,7 @@ export async function observeBoth(name: string, testCase: Case): Promise<{ refer
 
 /** Run a case on the reference only. */
 export async function runOnReference(name: string, testCase: Case): Promise<Observations> {
+  
   const clock = startClock(testCase);
   const disposeSources = track(beginSources(fetchForCase));
   const disposeModules = track(beginReferenceScope());
@@ -207,6 +215,7 @@ interface Clock {
  * modules load, so a timer set at module or component setup is faked too.
  */
 function startClock(testCase: Case): Clock {
+  
   if (!usesClock(testCase.steps)) return { fake: false, stop() {} };
   jest.useFakeTimers();
   const stop = track(() => jest.useRealTimers());

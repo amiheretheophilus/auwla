@@ -80,3 +80,23 @@ describe('template planning and emission', () => {
     expect(emitted).not.toBe(original);
   });
 });
+
+describe('features of later phases fail with their phase', () => {
+  it('rejects the ambient lifecycle calls, but not a local function with the same name', () => {
+    expect(() => inspect('export function App() { $effect(() => {}); return <p />; }')).toThrow('`$effect` from Phase 7');
+    expect(() => inspect('export function App() { $cleanup(() => {}); return <p />; }')).toThrow('`$cleanup` from Phase 7');
+    expect(() => inspect('const $effect = (fn) => fn(); export function App() { $effect(() => {}); return <p />; }')).not.toThrow();
+  });
+
+  it('rejects value imports from the data package, including server-function clients', () => {
+    expect(() => inspect(`import { $read } from '@memoized-dom/data'; export const App = () => <p />;`)).toThrow('Phase 8');
+    expect(() => inspect(`import { createPageSource } from '@memoized-dom/data/internal'; export const x = 1;`)).toThrow('Phase 8');
+    expect(() => inspect(`import type { Source } from '@memoized-dom/data'; export const App = () => <p />;`)).not.toThrow();
+  });
+
+  it('rejects a key that can change, and leaves out a key that cannot', () => {
+    expect(() => inspect('export function App() { let id = 1; return <p key={id} onClick={() => id++} />; }')).toThrow('from Phase 5');
+    const { component } = inspect(`export const App = () => <p key="x">hello</p>;`);
+    expect(component.template.markup).toBe('<p>hello</p>');
+  });
+});

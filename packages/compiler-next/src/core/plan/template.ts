@@ -166,6 +166,10 @@ class TemplateBuilder {
     if (!is.JSXAttribute(attribute)) return;
 
     const name = jsxAttributeName(attribute);
+    // A key that never changes never remounts, so leaving it out is correct.
+    if (name === 'key' && this.context.reactive(attributeExpression(attribute.value))) {
+      unsupported(this.context, attribute, 'keys that can change (lists and remounts)', 5);
+    }
     if (RESERVED_ATTRIBUTES.has(name)) return;
     if (name === 'ref') unsupported(this.context, attribute, 'refs', 7);
 

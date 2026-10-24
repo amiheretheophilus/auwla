@@ -74,7 +74,11 @@ the next microtask. Calls retain their native result and receiver.
 Component roots are watched by object identity through data fields; changed
 objects notify aliases and shallow copies that actually share them. Disposal
 removes those roots. Classification keeps potential source roots reactive, while
-runtime identity decides which versions change. Seven mutation comparisons pass.
+runtime identity decides which versions change. A read is a potential root only
+when its value can become part of the mutated binding: an operand of arithmetic,
+a comparison, `typeof`, template text or a conditional's test produces a new
+primitive, so `const local = value * LIMIT` leaves `LIMIT` constant
+(`features/state/classify.ts`, `mayFlowIntoValue`). Seven mutation comparisons pass.
 Receiver writes through `this`, private fields and `super` now report changes to
 their receiver's roots. Module/factory versions and shared roots notify subscribed
 consumers (`state-and-derived.md`). Proxy-specific reflection behavior still needs

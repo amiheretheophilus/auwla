@@ -88,3 +88,10 @@ it('does not probe an ordinary object or proxy for private render metadata', () 
   expect(reads).toEqual(native);
   output.slot.dispose();
 });
+
+it('refuses an array child until lists exist, instead of joining it into text', () => {
+  const output = slot();
+  expect(() => output.slot.write(['a', 'b'])).toThrow('from Phase 5');
+  expect(output.root.textContent).toBe('');
+  output.slot.dispose();
+});

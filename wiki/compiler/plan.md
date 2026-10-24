@@ -32,6 +32,13 @@ switch). Record the pass count in `../status.md` after each step. Generated prog
 run with `COMPILER=next FC_RUNS=200 bun test generator`. Each phase lists the case
 files that must pass in full at its exit.
 
+Every case that fails must fail with a "from Phase N" error that names the phase
+that builds the feature. A failure without one is a bug, even in an unfinished
+phase: the output was wrong and nothing said so. The checks are in
+`core/plan/template.ts` (`unsupported`), `core/plan/later-phases.ts` (`$effect`,
+`$cleanup`, imports from `@memoized-dom/data`) and the runtime value slot (an
+array child). Remove each check when its phase is built.
+
 ## Phase 0: decide the output
 
 - [x] The user approves the output architecture in `output.md`, or picks another.

@@ -23,6 +23,7 @@ import { planSharedReads, sharedSetup } from '../../features/state/shared-plan';
 import { planReceiverTargets } from '../../features/handlers/receivers';
 import { storageOwner } from './storage';
 import { planReturns } from '../../features/conditionals/returns';
+import { rejectLaterPhases } from './later-phases';
 
 export type { ComponentPlan, ModulePlan, Site, Template, TemplateNode } from './model';
 
@@ -57,6 +58,7 @@ function planModule(
       claimed.add(node);
     },
   };
+  rejectLaterPhases(entry, context);
 
   const plans = new Map<Node, ComponentPlan>();
   const moduleBindings = [...sharedReads.keys()].filter((binding) => binding.binding.module === module);

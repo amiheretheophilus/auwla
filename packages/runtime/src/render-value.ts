@@ -82,6 +82,12 @@ export function createValueSlot(text: Text, owner: RenderOwner) {
         ? captures.get(value)
         : undefined;
 
+      // compiler-next renders an array child as a list from Phase 5. Until
+      // then, fail loudly rather than join the items into text.
+      if (Array.isArray(value)) {
+        throw new Error('compiler-next renders an array child as a list from Phase 5 of wiki/compiler/plan.md');
+      }
+
       if (captured === undefined) {
         clear();
         setTextData(text, value);

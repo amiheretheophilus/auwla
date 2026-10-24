@@ -1,6 +1,6 @@
 # Status
 
-Last updated: 2026-10-21.
+Last updated: 2026-10-24.
 
 ## Branches
 
@@ -27,6 +27,27 @@ Last updated: 2026-10-21.
 
 ## Done
 
+- Review of the Phase 3 and Phase 4 commits (2026-10-24). Fixed:
+  - A read that only feeds arithmetic or a comparison no longer makes a constant
+    reactive (`68b6bba` made `const LIMIT = 3` state; `handlers.md`).
+  - The case harness disposes leftover runs before each case. Bun registers the
+    `afterEach` hook in shared `run.ts` only for the first test file, so a failed
+    case could leave a `#count` button that the next file read.
+  - A later-phase feature used to compile to wrong output: `$effect`/`$cleanup`
+    threw `ReferenceError`, sources ran without waiting, arrays rendered as
+    `[object Object]`, and a changing host `key` was dropped. Each now fails with
+    its "from Phase N" error (`plan.md`, "How progress is measured"). A key that
+    cannot change is still left out, as before.
+
+  `COMPILER=next bun test tests/cases`: **134 pass, 150 fail**, and every failure
+  names its phase: 71 data imports (8), 27 components (6), 17 changing keys and
+  6 array children (5), 19 `$effect`/`$cleanup` and 10 refs (7), 2 spread
+  children (5), 1 spread attribute (6). 182 compiler-next unit tests and 4
+  value-slot runtime tests pass; `bun check` passes.
+  Not changed, noted for later: every text site creates a value slot even when
+  its value is always primitive, and the runtime mutation check walks everything
+  reachable from each mounted root after every mutation. Both are performance
+  questions for the `bench/` run.
 - Readability pass through the recent compiler/runtime rewrite: expanded compound
   statements and traversal branches, extracted named helpers for site inputs,
   return searches, jump targets and render program construction, and documented
