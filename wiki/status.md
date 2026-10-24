@@ -27,7 +27,7 @@ Last updated: 2026-10-24.
 
 ## Done
 
-- Phase 6 general component/props integration (2026-10-24; broad audit pending).
+- Phase 6 general component/props integration (2026-10-24, `58a130a8`).
   Ordered call values cover named/member/dynamic/native tags, factories,
   recursive components, children, spread props and keyed identity. Parameter
   bindings receive versions and independent parent snapshots, preserving local
@@ -38,8 +38,20 @@ Last updated: 2026-10-24.
   notify their consumers. The reference retains nested setup function identity.
   Local verification: **84 component/state comparisons, nine native component
   tests, 22 affected runtime tests and ten generated component programs pass**.
-  Compiler-next and runtime type checks pass. Full cases/reference/generators
-  will run in the manual CI audit; Octane remains the user's performance gate.
+  Compiler-next and runtime type checks pass. Manual CI audit
+  [40128972595](https://github.com/amiheretheophilus/auwla/actions/runs/40128972595)
+  passes: **217 compiler-next cases**, with all **100 failures** belonging to
+  later phases (**29 Phase 7**, **71 Phase 8**); **317 reference cases**, **195
+  compiler unit tests**, **37 runtime tests**, and the full generator/corpus
+  batch with `FC_RUNS=200`, including 200 new component combinations.
+  A follow-up real-entry check adds root-factory registration for authored
+  `mount`, one native root test and two checks against the unchanged Octane/DOM
+  benchmark apps. The latter verify 1,000-row correctness and identity using the
+  test DOM, not browser timings. Octane now accepts an explicit compiler source
+  entry; the user can measure the rewrite rather than the old default compiler.
+  The final audit of this root-entry follow-up is pending. The full upstream
+  browser suite needs its absent submodule/dependencies here; Octane timing on
+  the user's VM remains the Phase 6 exit gate before Phase 5 fast paths.
 
 - Decision A and the `var` fixes (2026-10-24, `../decisions.md`). A plain
   statement inside a returning block runs again only when what it reads changed,

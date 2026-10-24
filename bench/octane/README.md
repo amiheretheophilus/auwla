@@ -54,6 +54,25 @@ bun run bench:octane:setup
 bun run bench:octane
 ```
 
+To measure the rewrite, select its source entry explicitly:
+
+```sh
+bun run bench:octane --compiler=packages/compiler-next/src/index.ts
+```
+
+The report records the selected compiler. The same option works with
+`--before-ref=COMMIT`: the baseline keeps that commit's old compiler/runtime,
+and the after build uses the selected compiler with the current runtime. Without
+this option the existing compiler remains the default.
+
+For a local correctness check that needs neither upstream dependencies nor a
+browser installation, run `bun test src/features/components/bench.test.ts` in
+`packages/compiler-next`. It compiles the unchanged Octane inline-row and DOM
+component-row fixtures, mounts them through the real runtime entry, and checks
+1,000-row creation, updates, identity through moves, selection, removal and
+disposal. It uses the test DOM and has no timing assertions; the pinned browser
+suite remains the performance gate.
+
 Setup initializes the exact submodule pin, keeps a sparse checkout of the
 benchmark, Octane package and required patches, installs its selected workspace
 from the frozen lockfile, and installs Playwright Chromium. Installation scripts

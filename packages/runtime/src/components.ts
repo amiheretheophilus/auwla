@@ -12,6 +12,7 @@ import { patchDomProps } from './dom-props';
 import { createComputation } from './computation';
 import { createWriteBatch } from './write-batch';
 import { createBuildScope } from './build-scope';
+import { registerRootFactory, rootFactoryStore } from './mount-core';
 import {
   createRenderValue,
   createValueSlot,
@@ -70,8 +71,16 @@ const hostPrograms = new Map<string, RenderProgram>();
 let nextChild = 0;
 
 /** Keep calling-convention metadata outside authored functions and objects. */
-export function defineComponent<T extends Function>(component: T): T {
+export function defineComponent<T extends Function>(component: T, rootId?: string): T {
   compiledComponents.add(component);
+  if (rootId !== undefined) {
+    registerRootFactory(component, {
+      id: rootId,
+      create() {
+        return (component as unknown as Component)(rootId, null, createPropsCell({})) as Node;
+      },
+    });
+  }
   return component;
 }
 
@@ -111,6 +120,12 @@ export function componentValue(component: Function): (...args: unknown[]) => obj
     adapter = (...args: unknown[]) => createRenderValue(componentProgram(component as Component), [args[0], args]);
     valueFunctions.set(component, adapter);
     valueComponents.set(adapter, component);
+    const root = rootFactoryStore().get(component);
+    if (root !== undefined) {
+      // An authored entry passes a value reference to mount(), which still
+      // needs the compiled root factory rather than the callable adapter body.
+      registerRootFactory(adapter, root);
+    }
   }
   return adapter;
 }

@@ -4,6 +4,7 @@ import { compileModules } from '@memoized-dom/compiler';
 import { build } from 'esbuild';
 import { assertPin, directory, fixtureDirectory } from './pin';
 import { pnpm } from './process';
+import { loadBenchmarkCompiler } from '../load-compiler';
 
 export interface MemoizedBuildOptions {
   readonly compiler?: typeof compileModules;
@@ -22,7 +23,8 @@ export async function buildMemoized(options: MemoizedBuildOptions = {}): Promise
   const output = options.output ?? resolve(directory, 'memoized-dom/dist');
   mkdirSync(output, { recursive: true });
   const sources = options.sources ?? memoizedSources();
-  const compiled = (options.compiler ?? compileModules)(sources, { runtimePath: '@memoized-dom/runtime' });
+  const compiler = options.compiler ?? (await loadBenchmarkCompiler()).compileModules;
+  const compiled = compiler(sources, { runtimePath: '@memoized-dom/runtime' });
   for (const [id, source] of Object.entries(compiled)) {
     writeFileSync(resolve(output, basename(id)), source);
   }

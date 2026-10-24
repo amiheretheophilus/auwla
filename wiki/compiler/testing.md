@@ -301,6 +301,14 @@ failed to load. The pipeline now refuses to emit JSX at all.
   2. The user then runs `bench/` on a different machine. Those numbers are the ones
      compared against the baseline below.
 
+Phase 6 adds local test-DOM checks of the unchanged Octane inline-row and DOM
+component-row sources (`src/features/components/bench.test.ts`). They verify
+1,000-row creation, updates, retained identity, selection/removal and disposal
+through the real `mount` API. These are correctness observations, not the pinned
+browser benchmark gates. The VM can select the rewrite with
+`bun run bench:octane --compiler=packages/compiler-next/src/index.ts`; the report
+records the selected compiler, including in a before/after comparison.
+
 ## Performance baseline
 
 The last full benchmark of the old compiler is `d6e678b`: 8 CPUs and 8 GiB on an

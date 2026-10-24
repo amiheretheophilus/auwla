@@ -19,7 +19,7 @@ afterEach(() => {
   }
 });
 
-async function compile(source: string) {
+async function compile(source: string, mountRoot = true) {
   const code = compileModules({ './App.tsx': source }, {
     runtimePath: '@memoized-dom/runtime/testing',
   })['./App.tsx']!;
@@ -33,7 +33,9 @@ async function compile(source: string) {
   const module = await import(pathToFileURL(path).href);
   setScheduler((run) => run());
   const root = document.createElement('div');
-  root.append(module.App('components', null));
+  if (mountRoot) {
+    root.append(module.App('components', null));
+  }
   document.body.append(root);
   mounted.push(root);
   const click = (selector: string) => root.querySelector<HTMLButtonElement>(selector)!.click();
@@ -181,4 +183,23 @@ it('tracks module-owned dynamic tags even when their props stay unchanged', asyn
   click('#change');
   expect(root.querySelector('h2')).toBeNull();
   expect(root.querySelector('p')?.textContent).toBe('value');
+});
+
+it('registers a root factory for an authored mount entry and removes it cleanly', async () => {
+  const { root, module } = await compile(`
+    import { mount } from '@memoized-dom/runtime/testing';
+    function Child({ value }) { return <p>{value}</p>; }
+    export function App() {
+      let count = 0;
+      return <main><Child value={count} /><button onClick={() => count++}>inc</button></main>;
+    }
+    export function start(host) { return mount(host, App); }
+  `, false);
+  const app = module.start(root);
+  expect(root.querySelector('p')?.textContent).toBe('0');
+  root.querySelector<HTMLButtonElement>('button')!.click();
+  expect(root.querySelector('p')?.textContent).toBe('1');
+  app.unmount();
+  expect(root.childNodes).toHaveLength(0);
+  expect(registeredIds()).toEqual([]);
 });

@@ -326,6 +326,9 @@ native pattern setup/reception. Runtime `components.ts` keeps compiled callable
 metadata in weak collections and supplies an ordinary-callable fallback for
 opaque tags. The fallback collects executed reads and owns the returned value's
 slot. Local cross-owner reads publish versions after their owner settles.
+Top-level components register a `registerRootFactory` definition, retained on a
+callable adapter passed to `mount`. Its factory calls the compiled component with
+the stable module/component root identity and a props cell.
 
 ## Alternatives considered
 

@@ -12,7 +12,7 @@ import { prepareComparison } from './comparison';
 const args = process.argv.slice(2);
 const known = args.filter(arg => !['--quick', '--smoke', '--canonical-only'].includes(arg)
   && !arg.startsWith('--targets=') && !arg.startsWith('--samples=') && !arg.startsWith('--before-ref=')
-  && !arg.startsWith('--comparison-order='));
+  && !arg.startsWith('--comparison-order=') && !arg.startsWith('--compiler='));
 if (known.length) throw new Error(`Unknown options: ${known.join(', ')}`);
 const beforeRef = args.find(arg => arg.startsWith('--before-ref='))?.slice('--before-ref='.length);
 if (beforeRef === '') throw new Error('--before-ref requires a Git commit/ref');
@@ -43,6 +43,7 @@ const metadata: Record<string, unknown> = {
   memoizedDirty: Boolean(git(['status', '--porcelain', '--untracked-files=no'])), pnpmVersion,
   upstreamLockSha256: createHash('sha256').update(readFileSync(resolve(upstream, 'pnpm-lock.yaml'))).digest('hex'),
   platform: process.platform, cpu: cpus()[0]?.model, logicalCpus: cpus().length,
+  compiler: args.find(arg => arg.startsWith('--compiler='))?.slice('--compiler='.length) ?? '@memoized-dom/compiler',
   memoryBytes: totalmem(), bunVersion: Bun.version, targets: names, samples,
   canonicalCpuThrottle: Number(process.env.CPU_THROTTLE || 1),
   memoizedState: 'component-owned; inline keyed rows; immutable array operations; synchronous scheduler',

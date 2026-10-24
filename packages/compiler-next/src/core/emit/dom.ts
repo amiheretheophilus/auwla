@@ -81,8 +81,20 @@ export function emitDom(plan: ModulePlan, options: CompileModulesOptions): Node 
       }));
     }
     let emitted = emitComponent(component, names, runtime, markup, replacements);
+    const enclosingFunction = [...module.ancestors(component.fn)].find((ancestor) => {
+      return ancestor !== component.fn && is.Function(ancestor);
+    });
+    const rootId = `${plan.module.path}#${component.fn.id?.name ?? component.fn.start}`;
     if (!is.FunctionDeclaration(component.fn)) {
-      emitted = expression('$$runtime.defineComponent($$component)', { runtime, component: emitted });
+      emitted = enclosingFunction === undefined
+        ? expression('$$runtime.defineComponent($$component, $$root)', {
+          runtime, component: emitted, root: stringLiteral(rootId),
+        })
+        : expression('$$runtime.defineComponent($$component)', { runtime, component: emitted });
+    } else if (enclosingFunction === undefined && component.fn.id !== null) {
+      hoisted.push(statement('$$runtime.defineComponent($$component, $$root);', {
+        runtime, component: component.fn.id.name, root: stringLiteral(rootId),
+      }));
     }
     const insideComponent = [...module.ancestors(component.fn)].some((ancestor) => {
       return ancestor !== component.fn && plan.components.has(ancestor);

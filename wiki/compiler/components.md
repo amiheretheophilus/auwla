@@ -13,6 +13,7 @@ Finds components, and compiles calls to them: props, children and slots.
 | `features/components/plan.ts` | Recognizes component calls and spread-bearing hosts that use ordered props |
 | `features/components/dom.ts` | Tag evaluation, ordered attributes/spreads, children, and component-value creation |
 | `features/components/dom.test.ts` | Native ordering, reserved props, disposal, SVG, direct arguments, opaque tags and shared tag reads |
+| `features/components/bench.test.ts` | Unchanged Octane inline rows and DOM component rows, mounted through the real application API with 1,000-row correctness and disposal checks |
 | `features/props/classify.ts` | Component identities and native parameter bindings |
 | `features/props/dom.ts` | Native parameter patterns, defaults/rest, per-binding parent snapshots and prop reception |
 | `packages/runtime/src/components.ts` | Props cells, callable adapters, compiled/native tag mounting, generic host props and subtree disposal |
@@ -45,6 +46,10 @@ Nested declarations are emitted before their enclosing component is sealed, so
 captured parent reads/writes receive the parent's version instrumentation. Local
 versions read across an owner boundary publish notifications after the owner
 settles. Disposal removes the child entity and its owned collectors and slots.
+Top-level compiled components also register root factories. Callable adapters
+carry that factory metadata so an authored `mount(host, Component)` entry uses
+the same runtime API as the existing compiler. This is covered independently of
+the comparison harness's direct root call.
 
 The reference retains a nested function declaration per setup invocation. Its
 previous per-render recreation prevented nested components from settling; the
@@ -84,8 +89,8 @@ The old compiler rejects both:
 All twenty current component comparisons pass on compiler-next, including five
 new direct-call/import, nested-owner, parameter-pattern and independent-slot
 cases. All 64 state/derived comparisons also pass, including deferred prop and
-keyed-override cases. Nine native regressions cover observations that do not
-depend on the reference. The broad CI audit and Octane gate are tracked in
+keyed-override cases. Ten native regressions and two benchmark-fixture checks
+cover observations that do not depend on the reference. The broad CI audit and Octane gate are tracked in
 `../status.md`; this is not a performance claim.
 
 Six `complex JSX:` cases combine state with fragments, render callbacks, JSX stored
