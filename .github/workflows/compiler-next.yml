@@ -1,18 +1,19 @@
-# The slow checks for compiler-next (wiki/compiler/testing.md). They take
-# about 20 minutes on the development machine, so they run here: every case on
-# the reference and on compiler-next, and the generators at 200 programs.
+# The slow compiler-next checks, run by hand when a batch is too slow for the
+# development machine (wiki/compiler/testing.md, "Where tests run"). Local runs
+# come first; this workflow never runs on push.
+#
+#   gh workflow run compiler-next.yml --ref compiler-rewrite -f suite=cases
+#   gh run watch <id> --repo amiheretheophilus/auwla --exit-status
 name: compiler-next
 
 on:
-  push:
-    branches: [compiler-rewrite]
-    paths:
-      - packages/compiler-next/**
-      - packages/runtime/**
-      - packages/data/**
-      - packages/compiler/**
-      - .github/workflows/compiler-next.yml
   workflow_dispatch:
+    inputs:
+      suite:
+        description: Which slow batch to run
+        type: choice
+        default: all
+        options: [all, cases, reference, generators, unit]
 
 concurrency:
   group: compiler-next-${{ github.ref }}
@@ -25,6 +26,7 @@ defaults:
 jobs:
   unit:
     name: types, unit and runtime tests
+    if: inputs.suite == 'all' || inputs.suite == 'unit'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -42,6 +44,7 @@ jobs:
 
   reference:
     name: every case on the reference
+    if: inputs.suite == 'all' || inputs.suite == 'reference'
     runs-on: ubuntu-latest
     timeout-minutes: 40
     steps:
@@ -56,6 +59,7 @@ jobs:
 
   cases:
     name: every case on compiler-next (failures must name their phase)
+    if: inputs.suite == 'all' || inputs.suite == 'cases'
     runs-on: ubuntu-latest
     timeout-minutes: 40
     steps:
@@ -76,9 +80,11 @@ jobs:
         with:
           name: cases-log
           path: packages/compiler-next/cases.log
+          retention-days: 3
 
   generators:
     name: generators at 200 programs
+    if: inputs.suite == 'all' || inputs.suite == 'generators'
     runs-on: ubuntu-latest
     timeout-minutes: 40
     steps:

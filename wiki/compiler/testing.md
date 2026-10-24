@@ -247,9 +247,53 @@ after the fix. This scoped run does not replace the Phase 5 full-generator gate.
   their tests, plus a small generated batch. A change in `core/` runs everything,
   but on CI. Features never import each other, so the mapping can be trusted.
 - The local generated budget is small, for a slow machine. CI runs a large one.
-- **CI**: none for now. The cases are small, so they run locally. GitHub Actions on
-  `amiheretheophilus/auwla` (free, public repo) comes once the compiler exists and
-  the suite reaches thousands of cases, including large generated batches.
+
+### Where tests run
+
+**The local machine first.** CI is only for a batch that is slow on the
+development machine: one that takes seconds to minutes, not milliseconds.
+
+| Run locally, on every change | Time here | 
+| --- | --- |
+| `bun check` in `packages/compiler-next` | ~1 s |
+| the unit tests of the touched feature (`bun test src/features/<name>`, `src/core/<stage>`) | seconds |
+| the case files the change affects (`COMPILER=next bun test tests/cases/<file>`), and with `REFERENCE_ONLY=1` when the reference changed | seconds to ~1 min each |
+| runtime tests a runtime change affects (`bun test ./packages/runtime/tests/<file>`) | seconds |
+
+| Run on CI, by hand, when needed | Time here | On CI |
+| --- | --- | --- |
+| every case on compiler-next, through the phase gate | ~10 min | ~30 s |
+| every case on the reference | ~5 min | ~20 s |
+| the generators at 200 programs | ~5 min | ~45 s |
+| all unit and runtime tests at once | ~1 min | ~15 s |
+
+Reach for CI when one of these is due: at a phase exit, after a change to shared
+machinery (the reference oracle, the graph, the derived-value planner, the
+runtime), or before reporting a step as verified across the suite. Not after
+every edit.
+
+The workflow is `.github/workflows/compiler-next.yml`. It never runs on push;
+start it by hand, choosing a suite (`all`, `cases`, `reference`, `generators`,
+`unit`):
+
+```sh
+gh workflow run compiler-next.yml --ref compiler-rewrite -f suite=cases
+gh run list --repo amiheretheophilus/auwla --workflow compiler-next.yml --limit 1
+gh run watch <id> --repo amiheretheophilus/auwla --exit-status
+```
+
+The `cases` job keeps its log as an artifact for 3 days
+(`gh run download <id> -n cases-log`). The repository is public, so standard
+GitHub-hosted runners are not billed; running by hand still keeps CI for the
+checks that need it.
+
+`scripts/phase-gate.ts` applies the rule of `plan.md`, "How progress is measured":
+a case may fail on compiler-next only with a "from Phase N" error. It prints the
+pass and fail counts, and how many cases wait for each phase.
+
+CI also catches what the local machine can hide. On 2026-10-24 a compiled case
+loaded locally only because a stray React install resolved leftover JSX; on CI it
+failed to load. The pipeline now refuses to emit JSX at all.
 - **Performance** uses `bench/`, not CI:
   1. A local run checks that the benchmarks pass their correctness gates. Local
      timings are noisy and are not compared.
