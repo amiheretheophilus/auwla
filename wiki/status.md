@@ -24,6 +24,15 @@ Last updated: 2026-10-25.
 
 ## Done
 
+- Optimization stage and comparison switch (2026-10-25). `pipeline.ts` now calls
+  `optimize/index.ts` between the general planner and emission. The initial pass
+  registry is empty; `optimize: false` bypasses it. The harness runs compiler-next
+  with passes on and off for each comparison/generated program, saving the
+  general output in `next-general/` and checking it against both the reference
+  and default output. Local validation passes `bun check` (123 files), four
+  pipeline tests and all 21 component comparisons through both strategies.
+  The first list pass follows this boundary.
+
 - Optimization plan clarified (2026-10-25). `compiler/optimize.md` records the
   folder boundaries and implementation order: establish emitted work, add the
   plan-stage/on-off boundary, then one proven list pass before further passes.

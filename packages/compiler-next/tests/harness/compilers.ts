@@ -88,6 +88,25 @@ const nextCompiler: Compiler = {
   },
 };
 
+const generalCompiler: Compiler = {
+  ...nextCompiler,
+  name: 'packages/compiler-next (optimizations disabled)',
+  output: 'next-general',
+
+  compile(source, modules) {
+    return compileModulesNext({ ...modules, './App.tsx': source }, {
+      runtimePath: '@memoized-dom/runtime/testing',
+      optimize: false,
+    });
+  },
+};
+
+/** Every next comparison also exercises the independently emitted general path. */
+export function comparisonCompilers(): readonly Compiler[] {
+  const compiler = selectedCompiler();
+  return compiler === nextCompiler ? [nextCompiler, generalCompiler] : [compiler];
+}
+
 /** Also used after a failed mount, which cannot return its unmount callback. */
 export function clearCompiledApps(): void {
   for (const id of registeredIds()) unregisterSubtree(id);

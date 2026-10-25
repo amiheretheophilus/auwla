@@ -11,7 +11,7 @@ import { toReference } from '../reference/transform';
 import { beginSources, finishSourceDeclarations } from '../reference/sources';
 import { clearDeferred, describeStep, rejectDeferred, resolveDeferred, usesClock, type Case, type Step } from './case';
 import { clearRequests, fetchForCase, rejectRequest, respond } from './requests';
-import { clearCompiledApps, selectedCompiler, type Compiler } from './compilers';
+import { clearCompiledApps, comparisonCompilers, type Compiler } from './compilers';
 import { serialize } from './serialize';
 
 const OUT = join(import.meta.dirname, '..', 'out');
@@ -62,14 +62,20 @@ export function behaves(name: string, testCase: Case): void {
 /** One entry per observation: what happened, then the HTML. */
 export type Observations = string[];
 
-/** Run a case on the reference and on the selected compiler. */
+/** Run both next strategies against one reference observation sequence. */
 export async function observeBoth(
   name: string,
   testCase: Case
 ): Promise<{ reference: Observations; compiled: Observations }> {
 
   const reference = await runOnReference(name, testCase);
-  const compiled = await runOnCompiler(name, testCase, selectedCompiler());
+  const compilers = comparisonCompilers();
+  const compiled = await runOnCompiler(name, testCase, compilers[0]!);
+  for (const compiler of compilers.slice(1)) {
+    const general = await runOnCompiler(name, testCase, compiler);
+    expect(general).toEqual(reference);
+    expect(general).toEqual(compiled);
+  }
   return { reference, compiled };
 }
 

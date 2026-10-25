@@ -7,6 +7,8 @@
  * are ignored, so callers can switch compilers without changes.
  */
 export interface CompileModulesOptions {
+  /** Disable optional plan fast paths to retain the general implementation. */
+  readonly optimize?: boolean;
   /** The runtime module the emitted code imports. Default `@memoized-dom/runtime`. */
   readonly runtimePath?: string;
   /**

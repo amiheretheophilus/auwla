@@ -1,6 +1,6 @@
 # Optimizations
 
-**Folder:** `optimize/` _(planned)_.
+**Folder:** `optimize/`. The stage and disable switch are built; passes follow.
 
 ## What it does
 
@@ -10,10 +10,10 @@ an optimization only makes a case faster.
 ## The contract
 
 ```ts
-interface Optimization<P> {
-  name: string;
+interface Optimization {
+  readonly name: string;
   /** A faster plan that behaves the same, or null to keep the general one. */
-  match(general: P, graph: ComponentGraph): P | null;
+  match(general: ModulePlan, graph: SemanticGraph): ModulePlan | null;
 }
 ```
 
@@ -33,7 +33,9 @@ interface Optimization<P> {
 4. **List optimizations also need `bench/`:** the numbers must not regress below the
    `d6e678b` baseline (`testing.md`).
 5. **Optimizations run after the plan is built and before emission**, in the order
-   listed in `optimize/index.ts` _(planned)_.
+   listed in `optimize/index.ts`. `compileModules(..., { optimize: false })`
+   bypasses all optional passes. The comparison harness emits both strategies,
+   into `next/` and `next-general/`, and checks both against the reference.
 6. **Correct first.** A case gets its general path, with tests, before any fast path
    for it is ported.
 

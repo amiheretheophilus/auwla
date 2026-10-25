@@ -16,6 +16,7 @@ import { parseModule } from './core/parse';
 import { resolve } from './core/resolve';
 import { planModules } from './core/plan';
 import type { CompileModulesOptions } from './options';
+import { optimizeModules } from './optimize';
 
 /** Compiles a set of modules that may import each other. Returns JavaScript by path. */
 export function compileModules(
@@ -25,7 +26,8 @@ export function compileModules(
   const parsed = Object.entries(modules).map(([path, source]) => parseModule(path, source));
   const resolved = resolve(parsed, options);
   const graph = classifyGraph(resolved);
-  const plans = planModules(graph, graph.queries, graph.components);
+  const general = planModules(graph, graph.queries, graph.components);
+  const plans = optimizeModules(general, graph, options.optimize !== false);
 
   const output: Record<string, string> = {};
   for (const plan of plans) {

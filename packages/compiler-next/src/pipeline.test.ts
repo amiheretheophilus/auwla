@@ -21,6 +21,34 @@ async function importCompiled(name: string, output: Record<string, string>, entr
 }
 
 describe('compileModules', () => {
+  it('keeps native evaluation and output when optional optimizations are disabled', async () => {
+    const source = `
+      const log = [];
+      function read(value) {
+        log.push(value);
+        return value;
+      }
+      export function App() {
+        return <p title={read('attribute')}>{read('child')}</p>;
+      }
+      export { log };
+    `;
+    const enabled = compileModules({ './App.tsx': source }, {
+      runtimePath: '@memoized-dom/runtime/testing',
+    });
+    const disabled = compileModules({ './App.tsx': source }, {
+      runtimePath: '@memoized-dom/runtime/testing',
+      optimize: false,
+    });
+    const fast = await importCompiled('optimization-enabled', enabled, 'App.js');
+    const general = await importCompiled('optimization-disabled', disabled, 'App.js');
+    const first = fast.App('optimized', null) as HTMLElement;
+    const second = general.App('general', null) as HTMLElement;
+    expect(first.outerHTML).toBe('<p title="attribute">child</p>');
+    expect(second.outerHTML).toBe(first.outerHTML);
+    expect(fast.log).toEqual(['attribute', 'child']);
+    expect(general.log).toEqual(fast.log);
+  });
   it('compiles modules without JSX so they run as before', async () => {
     const output = compileModules({
       './math.ts': `
