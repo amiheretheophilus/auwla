@@ -226,7 +226,9 @@ function notifies(root: Root, changed: ReadonlySet<object>, edit: Edit, index?: 
   // sees the edit.
   let reach = known !== undefined && Object.is(known.value, root.read()) ? known : walk(root, index);
   if (!reachesAny(reach.objects, changed)) return false;
-  if (reach === known && reach.stale) {
+  // An edit of the root's own value is a hit however stale the rest of the set
+  // is; only a hit on an object it may have dropped needs a new walk.
+  if (reach === known && reach.stale && !(isObject(reach.value) && changed.has(reach.value))) {
     reach = walk(root, index);
     if (!reachesAny(reach.objects, changed)) return false;
   } else if (reach === known) {
@@ -457,8 +459,12 @@ export function observeMutation(reads: readonly (() => unknown)[], notify: reado
  * (`method-calls.ts`). No snapshot: it reports `object` as an observation that
  * found it changed would. A call that throws stays pending, so its partial
  * edit is reported at the next recovery, as for any observation.
+ *
+ * The proven intrinsics can only add objects passed as `added` (their
+ * arguments) and may drop elements, so roots record exactly that rather than
+ * forgetting what they reach.
  */
-export function observeReceiverEdit(object: object, notify: readonly (() => void)[]): Observation {
+export function observeReceiverEdit(object: object, notify: readonly (() => void)[], added: readonly unknown[]): Observation {
   const state = mutationStore();
   let complete = false;
   const report = () => {
@@ -468,7 +474,7 @@ export function observeReceiverEdit(object: object, notify: readonly (() => void
     state.unrecovered.delete(reference);
     stamp(object);
     for (const callback of notify) callback();
-    notifyAliases(new Set([object]), { kind: 'unknown' });
+    notifyAliases(new Set([object]), { kind: 'store', added, removed: true });
   };
   const observation: Observation = {
     finish(result) {

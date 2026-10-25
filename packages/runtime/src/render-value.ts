@@ -74,9 +74,18 @@ interface Row {
  * (`wiki/compiler/conditionals-and-lists.md`, "Lists").
  */
 function rowIdentity(item: unknown, index: number): string {
-  const key = capturedOf(item)?.key;
-  return key === undefined || key === null ? `#${index}` : `key=${String(key)}`;
+  const captured = capturedOf(item);
+  const key = captured?.key;
+  if (key === undefined || key === null) return `#${index}`;
+  // Converting an object key may run its `toString`, so it runs every time.
+  if (typeof key === 'object' || typeof key === 'function') return `key=${String(key)}`;
+  // A value's primitive key never changes: build its identity once, which a
+  // reused row value (`list-map.ts`) then keeps across updates.
+  let identity = keyIdentities.get(captured!);
+  if (identity === undefined) keyIdentities.set(captured!, identity = `key=${String(key)}`);
+  return identity;
 }
+const keyIdentities = new WeakMap<CapturedRender, string>();
 
 /**
  * Shows any child value at `text`, its end anchor: text, one stored JSX value,

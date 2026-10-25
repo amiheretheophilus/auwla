@@ -101,6 +101,12 @@ call or an uncompiled setter forgets the set of each root it touched. So a miss
 is exact. A hit on a stale set walks that root again before notifying, so a
 removed object never notifies its old root.
 
+An edit of a root's own value is a hit even when its set is stale, so only a hit
+on an object the root may have dropped walks it again. A proven array method edit
+(`observeReceiverEdit`) records the objects it may add, its arguments, and marks
+the set stale, instead of forgetting it. So the 10k-row `data` root is not walked
+again after every `splice` or `reverse`.
+
 Component roots are also indexed by the objects they reach. A component can mount
 one per instance, so 10k rows would mean 10k roots. A store looks up only the
 roots holding the edited object, rather than visiting every mounted component:

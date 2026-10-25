@@ -1,6 +1,6 @@
 import { expect, it } from 'bun:test';
 import { observeMethod } from '../src/method-calls';
-import { recoverMutations } from '../src/mutation';
+import { mutationTarget, recoverMutations, registerSharedMutationRoots } from '../src/mutation';
 
 /**
  * Observation inputs for `value`. The general path calls every read to take
@@ -84,6 +84,25 @@ it('reads the method before the arguments, as a native call does', () => {
   const { reads, notify } = watch(() => target);
   observeMethod(reads, notify, target, 'run', 0)((log.push('argument'), 'call'));
   expect(log).toEqual(['method', 'argument', 'call']);
+});
+
+it('keeps alias tracking exact after a proven receiver edit', () => {
+  const items = rows();
+  const removed = items[1]!;
+  const kept = items[2]!;
+  const added = { id: 9 };
+  let notified = 0;
+  registerSharedMutationRoots({}, [{ read: () => items, notify: () => { notified++; } }]);
+  const { reads, notify } = watch(() => items);
+  observeMethod(reads, notify, items, 'splice', 0)(1, 1, added);
+  expect(notified).toBe(1);
+  mutationTarget(kept, 'id', () => {}).value = 20;
+  expect(notified).toBe(2);
+  mutationTarget(added, 'id', () => {}).value = 21;
+  expect(notified).toBe(3);
+  // The removed row no longer belongs to the root.
+  mutationTarget(removed, 'id', () => {}).value = 22;
+  expect(notified).toBe(3);
 });
 
 it('reports a receiver edit interrupted by an exception at the next recovery', () => {

@@ -134,6 +134,6 @@ export function observeMethod(
     for (const read of reads) {
       if (read() !== receiver) return observeMutation(reads, notify).finish(apply(method, receiver, args));
     }
-    return observeReceiverEdit(receiver, notify).finish(apply(method, receiver, args));
+    return observeReceiverEdit(receiver, notify, args).finish(apply(method, receiver, args));
   };
 }

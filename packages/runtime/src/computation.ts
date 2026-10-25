@@ -272,8 +272,11 @@ class Computation implements Frame {
     const current = store().current;
     if (current === null || this.dependencies === null) return;
     // Keyed reads stay keyed; the same key compared with another value in a
-    // sibling (another row) merges into a plain dependency (`depend`).
+    // sibling (another row) merges into a plain dependency (`depend`). A plain
+    // dependency already there covers a keyed one: nothing to add.
     for (const [key, dependency] of this.dependencies) {
+      const existing = current.dependencies?.get(key);
+      if (dependency.keyed !== undefined && existing !== undefined && existing.keyed === undefined) continue;
       depend(current, key, { ...dependency, seen: dependency.read() });
     }
   }
