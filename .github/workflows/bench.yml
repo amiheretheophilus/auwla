@@ -9,6 +9,11 @@
 name: bench
 
 on:
+  # GitHub registers a workflow only after an event runs it. A push that
+  # changes this file runs it with the defaults below (full, all, next).
+  push:
+    branches: [compiler-rewrite]
+    paths: [.github/workflows/bench.yml]
   workflow_dispatch:
     inputs:
       mode:
@@ -41,7 +46,7 @@ defaults:
 
 jobs:
   bench:
-    name: bench:vm (${{ inputs.mode }}, ${{ inputs.only }}, ${{ inputs.compiler }})
+    name: bench:vm (${{ inputs.mode || 'full' }}, ${{ inputs.only || 'all' }}, ${{ inputs.compiler || 'next' }})
     runs-on: ubuntu-latest
     timeout-minutes: 180
     steps:
@@ -61,11 +66,16 @@ jobs:
         env:
           # The DOM suite drives the runner's installed Chrome.
           PUPPETEER_EXECUTABLE_PATH: /usr/bin/google-chrome
+          # A push has no inputs; use the defaults.
+          MODE: ${{ inputs.mode || 'full' }}
+          ONLY: ${{ inputs.only || 'all' }}
+          COMPILER: ${{ inputs.compiler || 'next' }}
+          BEFORE_REF: ${{ inputs.before_ref }}
         run: |
-          args=(--compiler=${{ inputs.compiler }})
-          if [ "${{ inputs.mode }}" = quick ]; then args+=(--quick); fi
-          if [ "${{ inputs.only }}" != all ]; then args+=(--only=${{ inputs.only }}); fi
-          if [ -n "${{ inputs.before_ref }}" ]; then args+=(--before-ref=${{ inputs.before_ref }}); fi
+          args=(--compiler="$COMPILER")
+          if [ "$MODE" = quick ]; then args+=(--quick); fi
+          if [ "$ONLY" != all ]; then args+=(--only="$ONLY"); fi
+          if [ -n "$BEFORE_REF" ]; then args+=(--before-ref="$BEFORE_REF"); fi
           bun run bench:vm "${args[@]}"
       - if: always()
         name: Summary
