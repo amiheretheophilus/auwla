@@ -32,6 +32,8 @@ interface Proof {
   readonly callback: number;
   /** Edits its receiver, and nothing else. */
   readonly edits: boolean;
+  /** Argument interval inserted into the receiver; omitted when none are added. */
+  readonly added?: readonly [from: number, to?: number];
 }
 
 const { apply } = Reflect;
@@ -71,11 +73,14 @@ for (const name of ['find', 'findIndex', 'findLast', 'findLastIndex', 'some', 'e
   prove(name, { callback: 0 });
 }
 // Edit the receiver only.
-for (const name of ['push', 'pop', 'shift', 'unshift', 'reverse']) {
+for (const name of ['push', 'unshift']) {
+  prove(name, { edits: true, added: [0] });
+}
+for (const name of ['pop', 'shift', 'reverse']) {
   prove(name, { edits: true });
 }
-prove('splice', { edits: true, species: true, converted: [0, 1] });
-prove('fill', { edits: true, converted: [1, 2] });
+prove('splice', { edits: true, species: true, converted: [0, 1], added: [2] });
+prove('fill', { edits: true, converted: [1, 2], added: [0, 1] });
 prove('sort', { edits: true, callback: 0 });
 
 /** ArraySpeciesCreate on `array` constructs the intrinsic Array, running no authored code. */
@@ -136,6 +141,9 @@ export function observeMethod(
     for (const read of reads) {
       if (read() !== receiver) return observeMutation(reads, notify).finish(apply(method, receiver, args));
     }
-    return observeReceiverEdit(receiver, notify, args).finish(apply(method, receiver, args));
+    const added = proof!.added;
+    const from = added?.[0] ?? 0;
+    const to = added === undefined ? 0 : added[1] ?? args.length;
+    return observeReceiverEdit(receiver, notify, args, from, to).finish(apply(method, receiver, args));
   };
 }

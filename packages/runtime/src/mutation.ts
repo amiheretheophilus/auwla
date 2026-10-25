@@ -7,6 +7,8 @@ import {
   type Entity,
 } from './kernel';
 
+const arrayIsArray = Array.isArray;
+
 interface Root { readonly read: () => unknown; readonly notify: () => void }
 const sharedRoots = new Set<WeakRef<object>>();
 const rootsOfShared = new WeakMap<object, readonly Root[]>();
@@ -126,18 +128,53 @@ function hold(slot: Slot, object: object): void {
 }
 
 /** Walk identities through data fields, without invoking an unused accessor. */
-function reachable(value: unknown, visit: (object: object) => void, seen = new Set<object>()): void {
+function reachable(
+  value: unknown,
+  visit: (object: object) => void,
+  seen = new Set<object>(),
+  onUntrackedRead?: () => void,
+): void {
   if (value === null || (typeof value !== 'object' && typeof value !== 'function') || seen.has(value)) return;
   seen.add(value);
   visit(value);
   if (value instanceof Map) Map.prototype.forEach.call(value, (item: unknown, key: unknown) => {
-    reachable(key, visit, seen); reachable(item, visit, seen);
+    reachable(key, visit, seen, onUntrackedRead);
+    reachable(item, visit, seen, onUntrackedRead);
   });
-  if (value instanceof Set) Set.prototype.forEach.call(value, (item: unknown) => reachable(item, visit, seen));
+  if (value instanceof Set) {
+    Set.prototype.forEach.call(value, (item: unknown) => reachable(item, visit, seen, onUntrackedRead));
+  }
+  const array = onUntrackedRead !== undefined && arrayIsArray(value);
+  let length: unknown;
+  let elements = 0;
   for (const key of Reflect.ownKeys(value)) {
     const descriptor = Object.getOwnPropertyDescriptor(value, key)!;
-    if ('value' in descriptor) reachable(descriptor.value, visit, seen);
+    if (array) {
+      if (key === 'length' && 'value' in descriptor) {
+        length = descriptor.value;
+      } else if (arrayIndex(key)) {
+        elements++;
+      }
+    }
+    if ('value' in descriptor) {
+      reachable(descriptor.value, visit, seen, onUntrackedRead);
+    } else {
+      onUntrackedRead?.();
+    }
   }
+  // A native array method can materialize an inherited value from a hole.
+  // Descriptor traversal deliberately does not read that inherited element.
+  if (array && elements !== length) {
+    onUntrackedRead!();
+  }
+}
+
+function arrayIndex(key: PropertyKey): boolean {
+  if (typeof key !== 'string') {
+    return false;
+  }
+  const index = +key;
+  return index >= 0 && index < 0xffff_ffff && index % 1 === 0 && `${index}` === key;
 }
 
 /**
@@ -151,6 +188,8 @@ interface Reach {
   readonly value: unknown;
   readonly objects: WeakSet<object>;
   stale: boolean;
+  /** Accessors and sparse arrays can supply values absent from data descriptors. */
+  untracked: boolean;
 }
 const reaches = new WeakMap<Root, Reach>();
 
@@ -175,23 +214,30 @@ function walk(root: Root, slot?: Slot): Reach {
   }
   reaches.delete(root);
   const value = root.read();
-  const objects = new WeakSet<object>();
-  reachable(value, (object) => {
-    objects.add(object);
-    if (slot !== undefined) {
-      hold(slot, object);
-    }
-  });
-  const reach: Reach = { value, objects, stale: false };
+  const reach: Reach = { value, objects: new WeakSet(), stale: false, untracked: false };
+  extendReach(reach, value, slot);
   reaches.set(root, reach);
   slot?.store.unwalked.delete(slot);
   return reach;
+}
+
+function extendReach(reach: Reach, value: unknown, slot?: Slot): void {
+  reachable(value, (object) => {
+    reach.objects.add(object);
+    if (slot !== undefined) {
+      hold(slot, object);
+    }
+  }, new Set(), () => {
+    reach.untracked = true;
+  });
 }
 
 /** How an edit changed the data below the objects it changed. */
 type Edit =
   /** A store of `added`; `removed` when the old value may have been an object. */
   | { readonly kind: 'store'; readonly added: unknown; readonly removed: boolean }
+  /** Only this argument interval is inserted by the proven array intrinsic. */
+  | { readonly kind: 'receiver'; readonly added: readonly unknown[]; readonly from: number; readonly to: number }
   /** An opaque call or a setter: anything below the changed objects may differ. */
   | { readonly kind: 'unknown' };
 
@@ -309,21 +355,26 @@ function notifies(root: Root, changed: ReadonlySet<object>, edit: Edit, slot?: S
 }
 
 function record(root: Root, reach: Reach, edit: Edit, slot?: Slot): void {
-  if (edit.kind === 'unknown') {
+  if (edit.kind === 'unknown' || edit.kind === 'receiver' && reach.untracked) {
+    // Native methods can move a getter's result into an own data element.
+    // A descriptor-only reach cannot enumerate those additions in advance.
     reaches.delete(root);
     return;
   }
   // Incremental indexing can encounter the same reflection failures as a full
   // walk. A successful update clears this guard; a throw leaves a full retry.
   slot?.store.unwalked.add(slot);
-  reachable(edit.added, (object) => {
-    reach.objects.add(object);
-    if (slot !== undefined) {
-      hold(slot, object);
+  if (edit.kind === 'receiver') {
+    // Do not index the temporary arguments array, converting parameters or a
+    // comparator: none of those containers become data owned by the receiver.
+    for (let index = edit.from; index < edit.to; index++) {
+      extendReach(reach, edit.added[index], slot);
     }
-  });
+  } else {
+    extendReach(reach, edit.added, slot);
+  }
   slot?.store.unwalked.delete(slot);
-  if (edit.removed) reach.stale = true;
+  if (edit.kind === 'receiver' || edit.removed) reach.stale = true;
 }
 
 function isObject(value: unknown): value is object {
@@ -537,11 +588,17 @@ export function observeMutation(reads: readonly (() => unknown)[], notify: reado
  * found it changed would. A call that throws stays pending, so its partial
  * edit is reported at the next recovery, as for any observation.
  *
- * The proven intrinsics can only add objects passed as `added` (their
- * arguments) and may drop elements, so roots record exactly that rather than
- * forgetting what they reach.
+ * Dense data arrays add only the indicated argument values. A root containing
+ * accessors or sparse arrays forgets its reach: a native read can materialize a
+ * value absent from its data descriptors. Partial calls still recover normally.
  */
-export function observeReceiverEdit(object: object, notify: readonly (() => void)[], added: readonly unknown[]): Observation {
+export function observeReceiverEdit(
+  object: object,
+  notify: readonly (() => void)[],
+  added: readonly unknown[],
+  from = 0,
+  to = added.length,
+): Observation {
   const state = mutationStore();
   let complete = false;
   const report = () => {
@@ -551,7 +608,7 @@ export function observeReceiverEdit(object: object, notify: readonly (() => void
     state.unrecovered.delete(reference);
     stamp(object);
     for (const callback of notify) callback();
-    notifyAliases(new Set([object]), { kind: 'store', added, removed: true });
+    notifyAliases(new Set([object]), { kind: 'receiver', added, from, to });
   };
   const observation: Observation = {
     finish(result) {

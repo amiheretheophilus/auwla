@@ -138,3 +138,86 @@ it('reports a receiver edit interrupted by an exception at the next recovery', (
   recoverMutations();
   expect(counts.notified).toBe(1);
 });
+
+it('tracks an object moved from an accessor into a data element by an intrinsic', () => {
+  const added = { id: 10 };
+  const items = [{ id: 0 }, { id: 1 }];
+  let getterCalls = 0;
+  Object.defineProperty(items, 0, {
+    get() {
+      getterCalls++;
+      return added;
+    },
+    set() {},
+    configurable: true,
+  });
+  let notified = 0;
+  const owner = {};
+  registerSharedMutationRoots(owner, [{ read: () => items, notify: () => notified++ }]);
+  // Establish the reach before reverse runs. The accessor value is not an
+  // own data field yet, so it is discovered only after native reverse moves it.
+  mutationTarget({}, 'prime', () => {}).value = 1;
+  const { reads, notify } = watch(() => items);
+  observeMethod(reads, notify, items, 'reverse', 0)();
+  expect(items[1]).toBe(added);
+  expect(notified).toBe(1);
+  mutationTarget(added, 'id', () => {}).value = 11;
+  expect(notified).toBe(2);
+  expect(getterCalls).toBe(1);
+});
+
+it('tracks an inherited element moved into a sparse array by an intrinsic', () => {
+  const added = { id: 10 };
+  const items = [, { id: 1 }];
+  const prototype = Object.create(Array.prototype);
+  Object.defineProperty(prototype, 0, {
+    get: () => added,
+    set() {},
+    configurable: true,
+  });
+  Object.setPrototypeOf(items, prototype);
+  let notified = 0;
+  const owner = {};
+  registerSharedMutationRoots(owner, [{ read: () => items, notify: () => notified++ }]);
+  mutationTarget({}, 'prime', () => {}).value = 1;
+  const { reads, notify } = watch(() => items);
+  observeMethod(reads, notify, items, 'reverse', 0)();
+  expect(items[1]).toBe(added);
+  mutationTarget(added, 'id', () => {}).value = 11;
+  expect(notified).toBe(2);
+});
+
+it('does not register a comparator as data added by sorting', () => {
+  const items = rows();
+  const comparator = Object.assign((a: { id: number }, b: { id: number }) => a.id - b.id, { count: 0 });
+  let notified = 0;
+  const owner = {};
+  registerSharedMutationRoots(owner, [{ read: () => items, notify: () => notified++ }]);
+  mutationTarget({}, 'prime', () => {}).value = 1;
+  const { reads, notify } = watch(() => items);
+  observeMethod(reads, notify, items, 'sort', 1)(comparator);
+  expect(notified).toBe(1);
+  mutationTarget(comparator, 'count', () => {}).value = 1;
+  expect(notified).toBe(1);
+});
+
+it('recovers aliases materialized before an intrinsic throws', () => {
+  const added = { id: 10 };
+  const items = rows();
+  Object.defineProperty(items, 3, {
+    get: () => added,
+    set() { throw new Error('partial reverse'); },
+    configurable: true,
+  });
+  let notified = 0;
+  const owner = {};
+  registerSharedMutationRoots(owner, [{ read: () => items, notify: () => notified++ }]);
+  mutationTarget({}, 'prime', () => {}).value = 1;
+  const { reads, notify } = watch(() => items);
+  expect(() => observeMethod(reads, notify, items, 'reverse', 0)()).toThrow('partial reverse');
+  expect(items[0]).toBe(added);
+  recoverMutations();
+  expect(notified).toBe(1);
+  mutationTarget(added, 'id', () => {}).value = 11;
+  expect(notified).toBe(2);
+});

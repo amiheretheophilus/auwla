@@ -135,8 +135,13 @@ removed object never notifies its old root.
 An edit of a root's own value is a hit even when its set is stale, so only a hit
 on an object the root may have dropped walks it again. A proven array method edit
 (`observeReceiverEdit`) records the objects it may add, its arguments, and marks
-the set stale, instead of forgetting it. So the 10k-row `data` root is not walked
-again after every `splice` or `reverse`.
+the set stale, instead of forgetting it. Dense shared data roots can reuse that
+reach across consecutive structural edits. Component roots release stale index
+memberships after a completed update, as described below.
+Receiver edits record the exact insertion argument interval. Reaches with
+accessors or array holes are forgotten instead: native calls can materialize
+values that their data descriptors did not contain. The next lookup discovers
+those new aliases without invoking unused getters (`optimize.md`, "Method calls").
 
 Component roots are also indexed by the objects they reach. A component can mount
 one per instance, so 10k rows would mean 10k roots. A store looks up only the

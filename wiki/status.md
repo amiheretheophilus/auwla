@@ -24,6 +24,18 @@ Last updated: 2026-10-25.
 
 ## Done
 
+- Receiver-edit alias correction (2026-10-25). Native `reverse` could move an
+  accessor/inherited value into an own data element while an already cached
+  reach missed that new alias. The optimized compiled UI stayed at `10` after
+  the object changed to `11`, while general mode correctly updated. Reaches now
+  record accessors/holes and rebuild conservatively after such receiver edits.
+  Proven insertions also record only actual inserted values, rather than the
+  temporary arguments array or comparator. Four native regressions include
+  partial-throw recovery and getter-call counts; the DOM regression passes in
+  both modes. Both type checks, 47 focused runtime checks, 36 compiled
+  native/fixture/comparison checks and all eight placement/16 update-style Chrome
+  gates pass. The general fallback and existing proxy-reflection limits remain.
+
 - Shared mutation-cache lifetime (2026-10-25). A shared write now releases cached
   reaches whose native binding identity changed. Lazy shared derivations check
   again after replay, so a completed render does not retain their previous graph
@@ -34,6 +46,18 @@ Last updated: 2026-10-25.
   native/fixture/comparison checks pass. Chrome gates pass all eight compiled
   placements and all 16 update styles, with retained identity and mixed sequences.
   This fixes two reproduced lifetimes; the VM OOM remains unverified.
+  [CI 40234242114](https://github.com/amiheretheophilus/auwla/actions/runs/40234242114)
+  at `951aad5b` passes all four jobs: 250 compiler unit/native tests, 105 runtime
+  tests, 320 reference cases, 220 compiler comparisons with the same 100 Phase
+  7/8 failures, and ten generator/corpus checks at `FC_RUNS=200`.
+  [Quick run 40234242313](https://github.com/amiheretheophilus/auwla/actions/runs/40234242313)
+  passes DOM/Octane gates but still misses the floor: module-component
+  create/update/clear 10k are 144.7/50.5/34.2 ms next versus 18.9/2.0/0.8 ms old
+  (seven samples). Octane runlots is 293.6 versus 63.4 ms (three samples), and all
+  24 operations remain slower. These columns compare current compilers within
+  one run; separate-run numbers do not isolate either lifetime fix. The clear
+  profile shows individual DOM removals and GC as major costs. The ignored local
+  artifact copy is `bench/dom/dist/shared-cache-audit/`.
 
 - Mutation-index ownership cleanup (2026-10-25). Indexed roots now detach their
   memberships on disposal and reindexing. Completed updates release changed or

@@ -125,3 +125,27 @@ it.each(modes)('evaluates receiver, method, arguments and call in native order (
   click('go');
   expect(module.log).toEqual(['receiver', 'argument', 'done']);
 });
+
+it.each(modes)('keeps a getter-returned object reactive after reverse stores it as data ($mode)', async ({ optimize }) => {
+  const { host, click } = await mount(`
+    const added = { id: 10 };
+    const items = [{ id: 0 }, { id: 1 }];
+    const prime = { count: 0 };
+    Object.defineProperty(items, 0, {
+      get: () => added,
+      set() {},
+      configurable: true,
+    });
+    export function App() {
+      return <main><p>{items[1].id}</p>
+        <button id="reverse" onClick={() => { prime.count++; items.reverse(); }}>reverse</button>
+        <button id="edit" onClick={() => { added.id++; }}>edit</button>
+      </main>;
+    }
+  `, optimize);
+  expect(host.querySelector('p')!.textContent).toBe('1');
+  click('reverse');
+  expect(host.querySelector('p')!.textContent).toBe('10');
+  click('edit');
+  expect(host.querySelector('p')!.textContent).toBe('11');
+});

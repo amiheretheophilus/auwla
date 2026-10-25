@@ -123,11 +123,15 @@ a pending entry, so a call that throws midway is still reported at the next
 recovery. Anything unproven is observed as before. An unknown callee starts its
 observation before its arguments are evaluated, as the general form does.
 
-Known alias gap under audit: native `reverse` can move an accessor's returned
-object into an own data element. Recording only the call's arguments misses that
-newly reachable object when a root was already indexed. A native regression
-reproduces the missed later notification; the receiver-edit proof and recovery
-path must account for this before further array fast paths.
+Descriptor reaches remember when they encounter accessors or sparse arrays.
+A receiver edit discards such a reach: native `reverse` can move a getter or
+inherited value into an own data element without taking that object as an
+argument. The next alias lookup rebuilds from the resulting data, including after
+an interrupted native call. Dense data reaches record only arguments actually
+inserted: all arguments of push/unshift, splice's arguments after index 1, and
+fill's first argument. Sorting adds no comparator, and the temporary argument
+array is never indexed as receiver data. Native regressions and a both-mode DOM
+check cover the previously missed later notification; unused getters stay unused.
 
 The proof boundary is the same one compiled code already uses elsewhere. What a
 proven call can still run is property reads (getters, proxy traps) and implicit
