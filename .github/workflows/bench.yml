@@ -1,0 +1,78 @@
+# The benchmarks (`bench/README.md`), run by hand on a GitHub runner:
+#
+#   gh workflow run bench.yml --ref compiler-rewrite -f mode=full
+#   gh run download <id> --repo amiheretheophilus/auwla -n bench-results
+#
+# A shared runner is noisier than the benchmark VM. Compare columns within one
+# run (memoized-dom against vanilla JS, Octane's frameworks, or `before_ref`
+# side by side), not numbers across runs.
+name: bench
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: quick (correctness gates, one Octane sample) or full (timed)
+        type: choice
+        default: full
+        options: [full, quick]
+      only:
+        description: Which suites to run
+        type: choice
+        default: all
+        options: [all, dom, octane]
+      compiler:
+        description: Which compiler builds memoized-dom
+        type: choice
+        default: next
+        options: [next, old]
+      before_ref:
+        description: Optional baseline commit timed side by side (e.g. d6e678b)
+        type: string
+        default: ''
+
+concurrency:
+  group: bench-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  bench:
+    name: bench:vm (${{ inputs.mode }}, ${{ inputs.only }}, ${{ inputs.compiler }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          # --before-ref archives the baseline commit from history.
+          fetch-depth: 0
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: canary
+      # Octane's upstream harness needs Node >= 24.11.
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+      - run: bun install --frozen-lockfile
+      - name: bun run bench:vm
+        env:
+          # The DOM suite drives the runner's installed Chrome.
+          PUPPETEER_EXECUTABLE_PATH: /usr/bin/google-chrome
+        run: |
+          args=(--compiler=${{ inputs.compiler }})
+          if [ "${{ inputs.mode }}" = quick ]; then args+=(--quick); fi
+          if [ "${{ inputs.only }}" != all ]; then args+=(--only=${{ inputs.only }}); fi
+          if [ -n "${{ inputs.before_ref }}" ]; then args+=(--before-ref=${{ inputs.before_ref }}); fi
+          bun run bench:vm "${args[@]}"
+      - if: always()
+        name: Summary
+        run: cat bench/results/*/README.md >> "$GITHUB_STEP_SUMMARY" || true
+      - if: always()
+        uses: actions/upload-artifact@v5
+        with:
+          name: bench-results
+          path: bench/results
+          retention-days: 14

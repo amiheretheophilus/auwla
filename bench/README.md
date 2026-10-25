@@ -31,6 +31,17 @@ checkout clean, so the next `git pull` works.
 | `bun run bench:vm --compiler=old` | the same with the existing compiler, for reference |
 | `bun run bench:vm --no-build` | skip `bun run build` |
 
+The same command runs on a GitHub runner, started by hand
+(`.github/workflows/bench.yml`; its inputs mirror the options above):
+
+```sh
+gh workflow run bench.yml --repo amiheretheophilus/auwla --ref compiler-rewrite -f mode=full -f only=all -f compiler=next
+gh run download <id> --repo amiheretheophilus/auwla -n bench-results
+```
+
+A shared runner is noisier than the VM: compare columns within one run, not
+numbers across runs. The run's summary page shows the results table.
+
 Each compiler's output stays separate, so both can be read and run:
 
 | | Existing compiler | compiler-next |
