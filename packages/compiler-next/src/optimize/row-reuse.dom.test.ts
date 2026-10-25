@@ -53,13 +53,15 @@ it('allows reuse only for JSX-returning arrows that read tracked or constant val
       const items = [{ id: 1 }];
       return <ul onClick={() => { shared++; local++; }}>{items.map(${callback})}</ul>;
     }
-  `, true).match(/createRowCache\((true|false)\)/g) ?? [];
-  expect(caches('(item) => <li>{item.id}{shared}{fixed}</li>')).toEqual(['createRowCache(false)']);
-  expect(caches('(item, index) => <li>{index}</li>')).toEqual(['createRowCache(true)']);
-  expect(caches('(item) => { const label = item.id + fixed; return <li>{label}</li>; }')).toHaveLength(1);
+  `, true).match(/createRowCache\((true|false)\)|createRowList\(/g) ?? [];
+  // A proven callback returning one element is shown by a row list (`row-lists.ts`).
+  expect(caches('(item) => <li>{item.id}{shared}{fixed}</li>')).toEqual(['createRowList(']);
+  expect(caches('(item, index) => <li>{index}</li>')).toEqual(['createRowList(']);
+  expect(caches('(item, index) => <><li>{index}</li></>')).toEqual(['createRowCache(true)']);
+  expect(caches('(item) => { const label = item.id + fixed; return <li>{label}</li>; }')).toEqual(['createRowCache(false)']);
   // Component state and props read in a callback are emitted as tracked reads.
-  expect(caches('(item) => <li>{local}</li>')).toEqual(['createRowCache(false)']);
-  expect(caches('(item) => <li>{prop}</li>')).toEqual(['createRowCache(false)']);
+  expect(caches('(item) => <li>{local}</li>')).toEqual(['createRowList(']);
+  expect(caches('(item) => <li>{prop}</li>')).toEqual(['createRowList(']);
   // Returned objects must stay fresh.
   expect(caches('(item) => ({ id: item.id })')).toEqual([]);
   expect(caches('(item) => <li>{String(item.id)}</li>')).toEqual([]);

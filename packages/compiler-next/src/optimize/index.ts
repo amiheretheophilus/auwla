@@ -4,6 +4,7 @@ import type { ModulePlan } from '../core/plan';
 import { keyedComparisons } from './keyed-comparisons';
 import { methodCalls } from './methods';
 import { retainedListIndex } from './retained-list-index';
+import { rowLists } from './row-lists';
 
 export interface Optimization {
   readonly name: string;
@@ -13,7 +14,8 @@ export interface Optimization {
 
 // Ordering lives here. A pass receives resolved facts and returns a new plan;
 // it must never edit the authored syntax or another pass's input in place.
-const passes: readonly Optimization[] = [retainedListIndex, methodCalls, keyedComparisons];
+// Row lists need the method lowering's row-reuse proof.
+const passes: readonly Optimization[] = [retainedListIndex, methodCalls, rowLists, keyedComparisons];
 
 export function optimizeModules(
   plans: readonly ModulePlan[],

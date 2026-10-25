@@ -4,6 +4,7 @@ import {
   onEntityRender, runWithApplicationRuntime, type Entity,
 } from './kernel';
 import { recoverMutations, resumeMutations } from './mutation';
+import { advanceWriteEpoch } from './write-epoch';
 
 const pendingBoundaries = new Set<LocalWriteBatch>();
 const pendingRecoveries = new Set<LocalWriteBatch>();
@@ -160,6 +161,7 @@ class LocalWriteBatch implements WriteBatch {
   }
 
   mark(): void {
+    advanceWriteEpoch();
     if (!this.active) {
       // Setup seeds native values. Initial rendering remembers invalidations
       // without entering sites that have not finished mounting yet.

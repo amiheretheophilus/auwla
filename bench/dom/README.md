@@ -17,6 +17,8 @@ To check a change without a full run, `bun run bench/dom/quick.ts` builds both
 compilers and times chosen scenarios side by side. Options: `--scenarios=10k`, a
 list of names, `--samples=3`, `--adapters=module-component,vanilla`. It checks
 every timed sample but skips the full untimed validation pass.
+`BENCH_RUNTIME_SOURCE=1` bundles the runtime from source, so `profile.ts` names
+its functions; report timings from the default package build.
 
 `bun run bench/dom/profile.ts --adapter=module-component --scenario="select 10k"`
 CPU-profiles one scenario from the last quick bundle and lists functions by self

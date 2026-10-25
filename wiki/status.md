@@ -24,6 +24,23 @@ Last updated: 2026-10-25.
 
 ## Done
 
+- Old-model fast paths, step 2 (2026-10-25): row lists and cheaper shared reads.
+  A text site whose whole value is a proven `map` returning one keyed-first
+  element is shown by compiled rows reconciled from the array (`compiler/optimize.md`,
+  "Row lists"): no render value, capture array, nested slot or listener swap per
+  row, LIS moves, one-call clearing. Its identity and order equal the general
+  path's: a runtime model check covers every two-step sequence of up to three keys
+  (14,450 transitions), and both-mode DOM traces compare node identity through
+  moves, duplicates, holes, `'1'`/`1` keys, `reverse`, `splice` and edits. Shared
+  owners refresh once per write instead of once per read (`write-epoch.ts`),
+  readers reuse one version function, repeated tracked reads allocate nothing, and
+  an edit through a shared binding no longer walks that binding's 10k items
+  (`handlers.md`). Locally (slow desktop, three samples) module-inline 10k went
+  from create/update/clear 328/135/10 ms to 236/27/9 ms against old 115/10/4 ms;
+  component rows are unchanged until light row components land. Both type checks,
+  265 compiler unit/native tests, 126 runtime tests, the case files (220 pass,
+  the same 100 deferred failures) and the Chrome gates pass.
+
 - Old-model fast paths, step 1 (2026-10-25, `decisions.md`): a text site not
   proven primitive creates its value slot on the first object value and writes
   text directly until then. A component row's `{props.item.id}` and

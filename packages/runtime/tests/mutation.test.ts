@@ -156,6 +156,60 @@ it('wakes readers of the written binding and of derived bindings only', () => {
   expect(woken.sort()).toEqual(['data', 'total']);
 });
 
+it('skips walking a shared root its own edit notified, and finds it from an alias edit', () => {
+  let walks = 0;
+  const item = { label: 'a' };
+  const data = new Proxy([item], {
+    ownKeys(target) {
+      walks++;
+      return Reflect.ownKeys(target);
+    },
+  });
+  const writes = createSharedWrites([{}], []);
+  let notified = 0;
+  const notify = () => { notified++; };
+  writes.watch([{ read: () => data, notify }]);
+  // `data[0].label = …`: the compiled edit passes `data`'s own notifier.
+  mutationTarget(item, 'label', notify).value = 'b';
+  expect([walks, notified]).toEqual([0, 1]);
+  // The same object edited through another binding still reaches `data`.
+  mutationTarget(item, 'label', () => {}).value = 'c';
+  expect(walks).toBeGreaterThan(0);
+  expect(notified).toBe(2);
+});
+
+it('marks a shared owner stale after any write and fresh once its refresh begins', () => {
+  const key = {};
+  const writes = createSharedWrites([key], []);
+  expect(writes.stale()).toBe(true);
+  writes.refreshing();
+  expect(writes.stale()).toBe(false);
+  writes.mark(key);
+  expect(writes.stale()).toBe(true);
+  writes.refreshing();
+  mutationTarget({}, 'x', () => {}).value = 1;
+  expect(writes.stale()).toBe(true);
+  writes.refreshing();
+  // Another owner's write can change a derivation that reads it.
+  createSharedWrites([{}], []).mark();
+  expect(writes.stale()).toBe(true);
+});
+
+it('keeps one dependency per key and version reader, holding the latest version seen', () => {
+  let version = 0;
+  const read = () => version;
+  const key = {};
+  const computation = createComputation();
+  computation.begin();
+  trackRead(read, null, key);
+  version++;
+  trackRead(read, null, key);
+  computation.end();
+  expect(computation.changed()).toBe(false);
+  version++;
+  expect(computation.changed()).toBe(true);
+});
+
 it('checks shared binding identities without reflecting over their unchanged data', () => {
   let walks = 0;
   let getters = 0;

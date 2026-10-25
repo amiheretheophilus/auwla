@@ -86,7 +86,14 @@ Shared derivations refresh during a consuming build; native intermediate reads
 inside an event remain unchanged until its update boundary.
 After a shared derivation refresh, `shared-dom.ts` calls the shared write batch's
 `check()`. It releases cached mutation reaches of replaced bindings, as publishing
-a shared write does. Both-mode native GC checks verify the previous graph can be
+a shared write does. A refresh runs only when something was written since the
+last one began (`stale()`, `runtime/src/write-epoch.ts`): write batch marks,
+published versions, observed edits and kernel invalidations advance the epoch,
+and nothing else can change a derivation or a watched root. A list of 10k rows
+reading `selected` used to refresh once per row; a render now refreshes once
+after a write, and again only if that refresh itself wrote. Each binding's reader
+passes one hoisted `_version_x` function to `trackRead`, so reading it again in
+the same computation updates its dependency instead of allocating another. Both-mode native GC checks verify the previous graph can be
 collected after the consuming build; callbacks still read held native values.
 
 Nested lexical blocks now have their own storage activations, selected by

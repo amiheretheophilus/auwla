@@ -85,7 +85,7 @@ const lisInLis: boolean[] = [];
 const lisTails: number[] = [];
 const lisPrev: number[] = [];
 
-function lisPositions(seq: number[], start: number, end: number): boolean[] {
+export function lisPositions(seq: number[], start: number, end: number): boolean[] {
   const n = seq.length;
   const inLis = lisInLis;
   // A complete cyclic shift has two increasing runs. Prove it from the

@@ -11,12 +11,14 @@ export function emitMutations(
   plans: readonly MutationPlan[], versions: ReadonlyMap<BindingNode, string>, names: Names,
   runtime: string, batch: string | null, initial: ReadonlyMap<Node, Node>,
   keys: ReadonlyMap<BindingNode, string> = new Map(),
+  /** A shared owner's declared notifiers, also its watched roots' (`shared-dom.ts`). */
+  declared: ReadonlyMap<BindingNode, string> = new Map(),
 ) {
   const replacements = new Map(initial);
   const declarations: Statement[] = [];
   // One notification per binding: every edit of `data` bumps the same version
   // and marks the same batch, wherever the edit is.
-  const notifiers = new Map<BindingNode, string>();
+  const notifiers = new Map<BindingNode, string>(declared);
   const notifierOf = (binding: BindingNode): string => {
     let notify = notifiers.get(binding);
     if (notify === undefined) {
@@ -63,9 +65,12 @@ export function emitMutations(
       const call = copy(plan.operation, replacements);
       if (is.CallExpression(call) && is.MemberExpression(call.callee)) {
         const member = call.callee;
-        // One row cache per call site and owner instance (`runtime/src/list-map.ts`).
+        // One row cache per call site and owner instance (`runtime/src/list-map.ts`),
+        // or the rows of the text site this call is (`core/emit/row-list.ts`).
         let rows: Expression = expression('void 0');
-        if (plan.method.rowReuse !== undefined) {
+        if (plan.method.rowList === true) {
+          rows = expression('$$list', { list: names.of(plan.operation, '_rowList') });
+        } else if (plan.method.rowReuse !== undefined) {
           const cache = names.fresh('_rows');
           declarations.push(statement(`const $$cache = $$runtime.createRowCache(${plan.method.rowReuse.usesIndex});`, {
             cache, runtime,

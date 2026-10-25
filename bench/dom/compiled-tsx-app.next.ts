@@ -6,39 +6,41 @@ const _markup2 = "<li><!---->: <!----></li>";
 _MD.defineComponent(Row, "./bench/dom/App.tsx#Row");
 let _dataVersion = 0;
 const _sharedKey = {};
-function _read_data() {
-  if (_MD.isBuilding() && _sharedReady && !_sharedScope.active()) _refreshShared();
-  return _MD.trackRead(() => {
-    if (_MD.isBuilding() && _sharedReady && !_sharedScope.active()) _refreshShared();
-    return _dataVersion;
-  }, data, _sharedKey);
-}
-export { _read_data };
-let _selectedVersion = 0;
-const _sharedKey2 = {};
-function _read_selected() {
-  if (_MD.isBuilding() && _sharedReady && !_sharedScope.active()) _refreshShared();
-  return _MD.trackRead(() => {
-    if (_MD.isBuilding() && _sharedReady && !_sharedScope.active()) _refreshShared();
-    return _selectedVersion;
-  }, selected, _sharedKey2);
-}
-export { _read_selected };
-function _peek_selected() {
-  if (_MD.isBuilding() && _sharedReady && !_sharedScope.active()) _refreshShared();
-  return selected;
-}
-function _version_selected() {
-  if (_MD.isBuilding() && _sharedReady && !_sharedScope.active()) _refreshShared();
-  return _selectedVersion;
-}
-const _sharedScope = _MD.createBuildScope(true, false);
-let _sharedReady = false;
-const _sharedWrites = _MD.createSharedWrites([_sharedKey, _sharedKey2], []);
 function _mutated_data() {
   _dataVersion++;
   _sharedWrites.mark(_sharedKey);
 }
+function _version_data() {
+  if (_MD.isBuilding()) _refreshShared();
+  return _dataVersion;
+}
+function _read_data() {
+  if (_MD.isBuilding()) _refreshShared();
+  return _MD.trackRead(_version_data, data, _sharedKey);
+}
+export { _read_data };
+let _selectedVersion = 0;
+const _sharedKey2 = {};
+function _mutated_selected() {
+  _selectedVersion++;
+  _sharedWrites.mark(_sharedKey2);
+}
+function _version_selected() {
+  if (_MD.isBuilding()) _refreshShared();
+  return _selectedVersion;
+}
+function _read_selected() {
+  if (_MD.isBuilding()) _refreshShared();
+  return _MD.trackRead(_version_selected, selected, _sharedKey2);
+}
+export { _read_selected };
+function _peek_selected() {
+  if (_MD.isBuilding()) _refreshShared();
+  return selected;
+}
+const _sharedScope = _MD.createBuildScope(true, false);
+let _sharedReady = false;
+const _sharedWrites = _MD.createSharedWrites([_sharedKey, _sharedKey2], []);
 const _rows = _MD.createRowCache(false);
 function _completeShared(_result) {
   _sharedReady = true;
@@ -46,7 +48,8 @@ function _completeShared(_result) {
   return _result;
 }
 function _refreshShared() {
-  if (!_sharedReady || _sharedScope.active()) return;
+  if (!_sharedReady || !_sharedWrites.stale() || _sharedScope.active()) return;
+  _sharedWrites.refreshing();
   const _sharedFrame = _sharedScope.enter();
   _sharedWrites.check();
   _sharedScope.leave(_sharedFrame);
@@ -54,15 +57,9 @@ function _refreshShared() {
 const _sharedFrame = _sharedScope.enter();
 import { buildData } from './data';
 let data = [];
-_sharedWrites.watch([{ read: () => data, notify: () => {
-  _dataVersion++;
-  _sharedWrites.mark(_sharedKey);
-} }]);
+_sharedWrites.watch([{ read: () => data, notify: _mutated_data }]);
 let selected = null;
-_sharedWrites.watch([{ read: () => selected, notify: () => {
-  _selectedVersion++;
-  _sharedWrites.mark(_sharedKey2);
-} }]);
+_sharedWrites.watch([{ read: () => selected, notify: _mutated_selected }]);
 function Row(_id2, _parent2, _props2, _namespace2, _setupOnly2) {
   let _propsVersion = 0;
   const _readKey = {};

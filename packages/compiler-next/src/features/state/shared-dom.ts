@@ -18,6 +18,12 @@ export interface SharedOwnerEmit {
   readonly refresh: string;
   readonly ready: string;
   readonly declarations: readonly Statement[];
+  /**
+   * One notifier per binding, shared by its watched root and its edits. The
+   * runtime then knows an edit through `data` already notified `data`'s root
+   * and need not walk that root to find it (`runtime/src/mutation.ts`).
+   */
+  readonly notifiers: ReadonlyMap<BindingNode, string>;
 }
 
 export function emitSharedState(plan: ModulePlan, names: Names, runtime: string, initial: ReadonlyMap<Node, Node>) {
@@ -38,26 +44,33 @@ export function emitSharedState(plan: ModulePlan, names: Names, runtime: string,
     const refresh = names.fresh('_refreshShared');
     const ready = names.fresh('_sharedReady');
     const declarations: Statement[] = [];
+    const notifiers = new Map<BindingNode, string>();
     for (const binding of owner.state) {
       const version = names.fresh(`_${binding.binding.name}Version`);
       const key = names.fresh('_sharedKey');
+      const notify = names.fresh(`_mutated_${binding.binding.name}`);
       versions.set(binding, version);
       keys.set(binding, key);
+      notifiers.set(binding, notify);
       declarations.push(statement('let $$version = 0;', { version }));
       declarations.push(statement('const $$key = {};', { key }));
+      declarations.push(statement('function $$notify() { $$version++; $$batch.mark($$key); }', { notify, version, batch, key }));
       const read = plan.sharedReads.get(binding);
       if (read === undefined) {
         continue;
       }
-      // A reader refreshes an inactive shared owner before exposing its version
-      // or value. Re-entering its active setup would instead replay itself.
+      // A reader refreshes the shared owner before exposing its version or
+      // value (`_refreshShared` skips an active or unchanged owner). One version
+      // function per binding: a computation reading it again records nothing new.
+      const current = names.fresh(`_version_${binding.binding.name}`);
+      declarations.push(statement(`function $$current() {
+        if ($$runtime.isBuilding()) $$refresh();
+        return $$version;
+      }`, { current, refresh, runtime, version }));
       declarations.push(statement(`function $$reader() {
-        if ($$runtime.isBuilding() && $$ready && !$$scope.active()) $$refresh();
-        return $$runtime.trackRead(() => {
-          if ($$runtime.isBuilding() && $$ready && !$$scope.active()) $$refresh();
-          return $$version;
-        }, $$binding, $$key);
-      }`, { reader: read.name, ready, scope, refresh, runtime, version, binding: binding.binding.name, key }));
+        if ($$runtime.isBuilding()) $$refresh();
+        return $$runtime.trackRead($$current, $$binding, $$key);
+      }`, { reader: read.name, current, refresh, runtime, binding: binding.binding.name, key }));
       if (owner.fn === null && owner.block === null) {
         declarations.push(statement('export { $$reader };', { reader: read.name }));
       }
@@ -76,15 +89,10 @@ export function emitSharedState(plan: ModulePlan, names: Names, runtime: string,
         // `x === e` reads `x` first, then `e`, as written; the reader depends
         // only on the result (`optimize/keyed-comparisons.ts`).
         const peek = names.fresh(`_peek_${binding.binding.name}`);
-        const current = names.fresh(`_version_${binding.binding.name}`);
         declarations.push(statement(`function $$peek() {
-          if ($$runtime.isBuilding() && $$ready && !$$scope.active()) $$refresh();
+          if ($$runtime.isBuilding()) $$refresh();
           return $$binding;
-        }`, { peek, ready, scope, refresh, runtime, binding: binding.binding.name }));
-        declarations.push(statement(`function $$current() {
-          if ($$runtime.isBuilding() && $$ready && !$$scope.active()) $$refresh();
-          return $$version;
-        }`, { current, ready, scope, refresh, runtime, version }));
+        }`, { peek, refresh, runtime, binding: binding.binding.name }));
         for (const [node] of compared) {
           if (!is.BinaryExpression(node)) continue;
           const equals = expression('$$runtime.trackEquals($$peek(), $$other, $$peek, $$current, $$key)', {
@@ -116,7 +124,7 @@ export function emitSharedState(plan: ModulePlan, names: Names, runtime: string,
     declarations.push(statement('const $$batch = $$runtime.createSharedWrites($$keys, $$recomputed);', {
       batch, runtime, keys: keyList(keys.keys()), recomputed: keyList(recomputed),
     }));
-    owners.push({ plan: owner, versions, keys, scope, frame, batch, refresh, ready, declarations });
+    owners.push({ plan: owner, versions, keys, scope, frame, batch, refresh, ready, declarations, notifiers });
   }
   const importedReaders = new Map<BindingNode, string>();
   for (const binding of plan.module.module.bindings) {
@@ -183,9 +191,12 @@ export function finishSharedOwner(
     id: b.Identifier({ name: refresh }), params: [], async: false, generator: false, expression: false,
     body: b.BlockStatement({ body: [
       b.IfStatement({
-        test: expression('!$$ready || $$scope.active()', { ready, scope }),
+        // Unchanged since the last refresh began: nothing was written that
+        // could change a derivation or a watched root.
+        test: expression('!$$ready || !$$batch.stale() || $$scope.active()', { ready, scope, batch }),
         consequent: b.ReturnStatement({ argument: null }), alternate: null,
       }),
+      statement('$$batch.refreshing();', { batch }),
       statement('const $$frame = $$scope.enter();', { frame, scope }),
       ...update,
       // A lazy derivation may replace its graph after the input write already
@@ -266,8 +277,8 @@ export function finishSharedOwner(
       if (!ids.some((id) => id.name === binding.binding.name && id.start === name.start)) {
         continue;
       }
-      body.push(statement('$$batch.watch([{ read: () => $$binding, notify: () => { $$version++; $$batch.mark($$key); } }]);', {
-        batch, binding: binding.binding.name, version: owner.versions.get(binding)!, key: owner.keys.get(binding)!,
+      body.push(statement('$$batch.watch([{ read: () => $$binding, notify: $$notify }]);', {
+        batch, binding: binding.binding.name, notify: owner.notifiers.get(binding)!,
       }));
     }
   }

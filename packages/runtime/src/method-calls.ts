@@ -22,6 +22,7 @@
  */
 import { observeMutation, observeReceiverEdit } from './mutation';
 import type { RowCache } from './list-map';
+import type { RowList } from './row-list';
 
 interface Proof {
   /** Creates its result with ArraySpeciesCreate, which reads `constructor`. */
@@ -118,8 +119,11 @@ export function observeMethod(
   receiver: any,
   key: PropertyKey,
   proven: number,
-  /** For a callback also proven to allow row reuse (`list-map.ts`); used only for the intrinsic `map`. */
-  rows?: RowCache,
+  /**
+   * Used only for the intrinsic `map`: a row cache for a callback proven to
+   * allow reuse (`list-map.ts`), or the rows a text site shows (`row-list.ts`).
+   */
+  rows?: Pick<RowCache | RowList, 'map'>,
 ): (...args: unknown[]) => unknown {
   const method = receiver[key];
   const proof = proofs.get(method);

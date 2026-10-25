@@ -1,6 +1,7 @@
 /** Shared version notifications retain native module/factory values. */
 import { publishVersions } from './computation';
 import { checkSharedMutationRoots, registerSharedMutationRoots } from './mutation';
+import { writeEpoch } from './write-epoch';
 
 /**
  * `keys` are the owner's bindings. A write notifies the readers of the binding
@@ -11,7 +12,20 @@ import { checkSharedMutationRoots, registerSharedMutationRoots } from './mutatio
  */
 export function createSharedWrites(keys: readonly object[], recomputed: readonly object[] = keys) {
   const watched: { read: () => unknown; notify: () => void }[] = [];
+  let refreshed = -1;
   return {
+    /**
+     * Whether a write happened since the owner's last refresh began. Only a
+     * write can make its derivations or watched roots differ, so the readers
+     * of one render refresh once, not once per read. A refresh that writes
+     * leaves the owner stale, and the next read refreshes again.
+     */
+    stale(): boolean {
+      return refreshed !== writeEpoch();
+    },
+    refreshing(): void {
+      refreshed = writeEpoch();
+    },
     mark(written?: object) {
       checkSharedMutationRoots(watched);
       publishVersions(written === undefined ? keys : [written, ...recomputed], written);

@@ -1,5 +1,6 @@
 /** Dependencies reached through compiled callbacks during an opaque computation. */
 import { getExtensionStore, onCommitFinished, onEntityDispose, type Entity } from './kernel';
+import { advanceWriteEpoch } from './write-epoch';
 
 type Version = () => number;
 interface Dependency {
@@ -77,6 +78,7 @@ onEntityDispose((id) => {
 });
 
 export function publishVersions(keys: readonly object[], written?: object): void {
+  advanceWriteEpoch();
   const state = store();
   if (written !== undefined && state.current !== null) {
     (state.current.writes ??= new Set()).add(written);
@@ -119,7 +121,16 @@ export function publishVersions(keys: readonly object[], written?: object): void
 
 export function trackRead<T>(version: Version, value: T, key: object = version): T {
   const current = store().current;
-  if (current !== null) (current.dependencies ??= new Map()).set(key, { read: version, seen: version() });
+  if (current === null) return value;
+  const dependencies = current.dependencies ??= new Map();
+  const existing = dependencies.get(key);
+  // Rows of one list read the same binding thousands of times in one frame.
+  // The latest read sets what the computation saw, as a new record would.
+  if (existing !== undefined && existing.read === version && existing.keyed === undefined) {
+    existing.seen = version();
+  } else {
+    dependencies.set(key, { read: version, seen: version() });
+  }
   return value;
 }
 
@@ -133,11 +144,14 @@ export function trackRead<T>(version: Version, value: T, key: object = version):
 export function trackEquals(value: unknown, other: unknown, peek: () => unknown, version: Version, key: object): boolean {
   const result = value === other;
   const current = store().current;
-  if (current !== null) {
-    depend(current, key, {
-      read: () => (peek() === other ? 1 : 0), seen: result ? 1 : 0, keyed: { value: peek, equals: other, version },
-    });
-  }
+  if (current === null) return result;
+  // A plain dependency on the key already covers this comparison (`depend`),
+  // so thousands of rows comparing one key allocate nothing after the merge.
+  const existing = current.dependencies?.get(key);
+  if (existing !== undefined && existing.keyed === undefined) return result;
+  depend(current, key, {
+    read: () => (peek() === other ? 1 : 0), seen: result ? 1 : 0, keyed: { value: peek, equals: other, version },
+  });
   return result;
 }
 

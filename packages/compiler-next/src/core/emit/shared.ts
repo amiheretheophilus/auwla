@@ -38,7 +38,7 @@ export function emitShared(plan: ModulePlan, names: Names, runtime: string) {
   }
   const mutationDeclarations = new Map<(typeof state.owners)[number], readonly Statement[]>();
   for (const owner of state.owners) {
-    const mutations = emitMutations(owner.plan.mutations, owner.versions, names, runtime, owner.batch, replacements, owner.keys);
+    const mutations = emitMutations(owner.plan.mutations, owner.versions, names, runtime, owner.batch, replacements, owner.keys, owner.notifiers);
     replacements = new Map(mutations.replacements);
     mutationDeclarations.set(owner, mutations.declarations);
   }

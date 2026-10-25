@@ -17,6 +17,13 @@ export async function bundleDomPage(entry: string, outfile: string): Promise<voi
     plugins: [{
       name: 'selected-compiler-output',
       setup(builder) {
+        // Profiles name runtime functions only when it is bundled from source;
+        // the package build is minified. Timings use the package build.
+        if (process.env.BENCH_RUNTIME_SOURCE === '1') {
+          builder.onResolve({ filter: /^@memoized-dom\/runtime$/ }, () => ({
+            path: resolve(dirname(import.meta.filename), '../../packages/runtime/src/index.ts'),
+          }));
+        }
         builder.onResolve({ filter: /^\.\/compiled-[a-z-]+$/ }, ({ path, resolveDir }) => {
           const file = resolve(resolveDir, `${path}${suffix}.ts`);
           if (!existsSync(file)) {

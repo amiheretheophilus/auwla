@@ -270,6 +270,63 @@ mark. `optimize/row-reuse.dom.test.ts` covers which callbacks qualify, and
 identical output in both modes through edits, replacement, reversal, duplicates,
 shared and local reads.
 
+## Row lists
+
+The old compiler's list shape (`../decisions.md`, 2026-10-25): when a text site's
+whole value is `items.map((item, index) => <li key={…} …>)`, the rows are
+compiled and reconciled from the array, with no render value, capture array,
+row closure or nested value slot per row.
+
+`optimize/row-lists.ts` marks the site (`TextSite.listStrategy: 'rows'`) and its
+call (`method.rowList`) when:
+
+- the call has row reuse (`row-reuse.ts`), so the runtime proves the intrinsic
+  `map` before the list is used, and otherwise the callback runs as written;
+- the callback's body is one element with one root, and its parameters are
+  plain identifiers;
+- the root's `key`, if any, is its first site, so evaluating it before the row
+  keeps the authored order;
+- the site belongs to a component's own template (or a conditional branch of
+  it), where the callback is evaluated. Rows inside stored JSX stay general.
+
+`core/emit/row-list.ts` declares, before the site evaluates, a key function and
+a row factory taking the callback's parameter names, and
+`createRowList(anchor, owner, key, create)`. A row's update assigns its
+parameters and evaluates every site again in order; a handler written as a
+function literal is created once and reads the assigned parameters. The mutation
+lowering passes the list to `observeMethod` (`Names.of` gives both emitters the
+same name). The site writes `list.write(value)`.
+
+`runtime/src/row-list.ts` reconciles with the general path's identity and order
+(`list-values.ts`, `list-index.ts`, `render-value.ts`): `key=` and the key as a
+string, or `#index`; each identity reuses its first old row; old duplicates are
+never reused; unmatched rows are removed in old order, then old duplicates; a
+reused identity whose key value changed by `Object.is` (`1` after `'1'`) mounts
+again, after those removals. Faster than the general path: an unchanged ordered
+prefix needs no lookup or key string, moves follow the longest increasing
+subsequence (`list.ts`), and a list that is all of its parent clears with one
+`replaceChildren`. `map` returns a token the site's `write` ignores; any other
+value (an unproven callee ran the callback) goes to a value slot at the same
+anchor, and the next proven `map` clears it.
+
+Without `try`: a pass records the rows it creates. A throw leaves them pending,
+and the next pass or disposal removes them; the committed rows stay. A getter
+that renders the same site again supersedes the pass it interrupted: the inner
+pass recovers the outer one's new rows and commits, and the outer pass stops.
+
+What differs from the general path is only timing the console cannot see: a row
+mounts while its item is evaluated, before unmatched rows are removed, and
+sibling rows leave the DOM together when the whole parent clears.
+
+Checks: `runtime/tests/row-list.test.ts` compares reuse, creation order and
+disposal order with `reconcileList` for every two-step sequence of up to three
+keys over `1`, `'1'`, `2` and `null`, keyed and unkeyed (7,225 each), plus holes,
+moves, bulk clearing, a throwing key, reentry and the slot fallback.
+`optimize/row-lists.dom.test.ts` compares each step's DOM node identity in both
+modes through moves, duplicates, holes, `'1'`/`1` keys, `reverse`, `splice`,
+edits and clearing, and covers handlers after a swap, a receiver with its own
+`map`, stored JSX and arrays inside rows, SVG rows and the qualification limits.
+
 ## Implementation order after Phase 6
 
 Write batches now share recovery scheduling and publish dirty entities in groups

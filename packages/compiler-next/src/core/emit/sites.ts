@@ -1,5 +1,5 @@
 /** Initial site values and version-guarded updates, in authored evaluation order. */
-import { b } from 'yuku-ast';
+import { b, is } from 'yuku-ast';
 import type { Expression, Node, Statement } from 'yuku-parser';
 import type { BindingNode } from '../graph';
 import type { ComponentPlan, Site } from '../plan';
@@ -10,6 +10,7 @@ import { expression as buildExpression, statement, statements, stringLiteral } f
 import { emitSelection, type EmitOnce } from '../../features/conditionals/dom';
 import { emitTemplate, prepareTemplateSites } from './template';
 import { siteValue } from './render-value';
+import { emitRowList } from './row-list';
 
 export interface SitesEmit {
   readonly mount: readonly Statement[];
@@ -18,7 +19,7 @@ export interface SitesEmit {
 }
 export type SitesPlan = Pick<ComponentPlan, 'sites' | 'siteInputs' | 'dynamicSites'>;
 
-interface SitesContext {
+export interface SitesContext {
   names: Names;
   runtime: string;
   batch: string | null;
@@ -33,6 +34,12 @@ interface SitesContext {
   ref(index: number): string;
   /** Deferred setup inside a component's selector program. */
   once?: EmitOnce;
+  /**
+   * A row of a row list (`row-list.ts`): every update evaluates each site
+   * again, except a handler written as a function literal, created once; it
+   * reads the row's parameters, which the update assigns.
+   */
+  rows?: boolean;
 }
 
 export function emitSites(
@@ -40,6 +47,8 @@ export function emitSites(
   context: SitesContext,
 ): SitesEmit {
   const { names, runtime, batch, versions, replacements, entity } = context;
+  // Captured programs and rows evaluate every site on each update.
+  const replays = context.values !== undefined || context.rows === true;
   const mount: Statement[] = [];
   const update: Statement[] = [];
   const dispose: Statement[] = [];
@@ -58,6 +67,14 @@ export function emitSites(
     }
     const node = context.ref(site.node);
     const value = names.fresh('_value');
+    // The row list exists before the site's `map` call passes it to the runtime.
+    const rowList = site.kind === 'text' && site.listStrategy === 'rows' && site.rows !== undefined
+      ? emitRowList(site.rows, node, renderOwner(context), context)
+      : null;
+    if (rowList !== null) {
+      mount.push(...rowList.declarations);
+      dispose.push(statement('$$list.dispose();', { list: rowList.list }));
+    }
     const selection = site.kind === 'conditional'
       ? emitSelection(site.selection, { names, runtime, replacements, versions, once: context.once })
       : null;
@@ -97,21 +114,14 @@ export function emitSites(
     }
     let region: string | null = null;
     let valueSlot: LazySlot | null = null;
-    if (site.kind === 'text' && !site.primitive) {
+    if (site.kind === 'text' && !site.primitive && rowList === null) {
       // Most such sites only ever show text. The slot, which also shows stored
       // JSX and arrays, is created by the first value that is an object.
       const slot = names.fresh('_valueSlot');
       const factory = site.listStrategy === 'retained-index' ? 'createIndexedValueSlot' : 'createValueSlot';
       valueSlot = {
         name: slot,
-        create: buildExpression(`$$runtime.${factory}($$text, { id: $$id, batch: $$batch, entity: $$entity, namespace: $$namespace })`, {
-          runtime,
-          text: node,
-          id: context.id,
-          batch: batch ?? buildExpression('null'),
-          entity: batch === null ? buildExpression('void 0') : entity,
-          namespace: context.namespace ?? buildExpression('void 0'),
-        }),
+        create: buildExpression(`$$runtime.${factory}($$text, $$owner)`, { runtime, text: node, owner: renderOwner(context) }),
       };
       mount.push(statement('let $$slot = null;', { slot }));
       dispose.push(statement('if ($$slot !== null) $$slot.dispose();', { slot }));
@@ -138,7 +148,12 @@ export function emitSites(
       mount.push(statement('$$slot.remove();', { slot: node }));
       dispose.push(statement('$$region.dispose();', { region }));
     } else if (used) {
-      mount.push(...writeValue(site, value, node, runtime, batch, listener, valueSlot));
+      mount.push(...writeValue(site, value, node, runtime, batch, listener, valueSlot, rowList?.list ?? null));
+    }
+    if (context.rows === true && site.kind === 'event' && isFunctionLiteral(site.expression)) {
+      // Evaluating it again would create the same function over the same row
+      // bindings; only its identity, which no authored code sees, would differ.
+      continue;
     }
 
     const inputs = new Set<string>();
@@ -149,7 +164,7 @@ export function emitSites(
         inputs.add(version);
       }
     }
-    if (inputs.size === 0 && computation === null && context.values === undefined) {
+    if (inputs.size === 0 && computation === null && !replays) {
       if (region !== null) {
         update.push(statement('$$region.update();', { region }));
       }
@@ -166,7 +181,7 @@ export function emitSites(
       body.unshift(statement('$$computation.begin();', { computation }));
       body.push(statement('$$computation.end();', { computation }));
     }
-    const writes = used ? writeValue(site, next, node, runtime, batch, listener, valueSlot) : [];
+    const writes = used ? writeValue(site, next, node, runtime, batch, listener, valueSlot, rowList?.list ?? null) : [];
     writes.push(statement('$$value = $$next;', { value, next }));
     // Equality also keeps an unchanged prop from replacing text a user typed.
     // The NaN check avoids relying on an authored binding named Object.
@@ -179,7 +194,7 @@ export function emitSites(
     if (computation !== null) {
       conditions.push(`${computation}.changed()`);
     }
-    if (context.values !== undefined) {
+    if (replays) {
       update.push(...body);
     } else {
       update.push(guardedStatements(buildExpression(conditions.join(' || ')), body));
@@ -192,6 +207,22 @@ export function emitSites(
     }
   }
   return { mount, update, dispose };
+}
+
+/** What nested slots and lists need from the component that owns them. */
+function renderOwner(context: SitesContext): Expression {
+  const batch = context.batch;
+  return buildExpression('({ id: $$id, batch: $$batch, entity: $$entity, namespace: $$namespace })', {
+    id: context.id,
+    batch: batch ?? buildExpression('null'),
+    entity: batch === null ? buildExpression('void 0') : context.entity,
+    namespace: context.namespace ?? buildExpression('void 0'),
+  });
+}
+
+function isFunctionLiteral(node: Node): boolean {
+  while (is.ParenthesizedExpression(node)) node = node.expression;
+  return is.ArrowFunctionExpression(node) || is.FunctionExpression(node);
 }
 
 /** A text site's value slot, created on the first value that is an object. */
@@ -297,11 +328,16 @@ function writeValue(
   batch: string | null,
   listener: string | null,
   valueSlot: LazySlot | null,
+  rowList: string | null,
 ): Statement[] {
   if (site.kind === 'conditional' || site.kind === 'key') {
     return [];
   }
   if (site.kind === 'text') {
+    if (rowList !== null) {
+      // The list already showed its rows inside `map`; other values fall back to a slot.
+      return [statement('$$list.write($$value);', { list: rowList, value })];
+    }
     if (valueSlot !== null) {
       // Before a slot exists, a value that is not an object is text, exactly
       // what a new slot would write (`render-value.ts`, `write`).

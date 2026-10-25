@@ -23,6 +23,9 @@ place.
 | `packages/runtime/src/list-values.ts` | General first-unused row matching and native array-child traversal: holes, inherited indices and one read per present child |
 | `packages/runtime/src/list-index.ts` | Retains private row identities between updates, with first-unused matching, exact teardown order and exception/reentry recovery |
 | `optimize/retained-list-index.ts` | Chooses indexed child-value slots on a fresh plan; native calls and observation stay unchanged |
+| `optimize/row-lists.ts` | Marks a site whose whole value is a proven `map` returning one keyed-first element (`optimize.md`, "Row lists") |
+| `core/emit/row-list.ts` | Emits that site's key function and row factory, where its callback is evaluated |
+| `packages/runtime/src/row-list.ts` | Reconciles compiled rows from the array with the general path's identity and order; LIS moves, bulk clear, slot fallback |
 | `packages/runtime/src/cond.ts` | Existing anchored branch lifecycle; an optional insertion point preserves surrounding sibling order |
 
 Ternary branches and `&&`, `||`, `??` with ordinary left operands are built.

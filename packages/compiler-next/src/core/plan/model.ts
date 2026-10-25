@@ -49,8 +49,12 @@ interface SiteBase {
 
 export interface TextSite extends SiteBase {
   readonly kind: 'text';
-  /** Optional private row bookkeeping; expression evaluation stays general. */
-  readonly listStrategy?: 'retained-index';
+  /**
+   * Optional row bookkeeping: `retained-index` keeps evaluation general; `rows`
+   * shows the site's `map` call through compiled rows (`rows`, `optimize/row-lists.ts`).
+   */
+  readonly listStrategy?: 'retained-index' | 'rows';
+  readonly rows?: RowListPlan;
   /**
    * The expression can only produce a primitive, so the site writes its text
    * node directly. Otherwise a value slot also accepts stored JSX and arrays.
@@ -58,6 +62,19 @@ export interface TextSite extends SiteBase {
   readonly primitive: boolean;
   /** `{...items}`: each item is a child, so the site shows `[...items]`. */
   readonly spread?: boolean;
+}
+
+/**
+ * `items.map((item, index) => <element key={…} …>)` as a text site's whole
+ * value. When the runtime proves the intrinsic `map`, a row list evaluates the
+ * row's sites directly per item instead of calling the callback
+ * (`runtime/src/row-list.ts`); otherwise the callback runs as written.
+ */
+export interface RowListPlan {
+  readonly call: Extract<Node, { type: 'CallExpression' }>;
+  readonly callback: Extract<Node, { type: 'ArrowFunctionExpression' }>;
+  /** The returned element, planned as stored JSX; its key, if any, is its first site. */
+  readonly row: RenderValuePlan;
 }
 
 export interface AttributeSite extends SiteBase {
@@ -244,6 +261,8 @@ export interface MutationPlan {
     readonly provenCallbacks: number;
     /** The first argument also allows row reuse when the callee is the intrinsic `map` (`optimize/row-reuse.ts`). */
     readonly rowReuse?: { readonly usesIndex: boolean };
+    /** The call is a text site's whole value, shown by a row list (`optimize/row-lists.ts`). */
+    readonly rowList?: boolean;
   };
 }
 

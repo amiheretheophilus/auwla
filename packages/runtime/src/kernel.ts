@@ -25,6 +25,7 @@
  * only orphan children from subtree teardown.
  */
 import { runWithApplicationRuntime } from './application-scope';
+import { advanceWriteEpoch } from './write-epoch';
 export { runWithApplicationRuntime } from './application-scope';
 export { register } from './volatile';
 export { markDirty, markDirtyMany, markDirtySubtree, markOwnerRootDirty } from './reasoned-invalidation';
@@ -646,6 +647,7 @@ export function enqueueEntityInvalidation(
   reason?: DirtyReasonInput,
   merge?: DirtyReasonMerger,
 ): void {
+  advanceWriteEpoch();
   const runtime = getActiveApplicationRuntime();
   if (enqueueDirty(runtime.state, id, reason, merge)) scheduleCommit(runtime);
 }
@@ -653,6 +655,7 @@ export function enqueueEntityInvalidation(
 /** @internal Enqueue a resolved write's readers before a synchronous commit. */
 export function enqueueEntityInvalidations(ids: readonly EntityId[], reason?: DirtyReasonInput, merge?: DirtyReasonMerger): void {
   if (ids.length === 0) return;
+  advanceWriteEpoch();
   const runtime = getActiveApplicationRuntime();
   const k = runtime.state;
   let marked = false;
@@ -731,6 +734,7 @@ export function enqueueSubtreeInvalidation(
   ownerReason?: DirtyReasonInput,
   merge?: DirtyReasonMerger,
 ): void {
+  advanceWriteEpoch();
   const runtime = getActiveApplicationRuntime();
   const k = runtime.state;
   const prefix = id + '/';

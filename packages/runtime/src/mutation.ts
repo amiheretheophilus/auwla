@@ -6,6 +6,7 @@ import {
   runWithApplicationRuntime,
   type Entity,
 } from './kernel';
+import { advanceWriteEpoch } from './write-epoch';
 
 const arrayIsArray = Array.isArray;
 
@@ -270,6 +271,7 @@ let clock = 0;
 const editedAt = new WeakMap<object, number>();
 
 function stamp(object: object): void {
+  advanceWriteEpoch();
   editedAt.set(object, ++clock);
 }
 
@@ -309,8 +311,12 @@ function editedBelow(value: object, time: number, seen: Set<object>): boolean {
   return false;
 }
 
-/** Notify every root whose data includes a changed object, then record the edit. */
-function notifyAliases(changed: ReadonlySet<object>, edit: Edit): void {
+/**
+ * Notify every root whose data includes a changed object, then record the edit.
+ * `direct` are the notifiers the edit already called for the bindings it was
+ * written through (`data[i].label = …` calls `data`'s).
+ */
+function notifyAliases(changed: ReadonlySet<object>, edit: Edit, direct: readonly (() => void)[] = []): void {
   if (changed.size === 0) return;
   const callbacks = new Set<() => void>();
   const store = roots();
@@ -331,6 +337,18 @@ function notifyAliases(changed: ReadonlySet<object>, edit: Edit): void {
     }
   }
   for (const root of sharedWatchedRoots()) {
+    if (direct.includes(root.notify)) {
+      // Already notified. Without a current reach, walking this root would
+      // only build an index this edit does not need; the next edit made
+      // through another binding walks it then, as for any unwalked root.
+      const known = reaches.get(root);
+      if (known === undefined || !Object.is(known.value, root.read())) {
+        reaches.delete(root);
+        continue;
+      }
+      notifies(root, changed, edit);
+      continue;
+    }
     if (notifies(root, changed, edit)) callbacks.add(root.notify);
   }
   for (const notify of callbacks) notify();
@@ -608,7 +626,7 @@ export function observeReceiverEdit(
     state.unrecovered.delete(reference);
     stamp(object);
     for (const callback of notify) callback();
-    notifyAliases(new Set([object]), { kind: 'receiver', added, from, to });
+    notifyAliases(new Set([object]), { kind: 'receiver', added, from, to }, notify);
   };
   const observation: Observation = {
     finish(result) {
@@ -634,7 +652,7 @@ export function mutationTarget(object: any, key: any, notify: () => void) {
       object[property] = value;
       stamp(object);
       notify();
-      notifyAliases(new Set([object]), edit);
+      notifyAliases(new Set([object]), edit, [notify]);
     },
   };
 }
@@ -643,7 +661,7 @@ export function deleteMutation(object: any, key: any, notify: () => void): boole
   const result = delete object[key];
   stamp(object);
   notify();
-  notifyAliases(new Set([object]), { kind: 'store', added: undefined, removed: true });
+  notifyAliases(new Set([object]), { kind: 'store', added: undefined, removed: true }, [notify]);
   return result;
 }
 
