@@ -2,6 +2,7 @@
 import type { Entity } from './kernel';
 import { setTextData } from './setters';
 import type { createWriteBatch } from './write-batch';
+import { reconcileList } from './list-values';
 
 export interface RenderOwner {
   readonly id: string;
@@ -145,39 +146,28 @@ export function createValueSlot(text: Text, owner: RenderOwner) {
     }
     const parent = text.parentNode!;
 
-    // Match each item to the first unused row with its identity.
-    const unused = new Map<string, Row>();
-    const duplicates: Row[] = [];
-    for (const row of rows) {
-      if (unused.has(row.identity)) duplicates.push(row);
-      else unused.set(row.identity, row);
-    }
-    const next: Row[] = items.map((item, index) => {
-      const identity = rowIdentity(item, index);
-      const existing = unused.get(identity);
-      if (existing !== undefined) {
-        unused.delete(identity);
-        return existing;
-      }
-      const anchor = text.ownerDocument.createTextNode('');
-      parent.insertBefore(anchor, text);
-      return { identity, slot: createValueSlot(anchor, owner), text: anchor };
+    const next = reconcileList(rows, items, {
+      identity: rowIdentity,
+      create(identity) {
+        const anchor = text.ownerDocument.createTextNode('');
+        parent.insertBefore(anchor, text);
+        return { identity, slot: createValueSlot(anchor, owner), text: anchor };
+      },
+      remove(row) {
+        row.slot.remove();
+      },
     });
-
-    for (const row of [...unused.values(), ...duplicates]) {
-      row.slot.remove();
-    }
 
     // Place rows from the end, moving only a row not already before the next.
     let reference: Node = text;
-    for (let index = next.length - 1; index >= 0; index--) {
-      const row = next[index]!;
+    for (let index = next.rows.length - 1; index >= 0; index--) {
+      const row = next.rows[index]!;
       if (row.text.nextSibling !== reference) row.slot.moveBefore(reference);
       reference = row.slot.first();
     }
 
-    rows = next;
-    next.forEach((row, index) => row.slot.write(items[index]));
+    rows = next.rows;
+    rows.forEach((row, index) => row.slot.write(next.values[index]));
   }
 
   const slot = {

@@ -4,6 +4,40 @@
 import { expect } from 'bun:test';
 import { behaves } from '../harness/run';
 
+behaves('list: sparse arrays skip holes and retain keyed children through updates', {
+  source: `
+    export function App() {
+      let value = 1;
+      const children = [<li key="a">A:{value}</li>, , <li key="b">B:{value}</li>];
+      return <main><ul>{children}</ul>
+        <button onClick={() => value++}>inc</button></main>;
+    }
+  `,
+  steps: [{ click: 'button' }],
+  check(root, observation) {
+    expect(root.querySelector('ul')?.textContent).toBe(['A:1B:1', 'A:2B:2'][observation]!);
+    const first = root.querySelector('li')!;
+    if (observation === 0) {
+      first.setAttribute('data-retained', 'yes');
+    } else {
+      expect(first.getAttribute('data-retained')).toBe('yes');
+    }
+  },
+});
+
+behaves('list: rendering an array does not invoke its overridden map method', {
+  source: `
+    export function App() {
+      const children = [<li key="a">A</li>, <li key="b">B</li>];
+      children.map = () => { throw new Error('unrelated method'); };
+      return <ul>{children}</ul>;
+    }
+  `,
+  check(root) {
+    expect(root.textContent).toBe('AB');
+  },
+});
+
 behaves('conditional: stored JSX preserves creation-time values and follows later changes', {
   source: `export function App() {
     let count = 1;

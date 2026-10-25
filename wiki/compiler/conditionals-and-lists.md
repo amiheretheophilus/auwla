@@ -20,6 +20,7 @@ place.
 | `core/emit/sites.ts` | Composes branch templates/sites, guards selector reads separately, updates the active branch and disposes retired collectors/regions |
 | `core/emit/render-value.ts` | Hoists a compiled binding program for stored JSX and captures its inputs at the authored expression |
 | `packages/runtime/src/render-value.ts` | Mounts captured programs independently per consumer, updates matching programs in place and disposes replaced ranges |
+| `packages/runtime/src/list-values.ts` | General first-unused row matching and native array-child traversal: holes, inherited indices and one read per present child |
 | `packages/runtime/src/cond.ts` | Existing anchored branch lifecycle; an optional insertion point preserves surrounding sibling order |
 
 Ternary branches and `&&`, `||`, `??` with ordinary left operands are built.
@@ -126,6 +127,12 @@ scope, and a folded tail that never updated.
 
 ### Lists
 
+- Array-child traversal captures the length, skips holes, includes inherited
+  indices and reads each present value once. Rendering never calls an authored
+  array's `map` method. Sparse arrays, duplicate getter reads and overridden
+  methods exposed three general-path bugs during optimization preparation; native
+  runtime checks and the sparse/overridden-method comparisons retain the expected
+  behavior for both compiler strategies.
 - **The general rule:** any child expression whose value is an array is a list.
   When what it reads changes, it is evaluated again and its rows are reconciled: by
   `key` when rows have one, otherwise by position. That covers:

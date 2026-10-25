@@ -24,6 +24,16 @@ Last updated: 2026-10-25.
 
 ## Done
 
+- Array-child traversal corrected before the first list pass (2026-10-25).
+  Three new native checks reproduced a sparse-array crash, duplicate reads of
+  indexed getters, and accidental invocation of an authored array's `map` method.
+  General traversal now uses native length/index semantics, preserves source
+  positions across holes, and stores each child value once for its later write.
+  Row matching lives in `runtime/src/list-values.ts`; the reference is unchanged.
+  Local validation passes both package type checks, all nine runtime value tests,
+  53 conditional/list comparisons with both strategies, and all six unchanged
+  benchmark-fixture correctness/work checks. No timing improvement is claimed.
+
 - Optimization stage and comparison switch (2026-10-25). `pipeline.ts` now calls
   `optimize/index.ts` between the general planner and emission. The initial pass
   registry is empty; `optimize: false` bypasses it. The harness runs compiler-next

@@ -151,3 +151,49 @@ it('mounts again when one value keeps its program but changes its key', () => {
   expect(output.root.textContent).toBe('v2');
   expect(log).toEqual(['mount:v1', 'dispose:v1!', 'mount:v2']);
 });
+
+it('renders sparse arrays without losing the original positions of unkeyed rows', () => {
+  const log: string[] = [];
+  const program = item(log);
+  const output = slot();
+  const values = new Array(5);
+  values[1] = createRenderValue(program, ['a']);
+  values[4] = createRenderValue(program, ['b']);
+  output.slot.write(values);
+  const [a, b] = [...output.root.querySelectorAll('li')];
+  values[0] = createRenderValue(program, ['new']);
+  values[1] = createRenderValue(program, ['A']);
+  output.slot.write(values);
+  expect(output.root.textContent).toBe('newAb');
+  expect([...output.root.querySelectorAll('li')].slice(1)).toEqual([a, b]);
+  output.slot.dispose();
+});
+
+it('reads each present array value once while rendering children', () => {
+  let reads = 0;
+  const values = new Array(1);
+  Object.defineProperty(values, 0, {
+    get() {
+      reads++;
+      return 'child';
+    },
+  });
+  const output = slot();
+  output.slot.write(values);
+  expect(output.root.textContent).toBe('child');
+  expect(reads).toBe(1);
+  output.slot.dispose();
+});
+
+it('does not call an authored array method to render its children', () => {
+  const values = ['child'];
+  Object.defineProperty(values, 'map', {
+    value() {
+      throw new Error('an authored method was invoked by the renderer');
+    },
+  });
+  const output = slot();
+  output.slot.write(values);
+  expect(output.root.textContent).toBe('child');
+  output.slot.dispose();
+});
