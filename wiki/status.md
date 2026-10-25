@@ -24,6 +24,27 @@ Last updated: 2026-10-25.
 
 ## Done
 
+- Ordered row matching (2026-10-25). The controlled retained-table result below
+  regressed creation, so matching now consumes the unchanged ordered prefix
+  directly and builds a temporary lookup only after its first mismatch. Creation,
+  append, truncation and unchanged mappings need no matching map or per-item
+  generation bookkeeping. A linear model checks all 3,375 three-step binary-item
+  sequences with index use both enabled and disabled; duplicate/hole, reentry,
+  exception and retention regressions remain. Both type checks, 33 focused
+  runtime checks and 72 compiled feature/comparison checks pass. Chrome passes
+  all placement/identity/mixed gates and all 16 mutable/immutable variants.
+  Shared-code CI and a controlled comparison against `331ea92a` follow before
+  accepting a timing benefit.
+
+- Notification GC verification (2026-10-25).
+  [Unit CI 40239785266](https://github.com/amiheretheophilus/auwla/actions/runs/40239785266)
+  at `922ee4d1` passes the unchanged payload release assertion and the queued
+  strong-reference control. All 252 compiler checks and 116 runtime checks pass.
+  The fixture collects and probes in fresh timer tasks, avoiding conservative
+  roots from warm awaiting frames; no runtime workaround or version pin was
+  needed. Temporary heap diagnostics are removed. This closes that CI failure,
+  not the reported VM OOM.
+
 - Retained map-result lookup (2026-10-25). Row reuse now retains its private item
   lookup across successful mappings rather than deleting/repopulating a fresh
   table each time. Generation bookkeeping preserves duplicate occurrence order,

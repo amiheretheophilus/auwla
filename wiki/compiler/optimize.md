@@ -226,17 +226,23 @@ its reads with the computation around the call, so the site still re-runs when
 any of them changes. The result has native `map`'s shape: the same length and
 holes, and the same `thisArg` and arguments.
 
-The item lookup survives successful mappings. A generation consumes old duplicate
-occurrences in order and publishes each replacement at that occurrence. The first
-private row holds its group's bookkeeping; unique items allocate no wrapper or
-duplicate array. Unused items and excess duplicates are removed after success.
-The lookup detaches before the length or element reads can run authored code, so
+The cache retains its previous rows in occurrence order. An unchanged prefix
+already identifies the first unused occurrence, so it is consumed directly.
+Only the first mismatch builds a temporary lookup of the remaining old suffix.
+Initial creation, unchanged mappings, append and truncation need no matching map.
+This replaces generation bookkeeping that reduced allocation but regressed
+creation in the controlled runner comparison; allocation counts alone are not
+performance evidence.
+
+The cache detaches before length or element reads can run authored code, so
 reentry uses independent state and an exception cannot publish a partial pass.
-An empty result drops the lookup at once. Authored items and results are untouched.
-The 30-update work check creates zero replacement matching maps instead of 30;
-native cases cover duplicates, throws, reentry and collection of removed items.
-Mapping and reconciliation still scan every row; this change removes lookup
-allocation rather than establishing targeted structural updates.
+An empty result drops all rows at once. Authored items and results are untouched.
+The work check creates zero matching maps through creation, 30 unchanged updates,
+append and truncation. Native cases compare all 3,375 three-step binary-item
+sequences with a linear first-unused model, with index use on and off, and cover
+holes, duplicate edits, throws, reentry and collection of removed items.
+Mapping and reconciliation still scan every row; structural updates are not yet
+targeted to their changed positions.
 
 The item lookup supplies only a candidate. `Object.is` checks it before reuse,
 because a Map groups signed zeros while JavaScript arithmetic distinguishes

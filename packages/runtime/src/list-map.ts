@@ -33,14 +33,6 @@ interface Row {
   readonly computation: ReturnType<typeof createComputation>;
 }
 
-/** The first occurrence also owns the private matching state for its item. */
-interface RowHead extends Row {
-  generation: object;
-  used: number;
-  previousCount: number;
-  duplicates: Row[] | null;
-}
-
 /** Results the cache returned unchanged, with the mutation time it verified them at. */
 const verified = new WeakMap<object, number>();
 
@@ -60,68 +52,75 @@ export interface RowCache {
 }
 
 /**
- * Retain one lookup across successful mappings. Each generation consumes old
- * occurrences in order, then publishes their replacements at those positions.
- * The first row holds the bookkeeping so unique items need no wrapper object
- * or duplicate array. Nothing is attached to authored items or result values.
+ * General first-unused matching after the ordered prefix changes. A duplicate
+ * consumes the next occurrence, even when its callback has to run again.
  */
 class Rows {
-  private readonly first = new Map<unknown, RowHead>();
+  private readonly first = new Map<unknown, Row>();
+  private more: Map<unknown, Row[]> | null = null;
 
-  take(item: unknown, generation: object): Row | undefined {
-    const head = this.first.get(item);
-    if (head === undefined) {
-      return undefined;
+  take(item: unknown): Row | undefined {
+    const row = this.first.get(item);
+    if (row !== undefined) {
+      this.first.delete(item);
+      return row;
     }
-    if (head.generation !== generation) {
-      head.generation = generation;
-      head.used = 0;
-      head.previousCount = 1 + (head.duplicates?.length ?? 0);
-    }
-    const occurrence = head.used++;
-    if (occurrence >= head.previousCount) {
-      return undefined;
-    }
-    return occurrence === 0 ? head : head.duplicates?.[occurrence - 1];
+    return this.more?.get(item)?.shift();
   }
 
-  put(row: Row, generation: object): void {
-    const previous = this.first.get(row.item);
-    if (previous === undefined || previous.used === 1) {
-      if (previous === row) {
-        return;
-      }
-      // Promote this private row in place, avoiding a separate record for the
-      // common unique-item case. A replaced first row keeps its old dup queue.
-      const head = row as RowHead;
-      head.generation = generation;
-      head.used = previous?.used ?? 1;
-      head.previousCount = previous?.previousCount ?? 0;
-      head.duplicates = previous?.duplicates ?? null;
-      this.first.set(row.item, head);
+  put(row: Row): void {
+    if (!this.first.has(row.item)) {
+      this.first.set(row.item, row);
       return;
     }
-    const duplicates = previous.duplicates ??= [];
-    duplicates[previous.used - 2] = row;
-  }
-
-  finish(generation: object): void {
-    for (const [item, head] of this.first) {
-      if (head.generation !== generation) {
-        this.first.delete(item);
-      } else if (head.duplicates !== null) {
-        head.duplicates.length = head.used - 1;
-        if (head.duplicates.length === 0) {
-          head.duplicates = null;
-        }
-      }
+    const more = this.more ??= new Map();
+    const queue = more.get(row.item);
+    if (queue === undefined) {
+      more.set(row.item, [row]);
+    } else {
+      queue.push(row);
     }
+  }
+}
+
+/**
+ * An unchanged prefix already supplies the first unused occurrence. Match it
+ * directly and create a lookup only for the suffix after the first mismatch.
+ * Initial creation, in-place updates, append and truncation need no lookup.
+ */
+class RowMatcher {
+  private offset = 0;
+  private remaining: Rows | null = null;
+
+  constructor(private readonly previous: readonly Row[] | null) {}
+
+  take(item: unknown): Row | undefined {
+    if (this.remaining !== null) {
+      return this.remaining.take(item);
+    }
+    const row = this.previous?.[this.offset];
+    if (row === undefined) {
+      return undefined;
+    }
+    // Match Map's SameValueZero grouping here. The reuse check below still
+    // distinguishes signed zeros before it can return a previous result.
+    if (row.item === item || Object.is(row.item, item)) {
+      this.offset++;
+      return row;
+    }
+
+    const remaining = new Rows();
+    for (let index = this.offset; index < this.previous!.length; index++) {
+      remaining.put(this.previous![index]!);
+    }
+    this.remaining = remaining;
+    return remaining.take(item);
   }
 }
 
 /** One per call site and owner instance. `usesIndex`: the callback reads its second argument. */
 export function createRowCache(usesIndex: boolean): RowCache {
-  let rows: Rows | null = null;
+  let rows: readonly Row[] | null = null;
   return {
     map(array, callback, thisArg) {
       const cached = rows;
@@ -137,12 +136,12 @@ export function createRowCache(usesIndex: boolean): RowCache {
         rows = null;
         return result;
       }
-      const previous = cached ?? new Rows();
-      const generation = {};
+      const previous = new RowMatcher(cached);
+      const next: Row[] = [];
       for (let index = 0; index < length; index++) {
         if (!(index in array)) continue;
         const item = array[index];
-        let row = previous.take(item, generation);
+        let row = previous.take(item);
         if (row !== undefined) {
           // Map groups +0 and -0 together, but authored arithmetic can tell
           // them apart. The lookup finds a candidate; Object.is proves reuse.
@@ -164,10 +163,9 @@ export function createRowCache(usesIndex: boolean): RowCache {
         }
         row.computation.share();
         result[index] = row.result;
-        previous.put(row, generation);
+        next.push(row);
       }
-      previous.finish(generation);
-      rows = previous;
+      rows = next;
       return result;
     },
   };

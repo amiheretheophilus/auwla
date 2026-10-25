@@ -20,11 +20,10 @@ function counted() {
 
 const items = (count: number) => Array.from({ length: count }, (_, id) => ({ id }));
 
-it('retains its private lookup across repeated unchanged mappings', () => {
+it('matches unchanged ordered rows without building replacement lookups', () => {
   const cache = createRowCache(false);
   const rows = items(200);
   const { callback } = counted();
-  cache.map(rows, callback, undefined);
   let maps = 0;
   globalThis.Map = class extends NativeMap {
     constructor(...args: ConstructorParameters<MapConstructor>) {
@@ -32,9 +31,12 @@ it('retains its private lookup across repeated unchanged mappings', () => {
       maps++;
     }
   } as MapConstructor;
+  cache.map(rows, callback, undefined);
   for (let update = 0; update < 30; update++) {
     cache.map(rows, callback, undefined);
   }
+  cache.map([...rows, rows[0]], callback, undefined);
+  cache.map(rows.slice(0, 20), callback, undefined);
   expect(maps).toBe(0);
   cache.map([], callback, undefined);
   for (let update = 0; update < 30; update++) {
@@ -142,6 +144,73 @@ it('keeps duplicate occurrence order through replacement, removal and reappearan
   expect(added[0]).toBe(edited[0]);
   expect(added[1] === edited[2]).toBe(false);
   expect(calls).toEqual([a]);
+});
+
+it('matches first-unused reuse through every three-step binary-item sequence', () => {
+  const a = { id: 1 };
+  const b = { id: 2 };
+  const inputs: object[][] = [[]];
+  for (let length = 1; length <= 3; length++) {
+    for (let pattern = 0; pattern < 2 ** length; pattern++) {
+      inputs.push(Array.from({ length }, (_, index) => {
+        return (pattern & (1 << index)) === 0 ? a : b;
+      }));
+    }
+  }
+
+  interface ModelRow {
+    readonly item: object;
+    readonly index: number;
+    readonly value: number;
+  }
+  for (const usesIndex of [false, true]) {
+    for (const first of inputs) {
+      for (const second of inputs) {
+        for (const third of inputs) {
+          const cache = createRowCache(usesIndex);
+          let previous: ModelRow[] = [];
+          let expectedCalls = 0;
+          let actualCalls = 0;
+          for (const input of [first, second, third]) {
+            // This deliberately uses a small linear search, independently of
+            // the runtime's ordered prefix and its suffix lookup.
+            const used = new Set<ModelRow>();
+            const expected = input.map((item, index): ModelRow => {
+              const row = previous.find((candidate) => {
+                return candidate.item === item && !used.has(candidate);
+              });
+              if (row !== undefined) {
+                used.add(row);
+                if (!usesIndex || row.index === index) {
+                  return row;
+                }
+              }
+              return { item, index, value: expectedCalls++ };
+            });
+            const actual = cache.map(input, () => ({ value: actualCalls++ }), undefined);
+            expect(actual.map((row) => (row as { value: number }).value))
+              .toEqual(expected.map((row) => row.value));
+            previous = expected;
+          }
+        }
+      }
+    }
+  }
+});
+
+it('matches duplicate occurrences when holes move between them', () => {
+  const cache = createRowCache(false);
+  const a = { id: 1 };
+  const b = { id: 2 };
+  const { callback, calls } = counted();
+  const first = cache.map([a, , b, a], callback, undefined);
+  calls.length = 0;
+  const second = cache.map([, a, a, b], callback, undefined);
+  expect(0 in second).toBe(false);
+  expect(second[1]).toBe(first[0]);
+  expect(second[2]).toBe(first[3]);
+  expect(second[3]).toBe(first[2]);
+  expect(calls).toEqual([]);
 });
 
 it('keeps a reentrant mapping independent of the outer pending lookup', () => {
