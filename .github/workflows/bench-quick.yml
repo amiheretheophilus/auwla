@@ -57,7 +57,8 @@ jobs:
         with:
           bun-version: canary
       - run: bun install --frozen-lockfile
-      - run: bun run --cwd packages/runtime build
+      # The old compiler and the runtime load from their built packages.
+      - run: bun run build
       - name: Time old and next
         env:
           SCENARIOS: ${{ inputs.scenarios || '10k' }}
