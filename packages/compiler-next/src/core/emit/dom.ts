@@ -171,6 +171,16 @@ function emitComponent(
       runtime, version: state.versions.get(read.binding)!, binding: read.binding.binding.name, key,
     }));
   }
+  // `x === e` with a tracked `x`: the reader depends only on the comparison.
+  // `x` is read first, then `e`, as written (`optimize/keyed-comparisons.ts`).
+  for (const [node, binding] of plan.keyedComparisons ?? []) {
+    if (!is.BinaryExpression(node)) continue;
+    const equals = expression('$$runtime.trackEquals($$binding, $$other, () => $$binding, () => $$version, $$key)', {
+      runtime, binding: binding.binding.name, other: node.right, version: state.versions.get(binding)!,
+      key: trackKeys.get(binding)!,
+    });
+    readonly.set(node, node.operator === '!==' ? expression('!$$equals', { equals }) : equals);
+  }
   const handled = new Set(plan.takeovers);
   const mutations = emitMutations(plan.mutations, state.versions, names, runtime, batch, readonly);
   const writes = batch === null

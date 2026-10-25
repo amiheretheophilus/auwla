@@ -156,6 +156,7 @@ function _mutated_data() {
   _dataVersion++;
   _sharedWrites.mark(_sharedKey);
 }
+const _rows = _MD.createRowCache(false);
 function _completeShared(_result) {
   _sharedReady = true;
   _sharedScope.leave(_sharedFrame);
@@ -417,7 +418,7 @@ export function BenchModuleDataInline(_id, _parent, _props, _namespace2, _setupO
   }
   const _siteComputation = _MD.createComputation(_writes.mark, _entity);
   _siteComputation.begin();
-  let _value21 = _MD.observeMethod([() => data], [_mutated_data], _read_data(), "map", 1, void 0)((item) => (_MD.createRenderValue(_renderProgram, [_MD.trackRead(() => _selectedVersion, selected, _readKey) === item.id ? 'danger' : '', () => {
+  let _value21 = _MD.observeMethod([() => data], [_mutated_data], _read_data(), "map", 1, _rows)((item) => (_MD.createRenderValue(_renderProgram, [_MD.trackEquals(selected, item.id, () => selected, () => _selectedVersion, _readKey) ? 'danger' : '', () => {
     _write(selected = item.id);
   }, item.id, item.label], item.id)));
   _siteComputation.end();
@@ -436,7 +437,7 @@ export function BenchModuleDataInline(_id, _parent, _props, _namespace2, _setupO
     const _updateFrame = _scope.enter();
     if (_siteComputation.changed()) {
       _siteComputation.begin();
-      const _next9 = _MD.observeMethod([() => data], [_mutated_data], _read_data(), "map", 1, void 0)((item) => (_MD.createRenderValue(_renderProgram, [_MD.trackRead(() => _selectedVersion, selected, _readKey) === item.id ? 'danger' : '', () => {
+      const _next9 = _MD.observeMethod([() => data], [_mutated_data], _read_data(), "map", 1, _rows)((item) => (_MD.createRenderValue(_renderProgram, [_MD.trackEquals(selected, item.id, () => selected, () => _selectedVersion, _readKey) ? 'danger' : '', () => {
         _write(selected = item.id);
       }, item.id, item.label], item.id)));
       _siteComputation.end();

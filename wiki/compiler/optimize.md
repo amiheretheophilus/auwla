@@ -217,10 +217,14 @@ writing that same value again skips its update only if nothing at all was edited
 since. So an edit during the update, for example by a child's setup, still takes
 the full path.
 
-Component state and props are not tracked per row yet, so callbacks reading them
-keep the general path. That excludes the bench's component-owned selection
-variants and Octane's `selected`. Extending tracked reads to component bindings
-comes next.
+Component state and props read inside a callback are already emitted as tracked
+reads (`ComponentPlan.trackedReads`, `trackRead(() => version, …)`). Row reuse
+accepts exactly those reads. `keyed-comparisons.ts` also keys
+`x === e` at such a read: the emitter in `core/emit/dom.ts` writes
+`trackEquals(x, e, () => x, () => version, key)`. A selection then rebuilds only
+the rows whose comparison flips. The site still re-runs on the version change
+and checks each row, so this is O(rows) checks, not O(rows) rebuilds. Every bench
+variant and Octane's rows qualify.
 
 Checks: `runtime/tests/list-map.test.ts` covers reuse, in-place edits, index use,
 holes, duplicates, `thisArg`, tracked reads, dependency sharing and the verified

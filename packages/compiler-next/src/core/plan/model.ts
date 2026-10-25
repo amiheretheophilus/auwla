@@ -182,6 +182,12 @@ export interface ComponentPlan {
   readonly siteInputs: ReadonlyMap<Expression, readonly BindingNode[]>;
   readonly memos: readonly MemoGroupPlan[];
   readonly trackedReads: readonly { readonly node: Node; readonly binding: BindingNode }[];
+  /**
+   * Optional (`optimize/keyed-comparisons.ts`): `x === e` / `x !== e` whose left
+   * operand is one of `trackedReads`, emitted with `trackEquals` so a row
+   * depends only on the comparison. Keyed by the BinaryExpression.
+   */
+  readonly keyedComparisons?: ReadonlyMap<Node, BindingNode>;
   readonly dynamicSites: ReadonlySet<Expression>;
   readonly mutationRoots: readonly BindingNode[];
 }

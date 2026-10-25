@@ -57,9 +57,10 @@ it('allows reuse only for JSX-returning arrows that read tracked or constant val
   expect(caches('(item) => <li>{item.id}{shared}{fixed}</li>')).toEqual(['createRowCache(false)']);
   expect(caches('(item, index) => <li>{index}</li>')).toEqual(['createRowCache(true)']);
   expect(caches('(item) => { const label = item.id + fixed; return <li>{label}</li>; }')).toHaveLength(1);
-  // Component state and props are not tracked per row; returned objects must stay fresh.
-  expect(caches('(item) => <li>{local}</li>')).toEqual([]);
-  expect(caches('(item) => <li>{prop}</li>')).toEqual([]);
+  // Component state and props read in a callback are emitted as tracked reads.
+  expect(caches('(item) => <li>{local}</li>')).toEqual(['createRowCache(false)']);
+  expect(caches('(item) => <li>{prop}</li>')).toEqual(['createRowCache(false)']);
+  // Returned objects must stay fresh.
   expect(caches('(item) => ({ id: item.id })')).toEqual([]);
   expect(caches('(item) => <li>{String(item.id)}</li>')).toEqual([]);
   expect(caches('(item, index, all) => <li>{all.length}</li>')).toEqual([]);
@@ -67,6 +68,30 @@ it('allows reuse only for JSX-returning arrows that read tracked or constant val
   expect(caches('(item) => <li>{changing}</li>', 'globalThis.changing = 1; changing = 2;')).toEqual([]);
   expect(compile('export function App() { const a = [1]; return <ul>{a.map((x) => <li>{x}</li>)}</ul>; }', false))
     .not.toContain('createRowCache');
+});
+
+it.each(modes)('follows component state and props read inside rows ($mode)', async ({ optimize }) => {
+  const { host, click } = await mount(`
+    function List({ prefix, items }) {
+      let selected = 0;
+      return <ul>{items.map((row) =>
+        <li class={selected === row.id ? 'on' : ''} onClick={() => { selected = row.id; }}>{prefix}{row.id}</li>)}</ul>;
+    }
+    export function App() {
+      let prefix = 'a';
+      const items = [{ id: 1 }, { id: 2 }, { id: 3 }];
+      return <main><List prefix={prefix} items={items} />
+        <button id="prefix" onClick={() => { prefix = 'b'; }}>prefix</button></main>;
+    }
+  `, optimize);
+  const list = () => [...host.querySelectorAll('li')].map((row) => `${row.className}|${row.textContent}`).join(' ');
+  expect(list()).toBe('|a1 |a2 |a3');
+  host.querySelectorAll('li')[1]!.click();
+  expect(list()).toBe('|a1 on|a2 |a3');
+  host.querySelectorAll('li')[0]!.click();
+  expect(list()).toBe('on|a1 |a2 |a3');
+  click('prefix');
+  expect(list()).toBe('on|b1 |b2 |b3');
 });
 
 it.each(modes)('shows in-place edits, replacements, moves, duplicates and tracked reads ($mode)', async ({ optimize }) => {

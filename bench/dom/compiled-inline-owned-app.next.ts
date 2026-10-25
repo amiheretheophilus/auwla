@@ -149,6 +149,7 @@ export function BenchAppInlineOwned(_id, _parent, _props, _namespace2, _setupOnl
     _dataVersion++;
     _writes.mark();
   }
+  const _rows = _MD.createRowCache(false);
   function _write(_value9) {
     _dataVersion++;
     _writes.mark();
@@ -354,7 +355,7 @@ export function BenchAppInlineOwned(_id, _parent, _props, _namespace2, _setupOnl
   }
   const _siteComputation = _MD.createComputation(_writes.mark, _entity);
   _siteComputation.begin();
-  let _value22 = _MD.observeMethod([() => data], [_mutated_data], data, "map", 1, void 0)((item) => (_MD.createRenderValue(_renderProgram, [_MD.trackRead(() => _selectedVersion, selected, _readKey2) === item.id ? 'danger' : '', () => {
+  let _value22 = _MD.observeMethod([() => data], [_mutated_data], data, "map", 1, _rows)((item) => (_MD.createRenderValue(_renderProgram, [_MD.trackEquals(selected, item.id, () => selected, () => _selectedVersion, _readKey2) ? 'danger' : '', () => {
     _write2(selected = item.id);
   }, item.id, item.label], item.id)));
   _siteComputation.end();
@@ -378,7 +379,7 @@ export function BenchAppInlineOwned(_id, _parent, _props, _namespace2, _setupOnl
     const _updateFrame = _scope.enter();
     if (_dataVersion !== _seen || _siteComputation.changed()) {
       _siteComputation.begin();
-      const _next9 = _MD.observeMethod([() => data], [_mutated_data], data, "map", 1, void 0)((item) => (_MD.createRenderValue(_renderProgram, [_MD.trackRead(() => _selectedVersion, selected, _readKey2) === item.id ? 'danger' : '', () => {
+      const _next9 = _MD.observeMethod([() => data], [_mutated_data], data, "map", 1, _rows)((item) => (_MD.createRenderValue(_renderProgram, [_MD.trackEquals(selected, item.id, () => selected, () => _selectedVersion, _readKey2) ? 'danger' : '', () => {
         _write2(selected = item.id);
       }, item.id, item.label], item.id)));
       _siteComputation.end();

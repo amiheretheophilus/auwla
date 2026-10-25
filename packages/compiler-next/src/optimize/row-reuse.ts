@@ -12,7 +12,8 @@
  * - returns JSX on every path, a compiler-owned value; a fresh object or array
  *   returned to authored code must stay fresh;
  * - reads nothing reactive except through readers the runtime tracks (shared
- *   bindings), besides its own parameters and locals. Other free variables must
+ *   bindings, and component bindings at the reads the plan emits as `trackRead`),
+ *   besides its own parameters and locals. Other free variables must
  *   be constants that depend on nothing reactive (`isReactive`), or globals the
  *   program never writes. Nested functions are created, not run, so their
  *   bodies do not count.
@@ -74,6 +75,9 @@ export function rowReuse(general: ModulePlan, graph: SemanticGraph, callback: No
 
 function freeReadsTracked(general: ModulePlan, graph: SemanticGraph, module: Module, callback: Node): boolean {
   const shared = new Set([...general.sharedReads.keys()].map((node) => node.binding));
+  // Component bindings read here through `trackRead` (`ComponentPlan.trackedReads`).
+  const trackedNodes = new Set([...general.components.values()].flatMap((component) =>
+    component.trackedReads.map((read) => read.node)));
   let tracked = true;
   walk(callback, {
     enter: (node, ctx) => {
@@ -99,7 +103,7 @@ function freeReadsTracked(general: ModulePlan, graph: SemanticGraph, module: Mod
           && declaration.start >= callback.start && declaration.end <= callback.end;
         const definition = importedDefinition(binding) ?? binding;
         const constant = graph.bindings.get(definition);
-        tracked = local || shared.has(binding) || shared.has(definition)
+        tracked = local || shared.has(binding) || shared.has(definition) || trackedNodes.has(node)
           || (constant !== undefined && !isReactive(constant));
       }
       if (!tracked) ctx.stop();

@@ -24,6 +24,16 @@ Last updated: 2026-10-25.
 
 ## Done
 
+- Row reuse and keyed selection for component state (2026-10-25). Component
+  bindings read in a row callback are already tracked reads, so row reuse accepts
+  them, and `x === e` at such a read is keyed. Every bench variant and Octane's
+  rows qualify. Compiler tests: 234 pass (the 8 failures are the untracked
+  `packed-captures` work). Cases: 220 pass, with the same 100 deferred failures.
+  DOM gates pass. `bench-quick.yml` can also run Octane `--quick` for
+  memoized-dom, old against next (`-f octane=true`).
+  - GitHub quick timing at `7df981a4`, next against old at 10k, in ms:
+    component-row remove 15 vs 2.4; inline-row update 28 vs 1.0, select 12 vs 0.2.
+
 - Row reuse for `items.map` (2026-10-25). An unchanged item no longer re-runs
   the callback or re-checks its row, when the callback is proven to allow it
   (`compiler/optimize.md`, "Row reuse").

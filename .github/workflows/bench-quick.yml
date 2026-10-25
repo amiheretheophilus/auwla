@@ -35,6 +35,10 @@ on:
         description: Optional CPU profiles of next, "adapter:scenario;adapter:scenario"
         type: string
         default: ''
+      octane:
+        description: Also run Octane --quick for memoized-dom only, old (HEAD) against next
+        type: boolean
+        default: false
 
 concurrency:
   group: bench-quick-${{ github.ref }}
@@ -86,6 +90,21 @@ jobs:
             } >> profiles.md
           done
           cat profiles.md >> "$GITHUB_STEP_SUMMARY"
+      # Octane's upstream harness needs Node >= 24.11.
+      - if: inputs.octane
+        uses: actions/setup-node@v5
+        with:
+          node-version: 24
+      - name: Octane (memoized-dom only, quick)
+        if: inputs.octane
+        env:
+          BENCH_COMPILER: next
+        run: |
+          bun run bench/octane/setup.ts
+          bun run bench/octane/run.ts --quick --targets=memoized-dom --before-ref=HEAD
+          latest="$(ls -d bench/octane/results/*/ | sort | tail -1)"
+          cp "$latest/results.md" octane.md
+          { echo "## Octane quick at ${GITHUB_SHA::8}"; cat octane.md; } >> "$GITHUB_STEP_SUMMARY"
       - if: always()
         uses: actions/upload-artifact@v5
         with:
@@ -93,5 +112,6 @@ jobs:
           path: |
             quick.md
             profiles.md
+            octane.md
             bench/dom/dist/quick-*.js
           retention-days: 7

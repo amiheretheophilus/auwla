@@ -159,6 +159,7 @@ export function BenchAppOwned(_id, _parent, _props, _namespace, _setupOnly) {
     _dataVersion++;
     _writes.mark();
   }
+  const _rows = _MD.createRowCache(false);
   function _write(_value) {
     _dataVersion++;
     _writes.mark();
@@ -367,7 +368,7 @@ export function BenchAppOwned(_id, _parent, _props, _namespace, _setupOnly) {
   }
   const _siteComputation = _MD.createComputation(_writes.mark, _entity);
   _siteComputation.begin();
-  let _value14 = _MD.observeMethod([() => data], [_mutated_data], data, "map", 1, void 0)((item) => (_MD.createComponentValue(Row, { "key": item.id, "item": item, "selected": _MD.trackRead(() => _selectedVersion, selected, _readKey2) === item.id, "select": select })));
+  let _value14 = _MD.observeMethod([() => data], [_mutated_data], data, "map", 1, _rows)((item) => (_MD.createComponentValue(Row, { "key": item.id, "item": item, "selected": _MD.trackEquals(selected, item.id, () => selected, () => _selectedVersion, _readKey2), "select": select })));
   _siteComputation.end();
   const _valueSlot = _MD.createIndexedValueSlot(_text, { id: _id, batch: _writes, entity: _entity, namespace: _namespace });
   _valueSlot.write(_value14);
@@ -392,7 +393,7 @@ export function BenchAppOwned(_id, _parent, _props, _namespace, _setupOnly) {
     const _updateFrame = _scope.enter();
     if (_dataVersion !== _seen || _siteComputation.changed()) {
       _siteComputation.begin();
-      const _next = _MD.observeMethod([() => data], [_mutated_data], data, "map", 1, void 0)((item) => (_MD.createComponentValue(Row, { "key": item.id, "item": item, "selected": _MD.trackRead(() => _selectedVersion, selected, _readKey2) === item.id, "select": select })));
+      const _next = _MD.observeMethod([() => data], [_mutated_data], data, "map", 1, _rows)((item) => (_MD.createComponentValue(Row, { "key": item.id, "item": item, "selected": _MD.trackEquals(selected, item.id, () => selected, () => _selectedVersion, _readKey2), "select": select })));
       _siteComputation.end();
       if (_next !== _value14 && !(_next !== _next && _value14 !== _value14)) {
         _valueSlot.write(_next);
