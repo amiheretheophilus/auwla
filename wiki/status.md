@@ -57,6 +57,13 @@ Last updated: 2026-10-25.
   passes all correctness gates but does not justify the retained lookup yet:
   creation regresses in most placements, updates are mixed, and clear improves
   modestly. The allocation count alone does not establish a speed improvement.
+  Unit CI `40239345545` still fails after isolating only the dereference probe.
+  Reproducing CI's file order also fails locally on the same Bun version; this
+  is not established as a version regression. The final trace finds no incoming
+  JavaScript root for the retired computation or its dependency record. Collection
+  now runs from fresh timer callbacks too, keeping conservative continuation
+  stack roots out of the probe. The diagnostic heap code is removed, release
+  assertions and retry limits are unchanged, and Linux validation follows.
 
 - Receiver-edit alias correction (2026-10-25). Native `reverse` could move an
   accessor/inherited value into an own data element while an already cached

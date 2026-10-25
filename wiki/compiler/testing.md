@@ -111,6 +111,14 @@ full generator still fails on lists; its nonempty-list regression is preserved a
 
 ## Layers
 
+Runtime ownership GC checks hold recovery callbacks without running them and
+assert that completed payloads can be collected. Their bounded collection and
+weak-reference probes run in fresh timer tasks: warm JavaScriptCore continuation
+frames can conservatively retain retired locals even without a rooted JavaScript
+heap path. The release assertions stay unchanged, and a queued strong-reference
+control must remain alive through the same collection attempts. Run computation
+checks before retention checks as well as in isolation when changing this fixture.
+
 1. **Reference renderer** (`tests/reference/`). Test-only: the framework never
    renders this way. After every step it calls every component again. The component
    body is setup code, so only derivations are computed again:
