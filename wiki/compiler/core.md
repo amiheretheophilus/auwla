@@ -19,6 +19,11 @@ Failed setup uses the build scope's abandonment callback, guarded by entity
 identity, so recovery cannot remove a replacement with the same id. The batch
 records invalidations during initial rendering and settles them on activation.
 
+After general planning, `optimize/index.ts` may replace a plan; `optimize: false`
+bypasses all passes. The first pass annotates non-primitive `TextSite`s with
+`listStrategy: 'retained-index'`. Site emission selects the indexed value-slot
+factory while preserving the original expression and all collectors/writes.
+
 `core/emit/template.ts` keeps cached markup cloning for HTML and creates nodes
 with the consuming namespace for inherited SVG. Namespace propagation is one
 walk of the template, with HTML boundaries at `foreignObject`.

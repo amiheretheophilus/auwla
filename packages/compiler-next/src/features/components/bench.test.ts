@@ -9,8 +9,10 @@ import { compileModules } from '../../pipeline';
 
 const applications: MountedApplication[] = [];
 const hosts: HTMLElement[] = [];
+const NativeMap = globalThis.Map;
 
 afterEach(() => {
+  globalThis.Map = NativeMap;
   for (const application of applications.splice(0)) {
     application.unmount();
   }
@@ -24,14 +26,15 @@ afterEach(() => {
 const updates = { count: 0 };
 (globalThis as { __mmdUpdates?: typeof updates }).__mmdUpdates = updates;
 
-async function fixture(directory: string, files: readonly string[], component: string, counted = false) {
+async function fixture(directory: string, files: readonly string[], component: string, counted = false, optimize = true) {
   const root = join(import.meta.dirname, '../../../../../');
   const sources = Object.fromEntries(files.map((file) => {
     const path = `./bench/${directory}/${file}`;
     return [path, readFileSync(join(root, path), 'utf8')];
   }));
-  const compiled = compileModules(sources, { runtimePath: '@memoized-dom/runtime/testing' });
-  const output = join(import.meta.dirname, '../../../tests/out/components-bench', directory, counted ? 'counted' : '');
+  const compiled = compileModules(sources, { runtimePath: '@memoized-dom/runtime/testing', optimize });
+  const output = join(import.meta.dirname, '../../../tests/out/components-bench', directory,
+    optimize ? 'optimized' : 'general', counted ? 'counted' : '');
   mkdirSync(output, { recursive: true });
   for (const [path, source] of Object.entries(compiled)) {
     const code = counted
@@ -50,6 +53,36 @@ async function fixture(directory: string, files: readonly string[], component: s
   const click = (selector: string) => host.querySelector<HTMLElement>(selector)!.click();
   return { host, click };
 }
+
+it.each([
+  { mode: 'optimized', optimize: true },
+  { mode: 'general', optimize: false },
+])('reuses row-matching maps during inline-row selection ($mode)', async ({ optimize }) => {
+  const { host, click } = await fixture('octane/memoized-dom', ['App.tsx', 'model.ts'], 'OctaneBench', false, optimize);
+  click('#run');
+  const rows = [...host.querySelectorAll('tbody tr')];
+  const matchingMaps = new Set<object>();
+  globalThis.Map = class CountedMap<Key, Value> extends NativeMap<Key, Value> {
+    override set(key: Key, value: Value): this {
+      // Account only for renderer row identities. Mutation snapshots and other
+      // runtime maps remain part of the workload, but are not this pass's work.
+      if (typeof key === 'string' && key.startsWith('key=')) {
+        matchingMaps.add(this);
+      }
+      return super.set(key, value);
+    }
+  };
+  for (let index = 0; index < 4; index++) {
+    rows[index]!.querySelector<HTMLElement>('td:nth-child(2) a')!.click();
+    expect(rows[index]!.className).toBe('danger');
+    if (index > 0) {
+      expect(rows[index - 1]!.className).toBe('');
+    }
+  }
+  globalThis.Map = NativeMap;
+  expect(matchingMaps.size).toBe(optimize ? 0 : 4);
+  expect(host.querySelector('tbody tr')).toBe(rows[0]!);
+}, 30_000);
 
 it('updates only the component rows whose props changed', async () => {
   const { host } = await fixture('dom', ['App.tsx', 'data.ts'], 'BenchApp', true);

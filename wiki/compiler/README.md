@@ -22,6 +22,11 @@ OOM. Phase 5 fast paths and repeat measurements remain before the Phase 6 exit;
 the correctness audit does not establish the cause or resolution of that OOM.
 Remaining conformance gaps stay on their concept pages. Continue in `plan.md`.
 
+The optimization stage and on/off comparisons are built. The first list pass
+retains private row-matching tables; authored calls and mutation observation
+remain general. Direct iteration lowering and targeted selection remain pending
+(`optimize.md`), so this is not the Phase 5 performance exit.
+
 > "the goal is to write normal javascript and get effecient compiled output"
 
 Every valid JavaScript program is accepted, and every effect the console would show

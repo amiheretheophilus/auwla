@@ -94,7 +94,8 @@ export function emitSites(
     let valueSlot: string | null = null;
     if (site.kind === 'text' && !site.primitive) {
       valueSlot = names.fresh('_valueSlot');
-      mount.push(statement('const $$slot = $$runtime.createValueSlot($$text, { id: $$id, batch: $$batch, entity: $$entity, namespace: $$namespace });', {
+      const factory = site.listStrategy === 'retained-index' ? 'createIndexedValueSlot' : 'createValueSlot';
+      mount.push(statement(`const $$slot = $$runtime.${factory}($$text, { id: $$id, batch: $$batch, entity: $$entity, namespace: $$namespace });`, {
         slot: valueSlot,
         runtime,
         text: node,

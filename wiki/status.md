@@ -24,6 +24,24 @@ Last updated: 2026-10-25.
 
 ## Done
 
+- First list optimization (2026-10-25, broad CI pending).
+  `optimize/retained-list-index.ts` selects private row-index retention on fresh
+  plans; the authored expressions, calls, graph identities and opaque observation
+  remain intact. The runtime cache follows first-unused identity matching,
+  disposes unmatched primary rows before old duplicates, and detaches before
+  getters/key coercion/cleanup so exceptions or reentry cannot reuse a partial
+  index. Local matcher work counts are one map for 30 updates versus 30 general
+  maps; four selections in the unchanged 1,000-row inline fixture build zero new
+  matching maps with the pass versus four without it. Native custom-method and
+  callback checks pass in both modes. These are work counts, not speed/memory
+  results. Iteration lowering, capture removal, snapshot proofs, listener work
+  and targeted selection remain pending before the Phase 5/VM gate.
+  Local validation passes both package type checks (126 compiler and 71 runtime
+  source files), 84 focused compiler/behavior checks, 19 runtime/retention checks
+  including all 3,375 tested three-step key sequences, and 12 generated programs
+  (four component, four namespace and four conditional programs; seed 20261025)
+  through both strategies.
+
 - Array-child traversal corrected before the first list pass (2026-10-25).
   Three new native checks reproduced a sparse-array crash, duplicate reads of
   indexed getters, and accidental invocation of an authored array's `map` method.
@@ -34,14 +52,14 @@ Last updated: 2026-10-25.
   53 conditional/list comparisons with both strategies, and all six unchanged
   benchmark-fixture correctness/work checks. No timing improvement is claimed.
 
-- Optimization stage and comparison switch (2026-10-25). `pipeline.ts` now calls
-  `optimize/index.ts` between the general planner and emission. The initial pass
-  registry is empty; `optimize: false` bypasses it. The harness runs compiler-next
+- Optimization stage and comparison switch (2026-10-25, `bb3bd733`). `pipeline.ts`
+  calls `optimize/index.ts` between the general planner and emission.
+  `optimize: false` bypasses the passes. The harness runs compiler-next
   with passes on and off for each comparison/generated program, saving the
   general output in `next-general/` and checking it against both the reference
   and default output. Local validation passes `bun check` (123 files), four
   pipeline tests and all 21 component comparisons through both strategies.
-  The first list pass follows this boundary.
+  The first list pass above uses this boundary.
 
 - Optimization plan clarified (2026-10-25). `compiler/optimize.md` records the
   folder boundaries and implementation order: establish emitted work, add the

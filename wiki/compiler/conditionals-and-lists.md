@@ -21,6 +21,8 @@ place.
 | `core/emit/render-value.ts` | Hoists a compiled binding program for stored JSX and captures its inputs at the authored expression |
 | `packages/runtime/src/render-value.ts` | Mounts captured programs independently per consumer, updates matching programs in place and disposes replaced ranges |
 | `packages/runtime/src/list-values.ts` | General first-unused row matching and native array-child traversal: holes, inherited indices and one read per present child |
+| `packages/runtime/src/list-index.ts` | Retains private row identities between updates, with first-unused matching, exact teardown order and exception/reentry recovery |
+| `optimize/retained-list-index.ts` | Chooses indexed child-value slots on a fresh plan; native calls and observation stay unchanged |
 | `packages/runtime/src/cond.ts` | Existing anchored branch lifecycle; an optional insertion point preserves surrounding sibling order |
 
 Ternary branches and `&&`, `||`, `??` with ordinary left operands are built.
@@ -153,6 +155,8 @@ scope, and a folded tail that never updated.
   (`items.map(Row)`) fails with Phase 6 until components return markup.
 - **Fast paths** live in `optimize/` and keep list performance (`../rules.md`,
   rule 6):
+  - retained private row matching (built; `optimize.md`), also used for nested
+    array values; duplicate/throwing keys and reentry preserve general matching;
   - keyed `.map` over state, reusing rows;
   - targeted `push`, `splice` and `sort`;
   - DOM-only rows.

@@ -1,6 +1,7 @@
 # Optimizations
 
-**Folder:** `optimize/`. The stage and disable switch are built; passes follow.
+**Folder:** `optimize/`. The stage, disable switch and retained-list-index pass
+are built. Further list/call fast paths remain below.
 
 ## What it does
 
@@ -43,12 +44,47 @@ interface Optimization {
 
 | File | Makes faster |
 | --- | --- |
+| `retained-list-index.ts` (built) | Selects private row-index retention for non-primitive child sites, without changing authored expression evaluation |
 | `methods.ts` | Removes redundant call observation only when callee/receiver and effect proofs cover the executed operation. Method spelling alone never skips observation; unknown or overridden calls retain the before/after check (`state-and-derived.md`) |
 | `keyed-map.ts` | keyed `.map` over state reuses rows |
 | `array-ops.ts` | `push`, `splice`, `sort` update only the rows they touch |
 | `dom-only-rows.ts` | rows with no reactive work are plain DOM |
 | `reason-routing.ts` | a write updates only the sites on its paths |
 | `static-hoist.ts` | static templates are created once |
+
+## Retained row index
+
+The first pass changes only private row matching. It returns fresh component,
+branch and stored-value plans whose non-primitive text sites select
+`createIndexedValueSlot`. `core/emit/sites.ts` lowers that choice; this is still a
+general child-value site, not an explicit iteration plan. The planned explicit
+list emitter belongs in `features/lists/` when iteration lowering is built.
+Neither the authored AST nor its graph identities change.
+
+`packages/runtime/src/list-index.ts` retains the first row for each identity.
+Every reconciliation uses a fresh identity token to consume each old row at most
+once. Unmatched primary rows are disposed in old row order, followed by old
+duplicates in their old order, exactly as `list-values.ts` does. A cache is valid
+only for the exact private row array it indexed. It detaches before authored
+getters, key coercion or cleanup can run; a throw discards partial indexing, and
+reentrant calls use independent records. Slot clearing releases the cache.
+
+Both strategies use `list-values.ts` for array-child traversal: native length
+conversion, holes, inherited indices and one read per present value. The fast
+path makes no assumption about the array-producing expression, method names,
+callbacks, object aliases or key types. Native calls and mutation observation
+remain intact. It still traverses rows and allocates next-row/value arrays;
+render-value captures, row callbacks and opaque snapshots are not removed by
+this pass. The retained map adds one private record per distinct live identity.
+
+`runtime/tests/list-index.test.ts` checks duplicate/state/disposal behavior,
+throwing keys, reentry, inherited getters and 3,375 three-step sequences of
+binary-key lists up to length three against the unchanged general matcher.
+Native compiler checks retain custom/overridden calls and callback arguments.
+The unchanged 1,000-row inline fixture, selecting four different rows, builds
+four matching maps in general mode and zero new matching maps in optimized mode.
+A 30-update matcher check builds 30 general maps versus one retained map.
+These are work counts, not VM timing or memory results.
 
 ## Implementation order after Phase 6
 

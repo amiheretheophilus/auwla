@@ -2,7 +2,8 @@
 import type { Entity } from './kernel';
 import { setTextData } from './setters';
 import type { createWriteBatch } from './write-batch';
-import { reconcileList } from './list-values';
+import { reconcileList, type RowOperations } from './list-values';
+import { createRetainedListIndex, type RetainedListIndex } from './list-index';
 
 export interface RenderOwner {
   readonly id: string;
@@ -51,7 +52,13 @@ export function renderNamespace(parent: Node, namespace: 'html' | 'svg' = 'html'
   return isSvg && element.localName !== 'foreignObject' ? 'svg' : 'html';
 }
 
-export type ValueSlot = ReturnType<typeof createValueSlot>;
+export interface ValueSlot {
+  write(value: unknown): void;
+  first(): Node;
+  moveBefore(reference: Node): void;
+  dispose(): void;
+  remove(): void;
+}
 
 /** One row of a list: its identity and the slot that renders it. */
 interface Row {
@@ -75,15 +82,29 @@ function rowIdentity(item: unknown, index: number): string {
  * or an array as a list of rows. Content other than text sits between an
  * opening comment and `text`, so the whole range can be moved or removed.
  */
-export function createValueSlot(text: Text, owner: RenderOwner) {
+export function createValueSlot(text: Text, owner: RenderOwner): ValueSlot {
+  return createSlot(text, owner, false);
+}
+
+/** Same child semantics, with a retained private index for array rows. */
+export function createIndexedValueSlot(text: Text, owner: RenderOwner): ValueSlot {
+  return createSlot(text, owner, true);
+}
+
+function createSlot(text: Text, owner: RenderOwner, indexed: boolean): ValueSlot {
   let currentProgram: RenderProgram | null = null;
   let currentKey: unknown;
   let entry: RenderEntry | null = null;
   let rows: Row[] | null = null;
+  let rowIndex: RetainedListIndex<Row> | null = null;
+  let rowOperations: RowOperations<Row> | null = null;
   let openingAnchor: Comment | null = null;
   let disposed = false;
 
   function clear(): void {
+    rowIndex?.clear();
+    rowIndex = null;
+    rowOperations = null;
     entry?.dispose();
     entry = null;
     currentProgram = null;
@@ -144,19 +165,27 @@ export function createValueSlot(text: Text, owner: RenderOwner) {
       open('mmd:list');
       rows = [];
     }
-    const parent = text.parentNode!;
 
-    const next = reconcileList(rows, items, {
+    // These operations belong to the list instance, not each update. In
+    // particular, a retained list does not allocate two new row closures per
+    // reconciliation, and moving the range does not leave a captured parent.
+    rowOperations ??= {
       identity: rowIdentity,
       create(identity) {
         const anchor = text.ownerDocument.createTextNode('');
-        parent.insertBefore(anchor, text);
-        return { identity, slot: createValueSlot(anchor, owner), text: anchor };
+        text.parentNode!.insertBefore(anchor, text);
+        return { identity, slot: createSlot(anchor, owner, indexed), text: anchor };
       },
       remove(row) {
         row.slot.remove();
       },
-    });
+    };
+    if (indexed) {
+      rowIndex ??= createRetainedListIndex<Row>();
+    }
+    const next = rowIndex === null
+      ? reconcileList(rows, items, rowOperations)
+      : rowIndex.reconcile(rows, items, rowOperations);
 
     // Place rows from the end, moving only a row not already before the next.
     let reference: Node = text;

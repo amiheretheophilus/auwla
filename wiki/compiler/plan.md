@@ -206,6 +206,11 @@ array child). Remove each check when its phase is built.
   method-name rule. Even native `map` callbacks or array accessors can mutate
   state, and overridden methods can do anything. Preserve opaque observation
   whenever those effects are unproven (`optimize.md`).
+  The optional plan stage and on/off comparison harness are built. The first
+  pass retains private row matching tables, including exact duplicate teardown
+  order and exception/reentry recovery. It preserves native callbacks and opaque
+  observation; direct iteration lowering, capture removal and selection routing
+  remain pending. Work counts and proof limits are in `optimize.md`.
   A host with spread attributes (`<div {...p}>`) takes the generic runtime path
   and gets no template. An outside review of the inline-row output
   (2026-10-25) lists what the old compiler's list path does and the general

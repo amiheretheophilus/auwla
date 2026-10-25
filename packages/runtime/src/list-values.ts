@@ -19,15 +19,22 @@ export interface ListValues<Row extends ValueRow> {
  * include inherited indices, and read each present value once. Calling an
  * authored `items.map` here would execute unrelated application code.
  */
-function readRows<Row extends ValueRow>(
+export function readListValues<Row extends ValueRow>(
   items: readonly unknown[],
   take: (value: unknown, index: number) => Row,
 ): ListValues<Row> {
   const rows: Row[] = [];
   const values: unknown[] = [];
   // A proxy may supply a non-integer length. Unary + retains native ToNumber
-  // errors for Symbols/BigInts; truncation and clamping implement ToLength.
-  const length = Math.min(Math.max(Math.trunc(+items.length), 0), Number.MAX_SAFE_INTEGER);
+  // errors for Symbols/BigInts. Arithmetic implements ToLength without calling
+  // mutable Math methods or converting an authored object a second time.
+  const requestedLength = +items.length;
+  let length = 0;
+  if (requestedLength > 0) {
+    const maximumLength = 9_007_199_254_740_991;
+    const cappedLength = requestedLength < maximumLength ? requestedLength : maximumLength;
+    length = cappedLength - (cappedLength % 1);
+  }
   for (let index = 0; index < length; index++) {
     if (!(index in items)) {
       continue;
@@ -55,7 +62,7 @@ export function reconcileList<Row extends ValueRow>(
     }
   }
 
-  const next = readRows(items, (value, index) => {
+  const next = readListValues(items, (value, index) => {
     const identity = operations.identity(value, index);
     const row = unused.get(identity);
     if (row !== undefined) {
