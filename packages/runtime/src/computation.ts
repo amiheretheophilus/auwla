@@ -45,8 +45,16 @@ function store(): ComputationStore {
 
 const subscribers = new WeakMap<object, Set<Computation>>();
 
-function owned() {
+type OwnedComputations = Map<string, Set<Computation>>;
+
+function owned(): OwnedComputations {
   return getExtensionStore('mmd:owned-computations', () => new Map<string, Set<Computation>>());
+}
+
+function ownershipReference(): WeakRef<OwnedComputations> {
+  // Share one weak handle per application. Keeping an empty collector alive
+  // must not retain every other collector through the application's registry.
+  return getExtensionStore('mmd:computation-ownership-reference', () => new WeakRef(owned()));
 }
 
 /** Create the callback outside a notification wave's lexical environment. */
@@ -185,15 +193,14 @@ class Computation implements Frame {
   private subscriptions: object[] | null = null;
   private keyedSubscriptions: { readonly index: KeyedIndex; readonly equals: unknown }[] | null = null;
   private owner: Set<Computation> | undefined;
+  private readonly owners: WeakRef<OwnedComputations> | undefined;
+  private readonly entityId: string | undefined;
 
   constructor(readonly notify: (() => void) | undefined, entity: Entity | undefined) {
-    if (entity !== undefined) {
-      const owners = owned();
-      let list = owners.get(entity.id);
-      if (list === undefined) owners.set(entity.id, list = new Set());
-      list.add(this);
-      this.owner = list;
-    }
+    // Capture the creating application's registry, but do not register an
+    // empty collector. Prop-guarded row sites often discover no hidden reads.
+    this.owners = entity === undefined ? undefined : ownershipReference();
+    this.entityId = entity?.id;
   }
 
   begin(reset = true): void {
@@ -226,6 +233,7 @@ class Computation implements Frame {
     if (this.notify === undefined) return;
     this.unsubscribe();
     if (dependencies === null || dependencies.size === 0) return;
+    if (!this.ownSubscriptions()) return;
     const subscriptions: object[] = [];
     for (const [key, dependency] of dependencies) {
       if (dependency.keyed !== undefined) {
@@ -238,6 +246,26 @@ class Computation implements Frame {
       subscriptions.push(key);
     }
     this.subscriptions = subscriptions;
+  }
+
+  private ownSubscriptions(): boolean {
+    if (this.entityId === undefined || this.owner !== undefined) {
+      return true;
+    }
+    const owners = this.owners?.deref();
+    if (owners === undefined) {
+      return false;
+    }
+    // Register before subscribing, so abandoning setup before the compiler's
+    // cleanup callback exists still removes every installed subscription.
+    let list = owners.get(this.entityId);
+    if (list === undefined) {
+      list = new Set();
+      owners.set(this.entityId, list);
+    }
+    list.add(this);
+    this.owner = list;
+    return true;
   }
 
   private subscribeKeyed(key: object, dependency: Dependency): void {

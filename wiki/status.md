@@ -24,6 +24,24 @@ Last updated: 2026-10-25.
 
 ## Done
 
+- Lazy computation ownership (2026-10-25). Profiling row creation and clearing
+  at `bd89c47c` confirmed allocation/GC, lifecycle and DOM removal costs
+  ([run 40217588825](https://github.com/amiheretheophilus/auwla/actions/runs/40217588825)).
+  Empty collectors now avoid disposal registration until their first actual
+  subscription. The unchanged 1,000-row module-data component fixture adds
+  **0 ownership entries instead of 3,000**, in both compiler modes; later
+  subscriptions still belong to their creating application. A shared weak
+  registry handle prevents a retained empty collector from keeping application
+  storage alive. The first draft's strong handle failed the new GC regression;
+  the weak version passes it unchanged. Local checks pass both type checks,
+  28 lifecycle/retention tests and 44 compiler/native/fixture tests. Chrome
+  correctness gates pass all eight compiled state placements and all 16
+  mutable/immutable update styles, including identity and mixed sequences.
+  Four tracked inline fixtures reflect the corrected key capture layout.
+  Broad CI and runner timings follow after this commit.
+  This removes one fixed row cost; it does not eliminate computation objects,
+  per-row batches, props cells, DOM work or full-list scans.
+
 - Row-reuse boundary audit (2026-10-25). Three newly failing runtime checks
   reproduced signed-zero conflation, non-native proxy length conversion and a
   species proof invalidated during argument evaluation. Reuse now confirms

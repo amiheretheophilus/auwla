@@ -244,6 +244,14 @@ shared and local reads.
 
 ## Implementation order after Phase 6
 
+Row creation also pays fixed runtime ownership costs. Computation disposal
+registration now waits until the collector actually subscribes. In the unchanged
+module-data component fixture, creating 1,000 rows adds zero ownership entries
+instead of 3,000, and zero per-row ownership sets instead of 1,000. The collectors
+still run and can discover reads later; authored expressions and prop guards are
+unchanged. Both compiler modes check those counts along with update and clear.
+The lifecycle and retention contract is on `state-and-derived.md`.
+
 1. **Establish the work being removed.** Inspect the emitted inline-row and
    component-row programs and extend the existing fixture work counters where
    needed. Count row evaluations, snapshots, listener changes and DOM writes;

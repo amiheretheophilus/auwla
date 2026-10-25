@@ -101,6 +101,16 @@ captured application/batch. Disposal releases them; one computation changing
 dependencies does not unsubscribe another computation owned by the same entity.
 Disposing a retired branch collector also removes its disposer from the parent's
 ownership set; updating a live collector only replaces its subscriptions.
+
+Ownership registration starts with the first actual subscription, before it is
+installed. Empty collectors keep running normally and can discover hidden reads
+on later updates, but need no entry or disposal visit. One weak registry handle
+per application preserves the creating application's ownership without letting
+an escaped empty collector retain that application's storage. The runtime's
+`computation-ownership.test.ts` checks late subscription and separate applications;
+`retention.test.ts` checks collection while an empty collector remains reachable.
+The component fixture checks 3,000 avoided entries for 1,000 prop-guarded rows in
+both compiler modes, while keeping updates and complete disposal.
 Shared memo collectors isolate setup reads from callers and propagate invalidation
 to downstream owners before lazy refresh. One publication wave notifies each
 subscription once, including cycles; authored recovery resets abandoned waves.

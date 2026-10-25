@@ -3,7 +3,7 @@ import { afterEach, expect, it } from 'bun:test';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { basename, join } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { mount, registeredIds, setScheduler, type MountedApplication } from '@memoized-dom/runtime/testing';
+import { getExtensionStore, mount, registeredIds, setScheduler, type MountedApplication } from '@memoized-dom/runtime/testing';
 import { clearCompiledApps } from '../../../tests/harness/compilers';
 import { compileModules } from '../../pipeline';
 
@@ -143,6 +143,33 @@ const componentRowApps = [
   ['AppModuleDataComponent.tsx', 'BenchModuleDataComponent'],
   ['AppModuleSelectionComponent.tsx', 'BenchModuleSelectionComponent'],
 ] as const;
+
+it.each([
+  { mode: 'optimized', optimize: true },
+  { mode: 'general', optimize: false },
+])('registers only subscribing collectors in the component-row fixture ($mode)', async ({ optimize }) => {
+  const { host } = await fixture('dom', ['AppModuleDataComponent.tsx', 'data.ts'],
+    'BenchModuleDataComponent', false, optimize);
+  const owners = getExtensionStore<Map<string, Set<unknown>>>('mmd:owned-computations', () => new Map());
+  const collectorCount = () => [...owners.values()].reduce((count, collectors) => count + collectors.size, 0);
+  const initial = collectorCount();
+  const initialOwners = owners.size;
+  const click = (label: string) => {
+    [...host.querySelectorAll('button')].find((button) => button.textContent === label)!.click();
+  };
+
+  click('create1k');
+  expect(host.querySelectorAll('li')).toHaveLength(1000);
+  // The three row expressions are guarded by prop versions. Their collectors
+  // discover no hidden reads, so they add no ownership sets or disposal visits.
+  expect(collectorCount() - initial).toBe(0);
+  expect(owners.size).toBe(initialOwners);
+  click('update');
+  expect(host.querySelector('li')!.textContent).toContain(' !!!');
+  click('clear');
+  expect(host.querySelectorAll('li')).toHaveLength(0);
+  expect(collectorCount()).toBe(initial);
+}, 30_000);
 
 it.each(componentRowApps)('runs the component-row benchmark %s with retained rows and complete disposal', async (file, component) => {
   const { host } = await fixture('dom', [file, 'data.ts'], component);

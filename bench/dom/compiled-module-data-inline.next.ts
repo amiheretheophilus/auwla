@@ -16,13 +16,13 @@ const _renderProgram = { mount(_values, _owner) {
     _slot.replaceWith(_text);
     const _text2 = _document.createTextNode("");
     _slot2.replaceWith(_text2);
-    let _value = _values[0];
+    let _value = _values[1];
     if (_value != null && _value !== false) {
       _li.setAttribute("class", _value === true ? "" : _MD.textValue(_value));
     } else {
       _li.removeAttribute("class");
     }
-    let _value2 = _values[1];
+    let _value2 = _values[2];
     let _listener;
     if (_listener !== undefined) _li.removeEventListener("click", _listener);
     _listener = undefined;
@@ -30,15 +30,15 @@ const _renderProgram = { mount(_values, _owner) {
       _listener = _valueWrites === null ? _value2 : _valueWrites.listener(_value2);
       _li.addEventListener("click", _listener);
     }
-    let _value3 = _values[2];
+    let _value3 = _values[3];
     const _valueSlot = _MD.createIndexedValueSlot(_text, { id: _valueId, batch: _valueWrites, entity: _valueEntity, namespace: _namespace });
     _valueSlot.write(_value3);
-    let _value4 = _values[3];
+    let _value4 = _values[4];
     const _valueSlot2 = _MD.createIndexedValueSlot(_text2, { id: _valueId, batch: _valueWrites, entity: _valueEntity, namespace: _namespace });
     _valueSlot2.write(_value4);
     return { nodes: [_li], update(_values2) {
       _values = _values2;
-      const _next = _values[0];
+      const _next = _values[1];
       if (_next !== _value && !(_next !== _next && _value !== _value)) {
         if (_next != null && _next !== false) {
           _li.setAttribute("class", _next === true ? "" : _MD.textValue(_next));
@@ -47,7 +47,7 @@ const _renderProgram = { mount(_values, _owner) {
         }
         _value = _next;
       }
-      const _next2 = _values[1];
+      const _next2 = _values[2];
       if (_next2 !== _value2 && !(_next2 !== _next2 && _value2 !== _value2)) {
         if (_listener !== undefined) _li.removeEventListener("click", _listener);
         _listener = undefined;
@@ -57,12 +57,12 @@ const _renderProgram = { mount(_values, _owner) {
         }
         _value2 = _next2;
       }
-      const _next3 = _values[2];
+      const _next3 = _values[3];
       if (_next3 !== _value3 && !(_next3 !== _next3 && _value3 !== _value3)) {
         _valueSlot.write(_next3);
         _value3 = _next3;
       }
-      const _next4 = _values[3];
+      const _next4 = _values[4];
       if (_next4 !== _value4 && !(_next4 !== _next4 && _value4 !== _value4)) {
         _valueSlot2.write(_next4);
         _value4 = _next4;
@@ -81,13 +81,13 @@ const _renderProgram = { mount(_values, _owner) {
   _slot3.replaceWith(_text3);
   const _text4 = _document.createTextNode("");
   _slot4.replaceWith(_text4);
-  let _value5 = _values[0];
+  let _value5 = _values[1];
   if (_value5 != null && _value5 !== false) {
     _li2.setAttribute("class", _value5 === true ? "" : _MD.textValue(_value5));
   } else {
     _li2.removeAttribute("class");
   }
-  let _value6 = _values[1];
+  let _value6 = _values[2];
   let _listener2;
   if (_listener2 !== undefined) _li2.removeEventListener("click", _listener2);
   _listener2 = undefined;
@@ -95,15 +95,15 @@ const _renderProgram = { mount(_values, _owner) {
     _listener2 = _valueWrites === null ? _value6 : _valueWrites.listener(_value6);
     _li2.addEventListener("click", _listener2);
   }
-  let _value7 = _values[2];
+  let _value7 = _values[3];
   const _valueSlot3 = _MD.createIndexedValueSlot(_text3, { id: _valueId, batch: _valueWrites, entity: _valueEntity, namespace: _namespace });
   _valueSlot3.write(_value7);
-  let _value8 = _values[3];
+  let _value8 = _values[4];
   const _valueSlot4 = _MD.createIndexedValueSlot(_text4, { id: _valueId, batch: _valueWrites, entity: _valueEntity, namespace: _namespace });
   _valueSlot4.write(_value8);
   return { nodes: [_li2], update(_values2) {
     _values = _values2;
-    const _next5 = _values[0];
+    const _next5 = _values[1];
     if (_next5 !== _value5 && !(_next5 !== _next5 && _value5 !== _value5)) {
       if (_next5 != null && _next5 !== false) {
         _li2.setAttribute("class", _next5 === true ? "" : _MD.textValue(_next5));
@@ -112,7 +112,7 @@ const _renderProgram = { mount(_values, _owner) {
       }
       _value5 = _next5;
     }
-    const _next6 = _values[1];
+    const _next6 = _values[2];
     if (_next6 !== _value6 && !(_next6 !== _next6 && _value6 !== _value6)) {
       if (_listener2 !== undefined) _li2.removeEventListener("click", _listener2);
       _listener2 = undefined;
@@ -122,12 +122,12 @@ const _renderProgram = { mount(_values, _owner) {
       }
       _value6 = _next6;
     }
-    const _next7 = _values[2];
+    const _next7 = _values[3];
     if (_next7 !== _value7 && !(_next7 !== _next7 && _value7 !== _value7)) {
       _valueSlot3.write(_next7);
       _value7 = _next7;
     }
-    const _next8 = _values[3];
+    const _next8 = _values[4];
     if (_next8 !== _value8 && !(_next8 !== _next8 && _value8 !== _value8)) {
       _valueSlot4.write(_next8);
       _value8 = _next8;
@@ -418,9 +418,9 @@ export function BenchModuleDataInline(_id, _parent, _props, _namespace2, _setupO
   }
   const _siteComputation = _MD.createComputation(_writes.mark, _entity);
   _siteComputation.begin();
-  let _value21 = _MD.observeMethod([() => data], [_mutated_data], _read_data(), "map", 1, _rows)((item) => (_MD.createRenderValue(_renderProgram, [_MD.trackEquals(selected, item.id, () => selected, () => _selectedVersion, _readKey) ? 'danger' : '', () => {
+  let _value21 = _MD.observeMethod([() => data], [_mutated_data], _read_data(), "map", 1, _rows)((item) => (_MD.createKeyedRenderValue(_renderProgram, [item.id, _MD.trackEquals(selected, item.id, () => selected, () => _selectedVersion, _readKey) ? 'danger' : '', () => {
     _write(selected = item.id);
-  }, item.id, item.label], item.id)));
+  }, item.id, item.label], 0)));
   _siteComputation.end();
   const _valueSlot5 = _MD.createIndexedValueSlot(_text5, { id: _id, batch: _writes, entity: _entity, namespace: _namespace2 });
   _valueSlot5.write(_value21);
@@ -437,9 +437,9 @@ export function BenchModuleDataInline(_id, _parent, _props, _namespace2, _setupO
     const _updateFrame = _scope.enter();
     if (_siteComputation.changed()) {
       _siteComputation.begin();
-      const _next9 = _MD.observeMethod([() => data], [_mutated_data], _read_data(), "map", 1, _rows)((item) => (_MD.createRenderValue(_renderProgram, [_MD.trackEquals(selected, item.id, () => selected, () => _selectedVersion, _readKey) ? 'danger' : '', () => {
+      const _next9 = _MD.observeMethod([() => data], [_mutated_data], _read_data(), "map", 1, _rows)((item) => (_MD.createKeyedRenderValue(_renderProgram, [item.id, _MD.trackEquals(selected, item.id, () => selected, () => _selectedVersion, _readKey) ? 'danger' : '', () => {
         _write(selected = item.id);
-      }, item.id, item.label], item.id)));
+      }, item.id, item.label], 0)));
       _siteComputation.end();
       if (_next9 !== _value21 && !(_next9 !== _next9 && _value21 !== _value21)) {
         _valueSlot5.write(_next9);

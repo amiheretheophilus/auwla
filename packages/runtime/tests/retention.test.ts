@@ -2,6 +2,7 @@
 import { expect, it, spyOn } from 'bun:test';
 import { observeMutation } from '../src/mutation';
 import { createComputation, publishVersions, trackRead } from '../src/computation';
+import { createApplicationRuntime, getExtensionStore, registerEntity, runWithApplicationRuntime } from '../src/kernel';
 
 async function collectAfterTurn(reference?: WeakRef<object>): Promise<void> {
   // WeakRef targets stay alive for the job in which they were created. Cross
@@ -18,6 +19,28 @@ async function collectAfterTurn(reference?: WeakRef<object>): Promise<void> {
     }
   }
 }
+
+it('does not retain an application registry through an empty collector', async () => {
+  function completed() {
+    const runtime = createApplicationRuntime();
+    return runWithApplicationRuntime(runtime, () => {
+      const entity = { id: 'empty-row', parent: null, render() {} };
+      registerEntity(entity);
+      const computation = createComputation(undefined, entity);
+      computation.begin();
+      computation.end();
+      const owners = getExtensionStore<Map<string, Set<unknown>>>('mmd:owned-computations', () => new Map());
+      const reference = new WeakRef(owners);
+      runtime.dispose();
+      return { computation, reference };
+    });
+  }
+  const result = completed();
+  await collectAfterTurn(result.reference);
+  expect(result.reference.deref()).toBeUndefined();
+  expect(result.computation.changed()).toBe(false);
+  result.computation.dispose();
+});
 
 it('releases completed observation inputs while its recovery callback is still queued', async () => {
   const queued: (() => void)[] = [];
