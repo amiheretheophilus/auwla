@@ -168,11 +168,12 @@ full generator still fails on lists; its nonempty-list regression is preserved a
    smallest program that still fails. That program is saved to `tests/corpus/` and
    runs in every later run.
 4. **Feature tests** next to each feature, for its graph and plan facts.
-5. **Optimizations on and off.** Each compiler-next comparison and generated
-   program runs with passes enabled and with `optimize: false`; both must match
-   the reference and each other. Output stays in separate `next/` and
-   `next-general/` folders (`optimize.md`). Old-compiler and reference-only runs
-   retain their existing selection.
+5. **Optimizations on and off.** Every case and generated program that compares
+   compiler-next runs with passes enabled and with `optimize: false`; both must
+   match the reference and each other. Output stays in separate `next/` and
+   `next-general/` folders (`optimize.md`). Old-compiler and reference-only runs,
+   including the source/readiness generator for later phases, retain their
+   existing selection.
 6. **Strict checks.** A compile error on valid input already fails a case. Explicit
    checks for newly introduced `try`/`catch`/`finally` and output parsing with
    `yuku-parser` are still planned for the compiler adapter. Imported output

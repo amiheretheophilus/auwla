@@ -24,7 +24,7 @@ Last updated: 2026-10-25.
 
 ## Done
 
-- First list optimization (2026-10-25, broad CI pending).
+- First list optimization (2026-10-25, `84b52062`).
   `optimize/retained-list-index.ts` selects private row-index retention on fresh
   plans; the authored expressions, calls, graph identities and opaque observation
   remain intact. The runtime cache follows first-unused identity matching,
@@ -41,8 +41,15 @@ Last updated: 2026-10-25.
   including all 3,375 tested three-step key sequences, and 12 generated programs
   (four component, four namespace and four conditional programs; seed 20261025)
   through both strategies.
+  Manual CI [40186447841](https://github.com/amiheretheophilus/auwla/actions/runs/40186447841)
+  passes all four jobs: **220 compiler-next cases** through both strategies,
+  with the same **100 deferred failures** (**29 Phase 7**, **71 Phase 8**);
+  **320 reference cases**, **218 compiler unit tests**, **57 runtime tests**,
+  and all ten generator/corpus checks at `FC_RUNS=200`. Compiler-comparison
+  generators exercise both strategies; the source/readiness generator keeps its
+  existing reference-only baseline. No VM speed or OOM conclusion follows.
 
-- Array-child traversal corrected before the first list pass (2026-10-25).
+- Array-child traversal corrected before the first list pass (2026-10-25, `af93949f`).
   Three new native checks reproduced a sparse-array crash, duplicate reads of
   indexed getters, and accidental invocation of an authored array's `map` method.
   General traversal now uses native length/index semantics, preserves source
