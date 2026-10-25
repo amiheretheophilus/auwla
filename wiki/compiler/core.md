@@ -13,6 +13,11 @@ props feature emitters; nested component trees remain open to their enclosing
 instance's lexical rewrites until that composition is complete. Static and
 dynamic `ref` attributes retain their Phase 7 diagnostic.
 
+`KeySite` records identity expressions in the source-ordered site sequence.
+Stored-value plans identify their final root key by capture index, so emission
+does not move it past other attributes or children. Hosts with explicit
+`children` attributes use the ordered component-value path too.
+
 Component creation registers its inactive entity before authored setup and child
 mounts, preserving the kernel's existing parent-before-child ownership contract.
 Failed setup uses the build scope's abandonment callback, guarded by entity

@@ -14,7 +14,7 @@ import type {
   ComponentPlan, MemoGroupPlan, ModulePlan, RenderValuePlan, SharedOwnerPlan,
   SharedReadPlan, Site, Template,
 } from './model';
-import { buildTemplate, containsJsx, keyExpression, unsupported, type TemplateContext } from './template';
+import { buildTemplate, containsJsx, unsupported, type TemplateContext } from './template';
 import { canPlanConditional, planReturnProgram } from '../../features/conditionals/plan';
 import { unwrap } from './jsx';
 import { planLocalState } from '../../features/state/plan';
@@ -160,8 +160,16 @@ function planModule(
     }
     const value = buildTemplate(jsx, { ...context, captureValues: true });
     const svg = buildTemplate(jsx, { ...context, captureValues: true }, [], 'svg');
-    const key = is.JSXElement(jsx) ? keyExpression(jsx) : null;
-    values.push({ node: jsx, ...value, svgTemplate: { ...svg.template, markup: null }, key });
+    let keyIndex: number | null = null;
+    if (is.JSXElement(jsx)) {
+      const root = value.template.roots[0];
+      for (const [index, site] of value.sites.entries()) {
+        if (site.kind === 'key' && site.node === root) {
+          keyIndex = index;
+        }
+      }
+    }
+    values.push({ node: jsx, ...value, svgTemplate: { ...svg.template, markup: null }, keyIndex });
   }
   const sharedOwners: SharedOwnerPlan[] = [];
   const shared = moduleBindings;

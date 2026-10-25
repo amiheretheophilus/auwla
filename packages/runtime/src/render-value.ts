@@ -38,6 +38,11 @@ export function createRenderValue(program: RenderProgram, values: readonly unkno
   return value;
 }
 
+/** Select the key from captures that have already evaluated in source order. */
+export function createKeyedRenderValue(program: RenderProgram, values: readonly unknown[], keyIndex: number): object {
+  return createRenderValue(program, values, values[keyIndex]);
+}
+
 function capturedOf(value: unknown): CapturedRender | undefined {
   return value !== null && typeof value === 'object' ? captures.get(value) : undefined;
 }

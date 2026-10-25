@@ -46,6 +46,14 @@ selecting another program disposes the old range. Namespace selection happens at
 mount, so one stored value can be consumed in HTML and SVG. Nested values stay
 lazy under native JavaScript control flow.
 
+Keys occupy ordered capture sites alongside attributes and children. All key
+expressions run at their authored positions, including overwritten duplicates;
+the final root key's capture supplies list identity through
+`createKeyedRenderValue`. DOM programs do not evaluate those captures again.
+`src/optimize/packed-captures.dom.test.ts` preserves the native ordering,
+duplicate-key identity and throwing-key regressions in both modes. Capture
+packing remains unimplemented; these checks cover the general path it needs.
+
 The planner and emitter use named helpers for selection, return folding, capture
 emission and guarded writes. Comments explain why selector inputs exclude branch
 sites, why fallthrough leaves share identity and why range cleanup uses anchors.

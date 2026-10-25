@@ -51,6 +51,11 @@ export function emitSites(
   }
 
   for (const [siteIndex, site] of plan.sites.entries()) {
+    if (site.kind === 'key' && context.values !== undefined) {
+      // Captured keys already ran at creation; row matching consumes the final
+      // root key. A DOM program has no attribute or child to update for them.
+      continue;
+    }
     const node = context.ref(site.node);
     const value = names.fresh('_value');
     const selection = site.kind === 'conditional'
@@ -85,7 +90,7 @@ export function emitSites(
     if (computation !== null) {
       mount.push(statement('$$computation.end();', { computation }));
     }
-    const used = lastSiteByKey.get(siteKey(site)) === site;
+    const used = site.kind !== 'key' && lastSiteByKey.get(siteKey(site)) === site;
     const listener = used && site.kind === 'event' ? names.fresh('_listener') : null;
     if (listener !== null) {
       mount.push(statement('let $$listener;', { listener }));
@@ -263,7 +268,7 @@ function emitBranch(branch: ConditionalBranch, selected: string, plan: SitesPlan
 }
 
 function siteKey(site: Site): string {
-  if (site.kind === 'text' || site.kind === 'conditional') {
+  if (site.kind === 'text' || site.kind === 'conditional' || site.kind === 'key') {
     return `${site.node}:${site.kind}`;
   }
   if (site.kind === 'event') {
@@ -281,7 +286,7 @@ function writeValue(
   listener: string | null,
   valueSlot: string | null,
 ): Statement[] {
-  if (site.kind === 'conditional') {
+  if (site.kind === 'conditional' || site.kind === 'key') {
     return [];
   }
   if (site.kind === 'text') {

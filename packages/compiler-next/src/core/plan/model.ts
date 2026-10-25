@@ -75,6 +75,11 @@ export interface EventSite extends SiteBase {
   readonly event: string;
 }
 
+/** A JSX identity input: evaluated with the attributes, never written to DOM. */
+export interface KeySite extends SiteBase {
+  readonly kind: 'key';
+}
+
 export interface ConditionalSite extends SiteBase {
   readonly kind: 'conditional';
   readonly namespace: 'html' | 'svg';
@@ -154,7 +159,7 @@ export interface ConditionalBranch {
   readonly sites: readonly Site[];
 }
 
-export type Site = TextSite | AttributeSite | PropertySite | EventSite | ConditionalSite;
+export type Site = TextSite | AttributeSite | PropertySite | EventSite | KeySite | ConditionalSite;
 
 /** Distribute over the union so each site's own fields are retained. */
 export type UnplacedSite = Site extends infer S ? S extends Site ? Omit<S, 'node'> : never : never;
@@ -267,8 +272,8 @@ export interface RenderValuePlan {
   readonly svgTemplate: Template;
   /** Source order is also the capture-array order used by the emitted program. */
   readonly sites: readonly Site[];
-  /** The root element's `key`, captured with the value; a list matches rows by it. */
-  readonly key: Expression | null;
+  /** Capture index of the root's final `key` attribute, or null without one. */
+  readonly keyIndex: number | null;
 }
 
 export interface SharedReadPlan {

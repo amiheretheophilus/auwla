@@ -24,6 +24,16 @@ Last updated: 2026-10-25.
 
 ## Done
 
+- Capture-order audit (2026-10-25). The eight pending native regressions now
+  pass in both modes: stored keys run at their attribute position, the final
+  duplicate key controls identity, a throwing key prevents later evaluation,
+  and an overridden explicit `children` expression still runs. Keys are ordered
+  capture sites; their final root capture supplies identity without a second
+  evaluation. Explicit host children use the existing ordered props path.
+  Both type checks, 25 focused planner/native checks and 74 component/list
+  comparisons pass. Capture packing
+  remains unimplemented; no allocation or speed claim accompanies this fix.
+
 - Row reuse and keyed selection for component state (2026-10-25). Component
   bindings read in a row callback are already tracked reads, so row reuse accepts
   them, and `x === e` at such a read is keyed. Every bench variant and Octane's

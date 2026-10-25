@@ -86,9 +86,14 @@ export function emitRenderValue(plan: RenderValuePlan, names: Names, runtime: st
   // Captures stay at the authored expression, outside the hoisted program.
   // Moving them into mount would change lexical access and evaluation order.
   const captured = b.ArrayExpression({ elements: plan.sites.map((site) => siteValue(site)) });
-  const value = plan.key === null
+  const value = plan.keyIndex === null
     ? expression('$$runtime.createRenderValue($$program, $$values)', { runtime, program, values: captured })
-    : expression('$$runtime.createRenderValue($$program, $$values, $$key)', { runtime, program, values: captured, key: plan.key });
+    : expression('$$runtime.createKeyedRenderValue($$program, $$values, $$index)', {
+      runtime,
+      program,
+      values: captured,
+      index: b.Literal({ value: plan.keyIndex, raw: String(plan.keyIndex) }),
+    });
   return { declaration: declaration as Statement, replacement: value as Node };
 }
 

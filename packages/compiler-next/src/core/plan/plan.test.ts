@@ -120,7 +120,7 @@ describe('keys outside a list', () => {
   it('shows an element whose key can change through a keyed value, and leaves out a key that cannot', () => {
     const { plan, component } = inspect('export function App() { let id = 1; return <main><p key={id} onClick={() => id++} /></main>; }');
     expect(component.template.markup).toBe('<main><!----></main>');
-    expect(plan.values.map((value) => value.key !== null)).toEqual([true]);
+    expect(plan.values.map((value) => value.keyIndex !== null)).toEqual([true]);
     const literal = inspect(`export const App = () => <p key="x">hello</p>;`);
     expect(literal.component.template.markup).toBe('<p>hello</p>');
   });

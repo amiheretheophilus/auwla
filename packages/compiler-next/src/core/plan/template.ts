@@ -193,6 +193,13 @@ class TemplateBuilder {
     if (!is.JSXAttribute(attribute)) return;
 
     const name = jsxAttributeName(attribute);
+    if (name === 'key') {
+      const expression = attributeExpression(attribute.value);
+      // Keys belong to the same evaluation sequence as ordinary attributes.
+      // Keep even overwritten keys: their expressions may have effects or throw.
+      sites.push({ kind: 'key', expression, reactive: this.context.reactive(expression) });
+      return;
+    }
     if (RESERVED_ATTRIBUTES.has(name)) return;
     if (name === 'ref') unsupported(this.context, attribute, 'refs', 7);
 
@@ -227,12 +234,13 @@ class TemplateBuilder {
 
 /** The value of an element's `key` attribute, or null when it has none. */
 export function keyExpression(element: JsxElement): Expression | null {
+  let key: Expression | null = null;
   for (const attribute of element.openingElement.attributes) {
     if (is.JSXAttribute(attribute) && jsxAttributeName(attribute) === 'key') {
-      return attributeExpression(attribute.value);
+      key = attributeExpression(attribute.value);
     }
   }
-  return null;
+  return key;
 }
 
 function jsxAttributeName(attribute: Extract<Node, { type: 'JSXAttribute' }>): string {

@@ -37,6 +37,11 @@ conditional fragments; `foreignObject` restarts HTML. Custom and ordinary tag
 names inherit SVG too; a tag-name list cannot prove a value's eventual
 destination (`output.md`, "The calling convention").
 
+An intrinsic host with an explicit `children` attribute uses this same ordered
+props path. Its attribute expression still runs before JSX children overwrite
+it; without JSX children, the explicit value supplies the content. The capture
+ordering regressions exercise the overridden-expression case in both modes.
+
 The child keeps native variables and numeric versions. A receiver evaluates the
 native parameter patterns into temporaries. A different parent value replaces
 that binding and bumps its version; an unchanged value preserves a local

@@ -5,7 +5,7 @@ import { intrinsicTag } from '../../core/plan/jsx';
 
 export type ComponentCall = Extract<Node, { type: 'JSXElement' }>;
 
-/** Spread-bearing hosts need the same ordered props application as dynamic tags. */
+/** Hosts with spreads or explicit children need ordered props application. */
 export function isComponentCall(node: Node): node is ComponentCall {
   if (!is.JSXElement(node)) {
     return false;
@@ -13,5 +13,14 @@ export function isComponentCall(node: Node): node is ComponentCall {
   if (intrinsicTag(node) === null) {
     return true;
   }
-  return node.openingElement.attributes.some(is.JSXSpreadAttribute);
+  return node.openingElement.attributes.some((attribute) => {
+    if (is.JSXSpreadAttribute(attribute)) {
+      return true;
+    }
+    // Native JSX evaluates this prop before authored children overwrite it.
+    // The component-value path already preserves that ordering and fallback.
+    return is.JSXAttribute(attribute)
+      && is.JSXIdentifier(attribute.name)
+      && attribute.name.name === 'children';
+  });
 }
