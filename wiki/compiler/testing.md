@@ -111,6 +111,12 @@ full generator still fails on lists; its nonempty-list regression is preserved a
 
 ## Layers
 
+`bench/dom/compare.ts` can compare two compiler-next revisions with their matching
+runtimes (`--before-compiler=next`, or `compiler_ref` in `bench-quick.yml`). This
+keeps new runtime helpers paired with the compiler that emits them. Local
+`--validate-only` runs every snapshot correctness gate without timing or replacing
+timing reports; the same-run ABBA workflow supplies timing evidence.
+
 Runtime ownership GC checks hold recovery callbacks without running them and
 assert that completed payloads can be collected. Their bounded collection and
 weak-reference probes run in fresh timer tasks: warm JavaScriptCore continuation

@@ -35,6 +35,11 @@ attribute the runtime change; timings from separate workflow runs cannot do so.
 Use `-f runtime_operations=create,update,clear` to include updates, or select
 other operations supported by the comparison CLI.
 
+For a compiler-next change that also changes its runtime API, use
+`-f compiler_ref=COMMIT` instead. It compares both compiler-next revisions with
+their matching runtimes in the same ABBA order and uploads `compiler-comparison.md`
+and its raw samples. `runtime_operations` selects operations for either comparison.
+
 ## Local comparisons
 
 `bun run bench:dom:compare --before-ref=COMMIT` compiles the same authored DOM
@@ -48,6 +53,7 @@ per cell are the default. Production bundles use deterministic input seeds.
 bun run bench:dom:compare --before-ref=e0cd1d5
 bun run bench:dom:compare --before-ref=e0cd1d5 --isolate=runtime --operations=swap,remove,reverse --samples=15
 bun run bench:dom:compare --before-ref=e0cd1d5 --isolate=compiler --full
+BENCH_COMPILER=next bun run bench:dom:compare --before-ref=12f687b3 --before-compiler=next --validate-only
 ```
 
 `--isolate=runtime` uses the current compiler with each runtime;
@@ -56,6 +62,11 @@ bun run bench:dom:compare --before-ref=e0cd1d5 --isolate=compiler --full
 comparison requires compatible generated/runtime APIs. The default timing
 selection covers the eleven 10k scenarios; `--full` also times the 1k scenarios.
 The current side includes uncommitted source changes, recorded in the metadata.
+
+The baseline compiler defaults to the old compiler. `--before-compiler=next`
+selects compiler-next from that snapshot for `both` or `compiler` isolation.
+`--validate-only` runs all correctness gates once on each snapshot, with no timed
+samples or timing report writes. Its generated files use a separate directory.
 
 The runner writes isolated generated files, browser hashes, raw sample arrays
 and a comparison report under `dist/compare/`. It does not replace tracked

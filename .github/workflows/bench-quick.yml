@@ -44,9 +44,13 @@ on:
         type: string
         default: ''
       runtime_operations:
-        description: Operations in the isolated runtime comparison, e.g. create,update,clear
+        description: Operations in snapshot comparisons, e.g. create,update,clear
         type: string
         default: create,clear
+      compiler_ref:
+        description: Optional compiler-next baseline with its matching runtime, in ABBA order
+        type: string
+        default: ''
 
 concurrency:
   group: bench-quick-${{ github.ref }}
@@ -112,6 +116,17 @@ jobs:
           bun run bench/dom/compare.ts --before-ref="$BEFORE_REF" --isolate=runtime --operations="$OPERATIONS" --samples="$SAMPLES"
           cp bench/dom/dist/compare/*-runtime/results.md runtime-comparison.md
           cat runtime-comparison.md >> "$GITHUB_STEP_SUMMARY"
+      - name: Compare compiler-next snapshots with their matching runtimes
+        if: inputs.compiler_ref != ''
+        env:
+          BENCH_COMPILER: next
+          BEFORE_REF: ${{ inputs.compiler_ref }}
+          SAMPLES: ${{ inputs.samples || '5' }}
+          OPERATIONS: ${{ inputs.runtime_operations || 'create,clear' }}
+        run: |
+          bun run bench/dom/compare.ts --before-ref="$BEFORE_REF" --before-compiler=next --isolate=both --operations="$OPERATIONS" --samples="$SAMPLES"
+          cp bench/dom/dist/compare/*-both-next/results.md compiler-comparison.md
+          cat compiler-comparison.md >> "$GITHUB_STEP_SUMMARY"
       # Octane's upstream harness needs Node >= 24.11.
       - if: inputs.octane
         uses: actions/setup-node@v5
@@ -136,6 +151,8 @@ jobs:
             profiles.md
             octane.md
             runtime-comparison.md
+            compiler-comparison.md
             bench/dom/dist/compare/*-runtime/results.json
+            bench/dom/dist/compare/*-both-next/results.json
             bench/dom/dist/quick-*.js
           retention-days: 7

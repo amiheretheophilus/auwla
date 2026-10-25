@@ -24,6 +24,13 @@ Last updated: 2026-10-25.
 
 ## Done
 
+- Compiler-next snapshot comparison (2026-10-25). The DOM runner now accepts
+  `--before-compiler=next` and pairs each compiler snapshot with its runtime.
+  `bench-quick.yml` exposes this through `compiler_ref`. Local validation against
+  `12f687b3` passes every scenario and mixed sequence on both snapshots, with
+  **identical browser hashes** and no timed samples or report writes. The CLI's
+  `--validate-only` output is kept separate from timing artifacts.
+
 - Ordered row matching (2026-10-25). The controlled retained-table result below
   regressed creation, so matching now consumes the unchanged ordered prefix
   directly and builds a temporary lookup only after its first mismatch. Creation,
@@ -35,6 +42,8 @@ Last updated: 2026-10-25.
   all placement/identity/mixed gates and all 16 mutable/immutable variants.
   Shared-code CI and a controlled comparison against `331ea92a` follow before
   accepting a timing benefit.
+  [CI 40240409464](https://github.com/amiheretheophilus/auwla/actions/runs/40240409464)
+  at `12f687b3` passes every job. The controlled timing run is `40240414329`.
 
 - Notification GC verification (2026-10-25).
   [Unit CI 40239785266](https://github.com/amiheretheophilus/auwla/actions/runs/40239785266)
@@ -45,46 +54,16 @@ Last updated: 2026-10-25.
   needed. Temporary heap diagnostics are removed. This closes that CI failure,
   not the reported VM OOM.
 
-- Retained map-result lookup (2026-10-25). Row reuse now retains its private item
-  lookup across successful mappings rather than deleting/repopulating a fresh
-  table each time. Generation bookkeeping preserves duplicate occurrence order,
-  including changed first occurrences and reappearance. Length/element reads
-  detach the lookup before possible reentry or failure; an empty list drops it
-  without building another table. The 30-update check builds **zero replacement
-  maps instead of 30**. Five native mapping regressions and a GC check cover the
-  new ownership boundary. A combined GC failure was isolated by separating its
-  payload producer from a warmed awaiting test frame: it now runs in a separate
-  task while recovery remains held and the original collection assertion stays
-  unchanged. The runtime experiments were reverted. Both type checks, 63 focused
-  runtime checks, 82 feature/comparison checks and a final 23-test compiled
-  fixture/retention check pass. Chrome gates pass all eight compiled placements
-  and all 16 update styles with identity and mixed sequences. Shared-code CI and
-  a controlled same-compiler comparison follow before closing this batch.
-  [CI 40237497329](https://github.com/amiheretheophilus/auwla/actions/runs/40237497329)
-  passes compiler/reference/comparison/generator checks, but its runtime job has
-  **114 passes and one failure**: the notification-wave GC target remains alive
-  on Bun 1.4.4 canary. The separate-task fixture change is insufficient there.
-  Local Bun 1.4.3 passes the full runtime run. The batch remains under validation;
-  failure-only heap tracing follows to identify the remaining retainer without
-  changing the collection assertion.
-  [Unit CI 40238595022](https://github.com/amiheretheophilus/auwla/actions/runs/40238595022)
-  reproduces the same failure. Its heap trace identifies the payload's lexical
-  environment but no rooted path to it. Collection retries now perform their
-  weak-reference probe in a separate task and return only a boolean, avoiding a
-  successful dereference temporary in the awaiting collector frame. A positive
-  control verifies that an actual queued strong reference stays alive through
-  the same retries. Local runtime checks pass; Linux validation remains pending.
+- Retained map-result lookup trial (2026-10-25, superseded by ordered matching).
+  `dedfdb38` removed replacement matching maps, but
   [ABBA run 40237496644](https://github.com/amiheretheophilus/auwla/actions/runs/40237496644)
-  passes all correctness gates but does not justify the retained lookup yet:
+  passes all correctness gates and does not justify the extra bookkeeping:
   creation regresses in most placements, updates are mixed, and clear improves
   modestly. The allocation count alone does not establish a speed improvement.
-  Unit CI `40239345545` still fails after isolating only the dereference probe.
-  Reproducing CI's file order also fails locally on the same Bun version; this
-  is not established as a version regression. The final trace finds no incoming
-  JavaScript root for the retired computation or its dependency record. Collection
-  now runs from fresh timer callbacks too, keeping conservative continuation
-  stack roots out of the probe. The diagnostic heap code is removed, release
-  assertions and retry limits are unchanged, and Linux validation follows.
+  Its duplicate, reentry, throw and retention regressions remain in the new
+  matcher. The notification GC fixture failure from its CI is resolved above;
+  no runtime workaround was kept. The ignored raw artifacts are under
+  `bench/dom/dist/retained-map-comparison/`.
 
 - Receiver-edit alias correction (2026-10-25). Native `reverse` could move an
   accessor/inherited value into an own data element while an already cached
