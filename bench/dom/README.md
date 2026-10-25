@@ -26,6 +26,13 @@ A desktop is noisy. `gh workflow run bench-quick.yml --ref compiler-rewrite` run
 the same on a GitHub runner and writes the tables, and optional profiles
 (`-f profile="module-component:select 10k"`), to the run summary.
 
+To isolate a runtime change, add `-f runtime_ref=COMMIT`. This also runs the
+existing create/clear comparison in before/after/after/before order, compiling
+both columns with current compiler-next and bundling each runtime from source.
+The baseline must support the current compiler's runtime API. The report and
+raw samples are uploaded with the quick results. Compare these columns to
+attribute the runtime change; timings from separate workflow runs cannot do so.
+
 ## Local comparisons
 
 `bun run bench:dom:compare --before-ref=COMMIT` compiles the same authored DOM

@@ -24,6 +24,20 @@ Last updated: 2026-10-25.
 
 ## Done
 
+- Shared-code audit at `8ede65b2` (2026-10-25).
+  [CI 40219352965](https://github.com/amiheretheophilus/auwla/actions/runs/40219352965)
+  passes all four jobs: **246 compiler unit/native tests**, **82 runtime tests**,
+  **320 reference cases**, **220 compiler comparisons** in both modes with the
+  unchanged **100 deferred failures** (29 Phase 7, 71 Phase 8), and all ten
+  generator/corpus checks at `FC_RUNS=200`.
+  [Quick timing 40219352792](https://github.com/amiheretheophilus/auwla/actions/runs/40219352792)
+  passes DOM/Octane gates, but next is still slower than old: module-component
+  create/clear 10k are 163.4/31.4 ms versus 21.1/0.9 ms (five samples); Octane
+  runlots is 405.9 versus 61.7 ms (three samples). Separate-run timing changes
+  do not prove a regression or win from the ownership change. `bench-quick.yml`
+  now accepts `runtime_ref` to run the existing same-compiler ABBA create/clear
+  comparison and retain its raw samples, so that change can be isolated.
+
 - Lazy computation ownership (2026-10-25). Profiling row creation and clearing
   at `bd89c47c` confirmed allocation/GC, lifecycle and DOM removal costs
   ([run 40217588825](https://github.com/amiheretheophilus/auwla/actions/runs/40217588825)).

@@ -39,6 +39,10 @@ on:
         description: Also run Octane --quick for memoized-dom only, old (HEAD) against next
         type: boolean
         default: false
+      runtime_ref:
+        description: Optional baseline commit for a same-compiler ABBA runtime comparison of create and clear
+        type: string
+        default: ''
 
 concurrency:
   group: bench-quick-${{ github.ref }}
@@ -57,6 +61,9 @@ jobs:
       PUPPETEER_EXECUTABLE_PATH: /usr/bin/google-chrome
     steps:
       - uses: actions/checkout@v5
+        with:
+          # The optional comparison archives the requested runtime from history.
+          fetch-depth: 0
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: canary
@@ -90,6 +97,16 @@ jobs:
             } >> profiles.md
           done
           cat profiles.md >> "$GITHUB_STEP_SUMMARY"
+      - name: Compare runtime creation and clearing
+        if: inputs.runtime_ref != ''
+        env:
+          BENCH_COMPILER: next
+          BEFORE_REF: ${{ inputs.runtime_ref }}
+          SAMPLES: ${{ inputs.samples || '5' }}
+        run: |
+          bun run bench/dom/compare.ts --before-ref="$BEFORE_REF" --isolate=runtime --operations=create,clear --samples="$SAMPLES"
+          cp bench/dom/dist/compare/*-runtime/results.md runtime-comparison.md
+          cat runtime-comparison.md >> "$GITHUB_STEP_SUMMARY"
       # Octane's upstream harness needs Node >= 24.11.
       - if: inputs.octane
         uses: actions/setup-node@v5
@@ -113,5 +130,7 @@ jobs:
             quick.md
             profiles.md
             octane.md
+            runtime-comparison.md
+            bench/dom/dist/compare/*-runtime/results.json
             bench/dom/dist/quick-*.js
           retention-days: 7
