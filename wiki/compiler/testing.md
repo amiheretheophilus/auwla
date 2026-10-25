@@ -19,7 +19,7 @@
 | `tests/harness/case.ts` | The `Case` and `Step` types, optional `check(container, observation)` assertions, and `defer(name)` for async cases |
 | `tests/harness/run.ts` | `behaves(name, case)`: runs the case on the reference and on a compiler, compares after each step. An exception in an event handler fails the run (the DOM only reports it as a window `error` event). `disposeRuns()` cleans up after a failed run |
 | `tests/harness/server-functions.ts` | Server function client modules, generated from `define.function` files by the framework's own generator |
-| `tests/harness/compilers.ts` | The compilers a case can run on; `COMPILER=old` (default) is `packages/compiler` |
+| `tests/harness/compilers.ts` | The compilers a case can run on; `COMPILER=next` (default) is `packages/compiler-next`, `COMPILER=old` is `packages/compiler` |
 | `tests/harness/compile-worker.ts` | Optional separate-process old compilation for cases that can synchronously loop |
 | `tests/harness/serialize.ts` | The visible DOM as a comparable string |
 | `tests/harness/requests.ts` | Queued JSON responses/rejections and normalized request history |
@@ -34,16 +34,21 @@
 Run them with `bun test` in `packages/compiler-next` (no build needed), or one file:
 `bun test cases/handlers`. Generated programs: `FC_RUNS=200 bun test generator`
 (default 25), `FC_SEED=<seed>` to repeat a run, `SAVE_CORPUS=1` to keep the shrunk
-failure. `COMPILER=next` runs the cases on compiler-next instead of the old
-compiler (`plan.md` tracks how many pass). Unit tests of compiler stages live next
+failure. Cases run on compiler-next by default; `COMPILER=old` runs them on the
+old compiler instead (`plan.md` tracks how many pass). Unit tests of compiler stages live next
 to the code (`src/**/*.test.ts`); `bun test src` runs only those.
 
 `REFERENCE_ONLY=1 bun test cases` runs the reference without compiling. Use it to
 develop the oracle, then run each new case in the default comparison mode before
 calling the slice finished. That writes both `tests/out/<case>/reference/App.tsx`
-and `tests/out/<case>/compiled/App.tsx` (plus any additional modules). A compiler
-rejection is a recorded failure and cannot produce compiled output; runtime or
-assertion failures still leave both versions available to inspect. Each case's
+and compiler-next's `tests/out/<case>/next/App.tsx` (plus any additional modules;
+`COMPILER=old` writes `old/` instead). A compiler rejection is a recorded failure:
+`next/ERROR.txt` holds its message in place of the output. Runtime or assertion
+failures still leave both versions available to inspect. Each run replaces its
+case's folder, so `tests/out` only shows the last run of each case. The CI `cases`
+job uploads the whole folder as the `cases-output` artifact
+(`gh run download <id> --repo amiheretheophilus/auwla -n cases-output -D packages/compiler-next/tests/out`),
+so every case's output can be read without running all cases locally. Each case's
 optional `check` runs after mount (observation 0) and after each step, on both
 renderers in the default mode. The ported regressions use it to assert known text
 and DOM identity independently of the comparison, so two wrong renderers cannot

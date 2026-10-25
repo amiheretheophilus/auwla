@@ -81,6 +81,15 @@ jobs:
           name: cases-log
           path: packages/compiler-next/cases.log
           retention-days: 3
+      # What compiler-next emitted for every case (`next/`, or `next/ERROR.txt`
+      # when it did not compile) beside the reference's output (`reference/`):
+      #   gh run download <id> --repo amiheretheophilus/auwla -n cases-output -D packages/compiler-next/tests/out
+      - if: always()
+        uses: actions/upload-artifact@v5
+        with:
+          name: cases-output
+          path: packages/compiler-next/tests/out
+          retention-days: 3
 
   generators:
     name: generators at 200 programs

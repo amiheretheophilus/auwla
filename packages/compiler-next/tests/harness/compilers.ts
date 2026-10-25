@@ -1,8 +1,8 @@
 /**
- * The compilers a case can run against: `COMPILER=old` (the default until
- * compiler-next compiles JSX) uses `packages/compiler`; `COMPILER=next` uses
- * `packages/compiler-next/src`. Both emit code for the same runtime, so they
- * mount the same way.
+ * The compilers a case can run against: `COMPILER=next` (the default) uses
+ * `packages/compiler-next/src`; `COMPILER=old` uses `packages/compiler`. Both
+ * emit code for the same runtime, so they mount the same way. Each writes its
+ * output to its own folder, `tests/out/<case>/<output>/`.
  */
 import { compileModules } from '@memoized-dom/compiler';
 import { compileModules as compileModulesNext } from '../../src';
@@ -19,6 +19,8 @@ export interface CompiledApp {
 
 export interface Compiler {
   name: string;
+  /** The folder under `tests/out/<case>/` that holds this compiler's output. */
+  output: string;
   prepare(): () => void;
   /** Compile `App.tsx`. Returns the output files by name. */
   compile(source: string, modules?: Record<string, string>, timeoutMs?: number): Record<string, string>;
@@ -28,6 +30,7 @@ export interface Compiler {
 
 const oldCompiler: Compiler = {
   name: 'packages/compiler',
+  output: 'old',
 
   prepare() {
     const runtime = createDataRuntime({ fetch: fetchForCase });
@@ -78,6 +81,7 @@ const oldCompiler: Compiler = {
 const nextCompiler: Compiler = {
   ...oldCompiler,
   name: 'packages/compiler-next',
+  output: 'next',
 
   compile(source, modules) {
     return compileModulesNext({ ...modules, './App.tsx': source }, { runtimePath: '@memoized-dom/runtime/testing' });
@@ -91,7 +95,7 @@ export function clearCompiledApps(): void {
 }
 
 export function selectedCompiler(): Compiler {
-  const choice = process.env.COMPILER ?? 'old';
+  const choice = process.env.COMPILER ?? 'next';
   if (choice === 'old') return oldCompiler;
   if (choice === 'next') return nextCompiler;
   throw new Error(`COMPILER=${choice}: use 'old' or 'next'`);

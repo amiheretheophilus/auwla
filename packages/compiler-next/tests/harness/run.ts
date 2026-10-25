@@ -117,8 +117,17 @@ export async function runOnReference(name: string, testCase: Case): Promise<Obse
 async function runOnCompiler(name: string, testCase: Case, compiler: Compiler): Promise<Observations> {
   const clock = startClock(testCase);
   const disposeSources = track(compiler.prepare());
-  const files = compiler.compile(testCase.source, testCase.modules, testCase.compileTimeoutMs);
-  const module = await importFiles(name, 'compiled', files, 'App.tsx');
+  // Folders from older runs would show stale or other-compiler output.
+  rmSync(join(OUT, slug(name), 'compiled'), { recursive: true, force: true });
+  let files: Record<string, string>;
+  try {
+    files = compiler.compile(testCase.source, testCase.modules, testCase.compileTimeoutMs);
+  } catch (error) {
+    // A case that does not compile still shows why, in place of its output.
+    writeFiles(name, compiler.output, { 'ERROR.txt': `${compiler.name}\n\n${(error as Error).message}\n` });
+    throw error;
+  }
+  const module = await importFiles(name, compiler.output, files, 'App.tsx');
 
   const container = attachContainer();
   const errors = watchErrors();
@@ -245,6 +254,12 @@ function attachContainer(): HTMLElement {
 
 /** Write a case's files to `tests/out/<case>/<kind>/` and import the entry. */
 async function importFiles(name: string, kind: string, files: Record<string, string>, entry: string) {
+  const directory = writeFiles(name, kind, files);
+  return (await import(pathToFileURL(join(directory, entry)).href)) as Record<string, unknown>;
+}
+
+/** Replace `tests/out/<case>/<kind>/` with `files`. */
+function writeFiles(name: string, kind: string, files: Record<string, string>): string {
   const directory = join(OUT, slug(name), kind);
   rmSync(directory, { recursive: true, force: true });
   mkdirSync(directory, { recursive: true });
@@ -253,7 +268,7 @@ async function importFiles(name: string, kind: string, files: Record<string, str
     mkdirSync(dirname(path), { recursive: true });
     writeFileSync(path, code);
   }
-  return (await import(pathToFileURL(join(directory, entry)).href)) as Record<string, unknown>;
+  return directory;
 }
 
 function slug(name: string): string {
