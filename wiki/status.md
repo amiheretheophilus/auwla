@@ -39,6 +39,13 @@ Last updated: 2026-10-25.
   fixture/retention check pass. Chrome gates pass all eight compiled placements
   and all 16 update styles with identity and mixed sequences. Shared-code CI and
   a controlled same-compiler comparison follow before closing this batch.
+  [CI 40237497329](https://github.com/amiheretheophilus/auwla/actions/runs/40237497329)
+  passes compiler/reference/comparison/generator checks, but its runtime job has
+  **114 passes and one failure**: the notification-wave GC target remains alive
+  on Bun 1.4.4 canary. The separate-task fixture change is insufficient there.
+  Local Bun 1.4.3 passes the full runtime run. The batch remains under validation;
+  failure-only heap tracing follows to identify the remaining retainer without
+  changing the collection assertion.
 
 - Receiver-edit alias correction (2026-10-25). Native `reverse` could move an
   accessor/inherited value into an own data element while an already cached

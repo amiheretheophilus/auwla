@@ -46,6 +46,56 @@ function rowValue(item: { id: number }): object {
   return { id: item.id };
 }
 
+/** Print retainer paths on failure, without persisting a heap or its values. */
+function traceWaveRetainers(target: object): void {
+  const globals = globalThis as unknown as Record<string, unknown>;
+  globals.__mmdGcProbe = target;
+  const heap = Bun.generateHeapSnapshot();
+  delete globals.__mmdGcProbe;
+  const classes = new Map<number, string>();
+  for (let offset = 0; offset < heap.nodes.length; offset += 4) {
+    classes.set(heap.nodes[offset]!, heap.nodeClassNames[heap.nodes[offset + 2]!]!);
+  }
+  const incoming = new Map<number, { from: number; name: string }[]>();
+  let payload: number | undefined;
+  for (let offset = 0; offset < heap.edges.length; offset += 4) {
+    const from = heap.edges[offset]!;
+    const to = heap.edges[offset + 1]!;
+    const type = heap.edgeTypes[heap.edges[offset + 2]!]!;
+    const name = type === 'Property' || type === 'Variable'
+      ? `${type}:${heap.edgeNames[heap.edges[offset + 3]!]}` : type;
+    if (name === 'Property:__mmdGcProbe') {
+      payload = to;
+      continue;
+    }
+    const list = incoming.get(to) ?? [];
+    list.push({ from, name });
+    incoming.set(to, list);
+  }
+  if (payload === undefined) {
+    console.log('wave-probe-not-found');
+    return;
+  }
+  console.log('wave-direct-retainers', incoming.get(payload)?.map((edge) => `${classes.get(edge.from)} ${edge.name}`));
+  const queue = [{ id: payload, path: ['payload'] }];
+  const seen = new Set<number>([payload]);
+  let found = 0;
+  for (let index = 0; index < queue.length && index < 50_000 && found < 5; index++) {
+    const current = queue[index]!;
+    if (current.path.length >= 15) continue;
+    for (const edge of incoming.get(current.id) ?? []) {
+      const path = [...current.path, `${classes.get(edge.from)} ${edge.name}`];
+      if (edge.from === 0) {
+        console.log('wave-retainer-path', path.join(' <- '));
+        found++;
+      } else if (!seen.has(edge.from)) {
+        seen.add(edge.from);
+        queue.push({ id: edge.from, path });
+      }
+    }
+  }
+}
+
 it('releases removed items while their row lookup remains alive', async () => {
   function removed() {
     const item = { id: 1 };
@@ -196,6 +246,8 @@ it('releases completed notification waves before their recovery callbacks run', 
   scheduler.mockRestore();
   expect(queued.length).toBeGreaterThan(0);
   await collectAfterTurn(reference);
+  const retained = reference.deref();
+  if (retained !== undefined) traceWaveRetainers(retained);
   expect(reference.deref()).toBeUndefined();
   for (const recover of queued) {
     recover();
