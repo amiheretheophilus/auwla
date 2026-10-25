@@ -8,10 +8,11 @@
  * unknown, overridden or custom method keeps the general before/after check.
  */
 import type { Module } from 'yuku-analyzer';
-import { is, walk } from 'yuku-ast';
+import { is } from 'yuku-ast';
 import type { Node } from 'yuku-parser';
 import type { ComponentPlan, ModulePlan, MutationPlan, SharedOwnerPlan } from '../core/plan/model';
 import type { Optimization } from '.';
+import { effectFree } from './effects';
 
 /**
  * A member call the lowering can evaluate in native order: receiver, key,
@@ -35,47 +36,12 @@ function shortCircuits(node: Node): boolean {
   return false;
 }
 
-/**
- * Running `fn` makes no explicit call, construction, store outside its own
- * locals, deletion, iteration protocol use or suspension. What remains are
- * property reads and implicit conversions, which compiled code never observes,
- * and creating values: objects, functions (whose bodies do not run) and JSX.
- */
-function effectFree(module: Module, fn: Node): boolean {
-  if (!is.Function(fn) || fn.async || fn.generator) return false;
-  const local = (target: Node): boolean => {
-    if (!is.Identifier(target)) return false;
-    const declaration = module.referenceOf(target)?.binding?.declarations[0];
-    return declaration !== undefined && declaration.start >= fn.start && declaration.end <= fn.end;
-  };
-  let free = true;
-  walk(fn, {
-    enter: (node, ctx) => {
-      if (node !== fn && is.Function(node)) {
-        ctx.skip();
-        return;
-      }
-      const effect = is.CallExpression(node) || is.NewExpression(node) || is.TaggedTemplateExpression(node)
-        || is.ImportExpression(node) || is.AwaitExpression(node) || is.YieldExpression(node) || is.Class(node)
-        || is.ForOfStatement(node) || is.ForInStatement(node) || is.ArrayPattern(node) || is.JSXSpreadChild(node)
-        || (is.SpreadElement(node) && !is.ObjectExpression(ctx.parent))
-        || (is.UnaryExpression(node) && node.operator === 'delete')
-        || (is.AssignmentExpression(node) && !local(node.left))
-        || (is.UpdateExpression(node) && !local(node.argument));
-      if (effect) {
-        free = false;
-        ctx.stop();
-      }
-    },
-  });
-  return free;
-}
-
+/** Bit `i` set when argument `i` is an inline function whose body has no explicit effect. */
 function provenCallbacks(module: Module, operation: Node): number {
   let proven = 0;
   if (!is.CallExpression(operation)) return proven;
   operation.arguments.forEach((argument, index) => {
-    if (index < 31 && effectFree(module, argument)) proven |= 1 << index;
+    if (index < 31 && is.Function(argument) && effectFree(module, argument)) proven |= 1 << index;
   });
   return proven;
 }

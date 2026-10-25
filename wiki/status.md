@@ -24,6 +24,18 @@ Last updated: 2026-10-25.
 
 ## Done
 
+- Targeted selection for component rows (2026-10-25). `optimize/keyed-comparisons.ts`
+  plus the runtime's `trackEquals`: a selection wakes the rows whose
+  `selected === id` can flip, not every row (`compiler/optimize.md`, "Keyed
+  comparisons").
+  - GitHub quick timing at `634fcd59`, before this change, next against old in
+    ms at 10k: component-row select 58 vs 0.2, update 75 vs 1.7, remove 62 vs 2.6.
+  - Every list operation still costs 15–90 ms, because each change re-runs the
+    whole `map` and reconciles all rows. Per-item reuse in lists is next.
+  - Cases: 220 pass, with the same 100 deferred failures. Compiler unit tests
+    pass, apart from the untracked `packed-captures` work in progress. All 9
+    computation tests pass.
+
 - Per-row costs found by profiling (2026-10-25). `bench/dom/quick.ts` times
   chosen DOM scenarios, old against next, without a full run. On GitHub the same
   runs through `bench-quick.yml`, which can also CPU-profile a scenario

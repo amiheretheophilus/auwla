@@ -241,6 +241,13 @@ export interface ModulePlan {
   readonly values: readonly RenderValuePlan[];
   readonly calls: readonly Extract<Node, { type: 'JSXElement' }>[];
   readonly componentReferences: ReadonlySet<Node>;
+  /**
+   * Optional (`optimize/keyed-comparisons.ts`): `x === e` / `x !== e` where `x`
+   * is a shared binding of this module, read first, and `e` has no explicit
+   * effect. Emitted with `trackEquals`, so a reader wakes only when the
+   * comparison can flip. Keyed by the BinaryExpression.
+   */
+  readonly keyedComparisons?: ReadonlyMap<Node, BindingNode>;
 }
 
 export interface RenderValuePlan {

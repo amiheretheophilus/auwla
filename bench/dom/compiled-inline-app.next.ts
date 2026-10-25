@@ -159,6 +159,14 @@ function _read_selected() {
   }, selected, _sharedKey2);
 }
 export { _read_selected };
+function _peek_selected() {
+  if (_MD.isBuilding() && _sharedReady && !_sharedScope.active()) _refreshShared();
+  return selected;
+}
+function _version_selected() {
+  if (_MD.isBuilding() && _sharedReady && !_sharedScope.active()) _refreshShared();
+  return _selectedVersion;
+}
 const _sharedScope = _MD.createBuildScope(true, false);
 let _sharedReady = false;
 const _sharedWrites = _MD.createSharedWrites([_sharedKey, _sharedKey2], []);
@@ -442,7 +450,7 @@ export function BenchAppInline(_id, _parent, _props, _namespace2, _setupOnly) {
   }
   const _siteComputation = _MD.createComputation(_writes.mark, _entity);
   _siteComputation.begin();
-  let _value20 = _MD.observeMethod([() => data], [_mutated_data], _read_data(), "map", 1)((item) => (_MD.createRenderValue(_renderProgram, [_read_selected() === item.id ? 'danger' : '', () => {
+  let _value20 = _MD.observeMethod([() => data], [_mutated_data], _read_data(), "map", 1)((item) => (_MD.createRenderValue(_renderProgram, [_MD.trackEquals(_peek_selected(), item.id, _peek_selected, _version_selected, _sharedKey2) ? 'danger' : '', () => {
     ({ get value() {
       return selected;
     }, set value(_assigned2) {
@@ -462,7 +470,7 @@ export function BenchAppInline(_id, _parent, _props, _namespace2, _setupOnly) {
     const _updateFrame = _scope.enter();
     if (_siteComputation.changed()) {
       _siteComputation.begin();
-      const _next9 = _MD.observeMethod([() => data], [_mutated_data], _read_data(), "map", 1)((item) => (_MD.createRenderValue(_renderProgram, [_read_selected() === item.id ? 'danger' : '', () => {
+      const _next9 = _MD.observeMethod([() => data], [_mutated_data], _read_data(), "map", 1)((item) => (_MD.createRenderValue(_renderProgram, [_MD.trackEquals(_peek_selected(), item.id, _peek_selected, _version_selected, _sharedKey2) ? 'danger' : '', () => {
         ({ get value() {
           return selected;
         }, set value(_assigned2) {

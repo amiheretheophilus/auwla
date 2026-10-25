@@ -71,6 +71,28 @@ export function emitSharedState(plan: ModulePlan, names: Names, runtime: string,
         }
         replacements.set(reference.node, expression('$$reader()', { reader: read.name }));
       }
+      const compared = [...plan.keyedComparisons ?? []].filter(([, target]) => target === binding);
+      if (compared.length > 0) {
+        // `x === e` reads `x` first, then `e`, as written; the reader depends
+        // only on the result (`optimize/keyed-comparisons.ts`).
+        const peek = names.fresh(`_peek_${binding.binding.name}`);
+        const current = names.fresh(`_version_${binding.binding.name}`);
+        declarations.push(statement(`function $$peek() {
+          if ($$runtime.isBuilding() && $$ready && !$$scope.active()) $$refresh();
+          return $$binding;
+        }`, { peek, ready, scope, refresh, runtime, binding: binding.binding.name }));
+        declarations.push(statement(`function $$current() {
+          if ($$runtime.isBuilding() && $$ready && !$$scope.active()) $$refresh();
+          return $$version;
+        }`, { current, ready, scope, refresh, runtime, version }));
+        for (const [node] of compared) {
+          if (!is.BinaryExpression(node)) continue;
+          const equals = expression('$$runtime.trackEquals($$peek(), $$other, $$peek, $$current, $$key)', {
+            runtime, peek, other: node.right, current, key,
+          });
+          replacements.set(node, node.operator === '!==' ? expression('!$$equals', { equals }) : equals);
+        }
+      }
     }
     declarations.push(statement(`const $$scope = $$runtime.createBuildScope(true, ${owner.block !== null});`, { scope, runtime }));
     declarations.push(statement('let $$ready = false;', { ready }));

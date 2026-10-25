@@ -81,7 +81,7 @@ export {
   mutatedSince, mutationTime,
 } from './mutation';
 export { observeMethod } from './method-calls';
-export { createComputation, trackRead } from './computation';
+export { createComputation, trackEquals, trackRead } from './computation';
 export { createSharedWrites } from './shared-writes';
 export type { BuildScope, BuildFrame } from './build-scope';
 export { adoptInitialRoot } from './initial-root';

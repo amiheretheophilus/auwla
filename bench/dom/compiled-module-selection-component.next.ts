@@ -14,6 +14,14 @@ function _read_selected() {
   }, selected, _sharedKey);
 }
 export { _read_selected };
+function _peek_selected() {
+  if (_MD.isBuilding() && _sharedReady && !_sharedScope.active()) _refreshShared();
+  return selected;
+}
+function _version_selected() {
+  if (_MD.isBuilding() && _sharedReady && !_sharedScope.active()) _refreshShared();
+  return _selectedVersion;
+}
 const _sharedScope = _MD.createBuildScope(true, false);
 let _sharedReady = false;
 const _sharedWrites = _MD.createSharedWrites([_sharedKey], []);
@@ -88,7 +96,7 @@ function Row(_id2, _parent2, _props2, _namespace2, _setupOnly2) {
   _slot6.replaceWith(_text3);
   const _siteComputation2 = _MD.createComputation(_writes2.mark, _entity2);
   _siteComputation2.begin();
-  let _value14 = _read_selected() === props.item.id ? 'danger' : '';
+  let _value14 = _MD.trackEquals(_peek_selected(), props.item.id, _peek_selected, _version_selected, _sharedKey) ? 'danger' : '';
   _siteComputation2.end();
   if (_value14 != null && _value14 !== false) {
     _li2.setAttribute("class", _value14 === true ? "" : _MD.textValue(_value14));
@@ -138,7 +146,7 @@ function Row(_id2, _parent2, _props2, _namespace2, _setupOnly2) {
     const _updateFrame2 = _scope2.enter();
     if (_propsVersion !== _seen2 || _siteComputation2.changed()) {
       _siteComputation2.begin();
-      const _next2 = _read_selected() === props.item.id ? 'danger' : '';
+      const _next2 = _MD.trackEquals(_peek_selected(), props.item.id, _peek_selected, _version_selected, _sharedKey) ? 'danger' : '';
       _siteComputation2.end();
       if (_next2 !== _value14 && !(_next2 !== _next2 && _value14 !== _value14)) {
         if (_next2 != null && _next2 !== false) {

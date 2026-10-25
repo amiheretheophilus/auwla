@@ -5,7 +5,22 @@ type Version = () => number;
 interface Dependency {
   readonly read: Version;
   seen: number;
+  /** A keyed dependency: only whether `value() === equals` matters (`trackEquals`). */
+  readonly keyed?: { readonly value: () => unknown; readonly equals: unknown };
 }
+
+/**
+ * Computations that read a key only through `value === k`, by `k`. Changing the
+ * value from `a` to `b` can flip the comparison only where `k` is `a` or `b`. So
+ * a publish notifies those keyed by the new value plus those that matched
+ * before (`matched`), not every reader: selecting one of 10k rows wakes two.
+ */
+interface KeyedIndex {
+  readonly value: () => unknown;
+  readonly byValue: Map<unknown, Set<Computation>>;
+  readonly matched: Set<Computation>;
+}
+const keyedIndexes = new WeakMap<object, KeyedIndex>();
 
 /** A running computation. Maps and sets are created on first use: most sites track nothing. */
 interface Frame {
@@ -75,6 +90,11 @@ export function publishVersions(keys: readonly object[], written?: object): void
     for (const computation of subscribers.get(key) ?? []) {
       notifications.add(computation);
     }
+    const keyed = keyedIndexes.get(key);
+    if (keyed !== undefined) {
+      for (const computation of keyed.matched) notifications.add(computation);
+      for (const computation of keyed.byValue.get(keyed.value()) ?? []) notifications.add(computation);
+    }
   }
   for (const computation of notifications) {
     if (notified.has(computation)) {
@@ -93,6 +113,29 @@ export function trackRead<T>(version: Version, value: T, key: object = version):
   const current = store().current;
   if (current !== null) (current.dependencies ??= new Map()).set(key, { read: version, seen: version() });
   return value;
+}
+
+/**
+ * `value === other`, where `value` was just read from `peek` (the binding behind
+ * `key`). The running computation depends only on the result, so it is notified
+ * only when the value becomes or stops being `other` (`KeyedIndex`). A second
+ * comparison with another `other`, or a plain read, of the same key in one
+ * computation falls back to a plain dependency on `version`.
+ */
+export function trackEquals(value: unknown, other: unknown, peek: () => unknown, version: Version, key: object): boolean {
+  const result = value === other;
+  const current = store().current;
+  if (current === null) return result;
+  const dependencies = current.dependencies ??= new Map();
+  const existing = dependencies.get(key);
+  if (existing === undefined) {
+    dependencies.set(key, {
+      read: () => (peek() === other ? 1 : 0), seen: result ? 1 : 0, keyed: { value: peek, equals: other },
+    });
+  } else if (existing.keyed !== undefined && !Object.is(existing.keyed.equals, other)) {
+    dependencies.set(key, { read: version, seen: version() });
+  }
+  return result;
 }
 
 export function resetComputationScope(): void {
@@ -128,6 +171,7 @@ class Computation implements Frame {
   previous: Frame | null = null;
   private running = false;
   private subscriptions: object[] | null = null;
+  private keyedSubscriptions: { readonly index: KeyedIndex; readonly equals: unknown }[] | null = null;
   private owner: Set<Computation> | undefined;
 
   constructor(readonly notify: (() => void) | undefined, entity: Entity | undefined) {
@@ -171,13 +215,28 @@ class Computation implements Frame {
     this.unsubscribe();
     if (dependencies === null || dependencies.size === 0) return;
     const subscriptions: object[] = [];
-    for (const key of dependencies.keys()) {
+    for (const [key, dependency] of dependencies) {
+      if (dependency.keyed !== undefined) {
+        this.subscribeKeyed(key, dependency);
+        continue;
+      }
       let listeners = subscribers.get(key);
       if (listeners === undefined) subscribers.set(key, listeners = new Set());
       listeners.add(this);
       subscriptions.push(key);
     }
     this.subscriptions = subscriptions;
+  }
+
+  private subscribeKeyed(key: object, dependency: Dependency): void {
+    const { value, equals } = dependency.keyed!;
+    let index = keyedIndexes.get(key);
+    if (index === undefined) keyedIndexes.set(key, index = { value, byValue: new Map(), matched: new Set() });
+    let readers = index.byValue.get(equals);
+    if (readers === undefined) index.byValue.set(equals, readers = new Set());
+    readers.add(this);
+    if (dependency.seen === 1) index.matched.add(this);
+    (this.keyedSubscriptions ??= []).push({ index, equals });
   }
 
   changed(): boolean {
@@ -212,9 +271,19 @@ class Computation implements Frame {
   }
 
   private unsubscribe(): void {
-    if (this.subscriptions === null) return;
-    for (const key of this.subscriptions) subscribers.get(key)?.delete(this);
-    this.subscriptions = null;
+    if (this.subscriptions !== null) {
+      for (const key of this.subscriptions) subscribers.get(key)?.delete(this);
+      this.subscriptions = null;
+    }
+    if (this.keyedSubscriptions !== null) {
+      for (const { index, equals } of this.keyedSubscriptions) {
+        const readers = index.byValue.get(equals);
+        readers?.delete(this);
+        if (readers?.size === 0) index.byValue.delete(equals);
+        index.matched.delete(this);
+      }
+      this.keyedSubscriptions = null;
+    }
   }
 }
 

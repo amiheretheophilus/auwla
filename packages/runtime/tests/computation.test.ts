@@ -1,5 +1,5 @@
 import { expect, it } from 'bun:test';
-import { captureComputationScope, createComputation, publishVersions, trackRead } from '../src/computation';
+import { captureComputationScope, createComputation, publishVersions, trackEquals, trackRead } from '../src/computation';
 
 it('propagates shared invalidation through nested owners without recursively notifying a cycle', () => {
   const input = {}, output = {};
@@ -82,4 +82,82 @@ it('excludes its own mutated output while retaining another input in the same sh
   expect(computation.changed()).toBe(false);
   inputVersion++;
   expect(computation.changed()).toBe(true);
+});
+
+/** `rows` computations, each reading `selected === id` for its own id. */
+function selection(rows: number) {
+  const key = {};
+  const state = { selected: 0 as unknown, version: 0 };
+  const peek = () => state.selected;
+  const version = () => state.version;
+  const woken: number[] = [];
+  const computations = Array.from({ length: rows }, (_, id) => {
+    const computation = createComputation(() => woken.push(id));
+    computation.begin();
+    trackEquals(peek(), id, peek, version, key);
+    computation.end();
+    return computation;
+  });
+  const select = (value: unknown) => {
+    state.selected = value;
+    state.version++;
+    woken.length = 0;
+    publishVersions([key]);
+    return [...woken].sort((a, b) => a - b);
+  };
+  return { key, state, peek, version, computations, select };
+}
+
+it('wakes only the readers whose comparison can flip', () => {
+  const { computations, select } = selection(1000);
+  expect(select(5)).toEqual([0, 5]);
+  // Each woken reader re-evaluates; the others never ran again.
+  expect(computations[0]!.changed()).toBe(true);
+  expect(computations[5]!.changed()).toBe(true);
+  expect(computations[7]!.changed()).toBe(false);
+  expect(select(5)).toEqual([0, 5]);
+  expect(select('none')).toEqual([0]);
+});
+
+it('tracks the comparison after the reader re-runs', () => {
+  const { key, peek, version, computations, select } = selection(10);
+  select(3);
+  const rerun = (id: number) => {
+    const computation = computations[id]!;
+    computation.begin();
+    trackEquals(peek(), id, peek, version, key);
+    computation.end();
+  };
+  rerun(0);
+  rerun(3);
+  expect(select(4)).toEqual([3, 4]);
+});
+
+it('falls back to every change when one computation compares with two values or also reads plainly', () => {
+  const key = {};
+  const state = { selected: 0, version: 0 };
+  const peek = () => state.selected;
+  const version = () => state.version;
+  let woken = 0;
+  const twice = createComputation(() => woken++);
+  twice.begin();
+  trackEquals(peek(), 1, peek, version, key);
+  trackEquals(peek(), 2, peek, version, key);
+  twice.end();
+  const plain = createComputation(() => woken++);
+  plain.begin();
+  trackEquals(peek(), 1, peek, version, key);
+  trackRead(version, state.selected, key);
+  plain.end();
+  state.selected = 9;
+  state.version++;
+  publishVersions([key]);
+  expect(woken).toBe(2);
+  expect(twice.changed()).toBe(true);
+});
+
+it('stops waking a disposed keyed reader', () => {
+  const { computations, select } = selection(3);
+  computations[0]!.dispose();
+  expect(select(1)).toEqual([1]);
 });

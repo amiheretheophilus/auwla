@@ -144,6 +144,38 @@ runtime source), `slice(1)` goes from 84 ms to 0.11 ms, `map` from 68 ms to
 0.47 ms, and `reverse()` from 82 ms to 0.03 ms. These are micro timings; VM
 results are still needed.
 
+## Keyed comparisons
+
+Every component row reads `selected === props.item.id`, so changing `selected`
+woke all 10k rows: 10k notifications, batch marks and updates for a change that
+flips two classes. `optimize/keyed-comparisons.ts` marks `x === e` and `x !== e`
+when all of these hold:
+
+- `x` is a plain reference to a shared binding owned by this module, on the left,
+  so it is read first as written;
+- `e` has no explicit effect (`effects.ts`);
+- `e` does not read `x`.
+
+The emitter (`features/state/shared-dom.ts`) declares `_peek_x` and `_version_x`
+next to the reader. It replaces the comparison with
+`trackEquals(_peek_x(), e, _peek_x, _version_x, key)`, negated for `!==`.
+
+`trackEquals` (`runtime/src/computation.ts`) records a keyed dependency: only
+whether `value === e` held. A publish of the key notifies the readers keyed by
+the new value plus those that matched before. It does not need every earlier
+value to have been published. `===` never converts, so the result can flip only
+for those readers. Map keys treat `NaN` as equal, which at most adds a
+notification. A computation that compares the same key with two values, or also
+reads it plainly, falls back to a plain dependency. `changed()` reports a keyed
+dependency only when the comparison flips.
+
+Checks: `runtime/tests/computation.test.ts` covers that 1,000 readers wake 2 per
+selection, re-runs, the fallbacks and disposal. `optimize/keyed-comparisons.dom.test.ts`
+covers which comparisons qualify, and identical classes in both modes through
+selection, reselection, `NaN` and a row whose key changes. The DOM bench fixture
+counts 1, then 2, row updates per selection, against every row on the general
+path. Inline rows still re-run the whole `items.map`, which needs list lowering.
+
 ## Implementation order after Phase 6
 
 1. **Establish the work being removed.** Inspect the emitted inline-row and

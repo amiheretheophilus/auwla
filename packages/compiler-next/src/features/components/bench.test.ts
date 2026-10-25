@@ -84,8 +84,11 @@ it.each([
   expect(host.querySelector('tbody tr')).toBe(rows[0]!);
 }, 30_000);
 
-it('updates only the component rows whose props changed', async () => {
-  const { host } = await fixture('dom', ['App.tsx', 'data.ts'], 'BenchApp', true);
+it.each([
+  { mode: 'optimized', optimize: true },
+  { mode: 'general', optimize: false },
+])('updates only the component rows whose props changed ($mode)', async ({ optimize }) => {
+  const { host } = await fixture('dom', ['App.tsx', 'data.ts'], 'BenchApp', true, optimize);
   const click = (label: string) => {
     [...host.querySelectorAll('button')].find((node) => node.textContent === label)!.click();
   };
@@ -100,9 +103,14 @@ it('updates only the component rows whose props changed', async () => {
   expect(runs(() => click('swap'))).toBe(1);
   expect(runs(() => click('remove'))).toBe(1);
   expect(runs(() => click('append1k'))).toBe(1);
-  // Every row reads `selected`, so each row's class is checked.
-  const rows = host.querySelectorAll('li').length;
-  expect(runs(() => host.querySelector<HTMLElement>('li')!.click())).toBe(rows);
+  // Every row reads `selected === props.item.id`. With `keyed-comparisons`, a
+  // selection wakes the rows whose comparison can flip: the newly selected row,
+  // then also the previous one. The general path checks every row's class.
+  const rows = [...host.querySelectorAll('li')];
+  expect(runs(() => rows[0]!.click())).toBe(optimize ? 1 : rows.length);
+  expect(runs(() => rows[1]!.click())).toBe(optimize ? 2 : rows.length);
+  expect(rows[0]!.className).toBe('');
+  expect(rows[1]!.className).toBe('danger');
 }, 30_000);
 
 it('runs the Octane inline-row fixture through its synchronous creation/update/reorder/removal path', async () => {
