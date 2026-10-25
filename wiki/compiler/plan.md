@@ -202,7 +202,10 @@ array child). Remove each check when its phase is built.
   on and off; both must match the reference. Also found in the Phase 6 review:
   a render's `data.map(...)` is observed as an opaque call, which snapshots every
   object reachable from `data` on each evaluation (1,000 rows: 1,000 snapshots);
-  `map`, `filter`, `slice` and the like do not mutate and need no observation.
+  Avoiding that observation requires a callee/receiver/effect proof, never a
+  method-name rule. Even native `map` callbacks or array accessors can mutate
+  state, and overridden methods can do anything. Preserve opaque observation
+  whenever those effects are unproven (`optimize.md`).
   A host with spread attributes (`<div {...p}>`) takes the generic runtime path
   and gets no template. An outside review of the inline-row output
   (2026-10-25) lists what the old compiler's list path does and the general

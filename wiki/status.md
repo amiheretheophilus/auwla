@@ -24,6 +24,14 @@ Last updated: 2026-10-25.
 
 ## Done
 
+- Optimization plan clarified (2026-10-25). `compiler/optimize.md` records the
+  folder boundaries and implementation order: establish emitted work, add the
+  plan-stage/on-off boundary, then one proven list pass before further passes.
+  Removed the unsafe claim that names such as `map` justify skipping mutation
+  observation; even native callbacks/accessors can mutate state. Unknown and
+  overridden calls keep the general path. This is a documentation correction,
+  not an implemented optimization or a performance result.
+
 - Boundary audit after the `874c826` benchmark report (2026-10-25, `e995061a`). Independent
   native checks exposed failed-mount entity/collector leaks, stale earlier reads
   after child setup writes, skipped symbol-only props and changed rest-key order,
