@@ -252,6 +252,13 @@ still run and can discover reads later; authored expressions and prop guards are
 unchanged. Both compiler modes check those counts along with update and clear.
 The lifecycle and retention contract is on `state-and-derived.md`.
 
+The isolated ABBA runner comparison at `8ede65b2`'s runtime, against `4fde956e`,
+passes placement and identity gates in both orders. Owner-component clear 10k is
+33.5 to 26.0 ms and 29.4 to 25.5 ms (seven samples). Creation is mixed, and
+module-component clearing is slower in one order. This supports a limited
+teardown benefit, not a general creation win; the old compiler remains faster.
+The run, raw-sample location and other measurements are recorded in `../status.md`.
+
 1. **Establish the work being removed.** Inspect the emitted inline-row and
    component-row programs and extend the existing fixture work counters where
    needed. Count row evaluations, snapshots, listener changes and DOM writes;

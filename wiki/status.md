@@ -24,6 +24,21 @@ Last updated: 2026-10-25.
 
 ## Done
 
+- Isolated ownership measurement (2026-10-25).
+  [ABBA run 40220315808](https://github.com/amiheretheophilus/auwla/actions/runs/40220315808)
+  compares the runtime before ownership changes (`4fde956e`) with the changed
+  runtime, using identical current compiler output, seven samples per cell,
+  deterministic inputs and all placement/identity gates. Owner-component clear
+  10k improves in both orders: **33.5 to 26.0 ms**, then **29.4 to 25.5 ms**.
+  Module-data component clear is **33.8 to 27.8 ms**, then **28.1 to 27.2 ms**.
+  Creation is mixed, and module-component clear has a slower first-order result
+  (37.9 to 50.8 ms) followed by 34.6 to 33.7 ms. The evidence supports the
+  deterministic registration reduction and a limited clearing benefit, not a
+  broad creation win or the Phase 5 floor. The report's dirty-tree flag is only
+  the generated `quick.md`; raw status and bundle hashes are in its artifact.
+  Next work remains row setup/teardown costs, full-list scans and capture
+  allocations. Capture packing and the reported VM OOM remain unresolved.
+
 - Shared-code audit at `8ede65b2` (2026-10-25).
   [CI 40219352965](https://github.com/amiheretheophilus/auwla/actions/runs/40219352965)
   passes all four jobs: **246 compiler unit/native tests**, **82 runtime tests**,
