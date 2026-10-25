@@ -7,7 +7,6 @@ import { b } from 'yuku-ast';
 import type { Expression, Statement } from 'yuku-parser';
 import type { Site, Template } from '../plan';
 import type { Names } from './names';
-import { SVG_ELEMENTS } from '../plan/jsx';
 import { expression, numberLiteral, statement, statements, stringLiteral } from './quote';
 
 const SVG_NAMESPACE = 'http://www.w3.org/2000/svg';
@@ -150,21 +149,22 @@ function createNodes(template: Template, context: TemplateNames, inSvg = false):
  */
 export function inheritedNodes(template: Template): ReadonlySet<number> {
   const inherited = new Set<number>();
-  function visit(index: number): void {
+  function visit(index: number, inherits: boolean): void {
     const node = template.nodes[index]!;
-    if (node.kind !== 'element' || node.namespace !== 'html' || !SVG_ELEMENTS.has(node.tag)) {
+    if (node.kind !== 'element') {
       return;
     }
-    inherited.add(index);
-    if (node.tag === 'foreignObject') {
-      return;
+    if (inherits && node.namespace === 'html') {
+      // Namespace follows the destination, including custom tags. A tag-name
+      // table cannot prove that an authored value will only be consumed in HTML.
+      inherited.add(index);
     }
     for (const child of node.children) {
-      visit(child);
+      visit(child, inherits && node.tag !== 'foreignObject');
     }
   }
   for (const root of template.roots) {
-    visit(root);
+    visit(root, true);
   }
   return inherited;
 }

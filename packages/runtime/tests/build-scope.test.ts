@@ -1,9 +1,17 @@
-import { afterEach, expect, it } from 'bun:test';
+import { afterEach, expect, it, spyOn } from 'bun:test';
 import {
-  createApplicationRuntime, invalidateEntity, registerEntity, runWithApplicationRuntime, setScheduler,
+  createApplicationRuntime,
+  getActiveApplicationRuntime,
+  getEntity,
+  invalidateEntity,
+  registerEntity,
+  runWithApplicationRuntime,
+  setScheduler,
+  unregisterSubtree,
   type ApplicationRuntime,
 } from '../src/kernel';
 import { captureBuildScope, createBuildScope } from '../src/build-scope';
+import { observeMutation } from '../src/mutation';
 
 const runtimes: ApplicationRuntime[] = [];
 afterEach(() => {
@@ -15,6 +23,57 @@ function create() {
   runtimes.push(runtime);
   return runtime;
 }
+
+it('disposes abandoned setup in its own application during queued recovery', () => {
+  const first = create();
+  const second = create();
+  const queued: (() => void)[] = [];
+  const scheduler = spyOn(globalThis, 'queueMicrotask').mockImplementation((callback) => queued.push(callback));
+  runWithApplicationRuntime(first, () => {
+    registerEntity({ id: 'setup', parent: null, render() {} });
+    createBuildScope().enter(() => unregisterSubtree('setup'));
+  });
+  runWithApplicationRuntime(second, () => {
+    registerEntity({ id: 'setup', parent: null, render() {} });
+  });
+  scheduler.mockRestore();
+  runWithApplicationRuntime(second, () => {
+    for (const recover of queued) {
+      recover();
+    }
+    expect(getEntity('setup')).toBeDefined();
+  });
+  runWithApplicationRuntime(first, () => {
+    expect(getEntity('setup')).toBeUndefined();
+  });
+});
+
+it('restores abandoned setup and partial edits in the captured application', () => {
+  const first = create();
+  const second = create();
+  const item = { value: 0 };
+  const notified: ApplicationRuntime[] = [];
+  let restore = () => {};
+  runWithApplicationRuntime(first, () => {
+    restore = captureBuildScope();
+    registerEntity({ id: 'setup', parent: null, render() {} });
+    createBuildScope().enter(() => unregisterSubtree('setup'));
+    observeMutation([() => item], [() => {
+      notified.push(getActiveApplicationRuntime());
+    }]);
+    item.value++;
+  });
+  runWithApplicationRuntime(second, () => {
+    registerEntity({ id: 'setup', parent: null, render() {} });
+    restore();
+    expect(getEntity('setup')).toBeDefined();
+    expect(getActiveApplicationRuntime()).toBe(second);
+  });
+  runWithApplicationRuntime(first, () => {
+    expect(getEntity('setup')).toBeUndefined();
+  });
+  expect(notified).toEqual([first]);
+});
 
 it('shares the invocation owner with a lexical block while tracking its own active frame', () => {
   const runtime = create();

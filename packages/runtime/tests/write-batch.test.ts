@@ -24,6 +24,15 @@ function setup() {
 }
 
 describe('local write batches', () => {
+  it('settles initial-render invalidations only after the sites become active', () => {
+    const { batch, renders } = setup();
+    batch.mark();
+    batch.beginMount();
+    batch.mark();
+    expect(renders()).toBe(0);
+    batch.activate();
+    expect(renders()).toBe(1);
+  });
   it('drains batches dirtied by another commit before returning from a listener', () => {
     const first = setup();
     const second = setup();

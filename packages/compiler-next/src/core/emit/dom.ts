@@ -213,10 +213,20 @@ function emitComponent(
   if (batch !== null) {
     body.push(statement('const $$entity = { id: $$id, parent: $$parent, render: $$update };', { entity, id, parent, update }));
     body.push(statement('const $$batch = $$runtime.createWriteBatch($$entity);', { batch, runtime, entity }));
+    // Setup already owns collectors and can mount children. Register its
+    // inactive entity first so a failed mount can dispose that entire subtree.
+    // The batch becomes active only after every render site is initialized.
+    body.push(statement('$$runtime.registerEntity($$entity);', { runtime, entity }));
   }
   body.push(
     statement('const $$scope = $$runtime.createBuildScope();', { scope, runtime }),
-    statement('const $$setupFrame = $$scope.enter();', { setupFrame, scope }),
+    statement(batch === null
+      ? 'const $$setupFrame = $$scope.enter();'
+      : `const $$setupFrame = $$scope.enter(() => {
+        if ($$runtime.getEntity($$id) === $$entity) {
+          $$runtime.unregisterSubtree($$id);
+        }
+      });`, { setupFrame, scope, runtime, id, entity }),
     ...props.setup,
     ...memos.setup,
     ...memos.snapshots,
@@ -224,12 +234,12 @@ function emitComponent(
     b.IfStatement({
       test: b.Identifier({ name: setupOnly }),
       consequent: b.BlockStatement({ body: [
-        ...(batch === null ? [] : [statement('$$runtime.registerEntity($$entity);', { runtime, entity })]),
         statement('$$scope.leave($$setupFrame);', { scope, setupFrame }),
         b.ReturnStatement({ argument: null }),
       ] }),
       alternate: null,
     }),
+    ...(batch === null ? [] : [statement('$$batch.beginMount();', { batch })]),
     statement('const $$document = $$runtime.getActiveEnvironment().document;', { document, runtime }),
   );
   const used = new Set(plan.template.roots);
@@ -287,7 +297,6 @@ function emitComponent(
         statement('$$scope.leave($$updateFrame);', { scope, updateFrame }),
       ] }), async: false, generator: false, expression: false,
     }));
-    body.push(statement('$$runtime.registerEntity($$entity);', { runtime, entity }));
     body.push(statement('$$batch.activate();', { batch }));
   }
 

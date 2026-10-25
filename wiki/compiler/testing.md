@@ -28,7 +28,7 @@
 | `tests/generator/print.ts` | Prints a program as `App.tsx` and its steps; checks it parses with `yuku-parser` |
 | `tests/generator/generated.test.ts` | Runs random programs, shrinks a failure, reports it with a seed |
 | `tests/generator/corpus.test.ts` | Runs every saved failure in `tests/corpus/` |
-| `tests/generator/components.test.ts` | Generated named/member/factory tags, keyed local state, explicit/spread props, reordering and removal; compares both renderers and asserts expected text and retained DOM |
+| `tests/generator/components.test.ts` | Generated named/member/factory tags, keyed state, symbol/rest props, key order and HTML/SVG destinations; compares both renderers and independently asserts text, namespace and retained DOM |
 | `tests/generator/sources.test.ts` | Random programs with sources, checked without a compiler: answered late or inline from the start, they must end on the same page (`sources.md`) |
 
 Run them with `bun test` in `packages/compiler-next` (no build needed), or one file:
@@ -315,6 +315,25 @@ browser benchmark gates. The VM can select the rewrite with
 records the selected compiler, including in a before/after comparison.
 
 ## Performance baseline
+
+The user-supplied `auwla-benchmark-report-874c826.md` (2026-10-25) compares the old
+compiler and compiler-next at the same commit `874c8261`, with identical runtime
+sources for Octane. Both passed the browser correctness/identity gates, but the
+old compiler had the lower median in all 24 operations. In that run it ranked
+3/10 and compiler-next 10/10. The new update-style matrix hit V8 OOM, so its
+missing timings are failures to complete, not zeros. The report does not prove
+the cause of the OOM. Sequential DOM runs and the non-counterbalanced Octane
+order limit precise ratio claims; the rewrite has not met the performance gate.
+
+The follow-up audit adds checks across three boundaries that the earlier passing
+suite did not establish: native observations of key order/symbols/namespaces;
+failed construction and recovery while existing owners stay mounted; and payload
+liveness plus bounded deferred work. Component generation now varies symbol
+labels and rest-key order alongside retained state, plus standard/custom tags
+consumed independently through component, helper, stored and dynamic forms in
+HTML/SVG. Counts describe those tested combinations, not universal JavaScript
+coverage. Timing must be remeasured after the fixes; no OOM resolution or speed
+improvement follows from passing these checks alone.
 
 The last full benchmark of the old compiler is `d6e678b`: 8 CPUs and 8 GiB on an
 AMD EPYC VM, Chrome Headless Shell 149. `compiler-next` must beat it on the same

@@ -48,7 +48,9 @@ An initializer or builder with no active outputs is skipped altogether.
 per application, independently of lexical nesting and entity id. Setup and replay
 enter/leave that scope; a nested component temporarily owns it. Failed commits
 clear ownership, and a queued microtask clears frames abandoned by throwing setup,
-without generated exception wrappers. `core/emit/recovery.ts` captures ownership
+without generated exception wrappers. Abandoned setup disposes its entity and
+collectors; both queued and captured recovery run in the originating application.
+`core/emit/recovery.ts` captures ownership
 before each authored `try` and restores it at its existing `catch`/`finally` entry,
 including in helpers without JSX. Catch patterns evaluate after restoration in
 their own scope. A synchronously caught nested setup failure therefore does not

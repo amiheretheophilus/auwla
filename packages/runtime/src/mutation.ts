@@ -1,5 +1,11 @@
 /** Native member targets and observation for opaque calls. */
-import { getExtensionStore, onEntityDispose, type Entity } from './kernel';
+import {
+  getActiveApplicationRuntime,
+  getExtensionStore,
+  onEntityDispose,
+  runWithApplicationRuntime,
+  type Entity,
+} from './kernel';
 
 interface Root { readonly read: () => unknown; readonly notify: () => void }
 const sharedRoots = new Set<WeakRef<object>>();
@@ -214,34 +220,67 @@ function snapshot(object: object): unknown[] {
 }
 
 interface Observation { finish<T>(result: T): T; recover(): void }
-function observations() {
-  return getExtensionStore('mmd:mutations', () => new Set<WeakRef<Observation>>());
+interface MutationStore {
+  readonly pending: Set<WeakRef<Observation>>;
+  readonly unrecovered: Map<WeakRef<Observation>, Observation>;
+  queued: boolean;
+}
+
+function mutationStore(): MutationStore {
+  return getExtensionStore('mmd:mutations', () => ({
+    pending: new Set(),
+    unrecovered: new Map(),
+    queued: false,
+  }));
+}
+
+function recoverObservation(state: MutationStore, reference: WeakRef<Observation>): void {
+  const observation = state.unrecovered.get(reference) ?? reference.deref();
+  if (observation === undefined) {
+    state.pending.delete(reference);
+  } else {
+    observation.recover();
+  }
+  state.unrecovered.delete(reference);
+}
+
+function recoverPending(state: MutationStore): void {
+  for (const reference of state.pending) {
+    recoverObservation(state, reference);
+  }
 }
 
 export function recoverMutations(): void {
-  const pending = observations();
-  for (const reference of pending) {
-    const observation = reference.deref();
-    if (observation === undefined) pending.delete(reference);
-    else observation.recover();
+  recoverPending(mutationStore());
+}
+
+/** One task recovery per application; successful calls leave no payload behind. */
+function scheduleRecovery(): void {
+  const state = mutationStore();
+  if (state.queued || state.pending.size === 0) {
+    return;
   }
+  const runtime = getActiveApplicationRuntime();
+  state.queued = true;
+  globalThis.queueMicrotask(() => {
+    state.queued = false;
+    runWithApplicationRuntime(runtime, () => recoverPending(state));
+  });
 }
 
 export function resumeMutations(): void {
-  for (const reference of observations()) {
-    const observation = reference.deref();
-    if (observation !== undefined) globalThis.queueMicrotask(() => observation.recover());
-  }
+  scheduleRecovery();
 }
 
 export function captureMutationScope(): () => void {
-  const pending = observations();
+  const state = mutationStore();
+  const pending = state.pending;
   const before = new Set(pending);
   return () => {
     for (const reference of pending) {
-      const observation = reference.deref();
-      if (observation === undefined) pending.delete(reference);
-      else if (!before.has(reference)) observation.recover();
+      if (!before.has(reference)) {
+        recoverObservation(state, reference);
+      }
     }
   };
 }
@@ -257,11 +296,13 @@ function differs(prior: readonly unknown[], after: readonly unknown[]): boolean 
  * objects other roots may share.
  */
 export function observeMutation(reads: readonly (() => unknown)[], notify: readonly (() => void)[]): Observation {
+  let activeReads = reads;
+  let notifications = notify;
   let values: unknown[] = [];
   let reached: Set<object>[] = [];
   const objects = new Map<object, unknown[]>();
   function observe(): void {
-    values = reads.map((read) => read());
+    values = activeReads.map((read) => read());
     reached = values.map((value) => {
       const found = new Set<object>();
       reachable(value, (object) => {
@@ -273,7 +314,8 @@ export function observeMutation(reads: readonly (() => unknown)[], notify: reado
   }
   observe();
 
-  const pending = observations();
+  const state = mutationStore();
+  const pending = state.pending;
   let complete = false;
   const observation: Observation & { check(final: boolean): void } = {
     finish(result) {
@@ -281,6 +323,15 @@ export function observeMutation(reads: readonly (() => unknown)[], notify: reado
       this.check(true);
       complete = true;
       pending.delete(reference);
+      state.unrecovered.delete(reference);
+      // A caller may retain this completed handle, and many calls can finish
+      // before the task yields. Neither case should retain observed data or
+      // the callbacks that close over it until deferred recovery runs.
+      activeReads = [];
+      notifications = [];
+      values = [];
+      reached = [];
+      objects.clear();
       return result;
     },
     recover() {
@@ -297,11 +348,11 @@ export function observeMutation(reads: readonly (() => unknown)[], notify: reado
       // Stamp before notifying: a notified owner can update synchronously.
       for (const object of changed) stamp(object);
       let moved = false;
-      reads.forEach((read, index) => {
+      activeReads.forEach((read, index) => {
         const value = read();
         const replaced = !Object.is(value, values[index]);
         moved ||= replaced;
-        if (replaced || reachesAny(reached[index]!, changed)) notify[index]!();
+        if (replaced || reachesAny(reached[index]!, changed)) notifications[index]!();
       });
       // A later recovery compares with what each read reaches now.
       if (!final && (moved || changed.size > 0)) observe();
@@ -310,9 +361,13 @@ export function observeMutation(reads: readonly (() => unknown)[], notify: reado
   };
   const reference = new WeakRef(observation);
   pending.add(reference);
+  // An exception can abandon the native call before finish. Keep its observer
+  // alive until its first recovery, even if GC runs before that boundary. An
+  // awaiting call keeps its own handle alive after recovery through native JS.
+  state.unrecovered.set(reference, observation);
   // A call that throws cannot execute finish. Preserve completed edits at the
   // next boundary; authored catches perform the same recovery synchronously.
-  globalThis.queueMicrotask(() => observation.recover());
+  scheduleRecovery();
   return observation;
 }
 

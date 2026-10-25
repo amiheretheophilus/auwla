@@ -228,9 +228,9 @@ array child). Remove each check when its phase is built.
 
 - [x] `ComponentCall` with props as one object, children and slots, member and
   dynamic tags, factories, recursion, prop overrides (`components.md`).
-  General path built and locally checked: 20 component comparisons, all 64
-  state/derived comparisons, ten native regressions and two unchanged benchmark
-  fixture checks. The broad audit passes; details in `../status.md`.
+  General path built and checked against component/state comparisons, independent
+  native regressions and unchanged benchmark fixtures. These checks establish
+  their covered cases, not all component behavior; details in `../status.md`.
 - [x] A component used for its value (`items.map(Row)`, `const view = Row(x)`)
   returns markup, as the reference's does.
   Adapters are built; direct arguments, imported calls, map arguments/defaults/
@@ -238,17 +238,25 @@ array child). Remove each check when its phase is built.
 - [x] Review fixes (2026-10-25). A child updates only when a prop changed or a
   compiled edit reached it (`mutatedSince`); before, every parent update re-ran
   every child. A shared write wakes readers of what it wrote and of derived
-  bindings, not of all the module's state. Templates get an SVG variant only for
-  SVG root tags; `defineComponent` no longer runs at every tag evaluation.
+  bindings, not of all the module's state. `defineComponent` no longer runs at
+  every tag evaluation. The tag-name SVG restriction from that review was
+  removed: a consumed value takes its destination namespace, including custom
+  tags (`components.md`).
   `features/components/bench.test.ts` asserts the update counts on the
   component-row app: `update` 101 (100 rows and the list), `swap`, `remove` and
   `append1k` 1, a selection one per row.
-- **Exit:** `cases/components` passes; Octane run by the user. Then Phase 5's
-  fast paths and its benchmark gate.
-  Correctness checks pass. The VM's Octane timing remains pending; select
-  compiler-next with `--compiler=packages/compiler-next/src/index.ts`. The full
-  upstream browser benchmark has not run on this machine (its submodule and
-  browser dependencies are absent).
+- [x] Boundary audit after the supplied benchmark report: failed mounts dispose
+  their collectors and children; initial rendering settles child writes;
+  enumerable symbol props and rest-key order remain observable; finished
+  observations release their payloads before queued recovery. Recovery preserves
+  partial edits on exceptions and runs in the owning application. Tests and
+  limitations stay on the relevant concept pages.
+- **Exit:** component correctness and the performance floor both matter. The
+  user's report at `874c826` passes benchmark correctness gates, but the old
+  compiler is faster on all 24 Octane operations and the DOM update-style run
+  ends in an OOM. The performance gate is unmet (`testing.md`). Phase 5's pending
+  fast paths and new measurements remain before moving to Phase 7. The audit's
+  retention fixes do not establish the cause or resolution of that OOM.
 
 ## Phase 7: effects, cleanup, refs
 

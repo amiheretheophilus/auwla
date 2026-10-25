@@ -13,6 +13,12 @@ props feature emitters; nested component trees remain open to their enclosing
 instance's lexical rewrites until that composition is complete. Static and
 dynamic `ref` attributes retain their Phase 7 diagnostic.
 
+Component creation registers its inactive entity before authored setup and child
+mounts, preserving the kernel's existing parent-before-child ownership contract.
+Failed setup uses the build scope's abandonment callback, guarded by entity
+identity, so recovery cannot remove a replacement with the same id. The batch
+records invalidations during initial rendering and settles them on activation.
+
 `core/emit/template.ts` keeps cached markup cloning for HTML and creates nodes
 with the consuming namespace for inherited SVG. Namespace propagation is one
 walk of the template, with HTML boundaries at `foreignObject`.

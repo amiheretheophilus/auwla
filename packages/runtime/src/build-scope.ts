@@ -1,9 +1,16 @@
 /** Runtime invocation ownership for compiler-next setup and memo replay. */
-import { getActiveApplicationRuntime, getExtensionStore, onCommitFinished } from './kernel';
+import {
+  getActiveApplicationRuntime,
+  getExtensionStore,
+  onCommitFinished,
+  runWithApplicationRuntime,
+  type ApplicationRuntime,
+} from './kernel';
 import { captureComputationScope, resetComputationScope } from './computation';
 import { captureMutationScope } from './mutation';
 
 interface BuildStore {
+  readonly runtime: ApplicationRuntime;
   current: BuildFrame | null;
   epoch: number;
   queued: boolean;
@@ -27,7 +34,12 @@ export interface BuildScope {
 }
 
 function buildStore(): BuildStore {
-  return getExtensionStore('mmd:build-scope', () => ({ current: null, epoch: 0, queued: false }));
+  return getExtensionStore('mmd:build-scope', () => ({
+    runtime: getActiveApplicationRuntime(),
+    current: null,
+    epoch: 0,
+    queued: false,
+  }));
 }
 
 export function isBuilding(): boolean {
@@ -35,10 +47,14 @@ export function isBuilding(): boolean {
 }
 
 function reset(store: BuildStore): void {
-  settleAbandoned(store, null);
-  store.current = null;
-  store.epoch++;
-  resetComputationScope();
+  // A queued reset may run while another application is active. Both teardown
+  // and collector recovery still belong to the application that owns the frames.
+  runWithApplicationRuntime(store.runtime, () => {
+    settleAbandoned(store, null);
+    store.current = null;
+    store.epoch++;
+    resetComputationScope();
+  });
 }
 
 function settleAbandoned(store: BuildStore, stop: BuildFrame | null): void {
@@ -61,13 +77,17 @@ export function captureBuildScope(): () => void {
   const restoreComputation = captureComputationScope();
   const restoreMutations = captureMutationScope();
   return () => {
-    // An async continuation must not revive an owner from a finished turn.
-    if (store.epoch === epoch) {
-      settleAbandoned(store, current);
-      store.current = current;
-      restoreComputation();
-      restoreMutations();
-    }
+    // Recovery belongs to the captured application even if another one is
+    // currently active. Mutation notifications can consult that active context.
+    runWithApplicationRuntime(store.runtime, () => {
+      // An async continuation must not revive an owner from a finished turn.
+      if (store.epoch === epoch) {
+        settleAbandoned(store, current);
+        store.current = current;
+        restoreComputation();
+        restoreMutations();
+      }
+    });
   };
 }
 

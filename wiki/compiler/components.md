@@ -17,7 +17,7 @@ Finds components, and compiles calls to them: props, children and slots.
 | `features/props/classify.ts` | Component identities and native parameter bindings |
 | `features/props/dom.ts` | Native parameter patterns, defaults/rest, per-binding parent snapshots and prop reception |
 | `packages/runtime/src/components.ts` | Props cells, callable adapters, compiled/native tag mounting, generic host props and subtree disposal |
-| `tests/generator/components.test.ts` | Generated named/member/factory components with keyed edits, moves, prop updates and removal |
+| `tests/generator/components.test.ts` | Named/member/factory components, symbol/rest props, key order, retained state, and markup consumed in independent HTML/SVG destinations |
 
 ## General path
 
@@ -33,8 +33,9 @@ extracts `key` for identity and excludes `key`/`suspend` from child props. Expli
 children replace a spread's `children`, using a single value or an array. Native
 tag props reuse `patchDomProps`, including listeners batched in the owning
 application. SVG flows from the consuming slot through component roots and
-conditional fragments whose tags name SVG elements; `foreignObject` restarts
-HTML, and any other tag stays HTML (`output.md`, "The calling convention").
+conditional fragments; `foreignObject` restarts HTML. Custom and ordinary tag
+names inherit SVG too; a tag-name list cannot prove a value's eventual
+destination (`output.md`, "The calling convention").
 
 The child keeps native variables and numeric versions. A receiver evaluates the
 native parameter patterns into temporaries. A different parent value replaces
@@ -67,6 +68,18 @@ Nested declarations are emitted before their enclosing component is sealed, so
 captured parent reads/writes receive the parent's version instrumentation. Local
 versions read across an owner boundary publish notifications after the owner
 settles. Disposal removes the child entity and its owned collectors and slots.
+The entity registers before authored setup, as the kernel requires parents to
+register before children. The batch stays inactive while sites initialize.
+`beginMount` remembers writes from later sites and child setup; `activate`
+settles those writes only after the sites are ready. Initial module and parent
+reads are both checked against a child writing during mount.
+
+A failed setup frame owns abandonment cleanup, guarded by entity identity.
+Restoring an authored error boundary or recovering a failed commit disposes the
+unfinished child even when its existing parent remains mounted. Root setup,
+later sibling expressions, nested setup, retry and application isolation have
+independent checks in the feature/runtime tests. This uses the existing build
+scope recovery rather than adding exception wrappers to generated code.
 Top-level compiled components also register root factories. Callable adapters
 carry that factory metadata so an authored `mount(host, Component)` entry uses
 the same runtime API as the existing compiler. This is covered independently of
@@ -109,12 +122,13 @@ The old compiler rejects both:
 - `<UI.Box>`, a member tag;
 - `<Child a={1} b={2} />` where `Child` does not declare `b`.
 
-All twenty current component comparisons pass on compiler-next, including five
+The current component comparisons pass on compiler-next, including five
 new direct-call/import, nested-owner, parameter-pattern and independent-slot
 cases. All 64 state/derived comparisons also pass, including deferred prop and
-keyed-override cases. Ten native regressions and two benchmark-fixture checks
-cover observations that do not depend on the reference. The broad CI audit and Octane gate are tracked in
-`../status.md`; this is not a performance claim.
+keyed-override cases. Native regressions and unchanged benchmark-fixture checks
+cover observations that do not depend on the reference, including the ownership,
+initial-render, symbol/key-order and namespace boundaries above. The broad CI
+audit and the unmet performance gate are tracked in `../status.md`.
 
 Six `complex JSX:` cases combine state with fragments, render callbacks, JSX stored
 in variables, helper-produced JSX, nested arrays, conditional nodes, spread props,
@@ -168,6 +182,7 @@ as their parent closures are refreshed. Cases and fixes are in
 - Extend the generated combinations with recursive trees, nested slots, native
   callbacks, computed members and changing captured values. The current component
   generator covers named/member/factory tags, keyed state, spread/explicit props,
-  reordering and row removal.
+  enumerable symbols, rest-key order, reordering, row removal, and custom markup
+  consumed independently in HTML and SVG.
 - Expand locally declared component, computed-member and factory combinations;
   the current cases do not establish every callable/tag pattern.

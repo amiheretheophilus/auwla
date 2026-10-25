@@ -6,7 +6,7 @@
  * the same component and key again sends the new props through that cell. A
  * string tag (`<Tag>` holding `'h1'`) is a host element set generically.
  */
-import { getActiveEnvironment, registerEntity, unregisterSubtree, type Entity } from './kernel';
+import { getActiveEnvironment, getEntity, registerEntity, unregisterSubtree, type Entity } from './kernel';
 import { cleanup } from './cleanup';
 import { patchDomProps } from './dom-props';
 import { createComputation } from './computation';
@@ -64,19 +64,38 @@ export function sameProps(previous: unknown, next: unknown): boolean {
   if (Array.isArray(previous) !== Array.isArray(next)) {
     return false;
   }
-  const keys = Object.keys(next);
-  if (keys.length !== Object.keys(previous).length) {
+  if (Array.isArray(previous) && previous.length !== (next as unknown[]).length) {
     return false;
   }
-  for (const key of keys) {
-    if (!Object.prototype.hasOwnProperty.call(previous, key)) {
+  const keys = enumerableKeys(next);
+  const previousKeys = enumerableKeys(previous);
+  if (keys.length !== previousKeys.length) {
+    return false;
+  }
+  for (const [index, key] of keys.entries()) {
+    // The order is observable through Object.keys/Reflect.ownKeys in the
+    // child. Symbols participate in native object spread and rest too.
+    if (key !== previousKeys[index]) {
       return false;
     }
-    if (!Object.is((previous as Props)[key], (next as Props)[key])) {
+    const previousValue = (previous as Record<PropertyKey, unknown>)[key];
+    const nextValue = (next as Record<PropertyKey, unknown>)[key];
+    if (!Object.is(previousValue, nextValue)) {
       return false;
     }
   }
   return true;
+}
+
+/** Match the enumerable own fields copied by native object spread/rest. */
+function enumerableKeys(value: object): (string | symbol)[] {
+  const keys: (string | symbol)[] = Object.keys(value);
+  for (const symbol of Object.getOwnPropertySymbols(value)) {
+    if (Object.prototype.propertyIsEnumerable.call(value, symbol)) {
+      keys.push(symbol);
+    }
+  }
+  return keys;
 }
 
 export function createPropsCell(value: unknown, args: readonly unknown[] = [value]): PropsCell {
@@ -232,6 +251,7 @@ function nativeComponentProgram(component: Function): RenderProgram {
     mount(initial: readonly unknown[], owner: RenderOwner): RenderEntry {
       const id = `${owner.id}/c${nextChild++}`;
       let values = initial;
+      let mounted = false;
       const entity: Entity = { id, parent: owner.entity?.id ?? null, render: render };
       const batch = createWriteBatch(entity);
       const scope = createBuildScope();
@@ -243,7 +263,11 @@ function nativeComponentProgram(component: Function): RenderProgram {
       const content = createValueSlot(anchor, { ...owner, id, entity, batch });
 
       function render(): void {
-        const frame = scope.enter();
+        const frame = scope.enter(() => {
+          if (!mounted && getEntity(id) === entity) {
+            unregisterSubtree(id);
+          }
+        });
         computation.begin();
         const args = values[1] as readonly unknown[] | undefined;
         const output = Reflect.apply(component, undefined, args ?? [values[0]]);
@@ -257,8 +281,10 @@ function nativeComponentProgram(component: Function): RenderProgram {
         computation.dispose();
         content.dispose();
       });
+      batch.beginMount();
       render();
       batch.activate();
+      mounted = true;
       const nodes = Array.from(fragment.childNodes);
       return {
         nodes,

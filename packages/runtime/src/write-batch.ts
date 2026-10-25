@@ -39,7 +39,9 @@ export function rejectConstAssignment(): never {
 }
 
 export interface WriteBatch {
-  /** Creation-time writes seed values; activation starts later notifications. */
+  /** Remember writes during initial rendering without entering unfinished sites. */
+  beginMount(): void;
+  /** Activate completed sites and settle invalidations from initial rendering. */
   activate(): void;
   mark(): void;
   flush(): void;
@@ -50,6 +52,7 @@ export interface WriteBatch {
 export function createWriteBatch(entity: Entity): WriteBatch {
   const runtime = getActiveApplicationRuntime();
   let active = false;
+  let mounting = false;
   let dirty = false;
   let queued = false;
   let depth = 0;
@@ -86,11 +89,28 @@ export function createWriteBatch(entity: Entity): WriteBatch {
   };
 
   return {
+    beginMount() {
+      mounting = true;
+    },
     activate() {
       active = true;
+      mounting = false;
+      if (dirty) {
+        pendingBoundaries.add(boundary);
+        queue();
+        if (listenerDepth === 0) {
+          flush();
+        }
+      }
     },
     mark() {
       if (!active) {
+        // Setup writes seed native values. Once rendering begins, later sites
+        // and child setup may invalidate earlier reads; remember those changes
+        // until every site and cleanup has been initialized.
+        if (mounting) {
+          dirty = true;
+        }
         return;
       }
       dirty = true;

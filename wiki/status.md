@@ -9,10 +9,12 @@ Last updated: 2026-10-25.
   disabled. Its account has a billing lock, so CI cannot run there. See `../AGENTS.md`.
 - `compiler-rewrite` (working branch, from `compiler-refactor` at `6230c27`):
   the new compiler, designed in `compiler/`. Phases 1–4, the Phase 5 general list
-  rule and Phase 6 component/props integration are built. The full audit passes
-  with later-phase failures explicitly diagnosed. Component/root and benchmark
-  correctness evidence is below. The Phase 6 exit needs the user's VM timings
-  (`bun run bench:vm`, `../bench/README.md`); Phase 5 fast paths follow.
+  rule and Phase 6 component/props integration are built. Existing suites pass
+  within their coverage, with later-phase failures explicitly diagnosed. The
+  supplied `874c826` benchmark report passes correctness gates but fails the
+  performance floor: old wins all 24 Octane operations, and the DOM update-style
+  run ends in an OOM. Boundary fixes and their validation are below. Phase 5 fast
+  paths and new VM measurements remain before moving to Phase 7.
 - `compiler-refactor`: the old compiler's refactor, stopped on 2026-10-19. The
   sections below record that work.
 - `codex/package-conditional-sync` at `9e35480` (third-party package compilation,
@@ -22,10 +24,30 @@ Last updated: 2026-10-25.
 
 ## Done
 
+- Boundary audit after the `874c826` benchmark report (2026-10-25). Independent
+  native checks exposed failed-mount entity/collector leaks, stale earlier reads
+  after child setup writes, skipped symbol-only props and changed rest-key order,
+  and incorrect namespaces for custom markup consumed in SVG. Setup now registers
+  its inactive entity before owned work and disposes abandoned subtrees through
+  existing build-scope recovery. Rendering remembers writes until all sites are
+  ready, then activation settles them. Props compare ordered enumerable own keys,
+  including symbols; markup follows its consuming namespace without a tag table.
+  Retention checks also found finished mutation observations and notification waves
+  held payloads until queued recovery. Completed work now releases those payloads
+  and queues at most one recovery of each kind per application turn; abandoned
+  calls retain their first recovery so partial edits still notify. Recovery runs
+  in its originating application. These fixes do not establish the cause or
+  resolution of the reported OOM, and no speed improvement is claimed. Local
+  validation passes both package type checks, 21 component comparisons, 45 native
+  compiler/benchmark/recovery tests, 42 runtime tests and 16 generated programs
+  (eight component combinations and eight namespace combinations, seed 20261025).
+  The broader manual CI audit is pending.
+
 - Phase 6 review fixes (2026-10-25, `42ec7c07` and the benchmark commit after
   it). A child component updates only when a prop changed or a compiled edit
   reached it; a shared write wakes only readers of what it wrote and of derived
-  values; HTML-rooted templates have no SVG copy. On the component-row app,
+  values. Its SVG tag restriction is superseded by the boundary audit above.
+  On the component-row app,
   editing 100 labels now runs 101 updates instead of 1,001, and a swap, removal or
   append runs 1 instead of about 1,000 (`features/components/bench.test.ts`). CI
   [40168517752](https://github.com/amiheretheophilus/auwla/actions/runs/40168517752)

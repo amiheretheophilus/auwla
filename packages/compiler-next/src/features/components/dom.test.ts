@@ -5,12 +5,138 @@ import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { findAll } from 'yuku-ast';
 import { parse } from 'yuku-parser';
-import { registeredIds, setScheduler, unregisterSubtree } from '@memoized-dom/runtime/testing';
+import { getExtensionStore, registeredIds, setScheduler, unregisterSubtree } from '@memoized-dom/runtime/testing';
 import { clearCompiledApps } from '../../../tests/harness/compilers';
 import { compileModules } from '../../pipeline';
 
 let sequence = 0;
 const mounted: HTMLElement[] = [];
+
+const failedMounts = [
+  {
+    name: 'root setup',
+    setup: 'const value = fail();',
+    markup: '<Child value={value} />',
+  },
+  {
+    name: 'a later sibling expression',
+    setup: '',
+    markup: '<Child value="first" /><i title={fail()} />',
+  },
+  {
+    name: 'a nested child setup',
+    setup: '',
+    markup: '<Child value="first" /><Broken />',
+  },
+];
+
+it.each(failedMounts)('releases every setup resource after failure in $name and permits a retry', async ({ setup, markup }) => {
+  const { root, module } = await compile(`
+    import { mount } from '@memoized-dom/runtime/testing';
+    let permitted = false;
+    function fail() {
+      if (!permitted) throw new Error('setup failure');
+      return 'ready';
+    }
+    function Child({ value }) { return <p>{value}</p>; }
+    function Broken() { const value = fail(); return <p>{value}</p>; }
+    export function App() { ${setup} return <main>${markup}</main>; }
+    export function start(host) { return mount(host, App); }
+    export function allow() { permitted = true; }
+  `, false);
+  const computations = getExtensionStore('mmd:owned-computations', () => new Map());
+  const before = computations.size;
+  expect(() => module.start(root)).toThrow('setup failure');
+  expect(root.childNodes).toHaveLength(0);
+  expect(registeredIds()).toEqual([]);
+  expect(computations.size).toBe(before);
+  await Promise.resolve();
+  module.allow();
+  const application = module.start(root);
+  expect(root.querySelector('p')).not.toBeNull();
+  application.unmount();
+  expect(registeredIds()).toEqual([]);
+  expect(computations.size).toBe(before);
+});
+
+it('disposes a failed child mount while its existing parent remains mounted', async () => {
+  const { root, module } = await compile(`
+    import { flushWritesBeforeAwait } from '@memoized-dom/runtime/testing';
+    let allowed = false;
+    export let select;
+    function Child({ value }) {
+      if (!allowed) throw new Error('child failure');
+      return <output>{value}</output>;
+    }
+    export function App() {
+      let shown = false;
+      select = value => { shown = value; };
+      return <main>{shown && <Child value="ready" />}</main>;
+    }
+    export function change(value) { select(value); flushWritesBeforeAwait(undefined); }
+    export function allow() { allowed = true; }
+  `);
+  const before = registeredIds();
+  expect(() => module.change(true)).toThrow('child failure');
+  expect(registeredIds()).toEqual(before);
+  expect(root.querySelector('output')).toBeNull();
+  module.allow();
+  module.change(false);
+  module.change(true);
+  expect(root.querySelector('output')?.textContent).toBe('ready');
+});
+
+it('forwards changed symbol props and preserves rest-property order', async () => {
+  const { root, click } = await compile(`
+    const token = Symbol('token');
+    function Child({ [token]: value, ...rest }) {
+      return <p>{value}:{Object.keys(rest).join(',')}</p>;
+    }
+    export function App() {
+      let value = 1; let reversed = false;
+      const props = reversed ? { b: 2, a: 1, [token]: value } : { a: 1, b: 2, [token]: value };
+      return <main><Child {...props} />
+        <button id="value" onClick={() => value++}>value</button>
+        <button id="order" onClick={() => { reversed = true; }}>order</button></main>;
+    }
+  `);
+  expect(root.querySelector('p')?.textContent).toBe('1:a,b');
+  click('#value');
+  expect(root.querySelector('p')?.textContent).toBe('2:a,b');
+  click('#order');
+  expect(root.querySelector('p')?.textContent).toBe('2:b,a');
+});
+
+it('inherits the consuming namespace for custom tags and stored markup', async () => {
+  const { root } = await compile(`
+    function Custom() { return <custom-shape data-kind="component" />; }
+    export function App() {
+      const shape = <custom-shape data-kind="stored" />;
+      return <main><svg><Custom />{shape}</svg><section>{shape}</section></main>;
+    }
+  `);
+  const nodes = [...root.querySelectorAll('custom-shape')];
+  expect(nodes.map((node) => node.namespaceURI)).toEqual([
+    'http://www.w3.org/2000/svg',
+    'http://www.w3.org/2000/svg',
+    'http://www.w3.org/1999/xhtml',
+  ]);
+});
+
+it.each(['module', 'parent'])('settles earlier %s reads after a child writes during mount', async (owner) => {
+  const state = 'let count = 0;';
+  const child = 'function Child() { count++; return <i>child</i>; }';
+  const outside = owner === 'module' ? `${state} ${child}` : '';
+  const inside = owner === 'parent' ? `${state} ${child}` : '';
+  const { root } = await compile(`
+    ${outside}
+    export function App() {
+      ${inside}
+      return <main><p>{count}</p><Child /></main>;
+    }
+  `);
+  expect(root.querySelector('p')?.textContent).toBe('1');
+});
 
 afterEach(() => {
   clearCompiledApps();

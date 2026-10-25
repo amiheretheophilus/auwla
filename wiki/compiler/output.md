@@ -305,10 +305,11 @@ calls it with a fresh child id under its owner and its consuming namespace
 setup runs, nothing is mounted. A props cell also retains the complete native
 argument list for direct calls, map callbacks and rest parameters.
 
-Only markup whose root tags name SVG elements (`circle`, `g`, `a`, `title`, …,
-`SVG_ELEMENTS` in `core/plan/jsx.ts`) gets an SVG variant built at mount when
-`_namespace` is `'svg'`. Any other tag stays HTML in an SVG slot, so a component
-rooted at `<li>` or `<div>` has one template, cloned from markup.
+Namespace follows the consuming slot, including custom tags and stored markup
+used in both HTML and SVG. `foreignObject` explicitly restarts HTML. The emitter
+keeps cached HTML cloning and an SVG creation variant where the template can
+inherit its destination. A list of known SVG tag names cannot prove that the
+other names will only be consumed in HTML.
 
 A component used for its value (`items.map(Row)`, `const view = Row(x)`) gets
 `componentValue(Row)` at that reference instead: a function returning
@@ -337,6 +338,11 @@ on every evaluation, so the props cell keeps the child's object while its fields
 are the same (`sameProps`). The receiver marks the child's batch only when a
 binding changed, so in a list of 1,000 rows an edit to 100 items updates 100 rows,
 and a reorder updates none.
+
+`sameProps` includes enumerable symbol keys and observable key order, matching
+native spread/rest. It also compares array length. These checks apply to the
+compiler's props containers and newly built rest values, not arbitrary authored
+object identity. An unchanged object prop still follows `mutatedSince`.
 
 `features/components/dom.ts` builds ordered props; `features/props/dom.ts` emits
 native pattern setup/reception. Runtime `components.ts` keeps compiled callable

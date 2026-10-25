@@ -64,7 +64,8 @@ export function emitRenderValue(plan: RenderValuePlan, names: Names, runtime: st
 
   // Stored JSX can be consumed in either namespace. Choose at mount time,
   // when the consuming slot knows where its independent DOM will live.
-  // Only roots that are SVG tags can change namespace (`inheritedNodes`).
+  // Any tag can inherit SVG, including custom tags. Omit the variant only when
+  // the template's structure proves that no element inherits the destination.
   const svg = inheritedNodes(plan.template).size > 0 ? emitVariant(plan.svgTemplate) : null;
   const html = emitVariant(plan.template);
   const mountBody = [

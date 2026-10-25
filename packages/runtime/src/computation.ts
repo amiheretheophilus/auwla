@@ -16,12 +16,14 @@ interface Frame {
 interface ComputationStore {
   current: Frame | null;
   notifying: Set<() => void> | null;
+  queuedRecovery: boolean;
 }
 
 function store(): ComputationStore {
   return getExtensionStore('mmd:computation', () => ({
     current: null,
     notifying: null,
+    queuedRecovery: false,
   }));
 }
 
@@ -29,6 +31,18 @@ const subscribers = new WeakMap<object, Set<() => void>>();
 
 function owned() {
   return getExtensionStore('mmd:owned-computations', () => new Map<string, Set<() => void>>());
+}
+
+/** Create the callback outside a notification wave's lexical environment. */
+function scheduleRecovery(state: ComputationStore): void {
+  if (state.queuedRecovery) {
+    return;
+  }
+  state.queuedRecovery = true;
+  globalThis.queueMicrotask(() => {
+    state.queuedRecovery = false;
+    state.notifying = null;
+  });
 }
 
 onEntityDispose((id) => {
@@ -50,12 +64,9 @@ export function publishVersions(keys: readonly object[], written?: object): void
   const notified = state.notifying ?? new Set<() => void>();
   state.notifying = notified;
   if (outer) {
-    // A throwing subscriber skips the synchronous reset below.
-    globalThis.queueMicrotask(() => {
-      if (state.notifying === notified) {
-        state.notifying = null;
-      }
-    });
+    // A throwing subscriber skips the synchronous reset below. Recover once
+    // per application task, without capturing this wave's subscriber set.
+    scheduleRecovery(state);
   }
 
   const notifications = new Set<() => void>();

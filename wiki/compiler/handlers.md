@@ -22,6 +22,7 @@ Finds every place that changes state and makes the UI update after it.
 | `packages/runtime/tests/mutation.test.ts` | Descriptor snapshots, cyclic/native data, partial-call recovery and key order |
 | `packages/runtime/src/write-batch.ts` | Captures the application and entity, batches listener writes until return, and queues a microtask for unwrapped callbacks and error recovery |
 | `packages/runtime/tests/write-batch.test.ts` | Scheduler independence, nested listeners, native receivers/results, exceptions, disposal and application isolation |
+| `packages/runtime/tests/retention.test.ts` | Completed observation and notification payload release, bounded recovery scheduling, and guaranteed recovery of abandoned calls |
 
 The outer listener and pre-await boundary drain newly dirtied batches as well as
 the initial set. A parent commit can deliver props that dirty a child; that child
@@ -59,8 +60,10 @@ batches: an event that changes shared state flushes every pending consumer at it
 outer return, including consumers in another application. Per-batch depth still
 controls that batch's direct flush. The cross-application nested-listener runtime
 test verifies neither consumer renders early and both render once on return. Timers and
-promise callbacks use the queued microtask boundary. Setup writes do not schedule
-DOM work before registration. Notifications retain the originating application
+promise callbacks use the queued microtask boundary. Setup writes seed values;
+`beginMount` then records render-time invalidations without scheduling unfinished
+sites. `activate` settles remembered changes after every site is ready.
+Notifications retain the originating application
 and entity identity, so a delayed callback cannot update a replacement instance.
 Error recovery resets the listener depth at the next microtask without adding
 `try`/`catch`/`finally` around authored code.
@@ -101,6 +104,17 @@ An opaque call takes one shallow snapshot of each object its reads reach, before
 and after. A read is notified when one of its objects changed or the read now
 gives another value. This answers the same question as a deep snapshot of each
 read, without taking two more.
+Completed observations immediately clear their read/notification closures,
+values, reach sets and snapshots, including when a caller retains the completed
+handle. Successful calls do not leave those payloads alive until recovery runs.
+Mutation recovery queues once per application turn, using that application's
+runtime. An abandoned call stays strongly reachable until its first recovery;
+after that it uses a weak reference while a native awaiting caller retains its
+own handle. Notification-wave recovery also queues once per turn and does not
+capture completed subscriber sets. The retention tests hold recovery callbacks
+without running them, cross task boundaries, force collection with bounded
+retries, and check weak-reference liveness; they do not infer leaks from timings
+or a heap-size threshold.
 Receiver writes through `this`, private fields and `super` now report changes to
 their receiver's roots. Module/factory versions and shared roots notify subscribed
 consumers (`state-and-derived.md`). Proxy-specific reflection behavior still needs

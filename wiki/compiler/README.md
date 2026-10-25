@@ -9,13 +9,17 @@ Phases 1–4 and the Phase 5 general list rule are implemented. Phase 6 adds ord
 component props, children, native/member/dynamic tags, factories, recursion,
 prop overrides, component values and real application-root mounting. Both the
 inline-row and component-row benchmark sources pass local 1,000-row correctness
-checks. The full case/reference and generated-program audit passes; exact counts
-and commits are in `../status.md`.
+checks. Case/reference and generated-program checks pass within their current
+coverage. A subsequent boundary audit adds failed-mount ownership, initial-write
+settling, symbol/rest props, destination namespaces and retention checks; exact
+results and commits are in `../status.md`.
 
 The remaining case failures explicitly name Phase 7 (effects, cleanup and refs)
 or Phase 8 (sources/readiness). The reference already covers those semantics.
-Performance is not established: the user runs Octane on the benchmark VM before
-the Phase 6 exit, followed by Phase 5 fast paths and its performance gate.
+The supplied VM report at `874c826` fails the performance floor: the old compiler
+is faster on all 24 Octane operations, and the DOM update-style run ends in an
+OOM. Phase 5 fast paths and repeat measurements remain before the Phase 6 exit;
+the correctness audit does not establish the cause or resolution of that OOM.
 Remaining conformance gaps stay on their concept pages. Continue in `plan.md`.
 
 > "the goal is to write normal javascript and get effecient compiled output"
@@ -25,8 +29,9 @@ shows on the UI (`../rules.md`, rule 10).
 
 **Goal: better than the old compiler, in correctness and in speed.** The user: "we
 have to be better than the old compiler both correctness and performance". On the
-last benchmark (`d6e678b`, see `testing.md`) the old compiler ranked second of ten
-in Octane, after ripple and ahead of Solid; those numbers are the floor to beat.
+earlier baseline (`d6e678b`, see `testing.md`) the old compiler ranked second of
+ten in Octane. In the supplied `874c826` report it ranks third and the rewrite
+tenth; the rewrite must improve on the old compiler's performance.
 Emitted code is judged on speed only. Order of work: a case gets a correct general
 path first, then its fast paths (`optimize.md`).
 
