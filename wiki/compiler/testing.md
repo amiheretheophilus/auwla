@@ -335,9 +335,9 @@ HTML/SVG. Counts describe those tested combinations, not universal JavaScript
 coverage. Timing must be remeasured after the fixes; no OOM resolution or speed
 improvement follows from passing these checks alone.
 
-The last full benchmark of the old compiler is `d6e678b`: 8 CPUs and 8 GiB on an
-AMD EPYC VM, Chrome Headless Shell 149. `compiler-next` must beat it on the same
-benchmarks (`../decisions.md`, 2026-10-19):
+The agreed old-compiler floor remains `d6e678b`: 8 CPUs and 8 GiB on an AMD EPYC
+VM, Chrome Headless Shell 149. `compiler-next` must beat it on the same benchmarks
+(`../decisions.md`, 2026-10-19):
 
 - **Octane** (ten frameworks, canonical and keyed reorder): overall average rank
   3.146, second after ripple (1.667), ahead of Solid (3.854).

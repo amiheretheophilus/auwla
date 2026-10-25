@@ -24,7 +24,7 @@ Last updated: 2026-10-25.
 
 ## Done
 
-- Boundary audit after the `874c826` benchmark report (2026-10-25). Independent
+- Boundary audit after the `874c826` benchmark report (2026-10-25, `e995061a`). Independent
   native checks exposed failed-mount entity/collector leaks, stale earlier reads
   after child setup writes, skipped symbol-only props and changed rest-key order,
   and incorrect namespaces for custom markup consumed in SVG. Setup now registers
@@ -41,7 +41,13 @@ Last updated: 2026-10-25.
   validation passes both package type checks, 21 component comparisons, 45 native
   compiler/benchmark/recovery tests, 42 runtime tests and 16 generated programs
   (eight component combinations and eight namespace combinations, seed 20261025).
-  The broader manual CI audit is pending.
+  Manual CI [40183522441](https://github.com/amiheretheophilus/auwla/actions/runs/40183522441)
+  passes all four jobs at `e995061a`: **218 compiler-next cases**, with the same
+  **100 deferred failures** (**29 Phase 7**, **71 Phase 8**); **318 reference
+  cases**, **210 compiler unit tests**, **48 runtime tests**, and all ten
+  generator/corpus checks with `FC_RUNS=200`, including 200 component combinations
+  and 200 namespace combinations. This establishes the tested contracts, not
+  universal correctness or the performance floor.
 
 - Phase 6 review fixes (2026-10-25, `42ec7c07` and the benchmark commit after
   it). A child component updates only when a prop changed or a compiled edit
