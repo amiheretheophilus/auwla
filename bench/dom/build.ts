@@ -7,9 +7,11 @@
 import { writeFileSync, readFileSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { loadBenchmarkCompiler } from '../load-compiler';
+import { compiledSuffix, loadBenchmarkCompiler } from '../load-compiler';
 
 const { compileModules } = await loadBenchmarkCompiler();
+// compiler-next writes `compiled-*.next.ts` beside the existing compiler's files.
+const suffix = compiledSuffix();
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const dataSource = readFileSync(resolve(__dirname, 'data.ts'), 'utf-8');
@@ -56,7 +58,7 @@ export function createCompiledTsxApp() {
 }
 `;
 
-writeFileSync(resolve(__dirname, 'compiled-tsx-app.ts'), compiledTsxAppContent, 'utf-8');
+writeFileSync(resolve(__dirname, `compiled-tsx-app${suffix}.ts`), compiledTsxAppContent, 'utf-8');
 
 // 2. Compile AppInline.tsx
 const appInlineSource = readFileSync(resolve(__dirname, 'AppInline.tsx'), 'utf-8');
@@ -100,6 +102,6 @@ export function createCompiledInlineApp() {
 }
 `;
 
-writeFileSync(resolve(__dirname, 'compiled-inline-app.ts'), compiledInlineAppContent, 'utf-8');
+writeFileSync(resolve(__dirname, `compiled-inline-app${suffix}.ts`), compiledInlineAppContent, 'utf-8');
 
-console.log('Successfully compiled the DOM benchmark sources.');
+console.log(`Successfully compiled the DOM benchmark sources (compiled-*${suffix}.ts).`);

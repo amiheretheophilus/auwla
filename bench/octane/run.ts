@@ -8,6 +8,7 @@ import { buildTargets } from './build';
 import { command } from './process';
 import { writeReport, type SuiteResult } from './report';
 import { prepareComparison } from './comparison';
+import { selectedCompilerPath } from '../load-compiler';
 
 const args = process.argv.slice(2);
 const known = args.filter(arg => !['--quick', '--smoke', '--canonical-only'].includes(arg)
@@ -43,7 +44,7 @@ const metadata: Record<string, unknown> = {
   memoizedDirty: Boolean(git(['status', '--porcelain', '--untracked-files=no'])), pnpmVersion,
   upstreamLockSha256: createHash('sha256').update(readFileSync(resolve(upstream, 'pnpm-lock.yaml'))).digest('hex'),
   platform: process.platform, cpu: cpus()[0]?.model, logicalCpus: cpus().length,
-  compiler: args.find(arg => arg.startsWith('--compiler='))?.slice('--compiler='.length) ?? '@memoized-dom/compiler',
+  compiler: selectedCompilerPath() ?? '@memoized-dom/compiler',
   memoryBytes: totalmem(), bunVersion: Bun.version, targets: names, samples,
   canonicalCpuThrottle: Number(process.env.CPU_THROTTLE || 1),
   memoizedState: 'component-owned; inline keyed rows; immutable array operations; synchronous scheduler',

@@ -54,16 +54,20 @@ bun run bench:octane:setup
 bun run bench:octane
 ```
 
-To measure the rewrite, select its source entry explicitly:
+`bun run bench:vm` (`../README.md`) runs these steps, and the DOM suite, with
+compiler-next in one command. To run Octane alone with compiler-next:
 
 ```sh
-bun run bench:octane --compiler=packages/compiler-next/src/index.ts
+BENCH_COMPILER=next bun run bench:octane
 ```
 
-The report records the selected compiler. The same option works with
+compiler-next's app is built into `memoized-dom/dist.next/`, beside the existing
+compiler's `memoized-dom/dist/`, so both outputs can be read. The report records
+the selected compiler. `BENCH_COMPILER=next` also works with
 `--before-ref=COMMIT`: the baseline keeps that commit's old compiler/runtime,
-and the after build uses the selected compiler with the current runtime. Without
-this option the existing compiler remains the default.
+and the after build uses compiler-next with the current runtime. Without it the
+existing compiler remains the default; `--compiler=<path>` selects any other
+compiler entry.
 
 For a local correctness check that needs neither upstream dependencies nor a
 browser installation, run `bun test src/features/components/bench.test.ts` in

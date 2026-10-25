@@ -1,6 +1,6 @@
 # Status
 
-Last updated: 2026-10-24.
+Last updated: 2026-10-25.
 
 ## Branches
 
@@ -11,8 +11,8 @@ Last updated: 2026-10-24.
   the new compiler, designed in `compiler/`. Phases 1–4, the Phase 5 general list
   rule and Phase 6 component/props integration are built. The full audit passes
   with later-phase failures explicitly diagnosed. Component/root and benchmark
-  correctness evidence is below. The Phase 6 exit still needs the user's Octane
-  VM timings; Phase 5 fast paths follow that gate.
+  correctness evidence is below. The Phase 6 exit needs the user's VM timings
+  (`bun run bench:vm`, `../bench/README.md`); Phase 5 fast paths follow.
 - `compiler-refactor`: the old compiler's refactor, stopped on 2026-10-19. The
   sections below record that work.
 - `codex/package-conditional-sync` at `9e35480` (third-party package compilation,
@@ -21,6 +21,22 @@ Last updated: 2026-10-24.
 - The user put the agent in charge of the refactor on 2026-10-18 ("you are in charge now").
 
 ## Done
+
+- Phase 6 review fixes (2026-10-25, `42ec7c07` and the benchmark commit after
+  it). A child component updates only when a prop changed or a compiled edit
+  reached it; a shared write wakes only readers of what it wrote and of derived
+  values; HTML-rooted templates have no SVG copy. On the component-row app,
+  editing 100 labels now runs 101 updates instead of 1,001, and a swap, removal or
+  append runs 1 instead of about 1,000 (`features/components/bench.test.ts`). CI
+  [40168517752](https://github.com/amiheretheophilus/auwla/actions/runs/40168517752)
+  passes all four jobs: 217 compiler-next cases (100 Phase 7/8 failures), 317
+  reference cases, unit/runtime tests and all generators at 200 programs.
+  Running the DOM suite's gates on compiler-next found that a name inside a
+  prop's type (`(id: number) => void`) was treated as a prop; fixed in
+  `isRuntimeBinding`. All four component-row DOM apps are now mounted by
+  `bench.test.ts`. `bun run bench:vm` runs the DOM suite (against vanilla JS) and
+  Octane with compiler-next in one command; compiler-next's output is kept apart
+  (`compiled-*.next.ts`, `octane/memoized-dom/dist.next/`).
 
 - Phase 6 general component/props integration (2026-10-24, `58a130a8`).
   Ordered call values cover named/member/dynamic/native tags, factories,

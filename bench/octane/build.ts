@@ -4,7 +4,7 @@ import { compileModules } from '@memoized-dom/compiler';
 import { build } from 'esbuild';
 import { assertPin, directory, fixtureDirectory } from './pin';
 import { pnpm } from './process';
-import { loadBenchmarkCompiler } from '../load-compiler';
+import { compiledSuffix, loadBenchmarkCompiler } from '../load-compiler';
 
 export interface MemoizedBuildOptions {
   readonly compiler?: typeof compileModules;
@@ -20,7 +20,10 @@ export function memoizedSources(): Record<string, string> {
 }
 
 export async function buildMemoized(options: MemoizedBuildOptions = {}): Promise<string> {
-  const output = options.output ?? resolve(directory, 'memoized-dom/dist');
+  // compiler-next builds into `dist.next/`, beside the existing compiler's
+  // `dist/`, as the DOM suite writes `compiled-*.next.ts`.
+  const suffix = compiledSuffix();
+  const output = options.output ?? resolve(directory, `memoized-dom/dist${suffix}`);
   mkdirSync(output, { recursive: true });
   const sources = options.sources ?? memoizedSources();
   const compiler = options.compiler ?? (await loadBenchmarkCompiler()).compileModules;
@@ -35,7 +38,8 @@ export async function buildMemoized(options: MemoizedBuildOptions = {}): Promise
   });
   // Preserve the fixture's Bootstrap styles and root/container structure.
   const html = readFileSync(resolve(fixtureDirectory, 'octane-jsx/index.html'), 'utf8')
-    .replace('octane (JSX)', 'memoized-dom').replace('/src/main.js', '/main.js');
+    .replace('octane (JSX)', suffix === '.next' ? 'memoized-dom (compiler-next)' : 'memoized-dom')
+    .replace('/src/main.js', '/main.js');
   writeFileSync(resolve(output, 'index.html'), html);
   return output;
 }

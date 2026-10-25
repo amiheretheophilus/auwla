@@ -1,5 +1,16 @@
 # DOM List Benchmark
 
+## Compilers
+
+The builds use the existing compiler unless `BENCH_COMPILER=next` selects
+compiler-next. Each writes its own files: `compiled-*.ts` for the existing
+compiler, `compiled-*.next.ts` for compiler-next (both tracked, so the output
+can be read in the repository), and `state-placement-results.md` /
+`state-placement-results.next.md` for timings. `bundle.ts` builds the browser
+page from the selected set. `bun run bench:vm` (`../README.md`) runs the whole
+suite with compiler-next; `BENCH_COMPILER=next bun run bench:dom:compare
+--before-ref=COMMIT` times compiler-next against a baseline commit.
+
 ## Local comparisons
 
 `bun run bench:dom:compare --before-ref=COMMIT` compiles the same authored DOM

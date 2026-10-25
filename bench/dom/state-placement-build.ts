@@ -2,9 +2,11 @@
 import { writeFileSync, readFileSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { loadBenchmarkCompiler } from '../load-compiler';
+import { compiledSuffix, loadBenchmarkCompiler } from '../load-compiler';
 
 const { compileModules } = await loadBenchmarkCompiler();
+// compiler-next writes `compiled-*.next.ts` beside the existing compiler's files.
+const suffix = compiledSuffix();
 
 const directory = dirname(fileURLToPath(import.meta.url));
 const dataSource = readFileSync(resolve(directory, 'data.ts'), 'utf-8');
@@ -28,7 +30,7 @@ for (const [file, component, output, factory] of variants) {
       mount('root', ${component});
     `,
   }, { runtimePath: '@memoized-dom/runtime' })[moduleId]!;
-  writeFileSync(resolve(directory, `${output}.ts`), `/* oxlint-disable no-unused-expressions -- compiler-generated mutation sequences */
+  writeFileSync(resolve(directory, `${output}${suffix}.ts`), `/* oxlint-disable no-unused-expressions -- compiler-generated mutation sequences */
 ${compiled}
 
 export function ${factory}() {
@@ -48,4 +50,4 @@ export function ${factory}() {
 }
 `, 'utf-8');
 }
-console.log('Successfully compiled six additional state-placement variants.');
+console.log(`Successfully compiled six additional state-placement variants (compiled-*${suffix}.ts).`);

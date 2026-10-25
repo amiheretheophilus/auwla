@@ -1,11 +1,13 @@
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { loadBenchmarkCompiler } from '../load-compiler';
+import { compiledSuffix, loadBenchmarkCompiler } from '../load-compiler';
 import { build } from 'esbuild';
 import { rowStyles, statePlacements, updateStyles } from './state-placement-matrix';
 import { updateStyleSource } from './update-style-source';
 
 const { compileModules } = await loadBenchmarkCompiler();
+// compiler-next writes `<variant>.next.ts`, so the output shows which compiler made it.
+const suffix = compiledSuffix();
 
 const directory = import.meta.dirname;
 const output = resolve(directory, 'dist/update-style');
@@ -20,12 +22,12 @@ for (const placement of statePlacements) for (const rows of rowStyles) for (cons
     './bench/dom/data.ts': data,
     './bench/dom/dist/update-style/entry.ts': `import {mount} from '@memoized-dom/runtime'; import {${rootId}} from './${name}'; mount('root',${rootId});`,
   })[moduleId]!;
-  writeFileSync(resolve(output,name+'.ts'),compiled);
+  writeFileSync(resolve(output,name+suffix+'.ts'),compiled);
   const binding = 'App' + imports.length;
-  imports.push(`import {${rootId} as ${binding}} from './${name}';`);
+  imports.push(`import {${rootId} as ${binding}} from './${name}${suffix}';`);
   entries.push(`{id:'${name}', placement:'${placement.id}', rows:'${rows}', style:'${style}', rootId:'${rootId}', create:() => ${binding}('${rootId}',null) as HTMLElement}`);
 }
 writeFileSync(resolve(output,'apps.ts'),imports.join('\n') + '\nexport const variants = [' + entries.join(',\n') + '];\n');
 await build({entryPoints:[resolve(directory,'update-style-browser.ts')],outfile:resolve(output,'browser.js'),
   bundle:true,format:'iife',minify:true,define:{'process.env.NODE_ENV':'"production"'}});
-console.log('Compiled and bundled 16 mutable/immutable DOM variants.');
+console.log(`Compiled and bundled 16 mutable/immutable DOM variants (*${suffix}.ts).`);

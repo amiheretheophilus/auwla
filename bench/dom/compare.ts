@@ -7,6 +7,7 @@ import { build } from 'esbuild';
 import puppeteer from 'puppeteer-core';
 import type { BenchRow } from './state-placement-browser';
 import { helperComparisonSources } from './helper-comparison-fixture';
+import { selectedCompilerPath } from '../load-compiler';
 
 const args = process.argv.slice(2);
 if (args.includes('--help')) {
@@ -43,9 +44,12 @@ const archive = resolve(snapshot, 'source.tar');
 await git('archive', `--output=${archive}`, beforeCommit, 'packages/compiler', 'packages/runtime');
 const extract = Bun.spawn(['tar', '-xf', archive, '-C', snapshot], { cwd: root, stdout: 'inherit', stderr: 'inherit' });
 if (await extract.exited !== 0) throw new Error('Cannot extract baseline');
+// BENCH_COMPILER=next measures the rewrite as the after side; the baseline
+// keeps the snapshot's own compiler.
+const afterCompiler = selectedCompilerPath() ?? resolve(root, 'packages/compiler/src/index.ts');
 const compilers = {
-  before: await import(pathToFileURL(resolve(isolate === 'runtime' ? root : snapshot, 'packages/compiler/src/index.ts')).href),
-  after: await import(pathToFileURL(resolve(root, 'packages/compiler/src/index.ts')).href),
+  before: await import(pathToFileURL(resolve(isolate === 'runtime' ? afterCompiler : resolve(snapshot, 'packages/compiler/src/index.ts'))).href),
+  after: await import(pathToFileURL(afterCompiler).href),
 };
 const variants = [
   ['App', 'BenchApp', 'compiled-tsx-app', 'createCompiledTsxApp'],
@@ -139,7 +143,7 @@ try {
 } finally { await browser.close(); }
 const lines = ['# Local DOM comparison', '', `Baseline: ${beforeCommit}. Current HEAD: ${head}.`, '',
   `Current working tree includes changes: ${status !== ''}. Bundle hashes and checkout status are recorded in results.json.`, '',
-  `Isolation: ${isolate}. Browser: ${browserVersion}. ${samples} samples per cell; ABBA order.`, '',
+  `Isolation: ${isolate}. After compiler: ${afterCompiler}. Browser: ${browserVersion}. ${samples} samples per cell; ABBA order.`, '',
   helpers ? 'Focused closed-producer helper fixture: reverse, rotate and drop, plus mixed selection/reverse. This does not establish gains for opaque producers or the general DOM/Octane suite.'
     : 'All 21 scenarios and mixed sequences validated before timing.', '',
   'Every timed sample validates text, classes, order and retained identity outside timing. Authored inputs and deterministic seeds match. Timing includes JavaScript and DOM writes, excludes paint.', '',
@@ -152,7 +156,7 @@ for (const [before, after] of [[0, 1], [3, 2]] as const) {
     lines.push(`| ${row.name} | ${id} | ${time.toFixed(3)} | ${next.toFixed(3)} |`);
   }
 }
-writeFileSync(resolve(directory, 'results.json'), JSON.stringify({ beforeCommit, head, status, isolate,
+writeFileSync(resolve(directory, 'results.json'), JSON.stringify({ beforeCommit, head, status, isolate, afterCompiler,
   browserVersion, samples, names, helpers, hashes, measuredAt: new Date().toISOString(), runs }, null, 2) + '\n');
 writeFileSync(resolve(directory, 'results.md'), lines.join('\n') + '\n');
 console.log(`Report: ${resolve(directory, 'results.md')}`);
