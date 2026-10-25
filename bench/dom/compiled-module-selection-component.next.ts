@@ -195,6 +195,7 @@ export function BenchModuleSelectionComponent(_id, _parent, _props, _namespace, 
     _dataVersion++;
     _writes.mark();
   }
+  const _rows = _MD.createRowCache(false);
   function _write(_value) {
     _dataVersion++;
     _writes.mark();
@@ -310,7 +311,7 @@ export function BenchModuleSelectionComponent(_id, _parent, _props, _namespace, 
     _button13.addEventListener("click", _listener2);
   }
   let _value4 = () => {
-    _write(data = _MD.observeMethod([() => data], [_mutated_data], _MD.trackRead(() => _dataVersion, data, _readKey), "concat", 0)(buildData(1000)));
+    _write(data = _MD.observeMethod([() => data], [_mutated_data], _MD.trackRead(() => _dataVersion, data, _readKey), "concat", 0, void 0)(buildData(1000)));
   };
   let _listener3;
   if (_listener3 !== undefined) _button14.removeEventListener("click", _listener3);
@@ -320,7 +321,7 @@ export function BenchModuleSelectionComponent(_id, _parent, _props, _namespace, 
     _button14.addEventListener("click", _listener3);
   }
   let _value5 = () => {
-    _write(data = _MD.observeMethod([() => data], [_mutated_data], buildData(1000), "concat", 0)(_MD.trackRead(() => _dataVersion, data, _readKey)));
+    _write(data = _MD.observeMethod([() => data], [_mutated_data], buildData(1000), "concat", 0, void 0)(_MD.trackRead(() => _dataVersion, data, _readKey)));
   };
   let _listener4;
   if (_listener4 !== undefined) _button15.removeEventListener("click", _listener4);
@@ -330,7 +331,7 @@ export function BenchModuleSelectionComponent(_id, _parent, _props, _namespace, 
     _button15.addEventListener("click", _listener4);
   }
   let _value6 = () => {
-    _write(data = _MD.observeMethod([() => data], [_mutated_data], _MD.trackRead(() => _dataVersion, data, _readKey), "slice", 0)(0, -1000));
+    _write(data = _MD.observeMethod([() => data], [_mutated_data], _MD.trackRead(() => _dataVersion, data, _readKey), "slice", 0, void 0)(0, -1000));
   };
   let _listener5;
   if (_listener5 !== undefined) _button16.removeEventListener("click", _listener5);
@@ -364,7 +365,7 @@ export function BenchModuleSelectionComponent(_id, _parent, _props, _namespace, 
     _button18.addEventListener("click", _listener7);
   }
   let _value9 = () => {
-    _MD.observeMethod([() => data], [_mutated_data], _MD.trackRead(() => _dataVersion, data, _readKey), "reverse", 0)();
+    _MD.observeMethod([() => data], [_mutated_data], _MD.trackRead(() => _dataVersion, data, _readKey), "reverse", 0, void 0)();
   };
   let _listener8;
   if (_listener8 !== undefined) _button19.removeEventListener("click", _listener8);
@@ -374,7 +375,7 @@ export function BenchModuleSelectionComponent(_id, _parent, _props, _namespace, 
     _button19.addEventListener("click", _listener8);
   }
   let _value10 = () => {
-    _MD.observeMethod([() => data], [_mutated_data], _MD.trackRead(() => _dataVersion, data, _readKey), "splice", 0)(500, 1);
+    _MD.observeMethod([() => data], [_mutated_data], _MD.trackRead(() => _dataVersion, data, _readKey), "splice", 0, void 0)(500, 1);
   };
   let _listener9;
   if (_listener9 !== undefined) _button20.removeEventListener("click", _listener9);
@@ -384,7 +385,7 @@ export function BenchModuleSelectionComponent(_id, _parent, _props, _namespace, 
     _button20.addEventListener("click", _listener9);
   }
   let _value11 = () => {
-    _write(data = _MD.observeMethod([() => data], [_mutated_data], _MD.trackRead(() => _dataVersion, data, _readKey), "filter", 1)((_item, index) => index % 100 !== 0));
+    _write(data = _MD.observeMethod([() => data], [_mutated_data], _MD.trackRead(() => _dataVersion, data, _readKey), "filter", 1, void 0)((_item, index) => index % 100 !== 0));
   };
   let _listener10;
   if (_listener10 !== undefined) _button21.removeEventListener("click", _listener10);
@@ -412,7 +413,7 @@ export function BenchModuleSelectionComponent(_id, _parent, _props, _namespace, 
   }
   const _siteComputation = _MD.createComputation(_writes.mark, _entity);
   _siteComputation.begin();
-  let _value13 = _MD.observeMethod([() => data], [_mutated_data], data, "map", 1)((item) => (_MD.createComponentValue(Row, { "key": item.id, "item": item })));
+  let _value13 = _MD.observeMethod([() => data], [_mutated_data], data, "map", 1, _rows)((item) => (_MD.createComponentValue(Row, { "key": item.id, "item": item })));
   _siteComputation.end();
   const _valueSlot = _MD.createIndexedValueSlot(_text, { id: _id, batch: _writes, entity: _entity, namespace: _namespace });
   _valueSlot.write(_value13);
@@ -430,7 +431,7 @@ export function BenchModuleSelectionComponent(_id, _parent, _props, _namespace, 
     const _updateFrame = _scope.enter();
     if (_dataVersion !== _seen || _siteComputation.changed()) {
       _siteComputation.begin();
-      const _next = _MD.observeMethod([() => data], [_mutated_data], data, "map", 1)((item) => (_MD.createComponentValue(Row, { "key": item.id, "item": item })));
+      const _next = _MD.observeMethod([() => data], [_mutated_data], data, "map", 1, _rows)((item) => (_MD.createComponentValue(Row, { "key": item.id, "item": item })));
       _siteComputation.end();
       if (_next !== _value13 && !(_next !== _next && _value13 !== _value13)) {
         _valueSlot.write(_next);

@@ -24,6 +24,25 @@ Last updated: 2026-10-25.
 
 ## Done
 
+- Row reuse for `items.map` (2026-10-25). An unchanged item no longer re-runs
+  the callback or re-checks its row, when the callback is proven to allow it
+  (`compiler/optimize.md`, "Row reuse").
+  - Applies to the module-state bench variants. Callbacks reading component
+    state or props keep the general path until component reads are tracked
+    per row.
+  - Bug found by the DOM gates and fixed here. `share()` copied each keyed
+    dependency under its key, so several rows' `selected === id` collapsed to
+    the last one, and `module-inline` select 1k failed. Keyed reads of
+    different values now merge into a plain dependency (`depend` in
+    `runtime/src/computation.ts`). The same overwrite could already miss a
+    change in `807c0f8b`, through an opaque guarded statement's hidden reads.
+    Regression tests are in `computation.test.ts` and `row-reuse.dom.test.ts`.
+  - Cases: 220 pass, with the same 100 deferred failures. Runtime tests pass
+    (75). Compiler tests pass, apart from the untracked `packed-captures` work
+    in progress. The DOM gates pass: all 8 state placements and 16 update styles.
+  - GitHub quick timing at `807c0f8b` (before this change), next vs old in ms
+    at 10k, component rows: select 1.2 vs 0.2, update 61 vs 1.4, remove 53 vs 2.6.
+
 - Targeted selection for component rows (2026-10-25). `optimize/keyed-comparisons.ts`
   plus the runtime's `trackEquals`: a selection wakes the rows whose
   `selected === id` can flip, not every row (`compiler/optimize.md`, "Keyed

@@ -176,6 +176,58 @@ selection, reselection, `NaN` and a row whose key changes. The DOM bench fixture
 counts 1, then 2, row updates per selection, against every row on the general
 path. Inline rows still re-run the whole `items.map`, which needs list lowering.
 
+## Row reuse
+
+Every list change re-ran `items.map(callback)` for every item. A profile of
+removing one of 10k component rows shows the callbacks, their allocations and the
+resulting GC as the largest cost. Each row's value was then re-checked downstream
+(`sameProps`, `mutatedSince`), though almost nothing had changed.
+
+`optimize/row-reuse.ts` proves facts about a callback argument. It never looks at
+the method name. The callback must:
+
+- be an arrow taking at most `(item, index)`, without a rest parameter;
+- have no explicit effect (`effects.ts`);
+- return JSX on every path, a compiler-owned value, so reuse never hands authored
+  code a shared object;
+- read nothing reactive except through tracked readers (shared bindings), besides
+  its own parameters and locals. Other free variables must be constants that
+  depend on nothing reactive (`isReactive`), or globals the program never
+  writes. Bodies of nested functions are not run, so they do not count.
+
+`optimize/methods.ts` records `rowReuse` on the call. The emitter declares one
+`createRowCache(usesIndex)` per call site and owner instance, and passes it to
+`observeMethod`. It is used only once the runtime has proven the callee is the
+intrinsic `map` on an ordinary array.
+
+`runtime/src/list-map.ts` reuses an item's previous result when all of these hold:
+
+- the occurrence is the same value as before (duplicates keep their order);
+- nothing below it was edited since (`mutatedSince`);
+- the index is the same, when the callback reads it;
+- the row's computation reports no changed tracked read.
+
+Otherwise it calls the callback inside that row's computation. Every row shares
+its reads with the computation around the call, so the site still re-runs when
+any of them changes. The result has native `map`'s shape: the same length and
+holes, and the same `thisArg` and arguments.
+
+A reused value is marked verified at the current mutation time. A value slot
+writing that same value again skips its update only if nothing at all was edited
+since. So an edit during the update, for example by a child's setup, still takes
+the full path.
+
+Component state and props are not tracked per row yet, so callbacks reading them
+keep the general path. That excludes the bench's component-owned selection
+variants and Octane's `selected`. Extending tracked reads to component bindings
+comes next.
+
+Checks: `runtime/tests/list-map.test.ts` covers reuse, in-place edits, index use,
+holes, duplicates, `thisArg`, tracked reads, dependency sharing and the verified
+mark. `optimize/row-reuse.dom.test.ts` covers which callbacks qualify, and
+identical output in both modes through edits, replacement, reversal, duplicates,
+shared and local reads.
+
 ## Implementation order after Phase 6
 
 1. **Establish the work being removed.** Inspect the emitted inline-row and

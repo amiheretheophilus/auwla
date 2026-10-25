@@ -1,6 +1,6 @@
 /** Direct member stores keep native evaluation and report each completed target. */
 import { b, is } from 'yuku-ast';
-import type { Node, Statement } from 'yuku-parser';
+import type { Expression, Node, Statement } from 'yuku-parser';
 import type { BindingNode } from '../../core/graph';
 import type { MutationPlan } from '../../core/plan/model';
 import type { Names } from '../../core/emit/names';
@@ -63,11 +63,20 @@ export function emitMutations(
       const call = copy(plan.operation, replacements);
       if (is.CallExpression(call) && is.MemberExpression(call.callee)) {
         const member = call.callee;
-        call.callee = expression('$$runtime.observeMethod($$reads, $$notifications, $$receiver, $$key, $$proven)', {
+        // One row cache per call site and owner instance (`runtime/src/list-map.ts`).
+        let rows: Expression = expression('void 0');
+        if (plan.method.rowReuse !== undefined) {
+          const cache = names.fresh('_rows');
+          declarations.push(statement(`const $$cache = $$runtime.createRowCache(${plan.method.rowReuse.usesIndex});`, {
+            cache, runtime,
+          }));
+          rows = expression('$$cache', { cache });
+        }
+        call.callee = expression('$$runtime.observeMethod($$reads, $$notifications, $$receiver, $$key, $$proven, $$rows)', {
           runtime, receiver: member.object,
           key: member.computed ? member.property : stringLiteral((member.property as { name: string }).name),
           reads: b.ArrayExpression({ elements: reads }), notifications: b.ArrayExpression({ elements: notifications }),
-          proven: numberLiteral(plan.method.provenCallbacks),
+          proven: numberLiteral(plan.method.provenCallbacks), rows,
         });
         replacements.set(plan.operation, call);
         continue;

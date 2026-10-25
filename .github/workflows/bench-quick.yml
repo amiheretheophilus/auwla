@@ -83,13 +83,15 @@ jobs:
               echo '```'
               bun run bench/dom/profile.ts --adapter="$adapter" --scenario="$scenario" --runs=3 --top=30
               echo '```'
-            } >> "$GITHUB_STEP_SUMMARY"
+            } >> profiles.md
           done
+          cat profiles.md >> "$GITHUB_STEP_SUMMARY"
       - if: always()
         uses: actions/upload-artifact@v5
         with:
           name: bench-quick
           path: |
             quick.md
+            profiles.md
             bench/dom/dist/quick-*.js
           retention-days: 7

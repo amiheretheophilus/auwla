@@ -297,7 +297,7 @@ export function BenchModuleDataInline(_id, _parent, _props, _namespace2, _setupO
       data = _assigned;
       _dataVersion++;
       if (!_sharedScope.building()) _sharedWrites.mark(_sharedKey);
-    } }).value = _MD.observeMethod([() => data], [_mutated_data], _read_data(), "concat", 0)(buildData(1000));
+    } }).value = _MD.observeMethod([() => data], [_mutated_data], _read_data(), "concat", 0, void 0)(buildData(1000));
   };
   let _listener5;
   if (_listener5 !== undefined) _button14.removeEventListener("click", _listener5);
@@ -313,7 +313,7 @@ export function BenchModuleDataInline(_id, _parent, _props, _namespace2, _setupO
       data = _assigned;
       _dataVersion++;
       if (!_sharedScope.building()) _sharedWrites.mark(_sharedKey);
-    } }).value = _MD.observeMethod([() => data], [_mutated_data], buildData(1000), "concat", 0)(_read_data());
+    } }).value = _MD.observeMethod([() => data], [_mutated_data], buildData(1000), "concat", 0, void 0)(_read_data());
   };
   let _listener6;
   if (_listener6 !== undefined) _button15.removeEventListener("click", _listener6);
@@ -329,7 +329,7 @@ export function BenchModuleDataInline(_id, _parent, _props, _namespace2, _setupO
       data = _assigned;
       _dataVersion++;
       if (!_sharedScope.building()) _sharedWrites.mark(_sharedKey);
-    } }).value = _MD.observeMethod([() => data], [_mutated_data], _read_data(), "slice", 0)(0, -1000);
+    } }).value = _MD.observeMethod([() => data], [_mutated_data], _read_data(), "slice", 0, void 0)(0, -1000);
   };
   let _listener7;
   if (_listener7 !== undefined) _button16.removeEventListener("click", _listener7);
@@ -363,7 +363,7 @@ export function BenchModuleDataInline(_id, _parent, _props, _namespace2, _setupO
     _button18.addEventListener("click", _listener9);
   }
   let _value17 = () => {
-    _MD.observeMethod([() => data], [_mutated_data], _read_data(), "reverse", 0)();
+    _MD.observeMethod([() => data], [_mutated_data], _read_data(), "reverse", 0, void 0)();
   };
   let _listener10;
   if (_listener10 !== undefined) _button19.removeEventListener("click", _listener10);
@@ -373,7 +373,7 @@ export function BenchModuleDataInline(_id, _parent, _props, _namespace2, _setupO
     _button19.addEventListener("click", _listener10);
   }
   let _value18 = () => {
-    _MD.observeMethod([() => data], [_mutated_data], _read_data(), "splice", 0)(500, 1);
+    _MD.observeMethod([() => data], [_mutated_data], _read_data(), "splice", 0, void 0)(500, 1);
   };
   let _listener11;
   if (_listener11 !== undefined) _button20.removeEventListener("click", _listener11);
@@ -389,7 +389,7 @@ export function BenchModuleDataInline(_id, _parent, _props, _namespace2, _setupO
       data = _assigned;
       _dataVersion++;
       if (!_sharedScope.building()) _sharedWrites.mark(_sharedKey);
-    } }).value = _MD.observeMethod([() => data], [_mutated_data], _read_data(), "filter", 1)((_item, index) => index % 100 !== 0);
+    } }).value = _MD.observeMethod([() => data], [_mutated_data], _read_data(), "filter", 1, void 0)((_item, index) => index % 100 !== 0);
   };
   let _listener12;
   if (_listener12 !== undefined) _button21.removeEventListener("click", _listener12);
@@ -417,7 +417,7 @@ export function BenchModuleDataInline(_id, _parent, _props, _namespace2, _setupO
   }
   const _siteComputation = _MD.createComputation(_writes.mark, _entity);
   _siteComputation.begin();
-  let _value21 = _MD.observeMethod([() => data], [_mutated_data], _read_data(), "map", 1)((item) => (_MD.createRenderValue(_renderProgram, [_MD.trackRead(() => _selectedVersion, selected, _readKey) === item.id ? 'danger' : '', () => {
+  let _value21 = _MD.observeMethod([() => data], [_mutated_data], _read_data(), "map", 1, void 0)((item) => (_MD.createRenderValue(_renderProgram, [_MD.trackRead(() => _selectedVersion, selected, _readKey) === item.id ? 'danger' : '', () => {
     _write(selected = item.id);
   }, item.id, item.label], item.id)));
   _siteComputation.end();
@@ -436,7 +436,7 @@ export function BenchModuleDataInline(_id, _parent, _props, _namespace2, _setupO
     const _updateFrame = _scope.enter();
     if (_siteComputation.changed()) {
       _siteComputation.begin();
-      const _next9 = _MD.observeMethod([() => data], [_mutated_data], _read_data(), "map", 1)((item) => (_MD.createRenderValue(_renderProgram, [_MD.trackRead(() => _selectedVersion, selected, _readKey) === item.id ? 'danger' : '', () => {
+      const _next9 = _MD.observeMethod([() => data], [_mutated_data], _read_data(), "map", 1, void 0)((item) => (_MD.createRenderValue(_renderProgram, [_MD.trackRead(() => _selectedVersion, selected, _readKey) === item.id ? 'danger' : '', () => {
         _write(selected = item.id);
       }, item.id, item.label], item.id)));
       _siteComputation.end();

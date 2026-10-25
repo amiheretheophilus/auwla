@@ -156,6 +156,30 @@ it('falls back to every change when one computation compares with two values or 
   expect(twice.changed()).toBe(true);
 });
 
+it('merges keyed reads of different values shared by nested rows into a plain dependency', () => {
+  const key = {};
+  const state = { selected: 0, version: 0 };
+  const peek = () => state.selected;
+  const version = () => state.version;
+  let woken = 0;
+  const outer = createComputation(() => woken++);
+  outer.begin();
+  for (const id of [1, 2, 3]) {
+    const row = createComputation();
+    row.begin();
+    trackEquals(peek(), id, peek, version, key);
+    row.end();
+    row.share();
+  }
+  outer.end();
+  // Selecting the first row must wake the caller, not only the last row's value.
+  state.selected = 1;
+  state.version++;
+  publishVersions([key]);
+  expect(woken).toBe(1);
+  expect(outer.changed()).toBe(true);
+});
+
 it('stops waking a disposed keyed reader', () => {
   const { computations, select } = selection(3);
   computations[0]!.dispose();

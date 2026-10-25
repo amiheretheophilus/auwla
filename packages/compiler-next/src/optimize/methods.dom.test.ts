@@ -55,7 +55,7 @@ it('marks only inline callbacks without explicit effects as proven', () => {
       return <ul onClick={() => { items = items.slice(1); }}>{shown}{counted}{called}{local}</ul>;
     }
   `, true);
-  const proven = [...output.matchAll(/observeMethod\([^;]*?, "(\w+)", (\d+)\)/g)]
+  const proven = [...output.matchAll(/observeMethod\([^;]*?, "(\w+)", (\d+), /g)]
     .map(([, method, bits]) => `${method}:${bits}`);
   // Setup emits each derived call once, then the handler; replay repeats them.
   expect(proven.slice(0, 5)).toEqual(['map:1', 'map:0', 'map:0', 'filter:1', 'slice:0']);

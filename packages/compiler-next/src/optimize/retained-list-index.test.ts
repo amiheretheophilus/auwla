@@ -54,6 +54,6 @@ it('selects nested branch and stored-value slots without treating method names a
   expect(disabled).toContain('.observeMutation(');
   // `optimize/methods.ts` still calls and observes both; the runtime proof
   // keys on the callee's identity, never on these names.
-  expect(enabled).toContain('collection, "unfamiliar", 0)()');
-  expect(enabled).toContain('collection, "map", 0)()');
+  expect(enabled).toContain('collection, "unfamiliar", 0, void 0)()');
+  expect(enabled).toContain('collection, "map", 0, void 0)()');
 });

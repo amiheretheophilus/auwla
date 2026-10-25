@@ -4,6 +4,7 @@ import { setTextData } from './setters';
 import type { createWriteBatch } from './write-batch';
 import { reconcileList, type RowOperations } from './list-values';
 import { createRetainedListIndex, type RetainedListIndex } from './list-index';
+import { takeVerified } from './list-map';
 
 export interface RenderOwner {
   readonly id: string;
@@ -94,6 +95,8 @@ export function createIndexedValueSlot(text: Text, owner: RenderOwner): ValueSlo
 function createSlot(text: Text, owner: RenderOwner, indexed: boolean): ValueSlot {
   let currentProgram: RenderProgram | null = null;
   let currentKey: unknown;
+  /** The stored JSX value last written through `writeProgram`. */
+  let currentValue: unknown;
   let entry: RenderEntry | null = null;
   let rows: Row[] | null = null;
   let rowIndex: RetainedListIndex<Row> | null = null;
@@ -109,6 +112,7 @@ function createSlot(text: Text, owner: RenderOwner, indexed: boolean): ValueSlot
     entry = null;
     currentProgram = null;
     currentKey = undefined;
+    currentValue = undefined;
     if (rows !== null) {
       for (const row of rows) row.slot.dispose();
       rows = null;
@@ -212,9 +216,16 @@ function createSlot(text: Text, owner: RenderOwner, indexed: boolean): ValueSlot
       if (captured === undefined) {
         clear();
         setTextData(text, value);
+        currentValue = undefined;
+        return;
+      }
+      // A row cache reused this exact value, verified unchanged, with no edit
+      // since (`list-map.ts`): updating it again would find nothing to do.
+      if (value === currentValue && entry !== null && takeVerified(value as object)) {
         return;
       }
       writeProgram(captured);
+      currentValue = value;
     },
     /** The first node of this slot's range. */
     first(): Node {

@@ -81,6 +81,7 @@ export {
   mutatedSince, mutationTime,
 } from './mutation';
 export { observeMethod } from './method-calls';
+export { createRowCache } from './list-map';
 export { createComputation, trackEquals, trackRead } from './computation';
 export { createSharedWrites } from './shared-writes';
 export type { BuildScope, BuildFrame } from './build-scope';

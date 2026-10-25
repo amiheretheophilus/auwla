@@ -21,6 +21,7 @@
  * without a snapshot (`observeReceiverEdit`). Anything else is observed as before.
  */
 import { observeMutation, observeReceiverEdit } from './mutation';
+import type { RowCache } from './list-map';
 
 interface Proof {
   /** Creates its result with ArraySpeciesCreate, which reads `constructor`. */
@@ -45,6 +46,7 @@ const proofs = new Map<unknown, Proof>();
 // The intrinsics as loaded, before application code runs. Later replacing
 // `Array.prototype.slice` installs another function, which has no proof.
 const intrinsics = arrayPrototype as unknown as Record<string, unknown>;
+const intrinsicMap = intrinsics.map;
 function prove(name: string, proof: Partial<Proof>): void {
   const method = intrinsics[name];
   if (typeof method === 'function') {
@@ -111,6 +113,8 @@ export function observeMethod(
   receiver: any,
   key: PropertyKey,
   proven: number,
+  /** For a callback also proven to allow row reuse (`list-map.ts`); used only for the intrinsic `map`. */
+  rows?: RowCache,
 ): (...args: unknown[]) => unknown {
   const method = receiver[key];
   const proof = proofs.get(method);
@@ -122,7 +126,10 @@ export function observeMethod(
     if (!argumentsProven(proof!, args, proven)) {
       return observeMutation(reads, notify).finish(apply(method, receiver, args));
     }
-    if (!proof!.edits) return apply(method, receiver, args);
+    if (!proof!.edits) {
+      if (rows !== undefined && method === intrinsicMap) return rows.map(receiver, args[0] as Function, args[1]);
+      return apply(method, receiver, args);
+    }
     // Notifying every read is exact only when each read is the receiver itself.
     for (const read of reads) {
       if (read() !== receiver) return observeMutation(reads, notify).finish(apply(method, receiver, args));

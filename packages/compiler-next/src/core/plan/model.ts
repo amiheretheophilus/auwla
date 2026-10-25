@@ -229,7 +229,11 @@ export interface MutationPlan {
    * actual callee. Bit `i` of `provenCallbacks` marks argument `i` as an
    * inline function proven to make no explicit call or outside store.
    */
-  readonly method?: { readonly provenCallbacks: number };
+  readonly method?: {
+    readonly provenCallbacks: number;
+    /** The first argument also allows row reuse when the callee is the intrinsic `map` (`optimize/row-reuse.ts`). */
+    readonly rowReuse?: { readonly usesIndex: boolean };
+  };
 }
 
 export interface ModulePlan {

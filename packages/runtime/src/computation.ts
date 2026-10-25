@@ -6,7 +6,7 @@ interface Dependency {
   readonly read: Version;
   seen: number;
   /** A keyed dependency: only whether `value() === equals` matters (`trackEquals`). */
-  readonly keyed?: { readonly value: () => unknown; readonly equals: unknown };
+  readonly keyed?: { readonly value: () => unknown; readonly equals: unknown; readonly version: Version };
 }
 
 /**
@@ -125,17 +125,29 @@ export function trackRead<T>(version: Version, value: T, key: object = version):
 export function trackEquals(value: unknown, other: unknown, peek: () => unknown, version: Version, key: object): boolean {
   const result = value === other;
   const current = store().current;
-  if (current === null) return result;
-  const dependencies = current.dependencies ??= new Map();
-  const existing = dependencies.get(key);
-  if (existing === undefined) {
-    dependencies.set(key, {
-      read: () => (peek() === other ? 1 : 0), seen: result ? 1 : 0, keyed: { value: peek, equals: other },
+  if (current !== null) {
+    depend(current, key, {
+      read: () => (peek() === other ? 1 : 0), seen: result ? 1 : 0, keyed: { value: peek, equals: other, version },
     });
-  } else if (existing.keyed !== undefined && !Object.is(existing.keyed.equals, other)) {
-    dependencies.set(key, { read: version, seen: version() });
   }
   return result;
+}
+
+/**
+ * Add `dependency` on `key` to `frame`. One frame holds one dependency per key:
+ * a plain read replaces it, a keyed read adds nothing to an existing plain one,
+ * and keyed reads of two different values merge into a plain dependency on the
+ * key's version, which wakes on any change.
+ */
+function depend(frame: Frame, key: object, dependency: Dependency): void {
+  const dependencies = frame.dependencies ??= new Map();
+  const existing = dependencies.get(key);
+  if (existing === undefined || dependency.keyed === undefined) {
+    dependencies.set(key, dependency);
+  } else if (existing.keyed !== undefined && !Object.is(existing.keyed.equals, dependency.keyed.equals)) {
+    const version = existing.keyed.version;
+    dependencies.set(key, { read: version, seen: version() });
+  }
 }
 
 export function resetComputationScope(): void {
@@ -259,9 +271,10 @@ class Computation implements Frame {
   share(): void {
     const current = store().current;
     if (current === null || this.dependencies === null) return;
-    const target = current.dependencies ??= new Map();
+    // Keyed reads stay keyed; the same key compared with another value in a
+    // sibling (another row) merges into a plain dependency (`depend`).
     for (const [key, dependency] of this.dependencies) {
-      target.set(key, { read: dependency.read, seen: dependency.read() });
+      depend(current, key, { ...dependency, seen: dependency.read() });
     }
   }
 

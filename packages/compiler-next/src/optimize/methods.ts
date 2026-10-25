@@ -11,8 +11,10 @@ import type { Module } from 'yuku-analyzer';
 import { is } from 'yuku-ast';
 import type { Node } from 'yuku-parser';
 import type { ComponentPlan, ModulePlan, MutationPlan, SharedOwnerPlan } from '../core/plan/model';
+import type { SemanticGraph } from '../core/graph';
 import type { Optimization } from '.';
 import { effectFree } from './effects';
+import { rowReuse } from './row-reuse';
 
 /**
  * A member call the lowering can evaluate in native order: receiver, key,
@@ -46,19 +48,21 @@ function provenCallbacks(module: Module, operation: Node): number {
   return proven;
 }
 
-function lowered(module: Module, plans: readonly MutationPlan[]): readonly MutationPlan[] {
+type Lower = (operation: Node) => NonNullable<MutationPlan['method']>;
+
+function lowered(plans: readonly MutationPlan[], lower: Lower): readonly MutationPlan[] {
   let changed = false;
   const next = plans.map((plan) => {
     if (plan.kind !== 'call' || plan.method !== undefined || !plainMemberCall(plan.operation)) return plan;
     changed = true;
-    return { ...plan, method: { provenCallbacks: provenCallbacks(module, plan.operation) } };
+    return { ...plan, method: lower(plan.operation) };
   });
   return changed ? next : plans;
 }
 
-function loweredOwner<T extends ComponentPlan | SharedOwnerPlan>(module: Module, owner: T): T {
-  const mutations = lowered(module, owner.mutations);
-  const replayMutations = lowered(module, owner.replayMutations);
+function loweredOwner<T extends ComponentPlan | SharedOwnerPlan>(owner: T, lower: Lower): T {
+  const mutations = lowered(owner.mutations, lower);
+  const replayMutations = lowered(owner.replayMutations, lower);
   return mutations === owner.mutations && replayMutations === owner.replayMutations
     ? owner
     : { ...owner, mutations, replayMutations };
@@ -66,19 +70,24 @@ function loweredOwner<T extends ComponentPlan | SharedOwnerPlan>(module: Module,
 
 export const methodCalls: Optimization = {
   name: 'method-calls',
-  match(general: ModulePlan): ModulePlan | null {
+  match(general: ModulePlan, graph: SemanticGraph): ModulePlan | null {
     const module = general.module.module;
+    const lower: Lower = (operation) => {
+      const callback = is.CallExpression(operation) ? operation.arguments[0] : undefined;
+      const rows = callback === undefined ? null : rowReuse(general, graph, callback);
+      return { provenCallbacks: provenCallbacks(module, operation), ...(rows === null ? {} : { rowReuse: rows }) };
+    };
     let changed = false;
     const components = new Map(general.components);
     for (const [fn, component] of general.components) {
-      const next = loweredOwner(module, component);
+      const next = loweredOwner(component, lower);
       if (next !== component) {
         changed = true;
         components.set(fn, next);
       }
     }
     const sharedOwners = general.sharedOwners.map((owner) => {
-      const next = loweredOwner(module, owner);
+      const next = loweredOwner(owner, lower);
       changed ||= next !== owner;
       return next;
     });

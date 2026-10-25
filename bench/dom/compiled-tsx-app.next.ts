@@ -39,6 +39,7 @@ function _mutated_data() {
   _dataVersion++;
   _sharedWrites.mark(_sharedKey);
 }
+const _rows = _MD.createRowCache(false);
 function _completeShared(_result) {
   _sharedReady = true;
   _sharedScope.leave(_sharedFrame);
@@ -335,7 +336,7 @@ export function BenchApp(_id, _parent, _props, _namespace, _setupOnly) {
       data = _assigned;
       _dataVersion++;
       if (!_sharedScope.building()) _sharedWrites.mark(_sharedKey);
-    } }).value = _MD.observeMethod([() => data], [_mutated_data], _read_data(), "concat", 0)(buildData(1000));
+    } }).value = _MD.observeMethod([() => data], [_mutated_data], _read_data(), "concat", 0, void 0)(buildData(1000));
   };
   let _listener3;
   if (_listener3 !== undefined) _button14.removeEventListener("click", _listener3);
@@ -351,7 +352,7 @@ export function BenchApp(_id, _parent, _props, _namespace, _setupOnly) {
       data = _assigned;
       _dataVersion++;
       if (!_sharedScope.building()) _sharedWrites.mark(_sharedKey);
-    } }).value = _MD.observeMethod([() => data], [_mutated_data], buildData(1000), "concat", 0)(_read_data());
+    } }).value = _MD.observeMethod([() => data], [_mutated_data], buildData(1000), "concat", 0, void 0)(_read_data());
   };
   let _listener4;
   if (_listener4 !== undefined) _button15.removeEventListener("click", _listener4);
@@ -367,7 +368,7 @@ export function BenchApp(_id, _parent, _props, _namespace, _setupOnly) {
       data = _assigned;
       _dataVersion++;
       if (!_sharedScope.building()) _sharedWrites.mark(_sharedKey);
-    } }).value = _MD.observeMethod([() => data], [_mutated_data], _read_data(), "slice", 0)(0, -1000);
+    } }).value = _MD.observeMethod([() => data], [_mutated_data], _read_data(), "slice", 0, void 0)(0, -1000);
   };
   let _listener5;
   if (_listener5 !== undefined) _button16.removeEventListener("click", _listener5);
@@ -401,7 +402,7 @@ export function BenchApp(_id, _parent, _props, _namespace, _setupOnly) {
     _button18.addEventListener("click", _listener7);
   }
   let _value8 = () => {
-    _MD.observeMethod([() => data], [_mutated_data], _read_data(), "reverse", 0)();
+    _MD.observeMethod([() => data], [_mutated_data], _read_data(), "reverse", 0, void 0)();
   };
   let _listener8;
   if (_listener8 !== undefined) _button19.removeEventListener("click", _listener8);
@@ -411,7 +412,7 @@ export function BenchApp(_id, _parent, _props, _namespace, _setupOnly) {
     _button19.addEventListener("click", _listener8);
   }
   let _value9 = () => {
-    _MD.observeMethod([() => data], [_mutated_data], _read_data(), "splice", 0)(500, 1);
+    _MD.observeMethod([() => data], [_mutated_data], _read_data(), "splice", 0, void 0)(500, 1);
   };
   let _listener9;
   if (_listener9 !== undefined) _button20.removeEventListener("click", _listener9);
@@ -427,7 +428,7 @@ export function BenchApp(_id, _parent, _props, _namespace, _setupOnly) {
       data = _assigned;
       _dataVersion++;
       if (!_sharedScope.building()) _sharedWrites.mark(_sharedKey);
-    } }).value = _MD.observeMethod([() => data], [_mutated_data], _read_data(), "filter", 1)((_item, index) => index % 100 !== 0);
+    } }).value = _MD.observeMethod([() => data], [_mutated_data], _read_data(), "filter", 1, void 0)((_item, index) => index % 100 !== 0);
   };
   let _listener10;
   if (_listener10 !== undefined) _button21.removeEventListener("click", _listener10);
@@ -461,7 +462,7 @@ export function BenchApp(_id, _parent, _props, _namespace, _setupOnly) {
   }
   const _siteComputation = _MD.createComputation(_writes.mark, _entity);
   _siteComputation.begin();
-  let _value12 = _MD.observeMethod([() => data], [_mutated_data], _read_data(), "map", 1)((item) => (_MD.createComponentValue(Row, { "key": item.id, "item": item })));
+  let _value12 = _MD.observeMethod([() => data], [_mutated_data], _read_data(), "map", 1, _rows)((item) => (_MD.createComponentValue(Row, { "key": item.id, "item": item })));
   _siteComputation.end();
   const _valueSlot = _MD.createIndexedValueSlot(_text, { id: _id, batch: _writes, entity: _entity, namespace: _namespace });
   _valueSlot.write(_value12);
@@ -473,7 +474,7 @@ export function BenchApp(_id, _parent, _props, _namespace, _setupOnly) {
     const _updateFrame = _scope.enter();
     if (_siteComputation.changed()) {
       _siteComputation.begin();
-      const _next = _MD.observeMethod([() => data], [_mutated_data], _read_data(), "map", 1)((item) => (_MD.createComponentValue(Row, { "key": item.id, "item": item })));
+      const _next = _MD.observeMethod([() => data], [_mutated_data], _read_data(), "map", 1, _rows)((item) => (_MD.createComponentValue(Row, { "key": item.id, "item": item })));
       _siteComputation.end();
       if (_next !== _value12 && !(_next !== _next && _value12 !== _value12)) {
         _valueSlot.write(_next);
