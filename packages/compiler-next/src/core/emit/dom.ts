@@ -286,14 +286,19 @@ function emitComponent(
     const roots = plan.mutationRoots.map((binding) => expression('({ read: () => $$binding, notify: () => { $$version++; if (!$$scope.building()) $$batch.mark(); } })', {
       binding: binding.binding.name, version: state.versions.get(binding)!, batch, scope,
     }));
-    body.push(statement('$$runtime.watchMutationRoots($$entity, $$roots);', {
-      runtime, entity, roots: b.ArrayExpression({ elements: roots }),
-    }));
+    if (roots.length > 0) {
+      body.push(statement('$$runtime.watchMutationRoots($$entity, $$roots);', {
+        runtime, entity, roots: b.ArrayExpression({ elements: roots }),
+      }));
+    }
     body.push(b.FunctionDeclaration({
       id: b.Identifier({ name: update }), params: [],
       body: b.BlockStatement({ body: [
         statement('const $$updateFrame = $$scope.enter();', { updateFrame, scope }),
         ...memos.update, ...sites.update, ...publish,
+        // A root binding reassigned since its last walk marked this component;
+        // re-index it now rather than checking every root on every store.
+        ...(roots.length === 0 ? [] : [statement('$$runtime.checkMutationRoots($$entity);', { runtime, entity })]),
         statement('$$scope.leave($$updateFrame);', { scope, updateFrame }),
       ] }), async: false, generator: false, expression: false,
     }));

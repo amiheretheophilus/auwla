@@ -458,7 +458,6 @@ export function BenchAppInline(_id, _parent, _props, _namespace2, _setupOnly) {
     _siteComputation.dispose();
     _valueSlot5.dispose();
   });
-  _MD.watchMutationRoots(_entity, []);
   function _update() {
     const _updateFrame = _scope.enter();
     if (_siteComputation.changed()) {

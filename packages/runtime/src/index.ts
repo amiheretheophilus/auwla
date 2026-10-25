@@ -77,7 +77,7 @@ export { createWriteBatch, rejectConstAssignment, flushWritesBeforeAwait, resume
 export type { WriteBatch } from './write-batch';
 export { createBuildScope, captureBuildScope, isBuilding } from './build-scope';
 export {
-  mutationTarget, deleteMutation, receiverMutationTarget, observeMutation, watchMutationRoots,
+  mutationTarget, deleteMutation, receiverMutationTarget, observeMutation, watchMutationRoots, checkMutationRoots,
   mutatedSince, mutationTime,
 } from './mutation';
 export { observeMethod } from './method-calls';

@@ -396,6 +396,7 @@ export function BenchAppInlineOwned(_id, _parent, _props, _namespace2, _setupOnl
       _publishedVersion2 = _selectedVersion;
       _MD.publishVersions([_readKey2]);
     }
+    _MD.checkMutationRoots(_entity);
     _scope.leave(_updateFrame);
   }
   _writes.activate();

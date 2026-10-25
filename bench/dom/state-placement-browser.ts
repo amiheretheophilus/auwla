@@ -157,21 +157,29 @@ function validateAll(): void {
     for (const count of [1000, 10000]) validateSelectionSequence(id, app, count);
   }
 }
-function runAll(options: { samples?: number; names?: string[]; collectSamples?: boolean } = {}): BenchRow[] {
+function runAll(options: {
+  samples?: number; names?: string[]; collectSamples?: boolean;
+  /** Quick local runs (`quick.ts`) skip the full untimed pass; each sample is still validated. */
+  validate?: boolean; adapters?: string[];
+} = {}): BenchRow[] {
   const runs = options.samples ?? RUNS;
   if (!Number.isSafeInteger(runs) || runs < 1) throw new Error('samples must be a positive integer');
   if (options.names?.some(name => !scenarios.some(scenario => scenario.name === name))) {
     throw new Error('Unknown DOM comparison scenario');
   }
-  validateAll();
+  if (options.adapters?.some(id => !adapters.some(adapter => adapter.id === id))) {
+    throw new Error('Unknown DOM adapter');
+  }
+  if (options.validate !== false) validateAll();
+  const measured = adapters.filter(({ id }) => options.adapters === undefined || options.adapters.includes(id));
   return scenarios.filter(scenario => options.names === undefined || options.names.includes(scenario.name)).map((scenario, index) => {
     console.info(`measure ${scenario.name}`);
     const timings: Record<string, number> = {};
-    const samples = new Map(adapters.map(({ id }) => [id, [] as number[]]));
+    const samples = new Map(measured.map(({ id }) => [id, [] as number[]]));
     // Rotate adapter order to reduce a consistent first/last measurement bias.
     for (let sample = 0; sample < runs; sample++) {
-      for (let offset = 0; offset < adapters.length; offset++) {
-        const { id, app } = adapters[(index + sample + offset) % adapters.length]!;
+      for (let offset = 0; offset < measured.length; offset++) {
+        const { id, app } = measured[(index + sample + offset) % measured.length]!;
         setup(app, scenario);
         const before = snapshot(app);
         const start = performance.now();
@@ -185,5 +193,20 @@ function runAll(options: { samples?: number; names?: string[]; collectSamples?: 
     return { name: scenario.name, timings, ...(options.collectSamples ? { samples: Object.fromEntries(samples) } : {}) };
   });
 }
+/** Prepare one adapter and scenario, then run it once: a profiler (`profile.ts`) records only the run. */
+function scenarioFor(id: string, name: string) {
+  const adapter = adapters.find(entry => entry.id === id);
+  const scenario = scenarios.find(entry => entry.name === name);
+  if (adapter === undefined || scenario === undefined) throw new Error(`Unknown ${id} / ${name}`);
+  return { app: adapter.app, scenario };
+}
+(window as unknown as Record<string, unknown>).__setup = (id: string, name: string) => {
+  const { app, scenario } = scenarioFor(id, name);
+  setup(app, scenario);
+};
+(window as unknown as Record<string, unknown>).__runOnce = (id: string, name: string) => {
+  const { app, scenario } = scenarioFor(id, name);
+  run(app, scenario);
+};
 (window as unknown as Record<string, unknown>).__runAll = runAll;
 (window as unknown as Record<string, unknown>).__validateAll = validateAll;

@@ -11,6 +11,21 @@ page from the selected set. `bun run bench:vm` (`../README.md`) runs the whole
 suite with compiler-next; `BENCH_COMPILER=next bun run bench:dom:compare
 --before-ref=COMMIT` times compiler-next against a baseline commit.
 
+## Quick checks
+
+To check a change without a full run, `bun run bench/dom/quick.ts` builds both
+compilers and times chosen scenarios side by side. Options: `--scenarios=10k`, a
+list of names, `--samples=3`, `--adapters=module-component,vanilla`. It checks
+every timed sample but skips the full untimed validation pass.
+
+`bun run bench/dom/profile.ts --adapter=module-component --scenario="select 10k"`
+CPU-profiles one scenario from the last quick bundle and lists functions by self
+and inclusive time.
+
+A desktop is noisy. `gh workflow run bench-quick.yml --ref compiler-rewrite` runs
+the same on a GitHub runner and writes the tables, and optional profiles
+(`-f profile="module-component:select 10k"`), to the run summary.
+
 ## Local comparisons
 
 `bun run bench:dom:compare --before-ref=COMMIT` compiles the same authored DOM

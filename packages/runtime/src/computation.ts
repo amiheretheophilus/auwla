@@ -7,15 +7,16 @@ interface Dependency {
   seen: number;
 }
 
+/** A running computation. Maps and sets are created on first use: most sites track nothing. */
 interface Frame {
-  readonly dependencies: Map<object, Dependency>;
-  readonly writes: Set<object>;
-  readonly previous: Frame | null;
+  dependencies: Map<object, Dependency> | null;
+  writes: Set<object> | null;
+  previous: Frame | null;
 }
 
 interface ComputationStore {
   current: Frame | null;
-  notifying: Set<() => void> | null;
+  notifying: Set<Computation> | null;
   queuedRecovery: boolean;
 }
 
@@ -27,10 +28,10 @@ function store(): ComputationStore {
   }));
 }
 
-const subscribers = new WeakMap<object, Set<() => void>>();
+const subscribers = new WeakMap<object, Set<Computation>>();
 
 function owned() {
-  return getExtensionStore('mmd:owned-computations', () => new Map<string, Set<() => void>>());
+  return getExtensionStore('mmd:owned-computations', () => new Map<string, Set<Computation>>());
 }
 
 /** Create the callback outside a notification wave's lexical environment. */
@@ -46,22 +47,22 @@ function scheduleRecovery(state: ComputationStore): void {
 }
 
 onEntityDispose((id) => {
-  for (const dispose of owned().get(id) ?? []) {
-    dispose();
+  for (const computation of owned().get(id) ?? []) {
+    computation.dispose();
   }
   owned().delete(id);
 });
 
 export function publishVersions(keys: readonly object[], written?: object): void {
   const state = store();
-  if (written !== undefined) {
-    state.current?.writes.add(written);
+  if (written !== undefined && state.current !== null) {
+    (state.current.writes ??= new Set()).add(written);
   }
 
   // A shared memo can publish another version while its subscriber runs. Keep
   // one notification set for the whole wave so cycles cannot notify forever.
   const outer = state.notifying === null;
-  const notified = state.notifying ?? new Set<() => void>();
+  const notified = state.notifying ?? new Set<Computation>();
   state.notifying = notified;
   if (outer) {
     // A throwing subscriber skips the synchronous reset below. Recover once
@@ -69,17 +70,18 @@ export function publishVersions(keys: readonly object[], written?: object): void
     scheduleRecovery(state);
   }
 
-  const notifications = new Set<() => void>();
+  const notifications = new Set<Computation>();
   for (const key of keys) {
-    for (const notify of subscribers.get(key) ?? []) {
-      notifications.add(notify);
+    for (const computation of subscribers.get(key) ?? []) {
+      notifications.add(computation);
     }
   }
-  for (const notify of notifications) {
-    if (notified.has(notify)) {
+  for (const computation of notifications) {
+    if (notified.has(computation)) {
       continue;
     }
-    notified.add(notify);
+    notified.add(computation);
+    const notify = computation.notify!;
     notify();
   }
   if (outer) {
@@ -88,7 +90,8 @@ export function publishVersions(keys: readonly object[], written?: object): void
 }
 
 export function trackRead<T>(version: Version, value: T, key: object = version): T {
-  store().current?.dependencies.set(key, { read: version, seen: version() });
+  const current = store().current;
+  if (current !== null) (current.dependencies ??= new Map()).set(key, { read: version, seen: version() });
   return value;
 }
 
@@ -114,94 +117,107 @@ onCommitFinished((failed) => {
   }
 });
 
-export function createComputation(notify?: () => void, entity?: Entity) {
-  const invalidate = notify === undefined ? undefined : () => notify();
-  let dependencies = new Map<object, Dependency>();
-  let writes = new Set<object>();
-  const subscriptions = new Set<object>();
-  let frame: Frame | null = null;
-  let owner: Set<() => void> | undefined;
+/**
+ * One site's or memo's tracked reads. A class, not closures, and maps created
+ * on first use: a component row creates several, most of which track nothing.
+ * A computation runs as its own frame; it is never begun again while running.
+ */
+class Computation implements Frame {
+  dependencies: Map<object, Dependency> | null = null;
+  writes: Set<object> | null = null;
+  previous: Frame | null = null;
+  private running = false;
+  private subscriptions: object[] | null = null;
+  private owner: Set<Computation> | undefined;
 
-  const unsubscribe = () => {
-    if (invalidate !== undefined) {
-      for (const key of subscriptions) {
-        subscribers.get(key)?.delete(invalidate);
-      }
+  constructor(readonly notify: (() => void) | undefined, entity: Entity | undefined) {
+    if (entity !== undefined) {
+      const owners = owned();
+      let list = owners.get(entity.id);
+      if (list === undefined) owners.set(entity.id, list = new Set());
+      list.add(this);
+      this.owner = list;
     }
-    subscriptions.clear();
-  };
-  const dispose = () => {
-    unsubscribe();
-    owner?.delete(dispose);
-  };
-
-  if (entity !== undefined) {
-    const owners = owned();
-    const list = owners.get(entity.id) ?? new Set<() => void>();
-    list.add(dispose);
-    owner = list;
-    owners.set(entity.id, list);
   }
 
-  return {
-    begin(reset = true) {
-      if (reset) {
-        dependencies = new Map();
-        writes = new Set();
+  begin(reset = true): void {
+    if (reset) {
+      this.dependencies = null;
+      this.writes = null;
+    }
+    const state = store();
+    this.previous = state.current;
+    this.running = true;
+    state.current = this;
+  }
+
+  end(settle = true): void {
+    if (this.running) {
+      store().current = this.previous;
+      this.running = false;
+    }
+    this.previous = null;
+    if (!settle) return;
+    const dependencies = this.dependencies;
+    if (dependencies !== null) {
+      // A computation's own outputs must not become inputs that replay it.
+      // Other reads of the same owner remain dependencies through their keys.
+      if (this.writes !== null) {
+        for (const key of this.writes) dependencies.delete(key);
       }
-      const state = store();
-      frame = { dependencies, writes, previous: state.current };
-      state.current = frame;
-    },
-    end(settle = true) {
-      const state = store();
-      if (frame !== null) {
-        state.current = frame.previous;
-      }
-      frame = null;
-      if (settle) {
-        // A computation's own outputs must not become inputs that replay it.
-        // Other reads of the same owner remain dependencies through their keys.
-        for (const key of writes) {
-          dependencies.delete(key);
-        }
-        for (const dependency of dependencies.values()) {
-          dependency.seen = dependency.read();
-        }
-        if (invalidate !== undefined) {
-          unsubscribe();
-          for (const key of dependencies.keys()) {
-            const listeners = subscribers.get(key) ?? new Set<() => void>();
-            listeners.add(invalidate);
-            subscribers.set(key, listeners);
-            subscriptions.add(key);
-          }
-        }
-      }
-    },
-    changed() {
-      for (const dependency of dependencies.values()) {
-        if (dependency.read() !== dependency.seen) {
-          return true;
-        }
-      }
-      return false;
-    },
-    dependsOn(key: object) {
-      return dependencies.has(key);
-    },
-    /**
-     * Report this computation's dependencies to the one running around it. A
-     * nested computation that skipped its work this time still makes the outer
-     * one depend on what that work read.
-     */
-    share() {
-      const current = store().current;
-      if (current === null) return;
-      for (const [key, dependency] of dependencies) {
-        current.dependencies.set(key, { read: dependency.read, seen: dependency.read() });
-      }
-    },
-    dispose,
-  };
+      for (const dependency of dependencies.values()) dependency.seen = dependency.read();
+    }
+    if (this.notify === undefined) return;
+    this.unsubscribe();
+    if (dependencies === null || dependencies.size === 0) return;
+    const subscriptions: object[] = [];
+    for (const key of dependencies.keys()) {
+      let listeners = subscribers.get(key);
+      if (listeners === undefined) subscribers.set(key, listeners = new Set());
+      listeners.add(this);
+      subscriptions.push(key);
+    }
+    this.subscriptions = subscriptions;
+  }
+
+  changed(): boolean {
+    if (this.dependencies === null) return false;
+    for (const dependency of this.dependencies.values()) {
+      if (dependency.read() !== dependency.seen) return true;
+    }
+    return false;
+  }
+
+  dependsOn(key: object): boolean {
+    return this.dependencies?.has(key) ?? false;
+  }
+
+  /**
+   * Report this computation's dependencies to the one running around it. A
+   * nested computation that skipped its work this time still makes the outer
+   * one depend on what that work read.
+   */
+  share(): void {
+    const current = store().current;
+    if (current === null || this.dependencies === null) return;
+    const target = current.dependencies ??= new Map();
+    for (const [key, dependency] of this.dependencies) {
+      target.set(key, { read: dependency.read, seen: dependency.read() });
+    }
+  }
+
+  dispose(): void {
+    this.unsubscribe();
+    this.owner?.delete(this);
+  }
+
+  private unsubscribe(): void {
+    if (this.subscriptions === null) return;
+    for (const key of this.subscriptions) subscribers.get(key)?.delete(this);
+    this.subscriptions = null;
+  }
+}
+
+export function createComputation(notify?: () => void, entity?: Entity) {
+  return new Computation(notify, entity);
 }

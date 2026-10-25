@@ -439,6 +439,7 @@ export function BenchModuleSelectionInline(_id, _parent, _props, _namespace2, _s
       _publishedVersion = _dataVersion;
       _MD.publishVersions([_readKey]);
     }
+    _MD.checkMutationRoots(_entity);
     _scope.leave(_updateFrame);
   }
   _writes.activate();

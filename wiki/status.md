@@ -24,6 +24,21 @@ Last updated: 2026-10-25.
 
 ## Done
 
+- Per-row costs found by profiling (2026-10-25). `bench/dom/quick.ts` times
+  chosen DOM scenarios, old against next, without a full run. On GitHub the same
+  runs through `bench-quick.yml`, which can also CPU-profile a scenario
+  (`bench/dom/profile.ts`). The desktop is too noisy for close comparisons.
+  - Store alias lookup: every store visited every mounted component's root entry,
+    and each component row registered one, even an empty one. It is now an object
+    index, with re-checks after a component updates (`compiler/handlers.md`).
+    Update 10k with component rows dropped from 3.5 s to about 0.3 s locally.
+  - Computations are a class whose maps are created on first use. Each component
+    row creates three, and most track nothing.
+  - All runtime tests pass, and so do the compiler unit/DOM tests (apart from the
+    untracked `packed-captures` work in progress). Every case file matches the
+    100 deferred failures. Under full-suite load on the desktop, seven
+    two-strategy cases exceed the 5 s timeout; they pass when rerun alone.
+
 - Method-call observation proof (2026-10-25). Review of the `874c826` report found
   the main cost: every observed call snapshots all the data it reaches. That was
   about 70 ms per call on 10k rows, including the `data.map(...)` render site that

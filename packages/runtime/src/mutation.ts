@@ -14,13 +14,66 @@ export function registerSharedMutationRoots(owner: object, bindings: readonly Ro
   if (!rootsOfShared.has(owner)) sharedRoots.add(new WeakRef(owner));
   rootsOfShared.set(owner, bindings);
 }
-function roots() {
-  return getExtensionStore('mmd:mutation-roots', () => new Map<string, { entity: Entity; roots: readonly Root[] }>());
+/**
+ * A component root, through which the index refers to it. Disposal clears
+ * `root`, so an object that outlives the component does not retain its closure.
+ */
+interface Slot { root: Root | null }
+
+/**
+ * Component roots, indexed by the objects they reach, so a store notifies the
+ * roots that hold the edited object without visiting every mounted component.
+ * A component can mount one root per instance (10k rows: 10k roots).
+ *
+ * The index is complete for every root walked since its value last changed.
+ * It may hold extras (objects a root no longer reaches), which the reach check
+ * rejects. A root whose binding was reassigned has already marked its own
+ * component, so it is re-checked when that component updates
+ * (`checkMutationRoots`), not on every store.
+ */
+interface RootStore {
+  readonly entities: Map<string, readonly Slot[]>;
+  readonly holders: WeakMap<object, Set<Slot>>;
+  /** Roots to walk before the next lookup: new, moved, or after an unknown edit. */
+  readonly unwalked: Set<Slot>;
 }
-onEntityDispose((id) => { roots().delete(id); });
+function roots(): RootStore {
+  return getExtensionStore('mmd:mutation-roots', () => ({
+    entities: new Map(), holders: new WeakMap(), unwalked: new Set(),
+  }));
+}
+function release(store: RootStore, id: string): void {
+  for (const slot of store.entities.get(id) ?? []) {
+    slot.root = null;
+    store.unwalked.delete(slot);
+  }
+  store.entities.delete(id);
+}
+onEntityDispose((id) => { release(roots(), id); });
 
 export function watchMutationRoots(entity: Entity, bindings: readonly Root[]): void {
-  roots().set(entity.id, { entity, roots: bindings });
+  const store = roots();
+  release(store, entity.id);
+  const slots = bindings.map((root): Slot => ({ root }));
+  store.entities.set(entity.id, slots);
+  for (const slot of slots) store.unwalked.add(slot);
+}
+
+/** After a component updates: a root whose binding now holds another value is walked again before the next lookup. */
+export function checkMutationRoots(entity: Entity): void {
+  const store = roots();
+  for (const slot of store.entities.get(entity.id) ?? []) {
+    const known = slot.root === null ? undefined : reaches.get(slot.root);
+    if (known !== undefined && !Object.is(known.value, slot.root!.read())) store.unwalked.add(slot);
+  }
+}
+
+function holding(store: RootStore, slot: Slot) {
+  return (object: object) => {
+    let held = store.holders.get(object);
+    if (held === undefined) store.holders.set(object, held = new Set());
+    held.add(slot);
+  };
 }
 
 /** Walk identities through data fields, without invoking an unused accessor. */
@@ -52,10 +105,13 @@ interface Reach {
 }
 const reaches = new WeakMap<Root, Reach>();
 
-function walk(root: Root): Reach {
+function walk(root: Root, index?: (object: object) => void): Reach {
   const value = root.read();
   const objects = new WeakSet<object>();
-  reachable(value, (object) => objects.add(object));
+  reachable(value, (object) => {
+    objects.add(object);
+    index?.(object);
+  });
   const reach: Reach = { value, objects, stale: false };
   reaches.set(root, reach);
   return reach;
@@ -68,8 +124,8 @@ type Edit =
   /** An opaque call or a setter: anything below the changed objects may differ. */
   | { readonly kind: 'unknown' };
 
-function* watchedRoots(): Generator<Root> {
-  for (const entry of roots().values()) yield* entry.roots;
+/** Module and factory roots: one per shared binding, so few; each is checked on every edit. */
+function* sharedWatchedRoots(): Generator<Root> {
   for (const reference of sharedRoots) {
     const owner = reference.deref();
     if (owner === undefined) {
@@ -140,29 +196,54 @@ function editedBelow(value: object, time: number, seen: Set<object>): boolean {
 function notifyAliases(changed: ReadonlySet<object>, edit: Edit): void {
   if (changed.size === 0) return;
   const callbacks = new Set<() => void>();
-  for (const root of watchedRoots()) {
-    const known = reaches.get(root);
-    // A root that now holds another value is walked again; that walk already
-    // sees the edit.
-    let reach = known !== undefined && Object.is(known.value, root.read()) ? known : walk(root);
-    if (!reachesAny(reach.objects, changed)) continue;
-    if (reach === known && reach.stale) {
-      reach = walk(root);
-      if (!reachesAny(reach.objects, changed)) continue;
-    } else if (reach === known) {
-      record(root, reach, edit);
+  const store = roots();
+  for (const slot of store.unwalked) {
+    if (slot.root !== null) walk(slot.root, holding(store, slot));
+  }
+  store.unwalked.clear();
+  const candidates = new Set<Slot>();
+  for (const object of changed) {
+    for (const slot of store.holders.get(object) ?? []) candidates.add(slot);
+  }
+  for (const slot of candidates) {
+    if (slot.root === null) continue;
+    if (notifies(slot.root, changed, edit, holding(store, slot))) {
+      callbacks.add(slot.root.notify);
+      // After an unknown edit, walk again before the next lookup.
+      if (!reaches.has(slot.root)) store.unwalked.add(slot);
     }
-    callbacks.add(root.notify);
+  }
+  for (const root of sharedWatchedRoots()) {
+    if (notifies(root, changed, edit)) callbacks.add(root.notify);
   }
   for (const notify of callbacks) notify();
 }
 
-function record(root: Root, reach: Reach, edit: Edit): void {
+/** Whether `root` reaches a changed object; keeps its reach (and index) up to date. */
+function notifies(root: Root, changed: ReadonlySet<object>, edit: Edit, index?: (object: object) => void): boolean {
+  const known = reaches.get(root);
+  // A root that now holds another value is walked again; that walk already
+  // sees the edit.
+  let reach = known !== undefined && Object.is(known.value, root.read()) ? known : walk(root, index);
+  if (!reachesAny(reach.objects, changed)) return false;
+  if (reach === known && reach.stale) {
+    reach = walk(root, index);
+    if (!reachesAny(reach.objects, changed)) return false;
+  } else if (reach === known) {
+    record(root, reach, edit, index);
+  }
+  return true;
+}
+
+function record(root: Root, reach: Reach, edit: Edit, index?: (object: object) => void): void {
   if (edit.kind === 'unknown') {
     reaches.delete(root);
     return;
   }
-  reachable(edit.added, (object) => reach.objects.add(object));
+  reachable(edit.added, (object) => {
+    reach.objects.add(object);
+    index?.(object);
+  });
   if (edit.removed) reach.stale = true;
 }
 

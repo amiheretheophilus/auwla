@@ -99,8 +99,21 @@ A store that may drop an object marks the set stale, and so do a delete and a
 receiver write. A root that now holds another value is walked again. An opaque
 call or an uncompiled setter forgets the set of each root it touched. So a miss
 is exact. A hit on a stale set walks that root again before notifying, so a
-removed object never notifies its old root. A typical write (`row.label = x`)
-costs one set lookup per root.
+removed object never notifies its old root.
+
+Component roots are also indexed by the objects they reach. A component can mount
+one per instance, so 10k rows would mean 10k roots. A store looks up only the
+roots holding the edited object, rather than visiting every mounted component:
+update 10k spent 3 s in that loop (1,000 stores × 10k entities). The index may
+keep extras, which the reach check rejects. A new root, or one after an unknown
+edit, is walked before the next lookup.
+
+A root whose binding was reassigned has already marked its own component, so the
+emitted `_update` re-checks that component's roots (`checkMutationRoots`).
+Reading every root on every store is not needed. Components with no roots
+register none. Module and factory roots are few, one per shared binding, and are
+still checked on every edit. A typical write (`row.label = x`) costs one index
+lookup and one check per holding root.
 Known limit: uncompiled code that adds an object to watched data outside an
 observed call is not seen until that root is walked again.
 

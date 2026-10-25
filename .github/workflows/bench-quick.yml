@@ -1,0 +1,94 @@
+# A quick DOM timing on a GitHub runner, steadier than a desktop and much
+# cheaper than `bench.yml`: old and next side by side, chosen scenarios only.
+#
+#   gh workflow run bench-quick.yml --ref compiler-rewrite -f scenarios=10k
+#   gh workflow run bench-quick.yml --ref compiler-rewrite \
+#     -f profile="module-component:select 10k;module-inline:update 10k"
+#
+# The tables (and profiles) are in the run summary. Use it to check a change;
+# report numbers from `bench:vm`.
+name: bench-quick
+
+on:
+  push:
+    branches: [compiler-rewrite]
+    paths: [.github/workflows/bench-quick.yml]
+  workflow_dispatch:
+    inputs:
+      scenarios:
+        description: all, 1k, 10k, or comma-separated names ("update 10k,select 10k")
+        type: string
+        default: 10k
+      samples:
+        description: Samples per cell (median reported)
+        type: string
+        default: '5'
+      adapters:
+        description: Comma-separated adapter ids; empty for all
+        type: string
+        default: ''
+      compilers:
+        description: Compilers to compare
+        type: string
+        default: old,next
+      profile:
+        description: Optional CPU profiles of next, "adapter:scenario;adapter:scenario"
+        type: string
+        default: ''
+
+concurrency:
+  group: bench-quick-${{ github.ref }}
+  cancel-in-progress: false
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  quick:
+    name: quick DOM timing (${{ inputs.scenarios || '10k' }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      PUPPETEER_EXECUTABLE_PATH: /usr/bin/google-chrome
+    steps:
+      - uses: actions/checkout@v5
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: canary
+      - run: bun install --frozen-lockfile
+      - run: bun run --cwd packages/runtime build
+      - name: Time old and next
+        env:
+          SCENARIOS: ${{ inputs.scenarios || '10k' }}
+          SAMPLES: ${{ inputs.samples || '5' }}
+          ADAPTERS: ${{ inputs.adapters }}
+          COMPILERS: ${{ inputs.compilers || 'old,next' }}
+        run: |
+          args=(--compilers="$COMPILERS" --samples="$SAMPLES" --scenarios="$SCENARIOS" --out=quick.md)
+          if [ -n "$ADAPTERS" ]; then args+=(--adapters="$ADAPTERS"); fi
+          bun run bench/dom/quick.ts "${args[@]}"
+          { echo "## Quick DOM timing at ${GITHUB_SHA::8}"; cat quick.md; } >> "$GITHUB_STEP_SUMMARY"
+      - name: Profile
+        if: inputs.profile != ''
+        env:
+          PROFILE: ${{ inputs.profile }}
+        run: |
+          IFS=';' read -ra targets <<< "$PROFILE"
+          for target in "${targets[@]}"; do
+            adapter="${target%%:*}"; scenario="${target#*:}"
+            {
+              echo "## Profile: $adapter, $scenario"
+              echo '```'
+              bun run bench/dom/profile.ts --adapter="$adapter" --scenario="$scenario" --runs=3 --top=30
+              echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
+          done
+      - if: always()
+        uses: actions/upload-artifact@v5
+        with:
+          name: bench-quick
+          path: |
+            quick.md
+            bench/dom/dist/quick-*.js
+          retention-days: 7

@@ -134,7 +134,6 @@ function Row(_id2, _parent2, _props2, _namespace2, _setupOnly2) {
     _siteComputation4.dispose();
     _valueSlot3.dispose();
   });
-  _MD.watchMutationRoots(_entity2, []);
   function _update2() {
     const _updateFrame2 = _scope2.enter();
     if (_propsVersion !== _seen2 || _siteComputation2.changed()) {
@@ -435,6 +434,7 @@ export function BenchModuleSelectionComponent(_id, _parent, _props, _namespace, 
       _publishedVersion = _dataVersion;
       _MD.publishVersions([_readKey]);
     }
+    _MD.checkMutationRoots(_entity);
     _scope.leave(_updateFrame);
   }
   _writes.activate();
