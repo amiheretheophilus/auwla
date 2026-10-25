@@ -94,6 +94,20 @@ it.each(modes)('follows component state and props read inside rows ($mode)', asy
   expect(list()).toBe('on|b1 |b2 |b3');
 });
 
+it.each(modes)('re-evaluates rows when a primitive item changes its zero sign ($mode)', async ({ optimize }) => {
+  const { host, click } = await mount(`
+    export function App() {
+      let items = [0, -0];
+      return <main><ul>{items.map((item) => <li>{1 / item}</li>)}</ul>
+        <button id="swap" onClick={() => { items = [-0, 0]; }}>swap</button></main>;
+    }
+  `, optimize);
+  const values = () => [...host.querySelectorAll('li')].map((row) => row.textContent);
+  expect(values()).toEqual(['Infinity', '-Infinity']);
+  click('swap');
+  expect(values()).toEqual(['-Infinity', 'Infinity']);
+});
+
 it.each(modes)('shows in-place edits, replacements, moves, duplicates and tracked reads ($mode)', async ({ optimize }) => {
   const { host, click } = await mount(`
     let selected = 0;

@@ -24,6 +24,15 @@ Last updated: 2026-10-25.
 
 ## Done
 
+- Row-reuse boundary audit (2026-10-25). Three newly failing runtime checks
+  reproduced signed-zero conflation, non-native proxy length conversion and a
+  species proof invalidated during argument evaluation. Reuse now confirms
+  candidates with `Object.is`, shares native length conversion with child
+  traversal, and rechecks species after arguments. A native DOM regression
+  fails only with optimizations before the fix and passes in both modes after
+  it. Both type checks, 32 focused runtime checks and 14 compiler/native checks
+  pass. These fixes preserve the opaque fallback and add no method-name rule.
+
 - Capture-order audit (2026-10-25). The eight pending native regressions now
   pass in both modes: stored keys run at their attribute position, the final
   duplicate key controls identity, a throwing key prevents later evaluation,

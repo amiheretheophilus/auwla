@@ -113,6 +113,10 @@ the `Array.prototype` intrinsics captured when the runtime loaded. The condition
 - its callback argument has its `proven` bit (`sort` may also omit it);
 - for intrinsics that edit their receiver, every read returns that receiver.
 
+Species eligibility is checked again after arguments finish: argument evaluation
+can install a different constructor or species after the native method read.
+Such a call retains the captured callee and takes the general observation path.
+
 A proven read-only call then runs with no observation. A proven edit is reported
 with `observeReceiverEdit`: stamp, notify every read, then notify aliases. It keeps
 a pending entry, so a call that throws midway is still reported at the next
@@ -211,6 +215,12 @@ Otherwise it calls the callback inside that row's computation. Every row shares
 its reads with the computation around the call, so the site still re-runs when
 any of them changes. The result has native `map`'s shape: the same length and
 holes, and the same `thisArg` and arguments.
+
+The item lookup supplies only a candidate. `Object.is` checks it before reuse,
+because a Map groups signed zeros while JavaScript arithmetic distinguishes
+them. `list-values.ts` shares native length conversion with the map cache, so
+proxy-supplied lengths truncate, clamp or throw as native `map` does. Runtime
+regressions cover these boundaries; a both-mode DOM check swaps signed zeros.
 
 A reused value is marked verified at the current mutation time. A value slot
 writing that same value again skips its update only if nothing at all was edited

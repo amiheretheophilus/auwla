@@ -23,6 +23,7 @@
  */
 import { createComputation } from './computation';
 import { mutatedSince, mutationTime } from './mutation';
+import { readListLength } from './list-values';
 
 interface Row {
   readonly item: unknown;
@@ -87,15 +88,20 @@ export function createRowCache(usesIndex: boolean): RowCache {
     map(array, callback, thisArg) {
       const previous = rows;
       const next = new Rows();
-      const length = array.length;
+      const length = readListLength(array);
       const result = new Array<unknown>(length);
       for (let index = 0; index < length; index++) {
         if (!(index in array)) continue;
         const item = array[index];
         let row = previous.take(item);
-        if (row !== undefined && (usesIndex && row.index !== index
-          || mutatedSince(item, row.time) || row.computation.changed())) {
-          row = undefined;
+        if (row !== undefined) {
+          // Map groups +0 and -0 together, but authored arithmetic can tell
+          // them apart. The lookup finds a candidate; Object.is proves reuse.
+          const sameItem = Object.is(row.item, item);
+          const moved = usesIndex && row.index !== index;
+          if (!sameItem || moved || mutatedSince(item, row.time) || row.computation.changed()) {
+            row = undefined;
+          }
         }
         if (row === undefined) {
           const computation = createComputation();

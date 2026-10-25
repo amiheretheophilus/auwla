@@ -14,6 +14,19 @@ export interface ListValues<Row extends ValueRow> {
   readonly values: unknown[];
 }
 
+/** Native LengthOfArrayLike, including non-integer lengths supplied by proxies. */
+export function readListLength(items: readonly unknown[]): number {
+  // Unary + retains ToNumber errors for Symbols/BigInts. Arithmetic implements
+  // ToLength without mutable Math methods or converting an object twice.
+  const requestedLength = +items.length;
+  if (!(requestedLength > 0)) {
+    return 0;
+  }
+  const maximumLength = 9_007_199_254_740_991;
+  const cappedLength = requestedLength < maximumLength ? requestedLength : maximumLength;
+  return cappedLength - (cappedLength % 1);
+}
+
 /**
  * Match native array child traversal: capture the length, skip absent indices,
  * include inherited indices, and read each present value once. Calling an
@@ -25,16 +38,7 @@ export function readListValues<Row extends ValueRow>(
 ): ListValues<Row> {
   const rows: Row[] = [];
   const values: unknown[] = [];
-  // A proxy may supply a non-integer length. Unary + retains native ToNumber
-  // errors for Symbols/BigInts. Arithmetic implements ToLength without calling
-  // mutable Math methods or converting an authored object a second time.
-  const requestedLength = +items.length;
-  let length = 0;
-  if (requestedLength > 0) {
-    const maximumLength = 9_007_199_254_740_991;
-    const cappedLength = requestedLength < maximumLength ? requestedLength : maximumLength;
-    length = cappedLength - (cappedLength % 1);
-  }
+  const length = readListLength(items);
   for (let index = 0; index < length; index++) {
     if (!(index in items)) {
       continue;

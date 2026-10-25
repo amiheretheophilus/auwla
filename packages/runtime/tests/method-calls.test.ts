@@ -1,5 +1,6 @@
 import { expect, it } from 'bun:test';
 import { observeMethod } from '../src/method-calls';
+import { createRowCache } from '../src/list-map';
 import { mutationTarget, recoverMutations, registerSharedMutationRoots } from '../src/mutation';
 
 /**
@@ -57,6 +58,24 @@ it('observes a subclass, whose species constructor is authored', () => {
   observeMethod(reads, notify, items, 'slice', 0)(1);
   expect(constructed).toBe(1);
   expect(counts.reads).toBeGreaterThan(0);
+});
+
+it('rechecks species after arguments can change the receiver constructor', () => {
+  const items = rows();
+  const { reads, notify } = watch(() => items);
+  let constructed = 0;
+  class Result extends Array {
+    constructor(length: number) {
+      super(length);
+      constructed++;
+    }
+  }
+  const call = observeMethod(reads, notify, items, 'map', 1, createRowCache(false));
+  // This is the interval between the native method read and argument completion.
+  Object.defineProperty(items, 'constructor', { value: { [Symbol.species]: Result } });
+  const result = call((item: { id: number }) => ({ id: item.id }));
+  expect(constructed).toBe(1);
+  expect(result instanceof Result).toBe(true);
 });
 
 it('observes an object argument the intrinsic converts, and an unproven callback', () => {

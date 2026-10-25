@@ -123,7 +123,9 @@ export function observeMethod(
   const observation = eligible ? null : observeMutation(reads, notify);
   return (...args) => {
     if (observation !== null) return observation.finish(apply(method, receiver, args));
-    if (!argumentsProven(proof!, args, proven)) {
+    // Arguments run after the method read. They can replace the constructor
+    // or species that made the receiver eligible, so that proof must still hold.
+    if ((proof!.species && !intrinsicSpecies(receiver)) || !argumentsProven(proof!, args, proven)) {
       return observeMutation(reads, notify).finish(apply(method, receiver, args));
     }
     if (!proof!.edits) {

@@ -29,6 +29,32 @@ it('reuses each unchanged item result and calls the callback only for new items'
   expect(second[2]).toBe(first[0]);
 });
 
+it('distinguishes signed zero when deciding whether an item is unchanged', () => {
+  const cache = createRowCache(false);
+  const callback = (item: number) => ({ inverse: 1 / item });
+  const first = cache.map([0, -0], callback, undefined);
+  const second = cache.map([-0, 0], callback, undefined);
+  expect(second.map((row) => (row as { inverse: number }).inverse)).toEqual([-Infinity, Infinity]);
+  expect(second[0] === first[0]).toBe(false);
+  expect(second[1] === first[1]).toBe(false);
+});
+
+it('uses native length conversion for array proxies before creating a result', () => {
+  const cache = createRowCache(false);
+  let length: unknown = '3.9';
+  const array = new Proxy([], {
+    get(target, key, receiver) {
+      return key === 'length' ? length : Reflect.get(target, key, receiver);
+    },
+  });
+  const callback = () => ({});
+  expect(cache.map(array, callback, undefined)).toHaveLength(3);
+  length = -1;
+  expect(cache.map(array, callback, undefined)).toHaveLength(0);
+  length = 1n;
+  expect(() => cache.map(array, callback, undefined)).toThrow(TypeError);
+});
+
 it('calls again for an item edited in place, and for a moved item when the index is read', () => {
   const rows = items(3);
   const byItem = createRowCache(false);
