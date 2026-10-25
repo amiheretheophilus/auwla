@@ -248,8 +248,17 @@ Write batches now share recovery scheduling and publish dirty entities in groups
 through the existing kernel commit. The native 200-row listener check drops from
 201 recovery callbacks and 200 commits to one of each, without skipping a row.
 Completed batches also release row data before queued recovery runs. Error,
-ordering and ownership boundaries are on `handlers.md`; runner timing is still
-needed to establish the performance effect.
+ordering and ownership boundaries are on `handlers.md`.
+
+The same-compiler ABBA comparison from `d5abe1f0` to `248f8a83` passes every
+placement/identity gate and improves component-row updates in both orders. At
+10k, module-component update is 57.2 to 28.2 ms and 75.2 to 52.8 ms; module-data
+component update is 60.2 to 39.4 ms and 78.2 to 51.6 ms (seven samples per cell).
+Clearing and inline-row changes are mixed, and creation cells show substantial
+runner drift. Same-run old/next timings still show a large gap. The update profile
+continues to show recursive mutation reachability and `mutatedSince` checks,
+mapping/reconciliation and GC. Results and raw-sample locations are in
+`../status.md`; this does not close the performance floor or the reported VM OOM.
 
 Row creation also pays fixed runtime ownership costs. Computation disposal
 registration now waits until the collector actually subscribes. In the unchanged

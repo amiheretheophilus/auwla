@@ -24,6 +24,31 @@ Last updated: 2026-10-25.
 
 ## Done
 
+- Controlled write-batch measurement (2026-10-25).
+  [Run 40231260866](https://github.com/amiheretheophilus/auwla/actions/runs/40231260866)
+  compares `d5abe1f0` with `248f8a83` using identical compiler-next output, seven
+  samples per cell and before/after/after/before order. All placement, identity
+  and mixed-sequence gates pass in all four passes. Component-row update 10k
+  improves in both orders: module-component **57.2 to 28.2 ms**, then **75.2 to
+  52.8 ms**; owner-component **69.3 to 36.7 ms**, then **85.6 to 52.7 ms**;
+  module-data component **60.2 to 39.4 ms**, then **78.2 to 51.6 ms**. Component
+  creation is lower in both orders, but other cells show substantial runner
+  drift, including vanilla. Clearing is mixed: module-component is 39.6 to
+  42.6 ms, then 60.9 to 50.7 ms; owner-inline updates also disagree by order.
+  The evidence supports the component-update benefit; it does not establish a
+  general clearing or inline-row improvement.
+  The same-run old/next check still has a large gap: module-component create,
+  update and clear are **21.8/1.6/0.9 ms** old against **175.9/50.2/41.5 ms** next.
+  Octane passes its harness and retained-identity gates but remains slower on
+  all 24 operations (runlots **326.9 vs 83.0 ms**). The update profile still shows
+  mutation reachability walks, `mutatedSince`, row mapping/reconciliation and GC;
+  creation still pays row setup and DOM work. Full-list scans, capture packing
+  and the VM OOM remain open. Raw samples and bundle hashes are in the
+  `bench-quick` artifact at `bench/dom/dist/compare/d5abe1f0-runtime/results.json`;
+  the report's dirty-tree flag contains only generated `quick.md` and
+  `profiles.md`. A local ignored copy is under
+  `bench/dom/dist/write-batch-comparison/`.
+
 - Bounded write-batch recovery and grouped commits (2026-10-25). The native
   200-row listener check now uses **one kernel commit and one queued recovery**,
   rather than 200 commits and 201 callbacks, while rendering all 200 rows.
@@ -35,9 +60,14 @@ Last updated: 2026-10-25.
   native checks, two both-mode callback-budget checks and 34 comparison cases
   pass. Chrome correctness gates pass all eight compiled state placements and
   all 16 mutable/immutable update variants, including retained DOM identity and
-  mixed sequences. Shared-code CI and same-compiler runner timing follow before
-  closing this step. Capture packing, full-list scans and the
-  reported VM OOM remain unresolved.
+  mixed sequences.
+  [CI 40231249500](https://github.com/amiheretheophilus/auwla/actions/runs/40231249500)
+  at `248f8a83` passes all four jobs: **248 compiler unit/native tests**, **95
+  runtime tests**, **320 reference cases**, **220 compiler comparisons** in both
+  modes with the unchanged **100 deferred failures** (29 Phase 7, 71 Phase 8),
+  and all ten generator/corpus checks at `FC_RUNS=200`. The controlled measurement
+  above closes this implementation step; the Phase 5 performance floor remains
+  unmet.
 
 - Isolated ownership measurement (2026-10-25).
   [ABBA run 40220315808](https://github.com/amiheretheophilus/auwla/actions/runs/40220315808)

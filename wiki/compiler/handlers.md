@@ -57,6 +57,12 @@ row data can be collected. Both compiler modes also check a constant callback
 budget during the authored fixture's 100-row edit. These work and liveness checks
 do not establish a timing improvement or resolve the reported VM OOM.
 
+The subsequent same-compiler ABBA runner check shows faster component-row updates
+in both orders, with mixed clearing and inline-row results (`optimize.md`,
+"Implementation order after Phase 6"). The full shared-code audit passes all
+95 runtime tests and 248 compiler unit/native tests; comparison cases retain only
+the existing 100 Phase 7/8 failures (`../status.md`).
+
 Simple assignments and updates call a generated helper **after** the native
 operation succeeds; the helper returns that operation's value. Logical assignment
 uses its native short-circuit condition, so a skipped assignment does not bump a
