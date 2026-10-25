@@ -79,43 +79,7 @@ export function BenchAppInlineOwned(_id, _parent, _props, _namespace2, _setupOnl
   let _selectedVersion = 0;
   const _readKey = {};
   const _readKey2 = {};
-  function _mutated() {
-    _dataVersion++;
-    _writes.mark();
-  }
-  function _mutated2() {
-    _dataVersion++;
-    _writes.mark();
-  }
-  function _mutated3() {
-    _dataVersion++;
-    _writes.mark();
-  }
-  function _mutated4() {
-    _dataVersion++;
-    _writes.mark();
-  }
-  function _mutated5() {
-    _dataVersion++;
-    _writes.mark();
-  }
-  function _mutated6() {
-    _dataVersion++;
-    _writes.mark();
-  }
-  function _mutated7() {
-    _dataVersion++;
-    _writes.mark();
-  }
-  function _mutated8() {
-    _dataVersion++;
-    _writes.mark();
-  }
-  function _mutated9() {
-    _dataVersion++;
-    _writes.mark();
-  }
-  function _mutated10() {
+  function _mutated_data() {
     _dataVersion++;
     _writes.mark();
   }
@@ -180,7 +144,7 @@ export function BenchAppInlineOwned(_id, _parent, _props, _namespace2, _setupOnl
     _button2.addEventListener("click", _listener3);
   }
   let _value9 = () => {
-    _write(data = _MD.observeMutation([() => data], [_mutated7]).finish(_MD.trackRead(() => _dataVersion, data, _readKey).concat(buildData(1000))));
+    _write(data = _MD.observeMutation([() => data], [_mutated_data]).finish(_MD.trackRead(() => _dataVersion, data, _readKey).concat(buildData(1000))));
   };
   let _listener4;
   if (_listener4 !== undefined) _button3.removeEventListener("click", _listener4);
@@ -190,7 +154,7 @@ export function BenchAppInlineOwned(_id, _parent, _props, _namespace2, _setupOnl
     _button3.addEventListener("click", _listener4);
   }
   let _value10 = () => {
-    _write(data = _MD.observeMutation([() => data], [_mutated8]).finish(buildData(1000).concat(_MD.trackRead(() => _dataVersion, data, _readKey))));
+    _write(data = _MD.observeMutation([() => data], [_mutated_data]).finish(buildData(1000).concat(_MD.trackRead(() => _dataVersion, data, _readKey))));
   };
   let _listener5;
   if (_listener5 !== undefined) _button4.removeEventListener("click", _listener5);
@@ -200,7 +164,7 @@ export function BenchAppInlineOwned(_id, _parent, _props, _namespace2, _setupOnl
     _button4.addEventListener("click", _listener5);
   }
   let _value11 = () => {
-    _write(data = _MD.observeMutation([() => data], [_mutated4]).finish(_MD.trackRead(() => _dataVersion, data, _readKey).slice(0, -1000)));
+    _write(data = _MD.observeMutation([() => data], [_mutated_data]).finish(_MD.trackRead(() => _dataVersion, data, _readKey).slice(0, -1000)));
   };
   let _listener6;
   if (_listener6 !== undefined) _button5.removeEventListener("click", _listener6);
@@ -210,7 +174,7 @@ export function BenchAppInlineOwned(_id, _parent, _props, _namespace2, _setupOnl
     _button5.addEventListener("click", _listener6);
   }
   let _value12 = () => {
-    for (let i = 0; i < _MD.trackRead(() => _dataVersion, data, _readKey).length; i += 10) _MD.mutationTarget(_MD.trackRead(() => _dataVersion, data, _readKey)[i], "label", _mutated6).value += ' !!!';
+    for (let i = 0; i < _MD.trackRead(() => _dataVersion, data, _readKey).length; i += 10) _MD.mutationTarget(_MD.trackRead(() => _dataVersion, data, _readKey)[i], "label", _mutated_data).value += ' !!!';
   };
   let _listener7;
   if (_listener7 !== undefined) _button6.removeEventListener("click", _listener7);
@@ -221,47 +185,9 @@ export function BenchAppInlineOwned(_id, _parent, _props, _namespace2, _setupOnl
   }
   let _value13 = () => {
     if (_MD.trackRead(() => _dataVersion, data, _readKey).length > 998) {
-      let _tVersion = 0;
-      const _sharedKey = {};
-      function _read_t() {
-        if (_MD.isBuilding() && _sharedReady && !_sharedScope.active()) _refreshShared();
-        return _MD.trackRead(() => {
-          if (_MD.isBuilding() && _sharedReady && !_sharedScope.active()) _refreshShared();
-          return _tVersion;
-        }, t, _sharedKey);
-      }
-      const _sharedScope = _MD.createBuildScope(true, true);
-      let _sharedReady = false;
-      const _sharedWrites = _MD.createSharedWrites([_sharedKey], [_sharedKey]);
-      function _completeShared(_result) {
-        _sharedReady = true;
-        _sharedScope.leave(_sharedFrame);
-        return _result;
-      }
-      function _refreshShared() {
-        if (!_sharedReady || _sharedScope.active()) return;
-        const _sharedFrame = _sharedScope.enter();
-        let _recompute = false || _computation.changed();
-        if (_recompute && (false || true)) {
-          _computation.begin(true);
-          (t = _MD.trackRead(() => _dataVersion, data, _readKey)[1]);
-          _tVersion++;
-          _computation.end(true);
-        }
-        _sharedScope.leave(_sharedFrame);
-      }
-      const _sharedFrame = _sharedScope.enter(() => _completeShared(void 0));
-      const _computation = _MD.createComputation(_sharedWrites.mark);
-      _computation.begin(true);
-      let t = _MD.trackRead(() => _dataVersion, data, _readKey)[1];
-      _sharedWrites.watch([{ read: () => t, notify: () => {
-        _tVersion++;
-        _sharedWrites.mark(_sharedKey);
-      } }]);
-      _computation.end(true);
-      _MD.mutationTarget(_MD.trackRead(() => _dataVersion, data, _readKey), 1, _mutated5).value = _MD.trackRead(() => _dataVersion, data, _readKey)[998];
-      _MD.mutationTarget(_MD.trackRead(() => _dataVersion, data, _readKey), 998, _mutated).value = _read_t();
-      _completeShared(void 0);
+      const t = _MD.trackRead(() => _dataVersion, data, _readKey)[1];
+      _MD.mutationTarget(_MD.trackRead(() => _dataVersion, data, _readKey), 1, _mutated_data).value = _MD.trackRead(() => _dataVersion, data, _readKey)[998];
+      _MD.mutationTarget(_MD.trackRead(() => _dataVersion, data, _readKey), 998, _mutated_data).value = t;
     }
   };
   let _listener8;
@@ -272,7 +198,7 @@ export function BenchAppInlineOwned(_id, _parent, _props, _namespace2, _setupOnl
     _button7.addEventListener("click", _listener8);
   }
   let _value14 = () => {
-    _MD.observeMutation([() => data], [_mutated2]).finish(_MD.trackRead(() => _dataVersion, data, _readKey).reverse());
+    _MD.observeMutation([() => data], [_mutated_data]).finish(_MD.trackRead(() => _dataVersion, data, _readKey).reverse());
   };
   let _listener9;
   if (_listener9 !== undefined) _button8.removeEventListener("click", _listener9);
@@ -282,7 +208,7 @@ export function BenchAppInlineOwned(_id, _parent, _props, _namespace2, _setupOnl
     _button8.addEventListener("click", _listener9);
   }
   let _value15 = () => {
-    _MD.observeMutation([() => data], [_mutated3]).finish(_MD.trackRead(() => _dataVersion, data, _readKey).splice(500, 1));
+    _MD.observeMutation([() => data], [_mutated_data]).finish(_MD.trackRead(() => _dataVersion, data, _readKey).splice(500, 1));
   };
   let _listener10;
   if (_listener10 !== undefined) _button9.removeEventListener("click", _listener10);
@@ -292,7 +218,7 @@ export function BenchAppInlineOwned(_id, _parent, _props, _namespace2, _setupOnl
     _button9.addEventListener("click", _listener10);
   }
   let _value16 = () => {
-    _write(data = _MD.observeMutation([() => data], [_mutated9]).finish(_MD.trackRead(() => _dataVersion, data, _readKey).filter((_item, index) => index % 100 !== 0)));
+    _write(data = _MD.observeMutation([() => data], [_mutated_data]).finish(_MD.trackRead(() => _dataVersion, data, _readKey).filter((_item, index) => index % 100 !== 0)));
   };
   let _listener11;
   if (_listener11 !== undefined) _button10.removeEventListener("click", _listener11);
@@ -314,7 +240,7 @@ export function BenchAppInlineOwned(_id, _parent, _props, _namespace2, _setupOnl
   }
   const _siteComputation = _MD.createComputation(_writes.mark, _entity);
   _siteComputation.begin();
-  let _value18 = _MD.observeMutation([() => data], [_mutated10]).finish(data.map((item) => (_MD.createRenderValue(_renderProgram, [_MD.trackRead(() => _selectedVersion, selected, _readKey2) === item.id ? 'danger' : '', () => {
+  let _value18 = _MD.observeMutation([() => data], [_mutated_data]).finish(data.map((item) => (_MD.createRenderValue(_renderProgram, [_MD.trackRead(() => _selectedVersion, selected, _readKey2) === item.id ? 'danger' : '', () => {
     _write2(selected = item.id);
   }, item.id, item.label], item.id))));
   _siteComputation.end();
@@ -338,7 +264,7 @@ export function BenchAppInlineOwned(_id, _parent, _props, _namespace2, _setupOnl
     const _updateFrame = _scope.enter();
     if (_dataVersion !== _seen || _siteComputation.changed()) {
       _siteComputation.begin();
-      const _next5 = _MD.observeMutation([() => data], [_mutated10]).finish(data.map((item) => (_MD.createRenderValue(_renderProgram, [_MD.trackRead(() => _selectedVersion, selected, _readKey2) === item.id ? 'danger' : '', () => {
+      const _next5 = _MD.observeMutation([() => data], [_mutated_data]).finish(data.map((item) => (_MD.createRenderValue(_renderProgram, [_MD.trackRead(() => _selectedVersion, selected, _readKey2) === item.id ? 'danger' : '', () => {
         _write2(selected = item.id);
       }, item.id, item.label], item.id))));
       _siteComputation.end();

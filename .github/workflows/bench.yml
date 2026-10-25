@@ -36,9 +36,11 @@ on:
         type: string
         default: ''
 
+# One run per branch and compiler: a compiler-next run and an old-compiler run
+# proceed side by side; a second run of the same pair waits for the first.
 concurrency:
-  group: bench-${{ github.ref }}
-  cancel-in-progress: true
+  group: bench-${{ github.ref }}-${{ inputs.compiler || 'next' }}
+  cancel-in-progress: false
 
 defaults:
   run:

@@ -14,17 +14,27 @@ export function emitMutations(
 ) {
   const replacements = new Map(initial);
   const declarations: Statement[] = [];
+  // One notification per binding: every edit of `data` bumps the same version
+  // and marks the same batch, wherever the edit is.
+  const notifiers = new Map<BindingNode, string>();
+  const notifierOf = (binding: BindingNode): string => {
+    let notify = notifiers.get(binding);
+    if (notify === undefined) {
+      notify = names.fresh(`_mutated_${binding.binding.name}`);
+      notifiers.set(binding, notify);
+      declarations.push(statement('function $$notify() { $$version++; $$commit; }', {
+        notify, version: versions.get(binding)!, commit: batch === null ? expression('void 0')
+          : keys.has(binding) ? expression('$$batch.mark($$key)', { batch, key: keys.get(binding)! }) : expression('$$batch.mark()', { batch }),
+      }));
+    }
+    return notify;
+  };
   for (const plan of [...plans].sort((a, b) => (a.operation.end - a.operation.start) - (b.operation.end - b.operation.start))) {
     const notifications = [];
     const reads = [];
     for (const { binding, member } of plan.targets) {
       if (plan.kind !== 'call' && !is.MemberExpression(member)) continue;
-      const notify = names.fresh('_mutated');
-      const version = versions.get(binding)!;
-      declarations.push(statement('function $$notify() { $$version++; $$commit; }', {
-        notify, version, commit: batch === null ? expression('void 0')
-          : keys.has(binding) ? expression('$$batch.mark($$key)', { batch, key: keys.get(binding)! }) : expression('$$batch.mark()', { batch }),
-      }));
+      const notify = notifierOf(binding);
       if (plan.kind === 'call') {
         notifications.push(expression('$$notify', { notify }));
         reads.push(expression('() => $$binding', { binding: binding.binding.name }));

@@ -20,6 +20,14 @@ export function planSharedReads(graph: SemanticGraph, components: ReadonlySet<No
       const parent = entry.module.parentOf(binding.binding.declarations[0]!);
       if (declarator === null && !is.Class(parent)) continue;
       if (owner !== null && !is.BlockStatement(owner) && !binding.binding.references.some((reference) => runnerOf(entry.module, reference.node) !== owner)) continue;
+      // The same for a block in an ordinary function (`if (…) { const t = data[1]; … }`
+      // in a handler): read only by the run that declared it, it is plain
+      // JavaScript. A component's blocks keep versions; their locals feed markup.
+      if (owner !== null && is.BlockStatement(owner)) {
+        const runner = runnerOf(entry.module, owner);
+        const sameRun = binding.binding.references.every((reference) => runnerOf(entry.module, reference.node) === runner);
+        if (runner !== null && !components.has(runner) && sameRun) continue;
+      }
       if (declarator !== null) {
         const declaration = entry.module.parentOf(declarator);
         let block = declaration === null ? null : entry.module.parentOf(declaration);

@@ -205,6 +205,14 @@ let sum = 0;                          // derived: the loop re-runs when items ch
 for (const item of items) sum += item.price;
 ```
 
+A local of an ordinary function (a handler, a helper) that only the same run
+reads is plain JavaScript, compiled as written: `const t = data[1]` in a swap
+handler gets no version, reader or computation. That holds for a function's
+own locals and for a block's (`if (…) { const t = … }`,
+`features/state/shared-plan.ts`). A local that a later run can read, such as
+a closure kept by a timer, keeps its versions, as do a component's block
+locals, which feed its markup.
+
 ### Callbacks
 
 Timing belongs to an invocation, not a function's name or syntactic location.

@@ -86,10 +86,10 @@ export { _read_selected };
 const _sharedScope = _MD.createBuildScope(true, false);
 let _sharedReady = false;
 const _sharedWrites = _MD.createSharedWrites([_sharedKey], []);
-function _completeShared2(_result2) {
+function _completeShared(_result) {
   _sharedReady = true;
   _sharedScope.leave(_sharedFrame);
-  return _result2;
+  return _result;
 }
 function _refreshShared() {
   if (!_sharedReady || _sharedScope.active()) return;
@@ -106,43 +106,7 @@ _sharedWrites.watch([{ read: () => selected, notify: () => {
 export function BenchModuleSelectionInline(_id, _parent, _props, _namespace2, _setupOnly) {
   let _dataVersion = 0;
   const _readKey = {};
-  function _mutated() {
-    _dataVersion++;
-    _writes.mark();
-  }
-  function _mutated2() {
-    _dataVersion++;
-    _writes.mark();
-  }
-  function _mutated3() {
-    _dataVersion++;
-    _writes.mark();
-  }
-  function _mutated4() {
-    _dataVersion++;
-    _writes.mark();
-  }
-  function _mutated5() {
-    _dataVersion++;
-    _writes.mark();
-  }
-  function _mutated6() {
-    _dataVersion++;
-    _writes.mark();
-  }
-  function _mutated7() {
-    _dataVersion++;
-    _writes.mark();
-  }
-  function _mutated8() {
-    _dataVersion++;
-    _writes.mark();
-  }
-  function _mutated9() {
-    _dataVersion++;
-    _writes.mark();
-  }
-  function _mutated10() {
+  function _mutated_data() {
     _dataVersion++;
     _writes.mark();
   }
@@ -213,7 +177,7 @@ export function BenchModuleSelectionInline(_id, _parent, _props, _namespace2, _s
     _button2.addEventListener("click", _listener3);
   }
   let _value8 = () => {
-    _write(data = _MD.observeMutation([() => data], [_mutated7]).finish(_MD.trackRead(() => _dataVersion, data, _readKey).concat(buildData(1000))));
+    _write(data = _MD.observeMutation([() => data], [_mutated_data]).finish(_MD.trackRead(() => _dataVersion, data, _readKey).concat(buildData(1000))));
   };
   let _listener4;
   if (_listener4 !== undefined) _button3.removeEventListener("click", _listener4);
@@ -223,7 +187,7 @@ export function BenchModuleSelectionInline(_id, _parent, _props, _namespace2, _s
     _button3.addEventListener("click", _listener4);
   }
   let _value9 = () => {
-    _write(data = _MD.observeMutation([() => data], [_mutated8]).finish(buildData(1000).concat(_MD.trackRead(() => _dataVersion, data, _readKey))));
+    _write(data = _MD.observeMutation([() => data], [_mutated_data]).finish(buildData(1000).concat(_MD.trackRead(() => _dataVersion, data, _readKey))));
   };
   let _listener5;
   if (_listener5 !== undefined) _button4.removeEventListener("click", _listener5);
@@ -233,7 +197,7 @@ export function BenchModuleSelectionInline(_id, _parent, _props, _namespace2, _s
     _button4.addEventListener("click", _listener5);
   }
   let _value10 = () => {
-    _write(data = _MD.observeMutation([() => data], [_mutated4]).finish(_MD.trackRead(() => _dataVersion, data, _readKey).slice(0, -1000)));
+    _write(data = _MD.observeMutation([() => data], [_mutated_data]).finish(_MD.trackRead(() => _dataVersion, data, _readKey).slice(0, -1000)));
   };
   let _listener6;
   if (_listener6 !== undefined) _button5.removeEventListener("click", _listener6);
@@ -243,7 +207,7 @@ export function BenchModuleSelectionInline(_id, _parent, _props, _namespace2, _s
     _button5.addEventListener("click", _listener6);
   }
   let _value11 = () => {
-    for (let i = 0; i < _MD.trackRead(() => _dataVersion, data, _readKey).length; i += 10) _MD.mutationTarget(_MD.trackRead(() => _dataVersion, data, _readKey)[i], "label", _mutated6).value += ' !!!';
+    for (let i = 0; i < _MD.trackRead(() => _dataVersion, data, _readKey).length; i += 10) _MD.mutationTarget(_MD.trackRead(() => _dataVersion, data, _readKey)[i], "label", _mutated_data).value += ' !!!';
   };
   let _listener7;
   if (_listener7 !== undefined) _button6.removeEventListener("click", _listener7);
@@ -254,47 +218,9 @@ export function BenchModuleSelectionInline(_id, _parent, _props, _namespace2, _s
   }
   let _value12 = () => {
     if (_MD.trackRead(() => _dataVersion, data, _readKey).length > 998) {
-      let _tVersion = 0;
-      const _sharedKey2 = {};
-      function _read_t() {
-        if (_MD.isBuilding() && _sharedReady2 && !_sharedScope2.active()) _refreshShared2();
-        return _MD.trackRead(() => {
-          if (_MD.isBuilding() && _sharedReady2 && !_sharedScope2.active()) _refreshShared2();
-          return _tVersion;
-        }, t, _sharedKey2);
-      }
-      const _sharedScope2 = _MD.createBuildScope(true, true);
-      let _sharedReady2 = false;
-      const _sharedWrites2 = _MD.createSharedWrites([_sharedKey2], [_sharedKey2]);
-      function _completeShared(_result) {
-        _sharedReady2 = true;
-        _sharedScope2.leave(_sharedFrame2);
-        return _result;
-      }
-      function _refreshShared2() {
-        if (!_sharedReady2 || _sharedScope2.active()) return;
-        const _sharedFrame2 = _sharedScope2.enter();
-        let _recompute = false || _computation.changed();
-        if (_recompute && (false || true)) {
-          _computation.begin(true);
-          (t = _MD.trackRead(() => _dataVersion, data, _readKey)[1]);
-          _tVersion++;
-          _computation.end(true);
-        }
-        _sharedScope2.leave(_sharedFrame2);
-      }
-      const _sharedFrame2 = _sharedScope2.enter(() => _completeShared(void 0));
-      const _computation = _MD.createComputation(_sharedWrites2.mark);
-      _computation.begin(true);
-      let t = _MD.trackRead(() => _dataVersion, data, _readKey)[1];
-      _sharedWrites2.watch([{ read: () => t, notify: () => {
-        _tVersion++;
-        _sharedWrites2.mark(_sharedKey2);
-      } }]);
-      _computation.end(true);
-      _MD.mutationTarget(_MD.trackRead(() => _dataVersion, data, _readKey), 1, _mutated5).value = _MD.trackRead(() => _dataVersion, data, _readKey)[998];
-      _MD.mutationTarget(_MD.trackRead(() => _dataVersion, data, _readKey), 998, _mutated).value = _read_t();
-      _completeShared(void 0);
+      const t = _MD.trackRead(() => _dataVersion, data, _readKey)[1];
+      _MD.mutationTarget(_MD.trackRead(() => _dataVersion, data, _readKey), 1, _mutated_data).value = _MD.trackRead(() => _dataVersion, data, _readKey)[998];
+      _MD.mutationTarget(_MD.trackRead(() => _dataVersion, data, _readKey), 998, _mutated_data).value = t;
     }
   };
   let _listener8;
@@ -305,7 +231,7 @@ export function BenchModuleSelectionInline(_id, _parent, _props, _namespace2, _s
     _button7.addEventListener("click", _listener8);
   }
   let _value13 = () => {
-    _MD.observeMutation([() => data], [_mutated2]).finish(_MD.trackRead(() => _dataVersion, data, _readKey).reverse());
+    _MD.observeMutation([() => data], [_mutated_data]).finish(_MD.trackRead(() => _dataVersion, data, _readKey).reverse());
   };
   let _listener9;
   if (_listener9 !== undefined) _button8.removeEventListener("click", _listener9);
@@ -315,7 +241,7 @@ export function BenchModuleSelectionInline(_id, _parent, _props, _namespace2, _s
     _button8.addEventListener("click", _listener9);
   }
   let _value14 = () => {
-    _MD.observeMutation([() => data], [_mutated3]).finish(_MD.trackRead(() => _dataVersion, data, _readKey).splice(500, 1));
+    _MD.observeMutation([() => data], [_mutated_data]).finish(_MD.trackRead(() => _dataVersion, data, _readKey).splice(500, 1));
   };
   let _listener10;
   if (_listener10 !== undefined) _button9.removeEventListener("click", _listener10);
@@ -325,7 +251,7 @@ export function BenchModuleSelectionInline(_id, _parent, _props, _namespace2, _s
     _button9.addEventListener("click", _listener10);
   }
   let _value15 = () => {
-    _write(data = _MD.observeMutation([() => data], [_mutated9]).finish(_MD.trackRead(() => _dataVersion, data, _readKey).filter((_item, index) => index % 100 !== 0)));
+    _write(data = _MD.observeMutation([() => data], [_mutated_data]).finish(_MD.trackRead(() => _dataVersion, data, _readKey).filter((_item, index) => index % 100 !== 0)));
   };
   let _listener11;
   if (_listener11 !== undefined) _button10.removeEventListener("click", _listener11);
@@ -353,7 +279,7 @@ export function BenchModuleSelectionInline(_id, _parent, _props, _namespace2, _s
   }
   const _siteComputation = _MD.createComputation(_writes.mark, _entity);
   _siteComputation.begin();
-  let _value17 = _MD.observeMutation([() => data], [_mutated10]).finish(data.map((item) => (_MD.createRenderValue(_renderProgram, [_read_selected() === item.id ? 'danger' : '', () => {
+  let _value17 = _MD.observeMutation([() => data], [_mutated_data]).finish(data.map((item) => (_MD.createRenderValue(_renderProgram, [_read_selected() === item.id ? 'danger' : '', () => {
     ({ get value() {
       return selected;
     }, set value(_assigned) {
@@ -379,7 +305,7 @@ export function BenchModuleSelectionInline(_id, _parent, _props, _namespace2, _s
     const _updateFrame = _scope.enter();
     if (_dataVersion !== _seen || _siteComputation.changed()) {
       _siteComputation.begin();
-      const _next5 = _MD.observeMutation([() => data], [_mutated10]).finish(data.map((item) => (_MD.createRenderValue(_renderProgram, [_read_selected() === item.id ? 'danger' : '', () => {
+      const _next5 = _MD.observeMutation([() => data], [_mutated_data]).finish(data.map((item) => (_MD.createRenderValue(_renderProgram, [_read_selected() === item.id ? 'danger' : '', () => {
         ({ get value() {
           return selected;
         }, set value(_assigned) {
@@ -406,7 +332,7 @@ export function BenchModuleSelectionInline(_id, _parent, _props, _namespace2, _s
   _scope.leave(_setupFrame);
   return _div;
 }
-_completeShared2(void 0);
+_completeShared(void 0);
 
 export function createModuleSelectionInline() {
   const root = BenchModuleSelectionInline('BenchModuleSelectionInline', null) as HTMLElement;

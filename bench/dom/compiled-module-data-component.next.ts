@@ -17,50 +17,14 @@ export { _read_data };
 const _sharedScope = _MD.createBuildScope(true, false);
 let _sharedReady = false;
 const _sharedWrites = _MD.createSharedWrites([_sharedKey], []);
-function _mutated() {
+function _mutated_data() {
   _dataVersion++;
   _sharedWrites.mark(_sharedKey);
 }
-function _mutated2() {
-  _dataVersion++;
-  _sharedWrites.mark(_sharedKey);
-}
-function _mutated3() {
-  _dataVersion++;
-  _sharedWrites.mark(_sharedKey);
-}
-function _mutated4() {
-  _dataVersion++;
-  _sharedWrites.mark(_sharedKey);
-}
-function _mutated5() {
-  _dataVersion++;
-  _sharedWrites.mark(_sharedKey);
-}
-function _mutated6() {
-  _dataVersion++;
-  _sharedWrites.mark(_sharedKey);
-}
-function _mutated7() {
-  _dataVersion++;
-  _sharedWrites.mark(_sharedKey);
-}
-function _mutated8() {
-  _dataVersion++;
-  _sharedWrites.mark(_sharedKey);
-}
-function _mutated9() {
-  _dataVersion++;
-  _sharedWrites.mark(_sharedKey);
-}
-function _mutated10() {
-  _dataVersion++;
-  _sharedWrites.mark(_sharedKey);
-}
-function _completeShared2(_result2) {
+function _completeShared(_result) {
   _sharedReady = true;
   _sharedScope.leave(_sharedFrame);
-  return _result2;
+  return _result;
 }
 function _refreshShared() {
   if (!_sharedReady || _sharedScope.active()) return;
@@ -77,7 +41,7 @@ _sharedWrites.watch([{ read: () => data, notify: () => {
 function Row(_id2, _parent2, _props2, _namespace2, _setupOnly2) {
   let _propsVersion = 0;
   const _readKey2 = {};
-  function _mutated11() {
+  function _mutated_props() {
     _propsVersion++;
     _writes2.mark();
   }
@@ -129,7 +93,7 @@ function Row(_id2, _parent2, _props2, _namespace2, _setupOnly2) {
   }
   let _seen = _propsVersion;
   let _value15 = () => {
-    _MD.observeMutation([() => props], [_mutated11]).finish(_MD.trackRead(() => _propsVersion, props, _readKey2).select(_MD.trackRead(() => _propsVersion, props, _readKey2).item.id));
+    _MD.observeMutation([() => props], [_mutated_props]).finish(_MD.trackRead(() => _propsVersion, props, _readKey2).select(_MD.trackRead(() => _propsVersion, props, _readKey2).item.id));
   };
   let _listener12;
   if (_listener12 !== undefined) _li.removeEventListener("click", _listener12);
@@ -288,7 +252,7 @@ export function BenchModuleDataComponent(_id, _parent, _props, _namespace, _setu
       data = _assigned;
       _dataVersion++;
       if (!_sharedScope.building()) _sharedWrites.mark(_sharedKey);
-    } }).value = _MD.observeMutation([() => data], [_mutated7]).finish(_read_data().concat(buildData(1000)));
+    } }).value = _MD.observeMutation([() => data], [_mutated_data]).finish(_read_data().concat(buildData(1000)));
   };
   let _listener3;
   if (_listener3 !== undefined) _button3.removeEventListener("click", _listener3);
@@ -304,7 +268,7 @@ export function BenchModuleDataComponent(_id, _parent, _props, _namespace, _setu
       data = _assigned;
       _dataVersion++;
       if (!_sharedScope.building()) _sharedWrites.mark(_sharedKey);
-    } }).value = _MD.observeMutation([() => data], [_mutated8]).finish(buildData(1000).concat(_read_data()));
+    } }).value = _MD.observeMutation([() => data], [_mutated_data]).finish(buildData(1000).concat(_read_data()));
   };
   let _listener4;
   if (_listener4 !== undefined) _button4.removeEventListener("click", _listener4);
@@ -320,7 +284,7 @@ export function BenchModuleDataComponent(_id, _parent, _props, _namespace, _setu
       data = _assigned;
       _dataVersion++;
       if (!_sharedScope.building()) _sharedWrites.mark(_sharedKey);
-    } }).value = _MD.observeMutation([() => data], [_mutated4]).finish(_read_data().slice(0, -1000));
+    } }).value = _MD.observeMutation([() => data], [_mutated_data]).finish(_read_data().slice(0, -1000));
   };
   let _listener5;
   if (_listener5 !== undefined) _button5.removeEventListener("click", _listener5);
@@ -330,7 +294,7 @@ export function BenchModuleDataComponent(_id, _parent, _props, _namespace, _setu
     _button5.addEventListener("click", _listener5);
   }
   let _value7 = () => {
-    for (let i = 0; i < _read_data().length; i += 10) _MD.mutationTarget(_read_data()[i], "label", _mutated6).value += ' !!!';
+    for (let i = 0; i < _read_data().length; i += 10) _MD.mutationTarget(_read_data()[i], "label", _mutated_data).value += ' !!!';
   };
   let _listener6;
   if (_listener6 !== undefined) _button6.removeEventListener("click", _listener6);
@@ -341,47 +305,9 @@ export function BenchModuleDataComponent(_id, _parent, _props, _namespace, _setu
   }
   let _value8 = () => {
     if (_read_data().length > 998) {
-      let _tVersion = 0;
-      const _sharedKey2 = {};
-      function _read_t() {
-        if (_MD.isBuilding() && _sharedReady2 && !_sharedScope2.active()) _refreshShared2();
-        return _MD.trackRead(() => {
-          if (_MD.isBuilding() && _sharedReady2 && !_sharedScope2.active()) _refreshShared2();
-          return _tVersion;
-        }, t, _sharedKey2);
-      }
-      const _sharedScope2 = _MD.createBuildScope(true, true);
-      let _sharedReady2 = false;
-      const _sharedWrites2 = _MD.createSharedWrites([_sharedKey2], [_sharedKey2]);
-      function _completeShared(_result) {
-        _sharedReady2 = true;
-        _sharedScope2.leave(_sharedFrame2);
-        return _result;
-      }
-      function _refreshShared2() {
-        if (!_sharedReady2 || _sharedScope2.active()) return;
-        const _sharedFrame2 = _sharedScope2.enter();
-        let _recompute = false || _computation.changed();
-        if (_recompute && (false || true)) {
-          _computation.begin(true);
-          (t = _read_data()[1]);
-          _tVersion++;
-          _computation.end(true);
-        }
-        _sharedScope2.leave(_sharedFrame2);
-      }
-      const _sharedFrame2 = _sharedScope2.enter(() => _completeShared(void 0));
-      const _computation = _MD.createComputation(_sharedWrites2.mark);
-      _computation.begin(true);
-      let t = _read_data()[1];
-      _sharedWrites2.watch([{ read: () => t, notify: () => {
-        _tVersion++;
-        _sharedWrites2.mark(_sharedKey2);
-      } }]);
-      _computation.end(true);
-      _MD.mutationTarget(_read_data(), 1, _mutated5).value = _read_data()[998];
-      _MD.mutationTarget(_read_data(), 998, _mutated).value = _read_t();
-      _completeShared(void 0);
+      const t = _read_data()[1];
+      _MD.mutationTarget(_read_data(), 1, _mutated_data).value = _read_data()[998];
+      _MD.mutationTarget(_read_data(), 998, _mutated_data).value = t;
     }
   };
   let _listener7;
@@ -392,7 +318,7 @@ export function BenchModuleDataComponent(_id, _parent, _props, _namespace, _setu
     _button7.addEventListener("click", _listener7);
   }
   let _value9 = () => {
-    _MD.observeMutation([() => data], [_mutated2]).finish(_read_data().reverse());
+    _MD.observeMutation([() => data], [_mutated_data]).finish(_read_data().reverse());
   };
   let _listener8;
   if (_listener8 !== undefined) _button8.removeEventListener("click", _listener8);
@@ -402,7 +328,7 @@ export function BenchModuleDataComponent(_id, _parent, _props, _namespace, _setu
     _button8.addEventListener("click", _listener8);
   }
   let _value10 = () => {
-    _MD.observeMutation([() => data], [_mutated3]).finish(_read_data().splice(500, 1));
+    _MD.observeMutation([() => data], [_mutated_data]).finish(_read_data().splice(500, 1));
   };
   let _listener9;
   if (_listener9 !== undefined) _button9.removeEventListener("click", _listener9);
@@ -418,7 +344,7 @@ export function BenchModuleDataComponent(_id, _parent, _props, _namespace, _setu
       data = _assigned;
       _dataVersion++;
       if (!_sharedScope.building()) _sharedWrites.mark(_sharedKey);
-    } }).value = _MD.observeMutation([() => data], [_mutated9]).finish(_read_data().filter((_item, index) => index % 100 !== 0));
+    } }).value = _MD.observeMutation([() => data], [_mutated_data]).finish(_read_data().filter((_item, index) => index % 100 !== 0));
   };
   let _listener10;
   if (_listener10 !== undefined) _button10.removeEventListener("click", _listener10);
@@ -446,7 +372,7 @@ export function BenchModuleDataComponent(_id, _parent, _props, _namespace, _setu
   }
   const _siteComputation = _MD.createComputation(_writes.mark, _entity);
   _siteComputation.begin();
-  let _value13 = _MD.observeMutation([() => data], [_mutated10]).finish(_read_data().map((item) => (_MD.createComponentValue(Row, { "key": item.id, "item": item, "selected": _MD.trackRead(() => _selectedVersion, selected, _readKey) === item.id, "select": select }))));
+  let _value13 = _MD.observeMutation([() => data], [_mutated_data]).finish(_read_data().map((item) => (_MD.createComponentValue(Row, { "key": item.id, "item": item, "selected": _MD.trackRead(() => _selectedVersion, selected, _readKey) === item.id, "select": select }))));
   _siteComputation.end();
   const _valueSlot = _MD.createValueSlot(_text, { id: _id, batch: _writes, entity: _entity, namespace: _namespace });
   _valueSlot.write(_value13);
@@ -466,7 +392,7 @@ export function BenchModuleDataComponent(_id, _parent, _props, _namespace, _setu
     const _updateFrame = _scope.enter();
     if (_siteComputation.changed()) {
       _siteComputation.begin();
-      const _next = _MD.observeMutation([() => data], [_mutated10]).finish(_read_data().map((item) => (_MD.createComponentValue(Row, { "key": item.id, "item": item, "selected": _MD.trackRead(() => _selectedVersion, selected, _readKey) === item.id, "select": select }))));
+      const _next = _MD.observeMutation([() => data], [_mutated_data]).finish(_read_data().map((item) => (_MD.createComponentValue(Row, { "key": item.id, "item": item, "selected": _MD.trackRead(() => _selectedVersion, selected, _readKey) === item.id, "select": select }))));
       _siteComputation.end();
       if (_next !== _value13 && !(_next !== _next && _value13 !== _value13)) {
         _valueSlot.write(_next);
@@ -484,7 +410,7 @@ export function BenchModuleDataComponent(_id, _parent, _props, _namespace, _setu
   _scope.leave(_setupFrame);
   return _div;
 }
-_completeShared2(void 0);
+_completeShared(void 0);
 
 export function createModuleDataComponent() {
   const root = BenchModuleDataComponent('BenchModuleDataComponent', null) as HTMLElement;

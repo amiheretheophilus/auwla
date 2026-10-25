@@ -204,7 +204,18 @@ array child). Remove each check when its phase is built.
   object reachable from `data` on each evaluation (1,000 rows: 1,000 snapshots);
   `map`, `filter`, `slice` and the like do not mutate and need no observation.
   A host with spread attributes (`<div {...p}>`) takes the generic runtime path
-  and gets no template. **Done after Phase 6**
+  and gets no template. An outside review of the inline-row output
+  (2026-10-25) lists what the old compiler's list path does and the general
+  path does not, each measured by `bench/dom`:
+  - a keyed `map` becomes a list region reconciled from `data` directly: no
+    array of render values, capture tuples or row closures on each update;
+  - a selection (`selected === item.id` in a row) refreshes the previous and
+    the new key only, not every row;
+  - a row's handler is stable or delegated to the list's parent, so an update
+    never removes and re-adds 1,000 listeners;
+  - adjacent text (`{item.id}: {item.label}`) is one text node, and a primitive
+    text site writes `setTextData` without a value slot.
+  **Done after Phase 6**
   (`../decisions.md`, 2026-10-24): the benchmark needs both the inline-row and the
   component-row apps, and the second needs components.
 - **Exit:** `cases/conditionals-and-lists` passes in full. `bench/dom` and the
