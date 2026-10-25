@@ -1,5 +1,5 @@
 /** Correctness checks against the authored benchmark apps; no timing assertions. */
-import { afterEach, expect, it } from 'bun:test';
+import { afterEach, expect, it, spyOn } from 'bun:test';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { basename, join } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -10,8 +10,12 @@ import { compileModules } from '../../pipeline';
 const applications: MountedApplication[] = [];
 const hosts: HTMLElement[] = [];
 const NativeMap = globalThis.Map;
+const nativeQueueMicrotask = globalThis.queueMicrotask.bind(globalThis);
+let recoverySpy: ReturnType<typeof spyOn> | undefined;
 
 afterEach(() => {
+  recoverySpy?.mockRestore();
+  recoverySpy = undefined;
   globalThis.Map = NativeMap;
   for (const application of applications.splice(0)) {
     application.unmount();
@@ -21,6 +25,10 @@ afterEach(() => {
     host.remove();
   }
 });
+
+function runImmediately(run: () => void): void {
+  run();
+}
 
 /** Counts calls of every emitted `_update` function, when a fixture is counted. */
 const updates = { count: 0 };
@@ -47,7 +55,7 @@ async function fixture(directory: string, files: readonly string[], component: s
   const host = document.createElement('div');
   document.body.append(host);
   hosts.push(host);
-  setScheduler((run) => run());
+  setScheduler(runImmediately);
   const application = mount(host, module[component]);
   applications.push(application);
   const click = (selector: string) => host.querySelector<HTMLElement>(selector)!.click();
@@ -143,6 +151,32 @@ const componentRowApps = [
   ['AppModuleDataComponent.tsx', 'BenchModuleDataComponent'],
   ['AppModuleSelectionComponent.tsx', 'BenchModuleSelectionComponent'],
 ] as const;
+
+it.each([
+  { mode: 'optimized', optimize: true },
+  { mode: 'general', optimize: false },
+])('bounds recovery scheduling during a 100-row edit in the authored fixture ($mode)', async ({ optimize }) => {
+  const { host } = await fixture('dom', ['AppModuleDataComponent.tsx', 'data.ts'],
+    'BenchModuleDataComponent', false, optimize);
+  const click = (label: string) => {
+    [...host.querySelectorAll('button')].find((button) => button.textContent === label)!.click();
+  };
+  click('create1k');
+  await Promise.resolve();
+  let queued = 0;
+  recoverySpy = spyOn(globalThis, 'queueMicrotask').mockImplementation((callback) => {
+    queued++;
+    nativeQueueMicrotask(callback);
+  });
+  click('update');
+  recoverySpy.mockRestore();
+  recoverySpy = undefined;
+  expect(host.querySelectorAll('li')).toHaveLength(1000);
+  expect(host.querySelector('li')!.textContent).toContain(' !!!');
+  // Include every subsystem's recovery, without filtering runtime function
+  // names. The budget is constant rather than one callback per edited row.
+  expect(queued).toBeLessThan(10);
+}, 30_000);
 
 it.each([
   { mode: 'optimized', optimize: true },

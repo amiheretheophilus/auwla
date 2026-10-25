@@ -24,6 +24,11 @@ Failed setup uses the build scope's abandonment callback, guarded by entity
 identity, so recovery cannot remove a replacement with the same id. The batch
 records invalidations during initial rendering and settles them on activation.
 
+The runtime kernel exposes `onEntityRender` immediately before scheduled and
+explicit entity renders. Lifecycle features own the associated metadata and
+policy; the kernel does not import those features or wrap entity callbacks.
+Write-batch acknowledgement uses a weak entity index (`handlers.md`).
+
 After general planning, `optimize/index.ts` may replace a plan; `optimize: false`
 bypasses all passes. The first pass annotates non-primitive `TextSite`s with
 `listStrategy: 'retained-index'`. Site emission selects the indexed value-slot

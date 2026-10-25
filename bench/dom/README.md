@@ -32,6 +32,8 @@ both columns with current compiler-next and bundling each runtime from source.
 The baseline must support the current compiler's runtime API. The report and
 raw samples are uploaded with the quick results. Compare these columns to
 attribute the runtime change; timings from separate workflow runs cannot do so.
+Use `-f runtime_operations=create,update,clear` to include updates, or select
+other operations supported by the comparison CLI.
 
 ## Local comparisons
 

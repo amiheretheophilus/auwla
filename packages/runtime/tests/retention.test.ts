@@ -2,7 +2,11 @@
 import { expect, it, spyOn } from 'bun:test';
 import { observeMutation } from '../src/mutation';
 import { createComputation, publishVersions, trackRead } from '../src/computation';
-import { createApplicationRuntime, getExtensionStore, registerEntity, runWithApplicationRuntime } from '../src/kernel';
+import {
+  createApplicationRuntime, getExtensionStore, registerEntity, runWithApplicationRuntime,
+  setScheduler, unregisterSubtree,
+} from '../src/kernel';
+import { createWriteBatch } from '../src/write-batch';
 
 async function collectAfterTurn(reference?: WeakRef<object>): Promise<void> {
   // WeakRef targets stay alive for the job in which they were created. Cross
@@ -18,6 +22,12 @@ async function collectAfterTurn(reference?: WeakRef<object>): Promise<void> {
       return;
     }
   }
+}
+
+// Keep the scheduler outside payload-producing scopes. Otherwise the fixture's
+// installed callback can retain a shared lexical environment of its own.
+function runImmediately(run: () => void): void {
+  run();
 }
 
 it('does not retain an application registry through an empty collector', async () => {
@@ -40,6 +50,37 @@ it('does not retain an application registry through an empty collector', async (
   expect(result.reference.deref()).toBeUndefined();
   expect(result.computation.changed()).toBe(false);
   result.computation.dispose();
+});
+
+it('releases a completed row batch while its recovery is still queued', async () => {
+  const runtime = createApplicationRuntime();
+  const queued: (() => void)[] = [];
+  const scheduler = spyOn(globalThis, 'queueMicrotask').mockImplementation((callback) => queued.push(callback));
+  function completed() {
+    const payload = { renders: 0 };
+    const reference = new WeakRef(payload);
+    runWithApplicationRuntime(runtime, () => {
+      setScheduler(runImmediately);
+      const entity = { id: 'row', parent: null, render: () => payload.renders++ };
+      registerEntity(entity);
+      const batch = createWriteBatch(entity);
+      batch.activate();
+      batch.listener(() => batch.mark())();
+      expect(payload.renders).toBe(1);
+      unregisterSubtree(entity.id);
+    });
+    return reference;
+  }
+  const reference = completed();
+  scheduler.mockRestore();
+  await collectAfterTurn(reference);
+  const retainedBeforeRecovery = reference.deref() !== undefined;
+  // Restore scheduler state before asserting, including on the failing baseline.
+  for (const recover of queued) {
+    recover();
+  }
+  runtime.dispose();
+  expect(retainedBeforeRecovery).toBe(false);
 });
 
 it('releases completed observation inputs while its recovery callback is still queued', async () => {

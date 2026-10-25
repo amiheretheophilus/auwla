@@ -244,6 +244,13 @@ shared and local reads.
 
 ## Implementation order after Phase 6
 
+Write batches now share recovery scheduling and publish dirty entities in groups
+through the existing kernel commit. The native 200-row listener check drops from
+201 recovery callbacks and 200 commits to one of each, without skipping a row.
+Completed batches also release row data before queued recovery runs. Error,
+ordering and ownership boundaries are on `handlers.md`; runner timing is still
+needed to establish the performance effect.
+
 Row creation also pays fixed runtime ownership costs. Computation disposal
 registration now waits until the collector actually subscribes. In the unchanged
 module-data component fixture, creating 1,000 rows adds zero ownership entries

@@ -42,6 +42,16 @@ describe('local write batches', () => {
     first.batch.listener(() => first.batch.mark())();
     expect(second.renders()).toBe(1);
   });
+  it('drains child writes at the same queued boundary as their parent', async () => {
+    const first = setup();
+    const second = setup();
+    first.entity.render = () => second.batch.mark();
+    first.batch.activate();
+    second.batch.activate();
+    first.batch.mark();
+    await Promise.resolve();
+    expect(second.renders()).toBe(1);
+  });
   it('flushes all shared consumers at the outer listener boundary across applications', () => {
     const first = setup();
     const second = setup();

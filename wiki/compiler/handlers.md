@@ -24,14 +24,38 @@ Finds every place that changes state and makes the UI update after it.
 | `packages/runtime/tests/method-calls.test.ts` | Proven calls take no snapshot; own/replaced methods, subclass species, converting arguments, effectful callbacks and throws stay observed |
 | `optimize/methods.ts` | Lowers observed member calls to `observeMethod` and marks effect-free inline callbacks |
 | `optimize/methods.dom.test.ts` | Callback classification and native updates, overrides and order, with optimizations on and off |
-| `packages/runtime/src/write-batch.ts` | Captures the application and entity, batches listener writes until return, and queues a microtask for unwrapped callbacks and error recovery |
+| `packages/runtime/src/write-batch.ts` | Captures the application and entity, publishes groups of pending writes, and shares recovery scheduling across unfinished batches |
 | `packages/runtime/tests/write-batch.test.ts` | Scheduler independence, nested listeners, native receivers/results, exceptions, disposal and application isolation |
-| `packages/runtime/tests/retention.test.ts` | Completed observation and notification payload release, bounded recovery scheduling, and guaranteed recovery of abandoned calls |
+| `packages/runtime/tests/write-batch-recovery.test.ts` | Commit/callback counts, parent-child overlap, later writes, explicit renders, cross-application order and recovery failures |
+| `packages/runtime/tests/retention.test.ts` | Completed batch, observation and notification payload release, bounded recovery scheduling, and guaranteed recovery of abandoned calls |
 
 The outer listener and pre-await boundary drain newly dirtied batches as well as
 the initial set. A parent commit can deliver props that dirty a child; that child
 settles before the same listener returns. A focused runtime regression and the
 native SVG component update check cover this propagation.
+
+Each contiguous group of batches from the same application enters one kernel
+commit. First-mark order is retained across interleaved applications; the kernel
+orders parents before children within a group. A weak per-application entity
+index connects batches to the kernel's generic `onEntityRender` hook. A write is
+acknowledged when its entity starts rendering, including explicit entity and
+descendant renders. A parent marking an already queued child therefore does not
+cause a duplicate update, while a later sibling writing an already rendered child
+still schedules another update. Entity and render callback objects are unchanged.
+
+Unfinished batches share one recovery callback that captures no row. Completed
+batches leave its pending set immediately. Recovery reserves a continuation before
+entering opaque observation or rendering, so a failure cannot strand remaining
+rows or applications. Only the first batch is consumed before observation;
+remaining batches stay recoverable if observation itself throws. Helpers live on
+the batch prototype, while public methods remain bound for use as callbacks.
+
+The native 200-row check renders every row with one kernel commit and one queued
+recovery after a successful listener (previously 200 commits and 201 callbacks).
+The retention check holds that callback without running it and verifies completed
+row data can be collected. Both compiler modes also check a constant callback
+budget during the authored fixture's 100-row edit. These work and liveness checks
+do not establish a timing improvement or resolve the reported VM OOM.
 
 Simple assignments and updates call a generated helper **after** the native
 operation succeeds; the helper returns that operation's value. Logical assignment

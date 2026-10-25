@@ -404,6 +404,19 @@ const registryListeners: RegistryListener[] = [];
 export type EntityDisposeHook = (id: EntityId) => readonly unknown[] | void;
 const entityDisposeHooks: EntityDisposeHook[] = [];
 
+const entityRenderHooks: Array<(entity: Entity) => void> = [];
+
+/** @internal Let lifecycle features acknowledge work at the actual render boundary. */
+export function onEntityRender(hook: (entity: Entity) => void): void {
+  entityRenderHooks.push(hook);
+}
+
+function notifyEntityRender(entity: Entity): void {
+  for (const hook of entityRenderHooks) {
+    hook(entity);
+  }
+}
+
 /** @internal Observe the end of a scheduled render drain, including failure. */
 const commitFinishedListeners: Array<(failed: boolean, error?: unknown) => void> = [];
 export function onCommitFinished(listener: (failed: boolean, error?: unknown) => void): void {
@@ -579,6 +592,7 @@ export function renderDescendants(id: EntityId): void {
       const child = k.registry.get(childId);
       if (child === undefined) continue;
       if (child.phase !== 'effect') {
+        notifyEntityRender(child);
         child.render();
         undirty(childId);
       }
@@ -591,6 +605,7 @@ export function renderDescendants(id: EntityId): void {
       const child = k.registry.get(childId);
       if (child === undefined) continue;
       if (child.phase === 'effect') {
+        notifyEntityRender(child);
         child.render();
         undirty(childId);
       }
@@ -683,7 +698,10 @@ function runEntityUpdate(k: KernelState, entity: Entity, reasons: DirtyReasons):
   const previous = k.pullUpdate;
   k.pullUpdate = reasons === -1 || typeof reasons === 'object' && reasons !== null &&
     reasons.size === 1 && reasons.has(-1);
-  try { entity.render(reasons); }
+  try {
+    notifyEntityRender(entity);
+    entity.render(reasons);
+  }
   finally { k.pullUpdate = previous; }
 }
 

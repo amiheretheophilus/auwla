@@ -24,6 +24,21 @@ Last updated: 2026-10-25.
 
 ## Done
 
+- Bounded write-batch recovery and grouped commits (2026-10-25). The native
+  200-row listener check now uses **one kernel commit and one queued recovery**,
+  rather than 200 commits and 201 callbacks, while rendering all 200 rows.
+  Completed row data can be collected while recovery is still queued. Parent
+  marks of already queued children are acknowledged at actual render start;
+  later writes still run. Focused checks cover explicit renders, cross-application
+  order, observer/render errors, extracted methods and propagation in the same
+  boundary. Local type checks, 60 runtime/kernel/ownership checks, 40 compiled
+  native checks, two both-mode callback-budget checks and 34 comparison cases
+  pass. Chrome correctness gates pass all eight compiled state placements and
+  all 16 mutable/immutable update variants, including retained DOM identity and
+  mixed sequences. Shared-code CI and same-compiler runner timing follow before
+  closing this step. Capture packing, full-list scans and the
+  reported VM OOM remain unresolved.
+
 - Isolated ownership measurement (2026-10-25).
   [ABBA run 40220315808](https://github.com/amiheretheophilus/auwla/actions/runs/40220315808)
   compares the runtime before ownership changes (`4fde956e`) with the changed

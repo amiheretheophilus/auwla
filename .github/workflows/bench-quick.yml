@@ -40,9 +40,13 @@ on:
         type: boolean
         default: false
       runtime_ref:
-        description: Optional baseline commit for a same-compiler ABBA runtime comparison of create and clear
+        description: Optional baseline commit for a same-compiler ABBA runtime comparison
         type: string
         default: ''
+      runtime_operations:
+        description: Operations in the isolated runtime comparison, e.g. create,update,clear
+        type: string
+        default: create,clear
 
 concurrency:
   group: bench-quick-${{ github.ref }}
@@ -97,14 +101,15 @@ jobs:
             } >> profiles.md
           done
           cat profiles.md >> "$GITHUB_STEP_SUMMARY"
-      - name: Compare runtime creation and clearing
+      - name: Compare runtimes with the same compiler
         if: inputs.runtime_ref != ''
         env:
           BENCH_COMPILER: next
           BEFORE_REF: ${{ inputs.runtime_ref }}
           SAMPLES: ${{ inputs.samples || '5' }}
+          OPERATIONS: ${{ inputs.runtime_operations || 'create,clear' }}
         run: |
-          bun run bench/dom/compare.ts --before-ref="$BEFORE_REF" --isolate=runtime --operations=create,clear --samples="$SAMPLES"
+          bun run bench/dom/compare.ts --before-ref="$BEFORE_REF" --isolate=runtime --operations="$OPERATIONS" --samples="$SAMPLES"
           cp bench/dom/dist/compare/*-runtime/results.md runtime-comparison.md
           cat runtime-comparison.md >> "$GITHUB_STEP_SUMMARY"
       # Octane's upstream harness needs Node >= 24.11.
