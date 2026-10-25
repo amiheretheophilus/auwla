@@ -20,6 +20,7 @@ import { emitAwaitBoundaries } from './await';
 import { emitRenderValue } from './render-value';
 import { emitComponentCall } from '../../features/components/dom';
 import { emitProps } from '../../features/props/dom';
+import { functionValue } from '../resolve/functions';
 
 /** Preserve module syntax and exports, replacing planned functions on a fresh tree. */
 export function emitDom(plan: ModulePlan, options: CompileModulesOptions): Node {
@@ -60,7 +61,15 @@ export function emitDom(plan: ModulePlan, options: CompileModulesOptions): Node 
     }));
   }
   for (const call of plan.calls) {
-    replacements.set(call, emitComponentCall(call, runtime, plan.componentReferences.has(call.openingElement.name)));
+    // Module-level components and function expressions are registered where
+    // they are defined (below). Only a declaration nested in a function is
+    // registered where its tag is evaluated, which is hoisted in its scope.
+    const tag = call.openingElement.name;
+    const fn = plan.componentReferences.has(tag) ? functionValue(module, tag) : null;
+    const nested = fn !== null && is.FunctionDeclaration(fn) && [...module.ancestors(fn)].some((ancestor) => {
+      return ancestor !== fn && is.Function(ancestor);
+    });
+    replacements.set(call, emitComponentCall(call, runtime, nested));
   }
   hoisted.push(...shared.imports);
   for (const value of plan.values) {

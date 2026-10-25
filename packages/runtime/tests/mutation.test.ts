@@ -1,7 +1,11 @@
 import { expect, it } from 'bun:test';
 import {
-  captureMutationScope, deleteMutation, mutationTarget, observeMutation, registerSharedMutationRoots,
+  captureMutationScope, deleteMutation, mutatedSince, mutationTarget, mutationTime, observeMutation,
+  registerSharedMutationRoots,
 } from '../src/mutation';
+import { sameProps } from '../src/components';
+import { createSharedWrites } from '../src/shared-writes';
+import { createComputation, trackRead } from '../src/computation';
 
 /** A root that holds `value` and counts its notifications. */
 function root(initial: unknown) {
@@ -101,4 +105,53 @@ it('retains key coercion and reports only completed native stores', () => {
   target.value = 4;
   expect(log).toEqual(['key', 'rhs', 'write']);
   expect(item.count).toBe(4);
+});
+
+it('tells whether a value or the data below it was edited since a time', () => {
+  const nested = { label: 'a' };
+  const item = { id: 1, nested };
+  const other = { id: 2 };
+  const before = mutationTime();
+  expect(mutatedSince(item, before)).toBe(false);
+  mutationTarget(nested, 'label', () => {}).value = 'b';
+  expect(mutatedSince(item, before)).toBe(true);
+  expect(mutatedSince(other, before)).toBe(false);
+  const after = mutationTime();
+  expect(mutatedSince(item, after)).toBe(false);
+  // Edits inside an opaque call are found by its snapshots.
+  observeMutation([() => other], [() => {}]).finish(Object.assign(other, { id: 3 }));
+  expect(mutatedSince(other, after)).toBe(true);
+  expect(mutatedSince(item, after)).toBe(false);
+});
+
+it('stamps an edit before notifying, so a synchronous reader sees it', () => {
+  const item = { label: 'a' };
+  const before = mutationTime();
+  let seen = false;
+  mutationTarget(item, 'label', () => { seen = mutatedSince(item, before); }).value = 'b';
+  expect(seen).toBe(true);
+});
+
+it('compares props objects by their fields', () => {
+  const item = {};
+  expect(sameProps({ item, n: 1 }, { item, n: 1 })).toBe(true);
+  expect(sameProps({ item, n: 1 }, { item, n: 2 })).toBe(false);
+  expect(sameProps({ item }, { item, n: undefined })).toBe(false);
+  expect(sameProps({ a: 1 }, { b: 1 })).toBe(false);
+  expect(sameProps([1, item], [1, item])).toBe(true);
+  expect(sameProps([1], { 0: 1 })).toBe(false);
+});
+
+it('wakes readers of the written binding and of derived bindings only', () => {
+  const data = {}, selected = {}, total = {};
+  const writes = createSharedWrites([data, selected, total], [total]);
+  const woken: string[] = [];
+  for (const [name, key] of [['data', data], ['selected', selected], ['total', total]] as const) {
+    const computation = createComputation(() => woken.push(name));
+    computation.begin();
+    trackRead(() => 0, null, key);
+    computation.end();
+  }
+  writes.mark(data);
+  expect(woken.sort()).toEqual(['data', 'total']);
 });

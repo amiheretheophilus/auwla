@@ -81,6 +81,55 @@ function reachesAny(objects: { has(object: object): boolean }, changed: Readonly
   return false;
 }
 
+/**
+ * Every observed edit stamps the object it changed with a new time. A reader
+ * that keeps the time it last looked at a value can then ask whether the value
+ * changed in place since, without being notified of every edit: a component
+ * whose parent passes the same `item` again updates only if `item` was edited.
+ */
+let clock = 0;
+const editedAt = new WeakMap<object, number>();
+
+function stamp(object: object): void {
+  editedAt.set(object, ++clock);
+}
+
+export function mutationTime(): number {
+  return clock;
+}
+
+/** Whether an observed edit since `time` changed `value` or data reachable from it. */
+export function mutatedSince(value: unknown, time: number): boolean {
+  if (time === clock || !isObject(value)) return false;
+  return editedBelow(value, time, new Set());
+}
+
+function editedBelow(value: object, time: number, seen: Set<object>): boolean {
+  if (seen.has(value)) return false;
+  seen.add(value);
+  if ((editedAt.get(value) ?? 0) > time) return true;
+  const below = (item: unknown) => isObject(item) && editedBelow(item, time, seen);
+  if (value instanceof Map) {
+    let found = false;
+    Map.prototype.forEach.call(value, (item: unknown, key: unknown) => {
+      found ||= below(key) || below(item);
+    });
+    if (found) return true;
+  }
+  if (value instanceof Set) {
+    let found = false;
+    Set.prototype.forEach.call(value, (item: unknown) => {
+      found ||= below(item);
+    });
+    if (found) return true;
+  }
+  for (const key of Reflect.ownKeys(value)) {
+    const descriptor = Object.getOwnPropertyDescriptor(value, key)!;
+    if ('value' in descriptor && below(descriptor.value)) return true;
+  }
+  return false;
+}
+
 /** Notify every root whose data includes a changed object, then record the edit. */
 function notifyAliases(changed: ReadonlySet<object>, edit: Edit): void {
   if (changed.size === 0) return;
@@ -245,6 +294,8 @@ export function observeMutation(reads: readonly (() => unknown)[], notify: reado
         if (differs(prior, after)) changed.add(object);
         objects.set(object, after);
       }
+      // Stamp before notifying: a notified owner can update synchronously.
+      for (const object of changed) stamp(object);
       let moved = false;
       reads.forEach((read, index) => {
         const value = read();
@@ -273,6 +324,7 @@ export function mutationTarget(object: any, key: any, notify: () => void) {
     set value(value: unknown) {
       const edit = storeEdit(object, property, value);
       object[property] = value;
+      stamp(object);
       notify();
       notifyAliases(new Set([object]), edit);
     },
@@ -281,6 +333,7 @@ export function mutationTarget(object: any, key: any, notify: () => void) {
 
 export function deleteMutation(object: any, key: any, notify: () => void): boolean {
   const result = delete object[key];
+  stamp(object);
   notify();
   notifyAliases(new Set([object]), { kind: 'store', added: undefined, removed: true });
   return result;
@@ -292,6 +345,7 @@ export function receiverMutationTarget(read: () => any, write: (value: any) => v
     get value() { return read(); },
     set value(value: unknown) {
       write(value);
+      stamp(object);
       // Reading the old value could run a private or inherited getter.
       notifyAliases(new Set([object]), { kind: 'store', added: value, removed: true });
     },

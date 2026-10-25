@@ -74,8 +74,25 @@ export function emitSharedState(plan: ModulePlan, names: Names, runtime: string,
     }
     declarations.push(statement(`const $$scope = $$runtime.createBuildScope(true, ${owner.block !== null});`, { scope, runtime }));
     declarations.push(statement('let $$ready = false;', { ready }));
-    declarations.push(statement('const $$batch = $$runtime.createSharedWrites($$keys);', {
-      batch, runtime, keys: b.ArrayExpression({ elements: [...keys.values()].map((key) => expression('$$key', { key })) }),
+    // A write wakes readers of what it wrote and of every derived binding,
+    // which recomputes on read; readers of other state stay asleep.
+    const recomputed = new Set<BindingNode>();
+    for (const group of owner.memos) {
+      for (const computation of group.computations) {
+        for (const target of computation.targets) recomputed.add(target);
+      }
+      for (const targets of [...group.outputs.values(), ...group.possibleOutputs.values()]) {
+        for (const target of targets) recomputed.add(target);
+      }
+    }
+    const keyList = (bindings: Iterable<BindingNode>) => b.ArrayExpression({
+      elements: [...bindings].flatMap((binding) => {
+        const key = keys.get(binding);
+        return key === undefined ? [] : [expression('$$key', { key })];
+      }),
+    });
+    declarations.push(statement('const $$batch = $$runtime.createSharedWrites($$keys, $$recomputed);', {
+      batch, runtime, keys: keyList(keys.keys()), recomputed: keyList(recomputed),
     }));
     owners.push({ plan: owner, versions, keys, scope, frame, batch, refresh, ready, declarations });
   }

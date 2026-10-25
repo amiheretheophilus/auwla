@@ -4,7 +4,7 @@ import type { Expression, Node, Statement } from 'yuku-parser';
 import type { RenderValuePlan, Site, Template } from '../plan/model';
 import type { Names } from './names';
 import { expression, statement, stringLiteral } from './quote';
-import { emitTemplate, prepareTemplateSites } from './template';
+import { emitTemplate, inheritedNodes, prepareTemplateSites } from './template';
 import { emitSites } from './sites';
 
 export function emitRenderValue(plan: RenderValuePlan, names: Names, runtime: string) {
@@ -64,7 +64,8 @@ export function emitRenderValue(plan: RenderValuePlan, names: Names, runtime: st
 
   // Stored JSX can be consumed in either namespace. Choose at mount time,
   // when the consuming slot knows where its independent DOM will live.
-  const svg = emitVariant(plan.svgTemplate);
+  // Only roots that are SVG tags can change namespace (`inheritedNodes`).
+  const svg = inheritedNodes(plan.template).size > 0 ? emitVariant(plan.svgTemplate) : null;
   const html = emitVariant(plan.template);
   const mountBody = [
     statement('const $$document = $$runtime.getActiveEnvironment().document;', { document, runtime }),
@@ -72,11 +73,11 @@ export function emitRenderValue(plan: RenderValuePlan, names: Names, runtime: st
     statement('const $$entity = $$owner.entity;', { entity, owner }),
     statement('const $$batch = $$owner.batch;', { batch, owner }),
     statement('const $$namespace = $$owner.namespace;', { namespace, owner }),
-    b.IfStatement({
+    ...(svg === null ? [] : [b.IfStatement({
       test: expression('$$namespace === "svg"', { namespace }),
       consequent: b.BlockStatement({ body: svg }),
       alternate: null,
-    }),
+    })]),
     ...html,
   ];
   const declaration = programDeclaration(program, values, owner, mountBody);

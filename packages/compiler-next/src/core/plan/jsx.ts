@@ -20,6 +20,23 @@ export const VOID_ELEMENTS = new Set([
   'area', 'base', 'br', 'col', 'embed', 'hr', 'img', 'input', 'link', 'meta', 'source', 'track', 'wbr',
 ]);
 
+/**
+ * Tags that name an SVG element. Markup returned by a component or stored as a
+ * value takes the namespace of the slot that shows it, but only these tags
+ * (and what they contain) can become SVG there. Any other tag stays HTML, so
+ * most templates need no SVG variant.
+ */
+export const SVG_ELEMENTS = new Set([
+  'a', 'animate', 'animateMotion', 'animateTransform', 'circle', 'clipPath', 'defs', 'desc', 'ellipse',
+  'feBlend', 'feColorMatrix', 'feComponentTransfer', 'feComposite', 'feConvolveMatrix', 'feDiffuseLighting',
+  'feDisplacementMap', 'feDistantLight', 'feDropShadow', 'feFlood', 'feFuncA', 'feFuncB', 'feFuncG', 'feFuncR',
+  'feGaussianBlur', 'feImage', 'feMerge', 'feMergeNode', 'feMorphology', 'feOffset', 'fePointLight',
+  'feSpecularLighting', 'feSpotLight', 'feTile', 'feTurbulence', 'filter', 'foreignObject', 'g', 'image',
+  'line', 'linearGradient', 'marker', 'mask', 'metadata', 'mpath', 'path', 'pattern', 'polygon', 'polyline',
+  'radialGradient', 'rect', 'script', 'set', 'stop', 'style', 'svg', 'switch', 'symbol', 'text', 'textPath',
+  'title', 'tspan', 'use', 'view',
+]);
+
 /** Written as DOM properties, as the reference does (`tests/reference/runtime.ts`). */
 export const PROPERTIES = new Set(['value', 'checked', 'selected']);
 

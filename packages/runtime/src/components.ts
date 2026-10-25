@@ -49,14 +49,44 @@ function asProps(value: unknown): Props {
 /** Use the intrinsic even when an authored binding shadows Object. */
 export const sameValue = Object.is;
 
+/**
+ * Whether two objects the compiler or a rest pattern created hold the same
+ * values. Such an object is new on every evaluation, so its identity says
+ * nothing; its fields do. Edits inside a field are found by `mutatedSince`.
+ */
+export function sameProps(previous: unknown, next: unknown): boolean {
+  if (Object.is(previous, next)) {
+    return true;
+  }
+  if (previous === null || next === null || typeof previous !== 'object' || typeof next !== 'object') {
+    return false;
+  }
+  if (Array.isArray(previous) !== Array.isArray(next)) {
+    return false;
+  }
+  const keys = Object.keys(next);
+  if (keys.length !== Object.keys(previous).length) {
+    return false;
+  }
+  for (const key of keys) {
+    if (!Object.prototype.hasOwnProperty.call(previous, key)) {
+      return false;
+    }
+    if (!Object.is((previous as Props)[key], (next as Props)[key])) {
+      return false;
+    }
+  }
+  return true;
+}
+
 export function createPropsCell(value: unknown, args: readonly unknown[] = [value]): PropsCell {
   const cell: PropsCell = {
     value,
     arguments: args,
     receive: null,
     set(next, args = [next]) {
-      // The compiler compares each binding to its last parent value. Always
-      // deliver: a stable object identity can contain a newly mutated field.
+      // The receiver compares each binding with its last parent value, and
+      // asks `mutatedSince` about a value passed again, which may be edited.
       cell.value = next;
       cell.arguments = args;
       cell.receive?.(next);
@@ -89,7 +119,8 @@ export function createComponentValue(callee: unknown, props: unknown, key?: unkn
   const attributes = asProps(props);
   const identity = key === undefined ? attributes.key : key;
   let inputs = props;
-  if (props !== null && typeof props === 'object') {
+  const has = Object.prototype.hasOwnProperty;
+  if (has.call(attributes, 'key') || has.call(attributes, 'suspend')) {
     // JSX-only controls participate in identity and readiness, never in the
     // child's authored props object. Spreads have already evaluated their getters.
     const { key: _key, suspend: _suspend, ...forwarded } = attributes;
@@ -118,6 +149,8 @@ export function componentValue(component: Function): (...args: unknown[]) => obj
     // An ordinary call receives its authored object unchanged. Copying it here
     // would invoke unused getters and change parameter/default semantics.
     adapter = (...args: unknown[]) => createRenderValue(componentProgram(component as Component), [args[0], args]);
+    // `Row.name` reads the same through the adapter as through the function.
+    Object.defineProperty(adapter, 'name', { value: component.name, configurable: true });
     valueFunctions.set(component, adapter);
     valueComponents.set(adapter, component);
     const root = rootFactoryStore().get(component);
@@ -169,7 +202,15 @@ function componentProgram(component: Component): RenderProgram {
       return {
         nodes,
         update(next) {
-          cell.set(next[0], next[1] as readonly unknown[] | undefined);
+          const args = next[1] as readonly unknown[] | undefined;
+          // A JSX call builds a new props object each time; keep the one the
+          // child holds while its fields are the same. A direct call's
+          // arguments are authored values, compared by identity.
+          if (args === undefined && sameProps(cell.value, next[0])) {
+            cell.set(cell.value);
+            return;
+          }
+          cell.set(next[0], args);
         },
         dispose() {
           unregisterSubtree(id);

@@ -1,5 +1,5 @@
 /** Native parameter patterns, with a separate last-parent value per binding. */
-import { b, is } from 'yuku-ast';
+import { b, findAll, is } from 'yuku-ast';
 import type { Expression, Node, Statement } from 'yuku-parser';
 import type { ComponentPlan } from '../../core/plan';
 import type { BindingNode } from '../../core/graph';
@@ -51,19 +51,34 @@ export function emitProps(
     return { binding, next, previous };
   });
 
+  // A value passed again may have been edited in place since the child last
+  // received it; `seen` is when that was.
+  const seen = names.fresh('_propsSeen');
+  const changed = names.fresh('_propsChanged');
+  setup.push(statement('let $$seen = $$runtime.mutationTime();', { seen, runtime }));
+  const rests = restTargets(patterns);
   const body = declareParameters(patterns, cell, 'const', temporaryPattern);
+  body.push(statement('let $$changed = false;', { changed }));
   for (const { binding, next, previous } of entries) {
     const version = versions.get(binding)!;
-    body.push(statement(`if (!$$runtime.sameValue($$next, $$previous)) {
+    // A rest pattern builds a new object each time; its fields are what count.
+    const rest = binding.binding.declarations.some((declaration) => rests.has(declaration));
+    body.push(statement(`if (!$$same($$next, $$previous)) {
       $$binding = $$next;
       $$previous = $$next;
       $$version++;
-    } else if ($$next !== null && (typeof $$next === "object" || typeof $$next === "function")) {
+      $$changed = true;
+    } else if ($$runtime.mutatedSince($$previous, $$seen)) {
       $$version++;
-    }`, { runtime, next, previous, binding: binding.binding.name, version }));
+      $$changed = true;
+    }`, {
+      runtime, next, previous, binding: binding.binding.name, version, changed, seen,
+      same: expression(rest ? '$$runtime.sameProps' : '$$runtime.sameValue', { runtime }),
+    }));
   }
+  body.push(statement('$$seen = $$runtime.mutationTime();', { seen, runtime }));
   if (batch !== null) {
-    body.push(statement('$$batch.mark();', { batch }));
+    body.push(statement('if ($$changed) $$batch.mark();', { changed, batch }));
   }
   const receiver = b.ArrowFunctionExpression({
     id: null,
@@ -75,6 +90,20 @@ export function emitProps(
   });
   receive.push(statement('$$cell.receive = $$receiver;', { cell, receiver }));
   return { parameter, setup, receive };
+}
+
+/** The identifiers a rest element collects into, at any depth of the patterns. */
+function restTargets(patterns: readonly Node[]): ReadonlySet<Node> {
+  const targets = new Set<Node>();
+  for (const pattern of patterns) {
+    const rests = [...(is.RestElement(pattern) ? [pattern] : []), ...findAll(pattern, 'RestElement')];
+    for (const rest of rests) {
+      if (is.Identifier(rest.argument)) {
+        targets.add(rest.argument);
+      }
+    }
+  }
+  return targets;
 }
 
 /** Keep each native pattern in the child's lexical environment, in argument order. */

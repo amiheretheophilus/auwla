@@ -199,7 +199,12 @@ array child). Remove each check when its phase is built.
   random seeds, including the saved list failures in `tests/corpus/`.
 - [ ] Then the fast paths in `optimize/` (`optimize.md`): keyed `map`, targeted
   `push`/`splice`/`sort`, DOM-only rows, selection. Each runs with optimizations
-  on and off; both must match the reference. **Done after Phase 6**
+  on and off; both must match the reference. Also found in the Phase 6 review:
+  a render's `data.map(...)` is observed as an opaque call, which snapshots every
+  object reachable from `data` on each evaluation (1,000 rows: 1,000 snapshots);
+  `map`, `filter`, `slice` and the like do not mutate and need no observation.
+  A host with spread attributes (`<div {...p}>`) takes the generic runtime path
+  and gets no template. **Done after Phase 6**
   (`../decisions.md`, 2026-10-24): the benchmark needs both the inline-row and the
   component-row apps, and the second needs components.
 - **Exit:** `cases/conditionals-and-lists` passes in full. `bench/dom` and the
@@ -219,6 +224,14 @@ array child). Remove each check when its phase is built.
   returns markup, as the reference's does.
   Adapters are built; direct arguments, imported calls, map arguments/defaults/
   rest and discarded setup are locally checked. The Phase 6 guard is removed.
+- [x] Review fixes (2026-10-25). A child updates only when a prop changed or a
+  compiled edit reached it (`mutatedSince`); before, every parent update re-ran
+  every child. A shared write wakes readers of what it wrote and of derived
+  bindings, not of all the module's state. Templates get an SVG variant only for
+  SVG root tags; `defineComponent` no longer runs at every tag evaluation.
+  `features/components/bench.test.ts` asserts the update counts on the
+  component-row app: `update` 101 (100 rows and the list), `swap`, `remove` and
+  `append1k` 1, a selection one per row.
 - **Exit:** `cases/components` passes; Octane run by the user. Then Phase 5's
   fast paths and its benchmark gate.
   Correctness checks pass. The VM's Octane timing remains pending; select

@@ -7,6 +7,7 @@ import { b } from 'yuku-ast';
 import type { Expression, Statement } from 'yuku-parser';
 import type { Site, Template } from '../plan';
 import type { Names } from './names';
+import { SVG_ELEMENTS } from '../plan/jsx';
 import { expression, numberLiteral, statement, statements, stringLiteral } from './quote';
 
 const SVG_NAMESPACE = 'http://www.w3.org/2000/svg';
@@ -72,8 +73,9 @@ function materialize(template: Template, used: ReadonlySet<number>, context: Tem
   let create = expression('$$runtime.materializeMarkup($$markup)', {
     runtime: context.runtime, markup: context.markup!,
   });
-  if (context.namespace !== undefined) {
-    const svg = createNodes(template, context);
+  if (context.namespace !== undefined && inheritedNodes(template).size > 0) {
+    // Cloned markup is parsed as HTML; in an SVG slot, build the nodes instead.
+    const svg = createNodes(template, context, true);
     const body = [...svg.statements, b.ReturnStatement({
       argument: b.ArrayExpression({
         elements: template.nodes.map((_, index) => b.Identifier({ name: svg.ref(index) })),
@@ -98,7 +100,8 @@ function materialize(template: Template, used: ReadonlySet<number>, context: Tem
   return { statements: output, ref: (index) => refs.get(index)! };
 }
 
-function createNodes(template: Template, context: TemplateNames): TemplateEmit {
+/** With `inSvg`, the caller already knows the consuming slot is SVG. */
+function createNodes(template: Template, context: TemplateNames, inSvg = false): TemplateEmit {
   const output: Statement[] = [];
   const refs = template.nodes.map((_, index) => context.names.fresh(nodeName(template, index)));
   const holes = { document: context.document };
@@ -116,10 +119,11 @@ function createNodes(template: Template, context: TemplateNames): TemplateEmit {
     }
 
     const tag = stringLiteral(node.tag);
-    let create = node.namespace === 'svg'
+    const svg = node.namespace === 'svg' || (inSvg && inherited.has(index));
+    let create = svg
       ? expression('$$document.createElementNS($$svg, $$tag)', { ...holes, svg: stringLiteral(SVG_NAMESPACE), tag })
       : expression('$$document.createElement($$tag)', { ...holes, tag });
-    if (node.namespace === 'html' && context.namespace !== undefined && inherited.has(index)) {
+    if (!svg && context.namespace !== undefined && inherited.has(index)) {
       create = expression('$$namespace === "svg" ? $$document.createElementNS($$svg, $$tag) : $$html', {
         ...holes, namespace: context.namespace, svg: stringLiteral(SVG_NAMESPACE), tag, html: create,
       });
@@ -139,24 +143,28 @@ function createNodes(template: Template, context: TemplateNames): TemplateEmit {
   return { statements: output, ref: (index) => refs[index]! };
 }
 
-/** A foreignObject explicitly restarts HTML, including in an inherited SVG tree. */
-function inheritedNodes(template: Template): ReadonlySet<number> {
+/**
+ * The HTML-planned elements that become SVG when the consuming slot is SVG:
+ * SVG tags reached from a root through SVG tags. Any other tag stays HTML and
+ * so does what it contains; a foreignObject restarts HTML below it.
+ */
+export function inheritedNodes(template: Template): ReadonlySet<number> {
   const inherited = new Set<number>();
-  function visit(index: number, inherits: boolean): void {
-    if (inherits) {
-      inherited.add(index);
-    }
+  function visit(index: number): void {
     const node = template.nodes[index]!;
-    if (node.kind !== 'element') {
+    if (node.kind !== 'element' || node.namespace !== 'html' || !SVG_ELEMENTS.has(node.tag)) {
       return;
     }
-    const childrenInherit = inherits && node.tag !== 'foreignObject';
+    inherited.add(index);
+    if (node.tag === 'foreignObject') {
+      return;
+    }
     for (const child of node.children) {
-      visit(child, childrenInherit);
+      visit(child);
     }
   }
   for (const root of template.roots) {
-    visit(root, true);
+    visit(root);
   }
   return inherited;
 }

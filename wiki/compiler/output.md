@@ -294,15 +294,21 @@ paths later compile the common shapes more directly.
 `key`; `children` is the single child, or an array of several, as the reference
 builds it. Handlers and render callbacks are ordinary values.
 
-### 2. The calling convention stays
+### 2. The calling convention
 
-A compiled component starts with `Name(_id, _parent, _props)`, as the runtime's `mount`,
-the test harness and the bench builds call it. `_props` is a props cell from
-the runtime (`createPropsCell`), or undefined at the root, which reads as `{}`.
-The value slot calls it with a fresh child id under its owner, followed by its
-consuming namespace. An internal setup-only argument supports discarded calls
-without mounting their output. A props cell also retains the complete native
+A compiled component is `Name(_id, _parent, _props, _namespace, _setupOnly)`. The
+first three are what the runtime's `mount`, the test harness and the bench builds
+pass; the last two are optional. `_props` is a props cell from the runtime
+(`createPropsCell`), or undefined at the root, which reads as `{}`. The value slot
+calls it with a fresh child id under its owner and its consuming namespace
+(`'svg'` inside an SVG element). `_setupOnly` serves discarded calls (`Row();`):
+setup runs, nothing is mounted. A props cell also retains the complete native
 argument list for direct calls, map callbacks and rest parameters.
+
+Only markup whose root tags name SVG elements (`circle`, `g`, `a`, `title`, …,
+`SVG_ELEMENTS` in `core/plan/jsx.ts`) gets an SVG variant built at mount when
+`_namespace` is `'svg'`. Any other tag stays HTML in an SVG slot, so a component
+rooted at `<li>` or `<div>` has one template, cloned from markup.
 
 A component used for its value (`items.map(Row)`, `const view = Row(x)`) gets
 `componentValue(Row)` at that reference instead: a function returning
@@ -317,9 +323,20 @@ setup from `_props.arguments` (whose first value is `_props.value`), and each ge
 reads of state. When the parent sends new props, the cell calls the child's
 receiver, which destructures them into temporaries (defaults and rest included,
 natively) and, for each binding whose value from the parent changed
-(`Object.is`), assigns it and bumps its version. A prop the child wrote keeps its
-value until the parent sends a different one (`state-and-derived.md`, `Prop`).
-The receiver then marks the child's batch.
+(`Object.is`; field by field for a rest binding, which is a new object every
+time), assigns it and bumps its version. A prop the child wrote keeps its value
+until the parent sends a different one (`state-and-derived.md`, `Prop`).
+
+A value passed again may have been edited in place (`item.label += '!'` in the
+parent). Every compiled edit stamps the object it changed with a time from the
+runtime's mutation clock (`mutation.ts`). The receiver keeps the time it last
+received props and bumps a binding passed again only if `mutatedSince(value,
+seen)`: an edit since then reached the value or data below it. When no edit
+happened anywhere the check is one comparison. A JSX call's props object is new
+on every evaluation, so the props cell keeps the child's object while its fields
+are the same (`sameProps`). The receiver marks the child's batch only when a
+binding changed, so in a list of 1,000 rows an edit to 100 items updates 100 rows,
+and a reorder updates none.
 
 `features/components/dom.ts` builds ordered props; `features/props/dom.ts` emits
 native pattern setup/reception. Runtime `components.ts` keeps compiled callable

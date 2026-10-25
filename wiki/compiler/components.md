@@ -33,14 +33,27 @@ extracts `key` for identity and excludes `key`/`suspend` from child props. Expli
 children replace a spread's `children`, using a single value or an array. Native
 tag props reuse `patchDomProps`, including listeners batched in the owning
 application. SVG flows from the consuming slot through component roots and
-conditional fragments; `foreignObject` restarts HTML.
+conditional fragments whose tags name SVG elements; `foreignObject` restarts
+HTML, and any other tag stays HTML (`output.md`, "The calling convention").
 
 The child keeps native variables and numeric versions. A receiver evaluates the
 native parameter patterns into temporaries. A different parent value replaces
 that binding and bumps its version; an unchanged value preserves a local
-override. Stable object references still notify readers after mutations. Direct
-call adapters retain every argument, including map's index/array and rest
-parameters. A discarded direct call runs setup without mounting returned markup.
+override. A value passed again bumps only if a compiled edit reached it since the
+last receive (`mutatedSince`, `output.md`, "Props in the child"), and the child
+updates only when a binding changed. Direct call adapters retain every argument,
+including map's index/array and rest parameters; an adapter keeps the
+component's `name`. A discarded direct call runs setup without mounting returned
+markup.
+
+Module-level components and component function expressions are registered as
+compiled where they are defined. A component declaration nested in another
+function is registered where its tag is evaluated, or by `componentValue` when
+it is used as a value.
+
+`<div {...props}>` (a host with spread attributes) takes the generic host path:
+`patchDomProps` for attributes and a value slot for children. It is correct but
+not compiled to a template; Phase 5's fast paths cover it (`plan.md`).
 
 Nested declarations are emitted before their enclosing component is sealed, so
 captured parent reads/writes receive the parent's version instrumentation. Local
@@ -51,9 +64,11 @@ carry that factory metadata so an authored `mount(host, Component)` entry uses
 the same runtime API as the existing compiler. This is covered independently of
 the comparison harness's direct root call.
 
-The reference retains a nested function declaration per setup invocation. Its
-previous per-render recreation prevented nested components from settling; the
-new nested-component assertion remains unchanged.
+The reference retains a nested function declaration per setup invocation
+(`retainFunction`), as compiled setup creates it once. Recreating it on every
+render made each nested component a new type, which never settled. This changes
+the oracle for every nested function declaration, components or not; it is
+recorded in `../decisions.md` (2026-10-25).
 
 ## Rules
 

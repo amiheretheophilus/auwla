@@ -76,7 +76,10 @@ export { materializeMarkup } from './markup';
 export { createWriteBatch, rejectConstAssignment, flushWritesBeforeAwait, resumeWritesAfterAwait } from './write-batch';
 export type { WriteBatch } from './write-batch';
 export { createBuildScope, captureBuildScope, isBuilding } from './build-scope';
-export { mutationTarget, deleteMutation, receiverMutationTarget, observeMutation, watchMutationRoots } from './mutation';
+export {
+  mutationTarget, deleteMutation, receiverMutationTarget, observeMutation, watchMutationRoots,
+  mutatedSince, mutationTime,
+} from './mutation';
 export { createComputation, trackRead } from './computation';
 export { createSharedWrites } from './shared-writes';
 export type { BuildScope, BuildFrame } from './build-scope';
@@ -151,7 +154,7 @@ export { createCondRegion } from './cond';
 export { createRenderValue, createValueSlot, renderNamespace } from './render-value';
 export {
   componentValue, componentSetup, createComponentValue, createPropsCell,
-  defineComponent, sameValue, type PropsCell,
+  defineComponent, sameProps, sameValue, type PropsCell,
 } from './components';
 export { publishVersions } from './computation';
 export { registerProps, setProps } from './props';
