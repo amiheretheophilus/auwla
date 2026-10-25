@@ -2,7 +2,7 @@
 import { is } from 'yuku-ast';
 import type { Node } from 'yuku-parser';
 import type { Binding, Resolved } from '../../core/resolve';
-import { declaringRunner, isParameter } from '../../core/resolve';
+import { declaringRunner, isParameter, isRuntimeBinding } from '../../core/resolve';
 import { functionValue } from '../../core/resolve/functions';
 import type { FunctionNode } from '../../core/resolve/functions';
 import { returnedMarkup } from './returns';
@@ -59,14 +59,21 @@ export function propBindings(
   const props = new Set<Binding>();
   for (const entry of resolved.modules) {
     for (const binding of entry.module.bindings) {
-      if (!isParameter(binding)) {
+      if (!isParameter(binding) || !isRuntimeBinding(binding)) {
         continue;
       }
       const owner = declaringRunner(entry.module, binding);
       if (owner === null || !is.Function(owner) || !components.has(owner as FunctionNode)) {
         continue;
       }
-      props.add(binding);
+      // Declared in the component's own parameter list (any position: a map
+      // callback receives index and array too), not in a nested function's.
+      const declared = binding.declarations.some((name) => owner.params.some((param) => {
+        return name.start >= param.start && name.end <= param.end;
+      }));
+      if (declared) {
+        props.add(binding);
+      }
     }
   }
   return props;

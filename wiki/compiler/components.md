@@ -46,6 +46,14 @@ including map's index/array and rest parameters; an adapter keeps the
 component's `name`. A discarded direct call runs setup without mounting returned
 markup.
 
+Props are the bindings declared in the component's own parameter list, at any
+position. A name inside a parameter's type (`id` in
+`props: { select: (id: number) => void }`) is a parameter binding to yuku but
+does not exist at runtime; `isRuntimeBinding` excludes every binding declared
+inside a type. Found by the DOM benchmark's `AppOwned` (2026-10-25), whose rows
+threw `id is not defined`; the case `component props: parameter names inside a
+prop type are not props` covers it.
+
 Module-level components and component function expressions are registered as
 compiled where they are defined. A component declaration nested in another
 function is registered where its tag is evaluated, or by `componentValue` when

@@ -20,6 +20,22 @@ behaves('component values: direct calls and map callbacks keep native arguments'
   },
 });
 
+behaves('component props: parameter names inside a prop type are not props', {
+  source: `
+    function Row(props: { id: number; pick: (id: number) => void }) {
+      return <button onClick={() => props.pick(props.id)}>{props.id}</button>;
+    }
+    export function App() {
+      let picked = 0;
+      const pick = (id: number) => { picked = id; };
+      return <main><Row id={3} pick={pick} /><p>{picked}</p></main>;
+    }`,
+  steps: [{ click: 'button' }],
+  check(container, observation) {
+    expect(container.querySelector('p')?.textContent).toBe(['0', '3'][observation]);
+  },
+});
+
 behaves('component values: imported direct calls use the defining component', {
   modules: {
     './Row.tsx': `export function Row({ value }) { return <li>{value}</li>; }`,

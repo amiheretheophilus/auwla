@@ -40,9 +40,29 @@ export interface Resolved {
   writesOf(binding: Binding): readonly WriteSite[];
 }
 
-/** Type-only imports are visible to value-space lookup in yuku, but are erased. */
+/**
+ * Type-only imports are visible to value-space lookup in yuku, but are erased.
+ * So are the parameters of a type: `id` in `select: (id: number) => void`
+ * is a parameter binding to yuku, and does not exist at runtime.
+ */
 export function isRuntimeBinding(binding: Binding): boolean {
-  return binding.visibleIn('value') && !binding.has(BindingFlags.TypeImport);
+  return binding.visibleIn('value') && !binding.has(BindingFlags.TypeImport) && !declaredInType(binding);
+}
+
+/** Nodes whose whole subtree is a type, erased from the emitted program. */
+const TYPE_ONLY = new Set([
+  'TSTypeAnnotation', 'TSFunctionType', 'TSConstructorType', 'TSMethodSignature',
+  'TSCallSignatureDeclaration', 'TSConstructSignatureDeclaration', 'TSDeclareFunction',
+  'TSTypeAliasDeclaration', 'TSInterfaceDeclaration', 'TSTypeLiteral',
+]);
+
+function declaredInType(binding: Binding): boolean {
+  const name = binding.declarations[0];
+  if (name === undefined) return false;
+  for (const ancestor of binding.module.ancestors(name)) {
+    if (TYPE_ONLY.has(ancestor.type)) return true;
+  }
+  return false;
 }
 
 export function isParameter(binding: Binding): boolean {

@@ -39,7 +39,8 @@ async function fixture(directory: string, files: readonly string[], component: s
       : source;
     writeFileSync(join(output, basename(path)), code);
   }
-  const module = await import(pathToFileURL(join(output, 'App.tsx')).href);
+  // The first file is the entry that exports `component`.
+  const module = await import(pathToFileURL(join(output, files[0]!)).href);
   const host = document.createElement('div');
   document.body.append(host);
   hosts.push(host);
@@ -94,8 +95,16 @@ it('runs the Octane inline-row fixture through its synchronous creation/update/r
   expect(host.querySelectorAll('tbody tr')).toHaveLength(0);
 }, 30_000);
 
-it('runs the component-row benchmark with retained rows and complete disposal', async () => {
-  const { host } = await fixture('dom', ['App.tsx', 'data.ts'], 'BenchApp');
+// Every component-row placement the DOM suite times (`bench/dom/state-placement-browser.ts`).
+const componentRowApps = [
+  ['App.tsx', 'BenchApp'],
+  ['AppOwned.tsx', 'BenchAppOwned'],
+  ['AppModuleDataComponent.tsx', 'BenchModuleDataComponent'],
+  ['AppModuleSelectionComponent.tsx', 'BenchModuleSelectionComponent'],
+] as const;
+
+it.each(componentRowApps)('runs the component-row benchmark %s with retained rows and complete disposal', async (file, component) => {
+  const { host } = await fixture('dom', [file, 'data.ts'], component);
   const click = (label: string) => {
     const button = [...host.querySelectorAll('button')].find((node) => node.textContent === label)!;
     button.click();
@@ -103,6 +112,8 @@ it('runs the component-row benchmark with retained rows and complete disposal', 
   click('create1k');
   const rows = [...host.querySelectorAll('li')];
   expect(rows).toHaveLength(1000);
+  expect(rows.filter((row) => row.className !== '')).toHaveLength(0);
+  expect(new Set(rows.map((row) => row.textContent!.split(':')[0])).size).toBe(1000);
   const first = rows[0]!;
   const label = first.textContent;
   click('update');
