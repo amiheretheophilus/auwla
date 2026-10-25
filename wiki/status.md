@@ -46,6 +46,17 @@ Last updated: 2026-10-25.
   Local Bun 1.4.3 passes the full runtime run. The batch remains under validation;
   failure-only heap tracing follows to identify the remaining retainer without
   changing the collection assertion.
+  [Unit CI 40238595022](https://github.com/amiheretheophilus/auwla/actions/runs/40238595022)
+  reproduces the same failure. Its heap trace identifies the payload's lexical
+  environment but no rooted path to it. Collection retries now perform their
+  weak-reference probe in a separate task and return only a boolean, avoiding a
+  successful dereference temporary in the awaiting collector frame. A positive
+  control verifies that an actual queued strong reference stays alive through
+  the same retries. Local runtime checks pass; Linux validation remains pending.
+  [ABBA run 40237496644](https://github.com/amiheretheophilus/auwla/actions/runs/40237496644)
+  passes all correctness gates but does not justify the retained lookup yet:
+  creation regresses in most placements, updates are mixed, and clear improves
+  modestly. The allocation count alone does not establish a speed improvement.
 
 - Receiver-edit alias correction (2026-10-25). Native `reverse` could move an
   accessor/inherited value into an own data element while an already cached

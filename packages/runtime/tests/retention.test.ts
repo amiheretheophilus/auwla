@@ -20,7 +20,13 @@ async function collectAfterTurn(reference?: WeakRef<object>): Promise<void> {
     Bun.gc(true);
     await new Promise((resolve) => setTimeout(resolve, 0));
     Bun.gc(true);
-    if (reference === undefined || reference.deref() === undefined) {
+    // A successful deref keeps its target alive for that job. Perform the
+    // probe in another task so its temporary cannot survive in this awaiting
+    // activation and become the reason the next collection attempt fails.
+    const collected = await produceInTask(() => {
+      return reference === undefined || reference.deref() === undefined;
+    });
+    if (collected) {
       return;
     }
   }
@@ -45,6 +51,19 @@ function produceInTask<T>(produce: () => T): Promise<T> {
 function rowValue(item: { id: number }): object {
   return { id: item.id };
 }
+
+it('detects a strong payload reference held by a queued callback', async () => {
+  const queued: (() => void)[] = [];
+  function pending() {
+    const payload = { calls: 0 };
+    queued.push(() => payload.calls++);
+    return new WeakRef(payload);
+  }
+  const reference = await produceInTask(pending);
+  await collectAfterTurn(reference);
+  expect(reference.deref()).toBeDefined();
+  queued.shift()!();
+});
 
 /** Print retainer paths on failure, without persisting a heap or its values. */
 function traceWaveRetainers(target: object): void {
