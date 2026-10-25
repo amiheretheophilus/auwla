@@ -189,6 +189,9 @@ capture completed subscriber sets. The retention tests hold recovery callbacks
 without running them, cross task boundaries, force collection with bounded
 retries, and check weak-reference liveness; they do not infer leaks from timings
 or a heap-size threshold.
+The notification-wave fixture creates its payload in a separate task, keeping
+possible dead temporaries off its awaiting test frame. Its collection assertion
+still runs before the held recovery callbacks, so they cannot hide retention.
 Receiver writes through `this`, private fields and `super` now report changes to
 their receiver's roots. Module/factory versions and shared roots notify subscribed
 consumers (`state-and-derived.md`). Proxy-specific reflection behavior still needs

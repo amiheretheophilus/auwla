@@ -24,6 +24,22 @@ Last updated: 2026-10-25.
 
 ## Done
 
+- Retained map-result lookup (2026-10-25). Row reuse now retains its private item
+  lookup across successful mappings rather than deleting/repopulating a fresh
+  table each time. Generation bookkeeping preserves duplicate occurrence order,
+  including changed first occurrences and reappearance. Length/element reads
+  detach the lookup before possible reentry or failure; an empty list drops it
+  without building another table. The 30-update check builds **zero replacement
+  maps instead of 30**. Five native mapping regressions and a GC check cover the
+  new ownership boundary. A combined GC failure was isolated by separating its
+  payload producer from a warmed awaiting test frame: it now runs in a separate
+  task while recovery remains held and the original collection assertion stays
+  unchanged. The runtime experiments were reverted. Both type checks, 63 focused
+  runtime checks, 82 feature/comparison checks and a final 23-test compiled
+  fixture/retention check pass. Chrome gates pass all eight compiled placements
+  and all 16 update styles with identity and mixed sequences. Shared-code CI and
+  a controlled same-compiler comparison follow before closing this batch.
+
 - Receiver-edit alias correction (2026-10-25). Native `reverse` could move an
   accessor/inherited value into an own data element while an already cached
   reach missed that new alias. The optimized compiled UI stayed at `10` after
@@ -35,6 +51,10 @@ Last updated: 2026-10-25.
   both modes. Both type checks, 47 focused runtime checks, 36 compiled
   native/fixture/comparison checks and all eight placement/16 update-style Chrome
   gates pass. The general fallback and existing proxy-reflection limits remain.
+  [CI 40235925144](https://github.com/amiheretheophilus/auwla/actions/runs/40235925144)
+  at `331ea92a` passes all four jobs: 252 compiler unit/native tests, 109 runtime
+  tests, 320 reference cases, 220 compiler comparisons with the same 100 Phase
+  7/8 failures, and ten generator/corpus checks at `FC_RUNS=200`.
 
 - Shared mutation-cache lifetime (2026-10-25). A shared write now releases cached
   reaches whose native binding identity changed. Lazy shared derivations check

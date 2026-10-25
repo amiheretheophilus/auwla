@@ -8,6 +8,7 @@ import {
 } from '../src/kernel';
 import { createWriteBatch } from '../src/write-batch';
 import { createSharedWrites } from '../src/shared-writes';
+import { createRowCache } from '../src/list-map';
 
 async function collectAfterTurn(reference?: WeakRef<object>): Promise<void> {
   // WeakRef targets stay alive for the job in which they were created. Cross
@@ -30,6 +31,35 @@ async function collectAfterTurn(reference?: WeakRef<object>): Promise<void> {
 function runImmediately(run: () => void): void {
   run();
 }
+
+function runProducer<T>(produce: () => T, resolve: (value: T) => void): void {
+  resolve(produce());
+}
+
+function produceInTask<T>(produce: () => T): Promise<T> {
+  // Keep payload-producing call frames off the awaiting test's stack. JSC can
+  // otherwise retain dead temporaries in that async activation after warmup.
+  return new Promise((resolve) => setTimeout(runProducer, 0, produce, resolve));
+}
+
+function rowValue(item: { id: number }): object {
+  return { id: item.id };
+}
+
+it('releases removed items while their row lookup remains alive', async () => {
+  function removed() {
+    const item = { id: 1 };
+    const reference = new WeakRef(item);
+    const cache = createRowCache(false);
+    cache.map([item, item], rowValue, undefined);
+    cache.map([], rowValue, undefined);
+    return { cache, reference };
+  }
+  const result = removed();
+  await collectAfterTurn(result.reference);
+  expect(result.reference.deref()).toBeUndefined();
+  result.cache.map([], rowValue, undefined);
+});
 
 it('releases a shared binding\'s previous data after reassignment without another mutation', async () => {
   function replaced() {
@@ -162,7 +192,7 @@ it('releases completed notification waves before their recovery callbacks run', 
     computation.dispose();
     return reference;
   }
-  const reference = completed();
+  const reference = await produceInTask(completed);
   scheduler.mockRestore();
   expect(queued.length).toBeGreaterThan(0);
   await collectAfterTurn(reference);

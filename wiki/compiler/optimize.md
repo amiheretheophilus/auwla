@@ -226,6 +226,18 @@ its reads with the computation around the call, so the site still re-runs when
 any of them changes. The result has native `map`'s shape: the same length and
 holes, and the same `thisArg` and arguments.
 
+The item lookup survives successful mappings. A generation consumes old duplicate
+occurrences in order and publishes each replacement at that occurrence. The first
+private row holds its group's bookkeeping; unique items allocate no wrapper or
+duplicate array. Unused items and excess duplicates are removed after success.
+The lookup detaches before the length or element reads can run authored code, so
+reentry uses independent state and an exception cannot publish a partial pass.
+An empty result drops the lookup at once. Authored items and results are untouched.
+The 30-update work check creates zero replacement matching maps instead of 30;
+native cases cover duplicates, throws, reentry and collection of removed items.
+Mapping and reconciliation still scan every row; this change removes lookup
+allocation rather than establishing targeted structural updates.
+
 The item lookup supplies only a candidate. `Object.is` checks it before reuse,
 because a Map groups signed zeros while JavaScript arithmetic distinguishes
 them. `list-values.ts` shares native length conversion with the map cache, so

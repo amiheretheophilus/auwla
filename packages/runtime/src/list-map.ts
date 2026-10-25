@@ -33,6 +33,14 @@ interface Row {
   readonly computation: ReturnType<typeof createComputation>;
 }
 
+/** The first occurrence also owns the private matching state for its item. */
+interface RowHead extends Row {
+  generation: object;
+  used: number;
+  previousCount: number;
+  duplicates: Row[] | null;
+}
+
 /** Results the cache returned unchanged, with the mutation time it verified them at. */
 const verified = new WeakMap<object, number>();
 
@@ -52,48 +60,89 @@ export interface RowCache {
 }
 
 /**
- * Rows by item, in array order. An item can appear more than once: its first
- * row is in `first`, later ones queue in `more`, so each occurrence takes the
- * row of the same occurrence last time.
+ * Retain one lookup across successful mappings. Each generation consumes old
+ * occurrences in order, then publishes their replacements at those positions.
+ * The first row holds the bookkeeping so unique items need no wrapper object
+ * or duplicate array. Nothing is attached to authored items or result values.
  */
 class Rows {
-  readonly first = new Map<unknown, Row>();
-  more: Map<unknown, Row[]> | null = null;
+  private readonly first = new Map<unknown, RowHead>();
 
-  take(item: unknown): Row | undefined {
-    const row = this.first.get(item);
-    if (row !== undefined) {
-      this.first.delete(item);
-      return row;
+  take(item: unknown, generation: object): Row | undefined {
+    const head = this.first.get(item);
+    if (head === undefined) {
+      return undefined;
     }
-    return this.more?.get(item)?.shift();
+    if (head.generation !== generation) {
+      head.generation = generation;
+      head.used = 0;
+      head.previousCount = 1 + (head.duplicates?.length ?? 0);
+    }
+    const occurrence = head.used++;
+    if (occurrence >= head.previousCount) {
+      return undefined;
+    }
+    return occurrence === 0 ? head : head.duplicates?.[occurrence - 1];
   }
 
-  put(row: Row): void {
-    if (!this.first.has(row.item)) {
-      this.first.set(row.item, row);
+  put(row: Row, generation: object): void {
+    const previous = this.first.get(row.item);
+    if (previous === undefined || previous.used === 1) {
+      if (previous === row) {
+        return;
+      }
+      // Promote this private row in place, avoiding a separate record for the
+      // common unique-item case. A replaced first row keeps its old dup queue.
+      const head = row as RowHead;
+      head.generation = generation;
+      head.used = previous?.used ?? 1;
+      head.previousCount = previous?.previousCount ?? 0;
+      head.duplicates = previous?.duplicates ?? null;
+      this.first.set(row.item, head);
       return;
     }
-    const more = this.more ??= new Map();
-    const queue = more.get(row.item);
-    if (queue === undefined) more.set(row.item, [row]);
-    else queue.push(row);
+    const duplicates = previous.duplicates ??= [];
+    duplicates[previous.used - 2] = row;
+  }
+
+  finish(generation: object): void {
+    for (const [item, head] of this.first) {
+      if (head.generation !== generation) {
+        this.first.delete(item);
+      } else if (head.duplicates !== null) {
+        head.duplicates.length = head.used - 1;
+        if (head.duplicates.length === 0) {
+          head.duplicates = null;
+        }
+      }
+    }
   }
 }
 
 /** One per call site and owner instance. `usesIndex`: the callback reads its second argument. */
 export function createRowCache(usesIndex: boolean): RowCache {
-  let rows = new Rows();
+  let rows: Rows | null = null;
   return {
     map(array, callback, thisArg) {
-      const previous = rows;
-      const next = new Rows();
+      const cached = rows;
+      // Reading an array element can run a getter, reenter or throw. Detach
+      // before that work: reentry gets its own lookup, and a failed pass never
+      // exposes the partially consumed matching state to a later mapping.
+      rows = null;
       const length = readListLength(array);
       const result = new Array<unknown>(length);
+      if (length === 0) {
+        // Release the complete lookup at once, including after reentry from
+        // the length read. Empty lists need no replacement matching table.
+        rows = null;
+        return result;
+      }
+      const previous = cached ?? new Rows();
+      const generation = {};
       for (let index = 0; index < length; index++) {
         if (!(index in array)) continue;
         const item = array[index];
-        let row = previous.take(item);
+        let row = previous.take(item, generation);
         if (row !== undefined) {
           // Map groups +0 and -0 together, but authored arithmetic can tell
           // them apart. The lookup finds a candidate; Object.is proves reuse.
@@ -115,9 +164,10 @@ export function createRowCache(usesIndex: boolean): RowCache {
         }
         row.computation.share();
         result[index] = row.result;
-        next.put(row);
+        previous.put(row, generation);
       }
-      rows = next;
+      previous.finish(generation);
+      rows = previous;
       return result;
     },
   };

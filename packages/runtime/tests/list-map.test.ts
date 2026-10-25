@@ -1,7 +1,12 @@
-import { expect, it } from 'bun:test';
+import { afterEach, expect, it } from 'bun:test';
 import { createRowCache, takeVerified } from '../src/list-map';
 import { createComputation, publishVersions, trackRead } from '../src/computation';
 import { mutationTarget } from '../src/mutation';
+
+const NativeMap = globalThis.Map;
+afterEach(() => {
+  globalThis.Map = NativeMap;
+});
 
 /** A callback that counts its calls and returns a fresh object per call, like JSX. */
 function counted() {
@@ -14,6 +19,29 @@ function counted() {
 }
 
 const items = (count: number) => Array.from({ length: count }, (_, id) => ({ id }));
+
+it('retains its private lookup across repeated unchanged mappings', () => {
+  const cache = createRowCache(false);
+  const rows = items(200);
+  const { callback } = counted();
+  cache.map(rows, callback, undefined);
+  let maps = 0;
+  globalThis.Map = class extends NativeMap {
+    constructor(...args: ConstructorParameters<MapConstructor>) {
+      super(...args);
+      maps++;
+    }
+  } as MapConstructor;
+  for (let update = 0; update < 30; update++) {
+    cache.map(rows, callback, undefined);
+  }
+  expect(maps).toBe(0);
+  cache.map([], callback, undefined);
+  for (let update = 0; update < 30; update++) {
+    cache.map([], callback, undefined);
+  }
+  expect(maps).toBe(0);
+});
 
 it('reuses each unchanged item result and calls the callback only for new items', () => {
   const cache = createRowCache(false);
@@ -90,6 +118,89 @@ it('keeps native map shape: holes, duplicates, thisArg and arguments', () => {
   const again = cache.map(array, () => ({}), 'self');
   expect(again[0]).toBe(result[0]);
   expect(again[2]).toBe(result[2]);
+});
+
+it('keeps duplicate occurrence order through replacement, removal and reappearance', () => {
+  const cache = createRowCache(false);
+  const a = { id: 1 };
+  const b = { id: 2 };
+  const { calls, callback } = counted();
+  const first = cache.map([a, a, a, b], callback, undefined);
+  const moved = cache.map([a, b, a, a], callback, undefined);
+  expect(moved[0]).toBe(first[0]);
+  expect(moved[1]).toBe(first[3]);
+  expect(moved[2]).toBe(first[1]);
+  expect(moved[3]).toBe(first[2]);
+  mutationTarget(a, 'id', () => {}).value = 10;
+  const edited = cache.map([a, b, a, a], callback, undefined);
+  expect(edited[0] === first[0]).toBe(false);
+  expect(edited[2] === first[1]).toBe(false);
+  expect(edited[1]).toBe(first[3]);
+  cache.map([a], callback, undefined);
+  calls.length = 0;
+  const added = cache.map([a, a], callback, undefined);
+  expect(added[0]).toBe(edited[0]);
+  expect(added[1] === edited[2]).toBe(false);
+  expect(calls).toEqual([a]);
+});
+
+it('keeps a reentrant mapping independent of the outer pending lookup', () => {
+  const cache = createRowCache(false);
+  const rows = items(3);
+  const { callback } = counted();
+  cache.map(rows, callback, undefined);
+  let enter = true;
+  const array = rows.slice(0, 2);
+  Object.defineProperty(array, 0, {
+    get() {
+      if (enter) {
+        enter = false;
+        cache.map([rows[2]], callback, undefined);
+      }
+      return rows[0];
+    },
+    configurable: true,
+  });
+  const outer = cache.map(array, callback, undefined);
+  const next = cache.map([rows[1], rows[0]], callback, undefined);
+  expect(next[0]).toBe(outer[1]);
+  expect(next[1]).toBe(outer[0]);
+});
+
+it('recovers after an element read interrupts matching partway through', () => {
+  const cache = createRowCache(false);
+  const rows = items(3);
+  const { callback } = counted();
+  cache.map(rows, callback, undefined);
+  const array = rows.slice();
+  Object.defineProperty(array, 1, {
+    get() { throw new Error('element read'); },
+    configurable: true,
+  });
+  expect(() => cache.map(array, callback, undefined)).toThrow('element read');
+  const next = cache.map([rows[2], rows[0], rows[2]], callback, undefined);
+  expect(next.map((row) => (row as { id: number }).id)).toEqual([2, 0, 2]);
+  expect(next[0] === next[2]).toBe(false);
+});
+
+it('discards a reentrant lookup when the outer length read resolves to an empty list', () => {
+  const cache = createRowCache(false);
+  const rows = items(3);
+  const { callback } = counted();
+  cache.map(rows, callback, undefined);
+  let inner: unknown[] = [];
+  const array = new Proxy([], {
+    get(target, key, receiver) {
+      if (key === 'length') {
+        inner = cache.map([rows[2]], callback, undefined);
+        return 0;
+      }
+      return Reflect.get(target, key, receiver);
+    },
+  });
+  expect(cache.map(array, callback, undefined)).toEqual([]);
+  const next = cache.map([rows[2]], callback, undefined);
+  expect(next[0] === inner[0]).toBe(false);
 });
 
 it('recomputes a row whose tracked read changed and shares every row read with the caller', () => {
