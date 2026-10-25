@@ -24,6 +24,27 @@ Last updated: 2026-10-25.
 
 ## Done
 
+- Method-call observation proof (2026-10-25). Review of the `874c826` report found
+  the main cost: every observed call snapshots all the data it reaches. That was
+  about 70 ms per call on 10k rows, including the `data.map(...)` render site that
+  runs on every list update (select, update). `optimize/methods.ts` lowers member
+  calls to `observeMethod`. `runtime/src/method-calls.ts` skips the snapshot when
+  the actual callee is a captured array intrinsic and its receiver, arguments and
+  callbacks satisfy the proof (`compiler/optimize.md`, "Method calls").
+  - Micro timings on 10k rows: `slice` 84 → 0.11 ms, `map` 68 → 0.47 ms,
+    `reverse` 82 → 0.03 ms.
+  - Every observation in the compiled DOM component app is now lowered and
+    provable at runtime: concat, slice, filter, map, reverse and splice.
+  - Octane's calls into compiled helpers (`updateRows`, `swapRows`, `removeRow`,
+    `shuffleRows`) stay observed (`decisions.md`).
+  - Local validation: both type checks; 8 runtime method-call tests plus 10
+    mutation tests; 59 compiler unit and DOM checks in both modes.
+  - The eight case files that use array methods give 177 pass and the same 93
+    deferred failures as without the change (identical list).
+  - DOM bench gates pass on compiler-next: state-placement validation and all 16
+    update-style variants.
+  - VM timings are pending.
+
 - First list optimization (2026-10-25, `84b52062`).
   `optimize/retained-list-index.ts` selects private row-index retention on fresh
   plans; the authored expressions, calls, graph identities and opaque observation

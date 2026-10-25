@@ -80,6 +80,7 @@ export {
   mutationTarget, deleteMutation, receiverMutationTarget, observeMutation, watchMutationRoots,
   mutatedSince, mutationTime,
 } from './mutation';
+export { observeMethod } from './method-calls';
 export { createComputation, trackRead } from './computation';
 export { createSharedWrites } from './shared-writes';
 export type { BuildScope, BuildFrame } from './build-scope';

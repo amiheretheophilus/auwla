@@ -20,6 +20,10 @@ Finds every place that changes state and makes the UI update after it.
 | `await.test.ts` | Native immediate-suspension checks, return await, operands/receivers, awaited call arguments and suspended factory ownership |
 | `packages/runtime/src/mutation.ts` | Member target preserving native key conversion, getter/setter receiver and successful-store notification |
 | `packages/runtime/tests/mutation.test.ts` | Descriptor snapshots, cyclic/native data, partial-call recovery and key order |
+| `packages/runtime/src/method-calls.ts` | `observeMethod`: skips the snapshot for a call whose actual callee is a proven array intrinsic (`optimize.md`, "Method calls") |
+| `packages/runtime/tests/method-calls.test.ts` | Proven calls take no snapshot; own/replaced methods, subclass species, converting arguments, effectful callbacks and throws stay observed |
+| `optimize/methods.ts` | Lowers observed member calls to `observeMethod` and marks effect-free inline callbacks |
+| `optimize/methods.dom.test.ts` | Callback classification and native updates, overrides and order, with optimizations on and off |
 | `packages/runtime/src/write-batch.ts` | Captures the application and entity, batches listener writes until return, and queues a microtask for unwrapped callbacks and error recovery |
 | `packages/runtime/tests/write-batch.test.ts` | Scheduler independence, nested listeners, native receivers/results, exceptions, disposal and application isolation |
 | `packages/runtime/tests/retention.test.ts` | Completed observation and notification payload release, bounded recovery scheduling, and guaranteed recovery of abandoned calls |
@@ -118,7 +122,14 @@ or a heap-size threshold.
 Receiver writes through `this`, private fields and `super` now report changes to
 their receiver's roots. Module/factory versions and shared roots notify subscribed
 consumers (`state-and-derived.md`). Proxy-specific reflection behavior still needs
-coverage; no method fast paths exist yet.
+coverage.
+
+The snapshot costs the size of the data the reads reach: about 70 ms per call on
+10k rows, even for `items.slice(1)`. With optimizations on, a plain member call
+lowers to `observeMethod`, which skips it when the runtime proves the actual
+callee (`optimize.md`, "Method calls"). An edit it proves touches only a receiver
+that every read returns; it is reported through `observeReceiverEdit`, which keeps
+a pending entry so a throw mid-call is still recovered.
 
 Shared mutation notifications carry the exact written binding key. Hidden-read
 collectors exclude that computation's own outputs, while other shared inputs

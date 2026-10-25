@@ -5,7 +5,7 @@ import type { BindingNode } from '../../core/graph';
 import type { MutationPlan } from '../../core/plan/model';
 import type { Names } from '../../core/emit/names';
 import { copy } from '../../core/emit/copy';
-import { expression, statement, stringLiteral } from '../../core/emit/quote';
+import { expression, numberLiteral, statement, stringLiteral } from '../../core/emit/quote';
 
 export function emitMutations(
   plans: readonly MutationPlan[], versions: ReadonlyMap<BindingNode, string>, names: Names,
@@ -55,6 +55,22 @@ export function emitMutations(
           runtime, object: target.object,
           key: target.computed ? target.property : stringLiteral((target.property as { name: string }).name), notify,
         }));
+      }
+    }
+    if (plan.kind === 'call' && plan.method !== undefined) {
+      // `observeMethod(…, receiver, key, proven)(...arguments)` keeps native
+      // order: receiver, key, method read, arguments, call (`optimize/methods.ts`).
+      const call = copy(plan.operation, replacements);
+      if (is.CallExpression(call) && is.MemberExpression(call.callee)) {
+        const member = call.callee;
+        call.callee = expression('$$runtime.observeMethod($$reads, $$notifications, $$receiver, $$key, $$proven)', {
+          runtime, receiver: member.object,
+          key: member.computed ? member.property : stringLiteral((member.property as { name: string }).name),
+          reads: b.ArrayExpression({ elements: reads }), notifications: b.ArrayExpression({ elements: notifications }),
+          proven: numberLiteral(plan.method.provenCallbacks),
+        });
+        replacements.set(plan.operation, call);
+        continue;
       }
     }
     if (plan.kind === 'call') {

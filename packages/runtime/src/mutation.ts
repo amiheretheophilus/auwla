@@ -371,6 +371,38 @@ export function observeMutation(reads: readonly (() => unknown)[], notify: reado
   return observation;
 }
 
+/**
+ * A call proven to edit only `object`, which every read returns
+ * (`method-calls.ts`). No snapshot: it reports `object` as an observation that
+ * found it changed would. A call that throws stays pending, so its partial
+ * edit is reported at the next recovery, as for any observation.
+ */
+export function observeReceiverEdit(object: object, notify: readonly (() => void)[]): Observation {
+  const state = mutationStore();
+  let complete = false;
+  const report = () => {
+    if (complete) return;
+    complete = true;
+    state.pending.delete(reference);
+    state.unrecovered.delete(reference);
+    stamp(object);
+    for (const callback of notify) callback();
+    notifyAliases(new Set([object]), { kind: 'unknown' });
+  };
+  const observation: Observation = {
+    finish(result) {
+      report();
+      return result;
+    },
+    recover: report,
+  };
+  const reference = new WeakRef(observation);
+  state.pending.add(reference);
+  state.unrecovered.set(reference, observation);
+  scheduleRecovery();
+  return observation;
+}
+
 export function mutationTarget(object: any, key: any, notify: () => void) {
   // Computed property names perform ToPropertyKey before evaluating the RHS.
   const property = Reflect.ownKeys({ [key]: 0 })[0]!;

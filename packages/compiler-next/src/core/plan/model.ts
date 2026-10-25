@@ -223,6 +223,13 @@ export interface MutationPlan {
   readonly operation: Node;
   readonly targets: readonly { readonly binding: BindingNode; readonly member: Node }[];
   readonly kind: 'store' | 'delete' | 'call';
+  /**
+   * Optional (`optimize/methods.ts`): a plain member call lowered to
+   * `observeMethod`, which skips the snapshot when the runtime proves the
+   * actual callee. Bit `i` of `provenCallbacks` marks argument `i` as an
+   * inline function proven to make no explicit call or outside store.
+   */
+  readonly method?: { readonly provenCallbacks: number };
 }
 
 export interface ModulePlan {

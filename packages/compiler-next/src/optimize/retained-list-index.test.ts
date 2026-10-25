@@ -49,9 +49,11 @@ it('selects nested branch and stored-value slots without treating method names a
   const disabled = compileModules({ './App.tsx': source }, { optimize: false })['./App.tsx']!;
   expect(enabled).toContain('createIndexedValueSlot');
   expect(disabled).not.toContain('createIndexedValueSlot');
-  for (const output of [enabled, disabled]) {
-    expect(output).toContain('.unfamiliar(');
-    expect(output).toContain('.map(');
-    expect(output).toContain('.observeMutation(');
-  }
+  expect(disabled).toContain('.unfamiliar(');
+  expect(disabled).toContain('.map(');
+  expect(disabled).toContain('.observeMutation(');
+  // `optimize/methods.ts` still calls and observes both; the runtime proof
+  // keys on the callee's identity, never on these names.
+  expect(enabled).toContain('collection, "unfamiliar", 0)()');
+  expect(enabled).toContain('collection, "map", 0)()');
 });

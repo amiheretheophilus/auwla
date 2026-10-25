@@ -1,7 +1,7 @@
 # Optimizations
 
-**Folder:** `optimize/`. The stage, disable switch and retained-list-index pass
-are built. Further list/call fast paths remain below.
+**Folder:** `optimize/`. The stage, disable switch, retained-list-index pass and
+method-call pass are built. Further list fast paths remain below.
 
 ## What it does
 
@@ -45,7 +45,7 @@ interface Optimization {
 | File | Makes faster |
 | --- | --- |
 | `retained-list-index.ts` (built) | Selects private row-index retention for non-primitive child sites, without changing authored expression evaluation |
-| `methods.ts` | Removes redundant call observation only when callee/receiver and effect proofs cover the executed operation. Method spelling alone never skips observation; unknown or overridden calls retain the before/after check (`state-and-derived.md`) |
+| `methods.ts` (built) | Lowers observed member calls to `observeMethod`; the runtime skips the snapshot only when the actual callee, receiver, arguments and callbacks satisfy its proof. Unknown or overridden calls retain the before/after check ("Method calls" below) |
 | `keyed-map.ts` | keyed `.map` over state reuses rows |
 | `array-ops.ts` | `push`, `splice`, `sort` update only the rows they touch |
 | `dom-only-rows.ts` | rows with no reactive work are plain DOM |
@@ -85,6 +85,64 @@ The unchanged 1,000-row inline fixture, selecting four different rows, builds
 four matching maps in general mode and zero new matching maps in optimized mode.
 A 30-update matcher check builds 30 general maps versus one retained map.
 These are work counts, not VM timing or memory results.
+
+## Method calls
+
+The general path observes every call that may edit state by snapshotting all the
+data its reads reach, before and after (`handlers.md`). On 10k rows that is about
+70 ms per call, for `items.slice(1)` as for `items.map(row => <tr …/>)` in a
+render site, so every update of a large list paid it.
+
+`optimize/methods.ts` lowers each observed plain member call to
+`observeMethod(reads, notifications, receiver, key, proven)(...arguments)`. That
+keeps native order: receiver, key, one method read, arguments, call. Calls with an
+optional link anywhere in the callee chain, spread arguments, `super` or a private
+name keep the general form. The pass never reads the method name. For each inline
+function argument it sets bit `i` of `proven` when the body makes no explicit call,
+`new`, tagged template, store or update outside its own locals, `delete`, class,
+array destructuring, `for…of`/`for…in`, array spread or suspension. Nested function
+bodies are skipped: creating a function runs none of its body.
+
+`runtime/src/method-calls.ts` holds the proof. It keys on the callee's identity:
+the `Array.prototype` intrinsics captured when the runtime loaded. The conditions:
+
+- the receiver is an array, and for species-creating intrinsics its prototype is
+  `Array.prototype`, with no own `constructor` and the intrinsic species. These are
+  checked through descriptors, so no getter runs;
+- every argument the intrinsic converts to an integer is a primitive;
+- its callback argument has its `proven` bit (`sort` may also omit it);
+- for intrinsics that edit their receiver, every read returns that receiver.
+
+A proven read-only call then runs with no observation. A proven edit is reported
+with `observeReceiverEdit`: stamp, notify every read, then notify aliases. It keeps
+a pending entry, so a call that throws midway is still reported at the next
+recovery. Anything unproven is observed as before. An unknown callee starts its
+observation before its arguments are evaluated, as the general form does.
+
+The proof boundary is the same one compiled code already uses elsewhere. What a
+proven call can still run is property reads (getters, proxy traps) and implicit
+conversions. Compiled code never observes those for an ordinary `row.label` read
+or `a + b` either, and compiled getter bodies report their own state writes.
+Replacing `Array.prototype.slice` after the runtime loads installs a function
+without a proof. Replacing it before then is a known limit.
+
+The proven set: `slice`, `concat`, `indexOf`, `lastIndexOf`, `includes`, `at`,
+`toReversed`, `with` and `toSpliced` allocate a fresh result. `map`, `filter`,
+`find`, `findIndex`, `findLast`, `findLastIndex`, `some`, `every`, `reduce` and
+`reduceRight` call a proven callback. `push`, `pop`, `shift`, `unshift`, `reverse`,
+`splice`, `fill` and `sort` edit the receiver. Calls into compiled helpers
+(`updateRows(items)`) stay observed. A helper's body does not report edits to the
+objects it receives, so compiling the callee is no proof.
+
+Checks: `runtime/tests/method-calls.test.ts` covers that proven calls never take a
+snapshot. It also covers own or replaced methods, subclass species,
+`valueOf`-converting arguments, effectful callbacks, a receiver that is not the
+read value, native order, and a throw mid-edit. `optimize/methods.dom.test.ts`
+covers the callback classification and native updates, overridden methods,
+effectful callbacks and evaluation order, in both modes. On 10k plain rows (Bun,
+runtime source), `slice(1)` goes from 84 ms to 0.11 ms, `map` from 68 ms to
+0.47 ms, and `reverse()` from 82 ms to 0.03 ms. These are micro timings; VM
+results are still needed.
 
 ## Implementation order after Phase 6
 
