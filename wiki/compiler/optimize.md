@@ -123,6 +123,12 @@ a pending entry, so a call that throws midway is still reported at the next
 recovery. Anything unproven is observed as before. An unknown callee starts its
 observation before its arguments are evaluated, as the general form does.
 
+Known alias gap under audit: native `reverse` can move an accessor's returned
+object into an own data element. Recording only the call's arguments misses that
+newly reachable object when a root was already indexed. A native regression
+reproduces the missed later notification; the receiver-edit proof and recovery
+path must account for this before further array fast paths.
+
 The proof boundary is the same one compiled code already uses elsewhere. What a
 proven call can still run is property reads (getters, proxy traps) and implicit
 conversions. Compiled code never observes those for an ordinary `row.label` read

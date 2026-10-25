@@ -1,6 +1,6 @@
 /** Shared version notifications retain native module/factory values. */
 import { publishVersions } from './computation';
-import { registerSharedMutationRoots } from './mutation';
+import { checkSharedMutationRoots, registerSharedMutationRoots } from './mutation';
 
 /**
  * `keys` are the owner's bindings. A write notifies the readers of the binding
@@ -13,7 +13,12 @@ export function createSharedWrites(keys: readonly object[], recomputed: readonly
   const watched: { read: () => unknown; notify: () => void }[] = [];
   return {
     mark(written?: object) {
+      checkSharedMutationRoots(watched);
       publishVersions(written === undefined ? keys : [written, ...recomputed], written);
+    },
+    /** Lazy derivations can replace their value after the input write published. */
+    check() {
+      checkSharedMutationRoots(watched);
     },
     watch(roots: readonly { read: () => unknown; notify: () => void }[]) {
       watched.push(...roots);

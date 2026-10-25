@@ -30,6 +30,7 @@ function _completeShared(_result) {
 function _refreshShared() {
   if (!_sharedReady || _sharedScope.active()) return;
   const _sharedFrame = _sharedScope.enter();
+  _sharedWrites.check();
   _sharedScope.leave(_sharedFrame);
 }
 const _sharedFrame = _sharedScope.enter();

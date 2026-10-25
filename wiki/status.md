@@ -24,6 +24,17 @@ Last updated: 2026-10-25.
 
 ## Done
 
+- Shared mutation-cache lifetime (2026-10-25). A shared write now releases cached
+  reaches whose native binding identity changed. Lazy shared derivations check
+  again after replay, so a completed render does not retain their previous graph
+  until some later mutation. The native reassignment GC check and both-mode
+  compiled refresh GC checks fail before the fix and pass after it. An unchanged
+  binding check does no data reflection and invokes no unused getter. Both type
+  checks, 26 runtime lifecycle/mutation/retention checks and 87 focused compiled
+  native/fixture/comparison checks pass. Chrome gates pass all eight compiled
+  placements and all 16 update styles, with retained identity and mixed sequences.
+  This fixes two reproduced lifetimes; the VM OOM remains unverified.
+
 - Mutation-index ownership cleanup (2026-10-25). Indexed roots now detach their
   memberships on disposal and reindexing. Completed updates release changed or
   stale graphs before rebuilding lazily, and failed reflection leaves a retry
@@ -33,10 +44,14 @@ Last updated: 2026-10-25.
   memberships instead of 200**. Focused runtime checks, both type checks,
   37 compiled native/fixture tests and 34 both-mode comparison cases pass.
   Chrome correctness gates pass all eight compiled placements and all 16 update
-  variants, including retained identity and mixed sequences. A separate
-  GC regression also reproduces retention of a shared binding's previous data;
-  that fix follows in the next batch. Neither finding establishes the VM OOM's
+  variants, including retained identity and mixed sequences. The shared-cache
+  batch above also fixes retention of a shared binding's previous data.
+  Neither finding establishes the VM OOM's
   cause or resolution.
+  [CI 40233278523](https://github.com/amiheretheophilus/auwla/actions/runs/40233278523)
+  at `7bd641e0` passes all four jobs: 248 compiler unit/native tests, 103 runtime
+  tests, 320 reference cases, 220 compiler comparisons with the unchanged 100
+  Phase 7/8 failures, and ten generator/corpus checks at `FC_RUNS=200`.
 
 - Controlled write-batch measurement (2026-10-25).
   [Run 40231260866](https://github.com/amiheretheophilus/auwla/actions/runs/40231260866)

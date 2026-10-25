@@ -155,3 +155,25 @@ it('wakes readers of the written binding and of derived bindings only', () => {
   writes.mark(data);
   expect(woken.sort()).toEqual(['data', 'total']);
 });
+
+it('checks shared binding identities without reflecting over their unchanged data', () => {
+  let walks = 0;
+  let getters = 0;
+  const value = new Proxy({ count: 0, get unused() { getters++; return 0; } }, {
+    ownKeys(target) {
+      walks++;
+      return Reflect.ownKeys(target);
+    },
+  });
+  const key = {};
+  const writes = createSharedWrites([key], []);
+  writes.watch([{ read: () => value, notify() {} }]);
+  store(value, 'count', 1);
+  expect(walks).toBeGreaterThan(0);
+  walks = 0;
+  const mark = writes.mark;
+  mark(key);
+  writes.check();
+  expect(walks).toBe(0);
+  expect(getters).toBe(0);
+});

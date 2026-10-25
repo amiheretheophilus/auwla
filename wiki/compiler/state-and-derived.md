@@ -84,6 +84,10 @@ exports imported directly from the defining compiled module, including through
 reexports. Factory readers close over that invocation's versions and taken flags.
 Shared derivations refresh during a consuming build; native intermediate reads
 inside an event remain unchanged until its update boundary.
+After a shared derivation refresh, `shared-dom.ts` calls the shared write batch's
+`check()`. It releases cached mutation reaches of replaced bindings, as publishing
+a shared write does. Both-mode native GC checks verify the previous graph can be
+collected after the consuming build; callbacks still read held native values.
 
 Nested lexical blocks now have their own storage activations, selected by
 `core/plan/storage.ts`. Declarations stay in their authored block; readers and

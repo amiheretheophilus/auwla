@@ -162,9 +162,12 @@ still checked on every edit. A typical write (`row.label = x`) costs one index
 lookup and one check per holding root.
 Known limit: uncompiled code that adds an object to watched data outside an
 observed call is not seen until that root is walked again.
-Known retention gap: a shared binding's cached reach can retain its previous
-value after reassignment until another observed mutation. A native GC regression
-reproduces this; shared-cache invalidation is the next batch.
+Shared writes also check the identities of already cached native bindings and
+release a reach whose value was replaced. Shared derivation refresh calls the
+same check after replay, since it can replace a value after its input write
+published. These checks read native storage, without walking data or invoking
+unused accessors. Native GC checks cover reassignment without a later mutation;
+compiled checks cover collection after a lazy refresh in both modes.
 
 An opaque call takes one shallow snapshot of each object its reads reach, before
 and after. A read is notified when one of its objects changed or the read now

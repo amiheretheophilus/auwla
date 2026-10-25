@@ -154,6 +154,18 @@ interface Reach {
 }
 const reaches = new WeakMap<Root, Reach>();
 
+/** Shared readers return native bindings; checking identity does not walk their data. */
+export function checkSharedMutationRoots(bindings: readonly Root[]): void {
+  for (const root of bindings) {
+    const known = reaches.get(root);
+    if (known !== undefined && !Object.is(known.value, root.read())) {
+      // A reassignment can be the final action in a turn, such as clearing a
+      // list. Do not retain its previous graph until some later mutation.
+      reaches.delete(root);
+    }
+  }
+}
+
 function walk(root: Root, slot?: Slot): Reach {
   if (slot !== undefined) {
     // Keep an interrupted rebuild pending. Removing old memberships must not

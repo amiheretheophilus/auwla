@@ -1,12 +1,13 @@
 /** Finished work must release payloads before deferred recovery callbacks run. */
 import { expect, it, spyOn } from 'bun:test';
-import { observeMutation } from '../src/mutation';
+import { mutationTarget, observeMutation } from '../src/mutation';
 import { createComputation, publishVersions, trackRead } from '../src/computation';
 import {
   createApplicationRuntime, getExtensionStore, registerEntity, runWithApplicationRuntime,
   setScheduler, unregisterSubtree,
 } from '../src/kernel';
 import { createWriteBatch } from '../src/write-batch';
+import { createSharedWrites } from '../src/shared-writes';
 
 async function collectAfterTurn(reference?: WeakRef<object>): Promise<void> {
   // WeakRef targets stay alive for the job in which they were created. Cross
@@ -29,6 +30,26 @@ async function collectAfterTurn(reference?: WeakRef<object>): Promise<void> {
 function runImmediately(run: () => void): void {
   run();
 }
+
+it('releases a shared binding\'s previous data after reassignment without another mutation', async () => {
+  function replaced() {
+    let value = { count: 0 };
+    const reference = new WeakRef(value);
+    const key = {};
+    const writes = createSharedWrites([key], []);
+    writes.watch([{ read: () => value, notify() {} }]);
+    mutationTarget(value, 'count', () => {}).value = 1;
+    value = { count: 2 };
+    writes.mark(key);
+    return { reference, writes };
+  }
+  const result = replaced();
+  await collectAfterTurn(result.reference);
+  expect(result.reference.deref()).toBeUndefined();
+  // Keep the live shared owner reachable throughout collection. Only its old
+  // payload should be released, not the owner or its binding reader.
+  result.writes.mark();
+});
 
 it('does not retain an application registry through an empty collector', async () => {
   function completed() {

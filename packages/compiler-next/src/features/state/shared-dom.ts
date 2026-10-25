@@ -188,6 +188,9 @@ export function finishSharedOwner(
       }),
       statement('const $$frame = $$scope.enter();', { frame, scope }),
       ...update,
+      // A lazy derivation may replace its graph after the input write already
+      // published. Release cached mutation reaches before leaving this refresh.
+      statement('$$batch.check();', { batch }),
       statement('$$scope.leave($$frame);', { scope, frame }),
     ] }),
   }));
