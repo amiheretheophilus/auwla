@@ -24,6 +24,20 @@ Last updated: 2026-10-25.
 
 ## Done
 
+- Mutation-index ownership cleanup (2026-10-25). Indexed roots now detach their
+  memberships on disposal and reindexing. Completed updates release changed or
+  stale graphs before rebuilding lazily, and failed reflection leaves a retry
+  pending. Eight native regressions cover repeated mount/dispose, binding
+  replacement, retained aliases, opaque edits, stale reaches, interrupted walks
+  and disposal during a proxy trap. The 200-cycle check leaves **zero dead
+  memberships instead of 200**. Focused runtime checks, both type checks,
+  37 compiled native/fixture tests and 34 both-mode comparison cases pass.
+  Chrome correctness gates pass all eight compiled placements and all 16 update
+  variants, including retained identity and mixed sequences. A separate
+  GC regression also reproduces retention of a shared binding's previous data;
+  that fix follows in the next batch. Neither finding establishes the VM OOM's
+  cause or resolution.
+
 - Controlled write-batch measurement (2026-10-25).
   [Run 40231260866](https://github.com/amiheretheophilus/auwla/actions/runs/40231260866)
   compares `d5abe1f0` with `248f8a83` using identical compiler-next output, seven

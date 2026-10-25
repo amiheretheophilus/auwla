@@ -20,6 +20,7 @@ Finds every place that changes state and makes the UI update after it.
 | `await.test.ts` | Native immediate-suspension checks, return await, operands/receivers, awaited call arguments and suspended factory ownership |
 | `packages/runtime/src/mutation.ts` | Member target preserving native key conversion, getter/setter receiver and successful-store notification |
 | `packages/runtime/tests/mutation.test.ts` | Descriptor snapshots, cyclic/native data, partial-call recovery and key order |
+| `packages/runtime/tests/mutation-roots.test.ts` | Index membership cleanup on disposal/replacement, retained live aliases, opaque edits, interrupted rebuilds and disposal during reflection |
 | `packages/runtime/src/method-calls.ts` | `observeMethod`: skips the snapshot for a call whose actual callee is a proven array intrinsic (`optimize.md`, "Method calls") |
 | `packages/runtime/tests/method-calls.test.ts` | Proven calls take no snapshot; own/replaced methods, subclass species, converting arguments, effectful callbacks and throws stay observed |
 | `optimize/methods.ts` | Lowers observed member calls to `observeMethod` and marks effect-free inline callbacks |
@@ -146,12 +147,24 @@ edit, is walked before the next lookup.
 
 A root whose binding was reassigned has already marked its own component, so the
 emitted `_update` re-checks that component's roots (`checkMutationRoots`).
+Each indexed root records the buckets it joined. Disposal detaches those
+memberships and clears its cached reach, so long-lived data does not accumulate
+dead root records. Rebuilding a root first detaches its previous graph; an
+interrupted rebuild stays pending for the next lookup. Completed component
+updates also detach changed or stale graphs before their lazy rebuild. Opaque
+edits can forget the reach before that update, and still release its old buckets.
+Reflection that disposes an owner cannot reattach its dead root.
+The 200-cycle mount/dispose regression leaves zero memberships (previously 200),
+and the remaining native checks verify that current aliases still notify.
 Reading every root on every store is not needed. Components with no roots
 register none. Module and factory roots are few, one per shared binding, and are
 still checked on every edit. A typical write (`row.label = x`) costs one index
 lookup and one check per holding root.
 Known limit: uncompiled code that adds an object to watched data outside an
 observed call is not seen until that root is walked again.
+Known retention gap: a shared binding's cached reach can retain its previous
+value after reassignment until another observed mutation. A native GC regression
+reproduces this; shared-cache invalidation is the next batch.
 
 An opaque call takes one shallow snapshot of each object its reads reach, before
 and after. A read is notified when one of its objects changed or the read now
