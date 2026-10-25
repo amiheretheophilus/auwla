@@ -120,23 +120,33 @@ function Row(_id2, _parent2, _props2, _namespace2, _setupOnly2) {
   _siteComputation3.begin();
   let _value16 = props.item.id;
   _siteComputation3.end();
-  const _valueSlot2 = _MD.createIndexedValueSlot(_text2, { id: _id2, batch: _writes2, entity: _entity2, namespace: _namespace2 });
-  _valueSlot2.write(_value16);
+  let _valueSlot2 = null;
+  if (_valueSlot2 === null && (_value16 === null || typeof _value16 !== "object")) {
+    _MD.setTextData(_text2, _value16);
+  } else {
+    (_valueSlot2 ??= _MD.createIndexedValueSlot(_text2, { id: _id2, batch: _writes2, entity: _entity2, namespace: _namespace2 })).write(_value16);
+  }
   let _seen2 = _propsVersion;
   const _siteComputation4 = _MD.createComputation(_writes2.mark, _entity2);
   _siteComputation4.begin();
   let _value17 = props.item.label;
   _siteComputation4.end();
-  const _valueSlot3 = _MD.createIndexedValueSlot(_text3, { id: _id2, batch: _writes2, entity: _entity2, namespace: _namespace2 });
-  _valueSlot3.write(_value17);
+  let _valueSlot3 = null;
+  if (_valueSlot3 === null && (_value17 === null || typeof _value17 !== "object")) {
+    _MD.setTextData(_text3, _value17);
+  } else {
+    (_valueSlot3 ??= _MD.createIndexedValueSlot(_text3, { id: _id2, batch: _writes2, entity: _entity2, namespace: _namespace2 })).write(_value17);
+  }
   let _seen3 = _propsVersion;
   let _publishedVersion2 = _propsVersion;
   _MD.cleanup(_id2, () => {
     _siteComputation2.dispose();
     _siteComputation3.dispose();
-    _valueSlot2.dispose();
+    if (_valueSlot2 !== null) _valueSlot2.dispose();
+    _valueSlot2 = _MD.disposedValueSlot;
     _siteComputation4.dispose();
-    _valueSlot3.dispose();
+    if (_valueSlot3 !== null) _valueSlot3.dispose();
+    _valueSlot3 = _MD.disposedValueSlot;
   });
   function _update2() {
     const _updateFrame2 = _scope2.enter();
@@ -159,7 +169,11 @@ function Row(_id2, _parent2, _props2, _namespace2, _setupOnly2) {
       const _next3 = props.item.id;
       _siteComputation3.end();
       if (_next3 !== _value16 && !(_next3 !== _next3 && _value16 !== _value16)) {
-        _valueSlot2.write(_next3);
+        if (_valueSlot2 === null && (_next3 === null || typeof _next3 !== "object")) {
+          _MD.setTextData(_text2, _next3);
+        } else {
+          (_valueSlot2 ??= _MD.createIndexedValueSlot(_text2, { id: _id2, batch: _writes2, entity: _entity2, namespace: _namespace2 })).write(_next3);
+        }
         _value16 = _next3;
       }
       _seen2 = _propsVersion;
@@ -169,7 +183,11 @@ function Row(_id2, _parent2, _props2, _namespace2, _setupOnly2) {
       const _next4 = props.item.label;
       _siteComputation4.end();
       if (_next4 !== _value17 && !(_next4 !== _next4 && _value17 !== _value17)) {
-        _valueSlot3.write(_next4);
+        if (_valueSlot3 === null && (_next4 === null || typeof _next4 !== "object")) {
+          _MD.setTextData(_text3, _next4);
+        } else {
+          (_valueSlot3 ??= _MD.createIndexedValueSlot(_text3, { id: _id2, batch: _writes2, entity: _entity2, namespace: _namespace2 })).write(_next4);
+        }
         _value17 = _next4;
       }
       _seen3 = _propsVersion;
@@ -434,12 +452,17 @@ export function BenchModuleDataComponent(_id, _parent, _props, _namespace, _setu
   _siteComputation.begin();
   let _value13 = _MD.observeMethod([() => data], [_mutated_data], _read_data(), "map", 1, _rows)((item) => (_MD.createComponentValue(Row, { "key": item.id, "item": item, "selected": _MD.trackEquals(selected, item.id, () => selected, () => _selectedVersion, _readKey), "select": select })));
   _siteComputation.end();
-  const _valueSlot = _MD.createIndexedValueSlot(_text, { id: _id, batch: _writes, entity: _entity, namespace: _namespace });
-  _valueSlot.write(_value13);
+  let _valueSlot = null;
+  if (_valueSlot === null && (_value13 === null || typeof _value13 !== "object")) {
+    _MD.setTextData(_text, _value13);
+  } else {
+    (_valueSlot ??= _MD.createIndexedValueSlot(_text, { id: _id, batch: _writes, entity: _entity, namespace: _namespace })).write(_value13);
+  }
   let _publishedVersion = _selectedVersion;
   _MD.cleanup(_id, () => {
     _siteComputation.dispose();
-    _valueSlot.dispose();
+    if (_valueSlot !== null) _valueSlot.dispose();
+    _valueSlot = _MD.disposedValueSlot;
   });
   _MD.watchMutationRoots(_entity, [{ read: () => selected, notify: () => {
     _selectedVersion++;
@@ -455,7 +478,11 @@ export function BenchModuleDataComponent(_id, _parent, _props, _namespace, _setu
       const _next = _MD.observeMethod([() => data], [_mutated_data], _read_data(), "map", 1, _rows)((item) => (_MD.createComponentValue(Row, { "key": item.id, "item": item, "selected": _MD.trackEquals(selected, item.id, () => selected, () => _selectedVersion, _readKey), "select": select })));
       _siteComputation.end();
       if (_next !== _value13 && !(_next !== _next && _value13 !== _value13)) {
-        _valueSlot.write(_next);
+        if (_valueSlot === null && (_next === null || typeof _next !== "object")) {
+          _MD.setTextData(_text, _next);
+        } else {
+          (_valueSlot ??= _MD.createIndexedValueSlot(_text, { id: _id, batch: _writes, entity: _entity, namespace: _namespace })).write(_next);
+        }
         _value13 = _next;
       }
     }

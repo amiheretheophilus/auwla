@@ -168,6 +168,24 @@ async function compile(source: string, mountRoot = true) {
   return { module, root, click };
 }
 
+it('creates a text site slot on the first object and keeps it through later text', async () => {
+  const { root, click } = await compile(`
+    let step = 0;
+    const values = ['a', <b>x</b>, ['p', <i>q</i>], 7, null, Symbol.iterator.description, <u>y</u>];
+    function Child(props) { return <p>{props.value}</p>; }
+    export function App() {
+      return <main><button onClick={() => step++}>next</button><Child value={values[step]} /></main>;
+    }
+  `);
+  const shown = () => root.querySelector('p')!.innerHTML.replace(/<!--[^>]*-->/g, '');
+  const seen = [shown()];
+  for (let index = 1; index < 7; index++) {
+    click('button');
+    seen.push(shown());
+  }
+  expect(seen).toEqual(['a', '<b>x</b>', 'p<i>q</i>', '7', '', 'Symbol.iterator', '<u>y</u>']);
+});
+
 it('evaluates tag and spread getters once in order and excludes reserved props', async () => {
   const { module, root } = await compile(`
     export const seen = [];

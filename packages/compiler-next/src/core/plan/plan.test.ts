@@ -92,7 +92,8 @@ describe('primitive text sites', () => {
     const texts = component.sites.filter((site) => site.kind === 'text');
     expect(texts.map((site) => site.primitive)).toEqual([true, true, true, true, false, false]);
     const code = printJavaScript(emitDom(plan, { runtimePath: '@memoized-dom/runtime/testing' }), 'App.tsx', source);
-    expect(code.match(/createValueSlot\(/g)).toHaveLength(2);
+    // One lazily created slot per site that can receive more than text.
+    expect(code.match(/let _valueSlot\d* = null;/g)).toHaveLength(2);
   });
 });
 

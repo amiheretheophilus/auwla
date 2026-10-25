@@ -31,11 +31,19 @@ const _renderProgram = { mount(_values, _owner) {
       _li.addEventListener("click", _listener);
     }
     let _value3 = _values[3];
-    const _valueSlot = _MD.createIndexedValueSlot(_text, { id: _valueId, batch: _valueWrites, entity: _valueEntity, namespace: _namespace });
-    _valueSlot.write(_value3);
+    let _valueSlot = null;
+    if (_valueSlot === null && (_value3 === null || typeof _value3 !== "object")) {
+      _MD.setTextData(_text, _value3);
+    } else {
+      (_valueSlot ??= _MD.createIndexedValueSlot(_text, { id: _valueId, batch: _valueWrites, entity: _valueEntity, namespace: _namespace })).write(_value3);
+    }
     let _value4 = _values[4];
-    const _valueSlot2 = _MD.createIndexedValueSlot(_text2, { id: _valueId, batch: _valueWrites, entity: _valueEntity, namespace: _namespace });
-    _valueSlot2.write(_value4);
+    let _valueSlot2 = null;
+    if (_valueSlot2 === null && (_value4 === null || typeof _value4 !== "object")) {
+      _MD.setTextData(_text2, _value4);
+    } else {
+      (_valueSlot2 ??= _MD.createIndexedValueSlot(_text2, { id: _valueId, batch: _valueWrites, entity: _valueEntity, namespace: _namespace })).write(_value4);
+    }
     return { nodes: [_li], update(_values2) {
       _values = _values2;
       const _next = _values[1];
@@ -59,17 +67,27 @@ const _renderProgram = { mount(_values, _owner) {
       }
       const _next3 = _values[3];
       if (_next3 !== _value3 && !(_next3 !== _next3 && _value3 !== _value3)) {
-        _valueSlot.write(_next3);
+        if (_valueSlot === null && (_next3 === null || typeof _next3 !== "object")) {
+          _MD.setTextData(_text, _next3);
+        } else {
+          (_valueSlot ??= _MD.createIndexedValueSlot(_text, { id: _valueId, batch: _valueWrites, entity: _valueEntity, namespace: _namespace })).write(_next3);
+        }
         _value3 = _next3;
       }
       const _next4 = _values[4];
       if (_next4 !== _value4 && !(_next4 !== _next4 && _value4 !== _value4)) {
-        _valueSlot2.write(_next4);
+        if (_valueSlot2 === null && (_next4 === null || typeof _next4 !== "object")) {
+          _MD.setTextData(_text2, _next4);
+        } else {
+          (_valueSlot2 ??= _MD.createIndexedValueSlot(_text2, { id: _valueId, batch: _valueWrites, entity: _valueEntity, namespace: _namespace })).write(_next4);
+        }
         _value4 = _next4;
       }
     }, dispose() {
-      _valueSlot.dispose();
-      _valueSlot2.dispose();
+      if (_valueSlot !== null) _valueSlot.dispose();
+      _valueSlot = _MD.disposedValueSlot;
+      if (_valueSlot2 !== null) _valueSlot2.dispose();
+      _valueSlot2 = _MD.disposedValueSlot;
     } };
   }
   const _valueMarkup = "<li><!---->: <!----></li>";
@@ -96,11 +114,19 @@ const _renderProgram = { mount(_values, _owner) {
     _li2.addEventListener("click", _listener2);
   }
   let _value7 = _values[3];
-  const _valueSlot3 = _MD.createIndexedValueSlot(_text3, { id: _valueId, batch: _valueWrites, entity: _valueEntity, namespace: _namespace });
-  _valueSlot3.write(_value7);
+  let _valueSlot3 = null;
+  if (_valueSlot3 === null && (_value7 === null || typeof _value7 !== "object")) {
+    _MD.setTextData(_text3, _value7);
+  } else {
+    (_valueSlot3 ??= _MD.createIndexedValueSlot(_text3, { id: _valueId, batch: _valueWrites, entity: _valueEntity, namespace: _namespace })).write(_value7);
+  }
   let _value8 = _values[4];
-  const _valueSlot4 = _MD.createIndexedValueSlot(_text4, { id: _valueId, batch: _valueWrites, entity: _valueEntity, namespace: _namespace });
-  _valueSlot4.write(_value8);
+  let _valueSlot4 = null;
+  if (_valueSlot4 === null && (_value8 === null || typeof _value8 !== "object")) {
+    _MD.setTextData(_text4, _value8);
+  } else {
+    (_valueSlot4 ??= _MD.createIndexedValueSlot(_text4, { id: _valueId, batch: _valueWrites, entity: _valueEntity, namespace: _namespace })).write(_value8);
+  }
   return { nodes: [_li2], update(_values2) {
     _values = _values2;
     const _next5 = _values[1];
@@ -124,17 +150,27 @@ const _renderProgram = { mount(_values, _owner) {
     }
     const _next7 = _values[3];
     if (_next7 !== _value7 && !(_next7 !== _next7 && _value7 !== _value7)) {
-      _valueSlot3.write(_next7);
+      if (_valueSlot3 === null && (_next7 === null || typeof _next7 !== "object")) {
+        _MD.setTextData(_text3, _next7);
+      } else {
+        (_valueSlot3 ??= _MD.createIndexedValueSlot(_text3, { id: _valueId, batch: _valueWrites, entity: _valueEntity, namespace: _namespace })).write(_next7);
+      }
       _value7 = _next7;
     }
     const _next8 = _values[4];
     if (_next8 !== _value8 && !(_next8 !== _next8 && _value8 !== _value8)) {
-      _valueSlot4.write(_next8);
+      if (_valueSlot4 === null && (_next8 === null || typeof _next8 !== "object")) {
+        _MD.setTextData(_text4, _next8);
+      } else {
+        (_valueSlot4 ??= _MD.createIndexedValueSlot(_text4, { id: _valueId, batch: _valueWrites, entity: _valueEntity, namespace: _namespace })).write(_next8);
+      }
       _value8 = _next8;
     }
   }, dispose() {
-    _valueSlot3.dispose();
-    _valueSlot4.dispose();
+    if (_valueSlot3 !== null) _valueSlot3.dispose();
+    _valueSlot3 = _MD.disposedValueSlot;
+    if (_valueSlot4 !== null) _valueSlot4.dispose();
+    _valueSlot4 = _MD.disposedValueSlot;
   } };
 } };
 const _markup = "<div><div class=\"toolbar\"><button>create1k</button><button>create10k</button><button>append1k</button><button>prepend1k</button><button>pop1k</button><button>update</button><button>swap</button><button>reverse</button><button>remove</button><button>remove100</button><button>clear</button></div><ul><!----></ul></div>";
@@ -462,11 +498,16 @@ export function BenchAppInline(_id, _parent, _props, _namespace2, _setupOnly) {
     } }).value = item.id;
   }, item.id, item.label], 0)));
   _siteComputation.end();
-  const _valueSlot5 = _MD.createIndexedValueSlot(_text5, { id: _id, batch: _writes, entity: _entity, namespace: _namespace2 });
-  _valueSlot5.write(_value20);
+  let _valueSlot5 = null;
+  if (_valueSlot5 === null && (_value20 === null || typeof _value20 !== "object")) {
+    _MD.setTextData(_text5, _value20);
+  } else {
+    (_valueSlot5 ??= _MD.createIndexedValueSlot(_text5, { id: _id, batch: _writes, entity: _entity, namespace: _namespace2 })).write(_value20);
+  }
   _MD.cleanup(_id, () => {
     _siteComputation.dispose();
-    _valueSlot5.dispose();
+    if (_valueSlot5 !== null) _valueSlot5.dispose();
+    _valueSlot5 = _MD.disposedValueSlot;
   });
   function _update() {
     const _updateFrame = _scope.enter();
@@ -483,7 +524,11 @@ export function BenchAppInline(_id, _parent, _props, _namespace2, _setupOnly) {
       }, item.id, item.label], 0)));
       _siteComputation.end();
       if (_next9 !== _value20 && !(_next9 !== _next9 && _value20 !== _value20)) {
-        _valueSlot5.write(_next9);
+        if (_valueSlot5 === null && (_next9 === null || typeof _next9 !== "object")) {
+          _MD.setTextData(_text5, _next9);
+        } else {
+          (_valueSlot5 ??= _MD.createIndexedValueSlot(_text5, { id: _id, batch: _writes, entity: _entity, namespace: _namespace2 })).write(_next9);
+        }
         _value20 = _next9;
       }
     }

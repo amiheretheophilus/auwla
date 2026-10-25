@@ -253,7 +253,12 @@ template eligibility is an optimization, not a restriction on accepted tags.
 Text expressions replace comment placeholders so adjacent values retain separate
 nodes. Empty or multi-root fragments return a `DocumentFragment`.
 Root value slots use movable fragments too: a stored value can expand beyond its
-text anchor. Unclaimed JSX becomes a captured program after component templates
+text anchor. A text site that the syntax does not prove primitive creates its
+value slot on the first value that is an object (stored JSX, an array). Until
+then it writes text directly, which is what a new slot writes for any other
+value; once created, the slot stays, and after disposal the site holds
+`disposedValueSlot`, which ignores writes as a disposed slot does. Most such
+sites (`{props.item.label}`) only ever show text and never allocate a slot. Unclaimed JSX becomes a captured program after component templates
 are planned; the authored AST and lexical capture expressions remain unchanged.
 
 The current emitters keep each operation on its own line and use named helpers

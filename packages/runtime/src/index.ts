@@ -154,7 +154,7 @@ export { patchDomProps, setDomValue } from './dom-props';
 export { classValue, setClassValue, setStyleValue } from './dom-values';
 export { createCondRegion } from './cond';
 export {
-  createRenderValue, createKeyedRenderValue, createValueSlot, createIndexedValueSlot, renderNamespace,
+  createRenderValue, createKeyedRenderValue, createValueSlot, createIndexedValueSlot, disposedValueSlot, renderNamespace,
 } from './render-value';
 export {
   componentValue, componentSetup, createComponentValue, createPropsCell,

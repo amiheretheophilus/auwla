@@ -96,20 +96,26 @@ export function emitSites(
       mount.push(statement('let $$listener;', { listener }));
     }
     let region: string | null = null;
-    let valueSlot: string | null = null;
+    let valueSlot: LazySlot | null = null;
     if (site.kind === 'text' && !site.primitive) {
-      valueSlot = names.fresh('_valueSlot');
+      // Most such sites only ever show text. The slot, which also shows stored
+      // JSX and arrays, is created by the first value that is an object.
+      const slot = names.fresh('_valueSlot');
       const factory = site.listStrategy === 'retained-index' ? 'createIndexedValueSlot' : 'createValueSlot';
-      mount.push(statement(`const $$slot = $$runtime.${factory}($$text, { id: $$id, batch: $$batch, entity: $$entity, namespace: $$namespace });`, {
-        slot: valueSlot,
-        runtime,
-        text: node,
-        id: context.id,
-        batch: batch ?? buildExpression('null'),
-        entity: batch === null ? buildExpression('void 0') : entity,
-        namespace: context.namespace ?? buildExpression('void 0'),
-      }));
-      dispose.push(statement('$$slot.dispose();', { slot: valueSlot }));
+      valueSlot = {
+        name: slot,
+        create: buildExpression(`$$runtime.${factory}($$text, { id: $$id, batch: $$batch, entity: $$entity, namespace: $$namespace })`, {
+          runtime,
+          text: node,
+          id: context.id,
+          batch: batch ?? buildExpression('null'),
+          entity: batch === null ? buildExpression('void 0') : entity,
+          namespace: context.namespace ?? buildExpression('void 0'),
+        }),
+      };
+      mount.push(statement('let $$slot = null;', { slot }));
+      dispose.push(statement('if ($$slot !== null) $$slot.dispose();', { slot }));
+      dispose.push(statement('$$slot = $$runtime.disposedValueSlot;', { slot, runtime }));
     }
     if (site.kind === 'conditional') {
       region = names.fresh('_conditional');
@@ -186,6 +192,12 @@ export function emitSites(
     }
   }
   return { mount, update, dispose };
+}
+
+/** A text site's value slot, created on the first value that is an object. */
+interface LazySlot {
+  readonly name: string;
+  readonly create: Expression;
 }
 
 function guardedStatements(test: Expression, body: Statement[]): Statement {
@@ -284,14 +296,21 @@ function writeValue(
   runtime: string,
   batch: string | null,
   listener: string | null,
-  valueSlot: string | null,
+  valueSlot: LazySlot | null,
 ): Statement[] {
   if (site.kind === 'conditional' || site.kind === 'key') {
     return [];
   }
   if (site.kind === 'text') {
     if (valueSlot !== null) {
-      return [statement('$$slot.write($$value);', { slot: valueSlot, value })];
+      // Before a slot exists, a value that is not an object is text, exactly
+      // what a new slot would write (`render-value.ts`, `write`).
+      return statements(`
+        if (${valueSlot.name} === null && ($$value === null || typeof $$value !== "object")) {
+          $$runtime.setTextData($$node, $$value);
+        } else {
+          (${valueSlot.name} ??= $$create).write($$value);
+        }`, { runtime, node, value, create: valueSlot.create });
     }
     return [statement('$$runtime.setTextData($$node, $$value);', { runtime, node, value })];
   }

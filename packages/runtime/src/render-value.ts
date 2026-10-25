@@ -66,6 +66,21 @@ export interface ValueSlot {
   remove(): void;
 }
 
+/**
+ * What a compiled text site holds after disposal when it never needed a slot.
+ * Sites create their slot on the first value other than a primitive; a write
+ * after disposal is then ignored, as a disposed slot ignores it.
+ */
+export const disposedValueSlot: ValueSlot = Object.freeze({
+  write() {},
+  first(): Node {
+    throw new Error('[memo-dom] a disposed value slot has no nodes');
+  },
+  moveBefore() {},
+  dispose() {},
+  remove() {},
+});
+
 /** One row of a list: its identity and the slot that renders it. */
 interface Row {
   readonly identity: string;

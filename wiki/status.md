@@ -24,6 +24,16 @@ Last updated: 2026-10-25.
 
 ## Done
 
+- Old-model fast paths, step 1 (2026-10-25, `decisions.md`): a text site not
+  proven primitive creates its value slot on the first object value and writes
+  text directly until then. A component row's `{props.item.id}` and
+  `{props.item.label}` no longer allocate two slots per row. A native regression
+  moves one site through text, stored JSX, an array, a number, null and a symbol
+  description. Both type checks, 253 compiler unit/native tests, 118 runtime
+  tests, the case files (220 pass, the unchanged 100 deferred failures) and the
+  Chrome gates (all placements, all 16 update styles) pass. Next: the keyed
+  `map` list region with compiled row updates.
+
 - Compiler-next snapshot comparison (2026-10-25). The DOM runner now accepts
   `--before-compiler=next` and pairs each compiler snapshot with its runtime.
   `bench-quick.yml` exposes this through `compiler_ref`. Local validation against
