@@ -54,6 +54,21 @@ Last updated: 2026-10-26.
   No VM speedup or OOM resolution is claimed from these work counts. The routing
   and toolchain work is committed and pushed; the working tree is clean.
 
+- Allocation-free write observation (2026-10-26, step 1 of the gap plan):
+  - A store or delete reports its one object without building sets or arrays.
+  - Shared roots are visited without a generator.
+  - A primitive value adds nothing to a reach.
+  - String, symbol and number keys skip the computed-key probe; other keys still
+    convert once, through it (new runtime test).
+
+  Notifications, stamps and alias records are unchanged.
+  [ABBA run 40332528139](https://github.com/amiheretheophilus/auwla/actions/runs/40332528139)
+  (same compiler, nine samples, both orders) improves update 10k in all eight
+  placements, for example module-component 5.5 → 3.4 and 4.2 → 3.5 ms, and
+  owner-inline 3.5 → 2.6 and 3.4 → 2.5 ms. Create and clear are unchanged
+  within noise. Runtime mutation/method/row-list tests (64) and 173 compiler
+  handler, list, optimize and benchmark checks pass locally.
+
 - Gap analysis against the old compiler (2026-10-26): hand-edited variants of
   the module-component output, timed interleaved with a forced GC per sample.
   These attribute the gaps (`compiler/optimize.md`, "Gap analysis"):
