@@ -10,7 +10,7 @@ import { expression as buildExpression, statement, statements, stringLiteral } f
 import { emitSelection, type EmitOnce } from '../../features/conditionals/dom';
 import { emitTemplate, prepareTemplateSites } from './template';
 import { siteValue } from './render-value';
-import { emitRowList } from './row-list';
+import { emitRowList, type RowComponents } from './row-list';
 
 export interface SitesEmit {
   readonly mount: readonly Statement[];
@@ -40,6 +40,8 @@ export interface SitesContext {
    * reads the row's parameters, which the update assigns.
    */
   rows?: boolean;
+  /** Leaf component rows compiled at module level (`row-list.ts`). */
+  rowComponents?: RowComponents;
 }
 
 export function emitSites(
@@ -69,7 +71,7 @@ export function emitSites(
     const value = names.fresh('_value');
     // The row list exists before the site's `map` call passes it to the runtime.
     const rowList = site.kind === 'text' && site.listStrategy === 'rows' && site.rows !== undefined
-      ? emitRowList(site.rows, node, renderOwner(context), context)
+      ? emitRowList(site.rows, node, context)
       : null;
     if (rowList !== null) {
       mount.push(...rowList.declarations);
@@ -210,7 +212,7 @@ export function emitSites(
 }
 
 /** What nested slots and lists need from the component that owns them. */
-function renderOwner(context: SitesContext): Expression {
+export function renderOwner(context: SitesContext): Expression {
   const batch = context.batch;
   return buildExpression('({ id: $$id, batch: $$batch, entity: $$entity, namespace: $$namespace })', {
     id: context.id,

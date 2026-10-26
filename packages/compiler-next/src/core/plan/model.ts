@@ -73,8 +73,21 @@ export interface TextSite extends SiteBase {
 export interface RowListPlan {
   readonly call: Extract<Node, { type: 'CallExpression' }>;
   readonly callback: Extract<Node, { type: 'ArrowFunctionExpression' }>;
-  /** The returned element, planned as stored JSX; its key, if any, is its first site. */
-  readonly row: RenderValuePlan;
+  /** The root's `key`, its first attribute; null without one. */
+  readonly key: Expression | null;
+  readonly row:
+    /** An element, planned as stored JSX. */
+    | { readonly kind: 'element'; readonly value: RenderValuePlan }
+    /**
+     * `<Row key={…} a={…} />` for a leaf component (`optimize/row-lists.ts`):
+     * its template is compiled once more as a row taking the props object.
+     */
+    | {
+      readonly kind: 'component';
+      readonly component: FunctionNode;
+      /** The props after `key`, in authored order. */
+      readonly props: readonly { readonly name: string; readonly value: Expression }[];
+    };
 }
 
 export interface AttributeSite extends SiteBase {

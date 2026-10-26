@@ -314,6 +314,20 @@ and the next pass or disposal removes them; the committed rows stay. A getter
 that renders the same site again supersedes the pass it interrupted: the inner
 pass recovers the outer one's new rows and commits, and the outer pass stops.
 
+A row can also be `<Row key={…} a={…} />` for a **leaf component**: a
+module-level declaration, never reassigned, with at most one plain parameter,
+no setup statements, local state, derivations, writes, edits, takeovers or refs,
+and one element root. Its instance does nothing but show its props, so
+`RowComponents` (`core/emit/row-list.ts`) compiles its template once more at
+module level as `function _Row_row(props, owner)`, where its names resolve as
+written. The row builds the props object in authored order (after `key`) and
+passes a new one on each update. The general receiver keeps the old object
+while its fields are the same; the row does that too (`sameProps`) unless every
+use of `props` is a plain member read, which cannot observe the object's
+identity. `props.select(id)` passes `props` as `this`, and the general path
+observes that call as an edit of `props`, so such a component is not a leaf: the
+owner-placed bench rows stay general for now.
+
 What differs from the general path is only timing the console cannot see: a row
 mounts while its item is evaluated, before unmatched rows are removed, and
 sibling rows leave the DOM together when the whole parent clears.
@@ -326,6 +340,9 @@ moves, bulk clearing, a throwing key, reentry and the slot fallback.
 modes through moves, duplicates, holes, `'1'`/`1` keys, `reverse`, `splice`,
 edits and clearing, and covers handlers after a swap, a receiver with its own
 `map`, stored JSX and arrays inside rows, SVG rows and the qualification limits.
+The same traces run for keyed and unkeyed leaf component rows, a both-mode
+check passes one props object as `this` while its fields stay the same, and the
+leaf conditions are checked one by one.
 
 ## Implementation order after Phase 6
 

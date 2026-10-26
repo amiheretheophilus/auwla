@@ -159,3 +159,66 @@ it('keeps the general path when the key is not the first attribute or the row is
   expect(compile(source('<li key={row.id}>{row.id}</li>'), true)).toContain('createRowList(');
   expect(compile(source('<li key={row.id}>{row.id}</li>'), false)).not.toContain('createRowList(');
 });
+
+it.each(['<Item key={row.id} row={row} index={index} />', '<Item row={row} index={index} />'])(
+  'keeps the general path\'s identity for leaf component rows: %s',
+  async (row) => {
+    const source = `${steps}
+      let selected = 1;
+      function Item(props) {
+        return <li class={selected === props.row.id ? 'on' : ''}>{props.index}{props.row.l}</li>;
+      }
+      export function App() {
+        return <main><ul>{rows.map((row, index) => ${row})}</ul>
+          <button id="next" onClick={() => { changes[step++](); selected = 5; }}>next</button></main>;
+      }`;
+    expect(compile(source, true)).toContain('function _Item_row(');
+    const optimized = await trace(source, true, 10);
+    const general = await trace(source, false, 10);
+    expect(optimized).toEqual(general);
+  },
+);
+
+it.each([true, false])('passes the same props object to a method a component row calls (optimize: %p)', async (optimize) => {
+  const { host, click } = await mount(`
+    let rows = [{ id: 1 }, { id: 2 }];
+    let seen = [];
+    let shown = '';
+    function select(id) { seen.push(this); shown = id + ':' + new Set(seen).size; }
+    function Item(props) {
+      return <li class={props.on ? 'on' : ''} onClick={() => { props.select(props.row.id); }}>{props.row.id}</li>;
+    }
+    export function App() {
+      let tick = 0;
+      return <main><p>{shown}</p><ul>{rows.map((row) => <Item key={row.id} row={row} on={tick > 1} select={select} />)}</ul>
+        <button id="tick" onClick={() => { tick++; }}>tick</button></main>;
+    }
+  `, optimize);
+  const first = () => host.querySelector('li')!;
+  first().click();
+  click('tick');
+  first().click();
+  // Props with the same fields keep the first object, as the general receiver does.
+  expect(host.querySelector('p')!.textContent).toBe('1:1');
+  click('tick');
+  first().click();
+  expect(host.querySelector('p')!.textContent).toBe('1:2');
+  expect(first().className).toBe('on');
+});
+
+it('compiles only leaf components as rows', () => {
+  const source = (item: string) => `
+    let rows = [{ id: 1 }];
+    ${item}
+    export function App() {
+      return <main><ul>{rows.map((row) => <Item key={row.id} row={row} />)}</ul><button onClick={() => { rows = []; }}>clear</button></main>;
+    }`;
+  expect(compile(source('function Item(props) { return <li>{props.row.id}</li>; }'), true)).toContain('_Item_row(');
+  expect(compile(source('function Item(props) { let n = 0; return <li onClick={() => n++}>{n}</li>; }'), true)).not.toContain('_Item_row(');
+  expect(compile(source('function Item(props) { const label = props.row.id + 1; return <li>{label}</li>; }'), true)).not.toContain('_Item_row(');
+  expect(compile(source('function Item({ row }) { return <li>{row.id}</li>; }'), true)).not.toContain('_Item_row(');
+  // A fragment of one element mounts that element; two roots are not one row node.
+  expect(compile(source('function Item(props) { return <><li>{props.row.id}</li></>; }'), true)).toContain('_Item_row(');
+  expect(compile(source('function Item(props) { return <><li>{props.row.id}</li><li /></>; }'), true)).not.toContain('_Item_row(');
+  expect(compile(source('function Item(props) { return <li>{props.row.id}</li>; } Item = () => null;'), true)).not.toContain('_Item_row(');
+});

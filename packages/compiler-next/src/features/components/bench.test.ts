@@ -106,17 +106,18 @@ it.each([
     return updates.count;
   };
   click('create1k');
-  // The list owner updates once; a row updates only when its own item changed.
-  expect(runs(() => click('update'))).toBe(1 + 100);
+  // The list owner updates once. Generally, a row component updates only when
+  // its own item changed; optimized, `Row` is a leaf compiled into the owner's
+  // row list (`optimize/row-lists.ts`), which updates its rows in that one pass.
+  expect(runs(() => click('update'))).toBe(optimize ? 1 : 1 + 100);
   expect(runs(() => click('swap'))).toBe(1);
   expect(runs(() => click('remove'))).toBe(1);
   expect(runs(() => click('append1k'))).toBe(1);
-  // Every row reads `selected === props.item.id`. With `keyed-comparisons`, a
-  // selection wakes the rows whose comparison can flip: the newly selected row,
-  // then also the previous one. The general path checks every row's class.
+  // Every row reads `selected === props.item.id`; the general path checks every
+  // row component's class, the row list re-evaluates its rows in one owner pass.
   const rows = [...host.querySelectorAll('li')];
   expect(runs(() => rows[0]!.click())).toBe(optimize ? 1 : rows.length);
-  expect(runs(() => rows[1]!.click())).toBe(optimize ? 2 : rows.length);
+  expect(runs(() => rows[1]!.click())).toBe(optimize ? 1 : rows.length);
   expect(rows[0]!.className).toBe('');
   expect(rows[1]!.className).toBe('danger');
 }, 30_000);

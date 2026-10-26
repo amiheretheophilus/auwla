@@ -65,7 +65,8 @@ export function emitComponentCall(call: ComponentCall, runtime: string, compiled
   });
 }
 
-function attributeValue(value: Node | null): Expression {
+/** A JSX attribute's value as the props object holds it: `true` when it has none. */
+export function attributeValue(value: Node | null): Expression {
   if (value === null) {
     return expression('true');
   }

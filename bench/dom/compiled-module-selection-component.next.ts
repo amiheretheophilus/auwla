@@ -4,6 +4,100 @@ const _markup = "<div><div class=\"toolbar\"><button>create1k</button><button>cr
 _MD.defineComponent(BenchModuleSelectionComponent, "./bench/dom/AppModuleSelectionComponent.tsx#BenchModuleSelectionComponent");
 const _markup2 = "<li><!---->: <!----></li>";
 _MD.defineComponent(Row, "./bench/dom/AppModuleSelectionComponent.tsx#Row");
+function _Row_row(props, _rowOwner2) {
+  const _document2 = _MD.getActiveEnvironment().document;
+  const _rowId = _rowOwner2.id;
+  const _rowWrites = _rowOwner2.batch;
+  const _rowEntity = _rowOwner2.entity;
+  const _rowNamespace2 = _rowOwner2.namespace;
+  const _rowMarkup = "<li><!---->: <!----></li>";
+  const _nodes2 = _rowNamespace2 === "svg" ? (() => {
+    const _slot3 = _document2.createComment("");
+    const _static12 = _document2.createTextNode(": ");
+    const _slot4 = _document2.createComment("");
+    const _li = _document2.createElementNS("http://www.w3.org/2000/svg", "li");
+    _li.append(_slot3, _static12, _slot4);
+    return [_slot3, _static12, _slot4, _li];
+  })() : _MD.materializeMarkup(_rowMarkup);
+  const _slot5 = _nodes2[0];
+  const _slot6 = _nodes2[2];
+  const _li2 = _nodes2[3];
+  const _text2 = _document2.createTextNode("");
+  _slot5.replaceWith(_text2);
+  const _text3 = _document2.createTextNode("");
+  _slot6.replaceWith(_text3);
+  let _value14 = _MD.trackEquals(_peek_selected(), props.item.id, _peek_selected, _version_selected, _sharedKey) ? 'danger' : '';
+  if (_value14 != null && _value14 !== false) {
+    _li2.setAttribute("class", _value14 === true ? "" : _MD.textValue(_value14));
+  } else {
+    _li2.removeAttribute("class");
+  }
+  let _value15 = () => {
+    ({ get value() {
+      return selected;
+    }, set value(_assigned) {
+      selected = _assigned;
+      _selectedVersion++;
+      if (!_sharedScope.building()) _sharedWrites.mark(_sharedKey);
+    } }).value = props.item.id;
+  };
+  let _listener12;
+  if (_listener12 !== undefined) _li2.removeEventListener("click", _listener12);
+  _listener12 = undefined;
+  if (typeof _value15 === "function") {
+    _listener12 = _rowWrites === null ? _value15 : _rowWrites.listener(_value15);
+    _li2.addEventListener("click", _listener12);
+  }
+  let _value16 = props.item.id;
+  let _valueSlot = null;
+  if (_valueSlot === null && (_value16 === null || typeof _value16 !== "object")) {
+    _MD.setTextData(_text2, _value16);
+  } else {
+    (_valueSlot ??= _MD.createIndexedValueSlot(_text2, { id: _rowId, batch: _rowWrites, entity: _rowEntity, namespace: _rowNamespace2 })).write(_value16);
+  }
+  let _value17 = props.item.label;
+  let _valueSlot2 = null;
+  if (_valueSlot2 === null && (_value17 === null || typeof _value17 !== "object")) {
+    _MD.setTextData(_text3, _value17);
+  } else {
+    (_valueSlot2 ??= _MD.createIndexedValueSlot(_text3, { id: _rowId, batch: _rowWrites, entity: _rowEntity, namespace: _rowNamespace2 })).write(_value17);
+  }
+  return { node: _li2, update(_nextProps) {
+    props = _nextProps;
+    const _next = _MD.trackEquals(_peek_selected(), props.item.id, _peek_selected, _version_selected, _sharedKey) ? 'danger' : '';
+    if (_next !== _value14 && !(_next !== _next && _value14 !== _value14)) {
+      if (_next != null && _next !== false) {
+        _li2.setAttribute("class", _next === true ? "" : _MD.textValue(_next));
+      } else {
+        _li2.removeAttribute("class");
+      }
+      _value14 = _next;
+    }
+    const _next2 = props.item.id;
+    if (_next2 !== _value16 && !(_next2 !== _next2 && _value16 !== _value16)) {
+      if (_valueSlot === null && (_next2 === null || typeof _next2 !== "object")) {
+        _MD.setTextData(_text2, _next2);
+      } else {
+        (_valueSlot ??= _MD.createIndexedValueSlot(_text2, { id: _rowId, batch: _rowWrites, entity: _rowEntity, namespace: _rowNamespace2 })).write(_next2);
+      }
+      _value16 = _next2;
+    }
+    const _next3 = props.item.label;
+    if (_next3 !== _value17 && !(_next3 !== _next3 && _value17 !== _value17)) {
+      if (_valueSlot2 === null && (_next3 === null || typeof _next3 !== "object")) {
+        _MD.setTextData(_text3, _next3);
+      } else {
+        (_valueSlot2 ??= _MD.createIndexedValueSlot(_text3, { id: _rowId, batch: _rowWrites, entity: _rowEntity, namespace: _rowNamespace2 })).write(_next3);
+      }
+      _value17 = _next3;
+    }
+  }, dispose() {
+    if (_valueSlot !== null) _valueSlot.dispose();
+    _valueSlot = _MD.disposedValueSlot;
+    if (_valueSlot2 !== null) _valueSlot2.dispose();
+    _valueSlot2 = _MD.disposedValueSlot;
+  } };
+}
 let _selectedVersion = 0;
 const _sharedKey = {};
 function _mutated_selected() {
@@ -78,33 +172,33 @@ function Row(_id2, _parent2, _props2, _namespace2, _setupOnly2) {
     return;
   }
   _writes2.beginMount();
-  const _document2 = _MD.getActiveEnvironment().document;
-  const _nodes2 = _namespace2 === "svg" ? (() => {
-    const _slot3 = _document2.createComment("");
-    const _static12 = _document2.createTextNode(": ");
-    const _slot4 = _document2.createComment("");
-    const _li = _document2.createElementNS("http://www.w3.org/2000/svg", "li");
-    _li.append(_slot3, _static12, _slot4);
-    return [_slot3, _static12, _slot4, _li];
+  const _document3 = _MD.getActiveEnvironment().document;
+  const _nodes3 = _namespace2 === "svg" ? (() => {
+    const _slot7 = _document3.createComment("");
+    const _static13 = _document3.createTextNode(": ");
+    const _slot8 = _document3.createComment("");
+    const _li3 = _document3.createElementNS("http://www.w3.org/2000/svg", "li");
+    _li3.append(_slot7, _static13, _slot8);
+    return [_slot7, _static13, _slot8, _li3];
   })() : _MD.materializeMarkup(_markup2);
-  const _slot5 = _nodes2[0];
-  const _slot6 = _nodes2[2];
-  const _li2 = _nodes2[3];
-  const _text2 = _document2.createTextNode("");
-  _slot5.replaceWith(_text2);
-  const _text3 = _document2.createTextNode("");
-  _slot6.replaceWith(_text3);
+  const _slot9 = _nodes3[0];
+  const _slot10 = _nodes3[2];
+  const _li4 = _nodes3[3];
+  const _text4 = _document3.createTextNode("");
+  _slot9.replaceWith(_text4);
+  const _text5 = _document3.createTextNode("");
+  _slot10.replaceWith(_text5);
   const _siteComputation2 = _MD.createComputation(_writes2.mark, _entity2);
   _siteComputation2.begin();
-  let _value14 = _MD.trackEquals(_peek_selected(), props.item.id, _peek_selected, _version_selected, _sharedKey) ? 'danger' : '';
+  let _value18 = _MD.trackEquals(_peek_selected(), props.item.id, _peek_selected, _version_selected, _sharedKey) ? 'danger' : '';
   _siteComputation2.end();
-  if (_value14 != null && _value14 !== false) {
-    _li2.setAttribute("class", _value14 === true ? "" : _MD.textValue(_value14));
+  if (_value18 != null && _value18 !== false) {
+    _li4.setAttribute("class", _value18 === true ? "" : _MD.textValue(_value18));
   } else {
-    _li2.removeAttribute("class");
+    _li4.removeAttribute("class");
   }
   let _seen2 = _propsVersion;
-  let _value15 = () => {
+  let _value19 = () => {
     ({ get value() {
       return selected;
     }, set value(_assigned) {
@@ -113,86 +207,86 @@ function Row(_id2, _parent2, _props2, _namespace2, _setupOnly2) {
       if (!_sharedScope.building()) _sharedWrites.mark(_sharedKey);
     } }).value = _MD.trackRead(() => _propsVersion, props, _readKey2).item.id;
   };
-  let _listener12;
-  if (_listener12 !== undefined) _li2.removeEventListener("click", _listener12);
-  _listener12 = undefined;
-  if (typeof _value15 === "function") {
-    _listener12 = _writes2 === null ? _value15 : _writes2.listener(_value15);
-    _li2.addEventListener("click", _listener12);
+  let _listener13;
+  if (_listener13 !== undefined) _li4.removeEventListener("click", _listener13);
+  _listener13 = undefined;
+  if (typeof _value19 === "function") {
+    _listener13 = _writes2 === null ? _value19 : _writes2.listener(_value19);
+    _li4.addEventListener("click", _listener13);
   }
   const _siteComputation3 = _MD.createComputation(_writes2.mark, _entity2);
   _siteComputation3.begin();
-  let _value16 = props.item.id;
+  let _value20 = props.item.id;
   _siteComputation3.end();
-  let _valueSlot2 = null;
-  if (_valueSlot2 === null && (_value16 === null || typeof _value16 !== "object")) {
-    _MD.setTextData(_text2, _value16);
+  let _valueSlot3 = null;
+  if (_valueSlot3 === null && (_value20 === null || typeof _value20 !== "object")) {
+    _MD.setTextData(_text4, _value20);
   } else {
-    (_valueSlot2 ??= _MD.createIndexedValueSlot(_text2, { id: _id2, batch: _writes2, entity: _entity2, namespace: _namespace2 })).write(_value16);
+    (_valueSlot3 ??= _MD.createIndexedValueSlot(_text4, { id: _id2, batch: _writes2, entity: _entity2, namespace: _namespace2 })).write(_value20);
   }
   let _seen3 = _propsVersion;
   const _siteComputation4 = _MD.createComputation(_writes2.mark, _entity2);
   _siteComputation4.begin();
-  let _value17 = props.item.label;
+  let _value21 = props.item.label;
   _siteComputation4.end();
-  let _valueSlot3 = null;
-  if (_valueSlot3 === null && (_value17 === null || typeof _value17 !== "object")) {
-    _MD.setTextData(_text3, _value17);
+  let _valueSlot4 = null;
+  if (_valueSlot4 === null && (_value21 === null || typeof _value21 !== "object")) {
+    _MD.setTextData(_text5, _value21);
   } else {
-    (_valueSlot3 ??= _MD.createIndexedValueSlot(_text3, { id: _id2, batch: _writes2, entity: _entity2, namespace: _namespace2 })).write(_value17);
+    (_valueSlot4 ??= _MD.createIndexedValueSlot(_text5, { id: _id2, batch: _writes2, entity: _entity2, namespace: _namespace2 })).write(_value21);
   }
   let _seen4 = _propsVersion;
   let _publishedVersion2 = _propsVersion;
   _MD.cleanup(_id2, () => {
     _siteComputation2.dispose();
     _siteComputation3.dispose();
-    if (_valueSlot2 !== null) _valueSlot2.dispose();
-    _valueSlot2 = _MD.disposedValueSlot;
-    _siteComputation4.dispose();
     if (_valueSlot3 !== null) _valueSlot3.dispose();
     _valueSlot3 = _MD.disposedValueSlot;
+    _siteComputation4.dispose();
+    if (_valueSlot4 !== null) _valueSlot4.dispose();
+    _valueSlot4 = _MD.disposedValueSlot;
   });
   function _update2() {
     const _updateFrame2 = _scope2.enter();
     if (_propsVersion !== _seen2 || _siteComputation2.changed()) {
       _siteComputation2.begin();
-      const _next2 = _MD.trackEquals(_peek_selected(), props.item.id, _peek_selected, _version_selected, _sharedKey) ? 'danger' : '';
+      const _next5 = _MD.trackEquals(_peek_selected(), props.item.id, _peek_selected, _version_selected, _sharedKey) ? 'danger' : '';
       _siteComputation2.end();
-      if (_next2 !== _value14 && !(_next2 !== _next2 && _value14 !== _value14)) {
-        if (_next2 != null && _next2 !== false) {
-          _li2.setAttribute("class", _next2 === true ? "" : _MD.textValue(_next2));
+      if (_next5 !== _value18 && !(_next5 !== _next5 && _value18 !== _value18)) {
+        if (_next5 != null && _next5 !== false) {
+          _li4.setAttribute("class", _next5 === true ? "" : _MD.textValue(_next5));
         } else {
-          _li2.removeAttribute("class");
+          _li4.removeAttribute("class");
         }
-        _value14 = _next2;
+        _value18 = _next5;
       }
       _seen2 = _propsVersion;
     }
     if (_propsVersion !== _seen3 || _siteComputation3.changed()) {
       _siteComputation3.begin();
-      const _next3 = props.item.id;
+      const _next6 = props.item.id;
       _siteComputation3.end();
-      if (_next3 !== _value16 && !(_next3 !== _next3 && _value16 !== _value16)) {
-        if (_valueSlot2 === null && (_next3 === null || typeof _next3 !== "object")) {
-          _MD.setTextData(_text2, _next3);
+      if (_next6 !== _value20 && !(_next6 !== _next6 && _value20 !== _value20)) {
+        if (_valueSlot3 === null && (_next6 === null || typeof _next6 !== "object")) {
+          _MD.setTextData(_text4, _next6);
         } else {
-          (_valueSlot2 ??= _MD.createIndexedValueSlot(_text2, { id: _id2, batch: _writes2, entity: _entity2, namespace: _namespace2 })).write(_next3);
+          (_valueSlot3 ??= _MD.createIndexedValueSlot(_text4, { id: _id2, batch: _writes2, entity: _entity2, namespace: _namespace2 })).write(_next6);
         }
-        _value16 = _next3;
+        _value20 = _next6;
       }
       _seen3 = _propsVersion;
     }
     if (_propsVersion !== _seen4 || _siteComputation4.changed()) {
       _siteComputation4.begin();
-      const _next4 = props.item.label;
+      const _next7 = props.item.label;
       _siteComputation4.end();
-      if (_next4 !== _value17 && !(_next4 !== _next4 && _value17 !== _value17)) {
-        if (_valueSlot3 === null && (_next4 === null || typeof _next4 !== "object")) {
-          _MD.setTextData(_text3, _next4);
+      if (_next7 !== _value21 && !(_next7 !== _next7 && _value21 !== _value21)) {
+        if (_valueSlot4 === null && (_next7 === null || typeof _next7 !== "object")) {
+          _MD.setTextData(_text5, _next7);
         } else {
-          (_valueSlot3 ??= _MD.createIndexedValueSlot(_text3, { id: _id2, batch: _writes2, entity: _entity2, namespace: _namespace2 })).write(_next4);
+          (_valueSlot4 ??= _MD.createIndexedValueSlot(_text5, { id: _id2, batch: _writes2, entity: _entity2, namespace: _namespace2 })).write(_next7);
         }
-        _value17 = _next4;
+        _value21 = _next7;
       }
       _seen4 = _propsVersion;
     }
@@ -204,7 +298,7 @@ function Row(_id2, _parent2, _props2, _namespace2, _setupOnly2) {
   }
   _writes2.activate();
   _scope2.leave(_setupFrame2);
-  return _li2;
+  return _li4;
 }
 export function BenchModuleSelectionComponent(_id, _parent, _props, _namespace, _setupOnly) {
   let _dataVersion = 0;
@@ -213,7 +307,6 @@ export function BenchModuleSelectionComponent(_id, _parent, _props, _namespace, 
     _dataVersion++;
     _writes.mark();
   }
-  const _rows = _MD.createRowCache(false);
   function _write(_value) {
     _dataVersion++;
     _writes.mark();
@@ -429,22 +522,27 @@ export function BenchModuleSelectionComponent(_id, _parent, _props, _namespace, 
     _listener11 = _writes === null ? _value12 : _writes.listener(_value12);
     _button22.addEventListener("click", _listener11);
   }
+  const _rowNamespace = _MD.renderNamespace(_text.parentNode, _namespace);
+  const _rowOwner = { id: _id, batch: _writes, entity: _entity, namespace: _rowNamespace };
+  const _rowList = _MD.createRowList(_text, { id: _id, batch: _writes, entity: _entity, namespace: _namespace }, (item) => item.id, (item) => {
+    const _row = _Row_row({ "item": item }, _rowOwner);
+    return { node: _row.node, update(_item2) {
+      item = _item2;
+      _row.update({ "item": item });
+    }, dispose() {
+      _row.dispose();
+    } };
+  });
   const _siteComputation = _MD.createComputation(_writes.mark, _entity);
   _siteComputation.begin();
-  let _value13 = _MD.observeMethod([() => data], [_mutated_data], data, "map", 1, _rows)((item) => (_MD.createComponentValue(Row, { "key": item.id, "item": item })));
+  let _value13 = _MD.observeMethod([() => data], [_mutated_data], data, "map", 1, _rowList)((item) => (_MD.createComponentValue(Row, { "key": item.id, "item": item })));
   _siteComputation.end();
-  let _valueSlot = null;
-  if (_valueSlot === null && (_value13 === null || typeof _value13 !== "object")) {
-    _MD.setTextData(_text, _value13);
-  } else {
-    (_valueSlot ??= _MD.createIndexedValueSlot(_text, { id: _id, batch: _writes, entity: _entity, namespace: _namespace })).write(_value13);
-  }
+  _rowList.write(_value13);
   let _seen = _dataVersion;
   let _publishedVersion = _dataVersion;
   _MD.cleanup(_id, () => {
+    _rowList.dispose();
     _siteComputation.dispose();
-    if (_valueSlot !== null) _valueSlot.dispose();
-    _valueSlot = _MD.disposedValueSlot;
   });
   _MD.watchMutationRoots(_entity, [{ read: () => data, notify: () => {
     _dataVersion++;
@@ -454,15 +552,11 @@ export function BenchModuleSelectionComponent(_id, _parent, _props, _namespace, 
     const _updateFrame = _scope.enter();
     if (_dataVersion !== _seen || _siteComputation.changed()) {
       _siteComputation.begin();
-      const _next = _MD.observeMethod([() => data], [_mutated_data], data, "map", 1, _rows)((item) => (_MD.createComponentValue(Row, { "key": item.id, "item": item })));
+      const _next4 = _MD.observeMethod([() => data], [_mutated_data], data, "map", 1, _rowList)((item) => (_MD.createComponentValue(Row, { "key": item.id, "item": item })));
       _siteComputation.end();
-      if (_next !== _value13 && !(_next !== _next && _value13 !== _value13)) {
-        if (_valueSlot === null && (_next === null || typeof _next !== "object")) {
-          _MD.setTextData(_text, _next);
-        } else {
-          (_valueSlot ??= _MD.createIndexedValueSlot(_text, { id: _id, batch: _writes, entity: _entity, namespace: _namespace })).write(_next);
-        }
-        _value13 = _next;
+      if (_next4 !== _value13 && !(_next4 !== _next4 && _value13 !== _value13)) {
+        _rowList.write(_next4);
+        _value13 = _next4;
       }
       _seen = _dataVersion;
     }

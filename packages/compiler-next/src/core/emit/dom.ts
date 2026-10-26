@@ -18,6 +18,7 @@ import { emitMutations } from '../../features/handlers/mutations';
 import { emitShared } from './shared';
 import { emitAwaitBoundaries } from './await';
 import { emitRenderValue } from './render-value';
+import { RowComponents } from './row-list';
 import { emitComponentCall } from '../../features/components/dom';
 import { emitProps } from '../../features/props/dom';
 import { functionValue } from '../resolve/functions';
@@ -78,6 +79,7 @@ export function emitDom(plan: ModulePlan, options: CompileModulesOptions): Node 
     replacements.set(value.node, emitted.replacement);
   }
 
+  const rowComponents = new RowComponents(plan, names, runtime, replacements);
   // A parent setup can contain a component declaration. Compose the nested
   // function first, before finishCopy seals the parent's emitted tree.
   const components = [...plan.components.values()].sort((left, right) => right.fn.start - left.fn.start);
@@ -89,7 +91,7 @@ export function emitDom(plan: ModulePlan, options: CompileModulesOptions): Node 
         html: stringLiteral(component.template.markup!),
       }));
     }
-    let emitted = emitComponent(component, names, runtime, markup, replacements);
+    let emitted = emitComponent(component, names, runtime, markup, replacements, rowComponents);
     const enclosingFunction = [...module.ancestors(component.fn)].find((ancestor) => {
       return ancestor !== component.fn && is.Function(ancestor);
     });
@@ -113,6 +115,7 @@ export function emitDom(plan: ModulePlan, options: CompileModulesOptions): Node 
     replacements.set(component.fn, insideComponent ? emitted : finishCopy(emitted));
   }
 
+  hoisted.push(...rowComponents.declarations);
   const output = copy(module.ast, replacements);
   const sharedBody = shared.moduleBody();
   if (sharedBody !== null) {
@@ -137,6 +140,7 @@ function emitComponent(
   runtime: string,
   markup: string | null,
   external: ReadonlyMap<Node, Node>,
+  rowComponents: RowComponents,
 ): Node {
   const document = names.fresh('_document');
   const id = names.fresh('_id');
@@ -263,7 +267,7 @@ function emitComponent(
 
   const sites = emitSites(plan, {
     names, runtime, batch, entity, id, document, versions: state.versions, replacements: writes.replacements,
-    ref: slots.ref, once, namespace,
+    ref: slots.ref, once, namespace, rowComponents,
   });
   body.push(...sites.mount);
   // A callback can read this instance while another component collects its

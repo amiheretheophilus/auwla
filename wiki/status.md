@@ -24,6 +24,22 @@ Last updated: 2026-10-25.
 
 ## Done
 
+- Old-model fast paths, step 3 (2026-10-26): leaf component rows. A row list's
+  row can be `<Row key={…} … />` for a component whose instance only shows its
+  props; its template is compiled once more as a module-level row factory
+  (`compiler/optimize.md`, "Row lists"). No entity, write batch, build scope,
+  props cell or computation per row. Both-mode DOM traces match the general
+  path's node identity for keyed and unkeyed component rows, and the props
+  object stays the same while its fields do. Locally, module-component 10k
+  create/update/clear went from 684/161/90 ms to 425/69/11 ms (old 175/10/4).
+  Rows calling `props.select(…)` are not leaves (the call is observed as an edit
+  of `props`), so the owner and module-data placements are still general.
+  [Quick run 40245549997](https://github.com/amiheretheophilus/auwla/actions/runs/40245549997)
+  at step 2 (`cd041270`): module-inline 10k update 4.7 ms (was 27), clear 1.5
+  (was 15), pop1k 1.5 against old 2.2; Octane runlots 144 ms (was 303, old 64),
+  swap 4.1 (was 11.8), rotatef 0.32 (was 2.8), prepend100 1.5 (was 13.1).
+  [CI 40245546170](https://github.com/amiheretheophilus/auwla/actions/runs/40245546170) passes.
+
 - Old-model fast paths, step 2 (2026-10-25): row lists and cheaper shared reads.
   A text site whose whole value is a proven `map` returning one keyed-first
   element is shown by compiled rows reconciled from the array (`compiler/optimize.md`,
