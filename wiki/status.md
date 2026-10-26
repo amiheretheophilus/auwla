@@ -24,7 +24,7 @@ Last updated: 2026-10-26.
 
 ## Done
 
-- Helper method/prototype correctness gate (2026-10-26): explicit member stores
+- Helper method/prototype correctness gate (2026-10-26, `0f072957`): explicit member stores
   and native method calls on the same fresh array keep observation, since entry
   guards cannot establish that a later call still reaches the native method.
   Prototype stores stay observed, and computed store parameters are checked for
@@ -32,8 +32,13 @@ Last updated: 2026-10-26.
   keep observation. Six new reference comparisons first failed on optimized
   output and now pass in both compiler modes (`compiler/optimize.md`). Both
   package type checks, the runtime build, 56 focused compiler/handler/benchmark
-  checks and 18 runtime method-call checks pass locally. Full CI follows this
-  push; unrelated routing/toolchain work remains uncommitted.
+  checks and 18 runtime method-call checks pass locally.
+  [CI 40311997300](https://github.com/amiheretheophilus/auwla/actions/runs/40311997300)
+  at `0f072957` passes every job: 281 compiler checks, 138 runtime checks, 336
+  reference cases, 236 compiler comparisons with the unchanged 100 deferred
+  failures (29 Phase 7, 71 Phase 8), and ten generator checks at `FC_RUNS=200`.
+  Unrelated routing/toolchain work remains uncommitted; no timing improvement or
+  OOM resolution is claimed.
 
 - Fresh-allocation correctness gate (2026-10-26, `7edc5540`): helper proofs retain
   observation for object accessors and custom prototypes, and require primitive
@@ -45,8 +50,8 @@ Last updated: 2026-10-26.
   helper, handler and benchmark integration checks pass locally; benchmark
   checks verify row text, identity, selection and disposal without timing.
 
-- Catalog fallback gate (2026-10-26, `6e97a597`): an unlisted, dynamically installed array
-  method is accepted directly and through a helper, and its edits match the
+- Catalog fallback gate (2026-10-26, `6e97a597`): an unlisted, dynamically
+  installed array method is accepted directly and through a helper, and its edits match the
   reference in both compiler modes. A native method reached through an unlisted
   alias is proven by function identity, never rejected by its property name.
   The shared catalog's compiler capability is named `helperProof` to distinguish
