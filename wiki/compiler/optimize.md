@@ -405,6 +405,42 @@ all four component-row benchmark fixtures each assert 1 then 2 row updates and
 zero key re-evaluations at 1k rows. These are work counts; fresh VM timings and
 the OOM reproduction remain required before claiming the performance exit.
 
+### Quick browser measurements after routing
+
+[Run 40324188637](https://github.com/amiheretheophilus/auwla/actions/runs/40324188637)
+at `50c92d29` compares old and next at the same snapshot: seven DOM samples per
+cell at 10k rows, three Octane samples, and targeted next-only CPU profiles.
+Every timed DOM sample and both Octane harness/identity gates passed. Selection
+is 0.1–0.2 ms across all eight framework placements. It is close to old at this
+report's 0.1 ms DOM precision; zero-valued cells are rounded, not zero-cost work.
+Large gaps remain. Module-component create/update/clear are 32.7/5.5/2.3 ms
+next against 19.4/1.6/0.8 ms old. Owner-component update is 7.2 against 1.5 ms.
+Octane has eleven lower next medians, three ties and ten higher medians out of
+24; `runlots` is 107.5 against 63.5 ms, and `select_lots` is 0.2 against 0.1 ms.
+
+Profile symbols are resolved against the uploaded `quick-next.js`: `r6` is
+`setTextData`, `r7` cached template cloning, `j4` row reconciliation, and `T4`
+row removal. Creation samples include `cloneNode`, the compiled row factory,
+listener installation and GC. Module-component update includes the full row
+pass, text writes and GC. The clear profile is dominated by `replaceChildren`
+and GC; it does not establish that empty disposal callbacks are the main cost.
+Profiled elapsed times include instrumentation and must not replace the timing
+table, and `(program)` samples must not be counted as compiler work.
+
+The emitted artifacts expose a concrete next candidate: old guards number/string
+operands and fuses `{item.id}: {item.label}` into one text node. Its other branch
+concatenates values under `try/finally`, so it cannot define the new fallback's
+semantics or exception strategy. Next still has three text nodes and separate
+lazy slots. Guarded text fusion can reduce cloning, updates and removal work,
+but must keep child-value semantics and evaluation order without exception
+wrappers. It is followed by reducing full-row data-update
+work and listener/props allocation based on repeat measurements. These are next
+steps, not measured speedups. The identical vanilla creation control varies from
+19.4 to 23.9 ms between columns, so this shared-runner run is directional evidence,
+not the counterbalanced VM performance exit. It does not exercise the complete
+update-style matrix that previously exhausted memory. Downloaded reports and
+bundles are in ignored `bench/dom/dist/ci-40324188637/`.
+
 ## Read-only helpers
 
 `items = swapRows(items)` was observed by snapshotting everything `items`

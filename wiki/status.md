@@ -24,6 +24,19 @@ Last updated: 2026-10-26.
 
 ## Done
 
+- Quick browser benchmark after routing (2026-10-26):
+  [run 40324188637](https://github.com/amiheretheophilus/auwla/actions/runs/40324188637)
+  passes at `50c92d29`, comparing old/next at the same snapshot with seven DOM
+  samples per cell, three Octane samples and targeted profiles. Selection at
+  10k is 0.1–0.2 ms across the framework placements. Module-component
+  create/update/clear remain 32.7/5.5/2.3 ms next versus 19.4/1.6/0.8 old.
+  Octane has eleven faster next medians, three ties and ten slower out of 24;
+  `runlots` remains 107.5 versus 63.5 ms. Every timed DOM sample and Octane's
+  harness/identity checks pass. Decoded profiles, guard limits, runner drift
+  and the next text-fusion candidate are on `compiler/optimize.md`. Full reports
+  and bundles are downloaded to ignored `bench/dom/dist/ci-40324188637/`.
+  These quick results do not close the VM speed/memory gate or the prior OOM.
+
 - Selection routing completed (2026-10-26, `a4a6b06e`): inline rows and leaf component rows
   now refresh old/new keys when only a proven strict key comparison changes.
   The unchanged Octane and four component-row benchmark fixtures each update
@@ -41,10 +54,11 @@ Last updated: 2026-10-26.
   No VM speedup or OOM resolution is claimed from these work counts. The routing
   and toolchain work is committed and pushed; the working tree is clean.
 
-- Next performance gate: compare this completed snapshot with the old compiler
-  on the VM (`bench/README.md`). Then target remaining row creation/listener/
-  disposal and structural-update work using that profile. The architecture stays
-  staged; every optimization retains its general path. Phases 7/8 remain deferred.
+- Next performance work: guarded adjacent text fusion, then reducing full-row
+  data-update work and listener/props allocation, guided by the quick profiles
+  (`compiler/optimize.md`). Confirm changes with old/next comparisons and the
+  full VM speed/memory gate (`bench/README.md`). The architecture stays staged;
+  every optimization retains its general path. Phases 7/8 remain deferred.
 
 - Bun development types (2026-10-26, `21aed36f`): completed the pending `@types/bun`
   update from `latest` to `^1.4.4`, with matching 1.4.4 lockfile resolutions.
