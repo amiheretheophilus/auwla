@@ -551,8 +551,14 @@ confirmed by an interleaved variant run before it lands. The order:
    path would have written. Text-node boundaries are not a semantic guarantee.
    The text content is.
 4. `className` for HTML elements, and fewer per-row objects and closures (class 2).
-5. Delegated row events (class 3). This needs the user's decision on contract
-   (`../status.md`).
+5. One shared native listener per list instead of a wrapper closure per row
+   (class 2). Delegation is rejected (`../decisions.md`): a row is never provably
+   unexposed, because every document-level listener receives `event.target`.
+   With delegation, listeners other code adds to a row, `stopPropagation` on the
+   row, non-bubbling dispatch and clicks on detached rows would all behave
+   differently. The delegation row's ~17 ms is therefore not fully recoverable.
+   The shared listener saves the wrapper allocation, and `addEventListener` per
+   row remains.
 
 ## Read-only helpers
 

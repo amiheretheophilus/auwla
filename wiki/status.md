@@ -68,10 +68,8 @@ Last updated: 2026-10-26.
   2. Row-list buffers, a cached routing proof, and a bulk clear.
   3. Guarded text fusion.
   4. Per-row objects.
-  5. Delegation, which waits on a contract decision: a zero-parameter row
-     handler on an element the program never exposes runs from the list
-     parent's listener. Third-party code that adds listeners to compiler-owned
-     rows could then see a different order.
+  5. A shared native listener per list instead of a wrapper per row.
+     Delegation is rejected for correctness (`decisions.md`).
 
   Every optimization keeps its general path. Phases 7/8 remain deferred.
 
