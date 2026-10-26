@@ -96,6 +96,49 @@ it.each([true, false])('reuses, creates and removes exactly as the general path 
   }
 });
 
+it.each([true, false])('matches the model through long random sequences on one list (keyed: %p)', (keyed) => {
+  let seed = 7;
+  const random = (limit: number) => {
+    seed = (seed * 1103515245 + 12345) % 2147483648;
+    return seed % limit;
+  };
+  for (let sequence = 0; sequence < 60; sequence++) {
+    const { list, log, rows } = harness(keyed);
+    // The model keeps its rows across steps, as one value slot does.
+    let created = 0;
+    const removed: number[] = [];
+    type ModelRow = { identity: string; id: number; key: unknown };
+    const operations = {
+      identity: (value: unknown, index: number) => {
+        const key = keyed ? (value as Item).key : undefined;
+        return key === undefined || key === null ? `#${index}` : `key=${String(key)}`;
+      },
+      create: (name: string): ModelRow => ({ identity: name, id: 0, key: undefined }),
+      remove: (row: ModelRow) => { removed.push(row.id); },
+    };
+    let model: ModelRow[] = [];
+    for (let step = 0; step < 20; step++) {
+      const after = Array.from({ length: random(7) }, () => {
+        const key = alphabet[random(alphabet.length)];
+        return { key, label: String(key) };
+      });
+      log.length = 0;
+      removed.length = 0;
+      const next = reconcileList(model, after, operations);
+      next.rows.forEach((row, index) => {
+        const key = keyed ? (next.values[index] as Item).key : undefined;
+        if (row.id !== 0 && !Object.is(row.key, key)) removed.push(row.id);
+        if (row.id === 0 || !Object.is(row.key, key)) row.id = ++created;
+        row.key = key;
+      });
+      model = next.rows;
+      list.map(after, () => {}, undefined);
+      expect(rows().map((row) => row.id)).toEqual(model.map((row) => row.id));
+      expect(log.filter((line) => line.startsWith('dispose')).map((line) => Number(line.slice(8)))).toEqual(removed);
+    }
+  }
+});
+
 it('keeps three-step sequences consistent with the model, including old duplicates', () => {
   const sample = lists.filter((_, index) => index % 7 === 0);
   for (const first of sample) {

@@ -24,6 +24,20 @@ Last updated: 2026-10-25.
 
 ## Done
 
+- Old-model fast paths, step 4 (2026-10-26): row matching without rebuilding.
+  A row list keeps its identity index across passes and matches the rows next
+  to the last match before looking up, so a swap, a removal, an insertion or a
+  reversal of 10k rows no longer builds a 10k-entry lookup with a key string per
+  row, nor a duplicate set. Same reuse, creation and disposal order as the
+  general path: the model checks now include 60 random 20-step sequences per
+  mode on one list. Locally, inline reverse and remove100 at 10k are at or under
+  old. Both type checks, 270 compiler and 131 runtime tests, the case files
+  (unchanged 100 deferred failures) and the Chrome gates pass.
+  [Quick run 40289536569](https://github.com/amiheretheophilus/auwla/actions/runs/40289536569)
+  at step 3 (`403d9e19`): module-component 10k create/update/clear 54/6.7/1.7 ms
+  (step 2: 129/24/27.5; old 19/1.3/0.8). Octane swap 5.5, runlots 149 (old 67).
+  [CI 40289531456](https://github.com/amiheretheophilus/auwla/actions/runs/40289531456) passes.
+
 - Old-model fast paths, step 3 (2026-10-26): leaf component rows. A row list's
   row can be `<Row key={…} … />` for a component whose instance only shows its
   props; its template is compiled once more as a module-level row factory

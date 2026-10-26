@@ -15,9 +15,10 @@
  * `list-index.ts`): `key=` and the key as a string, or `#` and the index without
  * a key; each identity reuses its first previous row; old duplicates are never
  * reused; unmatched rows are removed in their old order, then old duplicates.
- * What differs is only the cost: an unchanged ordered prefix needs no lookup or
- * string, moves follow the longest increasing subsequence, and a list that is
- * the whole of its parent clears in one call.
+ * What differs is only the cost: a row still at its position needs no lookup or
+ * string, the identity index is kept across passes instead of rebuilt, moves
+ * follow the longest increasing subsequence, and a list that is the whole of
+ * its parent clears in one call.
  *
  * Any other value written to the site (the callee was not proven, so the
  * authored callback ran) goes to an ordinary value slot at the same anchor.
@@ -50,6 +51,8 @@ interface Row {
   position: number;
   /** An earlier committed row has the same identity, so this one is never reused. */
   duplicate: boolean;
+  /** The pass that matched or created it; a row is matched at most once per pass. */
+  taken: number;
 }
 
 export interface RowList {
@@ -70,6 +73,11 @@ function sameIdentity(row: Row, key: unknown, index: number): boolean {
   // Converting an object key may run its `toString`, so it runs every time.
   if (key === row.key && typeof key !== 'object' && typeof key !== 'function') return true;
   return identityOf(key, index) === row.identity;
+}
+
+/** An untaken first occurrence with the identity of `key` at `index`. */
+function available(row: Row | undefined, key: unknown, index: number, stamp: number): row is Row {
+  return row !== undefined && row.taken !== stamp && !row.duplicate && sameIdentity(row, key, index);
 }
 
 export function createRowList(anchor: Text, owner: RenderOwner, key: RowKey | null, create: RowFactory): RowList {
@@ -111,6 +119,27 @@ export function createRowList(anchor: Text, owner: RenderOwner, key: RowKey | nu
     }
   }
 
+  /**
+   * The first occurrence of each identity among the committed rows, kept
+   * across passes and updated only for rows created, removed or mounted again.
+   * A pass also enters its new first occurrences, so a later item with the same
+   * identity becomes a duplicate. Built on first use.
+   */
+  let identities: Map<string, Row> | null = null;
+  let pass = 0;
+
+  function lookup(): Map<string, Row> {
+    if (identities === null) {
+      identities = new Map();
+      for (const row of rows) if (!row.duplicate) identities.set(row.identity, row);
+    }
+    return identities;
+  }
+
+  function forget(row: Row): void {
+    if (identities?.get(row.identity) === row) identities.delete(row.identity);
+  }
+
   function recover(): void {
     // A key or row expression threw during the last pass. Its new rows were
     // never placed or committed; the committed rows still show valid items.
@@ -118,6 +147,7 @@ export function createRowList(anchor: Text, owner: RenderOwner, key: RowKey | nu
     const created = pending;
     pending = null;
     for (const row of created) {
+      forget(row);
       row.entry.dispose();
       row.entry.node.parentNode?.removeChild(row.entry.node);
     }
@@ -131,13 +161,13 @@ export function createRowList(anchor: Text, owner: RenderOwner, key: RowKey | nu
     // Applied on commit: a pass that throws leaves the committed identities.
     const keys: unknown[] = [];
     const indexes: number[] = [];
-    const identities: (string | null)[] = [];
     const created: Row[] = [];
-    /** Matched rows whose key value changed: the general path mounts them again. */
-    const replaced: Row[] = [];
+    /** Matched rows whose key value changed, with the rows that replace them. */
+    const replaced: [old: Row, row: Row][] = [];
     pending = created;
-    let prefix = 0;
-    let unused: Map<string, Row> | null = null;
+    const stamp = ++pass;
+    let ordered = true;
+    let last = -1;
     // A getter read by a key or row can render this site again, or dispose it.
     // The nested pass recovers this one's new rows and reconciles from the
     // committed rows; this pass then stops without committing anything.
@@ -147,33 +177,33 @@ export function createRowList(anchor: Text, owner: RenderOwner, key: RowKey | nu
       const item = array[index];
       const rowKey = key === null ? undefined : key(item, index);
       if (superseded()) return;
-      let row: Row | undefined;
+      // First-unused matching: a committed row that is not a duplicate is the
+      // only first occurrence of its identity, so any such untaken row whose
+      // identity agrees is the match. Try the rows after and before the last
+      // match (unchanged, shifted, inserted or reversed runs); else look it up.
+      let row: Row | undefined = previous[last + 1];
+      if (!available(row, rowKey, index, stamp)) row = previous[last - 1];
       let identity: string | null = null;
-      if (unused === null) {
-        const candidate = previous[prefix];
-        if (candidate !== undefined && !candidate.duplicate && sameIdentity(candidate, rowKey, index)) {
-          row = candidate;
-          prefix++;
-        } else {
-          // The ordered prefix ends: index the first occurrences after it.
-          unused = new Map();
-          for (let rest = prefix; rest < previous.length; rest++) {
-            const old = previous[rest]!;
-            if (!old.duplicate) unused.set(old.identity, old);
-          }
+      let duplicate = false;
+      if (!available(row, rowKey, index, stamp)) {
+        identity = identityOf(rowKey, index);
+        row = lookup().get(identity);
+        // Taken already by an earlier item (or created by it): a duplicate.
+        if (row !== undefined && row.taken === stamp) {
+          duplicate = true;
+          row = undefined;
         }
       }
-      if (row === undefined) {
-        identity = identityOf(rowKey, index);
-        row = unused!.get(identity);
-        if (row !== undefined) unused!.delete(identity);
-      }
-      if (row !== undefined && !Object.is(row.key, rowKey)) {
-        // Same identity, another key value (`1` after `'1'`, `-0` after `0`):
-        // a value slot mounts its row again (`render-value.ts`, `writeProgram`).
-        replaced.push(row);
-        identity ??= row.identity;
-        row = undefined;
+      let old: Row | undefined;
+      if (row !== undefined) {
+        row.taken = stamp;
+        if (!Object.is(row.key, rowKey)) {
+          // Same identity, another key value (`1` after `'1'`, `-0` after `0`):
+          // a value slot mounts its row again (`render-value.ts`, `writeProgram`).
+          old = row;
+          identity ??= row.identity;
+          row = undefined;
+        }
       }
       if (row === undefined) {
         const entry = create(item, index);
@@ -181,54 +211,42 @@ export function createRowList(anchor: Text, owner: RenderOwner, key: RowKey | nu
           entry.dispose();
           return;
         }
-        row = { entry, identity: identity!, key: rowKey, index, position: -1, duplicate: false };
+        row = { entry, identity: identity!, key: rowKey, index, position: -1, duplicate, taken: stamp };
         created.push(row);
+        if (old !== undefined) replaced.push([old, row]);
+        else if (!duplicate) lookup().set(row.identity, row);
       } else {
+        if (row.position < last) ordered = false;
+        last = row.position;
         row.entry.update(item, index);
         if (superseded()) return;
       }
       next.push(row);
       keys.push(rowKey);
       indexes.push(index);
-      identities.push(identity);
     }
 
     // Commit. Authored code runs again only in the removed rows' disposal.
     pending = null;
+    // The general order: unmatched first occurrences, then old duplicates.
     const removed: Row[] = [];
-    if (unused === null) {
-      // The ordered prefix: rows stay in order; only a replaced row is new.
-      for (let rest = prefix; rest < previous.length; rest++) {
-        if (!previous[rest]!.duplicate) removed.push(previous[rest]!);
-      }
-    } else {
-      for (const row of unused.values()) removed.push(row);
-    }
-    for (let rest = prefix; rest < previous.length; rest++) {
-      if (previous[rest]!.duplicate) removed.push(previous[rest]!);
-    }
-    const changed = unused !== null || created.length > 0;
-    if (changed) place(next);
-    // Duplicates can change only when rows were matched out of order or created.
-    const seen = changed ? new Set<string>() : null;
+    for (const row of previous) if (row.taken !== stamp && !row.duplicate) removed.push(row);
+    for (const row of previous) if (row.taken !== stamp && row.duplicate) removed.push(row);
+    for (const row of removed) forget(row);
+    for (const [, row] of replaced) identities?.set(row.identity, row);
+    if (!ordered || created.length > 0) place(next);
     for (let position = 0; position < next.length; position++) {
       const row = next[position]!;
       row.key = keys[position];
       row.index = indexes[position]!;
-      const identity = identities[position]!;
-      if (identity !== null) row.identity = identity;
       row.position = position;
-      if (seen !== null) {
-        row.duplicate = seen.has(row.identity);
-        seen.add(row.identity);
-      }
     }
     rows = next;
     if (removed.length > 0) removeRows(removed, next.length);
     // A value slot writes its rows after the unmatched ones are removed.
-    for (const row of replaced) {
-      row.entry.dispose();
-      detach(row);
+    for (const [old] of replaced) {
+      old.entry.dispose();
+      detach(old);
     }
   }
 
@@ -261,6 +279,7 @@ export function createRowList(anchor: Text, owner: RenderOwner, key: RowKey | nu
     recover();
     const committed = rows;
     rows = [];
+    identities = null;
     if (committed.length > 0) removeRows(committed, 0);
   }
 

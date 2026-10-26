@@ -302,10 +302,15 @@ same name). The site writes `list.write(value)`.
 string, or `#index`; each identity reuses its first old row; old duplicates are
 never reused; unmatched rows are removed in old order, then old duplicates; a
 reused identity whose key value changed by `Object.is` (`1` after `'1'`) mounts
-again, after those removals. Faster than the general path: an unchanged ordered
-prefix needs no lookup or key string, moves follow the longest increasing
-subsequence (`list.ts`), and a list that is all of its parent clears with one
-`replaceChildren`. `map` returns a token the site's `write` ignores; any other
+again, after those removals. Faster than the general path: a committed row that
+is not a duplicate is the only first occurrence of its identity, so any such
+untaken row whose identity agrees is the match. The list tries the rows after
+and before the last match first (unchanged, shifted, inserted and reversed runs
+need no lookup or key string), keeps its identity index across passes, updated
+only for rows created, removed or mounted again, and knows a new row is a
+duplicate when its identity was already taken in the pass. Moves follow the
+longest increasing subsequence (`list.ts`), and a list that is all of its parent
+clears with one `replaceChildren`. `map` returns a token the site's `write` ignores; any other
 value (an unproven callee ran the callback) goes to a value slot at the same
 anchor, and the next proven `map` clears it.
 
@@ -334,7 +339,8 @@ sibling rows leave the DOM together when the whole parent clears.
 
 Checks: `runtime/tests/row-list.test.ts` compares reuse, creation order and
 disposal order with `reconcileList` for every two-step sequence of up to three
-keys over `1`, `'1'`, `2` and `null`, keyed and unkeyed (7,225 each), plus holes,
+keys over `1`, `'1'`, `2` and `null`, keyed and unkeyed (7,225 each), 60 random
+20-step sequences on one list per mode (the retained index), plus holes,
 moves, bulk clearing, a throwing key, reentry and the slot fallback.
 `optimize/row-lists.dom.test.ts` compares each step's DOM node identity in both
 modes through moves, duplicates, holes, `'1'`/`1` keys, `reverse`, `splice`,
