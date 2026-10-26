@@ -188,3 +188,28 @@ it('retries indexing after a reflection failure interrupted a stale reach rebuil
     expect(holders(added)).toBe(1);
   });
 });
+
+it('leaves a root its own edit notified unwalked, and finds it from an alias edit', () => {
+  application(() => {
+    let walks = 0;
+    const item = { label: 'a' };
+    const data = new Proxy([item], {
+      ownKeys(target) {
+        walks++;
+        return Reflect.ownKeys(target);
+      },
+    });
+    let notices = 0;
+    const edited = () => { notices++; };
+    const entity = { id: 'list', parent: null, render() {} };
+    registerEntity(entity);
+    // Compiled edits through `data` call `edited`; the root names it as `direct`.
+    watchMutationRoots(entity, [{ read: () => data, notify: () => notices++, direct: edited }]);
+    mutationTarget(item, 'label', edited).value = 'b';
+    expect([walks, notices]).toEqual([0, 1]);
+    mutationTarget(item, 'label', () => {}).value = 'c';
+    expect(walks).toBeGreaterThan(0);
+    expect(notices).toBe(2);
+    unregisterSubtree('list');
+  });
+});

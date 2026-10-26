@@ -10,7 +10,12 @@ import { advanceWriteEpoch } from './write-epoch';
 
 const arrayIsArray = Array.isArray;
 
-interface Root { readonly read: () => unknown; readonly notify: () => void }
+interface Root {
+  readonly read: () => unknown;
+  readonly notify: () => void;
+  /** The notifier compiled edits through this binding call; such an edit has already notified it. */
+  readonly direct?: () => void;
+}
 const sharedRoots = new Set<WeakRef<object>>();
 const rootsOfShared = new WeakMap<object, readonly Root[]>();
 export function registerSharedMutationRoots(owner: object, bindings: readonly Root[]): void {
@@ -320,10 +325,13 @@ function notifyAliases(changed: ReadonlySet<object>, edit: Edit, direct: readonl
   if (changed.size === 0) return;
   const callbacks = new Set<() => void>();
   const store = roots();
+  // A root the edit already notified through its own binding needs no walk to
+  // be found: it stays unwalked until an edit through another binding.
+  const notified = (root: Root) => direct.includes(root.notify) || (root.direct !== undefined && direct.includes(root.direct));
   for (const slot of store.unwalked) {
-    if (slot.root !== null) walk(slot.root, slot);
+    if (slot.root === null) store.unwalked.delete(slot);
+    else if (!notified(slot.root)) walk(slot.root, slot);
   }
-  store.unwalked.clear();
   const candidates = new Set<Slot>();
   for (const object of changed) {
     for (const slot of store.holders.get(object) ?? []) candidates.add(slot);
@@ -331,13 +339,13 @@ function notifyAliases(changed: ReadonlySet<object>, edit: Edit, direct: readonl
   for (const slot of candidates) {
     if (slot.root === null) continue;
     if (notifies(slot.root, changed, edit, slot)) {
-      callbacks.add(slot.root.notify);
+      if (!notified(slot.root)) callbacks.add(slot.root.notify);
       // After an unknown edit, walk again before the next lookup.
       if (!reaches.has(slot.root)) store.unwalked.add(slot);
     }
   }
   for (const root of sharedWatchedRoots()) {
-    if (direct.includes(root.notify)) {
+    if (notified(root)) {
       // Already notified. Without a current reach, walking this root would
       // only build an index this edit does not need; the next edit made
       // through another binding walks it then, as for any unwalked root.

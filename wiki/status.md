@@ -24,6 +24,15 @@ Last updated: 2026-10-25.
 
 ## Done
 
+- Component roots skip their own edits (2026-10-26): an edit through a
+  component's state binding no longer walks that binding's root, as for shared
+  roots (`compiler/handlers.md`). At `a3427110` the owner placements still took
+  ~20 ms for update/swap/remove 10k against ~2 ms old.
+  [Quick run 40298575648](https://github.com/amiheretheophilus/auwla/actions/runs/40298575648)
+  at `a3427110`: Octane next is at or under old on 12 of 24 operations (remove,
+  reverse, rotatef/b, prepend100, append100, removefirst, displace3–8);
+  runlots 68.7 against 51.8 ms, select_lots 1.9 against 0.1.
+
 - Leaf rows with handler edits (2026-10-26): a row component whose handlers edit
   its props (`props.select(id)`) is compiled into the row list too; the edit
   stays observed and re-renders the list (`compiler/optimize.md`, "Row lists").

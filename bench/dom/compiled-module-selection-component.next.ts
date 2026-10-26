@@ -686,7 +686,7 @@ export function BenchModuleSelectionComponent(_id, _parent, _props, _namespace, 
   _MD.watchMutationRoots(_entity, [{ read: () => data, notify: () => {
     _dataVersion++;
     if (!_scope.building()) _writes.mark();
-  } }]);
+  }, direct: _mutated_data }]);
   function _update() {
     const _updateFrame = _scope.enter();
     if (_dataVersion !== _seen || _siteComputation.changed()) {

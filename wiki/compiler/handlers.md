@@ -199,7 +199,10 @@ use one notifier function (`shared-dom.ts`, `_mutated_x`). An edit made through
 that binding (`data[i].label = …`) has already notified it, so `notifyAliases`
 does not walk that root when it has no current reach: after `data = buildData()`
 the first edit no longer reflects over all 10k items. The root is walked when an
-edit through another binding needs it, as any unwalked root is. Proxy-specific reflection behavior still needs
+edit through another binding needs it, as any unwalked root is. A component's
+roots name their binding's edit notifier as `direct` (`core/emit/dom.ts`), so the
+same holds for component state: an edit through `data` neither walks `data`'s
+root eagerly nor notifies it twice. Proxy-specific reflection behavior still needs
 coverage.
 
 The snapshot costs the size of the data the reads reach: about 70 ms per call on

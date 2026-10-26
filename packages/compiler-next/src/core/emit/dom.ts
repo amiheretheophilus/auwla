@@ -292,9 +292,16 @@ function emitComponent(
     body.push(cleanup);
   }
   if (batch !== null) {
-    const roots = plan.mutationRoots.map((binding) => expression('({ read: () => $$binding, notify: () => { $$version++; if (!$$scope.building()) $$batch.mark(); } })', {
-      binding: binding.binding.name, version: state.versions.get(binding)!, batch, scope,
-    }));
+    // `direct`: the notifier this component's edits through the binding call,
+    // so such an edit need not walk the root to find it (`runtime/src/mutation.ts`).
+    const roots = plan.mutationRoots.map((binding) => {
+      const direct = mutations.notifiers.get(binding);
+      return expression(direct === undefined
+        ? '({ read: () => $$binding, notify: () => { $$version++; if (!$$scope.building()) $$batch.mark(); } })'
+        : '({ read: () => $$binding, notify: () => { $$version++; if (!$$scope.building()) $$batch.mark(); }, direct: $$direct })', {
+        binding: binding.binding.name, version: state.versions.get(binding)!, batch, scope, ...(direct === undefined ? {} : { direct }),
+      });
+    });
     if (roots.length > 0) {
       body.push(statement('$$runtime.watchMutationRoots($$entity, $$roots);', {
         runtime, entity, roots: b.ArrayExpression({ elements: roots }),

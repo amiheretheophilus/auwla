@@ -112,5 +112,5 @@ export function emitMutations(
       }));
     }
   }
-  return { replacements, declarations };
+  return { replacements, declarations, notifiers: notifiers as ReadonlyMap<BindingNode, string> };
 }

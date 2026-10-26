@@ -745,7 +745,7 @@ export function BenchAppInlineOwned(_id, _parent, _props, _namespace4, _setupOnl
   _MD.watchMutationRoots(_entity, [{ read: () => data, notify: () => {
     _dataVersion++;
     if (!_scope.building()) _writes.mark();
-  } }, { read: () => selected, notify: () => {
+  }, direct: _mutated_data }, { read: () => selected, notify: () => {
     _selectedVersion++;
     if (!_scope.building()) _writes.mark();
   } }]);
