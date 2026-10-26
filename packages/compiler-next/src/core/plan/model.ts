@@ -112,6 +112,30 @@ export interface EventSite extends SiteBase {
   readonly event: string;
 }
 
+export interface RefSite extends SiteBase {
+  readonly kind: 'ref';
+}
+
+export interface RefPlan {
+  readonly expression: Extract<Node, { type: 'Identifier' | 'MemberExpression' }>;
+  readonly binding: BindingNode;
+  readonly value: Extract<Node, { type: 'Identifier' }>;
+  readonly assignment: Extract<Node, { type: 'AssignmentExpression' }>;
+}
+
+export interface LifecycleCallPlan {
+  readonly call: Extract<Node, { type: 'CallExpression' }>;
+  readonly kind: '$effect' | '$cleanup';
+  readonly owner: FunctionNode | null;
+  readonly inputs: readonly Expression[];
+}
+
+export interface EffectGroupPlan {
+  readonly owner: FunctionNode | null;
+  readonly root: Node;
+  readonly reads: readonly { readonly node: Extract<Node, { type: 'Identifier' | 'JSXIdentifier' }>; readonly binding: BindingNode }[];
+}
+
 /** A JSX identity input: evaluated with the attributes, never written to DOM. */
 export interface KeySite extends SiteBase {
   readonly kind: 'key';
@@ -196,7 +220,7 @@ export interface ConditionalBranch {
   readonly sites: readonly Site[];
 }
 
-export type Site = TextSite | AttributeSite | PropertySite | EventSite | KeySite | ConditionalSite;
+export type Site = TextSite | AttributeSite | PropertySite | EventSite | RefSite | KeySite | ConditionalSite;
 
 /** Distribute over the union so each site's own fields are retained. */
 export type UnplacedSite = Site extends infer S ? S extends Site ? Omit<S, 'node'> : never : never;
@@ -298,6 +322,8 @@ export interface MutationPlan {
 }
 
 export interface ModulePlan {
+  readonly effects: { readonly calls: readonly LifecycleCallPlan[]; readonly groups: readonly EffectGroupPlan[] };
+  readonly refs: readonly RefPlan[];
   readonly module: ResolvedModule;
   readonly components: ReadonlyMap<Node, ComponentPlan>;
   readonly sharedOwners: readonly SharedOwnerPlan[];

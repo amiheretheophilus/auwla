@@ -7,7 +7,8 @@
  * string tag (`<Tag>` holding `'h1'`) is a host element set generically.
  */
 import { getActiveEnvironment, getEntity, registerEntity, unregisterSubtree, type Entity } from './kernel';
-import { cleanup } from './cleanup';
+import { cleanup, ownCleanup } from './cleanup';
+import { mountRef, type RefValue } from './refs';
 import { patchDomProps } from './dom-props';
 import { createComputation } from './computation';
 import { createWriteBatch } from './write-batch';
@@ -345,12 +346,14 @@ function hostProgram(tag: string): RenderProgram {
         content.write(children);
       };
       apply(values[0]);
+      const releaseRef = ownCleanup(owner.entity?.id ?? owner.id, mountRef(element, asProps(values[0]).ref as RefValue<Element>));
       return {
         nodes: [element],
         update(next) {
           apply(next[0]);
         },
         dispose() {
+          releaseRef();
           content.dispose();
         },
       };

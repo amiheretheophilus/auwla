@@ -153,3 +153,111 @@ behaves('each keyed row reads its own mounted ref', {
     expect(container.querySelector('ul')?.textContent).toBe(['oneonetwotwo', 'oneonetwotwothreethree'][observation]);
   },
 });
+
+behaves('a callback ref is connected before the first effect', {
+  source: `
+    export function App() {
+      let connected = false;
+      let seen = '';
+      $effect(() => { seen = connected ? 'connected' : 'detached'; });
+      return <main><div ref={node => { connected = node.isConnected; }} /><p>{seen}</p></main>;
+    }`,
+  check(container) { expect(container.querySelector('p')?.textContent).toBe('connected'); },
+});
+
+behaves('callback ref cleanup runs once on removal and remount', {
+  source: `
+    const events = [];
+    export function App() {
+      let show = true;
+      return <main>{show && <div ref={node => {
+        events.push('mount:' + node.isConnected);
+        return () => { events.push('leave'); };
+      }} />}<p>{events.join(',')}</p>
+        <button onClick={() => show = !show}>toggle</button></main>;
+    }`,
+  steps: [{ click: 'button' }, { click: 'button' }],
+  check(container, observation) {
+    expect(container.querySelector('p')?.textContent).toBe([
+      'mount:true', 'mount:true,leave', 'mount:true,leave,mount:true',
+    ][observation]);
+  },
+});
+
+behaves('imperative ref text survives an unrelated component update', {
+  source: `
+    export function App() {
+      let host;
+      let count = 0;
+      return <main><div ref={host}>initial</div><p>{count}</p>
+        <button id="edit" onClick={() => host.textContent = 'manual'}>edit</button>
+        <button id="next" onClick={() => count++}>next</button></main>;
+    }`,
+  steps: [{ click: '#edit' }, { click: '#next' }],
+  check(container, observation) {
+    expect(container.querySelector('div')?.textContent).toBe(observation === 0 ? 'initial' : 'manual');
+  },
+});
+
+behaves('a ref on a spread host mounts and clears through its owner', {
+  source: `
+    export function App() {
+      let node;
+      let show = true;
+      const attrs = { title: 'host' };
+      return <main>{show && <section {...attrs} ref={node} />}<p>{node?.tagName ?? 'none'}</p>
+        <button onClick={() => show = !show}>toggle</button></main>;
+    }`,
+  steps: [{ click: 'button' }, { click: 'button' }],
+  check(container, observation) {
+    expect(container.querySelector('p')?.textContent).toBe(['SECTION', 'none', 'SECTION'][observation]);
+  },
+});
+
+behaves('an exported ref wakes a reader in another module', {
+  modules: {
+    './Host.tsx': `export let node; export function Host() { return <div id="shared" ref={node} />; }`,
+    './Read.tsx': `import { node } from './Host'; export function Read() { return <p>{node?.id ?? 'none'}</p>; }`,
+  },
+  source: `
+    import { Host } from './Host';
+    import { Read } from './Read';
+    export function App() {
+      let show = true;
+      return <main><Read />{show && <Host />}
+        <button onClick={() => show = !show}>toggle</button></main>;
+    }`,
+  steps: [{ click: 'button' }, { click: 'button' }],
+  check(container, observation) {
+    expect(container.querySelector('p')?.textContent).toBe(['shared', 'none', 'shared'][observation]);
+  },
+});
+
+behaves('a member ref through an imported object updates its derived readers', {
+  modules: { './nodes.ts': `export const nodes = {};` },
+  source: `
+    import { nodes } from './nodes';
+    export function App() {
+      let show = true;
+      const label = nodes.panel?.id ?? 'none';
+      return <main><p>{label}</p>{show && <div id="imported" ref={nodes.panel} />}
+        <button onClick={() => show = !show}>toggle</button></main>;
+    }`,
+  steps: [{ click: 'button' }, { click: 'button' }],
+  check(container, observation) {
+    expect(container.querySelector('p')?.textContent).toBe(['imported', 'none', 'imported'][observation]);
+  },
+});
+
+behaves('DOM edits through a ref do not rebind it or rerun an effect reading its identity', {
+  source: `
+    export function App() {
+      let node;
+      let runs = 0;
+      $effect(() => { node; runs++; });
+      return <main><div ref={node} /><p>{runs}</p>
+        <button onClick={() => { node.textContent = 'manual'; node.setAttribute('title', 'edited'); }}>edit</button></main>;
+    }`,
+  steps: [{ click: 'button' }, { click: 'button' }],
+  check(container) { expect(container.querySelector('p')?.textContent).toBe('1'); },
+});

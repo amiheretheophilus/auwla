@@ -56,7 +56,7 @@ export {
   updateCell,
 } from './state-cells';
 export type { StateCell } from './state-cells';
-export { cleanup } from './cleanup';
+export { cleanup, ownCleanup } from './cleanup';
 export { readPreparationScope, releasePreparationRead } from './preparation-read';
 export { createPreparedRegion } from './prepared-region';
 export { createContentRegion } from './content-region';
@@ -67,16 +67,17 @@ export { encodePageHtml, decodePageHtml, encodePageFrame, encodePageFailure, dec
 export { collectRenderReadiness } from './render-readiness';
 export { toPresentationError, type PresentationError, type PresentationErrorKind } from './presentation-error';
 export type { CleanupDisposer } from './cleanup';
-export { mountRef, refAssign } from './refs';
+export { mountRef, refAssign, assignRef, isRefNode } from './refs';
 export type { RefCallback, RefValue } from './refs';
 export { registerConditionalEffect, registerEffect } from './effect';
+export { createEffectScope, ownedEffect, ownedCleanup } from './effect-scope';
 export type { EffectCallback, EffectCondition } from './effect';
 
 export { materializeMarkup, cloneTemplate, createTemplateCache } from './markup';
 export type { TemplateCache } from './markup';
 export { createWriteBatch, rejectConstAssignment, flushWritesBeforeAwait, resumeWritesAfterAwait } from './write-batch';
 export type { WriteBatch } from './write-batch';
-export { createBuildScope, captureBuildScope, isBuilding } from './build-scope';
+export { createBuildScope, captureBuildScope, isBuilding, isEffectInvocation } from './build-scope';
 export {
   mutationTarget, deleteMutation, receiverMutationTarget, observeMutation, watchMutationRoots, checkMutationRoots,
   mutatedSince, mutationTime,

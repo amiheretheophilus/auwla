@@ -42,6 +42,8 @@ export interface SitesContext {
   rows?: boolean;
   /** Leaf component rows compiled at module level (`row-list.ts`). */
   rowComponents?: RowComponents;
+  /** Ownership reconciled alongside a component's early-return selector. */
+  select?(site: Site, value: Expression): Expression;
 }
 
 export function emitSites(
@@ -68,6 +70,20 @@ export function emitSites(
       continue;
     }
     const node = context.ref(site.node);
+    if (site.kind === 'ref') {
+      // Refs mount once with the element and leave with that exact branch/row.
+      // A new wrapper on an unrelated render must not remount a callback ref.
+      const cleanup = names.fresh('_releaseRef');
+      const ref = context.values === undefined ? copy(site.expression, replacements)
+        : buildExpression('$$values[$$index]', { values: context.values, index: b.Literal({ value: siteIndex, raw: String(siteIndex) }) });
+      mount.push(statement('const $$cleanup = $$runtime.ownCleanup($$owner, $$runtime.mountRef($$node, $$ref));', {
+        cleanup, runtime, node, ref,
+        owner: context.batch === null ? buildExpression('$$id', { id: context.id })
+          : buildExpression('$$entity?.id ?? $$id', { entity: context.entity, id: context.id }),
+      }));
+      dispose.push(statement('$$cleanup();', { cleanup }));
+      continue;
+    }
     const value = names.fresh('_value');
     // The row list exists before the site's `map` call passes it to the runtime.
     const rowList = site.kind === 'text' && site.listStrategy === 'rows' && site.rows !== undefined
@@ -87,6 +103,7 @@ export function emitSites(
     let expression: Expression;
     if (context.values === undefined) {
       expression = selection?.expression ?? copy(siteValue(site), replacements);
+      if (selection !== null && context.select !== undefined) expression = context.select(site, expression);
     } else {
       // A stored JSX program receives captures; mounting it must not evaluate
       // its authored expressions a second time.
@@ -310,7 +327,7 @@ function emitBranch(branch: ConditionalBranch, selected: string, plan: SitesPlan
 }
 
 function siteKey(site: Site): string {
-  if (site.kind === 'text' || site.kind === 'conditional' || site.kind === 'key') {
+  if (site.kind === 'text' || site.kind === 'conditional' || site.kind === 'key' || site.kind === 'ref') {
     return `${site.node}:${site.kind}`;
   }
   if (site.kind === 'event') {
@@ -329,7 +346,7 @@ function writeValue(
   valueSlot: LazySlot | null,
   rowList: string | null,
 ): Statement[] {
-  if (site.kind === 'conditional' || site.kind === 'key') {
+  if (site.kind === 'conditional' || site.kind === 'key' || site.kind === 'ref') {
     return [];
   }
   if (site.kind === 'text') {

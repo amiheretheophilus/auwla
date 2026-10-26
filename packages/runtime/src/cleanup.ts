@@ -58,6 +58,21 @@ export function cleanup(
   return disposer;
 }
 
+/** Attach a resource now; early disposal also removes its owner's registration. */
+export function ownCleanup(owner: EntityId, disposer: CleanupDisposer): CleanupDisposer {
+  let active = true;
+  const release = (): void => {
+    if (!active) return;
+    active = false;
+    const registered = store().cleanups.get(owner);
+    const index = registered?.indexOf(release) ?? -1;
+    if (index >= 0) registered!.splice(index, 1);
+    disposer();
+  };
+  cleanup(owner, release);
+  return release;
+}
+
 /**
  * Drain an owner's disposers in reverse registration order.
  * Teardown continues after individual failures; the kernel reports them once

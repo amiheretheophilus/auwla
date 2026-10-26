@@ -1,11 +1,30 @@
 # Refs
 
-**Folder:** `features/refs/` _(planned)_.
+**Folder:** `features/refs/` (built).
 
 ## What it does
 
 Makes element refs reactive, so a user never needs a ref plus an effect
 (`../rules.md`, rule 9).
+
+## Files and implementation
+
+- `classify.ts` finds assignable targets, including array entries and member roots,
+  and supplies reactive graph facts. Imported member roots also mark their definition.
+- `plan.ts` supplies implicit assignments to the existing write and mutation
+  emitters; it introduces no second assignment or batching implementation.
+- `dom.ts` builds assign/forward adapters from those assignments. An imported
+  object's member uses existing mutation observation to reach its defining module
+  by object identity.
+- `core/plan/model.ts` has `RefPlan` and `RefSite`. Template sites, stored JSX,
+  branches and generic spread/dynamic hosts share runtime `mountRef`.
+- `runtime/src/refs.ts` owns assignment/forwarding, connected callbacks and
+  idempotent teardown. The pending-ref queue delays effects until refs finish.
+  Assigned DOM handles are leaves for mutation observation; their implementation
+  fields do not become framework state. Rebinding still publishes versions.
+- `runtime/src/cleanup.ts` attaches each ref disposer as soon as it mounts, so
+  later setup failure clears it too. Early branch disposal detaches that cleanup
+  from the owner, preserving idempotence without retaining historical ref nodes.
 
 ## Rules
 
@@ -32,8 +51,8 @@ Makes element refs reactive, so a user never needs a ref plus an effect
 
 ## Cases to test
 
-In `packages/compiler-next/tests/cases/refs.test.ts`. All pass today and must keep
-passing:
+In `packages/compiler-next/tests/cases/refs.test.ts`: 19 reference comparisons,
+also run with optimizations disabled. They cover:
 
 - a ref used in a handler;
 - markup that reads a ref updates when it mounts;
@@ -46,6 +65,10 @@ passing:
 - ref readers following replacement, removal and remount;
 - imperative text written through a ref surviving unrelated renders;
 - each keyed row reading its own mounted ref.
+- connected callback refs before the first effect and callback cleanup exactly once;
+- generic spread hosts, exported refs read by another module and imported-object
+  member refs feeding a derivation;
+- DOM edits preserving imperative text and not rerunning an identity-only effect.
 
 The old compiler fails the added case that logs ref identities to a module array
 inside an effect: mutating that array re-triggers the effect until the runtime's
@@ -53,8 +76,6 @@ cycle guard throws. The reference runs once for mount and once for replacement;
 the case asserts both results explicitly. Separate JSX branches keep separate node
 identities even when both use the same tag.
 
-## Open questions
-
-- Module-level ref targets (`export let node` with `ref={node}`): readers in other
-  modules are not tracked in the old compiler. In the new one they should be,
-  through `link/`.
+Module-level ref targets read by another module are implemented and covered.
+Reactive callback-ref re-execution remains the roadmap item described above;
+current callbacks mount once and return cleanup for their element's lifetime.

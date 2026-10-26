@@ -41,6 +41,10 @@ Stated by the user on 2026-10-18. They apply to every design and every fix.
       earlier "snapshot from initialization" decision (2026-10-20).
       A `const` cannot be reassigned, so a `const` with a reactive initializer
       remains derived.
+    - Effect executions own their locals (2026-10-26). A local created during
+      an effect run keeps that run's value for its cleanup. The effect reruns
+      when its inputs change. A cleanup reading an outer binding directly still
+      reads its current value. See `compiler/effects.md`.
     - Writes in the component body (`let label = user.name; if (!label) label =
       'Anonymous';`) are part of the derivation and re-run with it. The user: "it
       should work since it somehow being part of a reactivity derivation".

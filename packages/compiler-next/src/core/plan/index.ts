@@ -26,6 +26,8 @@ import { storageOwner } from './storage';
 import { planReturns } from '../../features/conditionals/returns';
 import { rejectLaterPhases } from './later-phases';
 import { isComponentCall } from '../../features/components/plan';
+import { planRefs, refMutations, refWrites } from '../../features/refs/plan';
+import { planEffects } from '../../features/effects/plan';
 
 export type { ComponentPlan, ModulePlan, Site, Template, TemplateNode } from './model';
 
@@ -38,7 +40,8 @@ export function planModules(
   const sharedReads = planSharedReads(graph, components);
   const owners = new Set<Node | null>([...components, ...[...sharedReads.keys()].map(storageOwner)]);
   const memos = planMemos(graph, queries, owners);
-  return graph.resolved.modules.map((entry) => planModule(graph, queries, components, entry, state, memos, sharedReads));
+  const refs = planRefs(graph);
+  return graph.resolved.modules.map((entry) => planModule(graph, queries, components, entry, state, memos, sharedReads, refs));
 }
 
 function planModule(
@@ -49,8 +52,11 @@ function planModule(
   state: ReadonlyMap<Node, readonly BindingNode[]>,
   memos: ReadonlyMap<Node | null, readonly MemoGroupPlan[]>,
   sharedReads: ReadonlyMap<BindingNode, SharedReadPlan>,
+  allRefs: ModulePlan['refs'],
 ): ModulePlan {
   const module = entry.module;
+  const refs = allRefs.filter((ref) => ref.binding.binding.module === module);
+  const effects = planEffects(graph, queries, entry, components);
   const claimed = new Set<Node>();
   const context: TemplateContext = {
     path: entry.path,
@@ -73,10 +79,11 @@ function planModule(
     const computations = memos.get(fn) ?? [];
     const targets = computations.flatMap((group) => group.computations.flatMap((memo) => memo.targets));
     const local = [...new Set([...(state.get(fn) ?? []), ...targets])];
-    const component = planComponent(fn, context, graph, queries, entry);
+    const component = planComponent(fn, context, graph, queries, entry, effects.groups);
     const { siteInputs, dynamicSites } = planSiteInputs(component.sites, fn, graph, queries, entry);
-    const writes = planWrites(local);
-    const mutations = planMutations(local);
+    const ownedRefs = refs.filter((ref) => local.includes(ref.binding));
+    const writes = [...planWrites(local), ...refWrites(ownedRefs)];
+    const mutations = [...planMutations(local), ...refMutations(ownedRefs)];
     const readonlyBindings = planReadonlyBindings(local);
     const takeovers = targets.filter((target) => {
       return target.takeovers.length > 0 && !readonlyBindings.includes(target);
@@ -103,6 +110,12 @@ function planModule(
       }
       return [{ node: read.reference.node, binding: read.target as BindingNode }];
     }));
+    for (const group of effects.groups) {
+      if (group.owner !== fn) continue;
+      for (const read of group.reads) {
+        if (local.includes(read.binding) && !trackedReads.some((existing) => existing.node === read.node)) trackedReads.push(read);
+      }
+    }
     for (const binding of local) {
       for (const reference of binding.binding.references) {
         if (reference.isWrite || reference.inTypePosition) {
@@ -184,8 +197,9 @@ function planModule(
       .map((group) => ({ ...group, dynamic: true }));
     const targets = computations.flatMap((group) => group.computations.flatMap((memo) => memo.targets));
     const local = [...new Set([...bindings, ...targets])];
-    const writes = planWrites(local);
-    const mutations = planMutations(local);
+    const ownedRefs = refs.filter((ref) => local.includes(ref.binding));
+    const writes = [...planWrites(local), ...refWrites(ownedRefs)];
+    const mutations = [...planMutations(local), ...refMutations(ownedRefs)];
     const runner = bindings[0]!.owner.runner;
     const replayed = (operation: Node) => {
       return runnerOf(module, operation) === runner && computations.some((group) => {
@@ -220,6 +234,8 @@ function planModule(
     });
   }
   return {
+    effects,
+    refs,
     module: entry,
     components: plans,
     sharedOwners,
@@ -297,6 +313,7 @@ function planComponent(
   graph: SemanticGraph,
   queries: InputQueries,
   entry: ResolvedModule,
+  effects: ModulePlan['effects']['groups'],
 ) {
   type Markup = Extract<Node, { type: 'JSXElement' | 'JSXFragment' }>;
   const body = fn.body;
@@ -311,6 +328,7 @@ function planComponent(
 
   const module = entry.module;
   const returned = planReturns(body.body as Statement[], {
+    hasLifecycle: (statement) => effects.some((group) => group.owner === fn && group.root.start >= statement.start && group.root.end <= statement.end),
     readsBlockLocal: (markup, block) => usesBlockLocal(module, markup, block, false),
     usesBlockLocal: (node, block) => usesBlockLocal(module, node, block, true),
     selectsMarkup: (expression) => {

@@ -1,6 +1,7 @@
 /** Feature order lives here; each feature consumes only shared core contracts. */
 import { classifyState } from '../../features/state/classify';
 import { classifyDerived } from '../../features/derived/classify';
+import { classifyRefs, refTargets } from '../../features/refs/classify';
 import { collectComputations } from '../../features/derived/computations';
 import { componentFunctions, propBindings } from '../../features/props/classify';
 import type { Resolved } from '../resolve';
@@ -25,9 +26,9 @@ export function classifyGraph(resolved: Resolved): ClassifiedGraph {
   const computations = collectComputations(resolved, queries);
   const components = componentFunctions(resolved);
   const props = propBindings(resolved, components);
-  // Ref/source classifiers join ahead of state/derived in their feature slices.
+  // Implicit ref writes supply reactive roots before derivation propagates.
   const state = classifyState(resolved, computations, props);
-  const facts = classifyDerived(state, resolved.globals);
+  const facts = classifyDerived(classifyRefs(state, refTargets(resolved)), resolved.globals);
   const escaping = escapingFacts(resolved, queries, components);
   return {
     ...buildGraph(resolved, facts, escaping),

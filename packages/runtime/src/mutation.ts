@@ -7,6 +7,7 @@ import {
   type Entity,
 } from './kernel';
 import { advanceWriteEpoch } from './write-epoch';
+import { isRefNode } from './refs';
 
 const arrayIsArray = Array.isArray;
 
@@ -141,6 +142,9 @@ function reachable(
   onUntrackedRead?: () => void,
 ): void {
   if (value === null || (typeof value !== 'object' && typeof value !== 'function') || seen.has(value)) return;
+  // DOM work through a mounted ref never changes that ref's binding. Its
+  // implementation fields (including a DOM shim's symbols) are not state.
+  if (isRefNode(value)) return;
   seen.add(value);
   visit(value);
   if (value instanceof Map) Map.prototype.forEach.call(value, (item: unknown, key: unknown) => {
@@ -705,6 +709,7 @@ export function mutationTarget(object: any, key: any, notify: () => void) {
     set value(value: unknown) {
       const edit = storeEdit(object, property, value);
       object[property] = value;
+      if (isRefNode(object)) return;
       stamp(object);
       notify();
       notifyAliases({ one: object, many: null }, edit, notify);

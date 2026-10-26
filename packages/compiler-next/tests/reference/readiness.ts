@@ -13,6 +13,20 @@ import { blockThunk, constDeclaration, identifier, member, runtimeCall, thunk } 
 import type { ClosureCells } from './closures';
 import { enclosingFunction, Reads } from './reads';
 
+// Readiness guards are built before component slots exist. Keep their binding
+// identity so those generated reads are lowered alongside authored references.
+const generatedReads = new WeakMap<Node, Binding>();
+
+export function generatedReadBinding(node: Node): Binding | undefined {
+  return generatedReads.get(node);
+}
+
+function bindingRead(binding: Binding): Expression {
+  const node = identifier(binding.name);
+  generatedReads.set(node, binding);
+  return node;
+}
+
 /** Read a module binding without changing its native live-binding behavior. */
 export function captureModuleRead(module: Module, binding: Binding, value: Expression): Expression {
   if (!is.Program(binding.scope.node)) return value;
@@ -433,14 +447,14 @@ class ModuleMemos {
   /** Every binding `init` reads: the memo is computed again when any of them changes. */
   private memoInputs(init: Node, exclude?: Binding): Expression {
     const elements = [...this.reads.inside([init], exclude)].map((binding) => {
-      return statusInput(binding, identifier(binding.name), [init], this.rawUses);
+      return statusInput(binding, bindingRead(binding), [init], this.rawUses);
     });
     return b.ArrayExpression({ elements });
   }
 
   private readsOf(exclude?: Binding): ReadsOf {
     const keep = (binding: Binding) => binding !== exclude;
-    return readsWithPaths(this.reads, (binding) => identifier(binding.name), this.rawUses, keep);
+    return readsWithPaths(this.reads, bindingRead, this.rawUses, keep);
   }
 
   private bindingsIn(pattern: Node): Binding[] {

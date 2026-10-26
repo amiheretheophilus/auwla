@@ -3,7 +3,7 @@ import { b, findAll, is } from 'yuku-ast';
 import type { Node, Statement } from 'yuku-parser';
 import type { CompileModulesOptions } from '../../options';
 import { DEFAULT_RUNTIME_PATH } from '../../options';
-import type { ComponentPlan, ModulePlan } from '../plan';
+import type { ComponentPlan, ModulePlan, Site } from '../plan';
 import { copy, finishCopy } from './copy';
 import { Names } from './names';
 import { expression, statement, stringLiteral } from './quote';
@@ -22,12 +22,14 @@ import { RowComponents } from './row-list';
 import { emitComponentCall } from '../../features/components/dom';
 import { emitProps } from '../../features/props/dom';
 import { functionValue } from '../resolve/functions';
+import { emitRefs } from '../../features/refs/dom';
+import { emitEffectGroups, emitLifecycleCalls } from '../../features/effects/dom';
 
 /** Preserve module syntax and exports, replacing planned functions on a fresh tree. */
 export function emitDom(plan: ModulePlan, options: CompileModulesOptions): Node {
   const module = plan.module.module;
   const hasRenderWork = plan.components.size > 0 || plan.sharedOwners.length > 0
-    || plan.values.length > 0 || plan.calls.length > 0 || plan.componentReferences.size > 0;
+    || plan.values.length > 0 || plan.calls.length > 0 || plan.componentReferences.size > 0 || plan.effects.calls.length > 0;
   if (!hasRenderWork) {
     const hasBoundaries = findAll(module.ast, ['TryStatement', 'AwaitExpression']).length > 0;
     if (!hasBoundaries) {
@@ -39,7 +41,7 @@ export function emitDom(plan: ModulePlan, options: CompileModulesOptions): Node 
   const runtime = names.fresh('_MD');
   const runtimePath = JSON.stringify(options.runtimePath ?? DEFAULT_RUNTIME_PATH);
   const hoisted: Statement[] = [statement(`import * as $$runtime from ${runtimePath};`, { runtime })];
-  const shared = emitShared(plan, names, runtime);
+  const shared = emitShared(plan, names, runtime, emitLifecycleCalls(plan, names, runtime));
   const replacements = shared.replacements;
   for (const reference of module.references) {
     if (reference.isWrite || reference.inTypePosition) {
@@ -91,7 +93,8 @@ export function emitDom(plan: ModulePlan, options: CompileModulesOptions): Node 
         html: stringLiteral(component.template.markup!),
       }));
     }
-    let emitted = emitComponent(component, names, runtime, markup, replacements, rowComponents);
+    let emitted = emitComponent(component, names, runtime, markup, replacements, rowComponents, plan.refs, plan.effects.groups,
+      plan.effects.calls.some((call) => call.owner === component.fn));
     const enclosingFunction = [...module.ancestors(component.fn)].find((ancestor) => {
       return ancestor !== component.fn && is.Function(ancestor);
     });
@@ -141,9 +144,12 @@ function emitComponent(
   markup: string | null,
   external: ReadonlyMap<Node, Node>,
   rowComponents: RowComponents,
+  refs: ModulePlan['refs'],
+  effectGroups: ModulePlan['effects']['groups'],
+  ownsLifecycle: boolean,
 ): Node {
   const document = names.fresh('_document');
-  const id = names.fresh('_id');
+  const id = names.of(plan.fn, '_id');
   const parent = names.fresh('_parent');
   const state = emitLocalState(plan.state, names);
   // Value slots can own nested DOM even when the component has no local state.
@@ -151,7 +157,11 @@ function emitComponent(
   const ownsRegions = plan.sites.some((site) => {
     return site.kind === 'conditional' || (site.kind === 'text' && !site.primitive);
   });
-  const needsBatch = plan.state.length > 0 || plan.dynamicSites.size > 0 || ownsRegions;
+  const ownsRefs = (sites: readonly Site[]): boolean => sites.some((site) => {
+    return site.kind === 'ref' || (site.kind === 'conditional' && site.branches.some((branch) => ownsRefs(branch.sites)));
+  });
+  const groups = effectGroups.filter((group) => group.owner === plan.fn);
+  const needsBatch = plan.state.length > 0 || plan.dynamicSites.size > 0 || ownsRegions || groups.length > 0 || ownsLifecycle || ownsRefs(plan.sites);
   const batch = needsBatch ? names.fresh('_writes') : null;
   const update = names.fresh('_update');
   const entity = names.fresh('_entity');
@@ -192,7 +202,9 @@ function emitComponent(
     : emitWrites(plan.writes, state.versions, names, batch, mutations.replacements, handled);
   // Only writes executed by replay itself are silent. A function created by a
   // replayed initializer may run later and must keep its ordinary write commits.
-  const replayBase = new Map(writes.replacements);
+  const refReplacements = emitRefs(refs.filter((ref) => plan.state.includes(ref.binding)), runtime, writes.replacements);
+  const effects = emitEffectGroups(groups, scope, id, names, runtime, refReplacements, plan.deferred, plan.setup);
+  const replayBase = new Map(effects.replacements);
   for (const write of plan.replayWrites) replayBase.delete(write.operation);
   for (const write of plan.replayMutations) {
     replayBase.delete(write.operation);
@@ -202,11 +214,11 @@ function emitComponent(
   const replay = emitWrites(plan.replayWrites, state.versions, names, null, replayMutations.replacements, handled);
   // One flag per setup segment after a return: whether control reached it.
   const reached = [...new Set(plan.deferred.values())].map(() => names.fresh('_reached'));
-  const memos = emitMemos(plan, state.versions, names, writes.replacements, replay.replacements, takeovers, runtime, trackKeys,
+  const memos = emitMemos(plan, state.versions, names, effects.replacements, replay.replacements, takeovers, runtime, trackKeys,
     batch === null ? undefined : { batch, entity }, { statements: plan.deferred, flags: reached });
   const once = (statements: readonly Statement[]): Statement[] => {
     const flag = reached[plan.deferred.get(statements[0]!)!]!;
-    return [b.IfStatement({
+    return [...effects.reach(statements), b.IfStatement({
       test: expression('!$$flag', { flag }),
       consequent: b.BlockStatement({
         body: [statement('$$flag = true;', { flag }), ...statements.flatMap((entry) => memos.deferred.get(entry) ?? [])],
@@ -234,6 +246,7 @@ function emitComponent(
   }
   body.push(
     statement('const $$scope = $$runtime.createBuildScope();', { scope, runtime }),
+    ...effects.declarations,
     statement(batch === null
       ? 'const $$setupFrame = $$scope.enter();'
       : `const $$setupFrame = $$scope.enter(() => {
@@ -261,8 +274,9 @@ function emitComponent(
   body.push(...slots.statements);
 
   const sites = emitSites(plan, {
-    names, runtime, batch, entity, id, document, versions: state.versions, replacements: writes.replacements,
+    names, runtime, batch, entity, id, document, versions: state.versions, replacements: effects.replacements,
     ref: slots.ref, once, namespace, rowComponents,
+    select: (site, value) => site.expression === plan.fn.body ? effects.select(value) : value,
   });
   body.push(...sites.mount);
   // A callback can read this instance while another component collects its

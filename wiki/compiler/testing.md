@@ -1,5 +1,13 @@
 # Testing
 
+Phase 7 adds independent effect/ref lifetime checks. The reference reconciles
+registration occurrences per render, retains binding identities in generated
+readiness guards until slot lowering, and gives each async cleanup its execution
+generation. Effect argument expressions with setup effects use its normal memo
+rules while registration remains reactive. Production uses entity ownership and
+version collectors instead. Explicit case expectations, including the user-chosen
+per-run cleanup captures, remain unchanged (`effects.md`, `refs.md`).
+
 **Folders:** `packages/compiler-next/tests/` (built), `features/*/*.test.ts` and
 `optimize/*.test.ts` _(planned)_.
 

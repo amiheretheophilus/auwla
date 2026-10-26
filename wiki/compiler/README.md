@@ -14,8 +14,9 @@ coverage. A subsequent boundary audit adds failed-mount ownership, initial-write
 settling, symbol/rest props, destination namespaces and retention checks; exact
 results and commits are in `../status.md`.
 
-The remaining case failures explicitly name Phase 7 (effects, cleanup and refs)
-or Phase 8 (sources/readiness). The reference already covers those semantics.
+Phase 7 effects, cleanup and reactive refs are implemented and pass the focused
+reference comparisons; full CI validation is pending. Source/readiness support
+remains Phase 8. The reference already covers those semantics.
 The supplied VM report at `874c826` fails the performance floor: the old compiler
 is faster on all 24 Octane operations, and the DOM update-style run ends in an
 OOM. Phase 5 fast paths and repeat measurements remain before the Phase 6 exit;

@@ -284,12 +284,16 @@ array child). Remove each check when its phase is built.
 
 ## Phase 7: effects, cleanup, refs
 
-- [ ] `$effect`, `$cleanup`, module effects, `x++` as a write, an effect's own
+- [x] `$effect`, `$cleanup`, module effects, `x++` as a write, an effect's own
   writes not re-running it (`effects.md`). Reuse runtime ownership, batching and
   dependency tracking; keep feature code in `features/effects/`.
-- [ ] Reactive refs, including mount/replacement/removal notifications, callback
+- [x] Reactive refs, including mount/replacement/removal notifications, callback
   cleanup and refs-before-effects ordering (`refs.md`).
-- **Exit:** `cases/effects` and `cases/refs` pass.
+- **Exit:** `cases/effects` and `cases/refs` pass. Locally verified: 18 effect
+  and 19 ref comparisons against the reference and both compiler modes, including
+  17 new behavioral cases. Full CI validation is pending; do not start Phase 8
+  until that shared-machinery check passes. Wider conformance limits remain on
+  the concept pages, not hidden as passing cases.
 
 ## Phase 8: sources and Group
 

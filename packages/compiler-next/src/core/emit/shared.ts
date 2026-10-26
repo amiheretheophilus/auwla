@@ -1,6 +1,6 @@
 /** Compose shared storage and feature emission before replacing components. */
 import { b } from 'yuku-ast';
-import type { Statement } from 'yuku-parser';
+import type { Node, Statement } from 'yuku-parser';
 import type { ModulePlan } from '../plan';
 import type { Names } from './names';
 import { copy } from './copy';
@@ -11,10 +11,15 @@ import { emitMutations } from '../../features/handlers/mutations';
 import { emitMemos } from '../../features/derived/dom';
 import { emitTakeovers } from '../../features/derived/takeover';
 import { emitReceiverTargets } from '../../features/handlers/receivers';
+import { emitWrites } from '../../features/handlers/dom';
+import { emitRefs } from '../../features/refs/dom';
+import { refWrites } from '../../features/refs/plan';
+import { emitEffectGroups } from '../../features/effects/dom';
+import { statement, stringLiteral } from './quote';
 
-export function emitShared(plan: ModulePlan, names: Names, runtime: string) {
+export function emitShared(plan: ModulePlan, names: Names, runtime: string, initial: ReadonlyMap<Node, Node> = new Map()) {
   const receivers = emitReceiverTargets(plan.receiverTargets, plan.module.module, names, runtime);
-  const state = emitSharedState(plan, names, runtime, receivers);
+  const state = emitSharedState(plan, names, runtime, new Map([...initial, ...receivers]));
   let replacements = new Map(state.replacements);
   const takeovers = new Map(state.owners.map((owner) => [owner, emitTakeovers(
     owner.plan.takeovers, owner.versions, names, owner.scope, owner.batch, owner.keys,
@@ -40,19 +45,24 @@ export function emitShared(plan: ModulePlan, names: Names, runtime: string) {
   for (const owner of state.owners) {
     const mutations = emitMutations(owner.plan.mutations, owner.versions, names, runtime, owner.batch, replacements, owner.keys, owner.notifiers);
     replacements = new Map(mutations.replacements);
-    mutationDeclarations.set(owner, mutations.declarations);
+    const refs = plan.refs.filter((ref) => owner.plan.state.includes(ref.binding));
+    const writes = emitWrites(refWrites(refs), owner.versions, names, owner.batch, replacements);
+    replacements = emitRefs(refs, runtime, writes.replacements);
+    mutationDeclarations.set(owner, [...mutations.declarations, ...writes.declarations]);
   }
   const emitOwner = (owner: (typeof state.owners)[number]) => {
-    const replayBase = new Map(replacements);
+    const groups = plan.effects.groups.filter((group) => group.owner === owner.plan.fn && owner.plan.block === null);
+    const effects = emitEffectGroups(groups, owner.scope, stringLiteral(`mmd:effects:${plan.module.path}`), names, runtime, replacements);
+    const replayBase = new Map(effects.replacements);
     for (const mutation of owner.plan.replayMutations) {
       replayBase.delete(mutation.operation);
       for (const target of mutation.targets) replayBase.delete(target.member);
     }
     const replay = emitMutations(owner.plan.replayMutations, owner.versions, names, runtime, null, replayBase);
-    const memos = emitMemos(owner.plan, owner.versions, names, replacements, replay.replacements,
+    const memos = emitMemos(owner.plan, owner.versions, names, effects.replacements, replay.replacements,
       takeovers.get(owner)!, runtime, owner.keys, { batch: owner.batch });
     const body = finishSharedOwner(owner, memos.setup, memos.snapshots, memos.update, names);
-    return [...owner.declarations, ...takeovers.get(owner)!.declarations,
+    return [...owner.declarations, ...effects.declarations, ...takeovers.get(owner)!.declarations,
       ...(mutationDeclarations.get(owner) ?? []), ...replay.declarations, ...body];
   };
   for (const owner of [...state.owners].sort((a, b) => (b.plan.block?.start ?? b.plan.fn?.start ?? -1) - (a.plan.block?.start ?? a.plan.fn?.start ?? -1))) {
@@ -69,6 +79,16 @@ export function emitShared(plan: ModulePlan, names: Names, runtime: string) {
     replacements.set(owner.plan.fn, fn);
   }
   const moduleOwner = state.owners.find((owner) => owner.plan.fn === null && owner.plan.block === null);
+  if (moduleOwner === undefined && plan.effects.calls.some((call) => call.owner === null)) {
+    const scope = names.fresh('_moduleScope');
+    const groups = plan.effects.groups.filter((group) => group.owner === null);
+    const effects = emitEffectGroups(groups, scope, stringLiteral(`mmd:effects:${plan.module.path}`), names, runtime, replacements);
+    replacements = new Map(effects.replacements);
+    state.imports.push(statement('const $$scope = $$runtime.createBuildScope(true);', { scope, runtime }), ...effects.declarations);
+  }
+  const owned = new Set([...plan.components.values()].flatMap((component) => component.state));
+  for (const owner of state.owners) for (const binding of owner.plan.state) owned.add(binding);
+  replacements = emitRefs(plan.refs.filter((ref) => !owned.has(ref.binding)), runtime, replacements, true);
   return {
     replacements, imports: state.imports,
     moduleBody: () => moduleOwner === undefined ? null : emitOwner(moduleOwner),

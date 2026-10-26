@@ -207,7 +207,10 @@ evaluation: parent attributes evaluate before child expressions.
 | `plan.test.ts` | Node addressing, expression order, graph reactivity, fallback creation and unchanged authored AST |
 
 - `Template`: static DOM shape, hoisted.
-- `TextSite`, `AttributeSite`, `PropertySite`, `EventSite`.
+- `TextSite`, `AttributeSite`, `PropertySite`, `EventSite`, `RefSite`.
+- `RefPlan` implicit assignments reuse ordinary write/mutation emission.
+- `LifecycleCallPlan` and `EffectGroupPlan` keep registration calls and their
+  activation roots. Early-return ownership is reconciled with the selector.
 - `ConditionalSite`: native selection tree, selector inputs and branch templates/sites (expression form built).
 - `RenderValuePlan`: stored JSX, with source-ordered captured sites and HTML/SVG template variants in `ModulePlan.values`.
 - `List { source, key, row: Plan }` _(planned)_.

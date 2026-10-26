@@ -212,11 +212,42 @@ export function $ready(slot: { v: unknown; pending: Waiting | undefined }): unkn
 
 interface EffectSlot {
   inputs: unknown;
-  teardown: (() => void) | undefined;
+  cleanup: EffectCleanup;
   readInputs: () => unknown[];
   callback: () => unknown;
   hasRun: boolean;
   reads: Set<ReadValue>;
+}
+
+let effectInvocation = false;
+
+function runEffectInvocation<T>(callback: () => T): T {
+  const previous = effectInvocation;
+  effectInvocation = true;
+  try { return callback(); }
+  finally { effectInvocation = previous; }
+}
+
+/** A resolved cleanup belongs to the execution that returned its promise. */
+class EffectCleanup {
+  private generation = 0;
+  private teardown: (() => void) | undefined;
+
+  begin(): (teardown: () => void) => void {
+    this.dispose();
+    const generation = this.generation;
+    return (teardown) => {
+      if (generation !== this.generation) runEffectInvocation(teardown);
+      else this.teardown = teardown;
+    };
+  }
+
+  dispose(): void {
+    this.generation++;
+    const teardown = this.teardown;
+    this.teardown = undefined;
+    if (teardown !== undefined) runEffectInvocation(teardown);
+  }
 }
 
 export class Instance {
@@ -226,9 +257,10 @@ export class Instance {
   /** How many times the instance has rendered. A memo that reads it is computed on every render. */
   render = 0;
   private readonly slots = new Map<number, MemoSlot>();
-  private readonly effects = new Map<number, EffectSlot>();
+  private readonly effects = new Map<string, EffectSlot>();
   /** Effects called during the current render; the others are destroyed. */
-  private readonly calledEffects = new Set<number>();
+  private readonly calledEffects = new Set<string>();
+  private readonly effectOccurrences = new Map<number | string, number>();
   private readonly cleanups: Array<() => void> = [];
   /** `"statement:position"` pairs from `observe`: that statement changed that value. */
   private readonly confirmations = new Set<string>();
@@ -350,14 +382,17 @@ export class Instance {
   }
 
   /** `$effect(callback)`: runs after the commit when it is new or its inputs changed. */
-  effect(index: number, readInputs: () => unknown[], callback: () => unknown): void {
-    this.calledEffects.add(index);
-    const slot = this.effects.get(index);
+  effect(index: number | string, readInputs: () => unknown[], callback: () => unknown): void {
+    const occurrence = this.effectOccurrences.get(index) ?? 0;
+    this.effectOccurrences.set(index, occurrence + 1);
+    const key = `${index}:${occurrence}`;
+    this.calledEffects.add(key);
+    const slot = this.effects.get(key);
 
     if (slot === undefined) {
-      this.effects.set(index, {
+      this.effects.set(key, {
         inputs: undefined,
-        teardown: undefined,
+        cleanup: new EffectCleanup(),
         readInputs,
         callback,
         hasRun: false,
@@ -464,6 +499,7 @@ export class Instance {
   beginRender(): void {
     this.render++;
     this.calledEffects.clear();
+    this.effectOccurrences.clear();
   }
 
   /** Initial setup runs in native order; a settling render must not execute it twice. */
@@ -488,7 +524,7 @@ export class Instance {
     for (const [index, slot] of this.effects) {
       if (!this.calledEffects.has(index)) {
         // Not called this render (its `if` is false now): destroyed.
-        slot.teardown?.();
+        slot.cleanup.dispose();
         this.effects.delete(index);
         ran = true;
         continue;
@@ -499,17 +535,16 @@ export class Instance {
       const inputs = deepCopy(values);
       if (slot.hasRun && deepEqual(slot.inputs, inputs)) continue;
       slot.hasRun = true;
-      slot.teardown?.();
-      slot.teardown = undefined;
+      const acceptCleanup = slot.cleanup.begin();
       const outer = computation;
       const trace: Computation = { reads: new Set(), writes: new Set() };
       computation = trace;
-      const result = slot.callback();
+      const result = runEffectInvocation(slot.callback);
       computation = outer;
       slot.reads = new Set([...trace.reads].filter((read) => {
         return !(read instanceof MemoSlot) || !trace.writes.has(read);
       }));
-      settleTeardown(result, (teardown) => (slot.teardown = teardown));
+      settleTeardown(result, acceptCleanup);
       // The effect already saw its own synchronous writes. They update the UI,
       // but do not immediately re-trigger this effect.
       slot.inputs = deepCopy([...slot.readInputs(), ...readValues(slot.reads)]);
@@ -525,7 +560,7 @@ export class Instance {
   }
 
   unmount(): void {
-    for (const slot of this.effects.values()) slot.teardown?.();
+    for (const slot of this.effects.values()) slot.cleanup.dispose();
     this.effects.clear();
     for (const cleanup of this.cleanups.reverse()) cleanup();
     this.cleanups.length = 0;
@@ -547,6 +582,12 @@ function settleTeardown(result: unknown, store: (teardown: () => void) => void):
 
 let rendering: Instance | null = null;
 
+/** Helpers register with the instance that invokes them, independently of their module. */
+export function $ownedEffect(site: string, inputs: () => unknown[], callback: () => unknown): void {
+  if (rendering !== null) rendering.effect(site, inputs, callback);
+  else $moduleEffect(inputs, callback);
+}
+
 /** Called first in every transformed component: the instance being rendered. */
 export function $enter(): Instance {
   if (rendering === null) throw new Error('reference: a component was called outside a render');
@@ -562,10 +603,11 @@ interface ModuleEffect {
   /** Undefined until the first run. */
   inputs: unknown;
   hasRun: boolean;
-  teardown: (() => void) | undefined;
+  cleanup: EffectCleanup;
 }
 
 interface ModuleMemo {
+  readonly invocation: boolean;
   readInputs: () => unknown[];
   update: () => unknown;
   /** The value it last computed. */
@@ -582,14 +624,14 @@ class ModuleEffects {
   addMemo(readInputs: () => unknown[], update: () => unknown, value: unknown): ModuleMemo {
     const sources = value instanceof Waiting ? value.sources : [];
     const inputs = deepCopy([...readInputs(), ...sources]);
-    const memo = { readInputs, update, value, sources, inputs, writtenLater: false };
+    const memo = { readInputs, update, value, sources, inputs, writtenLater: false, invocation: effectInvocation };
     this.memos.push(memo);
     return memo;
   }
 
   refreshMemos(): void {
     for (const memo of this.memos) {
-      if (memo.writtenLater) continue;
+      if (memo.writtenLater || memo.invocation) continue;
       const values = memo.readInputs();
       const inputs = deepCopy([...values, ...memo.sources]);
       if (deepEqual(memo.inputs, inputs)) continue;
@@ -602,7 +644,7 @@ class ModuleEffects {
   }
 
   add(readInputs: () => unknown[], callback: () => unknown): void {
-    this.effects.push({ readInputs, callback, inputs: undefined, hasRun: false, teardown: undefined });
+    this.effects.push({ readInputs, callback, inputs: undefined, hasRun: false, cleanup: new EffectCleanup() });
   }
 
   /** Run module effects that are new or whose inputs changed. Returns whether any ran. */
@@ -616,9 +658,8 @@ class ModuleEffects {
 
       effect.hasRun = true;
       effect.inputs = inputs;
-      effect.teardown?.();
-      effect.teardown = undefined;
-      settleTeardown(effect.callback(), (teardown) => (effect.teardown = teardown));
+      const acceptCleanup = effect.cleanup.begin();
+      settleTeardown(runEffectInvocation(effect.callback), acceptCleanup);
       effect.inputs = deepCopy(effect.readInputs());
       ran = true;
     }
@@ -626,7 +667,7 @@ class ModuleEffects {
   }
 
   unmount(): void {
-    for (const effect of this.effects) effect.teardown?.();
+    for (const effect of this.effects) effect.cleanup.dispose();
     this.effects.length = 0;
     this.memos.length = 0;
   }

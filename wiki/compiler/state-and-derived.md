@@ -1,5 +1,11 @@
 # Props, state and derived values
 
+Effect execution locals retain their invocation's values for cleanup, including
+shared storage created by helpers during that execution. They do not independently
+recompute after the effect returns. Reading an outer reactive binding directly
+still reads its current value. This is the 2026-10-26 user decision on
+`effects.md`; component/module derivation rules below remain in force.
+
 **Folders:** `features/props/`, `features/state/`, `features/derived/` (graph
 classification built in Phase 2; component-local assignment versions built in
 Phase 3; local versioned memos and definite body replay built).

@@ -98,10 +98,13 @@ describe('primitive text sites', () => {
 });
 
 describe('features of later phases fail with their phase', () => {
-  it('rejects the ambient lifecycle calls, but not a local function with the same name', () => {
-    expect(() => inspect('export function App() { $effect(() => {}); return <p />; }')).toThrow('`$effect` from Phase 7');
-    expect(() => inspect('export function App() { $cleanup(() => {}); return <p />; }')).toThrow('`$cleanup` from Phase 7');
-    expect(() => inspect('const $effect = (fn) => fn(); export function App() { $effect(() => {}); return <p />; }')).not.toThrow();
+  it('plans ambient lifecycle calls and preserves a shadowed local function', () => {
+    const effect = inspect('export function App() { $effect(() => {}); return <p />; }');
+    expect(effect.plan.effects.calls.map((call) => call.kind)).toEqual(['$effect']);
+    const cleanup = inspect('export function App() { $cleanup(() => {}); return <p />; }');
+    expect(cleanup.plan.effects.calls.map((call) => call.kind)).toEqual(['$cleanup']);
+    const shadowed = inspect('const $effect = (fn) => fn(); export function App() { $effect(() => {}); return <p />; }');
+    expect(shadowed.plan.effects.calls).toEqual([]);
   });
 
   it('rejects value imports from the data package, including server-function clients', () => {

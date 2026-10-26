@@ -22,6 +22,7 @@ export interface BuildFrame {
   readonly scope: object;
   readonly previous: BuildFrame | null;
   readonly epoch: number;
+  readonly invocation: boolean;
   readonly onAbandon?: () => void;
 }
 
@@ -44,6 +45,16 @@ function buildStore(): BuildStore {
 
 export function isBuilding(): boolean {
   return buildStore().current !== null;
+}
+
+/** Feature-owned context follows the same frames and exception recovery as setup. */
+export function currentBuildFrame(): BuildFrame | null {
+  return buildStore().current;
+}
+
+/** Effect-owned locals are native invocation values, not independent memos. */
+export function isEffectInvocation(): boolean {
+  return buildStore().current?.invocation ?? false;
 }
 
 function reset(store: BuildStore): void {
@@ -92,7 +103,7 @@ export function captureBuildScope(): () => void {
 }
 
 /** Each invocation has its own identity, even when an entity id is reused. */
-export function createBuildScope(shared = false, inheritOwner = false): BuildScope {
+export function createBuildScope(shared = false, inheritOwner = false, invocation = false): BuildScope {
   const runtime = getActiveApplicationRuntime();
   const store = buildStore();
   // A lexical block shares its surrounding setup's write ownership, but needs
@@ -102,7 +113,10 @@ export function createBuildScope(shared = false, inheritOwner = false): BuildSco
   return {
     enter(onAbandon) {
       const active = shared ? buildStore() : store;
-      const frame: BuildFrame = { owner, scope, previous: active.current, epoch: active.epoch, onAbandon };
+      const frame: BuildFrame = {
+        owner, scope, previous: active.current, epoch: active.epoch, onAbandon,
+        invocation: invocation || (active.current?.invocation ?? false),
+      };
       frameStores.set(frame, active);
       active.current = frame;
       if (!active.queued) {

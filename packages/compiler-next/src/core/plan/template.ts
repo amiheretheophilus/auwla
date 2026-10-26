@@ -201,7 +201,10 @@ class TemplateBuilder {
       return;
     }
     if (RESERVED_ATTRIBUTES.has(name)) return;
-    if (name === 'ref') unsupported(this.context, attribute, 'refs', 7);
+    if (name === 'ref') {
+      sites.push({ kind: 'ref', expression: attributeExpression(attribute.value), reactive: false });
+      return;
+    }
 
     const value = attribute.value;
     const expression = attributeExpression(value);

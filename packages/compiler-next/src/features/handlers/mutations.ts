@@ -19,6 +19,7 @@ export function emitMutations(
   // One notification per binding: every edit of `data` bumps the same version
   // and marks the same batch, wherever the edit is.
   const notifiers = new Map<BindingNode, string>(declared);
+  const refNotifiers = new Map<BindingNode, string>();
   const notifierOf = (binding: BindingNode): string => {
     let notify = notifiers.get(binding);
     if (notify === undefined) {
@@ -29,7 +30,16 @@ export function emitMutations(
           : keys.has(binding) ? expression('$$batch.mark($$key)', { batch, key: keys.get(binding)! }) : expression('$$batch.mark()', { batch }),
       }));
     }
-    return notify;
+    if (binding.kind !== 'Ref') return notify;
+    let refNotify = refNotifiers.get(binding);
+    if (refNotify === undefined) {
+      refNotify = names.fresh(`_edited_${binding.binding.name}`);
+      refNotifiers.set(binding, refNotify);
+      declarations.push(statement('function $$refNotify() { if (!$$runtime.isRefNode($$binding)) $$notify(); }', {
+        refNotify, runtime, binding: binding.binding.name, notify,
+      }));
+    }
+    return refNotify;
   };
   for (const plan of [...plans].sort((a, b) => (a.operation.end - a.operation.start) - (b.operation.end - b.operation.start))) {
     const notifications = [];

@@ -9,6 +9,7 @@ import { copy } from '../../core/emit/copy';
 import { expression, statement } from '../../core/emit/quote';
 
 export interface SharedOwnerEmit {
+  readonly invocation: string;
   readonly plan: SharedOwnerPlan;
   readonly versions: ReadonlyMap<BindingNode, string>;
   readonly keys: ReadonlyMap<BindingNode, string>;
@@ -43,6 +44,7 @@ export function emitSharedState(plan: ModulePlan, names: Names, runtime: string,
     const batch = names.fresh('_sharedWrites');
     const refresh = names.fresh('_refreshShared');
     const ready = names.fresh('_sharedReady');
+    const invocation = names.fresh('_effectInvocation');
     const declarations: Statement[] = [];
     const notifiers = new Map<BindingNode, string>();
     for (const binding of owner.state) {
@@ -107,6 +109,7 @@ export function emitSharedState(plan: ModulePlan, names: Names, runtime: string,
       }
     }
     declarations.push(statement(`const $$scope = $$runtime.createBuildScope(true, ${owner.block !== null});`, { scope, runtime }));
+    declarations.push(statement('const $$invocation = $$runtime.isEffectInvocation();', { invocation, runtime }));
     declarations.push(statement('let $$ready = false;', { ready }));
     // A write wakes readers of what it wrote and of every derived binding,
     // which recomputes on read; readers of other state stay asleep.
@@ -128,7 +131,7 @@ export function emitSharedState(plan: ModulePlan, names: Names, runtime: string,
     declarations.push(statement('const $$batch = $$runtime.createSharedWrites($$keys, $$recomputed);', {
       batch, runtime, keys: keyList(keys.keys()), recomputed: keyList(recomputed),
     }));
-    owners.push({ plan: owner, versions, keys, scope, frame, batch, refresh, ready, declarations, notifiers });
+    owners.push({ plan: owner, versions, keys, scope, frame, batch, refresh, ready, invocation, declarations, notifiers });
   }
   const importedReaders = new Map<BindingNode, string>();
   for (const binding of plan.module.module.bindings) {
@@ -197,7 +200,7 @@ export function finishSharedOwner(
       b.IfStatement({
         // Unchanged since the last refresh began: nothing was written that
         // could change a derivation or a watched root.
-        test: expression('!$$ready || !$$batch.stale() || $$scope.active()', { ready, scope, batch }),
+        test: expression('$$invocation || !$$ready || !$$batch.stale() || $$scope.active()', { invocation: owner.invocation, ready, scope, batch }),
         consequent: b.ReturnStatement({ argument: null }), alternate: null,
       }),
       statement('$$batch.refreshing();', { batch }),

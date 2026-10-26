@@ -17,7 +17,39 @@
  * processing.
  */
 
-import { getActiveApplicationRuntime, getActiveEnvironment, holdScheduling, releaseScheduling } from './kernel';
+import { getActiveApplicationRuntime, getActiveEnvironment, getExtensionStore, holdScheduling, releaseScheduling, runWithApplicationRuntime } from './kernel';
+
+function refQueue(): { pending: Set<object>; ready: Set<() => void> } {
+  return getExtensionStore('mmd:pending-refs', () => ({ pending: new Set<object>(), ready: new Set<() => void>() }));
+}
+
+/** Effects wait for authored ref callbacks, including refs installed by an update. */
+export function hasPendingRefs(): boolean {
+  return refQueue().pending.size > 0;
+}
+
+/** Queue once after the current creation stack and its deferred ref callbacks. */
+export function afterRefs(callback: () => void): () => void {
+  const queue = refQueue();
+  const runtime = getActiveApplicationRuntime();
+  let active = true;
+  const run = () => {
+    if (active) runWithApplicationRuntime(runtime, callback);
+  };
+  queue.ready.add(run);
+  queueMicrotask(() => {
+    if (queue.pending.size === 0 && queue.ready.delete(run)) run();
+  });
+  return () => { active = false; queue.ready.delete(run); };
+}
+
+function finishRef(queue: ReturnType<typeof refQueue>, ticket: object): void {
+  queue.pending.delete(ticket);
+  if (queue.pending.size > 0) return;
+  const ready = [...queue.ready];
+  queue.ready.clear();
+  for (const run of ready) queueMicrotask(run);
+}
 
 export type RefCallback<T extends Node = Node> = (
   node: T,
@@ -31,6 +63,12 @@ export type RefValue<T extends Node = Node> =
 
 /** Flags compiler-emitted assignable-target adapters as creation-time safe. */
 const REF_ASSIGN = Symbol('memo-dom.refAssign');
+const refNodes = new WeakSet<object>();
+
+/** Mounted ref nodes are imperative DOM handles, not traversable state roots. */
+export function isRefNode(value: unknown): boolean {
+  return value !== null && (typeof value === 'object' || typeof value === 'function') && refNodes.has(value);
+}
 
 /**
  * Mark a compiler-emitted adapter that only assigns its node to a source
@@ -41,6 +79,21 @@ export function refAssign<T extends Node>(
 ): RefCallback<T> {
   (assign as RefCallback<T> & { [REF_ASSIGN]?: true })[REF_ASSIGN] = true;
   return assign;
+}
+
+/** A target holding a callback forwards it; other targets receive the mounted node. */
+export function assignRef<T extends Node>(read: () => unknown, write: (node: T | undefined) => void): RefCallback<T> {
+  return refAssign((node: T) => {
+    const current = read();
+    if (typeof current === 'function' || Array.isArray(current)) {
+      return mountRef(node, current as RefValue<T>);
+    }
+    write(node);
+    return () => {
+      // A replacement can mount before the old owner's teardown finishes.
+      if (read() === node) write(undefined);
+    };
+  });
 }
 
 /** Mount refs left-to-right and return one idempotent reverse-order disposer. */
@@ -70,6 +123,9 @@ export function mountRef<T extends Node>(
       dispose?.();
     };
   }
+
+  if (value == null || value === false) return () => {};
+  refNodes.add(node);
 
   const eager: RefValue<T>[] = [];
   const deferred: RefValue<T>[] = [];
@@ -102,10 +158,18 @@ export function mountRef<T extends Node>(
   run(eager);
 
   if (deferred.length > 0) {
+    const runtime = getActiveApplicationRuntime();
+    const pending = refQueue();
+    const ticket = {};
+    pending.pending.add(ticket);
+    disposers.push(() => finishRef(pending, ticket));
     const runDeferred = (): void => {
-      if (!active || mounted) return;
-      mounted = true;
-      run(deferred);
+      runWithApplicationRuntime(runtime, () => {
+        if (!active || mounted) return;
+        mounted = true;
+        run(deferred);
+        finishRef(pending, ticket);
+      });
     };
     if (isLive(node)) {
       runDeferred();

@@ -54,6 +54,8 @@ export interface ReturnsContext {
   selectsMarkup(expression: Expression): boolean;
   /** The reactive bindings a statement reads, and whether some reads are hidden. */
   inputsOf(statement: Statement): { readonly inputs: readonly BindingNode[]; readonly opaque: boolean };
+  /** Lifecycle registrations must be reached on every selection of their path. */
+  hasLifecycle?(statement: Statement): boolean;
 }
 
 export function planReturns(body: readonly Statement[], context: ReturnsContext): ReturnsPlan {
@@ -90,7 +92,7 @@ export function planReturns(body: readonly Statement[], context: ReturnsContext)
       continue;
     }
     segment = null;
-    const guards = returningGuards(statement, statement, usesBlockLocal).map((guarded) => {
+    const guards = returningGuards(statement, statement, usesBlockLocal).filter((guarded) => !context.hasLifecycle?.(guarded)).map((guarded) => {
       return { statement: guarded, ...context.inputsOf(guarded) };
     });
     steps.push({ kind: 'native', statement, guards });

@@ -38,6 +38,7 @@ import { ClosureCells } from './closures';
 import { enclosingFunction, Reads } from './reads';
 import {
   buildModuleMemos,
+  generatedReadBinding,
   captureModuleRead,
   inputsOf,
   isDataCall,
@@ -94,7 +95,7 @@ const GUARDABLE_STATEMENTS = new Set<string>([
 ]);
 
 const RUNTIME_EXPORTS = [
-  '$h', 'Fragment as $Fragment', '$enter', '$assignRef', '$moduleEffect', '$moduleMemo',
+  '$h', 'Fragment as $Fragment', '$enter', '$assignRef', '$moduleEffect', '$ownedEffect', '$moduleMemo',
   '$when', '$value', '$waiting', '$sourceState', '$branch', '$switch', '$path', '$ready',
   '$captureRead', '$closureCell', '$closureRead',
   '$privateTarget',
@@ -458,8 +459,16 @@ class ComponentRewrite {
     return findAll(statement, 'ReturnStatement').some((ret) => this.enclosingFunction(ret) === this.component);
   }
 
-  private containsLifecycleCall(statement: Node, name: '$effect' | '$cleanup'): boolean {
-    return findAll(statement, 'CallExpression').some((call) => this.isLifecycleCall(call, name));
+  private containsLifecycleCall(statement: Node, name: '$effect' | '$cleanup', visited = new Set<Node>()): boolean {
+    return findAll(statement, 'CallExpression').some((call) => {
+      if (is.Identifier(call.callee, name) && !this.module.referenceOf(call.callee)?.binding) return true;
+      if (!is.Identifier(call.callee)) return false;
+      const binding = this.module.referenceOf(call.callee)?.binding;
+      const fn = binding === null || binding === undefined ? undefined : this.reads.functionOf(binding);
+      if (fn === undefined || visited.has(fn) || fn.body === null) return false;
+      visited.add(fn);
+      return this.containsLifecycleCall(fn.body, name, visited);
+    });
   }
 
   /** A call of the ambient `$effect` / `$cleanup`, directly in this component's body. */
@@ -935,7 +944,22 @@ class ComponentRewrite {
         return statusInput(binding, this.guardRead(binding), [callback], this.rawUses);
       });
       const inputs = thunk(b.ArrayExpression({ elements }));
-      this.lifecycleCalls.set(call, ctxCall('effect', [index, inputs, callback]));
+      let args = call.arguments as Expression[];
+      const argumentRoots = call.arguments as Node[];
+      const evaluatesCode = argumentRoots.some((root) => findAll(root, [
+        'CallExpression', 'NewExpression', 'AssignmentExpression', 'UpdateExpression',
+      ]).some((node) => this.enclosingFunction(node) === this.component));
+      if (evaluatesCode) {
+        // Registering the effect is reactive; setup expressions that produce its
+        // arguments still follow ordinary memo rules and must not run each pass.
+        const argInputs = this.inputList(this.reads.inside(argumentRoots, undefined), argumentRoots);
+        const value = ctxCall('memo', [numberLiteral(this.nextSlot++), argInputs,
+          thunk(b.ArrayExpression({ elements: call.arguments }))]);
+        args = [b.SpreadElement({ argument: b.MemberExpression({
+          object: value, property: b.Identifier({ name: 'v' }), computed: false, optional: false,
+        }) }) as unknown as Expression];
+      }
+      this.lifecycleCalls.set(call, ctxCall('effect', [index, inputs, ...args]));
     }
   }
 
@@ -1042,8 +1066,14 @@ class ComponentRewrite {
         const replacement = this.lifecycleCalls.get(node);
         if (replacement !== undefined) ctx.replace(replacement);
       },
-      Identifier: (_node, ctx) => {
+      Identifier: (node, ctx) => {
         const reference = ctx.reference;
+        const generated = generatedReadBinding(node);
+        if (generated !== undefined) {
+          const slot = this.slots.get(generated);
+          if (slot !== undefined) ctx.replace(member(slot.name, 'v'));
+          return;
+        }
         if (!reference?.binding || reference.inTypePosition) return;
         const nativePattern = this.patternOrigins.get(reference.binding);
         if (nativePattern && reference.node.start >= nativePattern.start && reference.node.end <= nativePattern.end) return;
@@ -1152,14 +1182,11 @@ function rewriteModuleEffects(module: Module): void {
 
   for (const call of module.findAll('CallExpression')) {
     if (!is.Identifier(call.callee, '$effect') || module.referenceOf(call.callee)?.binding) continue;
-    // Effects inside components are rewritten by `ComponentRewrite`.
-    if (enclosingFunction(module, call) !== undefined) continue;
-
     const callback = call.arguments[0] as Expression;
     const inputs = [...reads.ofCallback(callback)].map((binding) => identifier(binding.name));
     replacements.set(call, b.CallExpression({
-      callee: identifier('$moduleEffect'),
-      arguments: [thunk(b.ArrayExpression({ elements: inputs })), callback],
+      callee: identifier('$ownedEffect'),
+      arguments: [b.Literal({ value: `${module.path}:${call.start}`, raw: JSON.stringify(`${module.path}:${call.start}`) }), thunk(b.ArrayExpression({ elements: inputs })), ...call.arguments],
       optional: false,
     }));
   }

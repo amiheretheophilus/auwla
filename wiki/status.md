@@ -25,6 +25,21 @@ Last updated: 2026-10-26.
 
 ## Done
 
+- Phase 7 implementation (2026-10-26; full CI pending): effects, cleanup, module
+  effects, loop/conditional/helper registrations and reactive refs are built on
+  existing runtime ownership, collectors, write batches and ref mounting. Ref
+  assignments reuse ordinary write/mutation emission; imported member roots and
+  generic hosts are covered. Early-return paths dispose and reactivate effects.
+  Effect execution locals retain that run's values, as the user explicitly chose;
+  obsolete async cleanup runs immediately without replacing current teardown.
+  The reference fixes retain the original assertions and independently cover
+  loop occurrences, generated guard bindings and async cleanup generations.
+  Local checks pass: 18 effect and 19 ref comparisons in both compiler modes,
+  74 focused compiler/plan/benchmark checks total, 63 runtime checks and 64 existing
+  lifecycle/ref integration checks. Both package type checks and the runtime
+  build pass. No full root suite or timing benchmark was run. Full CI is the next
+  gate before Phase 8. Performance remains paused.
+
 - Work order updated (2026-10-26): performance is paused at the user's request.
   Phase 7 effects, cleanup and reactive refs are next, followed by the remaining
   feature phases. Reuse existing runtime ownership and tracking, keep code readable
