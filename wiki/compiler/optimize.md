@@ -381,6 +381,15 @@ allocates (`../decisions.md`, 2026-10-26):
   of something read from them (`result[0].label = …`). Object literals with
   accessors or a custom `__proto__` stay observed: a store or read can execute
   their authored setter or getter despite the receiver being newly allocated;
+- it never changes a fresh receiver's prototype. Computed store parameters
+  must also differ from `__proto__`, checked without converting them early;
+  locally built keys whose string concatenation could produce that name keep
+  observation. Computed object-literal keys use data-property creation and need
+  only the primitive conversion check;
+- a fresh array with explicit member stores is not also used as a method
+  receiver. A store can replace a native method after the entry guard, including
+  on a later loop iteration. This conservatively keeps observation even for
+  disjoint index stores and method calls until that stronger proof exists;
 - it calls only array methods: copying (`slice`, `concat`, `filter`, `map`,
   `toReversed`, `toSpliced`, `with`) and reading (`indexOf`, `includes`, `at`,
   `find…`, `some`, `every`) on parameters or its own arrays, and editing
@@ -401,7 +410,8 @@ The names only select candidates. `observeHelper` (`runtime/src/method-calls.ts`
 skips the snapshot only when each argument the helper calls a method on is an
 ordinary array without its own such property, with the intrinsic species, and
 each method used is still the intrinsic captured at load, and every parameter
-marked for conversion is primitive; otherwise it observes the call as before.
+marked for conversion is primitive, with computed store keys excluding
+`__proto__`; otherwise it observes the call as before.
 This preserves edits from `valueOf`/`Symbol.toPrimitive`, including a conversion
 that throws. Octane's `updateRows`, `swapRows` and `removeRow` qualify;
 `shuffleRows` calls a generated `random()` and stays observed.
@@ -412,9 +422,14 @@ property) edits rows. Named callbacks and unproven conversions cannot establish
 the helper proof. `tests/cases/handlers.test.ts` compares callback edits, index
 and property-key coercion, own/inherited setters, getters, and a setter that
 edits before throwing against the reference in both compiler modes.
+Own/computed method replacement, direct/computed prototype replacement and a
+locally concatenated prototype key also match the reference. All five replacement
+cases and the concatenation case failed before their corresponding fixes.
 `runtime/tests/method-calls.test.ts` counts no snapshot for a proven call, and
 observes an own `slice`, a replaced `splice`, an object converted to an index,
-and a conversion that edits before throwing.
+and a conversion that edits before throwing. Its computed-key check skips
+snapshots for ordinary strings/symbols and observes a prototype change or
+authored key conversion.
 
 ### Outside review and correctness gate (2026-10-26)
 

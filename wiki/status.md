@@ -24,7 +24,18 @@ Last updated: 2026-10-26.
 
 ## Done
 
-- Fresh-allocation correctness gate (2026-10-26): helper proofs retain
+- Helper method/prototype correctness gate (2026-10-26): explicit member stores
+  and native method calls on the same fresh array keep observation, since entry
+  guards cannot establish that a later call still reaches the native method.
+  Prototype stores stay observed, and computed store parameters are checked for
+  `__proto__` as well as primitive type. Locally concatenated prototype keys also
+  keep observation. Six new reference comparisons first failed on optimized
+  output and now pass in both compiler modes (`compiler/optimize.md`). Both
+  package type checks, the runtime build, 56 focused compiler/handler/benchmark
+  checks and 18 runtime method-call checks pass locally. Full CI follows this
+  push; unrelated routing/toolchain work remains uncommitted.
+
+- Fresh-allocation correctness gate (2026-10-26, `7edc5540`): helper proofs retain
   observation for object accessors and custom prototypes, and require primitive
   computed store/object-literal keys. The pre-fix optimized output missed edits
   from own/inherited setters, an own getter, object/array store-key conversion,

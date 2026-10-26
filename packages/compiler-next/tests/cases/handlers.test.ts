@@ -4,6 +4,37 @@
 import { expect } from 'bun:test';
 import { behaves } from '../harness/run';
 
+for (const [name, key, body] of [
+  ['replacing an own array method', 'push', `const box = []; box.push = () => { rows[0].label = 'z'; }; box.push();`],
+  ['replacing a computed array method', 'push', `const box = []; box[key] = () => { rows[0].label = 'z'; }; box.push();`],
+  ['replacing an array prototype', '__proto__', `const box = []; box.__proto__ = proto; box.push();`],
+  ['replacing an object prototype', '__proto__', `const box = {}; box.__proto__ = proto; box.value = 'z';`],
+  ['replacing a computed object prototype', '__proto__', `const box = {}; box[key] = proto; box.value = 'z';`],
+  ['building a prototype key by concatenation', '__proto__', `let name = '__'; name += 'proto__'; const box = {}; box[name] = proto; box.value = 'z';`],
+] as const) {
+  behaves(`a helper observes effects after ${name}`, {
+    source: `
+      function prototypeFor(rows) {
+        return {
+          set value(next) { rows[0].label = next; },
+          push() { rows[0].label = 'z'; }
+        };
+      }
+      function help(rows, key, proto) { ${body} return rows; }
+      export function App() {
+        let rows = [{ label: 'a' }];
+        const key = '${key}';
+        const proto = prototypeFor(rows);
+        return <main><p>{rows[0].label}</p>
+          <button onClick={() => { help(rows, key, proto); }}>go</button></main>;
+      }`,
+    steps: [{ click: 'button' }],
+    check(container, observation) {
+      expect(container.querySelector('p')?.textContent).toBe(observation === 0 ? 'a' : 'z');
+    },
+  });
+}
+
 for (const [name, helper] of [
   ['own setter', `const box = { set value(next) { rows[0].label = next; } }; box.value = 'z';`],
   ['inherited setter', `const box = { __proto__: { set value(next) { rows[0].label = next; } } }; box.value = 'z';`],

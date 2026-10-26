@@ -82,7 +82,16 @@ it('does not treat accessor or custom-prototype allocations as inert fresh data'
   expect(proof(`const box = { get value() { rows[0].label = 'z'; return 1; } }; const value = box.value;`)).toBe(false);
   expect(proof(`const box = { __proto__: { set value(next) { rows[0].label = next; } } }; box.value = 'z';`)).toBe(false);
   expect(proof(`let key = 0; key = { toString() { rows[0].label = 'z'; return 'value'; } }; const box = {}; box[key] = 1;`)).toBe(false);
-  expect(compile('export function help(rows, key) { const box = {}; box[key] = 1; return rows; }')).toContain('help, [1]');
+  expect(compile('export function help(rows, key) { const box = {}; box[key] = 1; return rows; }')).toContain('help, [1], [1]');
+});
+
+it('keeps observation when fresh member writes can invalidate native method guards', () => {
+  const proof = (body: string) => compile(`export function help(rows) { ${body} return rows; }`).includes('observeHelper(');
+  expect(proof(`const box = []; box.push = () => { rows[0].label = 'z'; }; box.push();`)).toBe(false);
+  expect(proof(`const box = []; box[0] = rows[0]; box.push(rows[1]);`)).toBe(false);
+  expect(proof(`const box = {}; box.__proto__ = rows[0]; box.value = 1;`)).toBe(false);
+  expect(proof(`const box = {}; box['__proto__'] = rows[0]; box.value = 1;`)).toBe(false);
+  expect(proof(`let key = '__'; key += 'proto__'; const box = {}; box[key] = rows[0]; box.value = 1;`)).toBe(false);
 });
 
 async function mount(helper: string, optimize: boolean, setup = '') {

@@ -88,6 +88,29 @@ it('observes a helper when a converted parameter can execute authored code', () 
   expect(items[0]!.id).toBe(43);
 });
 
+it('observes computed helper keys that can change a fresh receiver prototype', () => {
+  const items = rows();
+  const { counts, reads, notify } = watch(() => items);
+  const help = (input: { id: number }[], key: PropertyKey, proto: object) => {
+    const box: Record<PropertyKey, unknown> = {};
+    box[key] = proto;
+    box.value = 42;
+    return input;
+  };
+  const proto = { set value(next: number) { items[0]!.id = next; } };
+  observeHelper(reads, notify, [], [], help, [1], [1])(items, 'data', proto);
+  observeHelper(reads, notify, [], [], help, [1], [1])(items, Symbol('data'), proto);
+  expect(counts).toEqual({ reads: 0, notified: 0 });
+  observeHelper(reads, notify, [], [], help, [1], [1])(items, '__proto__', proto);
+  expect(items[0]!.id).toBe(42);
+  expect(counts.notified).toBe(1);
+  observeHelper(reads, notify, [], [], help, [1], [1])(items, {
+    [Symbol.toPrimitive]() { items[0]!.id = 43; return 'data'; },
+  }, proto);
+  expect(items[0]!.id).toBe(43);
+  expect(counts.notified).toBe(2);
+});
+
 it('reports a proven receiver edit without a snapshot', () => {
   const items = rows();
   const { counts, reads, notify } = watch(() => items);

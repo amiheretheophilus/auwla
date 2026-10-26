@@ -97,8 +97,9 @@ export function emitMutations(
         });
         const methods = b.ArrayExpression({ elements: plan.helper.methods.map((name) => stringLiteral(name)) });
         const primitives = b.ArrayExpression({ elements: plan.helper.primitives.map(numberLiteral) });
-        call.callee = expression('$$runtime.observeHelper($$reads, $$notifications, $$copies, $$methods, $$helper, $$primitives)', {
-          runtime, helper: call.callee, copies, methods, primitives,
+        const propertyKeys = b.ArrayExpression({ elements: plan.helper.propertyKeys.map(numberLiteral) });
+        call.callee = expression('$$runtime.observeHelper($$reads, $$notifications, $$copies, $$methods, $$helper, $$primitives, $$propertyKeys)', {
+          runtime, helper: call.callee, copies, methods, primitives, propertyKeys,
           reads: b.ArrayExpression({ elements: reads }), notifications: b.ArrayExpression({ elements: notifications }),
         });
         replacements.set(plan.operation, call);

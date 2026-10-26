@@ -78,8 +78,11 @@ function argumentsProven(proof: ArrayMethod, args: readonly unknown[], proven: n
  * in `copies` is copied (or read) with the named method, so it must be an
  * ordinary array whose method resolves to the intrinsic without a getter, with
  * the intrinsic species; each name in `methods` is called on an array the
- * helper allocated, so `Array.prototype` must still hold the intrinsic. Helper
- * parameters used in native conversions must be primitive too. Then
+ * helper allocated without replacing its members, so `Array.prototype` must
+ * still hold the intrinsic. Helper
+ * parameters used in native conversions must be primitive too; computed store
+ * keys must also differ from `__proto__`, which can change the fresh receiver's
+ * prototype and expose authored setters. Then
  * the call edits nothing that existed before it and needs no snapshot.
  * Otherwise it is observed as the general path observes it. The arguments are
  * effect-free, so observing after they are evaluated sees the same edits.
@@ -92,6 +95,8 @@ export function observeHelper(
   helper: Function,
   /** Parameters whose use inside the helper performs a native conversion. */
   primitives: readonly number[] = [],
+  /** Parameters used as computed store keys, excluding the prototype setter. */
+  propertyKeys: readonly number[] = [],
 ): (...args: unknown[]) => unknown {
   return (...args) => {
     const intrinsic = (name: string) => {
@@ -101,6 +106,9 @@ export function observeHelper(
     let proven = methods.every(intrinsic);
     for (const index of primitives) {
       if (!primitive(args[index])) proven = false;
+    }
+    for (const index of propertyKeys) {
+      if (!primitive(args[index]) || args[index] === '__proto__') proven = false;
     }
     for (const [index, name] of copies) {
       const argument = args[index];

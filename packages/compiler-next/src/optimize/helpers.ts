@@ -18,6 +18,8 @@
  *   proven primitive or helper parameters guarded at the call boundary;
  * - allocates object literals without accessors or a custom prototype, since
  *   those can execute authored code when fresh members are read or stored;
+ * - never changes a fresh receiver's prototype, and never combines member
+ *   stores and native method calls on the same fresh array;
  * - constructs nothing, deletes nothing, iterates nothing, spreads nothing and
  *   does not suspend.
  *
@@ -46,6 +48,8 @@ export interface HelperProof {
   readonly methods: readonly string[];
   /** Parameters converted by native methods or property keys must be primitive. */
   readonly primitives: readonly number[];
+  /** Computed store keys must also differ from the prototype setter's name. */
+  readonly propertyKeys: readonly number[];
 }
 
 type FunctionDeclaration = Extract<Node, { type: 'FunctionDeclaration' }>;
@@ -78,9 +82,12 @@ export function provenHelper(module: Module, fn: FunctionDeclaration): HelperPro
   // define its own `push`).
   const fresh = new Set<Binding>();
   const arrays = new Set<Binding>();
+  const memberWrites = new Set<Binding>();
+  const methodReceivers = new Set<Binding>();
   const copies: (readonly [number, string])[] = [];
   const methods = new Set<string>();
   const primitives = new Set<number>();
+  const propertyKeys = new Set<number>();
   let proven = true;
   const fail = (ctx: { stop(): void }) => {
     proven = false;
@@ -88,23 +95,34 @@ export function provenHelper(module: Module, fn: FunctionDeclaration): HelperPro
   };
 
   /** No speculative reads: values computed inside the helper must be proven here. */
-  const primitiveArgument = (node: Node, visited = new Set<Binding>()): boolean => {
-    if (is.Literal(node)) return !('regex' in node) && (node.value === null || typeof node.value !== 'object');
+  const primitiveArgument = (node: Node, visited = new Set<Binding>(), propertyKey = false): boolean => {
+    if (is.Literal(node)) return !('regex' in node) && (node.value === null || typeof node.value !== 'object')
+      && (!propertyKey || node.value !== '__proto__');
     if (is.ParenthesizedExpression(node) || is.TSAsExpression(node) || is.TSNonNullExpression(node)
-      || is.TSSatisfiesExpression(node)) return primitiveArgument(node.expression, visited);
+      || is.TSSatisfiesExpression(node)) return primitiveArgument(node.expression, visited, propertyKey);
     if (is.Identifier(node)) {
       const binding = bindingOf(node);
       if (binding === null || visited.has(binding) || !local(binding)) return false;
       const param = paramBindings.indexOf(binding);
       if (param >= 0) {
         primitives.add(param);
+        if (propertyKey) propertyKeys.add(param);
         return true;
       }
       visited.add(binding);
       const declaration = binding.declarations[0];
       const declarator = declaration === undefined ? null : module.parentOf(declaration);
       if (declarator === null || !is.VariableDeclarator(declarator) || declarator.init === null
-        || !primitiveArgument(declarator.init, new Set(visited))) return false;
+        || !primitiveArgument(declarator.init, new Set(visited), propertyKey)) return false;
+      // Primitive strings can concatenate into the prototype setter's name.
+      // Keep += on computed store keys only for bindings that stay numeric.
+      const concatenatesKey = propertyKey && binding.references.some((reference) => {
+        const write = reference.isWrite ? module.parentOf(reference.node) : null;
+        return write !== null && is.AssignmentExpression(write) && write.operator === '+=';
+      });
+      const numericLiteral = (value: Node) => is.Literal(value)
+        && (typeof value.value === 'number' || typeof value.value === 'bigint');
+      if (concatenatesKey && !numericLiteral(declarator.init)) return false;
       // A numeric loop index stays primitive through ++ or += a primitive.
       // Any assignment we cannot establish keeps the whole call observed.
       for (const reference of binding.references) {
@@ -112,7 +130,8 @@ export function provenHelper(module: Module, fn: FunctionDeclaration): HelperPro
         const write = module.parentOf(reference.node);
         if (write !== null && is.UpdateExpression(write) && write.argument === reference.node) continue;
         if (write !== null && is.AssignmentExpression(write) && write.left === reference.node
-          && primitiveArgument(write.right, new Set(visited))) continue;
+          && (!concatenatesKey || numericLiteral(write.right))
+          && primitiveArgument(write.right, new Set(visited), propertyKey)) continue;
         return false;
       }
       return true;
@@ -187,7 +206,12 @@ export function provenHelper(module: Module, fn: FunctionDeclaration): HelperPro
         }
         const binding = bindingOf(target.object);
         if (binding === null || !fresh.has(binding)
-          || (target.computed && !primitiveArgument(target.property))) fail(ctx);
+          || (target.computed ? !primitiveArgument(target.property, new Set(), true)
+            : is.Identifier(target.property) && target.property.name === '__proto__')) {
+          fail(ctx);
+          return;
+        }
+        memberWrites.add(binding);
         return;
       }
       if (is.CallExpression(node)) {
@@ -231,13 +255,18 @@ export function provenHelper(module: Module, fn: FunctionDeclaration): HelperPro
           }
         }
         if (param >= 0) copies.push([param, name]);
-        else methods.add(name);
+        else {
+          methods.add(name);
+          methodReceivers.add(receiver!);
+        }
       }
     },
   });
-  // A declaration is visited before any use of its constant, so a store or
-  // call through it was checked against the right set.
-  return proven ? { copies, methods: [...methods], primitives: [...primitives] } : null;
+  // Entry guards cannot prove methods on an array whose own members the helper
+  // writes. A store may replace a method before a call, including on the next
+  // loop iteration. Keep observation until those writes are proven disjoint.
+  if ([...methodReceivers].some((receiver) => memberWrites.has(receiver))) proven = false;
+  return proven ? { copies, methods: [...methods], primitives: [...primitives], propertyKeys: [...propertyKeys] } : null;
 }
 
 type Call = Extract<Node, { type: 'CallExpression' }>;
