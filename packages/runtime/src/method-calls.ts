@@ -50,9 +50,12 @@ const proofs = new Map<unknown, Proof>();
 // `Array.prototype.slice` installs another function, which has no proof.
 const intrinsics = arrayPrototype as unknown as Record<string, unknown>;
 const intrinsicMap = intrinsics.map;
+/** Each proven intrinsic by name, as loaded. */
+const loaded = new Map<string, Function>();
 function prove(name: string, proof: Partial<Proof>): void {
   const method = intrinsics[name];
   if (typeof method === 'function') {
+    loaded.set(name, method);
     proofs.set(method, { species: false, converted: [], callback: -1, edits: false, ...proof });
   }
 }
@@ -105,6 +108,42 @@ function argumentsProven(proof: Proof, args: readonly unknown[], proven: number)
   // the function the compiler proved, at the position it proved.
   if (proof.edits && args[proof.callback] === undefined) return true;
   return ((proven >> proof.callback) & 1) === 1;
+}
+
+/**
+ * `helper(...args)` for a helper the compiler proved edits only arrays and
+ * objects it allocates itself (`compiler-next/src/optimize/helpers.ts`). The
+ * proof assumed the array methods it calls are the intrinsics: each argument
+ * in `copies` is copied (or read) with the named method, so it must be an
+ * ordinary array whose method resolves to the intrinsic without a getter, with
+ * the intrinsic species; each name in `methods` is called on an array the
+ * helper allocated, so `Array.prototype` must still hold the intrinsic. Then
+ * the call edits nothing that existed before it and needs no snapshot.
+ * Otherwise it is observed as the general path observes it. The arguments are
+ * effect-free, so observing after they are evaluated sees the same edits.
+ */
+export function observeHelper(
+  reads: readonly (() => unknown)[],
+  notify: readonly (() => void)[],
+  copies: readonly (readonly [number, string])[],
+  methods: readonly string[],
+  helper: Function,
+): (...args: unknown[]) => unknown {
+  return (...args) => {
+    const intrinsic = (name: string) => {
+      const method = loaded.get(name);
+      return method !== undefined && getOwnPropertyDescriptor(arrayPrototype, name)?.value === method;
+    };
+    let proven = methods.every(intrinsic);
+    for (const [index, name] of copies) {
+      const argument = args[index];
+      if (!isArray(argument) || !intrinsicSpecies(argument) || hasOwn.call(argument, name) || !intrinsic(name)) {
+        proven = false;
+      }
+    }
+    if (proven) return apply(helper, undefined, args);
+    return observeMutation(reads, notify).finish(apply(helper, undefined, args));
+  };
 }
 
 /**

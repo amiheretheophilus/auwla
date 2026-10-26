@@ -350,6 +350,37 @@ The same traces run for keyed and unkeyed leaf component rows, a both-mode
 check passes one props object as `this` while its fields stay the same, and the
 leaf conditions are checked one by one.
 
+## Read-only helpers
+
+`items = swapRows(items)` was observed by snapshotting everything `items`
+reaches, before and after the call, though `swapRows` only edits the copy it
+makes. `optimize/helpers.ts` proves a called helper edits only what it
+allocates (`../decisions.md`, 2026-10-26):
+
+- a module-level function declaration, never reassigned, with plain parameters,
+  not async or a generator; the call has no spread and effect-free arguments;
+- its body stores, updates and edits only its own locals and members of its
+  fresh constants (`const result = rows.slice()`, `[…]`, `{…}`), never a member
+  of something read from them (`result[0].label = …`);
+- it calls only array methods: copying (`slice`, `concat`, `filter`, `map`,
+  `toReversed`, `toSpliced`, `with`) and reading (`indexOf`, `includes`, `at`,
+  `find…`, `some`, `every`) on parameters or its own arrays, and editing
+  (`push`, `pop`, `shift`, `unshift`, `splice`, `reverse`, `fill`) only on its own
+  arrays; callbacks must have no explicit effect;
+- it constructs, deletes, iterates, spreads, destructures and suspends nothing.
+
+The names only select candidates. `observeHelper` (`runtime/src/method-calls.ts`)
+skips the snapshot only when each argument the helper calls a method on is an
+ordinary array without its own such property, with the intrinsic species, and
+each method used is still the intrinsic captured at load; otherwise it observes
+the call as before. Octane's `updateRows`, `swapRows` and `removeRow` qualify;
+`shuffleRows` calls a generated `random()` and stays observed.
+
+Checks: `optimize/helpers.dom.test.ts` qualifies each rule, and in both modes
+shows a helper's result and catches an argument whose `slice` (subclass or own
+property) edits rows. `runtime/tests/method-calls.test.ts` counts no snapshot
+for a proven call, and observes an own `slice` or a replaced `splice`.
+
 ## Implementation order after Phase 6
 
 Write batches now share recovery scheduling and publish dirty entities in groups

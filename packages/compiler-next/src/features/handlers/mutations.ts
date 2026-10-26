@@ -87,6 +87,23 @@ export function emitMutations(
         continue;
       }
     }
+    if (plan.kind === 'call' && plan.helper !== undefined) {
+      // `observeHelper(…, helper)(...arguments)`: the callee is read before the
+      // arguments, which are effect-free (`optimize/helpers.ts`).
+      const call = copy(plan.operation, replacements);
+      if (is.CallExpression(call)) {
+        const copies = b.ArrayExpression({
+          elements: plan.helper.copies.map(([index, name]) => b.ArrayExpression({ elements: [numberLiteral(index), stringLiteral(name)] })),
+        });
+        const methods = b.ArrayExpression({ elements: plan.helper.methods.map((name) => stringLiteral(name)) });
+        call.callee = expression('$$runtime.observeHelper($$reads, $$notifications, $$copies, $$methods, $$helper)', {
+          runtime, helper: call.callee, copies, methods,
+          reads: b.ArrayExpression({ elements: reads }), notifications: b.ArrayExpression({ elements: notifications }),
+        });
+        replacements.set(plan.operation, call);
+        continue;
+      }
+    }
     if (plan.kind === 'call') {
       const operation = copy(plan.operation, replacements);
       replacements.set(plan.operation, expression('$$runtime.observeMutation($$reads, $$notifications).finish($$operation)', {

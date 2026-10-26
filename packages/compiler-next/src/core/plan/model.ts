@@ -277,6 +277,15 @@ export interface MutationPlan {
     /** The call is a text site's whole value, shown by a row list (`optimize/row-lists.ts`). */
     readonly rowList?: boolean;
   };
+  /**
+   * Optional (`optimize/helpers.ts`): a call of a helper proven to edit only
+   * what it allocates, lowered to `observeHelper`, which skips the snapshot
+   * once the runtime proves the array methods the proof assumed.
+   */
+  readonly helper?: {
+    readonly copies: readonly (readonly [number, string])[];
+    readonly methods: readonly string[];
+  };
 }
 
 export interface ModulePlan {

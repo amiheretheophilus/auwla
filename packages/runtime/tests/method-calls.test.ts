@@ -1,5 +1,5 @@
 import { expect, it } from 'bun:test';
-import { observeMethod } from '../src/method-calls';
+import { observeHelper, observeMethod } from '../src/method-calls';
 import { createRowCache } from '../src/list-map';
 import { mutationTarget, recoverMutations, registerSharedMutationRoots } from '../src/mutation';
 
@@ -24,6 +24,33 @@ it('runs a proven read-only intrinsic without a snapshot', () => {
   expect(observeMethod(reads, notify, items, 'concat', 0)([{ id: 9 }])).toHaveLength(5);
   expect(observeMethod(reads, notify, items, 'map', 1)(pure)).toEqual([0, 1, 2, 3]);
   expect(counts).toEqual({ reads: 0, notified: 0 });
+});
+
+it('calls a proven helper without a snapshot only while the methods it assumed are the intrinsics', () => {
+  const swap = (input: { id: number }[]) => {
+    const result = input.slice();
+    result.splice(0, 1, result[1]!);
+    return result;
+  };
+  const items = rows();
+  const { counts, reads, notify } = watch(() => items);
+  expect(observeHelper(reads, notify, [[0, 'slice']], ['splice'], swap)(items).map((row) => row.id)).toEqual([1, 1, 2, 3]);
+  expect(counts).toEqual({ reads: 0, notified: 0 });
+  // An own `slice` that edits its receiver: the call is observed, and the edit reported.
+  Object.defineProperty(items, 'slice', {
+    value(this: { id: number }[]) { this[0]!.id = 7; return Array.from(this); },
+  });
+  observeHelper(reads, notify, [[0, 'slice']], ['splice'], swap)(items);
+  expect(counts.reads).toBeGreaterThan(0);
+  expect(counts.notified).toBe(1);
+  // A replaced intrinsic used on the helper's own array is observed too.
+  const other = rows();
+  const watched = watch(() => other);
+  const splice = Array.prototype.splice;
+  Array.prototype.splice = function (this: unknown[], ...args: unknown[]) { return Reflect.apply(splice, this, args); } as typeof splice;
+  observeHelper(watched.reads, watched.notify, [[0, 'slice']], ['splice'], swap)(other);
+  Array.prototype.splice = splice;
+  expect(watched.counts.reads).toBeGreaterThan(0);
 });
 
 it('reports a proven receiver edit without a snapshot', () => {

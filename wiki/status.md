@@ -24,6 +24,11 @@ Last updated: 2026-10-25.
 
 ## Done
 
+- Read-only helpers (2026-10-26, `decisions.md`): a call of a helper proven to
+  edit only what it allocates skips the whole-input snapshot once the runtime
+  proves the array methods it assumed (`compiler/optimize.md`, "Read-only
+  helpers"). Octane's `updateRows`, `swapRows` and `removeRow` qualify.
+
 - Old-model fast paths, step 5 (2026-10-26): templates built once and cloned.
   Every component, branch, stored JSX value and row now clones a template built
   with DOM calls once per document (`compiler/core.md`), reaching nodes through

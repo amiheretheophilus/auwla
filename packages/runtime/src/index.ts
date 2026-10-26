@@ -81,7 +81,7 @@ export {
   mutationTarget, deleteMutation, receiverMutationTarget, observeMutation, watchMutationRoots, checkMutationRoots,
   mutatedSince, mutationTime,
 } from './mutation';
-export { observeMethod } from './method-calls';
+export { observeHelper, observeMethod } from './method-calls';
 export { createRowCache } from './list-map';
 export { createRowList } from './row-list';
 export { createComputation, trackEquals, trackRead } from './computation';
