@@ -274,6 +274,11 @@ export function mutationTime(): number {
   return clock;
 }
 
+/** When an observed edit last changed `object` itself; 0 if never. */
+export function editTime(object: object): number {
+  return editedAt.get(object) ?? 0;
+}
+
 /** Whether an observed edit since `time` changed `value` or data reachable from it. */
 export function mutatedSince(value: unknown, time: number): boolean {
   if (time === clock || !isObject(value)) return false;

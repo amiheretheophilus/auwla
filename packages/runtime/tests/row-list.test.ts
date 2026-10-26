@@ -4,6 +4,7 @@ import { createRowList, type RowEntry } from '../src/row-list';
 import { reconcileList } from '../src/list-values';
 import { createRenderValue, type RenderProgram } from '../src/render-value';
 import { createComputation, publishVersions, trackRead } from '../src/computation';
+import { observeMutation } from '../src/mutation';
 
 const document = new Window().document as unknown as Document;
 
@@ -166,6 +167,30 @@ it('keeps accessor and inherited key reads on the full map path', () => {
   h.list.dispose();
 });
 
+it('proves a key again after an observed edit of its item, not on every pass', () => {
+  const h = routedHarness([1, 2]);
+  const [first] = h.items();
+  let descriptors = 0;
+  const proxy = new Proxy(first!, {
+    getOwnPropertyDescriptor(target, property) { descriptors++; return Reflect.getOwnPropertyDescriptor(target, property); },
+  });
+  h.map([proxy, h.items()[1]!]);
+  expect(descriptors).toBe(1);
+  h.map([...h.items()]);
+  expect(descriptors).toBe(1);
+  // An observed call that turns the key into an accessor stamps the item.
+  const observation = observeMutation([() => h.items()], [() => {}]);
+  Object.defineProperty(first!, 'key', { get: () => 1, configurable: true, enumerable: true });
+  observation.finish(undefined);
+  h.map([...h.items()]);
+  h.reset();
+  h.select(1);
+  expect(h.list.changed()).toBe(true);
+  h.update();
+  expect(h.keyReads()).toBe(2);
+  h.list.dispose();
+});
+
 it('unsubscribes shared routes even when a row throws during disposal', () => {
   const anchor = document.createTextNode('');
   document.createElement('ul').append(anchor);
@@ -317,6 +342,34 @@ it.each([true, false])('reuses, creates and removes exactly as the general path 
   }
 });
 
+/**
+ * Keys whose strings coincide or nearly do: the row list compares canonical
+ * keys instead of `key=${String(key)}`, and must equate exactly the same keys.
+ */
+const symbol = Symbol('1');
+const wide: readonly unknown[] = [
+  1, '1', 2, null, undefined, 0, -0, '0', '-0', NaN, 'NaN', 1e21, '1e+21', '1e21', Infinity, 'Infinity',
+  true, 'true', 1n, symbol, 'Symbol(1)', '', ' 1', '01', 1.5, '1.5',
+  { toString: () => '1' }, { toString: () => 'true' }, ['1'],
+];
+
+it('converts each object key once per pass, as the general path does', () => {
+  let conversions = 0;
+  const keys = [0, 1, 2].map((id) => ({ toString() { conversions++; return String(id); } }));
+  const items = keys.map((key) => ({ key, label: String(key) }));
+  const { list } = harness();
+  const general = { identity: (value: unknown) => `key=${String((value as Item).key)}`, create: (name: string) => ({ identity: name }), remove() {} };
+  for (const order of [[0, 1, 2], [2, 1, 0], [1, 2], [0, 2, 1]]) {
+    const step = order.map((index) => items[index]!);
+    conversions = 0;
+    list.map(step, () => {}, undefined);
+    const ours = conversions;
+    conversions = 0;
+    reconcileList([], step, general);
+    expect(ours).toBe(conversions);
+  }
+});
+
 it.each([true, false])('matches the model through long random sequences on one list (keyed: %p)', (keyed) => {
   let seed = 7;
   const random = (limit: number) => {
@@ -340,7 +393,7 @@ it.each([true, false])('matches the model through long random sequences on one l
     let model: ModelRow[] = [];
     for (let step = 0; step < 20; step++) {
       const after = Array.from({ length: random(7) }, () => {
-        const key = alphabet[random(alphabet.length)];
+        const key = wide[random(wide.length)];
         return { key, label: String(key) };
       });
       log.length = 0;

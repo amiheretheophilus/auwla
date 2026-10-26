@@ -27,6 +27,7 @@ import { createComputation, publishVersions, trackRead } from './computation';
 import { readListLength } from './list-values';
 import { lisPositions } from './list';
 import { createIndexedValueSlot, type RenderOwner, type ValueSlot } from './render-value';
+import { editTime, mutationTime } from './mutation';
 
 export interface RowEntry {
   /** The row's only root, an element. */
@@ -45,8 +46,10 @@ interface Row {
   readonly entry: RowEntry;
   /** Last item supplied to the entry; targeted refreshes must keep its index. */
   item: unknown;
-  /** As the general path names it: `key=…`, or `#index` without a key. */
-  identity: string;
+  /** The identity (`Identity`): its canonical key, or its index without a key. */
+  identity: unknown;
+  /** Whether `identity` is an index (`#index` in the general path). */
+  indexed: boolean;
   /** The key last evaluated; a primitive key that stays the same keeps its identity. */
   key: unknown;
   index: number;
@@ -56,6 +59,13 @@ interface Row {
   duplicate: boolean;
   /** The pass that matched or created it; a row is matched at most once per pass. */
   taken: number;
+  /** Key and index from the running pass, applied when it commits. */
+  nextKey: unknown;
+  nextIndex: number;
+  /** The item, key and edit time at which the routing proof last held. */
+  provenItem: unknown;
+  provenKey: unknown;
+  provenAt: number;
 }
 
 export interface RowList {
@@ -87,21 +97,51 @@ interface Route {
   ready: boolean;
 }
 
-function identityOf(key: unknown, index: number): string {
-  return key === undefined || key === null ? `#${index}` : `key=${String(key)}`;
+/**
+ * The general path names a keyed row `key=${String(key)}`: two keys are the
+ * same identity exactly when their strings are equal. This is that identity
+ * without building the string. A string that is the canonical form of a number
+ * (`String(Number(s)) === s`) stands for that number, so `'1'` and `1` meet;
+ * the inverse of a number's canonical string is the number itself, so a number
+ * needs no conversion. Any other string stands for itself. Map's SameValueZero
+ * then equates exactly the keys whose strings are equal (`-0` and `0` are both
+ * `'0'`, `NaN` is `'NaN'`; `'-0'` and `'1e21'` are not canonical, so they stay
+ * strings). Other keys convert with `String` first; an object's `toString` runs
+ * once per item and pass, as in the general path.
+ */
+function canonical(key: unknown): unknown {
+  if (typeof key === 'number') return key;
+  const text = typeof key === 'string' ? key : String(key);
+  const number = Number(text);
+  return String(number) === text ? number : text;
 }
 
-/** Whether `row` has the identity of `key` at `index`, without a string when that is decidable. */
-function sameIdentity(row: Row, key: unknown, index: number): boolean {
-  if (key === undefined || key === null) return (row.key === undefined || row.key === null) && row.index === index;
-  // Converting an object key may run its `toString`, so it runs every time.
-  if (key === row.key && typeof key !== 'object' && typeof key !== 'function') return true;
-  return identityOf(key, index) === row.identity;
+/** SameValueZero, as Map compares identities. */
+function sameValueZero(left: unknown, right: unknown): boolean {
+  return left === right || (left !== left && right !== right);
 }
 
-/** An untaken first occurrence with the identity of `key` at `index`. */
-function available(row: Row | undefined, key: unknown, index: number, stamp: number): row is Row {
-  return row !== undefined && row.taken !== stamp && !row.duplicate && sameIdentity(row, key, index);
+/** An item's identity before it is needed. */
+const UNSET: unique symbol = Symbol('unset');
+
+/** An untaken first occurrence, or undefined. */
+function untaken(row: Row | undefined, stamp: number): Row | undefined {
+  return row !== undefined && row.taken !== stamp && !row.duplicate ? row : undefined;
+}
+
+/**
+ * Whether `row` has the identity of an item with `key`, without converting the
+ * key when that is decidable; undefined when the canonical identity is needed.
+ * `identity` is the item's index when `indexed`, else its canonical key or UNSET.
+ * Two numbers, or two strings, are the same identity exactly when they are
+ * SameValueZero (distinct numbers have distinct canonical strings).
+ */
+function identityMatch(row: Row, key: unknown, indexed: boolean, identity: unknown): boolean | undefined {
+  if (indexed || row.indexed) return indexed && row.indexed && row.identity === identity;
+  if (identity !== UNSET) return sameValueZero(identity, row.identity);
+  const kind = typeof key;
+  if ((kind === 'number' || kind === 'string') && typeof row.key === kind) return sameValueZero(key, row.key);
+  return undefined;
 }
 
 export function createRowList(
@@ -129,6 +169,23 @@ export function createRowList(
       value = descriptor.value;
     }
     return Object.is(value, key);
+  }
+
+  /**
+   * `stableKey`, reused while it is known to hold. Every compiled edit stamps
+   * the object it changed (`mutation.ts`), including an observed call that
+   * turns the key into an accessor, so a single-member path proven for this
+   * item and key still holds while the item has no later stamp. Longer paths
+   * pass through objects the row does not keep, and are proven every pass.
+   */
+  function proven(row: Row, item: unknown, key: unknown): boolean {
+    if (keyPath !== undefined && keyPath.length === 1 && row.provenAt >= 0 && row.provenItem === item
+      && Object.is(row.provenKey, key) && editTime(item as object) <= row.provenAt) return true;
+    if (!stableKey(item, key)) return false;
+    row.provenItem = item;
+    row.provenKey = key;
+    row.provenAt = mutationTime();
+    return true;
   }
 
   function routeChanged(route: Route): boolean {
@@ -182,21 +239,28 @@ export function createRowList(
    * The first occurrence of each identity among the committed rows, kept
    * across passes and updated only for rows created, removed or mounted again.
    * A pass also enters its new first occurrences, so a later item with the same
-   * identity becomes a duplicate. Built on first use.
+   * identity becomes a duplicate. Built on first use. Keyed and index
+   * identities (`key=…` and `#…`) never meet, so they have separate maps.
    */
-  let identities: Map<string, Row> | null = null;
+  let identities: { readonly keyed: Map<unknown, Row>; readonly indexed: Map<unknown, Row> } | null = null;
   let pass = 0;
+  /** The array of the rows two passes ago, reused for the next pass's rows. */
+  let spare: Row[] | null = null;
 
-  function lookup(): Map<string, Row> {
+  function lookup(indexed: boolean): Map<unknown, Row> {
     if (identities === null) {
-      identities = new Map();
-      for (const row of rows) if (!row.duplicate) identities.set(row.identity, row);
+      identities = { keyed: new Map(), indexed: new Map() };
+      for (const row of rows) {
+        if (!row.duplicate) (row.indexed ? identities.indexed : identities.keyed).set(row.identity, row);
+      }
     }
-    return identities;
+    return indexed ? identities.indexed : identities.keyed;
   }
 
   function forget(row: Row): void {
-    if (identities?.get(row.identity) === row) identities.delete(row.identity);
+    if (identities === null) return;
+    const map = row.indexed ? identities.indexed : identities.keyed;
+    if (map.get(row.identity) === row) map.delete(row.identity);
   }
 
   function recover(): void {
@@ -216,10 +280,10 @@ export function createRowList(
     recover();
     const previous = rows;
     const length = readListLength(array);
-    const next: Row[] = [];
-    // Applied on commit: a pass that throws leaves the committed identities.
-    const keys: unknown[] = [];
-    const indexes: number[] = [];
+    // A nested pass finds no spare and allocates its own.
+    const next = spare ?? [];
+    spare = null;
+    let count = 0;
     const created: Row[] = [];
     /** Matched rows whose key value changed, with the rows that replace them. */
     const replaced: [old: Row, row: Row][] = [];
@@ -241,13 +305,21 @@ export function createRowList(
       // only first occurrence of its identity, so any such untaken row whose
       // identity agrees is the match. Try the rows after and before the last
       // match (unchanged, shifted, inserted or reversed runs); else look it up.
-      let row: Row | undefined = previous[last + 1];
-      if (!available(row, rowKey, index, stamp)) row = previous[last - 1];
-      let identity: string | null = null;
+      const indexed = rowKey === undefined || rowKey === null;
+      // Computed at most once per item: converting an object key runs its `toString`.
+      let identity: unknown = indexed ? index : UNSET;
+      let row = untaken(previous[last + 1], stamp);
+      let match = row === undefined ? false : identityMatch(row, rowKey, indexed, identity);
+      if (match === undefined) match = sameValueZero(identity = canonical(rowKey), row!.identity);
+      if (!match) {
+        row = untaken(previous[last - 1], stamp);
+        match = row === undefined ? false : identityMatch(row, rowKey, indexed, identity);
+        if (match === undefined) match = sameValueZero(identity = canonical(rowKey), row!.identity);
+      }
       let duplicate = false;
-      if (!available(row, rowKey, index, stamp)) {
-        identity = identityOf(rowKey, index);
-        row = lookup().get(identity);
+      if (!match) {
+        if (identity === UNSET) identity = canonical(rowKey);
+        row = lookup(indexed).get(identity);
         // Taken already by an earlier item (or created by it): a duplicate.
         if (row !== undefined && row.taken === stamp) {
           duplicate = true;
@@ -261,7 +333,7 @@ export function createRowList(
           // Same identity, another key value (`1` after `'1'`, `-0` after `0`):
           // a value slot mounts its row again (`render-value.ts`, `writeProgram`).
           old = row;
-          identity ??= row.identity;
+          identity = row.identity;
           row = undefined;
         }
       }
@@ -271,10 +343,13 @@ export function createRowList(
           entry.dispose();
           return;
         }
-        row = { entry, item, identity: identity!, key: rowKey, index, position: -1, duplicate, taken: stamp };
+        row = {
+          entry, item, identity, indexed, key: rowKey, index, position: -1, duplicate, taken: stamp,
+          nextKey: rowKey, nextIndex: index, provenItem: undefined, provenKey: undefined, provenAt: -1,
+        };
         created.push(row);
         if (old !== undefined) replaced.push([old, row]);
-        else if (!duplicate) lookup().set(row.identity, row);
+        else if (!duplicate) lookup(indexed).set(identity, row);
       } else {
         if (row.position < last) ordered = false;
         last = row.position;
@@ -286,13 +361,15 @@ export function createRowList(
       // the authored map on a routed change instead of using a cached lookup.
       if (routeable) {
         if (rowKey === null || rowKey === undefined || typeof rowKey === 'object'
-          || typeof rowKey === 'function' || row.duplicate || !stableKey(item, rowKey)) routeable = false;
+          || typeof rowKey === 'function' || row.duplicate || !proven(row, item, rowKey)) routeable = false;
         if (superseded()) return;
       }
-      next.push(row);
-      keys.push(rowKey);
-      indexes.push(index);
+      // Applied on commit: a pass that throws leaves the committed keys and indexes.
+      row.nextKey = rowKey;
+      row.nextIndex = index;
+      next[count++] = row;
     }
+    next.length = count;
 
     // Commit. Authored code runs again only in the removed rows' disposal.
     pending = null;
@@ -300,16 +377,22 @@ export function createRowList(
     const removed: Row[] = [];
     for (const row of previous) if (row.taken !== stamp && !row.duplicate) removed.push(row);
     for (const row of previous) if (row.taken !== stamp && row.duplicate) removed.push(row);
-    for (const row of removed) forget(row);
-    for (const [, row] of replaced) identities?.set(row.identity, row);
+    // With no row left, the identities go with them.
+    if (count === 0) identities = null;
+    else for (const row of removed) forget(row);
+    for (const [, row] of replaced) {
+      if (identities !== null) (row.indexed ? identities.indexed : identities.keyed).set(row.identity, row);
+    }
     if (!ordered || created.length > 0) place(next);
-    for (let position = 0; position < next.length; position++) {
+    for (let position = 0; position < count; position++) {
       const row = next[position]!;
-      row.key = keys[position];
-      row.index = indexes[position]!;
+      row.key = row.nextKey;
+      row.index = row.nextIndex;
       row.position = position;
     }
     rows = next;
+    // Nothing refers to the previous rows' array any longer.
+    spare = previous;
     canRoute = routeable;
     if (removed.length > 0) removeRows(removed, next.length);
     // A value slot writes its rows after the unmatched ones are removed.
@@ -413,7 +496,7 @@ export function createRowList(
         // Primitive row keys cannot strictly equal an object, null or undefined.
         // In particular, never coerce an authored object to perform this lookup.
         if (value === null || value === undefined || typeof value === 'object' || typeof value === 'function') return;
-        const row = lookup().get(identityOf(value, 0));
+        const row = lookup(false).get(canonical(value));
         if (row !== undefined && row.key === value) affected.add(row);
       };
       for (const route of changed) {
