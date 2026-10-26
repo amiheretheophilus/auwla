@@ -107,10 +107,40 @@ describe('features of later phases fail with their phase', () => {
     expect(shadowed.plan.effects.calls).toEqual([]);
   });
 
-  it('rejects value imports from the data package, including server-function clients', () => {
-    expect(() => inspect(`import { $read } from '@memoized-dom/data'; export const App = () => <p />;`)).toThrow('Phase 8');
-    expect(() => inspect(`import { createPageSource } from '@memoized-dom/data/internal'; export const x = 1;`)).toThrow('Phase 8');
-    expect(() => inspect(`import type { Source } from '@memoized-dom/data'; export const App = () => <p />;`)).not.toThrow();
+  it('plans direct source APIs now supported by Phase 8', () => {
+    const { component } = inspect(`
+      import { $read } from '@memoized-dom/data';
+
+      export function App() {
+        const user = $read(Promise.resolve({ name: 'Ada' }));
+
+        return <p>{user.name}</p>;
+      }
+    `);
+
+    expect(component.sources!.bindings.map((source) => source.binding.binding.name)).toEqual(['user']);
+  });
+
+  it('keeps Group and internal server-client APIs deferred to the rest of Phase 8', () => {
+    expect(() => inspect(`
+      import { Group } from '@memoized-dom/data';
+
+      export const App = () => <Group><p /></Group>;
+    `)).toThrow('Phase 8');
+
+    expect(() => inspect(`
+      import { createPageSource } from '@memoized-dom/data/internal';
+
+      export const x = 1;
+    `)).toThrow('Phase 8');
+  });
+
+  it('allows data-package type imports independently of execution support', () => {
+    expect(() => inspect(`
+      import type { Source } from '@memoized-dom/data';
+
+      export const App = () => <p />;
+    `)).not.toThrow();
   });
 
   it('plans components used as callback values and direct calls', () => {

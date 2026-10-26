@@ -41,7 +41,11 @@ Last updated: 2026-10-26.
   modes, 28 source/plan checks, 62 mutation/list checks and 103 existing
   state/memo/mutation/shared/handler comparisons, 40 data checks and 160 source/
   lifecycle/reference cases. The complete local source gate reports 13 passing
-  comparisons and 75 explicit Phase 8 deferrals. Broad CI validation is pending.
+  comparisons and 75 explicit Phase 8 deferrals. The first broad gate passes
+  cases, reference and generators; its unit job caught an obsolete test still
+  requiring every data import to fail. That phase-guard assertion now checks
+  supported source planning separately from deferred Group/internal APIs.
+  A rerun of the complete gate is pending.
   General source flow, patterns, lazy execution, source effects/reassignment,
   Group and atomic preparation remain explicit Phase 8 work. Performance is
   still paused.
