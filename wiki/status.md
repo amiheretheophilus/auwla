@@ -33,6 +33,14 @@ Last updated: 2026-10-25.
   mode on one list. Locally, inline reverse and remove100 at 10k are at or under
   old. Both type checks, 270 compiler and 131 runtime tests, the case files
   (unchanged 100 deferred failures) and the Chrome gates pass.
+  [Quick run 40290911237](https://github.com/amiheretheophilus/auwla/actions/runs/40290911237)
+  and [CI 40290905464](https://github.com/amiheretheophilus/auwla/actions/runs/40290905464)
+  pass at `289dd9dd`. Module rows now match or beat old on swap and remove 10k
+  (component 2.3/2.1 against 2.6/2.2 ms; inline 1.9/1.6 against 2.0/1.8). Octane
+  beats old on 10 of 24 operations (reverse, rotatef/b, removefirst,
+  removeevery10, displace3–8). Still behind: creation about 3× (Octane runlots
+  146 against 64 ms), update 5×, selection, and the owner and module-data
+  component placements, whose rows are not leaves yet.
   [Quick run 40289536569](https://github.com/amiheretheophilus/auwla/actions/runs/40289536569)
   at step 3 (`403d9e19`): module-component 10k create/update/clear 54/6.7/1.7 ms
   (step 2: 129/24/27.5; old 19/1.3/0.8). Octane swap 5.5, runlots 149 (old 67).
