@@ -1,6 +1,6 @@
 # Status
 
-Last updated: 2026-10-25.
+Last updated: 2026-10-26.
 
 ## Branches
 
@@ -23,6 +23,18 @@ Last updated: 2026-10-25.
 - The user put the agent in charge of the refactor on 2026-10-18 ("you are in charge now").
 
 ## Done
+
+- Helper correctness gate (2026-10-26): the supplied review is audited on
+  `compiler/optimize.md`, and correctness fixes precede further performance
+  changes (`decisions.md`). Named array callbacks stay observed unless their
+  executed body is proven; helper parameters used as native indices are checked
+  as primitive before skipping observation. The new handler cases fail on the
+  previous optimized output and pass on the reference and both compiler modes
+  after the fix. Runtime checks also preserve edits before a coercion throws.
+  Local validation: both type checks, 20 compiler/handler checks and 16 native
+  method-call checks pass. The current selection-routing work and toolchain
+  edits are unrelated and remain outside this change. Full CI follows the push;
+  no performance or OOM resolution is claimed.
 
 - Component roots skip their own edits (2026-10-26): an edit through a
   component's state binding no longer walks that binding's root, as for shared

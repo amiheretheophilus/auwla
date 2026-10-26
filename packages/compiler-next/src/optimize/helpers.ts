@@ -13,7 +13,9 @@
  * - calls only array methods on parameters or fresh locals: ones that return a
  *   new array (`slice`, `concat`, `filter`, …), ones that only read (`indexOf`,
  *   `includes`, …), and, on fresh locals only, ones that edit their receiver
- *   (`splice`, `push`, …); callbacks must have no explicit effect (`effects.ts`);
+ *   (`splice`, `push`, …); callbacks must be inline and have no explicit effect
+ *   (`effects.ts`), and converted arguments must be proven primitive or helper
+ *   parameters guarded as primitive at the call boundary;
  * - constructs nothing, deletes nothing, iterates nothing, spreads nothing and
  *   does not suspend.
  *
@@ -40,12 +42,21 @@ const COPIES = new Set(['slice', 'concat', 'filter', 'map', 'toReversed', 'toSpl
 const READS = new Set(['indexOf', 'lastIndexOf', 'includes', 'at', 'find', 'findIndex', 'findLast', 'findLastIndex', 'some', 'every']);
 /** Edit only their receiver. */
 const EDITS = new Set(['push', 'pop', 'shift', 'unshift', 'splice', 'reverse', 'fill']);
+const CALLBACKS = new Set(['filter', 'map', 'find', 'findIndex', 'findLast', 'findLastIndex', 'some', 'every']);
+/** Arguments whose native conversion can call authored valueOf/toPrimitive. */
+const CONVERTED = new Map<string, readonly number[]>([
+  ['slice', [0, 1]], ['indexOf', [1]], ['lastIndexOf', [1]], ['includes', [1]],
+  ['at', [0]], ['with', [0]], ['toSpliced', [0, 1]], ['splice', [0, 1]], ['fill', [1, 2]],
+]);
+const PRIMITIVE_RESULTS = new Set(['indexOf', 'lastIndexOf', 'includes', 'findIndex', 'findLastIndex', 'some', 'every']);
 
 export interface HelperProof {
   /** `[argument, method]`: the helper copies that argument with that method. */
   readonly copies: readonly (readonly [number, string])[];
   /** Methods called on fresh locals; they must still be the intrinsics. */
   readonly methods: readonly string[];
+  /** Helper parameters used in native conversions: their actual values must be primitive. */
+  readonly primitives: readonly number[];
 }
 
 type FunctionDeclaration = Extract<Node, { type: 'FunctionDeclaration' }>;
@@ -80,10 +91,44 @@ export function provenHelper(module: Module, fn: FunctionDeclaration): HelperPro
   const arrays = new Set<Binding>();
   const copies: (readonly [number, string])[] = [];
   const methods = new Set<string>();
+  const primitives = new Set<number>();
   let proven = true;
   const fail = (ctx: { stop(): void }) => {
     proven = false;
     ctx.stop();
+  };
+
+  /** No speculative reads: values computed inside the helper must be proven here. */
+  const primitiveArgument = (node: Node, visited = new Set<Binding>()): boolean => {
+    if (is.Literal(node)) return !('regex' in node) && (node.value === null || typeof node.value !== 'object');
+    if (is.ParenthesizedExpression(node) || is.TSAsExpression(node) || is.TSNonNullExpression(node)
+      || is.TSSatisfiesExpression(node)) return primitiveArgument(node.expression, visited);
+    if (is.Identifier(node)) {
+      const binding = bindingOf(node);
+      if (binding === null || visited.has(binding) || !local(binding)) return false;
+      const param = paramBindings.indexOf(binding);
+      if (param >= 0) {
+        primitives.add(param);
+        return true;
+      }
+      visited.add(binding);
+      if (binding.references.some((reference) => reference.isWrite)) return false;
+      const declaration = binding.declarations[0];
+      const declarator = declaration === undefined ? null : module.parentOf(declaration);
+      return declarator !== null && is.VariableDeclarator(declarator) && declarator.init !== null
+        && primitiveArgument(declarator.init, visited);
+    }
+    if (is.UnaryExpression(node)) {
+      if (node.operator === '!' || node.operator === 'typeof' || node.operator === 'void') return true;
+      return primitiveArgument(node.argument, visited);
+    }
+    if (is.CallExpression(node) && is.MemberExpression(node.callee) && !node.callee.computed
+      && is.Identifier(node.callee.property)) {
+      // The normal call check below proves this receiver and the actual native
+      // method. Those intrinsics return primitives, including indexOf's -1.
+      return PRIMITIVE_RESULTS.has(node.callee.property.name);
+    }
+    return false;
   };
 
   walk(fn.body!, {
@@ -144,6 +189,23 @@ export function provenHelper(module: Module, fn: FunctionDeclaration): HelperPro
           fail(ctx);
           return;
         }
+        if (CALLBACKS.has(name)) {
+          const callback = node.arguments[0];
+          // Reading a named function is effect-free; executing it need not be.
+          // Unknown callbacks keep the general observer, even when passed in
+          // through an otherwise effect-free helper argument.
+          if (callback === undefined || !is.Function(callback) || !effectFree(module, callback)) {
+            fail(ctx);
+            return;
+          }
+        }
+        for (const position of CONVERTED.get(name) ?? []) {
+          const argument = node.arguments[position];
+          if (argument !== undefined && !primitiveArgument(argument)) {
+            fail(ctx);
+            return;
+          }
+        }
         for (const argument of node.arguments) {
           if (is.Function(argument) && !effectFree(module, argument)) {
             fail(ctx);
@@ -157,7 +219,7 @@ export function provenHelper(module: Module, fn: FunctionDeclaration): HelperPro
   });
   // A declaration is visited before any use of its constant, so a store or
   // call through it was checked against the right set.
-  return proven ? { copies, methods: [...methods] } : null;
+  return proven ? { copies, methods: [...methods], primitives: [...primitives] } : null;
 }
 
 type Call = Extract<Node, { type: 'CallExpression' }>;

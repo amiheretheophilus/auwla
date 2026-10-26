@@ -53,6 +53,27 @@ it('proves helpers that edit only arrays and objects they allocate', () => {
   expect(compile('export function help(rows) { return rows.slice(); }', false)).not.toContain('observeHelper(');
 });
 
+it('keeps callbacks opaque unless their executed body is proven', () => {
+  const helper = `
+    export function help(rows, callback) { return rows.map(callback); }
+  `;
+  expect(compile(helper)).not.toContain('observeHelper(');
+  expect(compile(`
+    const edit = (row) => { row.label = 'edited'; return true; };
+    export function help(rows) { return rows.filter(edit); }
+  `)).not.toContain('observeHelper(');
+});
+
+it('guards converted parameters and keeps unproven conversion values observed', () => {
+  expect(compile('export function help(rows, start) { return rows.slice(start); }')).toContain('help, [1]');
+  expect(compile('export function help(rows) { return rows.slice(rows[0]); }').includes('observeHelper(')).toBe(false);
+  expect(compile(`
+    const index = external.indexOf();
+    export function help(rows) { return rows.slice(index); }
+  `).includes('observeHelper(')).toBe(false);
+  expect(compile('export function help(rows) { return rows.slice(/x/); }').includes('observeHelper(')).toBe(false);
+});
+
 async function mount(helper: string, optimize: boolean, setup = '') {
   const directory = join(import.meta.dirname, '../../tests/out/helpers');
   mkdirSync(directory, { recursive: true });

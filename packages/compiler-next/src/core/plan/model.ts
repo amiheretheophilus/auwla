@@ -285,6 +285,7 @@ export interface MutationPlan {
   readonly helper?: {
     readonly copies: readonly (readonly [number, string])[];
     readonly methods: readonly string[];
+    readonly primitives: readonly number[];
   };
 }
 

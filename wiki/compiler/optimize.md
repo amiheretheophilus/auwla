@@ -369,20 +369,51 @@ allocates (`../decisions.md`, 2026-10-26):
   `toReversed`, `toSpliced`, `with`) and reading (`indexOf`, `includes`, `at`,
   `find…`, `some`, `every`) on parameters or its own arrays, and editing
   (`push`, `pop`, `shift`, `unshift`, `splice`, `reverse`, `fill`) only on its own
-  arrays; callbacks must have no explicit effect;
+  arrays; callbacks must be inline function expressions whose executed bodies
+  have no explicit effect. A named or parameter callback stays observed: reading
+  its function value does not prove what calling it does;
+- every argument a native method converts is a proven primitive or a helper
+  parameter checked as primitive at the call boundary. Literal primitives,
+  unchanged local aliases and proven primitive intrinsic results qualify;
+  unproven values computed inside the helper keep observation. No argument is
+  evaluated early just to check its type;
 - it constructs, deletes, iterates, spreads, destructures and suspends nothing.
 
 The names only select candidates. `observeHelper` (`runtime/src/method-calls.ts`)
 skips the snapshot only when each argument the helper calls a method on is an
 ordinary array without its own such property, with the intrinsic species, and
-each method used is still the intrinsic captured at load; otherwise it observes
-the call as before. Octane's `updateRows`, `swapRows` and `removeRow` qualify;
+each method used is still the intrinsic captured at load, and every parameter
+marked for conversion is primitive; otherwise it observes the call as before.
+This preserves edits from `valueOf`/`Symbol.toPrimitive`, including a conversion
+that throws. Octane's `updateRows`, `swapRows` and `removeRow` qualify;
 `shuffleRows` calls a generated `random()` and stays observed.
 
 Checks: `optimize/helpers.dom.test.ts` qualifies each rule, and in both modes
 shows a helper's result and catches an argument whose `slice` (subclass or own
-property) edits rows. `runtime/tests/method-calls.test.ts` counts no snapshot
-for a proven call, and observes an own `slice` or a replaced `splice`.
+property) edits rows. Named callbacks and unproven conversions cannot establish
+the helper proof. `tests/cases/handlers.test.ts` compares callback edits and
+index coercion against the reference in both compiler modes.
+`runtime/tests/method-calls.test.ts` counts no snapshot for a proven call, and
+observes an own `slice`, a replaced `splice`, an object converted to an index,
+and a conversion that edits before throwing.
+
+### Outside review and correctness gate (2026-10-26)
+
+The supplied review correctly identifies list-wide selection, props allocation,
+local read closures, event listeners, teardown and narrow row eligibility as
+performance work. These are deferred while the helper proof is hardened. Its
+OOM attribution is unproven: allocation churn and falling back for destructured
+rows or spread arguments do not establish retained-heap growth or the cause of
+the reported crash. A fix cannot be claimed to eliminate that OOM without a
+repeat run and memory evidence.
+
+The proposed shortcuts also need their own proofs. Skipping a row must account
+for all reactive inputs and observable work, not only item identity and index.
+Spread argument iteration can edit the receiver, replace a method or throw;
+event delegation must preserve dispatch order; fused text must retain child-value
+semantics. No claimed percentage or "100% correctness" guarantee is accepted
+from the review alone. The old runtime already has guarded list paths, so it is
+not accurately described as always assuming native methods and plain data.
 
 ## Implementation order after Phase 6
 

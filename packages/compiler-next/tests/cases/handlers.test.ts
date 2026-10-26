@@ -4,6 +4,39 @@
 import { expect } from 'bun:test';
 import { behaves } from '../harness/run';
 
+behaves('a helper observes mutations from a named array callback', {
+  source: `
+    function help(rows, callback) { return rows.map(callback); }
+    function edit(row) { row.label = 'z'; return row; }
+    export function App() {
+      let rows = [{ label: 'a' }];
+      return <main><p>{rows[0].label}</p>
+        <button onClick={() => { help(rows, edit); }}>go</button></main>;
+    }`,
+  steps: [{ click: 'button' }],
+  check(container, observation) {
+    expect(container.querySelector('p')?.textContent).toBe(observation === 0 ? 'a' : 'z');
+  },
+});
+
+behaves('a helper observes mutations from an array index conversion', {
+  source: `
+    function help(rows, start) { return rows.slice(start); }
+    function startFor(rows) {
+      return { valueOf() { rows[0].label = 'z'; return 0; } };
+    }
+    export function App() {
+      let rows = [{ label: 'a' }];
+      const start = startFor(rows);
+      return <main><p>{rows[0].label}</p>
+        <button onClick={() => { help(rows, start); }}>go</button></main>;
+    }`,
+  steps: [{ click: 'button' }],
+  check(container, observation) {
+    expect(container.querySelector('p')?.textContent).toBe(observation === 0 ? 'a' : 'z');
+  },
+});
+
 behaves('a member expression as a handler', {
   source: `
     let count = 0;

@@ -25,6 +25,7 @@ Finds every place that changes state and makes the UI update after it.
 | `packages/runtime/tests/method-calls.test.ts` | Proven calls take no snapshot; own/replaced methods, subclass species, converting arguments, effectful callbacks and throws stay observed |
 | `optimize/methods.ts` | Lowers observed member calls to `observeMethod` and marks effect-free inline callbacks |
 | `optimize/methods.dom.test.ts` | Callback classification and native updates, overrides and order, with optimizations on and off |
+| `tests/cases/handlers.test.ts` | Reference comparisons for handlers, async writes, helper callbacks and index conversions whose edits must reach the UI |
 | `packages/runtime/src/write-batch.ts` | Captures the application and entity, publishes groups of pending writes, and shares recovery scheduling across unfinished batches |
 | `packages/runtime/tests/write-batch.test.ts` | Scheduler independence, nested listeners, native receivers/results, exceptions, disposal and application isolation |
 | `packages/runtime/tests/write-batch-recovery.test.ts` | Commit/callback counts, parent-child overlap, later writes, explicit renders, cross-application order and recovery failures |

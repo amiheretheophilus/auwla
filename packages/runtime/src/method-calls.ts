@@ -117,7 +117,8 @@ function argumentsProven(proof: Proof, args: readonly unknown[], proven: number)
  * in `copies` is copied (or read) with the named method, so it must be an
  * ordinary array whose method resolves to the intrinsic without a getter, with
  * the intrinsic species; each name in `methods` is called on an array the
- * helper allocated, so `Array.prototype` must still hold the intrinsic. Then
+ * helper allocated, so `Array.prototype` must still hold the intrinsic. Helper
+ * parameters used in native conversions must be primitive too. Then
  * the call edits nothing that existed before it and needs no snapshot.
  * Otherwise it is observed as the general path observes it. The arguments are
  * effect-free, so observing after they are evaluated sees the same edits.
@@ -128,6 +129,8 @@ export function observeHelper(
   copies: readonly (readonly [number, string])[],
   methods: readonly string[],
   helper: Function,
+  /** Parameters whose use inside the helper performs a native conversion. */
+  primitives: readonly number[] = [],
 ): (...args: unknown[]) => unknown {
   return (...args) => {
     const intrinsic = (name: string) => {
@@ -135,6 +138,9 @@ export function observeHelper(
       return method !== undefined && getOwnPropertyDescriptor(arrayPrototype, name)?.value === method;
     };
     let proven = methods.every(intrinsic);
+    for (const index of primitives) {
+      if (!primitive(args[index])) proven = false;
+    }
     for (const [index, name] of copies) {
       const argument = args[index];
       if (!isArray(argument) || !intrinsicSpecies(argument) || hasOwn.call(argument, name) || !intrinsic(name)) {

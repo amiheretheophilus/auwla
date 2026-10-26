@@ -260,7 +260,11 @@ array child). Remove each check when its phase is built.
   partial edits on exceptions and runs in the owning application. Tests and
   limitations stay on the relevant concept pages.
 - **Exit:** component correctness and the performance floor both matter. The
-  user's report at `874c826` passes benchmark correctness gates, but the old
+  correctness audit also includes the 2026-10-26 helper-proof regressions:
+  named callbacks and native index coercions must match the reference with
+  optimizations enabled and disabled (`optimize.md`, "Read-only helpers").
+  Fix these boundaries before further performance changes (`../decisions.md`).
+  The user's report at `874c826` passes benchmark correctness gates, but the old
   compiler is faster on all 24 Octane operations and the DOM update-style run
   ends in an OOM. The performance gate is unmet (`testing.md`). Phase 5's pending
   fast paths and new measurements remain before moving to Phase 7. The audit's

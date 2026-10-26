@@ -53,6 +53,26 @@ it('calls a proven helper without a snapshot only while the methods it assumed a
   expect(watched.counts.reads).toBeGreaterThan(0);
 });
 
+it('observes a helper when a converted parameter can execute authored code', () => {
+  const items = rows();
+  const { counts, reads, notify } = watch(() => items);
+  const help = (input: { id: number }[], start: number) => input.slice(start);
+  observeHelper(reads, notify, [[0, 'slice']], [], help, [1])(items, 1);
+  expect(counts).toEqual({ reads: 0, notified: 0 });
+  observeHelper(reads, notify, [[0, 'slice']], [], help, [1])(items, {
+    valueOf() { items[0]!.id = 42; return 1; },
+  });
+  expect(counts.notified).toBe(1);
+  expect(items[0]!.id).toBe(42);
+  const call = () => observeHelper(reads, notify, [[0, 'slice']], [], help, [1])(items, {
+    [Symbol.toPrimitive]() { items[0]!.id = 43; throw new Error('index conversion'); },
+  });
+  expect(call).toThrow('index conversion');
+  recoverMutations();
+  expect(counts.notified).toBe(2);
+  expect(items[0]!.id).toBe(43);
+});
+
 it('reports a proven receiver edit without a snapshot', () => {
   const items = rows();
   const { counts, reads, notify } = watch(() => items);
