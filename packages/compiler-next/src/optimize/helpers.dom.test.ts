@@ -35,6 +35,7 @@ it('proves helpers that edit only arrays and objects they allocate', () => {
   expect(proven('export function help(rows) { const result = rows.slice(); result[0] = { id: 9, label: "x" }; return result; }')).toBe(true);
   expect(proven('export function help(rows) { const result = rows.slice(); result.splice(result.indexOf(rows[0]), 1); return result; }')).toBe(true);
   expect(proven('export function help(rows) { if (rows.length < 1) return rows; const out = []; for (let i = 0; i < rows.length; i++) out.push(rows[i]); return out; }')).toBe(true);
+  expect(proven('export function help(rows) { const result = rows.slice(); for (let i = 0; i < result.length; i += 10) result[i] = { label: rows[i].label }; return result; }')).toBe(true);
   expect(proven('export function help(rows) { return rows.filter((row) => row.id > 1); }')).toBe(true);
   // Each of these could edit what the caller passed or holds.
   expect(proven('export function help(rows) { rows[0] = 1; return rows; }')).toBe(false);
@@ -72,6 +73,16 @@ it('guards converted parameters and keeps unproven conversion values observed', 
     export function help(rows) { return rows.slice(index); }
   `).includes('observeHelper(')).toBe(false);
   expect(compile('export function help(rows) { return rows.slice(/x/); }').includes('observeHelper(')).toBe(false);
+});
+
+it('does not treat accessor or custom-prototype allocations as inert fresh data', () => {
+  const proof = (body: string) => compile(`export function help(rows) { ${body} return rows; }`).includes('observeHelper(');
+  expect(proof(`const box = { value: 0 }; box.value = 1;`)).toBe(true);
+  expect(proof(`const box = { set value(next) { rows[0].label = next; } }; box.value = 'z';`)).toBe(false);
+  expect(proof(`const box = { get value() { rows[0].label = 'z'; return 1; } }; const value = box.value;`)).toBe(false);
+  expect(proof(`const box = { __proto__: { set value(next) { rows[0].label = next; } } }; box.value = 'z';`)).toBe(false);
+  expect(proof(`let key = 0; key = { toString() { rows[0].label = 'z'; return 'value'; } }; const box = {}; box[key] = 1;`)).toBe(false);
+  expect(compile('export function help(rows, key) { const box = {}; box[key] = 1; return rows; }')).toContain('help, [1]');
 });
 
 async function mount(helper: string, optimize: boolean, setup = '') {

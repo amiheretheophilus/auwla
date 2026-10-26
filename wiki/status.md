@@ -24,7 +24,17 @@ Last updated: 2026-10-26.
 
 ## Done
 
-- Catalog fallback gate (2026-10-26): an unlisted, dynamically installed array
+- Fresh-allocation correctness gate (2026-10-26): helper proofs retain
+  observation for object accessors and custom prototypes, and require primitive
+  computed store/object-literal keys. The pre-fix optimized output missed edits
+  from own/inherited setters, an own getter, object/array store-key conversion,
+  and a setter that edited before throwing. Reference comparisons cover those
+  effects and computed literal keys. Primitive numeric loop indices still
+  qualify (`compiler/optimize.md`). The package type check and 37 focused
+  helper, handler and benchmark integration checks pass locally; benchmark
+  checks verify row text, identity, selection and disposal without timing.
+
+- Catalog fallback gate (2026-10-26, `6e97a597`): an unlisted, dynamically installed array
   method is accepted directly and through a helper, and its edits match the
   reference in both compiler modes. A native method reached through an unlisted
   alias is proven by function identity, never rejected by its property name.

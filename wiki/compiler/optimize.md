@@ -378,7 +378,9 @@ allocates (`../decisions.md`, 2026-10-26):
   not async or a generator; the call has no spread and effect-free arguments;
 - its body stores, updates and edits only its own locals and members of its
   fresh constants (`const result = rows.slice()`, `[…]`, `{…}`), never a member
-  of something read from them (`result[0].label = …`);
+  of something read from them (`result[0].label = …`). Object literals with
+  accessors or a custom `__proto__` stay observed: a store or read can execute
+  their authored setter or getter despite the receiver being newly allocated;
 - it calls only array methods: copying (`slice`, `concat`, `filter`, `map`,
   `toReversed`, `toSpliced`, `with`) and reading (`indexOf`, `includes`, `at`,
   `find…`, `some`, `every`) on parameters or its own arrays, and editing
@@ -386,9 +388,11 @@ allocates (`../decisions.md`, 2026-10-26):
   arrays; callbacks must be inline function expressions whose executed bodies
   have no explicit effect. A named or parameter callback stays observed: reading
   its function value does not prove what calling it does;
-- every argument a native method converts is a proven primitive or a helper
-  parameter checked as primitive at the call boundary. Literal primitives,
-  unchanged local aliases and proven primitive intrinsic results qualify;
+- every argument a native method converts, computed store key and computed
+  object-literal key is a proven primitive or a helper parameter checked as
+  primitive at the call boundary. Literal primitives, local aliases whose
+  initializer and all assignments remain primitive, and proven primitive
+  intrinsic results qualify. Numeric loop indices retain the fast path;
   unproven values computed inside the helper keep observation. No argument is
   evaluated early just to check its type;
 - it constructs, deletes, iterates, spreads, destructures and suspends nothing.
@@ -405,8 +409,9 @@ that throws. Octane's `updateRows`, `swapRows` and `removeRow` qualify;
 Checks: `optimize/helpers.dom.test.ts` qualifies each rule, and in both modes
 shows a helper's result and catches an argument whose `slice` (subclass or own
 property) edits rows. Named callbacks and unproven conversions cannot establish
-the helper proof. `tests/cases/handlers.test.ts` compares callback edits and
-index coercion against the reference in both compiler modes.
+the helper proof. `tests/cases/handlers.test.ts` compares callback edits, index
+and property-key coercion, own/inherited setters, getters, and a setter that
+edits before throwing against the reference in both compiler modes.
 `runtime/tests/method-calls.test.ts` counts no snapshot for a proven call, and
 observes an own `slice`, a replaced `splice`, an object converted to an index,
 and a conversion that edits before throwing.

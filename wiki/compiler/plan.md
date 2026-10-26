@@ -261,8 +261,9 @@ array child). Remove each check when its phase is built.
   limitations stay on the relevant concept pages.
 - **Exit:** component correctness and the performance floor both matter. The
   correctness audit also includes the 2026-10-26 helper-proof regressions:
-  named callbacks and native index coercions must match the reference with
-  optimizations enabled and disabled (`optimize.md`, "Read-only helpers").
+  named callbacks, accessors and native index/property-key coercions must match
+  the reference with optimizations enabled and disabled (`optimize.md`,
+  "Read-only helpers").
   Fix these boundaries before further performance changes (`../decisions.md`).
   The user's report at `874c826` passes benchmark correctness gates, but the old
   compiler is faster on all 24 Octane operations and the DOM update-style run

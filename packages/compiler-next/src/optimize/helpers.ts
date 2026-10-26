@@ -14,8 +14,10 @@
  *   new array (`slice`, `concat`, `filter`, …), ones that only read (`indexOf`,
  *   `includes`, …), and, on fresh locals only, ones that edit their receiver
  *   (`splice`, `push`, …); callbacks must be inline and have no explicit effect
- *   (`effects.ts`), and converted arguments must be proven primitive or helper
- *   parameters guarded as primitive at the call boundary;
+ *   (`effects.ts`), and converted arguments and computed store keys must be
+ *   proven primitive or helper parameters guarded at the call boundary;
+ * - allocates object literals without accessors or a custom prototype, since
+ *   those can execute authored code when fresh members are read or stored;
  * - constructs nothing, deletes nothing, iterates nothing, spreads nothing and
  *   does not suspend.
  *
@@ -42,7 +44,7 @@ export interface HelperProof {
   readonly copies: readonly (readonly [number, string])[];
   /** Methods called on fresh locals; they must still be the intrinsics. */
   readonly methods: readonly string[];
-  /** Helper parameters used in native conversions: their actual values must be primitive. */
+  /** Parameters converted by native methods or property keys must be primitive. */
   readonly primitives: readonly number[];
 }
 
@@ -99,11 +101,21 @@ export function provenHelper(module: Module, fn: FunctionDeclaration): HelperPro
         return true;
       }
       visited.add(binding);
-      if (binding.references.some((reference) => reference.isWrite)) return false;
       const declaration = binding.declarations[0];
       const declarator = declaration === undefined ? null : module.parentOf(declaration);
-      return declarator !== null && is.VariableDeclarator(declarator) && declarator.init !== null
-        && primitiveArgument(declarator.init, visited);
+      if (declarator === null || !is.VariableDeclarator(declarator) || declarator.init === null
+        || !primitiveArgument(declarator.init, new Set(visited))) return false;
+      // A numeric loop index stays primitive through ++ or += a primitive.
+      // Any assignment we cannot establish keeps the whole call observed.
+      for (const reference of binding.references) {
+        if (!reference.isWrite) continue;
+        const write = module.parentOf(reference.node);
+        if (write !== null && is.UpdateExpression(write) && write.argument === reference.node) continue;
+        if (write !== null && is.AssignmentExpression(write) && write.left === reference.node
+          && primitiveArgument(write.right, new Set(visited))) continue;
+        return false;
+      }
+      return true;
     }
     if (is.UnaryExpression(node)) {
       if (node.operator === '!' || node.operator === 'typeof' || node.operator === 'void') return true;
@@ -132,6 +144,23 @@ export function provenHelper(module: Module, fn: FunctionDeclaration): HelperPro
         fail(ctx);
         return;
       }
+      if (is.ObjectExpression(node)) {
+        for (const property of node.properties) {
+          if (!is.Property(property) || property.kind !== 'init') {
+            // Accessors can execute a hidden write when fresh data is read or
+            // assigned. Merely allocating their receiver proves no isolation.
+            fail(ctx);
+            return;
+          }
+          const prototype = !property.computed && !property.method && !property.shorthand
+            && ((is.Identifier(property.key) && property.key.name === '__proto__')
+              || (is.Literal(property.key) && property.key.value === '__proto__'));
+          if (prototype || (property.computed && !primitiveArgument(property.key))) {
+            fail(ctx);
+            return;
+          }
+        }
+      }
       if (is.VariableDeclarator(node) && is.Identifier(node.id) && node.init !== null) {
         const parent = module.parentOf(node);
         const init = node.init;
@@ -157,7 +186,8 @@ export function provenHelper(module: Module, fn: FunctionDeclaration): HelperPro
           return;
         }
         const binding = bindingOf(target.object);
-        if (binding === null || !fresh.has(binding)) fail(ctx);
+        if (binding === null || !fresh.has(binding)
+          || (target.computed && !primitiveArgument(target.property))) fail(ctx);
         return;
       }
       if (is.CallExpression(node)) {

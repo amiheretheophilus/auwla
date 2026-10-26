@@ -4,6 +4,70 @@
 import { expect } from 'bun:test';
 import { behaves } from '../harness/run';
 
+for (const [name, helper] of [
+  ['own setter', `const box = { set value(next) { rows[0].label = next; } }; box.value = 'z';`],
+  ['inherited setter', `const box = { __proto__: { set value(next) { rows[0].label = next; } } }; box.value = 'z';`],
+  ['own getter', `const box = { get value() { rows[0].label = 'z'; return 1; } }; const read = box.value;`],
+] as const) {
+  behaves(`a helper observes effects from a fresh object's ${name}`, {
+    source: `
+      function help(rows) { ${helper} return rows; }
+      export function App() {
+        let rows = [{ label: 'a' }];
+        return <main><p>{rows[0].label}</p>
+          <button onClick={() => { help(rows); }}>go</button></main>;
+      }`,
+    steps: [{ click: 'button' }],
+    check(container, observation) {
+      expect(container.querySelector('p')?.textContent).toBe(observation === 0 ? 'a' : 'z');
+    },
+  });
+}
+
+for (const [name, body] of [
+  ["a fresh object's computed store key", 'const box = { value: 0 }; box[key] = 1;'],
+  ["a fresh array's computed store key", 'const box = [0]; box[key] = 1;'],
+  ['a computed object literal key', 'const box = { [key]: 1 };'],
+] as const) {
+  behaves(`a helper observes conversion of ${name}`, {
+    source: `
+      function keyFor(rows) {
+        return { [Symbol.toPrimitive]() { rows[0].label = 'z'; return 'value'; } };
+      }
+      function help(rows, key) { ${body} return rows; }
+      export function App() {
+        let rows = [{ label: 'a' }];
+        const key = keyFor(rows);
+        return <main><p>{rows[0].label}</p>
+          <button onClick={() => { help(rows, key); }}>go</button></main>;
+      }`,
+    steps: [{ click: 'button' }],
+    check(container, observation) {
+      expect(container.querySelector('p')?.textContent).toBe(observation === 0 ? 'a' : 'z');
+    },
+  });
+}
+
+behaves('a helper preserves a setter edit before the setter throws', {
+  source: `
+    function help(rows) {
+      const box = { set value(next) { rows[0].label = next; throw new Error('setter'); } };
+      box.value = 'z';
+      return rows;
+    }
+    export function App() {
+      let rows = [{ label: 'a' }];
+      let error = '';
+      return <main><p>{rows[0].label}</p><output>{error}</output>
+        <button onClick={() => { try { help(rows); } catch (caught) { error = caught.message; } }}>go</button></main>;
+    }`,
+  steps: [{ click: 'button' }],
+  check(container, observation) {
+    expect(container.querySelector('p')?.textContent).toBe(observation === 0 ? 'a' : 'z');
+    expect(container.querySelector('output')?.textContent).toBe(observation === 0 ? '' : 'setter');
+  },
+});
+
 behaves('an unlisted array method works directly and through a helper', {
   source: `
     function install(rows) {
