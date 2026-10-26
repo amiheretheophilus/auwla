@@ -27,7 +27,9 @@ and unknown request methods remain opaque; non-GET promises are not sources.
 `$track(source)` reads the handle's status without waiting for its payload.
 That edge remains reactive but does not propagate `pending`. A payload access
 such as `$track(source.child)` still waits. Read facts keep their original
-reference identities through visible helper expansion.
+reference identities through visible helper expansion. Simple visible helper
+parameters forward this distinction: status-only parameters do not add a wait,
+and parameters with a payload use still do.
 
 This is graph infrastructure, not completed source emission. The Phase 8 import
 guard still applies. Runtime subscriptions, payload lowering, delayed seeds,
@@ -134,8 +136,12 @@ computations. No `try`/`catch`/`finally` is introduced.
 
 Status inputs retain the actual uses reached through called local helpers,
 so a `$track`-only helper can run while its source is pending. A helper that
-also reads a payload still waits. The same read traversal supplies binding
-dependencies and their uses; this does not duplicate the reference evaluator.
+also reads a payload still waits. Simple local helper parameters carry the
+source handle through calls, including forwarding calls; payload reads inside
+the helper unwrap it. Handle preservation and payload readiness have separate
+sets, because a mixed-use helper needs the handle while also waiting. The same
+read traversal supplies binding dependencies and their uses. This analysis is
+independent of the compiler and does not add a second reference evaluator.
 
 The inputs of an expression are built branch by branch (`inputsOf` in
 `readiness.ts`): `$branch` reads a test's inputs, evaluates the test, then lists
@@ -204,10 +210,12 @@ request cancellation through `$track` is still separate, unfinished work.
 
 ## Cases to test
 
-`tests/cases/sources.test.ts`: 76 cases, all passing on the reference. Two status
-regressions pin helper reads before commit and failure of an unused payload.
-The helper case exposed and fixed a reference guard that treated a status-only
-capture as a payload read; its original expectation was retained. The original
+`tests/cases/sources.test.ts`: 78 cases, all passing on the reference. Four status
+regressions pin helper captures before commit, failure of an unused payload,
+forwarded status parameters and mixed status/payload parameters. They exposed
+and fixed reference guards treating status-only captures/arguments as payload
+reads, and argument lowering losing the handle needed by `$track`. Their
+original expectations were retained. The original
 27 give 18 passes and 9 failures on the old compiler; the null-target case fails
 it (written on review, it caught the reference treating `null` as a new load);
 four destructuring cases give 2 passes and 2 failures (the direct

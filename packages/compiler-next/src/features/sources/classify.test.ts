@@ -172,6 +172,24 @@ describe('source classification and readiness edges', () => {
     expect(pending(result.node('label')).size).toBe(0);
   });
 
+  it('follows source handles passed through status-only helper parameters', () => {
+    const result = inspect(`
+      import { $fetch, $track } from '@memoized-dom/data';
+      function status(value) { return $track(value).status; }
+      function forward(value) { return status(value); }
+      const user = $fetch('/user'); const label = forward(user);`);
+    expect(isReactive(result.node('label'))).toBe(true);
+    expect(pending(result.node('label')).size).toBe(0);
+  });
+
+  it('retains a payload wait when a helper parameter has mixed uses', () => {
+    const result = inspect(`
+      import { $fetch, $track } from '@memoized-dom/data';
+      function summary(value) { return $track(value).status + value.name; }
+      const user = $fetch('/user'); const label = summary(user);`);
+    expect([...pending(result.node('label'))].map((node) => node.binding)).toEqual([result.node('user').binding]);
+  });
+
   it('distinguishes GET sources from action promises and unknown methods', () => {
     const result = inspect(`
       import { $fetch } from '@memoized-dom/data';

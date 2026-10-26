@@ -34,6 +34,37 @@ behaves('a status-only source failure does not wait for an unused payload', {
   },
 });
 
+behaves('passing a source through status helpers does not wait for its payload', {
+  source: `
+    import { $read, $track } from '@memoized-dom/data';
+    function status(value) { return $track(value).pending ? 'waiting' : 'ready'; }
+    function forward(value) { return status(value); }
+    export function App() {
+      const user = $read(defer('user'));
+      const label = forward(user);
+      return <p>{label}</p>;
+    }`,
+  steps: [{ resolve: 'user', value: { name: 'Ada' } }],
+  check(container, observation) {
+    expect(container.querySelector('p')?.textContent).toBe(['waiting', 'ready'][observation]);
+  },
+});
+
+behaves('passing a source to a helper that reads status and payload still waits', {
+  source: `
+    import { $read, $track, Group } from '@memoized-dom/data';
+    function summary(value) { return $track(value).status + ':' + value.name; }
+    export function App() {
+      const user = $read(defer('user'));
+      const label = summary(user);
+      return <Group pending={() => <i>loading</i>}><p>{label}</p></Group>;
+    }`,
+  steps: [{ resolve: 'user', value: { name: 'Ada' } }],
+  check(container, observation) {
+    expect(container.querySelector('p')?.textContent).toBe(['loading', 'success:Ada'][observation]);
+  },
+});
+
 behaves('a read waits before deriving through a helper', {
   source: `
     import { $read, Group } from '@memoized-dom/data';

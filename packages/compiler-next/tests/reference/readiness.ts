@@ -47,17 +47,77 @@ export function isDataCall(module: Module, node: Node, name: string): boolean {
   return is.ImportDeclaration(imported) && imported.source.value === '@memoized-dom/data';
 }
 
+export interface SourceUses {
+  /** Preserve the handle at a call which ultimately passes it to $track. */
+  readonly raw: Set<Node>;
+  /** Only status uses may bypass the payload guard. Mixed uses still wait. */
+  readonly status: Set<Node>;
+}
+
+/** Independent parameter-flow proof for the reference, before any AST edits. */
+export function sourceUses(module: Module): SourceUses {
+  const direct = new Set<Node>();
+  for (const call of module.findAll('CallExpression')) {
+    if (isDataCall(module, call, '$track') && call.arguments[0]) direct.add(call.arguments[0]);
+  }
+  const reads = new Reads(module);
+  interface Use { raw: boolean; payload: boolean }
+  const ordinary: Use = { raw: false, payload: true };
+  const examine = (start: Node, seen: Set<Binding>): Use => {
+    let value = start;
+    if (direct.has(value)) return { raw: true, payload: false };
+    for (const parent of module.ancestors(start)) {
+      if (parent === start) continue;
+      if (is.ParenthesizedExpression(parent) || is.TSAsExpression(parent) || is.TSNonNullExpression(parent) || is.TSSatisfiesExpression(parent)) {
+        value = parent;
+        if (direct.has(value)) return { raw: true, payload: false };
+        continue;
+      }
+      if (!is.CallExpression(parent) || !is.Identifier(parent.callee)) return ordinary;
+      const index = parent.arguments.indexOf(value as Expression);
+      if (index === -1 || parent.arguments.slice(0, index).some(is.SpreadElement)) return ordinary;
+      const callee = module.referenceOf(parent.callee)?.binding;
+      if (callee == null || callee.references.some((reference) => reference.isWrite)) return ordinary;
+      const fn = reads.functionOf(callee);
+      let parameter: Node | undefined = fn?.params[index];
+      if (is.AssignmentPattern(parameter)) parameter = parameter.left;
+      if (!is.Identifier(parameter)) return ordinary;
+      const binding = module.bindingOf(parameter);
+      if (binding === null || seen.has(binding)) return ordinary;
+      const uses = binding.references.filter((reference) => !reference.inTypePosition);
+      if (uses.length === 0) return ordinary;
+      const next = new Set(seen).add(binding);
+      const result: Use = { raw: false, payload: false };
+      for (const use of uses) {
+        const reached = use.isWrite ? ordinary : examine(use.node, next);
+        result.raw ||= reached.raw;
+        result.payload ||= reached.payload;
+      }
+      return result;
+    }
+    return ordinary;
+  };
+  const result: SourceUses = { raw: new Set(direct), status: new Set() };
+  for (const reference of module.references) {
+    if (reference.inTypePosition || reference.isWrite) continue;
+    const use = examine(reference.node, new Set());
+    if (use.raw) result.raw.add(reference.node);
+    if (!use.payload) result.status.add(reference.node);
+  }
+  return result;
+}
+
 /**
  * An input as `readInputs` lists it. When every use of the binding inside `roots`
  * is a status read (`$track(user)`), it does not wait for the payload: it is listed
  * as `$sourceState(user)`, which is never `Waiting`.
  */
 export function statusInput(
-  binding: Binding, value: Expression, roots: Node[], rawUses: Set<Node>,
+  binding: Binding, value: Expression, roots: Node[], rawUses: SourceUses,
   reads = new Reads(binding.module), skip: Node[] = [],
 ): Expression {
   const uses = reads.referencesInside(roots, undefined, skip).get(binding) ?? [];
-  const statusOnly = uses.length > 0 && uses.every((use) => rawUses.has(use.node));
+  const statusOnly = uses.length > 0 && uses.every((use) => rawUses.status.has(use.node));
   return statusOnly ? runtimeCall('$sourceState', [value]) : value;
 }
 
@@ -93,7 +153,7 @@ export interface ReadsOf {
 export function readsWithPaths(
   reads: Reads,
   readOf: (binding: Binding) => Expression,
-  rawUses: Set<Node>,
+  rawUses: SourceUses,
   keep: (binding: Binding) => boolean = () => true,
 ): ReadsOf {
   const readsOf = (root: Node, skip: Node[]) => {
@@ -278,7 +338,7 @@ function stringLiteral(value: string): Expression {
  * Built before payload reads are rewritten (`prepareModuleReads`), which then
  * rewrites the authored code wherever these memos placed it.
  */
-export function buildModuleMemos(module: Module, rawUses: Set<Node>): void {
+export function buildModuleMemos(module: Module, rawUses: SourceUses): void {
   const builder = new ModuleMemos(module, rawUses);
   for (const statement of module.ast.body) builder.visit(statement);
   const body = module.ast.body.flatMap((statement) => builder.around(statement));
@@ -306,7 +366,7 @@ class ModuleMemos {
   private nextPattern = 0;
   private readonly targets = new Map<Binding, string>();
 
-  constructor(private readonly module: Module, private readonly rawUses: Set<Node>) {
+  constructor(private readonly module: Module, private readonly rawUses: SourceUses) {
     this.reads = new Reads(module);
   }
 
@@ -485,7 +545,7 @@ class ModuleMemos {
  */
 export function prepareModuleReads(
   module: Module,
-  rawUses: Set<Node>,
+  rawUses: SourceUses,
   handledSites: Set<Node>,
   components: Set<Node>,
   closures: ClosureCells,
@@ -517,7 +577,7 @@ export function prepareModuleReads(
     Identifier(_node, ctx) {
       const reference = ctx.reference;
       if (!reference?.binding || reference.inTypePosition || reference.isWrite) return;
-      if (rawUses.has(reference.node)) return;
+      if (rawUses.raw.has(reference.node)) return;
       // `{ x }` must become `{ x: $value(x) }`.
       if (is.Property(ctx.parent) && ctx.parent.shorthand && ctx.key === 'value') {
         ctx.parent.shorthand = false;

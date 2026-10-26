@@ -25,16 +25,19 @@ Last updated: 2026-10-26.
 
 ## Done
 
-- Phase 8 graph foundation (2026-10-26): source-valued calls and visible helper
+- Phase 8 graph foundation (2026-10-26, `a2c78c10` plus parameter-flow follow-up): source-valued calls and visible helper
   returns are classified by binding identity, including aliases, named imports
   and re-exports. Changing request inputs preserves `Source`; a status-only
   `$track` dependency stays reactive without propagating a payload wait.
-  Two new behavioral assertions caught and fixed reference guards waiting on
-  a helper's status-only source capture. Existing assertions are unchanged.
-  Local package type checking, 62 focused compiler checks and 148 source/
+  Four new behavioral assertions caught and fixed reference guards waiting on
+  status-only captures/arguments, and argument lowering losing the handle used
+  by `$track` in a mixed-use helper. Existing assertions are unchanged.
+  Local package type checking, 64 focused compiler checks and 150 source/
   lifecycle/ref/callback reference cases pass. Source emission, ownership,
   delayed computations and Group remain unfinished; the explicit Phase 8 guard
-  remains in place. Performance is still paused.
+  remains in place. The first graph commit passes all jobs in
+  [CI 40373185069](https://github.com/amiheretheophilus/auwla/actions/runs/40373185069);
+  the parameter-flow follow-up still needs the broad gate. Performance is still paused.
 
 - Phase 7 completed (2026-10-26, `4e15dc31`): effects, cleanup, module
   effects, loop/conditional/helper registrations and reactive refs are built on

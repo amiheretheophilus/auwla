@@ -47,8 +47,10 @@ import {
   rewriteDataImports,
   shouldWaitAtAttribute,
   statusInput,
+  sourceUses,
   waitForExpression,
   type ReadsOf,
+  type SourceUses,
 } from './readiness';
 
 type FunctionNode = Extract<Node, { type: 'FunctionDeclaration' | 'FunctionExpression' | 'ArrowFunctionExpression' }>;
@@ -112,11 +114,7 @@ export function toReference(source: string, path: string, runtimeUrl: string): s
   }
 
   const readCalls = module.findAll('CallExpression').filter((call) => isDataCall(module, call, '$read'));
-  // `$track(user)` reads the source itself, not its payload.
-  const rawUses = new Set<Node>();
-  for (const call of module.findAll('CallExpression')) {
-    if (isDataCall(module, call, '$track') && call.arguments[0]) rawUses.add(call.arguments[0]);
-  }
+  const rawUses = sourceUses(module);
   buildModuleMemos(module, rawUses);
   const handledSites = new Set<Node>();
   const components = findComponents(module);
@@ -299,7 +297,7 @@ class ComponentRewrite {
   constructor(
     private readonly module: Module,
     private readonly component: FunctionNode,
-    private readonly rawUses: Set<Node>,
+    private readonly rawUses: SourceUses,
     private readonly handledSites: Set<Node>,
   ) {
     this.body = component.body as BlockStatement;
@@ -1083,7 +1081,7 @@ class ComponentRewrite {
           ctx.parent.shorthand = false;
         }
         const value = slot ? member(slot.name, 'v') : identifier(reference.binding.name);
-        if (reference.isWrite || this.rawUses.has(reference.node)) {
+        if (reference.isWrite || this.rawUses.raw.has(reference.node)) {
           ctx.replace(value);
         } else {
           const read = captureModuleRead(this.module, reference.binding, value);

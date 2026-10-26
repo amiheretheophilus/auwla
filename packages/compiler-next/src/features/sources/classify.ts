@@ -110,6 +110,36 @@ export class SourceQueries {
     return this.#call(module, call, new Set());
   }
 
+  waitsForPayload(read: ReadFact): boolean {
+    return this.#payloadUse(read.reference.module, read.reference.node, new Set());
+  }
+
+  #payloadUse(module: Module, value: Node, seen: Set<Binding>): boolean {
+    for (const parent of module.ancestors(value)) {
+      if (parent === value) continue;
+      if (is.ParenthesizedExpression(parent) || is.TSAsExpression(parent) || is.TSNonNullExpression(parent) || is.TSSatisfiesExpression(parent)) {
+        value = parent;
+        continue;
+      }
+      if (!is.CallExpression(parent)) return true;
+      const index = parent.arguments.indexOf(value as Expression);
+      if (index === -1 || parent.arguments.slice(0, index).some(is.SpreadElement)) return true;
+      if (index === 0 && dataApi(module, parent.callee) === '$track') return false;
+      const fn = functionValue(module, parent.callee);
+      const owner = fn === null ? undefined : this.#summaries.get(fn)?.module;
+      let parameter: Node | undefined = fn?.params[index];
+      if (is.AssignmentPattern(parameter)) parameter = parameter.left;
+      if (owner === undefined || !is.Identifier(parameter)) return true;
+      const binding = owner.bindingOf(parameter);
+      if (binding === null || seen.has(binding)) return true;
+      const uses = binding.references.filter((reference) => !reference.inTypePosition);
+      if (uses.length === 0) return true;
+      const next = new Set(seen).add(binding);
+      return uses.some((use) => use.isWrite || this.#payloadUse(owner, use.node, next));
+    }
+    return true;
+  }
+
   #call(module: Module, call: Extract<Node, { type: 'CallExpression' }>, seen: Set<Node>): SourceKind | null {
     const api = dataApi(module, call.callee);
     if (api === '$read') return 'read';
@@ -157,21 +187,6 @@ export class SourceQueries {
   }
 }
 
-/** Passing a source handle to $track needs its status, not its payload. */
-function waitsForPayload(read: ReadFact): boolean {
-  const module = read.reference.module;
-  let value: Node = read.reference.node;
-  for (const parent of module.ancestors(value)) {
-    if (parent === value) continue;
-    if (is.ParenthesizedExpression(parent) || is.TSAsExpression(parent) || is.TSNonNullExpression(parent) || is.TSSatisfiesExpression(parent)) {
-      value = parent;
-      continue;
-    }
-    return !(is.CallExpression(parent) && parent.arguments[0] === value && dataApi(module, parent.callee) === '$track');
-  }
-  return true;
-}
-
 export function classifySources(initial: ReadonlyMap<Binding, BindingFacts>, queries: SourceQueries) {
   const facts = new Map<Binding, BindingFacts>();
   for (const [binding, fact] of initial) {
@@ -183,7 +198,7 @@ export function classifySources(initial: ReadonlyMap<Binding, BindingFacts>, que
     facts.set(binding, {
       ...fact,
       kind: source ? 'Source' : fact.kind,
-      reads: fact.reads?.map((read) => waitsForPayload(read) ? read : { ...read, readiness: false }),
+      reads: fact.reads?.map((read) => queries.waitsForPayload(read) ? read : { ...read, readiness: false }),
     });
   }
   return facts;
