@@ -26,6 +26,21 @@ it('runs a proven read-only intrinsic without a snapshot', () => {
   expect(counts).toEqual({ reads: 0, notified: 0 });
 });
 
+it('accepts unlisted method names and proves an intrinsic by identity through an alias', () => {
+  const items = rows();
+  Object.defineProperty(items, 'renameFirst', {
+    value(this: { id: number }[]) { this[0]!.id = 42; },
+  });
+  Object.defineProperty(items, 'copyAlias', { value: Array.prototype.slice });
+  const { counts, reads, notify } = watch(() => items);
+  observeMethod(reads, notify, items, 'renameFirst', 0)();
+  expect(items[0]!.id).toBe(42);
+  expect(counts.notified).toBe(1);
+  const before = counts.reads;
+  expect(observeMethod(reads, notify, items, 'copyAlias', 0)(1)).toEqual(items.slice(1));
+  expect(counts.reads).toBe(before);
+});
+
 it('calls a proven helper without a snapshot only while the methods it assumed are the intrinsics', () => {
   const swap = (input: { id: number }[]) => {
     const result = input.slice();

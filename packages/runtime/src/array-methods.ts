@@ -15,12 +15,12 @@ export interface ArrayMethod {
   /** Argument interval inserted into the receiver, if any. */
   readonly added?: readonly [from: number, to?: number];
   /** Whether the current whole-helper proof supports this intrinsic. */
-  readonly helper: boolean;
+  readonly helperProof: boolean;
 }
 
 function method(kind: ArrayMethod['kind'], options: Partial<Omit<ArrayMethod, 'kind'>> = {}): ArrayMethod {
   return Object.freeze({
-    kind, species: false, callback: -1, returnsPrimitive: false, helper: true,
+    kind, species: false, callback: -1, returnsPrimitive: false, helperProof: true,
     ...options,
     converted: Object.freeze([...(options.converted ?? [])]),
     ...(options.added === undefined ? {} : { added: Object.freeze([...options.added]) as ArrayMethod['added'] }),
@@ -45,8 +45,8 @@ export const ARRAY_METHODS: Readonly<Record<string, ArrayMethod>> = Object.freez
   findLastIndex: method('read', { callback: 0, returnsPrimitive: true }),
   some: method('read', { callback: 0, returnsPrimitive: true }),
   every: method('read', { callback: 0, returnsPrimitive: true }),
-  reduce: method('read', { callback: 0, helper: false }),
-  reduceRight: method('read', { callback: 0, helper: false }),
+  reduce: method('read', { callback: 0, helperProof: false }),
+  reduceRight: method('read', { callback: 0, helperProof: false }),
   push: method('edit', { added: [0], returnsPrimitive: true }),
   unshift: method('edit', { added: [0], returnsPrimitive: true }),
   pop: method('edit'),
@@ -54,7 +54,7 @@ export const ARRAY_METHODS: Readonly<Record<string, ArrayMethod>> = Object.freez
   reverse: method('edit'),
   splice: method('edit', { species: true, converted: [0, 1], added: [2] }),
   fill: method('edit', { converted: [1, 2], added: [0, 1] }),
-  sort: method('edit', { callback: 0, helper: false }),
+  sort: method('edit', { callback: 0, helperProof: false }),
 });
 
 /** Unknown names, including Object.prototype members, have no proof. */

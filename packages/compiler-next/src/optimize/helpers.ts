@@ -172,7 +172,7 @@ export function provenHelper(module: Module, fn: FunctionDeclaration): HelperPro
         const receiver = bindingOf(callee.object);
         const param = receiver === null ? -1 : paramBindings.indexOf(receiver);
         const ownsReceiver = receiver !== null && arrays.has(receiver);
-        if (method === undefined || !method.helper || (method.kind === 'edit' && !ownsReceiver)
+        if (method === undefined || !method.helperProof || (method.kind === 'edit' && !ownsReceiver)
           || (param < 0 && !ownsReceiver)) {
           fail(ctx);
           return;

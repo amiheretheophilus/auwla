@@ -24,6 +24,15 @@ Last updated: 2026-10-26.
 
 ## Done
 
+- Catalog fallback gate (2026-10-26): an unlisted, dynamically installed array
+  method is accepted directly and through a helper, and its edits match the
+  reference in both compiler modes. A native method reached through an unlisted
+  alias is proven by function identity, never rejected by its property name.
+  The shared catalog's compiler capability is named `helperProof` to distinguish
+  it from permission to call an authored method (`compiler/optimize.md`). The
+  package type check, runtime build, 16 focused compiler checks and 17 native
+  method-call checks pass locally.
+
 - Shared array-method facts (2026-10-26): the compiler and runtime now consume
   one immutable, data-only catalog (`runtime/src/array-methods.ts`), exported
   through `@memoized-dom/runtime/array-methods`. This removes the duplicate
@@ -33,7 +42,10 @@ Last updated: 2026-10-26.
   names do not establish semantics (`compiler/optimize.md`). The earlier helper
   correctness fix is committed and pushed as `babb31b6`. Both package type
   checks, the runtime build, 29 compiler/handler checks and 16 native method-call
-  checks pass locally. Full correctness CI follows the shared-catalog push.
+  checks pass locally. [CI 40307783732](https://github.com/amiheretheophilus/auwla/actions/runs/40307783732)
+  at `42ca548e` passes every job: 279 compiler checks, 136 runtime checks, 322
+  reference cases, 222 compiler comparisons with the unchanged 100 deferred
+  failures (29 Phase 7, 71 Phase 8), and ten generator checks at `FC_RUNS=200`.
 
 - Helper correctness gate (2026-10-26): the supplied review is audited on
   `compiler/optimize.md`, and correctness fixes precede further performance

@@ -4,6 +4,28 @@
 import { expect } from 'bun:test';
 import { behaves } from '../harness/run';
 
+behaves('an unlisted array method works directly and through a helper', {
+  source: `
+    function install(rows) {
+      Object.defineProperty(rows, 'renameFirst', {
+        value() { this[0].label += '!'; return this; }
+      });
+    }
+    function help(rows) { return rows.renameFirst(); }
+    export function App() {
+      let rows = [{ label: 'a' }];
+      install(rows);
+      const name = 'renameFirst';
+      return <main><p>{rows[0].label}</p>
+        <button id="direct" onClick={() => { rows[name](); }}>direct</button>
+        <button id="helper" onClick={() => { help(rows); }}>helper</button></main>;
+    }`,
+  steps: [{ click: '#direct' }, { click: '#helper' }],
+  check(container, observation) {
+    expect(container.querySelector('p')?.textContent).toBe(['a', 'a!', 'a!!'][observation]);
+  },
+});
+
 behaves('a helper observes mutations from a named array callback', {
   source: `
     function help(rows, callback) { return rows.map(callback); }
