@@ -7,7 +7,7 @@ import type { ComponentPlan, ModulePlan } from '../plan';
 import { copy, finishCopy } from './copy';
 import { Names } from './names';
 import { expression, statement, stringLiteral } from './quote';
-import { emitTemplate, prepareTemplateSites } from './template';
+import { emitNodes } from './template';
 import { emitLocalState } from '../../features/state/dom';
 import { emitConstWrites, emitWrites } from '../../features/handlers/dom';
 import { emitSites } from './sites';
@@ -115,7 +115,7 @@ export function emitDom(plan: ModulePlan, options: CompileModulesOptions): Node 
     replacements.set(component.fn, insideComponent ? emitted : finishCopy(emitted));
   }
 
-  hoisted.push(...rowComponents.declarations);
+  hoisted.push(...rowComponents.declarations, ...names.hoisted);
   const output = copy(module.ast, replacements);
   const sharedBody = shared.moduleBody();
   if (sharedBody !== null) {
@@ -256,13 +256,8 @@ function emitComponent(
     ...(batch === null ? [] : [statement('$$batch.beginMount();', { batch })]),
     statement('const $$document = $$runtime.getActiveEnvironment().document;', { document, runtime }),
   );
-  const used = new Set(plan.template.roots);
-  for (const site of plan.sites) used.add(site.node);
-  const template = emitTemplate(plan.template, used, { names, runtime, document, markup, namespace });
-  body.push(...template.statements);
-
   // Placeholders keep neighbouring values as distinct text nodes after parsing.
-  const slots = prepareTemplateSites(plan.template, plan.sites, template, { names, runtime, document, markup });
+  const slots = emitNodes(plan.template, plan.sites, { names, runtime, document, markup, namespace });
   body.push(...slots.statements);
 
   const sites = emitSites(plan, {

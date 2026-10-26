@@ -26,6 +26,46 @@ import type { DocumentLike } from './environment';
 
 const templates = new WeakMap<DocumentLike, Map<string, Element>>();
 
+/** One compiled template's built nodes, per document and namespace (`cloneTemplate`). */
+export interface TemplateCache {
+  document: DocumentLike | null;
+  html: Node | null;
+  svg: Node | null;
+}
+
+export function createTemplateCache(): TemplateCache {
+  return { document: null, html: null, svg: null };
+}
+
+/**
+ * A copy of the nodes `build` creates, built once per document and namespace,
+ * as the old compiler's row templates were: text slots are text nodes in the
+ * template, and the compiled code reaches each node through `firstChild` and
+ * `nextSibling`. Null while hydrating, which claims existing nodes, and for a
+ * server document, which produces its own output; the caller then creates
+ * its nodes the general way.
+ */
+export function cloneTemplate(
+  cache: TemplateCache,
+  namespace: 'html' | 'svg' | undefined,
+  build: (document: DocumentLike, namespace: 'html' | 'svg') => Node,
+): Node | null {
+  const environment = getActiveEnvironment();
+  const document = environment.document;
+  if (environment.hydration !== undefined || document.materializeMarkup !== undefined) return null;
+  if (cache.document !== document) {
+    cache.document = document;
+    cache.html = null;
+    cache.svg = null;
+  }
+  if (namespace === 'svg') {
+    cache.svg ??= build(document, 'svg');
+    return cache.svg.cloneNode(true);
+  }
+  cache.html ??= build(document, 'html');
+  return cache.html.cloneNode(true);
+}
+
 /**
  * Materialize one compiler-generated markup string. Returns nodes in
  * compiler creation order (post-order DFS — the markup root is last).

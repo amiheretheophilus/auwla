@@ -27,6 +27,101 @@ export interface TemplateNames {
   readonly namespace?: string | Expression;
 }
 
+export interface NodesEmit {
+  readonly statements: Statement[];
+  /** The node a site writes: a text site's text node, otherwise the template node. */
+  ref(index: number): string;
+  /** A top-level node, or the fragment that carries a root text or region. */
+  root(index: number): string;
+}
+
+/**
+ * A template's nodes and its sites' text nodes. Where no root is itself a site,
+ * the old compiler's shape is used: the nodes are built once per document with
+ * DOM calls, text slots included as text nodes, then cloned, and each node is
+ * reached through `firstChild` and `nextSibling` (`runtime/src/markup.ts`,
+ * `cloneTemplate`). Hydration and server documents keep the general creation,
+ * emitted as the fallback.
+ */
+export function emitNodes(template: Template, sites: readonly Site[], context: TemplateNames): NodesEmit {
+  const used = new Set(template.roots);
+  for (const site of sites) used.add(site.node);
+  const general = () => {
+    const created = emitTemplate(template, used, context);
+    const slots = prepareTemplateSites(template, sites, created, context);
+    return { statements: [...created.statements, ...slots.statements], ref: slots.ref, root: slots.root };
+  };
+  // A root text or region needs a movable fragment (`prepareTemplateSites`).
+  const slotted = new Set(sites.filter((site) => site.kind === 'text' || site.kind === 'conditional').map((site) => site.node));
+  if (template.roots.length === 0 || template.roots.some((root) => slotted.has(root))) return general();
+
+  const { names, runtime } = context;
+  const texts = new Set(sites.filter((site) => site.kind === 'text').map((site) => site.node));
+  const inherits = context.namespace !== undefined && inheritedNodes(template).size > 0;
+  const cache = names.fresh('_template');
+  const build = names.fresh('_buildTemplate');
+  const document = names.fresh('_document');
+  const namespace = names.fresh('_namespace');
+  const created = createNodes(template, { ...context, document, namespace: inherits ? namespace : undefined }, false, texts);
+  const roots = template.roots.map((index) => created.ref(index));
+  const fragment = names.fresh('_fragment');
+  const result = roots.length === 1 ? [b.ReturnStatement({ argument: b.Identifier({ name: roots[0]! }) })] : [
+    statement('const $$fragment = $$document.createDocumentFragment();', { fragment, document }),
+    ...statements(`${fragment}.append(${roots.join(', ')});`),
+    b.ReturnStatement({ argument: b.Identifier({ name: fragment }) }),
+  ];
+  names.hoisted.push(statement('const $$cache = $$runtime.createTemplateCache();', { cache, runtime }));
+  const declaration = statement(`function ${build}($$document, $$namespace) {}`, { document, namespace });
+  if (declaration.type === 'FunctionDeclaration') declaration.body!.body = [...created.statements, ...result];
+  names.hoisted.push(declaration);
+
+  // Each node the sites or caller need gets one variable, set by either path.
+  const outer = new Map<number, string>();
+  for (const index of [...used].sort((left, right) => left - right)) {
+    outer.set(index, names.fresh(texts.has(index) ? '_text' : nodeName(template, index)));
+  }
+  const clone = names.fresh('_clone');
+  const parents = new Map<number, number>();
+  template.nodes.forEach((node, index) => {
+    if (node.kind === 'element') for (const child of node.children) parents.set(child, index);
+  });
+  const reached = new Map<number, string>();
+  const navigation: Statement[] = [];
+  const reach = (index: number): string => {
+    const known = reached.get(index);
+    if (known !== undefined) return known;
+    let path: string;
+    const parent = parents.get(index);
+    const siblings = parent === undefined ? template.roots : (template.nodes[parent] as { children: readonly number[] }).children;
+    const position = siblings.indexOf(index);
+    if (parent === undefined && template.roots.length === 1) path = clone;
+    else if (position === 0) path = `${parent === undefined ? clone : reach(parent)}.firstChild`;
+    else path = `${reach(siblings[position - 1]!)}.nextSibling`;
+    const name = names.fresh('_node');
+    navigation.push(statement(`const ${name} = ${path};`));
+    reached.set(index, name);
+    return name;
+  };
+  for (const [index, name] of outer) navigation.push(statement(`${name} = ${reach(index)};`));
+  const fallback = general();
+  const assignments = [...outer].map(([index, name]) => statement(`${name} = ${template.roots.includes(index) ? fallback.root(index) : fallback.ref(index)};`));
+  return {
+    statements: [
+      b.VariableDeclaration({ kind: 'let', declarations: [...outer.values()].map((name) => b.VariableDeclarator({ id: b.Identifier({ name }), init: null })) }),
+      statement('const $$clone = $$runtime.cloneTemplate($$cache, $$namespace, $$build);', {
+        clone, runtime, cache, build, namespace: inherits ? context.namespace! : expression('void 0'),
+      }),
+      b.IfStatement({
+        test: expression('$$clone !== null', { clone }),
+        consequent: b.BlockStatement({ body: navigation }),
+        alternate: b.BlockStatement({ body: [...fallback.statements, ...assignments] }),
+      }),
+    ],
+    ref: (index) => outer.get(index)!,
+    root: (index) => outer.get(index)!,
+  };
+}
+
 /** Create the nodes that `used` lists; with markup, the others exist but get no variable. */
 export function emitTemplate(template: Template, used: ReadonlySet<number>, context: TemplateNames): TemplateEmit {
   return context.markup === null
@@ -99,8 +194,12 @@ function materialize(template: Template, used: ReadonlySet<number>, context: Tem
   return { statements: output, ref: (index) => refs.get(index)! };
 }
 
-/** With `inSvg`, the caller already knows the consuming slot is SVG. */
-function createNodes(template: Template, context: TemplateNames, inSvg = false): TemplateEmit {
+/**
+ * With `inSvg`, the caller already knows the consuming slot is SVG. `texts`
+ * are placeholders created as text nodes, for a template whose text sites
+ * write them directly (`emitNodes`); other placeholders are comments.
+ */
+function createNodes(template: Template, context: TemplateNames, inSvg = false, texts: ReadonlySet<number> = new Set()): TemplateEmit {
   const output: Statement[] = [];
   const refs = template.nodes.map((_, index) => context.names.fresh(nodeName(template, index)));
   const holes = { document: context.document };
@@ -113,7 +212,9 @@ function createNodes(template: Template, context: TemplateNames, inSvg = false):
       return;
     }
     if (node.kind === 'placeholder') {
-      output.push(statement(`const ${name} = $$document.createComment("");`, holes));
+      output.push(statement(texts.has(index)
+        ? `const ${name} = $$document.createTextNode("");`
+        : `const ${name} = $$document.createComment("");`, holes));
       return;
     }
 

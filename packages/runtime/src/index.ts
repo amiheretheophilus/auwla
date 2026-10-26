@@ -72,7 +72,8 @@ export type { RefCallback, RefValue } from './refs';
 export { registerConditionalEffect, registerEffect } from './effect';
 export type { EffectCallback, EffectCondition } from './effect';
 
-export { materializeMarkup } from './markup';
+export { materializeMarkup, cloneTemplate, createTemplateCache } from './markup';
+export type { TemplateCache } from './markup';
 export { createWriteBatch, rejectConstAssignment, flushWritesBeforeAwait, resumeWritesAfterAwait } from './write-batch';
 export type { WriteBatch } from './write-batch';
 export { createBuildScope, captureBuildScope, isBuilding } from './build-scope';

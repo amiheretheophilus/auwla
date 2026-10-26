@@ -4,8 +4,62 @@ const _markup = "<div><div class=\"toolbar\"><button>create1k</button><button>cr
 _MD.defineComponent(BenchAppOwned, "./bench/dom/AppOwned.tsx#BenchAppOwned");
 const _markup2 = "<li><!---->: <!----></li>";
 _MD.defineComponent(Row, "./bench/dom/AppOwned.tsx#Row");
+const _template = _MD.createTemplateCache();
+function _buildTemplate(_document2, _namespace2) {
+  const _static = _document2.createTextNode("create1k");
+  const _button = _namespace2 === "svg" ? _document2.createElementNS("http://www.w3.org/2000/svg", "button") : _document2.createElement("button");
+  _button.append(_static);
+  const _static2 = _document2.createTextNode("create10k");
+  const _button2 = _namespace2 === "svg" ? _document2.createElementNS("http://www.w3.org/2000/svg", "button") : _document2.createElement("button");
+  _button2.append(_static2);
+  const _static3 = _document2.createTextNode("append1k");
+  const _button3 = _namespace2 === "svg" ? _document2.createElementNS("http://www.w3.org/2000/svg", "button") : _document2.createElement("button");
+  _button3.append(_static3);
+  const _static4 = _document2.createTextNode("prepend1k");
+  const _button4 = _namespace2 === "svg" ? _document2.createElementNS("http://www.w3.org/2000/svg", "button") : _document2.createElement("button");
+  _button4.append(_static4);
+  const _static5 = _document2.createTextNode("pop1k");
+  const _button5 = _namespace2 === "svg" ? _document2.createElementNS("http://www.w3.org/2000/svg", "button") : _document2.createElement("button");
+  _button5.append(_static5);
+  const _static6 = _document2.createTextNode("update");
+  const _button6 = _namespace2 === "svg" ? _document2.createElementNS("http://www.w3.org/2000/svg", "button") : _document2.createElement("button");
+  _button6.append(_static6);
+  const _static7 = _document2.createTextNode("swap");
+  const _button7 = _namespace2 === "svg" ? _document2.createElementNS("http://www.w3.org/2000/svg", "button") : _document2.createElement("button");
+  _button7.append(_static7);
+  const _static8 = _document2.createTextNode("reverse");
+  const _button8 = _namespace2 === "svg" ? _document2.createElementNS("http://www.w3.org/2000/svg", "button") : _document2.createElement("button");
+  _button8.append(_static8);
+  const _static9 = _document2.createTextNode("remove");
+  const _button9 = _namespace2 === "svg" ? _document2.createElementNS("http://www.w3.org/2000/svg", "button") : _document2.createElement("button");
+  _button9.append(_static9);
+  const _static10 = _document2.createTextNode("remove100");
+  const _button10 = _namespace2 === "svg" ? _document2.createElementNS("http://www.w3.org/2000/svg", "button") : _document2.createElement("button");
+  _button10.append(_static10);
+  const _static11 = _document2.createTextNode("clear");
+  const _button11 = _namespace2 === "svg" ? _document2.createElementNS("http://www.w3.org/2000/svg", "button") : _document2.createElement("button");
+  _button11.append(_static11);
+  const _div = _namespace2 === "svg" ? _document2.createElementNS("http://www.w3.org/2000/svg", "div") : _document2.createElement("div");
+  _div.setAttribute("class", "toolbar");
+  _div.append(_button, _button2, _button3, _button4, _button5, _button6, _button7, _button8, _button9, _button10, _button11);
+  const _slot = _document2.createTextNode("");
+  const _ul = _namespace2 === "svg" ? _document2.createElementNS("http://www.w3.org/2000/svg", "ul") : _document2.createElement("ul");
+  _ul.append(_slot);
+  const _div2 = _namespace2 === "svg" ? _document2.createElementNS("http://www.w3.org/2000/svg", "div") : _document2.createElement("div");
+  _div2.append(_div, _ul);
+  return _div2;
+}
+const _template2 = _MD.createTemplateCache();
+function _buildTemplate2(_document4, _namespace4) {
+  const _slot4 = _document4.createTextNode("");
+  const _static23 = _document4.createTextNode(": ");
+  const _slot5 = _document4.createTextNode("");
+  const _li = _namespace4 === "svg" ? _document4.createElementNS("http://www.w3.org/2000/svg", "li") : _document4.createElement("li");
+  _li.append(_slot4, _static23, _slot5);
+  return _li;
+}
 import { buildData } from './data';
-function Row(_id2, _parent2, _props2, _namespace2, _setupOnly2) {
+function Row(_id2, _parent2, _props2, _namespace3, _setupOnly2) {
   let _propsVersion = 0;
   const _readKey3 = {};
   function _mutated_props() {
@@ -45,22 +99,37 @@ function Row(_id2, _parent2, _props2, _namespace2, _setupOnly2) {
     return;
   }
   _writes2.beginMount();
-  const _document2 = _MD.getActiveEnvironment().document;
-  const _nodes2 = _namespace2 === "svg" ? (() => {
-    const _slot3 = _document2.createComment("");
-    const _static12 = _document2.createTextNode(": ");
-    const _slot4 = _document2.createComment("");
-    const _li = _document2.createElementNS("http://www.w3.org/2000/svg", "li");
-    _li.append(_slot3, _static12, _slot4);
-    return [_slot3, _static12, _slot4, _li];
-  })() : _MD.materializeMarkup(_markup2);
-  const _slot5 = _nodes2[0];
-  const _slot6 = _nodes2[2];
-  const _li2 = _nodes2[3];
-  const _text2 = _document2.createTextNode("");
-  _slot5.replaceWith(_text2);
-  const _text3 = _document2.createTextNode("");
-  _slot6.replaceWith(_text3);
+  const _document3 = _MD.getActiveEnvironment().document;
+  let _text3, _text4, _li2;
+  const _clone2 = _MD.cloneTemplate(_template2, _namespace3, _buildTemplate2);
+  if (_clone2 !== null) {
+    const _node16 = _clone2;
+    const _node17 = _node16.firstChild;
+    _text3 = _node17;
+    const _node18 = _node17.nextSibling;
+    const _node19 = _node18.nextSibling;
+    _text4 = _node19;
+    _li2 = _node16;
+  } else {
+    const _nodes2 = _namespace3 === "svg" ? (() => {
+      const _slot6 = _document3.createComment("");
+      const _static24 = _document3.createTextNode(": ");
+      const _slot7 = _document3.createComment("");
+      const _li3 = _document3.createElementNS("http://www.w3.org/2000/svg", "li");
+      _li3.append(_slot6, _static24, _slot7);
+      return [_slot6, _static24, _slot7, _li3];
+    })() : _MD.materializeMarkup(_markup2);
+    const _slot8 = _nodes2[0];
+    const _slot9 = _nodes2[2];
+    const _li4 = _nodes2[3];
+    const _text5 = _document3.createTextNode("");
+    _slot8.replaceWith(_text5);
+    const _text6 = _document3.createTextNode("");
+    _slot9.replaceWith(_text6);
+    _text3 = _text5;
+    _text4 = _text6;
+    _li2 = _li4;
+  }
   const _siteComputation2 = _MD.createComputation(_writes2.mark, _entity2);
   _siteComputation2.begin();
   let _value15 = props.selected ? 'danger' : '';
@@ -87,9 +156,9 @@ function Row(_id2, _parent2, _props2, _namespace2, _setupOnly2) {
   _siteComputation3.end();
   let _valueSlot2 = null;
   if (_valueSlot2 === null && (_value17 === null || typeof _value17 !== "object")) {
-    _MD.setTextData(_text2, _value17);
+    _MD.setTextData(_text3, _value17);
   } else {
-    (_valueSlot2 ??= _MD.createIndexedValueSlot(_text2, { id: _id2, batch: _writes2, entity: _entity2, namespace: _namespace2 })).write(_value17);
+    (_valueSlot2 ??= _MD.createIndexedValueSlot(_text3, { id: _id2, batch: _writes2, entity: _entity2, namespace: _namespace3 })).write(_value17);
   }
   let _seen3 = _propsVersion;
   const _siteComputation4 = _MD.createComputation(_writes2.mark, _entity2);
@@ -98,9 +167,9 @@ function Row(_id2, _parent2, _props2, _namespace2, _setupOnly2) {
   _siteComputation4.end();
   let _valueSlot3 = null;
   if (_valueSlot3 === null && (_value18 === null || typeof _value18 !== "object")) {
-    _MD.setTextData(_text3, _value18);
+    _MD.setTextData(_text4, _value18);
   } else {
-    (_valueSlot3 ??= _MD.createIndexedValueSlot(_text3, { id: _id2, batch: _writes2, entity: _entity2, namespace: _namespace2 })).write(_value18);
+    (_valueSlot3 ??= _MD.createIndexedValueSlot(_text4, { id: _id2, batch: _writes2, entity: _entity2, namespace: _namespace3 })).write(_value18);
   }
   let _seen4 = _propsVersion;
   let _publishedVersion3 = _propsVersion;
@@ -135,9 +204,9 @@ function Row(_id2, _parent2, _props2, _namespace2, _setupOnly2) {
       _siteComputation3.end();
       if (_next3 !== _value17 && !(_next3 !== _next3 && _value17 !== _value17)) {
         if (_valueSlot2 === null && (_next3 === null || typeof _next3 !== "object")) {
-          _MD.setTextData(_text2, _next3);
+          _MD.setTextData(_text3, _next3);
         } else {
-          (_valueSlot2 ??= _MD.createIndexedValueSlot(_text2, { id: _id2, batch: _writes2, entity: _entity2, namespace: _namespace2 })).write(_next3);
+          (_valueSlot2 ??= _MD.createIndexedValueSlot(_text3, { id: _id2, batch: _writes2, entity: _entity2, namespace: _namespace3 })).write(_next3);
         }
         _value17 = _next3;
       }
@@ -149,9 +218,9 @@ function Row(_id2, _parent2, _props2, _namespace2, _setupOnly2) {
       _siteComputation4.end();
       if (_next4 !== _value18 && !(_next4 !== _next4 && _value18 !== _value18)) {
         if (_valueSlot3 === null && (_next4 === null || typeof _next4 !== "object")) {
-          _MD.setTextData(_text3, _next4);
+          _MD.setTextData(_text4, _next4);
         } else {
-          (_valueSlot3 ??= _MD.createIndexedValueSlot(_text3, { id: _id2, batch: _writes2, entity: _entity2, namespace: _namespace2 })).write(_next4);
+          (_valueSlot3 ??= _MD.createIndexedValueSlot(_text4, { id: _id2, batch: _writes2, entity: _entity2, namespace: _namespace3 })).write(_next4);
         }
         _value18 = _next4;
       }
@@ -208,65 +277,111 @@ export function BenchAppOwned(_id, _parent, _props, _namespace, _setupOnly) {
   }
   _writes.beginMount();
   const _document = _MD.getActiveEnvironment().document;
-  const _nodes = _namespace === "svg" ? (() => {
-    const _static = _document.createTextNode("create1k");
-    const _button = _document.createElementNS("http://www.w3.org/2000/svg", "button");
-    _button.append(_static);
-    const _static2 = _document.createTextNode("create10k");
-    const _button2 = _document.createElementNS("http://www.w3.org/2000/svg", "button");
-    _button2.append(_static2);
-    const _static3 = _document.createTextNode("append1k");
-    const _button3 = _document.createElementNS("http://www.w3.org/2000/svg", "button");
-    _button3.append(_static3);
-    const _static4 = _document.createTextNode("prepend1k");
-    const _button4 = _document.createElementNS("http://www.w3.org/2000/svg", "button");
-    _button4.append(_static4);
-    const _static5 = _document.createTextNode("pop1k");
-    const _button5 = _document.createElementNS("http://www.w3.org/2000/svg", "button");
-    _button5.append(_static5);
-    const _static6 = _document.createTextNode("update");
-    const _button6 = _document.createElementNS("http://www.w3.org/2000/svg", "button");
-    _button6.append(_static6);
-    const _static7 = _document.createTextNode("swap");
-    const _button7 = _document.createElementNS("http://www.w3.org/2000/svg", "button");
-    _button7.append(_static7);
-    const _static8 = _document.createTextNode("reverse");
-    const _button8 = _document.createElementNS("http://www.w3.org/2000/svg", "button");
-    _button8.append(_static8);
-    const _static9 = _document.createTextNode("remove");
-    const _button9 = _document.createElementNS("http://www.w3.org/2000/svg", "button");
-    _button9.append(_static9);
-    const _static10 = _document.createTextNode("remove100");
-    const _button10 = _document.createElementNS("http://www.w3.org/2000/svg", "button");
-    _button10.append(_static10);
-    const _static11 = _document.createTextNode("clear");
-    const _button11 = _document.createElementNS("http://www.w3.org/2000/svg", "button");
-    _button11.append(_static11);
-    const _div = _document.createElementNS("http://www.w3.org/2000/svg", "div");
-    _div.setAttribute("class", "toolbar");
-    _div.append(_button, _button2, _button3, _button4, _button5, _button6, _button7, _button8, _button9, _button10, _button11);
-    const _slot = _document.createComment("");
-    const _ul = _document.createElementNS("http://www.w3.org/2000/svg", "ul");
-    _ul.append(_slot);
-    const _div2 = _document.createElementNS("http://www.w3.org/2000/svg", "div");
-    _div2.append(_div, _ul);
-    return [_static, _button, _static2, _button2, _static3, _button3, _static4, _button4, _static5, _button5, _static6, _button6, _static7, _button7, _static8, _button8, _static9, _button9, _static10, _button10, _static11, _button11, _div, _slot, _ul, _div2];
-  })() : _MD.materializeMarkup(_markup);
-  const _button12 = _nodes[1];
-  const _button13 = _nodes[3];
-  const _button14 = _nodes[5];
-  const _button15 = _nodes[7];
-  const _button16 = _nodes[9];
-  const _button17 = _nodes[11];
-  const _button18 = _nodes[13];
-  const _button19 = _nodes[15];
-  const _button20 = _nodes[17];
-  const _button21 = _nodes[19];
-  const _button22 = _nodes[21];
-  const _slot2 = _nodes[23];
-  const _div3 = _nodes[25];
-  const _text = _document.createTextNode("");
-  _slot2.replaceWith(_text);
+  let _button12, _button13, _button14, _button15, _button16, _button17, _button18, _button19, _button20, _button21, _button22, _text, _div3;
+  const _clone = _MD.cloneTemplate(_template, _namespace, _buildTemplate);
+  if (_clone !== null) {
+    const _node = _clone;
+    const _node2 = _node.firstChild;
+    const _node3 = _node2.firstChild;
+    _button12 = _node3;
+    const _node4 = _node3.nextSibling;
+    _button13 = _node4;
+    const _node5 = _node4.nextSibling;
+    _button14 = _node5;
+    const _node6 = _node5.nextSibling;
+    _button15 = _node6;
+    const _node7 = _node6.nextSibling;
+    _button16 = _node7;
+    const _node8 = _node7.nextSibling;
+    _button17 = _node8;
+    const _node9 = _node8.nextSibling;
+    _button18 = _node9;
+    const _node10 = _node9.nextSibling;
+    _button19 = _node10;
+    const _node11 = _node10.nextSibling;
+    _button20 = _node11;
+    const _node12 = _node11.nextSibling;
+    _button21 = _node12;
+    const _node13 = _node12.nextSibling;
+    _button22 = _node13;
+    const _node14 = _node2.nextSibling;
+    const _node15 = _node14.firstChild;
+    _text = _node15;
+    _div3 = _node;
+  } else {
+    const _nodes = _namespace === "svg" ? (() => {
+      const _static12 = _document.createTextNode("create1k");
+      const _button23 = _document.createElementNS("http://www.w3.org/2000/svg", "button");
+      _button23.append(_static12);
+      const _static13 = _document.createTextNode("create10k");
+      const _button24 = _document.createElementNS("http://www.w3.org/2000/svg", "button");
+      _button24.append(_static13);
+      const _static14 = _document.createTextNode("append1k");
+      const _button25 = _document.createElementNS("http://www.w3.org/2000/svg", "button");
+      _button25.append(_static14);
+      const _static15 = _document.createTextNode("prepend1k");
+      const _button26 = _document.createElementNS("http://www.w3.org/2000/svg", "button");
+      _button26.append(_static15);
+      const _static16 = _document.createTextNode("pop1k");
+      const _button27 = _document.createElementNS("http://www.w3.org/2000/svg", "button");
+      _button27.append(_static16);
+      const _static17 = _document.createTextNode("update");
+      const _button28 = _document.createElementNS("http://www.w3.org/2000/svg", "button");
+      _button28.append(_static17);
+      const _static18 = _document.createTextNode("swap");
+      const _button29 = _document.createElementNS("http://www.w3.org/2000/svg", "button");
+      _button29.append(_static18);
+      const _static19 = _document.createTextNode("reverse");
+      const _button30 = _document.createElementNS("http://www.w3.org/2000/svg", "button");
+      _button30.append(_static19);
+      const _static20 = _document.createTextNode("remove");
+      const _button31 = _document.createElementNS("http://www.w3.org/2000/svg", "button");
+      _button31.append(_static20);
+      const _static21 = _document.createTextNode("remove100");
+      const _button32 = _document.createElementNS("http://www.w3.org/2000/svg", "button");
+      _button32.append(_static21);
+      const _static22 = _document.createTextNode("clear");
+      const _button33 = _document.createElementNS("http://www.w3.org/2000/svg", "button");
+      _button33.append(_static22);
+      const _div4 = _document.createElementNS("http://www.w3.org/2000/svg", "div");
+      _div4.setAttribute("class", "toolbar");
+      _div4.append(_button23, _button24, _button25, _button26, _button27, _button28, _button29, _button30, _button31, _button32, _button33);
+      const _slot2 = _document.createComment("");
+      const _ul2 = _document.createElementNS("http://www.w3.org/2000/svg", "ul");
+      _ul2.append(_slot2);
+      const _div5 = _document.createElementNS("http://www.w3.org/2000/svg", "div");
+      _div5.append(_div4, _ul2);
+      return [_static12, _button23, _static13, _button24, _static14, _button25, _static15, _button26, _static16, _button27, _static17, _button28, _static18, _button29, _static19, _button30, _static20, _button31, _static21, _button32, _static22, _button33, _div4, _slot2, _ul2, _div5];
+    })() : _MD.materializeMarkup(_markup);
+    const _button34 = _nodes[1];
+    const _button35 = _nodes[3];
+    const _button36 = _nodes[5];
+    const _button37 = _nodes[7];
+    const _button38 = _nodes[9];
+    const _button39 = _nodes[11];
+    const _button40 = _nodes[13];
+    const _button41 = _nodes[15];
+    const _button42 = _nodes[17];
+    const _button43 = _nodes[19];
+    const _button44 = _nodes[21];
+    const _slot3 = _nodes[23];
+    const _div6 = _nodes[25];
+    const _text2 = _document.createTextNode("");
+    _slot3.replaceWith(_text2);
+    _button12 = _button34;
+    _button13 = _button35;
+    _button14 = _button36;
+    _button15 = _button37;
+    _button16 = _button38;
+    _button17 = _button39;
+    _button18 = _button40;
+    _button19 = _button41;
+    _button20 = _button42;
+    _button21 = _button43;
+    _button22 = _button44;
+    _text = _text2;
+    _div3 = _div6;
+  }
   let _value3 = () => {
     _write(data = buildData(1000));
     _write2(selected = null);

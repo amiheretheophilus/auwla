@@ -24,6 +24,19 @@ Last updated: 2026-10-25.
 
 ## Done
 
+- Old-model fast paths, step 5 (2026-10-26): templates built once and cloned.
+  Every component, branch, stored JSX value and row now clones a template built
+  with DOM calls once per document (`compiler/core.md`), reaching nodes through
+  `firstChild`/`nextSibling`; a row list inserts runs of new or moved rows as one
+  fragment. The creation profile no longer shows `replaceWith`, the clone walk,
+  per-row `createTextNode` or markup lookup, which were about half of creation.
+  Hydration and server documents keep the general creation (runtime
+  `markup.test.ts`). Both type checks, 270 compiler and 133 runtime tests, the
+  case files (unchanged 100 deferred failures) and the Chrome gates pass. Prompted
+  by a second outside review, whose other points (read-only helpers, targeted
+  list refreshes, rows whose handlers call `props.select`, delegated events)
+  are the next steps.
+
 - Old-model fast paths, step 4 (2026-10-26): row matching without rebuilding.
   A row list keeps its identity index across passes and matches the rows next
   to the last match before looking up, so a swap, a removal, an insertion or a

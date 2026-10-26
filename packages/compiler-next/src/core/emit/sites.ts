@@ -8,7 +8,7 @@ import { copy } from './copy';
 import type { Names } from './names';
 import { expression as buildExpression, statement, statements, stringLiteral } from './quote';
 import { emitSelection, type EmitOnce } from '../../features/conditionals/dom';
-import { emitTemplate, prepareTemplateSites } from './template';
+import { emitNodes } from './template';
 import { siteValue } from './render-value';
 import { emitRowList, type RowComponents } from './row-list';
 
@@ -267,13 +267,8 @@ function emitBranch(branch: ConditionalBranch, selected: string, plan: SitesPlan
     dispose = [statement('$$slot.dispose();', { slot })];
   } else {
     const markup = branch.template.markup === null ? null : names.fresh('_branchMarkup');
-    const used = new Set(branch.template.roots);
-    for (const site of branch.sites) {
-      used.add(site.node);
-    }
     const templateContext = { names, runtime, document, markup, namespace: context.namespace };
-    const template = emitTemplate(branch.template, used, templateContext);
-    const slots = prepareTemplateSites(branch.template, branch.sites, template, templateContext);
+    const slots = emitNodes(branch.template, branch.sites, templateContext);
     const sites = emitSites({ ...plan, sites: branch.sites }, { ...context, ref: slots.ref });
     roots = branch.template.roots.map(slots.root);
     const declarations = markup === null ? [] : [
@@ -281,7 +276,6 @@ function emitBranch(branch: ConditionalBranch, selected: string, plan: SitesPlan
     ];
     body = [
       ...declarations,
-      ...template.statements,
       ...slots.statements,
       ...sites.mount,
     ];

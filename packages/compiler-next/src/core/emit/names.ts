@@ -2,12 +2,17 @@
  * Names for generated bindings that cannot collide with the module's own:
  * `_update`, then `_update2` if the author already uses `_update`.
  */
-import type { Node } from 'yuku-parser';
+import type { Node, Statement } from 'yuku-parser';
 import type { Module } from '../resolve';
 
 export class Names {
   readonly #taken = new Set<string>();
   readonly #owned = new Map<Node, string>();
+  /**
+   * Module-level declarations made while emitting nested code (a template's
+   * cache and builder); `emitDom` places them with its other hoisted statements.
+   */
+  readonly hoisted: Statement[] = [];
 
   constructor(module: Module) {
     for (const binding of module.bindings) this.#taken.add(binding.name);

@@ -265,12 +265,27 @@ export function createRowList(anchor: Text, owner: RenderOwner, key: RowKey | nu
     }
     // `lisPositions` returns a shared buffer; it is read before any other call.
     const kept = ordered ? null : lisPositions(sequence, 0, sequence.length);
+    const stays = (position: number) => sequence[position]! >= 0 && (kept === null || kept[position] === true);
     let before: Node = anchor;
-    for (let position = next.length - 1; position >= 0; position--) {
-      const node = next[position]!.entry.node;
-      const stays = sequence[position]! >= 0 && (kept === null || kept[position] === true);
-      if (!stays) parent.insertBefore(node, before);
-      before = node;
+    let position = next.length - 1;
+    while (position >= 0) {
+      if (stays(position)) {
+        before = next[position]!.entry.node;
+        position--;
+        continue;
+      }
+      // A run of new or moved rows goes in as one fragment, as the old list did.
+      let start = position;
+      while (start > 0 && !stays(start - 1)) start--;
+      if (start === position) {
+        parent.insertBefore(next[position]!.entry.node, before);
+      } else {
+        const fragment = anchor.ownerDocument.createDocumentFragment();
+        for (let index = start; index <= position; index++) fragment.appendChild(next[index]!.entry.node);
+        parent.insertBefore(fragment, before);
+      }
+      before = next[start]!.entry.node;
+      position = start - 1;
     }
   }
 

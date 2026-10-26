@@ -16,7 +16,7 @@ import type { FunctionNode } from '../resolve/functions';
 import type { Names } from './names';
 import { copy } from './copy';
 import { expression, statement, stringLiteral } from './quote';
-import { emitTemplate, inheritedNodes, prepareTemplateSites } from './template';
+import { emitNodes, inheritedNodes } from './template';
 import { emitSites, renderOwner, type SitesContext } from './sites';
 
 type BlockStatement = Extract<Statement, { type: 'BlockStatement' }>;
@@ -165,18 +165,13 @@ function emitRow(
 ): Statement[] {
   const { names, runtime } = context;
   const markup = shape.markup === null ? null : names.fresh('_rowMarkup');
-  const used = new Set(shape.roots);
-  for (const site of sites) used.add(site.node);
-  const templateContext = {
-    names, runtime, document: context.document, markup, ...(inherits ? { namespace: context.namespace } : {}),
-  };
-  const template = emitTemplate(shape, used, templateContext);
-  const slots = prepareTemplateSites(shape, sites, template, templateContext);
+  const slots = emitNodes(shape, sites, {
+    names, runtime, document: context.document, markup, namespace: inherits ? context.namespace : undefined,
+  });
   const emitted = emitSites({ sites, siteInputs: new Map(), dynamicSites: new Set() },
     { ...context, ref: slots.ref, rows: true, once: undefined });
   return [
     ...(markup === null ? [] : [statement('const $$markup = $$html;', { markup, html: stringLiteral(shape.markup!) })]),
-    ...template.statements,
     ...slots.statements,
     ...emitted.mount,
     b.ReturnStatement({ argument: finish(emitted, slots.root(shape.roots[0]!)) }),

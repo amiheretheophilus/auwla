@@ -246,7 +246,18 @@ trees are sealed with `finishCopy` before the final module copy, preserving thei
 combined local/shared operations. Noncomputed property keys remain syntax;
 rewritten shorthand values expand when needed.
 
-Ordinary HTML uses hoisted markup and cached template cloning. Tables, raw-text
+A template whose roots are elements or static text is built the old compiler's
+way (`emitNodes` in `core/emit/template.ts`): a hoisted builder creates its
+nodes with DOM calls once per document and namespace, text slots included as
+empty text nodes, and each mount clones it (`cloneTemplate`) and reaches every
+node it needs through `firstChild` and `nextSibling`. No markup is parsed, so
+adjacent text slots stay separate without placeholders, and tables or SVG need
+no special case. Hydration claims existing nodes and a server document builds
+its own output; for those `cloneTemplate` returns null and the general creation
+below runs, emitted beside it. A template with no roots, or whose root is itself
+a text or region site, uses only the general creation.
+
+General creation: ordinary HTML uses hoisted markup and cached template cloning. Tables, raw-text
 elements, parser-sensitive nesting, SVG and unproven tags use direct creation.
 This fallback preserves the authored tree and SVG/foreignObject namespaces;
 template eligibility is an optimization, not a restriction on accepted tags.

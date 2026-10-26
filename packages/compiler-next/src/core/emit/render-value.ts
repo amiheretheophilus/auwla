@@ -4,7 +4,7 @@ import type { Expression, Node, Statement } from 'yuku-parser';
 import type { RenderValuePlan, Site, Template } from '../plan/model';
 import type { Names } from './names';
 import { expression, statement, stringLiteral } from './quote';
-import { emitTemplate, inheritedNodes, prepareTemplateSites } from './template';
+import { emitNodes, inheritedNodes } from './template';
 import { emitSites } from './sites';
 
 export function emitRenderValue(plan: RenderValuePlan, names: Names, runtime: string) {
@@ -20,14 +20,7 @@ export function emitRenderValue(plan: RenderValuePlan, names: Names, runtime: st
 
   function emitVariant(shape: Template): Statement[] {
     const markup = shape.markup === null ? null : names.fresh('_valueMarkup');
-    const used = new Set(shape.roots);
-    for (const site of plan.sites) {
-      used.add(site.node);
-    }
-
-    const context = { names, runtime, document, markup };
-    const template = emitTemplate(shape, used, context);
-    const slots = prepareTemplateSites(shape, plan.sites, template, context);
+    const slots = emitNodes(shape, plan.sites, { names, runtime, document, markup });
     const sites = emitSites(
       { sites: plan.sites, siteInputs: new Map(), dynamicSites: new Set() },
       {
@@ -55,7 +48,6 @@ export function emitRenderValue(plan: RenderValuePlan, names: Names, runtime: st
     ];
     return [
       ...declarations,
-      ...template.statements,
       ...slots.statements,
       ...sites.mount,
       b.ReturnStatement({ argument: entry }),
