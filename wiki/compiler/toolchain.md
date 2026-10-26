@@ -25,6 +25,12 @@ Other libraries:
 | `fast-check` | generates test programs and shrinks failures (`testing.md`), so we don't write our own shrinker |
 | `@memoized-dom/runtime/array-methods` | Data-only intrinsic facts shared by compiler proofs and runtime guards; does not initialize the runtime (`optimize.md`) |
 
+Development uses Bun's native `bun check`, with the root engine floor
+`>=1.4.3-0`. The root now requests `@types/bun` `^1.4.4`, rather than `latest`;
+`bun.lock` resolves both `@types/bun` and `bun-types` to 1.4.4. A frozen install
+and the compiler-next/runtime package checks validate this development-only
+update; it does not change the browser runtime or emitted programs.
+
 ## Rules
 
 - Only `core/parse/` imports `yuku-parser`, only `core/resolve/` imports

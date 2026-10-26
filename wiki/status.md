@@ -24,6 +24,11 @@ Last updated: 2026-10-26.
 
 ## Done
 
+- Bun development types (2026-10-26): completed the pending `@types/bun`
+  update from `latest` to `^1.4.4`, with matching 1.4.4 lockfile resolutions.
+  The frozen install makes no changes, and compiler-next (139 files) and
+  runtime (76 files) pass `bun check` (`compiler/toolchain.md`).
+
 - Helper method/prototype correctness gate (2026-10-26, `0f072957`): explicit member stores
   and native method calls on the same fresh array keep observation, since entry
   guards cannot establish that a later call still reaches the native method.
