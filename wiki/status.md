@@ -24,6 +24,17 @@ Last updated: 2026-10-26.
 
 ## Done
 
+- Shared array-method facts (2026-10-26): the compiler and runtime now consume
+  one immutable, data-only catalog (`runtime/src/array-methods.ts`), exported
+  through `@memoized-dom/runtime/array-methods`. This removes the duplicate
+  compiler copy/read/edit, callback, conversion and primitive-result tables and
+  the runtime's separate intrinsic registration list. The compiler still proves
+  authored effects, and the runtime still checks actual callee identity; method
+  names do not establish semantics (`compiler/optimize.md`). The earlier helper
+  correctness fix is committed and pushed as `babb31b6`. Both package type
+  checks, the runtime build, 29 compiler/handler checks and 16 native method-call
+  checks pass locally. Full correctness CI follows the shared-catalog push.
+
 - Helper correctness gate (2026-10-26): the supplied review is audited on
   `compiler/optimize.md`, and correctness fixes precede further performance
   changes (`decisions.md`). Named array callbacks stay observed unless their

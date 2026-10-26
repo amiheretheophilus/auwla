@@ -30,25 +30,12 @@
  */
 import type { Binding, Module } from 'yuku-analyzer';
 import { is, walk } from 'yuku-ast';
+import { arrayMethod } from '@memoized-dom/runtime/array-methods';
 import type { Node } from 'yuku-parser';
 import type { ComponentPlan, ModulePlan, MutationPlan, SharedOwnerPlan } from '../core/plan/model';
 import { importedDefinition } from '../core/resolve';
 import { effectFree } from './effects';
 import type { Optimization } from '.';
-
-/** Return a new array from their receiver. */
-const COPIES = new Set(['slice', 'concat', 'filter', 'map', 'toReversed', 'toSpliced', 'with']);
-/** Only read their receiver. */
-const READS = new Set(['indexOf', 'lastIndexOf', 'includes', 'at', 'find', 'findIndex', 'findLast', 'findLastIndex', 'some', 'every']);
-/** Edit only their receiver. */
-const EDITS = new Set(['push', 'pop', 'shift', 'unshift', 'splice', 'reverse', 'fill']);
-const CALLBACKS = new Set(['filter', 'map', 'find', 'findIndex', 'findLast', 'findLastIndex', 'some', 'every']);
-/** Arguments whose native conversion can call authored valueOf/toPrimitive. */
-const CONVERTED = new Map<string, readonly number[]>([
-  ['slice', [0, 1]], ['indexOf', [1]], ['lastIndexOf', [1]], ['includes', [1]],
-  ['at', [0]], ['with', [0]], ['toSpliced', [0, 1]], ['splice', [0, 1]], ['fill', [1, 2]],
-]);
-const PRIMITIVE_RESULTS = new Set(['indexOf', 'lastIndexOf', 'includes', 'findIndex', 'findLastIndex', 'some', 'every']);
 
 export interface HelperProof {
   /** `[argument, method]`: the helper copies that argument with that method. */
@@ -126,7 +113,7 @@ export function provenHelper(module: Module, fn: FunctionDeclaration): HelperPro
       && is.Identifier(node.callee.property)) {
       // The normal call check below proves this receiver and the actual native
       // method. Those intrinsics return primitives, including indexOf's -1.
-      return PRIMITIVE_RESULTS.has(node.callee.property.name);
+      return arrayMethod(node.callee.property.name)?.returnsPrimitive === true;
     }
     return false;
   };
@@ -150,7 +137,7 @@ export function provenHelper(module: Module, fn: FunctionDeclaration): HelperPro
         const init = node.init;
         const allocates = is.ArrayExpression(init) || is.ObjectExpression(init)
           || (is.CallExpression(init) && is.MemberExpression(init.callee) && !init.callee.computed
-            && is.Identifier(init.callee.property) && COPIES.has(init.callee.property.name));
+            && is.Identifier(init.callee.property) && arrayMethod(init.callee.property.name)?.kind === 'copy');
         const binding = module.bindings.find((candidate) => candidate.declarations[0] === node.id);
         if (allocates && parent !== null && is.VariableDeclaration(parent) && parent.kind === 'const' && binding !== undefined) {
           fresh.add(binding);
@@ -181,16 +168,17 @@ export function provenHelper(module: Module, fn: FunctionDeclaration): HelperPro
           return;
         }
         const name = callee.property.name;
+        const method = arrayMethod(name);
         const receiver = bindingOf(callee.object);
         const param = receiver === null ? -1 : paramBindings.indexOf(receiver);
         const ownsReceiver = receiver !== null && arrays.has(receiver);
-        const allowed = COPIES.has(name) || READS.has(name) || (ownsReceiver && EDITS.has(name));
-        if (!allowed || (param < 0 && !ownsReceiver)) {
+        if (method === undefined || !method.helper || (method.kind === 'edit' && !ownsReceiver)
+          || (param < 0 && !ownsReceiver)) {
           fail(ctx);
           return;
         }
-        if (CALLBACKS.has(name)) {
-          const callback = node.arguments[0];
+        if (method.callback >= 0) {
+          const callback = node.arguments[method.callback];
           // Reading a named function is effect-free; executing it need not be.
           // Unknown callbacks keep the general observer, even when passed in
           // through an otherwise effect-free helper argument.
@@ -199,7 +187,7 @@ export function provenHelper(module: Module, fn: FunctionDeclaration): HelperPro
             return;
           }
         }
-        for (const position of CONVERTED.get(name) ?? []) {
+        for (const position of method.converted) {
           const argument = node.arguments[position];
           if (argument !== undefined && !primitiveArgument(argument)) {
             fail(ctx);

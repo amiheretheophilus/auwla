@@ -29,6 +29,11 @@
       "import": "./dist/index.js",
       "default": "./dist/index.js"
     },
+    "./array-methods": {
+      "types": "./dist/array-methods.d.ts",
+      "import": "./dist/array-methods.js",
+      "default": "./dist/array-methods.js"
+    },
     "./hydrate": {
       "types": "./dist/hydrate.d.ts",
       "import": "./dist/hydrate.js",

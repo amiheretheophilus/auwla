@@ -23,6 +23,7 @@ Other libraries:
 | --- | --- |
 | `happy-dom` | the DOM in tests (already used by `test-support/`) |
 | `fast-check` | generates test programs and shrinks failures (`testing.md`), so we don't write our own shrinker |
+| `@memoized-dom/runtime/array-methods` | Data-only intrinsic facts shared by compiler proofs and runtime guards; does not initialize the runtime (`optimize.md`) |
 
 ## Rules
 

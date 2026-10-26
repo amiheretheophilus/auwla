@@ -2,6 +2,7 @@ import { defineConfig } from 'rolldown';
 
 export default defineConfig({
   input: {
+    'array-methods': './src/array-methods.ts',
     index: './src/index.ts',
     hot: './src/hot.ts',
     hydrate: './src/hydrate.ts',

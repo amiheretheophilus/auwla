@@ -21,21 +21,9 @@
  * without a snapshot (`observeReceiverEdit`). Anything else is observed as before.
  */
 import { observeMutation, observeReceiverEdit } from './mutation';
+import { ARRAY_METHODS, type ArrayMethod } from './array-methods';
 import type { RowCache } from './list-map';
 import type { RowList } from './row-list';
-
-interface Proof {
-  /** Creates its result with ArraySpeciesCreate, which reads `constructor`. */
-  readonly species: boolean;
-  /** Argument positions converted with ToIntegerOrInfinity. */
-  readonly converted: readonly number[];
-  /** The position of the callback the intrinsic calls, or -1. */
-  readonly callback: number;
-  /** Edits its receiver, and nothing else. */
-  readonly edits: boolean;
-  /** Argument interval inserted into the receiver; omitted when none are added. */
-  readonly added?: readonly [from: number, to?: number];
-}
 
 const { apply } = Reflect;
 const { getOwnPropertyDescriptor, getPrototypeOf } = Object;
@@ -45,47 +33,20 @@ const ArrayIntrinsic = Array;
 const arrayPrototype = Array.prototype;
 const speciesGetter = getOwnPropertyDescriptor(Array, Symbol.species)?.get;
 
-const proofs = new Map<unknown, Proof>();
+const proofs = new Map<unknown, ArrayMethod>();
 // The intrinsics as loaded, before application code runs. Later replacing
 // `Array.prototype.slice` installs another function, which has no proof.
 const intrinsics = arrayPrototype as unknown as Record<string, unknown>;
 const intrinsicMap = intrinsics.map;
 /** Each proven intrinsic by name, as loaded. */
 const loaded = new Map<string, Function>();
-function prove(name: string, proof: Partial<Proof>): void {
+for (const [name, proof] of Object.entries(ARRAY_METHODS)) {
   const method = intrinsics[name];
   if (typeof method === 'function') {
     loaded.set(name, method);
-    proofs.set(method, { species: false, converted: [], callback: -1, edits: false, ...proof });
+    proofs.set(method, proof);
   }
 }
-
-// Allocate a fresh result.
-prove('slice', { species: true, converted: [0, 1] });
-prove('concat', { species: true });
-prove('indexOf', { converted: [1] });
-prove('lastIndexOf', { converted: [1] });
-prove('includes', { converted: [1] });
-prove('at', { converted: [0] });
-prove('toReversed', {});
-prove('with', { converted: [0] });
-prove('toSpliced', { converted: [0, 1] });
-// Call a proven callback; allocate a fresh result.
-prove('map', { species: true, callback: 0 });
-prove('filter', { species: true, callback: 0 });
-for (const name of ['find', 'findIndex', 'findLast', 'findLastIndex', 'some', 'every', 'reduce', 'reduceRight']) {
-  prove(name, { callback: 0 });
-}
-// Edit the receiver only.
-for (const name of ['push', 'unshift']) {
-  prove(name, { edits: true, added: [0] });
-}
-for (const name of ['pop', 'shift', 'reverse']) {
-  prove(name, { edits: true });
-}
-prove('splice', { edits: true, species: true, converted: [0, 1], added: [2] });
-prove('fill', { edits: true, converted: [1, 2], added: [0, 1] });
-prove('sort', { edits: true, callback: 0 });
 
 /** ArraySpeciesCreate on `array` constructs the intrinsic Array, running no authored code. */
 function intrinsicSpecies(array: object): boolean {
@@ -99,14 +60,14 @@ function primitive(value: unknown): boolean {
   return value === null || (typeof value !== 'object' && typeof value !== 'function');
 }
 
-function argumentsProven(proof: Proof, args: readonly unknown[], proven: number): boolean {
+function argumentsProven(proof: ArrayMethod, args: readonly unknown[], proven: number): boolean {
   for (const position of proof.converted) {
     if (!primitive(args[position])) return false;
   }
   if (proof.callback < 0) return true;
   // An omitted comparator sorts by string conversion; anything else must be
   // the function the compiler proved, at the position it proved.
-  if (proof.edits && args[proof.callback] === undefined) return true;
+  if (proof.kind === 'edit' && args[proof.callback] === undefined) return true;
   return ((proven >> proof.callback) & 1) === 1;
 }
 
@@ -182,7 +143,7 @@ export function observeMethod(
     if ((proof!.species && !intrinsicSpecies(receiver)) || !argumentsProven(proof!, args, proven)) {
       return observeMutation(reads, notify).finish(apply(method, receiver, args));
     }
-    if (!proof!.edits) {
+    if (proof!.kind !== 'edit') {
       if (rows !== undefined && method === intrinsicMap) return rows.map(receiver, args[0] as Function, args[1]);
       return apply(method, receiver, args);
     }

@@ -88,6 +88,16 @@ These are work counts, not VM timing or memory results.
 
 ## Method calls
 
+`packages/runtime/src/array-methods.ts`, exposed as
+`@memoized-dom/runtime/array-methods`, is the single data-only catalog of array
+method facts: copy/read/edit kind, species, callback and converted-argument
+positions, inserted values, primitive results and current helper eligibility.
+`helpers.ts` reads those facts directly; `runtime/src/method-calls.ts` associates
+the same records with the captured intrinsic identities. There are no separate
+compiler method sets to maintain. The catalog imports no runtime kernel or DOM.
+Names still only select candidates: compiler effect proofs and runtime callee,
+receiver and argument guards remain necessary.
+
 The general path observes every call that may edit state by snapshotting all the
 data its reads reach, before and after (`handlers.md`). On 10k rows that is about
 70 ms per call, for `items.slice(1)` as for `items.map(row => <tr …/>)` in a
