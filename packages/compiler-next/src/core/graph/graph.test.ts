@@ -291,6 +291,20 @@ describe('graph assembly', () => {
 });
 
 describe('shared graph queries', () => {
+  it('keeps status dependencies reactive without propagating their payload wait', () => {
+    const input = fixture({ './App.tsx': 'const user = {}; const request = user; const label = request.status;' });
+    input.classify('user', 'Source');
+    input.classify('request', 'Derived', [{ reference: input.reference('user'), readiness: false }]);
+    input.classify('label', 'Derived', [{ reference: input.reference('request') }]);
+    const graph = input.build();
+    const label = graph.bindings.get(input.binding('label'))!;
+    const request = graph.bindings.get(input.binding('request'))!;
+    expect(request.reads[0]!.readiness).toBe(false);
+    expect(isReactive(label)).toBe(true);
+    expect(pending(label).size).toBe(0);
+    expect(pending(label, () => true).size).toBe(0);
+  });
+
   it('finds chained sources through a diamond exactly once, including a source itself', () => {
     const input = fixture({
       './App.tsx': 'const a = load(); const b = load(a); const left = b; const right = b; const view = left + right;',

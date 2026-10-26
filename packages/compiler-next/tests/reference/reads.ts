@@ -17,7 +17,12 @@ export class Reads {
    * Reads inside `skip` (parts of a root) are left out.
    */
   inside(roots: Node[], exclude: Binding | undefined, skip: Node[] = []): Set<Binding> {
-    const found = new Set<Binding>();
+    return new Set(this.referencesInside(roots, exclude, skip).keys());
+  }
+
+  /** Keep reached uses as well as bindings, including uses in called helpers. */
+  referencesInside(roots: Node[], exclude?: Binding, skip: Node[] = []): Map<Binding, Reference[]> {
+    const found = new Map<Binding, Reference[]>();
     for (const root of roots) this.collect(root, root, false, found, new Set(), skip);
     if (exclude) found.delete(exclude);
     return found;
@@ -60,21 +65,21 @@ export class Reads {
    * records its inputs. Updates (`runs++`) are writes, not reads.
    */
   ofCallback(callback: Expression): Set<Binding> {
-    const found = new Set<Binding>();
+    const found = new Map<Binding, Reference[]>();
     let fn: Node | undefined = callback;
     if (is.Identifier(callback)) {
       const binding = this.module.referenceOf(callback)?.binding;
       fn = binding ? this.functionOf(binding) : undefined;
     }
     if (fn !== undefined && is.Function(fn)) this.collect(fn, fn, true, found, new Set([fn]));
-    return found;
+    return new Set(found.keys());
   }
 
   private collect(
     root: Node,
     scope: Node,
     directOnly: boolean,
-    found: Set<Binding>,
+    found: Map<Binding, Reference[]>,
     visited: Set<Node>,
     skip: Node[] = [],
   ): void {
@@ -89,14 +94,16 @@ export class Reads {
 
       const fn = this.functionOf(binding);
       if (fn === undefined) {
-        found.add(binding);
+        const references = found.get(binding) ?? [];
+        references.push(reference!);
+        found.set(binding, references);
         return;
       }
 
       const parent = this.module.parentOf(reference.node);
       if (visited.has(fn) || !is.CallExpression(parent) || parent.callee !== reference.node) return;
       visited.add(fn);
-      this.collect(fn, fn, directOnly, found, visited);
+      this.collect(fn, fn, directOnly, found, visited, skip);
     };
 
     this.module.walk({

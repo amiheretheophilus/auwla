@@ -301,6 +301,10 @@ array child). Remove each check when its phase is built.
 
 ## Phase 8: sources and Group
 
+- [x] Classify source-valued calls and visible helper returns by binding identity;
+  preserve source identity through changing request inputs. Keep `$track`
+  dependencies reactive without waiting for their payload. Two new reference
+  cases pin status availability and expose a helper-status guard bug, now fixed.
 - [ ] `$fetch`, `$read`, `$track`, GET server functions; readiness (`pending`),
   `Group` policies, `suspend`; the non-GET contract check and its compiler tests
   (`sources.md`).

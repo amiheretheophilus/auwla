@@ -4,6 +4,36 @@ import { behaves } from '../harness/run';
 import { requestedUrls, requestSignals } from '../harness/requests';
 import { serverFunctionClient } from '../harness/server-functions';
 
+behaves('a source status helper remains available before its payload commits', {
+  source: `
+    import { $read, $track } from '@memoized-dom/data';
+    export function App() {
+      const user = $read(defer('user'));
+      function status() { return $track(user).pending ? 'waiting' : 'ready'; }
+      const label = status();
+      return <main><p>{label}</p><b>static</b></main>;
+    }`,
+  steps: [{ resolve: 'user', value: { name: 'Ada' } }],
+  check(container, observation) {
+    expect(container.querySelector('p')?.textContent).toBe(['waiting', 'ready'][observation]);
+    expect(container.querySelector('b')?.textContent).toBe('static');
+  },
+});
+
+behaves('a status-only source failure does not wait for an unused payload', {
+  source: `
+    import { $read, $track } from '@memoized-dom/data';
+    export function App() {
+      const user = $read(defer('user'));
+      const request = $track(user);
+      return <p>{request.error ? request.error.message : request.status}</p>;
+    }`,
+  steps: [{ reject: 'user', message: 'unavailable' }],
+  check(container, observation) {
+    expect(container.querySelector('p')?.textContent).toBe(['pending', 'unavailable'][observation]);
+  },
+});
+
 behaves('a read waits before deriving through a helper', {
   source: `
     import { $read, Group } from '@memoized-dom/data';

@@ -96,7 +96,7 @@ export function buildGraph(
       // This is a compiler fact error, not rejection of an authored expression.
       throw new Error('memo-dom: graph dependency is not a runtime binding in this project');
     }
-    return { target, reference: read.reference, path: [...(read.path ?? [])] };
+    return { target, reference: read.reference, path: [...(read.path ?? [])], readiness: read.readiness };
   }
 
   for (const [binding, node] of bindings) {

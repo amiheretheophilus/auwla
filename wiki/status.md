@@ -25,6 +25,17 @@ Last updated: 2026-10-26.
 
 ## Done
 
+- Phase 8 graph foundation (2026-10-26): source-valued calls and visible helper
+  returns are classified by binding identity, including aliases, named imports
+  and re-exports. Changing request inputs preserves `Source`; a status-only
+  `$track` dependency stays reactive without propagating a payload wait.
+  Two new behavioral assertions caught and fixed reference guards waiting on
+  a helper's status-only source capture. Existing assertions are unchanged.
+  Local package type checking, 62 focused compiler checks and 148 source/
+  lifecycle/ref/callback reference cases pass. Source emission, ownership,
+  delayed computations and Group remain unfinished; the explicit Phase 8 guard
+  remains in place. Performance is still paused.
+
 - Phase 7 completed (2026-10-26, `4e15dc31`): effects, cleanup, module
   effects, loop/conditional/helper registrations and reactive refs are built on
   existing runtime ownership, collectors, write batches and ref mounting. Ref

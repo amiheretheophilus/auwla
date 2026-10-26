@@ -46,7 +46,7 @@ export function classifyDerived(
   for (const [binding, fact] of facts) {
     if (!fact.reads?.some(readsWrittenGlobal)) continue;
     mark(binding);
-    if (fact.kind !== 'Prop' && fact.initial !== undefined) {
+    if (canDerive(fact)) {
       facts.set(binding, { ...fact, kind: 'Derived' });
     }
   }
@@ -56,7 +56,7 @@ export function classifyDerived(
     const dependency = work[index]!;
     for (const binding of dependents.get(dependency) ?? []) {
       const fact = facts.get(binding)!;
-      if (fact.kind !== 'Prop' && fact.initial !== undefined) {
+      if (canDerive(fact)) {
         facts.set(binding, { ...fact, kind: 'Derived' });
       }
       mark(binding);
@@ -70,4 +70,9 @@ export function classifyDerived(
     if (target !== undefined) facts.set(binding, { ...fact, kind: target.kind });
   }
   return facts;
+}
+
+/** A source follows request inputs while retaining its source identity. */
+function canDerive(fact: BindingFacts): boolean {
+  return fact.kind !== 'Prop' && fact.kind !== 'Source' && fact.initial !== undefined;
 }

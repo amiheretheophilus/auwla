@@ -1,11 +1,39 @@
 # Sources and readiness
 
-**Folders:** `features/sources/` _(planned)_; the test reference is built in
+**Folders:** `features/sources/`; the test reference is built in
 `packages/compiler-next/tests/reference/`.
 
 ## What it does
 
 Finds values that load over time and makes everything computed from them wait.
+
+## Compiler files and current boundary
+
+All compiler paths below are under `packages/compiler-next/src/`.
+
+| File | Owns |
+| --- | --- |
+| `features/sources/classify.ts` | Source-valued calls/returns, framework API binding identity and status-only read facts |
+| `features/sources/classify.test.ts` | Graph checks for direct/aliased APIs, helpers, imports, request inputs, takeover sites and status dependencies |
+| `core/graph/model.ts`, `index.ts`, `rules.ts` | Readiness edges, separate from ordinary reactive dependencies |
+
+The graph recognizes `$read`, GET `$fetch` and visible helpers returning them,
+including named linked helpers and re-exports. A request remains `Source` when
+its arguments change. Aliases retain edges to their original source. A helper
+that only creates a source, returns a payload field, or returns a promise,
+iterator or callback is not itself a source factory. Changed callable values
+and unknown request methods remain opaque; non-GET promises are not sources.
+
+`$track(source)` reads the handle's status without waiting for its payload.
+That edge remains reactive but does not propagate `pending`. A payload access
+such as `$track(source.child)` still waits. Read facts keep their original
+reference identities through visible helper expansion.
+
+This is graph infrastructure, not completed source emission. The Phase 8 import
+guard still applies. Runtime subscriptions, payload lowering, delayed seeds,
+lazy execution guards, Group presentation and preparation remain to be wired to
+the existing data/runtime APIs. Opaque/nested source values need the runtime
+readiness path; static graph candidates alone cannot choose active branches.
 
 ## Reference files
 
@@ -104,6 +132,11 @@ returns a `Waiting` value carrying its sources, rather than evaluating against
 `undefined` or throwing a suspension signal. `$value` reads the payload in ready
 computations. No `try`/`catch`/`finally` is introduced.
 
+Status inputs retain the actual uses reached through called local helpers,
+so a `$track`-only helper can run while its source is pending. A helper that
+also reads a payload still waits. The same read traversal supplies binding
+dependencies and their uses; this does not duplicate the reference evaluator.
+
 The inputs of an expression are built branch by branch (`inputsOf` in
 `readiness.ts`): `$branch` reads a test's inputs, evaluates the test, then lists
 the chosen branch's inputs; `$switch` does the same for a `switch`. A test is only
@@ -171,7 +204,10 @@ request cancellation through `$track` is still separate, unfinished work.
 
 ## Cases to test
 
-`tests/cases/sources.test.ts`: 74 cases, all passing on the reference. The original
+`tests/cases/sources.test.ts`: 76 cases, all passing on the reference. Two status
+regressions pin helper reads before commit and failure of an unused payload.
+The helper case exposed and fixed a reference guard that treated a status-only
+capture as a payload read; its original expectation was retained. The original
 27 give 18 passes and 9 failures on the old compiler; the null-target case fails
 it (written on review, it caught the reference treating `null` as a new load);
 four destructuring cases give 2 passes and 2 failures (the direct

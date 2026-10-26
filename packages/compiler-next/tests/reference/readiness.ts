@@ -52,10 +52,11 @@ export function isDataCall(module: Module, node: Node, name: string): boolean {
  * is a status read (`$track(user)`), it does not wait for the payload: it is listed
  * as `$sourceState(user)`, which is never `Waiting`.
  */
-export function statusInput(binding: Binding, value: Expression, roots: Node[], rawUses: Set<Node>): Expression {
-  const uses = binding.references.filter((reference) => roots.some((root) => {
-    return reference.node.start >= root.start && reference.node.end <= root.end;
-  }));
+export function statusInput(
+  binding: Binding, value: Expression, roots: Node[], rawUses: Set<Node>,
+  reads = new Reads(binding.module), skip: Node[] = [],
+): Expression {
+  const uses = reads.referencesInside(roots, undefined, skip).get(binding) ?? [];
   const statusOnly = uses.length > 0 && uses.every((use) => rawUses.has(use.node));
   return statusOnly ? runtimeCall('$sourceState', [value]) : value;
 }
@@ -97,7 +98,7 @@ export function readsWithPaths(
 ): ReadsOf {
   const readsOf = (root: Node, skip: Node[]) => {
     const bindings = [...reads.inside([root], undefined, skip)].filter(keep);
-    const elements = bindings.map((binding) => statusInput(binding, readOf(binding), [root], rawUses));
+    const elements = bindings.map((binding) => statusInput(binding, readOf(binding), [root], rawUses, reads, skip));
     for (const { binding, path } of reads.paths(root, skip)) {
       if (!keep(binding)) continue;
       const keys = b.ArrayExpression({ elements: path.map(stringLiteral) });

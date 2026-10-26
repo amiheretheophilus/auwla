@@ -46,6 +46,8 @@ export interface ReadFact {
   readonly binding?: Binding;
   /** [] reads the value itself; null is a computed property step. */
   readonly path?: readonly PathKey[];
+  /** Status reads stay reactive without waiting for the source payload. */
+  readonly readiness?: boolean;
 }
 
 export interface BindingFacts {
@@ -61,6 +63,7 @@ export interface ReadEdge {
   /** Null only for an import's implicit live-binding link. */
   readonly reference: Reference | null;
   readonly path: readonly PathKey[];
+  readonly readiness?: boolean;
 }
 
 /**

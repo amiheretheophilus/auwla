@@ -12,7 +12,7 @@ export function pending(
   follows: (edge: ReadEdge) => boolean = () => true,
 ): ReadonlySet<SourceNode> {
   const sources = new Set<SourceNode>();
-  for (const dependency of reachable(node, follows)) {
+  for (const dependency of reachable(node, (edge) => edge.readiness !== false && follows(edge))) {
     if (dependency.kind === 'Source' && dependency.binding !== null) {
       sources.add(dependency as SourceNode);
     }

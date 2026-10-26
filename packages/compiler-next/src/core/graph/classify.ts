@@ -2,6 +2,7 @@
 import { classifyState } from '../../features/state/classify';
 import { classifyDerived } from '../../features/derived/classify';
 import { classifyRefs, refTargets } from '../../features/refs/classify';
+import { classifySources, SourceQueries } from '../../features/sources/classify';
 import { collectComputations } from '../../features/derived/computations';
 import { componentFunctions, propBindings } from '../../features/props/classify';
 import type { Resolved } from '../resolve';
@@ -28,7 +29,8 @@ export function classifyGraph(resolved: Resolved): ClassifiedGraph {
   const props = propBindings(resolved, components);
   // Implicit ref writes supply reactive roots before derivation propagates.
   const state = classifyState(resolved, computations, props);
-  const facts = classifyDerived(classifyRefs(state, refTargets(resolved)), resolved.globals);
+  const sources = classifySources(state, new SourceQueries(summaries));
+  const facts = classifyDerived(classifyRefs(sources, refTargets(resolved)), resolved.globals);
   const escaping = escapingFacts(resolved, queries, components);
   return {
     ...buildGraph(resolved, facts, escaping),
