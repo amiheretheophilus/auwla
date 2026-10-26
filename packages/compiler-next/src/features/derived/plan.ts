@@ -29,7 +29,19 @@ export function planMemos(
 
   const owners = new Map<Node | null, MemoPlan[]>();
   for (const [declarator, targets] of declarations) {
-    if (!targets.some((target) => target.kind === 'Derived' || target.kind === 'Opaque' || target.initial?.builders.some((builder) => builder.certainty === 'possible'))) continue;
+    const needsMemo = targets.some((target) => {
+      const reactive = target.kind === 'Derived'
+        || target.kind === 'Opaque'
+        || target.kind === 'Source';
+
+      const hasPossibleBuilder = target.initial?.builders.some((builder) => builder.certainty === 'possible');
+
+      return reactive || hasPossibleBuilder;
+    });
+
+    if (!needsMemo) {
+      continue;
+    }
     const first = targets[0]!;
     const module = first.binding.module;
     const builders = new Set<Statement | VariableDeclarator>();

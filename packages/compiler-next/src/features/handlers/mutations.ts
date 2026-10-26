@@ -7,31 +7,70 @@ import type { Names } from '../../core/emit/names';
 import { copy } from '../../core/emit/copy';
 import { expression, numberLiteral, statement, stringLiteral } from '../../core/emit/quote';
 
+interface MutationEmitOptions {
+  readonly keys?: ReadonlyMap<BindingNode, string>;
+  /** Shared owners and row handlers can supply their existing notifier. */
+  readonly notifiers?: ReadonlyMap<BindingNode, string>;
+  /** A transparent binding is observed through its payload, not its handle. */
+  readonly values?: ReadonlyMap<BindingNode, Expression>;
+  readonly changed?: ReadonlyMap<BindingNode, Expression>;
+}
+
 export function emitMutations(
-  plans: readonly MutationPlan[], versions: ReadonlyMap<BindingNode, string>, names: Names,
-  runtime: string, batch: string | null, initial: ReadonlyMap<Node, Node>,
-  keys: ReadonlyMap<BindingNode, string> = new Map(),
-  /** A shared owner's declared notifiers, also its watched roots' (`shared-dom.ts`). */
-  declared: ReadonlyMap<BindingNode, string> = new Map(),
+  plans: readonly MutationPlan[],
+  versions: ReadonlyMap<BindingNode, string>,
+  names: Names,
+  runtime: string,
+  batch: string | null,
+  initial: ReadonlyMap<Node, Node>,
+  options: MutationEmitOptions = {},
 ) {
+  const keys = options.keys ?? new Map();
   const replacements = new Map(initial);
   const declarations: Statement[] = [];
   // One notification per binding: every edit of `data` bumps the same version
   // and marks the same batch, wherever the edit is.
-  const notifiers = new Map<BindingNode, string>(declared);
+  const notifiers = new Map<BindingNode, string>(options.notifiers);
   const refNotifiers = new Map<BindingNode, string>();
+
   const notifierOf = (binding: BindingNode): string => {
     let notify = notifiers.get(binding);
+
     if (notify === undefined) {
       notify = names.fresh(`_mutated_${binding.binding.name}`);
       notifiers.set(binding, notify);
-      declarations.push(statement('function $$notify() { $$version++; $$commit; }', {
-        notify, version: versions.get(binding)!, commit: batch === null ? expression('void 0')
-          : keys.has(binding) ? expression('$$batch.mark($$key)', { batch, key: keys.get(binding)! }) : expression('$$batch.mark()', { batch }),
+
+      let commit = expression('void 0');
+      const key = keys.get(binding);
+
+      if (batch !== null) {
+        commit = key === undefined
+          ? expression('$$batch.mark()', { batch })
+          : expression('$$batch.mark($$key)', { batch, key });
+      }
+
+      const changed = options.changed?.get(binding);
+
+      declarations.push(statement(`
+        function $$notify() {
+          $$version++;
+          ${changed === undefined ? '' : '$$changed;'}
+          $$commit;
+        }
+      `, {
+        notify,
+        version: versions.get(binding)!,
+        changed: changed ?? expression('void 0'),
+        commit,
       }));
     }
-    if (binding.kind !== 'Ref') return notify;
+
+    if (binding.kind !== 'Ref') {
+      return notify;
+    }
+
     let refNotify = refNotifiers.get(binding);
+
     if (refNotify === undefined) {
       refNotify = names.fresh(`_edited_${binding.binding.name}`);
       refNotifiers.set(binding, refNotify);
@@ -39,6 +78,7 @@ export function emitMutations(
         refNotify, runtime, binding: binding.binding.name, notify,
       }));
     }
+
     return refNotify;
   };
   for (const plan of [...plans].sort((a, b) => (a.operation.end - a.operation.start) - (b.operation.end - b.operation.start))) {
@@ -49,7 +89,9 @@ export function emitMutations(
       const notify = notifierOf(binding);
       if (plan.kind === 'call') {
         notifications.push(expression('$$notify', { notify }));
-        reads.push(expression('() => $$binding', { binding: binding.binding.name }));
+        const value = options.values?.get(binding) ?? expression('$$binding', { binding: binding.binding.name });
+
+        reads.push(expression('() => $$value', { value }));
         continue;
       }
       if (plan.kind === 'delete') {

@@ -65,6 +65,285 @@ behaves('passing a source to a helper that reads status and payload still waits'
   },
 });
 
+behaves('component sources: pending reads defer native derivations', {
+  source: `
+    import { $read } from '@memoized-dom/data';
+
+    function shout(value) {
+      return value.toUpperCase() + '!';
+    }
+
+    export function App() {
+      const user = $read(defer('user'));
+      const title = shout(user.name);
+
+      return <main><h1>{title}</h1><p>static</p></main>;
+    }
+  `,
+  steps: [{ resolve: 'user', value: { name: 'Ada' } }],
+  check(container, observation) {
+    expect(container.querySelector('h1')?.textContent).toBe(['', 'ADA!'][observation]);
+    expect(container.querySelector('p')?.textContent).toBe('static');
+  },
+});
+
+behaves('component sources: fetch arguments replace the request and null clears its payload', {
+  source: `
+    import { $fetch } from '@memoized-dom/data';
+
+    export function App() {
+      let id = 1;
+      const user = $fetch(id === null ? null : '/users/' + id);
+      const title = user === null ? 'none' : user.name.toUpperCase();
+
+      return (
+        <main>
+          <h1>{title}</h1>
+          <button class="next" onClick={() => { id++; }}>next</button>
+          <button class="pause" onClick={() => { id = null; }}>pause</button>
+        </main>
+      );
+    }
+  `,
+  steps: [
+    { respond: '/users/1', value: { name: 'Ada' } },
+    { click: '.next' },
+    { respond: '/users/2', value: { name: 'Lin' } },
+    { click: '.pause' },
+  ],
+  check(container, observation) {
+    expect(container.querySelector('h1')?.textContent).toBe(['', 'ADA', 'ADA', 'LIN', 'none'][observation]);
+
+    const expected = observation < 2 ? ['/users/1'] : ['/users/1', '/users/2'];
+
+    expect(requestedUrls()).toEqual(expected);
+  },
+});
+
+behaves('component sources: an early undefined write takes over a delayed seed', {
+  source: `
+    import { $read } from '@memoized-dom/data';
+
+    export function App() {
+      const user = $read(defer('user'));
+      let selected = user.name;
+      const name = user.name;
+
+      return (
+        <main>
+          <p>{selected === undefined ? 'empty' : selected}</p>
+          <span>{name}</span>
+          <button onClick={() => { selected = undefined; }}>override</button>
+        </main>
+      );
+    }
+  `,
+  steps: [
+    { click: 'button' },
+    { resolve: 'user', value: { name: 'Ada' } },
+  ],
+  check(container, observation) {
+    expect(container.querySelector('p')?.textContent).toBe(['', 'empty', 'empty'][observation]);
+    expect(container.querySelector('span')?.textContent).toBe(['', '', 'Ada'][observation]);
+  },
+});
+
+behaves('component sources: a chained fetch waits for its request arguments', {
+  source: `
+    import { $fetch } from '@memoized-dom/data';
+
+    export function App() {
+      const article = $fetch('/article');
+      const comments = $fetch('/comments/' + article.slug);
+
+      return <p>{comments[0].body}</p>;
+    }
+  `,
+  steps: [
+    { respond: '/article', value: { slug: 'first' } },
+    { respond: '/comments/first', value: [{ body: 'hello' }] },
+  ],
+  check(container, observation) {
+    expect(container.querySelector('p')?.textContent).toBe(['', '', 'hello'][observation]);
+
+    const expected = observation === 0 ? ['/article'] : ['/article', '/comments/first'];
+
+    expect(requestedUrls()).toEqual(expected);
+  },
+});
+
+behaves('component sources: removing an owner aborts its unshared pending fetch', {
+  source: `
+    import { $fetch } from '@memoized-dom/data';
+
+    function Child() {
+      const user = $fetch('/slow');
+
+      return <p>{user.name}</p>;
+    }
+
+    export function App() {
+      let show = true;
+
+      return (
+        <main>
+          {show && <Child />}
+          <button onClick={() => { show = false; }}>remove</button>
+        </main>
+      );
+    }
+  `,
+  steps: [{ click: 'button' }],
+  check(container, observation) {
+    expect(container.querySelector('p') !== null).toBe(observation === 0);
+    expect(requestedUrls()).toEqual(['/slow']);
+    expect(requestSignals()[0]?.aborted).toBe(observation === 1);
+  },
+});
+
+behaves('component sources: a remaining GET owner keeps its shared request alive', {
+  source: `
+    import { $fetch } from '@memoized-dom/data';
+
+    function Name({ id }) {
+      const user = $fetch('/user');
+
+      return <p id={id}>{user.name}</p>;
+    }
+
+    export function App() {
+      let showLeft = true;
+
+      return (
+        <main>
+          {showLeft && <Name id="left" />}
+          <Name id="right" />
+          <button onClick={() => { showLeft = false; }}>remove left</button>
+        </main>
+      );
+    }
+  `,
+  steps: [
+    { click: 'button' },
+    { respond: '/user', value: { name: 'Ada' } },
+  ],
+  check(container, observation) {
+    expect(container.querySelector('#left') !== null).toBe(observation === 0);
+    expect(container.querySelector('#right')?.textContent).toBe(['', '', 'Ada'][observation]);
+    expect(requestedUrls()).toEqual(['/user']);
+    expect(requestSignals()[0]?.aborted).toBe(false);
+  },
+});
+
+behaves('component sources: an unmounted read ignores its late completion', {
+  source: `
+    import { $read } from '@memoized-dom/data';
+
+    function Child() {
+      const user = $read(defer('late'));
+
+      return <p>{user.name}</p>;
+    }
+
+    export function App() {
+      let show = true;
+
+      return (
+        <main>
+          {show && <Child />}
+          <button onClick={() => { show = false; }}>remove</button>
+        </main>
+      );
+    }
+  `,
+  steps: [
+    { click: 'button' },
+    { resolve: 'late', value: { name: 'stale' } },
+  ],
+  check(container, observation) {
+    expect(container.querySelector('p') !== null).toBe(observation === 0);
+    expect(container.textContent).toBe('remove');
+  },
+});
+
+behaves('component sources: an initial null target is ready without a request', {
+  source: `
+    import { $fetch, $track } from '@memoized-dom/data';
+
+    export function App() {
+      const user = $fetch(null);
+      const request = $track(user);
+
+      return (
+        <main>
+          <p>{user === null ? 'none' : user.name}</p>
+          <span>{request.status}</span>
+        </main>
+      );
+    }
+  `,
+  check(container) {
+    expect(container.querySelector('p')?.textContent).toBe('none');
+    expect(container.querySelector('span')?.textContent).toBe('success');
+    expect(requestedUrls()).toEqual([]);
+  },
+});
+
+behaves('component sources: an unlisted payload method updates its readers without repeating the read', {
+  source: `
+    import { $read } from '@memoized-dom/data';
+
+    export function App() {
+      const box = $read(defer('ready').then(() => ({
+        value: 0,
+
+        advanceUnlisted() {
+          this.value++;
+
+          return this.value;
+        },
+      })));
+
+      let turn = 0;
+      const label = box.advanceUnlisted() + turn;
+
+      return (
+        <main>
+          <p>{box.value}</p>
+          <span>{label}</span>
+          <button onClick={() => { turn++; }}>next</button>
+        </main>
+      );
+    }
+  `,
+  steps: [
+    { resolve: 'ready', value: true },
+    { click: 'button' },
+  ],
+  check(container, observation) {
+    expect(container.querySelector('p')?.textContent).toBe(['', '1', '2'][observation]);
+    expect(container.querySelector('span')?.textContent).toBe(['', '1', '3'][observation]);
+  },
+});
+
+behaves('component sources: a source-backed native map renders after loading', {
+  source: `
+    import { $read } from '@memoized-dom/data';
+
+    export function App() {
+      const users = $read(defer('users'));
+
+      return <ul>{users.map((user) => <li key={user.id}>{user.name}</li>)}</ul>;
+    }
+  `,
+  steps: [{ resolve: 'users', value: [{ id: 1, name: 'Ada' }, { id: 2, name: 'Lin' }] }],
+  check(container, observation) {
+    const names = Array.from(container.querySelectorAll('li'), (node) => node.textContent);
+
+    expect(names).toEqual(observation === 0 ? [] : ['Ada', 'Lin']);
+  },
+});
+
 behaves('a read waits before deriving through a helper', {
   source: `
     import { $read, Group } from '@memoized-dom/data';

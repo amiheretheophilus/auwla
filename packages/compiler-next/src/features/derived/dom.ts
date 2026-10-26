@@ -27,6 +27,7 @@ export function emitMemos(
   trackKeys: ReadonlyMap<BindingNode, string>,
   notify?: { readonly batch: string; readonly entity?: string },
   deferred: DeferredSetup = { statements: new Map(), flags: [] },
+  values: ReadonlyMap<BindingNode, Expression> = new Map(),
 ) {
   const setup: Statement[] = [];
   const snapshots: Statement[] = [];
@@ -53,7 +54,55 @@ export function emitMemos(
   const observationAfter = new Map<Node, Statement[]>();
   const initialTracking = new Map<Node, { computation: string; changed: Expression }>();
   const sharedBuilders = new Map<Node, Statement>();
+
+  const trackInitializer = (
+    group: MemoGroupPlan,
+    step: Extract<Node, { type: 'VariableDeclarator' }>,
+  ): void => {
+    if (initialTracking.has(step)) {
+      return;
+    }
+
+    const computation = names.fresh('_initializerComputation');
+    const create = notify === undefined
+      ? 'const $$computation = $$runtime.createComputation();'
+      : `const $$computation = $$runtime.createComputation($$batch.mark${notify.entity === undefined ? '' : ', $$entity'});`;
+
+    setup.push(statement(create, { computation, runtime, ...notify }));
+
+    const conditions: Expression[] = [expression('$$computation.changed()', { computation })];
+    const memo = group.computations.find((memo) => memo.declarator === step);
+
+    // Track the initializer's own inputs separately from the group's. A source
+    // completion changes its output version, but does not create another request.
+    for (const input of memo?.initializerInputs ?? memo?.inputs ?? []) {
+      const version = versions.get(input);
+
+      if (version === undefined) {
+        continue;
+      }
+
+      const seen = names.fresh('_initializerFrom');
+
+      snapshots.push(statement('let $$seen = $$version;', { seen, version }));
+      conditions.push(expression('$$seen !== $$version', { seen, version }));
+      settle(group, statement('$$seen = $$version;', { seen, version }));
+    }
+
+    const changed = conditions.reduce((left, right) => {
+      return b.LogicalExpression({ operator: '||', left, right });
+    });
+
+    initialTracking.set(step, { computation, changed });
+  };
+
   for (const group of plan.memos) {
+    for (const memo of group.computations) {
+      if (memo.targets.some((target) => target.kind === 'Source')) {
+        trackInitializer(group, memo.declarator);
+      }
+    }
+
     for (const [step, targets] of group.possibleOutputs) {
       const used = names.fresh('_builderUsed');
       possibleFlags.set(step, used);
@@ -71,32 +120,16 @@ export function emitMemos(
       const observation = names.fresh('_builderObservation');
       observationBefore.set(step, [statement('const $$observation = $$runtime.observeMutation($$reads, $$callbacks);', {
         observation, runtime,
-        reads: b.ArrayExpression({ elements: targets.map((target) => expression('() => $$binding', { binding: target.binding.name })) }),
+        reads: b.ArrayExpression({ elements: targets.map((target) => {
+          const value = values.get(target) ?? expression('$$binding', { binding: target.binding.name });
+
+          return expression('() => $$value', { value });
+        }) }),
         callbacks: b.ArrayExpression({ elements: callbacks }),
       })]);
       observationAfter.set(step, [statement('$$observation.finish();', { observation })]);
       if (is.VariableDeclarator(step)) {
-        const computation = names.fresh('_initializerComputation');
-        const create = notify === undefined ? 'const $$computation = $$runtime.createComputation();'
-          : `const $$computation = $$runtime.createComputation($$batch.mark${notify.entity === undefined ? '' : ', $$entity'});`;
-        setup.push(statement(create, { computation, runtime, ...notify }));
-        const conditions: Expression[] = [expression('$$computation.changed()', { computation })];
-        // The value replays when anything its derivation reads changed: its
-        // initializer and its builders (`let d = a; if (o.b) d = 0;` follows
-        // `o.b`). Not merely because its group did, which would repeat an
-        // initializer's side effects for an unrelated input.
-        const memo = group.computations.find((memo) => memo.declarator === step);
-        for (const input of memo?.inputs ?? []) {
-          const version = versions.get(input);
-          if (version === undefined) continue;
-          const seen = names.fresh('_initializerFrom');
-          snapshots.push(statement('let $$seen = $$version;', { seen, version }));
-          conditions.push(expression('$$seen !== $$version', { seen, version }));
-          settle(group, statement('$$seen = $$version;', { seen, version }));
-        }
-        initialTracking.set(step, {
-          computation, changed: conditions.reduce((left, right) => b.LogicalExpression({ operator: '||', left, right })),
-        });
+        trackInitializer(group, step);
       }
     }
   }
@@ -332,9 +365,21 @@ export function emitMemos(
       }) : active(outputs);
     const initializer = initialTracking.get(original);
     if (initializer !== undefined) {
-      eligible = expression('($$used && $$possible) || ($$changed && $$definite)', {
-        used: possibleFlags.get(original)!, possible: active(possible), changed: initializer.changed, definite: active(definite),
-      });
+      const used = possibleFlags.get(original);
+
+      if (used === undefined) {
+        eligible = expression('$$changed && $$definite', {
+          changed: initializer.changed,
+          definite: active(definite),
+        });
+      } else {
+        eligible = expression('($$used && $$possible) || ($$changed && $$definite)', {
+          used,
+          possible: active(possible),
+          changed: initializer.changed,
+          definite: active(definite),
+        });
+      }
     }
     let test = expression('$$changed && $$active', {
       changed: dirty.get(step.group)!, active: eligible,

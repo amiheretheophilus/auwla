@@ -17,6 +17,8 @@ export function rejectLaterPhases(entry: ResolvedModule, context: TemplateContex
   for (const declaration of module.imports) {
     if (declaration.typeOnly) continue;
     const fromData = declaration.specifier === DATA_PACKAGE || declaration.specifier.startsWith(`${DATA_PACKAGE}/`);
-    if (fromData) unsupported(context, declaration.node, `imports from \`${declaration.specifier}\``, 8);
+    if (!fromData) continue;
+    if (declaration.specifier === DATA_PACKAGE && ['$fetch', '$read', '$track'].includes(declaration.name ?? '')) continue;
+    unsupported(context, declaration.node, `imports from \`${declaration.specifier}\``, 8);
   }
 }

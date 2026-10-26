@@ -28,6 +28,8 @@ import { rejectLaterPhases } from './later-phases';
 import { isComponentCall } from '../../features/components/plan';
 import { planRefs, refMutations, refWrites } from '../../features/refs/plan';
 import { planEffects } from '../../features/effects/plan';
+import { planSources, planSourceMemos, validateSourceCalls } from '../../features/sources/plan';
+import { SourceQueries } from '../../features/sources/classify';
 
 export type { ComponentPlan, ModulePlan, Site, Template, TemplateNode } from './model';
 
@@ -57,6 +59,7 @@ function planModule(
   const module = entry.module;
   const refs = allRefs.filter((ref) => ref.binding.binding.module === module);
   const effects = planEffects(graph, queries, entry, components);
+  const sourceQueries = new SourceQueries(new Map(graph.functions.map((summary) => [summary.fn, summary])));
   const claimed = new Set<Node>();
   const context: TemplateContext = {
     path: entry.path,
@@ -68,6 +71,7 @@ function planModule(
   };
   const functions = module.findAll(['FunctionDeclaration', 'FunctionExpression', 'ArrowFunctionExpression']);
   rejectLaterPhases(entry, context);
+  validateSourceCalls(graph, entry, components, context);
 
   const plans = new Map<Node, ComponentPlan>();
   const moduleBindings = [...sharedReads.keys()].filter((binding) => binding.binding.module === module);
@@ -142,7 +146,7 @@ function planModule(
       const declaration = module.parentOf(declarator);
       return declaration !== null && module.parentOf(declaration) === fn.body;
     });
-    plans.set(fn, {
+    const planned: ComponentPlan = {
       ...component,
       state: local,
       writes,
@@ -156,7 +160,17 @@ function planModule(
       trackedReads,
       dynamicSites,
       mutationRoots,
-    });
+    };
+    const sources = planSources(graph, queries, sourceQueries, planned, context);
+    if (sources === undefined) {
+      plans.set(fn, planned);
+    } else {
+      plans.set(fn, {
+        ...planned,
+        sources,
+        memos: planSourceMemos(planned.memos, sources, graph, queries),
+      });
+    }
   }
 
   // Remaining JSX is a native stored/passed/returned value. Capture its site

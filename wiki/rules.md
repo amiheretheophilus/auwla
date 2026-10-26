@@ -60,3 +60,7 @@ Stated by the user on 2026-10-18. They apply to every design and every fix.
     correctness and performance". The `d6e678b` benchmark is the floor.
 14. **The compiler wiki is the map of the code.** Each group of related files has
     a page in `compiler/`, changed in the same commit as the code.
+15. **Readable source** (2026-10-26). The user: "your code is compressed why???
+    i read it leave spaces and comments". Separate logical steps with blank
+    lines, expand control flow, and use named helpers. Comments explain why a
+    decision is needed, especially around readiness, ownership and ordering.

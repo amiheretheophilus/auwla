@@ -57,53 +57,124 @@ export interface SourceUses {
 /** Independent parameter-flow proof for the reference, before any AST edits. */
 export function sourceUses(module: Module): SourceUses {
   const direct = new Set<Node>();
+
   for (const call of module.findAll('CallExpression')) {
-    if (isDataCall(module, call, '$track') && call.arguments[0]) direct.add(call.arguments[0]);
+    if (isDataCall(module, call, '$track') && call.arguments[0]) {
+      direct.add(call.arguments[0]);
+    }
   }
+
   const reads = new Reads(module);
-  interface Use { raw: boolean; payload: boolean }
+
+  interface Use {
+    raw: boolean;
+    payload: boolean;
+  }
+
   const ordinary: Use = { raw: false, payload: true };
+
   const examine = (start: Node, seen: Set<Binding>): Use => {
     let value = start;
-    if (direct.has(value)) return { raw: true, payload: false };
+
+    if (direct.has(value)) {
+      return { raw: true, payload: false };
+    }
+
     for (const parent of module.ancestors(start)) {
-      if (parent === start) continue;
-      if (is.ParenthesizedExpression(parent) || is.TSAsExpression(parent) || is.TSNonNullExpression(parent) || is.TSSatisfiesExpression(parent)) {
-        value = parent;
-        if (direct.has(value)) return { raw: true, payload: false };
+      if (parent === start) {
         continue;
       }
-      if (!is.CallExpression(parent) || !is.Identifier(parent.callee)) return ordinary;
+
+      const wrapper = is.ParenthesizedExpression(parent)
+        || is.TSAsExpression(parent)
+        || is.TSNonNullExpression(parent)
+        || is.TSSatisfiesExpression(parent);
+
+      if (wrapper) {
+        value = parent;
+
+        if (direct.has(value)) {
+          return { raw: true, payload: false };
+        }
+
+        continue;
+      }
+
+      if (!is.CallExpression(parent) || !is.Identifier(parent.callee)) {
+        return ordinary;
+      }
+
       const index = parent.arguments.indexOf(value as Expression);
-      if (index === -1 || parent.arguments.slice(0, index).some(is.SpreadElement)) return ordinary;
+
+      if (index === -1 || parent.arguments.slice(0, index).some(is.SpreadElement)) {
+        return ordinary;
+      }
+
       const callee = module.referenceOf(parent.callee)?.binding;
-      if (callee == null || callee.references.some((reference) => reference.isWrite)) return ordinary;
+
+      if (callee == null || callee.references.some((reference) => reference.isWrite)) {
+        return ordinary;
+      }
+
       const fn = reads.functionOf(callee);
       let parameter: Node | undefined = fn?.params[index];
-      if (is.AssignmentPattern(parameter)) parameter = parameter.left;
-      if (!is.Identifier(parameter)) return ordinary;
+
+      if (is.AssignmentPattern(parameter)) {
+        parameter = parameter.left;
+      }
+
+      if (!is.Identifier(parameter)) {
+        return ordinary;
+      }
+
       const binding = module.bindingOf(parameter);
-      if (binding === null || seen.has(binding)) return ordinary;
+
+      if (binding === null || seen.has(binding)) {
+        return ordinary;
+      }
+
       const uses = binding.references.filter((reference) => !reference.inTypePosition);
-      if (uses.length === 0) return ordinary;
+
+      if (uses.length === 0) {
+        return ordinary;
+      }
+
       const next = new Set(seen).add(binding);
       const result: Use = { raw: false, payload: false };
+
+      // A mixed-use parameter still needs the handle for $track, while its
+      // payload reads keep the caller's readiness guard in place.
       for (const use of uses) {
         const reached = use.isWrite ? ordinary : examine(use.node, next);
+
         result.raw ||= reached.raw;
         result.payload ||= reached.payload;
       }
+
       return result;
     }
+
     return ordinary;
   };
+
   const result: SourceUses = { raw: new Set(direct), status: new Set() };
+
   for (const reference of module.references) {
-    if (reference.inTypePosition || reference.isWrite) continue;
+    if (reference.inTypePosition || reference.isWrite) {
+      continue;
+    }
+
     const use = examine(reference.node, new Set());
-    if (use.raw) result.raw.add(reference.node);
-    if (!use.payload) result.status.add(reference.node);
+
+    if (use.raw) {
+      result.raw.add(reference.node);
+    }
+
+    if (!use.payload) {
+      result.status.add(reference.node);
+    }
   }
+
   return result;
 }
 

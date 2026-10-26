@@ -25,6 +25,27 @@ Last updated: 2026-10-26.
 
 ## Done
 
+- Phase 8 component source execution (2026-10-26): direct component-owned
+  `$read`/GET `$fetch` declarations, payload readiness, delayed seeds and early
+  undefined takeover, chained requests, retained payloads during request input
+  changes and component disposal are built on existing data/runtime hooks.
+  Source settlements wake memo groups without repeating requests; request
+  initializers follow their own arguments, independently of payload builders.
+  Payload methods use the existing general mutation observer and data mutation
+  publication. The null-target data runtime bug is fixed for initial creation
+  and both rebind paths. No existing behavioral assertion was weakened.
+  The source code was expanded with spacing, named helpers and comments, as
+  requested; rule 15 records this requirement. Ten new behavioral cases, four
+  planning checks and three data checks were added. Local checks so far pass:
+  compiler/data types, the data build, 13 source comparisons in both compiler
+  modes, 28 source/plan checks, 62 mutation/list checks and 103 existing
+  state/memo/mutation/shared/handler comparisons, 40 data checks and 160 source/
+  lifecycle/reference cases. The complete local source gate reports 13 passing
+  comparisons and 75 explicit Phase 8 deferrals. Broad CI validation is pending.
+  General source flow, patterns, lazy execution, source effects/reassignment,
+  Group and atomic preparation remain explicit Phase 8 work. Performance is
+  still paused.
+
 - Phase 8 graph foundation (2026-10-26, `a2c78c10`, `baae24d6`): source-valued
   calls and visible helper returns are classified by binding identity, including aliases, named imports
   and re-exports. Changing request inputs preserves `Source`; a status-only

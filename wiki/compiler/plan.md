@@ -309,6 +309,13 @@ array child). Remove each check when its phase is built.
 - [ ] `$fetch`, `$read`, `$track`, GET server functions; readiness (`pending`),
   `Group` policies, `suspend`; the non-GET contract check and its compiler tests
   (`sources.md`).
+  - [x] First component execution slice: direct sources, payload guards, delayed
+    derivations/seeds, request input rebinding and source lifetime. Ten new
+    reference cases and four planning checks pin this slice; three data checks
+    fix null-target snapshots. Existing source status cases begin passing.
+  - [ ] Complete general source flow, module/helper/callback ownership, patterns,
+    lazy statements/branches, effects and source reassignment; then Group policies
+    and atomic preparation. Remaining comparisons keep explicit Phase 8 errors.
 - **Exit:** `cases/sources` passes; the generated source programs also run
   against compiler-next.
 

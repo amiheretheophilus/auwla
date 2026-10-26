@@ -15,11 +15,12 @@ settling, symbol/rest props, destination namespaces and retention checks; exact
 results and commits are in `../status.md`.
 
 Phase 7 effects, cleanup and reactive refs pass their reference comparisons and
-the full CI gate at `4e15dc31`. Phase 8 source classification and status-read
-facts are built at `baae24d6`, with 20 new compiler checks and four new source
-reference cases. The full CI gate passes; all 81 remaining comparison failures
-explicitly name Phase 8 sources/readiness. Source emission, delayed computations
-and Group preparation remain unfinished (`sources.md`).
+the full CI gate at `4e15dc31`. Phase 8 now executes direct component-owned
+sources with payload guards, delayed seeds, request rebinding and cleanup,
+using the existing data/runtime hooks. Source snapshots and request initializer
+inputs are tracked separately by the memo engine. The wider source flow,
+Group policies and atomic preparation remain unfinished, with explicit Phase 8
+diagnostics (`sources.md`). Validation counts and CI results are in `../status.md`.
 The supplied VM report at `874c826` fails the performance floor: the old compiler
 is faster on all 24 Octane operations, and the DOM update-style run ends in an
 OOM. Phase 5 fast paths and repeat measurements remain before the Phase 6 exit;

@@ -161,8 +161,9 @@ export class RowComponents {
     // they notify the list, which shows its rows again (`optimize/row-lists.ts`).
     const invalidate = names.fresh('_invalidate');
     const replacements = new Map([...this.replacements, ...routed]);
-    const handlers = emitMutations(component.mutations, new Map(), names, runtime, null, replacements, new Map(),
-      new Map(component.state.map((binding) => [binding, invalidate])));
+    const handlers = emitMutations(component.mutations, new Map(), names, runtime, null, replacements, {
+      notifiers: new Map(component.state.map((binding) => [binding, invalidate])),
+    });
     const context: SitesContext = {
       names, runtime, batch, entity, id, document, namespace,
       versions: new Map(), replacements: handlers.replacements, ref: () => '', rows: true,

@@ -25,6 +25,14 @@ one replaces it. Object mutations still invalidate consumers without requiring a
 new object identity. Component details and direct-call coverage live on
 `components.md`.
 
+Phase 8 sources use this same memo engine (`sources.md`). A source snapshot can
+change outside an authored store, so its version is an input even when that
+source is a group's output. Its request initializer tracks `initializerInputs`
+separately: payload builders can use other state without issuing another request
+when that state changes. Other computations retain their existing full input
+set. Builder observation can receive a payload reader for transparent bindings;
+it does not snapshot the resource's implementation object.
+
 `features/derived/plan.ts` plans top-level component declarations, including native
 destructuring, and their definite body builders. Computations sharing a statement
 form one group: all its outputs reset together and the statement replays once.

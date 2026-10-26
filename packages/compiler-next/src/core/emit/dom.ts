@@ -24,6 +24,7 @@ import { emitProps } from '../../features/props/dom';
 import { functionValue } from '../resolve/functions';
 import { emitRefs } from '../../features/refs/dom';
 import { emitEffectGroups, emitLifecycleCalls } from '../../features/effects/dom';
+import { emitSources } from '../../features/sources/dom';
 
 /** Preserve module syntax and exports, replacing planned functions on a fresh tree. */
 export function emitDom(plan: ModulePlan, options: CompileModulesOptions): Node {
@@ -39,8 +40,12 @@ export function emitDom(plan: ModulePlan, options: CompileModulesOptions): Node 
 
   const names = new Names(module);
   const runtime = names.fresh('_MD');
+  const data = names.fresh('_data');
   const runtimePath = JSON.stringify(options.runtimePath ?? DEFAULT_RUNTIME_PATH);
   const hoisted: Statement[] = [statement(`import * as $$runtime from ${runtimePath};`, { runtime })];
+  if ([...plan.components.values()].some((component) => component.sources !== undefined)) {
+    hoisted.push(statement('import * as $$data from "@memoized-dom/data/internal";', { data }));
+  }
   const shared = emitShared(plan, names, runtime, emitLifecycleCalls(plan, names, runtime));
   const replacements = shared.replacements;
   for (const reference of module.references) {
@@ -94,7 +99,7 @@ export function emitDom(plan: ModulePlan, options: CompileModulesOptions): Node 
       }));
     }
     let emitted = emitComponent(component, names, runtime, markup, replacements, rowComponents, plan.refs, plan.effects.groups,
-      plan.effects.calls.some((call) => call.owner === component.fn));
+      plan.effects.calls.some((call) => call.owner === component.fn), data);
     const enclosingFunction = [...module.ancestors(component.fn)].find((ancestor) => {
       return ancestor !== component.fn && is.Function(ancestor);
     });
@@ -147,6 +152,7 @@ function emitComponent(
   refs: ModulePlan['refs'],
   effectGroups: ModulePlan['effects']['groups'],
   ownsLifecycle: boolean,
+  data: string,
 ): Node {
   const document = names.fresh('_document');
   const id = names.of(plan.fn, '_id');
@@ -161,7 +167,13 @@ function emitComponent(
     return site.kind === 'ref' || (site.kind === 'conditional' && site.branches.some((branch) => ownsRefs(branch.sites)));
   });
   const groups = effectGroups.filter((group) => group.owner === plan.fn);
-  const needsBatch = plan.state.length > 0 || plan.dynamicSites.size > 0 || ownsRegions || groups.length > 0 || ownsLifecycle || ownsRefs(plan.sites);
+  const needsBatch = plan.state.length > 0
+    || plan.dynamicSites.size > 0
+    || ownsRegions
+    || groups.length > 0
+    || ownsLifecycle
+    || ownsRefs(plan.sites)
+    || plan.sources !== undefined;
   const batch = needsBatch ? names.fresh('_writes') : null;
   const update = names.fresh('_update');
   const entity = names.fresh('_entity');
@@ -196,7 +208,18 @@ function emitComponent(
     readonly.set(node, node.operator === '!==' ? expression('!$$equals', { equals }) : equals);
   }
   const handled = new Set(plan.takeovers);
-  const mutations = emitMutations(plan.mutations, state.versions, names, runtime, batch, readonly);
+  const sources = emitSources(plan.sources, {
+    versions: state.versions,
+    takeoverFlags: takeovers.flags,
+    names,
+    data,
+    runtime,
+    owner: id,
+    batch: batch!,
+    scope,
+    replacements: readonly,
+  });
+  const mutations = emitMutations(plan.mutations, state.versions, names, runtime, batch, sources.replacements, sources.mutations);
   const writes = batch === null
     ? { replacements: mutations.replacements, declarations: [] }
     : emitWrites(plan.writes, state.versions, names, batch, mutations.replacements, handled);
@@ -210,12 +233,12 @@ function emitComponent(
     replayBase.delete(write.operation);
     for (const target of write.targets) replayBase.delete(target.member);
   }
-  const replayMutations = emitMutations(plan.replayMutations, state.versions, names, runtime, null, replayBase);
+  const replayMutations = emitMutations(plan.replayMutations, state.versions, names, runtime, null, replayBase, sources.mutations);
   const replay = emitWrites(plan.replayWrites, state.versions, names, null, replayMutations.replacements, handled);
   // One flag per setup segment after a return: whether control reached it.
   const reached = [...new Set(plan.deferred.values())].map(() => names.fresh('_reached'));
   const memos = emitMemos(plan, state.versions, names, effects.replacements, replay.replacements, takeovers, runtime, trackKeys,
-    batch === null ? undefined : { batch, entity }, { statements: plan.deferred, flags: reached });
+    batch === null ? undefined : { batch, entity }, { statements: plan.deferred, flags: reached }, sources.mutations.values);
   const once = (statements: readonly Statement[]): Statement[] => {
     const flag = reached[plan.deferred.get(statements[0]!)!]!;
     return [...effects.reach(statements), b.IfStatement({
@@ -246,6 +269,7 @@ function emitComponent(
   }
   body.push(
     statement('const $$scope = $$runtime.createBuildScope();', { scope, runtime }),
+    ...sources.declarations,
     ...effects.declarations,
     statement(batch === null
       ? 'const $$setupFrame = $$scope.enter();'
@@ -313,7 +337,8 @@ function emitComponent(
       return expression(direct === undefined
         ? '({ read: () => $$binding, notify: () => { $$version++; if (!$$scope.building()) $$batch.mark(); } })'
         : '({ read: () => $$binding, notify: () => { $$version++; if (!$$scope.building()) $$batch.mark(); }, direct: $$direct })', {
-        binding: binding.binding.name, version: state.versions.get(binding)!, batch, scope, ...(direct === undefined ? {} : { direct }),
+        binding: sources.mutations.values.get(binding) ?? expression('$$binding', { binding: binding.binding.name }),
+        version: state.versions.get(binding)!, batch, scope, ...(direct === undefined ? {} : { direct }),
       });
     });
     if (roots.length > 0) {

@@ -226,6 +226,7 @@ export type Site = TextSite | AttributeSite | PropertySite | EventSite | RefSite
 export type UnplacedSite = Site extends infer S ? S extends Site ? Omit<S, 'node'> : never : never;
 
 export interface ComponentPlan {
+  readonly sources?: ComponentSourcesPlan;
   readonly fn: FunctionNode;
   /**
    * The authored statements that run once as setup: those before the first
@@ -258,6 +259,29 @@ export interface ComponentPlan {
   readonly mutationRoots: readonly BindingNode[];
 }
 
+/** Component-local sources still use native bindings and the shared memo engine. */
+export interface ComponentSourcesPlan {
+  readonly bindings: readonly {
+    readonly binding: BindingNode;
+    readonly call: Extract<Node, { type: 'CallExpression' }>;
+    readonly read: boolean;
+  }[];
+  readonly payloadReads: readonly Node[];
+  readonly guards: ReadonlyMap<Expression, SourceReadinessGuard>;
+}
+
+export interface SourceReadinessGuard {
+  readonly inputs: readonly SourcePrerequisite[];
+  /** Derivations retain failure; consuming render sites surface it. */
+  readonly render: boolean;
+}
+
+export interface SourcePrerequisite {
+  readonly source: BindingNode;
+  /** A later assignment along this path cuts its upstream readiness edge. */
+  readonly unlessTaken: readonly BindingNode[];
+}
+
 /** Statements shared by computations run once; their outputs reset together. */
 export interface MemoGroupPlan {
   readonly dynamic: boolean;
@@ -281,6 +305,8 @@ export interface MemoPlan {
   readonly nested: boolean;
   readonly targets: readonly BindingNode[];
   readonly inputs: readonly BindingNode[];
+  /** Source requests replay for their request inputs, independently of payload builders. */
+  readonly initializerInputs?: readonly BindingNode[];
   readonly builders: readonly (Statement | VariableDeclarator)[];
   readonly builderTargets: ReadonlyMap<Node, readonly BindingNode[]>;
   readonly possibleBuilders: ReadonlyMap<Node, readonly BindingNode[]>;

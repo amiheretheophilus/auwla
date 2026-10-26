@@ -44,6 +44,13 @@ binding later holds an ordinary object. Rebinding the ref still publishes its
 version. The reference checks that editing ref text/attributes leaves an
 identity-only effect asleep.
 
+Phase 8 sources also reuse these mutation emitters. Their optional payload
+readers are shared by direct call observation, possible-builder observation and
+watched roots. A completed payload edit calls the data runtime's existing
+`notifyResolvedValueMutation` hook before committing the binding's version.
+Unlisted methods retain the general observer; no new method list decides source
+semantics (`sources.md`).
+
 Each contiguous group of batches from the same application enters one kernel
 commit. First-mark order is retained across interleaved applications; the kernel
 orders parents before children within a group. A weak per-application entity

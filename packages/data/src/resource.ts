@@ -90,13 +90,16 @@ interface MutableSnapshot<T> {
   refreshing: boolean;
 }
 
-const idleSnapshot = <T>(): MutableSnapshot<T> => ({
-  data: undefined,
-  error: null,
-  status: 'idle',
-  pending: false,
-  refreshing: false,
-});
+/** A null target has already resolved to null; it is not an unfinished request. */
+function initialSnapshot<T>(paused = false): MutableSnapshot<T> {
+  return {
+    data: paused ? (null as T) : undefined,
+    error: null,
+    status: paused ? 'success' : 'idle',
+    pending: false,
+    refreshing: false,
+  };
+}
 
 function publicSnapshot<T>(snapshot: MutableSnapshot<T>): ResourceSnapshot<T> {
   return Object.freeze({ ...snapshot });
@@ -150,7 +153,7 @@ class FetchEntry {
     });
   }
   readonly consumers = new Set<ResourceController<unknown>>();
-  snapshot: MutableSnapshot<unknown> = idleSnapshot();
+  snapshot: MutableSnapshot<unknown> = initialSnapshot();
   hasData = false;
   cache: Exclude<FetchCache, false>;
   request: Promise<unknown> | null = null;
@@ -448,7 +451,7 @@ export class FetchStore {
 
 class ResourceController<T> {
   updates: LiveStamp[] = [];
-  snapshot: MutableSnapshot<T> = idleSnapshot();
+  snapshot: MutableSnapshot<T> = initialSnapshot();
   entry: FetchEntry | null = null;
   disposed = false;
   private removeSignalListener: (() => void) | null = null;
@@ -462,8 +465,15 @@ class ResourceController<T> {
   ) {
     this.descriptor = descriptor;
     this.paused = paused;
-    if (!this.bindSignal(descriptor.signal)) return;
-    if (!paused) this.attach(false);
+    this.snapshot = initialSnapshot<T>(paused);
+
+    if (!this.bindSignal(descriptor.signal)) {
+      return;
+    }
+
+    if (!paused) {
+      this.attach(false);
+    }
   }
 
   descriptor: FetchDescriptor;
@@ -537,7 +547,7 @@ class ResourceController<T> {
     if (this.entry !== entry) return;
     this.entry = null;
     if (reset) {
-      this.snapshot = idleSnapshot();
+      this.snapshot = initialSnapshot();
       this.notify();
     }
   }
@@ -773,7 +783,7 @@ export function rebindFetchResource<T>(
   controller.descriptor = descriptor;
   controller.paused = paused;
   controller.retainForRebind(paused);
-  controller.snapshot = idleSnapshot();
+  controller.snapshot = initialSnapshot(paused);
 
   if (!controller.bindSignal(descriptor.signal) || paused) {
     controller.notify();
@@ -825,7 +835,7 @@ export function rebindFetchResourceFrom<T>(
   controller.descriptor = incoming.descriptor;
   controller.paused = incoming.paused;
   controller.retainForRebind(controller.paused);
-  controller.snapshot = idleSnapshot();
+  controller.snapshot = initialSnapshot(controller.paused);
 
   if (!controller.bindSignal(controller.descriptor.signal) || controller.paused) {
     incoming.dispose();

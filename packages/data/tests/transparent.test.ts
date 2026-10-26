@@ -36,6 +36,52 @@ function json(value: unknown, status = 200): Response {
 }
 
 describe('transparent resolved values', () => {
+  it('treats an initial null target as a committed null payload without fetching', () => {
+    const fetcher = vi.fn(async () => json({ name: 'unused' }));
+    const runtime = createDataRuntime({ fetch: fetcher as FetchStub });
+    const resource = runtime.$fetch<User | null>(null);
+    const value = resource as unknown as ResolvedValue<User | null>;
+    const state = $track(value);
+
+    expect(readResolvedValue(value)).toBeNull();
+    expect(resource.data).toBeNull();
+    expect(state.status).toBe('success');
+    expect(state.pending).toBe(false);
+    expect(state.refreshing).toBe(false);
+    expect(fetcher).not.toHaveBeenCalled();
+
+    runtime.clear();
+  });
+
+  for (const mode of ['direct', 'factory'] as const) {
+    it(`clears a committed payload on a ${mode} rebind to null`, async () => {
+      const fetcher = vi.fn(async () => json({ id: 1, name: 'Ada' }));
+      const runtime = createDataRuntime({ fetch: fetcher as FetchStub });
+      const resource = runtime.$fetch<User | null>('/user');
+      const value = resource as unknown as ResolvedValue<User | null>;
+      const state = $track(value);
+
+      await waitFor(() => expect(state.status).toBe('success'));
+
+      if (mode === 'direct') {
+        rebindResolvedValue(value, null);
+      } else {
+        rebindResolvedValueFromFactory(value, () => {
+          return runtime.$fetch<User | null>(null) as unknown as ResolvedValue<User | null>;
+        });
+      }
+
+      expect(readResolvedValue(value)).toBeNull();
+      expect(resource.data).toBeNull();
+      expect(state.status).toBe('success');
+      expect(state.pending).toBe(false);
+      expect(state.refreshing).toBe(false);
+      expect(fetcher).toHaveBeenCalledTimes(1);
+
+      runtime.clear();
+    });
+  }
+
   it('settles preparation-local sources into payload caches and releases active entries', async () => {
     const fetcher = vi.fn(async () => json([{ id: 'one' }]));
     const runtime = createDataRuntime({ fetch: fetcher as FetchStub });

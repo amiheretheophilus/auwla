@@ -43,7 +43,10 @@ export function emitShared(plan: ModulePlan, names: Names, runtime: string, init
   }
   const mutationDeclarations = new Map<(typeof state.owners)[number], readonly Statement[]>();
   for (const owner of state.owners) {
-    const mutations = emitMutations(owner.plan.mutations, owner.versions, names, runtime, owner.batch, replacements, owner.keys, owner.notifiers);
+    const mutations = emitMutations(owner.plan.mutations, owner.versions, names, runtime, owner.batch, replacements, {
+      keys: owner.keys,
+      notifiers: owner.notifiers,
+    });
     replacements = new Map(mutations.replacements);
     const refs = plan.refs.filter((ref) => owner.plan.state.includes(ref.binding));
     const writes = emitWrites(refWrites(refs), owner.versions, names, owner.batch, replacements);

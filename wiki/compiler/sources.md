@@ -15,6 +15,9 @@ All compiler paths below are under `packages/compiler-next/src/`.
 | --- | --- |
 | `features/sources/classify.ts` | Source-valued calls/returns, framework API binding identity and status-only read facts |
 | `features/sources/classify.test.ts` | Graph checks for direct/aliased APIs, helpers, imports, request inputs, takeover sites and status dependencies |
+| `features/sources/plan.ts` | Component-owned source declarations, request inputs and readiness paths cut by later assignments |
+| `features/sources/dom.ts` | Existing data subscriptions/rebinding, payload reads, cleanup ownership and consuming-site guards |
+| `features/sources/plan.test.ts` | Request/settlement dependencies, delayed seed paths, immutable syntax and absence of generated exception wrappers |
 | `core/graph/model.ts`, `index.ts`, `rules.ts` | Readiness edges, separate from ordinary reactive dependencies |
 
 The graph recognizes `$read`, GET `$fetch` and visible helpers returning them,
@@ -31,11 +34,36 @@ reference identities through visible helper expansion. Simple visible helper
 parameters forward this distinction: status-only parameters do not add a wait,
 and parameters with a payload use still do.
 
-This is graph infrastructure, not completed source emission. The Phase 8 import
-guard still applies. Runtime subscriptions, payload lowering, delayed seeds,
-lazy execution guards, Group presentation and preparation remain to be wired to
-the existing data/runtime APIs. Opaque/nested source values need the runtime
-readiness path; static graph candidates alone cannot choose active branches.
+Direct `$read`/GET `$fetch` declarations at component setup now execute. Stable
+API aliases work, and status-only captures and simple forwarding helpers retain
+their handles. Payload derivations and consuming sites wait before reading an
+unavailable value; the default pending presentation is empty. An early assignment
+cuts a seed's readiness path, including an assignment of `undefined`.
+
+Source snapshots notify the existing component batch in its captured application.
+`connectResolvedValue` and `ownCleanup` attach disposal immediately. Changed
+request inputs use `rebindResolvedValueFromFactory`, preserving loaded data and
+ignoring obsolete requests through the existing data engine. `$read` receives a
+replay thunk for retry. No second request engine or ownership stack is added.
+
+The shared memo engine distinguishes a source's request inputs from payload body
+builders. Source settlement wakes its group even when the source is also an
+output; only changed request inputs repeat the initializer. Observed payload
+methods use the existing mutation observer with a payload reader and
+`notifyResolvedValueMutation`, including unlisted methods. Root observation and
+possible-builder snapshots inspect that same payload.
+
+`packages/data/src/resource.ts` now initializes a null-target source as success
+with a null payload. Both direct and factory rebinding to null clear committed
+data without sending a request. Three data regressions pin those paths.
+
+Phase 8 is unfinished. Module/helper/callback source creation, reassigned sources,
+source patterns, payload captures, mixed handle/payload helper parameters, source
+aliases/paths, forwarded props, source-dependent body builders and effects remain
+explicitly deferred, as do Group policies and atomic preparation. Branches can
+use the static guard only when their sources are already required by the test;
+other lazy source execution still needs a plan. These are temporary phase guards,
+not restrictions on the completed framework's JavaScript or method vocabulary.
 
 ## Reference files
 
@@ -210,7 +238,11 @@ request cancellation through `$track` is still separate, unfinished work.
 
 ## Cases to test
 
-`tests/cases/sources.test.ts`: 78 cases, all passing on the reference. Four status
+`tests/cases/sources.test.ts`: 88 cases, all passing on the reference. Ten component
+execution cases cover delayed derivations, request arguments/replacement, null
+targets, early undefined takeover, chained requests, owner disposal, shared GETs,
+late promise completion, unlisted payload methods and source-backed native maps.
+Four status
 regressions pin helper captures before commit, failure of an unused payload,
 forwarded status parameters and mixed status/payload parameters. They exposed
 and fixed reference guards treating status-only captures/arguments as payload
@@ -323,6 +355,9 @@ behaviour. Each gets a case when a compiler slice touches it:
   re-export, closure and alias combinations.
 - Full `$track` lifecycle callbacks/cancellation, fetch validation/non-JSON
   transports, complete error details and remaining request API contracts.
+- Status-only transitions with side-effectful source derivations need explicit
+  replay-count coverage before the Phase 8 exit, alongside more callback/alias
+  and failed-setup ownership interleavings.
 - Live/generator/`page()` server functions are not modeled.
 
 ## Compiler tests to write (not reference cases)
