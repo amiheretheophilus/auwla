@@ -9,8 +9,8 @@ The order of work for the new compiler, from an empty `src/` to replacing
 - **Do the next unchecked step.** Do not start a later phase before the current
   phase's exit check passes, except for the user-approved performance pause below.
   Do not skip ahead to optimizations.
-- **Performance is paused (2026-10-26).** Continue with Phase 7 and the remaining
-  feature phases. Phase 5/6 performance work and VM speed/memory measurements are
+- **Performance is paused (2026-10-26).** Continue the remaining feature phases,
+  currently Phase 8. Phase 5/6 performance work and VM speed/memory measurements are
   deferred, not passed; they remain release gates before replacing the old
   compiler. The paused row-list step is saved on `tmp/perf-rows` at `b5166fb7`.
 - **Semantics are decided.** `../rules.md`, `../decisions.md` and the concept pages

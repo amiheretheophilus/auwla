@@ -15,14 +15,17 @@ settling, symbol/rest props, destination namespaces and retention checks; exact
 results and commits are in `../status.md`.
 
 Phase 7 effects, cleanup and reactive refs pass their reference comparisons and
-the full CI gate at `4e15dc31`. All 77 remaining comparison failures explicitly
-name Phase 8 sources/readiness. The reference already covers those semantics.
+the full CI gate at `4e15dc31`. Phase 8 source classification and status-read
+facts are built at `baae24d6`, with 20 new compiler checks and four new source
+reference cases. The full CI gate passes; all 81 remaining comparison failures
+explicitly name Phase 8 sources/readiness. Source emission, delayed computations
+and Group preparation remain unfinished (`sources.md`).
 The supplied VM report at `874c826` fails the performance floor: the old compiler
 is faster on all 24 Octane operations, and the DOM update-style run ends in an
 OOM. Phase 5 fast paths and repeat measurements remain before the Phase 6 exit;
 the correctness audit does not establish the cause or resolution of that OOM.
 Remaining conformance gaps stay on their concept pages. Performance work is paused
-at the user's request (2026-10-26); continue with Phase 7 in `plan.md`. Outstanding
+at the user's request (2026-10-26); continue with Phase 8 in `plan.md`. Outstanding
 performance gates remain required before replacing the old compiler.
 
 The optimization stage and on/off comparisons are built. Passes retain private

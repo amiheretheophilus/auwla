@@ -25,8 +25,8 @@ Last updated: 2026-10-26.
 
 ## Done
 
-- Phase 8 graph foundation (2026-10-26, `a2c78c10` plus parameter-flow follow-up): source-valued calls and visible helper
-  returns are classified by binding identity, including aliases, named imports
+- Phase 8 graph foundation (2026-10-26, `a2c78c10`, `baae24d6`): source-valued
+  calls and visible helper returns are classified by binding identity, including aliases, named imports
   and re-exports. Changing request inputs preserves `Source`; a status-only
   `$track` dependency stays reactive without propagating a payload wait.
   Four new behavioral assertions caught and fixed reference guards waiting on
@@ -35,9 +35,15 @@ Last updated: 2026-10-26.
   Local package type checking, 64 focused compiler checks and 150 source/
   lifecycle/ref/callback reference cases pass. Source emission, ownership,
   delayed computations and Group remain unfinished; the explicit Phase 8 guard
-  remains in place. The first graph commit passes all jobs in
-  [CI 40373185069](https://github.com/amiheretheophilus/auwla/actions/runs/40373185069);
-  the parameter-flow follow-up still needs the broad gate. Performance is still paused.
+  remains in place. All jobs pass at `baae24d6` in
+  [CI 40383963500](https://github.com/amiheretheophilus/auwla/actions/runs/40383963500):
+  325 compiler checks, 158 runtime checks, 362 reference cases, 281 compiled
+  comparisons and ten generator checks at `FC_RUNS=200`. The 81 deferred
+  comparisons all explicitly name Phase 8 (77 existing plus four new source
+  cases); no previously passing comparison regressed. Next: source subscriptions
+  and payload lowering, then delayed seeds/computations and Group preparation,
+  reusing the existing data resource and runtime ownership APIs. Performance is
+  still paused; no timing benchmark or full root suite was run locally.
 
 - Phase 7 completed (2026-10-26, `4e15dc31`): effects, cleanup, module
   effects, loop/conditional/helper registrations and reactive refs are built on
