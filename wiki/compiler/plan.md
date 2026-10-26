@@ -7,7 +7,12 @@ The order of work for the new compiler, from an empty `src/` to replacing
 ## Rules for every session
 
 - **Do the next unchecked step.** Do not start a later phase before the current
-  phase's exit check passes. Do not skip ahead to optimizations.
+  phase's exit check passes, except for the user-approved performance pause below.
+  Do not skip ahead to optimizations.
+- **Performance is paused (2026-10-26).** Continue with Phase 7 and the remaining
+  feature phases. Phase 5/6 performance work and VM speed/memory measurements are
+  deferred, not passed; they remain release gates before replacing the old
+  compiler. The paused row-list step is saved on `tmp/perf-rows` at `b5166fb7`.
 - **Semantics are decided.** `../rules.md`, `../decisions.md` and the concept pages
   say what correct is; the tests in `packages/compiler-next/tests/` are the spec.
   Do not change a rule or a test expectation without the user. If a case seems
@@ -273,13 +278,17 @@ array child). Remove each check when its phase is built.
   The user's report at `874c826` passes benchmark correctness gates, but the old
   compiler is faster on all 24 Octane operations and the DOM update-style run
   ends in an OOM. The performance gate is unmet (`testing.md`). Phase 5's pending
-  fast paths and new measurements remain before moving to Phase 7. The audit's
+  fast paths and new measurements are deferred by the user's performance pause.
+  Continue with Phase 7. The audit's
   retention fixes do not establish the cause or resolution of that OOM.
 
 ## Phase 7: effects, cleanup, refs
 
 - [ ] `$effect`, `$cleanup`, module effects, `x++` as a write, an effect's own
-  writes not re-running it (`effects.md`); reactive refs (`refs.md`).
+  writes not re-running it (`effects.md`). Reuse runtime ownership, batching and
+  dependency tracking; keep feature code in `features/effects/`.
+- [ ] Reactive refs, including mount/replacement/removal notifications, callback
+  cleanup and refs-before-effects ordering (`refs.md`).
 - **Exit:** `cases/effects` and `cases/refs` pass.
 
 ## Phase 8: sources and Group

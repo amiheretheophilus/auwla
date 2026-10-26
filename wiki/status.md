@@ -14,7 +14,8 @@ Last updated: 2026-10-26.
   supplied `874c826` benchmark report passes correctness gates but fails the
   performance floor: old wins all 24 Octane operations, and the DOM update-style
   run ends in an OOM. Boundary fixes and their validation are below. Phase 5 fast
-  paths and new VM measurements remain before moving to Phase 7.
+  paths and new VM measurements remain deferred release gates. The user paused
+  performance work on 2026-10-26; continue feature correctness with Phase 7.
 - `compiler-refactor`: the old compiler's refactor, stopped on 2026-10-19. The
   sections below record that work.
 - `codex/package-conditional-sync` at `9e35480` (third-party package compilation,
@@ -23,6 +24,13 @@ Last updated: 2026-10-26.
 - The user put the agent in charge of the refactor on 2026-10-18 ("you are in charge now").
 
 ## Done
+
+- Work order updated (2026-10-26): performance is paused at the user's request.
+  Phase 7 effects, cleanup and reactive refs are next, followed by the remaining
+  feature phases. Reuse existing runtime ownership and tracking, keep code readable
+  and avoid duplicate implementations. The paused row-list step is preserved on
+  `tmp/perf-rows` at `b5166fb7`; Phase 7 proceeds on `compiler-rewrite`. Outstanding
+  performance and memory gates still apply before replacing the old compiler.
 
 - Quick browser benchmark after routing (2026-10-26):
   [run 40324188637](https://github.com/amiheretheophilus/auwla/actions/runs/40324188637)

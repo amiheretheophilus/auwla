@@ -20,7 +20,9 @@ The supplied VM report at `874c826` fails the performance floor: the old compile
 is faster on all 24 Octane operations, and the DOM update-style run ends in an
 OOM. Phase 5 fast paths and repeat measurements remain before the Phase 6 exit;
 the correctness audit does not establish the cause or resolution of that OOM.
-Remaining conformance gaps stay on their concept pages. Continue in `plan.md`.
+Remaining conformance gaps stay on their concept pages. Performance work is paused
+at the user's request (2026-10-26); continue with Phase 7 in `plan.md`. Outstanding
+performance gates remain required before replacing the old compiler.
 
 The optimization stage and on/off comparisons are built. Passes retain private
 row-matching tables, skip snapshots for proven intrinsic calls, reuse eligible
