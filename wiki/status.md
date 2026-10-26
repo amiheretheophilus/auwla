@@ -9,13 +9,13 @@ Last updated: 2026-10-26.
   disabled. Its account has a billing lock, so CI cannot run there. See `../AGENTS.md`.
 - `compiler-rewrite` (working branch, from `compiler-refactor` at `6230c27`):
   the new compiler, designed in `compiler/`. Phases 1–4, the Phase 5 general list
-  rule and Phase 6 component/props integration are built. Existing suites pass
+  rule, Phase 6 components/props and Phase 7 effects/cleanup/refs are built. Existing suites pass
   within their coverage, with later-phase failures explicitly diagnosed. The
   supplied `874c826` benchmark report passes correctness gates but fails the
   performance floor: old wins all 24 Octane operations, and the DOM update-style
   run ends in an OOM. Boundary fixes and their validation are below. Phase 5 fast
   paths and new VM measurements remain deferred release gates. The user paused
-  performance work on 2026-10-26; continue feature correctness with Phase 7.
+  performance work on 2026-10-26; continue feature correctness with Phase 8.
 - `compiler-refactor`: the old compiler's refactor, stopped on 2026-10-19. The
   sections below record that work.
 - `codex/package-conditional-sync` at `9e35480` (third-party package compilation,
@@ -25,7 +25,7 @@ Last updated: 2026-10-26.
 
 ## Done
 
-- Phase 7 implementation (2026-10-26; full CI pending): effects, cleanup, module
+- Phase 7 completed (2026-10-26, `4e15dc31`): effects, cleanup, module
   effects, loop/conditional/helper registrations and reactive refs are built on
   existing runtime ownership, collectors, write batches and ref mounting. Ref
   assignments reuse ordinary write/mutation emission; imported member roots and
@@ -37,8 +37,15 @@ Last updated: 2026-10-26.
   Local checks pass: 18 effect and 19 ref comparisons in both compiler modes,
   74 focused compiler/plan/benchmark checks total, 63 runtime checks and 64 existing
   lifecycle/ref integration checks. Both package type checks and the runtime
-  build pass. No full root suite or timing benchmark was run. Full CI is the next
-  gate before Phase 8. Performance remains paused.
+  build pass. No full root suite or timing benchmark was run.
+  [CI 40355236792](https://github.com/amiheretheophilus/auwla/actions/runs/40355236792)
+  passes all jobs at that commit: 305 compiler checks, 158 runtime checks, 358
+  reference cases, 281 compiler comparisons and ten generator checks at
+  `FC_RUNS=200`. The 77 remaining failures all explicitly name Phase 8; six cases
+  combining lifecycle and sources now reach the source guard instead of Phase 7.
+  No existing behavioral expectation was weakened. Next: Phase 8 sources and
+  readiness, starting with `$read`/`$fetch` and the dependency/seed rules before
+  Group publication and request lifecycle. Performance remains paused.
 
 - Work order updated (2026-10-26): performance is paused at the user's request.
   Phase 7 effects, cleanup and reactive refs are next, followed by the remaining

@@ -56,7 +56,8 @@ and runs their cleanup.
 ## Inputs and outputs
 
 - In: `Resolved`, the graph.
-- Out: `Effect` nodes with `reads` and `writes` edges.
+- Out: lifecycle calls and activation groups in the plan, reusing the graph's
+  binding read/write facts and runtime computation tracking.
 
 ## Cases to test
 

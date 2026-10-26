@@ -291,9 +291,13 @@ array child). Remove each check when its phase is built.
   cleanup and refs-before-effects ordering (`refs.md`).
 - **Exit:** `cases/effects` and `cases/refs` pass. Locally verified: 18 effect
   and 19 ref comparisons against the reference and both compiler modes, including
-  17 new behavioral cases. Full CI validation is pending; do not start Phase 8
-  until that shared-machinery check passes. Wider conformance limits remain on
-  the concept pages, not hidden as passing cases.
+  17 new behavioral cases. Passed at `4e15dc31` in
+  [CI 40355236792](https://github.com/amiheretheophilus/auwla/actions/runs/40355236792):
+  305 compiler checks, 158 runtime checks, 358 reference cases, 281 comparisons
+  and ten generator checks at `FC_RUNS=200`. All 77 remaining comparison failures
+  explicitly name Phase 8. Six mixed-feature cases formerly blocked by Phase 7
+  now reach their source/readiness guard. Wider conformance limits remain on
+  the concept pages. Next: Phase 8; performance remains paused.
 
 ## Phase 8: sources and Group
 

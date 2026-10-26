@@ -36,6 +36,14 @@ the initial set. A parent commit can deliver props that dirty a child; that chil
 settles before the same listener returns. A focused runtime regression and the
 native SVG component update check cover this propagation.
 
+Phase 7 ref writes use this same assignment/mutation pipeline (`refs.md`). A
+mounted ref node is an imperative DOM handle, so mutation reach traversal does not
+inspect its DOM implementation fields. Direct DOM stores do not publish state
+edits, and a ref binding's mutation notifier retains the general path if that
+binding later holds an ordinary object. Rebinding the ref still publishes its
+version. The reference checks that editing ref text/attributes leaves an
+identity-only effect asleep.
+
 Each contiguous group of batches from the same application enters one kernel
 commit. First-mark order is retained across interleaved applications; the kernel
 orders parents before children within a group. A weak per-application entity
