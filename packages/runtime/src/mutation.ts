@@ -228,6 +228,8 @@ function walk(root: Root, slot?: Slot): Reach {
 }
 
 function extendReach(reach: Reach, value: unknown, slot?: Slot): void {
+  // A stored primitive reaches nothing; most stores write one.
+  if (!isObject(value)) return;
   reachable(value, (object) => {
     reach.objects.add(object);
     if (slot !== undefined) {
@@ -246,18 +248,6 @@ type Edit =
   | { readonly kind: 'receiver'; readonly added: readonly unknown[]; readonly from: number; readonly to: number }
   /** An opaque call or a setter: anything below the changed objects may differ. */
   | { readonly kind: 'unknown' };
-
-/** Module and factory roots: one per shared binding, so few; each is checked on every edit. */
-function* sharedWatchedRoots(): Generator<Root> {
-  for (const reference of sharedRoots) {
-    const owner = reference.deref();
-    if (owner === undefined) {
-      sharedRoots.delete(reference);
-      continue;
-    }
-    yield* rootsOfShared.get(owner) ?? [];
-  }
-}
 
 function reachesAny(objects: { has(object: object): boolean }, changed: ReadonlySet<object>): boolean {
   for (const object of changed) {
@@ -317,63 +307,108 @@ function editedBelow(value: object, time: number, seen: Set<object>): boolean {
 }
 
 /**
+ * What an edit changed: `one` object (a store, delete or proven receiver edit),
+ * or the set `many` an observation found changed. Stores run once per written
+ * element, so the single-object form allocates no set.
+ */
+interface Changed {
+  readonly one: object | null;
+  readonly many: ReadonlySet<object> | null;
+}
+
+function reachesChanged(objects: { has(object: object): boolean }, changed: Changed): boolean {
+  return changed.one !== null ? objects.has(changed.one) : reachesAny(objects, changed.many!);
+}
+
+/** The notifiers an edit already called: none, one, or several. */
+type Direct = (() => void) | readonly (() => void)[] | null;
+
+function calledDirectly(direct: Direct, notify: () => void): boolean {
+  if (direct === null) return false;
+  return typeof direct === 'function' ? direct === notify : direct.includes(notify);
+}
+
+/**
+ * A root the edit already notified through its own binding needs no walk to
+ * be found: it stays unwalked until an edit through another binding.
+ */
+function notifiedDirectly(root: Root, direct: Direct): boolean {
+  return calledDirectly(direct, root.notify) || (root.direct !== undefined && calledDirectly(direct, root.direct));
+}
+
+/**
  * Notify every root whose data includes a changed object, then record the edit.
  * `direct` are the notifiers the edit already called for the bindings it was
  * written through (`data[i].label = …` calls `data`'s).
  */
-function notifyAliases(changed: ReadonlySet<object>, edit: Edit, direct: readonly (() => void)[] = []): void {
-  if (changed.size === 0) return;
-  const callbacks = new Set<() => void>();
+function notifyAliases(changed: Changed, edit: Edit, direct: Direct = null): void {
+  if (changed.many !== null && changed.many.size === 0) return;
+  let callbacks: Set<() => void> | null = null;
   const store = roots();
-  // A root the edit already notified through its own binding needs no walk to
-  // be found: it stays unwalked until an edit through another binding.
-  const notified = (root: Root) => direct.includes(root.notify) || (root.direct !== undefined && direct.includes(root.direct));
   for (const slot of store.unwalked) {
     if (slot.root === null) store.unwalked.delete(slot);
-    else if (!notified(slot.root)) walk(slot.root, slot);
+    else if (!notifiedDirectly(slot.root, direct)) walk(slot.root, slot);
   }
-  const candidates = new Set<Slot>();
-  for (const object of changed) {
-    for (const slot of store.holders.get(object) ?? []) candidates.add(slot);
+  // Copied before notifying: walks and records change these buckets.
+  let candidates: Iterable<Slot> | null = null;
+  if (changed.one !== null) {
+    const held = store.holders.get(changed.one);
+    if (held !== undefined && held.size > 0) candidates = [...held];
+  } else {
+    const all = new Set<Slot>();
+    for (const object of changed.many!) {
+      for (const slot of store.holders.get(object) ?? []) all.add(slot);
+    }
+    candidates = all;
   }
-  for (const slot of candidates) {
+  for (const slot of candidates ?? []) {
     if (slot.root === null) continue;
     if (notifies(slot.root, changed, edit, slot)) {
-      if (!notified(slot.root)) callbacks.add(slot.root.notify);
+      if (!notifiedDirectly(slot.root, direct)) (callbacks ??= new Set()).add(slot.root.notify);
       // After an unknown edit, walk again before the next lookup.
       if (!reaches.has(slot.root)) store.unwalked.add(slot);
     }
   }
-  for (const root of sharedWatchedRoots()) {
-    if (notified(root)) {
-      // Already notified. Without a current reach, walking this root would
-      // only build an index this edit does not need; the next edit made
-      // through another binding walks it then, as for any unwalked root.
-      const known = reaches.get(root);
-      if (known === undefined || !Object.is(known.value, root.read())) {
-        reaches.delete(root);
-        continue;
-      }
-      notifies(root, changed, edit);
+  // Module and factory roots: one per shared binding, so few; each is checked on every edit.
+  for (const reference of sharedRoots) {
+    const owner = reference.deref();
+    if (owner === undefined) {
+      sharedRoots.delete(reference);
       continue;
     }
-    if (notifies(root, changed, edit)) callbacks.add(root.notify);
+    for (const root of rootsOfShared.get(owner) ?? []) {
+      if (notifiedDirectly(root, direct)) {
+        // Already notified. Without a current reach, walking this root would
+        // only build an index this edit does not need; the next edit made
+        // through another binding walks it then, as for any unwalked root.
+        const known = reaches.get(root);
+        if (known === undefined || !Object.is(known.value, root.read())) {
+          reaches.delete(root);
+          continue;
+        }
+        notifies(root, changed, edit);
+        continue;
+      }
+      if (notifies(root, changed, edit)) (callbacks ??= new Set()).add(root.notify);
+    }
   }
-  for (const notify of callbacks) notify();
+  if (callbacks !== null) for (const notify of callbacks) notify();
 }
 
 /** Whether `root` reaches a changed object; keeps its reach (and index) up to date. */
-function notifies(root: Root, changed: ReadonlySet<object>, edit: Edit, slot?: Slot): boolean {
+function notifies(root: Root, changed: Changed, edit: Edit, slot?: Slot): boolean {
   const known = reaches.get(root);
   // A root that now holds another value is walked again; that walk already
   // sees the edit.
   let reach = known !== undefined && Object.is(known.value, root.read()) ? known : walk(root, slot);
-  if (!reachesAny(reach.objects, changed)) return false;
+  if (!reachesChanged(reach.objects, changed)) return false;
   // An edit of the root's own value is a hit however stale the rest of the set
   // is; only a hit on an object it may have dropped needs a new walk.
-  if (reach === known && reach.stale && !(isObject(reach.value) && changed.has(reach.value))) {
+  const ownValue = isObject(reach.value)
+    && (changed.one !== null ? changed.one === reach.value : changed.many!.has(reach.value));
+  if (reach === known && reach.stale && !ownValue) {
     reach = walk(root, slot);
-    if (!reachesAny(reach.objects, changed)) return false;
+    if (!reachesChanged(reach.objects, changed)) return false;
   } else if (reach === known) {
     record(root, reach, edit, slot);
   }
@@ -593,7 +628,7 @@ export function observeMutation(reads: readonly (() => unknown)[], notify: reado
       });
       // A later recovery compares with what each read reaches now.
       if (!final && (moved || changed.size > 0)) observe();
-      notifyAliases(changed, { kind: 'unknown' });
+      notifyAliases({ one: null, many: changed }, { kind: 'unknown' });
     },
   };
   const reference = new WeakRef(observation);
@@ -634,7 +669,7 @@ export function observeReceiverEdit(
     state.unrecovered.delete(reference);
     stamp(object);
     for (const callback of notify) callback();
-    notifyAliases(new Set([object]), { kind: 'receiver', added, from, to }, notify);
+    notifyAliases({ one: object, many: null }, { kind: 'receiver', added, from, to }, notify);
   };
   const observation: Observation = {
     finish(result) {
@@ -650,9 +685,21 @@ export function observeReceiverEdit(
   return observation;
 }
 
+/**
+ * ToPropertyKey: strings and symbols are keys already, and a number converts
+ * by ToString, which `String` performs without running authored code. Any
+ * other value can run `toString`/`valueOf`/`Symbol.toPrimitive`, so it goes
+ * through a computed property name, which converts exactly once.
+ */
+function propertyKey(key: unknown): PropertyKey {
+  if (typeof key === 'string' || typeof key === 'symbol') return key;
+  if (typeof key === 'number') return String(key);
+  return Reflect.ownKeys({ [key as PropertyKey]: 0 })[0]!;
+}
+
 export function mutationTarget(object: any, key: any, notify: () => void) {
   // Computed property names perform ToPropertyKey before evaluating the RHS.
-  const property = Reflect.ownKeys({ [key]: 0 })[0]!;
+  const property = propertyKey(key);
   return {
     get value() { return object[property]; },
     set value(value: unknown) {
@@ -660,7 +707,7 @@ export function mutationTarget(object: any, key: any, notify: () => void) {
       object[property] = value;
       stamp(object);
       notify();
-      notifyAliases(new Set([object]), edit, [notify]);
+      notifyAliases({ one: object, many: null }, edit, notify);
     },
   };
 }
@@ -669,7 +716,7 @@ export function deleteMutation(object: any, key: any, notify: () => void): boole
   const result = delete object[key];
   stamp(object);
   notify();
-  notifyAliases(new Set([object]), { kind: 'store', added: undefined, removed: true }, [notify]);
+  notifyAliases({ one: object, many: null }, { kind: 'store', added: undefined, removed: true }, notify);
   return result;
 }
 
@@ -681,7 +728,7 @@ export function receiverMutationTarget(read: () => any, write: (value: any) => v
       write(value);
       stamp(object);
       // Reading the old value could run a private or inherited getter.
-      notifyAliases(new Set([object]), { kind: 'store', added: value, removed: true });
+      notifyAliases({ one: object, many: null }, { kind: 'store', added: value, removed: true });
     },
   };
 }

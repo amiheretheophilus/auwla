@@ -231,3 +231,22 @@ it('checks shared binding identities without reflecting over their unchanged dat
   expect(walks).toBe(0);
   expect(getters).toBe(0);
 });
+
+it('converts a store key as a computed member does: once, before the value', () => {
+  const symbol = Symbol('s');
+  const object: Record<PropertyKey, unknown> = {};
+  store(object, -0, 'zero');
+  store(object, 1e21, 'big');
+  store(object, 1.5, 'fraction');
+  store(object, symbol, 'symbol');
+  store(object, 'name', 'string');
+  expect(Reflect.ownKeys(object)).toEqual(['0', '1e+21', '1.5', 'name', symbol]);
+  const log: string[] = [];
+  const key = { toString() { log.push('key'); return 'k'; } };
+  const target = mutationTarget(object, key, () => {});
+  log.push('value');
+  target.value = 1;
+  target.value = 2;
+  expect(log).toEqual(['key', 'value']);
+  expect(object.k).toBe(2);
+});
