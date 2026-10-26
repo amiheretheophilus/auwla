@@ -1046,8 +1046,9 @@ class Renderer {
   }
 
   private renderChildren(children: unknown[], position: string, inSvg: boolean, policies: Policies): Node[] {
+    const occurrences = new Map<string, number>();
     return children.flatMap((child, index) => {
-      return this.renderNode(child, childPosition(child, index, position), inSvg, policies);
+      return this.renderNode(child, childPosition(child, index, position, occurrences), inSvg, policies);
     });
   }
 

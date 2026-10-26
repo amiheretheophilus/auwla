@@ -233,7 +233,7 @@ Features build their own pieces. Optimizations replace pieces (`optimize.md`).
 | `packages/runtime/src/render-value.ts` | Keeps program metadata in a WeakMap and gives each consuming slot its own anchored DOM range |
 | `packages/runtime/src/computation.ts` | Captures executed hidden version reads for opaque memos/sites, with stable keys and nested restoration |
 | `template.ts` | Calls runtime `materializeMarkup`, or creates nodes directly when HTML parsing would alter the tree |
-| `names.ts` | Allocates generated names against all authored bindings and references |
+| `names.ts` | Allocates generated names against authored names; `of(node, base)` shares distinct roles for one authored node |
 | `quote.ts` | Parses and copies generated statement snippets, filling AST holes; syntax that cannot parse at module scope uses builders directly |
 | `copy.ts` | Copies authored syntax with identity-keyed replacements, without changing analyzer nodes |
 | `recovery.ts` | Captures dynamic ownership around existing authored try statements and restores it before catch patterns/bodies and finally; adds no exception wrappers |

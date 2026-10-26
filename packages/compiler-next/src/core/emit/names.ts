@@ -7,7 +7,7 @@ import type { Module } from '../resolve';
 
 export class Names {
   readonly #taken = new Set<string>();
-  readonly #owned = new Map<Node, string>();
+  readonly #owned = new Map<Node, Map<string, string>>();
   /**
    * Module-level declarations made while emitting nested code (a template's
    * cache and builder); `emitDom` places them with its other hoisted statements.
@@ -28,12 +28,16 @@ export class Names {
   }
 
   /**
-   * One fresh name per authored node, the same for every emitter that asks:
-   * a row list is declared by its site and passed to `map` by the mutation lowering.
+   * One fresh name per authored node and base, the same for every emitter that
+   * asks: a row list is declared by its site and passed to `map` by the
+   * mutation lowering; a shared binding's peek, version and key are declared
+   * by `shared-dom.ts` and passed to the row lists that route on it.
    */
   of(node: Node, base: string): string {
-    let name = this.#owned.get(node);
-    if (name === undefined) this.#owned.set(node, name = this.fresh(base));
+    let names = this.#owned.get(node);
+    if (names === undefined) this.#owned.set(node, names = new Map());
+    let name = names.get(base);
+    if (name === undefined) names.set(base, name = this.fresh(base));
     return name;
   }
 

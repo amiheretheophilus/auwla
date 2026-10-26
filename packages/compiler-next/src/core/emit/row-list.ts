@@ -27,7 +27,21 @@ export function emitRowList(plan: RowListPlan, anchor: string, context: SitesCon
   readonly list: string;
   readonly declarations: readonly Statement[];
 } {
-  const { names, runtime, replacements } = context;
+  const { names, runtime } = context;
+  const replacements = new Map(context.replacements);
+  const untracked = new Map<Node, Node>();
+  for (const route of plan.routes) {
+    const binding = route.binding.binding;
+    const local = context.versions.has(route.binding);
+    const left = local ? expression(binding.name)
+      : expression('$$peek()', { peek: names.of(binding.declarations[0]!, `_peek_${binding.name}`) });
+    // Only the compiled row copy reads without tracking. The authored callback
+    // retains its ordinary dependencies when a custom map takes the fallback.
+    const comparison = b.BinaryExpression({ operator: route.node.operator, left, right: route.node.right });
+    untracked.set(route.node, comparison);
+    replacements.set(route.node, comparison);
+  }
+  const rowContext = { ...context, replacements };
   const list = names.of(plan.call, '_rowList');
   const params = plan.callback.params.map((param) => (param as { name: string }).name);
   const namespace = names.fresh('_rowNamespace');
@@ -41,7 +55,7 @@ export function emitRowList(plan: RowListPlan, anchor: string, context: SitesCon
   if (plan.row.kind === 'element') {
     const value = plan.row.value;
     const sites = value.keyIndex === null ? value.sites : value.sites.filter((_, index) => index !== value.keyIndex);
-    const variant = (shape: Template) => emitRow(shape, sites, { ...context, namespace }, (emitted, root) => {
+    const variant = (shape: Template) => emitRow(shape, sites, { ...rowContext, namespace }, (emitted, root) => {
       const next = params.map((param) => names.fresh(`_${param}`));
       return entry(root, next, [...assign(params, next), ...emitted.update], emitted.dispose);
     });
@@ -76,7 +90,7 @@ export function emitRowList(plan: RowListPlan, anchor: string, context: SitesCon
     const row = names.fresh('_row');
     const next = params.map((param) => names.fresh(`_${param}`));
     body = [
-      statement('const $$row = $$factory($$props, $$owner);', { row, factory: rows.factory(plan.row.component), props: props(), owner }),
+      statement('const $$row = $$factory($$props, $$owner);', { row, factory: rows.factory(plan.row.component, untracked), props: props(), owner }),
       b.ReturnStatement({ argument: entry(`${row}.node`, next, [
         ...assign(params, next),
         statement('$$row.update($$props);', { row, props: props() }),
@@ -85,16 +99,36 @@ export function emitRowList(plan: RowListPlan, anchor: string, context: SitesCon
   }
   const create = arrow(params, b.BlockStatement({ body }));
   const key = plan.key === null ? expression('null') : arrow(params, copy(plan.key, replacements));
-  declarations.push(statement('const $$list = $$runtime.createRowList($$anchor, $$owner, $$key, $$create);', {
+  const keyPath: string[] = [];
+  let member = plan.key;
+  while (member !== null && is.MemberExpression(member) && is.Identifier(member.property)) {
+    keyPath.unshift(member.property.name);
+    member = member.object;
+  }
+  declarations.push(statement('const $$list = $$runtime.createRowList($$anchor, $$owner, $$key, $$create, $$path);', {
     list, runtime, anchor, owner: renderOwner(context), key, create,
+    path: plan.routes.length === 0 ? expression('void 0') : b.ArrayExpression({ elements: keyPath.map(stringLiteral) }),
   }));
+  for (const binding of new Set(plan.routes.map((route) => route.binding))) {
+    const local = context.versions.get(binding);
+    const declared = binding.binding.declarations[0]!;
+    const peek = local === undefined
+      ? expression(names.of(declared, `_peek_${binding.binding.name}`))
+      : expression('() => $$binding', { binding: binding.binding.name });
+    const version = local === undefined
+      ? expression(names.of(declared, `_version_${binding.binding.name}`))
+      : expression('() => $$version', { version: local });
+    declarations.push(statement('$$list.route($$peek, $$version, $$key);', {
+      list, peek, version, key: local === undefined ? expression(names.of(declared, '_sharedKey')) : expression('void 0'),
+    }));
+  }
   return { list, declarations };
 }
 
 /** Leaf component rows, each compiled once per module (`emitRowList`). */
 export class RowComponents {
   readonly declarations: Statement[] = [];
-  readonly #factories = new Map<Node, string>();
+  readonly #factories = new Map<Node, Map<string, string>>();
 
   constructor(
     private readonly plan: ModulePlan,
@@ -104,13 +138,17 @@ export class RowComponents {
     private readonly replacements: ReadonlyMap<Node, Node>,
   ) {}
 
-  factory(fn: FunctionNode): string {
-    let name = this.#factories.get(fn);
+  factory(fn: FunctionNode, untracked: ReadonlyMap<Node, Node>): string {
+    const routed = [...untracked].filter(([node]) => node.start >= fn.start && node.end <= fn.end);
+    const signature = routed.map(([node]) => node.start).join(',');
+    let factories = this.#factories.get(fn);
+    if (factories === undefined) this.#factories.set(fn, factories = new Map());
+    let name = factories.get(signature);
     if (name !== undefined) return name;
     const component = this.plan.components.get(fn)!;
     const { names, runtime } = this;
     name = names.fresh(`_${is.FunctionDeclaration(fn) && fn.id !== null ? fn.id.name : 'component'}_row`);
-    this.#factories.set(fn, name);
+    factories.set(signature, name);
     const param = fn.params[0];
     const props = param !== undefined && is.Identifier(param) ? param.name : names.fresh('_props');
     const owner = names.fresh('_rowOwner');
@@ -122,7 +160,8 @@ export class RowComponents {
     // Its handlers' edits of its props stay observed, as in the component;
     // they notify the list, which shows its rows again (`optimize/row-lists.ts`).
     const invalidate = names.fresh('_invalidate');
-    const handlers = emitMutations(component.mutations, new Map(), names, runtime, null, this.replacements, new Map(),
+    const replacements = new Map([...this.replacements, ...routed]);
+    const handlers = emitMutations(component.mutations, new Map(), names, runtime, null, replacements, new Map(),
       new Map(component.state.map((binding) => [binding, invalidate])));
     const context: SitesContext = {
       names, runtime, batch, entity, id, document, namespace,

@@ -23,7 +23,7 @@
  * Any other value written to the site (the callee was not proven, so the
  * authored callback ran) goes to an ordinary value slot at the same anchor.
  */
-import { publishVersions, trackRead } from './computation';
+import { createComputation, publishVersions, trackRead } from './computation';
 import { readListLength } from './list-values';
 import { lisPositions } from './list';
 import { createIndexedValueSlot, type RenderOwner, type ValueSlot } from './render-value';
@@ -43,6 +43,8 @@ export type RowFactory = (item: unknown, index: number) => RowEntry;
 
 interface Row {
   readonly entry: RowEntry;
+  /** Last item supplied to the entry; targeted refreshes must keep its index. */
+  item: unknown;
   /** As the general path names it: `key=…`, or `#index` without a key. */
   identity: string;
   /** The key last evaluated; a primitive key that stays the same keeps its identity. */
@@ -61,12 +63,28 @@ export interface RowList {
   map(array: readonly unknown[], callback: Function, thisArg: unknown): unknown;
   /** The site's value: the token is already shown; anything else goes to a value slot. */
   write(value: unknown): void;
+  /** Register a binding compared strictly with the row key, before the first map. */
+  route(peek: () => unknown, version: () => number, key?: object): void;
+  /** Unsupported keys or the value-slot fallback need the authored map again. */
+  changed(): boolean;
+  /** Refresh only rows matching a routed binding's previous or current value. */
+  refresh(computation?: ReturnType<typeof createComputation>): void;
   /**
    * A row observed an edit of what it shows, such as its props object, in a
    * handler. Rows have no own updates; the site that maps them runs again.
    */
   invalidate(): void;
   dispose(): void;
+}
+
+interface Route {
+  readonly peek: () => unknown;
+  readonly version: () => number;
+  readonly key: object | undefined;
+  readonly computation: ReturnType<typeof createComputation> | null;
+  value: unknown;
+  seen: number;
+  ready: boolean;
 }
 
 function identityOf(key: unknown, index: number): string {
@@ -86,7 +104,11 @@ function available(row: Row | undefined, key: unknown, index: number, stamp: num
   return row !== undefined && row.taken !== stamp && !row.duplicate && sameIdentity(row, key, index);
 }
 
-export function createRowList(anchor: Text, owner: RenderOwner, key: RowKey | null, create: RowFactory): RowList {
+export function createRowList(
+  anchor: Text, owner: RenderOwner, key: RowKey | null, create: RowFactory,
+  /** The compiler-proven member chain from the item to its key, for routing. */
+  keyPath?: readonly string[],
+): RowList {
   const token = Object.freeze({});
   let rows: Row[] = [];
   /** Rows created by a pass that threw before committing them. */
@@ -94,6 +116,37 @@ export function createRowList(anchor: Text, owner: RenderOwner, key: RowKey | nu
   let slot: ValueSlot | null = null;
   let showingSlot = false;
   let disposed = false;
+  let routes: Route[] | null = null;
+  let canRoute = false;
+
+  function stableKey(item: unknown, key: unknown): boolean {
+    if (keyPath === undefined) return false;
+    let value = item;
+    for (const member of keyPath) {
+      if (value === null || (typeof value !== 'object' && typeof value !== 'function')) return false;
+      const descriptor = Object.getOwnPropertyDescriptor(value, member);
+      if (descriptor === undefined || !('value' in descriptor)) return false;
+      value = descriptor.value;
+    }
+    return Object.is(value, key);
+  }
+
+  function routeChanged(route: Route): boolean {
+    return !route.ready || route.version() !== route.seen;
+  }
+
+  /** Shared bindings wake the owner once per list, never once per row. */
+  function syncRoutes(): void {
+    for (const route of routes ?? []) {
+      const computation = route.computation;
+      computation?.begin();
+      if (route.key !== undefined) trackRead(route.version, null, route.key);
+      route.value = route.peek();
+      computation?.end();
+      route.seen = route.version();
+      route.ready = true;
+    }
+  }
 
   /** A row's node leaves only the list's own parent, as a slot removes only its own range. */
   function detach(row: Row): void {
@@ -173,6 +226,7 @@ export function createRowList(anchor: Text, owner: RenderOwner, key: RowKey | nu
     pending = created;
     const stamp = ++pass;
     let ordered = true;
+    let routeable = routes !== null && key !== null;
     let last = -1;
     // A getter read by a key or row can render this site again, or dispose it.
     // The nested pass recovers this one's new rows and reconciles from the
@@ -217,14 +271,22 @@ export function createRowList(anchor: Text, owner: RenderOwner, key: RowKey | nu
           entry.dispose();
           return;
         }
-        row = { entry, identity: identity!, key: rowKey, index, position: -1, duplicate, taken: stamp };
+        row = { entry, item, identity: identity!, key: rowKey, index, position: -1, duplicate, taken: stamp };
         created.push(row);
         if (old !== undefined) replaced.push([old, row]);
         else if (!duplicate) lookup().set(row.identity, row);
       } else {
         if (row.position < last) ordered = false;
         last = row.position;
+        row.item = item;
         row.entry.update(item, index);
+        if (superseded()) return;
+      }
+      // These identities may alias or invoke authored conversion. Re-evaluate
+      // the authored map on a routed change instead of using a cached lookup.
+      if (routeable) {
+        if (rowKey === null || rowKey === undefined || typeof rowKey === 'object'
+          || typeof rowKey === 'function' || row.duplicate || !stableKey(item, rowKey)) routeable = false;
         if (superseded()) return;
       }
       next.push(row);
@@ -248,6 +310,7 @@ export function createRowList(anchor: Text, owner: RenderOwner, key: RowKey | nu
       row.position = position;
     }
     rows = next;
+    canRoute = routeable;
     if (removed.length > 0) removeRows(removed, next.length);
     // A value slot writes its rows after the unmatched ones are removed.
     for (const [old] of replaced) {
@@ -301,6 +364,7 @@ export function createRowList(anchor: Text, owner: RenderOwner, key: RowKey | nu
     const committed = rows;
     rows = [];
     identities = null;
+    canRoute = false;
     if (committed.length > 0) removeRows(committed, 0);
   }
 
@@ -318,6 +382,7 @@ export function createRowList(anchor: Text, owner: RenderOwner, key: RowKey | nu
         showingSlot = false;
       }
       reconcile(array);
+      if (!disposed) syncRoutes();
       return token;
     },
     write(value) {
@@ -325,6 +390,50 @@ export function createRowList(anchor: Text, owner: RenderOwner, key: RowKey | nu
       clearRows();
       (slot ??= createIndexedValueSlot(anchor, owner)).write(value);
       showingSlot = true;
+      syncRoutes();
+    },
+    route(peek, version, key) {
+      if (disposed) return;
+      (routes ??= []).push({
+        peek, version, key, value: undefined, seen: -1, ready: false,
+        computation: key === undefined ? null : createComputation(owner.batch?.mark, owner.entity),
+      });
+    },
+    changed() {
+      if (disposed) return false;
+      if (pending !== null) return true;
+      return (!canRoute || showingSlot) && (routes?.some(routeChanged) ?? false);
+    },
+    refresh(computation) {
+      if (disposed || showingSlot || !canRoute || pending !== null || routes === null) return;
+      const changed = routes.filter(routeChanged);
+      if (changed.length === 0) return;
+      const affected = new Set<Row>();
+      const add = (value: unknown) => {
+        // Primitive row keys cannot strictly equal an object, null or undefined.
+        // In particular, never coerce an authored object to perform this lookup.
+        if (value === null || value === undefined || typeof value === 'object' || typeof value === 'function') return;
+        const row = lookup().get(identityOf(value, 0));
+        if (row !== undefined && row.key === value) affected.add(row);
+      };
+      for (const route of changed) {
+        const next = route.peek();
+        if (route.ready && route.value === next) continue;
+        add(route.value);
+        add(next);
+      }
+      const stamp = pass;
+      if (affected.size > 0) computation?.begin(false);
+      // A full map evaluates rows in DOM order, regardless of which key changed.
+      for (const row of [...affected].sort((left, right) => left.position - right.position)) {
+        row.entry.update(row.item, row.index);
+        if (disposed || showingSlot || pass !== stamp) {
+          computation?.end(!disposed);
+          return;
+        }
+      }
+      if (affected.size > 0) computation?.end();
+      syncRoutes();
     },
     invalidate() {
       if (disposed) return;
@@ -334,6 +443,10 @@ export function createRowList(anchor: Text, owner: RenderOwner, key: RowKey | nu
     dispose() {
       if (disposed) return;
       disposed = true;
+      const subscriptions = routes;
+      routes = null;
+      // A row's disposal can throw. Release subscriptions before authored work.
+      for (const route of subscriptions ?? []) route.computation?.dispose();
       clearRows();
       slot?.dispose();
     },

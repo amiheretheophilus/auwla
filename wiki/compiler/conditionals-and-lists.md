@@ -170,7 +170,15 @@ scope, and a folded tail that never updated.
     array values; duplicate/throwing keys and reentry preserve general matching;
   - keyed `.map` over state, reusing rows;
   - targeted `push`, `splice` and `sort`;
-  - DOM-only rows.
+  - DOM-only rows (built), including leaf components;
+  - selection routed to old/new keys (built; `optimize.md`, "Selection routing").
+
+  Selection comparisons cover local/shared state and inline/leaf rows through
+  moves, removal, clearing, repopulation and simultaneous data/selection writes.
+  Duplicate, colliding and null keys retain strict comparison behavior. This
+  exposed a reference-renderer bug: sibling key collisions shared a DOM position
+  and overwrote each other's props. Preparation and rendering now assign
+  distinct occurrence positions; the failing assertions were kept unchanged.
 
   Every current list optimization stays until a plan pass reproduces it, and the
   `bench/` numbers are the gate (`../decisions.md`).

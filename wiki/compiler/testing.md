@@ -11,7 +11,7 @@
 | `tests/reference/runtime.ts` | Runs the reference: re-renders everything, keeps slots per component instance |
 | `tests/reference/sources.ts` | Independent source state, readiness values, JSON fetches and promise reads |
 | `tests/reference/readiness.ts` | Source-aware expressions, imports and module derivations |
-| `tests/reference/preparation.ts` | Atomic initial preparation without DOM, shared position matching and active source collection |
+| `tests/reference/preparation.ts` | Atomic initial preparation without DOM, shared position matching with distinct duplicate-key occurrences, and active source collection |
 | `tests/reference/reads.ts` | Dependency queries using yuku bindings and references |
 | `tests/reference/callbacks.ts` | Detects function boundaries so callback creation does not read its captures |
 | `tests/reference/closures.ts` | State in helper and factory closures: a dependency cell per invocation, recorded when a created function reads the binding |

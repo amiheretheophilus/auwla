@@ -12,9 +12,15 @@ export function elementPosition(node: Element, position: string): string {
   return position;
 }
 
-export function childPosition(child: unknown, index: number, position: string): string {
+export function childPosition(child: unknown, index: number, position: string, occurrences: Map<string, number>): string {
   const key = isElement(child) ? child.props.key : undefined;
-  return `${position}/${key === undefined || key === null ? `#${index}` : `key=${String(key)}`}`;
+  if (key === undefined || key === null) return `${position}/#${index}`;
+  const identity = `key=${String(key)}`;
+  const occurrence = occurrences.get(identity) ?? 0;
+  occurrences.set(identity, occurrence + 1);
+  // Duplicate identities still render distinct siblings. Sharing a position
+  // makes the last sibling's props overwrite the earlier sibling's DOM.
+  return `${position}/${identity}${occurrence === 0 ? '' : `/duplicate=${occurrence}`}`;
 }
 
 interface ComponentOutput {
@@ -64,6 +70,7 @@ export class Preparation {
   }
 
   private children(children: unknown[], position: string): void {
-    children.forEach((child, index) => this.visit(child, childPosition(child, index, position)));
+    const occurrences = new Map<string, number>();
+    children.forEach((child, index) => this.visit(child, childPosition(child, index, position, occurrences)));
   }
 }

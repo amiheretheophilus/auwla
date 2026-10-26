@@ -25,9 +25,10 @@ Remaining conformance gaps stay on their concept pages. Continue in `plan.md`.
 The optimization stage and on/off comparisons are built. Passes retain private
 row-matching tables, skip snapshots for proven intrinsic calls, reuse eligible
 map results and target strict comparisons through keyed dependencies. Each keeps
-its general fallback (`optimize.md`). Direct iteration lowering, targeted
-structural updates and row creation costs remain before the Phase 5 performance
-exit; current timings still trail the old compiler.
+its general fallback (`optimize.md`). Compiled rows, leaf component factories,
+template cloning, guarded helper calls and selection routing are built.
+Targeted structural updates and row creation/event/disposal costs remain before
+the Phase 5 performance exit; fresh VM timings must establish the remaining gap.
 
 > "the goal is to write normal javascript and get effecient compiled output"
 

@@ -96,7 +96,8 @@ export function emitSites(
       });
     }
 
-    const needsCollector = context.values === undefined && plan.dynamicSites.has(site.expression);
+    const routed = rowList !== null && site.kind === 'text' && site.rows!.routes.length > 0;
+    const needsCollector = context.values === undefined && (plan.dynamicSites.has(site.expression) || routed);
     const computation = needsCollector ? names.fresh('_siteComputation') : null;
     if (computation !== null) {
       mount.push(statement('const $$computation = $$runtime.createComputation($$batch.mark, $$entity);', {
@@ -196,11 +197,13 @@ export function emitSites(
     if (computation !== null) {
       conditions.push(`${computation}.changed()`);
     }
+    if (routed) conditions.push(`${rowList.list}.changed()`);
     if (replays) {
       update.push(...body);
     } else {
       update.push(guardedStatements(buildExpression(conditions.join(' || ')), body));
     }
+    if (routed) update.push(statement('$$list.refresh($$computation);', { list: rowList.list, computation: computation! }));
 
     // The selector's inputs can be unchanged while an active branch's own text
     // changed. Always reach that branch; its sites apply their own guards.

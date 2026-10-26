@@ -202,7 +202,8 @@ selection, re-runs, the fallbacks and disposal. `optimize/keyed-comparisons.dom.
 covers which comparisons qualify, and identical classes in both modes through
 selection, reselection, `NaN` and a row whose key changes. The DOM bench fixture
 counts 1, then 2, row updates per selection, against every row on the general
-path. Inline rows still re-run the whole `items.map`, which needs list lowering.
+path. Compiled row lists can now route the same comparisons directly to their
+old and new row keys ("Selection routing" below).
 
 ## Row reuse
 
@@ -275,8 +276,8 @@ accepts exactly those reads. `keyed-comparisons.ts` also keys
 `x === e` at such a read: the emitter in `core/emit/dom.ts` writes
 `trackEquals(x, e, () => x, () => version, key)`. A selection then rebuilds only
 the rows whose comparison flips. The site still re-runs on the version change
-and checks each row, so this is O(rows) checks, not O(rows) rebuilds. Every bench
-variant and Octane's rows qualify.
+and checks each row on this general reuse path. Compiled row lists additionally
+route eligible selection changes without re-running `map` (below).
 
 Checks: `runtime/tests/list-map.test.ts` covers reuse, in-place edits, index use,
 holes, duplicates, `thisArg`, tracked reads, dependency sharing and the verified
@@ -366,6 +367,43 @@ edits and clearing, and covers handlers after a swap, a receiver with its own
 The same traces run for keyed and unkeyed leaf component rows, a both-mode
 check passes one props object as `this` while its fields stay the same, and the
 leaf conditions are checked one by one.
+
+### Selection routing
+
+`RowListPlan.routes` records strict comparisons of tracked bindings with the
+row's key member chain, such as `selected === row.id`. Only reads evaluated
+while rendering qualify; a handler's later reads do not. For a leaf component,
+`props.item.id` can be matched through `item={row}` to the outer `key={row.id}`.
+`!==` qualifies too. Local site inputs lose the binding only if every read of
+it in the site is routed. Other inputs and plain reads still take the full path.
+
+The emitter leaves the authored callback's tracking intact for custom methods.
+Only compiled row copies use untracked reads. Leaf factories are specialized
+by those comparisons, so using the same component under another key retains
+ordinary dependencies. `Names.of(node, base)` shares distinct peek/version/key
+names between shared-state emission and row emission.
+
+`createRowList` receives the key member path. During full mapping, routing is
+enabled only for unique, non-null primitive keys reached through own data
+properties. Accessors, inherited properties, object keys, missing keys and
+duplicate/colliding identities keep full mapping. A shared routed binding has
+one subscription per list; local bindings already wake their owner. `changed`
+asks for full evaluation when routing is unavailable. Otherwise `refresh`
+looks up old/new keys in the retained identity index, updates their union once
+in row order with current items/indexes, and preserves DOM and handler captures.
+An unchanged comparison value does no row work. A targeted update also collects
+newly reached dependencies into the site's collector. Disposal releases route
+subscriptions before invoking any row disposal that could throw.
+
+Checks: native cases cover 10k rows with 1/2/0 updates for initial selection,
+changed selection and reselection, and zero key re-evaluations. They retain
+fallbacks, strict equality, recovery, reentry and disposal. Both-mode DOM checks
+cover other inputs, newly reached shared reads, custom methods, conditional
+remounting, multiple routes and leaf-factory specialization. Five reference
+comparisons cover selection with edits and mixed keys. The unchanged Octane and
+all four component-row benchmark fixtures each assert 1 then 2 row updates and
+zero key re-evaluations at 1k rows. These are work counts; fresh VM timings and
+the OOM reproduction remain required before claiming the performance exit.
 
 ## Read-only helpers
 

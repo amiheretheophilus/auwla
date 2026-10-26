@@ -24,7 +24,24 @@ Last updated: 2026-10-26.
 
 ## Done
 
-- Bun development types (2026-10-26): completed the pending `@types/bun`
+- Selection routing completed (2026-10-26): inline rows and leaf component rows
+  now refresh old/new keys when only a proven strict key comparison changes.
+  The unchanged Octane and four component-row benchmark fixtures each update
+  1 row on first selection and 2 on changed selection, with zero key evaluation;
+  a native 10k-row check verifies the same bound and no work on reselection.
+  Fallbacks preserve other inputs, custom methods, ambiguous/accessor keys,
+  recovery, dependency collection and disposal (`compiler/optimize.md`). A new
+  mixed-key case also fixed reference siblings overwriting one another's props.
+  Both package type checks, the runtime build, 113 focused compiler/benchmark/
+  comparison checks and 40 runtime checks pass locally. Full CI follows push.
+  No VM speedup or OOM resolution is claimed from these work counts.
+
+- Next performance gate: compare this completed snapshot with the old compiler
+  on the VM (`bench/README.md`). Then target remaining row creation/listener/
+  disposal and structural-update work using that profile. The architecture stays
+  staged; every optimization retains its general path. Phases 7/8 remain deferred.
+
+- Bun development types (2026-10-26, `21aed36f`): completed the pending `@types/bun`
   update from `latest` to `^1.4.4`, with matching 1.4.4 lockfile resolutions.
   The frozen install makes no changes, and compiler-next (139 files) and
   runtime (76 files) pass `bun check` (`compiler/toolchain.md`).

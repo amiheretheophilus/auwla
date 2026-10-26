@@ -209,8 +209,13 @@ array child). Remove each check when its phase is built.
   The optional plan stage and on/off comparison harness are built. The first
   pass retains private row matching tables, including exact duplicate teardown
   order and exception/reentry recovery. It preserves native callbacks and opaque
-  observation; direct iteration lowering, capture removal and selection routing
-  remain pending. Work counts and proof limits are in `optimize.md`.
+  observation. Built since: compiled DOM/leaf-component rows without render-value
+  capture arrays, retained matching, cloned templates, guarded read-only helpers,
+  and old/new-key selection routing. The selection checks cover Octane and all
+  four component-row placements with 1 then 2 row updates and no key evaluation.
+  Remaining: targeted structural updates, row creation/listener/disposal overhead,
+  adjacent text fusion where proven, and fresh VM speed/memory measurements.
+  Work counts and proof limits are in `optimize.md`.
   A host with spread attributes (`<div {...p}>`) takes the generic runtime path
   and gets no template. An outside review of the inline-row output
   (2026-10-25) lists what the old compiler's list path does and the general

@@ -4,6 +4,7 @@ import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { basename, join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { getExtensionStore, mount, registeredIds, setScheduler, type MountedApplication } from '@memoized-dom/runtime/testing';
+import * as runtime from '@memoized-dom/runtime/testing';
 import { clearCompiledApps } from '../../../tests/harness/compilers';
 import { compileModules } from '../../pipeline';
 
@@ -12,10 +13,13 @@ const hosts: HTMLElement[] = [];
 const NativeMap = globalThis.Map;
 const nativeQueueMicrotask = globalThis.queueMicrotask.bind(globalThis);
 let recoverySpy: ReturnType<typeof spyOn> | undefined;
+let rowSpy: ReturnType<typeof spyOn> | undefined;
 
 afterEach(() => {
   recoverySpy?.mockRestore();
   recoverySpy = undefined;
+  rowSpy?.mockRestore();
+  rowSpy = undefined;
   globalThis.Map = NativeMap;
   for (const application of applications.splice(0)) {
     application.unmount();
@@ -152,6 +156,40 @@ const componentRowApps = [
   ['AppModuleDataComponent.tsx', 'BenchModuleDataComponent'],
   ['AppModuleSelectionComponent.tsx', 'BenchModuleSelectionComponent'],
 ] as const;
+
+it.each([
+  ['octane/memoized-dom', ['App.tsx', 'model.ts'], 'OctaneBench'],
+  ...componentRowApps.map(([file, component]) => ['dom', [file, 'data.ts'], component] as const),
+] as const)('routes benchmark selection without remapping rows: %s/%s', async (directory, files, component) => {
+  let updates = 0, keys = 0;
+  const create = runtime.createRowList;
+  rowSpy = spyOn(runtime, 'createRowList').mockImplementation((anchor, owner, key, factory, path) =>
+    create(anchor, owner, key === null ? null : (item, index) => { keys++; return key(item, index); }, (item, index) => {
+      const entry = factory(item, index);
+      const update = entry.update;
+      entry.update = (item, index) => { updates++; update(item, index); };
+      return entry;
+    }, path));
+  const { host, click } = await fixture(directory, files, component);
+  if (component === 'OctaneBench') click('#run');
+  else [...host.querySelectorAll('button')].find((button) => button.textContent === 'create1k')!.click();
+  const rows = [...host.querySelectorAll<HTMLElement>('tbody tr, ul > li')];
+  expect(rows).toHaveLength(1000);
+  const select = (index: number) => {
+    if (component === 'OctaneBench') rows[index]!.querySelector<HTMLElement>('td:nth-child(2) a')!.click();
+    else rows[index]!.click();
+  };
+  updates = 0; keys = 0;
+  select(0);
+  expect(updates).toBe(1);
+  expect(keys).toBe(0);
+  updates = 0;
+  select(999);
+  expect(updates).toBe(2);
+  expect(keys).toBe(0);
+  expect(rows[0]!.className).toBe('');
+  expect(rows[999]!.className).toBe('danger');
+}, 30_000);
 
 it.each([
   { mode: 'optimized', optimize: true },

@@ -22,8 +22,11 @@
  *
  * Nothing here reads the method name; the runtime checks the callee.
  */
+import type { Binding, Module } from 'yuku-analyzer';
 import { is } from 'yuku-ast';
 import type { Node } from 'yuku-parser';
+import type { BindingNode } from '../core/graph';
+import { qualifies } from './keyed-comparisons';
 import type { ComponentPlan, ModulePlan, MutationPlan, RenderValuePlan, RowListPlan, Site } from '../core/plan/model';
 import type { FunctionNode } from '../core/resolve/functions';
 import { cleanJsxText } from '../core/plan/jsx';
@@ -48,7 +51,7 @@ function rowList(site: Site, general: ModulePlan, values: ReadonlyMap<Node, Rend
     if (value.template.roots.length !== 1) return null;
     if (value.template.nodes[value.template.roots[0]!]!.kind !== 'element') return null;
     if (value.keyIndex !== null && value.keyIndex !== 0) return null;
-    return { call, callback, key: value.keyIndex === null ? null : value.sites[0]!.expression, row: { kind: 'element', value } };
+    return { call, callback, key: value.keyIndex === null ? null : value.sites[0]!.expression, routes: [], row: { kind: 'element', value } };
   }
   return componentRow(call, callback, body, general);
 }
@@ -74,7 +77,7 @@ function componentRow(
   const fn = leafComponent(element.openingElement.name, general);
   if (fn === null) return null;
   return {
-    call, callback, key: keys[0]?.value ?? null,
+    call, callback, key: keys[0]?.value ?? null, routes: [],
     row: { kind: 'component', component: fn, props: named.filter((attribute) => attribute.name !== 'key') },
   };
 }
@@ -114,6 +117,95 @@ function leafComponent(tag: Extract<Node, { type: 'JSXIdentifier' }>, general: M
   if (plan.template.nodes[plan.template.roots[0]!]!.kind !== 'element') return null;
   if (plan.sites.some((site) => (site.kind === 'attribute' || site.kind === 'property') && site.name === 'ref')) return null;
   return fn;
+}
+
+/** The same member chain on the callback's first parameter (`row.id` and `row.id`). */
+function sameChain(module: Module, left: Node, right: Node, param: Binding): boolean {
+  if (is.Identifier(left) && is.Identifier(right)) {
+    return module.referenceOf(left)?.binding === param && module.referenceOf(right)?.binding === param;
+  }
+  if (!is.MemberExpression(left) || !is.MemberExpression(right) || left.computed || right.computed
+    || left.optional || right.optional || !is.Identifier(left.property) || !is.Identifier(right.property)
+    || left.property.name !== right.property.name) return false;
+  return sameChain(module, left.object, right.object, param);
+}
+
+/** Substitute a leaf's `props.item` with the corresponding authored row prop. */
+function componentKey(module: Module, node: Node, key: Node, rows: RowListPlan, param: Binding): boolean {
+  if (rows.row.kind !== 'component') return false;
+  const props = rows.row.component.params[0];
+  if (props === undefined || !is.Identifier(props)) return false;
+  const binding = module.bindings.find((candidate) => candidate.declarations[0] === props);
+  if (binding === undefined) return false;
+  const match = (left: Node, right: Node): boolean => {
+    if (!is.MemberExpression(left) || left.computed || left.optional || !is.Identifier(left.property)) return false;
+    if (is.Identifier(left.object) && module.referenceOf(left.object)?.binding === binding) {
+      const prop = rows.row.kind === 'component' ? rows.row.props.find((prop) => prop.name === left.property.name) : undefined;
+      return prop !== undefined && sameChain(module, prop.value, right, param);
+    }
+    return is.MemberExpression(right) && !right.computed && !right.optional && is.Identifier(right.property)
+      && left.property.name === right.property.name && match(left.object, right.object);
+  };
+  return match(node, key);
+}
+
+/**
+ * Route `selected === row.id` by key (`RowListPlan.routes`): the comparison
+ * qualifies as keyed (`keyed-comparisons.ts`: `===`/`!==`, a tracked binding
+ * read first, an effect-free right side), it is part of the row, and its right
+ * side is the key expression itself. Where the binding is the component's own
+ * state and every read of it in the site is routed, the site no longer takes
+ * it as an input: the list refreshes the affected rows instead.
+ */
+function withRoutes(
+  rows: RowListPlan, site: Site, general: ModulePlan, component: ComponentPlan,
+  inputs: Map<Node, readonly BindingNode[]>, routed: Map<Node, BindingNode>,
+): RowListPlan {
+  const module = general.module.module;
+  const param = rows.callback.params[0];
+  if (rows.key === null || param === undefined) return rows;
+  const parameter = module.bindings.find((binding) => binding.declarations[0] === param);
+  if (parameter === undefined) return rows;
+  const row = rows.row;
+  const regions: Node[] = row.kind === 'element'
+    ? row.value.sites.filter((_, index) => index !== row.value.keyIndex).map((entry) => entry.expression)
+    : row.props.map((prop) => prop.value);
+  const reads: { node: Node; binding: BindingNode }[] = [];
+  const collect = (regions: readonly Node[], fn: FunctionNode, owner: ComponentPlan) => {
+    // A handler's later read does not participate in rendering this row.
+    const within = (node: Node) => regions.some((region) => node.start >= region.start && node.end <= region.end)
+      && [...module.ancestors(node)].find((ancestor) => is.Function(ancestor)) === fn;
+    for (const read of general.sharedReads.values()) {
+      if (read.binding.binding.module !== module) continue;
+      for (const reference of read.binding.binding.references) {
+        if (!reference.isWrite && !reference.inTypePosition && within(reference.node)) reads.push({ node: reference.node, binding: read.binding });
+      }
+    }
+    for (const read of owner.trackedReads) if (within(read.node)) reads.push(read);
+  };
+  collect(regions, rows.callback, component);
+  if (row.kind === 'component') {
+    const leaf = general.components.get(row.component)!;
+    collect(leaf.sites.map((site) => site.expression), row.component, leaf);
+  }
+  const routes: RowListPlan['routes'][number][] = [];
+  for (const { node, binding } of reads) {
+    const comparison = qualifies(module, node, binding.binding);
+    if (comparison === null || !is.BinaryExpression(comparison)
+      || (!sameChain(module, comparison.right, rows.key, parameter)
+        && !componentKey(module, comparison.right, rows.key, rows, parameter))) continue;
+    routes.push({ node: comparison, binding });
+    routed.set(comparison, binding);
+  }
+  for (const binding of new Set(routes.map((route) => route.binding))) {
+    const uses = binding.binding.references.filter((reference) => !reference.isWrite
+      && reference.node.start >= site.expression.start && reference.node.end <= site.expression.end);
+    const current = inputs.get(site.expression);
+    if (current !== undefined && uses.every((reference) => routes.some((route) => route.node.left === reference.node))) {
+      inputs.set(site.expression, current.filter((input) => input !== binding));
+    }
+  }
+  return routes.length === 0 ? rows : { ...rows, routes };
 }
 
 function rowSites(sites: readonly Site[], plan: (site: Site) => RowListPlan | null, found: Set<Node>): readonly Site[] {
@@ -156,13 +248,18 @@ export const rowLists: Optimization = {
       for (const mutation of owner.mutations) calls.set(mutation.operation, mutation);
     }
     const found = new Set<Node>();
-    const plan = (site: Site) => rowList(site, general, values, calls);
+    const routed = new Map<Node, BindingNode>();
     // Only a component's own sites: the row is declared where its callback is
     // evaluated, in the component's scope. Rows inside stored JSX stay general.
     const components = new Map(general.components);
     for (const [fn, component] of general.components) {
+      const inputs = new Map(component.siteInputs);
+      const plan = (site: Site) => {
+        const rows = rowList(site, general, values, calls);
+        return rows === null ? null : withRoutes(rows, site, general, component, inputs, routed);
+      };
       const sites = rowSites(component.sites, plan, found);
-      if (sites !== component.sites) components.set(fn, { ...component, sites });
+      if (sites !== component.sites) components.set(fn, { ...component, sites, siteInputs: inputs });
     }
     if (found.size === 0) return null;
     for (const [fn, component] of components) {
@@ -173,6 +270,6 @@ export const rowLists: Optimization = {
       const mutations = markCalls(owner.mutations, found);
       return mutations === owner.mutations ? owner : { ...owner, mutations };
     });
-    return { ...general, components, sharedOwners };
+    return { ...general, components, sharedOwners, ...(routed.size > 0 ? { routedComparisons: routed } : {}) };
   },
 };

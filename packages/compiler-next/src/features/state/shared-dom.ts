@@ -47,7 +47,9 @@ export function emitSharedState(plan: ModulePlan, names: Names, runtime: string,
     const notifiers = new Map<BindingNode, string>();
     for (const binding of owner.state) {
       const version = names.fresh(`_${binding.binding.name}Version`);
-      const key = names.fresh('_sharedKey');
+      // Named per binding (`Names.of`) so a row list routing on it can pass them.
+      const declared = binding.binding.declarations[0]!;
+      const key = names.of(declared, '_sharedKey');
       const notify = names.fresh(`_mutated_${binding.binding.name}`);
       versions.set(binding, version);
       keys.set(binding, key);
@@ -62,7 +64,7 @@ export function emitSharedState(plan: ModulePlan, names: Names, runtime: string,
       // A reader refreshes the shared owner before exposing its version or
       // value (`_refreshShared` skips an active or unchanged owner). One version
       // function per binding: a computation reading it again records nothing new.
-      const current = names.fresh(`_version_${binding.binding.name}`);
+      const current = names.of(declared, `_version_${binding.binding.name}`);
       declarations.push(statement(`function $$current() {
         if ($$runtime.isBuilding()) $$refresh();
         return $$version;
@@ -85,10 +87,12 @@ export function emitSharedState(plan: ModulePlan, names: Names, runtime: string,
         replacements.set(reference.node, expression('$$reader()', { reader: read.name }));
       }
       const compared = [...plan.keyedComparisons ?? []].filter(([, target]) => target === binding);
-      if (compared.length > 0) {
+      const routed = [...plan.routedComparisons ?? []].some(([, target]) => target === binding);
+      if (compared.length > 0 || routed) {
         // `x === e` reads `x` first, then `e`, as written; the reader depends
-        // only on the result (`optimize/keyed-comparisons.ts`).
-        const peek = names.fresh(`_peek_${binding.binding.name}`);
+        // only on the result (`optimize/keyed-comparisons.ts`), or a row list
+        // reads it untracked and refreshes the rows keyed by it (`row-lists.ts`).
+        const peek = names.of(declared, `_peek_${binding.binding.name}`);
         declarations.push(statement(`function $$peek() {
           if ($$runtime.isBuilding()) $$refresh();
           return $$binding;

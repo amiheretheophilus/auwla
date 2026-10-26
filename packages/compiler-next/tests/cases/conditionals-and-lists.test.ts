@@ -4,6 +4,60 @@
 import { expect } from 'bun:test';
 import { behaves } from '../harness/run';
 
+for (const shared of [false, true]) {
+  for (const component of [false, true]) {
+    const state = 'let selected = 0;';
+    const row = component
+      ? shared ? '<Item key={row.id} row={row} />' : '<Item key={row.id} row={row} on={selected === row.id} />'
+      : '<li key={row.id} class={selected === row.id ? "on" : "off"}>{row.id}</li>';
+    behaves(`list: ${shared ? 'shared' : 'local'} selection follows ${component ? 'component' : 'inline'} keys through edits`, {
+      source: `
+        ${shared ? state : ''}
+        ${component ? `function Item(props) { return <li class={${shared ? 'selected === props.row.id' : 'props.on'} ? 'on' : 'off'}>{props.row.id}</li>; }` : ''}
+        export function App() {
+          ${shared ? '' : state}
+          let rows = [{ id: 1 }, { id: 2 }, { id: 3 }];
+          return <main><ul>{rows.map((row) => ${row})}</ul>
+            <button id="one" onClick={() => { selected = 1; }}>one</button>
+            <button id="two" onClick={() => { selected = 2; }}>two</button>
+            <button id="reverse" onClick={() => { rows = rows.toReversed(); }}>reverse</button>
+            <button id="remove" onClick={() => { rows = rows.filter((row) => row.id !== selected); }}>remove</button>
+            <button id="clear" onClick={() => { rows = []; }}>clear</button>
+            <button id="seed" onClick={() => { rows = [{ id: 1 }, { id: 4 }]; }}>seed</button>
+            <button id="both" onClick={() => { rows = [{ id: 2 }, { id: 4 }]; selected = 4; }}>both</button></main>;
+        }`,
+      steps: ['one', 'two', 'reverse', 'remove', 'one', 'clear', 'seed', 'both'].map((id) => ({ click: '#' + id })),
+      check(root, observation) {
+        const expected = [
+          '1:off 2:off 3:off', '1:on 2:off 3:off', '1:off 2:on 3:off', '3:off 2:on 1:off',
+          '3:off 1:off', '3:off 1:on', '', '1:on 4:off', '2:off 4:on',
+        ];
+        expect([...root.querySelectorAll('li')].map((row) => `${row.textContent}:${row.className}`).join(' ')).toBe(expected[observation]!);
+        if (observation === 0) root.querySelector('li')!.setAttribute('data-retained', 'yes');
+        if (observation === 3) expect(root.querySelector('li:last-child')!.getAttribute('data-retained')).toBe('yes');
+      },
+    });
+  }
+}
+
+behaves('list: selection preserves strict comparison for colliding, duplicate and absent keys', {
+  source: `
+    let selected = 0;
+    export function App() {
+      let rows = [{ id: 1, label: 'number' }, { id: '1', label: 'string' }, { id: 1, label: 'duplicate' }, { id: null, label: 'null' }];
+      return <main><ul>{rows.map((row) => <li key={row.id} class={selected === row.id ? 'on' : 'off'}>{row.label}</li>)}</ul>
+        <button id="number" onClick={() => { selected = 1; }}>number</button>
+        <button id="string" onClick={() => { selected = '1'; }}>string</button>
+        <button id="null" onClick={() => { selected = null; }}>null</button></main>;
+    }`,
+  steps: [{ click: '#number' }, { click: '#string' }, { click: '#null' }],
+  check(root, observation) {
+    expect([...root.querySelectorAll('li')].map((row) => row.className)).toEqual([
+      ['off', 'off', 'off', 'off'], ['on', 'off', 'on', 'off'], ['off', 'on', 'off', 'off'], ['off', 'off', 'off', 'on'],
+    ][observation]!);
+  },
+});
+
 behaves('list: sparse arrays skip holes and retain keyed children through updates', {
   source: `
     export function App() {

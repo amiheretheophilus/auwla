@@ -75,6 +75,13 @@ export interface RowListPlan {
   readonly callback: Extract<Node, { type: 'ArrowFunctionExpression' }>;
   /** The root's `key`, its first attribute; null without one. */
   readonly key: Expression | null;
+  /**
+   * `selected === row.id` in the row, where `selected` is tracked and the right
+   * side is the key expression itself: the row depends on `selected` only
+   * through its own key. The list refreshes the rows keyed by the old and the
+   * new value instead of every row (`runtime/src/row-list.ts`, `route`).
+   */
+  readonly routes: readonly { readonly node: Extract<Node, { type: 'BinaryExpression' }>; readonly binding: BindingNode }[];
   readonly row:
     /** An element, planned as stored JSX. */
     | { readonly kind: 'element'; readonly value: RenderValuePlan }
@@ -306,6 +313,8 @@ export interface ModulePlan {
    * comparison can flip. Keyed by the BinaryExpression.
    */
   readonly keyedComparisons?: ReadonlyMap<Node, BindingNode>;
+  /** Comparisons whose compiled row copies read untracked; authored callbacks retain tracking. */
+  readonly routedComparisons?: ReadonlyMap<Node, BindingNode>;
 }
 
 export interface RenderValuePlan {

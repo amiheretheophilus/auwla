@@ -21,7 +21,7 @@ import type { Optimization } from '.';
 import { effectFree } from './effects';
 
 /** The comparison `node` is the left operand of, if it qualifies. */
-function keyedComparison(module: Module, node: Node, binding: Binding): Node | null {
+export function qualifies(module: Module, node: Node, binding: Binding): Node | null {
   const parent = module.parentOf(node);
   if (!is.BinaryExpression(parent) || (parent.operator !== '===' && parent.operator !== '!==')) return null;
   if (parent.left !== node || !effectFree(module, parent.right)) return null;
@@ -41,7 +41,7 @@ export const keyedComparisons: Optimization = {
       if (binding.module !== module) continue;
       for (const reference of binding.references) {
         if (reference.isWrite || reference.inTypePosition) continue;
-        const comparison = keyedComparison(module, reference.node, binding);
+        const comparison = qualifies(module, reference.node, binding);
         if (comparison !== null) comparisons.set(comparison, read.binding);
       }
     }
@@ -51,7 +51,7 @@ export const keyedComparisons: Optimization = {
     for (const [fn, component] of general.components) {
       const local = new Map<Node, BindingNode>();
       for (const read of component.trackedReads) {
-        const comparison = keyedComparison(module, read.node, read.binding.binding);
+        const comparison = qualifies(module, read.node, read.binding.binding);
         if (comparison !== null) local.set(comparison, read.binding);
       }
       if (local.size > 0) {
