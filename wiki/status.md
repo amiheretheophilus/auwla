@@ -24,7 +24,7 @@ Last updated: 2026-10-26.
 
 ## Done
 
-- Selection routing completed (2026-10-26): inline rows and leaf component rows
+- Selection routing completed (2026-10-26, `a4a6b06e`): inline rows and leaf component rows
   now refresh old/new keys when only a proven strict key comparison changes.
   The unchanged Octane and four component-row benchmark fixtures each update
   1 row on first selection and 2 on changed selection, with zero key evaluation;
@@ -33,8 +33,13 @@ Last updated: 2026-10-26.
   recovery, dependency collection and disposal (`compiler/optimize.md`). A new
   mixed-key case also fixed reference siblings overwriting one another's props.
   Both package type checks, the runtime build, 113 focused compiler/benchmark/
-  comparison checks and 40 runtime checks pass locally. Full CI follows push.
-  No VM speedup or OOM resolution is claimed from these work counts.
+  comparison checks and 40 runtime checks pass locally.
+  [CI 40318873066](https://github.com/amiheretheophilus/auwla/actions/runs/40318873066)
+  at `a4a6b06e` passes every job: 301 compiler checks, 150 runtime checks, 341
+  reference cases, 241 compiler comparisons with the same 100 deferred failures
+  (29 Phase 7, 71 Phase 8), and ten generator checks at `FC_RUNS=200`.
+  No VM speedup or OOM resolution is claimed from these work counts. The routing
+  and toolchain work is committed and pushed; the working tree is clean.
 
 - Next performance gate: compare this completed snapshot with the old compiler
   on the VM (`bench/README.md`). Then target remaining row creation/listener/
@@ -59,8 +64,8 @@ Last updated: 2026-10-26.
   at `0f072957` passes every job: 281 compiler checks, 138 runtime checks, 336
   reference cases, 236 compiler comparisons with the unchanged 100 deferred
   failures (29 Phase 7, 71 Phase 8), and ten generator checks at `FC_RUNS=200`.
-  Unrelated routing/toolchain work remains uncommitted; no timing improvement or
-  OOM resolution is claimed.
+  Routing/toolchain work was deferred from this fix and is completed above; no
+  timing improvement or OOM resolution is claimed for the helper fix.
 
 - Fresh-allocation correctness gate (2026-10-26, `7edc5540`): helper proofs retain
   observation for object accessors and custom prototypes, and require primitive
