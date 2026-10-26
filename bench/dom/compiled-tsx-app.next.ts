@@ -709,7 +709,7 @@ export function BenchApp(_id, _parent, _props, _namespace, _setupOnly) {
     _button22.addEventListener("click", _listener11);
   }
   const _rowNamespace = _MD.renderNamespace(_text.parentNode, _namespace);
-  const _rowOwner = { id: _id, batch: _writes, entity: _entity, namespace: _rowNamespace };
+  const _rowOwner = { id: _id, batch: _writes, entity: _entity, namespace: _rowNamespace, invalidate: () => _rowList.invalidate() };
   const _rowList = _MD.createRowList(_text, { id: _id, batch: _writes, entity: _entity, namespace: _namespace }, (item) => item.id, (item) => {
     const _row = _Row_row({ "item": item }, _rowOwner);
     return { node: _row.node, update(_item2) {

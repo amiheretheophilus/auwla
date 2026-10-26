@@ -24,6 +24,12 @@ Last updated: 2026-10-25.
 
 ## Done
 
+- Leaf rows with handler edits (2026-10-26): a row component whose handlers edit
+  its props (`props.select(id)`) is compiled into the row list too; the edit
+  stays observed and re-renders the list (`compiler/optimize.md`, "Row lists").
+  The owner and module-data component placements now use row lists. A both-mode
+  check edits a row's item through its props and through a prop method's `this`.
+
 - Read-only helpers (2026-10-26, `decisions.md`): a call of a helper proven to
   edit only what it allocates skips the whole-input snapshot once the runtime
   proves the array methods it assumed (`compiler/optimize.md`, "Read-only

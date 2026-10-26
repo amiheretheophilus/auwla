@@ -4,6 +4,110 @@ const _markup = "<div><div class=\"toolbar\"><button>create1k</button><button>cr
 _MD.defineComponent(BenchAppOwned, "./bench/dom/AppOwned.tsx#BenchAppOwned");
 const _markup2 = "<li><!---->: <!----></li>";
 _MD.defineComponent(Row, "./bench/dom/AppOwned.tsx#Row");
+function _Row_row(props, _rowOwner2) {
+  const _document3 = _MD.getActiveEnvironment().document;
+  const _rowId = _rowOwner2.id;
+  const _rowWrites = _rowOwner2.batch;
+  const _rowEntity = _rowOwner2.entity;
+  const _rowNamespace2 = _rowOwner2.namespace;
+  const _invalidate = _rowOwner2.invalidate;
+  const _rowMarkup = "<li><!---->: <!----></li>";
+  let _text3, _text4, _li2;
+  const _clone2 = _MD.cloneTemplate(_template2, _rowNamespace2, _buildTemplate2);
+  if (_clone2 !== null) {
+    const _node16 = _clone2;
+    const _node17 = _node16.firstChild;
+    _text3 = _node17;
+    const _node18 = _node17.nextSibling;
+    const _node19 = _node18.nextSibling;
+    _text4 = _node19;
+    _li2 = _node16;
+  } else {
+    const _nodes2 = _rowNamespace2 === "svg" ? (() => {
+      const _slot6 = _document3.createComment("");
+      const _static24 = _document3.createTextNode(": ");
+      const _slot7 = _document3.createComment("");
+      const _li3 = _document3.createElementNS("http://www.w3.org/2000/svg", "li");
+      _li3.append(_slot6, _static24, _slot7);
+      return [_slot6, _static24, _slot7, _li3];
+    })() : _MD.materializeMarkup(_rowMarkup);
+    const _slot8 = _nodes2[0];
+    const _slot9 = _nodes2[2];
+    const _li4 = _nodes2[3];
+    const _text5 = _document3.createTextNode("");
+    _slot8.replaceWith(_text5);
+    const _text6 = _document3.createTextNode("");
+    _slot9.replaceWith(_text6);
+    _text3 = _text5;
+    _text4 = _text6;
+    _li2 = _li4;
+  }
+  let _value15 = props.selected ? 'danger' : '';
+  if (_value15 != null && _value15 !== false) {
+    _li2.setAttribute("class", _value15 === true ? "" : _MD.textValue(_value15));
+  } else {
+    _li2.removeAttribute("class");
+  }
+  let _value16 = () => {
+    _MD.observeMethod([() => props], [_invalidate], props, "select", 0, void 0)(props.item.id);
+  };
+  let _listener12;
+  if (_listener12 !== undefined) _li2.removeEventListener("click", _listener12);
+  _listener12 = undefined;
+  if (typeof _value16 === "function") {
+    _listener12 = _rowWrites === null ? _value16 : _rowWrites.listener(_value16);
+    _li2.addEventListener("click", _listener12);
+  }
+  let _value17 = props.item.id;
+  let _valueSlot = null;
+  if (_valueSlot === null && (_value17 === null || typeof _value17 !== "object")) {
+    _MD.setTextData(_text3, _value17);
+  } else {
+    (_valueSlot ??= _MD.createIndexedValueSlot(_text3, { id: _rowId, batch: _rowWrites, entity: _rowEntity, namespace: _rowNamespace2 })).write(_value17);
+  }
+  let _value18 = props.item.label;
+  let _valueSlot2 = null;
+  if (_valueSlot2 === null && (_value18 === null || typeof _value18 !== "object")) {
+    _MD.setTextData(_text4, _value18);
+  } else {
+    (_valueSlot2 ??= _MD.createIndexedValueSlot(_text4, { id: _rowId, batch: _rowWrites, entity: _rowEntity, namespace: _rowNamespace2 })).write(_value18);
+  }
+  return { node: _li2, update(_nextProps) {
+    if (!_MD.sameProps(props, _nextProps)) props = _nextProps;
+    const _next = props.selected ? 'danger' : '';
+    if (_next !== _value15 && !(_next !== _next && _value15 !== _value15)) {
+      if (_next != null && _next !== false) {
+        _li2.setAttribute("class", _next === true ? "" : _MD.textValue(_next));
+      } else {
+        _li2.removeAttribute("class");
+      }
+      _value15 = _next;
+    }
+    const _next2 = props.item.id;
+    if (_next2 !== _value17 && !(_next2 !== _next2 && _value17 !== _value17)) {
+      if (_valueSlot === null && (_next2 === null || typeof _next2 !== "object")) {
+        _MD.setTextData(_text3, _next2);
+      } else {
+        (_valueSlot ??= _MD.createIndexedValueSlot(_text3, { id: _rowId, batch: _rowWrites, entity: _rowEntity, namespace: _rowNamespace2 })).write(_next2);
+      }
+      _value17 = _next2;
+    }
+    const _next3 = props.item.label;
+    if (_next3 !== _value18 && !(_next3 !== _next3 && _value18 !== _value18)) {
+      if (_valueSlot2 === null && (_next3 === null || typeof _next3 !== "object")) {
+        _MD.setTextData(_text4, _next3);
+      } else {
+        (_valueSlot2 ??= _MD.createIndexedValueSlot(_text4, { id: _rowId, batch: _rowWrites, entity: _rowEntity, namespace: _rowNamespace2 })).write(_next3);
+      }
+      _value18 = _next3;
+    }
+  }, dispose() {
+    if (_valueSlot !== null) _valueSlot.dispose();
+    _valueSlot = _MD.disposedValueSlot;
+    if (_valueSlot2 !== null) _valueSlot2.dispose();
+    _valueSlot2 = _MD.disposedValueSlot;
+  } };
+}
 const _template = _MD.createTemplateCache();
 function _buildTemplate(_document2, _namespace2) {
   const _static = _document2.createTextNode("create1k");
@@ -50,16 +154,25 @@ function _buildTemplate(_document2, _namespace2) {
   return _div2;
 }
 const _template2 = _MD.createTemplateCache();
-function _buildTemplate2(_document4, _namespace4) {
+function _buildTemplate2(_document4, _namespace3) {
   const _slot4 = _document4.createTextNode("");
   const _static23 = _document4.createTextNode(": ");
   const _slot5 = _document4.createTextNode("");
-  const _li = _namespace4 === "svg" ? _document4.createElementNS("http://www.w3.org/2000/svg", "li") : _document4.createElement("li");
+  const _li = _namespace3 === "svg" ? _document4.createElementNS("http://www.w3.org/2000/svg", "li") : _document4.createElement("li");
   _li.append(_slot4, _static23, _slot5);
   return _li;
 }
+const _template3 = _MD.createTemplateCache();
+function _buildTemplate3(_document6, _namespace5) {
+  const _slot10 = _document6.createTextNode("");
+  const _static25 = _document6.createTextNode(": ");
+  const _slot11 = _document6.createTextNode("");
+  const _li5 = _namespace5 === "svg" ? _document6.createElementNS("http://www.w3.org/2000/svg", "li") : _document6.createElement("li");
+  _li5.append(_slot10, _static25, _slot11);
+  return _li5;
+}
 import { buildData } from './data';
-function Row(_id2, _parent2, _props2, _namespace3, _setupOnly2) {
+function Row(_id2, _parent2, _props2, _namespace4, _setupOnly2) {
   let _propsVersion = 0;
   const _readKey3 = {};
   function _mutated_props() {
@@ -99,130 +212,130 @@ function Row(_id2, _parent2, _props2, _namespace3, _setupOnly2) {
     return;
   }
   _writes2.beginMount();
-  const _document3 = _MD.getActiveEnvironment().document;
-  let _text3, _text4, _li2;
-  const _clone2 = _MD.cloneTemplate(_template2, _namespace3, _buildTemplate2);
-  if (_clone2 !== null) {
-    const _node16 = _clone2;
-    const _node17 = _node16.firstChild;
-    _text3 = _node17;
-    const _node18 = _node17.nextSibling;
-    const _node19 = _node18.nextSibling;
-    _text4 = _node19;
-    _li2 = _node16;
+  const _document5 = _MD.getActiveEnvironment().document;
+  let _text7, _text8, _li6;
+  const _clone3 = _MD.cloneTemplate(_template3, _namespace4, _buildTemplate3);
+  if (_clone3 !== null) {
+    const _node20 = _clone3;
+    const _node21 = _node20.firstChild;
+    _text7 = _node21;
+    const _node22 = _node21.nextSibling;
+    const _node23 = _node22.nextSibling;
+    _text8 = _node23;
+    _li6 = _node20;
   } else {
-    const _nodes2 = _namespace3 === "svg" ? (() => {
-      const _slot6 = _document3.createComment("");
-      const _static24 = _document3.createTextNode(": ");
-      const _slot7 = _document3.createComment("");
-      const _li3 = _document3.createElementNS("http://www.w3.org/2000/svg", "li");
-      _li3.append(_slot6, _static24, _slot7);
-      return [_slot6, _static24, _slot7, _li3];
+    const _nodes3 = _namespace4 === "svg" ? (() => {
+      const _slot12 = _document5.createComment("");
+      const _static26 = _document5.createTextNode(": ");
+      const _slot13 = _document5.createComment("");
+      const _li7 = _document5.createElementNS("http://www.w3.org/2000/svg", "li");
+      _li7.append(_slot12, _static26, _slot13);
+      return [_slot12, _static26, _slot13, _li7];
     })() : _MD.materializeMarkup(_markup2);
-    const _slot8 = _nodes2[0];
-    const _slot9 = _nodes2[2];
-    const _li4 = _nodes2[3];
-    const _text5 = _document3.createTextNode("");
-    _slot8.replaceWith(_text5);
-    const _text6 = _document3.createTextNode("");
-    _slot9.replaceWith(_text6);
-    _text3 = _text5;
-    _text4 = _text6;
-    _li2 = _li4;
+    const _slot14 = _nodes3[0];
+    const _slot15 = _nodes3[2];
+    const _li8 = _nodes3[3];
+    const _text9 = _document5.createTextNode("");
+    _slot14.replaceWith(_text9);
+    const _text10 = _document5.createTextNode("");
+    _slot15.replaceWith(_text10);
+    _text7 = _text9;
+    _text8 = _text10;
+    _li6 = _li8;
   }
   const _siteComputation2 = _MD.createComputation(_writes2.mark, _entity2);
   _siteComputation2.begin();
-  let _value15 = props.selected ? 'danger' : '';
+  let _value19 = props.selected ? 'danger' : '';
   _siteComputation2.end();
-  if (_value15 != null && _value15 !== false) {
-    _li2.setAttribute("class", _value15 === true ? "" : _MD.textValue(_value15));
+  if (_value19 != null && _value19 !== false) {
+    _li6.setAttribute("class", _value19 === true ? "" : _MD.textValue(_value19));
   } else {
-    _li2.removeAttribute("class");
+    _li6.removeAttribute("class");
   }
   let _seen2 = _propsVersion;
-  let _value16 = () => {
+  let _value20 = () => {
     _MD.observeMethod([() => props], [_mutated_props], _MD.trackRead(() => _propsVersion, props, _readKey3), "select", 0, void 0)(_MD.trackRead(() => _propsVersion, props, _readKey3).item.id);
   };
-  let _listener12;
-  if (_listener12 !== undefined) _li2.removeEventListener("click", _listener12);
-  _listener12 = undefined;
-  if (typeof _value16 === "function") {
-    _listener12 = _writes2 === null ? _value16 : _writes2.listener(_value16);
-    _li2.addEventListener("click", _listener12);
+  let _listener13;
+  if (_listener13 !== undefined) _li6.removeEventListener("click", _listener13);
+  _listener13 = undefined;
+  if (typeof _value20 === "function") {
+    _listener13 = _writes2 === null ? _value20 : _writes2.listener(_value20);
+    _li6.addEventListener("click", _listener13);
   }
   const _siteComputation3 = _MD.createComputation(_writes2.mark, _entity2);
   _siteComputation3.begin();
-  let _value17 = props.item.id;
+  let _value21 = props.item.id;
   _siteComputation3.end();
-  let _valueSlot2 = null;
-  if (_valueSlot2 === null && (_value17 === null || typeof _value17 !== "object")) {
-    _MD.setTextData(_text3, _value17);
+  let _valueSlot3 = null;
+  if (_valueSlot3 === null && (_value21 === null || typeof _value21 !== "object")) {
+    _MD.setTextData(_text7, _value21);
   } else {
-    (_valueSlot2 ??= _MD.createIndexedValueSlot(_text3, { id: _id2, batch: _writes2, entity: _entity2, namespace: _namespace3 })).write(_value17);
+    (_valueSlot3 ??= _MD.createIndexedValueSlot(_text7, { id: _id2, batch: _writes2, entity: _entity2, namespace: _namespace4 })).write(_value21);
   }
   let _seen3 = _propsVersion;
   const _siteComputation4 = _MD.createComputation(_writes2.mark, _entity2);
   _siteComputation4.begin();
-  let _value18 = props.item.label;
+  let _value22 = props.item.label;
   _siteComputation4.end();
-  let _valueSlot3 = null;
-  if (_valueSlot3 === null && (_value18 === null || typeof _value18 !== "object")) {
-    _MD.setTextData(_text4, _value18);
+  let _valueSlot4 = null;
+  if (_valueSlot4 === null && (_value22 === null || typeof _value22 !== "object")) {
+    _MD.setTextData(_text8, _value22);
   } else {
-    (_valueSlot3 ??= _MD.createIndexedValueSlot(_text4, { id: _id2, batch: _writes2, entity: _entity2, namespace: _namespace3 })).write(_value18);
+    (_valueSlot4 ??= _MD.createIndexedValueSlot(_text8, { id: _id2, batch: _writes2, entity: _entity2, namespace: _namespace4 })).write(_value22);
   }
   let _seen4 = _propsVersion;
   let _publishedVersion3 = _propsVersion;
   _MD.cleanup(_id2, () => {
     _siteComputation2.dispose();
     _siteComputation3.dispose();
-    if (_valueSlot2 !== null) _valueSlot2.dispose();
-    _valueSlot2 = _MD.disposedValueSlot;
-    _siteComputation4.dispose();
     if (_valueSlot3 !== null) _valueSlot3.dispose();
     _valueSlot3 = _MD.disposedValueSlot;
+    _siteComputation4.dispose();
+    if (_valueSlot4 !== null) _valueSlot4.dispose();
+    _valueSlot4 = _MD.disposedValueSlot;
   });
   function _update2() {
     const _updateFrame2 = _scope2.enter();
     if (_propsVersion !== _seen2 || _siteComputation2.changed()) {
       _siteComputation2.begin();
-      const _next2 = props.selected ? 'danger' : '';
+      const _next5 = props.selected ? 'danger' : '';
       _siteComputation2.end();
-      if (_next2 !== _value15 && !(_next2 !== _next2 && _value15 !== _value15)) {
-        if (_next2 != null && _next2 !== false) {
-          _li2.setAttribute("class", _next2 === true ? "" : _MD.textValue(_next2));
+      if (_next5 !== _value19 && !(_next5 !== _next5 && _value19 !== _value19)) {
+        if (_next5 != null && _next5 !== false) {
+          _li6.setAttribute("class", _next5 === true ? "" : _MD.textValue(_next5));
         } else {
-          _li2.removeAttribute("class");
+          _li6.removeAttribute("class");
         }
-        _value15 = _next2;
+        _value19 = _next5;
       }
       _seen2 = _propsVersion;
     }
     if (_propsVersion !== _seen3 || _siteComputation3.changed()) {
       _siteComputation3.begin();
-      const _next3 = props.item.id;
+      const _next6 = props.item.id;
       _siteComputation3.end();
-      if (_next3 !== _value17 && !(_next3 !== _next3 && _value17 !== _value17)) {
-        if (_valueSlot2 === null && (_next3 === null || typeof _next3 !== "object")) {
-          _MD.setTextData(_text3, _next3);
+      if (_next6 !== _value21 && !(_next6 !== _next6 && _value21 !== _value21)) {
+        if (_valueSlot3 === null && (_next6 === null || typeof _next6 !== "object")) {
+          _MD.setTextData(_text7, _next6);
         } else {
-          (_valueSlot2 ??= _MD.createIndexedValueSlot(_text3, { id: _id2, batch: _writes2, entity: _entity2, namespace: _namespace3 })).write(_next3);
+          (_valueSlot3 ??= _MD.createIndexedValueSlot(_text7, { id: _id2, batch: _writes2, entity: _entity2, namespace: _namespace4 })).write(_next6);
         }
-        _value17 = _next3;
+        _value21 = _next6;
       }
       _seen3 = _propsVersion;
     }
     if (_propsVersion !== _seen4 || _siteComputation4.changed()) {
       _siteComputation4.begin();
-      const _next4 = props.item.label;
+      const _next7 = props.item.label;
       _siteComputation4.end();
-      if (_next4 !== _value18 && !(_next4 !== _next4 && _value18 !== _value18)) {
-        if (_valueSlot3 === null && (_next4 === null || typeof _next4 !== "object")) {
-          _MD.setTextData(_text4, _next4);
+      if (_next7 !== _value22 && !(_next7 !== _next7 && _value22 !== _value22)) {
+        if (_valueSlot4 === null && (_next7 === null || typeof _next7 !== "object")) {
+          _MD.setTextData(_text8, _next7);
         } else {
-          (_valueSlot3 ??= _MD.createIndexedValueSlot(_text4, { id: _id2, batch: _writes2, entity: _entity2, namespace: _namespace3 })).write(_next4);
+          (_valueSlot4 ??= _MD.createIndexedValueSlot(_text8, { id: _id2, batch: _writes2, entity: _entity2, namespace: _namespace4 })).write(_next7);
         }
-        _value18 = _next4;
+        _value22 = _next7;
       }
       _seen4 = _propsVersion;
     }
@@ -234,7 +347,7 @@ function Row(_id2, _parent2, _props2, _namespace3, _setupOnly2) {
   }
   _writes2.activate();
   _scope2.leave(_setupFrame2);
-  return _li2;
+  return _li6;
 }
 export function BenchAppOwned(_id, _parent, _props, _namespace, _setupOnly) {
   let _dataVersion = 0;
@@ -246,7 +359,6 @@ export function BenchAppOwned(_id, _parent, _props, _namespace, _setupOnly) {
     _dataVersion++;
     _writes.mark();
   }
-  const _rows = _MD.createRowCache(false);
   function _write(_value) {
     _dataVersion++;
     _writes.mark();
@@ -499,23 +611,28 @@ export function BenchAppOwned(_id, _parent, _props, _namespace, _setupOnly) {
     _listener11 = _writes === null ? _value13 : _writes.listener(_value13);
     _button22.addEventListener("click", _listener11);
   }
+  const _rowNamespace = _MD.renderNamespace(_text.parentNode, _namespace);
+  const _rowOwner = { id: _id, batch: _writes, entity: _entity, namespace: _rowNamespace, invalidate: () => _rowList.invalidate() };
+  const _rowList = _MD.createRowList(_text, { id: _id, batch: _writes, entity: _entity, namespace: _namespace }, (item) => item.id, (item) => {
+    const _row = _Row_row({ "item": item, "selected": _MD.trackEquals(selected, item.id, () => selected, () => _selectedVersion, _readKey2), "select": select }, _rowOwner);
+    return { node: _row.node, update(_item2) {
+      item = _item2;
+      _row.update({ "item": item, "selected": _MD.trackEquals(selected, item.id, () => selected, () => _selectedVersion, _readKey2), "select": select });
+    }, dispose() {
+      _row.dispose();
+    } };
+  });
   const _siteComputation = _MD.createComputation(_writes.mark, _entity);
   _siteComputation.begin();
-  let _value14 = _MD.observeMethod([() => data], [_mutated_data], data, "map", 1, _rows)((item) => (_MD.createComponentValue(Row, { "key": item.id, "item": item, "selected": _MD.trackEquals(selected, item.id, () => selected, () => _selectedVersion, _readKey2), "select": select })));
+  let _value14 = _MD.observeMethod([() => data], [_mutated_data], data, "map", 1, _rowList)((item) => (_MD.createComponentValue(Row, { "key": item.id, "item": item, "selected": _MD.trackEquals(selected, item.id, () => selected, () => _selectedVersion, _readKey2), "select": select })));
   _siteComputation.end();
-  let _valueSlot = null;
-  if (_valueSlot === null && (_value14 === null || typeof _value14 !== "object")) {
-    _MD.setTextData(_text, _value14);
-  } else {
-    (_valueSlot ??= _MD.createIndexedValueSlot(_text, { id: _id, batch: _writes, entity: _entity, namespace: _namespace })).write(_value14);
-  }
+  _rowList.write(_value14);
   let _seen = _dataVersion;
   let _publishedVersion = _dataVersion;
   let _publishedVersion2 = _selectedVersion;
   _MD.cleanup(_id, () => {
+    _rowList.dispose();
     _siteComputation.dispose();
-    if (_valueSlot !== null) _valueSlot.dispose();
-    _valueSlot = _MD.disposedValueSlot;
   });
   _MD.watchMutationRoots(_entity, [{ read: () => data, notify: () => {
     _dataVersion++;
@@ -531,15 +648,11 @@ export function BenchAppOwned(_id, _parent, _props, _namespace, _setupOnly) {
     const _updateFrame = _scope.enter();
     if (_dataVersion !== _seen || _siteComputation.changed()) {
       _siteComputation.begin();
-      const _next = _MD.observeMethod([() => data], [_mutated_data], data, "map", 1, _rows)((item) => (_MD.createComponentValue(Row, { "key": item.id, "item": item, "selected": _MD.trackEquals(selected, item.id, () => selected, () => _selectedVersion, _readKey2), "select": select })));
+      const _next4 = _MD.observeMethod([() => data], [_mutated_data], data, "map", 1, _rowList)((item) => (_MD.createComponentValue(Row, { "key": item.id, "item": item, "selected": _MD.trackEquals(selected, item.id, () => selected, () => _selectedVersion, _readKey2), "select": select })));
       _siteComputation.end();
-      if (_next !== _value14 && !(_next !== _next && _value14 !== _value14)) {
-        if (_valueSlot === null && (_next === null || typeof _next !== "object")) {
-          _MD.setTextData(_text, _next);
-        } else {
-          (_valueSlot ??= _MD.createIndexedValueSlot(_text, { id: _id, batch: _writes, entity: _entity, namespace: _namespace })).write(_next);
-        }
-        _value14 = _next;
+      if (_next4 !== _value14 && !(_next4 !== _next4 && _value14 !== _value14)) {
+        _rowList.write(_next4);
+        _value14 = _next4;
       }
       _seen = _dataVersion;
     }

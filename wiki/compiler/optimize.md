@@ -330,8 +330,11 @@ passes a new one on each update. The general receiver keeps the old object
 while its fields are the same; the row does that too (`sameProps`) unless every
 use of `props` is a plain member read, which cannot observe the object's
 identity. `props.select(id)` passes `props` as `this`, and the general path
-observes that call as an edit of `props`, so such a component is not a leaf: the
-owner-placed bench rows stay general for now.
+observes that call as an edit of `props`. A leaf may make such edits of its
+props, but only in its handlers, never while it renders: the row keeps the same
+observation, and its notification invalidates the row list
+(`RowList.invalidate`), whose version the mapping site reads, so the site
+shows the rows again. This covers the owner-placed bench rows.
 
 What differs from the general path is only timing the console cannot see: a row
 mounts while its item is evaluated, before unmatched rows are removed, and

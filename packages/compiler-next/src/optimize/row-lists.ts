@@ -82,8 +82,9 @@ function componentRow(
 /**
  * A module-level component declaration, never reassigned, whose instance only
  * shows its props: no setup statements, local state, derivations, writes,
- * edits, takeovers or refs, at most one plain `props` parameter, and one
- * element root. Compiled again at module level, its names resolve as written.
+ * takeovers or refs, no edits except of its props inside its handlers, at most
+ * one plain `props` parameter, and one element root. Compiled again at module
+ * level, its names resolve as written.
  */
 function leafComponent(tag: Extract<Node, { type: 'JSXIdentifier' }>, general: ModulePlan): FunctionNode | null {
   const module = general.module.module;
@@ -98,8 +99,15 @@ function leafComponent(tag: Extract<Node, { type: 'JSXIdentifier' }>, general: M
   const [fn, plan] = found;
   if ([...module.ancestors(fn)].some((ancestor) => ancestor !== fn && is.Function(ancestor))) return null;
   if (fn.async || fn.generator || fn.params.length > 1 || (fn.params.length === 1 && !is.Identifier(fn.params[0]))) return null;
+  // Edits of its props made by its handlers (`props.select(id)` passes `props`
+  // as `this`) stay observed in the row; they re-render the list
+  // (`core/emit/row-list.ts`). Nothing may edit them while the row renders.
+  const inHandler = (operation: Node) => [...module.ancestors(operation)]
+    .some((ancestor) => ancestor !== fn && is.Function(ancestor) && ancestor.start >= fn.start && ancestor.end <= fn.end);
+  const handlerEdits = plan.mutations.every((mutation) => inHandler(mutation.operation)
+    && mutation.targets.every((target) => target.binding.kind === 'Prop' && plan.state.includes(target.binding)));
   const idle = plan.setup.length === 0 && plan.deferred.size === 0 && plan.memos.length === 0
-    && plan.writes.length === 0 && plan.replayWrites.length === 0 && plan.mutations.length === 0
+    && plan.writes.length === 0 && plan.replayWrites.length === 0 && handlerEdits
     && plan.replayMutations.length === 0 && plan.takeovers.length === 0 && plan.readonlyBindings.length === 0
     && plan.mutationRoots.length === 0 && plan.state.every((state) => state.kind === 'Prop');
   if (!idle || plan.template.roots.length !== 1) return null;

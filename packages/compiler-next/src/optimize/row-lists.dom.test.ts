@@ -206,6 +206,26 @@ it.each([true, false])('passes the same props object to a method a component row
   expect(first().className).toBe('on');
 });
 
+it.each([true, false])('shows edits a component row\'s handler makes through its props (optimize: %p)', async (optimize) => {
+  const source = `
+    let rows = [{ id: 1, label: 'a' }, { id: 2, label: 'b' }];
+    let marked = 0;
+    function mark(id) { this.row.label += '?'; marked = id; }
+    function Item(props) {
+      return <li onClick={() => { props.row.label += '!'; props.mark(props.row.id); }}>{props.row.label}</li>;
+    }
+    export function App() {
+      return <main><p>{marked}</p><ul>{rows.map((row) => <Item key={row.id} row={row} mark={mark} />)}</ul></main>;
+    }`;
+  expect(compile(source, true)).toContain('_Item_row(');
+  const { host } = await mount(source, optimize);
+  host.querySelectorAll('li')[1]!.click();
+  expect(host.querySelector('p')!.textContent).toBe('2');
+  expect(host.querySelector('ul')!.textContent).toBe('ab!?');
+  host.querySelectorAll('li')[0]!.click();
+  expect(host.querySelector('ul')!.textContent).toBe('a!?b!?');
+});
+
 it('compiles only leaf components as rows', () => {
   const source = (item: string) => `
     let rows = [{ id: 1 }];
@@ -221,4 +241,7 @@ it('compiles only leaf components as rows', () => {
   expect(compile(source('function Item(props) { return <><li>{props.row.id}</li></>; }'), true)).toContain('_Item_row(');
   expect(compile(source('function Item(props) { return <><li>{props.row.id}</li><li /></>; }'), true)).not.toContain('_Item_row(');
   expect(compile(source('function Item(props) { return <li>{props.row.id}</li>; } Item = () => null;'), true)).not.toContain('_Item_row(');
+  // Edits of its props while it renders, rather than in a handler, keep the component.
+  expect(compile(source('function Item(props) { return <li>{props.row.list.pop()}</li>; }'), true)).not.toContain('_Item_row(');
+  expect(compile(source('function Item(props) { return <li onClick={() => { props.row.id++; }}>{props.row.id}</li>; }'), true)).toContain('_Item_row(');
 });

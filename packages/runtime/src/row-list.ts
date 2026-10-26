@@ -23,6 +23,7 @@
  * Any other value written to the site (the callee was not proven, so the
  * authored callback ran) goes to an ordinary value slot at the same anchor.
  */
+import { publishVersions, trackRead } from './computation';
 import { readListLength } from './list-values';
 import { lisPositions } from './list';
 import { createIndexedValueSlot, type RenderOwner, type ValueSlot } from './render-value';
@@ -60,6 +61,11 @@ export interface RowList {
   map(array: readonly unknown[], callback: Function, thisArg: unknown): unknown;
   /** The site's value: the token is already shown; anything else goes to a value slot. */
   write(value: unknown): void;
+  /**
+   * A row observed an edit of what it shows, such as its props object, in a
+   * handler. Rows have no own updates; the site that maps them runs again.
+   */
+  invalidate(): void;
   dispose(): void;
 }
 
@@ -298,9 +304,14 @@ export function createRowList(anchor: Text, owner: RenderOwner, key: RowKey | nu
     if (committed.length > 0) removeRows(committed, 0);
   }
 
+  // The mapping site reads this version, so `invalidate` re-runs that site.
+  const versionKey = {};
+  let version = 0;
+  const current = () => version;
   return {
     map(array) {
       if (disposed) return token;
+      trackRead(current, null, versionKey);
       if (showingSlot) {
         // Writing text clears whatever the slot showed; the anchor stays.
         slot!.write('');
@@ -314,6 +325,11 @@ export function createRowList(anchor: Text, owner: RenderOwner, key: RowKey | nu
       clearRows();
       (slot ??= createIndexedValueSlot(anchor, owner)).write(value);
       showingSlot = true;
+    },
+    invalidate() {
+      if (disposed) return;
+      version++;
+      publishVersions([versionKey]);
     },
     dispose() {
       if (disposed) return;

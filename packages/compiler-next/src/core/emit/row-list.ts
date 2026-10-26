@@ -18,6 +18,7 @@ import { copy } from './copy';
 import { expression, statement, stringLiteral } from './quote';
 import { emitNodes, inheritedNodes } from './template';
 import { emitSites, renderOwner, type SitesContext } from './sites';
+import { emitMutations } from '../../features/handlers/mutations';
 
 type BlockStatement = Extract<Statement, { type: 'BlockStatement' }>;
 
@@ -57,7 +58,15 @@ export function emitRowList(plan: RowListPlan, anchor: string, context: SitesCon
     const rows = context.rowComponents;
     if (rows === undefined) throw new Error('memo-dom: a component row list needs the module\'s row components');
     const owner = names.fresh('_rowOwner');
-    declarations.push(statement('const $$owner = $$value;', { owner, value: renderOwner({ ...context, namespace }) }));
+    const value = renderOwner({ ...context, namespace });
+    if (value.type === 'ObjectExpression') {
+      // A row's handler edit of its props re-renders the list (`RowComponents`).
+      value.properties.push(b.Property({
+        key: b.Identifier({ name: 'invalidate' }), value: expression('() => $$list.invalidate()', { list }),
+        kind: 'init', method: false, shorthand: false, computed: false,
+      }) as (typeof value.properties)[number]);
+    }
+    declarations.push(statement('const $$owner = $$value;', { owner, value }));
     const props = () => b.ObjectExpression({
       properties: (plan.row as Extract<RowListPlan['row'], { kind: 'component' }>).props.map(({ name, value }) => b.Property({
         key: stringLiteral(name), value: copy(value, replacements), kind: 'init',
@@ -110,9 +119,14 @@ export class RowComponents {
     const batch = names.fresh('_rowWrites');
     const entity = names.fresh('_rowEntity');
     const namespace = names.fresh('_rowNamespace');
+    // Its handlers' edits of its props stay observed, as in the component;
+    // they notify the list, which shows its rows again (`optimize/row-lists.ts`).
+    const invalidate = names.fresh('_invalidate');
+    const handlers = emitMutations(component.mutations, new Map(), names, runtime, null, this.replacements, new Map(),
+      new Map(component.state.map((binding) => [binding, invalidate])));
     const context: SitesContext = {
       names, runtime, batch, entity, id, document, namespace,
-      versions: new Map(), replacements: this.replacements, ref: () => '', rows: true,
+      versions: new Map(), replacements: handlers.replacements, ref: () => '', rows: true,
     };
     const body = emitRow(component.template, component.sites, context, (emitted, root) => {
       const next = names.fresh('_nextProps');
@@ -132,6 +146,8 @@ export class RowComponents {
         statement('const $$batch = $$owner.batch;', { batch, owner }),
         statement('const $$entity = $$owner.entity;', { entity, owner }),
         statement('const $$namespace = $$owner.namespace;', { namespace, owner }),
+        ...(component.mutations.length === 0 ? [] : [statement('const $$invalidate = $$owner.invalidate;', { invalidate, owner })]),
+        ...handlers.declarations,
         ...body,
       ];
     }
