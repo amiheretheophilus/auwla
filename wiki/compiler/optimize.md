@@ -441,6 +441,119 @@ not the counterbalanced VM performance exit. It does not exercise the complete
 update-style matrix that previously exhausted memory. Downloaded reports and
 bundles are in ignored `bench/dom/dist/ci-40324188637/`.
 
+### Gap analysis against the old compiler (2026-10-26)
+
+Profiles name where time is spent but not what removing it would save. This
+analysis therefore times variants instead: the module-component output
+(`App.tsx`) is copied and edited by hand to remove exactly one cost. Variants
+run on the same page as the old output, interleaved, with a forced GC before
+every timed sample (`--js-flags=--expose-gc`). Without that GC, a previous
+sample's garbage landed on random variants and two runs disagreed by up to 30%.
+With it, repeat runs agree within about 5%. The variants are unsafe, and their
+local times are relative only. The scratch harness is in ignored
+`bench/dom/dist/ablation/`.
+
+Local medians in ms, 10k rows (15–25 samples):
+
+| Variant (one change to next's output) | create | update | clear |
+| --- | ---: | ---: | ---: |
+| old compiler | 73–82 | 5.0–5.3 | 3.7–4.2 |
+| next as emitted | 152–154 | 20–24 | 12.0–12.2 |
+| one text node for `{id}: {label}` | 124 | | 11.8–12.3 |
+| no per-row listener at all | 132–137 | | 11.2–11.4 |
+| old's delegated listener | 136–138 | | 11.1–12.2 |
+| no per-row routing check (`stableKey`) | 139–142 | | |
+| fused text + delegation + `className` | 96–101 | | 10.5–10.7 |
+| plain writes, one notification (handler) | | 10.8–11.9 | |
+| …and no routing check | | 9.9 | |
+| …and no props object per update | | 9.7 | |
+
+What each gap consists of:
+
+- **Update.** Observing the handler's 1,000 `data[i].label += ' !!!'` writes costs
+  about 9 ms here, about 9 µs per write. Each write allocates a property-key
+  probe, a target object, a descriptor, two sets, an array and a generator,
+  and checks every shared root. Old sets a flag and notifies once after the
+  loop. Old's markDirtySubtree misses aliases held by other components, so the
+  notification must stay. Its per-write cost need not. The routing proof's
+  `getOwnPropertyDescriptor` per row and pass costs about 2 ms. The remaining
+  ~4.5 ms is the row pass itself. Each pass allocates `next`, `keys` and
+  `indexes` arrays and a closure. Old reuses its buffers and has a same-shape
+  fast path.
+- **Create.** About 70 ms locally, spread over several costs:
+  - Three text nodes instead of one: about 28 ms (cloning, insertion, GC).
+  - A listener and its wrapper closure per row: about 17 ms.
+  - The routing proof: about 12 ms.
+  - `setAttribute('class', '')`: a few ms.
+  - Per-row objects: the row's `{node, update, dispose}`, the factory's wrapper
+    with three more closures, the `Row` record, and an identity string and Map
+    entry per row.
+
+  Together the first three bring create to about 1.2× old.
+- **Clear.** DOM removal is not the difference: fusion and delegation barely
+  move it. The cost is per-row JS:
+  - an identity `Map` delete for each row;
+  - two dispose calls, row and wrapper, where both are usually no-ops because
+    value slots are lazy;
+  - a `parentNode` check for each row.
+
+  Old's compiler proves rows own no resources (`resourceFree`) and clears the
+  whole range with no per-row work.
+- **Swap/remove** are within noise of old locally (CI: 2.1 vs 1.1 ms swap).
+
+The old compiler's shapes worth keeping:
+
+- adjacent text fused into one node, guarded by `typeof`;
+- delegated events;
+- `className`;
+- one notification per handler instead of one per write;
+- row buffers reused across passes, with same-shape, append-only and
+  removal-only fast paths;
+- bulk clear when rows own nothing;
+- raw keys in the identity `Map`.
+
+Do not copy:
+
+- old's `try/finally` around fused text (rule 5);
+- markDirtySubtree in place of alias notification (it misses other
+  components' copies);
+- throwing on duplicate keys;
+- delegation that changes what a handler can observe.
+
+**Correctness lesson.** Every regression found in this work was in one fast path,
+read-only helpers (`32f55255`; fixed in `babb31b6`, `7edc5540`, `0f072957`). Its
+proof reasoned about authored JavaScript (callbacks, coercion, accessors, method
+and prototype replacement) and missed cases. Planned work is therefore ranked by
+where its proof lives:
+
+1. **Runtime refactors with unchanged semantics.** Lowest risk. The existing
+   mutation and row-list model tests already pin the behavior.
+2. **Compiler-owned structure guarded at runtime.** For example, fused text
+   behind `typeof` checks, or a bulk clear when no row created a slot. The proof
+   is about code the compiler emitted, not about authored code.
+3. **Proofs about authored code.** For example, skipping a row update, or
+   delegation. Each one needs every assumption listed on this page, and a case
+   that breaks each assumption. The case must be checked to fail with that
+   guard removed.
+
+Every step runs the case files in both modes and the generators. Its timing is
+confirmed by an interleaved variant run before it lands. The order:
+
+1. Write observation without per-write allocation. Keep the same notifications,
+   stamps and alias records (class 1).
+2. Row-list pass buffers reused. The routing proof is checked once per row and
+   item, not on every pass. Bulk clear skips per-row teardown when no row
+   created a slot (classes 1–2).
+3. Guarded adjacent-text fusion (class 2). It applies only while every operand
+   is a primitive. A row whose operand becomes an object switches to the
+   general nodes for good. On update, each changed operand writes the whole
+   string, so a later operand that throws leaves exactly the text the general
+   path would have written. Text-node boundaries are not a semantic guarantee.
+   The text content is.
+4. `className` for HTML elements, and fewer per-row objects and closures (class 2).
+5. Delegated row events (class 3). This needs the user's decision on contract
+   (`../status.md`).
+
 ## Read-only helpers
 
 `items = swapRows(items)` was observed by snapshotting everything `items`

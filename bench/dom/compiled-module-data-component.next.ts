@@ -677,14 +677,15 @@ export function BenchModuleDataComponent(_id, _parent, _props, _namespace, _setu
   const _rowNamespace = _MD.renderNamespace(_text.parentNode, _namespace);
   const _rowOwner = { id: _id, batch: _writes, entity: _entity, namespace: _rowNamespace, invalidate: () => _rowList.invalidate() };
   const _rowList = _MD.createRowList(_text, { id: _id, batch: _writes, entity: _entity, namespace: _namespace }, (item) => item.id, (item) => {
-    const _row = _Row_row({ "item": item, "selected": _MD.trackEquals(selected, item.id, () => selected, () => _selectedVersion, _readKey), "select": select }, _rowOwner);
+    const _row = _Row_row({ "item": item, "selected": selected === item.id, "select": select }, _rowOwner);
     return { node: _row.node, update(_item2) {
       item = _item2;
-      _row.update({ "item": item, "selected": _MD.trackEquals(selected, item.id, () => selected, () => _selectedVersion, _readKey), "select": select });
+      _row.update({ "item": item, "selected": selected === item.id, "select": select });
     }, dispose() {
       _row.dispose();
     } };
-  });
+  }, ["id"]);
+  _rowList.route(() => selected, () => _selectedVersion, void 0);
   const _siteComputation = _MD.createComputation(_writes.mark, _entity);
   _siteComputation.begin();
   let _value13 = _MD.observeMethod([() => data], [_mutated_data], _read_data(), "map", 1, _rowList)((item) => (_MD.createComponentValue(Row, { "key": item.id, "item": item, "selected": _MD.trackEquals(selected, item.id, () => selected, () => _selectedVersion, _readKey), "select": select })));
@@ -704,7 +705,7 @@ export function BenchModuleDataComponent(_id, _parent, _props, _namespace, _setu
   } }]);
   function _update() {
     const _updateFrame = _scope.enter();
-    if (_siteComputation.changed()) {
+    if (_siteComputation.changed() || _rowList.changed()) {
       _siteComputation.begin();
       const _next4 = _MD.observeMethod([() => data], [_mutated_data], _read_data(), "map", 1, _rowList)((item) => (_MD.createComponentValue(Row, { "key": item.id, "item": item, "selected": _MD.trackEquals(selected, item.id, () => selected, () => _selectedVersion, _readKey), "select": select })));
       _siteComputation.end();
@@ -713,6 +714,7 @@ export function BenchModuleDataComponent(_id, _parent, _props, _namespace, _setu
         _value13 = _next4;
       }
     }
+    _rowList.refresh(_siteComputation);
     if (_publishedVersion !== _selectedVersion) {
       _publishedVersion = _selectedVersion;
       _MD.publishVersions([_readKey]);

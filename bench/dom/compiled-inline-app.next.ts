@@ -666,7 +666,7 @@ export function BenchAppInline(_id, _parent, _props, _namespace4, _setupOnly) {
         _text12 = _text14;
         _li8 = _li9;
       }
-      let _value21 = _MD.trackEquals(_peek_selected(), item.id, _peek_selected, _version_selected, _sharedKey2) ? 'danger' : '';
+      let _value21 = _peek_selected() === item.id ? 'danger' : '';
       if (_value21 != null && _value21 !== false) {
         _li8.setAttribute("class", _value21 === true ? "" : _MD.textValue(_value21));
       } else {
@@ -704,7 +704,7 @@ export function BenchAppInline(_id, _parent, _props, _namespace4, _setupOnly) {
       }
       return { node: _li8, update(_item2) {
         item = _item2;
-        const _next9 = _MD.trackEquals(_peek_selected(), item.id, _peek_selected, _version_selected, _sharedKey2) ? 'danger' : '';
+        const _next9 = _peek_selected() === item.id ? 'danger' : '';
         if (_next9 !== _value21 && !(_next9 !== _next9 && _value21 !== _value21)) {
           if (_next9 != null && _next9 !== false) {
             _li8.setAttribute("class", _next9 === true ? "" : _MD.textValue(_next9));
@@ -762,7 +762,7 @@ export function BenchAppInline(_id, _parent, _props, _namespace4, _setupOnly) {
       _text16 = _text18;
       _li11 = _li12;
     }
-    let _value25 = _MD.trackEquals(_peek_selected(), item.id, _peek_selected, _version_selected, _sharedKey2) ? 'danger' : '';
+    let _value25 = _peek_selected() === item.id ? 'danger' : '';
     if (_value25 != null && _value25 !== false) {
       _li11.setAttribute("class", _value25 === true ? "" : _MD.textValue(_value25));
     } else {
@@ -800,7 +800,7 @@ export function BenchAppInline(_id, _parent, _props, _namespace4, _setupOnly) {
     }
     return { node: _li11, update(_item3) {
       item = _item3;
-      const _next12 = _MD.trackEquals(_peek_selected(), item.id, _peek_selected, _version_selected, _sharedKey2) ? 'danger' : '';
+      const _next12 = _peek_selected() === item.id ? 'danger' : '';
       if (_next12 !== _value25 && !(_next12 !== _next12 && _value25 !== _value25)) {
         if (_next12 != null && _next12 !== false) {
           _li11.setAttribute("class", _next12 === true ? "" : _MD.textValue(_next12));
@@ -833,7 +833,8 @@ export function BenchAppInline(_id, _parent, _props, _namespace4, _setupOnly) {
       if (_valueSlot8 !== null) _valueSlot8.dispose();
       _valueSlot8 = _MD.disposedValueSlot;
     } };
-  });
+  }, ["id"]);
+  _rowList.route(_peek_selected, _version_selected, _sharedKey2);
   const _siteComputation = _MD.createComputation(_writes.mark, _entity);
   _siteComputation.begin();
   let _value20 = _MD.observeMethod([() => data], [_mutated_data], _read_data(), "map", 1, _rowList)((item) => (_MD.createKeyedRenderValue(_renderProgram, [item.id, _MD.trackEquals(_peek_selected(), item.id, _peek_selected, _version_selected, _sharedKey2) ? 'danger' : '', () => {
@@ -853,7 +854,7 @@ export function BenchAppInline(_id, _parent, _props, _namespace4, _setupOnly) {
   });
   function _update() {
     const _updateFrame = _scope.enter();
-    if (_siteComputation.changed()) {
+    if (_siteComputation.changed() || _rowList.changed()) {
       _siteComputation.begin();
       const _next15 = _MD.observeMethod([() => data], [_mutated_data], _read_data(), "map", 1, _rowList)((item) => (_MD.createKeyedRenderValue(_renderProgram, [item.id, _MD.trackEquals(_peek_selected(), item.id, _peek_selected, _version_selected, _sharedKey2) ? 'danger' : '', () => {
         ({ get value() {
@@ -870,6 +871,7 @@ export function BenchAppInline(_id, _parent, _props, _namespace4, _setupOnly) {
         _value20 = _next15;
       }
     }
+    _rowList.refresh(_siteComputation);
     _scope.leave(_updateFrame);
   }
   _writes.activate();

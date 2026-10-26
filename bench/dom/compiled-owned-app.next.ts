@@ -614,14 +614,15 @@ export function BenchAppOwned(_id, _parent, _props, _namespace, _setupOnly) {
   const _rowNamespace = _MD.renderNamespace(_text.parentNode, _namespace);
   const _rowOwner = { id: _id, batch: _writes, entity: _entity, namespace: _rowNamespace, invalidate: () => _rowList.invalidate() };
   const _rowList = _MD.createRowList(_text, { id: _id, batch: _writes, entity: _entity, namespace: _namespace }, (item) => item.id, (item) => {
-    const _row = _Row_row({ "item": item, "selected": _MD.trackEquals(selected, item.id, () => selected, () => _selectedVersion, _readKey2), "select": select }, _rowOwner);
+    const _row = _Row_row({ "item": item, "selected": selected === item.id, "select": select }, _rowOwner);
     return { node: _row.node, update(_item2) {
       item = _item2;
-      _row.update({ "item": item, "selected": _MD.trackEquals(selected, item.id, () => selected, () => _selectedVersion, _readKey2), "select": select });
+      _row.update({ "item": item, "selected": selected === item.id, "select": select });
     }, dispose() {
       _row.dispose();
     } };
-  });
+  }, ["id"]);
+  _rowList.route(() => selected, () => _selectedVersion, void 0);
   const _siteComputation = _MD.createComputation(_writes.mark, _entity);
   _siteComputation.begin();
   let _value14 = _MD.observeMethod([() => data], [_mutated_data], data, "map", 1, _rowList)((item) => (_MD.createComponentValue(Row, { "key": item.id, "item": item, "selected": _MD.trackEquals(selected, item.id, () => selected, () => _selectedVersion, _readKey2), "select": select })));
@@ -646,7 +647,7 @@ export function BenchAppOwned(_id, _parent, _props, _namespace, _setupOnly) {
   } }]);
   function _update() {
     const _updateFrame = _scope.enter();
-    if (_dataVersion !== _seen || _siteComputation.changed()) {
+    if (_dataVersion !== _seen || _siteComputation.changed() || _rowList.changed()) {
       _siteComputation.begin();
       const _next4 = _MD.observeMethod([() => data], [_mutated_data], data, "map", 1, _rowList)((item) => (_MD.createComponentValue(Row, { "key": item.id, "item": item, "selected": _MD.trackEquals(selected, item.id, () => selected, () => _selectedVersion, _readKey2), "select": select })));
       _siteComputation.end();
@@ -656,6 +657,7 @@ export function BenchAppOwned(_id, _parent, _props, _namespace, _setupOnly) {
       }
       _seen = _dataVersion;
     }
+    _rowList.refresh(_siteComputation);
     if (_publishedVersion !== _dataVersion) {
       _publishedVersion = _dataVersion;
       _MD.publishVersions([_readKey]);

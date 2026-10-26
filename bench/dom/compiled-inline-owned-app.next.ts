@@ -572,7 +572,7 @@ export function BenchAppInlineOwned(_id, _parent, _props, _namespace4, _setupOnl
         _text12 = _text14;
         _li8 = _li9;
       }
-      let _value23 = _MD.trackEquals(selected, item.id, () => selected, () => _selectedVersion, _readKey2) ? 'danger' : '';
+      let _value23 = selected === item.id ? 'danger' : '';
       if (_value23 != null && _value23 !== false) {
         _li8.setAttribute("class", _value23 === true ? "" : _MD.textValue(_value23));
       } else {
@@ -604,7 +604,7 @@ export function BenchAppInlineOwned(_id, _parent, _props, _namespace4, _setupOnl
       }
       return { node: _li8, update(_item2) {
         item = _item2;
-        const _next9 = _MD.trackEquals(selected, item.id, () => selected, () => _selectedVersion, _readKey2) ? 'danger' : '';
+        const _next9 = selected === item.id ? 'danger' : '';
         if (_next9 !== _value23 && !(_next9 !== _next9 && _value23 !== _value23)) {
           if (_next9 != null && _next9 !== false) {
             _li8.setAttribute("class", _next9 === true ? "" : _MD.textValue(_next9));
@@ -662,7 +662,7 @@ export function BenchAppInlineOwned(_id, _parent, _props, _namespace4, _setupOnl
       _text16 = _text18;
       _li11 = _li12;
     }
-    let _value27 = _MD.trackEquals(selected, item.id, () => selected, () => _selectedVersion, _readKey2) ? 'danger' : '';
+    let _value27 = selected === item.id ? 'danger' : '';
     if (_value27 != null && _value27 !== false) {
       _li11.setAttribute("class", _value27 === true ? "" : _MD.textValue(_value27));
     } else {
@@ -694,7 +694,7 @@ export function BenchAppInlineOwned(_id, _parent, _props, _namespace4, _setupOnl
     }
     return { node: _li11, update(_item3) {
       item = _item3;
-      const _next12 = _MD.trackEquals(selected, item.id, () => selected, () => _selectedVersion, _readKey2) ? 'danger' : '';
+      const _next12 = selected === item.id ? 'danger' : '';
       if (_next12 !== _value27 && !(_next12 !== _next12 && _value27 !== _value27)) {
         if (_next12 != null && _next12 !== false) {
           _li11.setAttribute("class", _next12 === true ? "" : _MD.textValue(_next12));
@@ -727,7 +727,8 @@ export function BenchAppInlineOwned(_id, _parent, _props, _namespace4, _setupOnl
       if (_valueSlot8 !== null) _valueSlot8.dispose();
       _valueSlot8 = _MD.disposedValueSlot;
     } };
-  });
+  }, ["id"]);
+  _rowList.route(() => selected, () => _selectedVersion, void 0);
   const _siteComputation = _MD.createComputation(_writes.mark, _entity);
   _siteComputation.begin();
   let _value22 = _MD.observeMethod([() => data], [_mutated_data], data, "map", 1, _rowList)((item) => (_MD.createKeyedRenderValue(_renderProgram, [item.id, _MD.trackEquals(selected, item.id, () => selected, () => _selectedVersion, _readKey2) ? 'danger' : '', () => {
@@ -751,7 +752,7 @@ export function BenchAppInlineOwned(_id, _parent, _props, _namespace4, _setupOnl
   } }]);
   function _update() {
     const _updateFrame = _scope.enter();
-    if (_dataVersion !== _seen || _siteComputation.changed()) {
+    if (_dataVersion !== _seen || _siteComputation.changed() || _rowList.changed()) {
       _siteComputation.begin();
       const _next15 = _MD.observeMethod([() => data], [_mutated_data], data, "map", 1, _rowList)((item) => (_MD.createKeyedRenderValue(_renderProgram, [item.id, _MD.trackEquals(selected, item.id, () => selected, () => _selectedVersion, _readKey2) ? 'danger' : '', () => {
         _write2(selected = item.id);
@@ -763,6 +764,7 @@ export function BenchAppInlineOwned(_id, _parent, _props, _namespace4, _setupOnl
       }
       _seen = _dataVersion;
     }
+    _rowList.refresh(_siteComputation);
     if (_publishedVersion !== _dataVersion) {
       _publishedVersion = _dataVersion;
       _MD.publishVersions([_readKey]);

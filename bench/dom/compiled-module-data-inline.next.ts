@@ -635,7 +635,7 @@ export function BenchModuleDataInline(_id, _parent, _props, _namespace4, _setupO
         _text12 = _text14;
         _li8 = _li9;
       }
-      let _value22 = _MD.trackEquals(selected, item.id, () => selected, () => _selectedVersion, _readKey) ? 'danger' : '';
+      let _value22 = selected === item.id ? 'danger' : '';
       if (_value22 != null && _value22 !== false) {
         _li8.setAttribute("class", _value22 === true ? "" : _MD.textValue(_value22));
       } else {
@@ -667,7 +667,7 @@ export function BenchModuleDataInline(_id, _parent, _props, _namespace4, _setupO
       }
       return { node: _li8, update(_item2) {
         item = _item2;
-        const _next9 = _MD.trackEquals(selected, item.id, () => selected, () => _selectedVersion, _readKey) ? 'danger' : '';
+        const _next9 = selected === item.id ? 'danger' : '';
         if (_next9 !== _value22 && !(_next9 !== _next9 && _value22 !== _value22)) {
           if (_next9 != null && _next9 !== false) {
             _li8.setAttribute("class", _next9 === true ? "" : _MD.textValue(_next9));
@@ -725,7 +725,7 @@ export function BenchModuleDataInline(_id, _parent, _props, _namespace4, _setupO
       _text16 = _text18;
       _li11 = _li12;
     }
-    let _value26 = _MD.trackEquals(selected, item.id, () => selected, () => _selectedVersion, _readKey) ? 'danger' : '';
+    let _value26 = selected === item.id ? 'danger' : '';
     if (_value26 != null && _value26 !== false) {
       _li11.setAttribute("class", _value26 === true ? "" : _MD.textValue(_value26));
     } else {
@@ -757,7 +757,7 @@ export function BenchModuleDataInline(_id, _parent, _props, _namespace4, _setupO
     }
     return { node: _li11, update(_item3) {
       item = _item3;
-      const _next12 = _MD.trackEquals(selected, item.id, () => selected, () => _selectedVersion, _readKey) ? 'danger' : '';
+      const _next12 = selected === item.id ? 'danger' : '';
       if (_next12 !== _value26 && !(_next12 !== _next12 && _value26 !== _value26)) {
         if (_next12 != null && _next12 !== false) {
           _li11.setAttribute("class", _next12 === true ? "" : _MD.textValue(_next12));
@@ -790,7 +790,8 @@ export function BenchModuleDataInline(_id, _parent, _props, _namespace4, _setupO
       if (_valueSlot8 !== null) _valueSlot8.dispose();
       _valueSlot8 = _MD.disposedValueSlot;
     } };
-  });
+  }, ["id"]);
+  _rowList.route(() => selected, () => _selectedVersion, void 0);
   const _siteComputation = _MD.createComputation(_writes.mark, _entity);
   _siteComputation.begin();
   let _value21 = _MD.observeMethod([() => data], [_mutated_data], _read_data(), "map", 1, _rowList)((item) => (_MD.createKeyedRenderValue(_renderProgram, [item.id, _MD.trackEquals(selected, item.id, () => selected, () => _selectedVersion, _readKey) ? 'danger' : '', () => {
@@ -809,7 +810,7 @@ export function BenchModuleDataInline(_id, _parent, _props, _namespace4, _setupO
   } }]);
   function _update() {
     const _updateFrame = _scope.enter();
-    if (_siteComputation.changed()) {
+    if (_siteComputation.changed() || _rowList.changed()) {
       _siteComputation.begin();
       const _next15 = _MD.observeMethod([() => data], [_mutated_data], _read_data(), "map", 1, _rowList)((item) => (_MD.createKeyedRenderValue(_renderProgram, [item.id, _MD.trackEquals(selected, item.id, () => selected, () => _selectedVersion, _readKey) ? 'danger' : '', () => {
         _write(selected = item.id);
@@ -820,6 +821,7 @@ export function BenchModuleDataInline(_id, _parent, _props, _namespace4, _setupO
         _value21 = _next15;
       }
     }
+    _rowList.refresh(_siteComputation);
     if (_publishedVersion !== _selectedVersion) {
       _publishedVersion = _selectedVersion;
       _MD.publishVersions([_readKey]);

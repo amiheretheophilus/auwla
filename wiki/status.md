@@ -54,11 +54,26 @@ Last updated: 2026-10-26.
   No VM speedup or OOM resolution is claimed from these work counts. The routing
   and toolchain work is committed and pushed; the working tree is clean.
 
-- Next performance work: guarded adjacent text fusion, then reducing full-row
-  data-update work and listener/props allocation, guided by the quick profiles
-  (`compiler/optimize.md`). Confirm changes with old/next comparisons and the
-  full VM speed/memory gate (`bench/README.md`). The architecture stays staged;
-  every optimization retains its general path. Phases 7/8 remain deferred.
+- Gap analysis against the old compiler (2026-10-26): hand-edited variants of
+  the module-component output, timed interleaved with a forced GC per sample.
+  These attribute the gaps (`compiler/optimize.md`, "Gap analysis"):
+  - **Update** (old 5 ms, next 20–24 locally): about 9 ms is per-write
+    observation, 2 ms the routing proof, and the rest per-pass allocation.
+  - **Create** (old 73–82, next 152): fused text, delegation and `className`
+    bring next to 96–101.
+  - **Clear:** per-row teardown JS.
+
+  Next steps, in order:
+  1. Allocation-free write observation.
+  2. Row-list buffers, a cached routing proof, and a bulk clear.
+  3. Guarded text fusion.
+  4. Per-row objects.
+  5. Delegation, which waits on a contract decision: a zero-parameter row
+     handler on an element the program never exposes runs from the list
+     parent's listener. Third-party code that adds listeners to compiler-owned
+     rows could then see a different order.
+
+  Every optimization keeps its general path. Phases 7/8 remain deferred.
 
 - Bun development types (2026-10-26, `21aed36f`): completed the pending `@types/bun`
   update from `latest` to `^1.4.4`, with matching 1.4.4 lockfile resolutions.

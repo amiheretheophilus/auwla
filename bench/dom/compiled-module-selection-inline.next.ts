@@ -619,7 +619,7 @@ export function BenchModuleSelectionInline(_id, _parent, _props, _namespace4, _s
         _text12 = _text14;
         _li8 = _li9;
       }
-      let _value22 = _MD.trackEquals(_peek_selected(), item.id, _peek_selected, _version_selected, _sharedKey) ? 'danger' : '';
+      let _value22 = _peek_selected() === item.id ? 'danger' : '';
       if (_value22 != null && _value22 !== false) {
         _li8.setAttribute("class", _value22 === true ? "" : _MD.textValue(_value22));
       } else {
@@ -657,7 +657,7 @@ export function BenchModuleSelectionInline(_id, _parent, _props, _namespace4, _s
       }
       return { node: _li8, update(_item2) {
         item = _item2;
-        const _next9 = _MD.trackEquals(_peek_selected(), item.id, _peek_selected, _version_selected, _sharedKey) ? 'danger' : '';
+        const _next9 = _peek_selected() === item.id ? 'danger' : '';
         if (_next9 !== _value22 && !(_next9 !== _next9 && _value22 !== _value22)) {
           if (_next9 != null && _next9 !== false) {
             _li8.setAttribute("class", _next9 === true ? "" : _MD.textValue(_next9));
@@ -715,7 +715,7 @@ export function BenchModuleSelectionInline(_id, _parent, _props, _namespace4, _s
       _text16 = _text18;
       _li11 = _li12;
     }
-    let _value26 = _MD.trackEquals(_peek_selected(), item.id, _peek_selected, _version_selected, _sharedKey) ? 'danger' : '';
+    let _value26 = _peek_selected() === item.id ? 'danger' : '';
     if (_value26 != null && _value26 !== false) {
       _li11.setAttribute("class", _value26 === true ? "" : _MD.textValue(_value26));
     } else {
@@ -753,7 +753,7 @@ export function BenchModuleSelectionInline(_id, _parent, _props, _namespace4, _s
     }
     return { node: _li11, update(_item3) {
       item = _item3;
-      const _next12 = _MD.trackEquals(_peek_selected(), item.id, _peek_selected, _version_selected, _sharedKey) ? 'danger' : '';
+      const _next12 = _peek_selected() === item.id ? 'danger' : '';
       if (_next12 !== _value26 && !(_next12 !== _next12 && _value26 !== _value26)) {
         if (_next12 != null && _next12 !== false) {
           _li11.setAttribute("class", _next12 === true ? "" : _MD.textValue(_next12));
@@ -786,7 +786,8 @@ export function BenchModuleSelectionInline(_id, _parent, _props, _namespace4, _s
       if (_valueSlot8 !== null) _valueSlot8.dispose();
       _valueSlot8 = _MD.disposedValueSlot;
     } };
-  });
+  }, ["id"]);
+  _rowList.route(_peek_selected, _version_selected, _sharedKey);
   const _siteComputation = _MD.createComputation(_writes.mark, _entity);
   _siteComputation.begin();
   let _value21 = _MD.observeMethod([() => data], [_mutated_data], data, "map", 1, _rowList)((item) => (_MD.createKeyedRenderValue(_renderProgram, [item.id, _MD.trackEquals(_peek_selected(), item.id, _peek_selected, _version_selected, _sharedKey) ? 'danger' : '', () => {
@@ -812,7 +813,7 @@ export function BenchModuleSelectionInline(_id, _parent, _props, _namespace4, _s
   }, direct: _mutated_data }]);
   function _update() {
     const _updateFrame = _scope.enter();
-    if (_dataVersion !== _seen || _siteComputation.changed()) {
+    if (_dataVersion !== _seen || _siteComputation.changed() || _rowList.changed()) {
       _siteComputation.begin();
       const _next15 = _MD.observeMethod([() => data], [_mutated_data], data, "map", 1, _rowList)((item) => (_MD.createKeyedRenderValue(_renderProgram, [item.id, _MD.trackEquals(_peek_selected(), item.id, _peek_selected, _version_selected, _sharedKey) ? 'danger' : '', () => {
         ({ get value() {
@@ -830,6 +831,7 @@ export function BenchModuleSelectionInline(_id, _parent, _props, _namespace4, _s
       }
       _seen = _dataVersion;
     }
+    _rowList.refresh(_siteComputation);
     if (_publishedVersion !== _dataVersion) {
       _publishedVersion = _dataVersion;
       _MD.publishVersions([_readKey]);

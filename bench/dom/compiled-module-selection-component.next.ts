@@ -41,7 +41,7 @@ function _Row_row(props, _rowOwner2) {
     _text4 = _text6;
     _li2 = _li4;
   }
-  let _value14 = _MD.trackEquals(_peek_selected(), props.item.id, _peek_selected, _version_selected, _sharedKey) ? 'danger' : '';
+  let _value14 = _peek_selected() === props.item.id ? 'danger' : '';
   if (_value14 != null && _value14 !== false) {
     _li2.setAttribute("class", _value14 === true ? "" : _MD.textValue(_value14));
   } else {
@@ -79,7 +79,7 @@ function _Row_row(props, _rowOwner2) {
   }
   return { node: _li2, update(_nextProps) {
     props = _nextProps;
-    const _next = _MD.trackEquals(_peek_selected(), props.item.id, _peek_selected, _version_selected, _sharedKey) ? 'danger' : '';
+    const _next = _peek_selected() === props.item.id ? 'danger' : '';
     if (_next !== _value14 && !(_next !== _next && _value14 !== _value14)) {
       if (_next != null && _next !== false) {
         _li2.setAttribute("class", _next === true ? "" : _MD.textValue(_next));
@@ -671,7 +671,8 @@ export function BenchModuleSelectionComponent(_id, _parent, _props, _namespace, 
     }, dispose() {
       _row.dispose();
     } };
-  });
+  }, ["id"]);
+  _rowList.route(_peek_selected, _version_selected, _sharedKey);
   const _siteComputation = _MD.createComputation(_writes.mark, _entity);
   _siteComputation.begin();
   let _value13 = _MD.observeMethod([() => data], [_mutated_data], data, "map", 1, _rowList)((item) => (_MD.createComponentValue(Row, { "key": item.id, "item": item })));
@@ -689,7 +690,7 @@ export function BenchModuleSelectionComponent(_id, _parent, _props, _namespace, 
   }, direct: _mutated_data }]);
   function _update() {
     const _updateFrame = _scope.enter();
-    if (_dataVersion !== _seen || _siteComputation.changed()) {
+    if (_dataVersion !== _seen || _siteComputation.changed() || _rowList.changed()) {
       _siteComputation.begin();
       const _next4 = _MD.observeMethod([() => data], [_mutated_data], data, "map", 1, _rowList)((item) => (_MD.createComponentValue(Row, { "key": item.id, "item": item })));
       _siteComputation.end();
@@ -699,6 +700,7 @@ export function BenchModuleSelectionComponent(_id, _parent, _props, _namespace, 
       }
       _seen = _dataVersion;
     }
+    _rowList.refresh(_siteComputation);
     if (_publishedVersion !== _dataVersion) {
       _publishedVersion = _dataVersion;
       _MD.publishVersions([_readKey]);

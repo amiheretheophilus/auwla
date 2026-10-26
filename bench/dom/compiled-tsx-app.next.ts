@@ -41,7 +41,7 @@ function _Row_row(props, _rowOwner2) {
     _text4 = _text6;
     _li2 = _li4;
   }
-  let _value13 = _MD.trackEquals(_peek_selected(), props.item.id, _peek_selected, _version_selected, _sharedKey2) ? 'danger' : '';
+  let _value13 = _peek_selected() === props.item.id ? 'danger' : '';
   if (_value13 != null && _value13 !== false) {
     _li2.setAttribute("class", _value13 === true ? "" : _MD.textValue(_value13));
   } else {
@@ -79,7 +79,7 @@ function _Row_row(props, _rowOwner2) {
   }
   return { node: _li2, update(_nextProps) {
     props = _nextProps;
-    const _next = _MD.trackEquals(_peek_selected(), props.item.id, _peek_selected, _version_selected, _sharedKey2) ? 'danger' : '';
+    const _next = _peek_selected() === props.item.id ? 'danger' : '';
     if (_next !== _value13 && !(_next !== _next && _value13 !== _value13)) {
       if (_next != null && _next !== false) {
         _li2.setAttribute("class", _next === true ? "" : _MD.textValue(_next));
@@ -718,7 +718,8 @@ export function BenchApp(_id, _parent, _props, _namespace, _setupOnly) {
     }, dispose() {
       _row.dispose();
     } };
-  });
+  }, ["id"]);
+  _rowList.route(_peek_selected, _version_selected, _sharedKey2);
   const _siteComputation = _MD.createComputation(_writes.mark, _entity);
   _siteComputation.begin();
   let _value12 = _MD.observeMethod([() => data], [_mutated_data], _read_data(), "map", 1, _rowList)((item) => (_MD.createComponentValue(Row, { "key": item.id, "item": item })));
@@ -730,7 +731,7 @@ export function BenchApp(_id, _parent, _props, _namespace, _setupOnly) {
   });
   function _update() {
     const _updateFrame = _scope.enter();
-    if (_siteComputation.changed()) {
+    if (_siteComputation.changed() || _rowList.changed()) {
       _siteComputation.begin();
       const _next4 = _MD.observeMethod([() => data], [_mutated_data], _read_data(), "map", 1, _rowList)((item) => (_MD.createComponentValue(Row, { "key": item.id, "item": item })));
       _siteComputation.end();
@@ -739,6 +740,7 @@ export function BenchApp(_id, _parent, _props, _namespace, _setupOnly) {
         _value12 = _next4;
       }
     }
+    _rowList.refresh(_siteComputation);
     _scope.leave(_updateFrame);
   }
   _writes.activate();
