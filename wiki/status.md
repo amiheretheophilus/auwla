@@ -25,7 +25,7 @@ Last updated: 2026-10-26.
 
 ## Done
 
-- Phase 8 component source execution (2026-10-26): direct component-owned
+- Phase 8 component source execution (2026-10-26, `1478f380`, `9c8711ea`): direct component-owned
   `$read`/GET `$fetch` declarations, payload readiness, delayed seeds and early
   undefined takeover, chained requests, retained payloads during request input
   changes and component disposal are built on existing data/runtime hooks.
@@ -41,14 +41,17 @@ Last updated: 2026-10-26.
   modes, 28 source/plan checks, 62 mutation/list checks and 103 existing
   state/memo/mutation/shared/handler comparisons, 40 data checks and 160 source/
   lifecycle/reference cases. The complete local source gate reports 13 passing
-  comparisons and 75 explicit Phase 8 deferrals. The first broad gate passes
-  cases, reference and generators; its unit job caught an obsolete test still
-  requiring every data import to fail. That phase-guard assertion now checks
+  comparisons and 75 explicit Phase 8 deferrals. The phase-guard unit checks
   supported source planning separately from deferred Group/internal APIs.
-  A rerun of the complete gate is pending.
+  All jobs pass at `9c8711ea` in
+  [CI 40398563771](https://github.com/amiheretheophilus/auwla/actions/runs/40398563771):
+  331 compiler checks, 158 runtime checks, 372 reference cases and ten generator
+  checks at `FC_RUNS=200`. Compiled comparisons increase from 281 to 294 passes
+  (three existing status cases plus ten new source cases); all 78 remaining
+  comparisons explicitly name Phase 8. No previously passing comparison regressed.
   General source flow, patterns, lazy execution, source effects/reassignment,
   Group and atomic preparation remain explicit Phase 8 work. Performance is
-  still paused.
+  still paused. No timing benchmark or full root suite was run locally.
 
 - Phase 8 graph foundation (2026-10-26, `a2c78c10`, `baae24d6`): source-valued
   calls and visible helper returns are classified by binding identity, including aliases, named imports
