@@ -342,7 +342,7 @@ export class Instance {
       const outer = computation;
       const trace: Computation = { reads: new Set(), writes: new Set() };
       computation = trace;
-      const value = compute();
+      const value = this.evaluateAs(`memo:${index}`, compute);
       computation = outer;
       if (!(value instanceof Waiting)) {
         this.initializersRun.add(index);
@@ -396,10 +396,27 @@ export class Instance {
     targets: readonly (readonly [MemoSlot, () => boolean])[];
   }>();
 
+  /**
+   * The statement or initializer now evaluating. Its own earlier record is not
+   * a reason for it to wait: it is about to find out whether it can run.
+   */
+  private evaluating: string | undefined;
+
+  /** Evaluate `run` as statement or initializer `key` (see `evaluating`). */
+  private evaluateAs<T>(key: string, run: () => T): T {
+    const outer = this.evaluating;
+    this.evaluating = key;
+    // Test-only code, as `runEffectInvocation`: a throwing initializer must
+    // not leave its key ignored for the rest of the render.
+    try { return run(); }
+    finally { this.evaluating = outer; }
+  }
+
   /** What `slot` waits for because a statement that may build it is blocked. */
   blockedFor(slot: MemoSlot): Waiting | undefined {
     const sources = new Set<Source>();
-    for (const { pending, targets } of this.blocked.values()) {
+    for (const [key, { pending, targets }] of this.blocked) {
+      if (key === this.evaluating) continue;
       if (!targets.some(([target, applies]) => target === slot && applies())) continue;
       // Only what still has no payload, or failed; no new claims or requests.
       for (const source of pending.sources) {
@@ -533,7 +550,7 @@ export class Instance {
       this.statementsRun.add(index);
       return;
     }
-    const pending = $waiting(readInputs());
+    const pending = this.evaluateAs(key, () => $waiting(readInputs()));
     if (pending !== undefined) {
       // What it builds, and what it may change until seen not to, wait with it
       // (decisions, 2026-10-19). Its own guard chose the branches that run, so

@@ -2121,6 +2121,29 @@ behaves('taking over every value a waiting statement builds stops the values it 
   },
 });
 
+behaves('a value stops waiting when a mutation lets the initializer that may change it run', {
+  source: `
+    import { $fetch, Group } from '@memoized-dom/data';
+    export function App() {
+      const s0 = $fetch('/s0');
+      let items = [];
+      const count = 0 + s0.value;
+      const pick = items.includes(items.reduce((sum, x) => sum + x, 0)) ? 0 : count;
+      return (
+        <Group pending={() => <i>loading</i>}>
+          <p>{items.length}</p>
+          <button onClick={() => { items.push(0); }}>push</button>
+        </Group>
+      );
+    }`,
+  steps: [{ click: 'button' }, { respond: '/s0', value: { value: 0 } }],
+  check(container, observation) {
+    // After the push, \`items.includes(0)\` is true: \`pick\` no longer needs
+    // \`count\`, its initializer runs, and \`items\` stops waiting.
+    expect(container.querySelector('p')?.textContent).toBe(['loading', '1', '1'][observation]);
+  },
+});
+
 behaves('a snapshot written before its source loads keeps the write', {
   source: `
     import { $fetch, Group } from '@memoized-dom/data';
