@@ -2033,6 +2033,28 @@ behaves('a may-change statement whose test reads the value itself waits only whe
   },
 });
 
+behaves('a value an initializer may change stops waiting once that initializer runs', {
+  source: `
+    import { $fetch, Group } from '@memoized-dom/data';
+    export function App() {
+      const s0 = $fetch('/s0');
+      let items = [];
+      let first = Math.max(0, items.includes(s0.value > 0 ? 1 : 0) ? 1 : 0);
+      if (0 > 0) first = 0;
+      let second = 0 + items.reduce((sum, x) => sum + x, 0);
+      if (0 > 0) second = 0;
+      return (
+        <Group pending={() => <i>loading</i>}>
+          <p>{items.reduce((sum, x) => sum + x, 0)}</p>
+        </Group>
+      );
+    }`,
+  steps: [{ respond: '/s0', value: { value: 0 } }],
+  check(container, observation) {
+    expect(container.querySelector('p')?.textContent).toBe(['loading', '0'][observation]);
+  },
+});
+
 behaves('a snapshot written before its source loads keeps the write', {
   source: `
     import { $fetch, Group } from '@memoized-dom/data';

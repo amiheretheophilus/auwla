@@ -116,9 +116,27 @@ export function sourceBindingInput(value: unknown, binding: SourceBindingReadine
     return value;
   }
 
-  const waits = binding.steps.flatMap((step) => step === ignore || step.waiting === undefined ? [] : [step.waiting]);
+  // A recorded step blocks only while one of its sources is still unsettled.
+  // Once they settle, the step runs again in the same update. Until then two
+  // builders of one value (`let a = items.includes(…)`, `let b =
+  // items.reduce(…)`) must not keep each other waiting on stale records.
+  const waits = binding.steps.flatMap((step) => {
+    if (step === ignore || step.waiting === undefined) {
+      return [];
+    }
+
+    const unsettled = step.waiting.sources.filter(isUnsettled);
+
+    return unsettled.length === 0 ? [] : [new WaitingSourceInputs(unsettled)];
+  });
 
   return waitingSourceInputs(waits) ?? value;
+}
+
+function isUnsettled(source: ResolvedValue<unknown>): boolean {
+  const snapshot = resolvedValueSnapshot(source);
+
+  return snapshot.status !== 'success' || snapshot.error !== null;
 }
 
 export function recordSourceBuilder<T>(step: SourceBuilderReadiness, result: T): T {

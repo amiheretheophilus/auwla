@@ -66,6 +66,13 @@ methods use the existing mutation observer with a payload reader and
 `notifyResolvedValueMutation`, including unlisted methods. Root observation and
 possible-builder snapshots inspect that same payload.
 
+A value's readiness (`sourceBindingInput`) counts a builder step's recorded
+waiting only while one of that step's sources is still unsettled. Two builders
+of one value each ignore only their own step, so without this they kept each
+other waiting forever after the source settled (2026-10-27, source generator
+seed 1066878729; case "a value an initializer may change stops waiting once
+that initializer runs").
+
 `packages/data/src/resource.ts` gives a null-target source a `null` payload with
 status `idle`. Both direct and factory rebinding to null clear committed data
 without sending a request. Data regressions pin those paths, and that an
