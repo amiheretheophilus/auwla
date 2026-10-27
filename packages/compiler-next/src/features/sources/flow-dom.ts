@@ -157,7 +157,8 @@ export function emitSourceFlow(
   }
 
   for (const [root, inputs] of flow.guards) {
-    const guarded = sourceInputs(inputs, names, data, replacements, (node) => raw(node));
+    const builder = [...flow.builders.keys()].find((step) => is.VariableDeclarator(step) && step.init === root);
+    const guarded = sourceInputs(inputs, names, data, replacements, (node) => raw(node, builder));
     const value = copy(root, guarded.replacements);
     const body = expression('$$data.whenSourceInputs(() => $$inputs, () => $$value)', {
       data,
@@ -170,6 +171,19 @@ export function emitSourceFlow(
 
   for (const [root, builder] of flow.builders) {
     const step = names.of(root, '_sourceStep');
+
+    if (is.VariableDeclarator(root)) {
+      if (root.init !== null) {
+        replacements.set(root.init, expression('$$data.recordSourceBuilder($$step, $$value)', {
+          data,
+          step,
+          value: copy(root.init, replacements),
+        }));
+      }
+
+      continue;
+    }
+
     const guarded = sourceInputs(builder.inputs, names, data, replacements, (node) => raw(node, root));
     const body = copy(root, guarded.replacements);
     const waiting = names.fresh('_builderWaiting');

@@ -201,6 +201,12 @@ class PropSlot extends MemoSlot {
   }
 }
 
+/** Add `pending` to what a slot waits for, unless a handler already took it over. */
+function waitAlso(slot: MemoSlot, pending: Waiting): void {
+  if (slot.writtenLater) return;
+  slot.pending = $waiting([slot.pending, pending]);
+}
+
 /**
  * A slot's value as an input of rendering, derivations and effects: waiting
  * while statements that build it wait for a source. Handlers read `slot.v`, the
@@ -267,6 +273,8 @@ export class Instance {
   private readonly statementsRun = new Set<number>();
   /** `observe` indexes that have run at least once. */
   private readonly observed = new Set<number>();
+  /** Memo indexes whose initializer has completed at least once. */
+  private readonly initializersRun = new Set<number>();
   private readonly computations = new Map<number, Computation>();
   private readonly functions = new Map<number, Function>();
 
@@ -298,7 +306,10 @@ export class Instance {
    * A derived value: computed again only when one of its inputs changes.
    * `readPending` lists what the body statements that build it read.
    */
-  memo(index: number, readInputs: () => unknown[], compute: () => unknown, readPending?: () => unknown[]): MemoSlot {
+  memo(
+    index: number, readInputs: () => unknown[], compute: () => unknown, readPending?: () => unknown[],
+    mayBuild: () => MemoSlot[] = () => [],
+  ): MemoSlot {
     let slot = this.slots.get(index) as MemoSlot | undefined;
     if (slot?.writtenLater) {
       slot.fresh = false;
@@ -315,11 +326,24 @@ export class Instance {
     }
     slot.readInputs = readInputs;
     if (slot.inputs === undefined || !deepEqual(slot.inputs, inputs)) {
+      // The initializer may change values declared before it
+      // (`let total = items.reduce(…)`): watch them, as `observe` does for a
+      // body statement.
+      const targets = mayBuild();
+      const before = targets.map((target) => deepCopy(target.peek()));
       const outer = computation;
       const trace: Computation = { reads: new Set(), writes: new Set() };
       computation = trace;
       const value = compute();
       computation = outer;
+      if (!(value instanceof Waiting)) {
+        this.initializersRun.add(index);
+        targets.forEach((target, position) => {
+          if (!deepEqual(before[position], deepCopy(target.peek()))) {
+            this.confirmations.add(`memo:${index}:${position}`);
+          }
+        });
+      }
       noteReplacement(slot.peek(), value);
       slot.seed(value);
       slot.fresh = true;
@@ -337,6 +361,16 @@ export class Instance {
       waitingInputs.push(...trace.pending.sources);
     }
     slot.pending = $waiting(waitingInputs);
+
+    // While the initializer waits, so does each value it may change, until it
+    // has run once; after that, only a value it was seen to change.
+    const current = slot.peek();
+    if (current instanceof Waiting) {
+      mayBuild().forEach((target, position) => {
+        const unknown = !this.initializersRun.has(index) || this.confirmations.has(`memo:${index}:${position}`);
+        if (unknown) waitAlso(target, current);
+      });
+    }
     return slot;
   }
 
@@ -453,13 +487,26 @@ export class Instance {
    * has taken over every value it builds. If another target still derives, keep
    * replaying the statement; each slot setter protects its own later override.
    */
-  statement(index: number, readInputs: () => unknown[], run: () => void, builds: MemoSlot[] = []): void {
+  statement(
+    index: number, readInputs: () => unknown[], run: () => void, builds: MemoSlot[] = [],
+    mayBuild: readonly (readonly [MemoSlot, number, number])[] = [],
+  ): void {
     const targets = [...builds, ...(this.computations.get(index)?.writes ?? [])];
     if (targets.length > 0 && targets.every((slot) => slot.writtenLater)) {
       this.statementsRun.add(index);
       return;
     }
-    if ($waiting(readInputs())) return;
+    const pending = $waiting(readInputs());
+    if (pending !== undefined) {
+      // A value this blocked statement may change waits with it until it has
+      // run once, whatever it reads and wherever that was declared
+      // (decisions, 2026-10-19). Set here, at run time, so a read declared
+      // after the value still counts; the value's memo resets it next render.
+      for (const [slot, observe, position] of mayBuild) {
+        if (this.mayChange(observe, position)) waitAlso(slot, pending);
+      }
+      return;
+    }
     const outer = computation;
     const trace: Computation = { reads: new Set(), writes: new Set() };
     computation = trace;

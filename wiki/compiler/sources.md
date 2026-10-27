@@ -154,10 +154,10 @@ All paths below are under `packages/compiler-next/`. This is test code only.
   has run once, the value waits for the statement's sources; after that it waits
   only if the call was seen to change it. This does not depend on a method list
   (`optimize/methods.ts` may skip the runtime check, never change what waits).
-  Only body statements count, as in the reference (`GUARDABLE_STATEMENTS`):
-  another binding's initializer (`let total = items.reduce(…)`) does not make
-  `items` wait. Its readers show the current value and update if that
-  initializer later changes it (2026-10-27, found by the source generator).
+  Another binding's initializer is such a statement too (`let total =
+  items.reduce(…) + count` makes `items` wait while `count` loads), and the
+  statement's reads count wherever they are declared (2026-10-27, found by the
+  source generator against the compiled output).
 - Waiting is about what the page shows, not about the value. Rendering,
   derivations and effects wait; a handler reads and writes the real value
   JavaScript has (`let items = [1, 2]` is `[1, 2]`, and `items.pop()` works).
@@ -190,6 +190,15 @@ so such a chain runs link by link through `$chain`, which keeps the
 short-circuit, the evaluation order and each call's `this`. `delete`, `super`
 and private-name chains stay as written, without unwrapping (2026-10-27; the
 ref case "a derivation of a ref updates after mount" caught it).
+
+A value a waiting statement may change is marked pending when that statement
+runs and finds its inputs waiting (`statement(…, mayBuild)`), and likewise when
+another binding's initializer may change it (`memo(…, mayBuild)`, observed like
+`observe`). Doing this at run time lets reads declared after the value count;
+the static `builderInputs` thunk cannot read them where the value is declared.
+The value's memo resets `pending` on the next render. Before 2026-10-27 the
+reference skipped both cases, which the source generator found against the
+compiled output (two cases under "Found by the generated source programs").
 
 Status inputs retain the actual uses reached through called local helpers,
 so a `$track`-only helper can run while its source is pending. A helper that

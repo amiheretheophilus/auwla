@@ -1962,6 +1962,53 @@ behaves('a handler uses the real value while a statement that may change it wait
   },
 });
 
+behaves('another binding\'s initializer that may change a value makes it wait', {
+  source: `
+    import { $fetch, Group } from '@memoized-dom/data';
+    export function App() {
+      const s0 = $fetch('/s0');
+      let items = [];
+      let count = 0;
+      for (const x of s0.items) count += x;
+      let total = items.reduce((sum, x) => sum + x, 0) + count;
+      return (
+        <Group pending={() => <i>loading</i>}>
+          <p>{items.length}</p>
+        </Group>
+      );
+    }`,
+  steps: [{ respond: '/s0', value: { items: [] } }],
+  check(container, observation) {
+    // \`items.reduce(…)\` waits for \`count\`, and may change \`items\` before it runs.
+    expect(container.querySelector('p')?.textContent).toBe(['loading', '0'][observation]);
+  },
+});
+
+behaves('a statement that may change a value makes it wait for reads declared after the value', {
+  source: `
+    import { $fetch, Group } from '@memoized-dom/data';
+    export function App() {
+      const s0 = $fetch('/s0');
+      let items = [];
+      let count = 0;
+      for (const x of s0.items) count += x;
+      let found = 0;
+      if (items.includes(count)) found = 1;
+      return (
+        <Group pending={() => <i>loading</i>}>
+          <p>{items.length}</p>
+          <span>{found}</span>
+        </Group>
+      );
+    }`,
+  steps: [{ respond: '/s0', value: { items: [] } }],
+  check(container, observation) {
+    // \`count\` is declared after \`items\`; the waiting \`if\` still counts.
+    expect(container.querySelector('p')?.textContent).toBe(['loading', '0'][observation]);
+    expect(container.querySelector('span')?.textContent).toBe(['loading', '0'][observation]);
+  },
+});
+
 behaves('a snapshot written before its source loads keeps the write', {
   source: `
     import { $fetch, Group } from '@memoized-dom/data';

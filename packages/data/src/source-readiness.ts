@@ -121,6 +121,12 @@ export function sourceBindingInput(value: unknown, binding: SourceBindingReadine
   return waitingSourceInputs(waits) ?? value;
 }
 
+export function recordSourceBuilder<T>(step: SourceBuilderReadiness, result: T): T {
+  step.waiting = result instanceof WaitingSourceInputs ? result : undefined;
+
+  return result;
+}
+
 export function sourceBuilderWaiting(inputs: () => readonly unknown[]): WaitingSourceInputs | undefined {
   return isSourceComputation() ? waitingSourceInputs(inputs()) : undefined;
 }

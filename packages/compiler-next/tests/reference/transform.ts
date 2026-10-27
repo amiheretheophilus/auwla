@@ -288,6 +288,8 @@ class ComponentRewrite {
   private readonly patternOrigins = new Map<Binding, Node>();
   /** Body statements that may build a binding. */
   private readonly plans = new Map<Statement, StatementPlan>();
+  /** A declared binding → the values its initializer may change. */
+  private readonly initializerBuilds = new Map<Binding, Binding[]>();
   /** `$effect(...)` and `$cleanup(...)` calls → their runtime calls. */
   private readonly lifecycleCalls = new Map<Node, Expression>();
 
@@ -412,6 +414,10 @@ class ComponentRewrite {
       for (const use of this.usesOf(binding)) {
         if (this.runsLater(use)) continue;
         const statement = this.topStatementOf(use.node);
+        if (statement !== undefined && statement !== declaration && is.VariableDeclaration(statement)) {
+          this.noteInitializerBuild(statement, use, binding);
+          continue;
+        }
         if (statement === undefined || statement === declaration || !this.canBuild(statement)) continue;
 
         const plan = this.planOf(statement);
@@ -433,6 +439,25 @@ class ComponentRewrite {
       plan.mayBuild = plan.mayBuild.filter((binding) => !plan.builds.has(binding));
       if (plan.mayBuild.length > 0) plan.observeIndex = this.nextObserve++;
     }
+  }
+
+  /**
+   * Another binding's initializer that may change `target` (`let total =
+   * items.reduce(…)`) is a body statement that may build it: `target` waits
+   * while that initializer waits (`memo`'s `mayBuild`). Patterns are not
+   * modeled here.
+   */
+  private noteInitializerBuild(statement: Statement, use: Reference, target: Binding): void {
+    if (changeOf(this.module, use) === 'none' || this.slots.get(target)?.treatment !== 'memo') return;
+    const declarator = (statement as Extract<Node, { type: 'VariableDeclaration' }>).declarations.find((entry) => {
+      return entry.init !== null && use.node.start >= entry.init.start && use.node.end <= entry.init.end;
+    });
+    if (declarator === undefined || !is.Identifier(declarator.id)) return;
+    const declared = this.module.bindingOf(declarator.id);
+    if (declared === null || declared === target) return;
+    const targets = this.initializerBuilds.get(declared) ?? [];
+    if (!targets.includes(target)) targets.push(target);
+    this.initializerBuilds.set(declared, targets);
   }
 
   private planOf(statement: Statement): StatementPlan {
@@ -516,8 +541,17 @@ class ComponentRewrite {
         .map((binding) => this.slots.get(binding))
         .filter((slot) => slot !== undefined && slot.treatment !== 'prop')
         .map((slot) => identifier(slot!.name));
+      // `[slot, observe index, position]` for each value it only may change.
+      const mayBuild = plan.mayBuild.flatMap((binding, position) => {
+        const slot = this.slots.get(binding);
+        if (slot === undefined || slot.treatment === 'prop') return [];
+        return [b.ArrayExpression({ elements: [
+          identifier(slot.name), numberLiteral(plan.observeIndex!), numberLiteral(position),
+        ] })];
+      });
       const args = [numberLiteral(index), inputs, run];
-      if (builtSlots.length > 0) args.push(b.ArrayExpression({ elements: builtSlots }));
+      if (builtSlots.length > 0 || mayBuild.length > 0) args.push(b.ArrayExpression({ elements: builtSlots }));
+      if (mayBuild.length > 0) args.push(b.ArrayExpression({ elements: mayBuild }));
       const guarded = b.ExpressionStatement({ expression: ctxCall('statement', args) }) as Statement;
 
       const everyRender = [...plan.builds].some((binding) => {
@@ -777,7 +811,9 @@ class ComponentRewrite {
       const pending = this.builderInputs(binding);
       const index = numberLiteral(slot.index);
       const args = [index, this.inputsOf(binding, declarator.init), initial];
-      if (pending !== undefined) args.push(pending);
+      const changes = (this.initializerBuilds.get(binding) ?? []).map((target) => identifier(this.slots.get(target)!.name));
+      if (pending !== undefined || changes.length > 0) args.push(pending ?? identifier('undefined'));
+      if (changes.length > 0) args.push(thunk(b.ArrayExpression({ elements: changes })));
       const created = ctxCall('memo', args);
       declarations.push({ declarator, slot, created });
     }
