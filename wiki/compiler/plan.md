@@ -135,7 +135,7 @@ array child). Remove each check when its phase is built.
     activations, with seven native cases plus caught-setup recovery verified
     (`state-and-derived.md`).
   - [x] local takeover flags and runtime setup/replay ownership. Twelve selected
-    `cases/callbacks` comparisons and the existing handler-takeover case pass;
+    `cases/state-and-derived.callbacks` comparisons and the existing handler-takeover case pass;
     eight native execution tests and four runtime scope tests cover partial
     stores, sibling replay, nested owners and exception boundaries. Module/closure
     takeover and possible builders follow their storage/observation slices;

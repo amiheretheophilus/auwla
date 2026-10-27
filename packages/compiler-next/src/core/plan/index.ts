@@ -29,7 +29,7 @@ import { planRefs, refMutations, refWrites } from '../../features/refs/plan';
 import { planEffects } from '../../features/effects/plan';
 import { planSources, planSourceMemos } from '../../features/sources/plan';
 import { SourceQueries } from '../../features/sources/classify';
-import { planSourceFlow } from '../../features/sources/flow';
+import { planSourceFlow } from '../../features/sources/flow-plan';
 import { validateSourceActions } from '../../features/sources/actions';
 
 export type { ComponentPlan, ModulePlan, Site, Template, TemplateNode } from './model';

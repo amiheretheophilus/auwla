@@ -240,7 +240,9 @@ Features build their own pieces. Optimizations replace pieces (`optimize.md`).
 | `quote.ts` | Parses and copies generated statement snippets, filling AST holes; syntax that cannot parse at module scope uses builders directly |
 | `copy.ts` | Copies authored syntax with identity-keyed replacements, without changing analyzer nodes |
 | `recovery.ts` | Captures dynamic ownership around existing authored try statements and restores it before catch patterns/bodies and finally; adds no exception wrappers |
+| `patterns.ts` | Binding patterns as emitted code needs them: their bound names, and the pattern as an assignment target |
 | `print.ts` | Prints JavaScript through `yuku-codegen`, erasing TypeScript |
+| `core/diagnostics.ts` | `CompileError`: a reported error with its place in the authored module (framework API contracts only, `sources.md`; valid JavaScript is never an error) |
 
 `copy.ts` retains authored origins in external weak maps while composing feature
 rewrites. Later local rewrites can reach callbacks already copied into a shared
@@ -295,7 +297,7 @@ explicit async boundaries, conditional regions and stored JSX are built. Nested 
 still require their planned slices. The printer currently returns code, not source
 maps. The Phase 3 exit passes under the agreed view scope (`plan.md`).
 
-**Verified:** `tests/cases/static-markup.test.ts` has 18 comparison cases with
+**Verified:** `tests/cases/core.static-markup.test.ts` has 18 comparison cases with
 independent DOM assertions: nesting, whitespace/entities, attributes and aliases,
 fragments, adjacent primitive values, properties, tables, invalid HTML nesting,
 SVG namespaces, raw text, name collisions, expression order, native event delivery,

@@ -411,7 +411,15 @@ a method replays from its initializer when a builder input changes`).
 
 ## Cases to test
 
-**Verified takeover slice:** twelve selected `tests/cases/callbacks.test.ts`
+Case files for this page: `tests/cases/state-and-derived.test.ts` (general),
+`state-and-derived.callbacks.test.ts` (takeover and unknown callers),
+`state-and-derived.memos.test.ts` (memo chains and builders),
+`state-and-derived.shared.test.ts` (module and factory shared owners) and
+`state-and-derived.tracking.test.ts` (hidden reads reported by escaping
+functions). Before 2026-10-27 the last four were `callbacks`, `memos`,
+`shared-state` and `tracking`, outside the one-file-per-page rule.
+
+**Verified takeover slice:** twelve selected `tests/cases/state-and-derived.callbacks.test.ts`
 comparisons cover registered/untaken handlers, equal assignments, aliased timers,
 async continuations, logical assignments, postfix/pattern results, shared builders,
 destructured siblings, and immediate opaque invocation without takeover. The
@@ -421,7 +429,7 @@ cover nested owners, applications, throwing setup and failed replay. Full callba
 acceptance still includes mutation, sources, components, effects and dynamic reads
 that belong to the remaining slices.
 
-**Verified memo slice:** six `tests/cases/memos.test.ts` comparisons cover chains,
+**Verified memo slice:** six `tests/cases/state-and-derived.memos.test.ts` comparisons cover chains,
 loops with break/continue, switch, pattern defaults/rest and shared builders.
 The existing const-derived, body-write, if/else and destructuring cases also pass
 on compiler-next. Ten direct execution tests and three plan tests cover the
@@ -482,7 +490,7 @@ closures still need the broader reference coverage already listed on `sources.md
 
 ### Callback verification (2026-10-20)
 
-`tests/cases/callbacks.test.ts` has 22 explicit cases. All pass on the reference;
+`tests/cases/state-and-derived.callbacks.test.ts` has 22 explicit cases. All pass on the reference;
 all fail on the old compiler. Both reference and old compiled versions were
 generated for all 22 under `tests/out/callbacks-*/`.
 

@@ -31,7 +31,7 @@ per-run cleanup captures, remain unchanged (`effects.md`, `refs.md`).
 | `tests/harness/compile-worker.ts` | Optional separate-process old compilation for cases that can synchronously loop |
 | `tests/harness/serialize.ts` | The visible DOM as a comparable string |
 | `tests/harness/requests.ts` | Queued JSON responses/rejections and normalized request history |
-| `tests/cases/<page>.test.ts` | One file per wiki page; holds that page's "Cases to test" |
+| `tests/cases/<page>.test.ts` | One file per wiki page; holds that page's "Cases to test". A page with many cases may split them by topic as `<page>.<topic>.test.ts` (`state-and-derived.memos.test.ts`); every case file starts with its page's name |
 | `tests/generator/program.ts` | fast-check arbitraries: a random program as plain data (state, derived values, views, buttons, clicks) |
 | `tests/generator/print.ts` | Prints a program as `App.tsx` and its steps; checks it parses with `yuku-parser` |
 | `tests/generator/generated.test.ts` | Runs random programs, shrinks a failure, reports it with a seed |
@@ -67,7 +67,7 @@ Cases may provide extra `modules` for imports. Steps include `respond` (JSON bod
 and optional HTTP status), `rejectRequest`, and `reject` for a named `defer`.
 `{ advance: ms }` lets time pass: a case with this step runs on Bun's fake timers
 from before its modules load, so `setTimeout` and `setInterval` callbacks fire
-only when a step advances the clock (the timer cases in `cases/callbacks.test.ts`).
+only when a step advances the clock (the timer cases in `cases/state-and-derived.callbacks.test.ts`).
 The DOM preload keeps Bun's native timers, so fake timers work with happy-dom.
 Each run owns and disposes its module work, sources and transport. Relative and
 same-origin absolute request URLs compare by path and query. Use `--timeout 30000`
@@ -101,7 +101,7 @@ the 19 that currently fail on the old compiler, must pass on the new compiler.
 The test reference can also contain bugs: when it disagrees with JavaScript or an
 agreed rule, fix the reference rather than copying its mistake into the compiler.
 
-The memo slice adds six comparisons in `cases/memos.test.ts` and direct native
+The memo slice adds six comparisons in `cases/state-and-derived.memos.test.ts` and direct native
 execution checks in `src/features/derived/dom.test.ts`. Shared-builder cases caught
 a feedback loop in the reference: co-written outputs must be internal to the
 computation, with input snapshots captured after the statement finishes. The
@@ -154,7 +154,7 @@ checks before retention checks as well as in isolation when changing this fixtur
    list. Module reads remain native live bindings, recorded through `$captureRead`;
    native assignment targets preserve logical assignment and postfix results.
    Readiness is checked when a body callback is invoked, not when it is stored.
-   `cases/callbacks.test.ts` owns the callback regression cases; their rules and
+   `cases/state-and-derived.callbacks.test.ts` owns the callback regression cases; their rules and
    old-compiler failures live on `state-and-derived.md`.
 
    DOM nodes are kept between renders, matched by authored JSX site, position, key

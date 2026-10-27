@@ -258,7 +258,7 @@ computation.
 
 ### Cases that hold the design to this
 
-`cases/callbacks.test.ts`: the timer cases, and the "unknown callers" cases: a
+`cases/state-and-derived.callbacks.test.ts`: the timer cases, and the "unknown callers" cases: a
 method on an object, factory functions taken out by destructuring, a getter on a
 prop object, a host function running a callback at once, and a call with a side
 effect running once across unrelated updates. All pass on the reference; the old

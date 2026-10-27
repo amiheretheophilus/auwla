@@ -114,6 +114,19 @@ A feature folder holds only the stages it takes part in:
 | `dom.ts`, `ssr.ts` | emit: its code for each backend |
 | `<feature>.test.ts` | unit tests of its graph and plan facts. Behaviour cases live in `tests/cases/<page>.test.ts` (see `testing.md`) |
 
+When one stage file grows a separate concept, the concept gets its own files,
+named for the concept and the stage: `state/shared-plan.ts` and
+`state/shared-dom.ts`, `sources/flow-plan.ts` and `sources/flow-dom.ts`. A
+helper used by only one stage file is named for its concept
+(`derived/takeover.ts`, `handlers/receivers.ts`, `sources/actions.ts`). Every
+file appears in its page's file table with the stage it serves; a file no page
+lists is drift and gets a row or a merge in the same commit. Tests sit next to
+the file they test (`<name>.test.ts`). Features never import each other; the
+stage files in `core/` (`graph/classify.ts`, `plan/index.ts`, `emit/dom.ts`,
+`emit/shared.ts`) compose them. `src/structure.test.ts` fails when a source
+file is on no page or a feature imports another feature, so drift shows up in
+the unit tests instead of accumulating (2026-10-27).
+
 ## Pages
 
 One page per group of related files:

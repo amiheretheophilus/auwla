@@ -18,7 +18,7 @@ All compiler paths below are under `packages/compiler-next/src/`.
 | `features/sources/plan.ts` | Component-owned source declarations, request inputs and readiness paths cut by later assignments |
 | `features/sources/dom.ts` | Existing data subscriptions/rebinding, payload reads, cleanup ownership and consuming-site guards |
 | `features/sources/plan.test.ts` | Request/settlement dependencies, delayed seed paths, immutable syntax and absence of generated exception wrappers |
-| `features/sources/flow.ts` | Readiness along authored control flow: payload reads, guarded sites, lazy branches, patterns, `Group`/`suspend` elements, body builders and callback statements |
+| `features/sources/flow-plan.ts` | Readiness along authored control flow: payload reads, guarded sites, lazy branches, patterns, `Group`/`suspend` elements, body builders and callback statements |
 | `features/sources/flow-dom.ts` | Emits that flow on fresh syntax: readiness inputs that keep the handle, builder steps, branch choices and lexical presentation |
 | `features/sources/actions.ts`, `actions.test.ts` | The non-GET contract: a `$fetch` action (or a facade around one) reached from setup or module scope is a compile error; callbacks are not calls |
 | `core/graph/model.ts`, `index.ts`, `rules.ts` | Readiness edges, separate from ordinary reactive dependencies |

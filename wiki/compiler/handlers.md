@@ -123,7 +123,7 @@ Direct property assignment/update/delete now bumps the root binding's version.
 Native member targets notify each successful pattern/loop store independently;
 computed keys convert once before the RHS. A mutation never takes over the root
 binding or makes a const assignment illegal. Definite property builders replay
-silently with their inputs. Three comparison cases in `cases/mutations.test.ts`
+silently with their inputs. Three comparison cases in `cases/handlers.mutations.test.ts`
 verify derived readers, retained edits and body replay. Opaque receiver/argument
 calls now observe data before and after the native call. Descriptor snapshots
 avoid unused getters and include cycles, symbols, hidden fields, Map/Set, Date
@@ -301,7 +301,7 @@ Nested-block storage, shared storage and explicit await boundaries are built.
 ## Cases to test
 
 In `packages/compiler-next/tests/cases/handlers.test.ts`.
-The local assignment slice also has nine `tests/cases/counters.test.ts` comparison
+The local assignment slice also has nine `tests/cases/handlers.counters.test.ts` comparison
 cases, all passing: independent counters, helper batching, expression results,
 logical assignments, patterns, loop targets, timers, live properties/attributes/
 handler selection, and repeated attributes. Seven direct execution tests cover
@@ -309,7 +309,7 @@ unrelated/no-op writes, typed text, instance isolation, shadows, partial throwin
 patterns, defaults/rest and block scope. Eight runtime batching tests pass.
 Existing `typing into an input` and `an async helper preserves return await` pass
 on compiler-next; the full handlers file is not yet a Phase 3 exit pass.
-Callback takeover cases are in `tests/cases/callbacks.test.ts`; their expected and
+Callback takeover cases are in `tests/cases/state-and-derived.callbacks.test.ts`; their expected and
 old-compiler results are on `state-and-derived.md`, "Callback verification".
 
 The old compiler fails these:
