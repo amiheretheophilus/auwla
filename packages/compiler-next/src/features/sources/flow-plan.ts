@@ -97,11 +97,22 @@ export function planSourceFlow(
 
         const previous = builders.get(step);
         const targets = [...new Set([...(previous?.targets ?? []), binding])];
-        const definite = builder.certainty === 'definite'
-          ? [...new Set([...(previous?.definite ?? []), binding])]
-          : previous?.definite ?? [];
+        const definite = new Set(previous?.definite ?? []);
 
-        builders.set(step, { inputs, targets, definite, owner });
+        if (builder.certainty === 'definite') {
+          definite.add(binding);
+        }
+
+        // A declarator definitely builds the binding it declares: once a later
+        // write takes that binding over, the initializer never runs again.
+        const declared = is.VariableDeclarator(step) && is.Identifier(step.id) ? module.bindingOf(step.id) : null;
+        const declaredNode = declared === null ? undefined : graph.bindings.get(declared);
+
+        if (declaredNode !== undefined) {
+          definite.add(declaredNode);
+        }
+
+        builders.set(step, { inputs, targets, definite: [...definite], owner });
 
         const owned = bindingBuilders.get(binding) ?? [];
 

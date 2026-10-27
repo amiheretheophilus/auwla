@@ -181,6 +181,8 @@ class MemoSlot {
 
   /** True on the render where the value was computed again. */
   fresh = false;
+  /** What the initializer waits for, while it has not run (`memo`). */
+  initializer: Waiting | undefined;
   /** Deep copy of the inputs it was computed from. */
   inputs: unknown;
   /** Sources discovered when a helper returned a waiting computation. */
@@ -322,6 +324,8 @@ export class Instance {
     if (slot?.writtenLater) {
       slot.fresh = false;
       slot.pending = undefined;
+      // Taken over: its initializer never runs again, so nothing waits for it.
+      this.blocked.delete(`memo:${index}`);
       return slot;
     }
     const dependencies = this.dependenciesOf(slot);
@@ -333,10 +337,11 @@ export class Instance {
       this.slots.set(index, slot);
     }
     slot.readInputs = readInputs;
-    // A `Waiting` value never ran its initializer: retry it every render, since
-    // an input can become ready without changing value (a handler wrote the
-    // same value its waiting builder would have replaced).
-    const waiting = slot.peek() instanceof Waiting;
+    // An initializer that returned `Waiting` has not run: retry it every
+    // render, since an input can become ready without changing value (a
+    // handler wrote the same value its waiting builder started from). A body
+    // statement may have overwritten the slot since, so track the initializer.
+    const waiting = slot.initializer !== undefined;
     if (slot.inputs === undefined || waiting || !deepEqual(slot.inputs, inputs)) {
       // The initializer may change values declared before it
       // (`let total = items.reduce(…)`): watch them, as `observe` does for a
@@ -358,6 +363,7 @@ export class Instance {
       }
       noteReplacement(slot.peek(), value);
       slot.seed(value);
+      slot.initializer = value instanceof Waiting ? value : undefined;
       slot.fresh = true;
       slot.reads = trace.reads;
       slot.callbackSources = trace.pending?.sources ?? [];
@@ -376,8 +382,8 @@ export class Instance {
     // While the initializer waits, so does each value it may change, until it
     // has run once; after that, only a value it was seen to change.
     const key = `memo:${index}`;
-    const current = slot.peek();
-    if (current instanceof Waiting) {
+    const current = slot.initializer;
+    if (current !== undefined) {
       this.blocked.set(key, {
         pending: current,
         targets: mayBuild().map((target, position) => [target, () => {

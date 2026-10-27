@@ -359,11 +359,12 @@ export function sourceReadinessStorage(plan: ModulePlan, owner: Node | null, nam
     }
   }
 
-  for (const [binding, steps] of flow?.bindingBuilders ?? []) {
+  for (const binding of flow === undefined ? [] : readinessBindings(flow)) {
     if (binding.owner.runner !== owner) {
       continue;
     }
 
+    const steps = flow!.bindingBuilders.get(binding) ?? [];
     const stepOf = (step: Node) => expression('$$step', { step: names.of(step, '_sourceStep') });
     const possible = steps.filter((step) => !flow!.builders.get(step)!.definite.includes(binding));
 
@@ -416,7 +417,7 @@ export function sourceTakeovers(
     return new Map();
   }
 
-  return new Map([...flow.bindingBuilders.keys()].map((binding) => {
+  return new Map([...readinessBindings(flow)].map((binding) => {
     const builds = [...flow.builders]
       .filter(([, builder]) => builder.definite.includes(binding))
       .map(([step]) => expression('$$step', { step: names.of(step, '_sourceStep') }));
@@ -427,6 +428,18 @@ export function sourceTakeovers(
       builds: b.ArrayExpression({ elements: builds }),
     })];
   }));
+}
+
+/**
+ * The bindings with a readiness cell: those that wait for builder steps, and
+ * those a step definitely builds (including the one a declarator declares),
+ * whose takeover releases that step.
+ */
+function readinessBindings(flow: NonNullable<ModulePlan['sourceFlow']>): Set<BindingNode> {
+  return new Set([
+    ...flow.bindingBuilders.keys(),
+    ...[...flow.builders.values()].flatMap((builder) => builder.definite),
+  ]);
 }
 
 function withChoices(cache: string | null, value: Expression): Expression {

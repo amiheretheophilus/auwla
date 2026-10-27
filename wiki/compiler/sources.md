@@ -89,6 +89,13 @@ observation saw a run change it (`noteSourceChange`, passed to `emitMemos` as
 `observedChanges`). This is the reference's `mayChange` (2026-10-27, source
 generator seed -25242095).
 
+The reference tracks a memo's initializer separately from its slot value
+(`MemoSlot.initializer`): a later body write can replace a `Waiting` value while
+the initializer has still not run (generator seed 1932424307). A declarator
+step definitely builds the binding it declares, so taking that binding over
+releases the values its waiting initializer may change; such bindings get a
+readiness cell even without builder steps of their own.
+
 A builder step counts the values it definitely builds (`builds`). When later
 writes take all of them over (`takeSourceBinding`), the statement counts as
 skipped (decisions, 2026-10-19) and stops making the values it only may change

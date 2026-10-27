@@ -2241,6 +2241,50 @@ behaves('a derivation of a value a handler took over before its source loaded is
   },
 });
 
+behaves('a value waits for an initializer that may change it even when a body write follows', {
+  source: `
+    import { $fetch, Group } from '@memoized-dom/data';
+    export function App() {
+      const s0 = $fetch('/s0');
+      let items = [];
+      let pick = 0 + (items.includes(0) ? 0 : s0.value);
+      if (!(1 % 2 === 0)) pick = 0;
+      return (
+        <Group pending={() => <i>loading</i>}>
+          <p>{items.length}</p>
+        </Group>
+      );
+    }`,
+  steps: [{ respond: '/s0', value: { value: 0 } }],
+  check(container, observation) {
+    // The body write to \`pick\` is part of its derivation; the initializer
+    // still runs once \`s0\` loads, and may change \`items\` until then.
+    expect(container.querySelector('p')?.textContent).toBe(['loading', '0'][observation]);
+  },
+});
+
+behaves('taking over a binding releases what its waiting initializer may change', {
+  source: `
+    import { $fetch, Group } from '@memoized-dom/data';
+    export function App() {
+      const s0 = $fetch('/s0');
+      let items = [];
+      let pick = items.includes(0) ? 0 : s0.value;
+      return (
+        <Group pending={() => <i>loading</i>}>
+          <p>{items.length}</p>
+          <button onClick={() => { pick = 5; }}>pick</button>
+        </Group>
+      );
+    }`,
+  steps: [{ click: 'button' }, { respond: '/s0', value: { value: 0 } }],
+  check(container, observation) {
+    // After the click \`pick\` keeps 5 and its initializer never runs again,
+    // so it can no longer change \`items\`.
+    expect(container.querySelector('p')?.textContent).toBe(['loading', '0', '0'][observation]);
+  },
+});
+
 behaves('a snapshot written before its source loads keeps the write', {
   source: `
     import { $fetch, Group } from '@memoized-dom/data';
