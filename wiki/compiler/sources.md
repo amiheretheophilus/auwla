@@ -230,7 +230,9 @@ observed like `observe`). A value's `pending` is its own callbacks' waiting
 plus every blocked entry that targets it; an entry lasts until its statement
 runs, as the compiled output's builder steps do. The statement's own guard
 chooses the branches that run, so a test it can evaluate never makes anything
-wait. A statement that is blocked now counts as not having run (`ran`), so it is
+wait. A memo whose value is still `Waiting` never ran its initializer and is
+retried every render, since an input can become ready without changing value
+(generator seed 1762547711). A statement that is blocked now counts as not having run (`ran`), so it is
 retried once its inputs are ready; before 2026-10-27 a loop builder blocked on
 a later render was never retried and kept its reset value (generator seed
 729503972). While a statement's guard or an initializer evaluates, its own earlier

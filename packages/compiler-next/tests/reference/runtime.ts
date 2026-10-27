@@ -333,7 +333,11 @@ export class Instance {
       this.slots.set(index, slot);
     }
     slot.readInputs = readInputs;
-    if (slot.inputs === undefined || !deepEqual(slot.inputs, inputs)) {
+    // A `Waiting` value never ran its initializer: retry it every render, since
+    // an input can become ready without changing value (a handler wrote the
+    // same value its waiting builder would have replaced).
+    const waiting = slot.peek() instanceof Waiting;
+    if (slot.inputs === undefined || waiting || !deepEqual(slot.inputs, inputs)) {
       // The initializer may change values declared before it
       // (`let total = items.reduce(…)`): watch them, as `observe` does for a
       // body statement.

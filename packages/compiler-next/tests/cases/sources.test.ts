@@ -2217,6 +2217,30 @@ behaves('a loop builder blocked by a waiting value runs once that value is ready
   },
 });
 
+behaves('a derivation of a value a handler took over before its source loaded is ready', {
+  source: `
+    import { $fetch, Group } from '@memoized-dom/data';
+    export function App() {
+      const s0 = $fetch('/s0');
+      let zero = 0;
+      let total = 0;
+      for (const x of s0.items) total += x;
+      const copy = total;
+      return (
+        <Group pending={() => <i>loading</i>}>
+          <p>{copy}</p>
+          <button onClick={() => { total = zero; }}>reset</button>
+        </Group>
+      );
+    }`,
+  steps: [{ click: 'button' }, { respond: '/s0', value: { items: [5] } }],
+  check(container, observation) {
+    // The click writes the same 0 the waiting loop started from; the write is
+    // kept (decisions, 2026-10-19), so \`copy\` is ready at once.
+    expect(container.querySelector('p')?.textContent).toBe(['loading', '0', '0'][observation]);
+  },
+});
+
 behaves('a snapshot written before its source loads keeps the write', {
   source: `
     import { $fetch, Group } from '@memoized-dom/data';
