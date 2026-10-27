@@ -523,8 +523,13 @@ export class Instance {
     return !this.observed.has(index) || this.confirmed(index, position);
   }
 
+  /**
+   * Whether statement `index` completed and is not blocked now. A statement
+   * that a later render found waiting has not completed that run, so it is
+   * retried once its inputs are ready, as the compiled builder steps are.
+   */
   ran(index: number): boolean {
-    return this.statementsRun.has(index);
+    return this.statementsRun.has(index) && !this.blocked.has(`statement:${index}`);
   }
 
   /** Immediate callbacks can build a value even when no static call summary exists. */

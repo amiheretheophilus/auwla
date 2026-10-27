@@ -2192,6 +2192,31 @@ behaves('a value does not wait again for a statement seen not to change it', {
   },
 });
 
+behaves('a loop builder blocked by a waiting value runs once that value is ready', {
+  source: `
+    import { $fetch, Group } from '@memoized-dom/data';
+    export function App() {
+      const s0 = $fetch('/s0');
+      let items = [0, 1];
+      let total = 0;
+      for (const x of items) total += x;
+      let found = 0;
+      if (items.includes(2) ? 0 : s0.value) found = 1;
+      return (
+        <Group pending={() => <i>loading</i>}>
+          <p>{total}</p>
+          <button onClick={() => { items.reverse(); }}>reverse</button>
+        </Group>
+      );
+    }`,
+  steps: [{ click: 'button' }, { respond: '/s0', value: { value: 0 } }],
+  check(container, observation) {
+    // After the reverse, the loop rebuilds \`total\` from \`items\`, which waits
+    // for the \`if\` that may change it; once it ran, the loop sums 1 again.
+    expect(container.querySelector('p')?.textContent).toBe(['1', 'loading', '1'][observation]);
+  },
+});
+
 behaves('a snapshot written before its source loads keeps the write', {
   source: `
     import { $fetch, Group } from '@memoized-dom/data';

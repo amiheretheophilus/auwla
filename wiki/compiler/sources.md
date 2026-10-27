@@ -230,7 +230,10 @@ observed like `observe`). A value's `pending` is its own callbacks' waiting
 plus every blocked entry that targets it; an entry lasts until its statement
 runs, as the compiled output's builder steps do. The statement's own guard
 chooses the branches that run, so a test it can evaluate never makes anything
-wait. While a statement's guard or an initializer evaluates, its own earlier
+wait. A statement that is blocked now counts as not having run (`ran`), so it is
+retried once its inputs are ready; before 2026-10-27 a loop builder blocked on
+a later render was never retried and kept its reset value (generator seed
+729503972). While a statement's guard or an initializer evaluates, its own earlier
 entry is ignored (`evaluateAs`), as the compiled `sourceBindingInput(…, ignore)`
 ignores the reading step: otherwise an initializer that reads the value it may
 change kept waiting on its own stale record after a mutation let it run
