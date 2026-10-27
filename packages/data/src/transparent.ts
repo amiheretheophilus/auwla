@@ -2,12 +2,21 @@ import { RequestError } from './errors';
 import { writeFetchResource } from './resource-writes';
 import { isReadResource } from './read-resource';
 import { isFormSource, notifyFormSource } from './forms';
-import { getActiveApplicationRuntime } from '@memoized-dom/runtime';
+import {
+  getActiveApplicationRuntime,
+  getExtensionStore,
+  publishVersions,
+  runWithApplicationRuntime,
+  trackRead,
+} from '@memoized-dom/runtime';
+import { getActiveDataRuntime } from './active-runtime';
+import { registerDataRuntimeDisposer } from './runtime-lifetime';
 import {
   disposeFetchResource,
   fetchResourceOperationId,
   fetchResourceSnapshot,
   fetchResourceIsFiniteStream,
+  fetchResourceIsLive,
   isFetchResource,
   rebindFetchResource,
   retryFetchResourceIfLive,
@@ -78,8 +87,56 @@ function source<T>(value: ResolvedValue<T> | ModuleSourceRef): FetchResource<T> 
  * another caller (`<Author article={source} />` and `<Author article={row} />`).
  * Plain data is already committed: it reads as itself and never changes here.
  */
-function isSource(value: unknown): boolean {
+export function isResolvedSource(value: unknown): boolean {
   return isModuleSourceRef(value) || isFetchResource(value);
+}
+
+const isSource = isResolvedSource;
+
+interface SourceReadDependency {
+  version: number;
+  readonly key: object;
+  readonly current: () => number;
+  disconnect(): void;
+}
+
+/** Source transitions participate in the existing computation collector. */
+function trackSourceRead(value: unknown): void {
+  if (!isSource(value)) {
+    return;
+  }
+
+  const resource = source(value as ResolvedValue<unknown>);
+  const reads = getExtensionStore('mmd:source-read-dependencies', () => new WeakMap<object, SourceReadDependency>());
+  let dependency = reads.get(resource);
+
+  if (dependency === undefined) {
+    const runtime = getActiveApplicationRuntime();
+    const created: SourceReadDependency = {
+      version: 0,
+      key: {},
+      current: () => created.version,
+      disconnect: () => {},
+    };
+
+    reads.set(resource, created);
+
+    created.disconnect = observeResolvedValue(value as ResolvedValue<unknown>, () => {
+      runWithApplicationRuntime(runtime, () => {
+        created.version++;
+        publishVersions([created.key]);
+      });
+    });
+
+    // Runtime disposal releases subscriptions, while an unreachable local source
+    // and its dependency can be collected before the application itself leaves.
+    const reference = new WeakRef(created);
+
+    registerDataRuntimeDisposer(getActiveDataRuntime(), () => reference.deref()?.disconnect());
+    dependency = created;
+  }
+
+  trackRead(dependency.current, undefined, dependency.key);
 }
 
 function snapshotOf<T>(value: ResolvedValue<T> | ModuleSourceRef): ResourceSnapshot<T> {
@@ -95,6 +152,7 @@ function consumeRenderSource<T>(value: ResolvedValue<T>): FetchResource<T> {
   if (preparation === undefined) return resource;
   preparation.consume({
     key: resource,
+    isLive: () => fetchResourceIsLive(resource),
     snapshot() {
       const snapshot = fetchResourceSnapshot(resource);
       if (snapshot.error !== null) return { status: 'error', error: snapshot.error };
@@ -174,12 +232,30 @@ export function trackResolvedValue<T>(
   const existing = trackedValues.get(resource);
   if (existing !== undefined) return existing as TrackedValue<T>;
   const tracked: TrackedValue<T> = Object.freeze({
-    get id() { return fetchResourceOperationId(resource); },
-    get status() { return resource.status; },
-    get pending() { return resource.pending; },
-    get refreshing() { return resource.refreshing; },
-    get streaming() { return fetchResourceSnapshot(resource).streaming === true; },
-    get error() { return resource.error; },
+    get id() {
+      trackSourceRead(value);
+      return fetchResourceOperationId(resource);
+    },
+    get status() {
+      trackSourceRead(value);
+      return resource.status;
+    },
+    get pending() {
+      trackSourceRead(value);
+      return resource.pending;
+    },
+    get refreshing() {
+      trackSourceRead(value);
+      return resource.refreshing;
+    },
+    get streaming() {
+      trackSourceRead(value);
+      return fetchResourceSnapshot(resource).streaming === true;
+    },
+    get error() {
+      trackSourceRead(value);
+      return resource.error;
+    },
     onSuccess(callback: (data: T, requestId: string) => void) {
       return observeTrackedOutcome(
         resource,
@@ -231,6 +307,7 @@ export function readResolvedValue<T>(
   binding?: string,
   site?: string,
 ): T {
+  trackSourceRead(value);
   const snapshot = snapshotOf(value);
   if (snapshot.status === 'success') return snapshot.data as T;
   if (snapshot.status === 'error' && snapshot.error !== null) {
@@ -453,6 +530,7 @@ export function withRoutedSources<TContext extends { readonly signal: AbortSigna
 export function resolvedValueSnapshot<T>(
   value: ResolvedValue<T>,
 ): ResourceSnapshot<T> {
+  trackSourceRead(value);
   return snapshotOf(value);
 }
 

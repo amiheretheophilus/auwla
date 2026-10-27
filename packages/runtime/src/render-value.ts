@@ -30,6 +30,16 @@ interface CapturedRender {
 // Metadata stays outside the authored value. Looking it up must not invoke a
 // getter or proxy trap on an ordinary object passed to a child slot.
 const captures = new WeakMap<object, CapturedRender>();
+const presentations = new WeakMap<object, { readonly show: () => unknown; readonly retain: boolean }>();
+
+/** A pending/error policy is presentation, not a new committed value for this slot. */
+export function createPresentationValue(show: () => unknown, retain = false): object {
+  const value = {};
+
+  presentations.set(value, { show, retain });
+
+  return value;
+}
 
 /** Creating JSX evaluates its inputs now; DOM is owned independently by each slot. */
 export function createRenderValue(program: RenderProgram, values: readonly unknown[], key?: unknown): object {
@@ -132,6 +142,8 @@ function createSlot(text: Text, owner: RenderOwner, indexed: boolean): ValueSlot
   let rowOperations: RowOperations<Row> | null = null;
   let openingAnchor: Comment | null = null;
   let disposed = false;
+  let hasReadyValue = false;
+  let lastReadyValue: unknown;
 
   function clear(): void {
     rowIndex?.clear();
@@ -232,29 +244,48 @@ function createSlot(text: Text, owner: RenderOwner, indexed: boolean): ValueSlot
     rows.forEach((row, index) => row.slot.write(next.values[index]));
   }
 
+  const show = (value: unknown): void => {
+    if (Array.isArray(value)) {
+      writeList(value);
+      return;
+    }
+
+    const captured = capturedOf(value);
+
+    if (captured === undefined) {
+      clear();
+      setTextData(text, value);
+      currentValue = undefined;
+      return;
+    }
+
+    // A row cache reused this exact value, verified unchanged, with no edit
+    // since (`list-map.ts`): updating it again would find nothing to do.
+    if (value === currentValue && entry !== null && takeVerified(value as object)) {
+      return;
+    }
+
+    writeProgram(captured);
+    currentValue = value;
+  };
+
   const slot = {
     write(value: unknown) {
       if (disposed) {
         return;
       }
-      if (Array.isArray(value)) {
-        writeList(value);
-        return;
+
+      const presentation = value !== null && typeof value === 'object' ? presentations.get(value) : undefined;
+      const next = presentation === undefined ? value
+        : presentation.retain && hasReadyValue ? lastReadyValue
+        : presentation.show();
+
+      show(next);
+
+      if (presentation === undefined) {
+        lastReadyValue = next;
+        hasReadyValue = true;
       }
-      const captured = capturedOf(value);
-      if (captured === undefined) {
-        clear();
-        setTextData(text, value);
-        currentValue = undefined;
-        return;
-      }
-      // A row cache reused this exact value, verified unchanged, with no edit
-      // since (`list-map.ts`): updating it again would find nothing to do.
-      if (value === currentValue && entry !== null && takeVerified(value as object)) {
-        return;
-      }
-      writeProgram(captured);
-      currentValue = value;
     },
     /** The first node of this slot's range. */
     first(): Node {
@@ -272,6 +303,8 @@ function createSlot(text: Text, owner: RenderOwner, indexed: boolean): ValueSlot
     },
     dispose() {
       clear();
+      lastReadyValue = undefined;
+      hasReadyValue = false;
       disposed = true;
     },
     /** Dispose, and remove the end anchor too. */

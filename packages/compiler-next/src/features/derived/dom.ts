@@ -28,6 +28,7 @@ export function emitMemos(
   notify?: { readonly batch: string; readonly entity?: string },
   deferred: DeferredSetup = { statements: new Map(), flags: [] },
   values: ReadonlyMap<BindingNode, Expression> = new Map(),
+  pendingSteps: ReadonlyMap<Node, Expression> = new Map(),
 ) {
   const setup: Statement[] = [];
   const snapshots: Statement[] = [];
@@ -381,6 +382,23 @@ export function emitMemos(
         });
       }
     }
+    const pending = pendingSteps.get(original);
+
+    if (pending !== undefined) {
+      // An opaque builder that has not run yet cannot have demonstrated a
+      // mutation. Its blocked first execution still has to be retried.
+      const untaken = outputs.map((target) => {
+        const taken = takeovers.flags.get(target);
+
+        return taken === undefined ? expression('true') : expression('!$$taken', { taken });
+      }).reduce((left, right) => b.LogicalExpression({ operator: '||', left, right }), expression('false'));
+
+      eligible = expression('$$eligible || ($$pending && $$active)', {
+        eligible,
+        pending,
+        active: untaken,
+      });
+    }
     let test = expression('$$changed && $$active', {
       changed: dirty.get(step.group)!, active: eligible,
     });
@@ -391,7 +409,14 @@ export function emitMemos(
     }
     return b.IfStatement({
       test,
-      consequent: b.BlockStatement({ body: [...before(original), ...step.body, ...after(original)] }), alternate: null,
+      consequent: b.BlockStatement({ body: [
+        ...before(original),
+        ...(pendingSteps.has(original) ? observationBefore.get(original) ?? [] : []),
+        ...step.body,
+        ...(pendingSteps.has(original) ? observationAfter.get(original) ?? [] : []),
+        ...after(original),
+      ] }),
+      alternate: null,
     });
   });
   return { setup, snapshots, deferred: deferredCode, update: [...checks, ...replay, ...finish] };

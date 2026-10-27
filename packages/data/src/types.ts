@@ -200,6 +200,11 @@ export interface FetchFunction {
 export interface TransparentFetchFunction {
   <T = unknown>(
     target: string | URL | null,
+    options: FetchOptions & { readonly method: Exclude<FetchMethod, 'GET'> },
+  ): Promise<T>;
+
+  <T = unknown>(
+    target: string | URL | null,
     options?: FetchOptions,
   ): ResolvedValue<T>;
 

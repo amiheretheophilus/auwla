@@ -101,7 +101,8 @@ export class InputQueries {
 
     const reads = [...references].map((reference): ReadFact => ({
       reference,
-      path: readPath(reference),
+      path: readPath(reference, reference.module === module
+        && reference.node.start >= root.start && reference.node.end <= root.end ? root : undefined),
     }));
     const facts: InputFacts = { reads, writes: [...writes], opaque };
     this.#roots.set(root, facts);
@@ -182,11 +183,17 @@ function isParameterOf(reference: Reference, fn: FunctionNode): boolean {
   return binding !== null && isParameter(binding) && declaringRunner(reference.module, binding) === fn;
 }
 
-function readPath(reference: Reference): readonly (string | null)[] {
+function readPath(reference: Reference, root?: Node): readonly (string | null)[] {
   const path: (string | null)[] = [];
   let child: Node = reference.node;
   let parent = reference.module.parentOf(child);
   while (is.MemberExpression(parent) && parent.object === child) {
+    // A query for the receiver alone must not consume its parent's property.
+    // Expanded helper reads lie outside the root and retain their full paths.
+    if (root !== undefined && (parent.start < root.start || parent.end > root.end)) {
+      break;
+    }
+
     path.push(!parent.computed && is.Identifier(parent.property) ? parent.property.name : null);
     child = parent;
     parent = reference.module.parentOf(child);

@@ -44,6 +44,8 @@ export interface SitesContext {
   rowComponents?: RowComponents;
   /** Ownership reconciled alongside a component's early-return selector. */
   select?(site: Site, value: Expression): Expression;
+  readonly source?: { readonly data: string; readonly policy: Expression };
+  readonly sourceValues?: boolean;
 }
 
 export function emitSites(
@@ -94,7 +96,10 @@ export function emitSites(
       dispose.push(statement('$$list.dispose();', { list: rowList.list }));
     }
     const selection = site.kind === 'conditional'
-      ? emitSelection(site.selection, { names, runtime, replacements, versions, once: context.once })
+      ? emitSelection(site.selection, {
+        names, runtime, replacements, versions, once: context.once,
+        source: context.source === undefined ? undefined : { ...context.source, fallback: site.branches.length },
+      })
       : null;
     if (selection !== null) {
       mount.push(...selection.declarations);
@@ -104,6 +109,22 @@ export function emitSites(
     if (context.values === undefined) {
       expression = selection?.expression ?? copy(siteValue(site), replacements);
       if (selection !== null && context.select !== undefined) expression = context.select(site, expression);
+      if (context.source !== undefined && site.kind !== 'event' && site.kind !== 'key') {
+        const readSite = stringLiteral(`${site.expression.start}:${site.expression.end}:${site.kind}`);
+
+        expression = buildExpression('$$runtime.readPreparationScope($$owner, $$site, () => $$value)', {
+          runtime,
+          owner: context.id,
+          site: readSite,
+          value: expression,
+        });
+
+        dispose.push(statement('$$runtime.releasePreparationRead($$owner, $$site);', {
+          runtime,
+          owner: context.id,
+          site: readSite,
+        }));
+      }
     } else {
       // A stored JSX program receives captures; mounting it must not evaluate
       // its authored expressions a second time.
@@ -141,6 +162,7 @@ export function emitSites(
       const factory = site.listStrategy === 'retained-index' ? 'createIndexedValueSlot' : 'createValueSlot';
       valueSlot = {
         name: slot,
+        always: context.source !== undefined || context.sourceValues === true,
         create: buildExpression(`$$runtime.${factory}($$text, $$owner)`, { runtime, text: node, owner: renderOwner(context) }),
       };
       mount.push(statement('let $$slot = null;', { slot }));
@@ -156,6 +178,9 @@ export function emitSites(
       }));
       const branchContext = { ...context, namespace };
       const factories = site.branches.map((branch) => emitBranch(branch, value, plan, branchContext));
+      if (context.source !== undefined) {
+        factories.push(emitBranch({ template: null, sites: [] }, value, plan, branchContext));
+      }
       mount.push(statement('const $$region = $$runtime.createCondRegion($$slot.parentNode, $$id + $$suffix, () => $$value.index, $$branches, void 0, void 0, void 0, $$slot);', {
         region,
         runtime,
@@ -251,6 +276,7 @@ function isFunctionLiteral(node: Node): boolean {
 interface LazySlot {
   readonly name: string;
   readonly create: Expression;
+  readonly always: boolean;
 }
 
 function guardedStatements(test: Expression, body: Statement[]): Statement {
@@ -355,6 +381,9 @@ function writeValue(
       return [statement('$$list.write($$value);', { list: rowList, value })];
     }
     if (valueSlot !== null) {
+      if (valueSlot.always) {
+        return [statement(`(${valueSlot.name} ??= $$create).write($$value);`, { create: valueSlot.create, value })];
+      }
       // Before a slot exists, a value that is not an object is text, exactly
       // what a new slot would write (`render-value.ts`, `write`).
       return statements(`

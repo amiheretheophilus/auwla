@@ -22,6 +22,7 @@ if (path === undefined) {
 const lines = readFileSync(path, 'utf8').split(/\r?\n/);
 const phases = new Map<string, number>();
 const unexplained: string[] = [];
+const completedPhase = 8;
 let block: string[] = [];
 for (const line of lines) {
   if (/^\d+ tests? failed:$/.test(line.trim())) break;
@@ -35,8 +36,11 @@ for (const line of lines) {
   }
   const name = line.replace(/^\(fail\)\s*/, '').replace(/\s*\[[\d.]+m?s\]$/, '');
   const reason = block.map((entry) => /from Phase (\d+)/.exec(entry)).find((match) => match !== null);
-  if (reason === undefined) unexplained.push(name);
-  else phases.set(`Phase ${reason[1]}`, (phases.get(`Phase ${reason[1]}`) ?? 0) + 1);
+  if (reason === undefined || Number(reason[1]) <= completedPhase) {
+    unexplained.push(name);
+  } else {
+    phases.set(`Phase ${reason[1]}`, (phases.get(`Phase ${reason[1]}`) ?? 0) + 1);
+  }
   block = [];
 }
 
@@ -48,7 +52,7 @@ if (summary.length === 0) {
   process.exit(1);
 }
 if (unexplained.length > 0) {
-  console.error(`${unexplained.length} failure(s) name no phase:`);
+  console.error(`${unexplained.length} failure(s) name no unfinished phase (Phases 1-${completedPhase} are implemented):`);
   for (const name of unexplained) console.error(`  ${name}`);
   process.exit(1);
 }

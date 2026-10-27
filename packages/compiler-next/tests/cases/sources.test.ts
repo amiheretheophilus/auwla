@@ -4,6 +4,132 @@ import { behaves } from '../harness/run';
 import { requestedUrls, requestSignals } from '../harness/requests';
 import { serverFunctionClient } from '../harness/server-functions';
 
+behaves('source regressions: a reducer predicate leaves an inactive source unread', {
+  source: `
+    import { $read, Group } from '@memoized-dom/data';
+
+    export function App() {
+      const user = $read(defer('user'));
+      let numbers = [2, 6];
+      const label = numbers.reduce((total, value) => total + value, 0) > 0
+        ? 'ready:8'
+        : user.name;
+
+      return <Group pending={() => <i>loading</i>}>
+        <p>{label}</p>
+        <button onClick={() => { numbers = []; }}>clear</button>
+      </Group>;
+    }`,
+  steps: [{ click: 'button' }, { resolve: 'user', value: { name: 'Ada' } }],
+  check(container, observation) {
+    expect(container.querySelector('p')?.textContent).toBe(['ready:8', 'loading', 'Ada'][observation]);
+  },
+});
+
+behaves('source regressions: status and payload uses of one binding both participate', {
+  source: `
+    import { $read, $track, Group } from '@memoized-dom/data';
+
+    export function App() {
+      const user = $read(defer('user'));
+      const label = $track(user).status + ':' + user.name;
+
+      return <Group pending={() => <i>loading</i>}><p>{label}</p></Group>;
+    }`,
+  steps: [{ resolve: 'user', value: { name: 'Ada' } }],
+  check(container, observation) {
+    expect(container.querySelector('p')?.textContent).toBe(['loading', 'success:Ada'][observation]);
+  },
+});
+
+behaves('source regressions: distinct source paths through the same props wait independently', {
+  source: `
+    import { $read, Group } from '@memoized-dom/data';
+
+    function Names(props) {
+      return <p>{props.left.name + ':' + props.right.name}</p>;
+    }
+
+    export function App() {
+      const left = $read(defer('left'));
+      const right = $read(defer('right'));
+
+      return <Group pending={() => <i>loading</i>}><Names left={left} right={right} /></Group>;
+    }`,
+  steps: [
+    { resolve: 'left', value: { name: 'Ada' } },
+    { resolve: 'right', value: { name: 'Lin' } },
+  ],
+  check(container, observation) {
+    expect(container.querySelector('p')?.textContent).toBe(['loading', 'loading', 'Ada:Lin'][observation]);
+  },
+});
+
+behaves('source regressions: a native attribute waits with its host and preserves ordinary siblings', {
+  source: `
+    import { $read, Group } from '@memoized-dom/data';
+
+    export function App() {
+      const user = $read(defer('user'));
+
+      return <Group pending={() => <i>loading</i>}>
+        <p title={user.name}>content</p>
+        <b>static</b>
+      </Group>;
+    }`,
+  steps: [{ resolve: 'user', value: { name: 'Ada' } }],
+  check(container, observation) {
+    expect(container.querySelector('p') !== null).toBe(observation === 1);
+    expect(container.querySelector('i')?.textContent ?? '').toBe(observation === 0 ? 'loading' : '');
+    expect(container.querySelector('p')?.getAttribute('title') ?? '').toBe(observation === 0 ? '' : 'Ada');
+    expect(container.querySelector('b')?.textContent).toBe('static');
+  },
+});
+
+behaves('source regressions: a scalar prop waits at its use while child static content mounts', {
+  source: `
+    import { $read, Group } from '@memoized-dom/data';
+
+    function Card({ name }) {
+      return <section><p>{name}</p><b>static</b></section>;
+    }
+
+    export function App() {
+      const user = $read(defer('user'));
+
+      return <Group pending={() => <i>loading</i>}><Card name={user.name} /></Group>;
+    }`,
+  steps: [{ resolve: 'user', value: { name: 'Ada' } }],
+  check(container, observation) {
+    expect(container.querySelector('p')?.textContent).toBe(['loading', 'Ada'][observation]);
+    expect(container.querySelector('b')?.textContent).toBe('static');
+  },
+});
+
+behaves('source regressions: forwarding a source through a props member keeps status available', {
+  source: `
+    import { $read, $track, Group } from '@memoized-dom/data';
+
+    function Status({ user }) {
+      return <small>{$track(user).status}</small>;
+    }
+
+    function Forward(props) {
+      return <section><Status user={props.user} /><p>{props.user.name}</p></section>;
+    }
+
+    export function App() {
+      const user = $read(defer('user'));
+
+      return <Group pending={() => <i>loading</i>}><Forward user={user} /></Group>;
+    }`,
+  steps: [{ resolve: 'user', value: { name: 'Ada' } }],
+  check(container, observation) {
+    expect(container.querySelector('small')?.textContent).toBe(['pending', 'success'][observation]);
+    expect(container.querySelector('p')?.textContent).toBe(['loading', 'Ada'][observation]);
+  },
+});
+
 behaves('a source status helper remains available before its payload commits', {
   source: `
     import { $read, $track } from '@memoized-dom/data';

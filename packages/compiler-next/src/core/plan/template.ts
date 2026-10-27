@@ -27,6 +27,7 @@ export interface TemplateContext {
   claimMarkup?(node: Node): void;
   /** Capture child expressions at creation instead of planning lazy DOM selectors. */
   readonly captureValues?: boolean;
+  readonly sourceReadiness?: boolean;
 }
 
 type JsxRoot = Extract<Node, { type: 'JSXElement' | 'JSXFragment' }>;
@@ -94,7 +95,7 @@ class TemplateBuilder {
         }
         this.flushText(run);
         run.indices.push(this.textSite(child.expression, ancestors, namespace));
-      } else if (is.JSXElement(child) && (isComponentCall(child) || this.isKeyedRow(child))) {
+      } else if (is.JSXElement(child) && (isComponentCall(child) || this.isSourceAttributeSite(child) || this.isKeyedRow(child))) {
         // Shown through a value slot, so a new key mounts a new element.
         this.flushText(run);
         run.indices.push(this.textSite(child as Expression, ancestors, namespace));
@@ -123,6 +124,13 @@ class TemplateBuilder {
     return this.context.reactive(key);
   }
 
+  private isSourceAttributeSite(element: JsxElement): boolean {
+    return this.context.sourceReadiness === true && !this.context.captureValues
+      && element.openingElement.attributes.some((attribute) => {
+        return is.JSXAttribute(attribute) && is.JSXExpressionContainer(attribute.value);
+      });
+  }
+
   private flushText(run: ChildRun): void {
     if (run.text === '') return;
     run.indices.push(this.add({ kind: 'text', text: run.text }));
@@ -147,7 +155,7 @@ class TemplateBuilder {
       node,
       expression,
       reactive: this.context.reactive(expression),
-      primitive: !spread && alwaysPrimitive(expression),
+      primitive: !spread && !this.context.sourceReadiness && alwaysPrimitive(expression),
       spread,
     });
     return node;

@@ -1,6 +1,6 @@
 import { expect, it } from 'bun:test';
 import { Window } from 'happy-dom';
-import { createRenderValue, createValueSlot, type RenderProgram } from '../src/render-value';
+import { createPresentationValue, createRenderValue, createValueSlot, type RenderProgram } from '../src/render-value';
 
 const document = new Window().document as unknown as Document;
 
@@ -10,6 +10,42 @@ function slot() {
   root.append(text);
   return { root, slot: createValueSlot(text, { id: 'value', entity: undefined, batch: null }) };
 }
+
+it('retains the last ready value through replacement without caching loading or error UI', () => {
+  const { root, slot: output } = slot();
+
+  output.write('first');
+  output.write(createPresentationValue(() => 'loading', false));
+  expect(root.textContent).toBe('loading');
+
+  output.write(createPresentationValue(() => 'replacement', true));
+  expect(root.textContent).toBe('first');
+
+  output.write(createPresentationValue(() => 'error', false));
+  expect(root.textContent).toBe('error');
+
+  output.write(createPresentationValue(() => 'retry', true));
+  expect(root.textContent).toBe('first');
+
+  output.write('second');
+  output.write(createPresentationValue(() => 'loading again', true));
+  expect(root.textContent).toBe('second');
+
+  output.dispose();
+});
+
+it('shows initial pending presentation when the slot has no committed value', () => {
+  const { root, slot: output } = slot();
+
+  output.write(createPresentationValue(() => 'loading', true));
+  expect(root.textContent).toBe('loading');
+
+  output.write(undefined);
+  output.write(createPresentationValue(() => 'replacement', true));
+  expect(root.textContent).toBe('');
+
+  output.dispose();
+});
 
 it('updates one compiled program in place, replaces another and drains primitive transitions', () => {
   const log: string[] = [];

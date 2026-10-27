@@ -58,6 +58,7 @@ export function createPreparedRegion(
     return {
       get status() { return disposed ? 'disposed' as const : 'active' as const; },
       get error(): unknown { return undefined; },
+      restart() {},
       update(reasons: DirtyReasons = null) {
         if (!disposed) enclosing.run(() => entry.update(reasons));
       },
@@ -80,6 +81,8 @@ export function createPreparedRegion(
   const hasFailed = () => state === 'error';
   let failure: unknown;
   let unsubscribe = () => {};
+  let releaseFailureWatchers = () => {};
+  let releaseFailures = () => {};
   let generation = 0;
   let retrying: Promise<void> | undefined;
   let resolveReady = () => {};
@@ -114,6 +117,34 @@ export function createPreparedRegion(
     try { releaseContent(); }
     catch (cleanup) { failure = new AggregateError([cause, cleanup], '[memo-dom] atomic render and rollback failed'); }
     rejectReady(failure);
+    const watchers = preparation.failedDependencies.flatMap(resource => {
+      if (resource.snapshot().status !== 'error' || resource.isLive?.() === false) {
+        return [];
+      }
+
+      let subscribing = true;
+      const stop = resource.subscribe(() => {
+        if (subscribing || state !== 'error') {
+          return;
+        }
+
+        inRuntime(() => {
+          if (resource.snapshot().status !== 'error') {
+            restart();
+          }
+        });
+      });
+
+      subscribing = false;
+
+      return [stop];
+    });
+
+    releaseFailureWatchers = () => {
+      for (const stop of watchers) {
+        stop();
+      }
+    };
     // Cursor/mismatch failures belong to mount recovery, never to Group UI.
     if (preserveAdopted || cause instanceof HydrationMismatchError) throw failure;
     releaseFallback();
@@ -151,6 +182,9 @@ export function createPreparedRegion(
     }));
   };
   function start() {
+    releaseFailureWatchers();
+    releaseFailureWatchers = () => {};
+    releaseFailures();
     published=preserveAdopted;
     state = 'pending';
     failure = undefined;
@@ -161,6 +195,8 @@ export function createPreparedRegion(
     noteRenderReadiness(readiness);
     detached = getActiveEnvironment().document.createDocumentFragment();
     preparation = createRenderPreparation(fail);
+    const current = preparation;
+    releaseFailures = () => current.releaseFailures();
     unsubscribe = preparation.subscribe(check);
     try {
       content = preparation.run(createContent);
@@ -205,6 +241,7 @@ export function createPreparedRegion(
     // Owned holders retire; surviving borrowed operations need explicit retry.
     retrying = Promise.resolve().then(() => inRuntime(() => {
       if (state === 'disposed' || token !== generation) return;
+      releaseFailureWatchers();
       void preparation.retryFailed().catch(() => {});
       releaseFallback();
       clear();
@@ -219,13 +256,24 @@ export function createPreparedRegion(
     state = 'disposed';
     generation++;
     unsubscribe();
+    releaseFailureWatchers();
     rejectReady(new DOMException('Atomic region was disposed', 'AbortError'));
     inRuntime(() => {
-      try { release([releaseFallback, releaseContent]); }
+      try { release([releaseFallback, releaseContent, releaseFailures]); }
       finally {
         if (!preserveAdopted) { clear(); open.parentNode?.removeChild(open); end.parentNode?.removeChild(end); }
       }
     });
+  }
+  function restart(): void {
+    if (state !== 'error') {
+      return;
+    }
+
+    releaseFailureWatchers();
+    releaseFallback();
+    clear();
+    start();
   }
   try { start(); }
   catch (cause) {
@@ -238,6 +286,8 @@ export function createPreparedRegion(
     get error() { return failure; },
     get settled() { return readiness; },
     retry,
+    /** New authored inputs replace a failed draft without retrying old requests. */
+    restart,
     update(reasons: DirtyReasons = null) {
       if (state !== 'pending' && state !== 'active') return;
       try { preparation.run(() => content?.update(reasons)); check(); }

@@ -1,4 +1,6 @@
 import { getGlobalControllers } from './global-controllers';
+import { isEffectInvocation } from '@memoized-dom/runtime';
+import { isSourceComputation } from './source-scope';
 import {
   isAbortError,
   toRequestError,
@@ -631,6 +633,9 @@ function fetchDescriptor(
 ): { descriptor: FetchDescriptor; paused: boolean } {
   const method = normalizeFetchMethod(options.method);
   const paused=target===null;
+  if (!paused && method !== 'GET' && isSourceComputation() && !isEffectInvocation()) {
+    throw new TypeError(`[memo-dom] ${method} actions must run from an event handler, effect or deferred callback`);
+  }
   if (!paused && (method === 'GET' || method === 'HEAD') && options.body !== undefined) {
     throw new TypeError(`$fetch ${method} requests cannot include a body`);
   }
@@ -721,6 +726,13 @@ export function fetchResourceIsFiniteStream(resource: unknown): boolean {
 export function isFetchResource(value: unknown): value is FetchResource<unknown> {
   return typeof value === 'object' && value !== null &&
     (controllers.has(value) || isReadResource(value) || isFormSource(value));
+}
+
+export function fetchResourceIsLive(resource: FetchResource<unknown>): boolean {
+  if (isReadResource(resource)) return readResourceIsLive(resource);
+  if (isFormSource(resource)) return true;
+
+  return !resourceController(resource).disposed;
 }
 
 export function subscribeFetchResource<T>(

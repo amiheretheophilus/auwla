@@ -21,6 +21,6 @@ export function isComponentCall(node: Node): node is ComponentCall {
     // The component-value path already preserves that ordering and fallback.
     return is.JSXAttribute(attribute)
       && is.JSXIdentifier(attribute.name)
-      && attribute.name.name === 'children';
+      && (attribute.name.name === 'children' || attribute.name.name === 'suspend');
   });
 }

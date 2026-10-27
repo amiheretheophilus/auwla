@@ -551,8 +551,8 @@ export interface ServerFunctionDeclarationOptions {
  * Emit the client-facing declaration barrel for the application's server
  * functions. Signatures reference the real implementations through
  * `Parameters`/`ReturnType`, so server builds keep their ordinary async
- * TypeScript types while client imports see the colorless `ResolvedValue<T>`
- * contract (readable as `T`, `$track`-able). Exported names must be unique
+ * TypeScript types while GET imports see `ResolvedValue<T>` and actions return
+ * ordinary promises. Exported names must be unique
  * across modules because the barrel is one flat module.
  */
 export function generateServerFunctionDeclarations(
@@ -584,8 +584,11 @@ export function generateServerFunctionDeclarations(
       }
       seen.set(fn.exported, module.moduleId);
       const target = `${alias}.${fn.exported}`;
+      const result = `__mmdClientValue<Awaited<ServerFunctionResult<typeof ${target}>>>`;
+      const returned = fn.method === 'GET' ? `ResolvedValue<${result}>` : `Promise<${result}>`;
+
       statements.push(
-        `export declare function ${fn.exported}(...args: ServerFunctionArguments<typeof ${target}>): ResolvedValue<__mmdClientValue<Awaited<ServerFunctionResult<typeof ${target}>>>>;`,
+        `export declare function ${fn.exported}(...args: ServerFunctionArguments<typeof ${target}>): ${returned};`,
       );
     }
   }

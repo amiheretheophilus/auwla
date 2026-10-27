@@ -130,17 +130,17 @@ export function dataExport(module: Module, value: Node): string | null {
 }
 
 /** Unknown request methods may be actions. Do not label their promises sources. */
-function isGet(call: Extract<Node, { type: 'CallExpression' }>): boolean {
+export function fetchMethod(call: Extract<Node, { type: 'CallExpression' }>): string | null {
   const options = call.arguments[1];
 
   if (options === undefined) {
-    return true;
+    return 'GET';
   }
 
   const value = unwrap(options as Expression);
 
   if (!is.ObjectExpression(value)) {
-    return false;
+    return null;
   }
 
   let method: string | null = 'GET';
@@ -170,7 +170,7 @@ function isGet(call: Extract<Node, { type: 'CallExpression' }>): boolean {
     }
   }
 
-  return method === 'GET';
+  return method;
 }
 
 /**
@@ -286,7 +286,7 @@ export class SourceQueries {
     }
 
     if (api === '$fetch') {
-      return isGet(call) ? 'fetch' : null;
+      return fetchMethod(call) === 'GET' ? 'fetch' : null;
     }
 
     const fn = functionValue(module, call.callee);

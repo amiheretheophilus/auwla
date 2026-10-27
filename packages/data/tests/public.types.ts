@@ -75,7 +75,11 @@ $track(user).onError((error, requestId) => {
 });
 void $track(user).refresh();
 $track(user).abort();
+const savedPromise: Promise<User> = savedUser;
+void savedPromise.then(value => value.name);
+// @ts-expect-error An action's response must be awaited.
 void savedUser.name;
+// @ts-expect-error Actions are promises, not trackable sources.
 void $track(savedUser).pending;
 
 const promisedUser = Promise.resolve<User>({ id: 1, name: 'Ada' });

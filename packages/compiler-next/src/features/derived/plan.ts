@@ -55,12 +55,20 @@ export function planMemos(
     };
     for (const target of targets) {
       for (const builder of target.initial?.builders ?? []) {
+        const statement = is.ExportNamedDeclaration(builder.statement)
+          ? builder.statement.declaration
+          : builder.statement;
+
+        if (statement === null) {
+          continue;
+        }
+
         if (builder.certainty !== 'definite') {
-          const steps = is.VariableDeclaration(builder.statement)
-            ? builder.statement.declarations.filter((entry) => entry.init !== null && (
+          const steps = is.VariableDeclaration(statement)
+            ? statement.declarations.filter((entry) => entry.init !== null && (
               target.writes.some(({ site }) => site.node.start >= entry.start && site.node.end <= entry.end)
               || (builder.invocation === 'runtime' && queries.inputsOf(module, entry).opaque)
-            )) : [builder.statement];
+            )) : [statement];
           for (const step of steps) {
             const outputs = possibleBuilders.get(step) ?? new Set<BindingNode>();
             outputs.add(target);
@@ -68,10 +76,10 @@ export function planMemos(
           }
           continue;
         }
-        if (is.VariableDeclaration(builder.statement)) {
+        if (is.VariableDeclaration(statement)) {
           // A declaration can also build an earlier binding: `const b = a += n`.
           // Share that declarator's step instead of redeclaring b during replay.
-          for (const entry of builder.statement.declarations) {
+          for (const entry of statement.declarations) {
             if (entry.init === null) continue;
             const invoked = queries.inputsOf(module, entry.init).writes;
             const writesTarget = target.writes.some(({ site }) => {
@@ -80,7 +88,7 @@ export function planMemos(
             if (writesTarget) addBuilder(entry, target);
           }
         } else {
-          addBuilder(builder.statement as Statement, target);
+          addBuilder(statement as Statement, target);
         }
       }
     }

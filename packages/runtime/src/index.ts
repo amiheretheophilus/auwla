@@ -77,7 +77,7 @@ export { materializeMarkup, cloneTemplate, createTemplateCache } from './markup'
 export type { TemplateCache } from './markup';
 export { createWriteBatch, rejectConstAssignment, flushWritesBeforeAwait, resumeWritesAfterAwait } from './write-batch';
 export type { WriteBatch } from './write-batch';
-export { createBuildScope, captureBuildScope, isBuilding, isEffectInvocation } from './build-scope';
+export { createBuildScope, captureBuildScope, currentBuildFrame, isBuilding, isEffectInvocation } from './build-scope';
 export {
   mutationTarget, deleteMutation, receiverMutationTarget, observeMutation, watchMutationRoots, checkMutationRoots,
   mutatedSince, mutationTime,
@@ -157,7 +157,7 @@ export { patchDomProps, setDomValue } from './dom-props';
 export { classValue, setClassValue, setStyleValue } from './dom-values';
 export { createCondRegion } from './cond';
 export {
-  createRenderValue, createKeyedRenderValue, createValueSlot, createIndexedValueSlot, disposedValueSlot, renderNamespace,
+  createRenderValue, createKeyedRenderValue, createPresentationValue, createValueSlot, createIndexedValueSlot, disposedValueSlot, renderNamespace,
 } from './render-value';
 export {
   componentValue, componentSetup, createComponentValue, createPropsCell,

@@ -5,6 +5,7 @@ import { resolve } from '../../core/resolve';
 import { classifyGraph } from '../../core/graph/classify';
 import { planModules } from '../../core/plan';
 import { emitDom } from '../../core/emit/dom';
+import { variableDeclaration } from '../../core/graph/inputs';
 
 function fixture(source: string) {
   const parsed = parseModule('./App.tsx', source);
@@ -67,7 +68,7 @@ describe('component source planning', () => {
   });
 
   it('retains the binding whose later write cuts a seed readiness path', () => {
-    const { component } = fixture(`
+    const { component, module } = fixture(`
       import { $read } from '@memoized-dom/data';
 
       export function App() {
@@ -79,12 +80,11 @@ describe('component source planning', () => {
     `);
 
     const selected = component.state.find((binding) => binding.binding.name === 'selected')!;
-    const text = component.sites.find((site) => site.kind === 'text')!;
-    const guard = component.sources!.guards.get(text.expression)!;
+    const initializer = variableDeclaration(selected.binding)!.init!;
+    const guard = module.sourceFlow!.guards.get(initializer)!;
 
-    expect(guard.render).toBe(true);
-    expect(guard.inputs[0]!.source.binding.name).toBe('user');
-    expect(guard.inputs[0]!.unlessTaken).toEqual([selected]);
+    expect(guard.reads.map((read) => 'name' in read.value ? read.value.name : '')).toContain('user');
+    expect(component.takeovers).toContain(selected);
   });
 
   it('preserves the authored tree and emits no exception wrapper', () => {

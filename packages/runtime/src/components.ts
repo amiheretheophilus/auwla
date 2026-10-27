@@ -24,6 +24,7 @@ import {
 
 /** What a compiled component receives as `_props`: the current props, and how to hear new ones. */
 export interface PropsCell {
+  readonly presentation?: unknown;
   value: unknown;
   arguments: readonly unknown[];
   /** Set by the component: called with each new props object from its parent. */
@@ -99,8 +100,9 @@ function enumerableKeys(value: object): (string | symbol)[] {
   return keys;
 }
 
-export function createPropsCell(value: unknown, args: readonly unknown[] = [value]): PropsCell {
+export function createPropsCell(value: unknown, args: readonly unknown[] = [value], presentation?: unknown): PropsCell {
   const cell: PropsCell = {
+    presentation,
     value,
     arguments: args,
     receive: null,
@@ -135,7 +137,7 @@ export function defineComponent<T extends Function>(component: T, rootId?: strin
 }
 
 /** A component call, or a string tag, as a value a slot can show. */
-export function createComponentValue(callee: unknown, props: unknown, key?: unknown): object {
+export function createComponentValue(callee: unknown, props: unknown, key?: unknown, presentation?: unknown): object {
   const attributes = asProps(props);
   const identity = key === undefined ? attributes.key : key;
   let inputs = props;
@@ -148,7 +150,7 @@ export function createComponentValue(callee: unknown, props: unknown, key?: unkn
   }
   if (typeof callee === 'function') {
     const component = valueComponents.get(callee) ?? callee;
-    return createRenderValue(componentProgram(component as Component), [inputs], identity);
+    return createRenderValue(componentProgram(component as Component), [inputs, undefined, presentation], identity);
   }
   if (typeof callee === 'string') {
     return createRenderValue(hostProgram(callee), [inputs], identity);
@@ -217,7 +219,7 @@ function componentProgram(component: Component): RenderProgram {
   program = {
     mount(values: readonly unknown[], owner: RenderOwner): RenderEntry {
       const id = `${owner.id}/c${nextChild++}`;
-      const cell = createPropsCell(values[0], values[1] as readonly unknown[] | undefined);
+      const cell = createPropsCell(values[0], values[1] as readonly unknown[] | undefined, values[2]);
       const nodes = nodesOf(component(id, owner.entity?.id ?? null, cell, owner.namespace));
       return {
         nodes,

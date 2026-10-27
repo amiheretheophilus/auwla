@@ -178,7 +178,7 @@ describe('defined HTTP server functions', () => {
       'export declare function getStory(...args: ServerFunctionArguments<typeof __mmd_impl_0.getStory>): ResolvedValue<__mmdClientValue<Awaited<ServerFunctionResult<typeof __mmd_impl_0.getStory>>>>;',
     );
     expect(declarations).toContain(
-      'export declare function postVote(...args: ServerFunctionArguments<typeof __mmd_impl_0.postVote>): ResolvedValue<__mmdClientValue<Awaited<ServerFunctionResult<typeof __mmd_impl_0.postVote>>>>;',
+      'export declare function postVote(...args: ServerFunctionArguments<typeof __mmd_impl_0.postVote>): Promise<__mmdClientValue<Awaited<ServerFunctionResult<typeof __mmd_impl_0.postVote>>>>;',
     );
     expect(declarations).not.toContain('middleware');
   });

@@ -22,6 +22,8 @@ export interface RenderPreparation extends RenderPreparationOwner {
   readonly errors: readonly unknown[];
   subscribe(listener: () => void): () => void;
   retryFailed(): Promise<unknown>;
+  readonly failedDependencies: readonly PreparationDependency[];
+  releaseFailures(): void;
   activate(): void;
   dispose(): void;
   readonly status: 'pending' | 'active' | 'disposed';
@@ -46,13 +48,21 @@ export function createRenderPreparation(onRenderError?: (error: unknown) => void
   let status: RenderPreparation['status'] = 'pending';
   let ready = false;
   let failedRetries: Array<() => Promise<unknown>> = [];
+  let failedDependencies: PreparationDependency[] = [];
   const captureRetries = () => {
-    const retries = [...dependencies.values()].flatMap(({ resource }) =>
-      resource.snapshot().status === 'error' && resource.retry !== undefined
-        ? [() => resource.retry!()] : []);
+    const consumed = [...dependencies.values()].map(({ resource }) => resource);
+    const retries = consumed.flatMap(resource => resource.retry === undefined ? [] : [() => {
+      return resource.snapshot().status === 'error' ? resource.retry!() : Promise.resolve();
+    }]);
     // Nested read/run frames unwind through the same rollback. The outer
     // frames must not erase adapters already captured by the innermost one.
-    if (retries.length !== 0) failedRetries = retries;
+    if (consumed.length !== 0) {
+      failedDependencies = consumed;
+    }
+
+    if (retries.length !== 0) {
+      failedRetries = retries;
+    }
   };
   const listeners = new Set<() => void>();
   let notificationQueued = false;
@@ -131,6 +141,13 @@ export function createRenderPreparation(onRenderError?: (error: unknown) => void
       const retry = failedRetries;
       failedRetries = [];
       return inRuntime(() => Promise.all(retry.map(run => run())));
+    },
+    get failedDependencies() {
+      return failedDependencies;
+    },
+    releaseFailures() {
+      failedDependencies = [];
+      failedRetries = [];
     },
     run<T>(render: () => T): T {
       if (status === 'disposed') {

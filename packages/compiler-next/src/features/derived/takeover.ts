@@ -15,6 +15,8 @@ export function emitTakeovers(
   bindings: readonly BindingNode[], versions: ReadonlyMap<BindingNode, string>,
   names: Names, scope: string, batch: string,
   keys: ReadonlyMap<BindingNode, string> = new Map(),
+  onTakeover: ReadonlyMap<BindingNode, Expression> = new Map(),
+  beforeAssignment?: Expression,
 ): TakeoverEmit {
   const flags = new Map<BindingNode, string>();
   const targets = new Map<BindingNode, Expression>();
@@ -34,11 +36,15 @@ export function emitTakeovers(
       set value($$value) {
         const $$building = $$scope.building();
         if ($$building && $$taken) return;
+        $$beforeAssignment;
         $$binding = $$value;
         $$version++;
-        if (!$$building) { $$taken = true; $$commit; }
+        if (!$$building) { $$taken = true; $$onTakeover; $$commit; }
       }
     }).value`, { binding: target.binding.name, value, building, scope, taken, version,
+      onTakeover: onTakeover.get(target) ?? expression('void 0'),
+      beforeAssignment: beforeAssignment === undefined ? expression('void 0')
+        : expression('$$hook($$binding, $$value)', { hook: beforeAssignment, binding: target.binding.name, value }),
       commit: keys.has(target) ? expression('$$batch.mark($$key)', { batch, key: keys.get(target)! }) : expression('$$batch.mark()', { batch }),
     });
     targets.set(target, receiver);

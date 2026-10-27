@@ -1,6 +1,6 @@
 /** DOM emission from the render plan, with feature-owned state and write emission. */
 import { b, findAll, is } from 'yuku-ast';
-import type { Node, Statement } from 'yuku-parser';
+import type { Expression, Node, Statement } from 'yuku-parser';
 import type { CompileModulesOptions } from '../../options';
 import { DEFAULT_RUNTIME_PATH } from '../../options';
 import type { ComponentPlan, ModulePlan, Site } from '../plan';
@@ -25,12 +25,14 @@ import { functionValue } from '../resolve/functions';
 import { emitRefs } from '../../features/refs/dom';
 import { emitEffectGroups, emitLifecycleCalls } from '../../features/effects/dom';
 import { emitSources } from '../../features/sources/dom';
+import { emitSourceFlow, sourceReadinessStorage } from '../../features/sources/flow-dom';
 
 /** Preserve module syntax and exports, replacing planned functions on a fresh tree. */
 export function emitDom(plan: ModulePlan, options: CompileModulesOptions): Node {
   const module = plan.module.module;
   const hasRenderWork = plan.components.size > 0 || plan.sharedOwners.length > 0
-    || plan.values.length > 0 || plan.calls.length > 0 || plan.componentReferences.size > 0 || plan.effects.calls.length > 0;
+    || plan.values.length > 0 || plan.calls.length > 0 || plan.componentReferences.size > 0 || plan.effects.calls.length > 0
+    || plan.sourceFlow !== undefined;
   if (!hasRenderWork) {
     const hasBoundaries = findAll(module.ast, ['TryStatement', 'AwaitExpression']).length > 0;
     if (!hasBoundaries) {
@@ -43,11 +45,13 @@ export function emitDom(plan: ModulePlan, options: CompileModulesOptions): Node 
   const data = names.fresh('_data');
   const runtimePath = JSON.stringify(options.runtimePath ?? DEFAULT_RUNTIME_PATH);
   const hoisted: Statement[] = [statement(`import * as $$runtime from ${runtimePath};`, { runtime })];
-  if ([...plan.components.values()].some((component) => component.sources !== undefined)) {
+  if (plan.sourceFlow !== undefined) {
     hoisted.push(statement('import * as $$data from "@memoized-dom/data/internal";', { data }));
   }
-  const shared = emitShared(plan, names, runtime, emitLifecycleCalls(plan, names, runtime));
-  const replacements = shared.replacements;
+  const shared = emitShared(plan, names, runtime, emitLifecycleCalls(plan, names, runtime, data), plan.sourceFlow === undefined ? undefined : data);
+  const sourceFlow = emitSourceFlow(plan, names, runtime, data, shared.replacements);
+  hoisted.push(...sourceFlow.declarations);
+  const replacements = sourceFlow.replacements;
   for (const reference of module.references) {
     if (reference.isWrite || reference.inTypePosition) {
       continue;
@@ -69,6 +73,9 @@ export function emitDom(plan: ModulePlan, options: CompileModulesOptions): Node 
     }));
   }
   for (const call of plan.calls) {
+    if (plan.sourceFlow?.groups.includes(call)) {
+      continue;
+    }
     // Module-level components and function expressions are registered where
     // they are defined (below). Only a declaration nested in a function is
     // registered where its tag is evaluated, which is hoisted in its scope.
@@ -77,11 +84,15 @@ export function emitDom(plan: ModulePlan, options: CompileModulesOptions): Node 
     const nested = fn !== null && is.FunctionDeclaration(fn) && [...module.ancestors(fn)].some((ancestor) => {
       return ancestor !== fn && is.Function(ancestor);
     });
-    replacements.set(call, emitComponentCall(call, runtime, nested));
+    const value = emitComponentCall(call, runtime, nested,
+      plan.sourceFlow === undefined ? undefined : sourceFlow.policyOf(call),
+      plan.sourceFlow === undefined ? undefined : data);
+
+    replacements.set(call, sourceFlow.suspendValue(call, sourceFlow.elementValue(call, value)));
   }
   hoisted.push(...shared.imports);
   for (const value of plan.values) {
-    const emitted = emitRenderValue(value, names, runtime);
+    const emitted = emitRenderValue(value, names, runtime, plan.sourceFlow !== undefined);
     hoisted.push(emitted.declaration);
     replacements.set(value.node, emitted.replacement);
   }
@@ -99,7 +110,11 @@ export function emitDom(plan: ModulePlan, options: CompileModulesOptions): Node 
       }));
     }
     let emitted = emitComponent(component, names, runtime, markup, replacements, rowComponents, plan.refs, plan.effects.groups,
-      plan.effects.calls.some((call) => call.owner === component.fn), data);
+      plan.effects.calls.some((call) => call.owner === component.fn), data, plan.sourceFlow !== undefined, {
+        storage: sourceReadinessStorage(plan, component.fn, names),
+        blocked: sourceFlow.blockedSteps,
+        taken: sourceFlow.takenBindings,
+      });
     const enclosingFunction = [...module.ancestors(component.fn)].find((ancestor) => {
       return ancestor !== component.fn && is.Function(ancestor);
     });
@@ -127,8 +142,9 @@ export function emitDom(plan: ModulePlan, options: CompileModulesOptions): Node 
   const output = copy(module.ast, replacements);
   const sharedBody = shared.moduleBody();
   if (sharedBody !== null) {
-    const directives = sharedBody.filter((node) => is.ExpressionStatement(node) && typeof node.directive === 'string');
-    output.body = [...directives, ...sharedBody.filter((node) => !directives.includes(node))] as typeof output.body;
+    const composed = copy(sharedBody, replacements);
+    const directives = composed.filter((node) => is.ExpressionStatement(node) && typeof node.directive === 'string');
+    output.body = [...directives, ...composed.filter((node) => !directives.includes(node))] as typeof output.body;
   }
   // A module's directive prologue must remain before generated declarations.
   let insertion = 0;
@@ -153,6 +169,12 @@ function emitComponent(
   effectGroups: ModulePlan['effects']['groups'],
   ownsLifecycle: boolean,
   data: string,
+  sourceFlow: boolean,
+  readiness: {
+    readonly storage: readonly Statement[];
+    readonly blocked: ReadonlyMap<Node, Expression>;
+    readonly taken: ReadonlyMap<import('../graph').BindingNode, Expression>;
+  },
 ): Node {
   const document = names.fresh('_document');
   const id = names.of(plan.fn, '_id');
@@ -174,7 +196,7 @@ function emitComponent(
     || ownsLifecycle
     || ownsRefs(plan.sites)
     || plan.sources !== undefined;
-  const batch = needsBatch ? names.fresh('_writes') : null;
+  const batch = needsBatch || sourceFlow ? names.fresh('_writes') : null;
   const update = names.fresh('_update');
   const entity = names.fresh('_entity');
   const scope = names.fresh('_scope');
@@ -183,7 +205,15 @@ function emitComponent(
   const namespace = names.fresh('_namespace');
   const setupOnly = names.fresh('_setupOnly');
   const props = emitProps(plan, state.versions, names, runtime, batch, external);
-  const takeovers = emitTakeovers(plan.takeovers, state.versions, names, scope, batch!);
+  const before = names.fresh('_previousSource');
+  const next = names.fresh('_nextSource');
+  const beforeAssignment = sourceFlow ? expression('($$before, $$next) => $$data.noteSourceReplacement($$before, $$next, $$id)', {
+    before,
+    next,
+    data,
+    id,
+  }) : undefined;
+  const takeovers = emitTakeovers(plan.takeovers, state.versions, names, scope, batch!, new Map(), readiness.taken, beforeAssignment);
   const trackKeys = new Map<import('../graph').BindingNode, string>();
   const readonly = new Map([
     ...external,
@@ -194,7 +224,10 @@ function emitComponent(
     const key = trackKeys.get(read.binding) ?? names.fresh('_readKey');
     trackKeys.set(read.binding, key);
     readonly.set(read.node, expression('$$runtime.trackRead(() => $$version, $$binding, $$key)', {
-      runtime, version: state.versions.get(read.binding)!, binding: read.binding.binding.name, key,
+      runtime,
+      version: state.versions.get(read.binding)!,
+      binding: copy(read.node, readonly),
+      key,
     }));
   }
   // `x === e` with a tracked `x`: the reader depends only on the comparison.
@@ -208,18 +241,8 @@ function emitComponent(
     readonly.set(node, node.operator === '!==' ? expression('!$$equals', { equals }) : equals);
   }
   const handled = new Set(plan.takeovers);
-  const sources = emitSources(plan.sources, {
-    versions: state.versions,
-    takeoverFlags: takeovers.flags,
-    names,
-    data,
-    runtime,
-    owner: id,
-    batch: batch!,
-    scope,
-    replacements: readonly,
-  });
-  const mutations = emitMutations(plan.mutations, state.versions, names, runtime, batch, sources.replacements, sources.mutations);
+  const sources = emitSources(plan.sources, data);
+  const mutations = emitMutations(plan.mutations, state.versions, names, runtime, batch, readonly, sources);
   const writes = batch === null
     ? { replacements: mutations.replacements, declarations: [] }
     : emitWrites(plan.writes, state.versions, names, batch, mutations.replacements, handled);
@@ -228,17 +251,28 @@ function emitComponent(
   const refReplacements = emitRefs(refs.filter((ref) => plan.state.includes(ref.binding)), runtime, writes.replacements);
   const effects = emitEffectGroups(groups, scope, id, names, runtime, refReplacements, plan.deferred, plan.setup);
   const replayBase = new Map(effects.replacements);
-  for (const write of plan.replayWrites) replayBase.delete(write.operation);
+  const restoreReplayInput = (node: Node): void => {
+    const source = readonly.get(node);
+
+    if (source === undefined) {
+      replayBase.delete(node);
+    } else {
+      replayBase.set(node, source);
+    }
+  };
+
+  for (const write of plan.replayWrites) restoreReplayInput(write.operation);
   for (const write of plan.replayMutations) {
-    replayBase.delete(write.operation);
-    for (const target of write.targets) replayBase.delete(target.member);
+    restoreReplayInput(write.operation);
+    for (const target of write.targets) restoreReplayInput(target.member);
   }
-  const replayMutations = emitMutations(plan.replayMutations, state.versions, names, runtime, null, replayBase, sources.mutations);
+  const replayMutations = emitMutations(plan.replayMutations, state.versions, names, runtime, null, replayBase, sources);
   const replay = emitWrites(plan.replayWrites, state.versions, names, null, replayMutations.replacements, handled);
   // One flag per setup segment after a return: whether control reached it.
   const reached = [...new Set(plan.deferred.values())].map(() => names.fresh('_reached'));
   const memos = emitMemos(plan, state.versions, names, effects.replacements, replay.replacements, takeovers, runtime, trackKeys,
-    batch === null ? undefined : { batch, entity }, { statements: plan.deferred, flags: reached }, sources.mutations.values);
+    batch === null ? undefined : { batch, entity }, { statements: plan.deferred, flags: reached }, sources.values,
+    readiness.blocked);
   const once = (statements: readonly Statement[]): Statement[] => {
     const flag = reached[plan.deferred.get(statements[0]!)!]!;
     return [...effects.reach(statements), b.IfStatement({
@@ -254,6 +288,7 @@ function emitComponent(
     ...state.declarations,
     ...[...trackKeys.values()].map((key) => statement('const $$key = {};', { key })),
     ...takeovers.declarations,
+    ...readiness.storage,
     ...mutations.declarations,
     ...replayMutations.declarations,
     ...writes.declarations,
@@ -269,7 +304,6 @@ function emitComponent(
   }
   body.push(
     statement('const $$scope = $$runtime.createBuildScope();', { scope, runtime }),
-    ...sources.declarations,
     ...effects.declarations,
     statement(batch === null
       ? 'const $$setupFrame = $$scope.enter();'
@@ -278,6 +312,13 @@ function emitComponent(
           $$runtime.unregisterSubtree($$id);
         }
       });`, { setupFrame, scope, runtime, id, entity }),
+    ...(sourceFlow ? [
+      statement('$$data.ownSourceFrame($$frame, $$id);', { data, frame: setupFrame, id }),
+      statement('const $$policy = $$props?.presentation;', {
+        policy: names.of(plan.fn, '_sourcePolicy'),
+        props: props.parameter,
+      }),
+    ] : []),
     ...props.setup,
     ...memos.setup,
     ...memos.snapshots,
@@ -301,6 +342,7 @@ function emitComponent(
     names, runtime, batch, entity, id, document, versions: state.versions, replacements: effects.replacements,
     ref: slots.ref, once, namespace, rowComponents,
     select: (site, value) => site.expression === plan.fn.body ? effects.select(value) : value,
+    source: sourceFlow ? { data, policy: expression('$$policy', { policy: names.of(plan.fn, '_sourcePolicy') }) } : undefined,
   });
   body.push(...sites.mount);
   // A callback can read this instance while another component collects its
@@ -337,7 +379,7 @@ function emitComponent(
       return expression(direct === undefined
         ? '({ read: () => $$binding, notify: () => { $$version++; if (!$$scope.building()) $$batch.mark(); } })'
         : '({ read: () => $$binding, notify: () => { $$version++; if (!$$scope.building()) $$batch.mark(); }, direct: $$direct })', {
-        binding: sources.mutations.values.get(binding) ?? expression('$$binding', { binding: binding.binding.name }),
+        binding: sources.values.get(binding) ?? expression('$$binding', { binding: binding.binding.name }),
         version: state.versions.get(binding)!, batch, scope, ...(direct === undefined ? {} : { direct }),
       });
     });

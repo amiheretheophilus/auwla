@@ -24,12 +24,13 @@ import { planSharedReads, sharedSetup } from '../../features/state/shared-plan';
 import { planReceiverTargets } from '../../features/handlers/receivers';
 import { storageOwner } from './storage';
 import { planReturns } from '../../features/conditionals/returns';
-import { rejectLaterPhases } from './later-phases';
 import { isComponentCall } from '../../features/components/plan';
 import { planRefs, refMutations, refWrites } from '../../features/refs/plan';
 import { planEffects } from '../../features/effects/plan';
-import { planSources, planSourceMemos, validateSourceCalls } from '../../features/sources/plan';
+import { planSources, planSourceMemos } from '../../features/sources/plan';
 import { SourceQueries } from '../../features/sources/classify';
+import { planSourceFlow } from '../../features/sources/flow';
+import { validateSourceActions } from '../../features/sources/actions';
 
 export type { ComponentPlan, ModulePlan, Site, Template, TemplateNode } from './model';
 
@@ -60,8 +61,10 @@ function planModule(
   const refs = allRefs.filter((ref) => ref.binding.binding.module === module);
   const effects = planEffects(graph, queries, entry, components);
   const sourceQueries = new SourceQueries(new Map(graph.functions.map((summary) => [summary.fn, summary])));
+  const sourceFlow = planSourceFlow(entry, graph, queries, components, sourceQueries);
   const claimed = new Set<Node>();
   const context: TemplateContext = {
+    sourceReadiness: sourceFlow !== undefined,
     path: entry.path,
     source: module.source,
     reactive: (expression) => readsReactive(graph, queries, entry, expression),
@@ -70,8 +73,9 @@ function planModule(
     },
   };
   const functions = module.findAll(['FunctionDeclaration', 'FunctionExpression', 'ArrowFunctionExpression']);
-  rejectLaterPhases(entry, context);
-  validateSourceCalls(graph, entry, components, context);
+  if (sourceFlow !== undefined) {
+    validateSourceActions(graph, entry, components);
+  }
 
   const plans = new Map<Node, ComponentPlan>();
   const moduleBindings = [...sharedReads.keys()].filter((binding) => binding.binding.module === module);
@@ -156,12 +160,12 @@ function planModule(
       readonlyBindings,
       takeovers,
       siteInputs,
-      memos: computations,
+      memos: sourceFlow === undefined ? computations : computations.map((group) => ({ ...group, dynamic: true })),
       trackedReads,
-      dynamicSites,
+      dynamicSites: sourceFlow === undefined ? dynamicSites : new Set(allSites(component.sites).map((site) => site.expression)),
       mutationRoots,
     };
-    const sources = planSources(graph, queries, sourceQueries, planned, context);
+    const sources = planSources(planned);
     if (sources === undefined) {
       plans.set(fn, planned);
     } else {
@@ -181,7 +185,7 @@ function planModule(
     if (claimed.has(jsx)) {
       continue;
     }
-    if (isComponentCall(jsx)) {
+    if (isComponentCall(jsx) || (is.JSXElement(jsx) && sourceFlow?.elements.has(jsx))) {
       calls.push(jsx);
       continue;
     }
@@ -248,6 +252,7 @@ function planModule(
     });
   }
   return {
+    sourceFlow,
     effects,
     refs,
     module: entry,

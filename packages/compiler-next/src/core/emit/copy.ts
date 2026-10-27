@@ -20,6 +20,13 @@ function clone<T>(value: T, replacements: ReadonlyMap<Node, Node>, applying: Set
   if (value === null || typeof value !== 'object') {
     return value;
   }
+  if (finished.has(value)) {
+    // A sealed generated input can be embedded in another feature's wrapper.
+    // Preserve it there too, rather than following its authored origin again.
+    const output = structuredClone(value);
+    finished.add(output);
+    return output;
+  }
   const origin = origins.get(value) ?? value;
   const replacement = replacements.get(value as unknown as Node) ?? replacements.get(origin as Node);
   if (replacement !== undefined && finished.has(replacement)) {

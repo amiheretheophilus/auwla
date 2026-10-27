@@ -7,7 +7,7 @@ import { expression, statement, stringLiteral } from './quote';
 import { emitNodes, inheritedNodes } from './template';
 import { emitSites } from './sites';
 
-export function emitRenderValue(plan: RenderValuePlan, names: Names, runtime: string) {
+export function emitRenderValue(plan: RenderValuePlan, names: Names, runtime: string, sourceValues = false) {
   const program = names.fresh('_renderProgram');
   const values = names.fresh('_values');
   const next = names.fresh('_values');
@@ -31,6 +31,7 @@ export function emitRenderValue(plan: RenderValuePlan, names: Names, runtime: st
         entity,
         batch,
         values,
+        sourceValues,
         namespace,
         versions: new Map(),
         replacements: new Map(),

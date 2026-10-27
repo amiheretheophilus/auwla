@@ -16,13 +16,15 @@ import { emitRefs } from '../../features/refs/dom';
 import { refWrites } from '../../features/refs/plan';
 import { emitEffectGroups } from '../../features/effects/dom';
 import { statement, stringLiteral } from './quote';
+import { sourceBlockedSteps, sourceReadinessStorage, sourceTakeovers } from '../../features/sources/flow-dom';
 
-export function emitShared(plan: ModulePlan, names: Names, runtime: string, initial: ReadonlyMap<Node, Node> = new Map()) {
+export function emitShared(plan: ModulePlan, names: Names, runtime: string, initial: ReadonlyMap<Node, Node> = new Map(), data?: string) {
   const receivers = emitReceiverTargets(plan.receiverTargets, plan.module.module, names, runtime);
-  const state = emitSharedState(plan, names, runtime, new Map([...initial, ...receivers]));
+  const state = emitSharedState(plan, names, runtime, new Map([...initial, ...receivers]), data);
   let replacements = new Map(state.replacements);
   const takeovers = new Map(state.owners.map((owner) => [owner, emitTakeovers(
-    owner.plan.takeovers, owner.versions, names, owner.scope, owner.batch, owner.keys,
+    owner.plan.takeovers, owner.versions, names, owner.scope, owner.batch, owner.keys, sourceTakeovers(plan, names),
+    data === undefined ? undefined : expression('$$data.noteSourceReplacement', { data }),
   )]));
   for (const owner of state.owners) {
     for (const [node, replacement] of takeovers.get(owner)!.replacements) replacements.set(node, replacement);
@@ -63,9 +65,12 @@ export function emitShared(plan: ModulePlan, names: Names, runtime: string, init
     }
     const replay = emitMutations(owner.plan.replayMutations, owner.versions, names, runtime, null, replayBase);
     const memos = emitMemos(owner.plan, owner.versions, names, effects.replacements, replay.replacements,
-      takeovers.get(owner)!, runtime, owner.keys, { batch: owner.batch });
-    const body = finishSharedOwner(owner, memos.setup, memos.snapshots, memos.update, names);
-    return [...owner.declarations, ...effects.declarations, ...takeovers.get(owner)!.declarations,
+      takeovers.get(owner)!, runtime, owner.keys, { batch: owner.batch }, undefined, undefined, sourceBlockedSteps(plan, names));
+    const enterSource = data !== undefined && owner.plan.fn === null && owner.plan.block === null
+      ? [statement('$$data.ownSourceFrame($$frame, null);', { data, frame: owner.frame })]
+      : [];
+    const body = finishSharedOwner(owner, memos.setup, memos.snapshots, memos.update, names, enterSource);
+    return [...owner.declarations, ...sourceReadinessStorage(plan, owner.plan.fn, names), ...effects.declarations, ...takeovers.get(owner)!.declarations,
       ...(mutationDeclarations.get(owner) ?? []), ...replay.declarations, ...body];
   };
   for (const owner of [...state.owners].sort((a, b) => (b.plan.block?.start ?? b.plan.fn?.start ?? -1) - (a.plan.block?.start ?? a.plan.fn?.start ?? -1))) {

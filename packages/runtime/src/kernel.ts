@@ -75,6 +75,8 @@ export interface RenderPreparationOwner {
 /** @internal Resource adapter; the kernel never imports a data implementation. */
 export interface PreparationDependency {
   readonly key: object;
+  /** A retired owned resource must not be watched or restarted as borrowed work. */
+  readonly isLive?: () => boolean;
   snapshot(): { status: 'pending' | 'ready' | 'error'; error?: unknown };
   subscribe(invalidate: () => void): () => void;
   /** @internal Retry a borrowed failed operation after staged owners retire. */

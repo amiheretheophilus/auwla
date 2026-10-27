@@ -49,6 +49,7 @@ import {
   statusInput,
   sourceUses,
   waitForExpression,
+  waitForRenderExpression,
   type ReadsOf,
   type SourceUses,
 } from './readiness';
@@ -704,7 +705,7 @@ class ComponentRewrite {
         if (is.JSXEmptyExpression(node.expression) || !shouldWaitAtAttribute(ctx.parent)) return;
         this.handledSites.add(node);
         if (is.Function(node.expression)) return;
-        node.expression = waitForExpression(node.expression, this.readsOf());
+        node.expression = waitForRenderExpression(this.module, node, this.readsOf());
       },
     }, this.component);
   }

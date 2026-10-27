@@ -46,7 +46,8 @@ export class Reads {
       const path: string[] = [];
       let node: Node = reference.node;
       let parent = this.module.parentOf(node);
-      while (is.MemberExpression(parent) && parent.object === node && !parent.computed && is.Identifier(parent.property)) {
+      while (is.MemberExpression(parent) && parent.object === node && !parent.computed && is.Identifier(parent.property)
+        && parent.start >= root.start && parent.end <= root.end) {
         path.push(parent.property.name);
         node = parent;
         parent = this.module.parentOf(node);
@@ -116,7 +117,10 @@ export class Reads {
   directReads(part: Node): Binding[] {
     const found = new Set<Binding>();
     const visit = (reference: Reference | null) => {
-      if (reference?.binding && !reference.isWrite && !reference.inTypePosition) found.add(reference.binding);
+      if (reference?.binding && !reference.isWrite && !reference.inTypePosition
+        && !crossesFunction(this.module, reference.node, part)) {
+        found.add(reference.binding);
+      }
     };
     this.module.walk({
       Identifier: (_node, ctx) => visit(ctx.reference),

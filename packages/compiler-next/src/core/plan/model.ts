@@ -264,22 +264,7 @@ export interface ComponentSourcesPlan {
   readonly bindings: readonly {
     readonly binding: BindingNode;
     readonly call: Extract<Node, { type: 'CallExpression' }>;
-    readonly read: boolean;
   }[];
-  readonly payloadReads: readonly Node[];
-  readonly guards: ReadonlyMap<Expression, SourceReadinessGuard>;
-}
-
-export interface SourceReadinessGuard {
-  readonly inputs: readonly SourcePrerequisite[];
-  /** Derivations retain failure; consuming render sites surface it. */
-  readonly render: boolean;
-}
-
-export interface SourcePrerequisite {
-  readonly source: BindingNode;
-  /** A later assignment along this path cuts its upstream readiness edge. */
-  readonly unlessTaken: readonly BindingNode[];
 }
 
 /** Statements shared by computations run once; their outputs reset together. */
@@ -348,6 +333,8 @@ export interface MutationPlan {
 }
 
 export interface ModulePlan {
+  /** Source readiness is planned from the same graph, including helper scopes. */
+  readonly sourceFlow?: SourceFlowPlan;
   readonly effects: { readonly calls: readonly LifecycleCallPlan[]; readonly groups: readonly EffectGroupPlan[] };
   readonly refs: readonly RefPlan[];
   readonly module: ResolvedModule;
@@ -368,6 +355,59 @@ export interface ModulePlan {
   /** Comparisons whose compiled row copies read untracked; authored callbacks retain tracking. */
   readonly routedComparisons?: ReadonlyMap<Node, BindingNode>;
 }
+
+export interface SourceFlowPlan {
+  readonly elements: ReadonlyMap<Extract<Node, { type: 'JSXElement' }>, SourceInputPlan>;
+  readonly callbackStatements: ReadonlyMap<Statement, SourceInputPlan>;
+  readonly builders: ReadonlyMap<Node, SourceBuilderPlan>;
+  readonly bindingBuilders: ReadonlyMap<BindingNode, readonly Node[]>;
+  readonly suspends: ReadonlyMap<Extract<Node, { type: 'JSXElement' }>, readonly Node[]>;
+  readonly retained: ReadonlyMap<Expression, SourceInputPlan>;
+  readonly payloadReads: readonly Node[];
+  readonly memberObjects: readonly Expression[];
+  readonly guards: ReadonlyMap<Expression, SourceInputPlan>;
+  readonly patterns: ReadonlyMap<VariableDeclarator, SourceInputPlan>;
+  readonly groups: readonly Extract<Node, { type: 'JSXElement' }>[];
+  readonly calls: readonly { readonly call: Extract<Node, { type: 'CallExpression' }>; readonly read: boolean }[];
+  readonly moduleSources: readonly { readonly declaration: VariableDeclarator; readonly call: Expression }[];
+}
+
+export interface SourceBuilderPlan {
+  readonly inputs: SourceInputPlan;
+  readonly targets: readonly BindingNode[];
+  readonly owner: Node | null;
+}
+
+/** Native branches choose their own readiness inputs; inactive branches add none. */
+export interface SourceInputPlan {
+  readonly reads: readonly {
+    readonly value: Node;
+    readonly status: boolean;
+    readonly path: readonly string[];
+  }[];
+  readonly branches: readonly SourceBranchInputs[];
+}
+
+export type SourceBranchInputs =
+  | {
+    readonly kind: 'branch';
+    readonly operator: '?' | '&&' | '||' | '??';
+    readonly test: Expression;
+    readonly testInputs: SourceInputPlan;
+    readonly consequent: SourceInputPlan;
+    readonly alternate: SourceInputPlan;
+  }
+  | {
+    readonly kind: 'switch';
+    readonly test: Expression;
+    readonly testInputs: SourceInputPlan;
+    readonly cases: readonly {
+      readonly test: Expression | null;
+      readonly testInputs: SourceInputPlan;
+      readonly body: SourceInputPlan;
+      readonly ends: boolean;
+    }[];
+  };
 
 export interface RenderValuePlan {
   /** Identity of the JSX creation expression, shared across its consumers. */

@@ -1,4 +1,29 @@
 export { createDataRuntime } from './client';
+export {
+  destructureSourceInputs,
+  presentSourceValue,
+  mergeSourcePresentation,
+  readSourceValue,
+  sourcePathInput,
+  sourceChoice,
+  sourceBranchInputs,
+  sourceSwitchInputs,
+  selectSourceBranch,
+  sourceStatusInput,
+  sourceBindingInput,
+  recordSourceBuilder,
+  sourceBuilderWaiting,
+  noteSourceReplacement,
+  waitingSourceInputs,
+  WaitingSourceInputs,
+  whenSourceInputs,
+  beginSourceEvaluation,
+  finishSourceEvaluation,
+  recordSourceWaiting,
+} from './source-readiness';
+export { captureCreatedSource, describeSourceValue, ownSourceFrame, retainSourceValue } from './source-scope';
+export { ownedSourceEffect } from './source-effects';
+export { createSourceComponentValue, createSuspendedSourceValue } from './source-presentation';
 export { createStreamingSource } from './streaming';
 export { createPageSource } from './page-source';
 export { applyLivePatch, LIVE_PATCH_MAX_DEPTH, LIVE_PATCH_MAX_OPERATIONS } from './live-patch';

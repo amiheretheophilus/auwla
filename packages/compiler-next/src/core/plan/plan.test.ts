@@ -97,7 +97,7 @@ describe('primitive text sites', () => {
   });
 });
 
-describe('features of later phases fail with their phase', () => {
+describe('framework API planning', () => {
   it('plans ambient lifecycle calls and preserves a shadowed local function', () => {
     const effect = inspect('export function App() { $effect(() => {}); return <p />; }');
     expect(effect.plan.effects.calls.map((call) => call.kind)).toEqual(['$effect']);
@@ -121,18 +121,18 @@ describe('features of later phases fail with their phase', () => {
     expect(component.sources!.bindings.map((source) => source.binding.binding.name)).toEqual(['user']);
   });
 
-  it('keeps Group and internal server-client APIs deferred to the rest of Phase 8', () => {
+  it('plans Group and allows internal server-client APIs', () => {
     expect(() => inspect(`
       import { Group } from '@memoized-dom/data';
 
       export const App = () => <Group><p /></Group>;
-    `)).toThrow('Phase 8');
+    `)).not.toThrow();
 
     expect(() => inspect(`
       import { createPageSource } from '@memoized-dom/data/internal';
 
       export const x = 1;
-    `)).toThrow('Phase 8');
+    `)).not.toThrow();
   });
 
   it('allows data-package type imports independently of execution support', () => {

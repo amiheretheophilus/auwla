@@ -1,5 +1,5 @@
 /** Emit native short-circuit selection without evaluating an inactive branch. */
-import { b } from 'yuku-ast';
+import { b, findAll } from 'yuku-ast';
 import type { Expression, Node, Statement } from 'yuku-parser';
 import type { ConditionalSelection, FunctionScoped, ReturningGuard } from '../../core/plan/model';
 import type { BindingNode } from '../../core/graph';
@@ -18,11 +18,18 @@ export interface SelectionContext {
   readonly versions: ReadonlyMap<BindingNode, string>;
   /** Deferred setup inside a component's selector program. */
   readonly once?: EmitOnce;
+  readonly source?: { readonly data: string; readonly policy: Expression; readonly fallback: number };
 }
 
 export function emitSelection(selection: ConditionalSelection, context: SelectionContext) {
   const { names, runtime, replacements, versions, once } = context;
   const declarations: Statement[] = [];
+  const waiting = (value: Expression): Expression => expression('({ index: $$index, value: $$data.presentSourceValue($$value, $$policy) })', {
+    index: numberLiteral(context.source!.fallback),
+    value,
+    data: context.source!.data,
+    policy: context.source!.policy,
+  });
   function choice(index: number, value: Expression = expression('void 0')): Expression {
     return expression('({ index: $$index, value: $$value })', {
       index: numberLiteral(index),
@@ -36,6 +43,20 @@ export function emitSelection(selection: ConditionalSelection, context: Selectio
       return choice(node.index, value);
     }
     if (node.kind === 'test') {
+      if (context.source !== undefined) {
+        const value = names.fresh('_sourceTest');
+
+        return expression('$$data.selectSourceBranch($$test, ($$value) => $$value ? $$yes : $$no, $$fallback, $$policy)', {
+          data: context.source.data,
+          test: copy(node.test, replacements),
+          value,
+          yes: select(node.consequent),
+          no: select(node.alternate),
+          fallback: numberLiteral(context.source.fallback),
+          policy: context.source.policy,
+        });
+      }
+
       return b.ConditionalExpression({
         test: copy(node.test, replacements),
         consequent: select(node.consequent),
@@ -53,13 +74,21 @@ export function emitSelection(selection: ConditionalSelection, context: Selectio
     const useRight = node.operator === '&&' ? expression('$$left', { left })
       : node.operator === '||' ? expression('!$$left', { left })
       : expression('$$left === null || $$left === void 0', { left });
+    const chosen = b.ConditionalExpression({
+      test: useRight,
+      consequent: select(node.right),
+      alternate: choice(node.fallback, expression('$$left', { left })),
+    });
+
     return b.SequenceExpression({
       expressions: [
         expression('$$left = $$value', { left, value: copy(node.left, replacements) }),
-        b.ConditionalExpression({
-          test: useRight,
-          consequent: select(node.right),
-          alternate: choice(node.fallback, expression('$$left', { left })),
+        context.source === undefined ? chosen : expression('$$data.selectSourceBranch($$left, () => $$chosen, $$fallback, $$policy)', {
+          data: context.source.data,
+          left,
+          chosen,
+          fallback: numberLiteral(context.source.fallback),
+          policy: context.source.policy,
         }),
       ],
     });
@@ -73,6 +102,33 @@ export function emitSelection(selection: ConditionalSelection, context: Selectio
     const local = new Map(replacements);
     for (const [returned, selected] of node.returns) {
       local.set(returned, b.ReturnStatement({ argument: select(selected) }));
+    }
+    if (context.source !== undefined) {
+      for (const step of node.steps) {
+        if (step.kind !== 'native') {
+          continue;
+        }
+
+        for (const branch of findAll(step.statement, 'IfStatement').reverse()) {
+          if (!replacements.has(branch.test)) {
+            continue;
+          }
+
+          const test = names.fresh('_returnTest');
+          const selected = copy(branch, local);
+
+          selected.test = expression('$$test', { test });
+          local.set(branch, b.BlockStatement({ body: [
+            statement('const $$test = $$value;', { test, value: copy(branch.test, replacements) }),
+            b.IfStatement({
+              test: expression('$$test instanceof $$data.WaitingSourceInputs', { test, data: context.source.data }),
+              consequent: b.ReturnStatement({ argument: waiting(expression('$$test', { test })) }),
+              alternate: null,
+            }),
+            selected,
+          ] }));
+        }
+      }
     }
     // A `var` belongs to the component's scope: declare it there, and assign
     // it where it was written. Each run of the selector is one run of the

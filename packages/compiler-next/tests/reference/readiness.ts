@@ -164,6 +164,16 @@ export function sourceUses(module: Module): SourceUses {
       continue;
     }
 
+    const parent = module.parentOf(reference.node);
+
+    // A component receives a whole source handle. Consuming it in the child
+    // decides readiness, and a status-only child must work before loading.
+    if (is.JSXExpressionContainer(parent) && forwardedAttribute(module, parent)
+      && parent.expression === reference.node) {
+      result.raw.add(reference.node);
+      continue;
+    }
+
     const use = examine(reference.node, new Set());
 
     if (use.raw) {
@@ -198,6 +208,45 @@ export function shouldWaitAtAttribute(parent: Node | null): boolean {
   const name = parent.name.name;
   if (name.startsWith('on')) return false;
   return !['ref', 'pending', 'error', '$referenceSite'].includes(name);
+}
+
+function forwardedAttribute(module: Module, container: Node): boolean {
+  const attribute = module.parentOf(container);
+
+  if (!is.JSXAttribute(attribute) || (is.JSXIdentifier(attribute.name) && attribute.name.name === 'key')) {
+    return false;
+  }
+
+  const opening = module.parentOf(attribute);
+
+  if (!is.JSXOpeningElement(opening)) {
+    return false;
+  }
+
+  const tag = opening.name;
+
+  return is.JSXMemberExpression(tag) || (is.JSXIdentifier(tag) && /^[A-Z_$]/.test(tag.name));
+}
+
+/** Forward the value at a component prop; wait only for the object used to reach it. */
+export function waitForRenderExpression(
+  module: Module,
+  container: Extract<Node, { type: 'JSXExpressionContainer' }>,
+  readsOf: ReadsOf,
+): Expression {
+  const value = container.expression as Expression;
+
+  if (forwardedAttribute(module, container)) {
+    if (is.Identifier(value)) {
+      return value;
+    }
+
+    if (is.MemberExpression(value)) {
+      return runtimeCall('$when', [thunk(inputsOf(value.object, readsOf)), thunk(value)]);
+    }
+  }
+
+  return waitForExpression(value, readsOf);
 }
 
 // ---------------------------------------------------------------------------
@@ -624,6 +673,14 @@ export function prepareModuleReads(
   const reads = new Reads(module);
   const readsOf = readsWithPaths(reads, (binding) => identifier(binding.name), rawUses);
 
+  // Props can contain handles several members deep. Unwrap the receiver of
+  // each nested access, while leaving the final value available for forwarding.
+  for (const member of module.findAll('MemberExpression')) {
+    if (is.MemberExpression(member.object)) {
+      member.object = runtimeCall('$value', [member.object]);
+    }
+  }
+
   module.walk({
     ReturnStatement(node) {
       const expression = node.argument;
@@ -642,7 +699,7 @@ export function prepareModuleReads(
       if (handledSites.has(node)) return;
       if (is.JSXEmptyExpression(node.expression) || is.Function(node.expression)) return;
       if (!shouldWaitAtAttribute(ctx.parent)) return;
-      node.expression = waitForExpression(node.expression, readsOf);
+      node.expression = waitForRenderExpression(module, node, readsOf);
     },
 
     Identifier(_node, ctx) {

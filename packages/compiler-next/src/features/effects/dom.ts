@@ -6,12 +6,27 @@ import type { Names } from '../../core/emit/names';
 import { copy } from '../../core/emit/copy';
 import { expression, statement, stringLiteral } from '../../core/emit/quote';
 
-export function emitLifecycleCalls(plan: ModulePlan, names: Names, runtime: string) {
+export function emitLifecycleCalls(plan: ModulePlan, names: Names, runtime: string, data?: string) {
   const replacements = new Map<Node, Node>();
   const moduleOwner = stringLiteral(`mmd:effects:${plan.module.path}`);
   for (const { call, kind, inputs, owner } of plan.effects.calls) {
     const parent = owner === null ? moduleOwner : expression('$$id', { id: names.of(owner, '_id') });
     const args = b.ArrayExpression({ elements: call.arguments });
+    if (kind === '$effect' && plan.sourceFlow !== undefined && data !== undefined) {
+      const captures = b.ArrayExpression({ elements: inputs.map((node) => {
+        return is.Identifier(node) ? b.Identifier({ name: node.name }) : copy(node);
+      }) });
+
+      replacements.set(call, expression('$$data.ownedSourceEffect($$site, $$args, () => $$inputs, $$parent)', {
+        data,
+        site: stringLiteral(`${plan.module.path}:${call.start}`),
+        args,
+        inputs: captures,
+        parent,
+      }));
+
+      continue;
+    }
     replacements.set(call, kind === '$cleanup'
       ? expression('$$runtime.ownedCleanup($$args, $$parent)', { runtime, args, parent })
       : expression('$$runtime.ownedEffect($$site, $$args, () => $$inputs, $$parent)', {

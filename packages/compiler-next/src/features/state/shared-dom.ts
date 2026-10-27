@@ -27,7 +27,7 @@ export interface SharedOwnerEmit {
   readonly notifiers: ReadonlyMap<BindingNode, string>;
 }
 
-export function emitSharedState(plan: ModulePlan, names: Names, runtime: string, initial: ReadonlyMap<Node, Node>) {
+export function emitSharedState(plan: ModulePlan, names: Names, runtime: string, initial: ReadonlyMap<Node, Node>, data?: string) {
   const replacements = new Map(initial);
   const imports: Statement[] = [];
   const owners: SharedOwnerEmit[] = [];
@@ -71,10 +71,19 @@ export function emitSharedState(plan: ModulePlan, names: Names, runtime: string,
         if ($$runtime.isBuilding()) $$refresh();
         return $$version;
       }`, { current, refresh, runtime, version }));
-      declarations.push(statement(`function $$reader() {
+      const hasReadiness = data !== undefined && plan.sourceFlow?.bindingBuilders.has(binding);
+      const readiness = names.fresh('_readReadiness');
+      const value = hasReadiness ? expression('$$readiness ? $$data.sourceBindingInput($$binding, $$cell, $$readiness === true ? void 0 : $$readiness) : $$binding', {
+        readiness,
+        data: data!,
+        binding: binding.binding.name,
+        cell: names.of(declared, '_sourceBinding'),
+      }) : expression('$$binding', { binding: binding.binding.name });
+
+      declarations.push(statement(`function $$reader(${hasReadiness ? '$$readiness' : ''}) {
         if ($$runtime.isBuilding()) $$refresh();
-        return $$runtime.trackRead($$current, $$binding, $$key);
-      }`, { reader: read.name, current, refresh, runtime, binding: binding.binding.name, key }));
+        return $$runtime.trackRead($$current, $$value, $$key);
+      }`, { reader: read.name, current, refresh, runtime, value, key, readiness }));
       if (owner.fn === null && owner.block === null) {
         declarations.push(statement('export { $$reader };', { reader: read.name }));
       }
@@ -167,6 +176,7 @@ export function finishSharedOwner(
   snapshots: readonly Statement[],
   update: readonly Statement[],
   names: Names,
+  onEnter: readonly Statement[] = [],
 ) {
   const { scope, frame, ready, refresh, batch } = owner;
   const declarations: Statement[] = [];
@@ -205,6 +215,7 @@ export function finishSharedOwner(
       }),
       statement('$$batch.refreshing();', { batch }),
       statement('const $$frame = $$scope.enter();', { frame, scope }),
+      ...onEnter,
       ...update,
       // A lazy derivation may replace its graph after the input write already
       // published. Release cached mutation reaches before leaving this refresh.
@@ -270,6 +281,7 @@ export function finishSharedOwner(
     ...declarations,
     statement(owner.plan.block === null ? 'const $$frame = $$scope.enter();'
       : 'const $$frame = $$scope.enter(() => $$complete(void 0));', { frame, scope, complete }),
+    ...onEnter,
   ];
   for (const node of setup) {
     body.push(copy(node, returns));

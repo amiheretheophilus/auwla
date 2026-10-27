@@ -18,6 +18,7 @@ import { enableDataReads } from './read-resource';
 import { exposeDataRuntime } from './client';
 import { enableRequestEncoding } from './request-encoding';
 import { installActiveDataRestoration } from './active-restoration';
+import { transparentFetchResult } from './transparent-actions';
 
 installActiveDataRestoration();
 
@@ -34,7 +35,7 @@ export function setActiveDataRuntime(runtime: DataRuntime | null): DataRuntime {
 export const $fetch = ((
   target: string | URL | null,
   options?: FetchOptions,
-) => enableRequestEncoding(activeDataRuntime()).$fetch(target, options)) as unknown as TransparentFetchFunction;
+) => transparentFetchResult(enableRequestEncoding(activeDataRuntime()).$fetch(target, options))) as unknown as TransparentFetchFunction;
 export const $read = <T>(
   promise: PromiseLike<T>,
   replay?: () => PromiseLike<T>,

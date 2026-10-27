@@ -1,6 +1,9 @@
 import { waitFor, type FetchStub } from '../../../test-support/helpers';
 import { describe, expect, it, vi } from 'bun:test';
+import { createBuildScope } from '@memoized-dom/runtime';
+import { ownSourceFrame } from '../src/source-scope';
 import {
+  $fetch,
   $read,
   $track,
   createDataRuntime,
@@ -36,6 +39,47 @@ function json(value: unknown, status = 200): Response {
 }
 
 describe('transparent resolved values', () => {
+  it('rejects an opaque render-time action before starting its request', () => {
+    const fetcher = vi.fn(async () => json({ saved: true }));
+    const runtime = createDataRuntime({ fetch: fetcher as FetchStub });
+    const scope = createBuildScope();
+    const frame = scope.enter();
+
+    ownSourceFrame(frame, null);
+
+    expect(() => runWithDataRuntime(runtime, () => $fetch('/save', { method: 'POST' })))
+      .toThrow('actions must run from an event handler, effect or deferred callback');
+    expect(fetcher).not.toHaveBeenCalled();
+
+    scope.leave(frame);
+    runtime.clear();
+  });
+
+  it('awaits a POST facade through the original request and dispatches only once', async () => {
+    const fetcher = vi.fn(async () => json({ id: 1, name: 'Lin' }));
+    const runtime = createDataRuntime({ fetch: fetcher as FetchStub });
+    const result = runWithDataRuntime(runtime, () => {
+      return $fetch<User>('/users', { method: 'POST', body: { name: 'Lin' } });
+    });
+
+    expect(result).toBeInstanceOf(Promise);
+    expect(await result).toEqual({ id: 1, name: 'Lin' });
+    expect(fetcher).toHaveBeenCalledTimes(1);
+
+    runtime.clear();
+  });
+
+  it('rejects a failed action with the original request error', async () => {
+    const fetcher = vi.fn(async () => json({ message: 'offline' }, 503));
+    const runtime = createDataRuntime({ fetch: fetcher as FetchStub });
+    const result = runWithDataRuntime(runtime, () => $fetch('/users', { method: 'POST' }));
+
+    await expect(result).rejects.toMatchObject({ kind: 'http', status: 503, message: 'offline' });
+    expect(fetcher).toHaveBeenCalledTimes(1);
+
+    runtime.clear();
+  });
+
   it('treats an initial null target as a committed null payload without fetching', () => {
     const fetcher = vi.fn(async () => json({ name: 'unused' }));
     const runtime = createDataRuntime({ fetch: fetcher as FetchStub });
