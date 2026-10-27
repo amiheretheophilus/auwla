@@ -191,14 +191,20 @@ short-circuit, the evaluation order and each call's `this`. `delete`, `super`
 and private-name chains stay as written, without unwrapping (2026-10-27; the
 ref case "a derivation of a ref updates after mount" caught it).
 
-A value a waiting statement may change is marked pending when that statement
-runs and finds its inputs waiting (`statement(…, mayBuild)`), and likewise when
-another binding's initializer may change it (`memo(…, mayBuild)`, observed like
-`observe`). Doing this at run time lets reads declared after the value count;
-the static `builderInputs` thunk cannot read them where the value is declared.
-The value's memo resets `pending` on the next render. Before 2026-10-27 the
-reference skipped both cases, which the source generator found against the
-compiled output (two cases under "Found by the generated source programs").
+Builder readiness is tracked at run time (`Instance.blocked` in
+`reference/runtime.ts`). A statement whose guard finds its inputs waiting
+records itself with the values it builds and those it may change
+(`statement(…, builds, mayBuild)`); another binding's initializer that is still
+`Waiting` does the same for the values it may change (`memo(…, mayBuild)`,
+observed like `observe`). A value's `pending` is its own callbacks' waiting
+plus every blocked entry that targets it; an entry lasts until its statement
+runs, as the compiled output's builder steps do. The statement's own guard
+chooses the branches that run, so a test it can evaluate never makes anything
+wait. This replaced a static `builderInputs` thunk evaluated where the value is
+declared, which could not read the value itself (so such a test was never
+evaluated ahead) or anything declared after it. The source generator, comparing
+compiled output with the reference, found all three (2026-10-27; three cases
+under "Found by the generated source programs").
 
 Status inputs retain the actual uses reached through called local helpers,
 so a `$track`-only helper can run while its source is pending. A helper that

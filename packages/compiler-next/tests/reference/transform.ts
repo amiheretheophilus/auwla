@@ -806,13 +806,12 @@ class ComponentRewrite {
       const declarator = this.declaratorOf(binding)!;
       const initialValue = declarator.init ?? identifier('undefined');
       const initial = thunk(waitForExpression(initialValue, this.readsOf()));
-      // The slot holds the initializer's value at once; while statements that build
-      // it wait for a source, rendering waits too (`$ready`).
-      const pending = this.builderInputs(binding);
+      // The slot holds the initializer's value at once. While a statement that
+      // builds it is blocked on a source, rendering waits too (`$ready`); the
+      // runtime tracks that as statements run (`Instance.blockedFor`).
       const index = numberLiteral(slot.index);
       const args = [index, this.inputsOf(binding, declarator.init), initial];
       const changes = (this.initializerBuilds.get(binding) ?? []).map((target) => identifier(this.slots.get(target)!.name));
-      if (pending !== undefined || changes.length > 0) args.push(pending ?? identifier('undefined'));
       if (changes.length > 0) args.push(thunk(b.ArrayExpression({ elements: changes })));
       const created = ctxCall('memo', args);
       declarations.push({ declarator, slot, created });
@@ -1039,44 +1038,6 @@ class ComponentRewrite {
   /** `() => [inputs]` of a guard on `root`, branch by branch (`inputsOf`). */
   private guardInputs(root: Node): Expression {
     return thunk(inputsOf(root, this.readsOf()));
-  }
-
-  /**
-   * A value built by body statements waits for what they read too. A statement
-   * that only may build it (it passes the value to a call) counts until it is seen
-   * not to change it: `...($ctx.mayChange(0, 1) ? [reads] : [])`. Reads declared
-   * after the value cannot be read where it is declared, so they are left out.
-   */
-  private builderInputs(binding: Binding): Expression | undefined {
-    const declaredAt = binding.declarations[0]!.start;
-    const readsOf = this.readsOf((input) => input !== binding && !this.isDeclaredAfter(input, declaredAt));
-    const elements: Expression[] = [];
-    let built = false;
-
-    for (const [statement, plan] of this.plans) {
-      if (plan.builds.has(binding)) {
-        built = true;
-        elements.push(b.SpreadElement({ argument: inputsOf(statement, readsOf) }) as never);
-      }
-      const position = plan.mayBuild.indexOf(binding);
-      if (position >= 0) {
-        built = true;
-        const test = ctxCall('mayChange', [numberLiteral(plan.observeIndex!), numberLiteral(position)]);
-        const choice = b.ConditionalExpression({
-          test,
-          consequent: inputsOf(statement, readsOf),
-          alternate: b.ArrayExpression({ elements: [] }),
-        });
-        elements.push(b.SpreadElement({ argument: choice }) as never);
-      }
-    }
-
-    return built ? thunk(b.ArrayExpression({ elements })) : undefined;
-  }
-
-  private isDeclaredAfter(input: Binding, position: number): boolean {
-    const isOwn = this.slots.has(input) || this.ownBindings().includes(input);
-    return isOwn && !this.isParameter(input) && input.declarations[0]!.start > position;
   }
 
   /** `() => [a, $s1.v, …]`: reads the current value of each input. */

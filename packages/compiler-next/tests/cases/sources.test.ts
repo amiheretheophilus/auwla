@@ -2009,6 +2009,30 @@ behaves('a statement that may change a value makes it wait for reads declared af
   },
 });
 
+behaves('a may-change statement whose test reads the value itself waits only when its branch runs', {
+  source: `
+    import { $fetch, Group } from '@memoized-dom/data';
+    export function App() {
+      const s0 = $fetch('/s0');
+      let items = [];
+      let found = 0;
+      if (items.length > items.reduce((sum, x) => sum + x, 0)) found = s0.value;
+      return (
+        <Group pending={() => <i>loading</i>}>
+          <p>{items.length > 0 ? 'some' : 'none'}</p>
+          <span>{found}</span>
+        </Group>
+      );
+    }`,
+  steps: [{ respond: '/s0', value: { value: 1 } }],
+  check(container) {
+    // The test reads no source and is false, so the source branch never runs
+    // ("branches are lazy"): neither \`items\` nor \`found\` waits.
+    expect(container.querySelector('p')?.textContent).toBe('none');
+    expect(container.querySelector('span')?.textContent).toBe('0');
+  },
+});
+
 behaves('a snapshot written before its source loads keeps the write', {
   source: `
     import { $fetch, Group } from '@memoized-dom/data';

@@ -185,8 +185,22 @@ class MemoSlot {
   inputs: unknown;
   /** Sources discovered when a helper returned a waiting computation. */
   sources: readonly Source[] = [];
-  /** Statements that build it still wait for a source (`$ready`). */
-  pending: Waiting | undefined;
+  /** What its initializer's helpers and callbacks wait for, set each render. */
+  private ownPending: Waiting | undefined;
+
+  /**
+   * It waits (`$ready`) while its own computation's callbacks wait, or while a
+   * statement that builds or may change it is blocked on a source
+   * (`Instance.blockedFor`). A handler that took it over ends both.
+   */
+  get pending(): Waiting | undefined {
+    if (this.writtenLater) return undefined;
+    return $waiting([this.ownPending, this.owner.blockedFor(this)]);
+  }
+
+  set pending(value: Waiting | undefined) {
+    this.ownPending = value;
+  }
   /** A callback used by the initializer may discover readiness only when called. */
   callbackSources: readonly Source[] = [];
   reads = new Set<ReadValue>();
@@ -199,12 +213,6 @@ class PropSlot extends MemoSlot {
     super(owner);
     this.seed(fromParent);
   }
-}
-
-/** Add `pending` to what a slot waits for, unless a handler already took it over. */
-function waitAlso(slot: MemoSlot, pending: Waiting): void {
-  if (slot.writtenLater) return;
-  slot.pending = $waiting([slot.pending, pending]);
 }
 
 /**
@@ -304,10 +312,10 @@ export class Instance {
 
   /**
    * A derived value: computed again only when one of its inputs changes.
-   * `readPending` lists what the body statements that build it read.
+   * `mayBuild` lists values declared before it that its initializer may change.
    */
   memo(
-    index: number, readInputs: () => unknown[], compute: () => unknown, readPending?: () => unknown[],
+    index: number, readInputs: () => unknown[], compute: () => unknown,
     mayBuild: () => MemoSlot[] = () => [],
   ): MemoSlot {
     let slot = this.slots.get(index) as MemoSlot | undefined;
@@ -354,8 +362,7 @@ export class Instance {
     } else {
       slot.fresh = false;
     }
-    const waitingInputs = readPending?.() ?? [];
-    waitingInputs.push(...slot.callbackSources);
+    const waitingInputs: unknown[] = [...slot.callbackSources];
     for (const trace of this.computations.values()) {
       if (trace.pending === undefined || !trace.writes.has(slot)) continue;
       waitingInputs.push(...trace.pending.sources);
@@ -364,14 +371,42 @@ export class Instance {
 
     // While the initializer waits, so does each value it may change, until it
     // has run once; after that, only a value it was seen to change.
+    const key = `memo:${index}`;
     const current = slot.peek();
     if (current instanceof Waiting) {
-      mayBuild().forEach((target, position) => {
-        const unknown = !this.initializersRun.has(index) || this.confirmations.has(`memo:${index}:${position}`);
-        if (unknown) waitAlso(target, current);
+      this.blocked.set(key, {
+        pending: current,
+        targets: mayBuild().map((target, position) => [target, () => {
+          return !this.initializersRun.has(index) || this.confirmations.has(`${key}:${position}`);
+        }] as const),
       });
+    } else {
+      this.blocked.delete(key);
     }
     return slot;
+  }
+
+  /**
+   * Statements (and initializers) found waiting for a source, with the values
+   * they build or may change. An entry lasts until the statement runs, across
+   * renders, as the compiled output's builder steps do.
+   */
+  private readonly blocked = new Map<string, {
+    pending: Waiting;
+    targets: readonly (readonly [MemoSlot, () => boolean])[];
+  }>();
+
+  /** What `slot` waits for because a statement that may build it is blocked. */
+  blockedFor(slot: MemoSlot): Waiting | undefined {
+    const sources = new Set<Source>();
+    for (const { pending, targets } of this.blocked.values()) {
+      if (!targets.some(([target, applies]) => target === slot && applies())) continue;
+      // Only what still has no payload, or failed; no new claims or requests.
+      for (const source of pending.sources) {
+        if (!source.hasValue || source.error !== null) sources.add(source);
+      }
+    }
+    return sources.size === 0 ? undefined : new Waiting([...sources]);
   }
 
   private dependenciesOf(slot: MemoSlot | undefined): Set<ReadValue> {
@@ -491,22 +526,28 @@ export class Instance {
     index: number, readInputs: () => unknown[], run: () => void, builds: MemoSlot[] = [],
     mayBuild: readonly (readonly [MemoSlot, number, number])[] = [],
   ): void {
+    const key = `statement:${index}`;
     const targets = [...builds, ...(this.computations.get(index)?.writes ?? [])];
     if (targets.length > 0 && targets.every((slot) => slot.writtenLater)) {
+      this.blocked.delete(key);
       this.statementsRun.add(index);
       return;
     }
     const pending = $waiting(readInputs());
     if (pending !== undefined) {
-      // A value this blocked statement may change waits with it until it has
-      // run once, whatever it reads and wherever that was declared
-      // (decisions, 2026-10-19). Set here, at run time, so a read declared
-      // after the value still counts; the value's memo resets it next render.
-      for (const [slot, observe, position] of mayBuild) {
-        if (this.mayChange(observe, position)) waitAlso(slot, pending);
-      }
+      // What it builds, and what it may change until seen not to, wait with it
+      // (decisions, 2026-10-19). Its own guard chose the branches that run, so
+      // a test it can evaluate does not make anything wait.
+      this.blocked.set(key, {
+        pending,
+        targets: [
+          ...targets.map((slot) => [slot, () => true] as const),
+          ...mayBuild.map(([slot, observe, position]) => [slot, () => this.mayChange(observe, position)] as const),
+        ],
+      });
       return;
     }
+    this.blocked.delete(key);
     const outer = computation;
     const trace: Computation = { reads: new Set(), writes: new Set() };
     computation = trace;
