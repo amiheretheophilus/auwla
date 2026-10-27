@@ -2285,6 +2285,41 @@ behaves('taking over a binding releases what its waiting initializer may change'
   },
 });
 
+// Ambient data calls: the framework declares them global and supplies imports.
+
+behaves('ambient $fetch and $track behave as their imports', {
+  source: `
+    export function App() {
+      let id = 1;
+      const user = $fetch('/user/' + id);
+      const request = $track(user);
+      return (
+        <main>
+          <p>{user.name}</p>
+          <span>{request.pending ? 'pending' : request.refreshing ? 'refreshing' : 'ready'}</span>
+          <button onClick={() => { id = 2; }}>next</button>
+        </main>
+      );
+    }`,
+  steps: [{ respond: '/user/1', value: { name: 'Ada' } }, { click: 'button' }, { respond: '/user/2', value: { name: 'Lin' } }],
+  check(container, observation) {
+    expect(container.querySelector('p')?.textContent).toBe(['', 'Ada', 'Ada', 'Lin'][observation]);
+    expect(container.querySelector('span')?.textContent).toBe(['pending', 'ready', 'refreshing', 'ready'][observation]);
+  },
+});
+
+behaves('a local $fetch shadows the ambient data call', {
+  source: `
+    function $fetch(path) { return { name: 'local ' + path }; }
+    export function App() {
+      const user = $fetch('/user');
+      return <p>{user.name}</p>;
+    }`,
+  check(container) {
+    expect(container.querySelector('p')?.textContent).toBe('local /user');
+  },
+});
+
 behaves('a snapshot written before its source loads keeps the write', {
   source: `
     import { $fetch, Group } from '@memoized-dom/data';

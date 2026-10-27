@@ -11,6 +11,7 @@ import { Analyzer, BindingFlags, type Binding, type Module } from 'yuku-analyzer
 import type { CompileModulesOptions } from '../../options';
 import { CompileError } from '../diagnostics';
 import type { ParsedModule } from '../parse';
+import { withAmbientImports } from './ambient';
 import { findGlobalWrites, type GlobalWrites } from './globals';
 import { importResolver } from './imports';
 import { findWrites, type WriteSite } from './writes';
@@ -80,7 +81,14 @@ export function resolve(parsed: readonly ParsedModule[], options: CompileModules
   const analyzer = new Analyzer({ resolve: importResolver(paths, options) });
 
   const modules = parsed.map((input): ResolvedModule => {
-    const module = analyzer.setFile(input.path, input.source, { lang: input.lang, sourceType: 'module' });
+    const settings = { lang: input.lang, sourceType: 'module' } as const;
+    let module = analyzer.setFile(input.path, input.source, settings);
+    const ambient = withAmbientImports(module, input.source);
+
+    if (ambient !== null) {
+      module = analyzer.setFile(input.path, ambient, settings);
+    }
+
     const error = module.diagnostics.find((diagnostic) => diagnostic.severity === 'error');
     if (error !== undefined) {
       // Parse already checked the authored text, so this is lowered code.

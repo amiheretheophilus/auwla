@@ -66,6 +66,7 @@ removing its placeholder, so later branch mounts inherit it too.
 | `imports.ts` | which compiled module an import names: relative paths with extension and `index` probing, `options.resolveImport` first; packages are outside |
 | `writes.ts` | write sites per binding, and `runnerOf` / `declaringRunner` |
 | `globals.ts` | which host globals the program writes; every other global is not an input (`state-and-derived.md`) |
+| `ambient.ts` | appends the import of an ambient framework data call (`$fetch`, `$read`, `$track`, `$forms`) a module uses without a binding, before analysis, so later stages resolve it by binding identity (`sources.md`) |
 | `members.ts` | whether a property read may run hidden code (a getter, a proxy): not on unwritten globals or constant plain data |
 | `functions.ts` | one summary per function (captured reads, writes, calls, `this` use), built in one pass per module; `functionValue` follows immutable aliases and imports to a function |
 | `escapes.ts` | escaping functions: stored, passed, returned, exported, aliased, methods and accessors; not those only ever called directly (`output.md`, "Phase 3 design", rule 5) |

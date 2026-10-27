@@ -1,4 +1,7 @@
 /** Stable authored graphs; examples are measured separately and may change. */
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+
 export const sizeFixtures: Record<string, Record<string, string>> = {
   ...Object.fromEntries([1,24].flatMap(count=>['composition','request'].map(kind=>[`${kind}-recreated-slot-${count}`,{
     './App.tsx': `import {Shell} from './Shell';export function App(){let n=0;let open=true;
@@ -225,4 +228,12 @@ export const sizeFixtures: Record<string, Record<string, string>> = {
     return <main><button onClick={()=>{keyed=keyed.toReversed();positional=[...positional,'c'];}}>Change</button>
       <ul class="keyed">{keyed.map(row=><li key={row.id}>{row.label}</li>)}</ul>
       <ul class="positional">{positional.map((item,index)=><li key={index}>{index}:{item}</li>)}</ul></main>;}` },
+  // Whole applications: the user's dashboard (sources, Group/suspend, component
+  // lists, forms, refs, effects, a timer) and the Octane benchmark app.
+  flowos: { './App.tsx': readFileSync(resolve(import.meta.dirname, 'fixtures/flowos.tsx'), 'utf8') },
+  octane: {
+    './App.tsx': `export { OctaneBench as App } from './Octane';`,
+    './Octane.tsx': readFileSync(resolve(import.meta.dirname, '../octane/memoized-dom/App.tsx'), 'utf8'),
+    './model.ts': readFileSync(resolve(import.meta.dirname, '../octane/memoized-dom/model.ts'), 'utf8'),
+  },
 };

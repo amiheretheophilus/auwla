@@ -131,6 +131,14 @@ All paths below are under `packages/compiler-next/`. This is test code only.
 
 ## Rules
 
+- `$fetch`, `$read`, `$track` and `$forms` work with or without an import: the
+  framework declares them global and supplies their imports
+  (`packages/compiler/src/jsx-types.ts`). `core/resolve/ambient.ts` appends the
+  import to a module that uses one without a binding; a local declaration of the
+  same name shadows it, and a module that assigns the global keeps the global.
+  Before 2026-10-27 compiler-next only recognized imported calls, so examples
+  using the ambient form (fieldnotes, octopulse, stress-lab) compiled to calls of
+  an undefined global.
 - A **source** is a `$fetch` call, a `$read` call, a GET server function call, or a
   call to a helper that returns one. The helper may be in the same module or
   imported; `definition()` from `yuku-analyzer` finds it either way. The old
@@ -218,6 +226,10 @@ All paths below are under `packages/compiler-next/`. This is test code only.
 returns a `Waiting` value carrying its sources, rather than evaluating against
 `undefined` or throwing a suspension signal. `$value` reads the payload in ready
 computations. No `try`/`catch`/`finally` is introduced.
+
+A source that took a loaded one's place (an input change) reports `refreshing`
+and not `pending` while it loads, as `docs/05-data.md` says and the data runtime
+does; before 2026-10-27 the reference reported a fresh load.
 
 A prop can hold a source handle several members deep, so `prepareModuleReads`
 unwraps the receiver of each nested member (`$value(props.user).name`). Inside

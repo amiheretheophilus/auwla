@@ -1,21 +1,51 @@
-/** Attribute minified browser bytes to stable compiler-generated source graphs. */
+/**
+ * Attribute minified browser bytes to stable compiler-generated source graphs.
+ *
+ * `BENCH_COMPILER=next` audits compiler-next instead (`../load-compiler.ts`).
+ * The bundle-trimming checks below describe what the existing compiler
+ * achieves; for compiler-next they are reported as targets not yet met rather
+ * than stopping the audit, so the report doubles as its size to-do list.
+ */
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { posix, resolve } from 'node:path';
 import { gzipSync, brotliCompressSync } from 'node:zlib';
 import { build } from 'esbuild';
-import { compileModulesDetailed } from '@memoized-dom/compiler';
 import { sizeFixtures } from './fixtures';
 import { hydrationBootstrap, hydrationVirtualId } from '../../packages/vite/src/hydration';
+import { compiledSuffix, selectedCompilerPath } from '../load-compiler';
 
 const args = process.argv.slice(2);
-if (args.some(arg => arg !== '--verify' && arg !== '--hydrate' && arg !== '--hydrate-program' && !/^--baseline-hydration=(general|program)$/.test(arg) && !arg.startsWith('--before-ref=') && !arg.startsWith('--fixture='))) throw new Error('Use --verify, --hydrate, --hydrate-program, --baseline-hydration=general|program, --before-ref=<commit> or --fixture=<name>');
+if (args.some(arg => arg !== '--verify' && arg !== '--hydrate' && arg !== '--hydrate-program' && !/^--baseline-hydration=(general|program)$/.test(arg) && !arg.startsWith('--before-ref=') && !arg.startsWith('--fixture=') && !arg.startsWith('--compiler='))) throw new Error('Use --verify, --hydrate, --hydrate-program, --baseline-hydration=general|program, --before-ref=<commit>, --fixture=<name> or --compiler=<entry>');
 const programHydration = args.includes('--hydrate-program');
 const baselineProgramHydration=!args.includes('--baseline-hydration=general');
 const hydration = args.includes('--hydrate') || programHydration;
 
+/** `old` is the existing compiler; anything else is compiler-next or a snapshot of it. */
+const compilerPath = selectedCompilerPath();
+const compilerName = compilerPath === null ? 'old' : compiledSuffix().slice(1);
+if (compilerPath !== null && hydration) throw new Error('compiler-next has no hydration output yet (Phase 10)');
+const compileFixture = compilerPath === null
+  ? (await import('@memoized-dom/compiler')).compileModulesDetailed
+  : await (async () => {
+    const { compileModules } = await import(new URL(`file:///${compilerPath.replaceAll('\\', '/')}`).href);
+    return (sources: Record<string, string>) => ({
+      output: compileModules(sources) as Record<string, string>,
+      hydrationCapabilities: { list: false, markup: false },
+    });
+  })();
+
+/** A trimming target: the existing compiler must meet it; compiler-next reports it. */
+const notMet: string[] = [];
+function trimmed(condition: boolean, fixture: string, graph: string, message: string): void {
+  if (condition) return;
+  if (compilerName === 'old') throw new Error(message);
+  notMet.push(`${fixture} (${graph}): ${message}`);
+}
+
 const root = resolve(import.meta.dirname, '../..');
-const directory = resolve(import.meta.dirname, programHydration ? 'dist/audit-program-hydration' : hydration ? 'dist/audit-hydration' : 'dist/audit');
+const suffix = compilerName === 'old' ? '' : `-${compilerName}`;
+const directory = resolve(import.meta.dirname, programHydration ? 'dist/audit-program-hydration' : hydration ? 'dist/audit-hydration' : `dist/audit${suffix}`);
 const revision = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' }).trim();
 const status = execFileSync('git', ['status', '--porcelain'], { cwd: root, encoding: 'utf8' }).trim();
 mkdirSync(directory, { recursive: true });
@@ -34,26 +64,37 @@ if (reference !== undefined) {
     'packages/router/src', 'packages/router/package.json'], { cwd: root });
   execFileSync('tar', ['-xf', archive, '-C', baselineRoot]);
 }
-const rows: Array<{ fixture: string; graph: string; raw: number; gzip: number; brotli: number;
+const rows: Array<{ fixture: string; graph: string; raw: number; gzip: number; brotli: number; app: number;
   inputs: Array<{ path: string; bytes: number }> }> = [];
 const selected = new Set(args.filter(arg => arg.startsWith('--fixture=')).map(arg => arg.slice(10)));
 for (const name of selected) if (!Object.hasOwn(sizeFixtures, name)) throw new Error(`Unknown fixture ${name}`);
 for (const [fixture, sources] of Object.entries(sizeFixtures)) {
   if (selected.size && !selected.has(fixture)) continue;
-  const compilation = compileModulesDetailed({ ...sources,
-    './main.ts': `${hydration ? `import '${programHydration ? hydrationVirtualId : '@memoized-dom/runtime/hydrate'}';` : ''}import {mount} from '@memoized-dom/runtime';import {App} from './App';mount('root',App);`,
-  }, {dataDelivery: hydration ? 'universal' : 'client'});
+  let compilation: { output: Record<string, string>; hydrationCapabilities: { list: boolean; markup: boolean } };
+  try {
+    compilation = compileFixture({ ...sources,
+      './main.ts': `${hydration ? `import '${programHydration ? hydrationVirtualId : '@memoized-dom/runtime/hydrate'}';` : ''}import {mount} from '@memoized-dom/runtime';import {App} from './App';mount('root',App);`,
+    }, {dataDelivery: hydration ? 'universal' : 'client'});
+  } catch (error) {
+    // A fixture one compiler rejects is reported, not fatal: the other may accept it.
+    if (compilerName === 'old') throw error;
+    notMet.push(`${fixture}: does not compile: ${error instanceof Error ? error.message.split('\n')[0] : String(error)}`);
+    continue;
+  }
   const compiled = compilation.output;
-  if (fixture === 'request-factory-rebind' && !compiled['./App.tsx']?.includes('rebindResolvedValueFromFactory')) {
-    throw new Error('The factory fixture must exercise imported request adoption');
-  }
-  if (fixture === 'request-rebind' && !compiled['./App.tsx']?.includes('rebindResolvedValue(')) {
-    throw new Error('The direct fixture must exercise request rebinding');
-  }
-  if (fixture === 'mixed-lists' && (!compiled['./App.tsx']?.includes('createListRegion') ||
-      !compiled['./App.tsx']?.includes('createPositionalListRegion'))) throw new Error('The mixed fixture must exercise both list capabilities');
-  if (fixture === 'request-markup' && !compiled['./App.tsx']?.includes('materializeMarkup')) {
-    throw new Error('The markup fixture must exercise template materialization');
+  // These pin that a fixture exercises the existing compiler's emitted capability.
+  if (compilerName === 'old') {
+    if (fixture === 'request-factory-rebind' && !compiled['./App.tsx']?.includes('rebindResolvedValueFromFactory')) {
+      throw new Error('The factory fixture must exercise imported request adoption');
+    }
+    if (fixture === 'request-rebind' && !compiled['./App.tsx']?.includes('rebindResolvedValue(')) {
+      throw new Error('The direct fixture must exercise request rebinding');
+    }
+    if (fixture === 'mixed-lists' && (!compiled['./App.tsx']?.includes('createListRegion') ||
+        !compiled['./App.tsx']?.includes('createPositionalListRegion'))) throw new Error('The mixed fixture must exercise both list capabilities');
+    if (fixture === 'request-markup' && !compiled['./App.tsx']?.includes('materializeMarkup')) {
+      throw new Error('The markup fixture must exercise template materialization');
+    }
   }
   const modules = new Map(Object.entries(compiled).map(([id, source]) => [posix.resolve('/', id), source]));
   for (const graph of ['package', 'source', ...(baselineRoot ? ['source-before'] : [])]) {
@@ -97,102 +138,65 @@ for (const [fixture, sources] of Object.entries(sizeFixtures)) {
     const inputs = Object.entries(Object.values(result.metafile!.outputs)[0]!.inputs)
       .map(([path, input]) => ({ path: path.replaceAll('\\', '/'), bytes: input.bytesInOutput }))
       .filter(input => input.bytes > 0).sort((a, b) => b.bytes - a.bytes);
+    // Minified bytes of the compiled fixture modules alone: the part that grows
+    // with every component, unlike the shared runtime.
+    const app = inputs.filter(input => input.path.startsWith('fixture:')).reduce((sum, input) => sum + input.bytes, 0);
     const row = { fixture, graph, raw: output.contents.byteLength, gzip: gzipSync(output.contents).byteLength,
-      brotli: brotliCompressSync(output.contents).byteLength, inputs };
+      brotli: brotliCompressSync(output.contents).byteLength, app, inputs };
+    const check = (condition: boolean, message: string) => trimmed(condition, fixture, graph, message);
+    const counters = ['owner-counter', 'input-list', 'module-counter'].includes(fixture);
+    const fixedRequests = ['request-group','request-routed-group','request-data'].includes(fixture);
+    const bodyless = [...['request-group','request-routed-group','request-data'], 'request-rebind', 'request-factory-rebind'].includes(fixture);
+    const retains = (pattern: RegExp) => inputs.some(input => pattern.test(input.path));
     if (graph !== 'source-before') {
       const overrides = output.text.includes('.effects??');
-      if (!hydration && ['owner-counter', 'input-list', 'module-counter'].includes(fixture) && overrides) {
-        throw new Error('Ordinary client mounting must not retain environment override merging');
-      }
-      if (fixture === 'isolated-counter' && !overrides) {
-        throw new Error('An isolated runtime must retain environment override support');
-      }
-    }
-    if (!hydration && graph !== 'source-before' &&
-        ['owner-counter', 'input-list', 'module-counter'].includes(fixture) &&
-        inputs.some(input => /\/hydration-error\.(?:ts|js)$/.test(input.path))) {
-      throw new Error('Ordinary mount must not retain optional hydration recovery');
-    }
-    if (graph !== 'source-before' && ['owner-counter', 'input-list', 'module-counter'].includes(fixture) &&
-        output.text.includes('type:"open",kind:') !== hydration) {
-      throw new Error('The full region marker parser must be retained only with hydration');
+      check(!(!hydration && counters && overrides), 'Ordinary client mounting must not retain environment override merging');
+      check(!(fixture === 'isolated-counter' && !overrides), 'An isolated runtime must retain environment override support');
+      check(!(!hydration && counters && retains(/\/hydration-error\.(?:ts|js)$/)), 'Ordinary mount must not retain optional hydration recovery');
+      check(!(counters && output.text.includes('type:"open",kind:') !== hydration), 'The full region marker parser must be retained only with hydration');
+      check(!(fixture === 'request-routed-group' && retains(/router\/(?:src|dist)\/preparation\.(?:ts|js)$/)), 'Ordinary routing must not retain route preparation execution');
+      check(!(fixture === 'route-helper' && /new RegExp\(/.test(output.text)), 'Path interpolation must not retain pattern matching expressions');
+      check(!(fixture === 'route-lazy' && output.text.includes('/_memoized/routed')), 'Lazy-only routes must not retain routed data execution');
+      check(!(fixedRequests && retains(/\/data\/src\/resource-writes\.ts$/)), 'Read-only fetched pages must not retain the optional mutation implementation');
+      check(!(fixedRequests && output.text.includes('Cannot rebind a disposed fetch resource')), 'Fixed fetched pages must not retain optional request replay');
+      check(!(bodyless && output.text.includes('Request body must be JSON-serializable')), 'Proved bodyless requests must not retain request body encoding');
+      check(!(!hydration && bodyless && output.text.includes('Serialized data state sources must be an array')), 'Proved client-only fetches must not retain restoration validation');
+      check(!(!hydration && ['static','owner-counter','input-list','request-group','request-routed-group','request-data'].includes(fixture)
+        && output.text.includes('memoized-dom:stream')), 'Client-only programs must not retain streamed document handoff');
+      check(!(hydration && fixture.startsWith('request-') && !output.text.includes('Serialized data state sources must be an array')), 'SSR-capable fetches must retain transfer restoration');
     }
     if (programHydration && graph === 'source') {
-      if (!compilation.hydrationCapabilities.list && inputs.some(input => input.path.endsWith('/hydration-list.ts'))) throw new Error('A program without lists retained list adoption');
-      if (!compilation.hydrationCapabilities.markup && inputs.some(input => /\/(?:hydration-markup|markup-walk)\.ts$/.test(input.path))) throw new Error('A program without markup retained markup adoption');
+      check(!(!compilation.hydrationCapabilities.list && retains(/\/hydration-list\.ts$/)), 'A program without lists retained list adoption');
+      check(!(!compilation.hydrationCapabilities.markup && retains(/\/(?:hydration-markup|markup-walk)\.ts$/)), 'A program without markup retained markup adoption');
     }
-    if (fixture === 'request-routed-group' && graph !== 'source-before' &&
-      inputs.some(input => /router\/(?:src|dist)\/preparation\.(?:ts|js)$/.test(input.path))) {
-      throw new Error('Ordinary routing must not retain route preparation execution');
+    check(!(['request-encoded-body','request-opaque-options'].includes(fixture) && !output.text.includes('Request body must be JSON-serializable')),
+      'Generic requests must retain request body encoding');
+    if (graph === 'source') {
+      check(!(!hydration && bodyless && retains(/\/request-(?:transfer|hash)\.ts$/)), 'Proved bodyless client-only fetches must not retain transfer fingerprints');
+      check(!(!hydration && fixedRequests && retains(/\/data\/src\/(?:active-restoration|restoration)\.ts$/)), 'Client-only requests must not retain restoration or stream waiters');
+      check(!(hydration && fixture.startsWith('request-') && !retains(/\/request-transfer\.ts$/)), 'SSR-capable fetches must retain transfer fingerprints');
     }
-    if (fixture === 'route-helper' && graph !== 'source-before' && /new RegExp\(/.test(output.text)) {
-      throw new Error('Path interpolation must not retain pattern matching expressions');
-    }
-    if (fixture === 'route-lazy' && graph !== 'source-before' && output.text.includes('/_memoized/routed')) {
-      throw new Error('Lazy-only routes must not retain routed data execution');
-    }
-    if (['request-group','request-routed-group','request-data'].includes(fixture) && graph !== 'source-before' &&
-      inputs.some(input => input.path.endsWith('/data/src/resource-writes.ts'))) {
-      throw new Error('Read-only fetched pages must not retain the optional mutation implementation');
-    }
-    if (['request-group','request-routed-group','request-data'].includes(fixture) && graph !== 'source-before' &&
-      output.text.includes('Cannot rebind a disposed fetch resource')) {
-      throw new Error('Fixed fetched pages must not retain optional request replay');
-    }
-    if (['request-group','request-routed-group','request-data','request-rebind','request-factory-rebind'].includes(fixture) &&
-      graph !== 'source-before' && output.text.includes('Request body must be JSON-serializable')) {
-      throw new Error('Proved bodyless requests must not retain request body encoding');
-    }
-    if (['request-encoded-body','request-opaque-options'].includes(fixture) &&
-      !output.text.includes('Request body must be JSON-serializable')) {
-      throw new Error('Generic requests must retain request body encoding');
-    }
-    if (!hydration && graph !== 'source-before' &&
-        ['request-group','request-routed-group','request-data','request-rebind','request-factory-rebind'].includes(fixture) &&
-        output.text.includes('Serialized data state sources must be an array')) {
-      throw new Error('Proved client-only fetches must not retain restoration validation');
-    }
-    if (!hydration && graph === 'source' &&
-        ['request-group','request-routed-group','request-data','request-rebind','request-factory-rebind'].includes(fixture) &&
-        inputs.some(input => /\/request-(?:transfer|hash)\.ts$/.test(input.path))) {
-      throw new Error('Proved bodyless client-only fetches must not retain transfer fingerprints');
-    }
-    if (!hydration && graph !== 'source-before' &&
-        ['static','owner-counter','input-list','request-group','request-routed-group','request-data'].includes(fixture) &&
-        output.text.includes('memoized-dom:stream')) {
-      throw new Error('Client-only programs must not retain streamed document handoff');
-    }
-    if (!hydration && graph === 'source' &&
-        ['request-group','request-routed-group','request-data'].includes(fixture) &&
-        inputs.some(input => /\/data\/src\/(?:active-restoration|restoration)\.ts$/.test(input.path))) {
-      throw new Error('Client-only requests must not retain restoration or stream waiters');
-    }
-    if (hydration && graph === 'source' && fixture.startsWith('request-') &&
-        !inputs.some(input => input.path.endsWith('/request-transfer.ts'))) {
-      throw new Error('SSR-capable fetches must retain transfer fingerprints');
-    }
-    if (hydration && graph !== 'source-before' && fixture.startsWith('request-') &&
-        !output.text.includes('Serialized data state sources must be an array')) {
-      throw new Error('SSR-capable fetches must retain transfer restoration');
-    }
-    if (inputs.some(input => /(?:^|\/)packages\/(?:compiler|vite|language-service|server|adapters|utils)\//.test(input.path))) {
-      throw new Error('Ordinary browser fixtures must not retain unused utility, server or tooling packages');
-    }
+    check(!retains(/(?:^|\/)packages\/(?:compiler|vite|language-service|server|adapters|utils)\//),
+      'Ordinary browser fixtures must not retain unused utility, server or tooling packages');
     rows.push(row);
     writeFileSync(resolve(directory, `${fixture}-${graph}.js`), output.contents);
     writeFileSync(resolve(directory, `${fixture}-${graph}.meta.json`), JSON.stringify(result.metafile, null, 2));
-    console.log(`${fixture.padEnd(16)} ${graph.padEnd(7)} ${row.raw} B raw / ${row.gzip} B gzip / ${row.brotli} B br`);
+    console.log(`${fixture.padEnd(16)} ${graph.padEnd(7)} ${row.raw} B raw / ${row.gzip} B gzip / ${row.brotli} B br / ${row.app} B app`);
   }
 }
-const lines = ['# Browser bundle audit', '',
+const lines = [`# Browser bundle audit (${compilerName} compiler)`, '',
   `HEAD: ${revision}. Working tree includes changes: ${status !== ''}.`, '',
   `Runtime/data/router source baseline: ${baseline ?? 'not requested'}. All graphs use the current compiler and identical authored fixtures.`, '',
   'Archived runtime sources are used unchanged. Missing compiler hooks fail the audit; choose an API-compatible baseline or compare each revision with its own compiler.', '',
   'Stable authored fixtures compiled by the current compiler. Each graph includes mount and root metadata.', '',
   `Optional hydration included: ${hydration}; compiler-selected capabilities: ${programHydration}. Baseline hydration: ${programHydration?(baselineProgramHydration?'same program capabilities':'explicit general entry'):'same entry'}. Use --baseline-hydration=general only to compare older revisions without program hydration. Browser verification below checks client interactions; SSR adoption/recovery is covered by the hydration test suites.`, '',
   '`package` resolves published browser exports; `source` attributes the equivalent graph to runtime, data and router source modules. Each whole bundle is compressed once; input attribution is minified raw bytes, not additive gzip savings.', '',
-  '| Fixture | Graph | Raw B | Gzip B | Brotli B |', '|---|---|---:|---:|---:|',
-  ...rows.map(row => `| ${row.fixture} | ${row.graph} | ${row.raw} | ${row.gzip} | ${row.brotli} |`), ''];
+  '`App B` is the minified bytes attributed to the compiled fixture modules alone.', '',
+  '| Fixture | Graph | Raw B | Gzip B | Brotli B | App B |', '|---|---|---:|---:|---:|---:|',
+  ...rows.map(row => `| ${row.fixture} | ${row.graph} | ${row.raw} | ${row.gzip} | ${row.brotli} | ${row.app} |`), '',
+  ...(notMet.length === 0 ? [] : ['## Trimming targets the existing compiler meets and this one does not', '',
+    ...notMet.map(item => `- ${item}`), '']),
+];
 if (process.argv.includes('--verify')) {
   const { default: puppeteer } = await import('puppeteer-core');
   const allowed = new Set(rows.flatMap(row => ['js', 'html'].map(extension => `${row.fixture}-${row.graph}.${extension}`)));

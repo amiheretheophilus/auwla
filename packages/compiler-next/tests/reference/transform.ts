@@ -107,8 +107,27 @@ const RUNTIME_EXPORTS = [
 // ---------------------------------------------------------------------------
 // Entry point
 
+/**
+ * `$fetch`, `$read`, `$track` and `$forms` are ambient framework globals whose
+ * imports the compiler supplies (`packages/compiler/src/jsx-types.ts`). A module
+ * reading one without a binding behaves as if it imported it.
+ */
+function withAmbientDataImports(source: string, path: string): string {
+  const module = analyze(source, { path });
+  const names = new Set<string>();
+  const written = new Set<string>();
+  for (const reference of module.unresolvedReferences) {
+    if (!['$fetch', '$read', '$track', '$forms'].includes(reference.name) || reference.inTypePosition) continue;
+    (reference.isWrite ? written : names).add(reference.name);
+  }
+  // A module that assigns the global itself keeps it.
+  for (const name of written) names.delete(name);
+  if (names.size === 0) return source;
+  return `${source}\nimport { ${[...names].sort().join(', ')} } from '@memoized-dom/data';\n`;
+}
+
 export function toReference(source: string, path: string, runtimeUrl: string): string {
-  const module = analyze(prepareJsx(source), { path });
+  const module = analyze(withAmbientDataImports(prepareJsx(source), path), { path });
   if (module.diagnostics.length > 0) {
     const messages = module.diagnostics.map((diagnostic) => diagnostic.message).join('; ');
     throw new Error(`reference: ${path} does not parse: ${messages}`);

@@ -41,6 +41,12 @@ jobs:
       - run: bun test src
         working-directory: packages/compiler-next
       - run: bun test ./packages/runtime/tests
+      # Compiled sources run on the data runtime; its own tests pin request,
+      # readiness and status semantics (a broken one went unnoticed on 2026-10-27).
+      - run: bun check -p tsconfig.test.json
+        working-directory: packages/data
+      - run: bun test
+        working-directory: packages/data
 
   reference:
     name: every case on the reference

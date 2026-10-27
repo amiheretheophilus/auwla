@@ -136,12 +136,17 @@ export class Source {
     return `${this.id}:${this.generation}`;
   }
 
+  /**
+   * "An input change is a refresh, not a new initial load. `refreshing` is
+   * `true` and `pending` stays `false`" (`docs/05-data.md`): a source that took
+   * a loaded one's place counts as refreshing while it loads.
+   */
   get pending(): boolean {
-    return !this.hasValue && this.status === 'pending';
+    return !this.hasValue && !this.replacesLoaded && this.status === 'pending';
   }
 
   get refreshing(): boolean {
-    return this.hasValue && this.status === 'pending';
+    return (this.hasValue || this.replacesLoaded) && this.status === 'pending';
   }
 
   refresh(): Promise<unknown> {
