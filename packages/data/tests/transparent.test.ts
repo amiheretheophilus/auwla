@@ -87,12 +87,38 @@ describe('transparent resolved values', () => {
     const value = resource as unknown as ResolvedValue<User | null>;
     const state = $track(value);
 
+    // No request ran, so the status stays `idle` (fetch-descriptor.test.ts);
+    // the payload is still a committed `null` that readers never wait for.
     expect(readResolvedValue(value)).toBeNull();
     expect(resource.data).toBeNull();
-    expect(state.status).toBe('success');
+    expect(state.status).toBe('idle');
     expect(state.pending).toBe(false);
     expect(state.refreshing).toBe(false);
     expect(fetcher).not.toHaveBeenCalled();
+
+    runtime.clear();
+  });
+
+  it('reports no success for a request abandoned by a rebind to null', async () => {
+    let respond: (response: Response) => void = () => {};
+    const fetcher = vi.fn(() => new Promise<Response>((resolve) => {
+      respond = resolve;
+    }));
+    const runtime = createDataRuntime({ fetch: fetcher as FetchStub });
+    const resource = runtime.$fetch<User | null>('/user');
+    const value = resource as unknown as ResolvedValue<User | null>;
+    const succeeded = vi.fn();
+
+    await waitFor(() => expect(fetcher).toHaveBeenCalledTimes(1));
+    $track(value).onSuccess(succeeded);
+
+    // The abandoned request's callback must never receive the paused `null`.
+    rebindResolvedValue(value, null);
+    respond(json({ id: 1, name: 'Ada' }));
+    await runtime.settle();
+
+    expect(succeeded).not.toHaveBeenCalled();
+    expect(readResolvedValue(value)).toBeNull();
 
     runtime.clear();
   });
@@ -117,7 +143,7 @@ describe('transparent resolved values', () => {
 
       expect(readResolvedValue(value)).toBeNull();
       expect(resource.data).toBeNull();
-      expect(state.status).toBe('success');
+      expect(state.status).toBe('idle');
       expect(state.pending).toBe(false);
       expect(state.refreshing).toBe(false);
       expect(fetcher).toHaveBeenCalledTimes(1);

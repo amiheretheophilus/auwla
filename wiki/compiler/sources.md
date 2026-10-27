@@ -18,7 +18,20 @@ All compiler paths below are under `packages/compiler-next/src/`.
 | `features/sources/plan.ts` | Component-owned source declarations, request inputs and readiness paths cut by later assignments |
 | `features/sources/dom.ts` | Existing data subscriptions/rebinding, payload reads, cleanup ownership and consuming-site guards |
 | `features/sources/plan.test.ts` | Request/settlement dependencies, delayed seed paths, immutable syntax and absence of generated exception wrappers |
+| `features/sources/flow.ts` | Readiness along authored control flow: payload reads, guarded sites, lazy branches, patterns, `Group`/`suspend` elements, body builders and callback statements |
+| `features/sources/flow-dom.ts` | Emits that flow on fresh syntax: readiness inputs that keep the handle, builder steps, branch choices and lexical presentation |
+| `features/sources/actions.ts`, `actions.test.ts` | The non-GET contract: a `$fetch` action (or a facade around one) reached from setup or module scope is a compile error; callbacks are not calls |
 | `core/graph/model.ts`, `index.ts`, `rules.ts` | Readiness edges, separate from ordinary reactive dependencies |
+
+Data runtime files used by the emitted code (`packages/data/src/`):
+
+| File | Owns |
+| --- | --- |
+| `source-readiness.ts` | `WaitingSourceInputs`, `whenSourceInputs`, branch/switch choices, builder and binding readiness |
+| `source-presentation.ts` | `Group` policies and `suspend` regions on the runtime's detached-region coordinator |
+| `source-scope.ts` | Source ownership by the invoking component/helper frame, retained declarations, lazy module sources |
+| `source-effects.ts` | Effects whose source inputs wait, on the runtime's scheduling and cleanup |
+| `transparent-actions.ts` | An awaited action returns the request the engine already dispatched |
 
 The graph recognizes `$read`, GET `$fetch` and visible helpers returning them,
 including named linked helpers and re-exports. A request remains `Source` when
@@ -53,17 +66,17 @@ methods use the existing mutation observer with a payload reader and
 `notifyResolvedValueMutation`, including unlisted methods. Root observation and
 possible-builder snapshots inspect that same payload.
 
-`packages/data/src/resource.ts` now initializes a null-target source as success
-with a null payload. Both direct and factory rebinding to null clear committed
-data without sending a request. Three data regressions pin those paths.
+`packages/data/src/resource.ts` gives a null-target source a `null` payload with
+status `idle`. Both direct and factory rebinding to null clear committed data
+without sending a request. Data regressions pin those paths, and that an
+abandoned request reports no success.
 
-Phase 8 is unfinished. Module/helper/callback source creation, reassigned sources,
-source patterns, payload captures, mixed handle/payload helper parameters, source
-aliases/paths, forwarded props, source-dependent body builders and effects remain
-explicitly deferred, as do Group policies and atomic preparation. Branches can
-use the static guard only when their sources are already required by the test;
-other lazy source execution still needs a plan. These are temporary phase guards,
-not restrictions on the completed framework's JavaScript or method vocabulary.
+Phase 8 is built (2026-10-27). General source flow (module, helper and callback
+creation, reassignment, patterns, lazy statements and branches, builders,
+effects), `Group` policies and atomic `suspend` preparation run through the
+files above, and the Phase 8 guard (`core/plan/later-phases.ts`) is removed.
+The phase gate (`scripts/phase-gate.ts`) now treats a failure naming Phase 8 or
+earlier as unexplained.
 
 ## Reference files
 
@@ -141,6 +154,10 @@ All paths below are under `packages/compiler-next/`. This is test code only.
   has run once, the value waits for the statement's sources; after that it waits
   only if the call was seen to change it. This does not depend on a method list
   (`optimize/methods.ts` may skip the runtime check, never change what waits).
+  Only body statements count, as in the reference (`GUARDABLE_STATEMENTS`):
+  another binding's initializer (`let total = items.reduce(…)`) does not make
+  `items` wait. Its readers show the current value and update if that
+  initializer later changes it (2026-10-27, found by the source generator).
 - Waiting is about what the page shows, not about the value. Rendering,
   derivations and effects wait; a handler reads and writes the real value
   JavaScript has (`let items = [1, 2]` is `[1, 2]`, and `items.pop()` works).
@@ -148,7 +165,10 @@ All paths below are under `packages/compiler-next/`. This is test code only.
   body statements that build its first value are skipped, since in JavaScript
   they ran before the handler (`../decisions.md`, 2026-10-19).
 - A `null` target sends no request and the payload is `null` at once, not pending
-  (`docs/05-data.md`: "pauses the request and clears the payload").
+  (`docs/05-data.md`: "pauses the request and clears the payload"). No request
+  ran, so `$track(source).status` stays `idle` and nothing reports a success
+  (`../decisions.md`, 2026-10-27). Payload readers use
+  `fetchResourcePayloadSnapshot`, which sees the paused `null` as committed.
 - Destructuring a source is valid; the pattern runs when the payload exists
   (`../decisions.md`, 2026-10-19; the docs' `MMD-S004` error is gone). The names are
   derived like any other: they follow a new request, a refresh and a mutation of
@@ -161,6 +181,15 @@ All paths below are under `packages/compiler-next/`. This is test code only.
 returns a `Waiting` value carrying its sources, rather than evaluating against
 `undefined` or throwing a suspension signal. `$value` reads the payload in ready
 computations. No `try`/`catch`/`finally` is introduced.
+
+A prop can hold a source handle several members deep, so `prepareModuleReads`
+unwraps the receiver of each nested member (`$value(props.user).name`). Inside
+an optional chain that would cut the chain in two (`$value(node?.tagName)
+.toLowerCase()` throws where `node?.tagName.toLowerCase()` yields `undefined`),
+so such a chain runs link by link through `$chain`, which keeps the
+short-circuit, the evaluation order and each call's `this`. `delete`, `super`
+and private-name chains stay as written, without unwrapping (2026-10-27; the
+ref case "a derivation of a ref updates after mount" caught it).
 
 Status inputs retain the actual uses reached through called local helpers,
 so a `$track`-only helper can run while its source is pending. A helper that

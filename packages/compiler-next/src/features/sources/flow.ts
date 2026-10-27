@@ -72,40 +72,34 @@ export function planSourceFlow(
     for (const builder of binding.initial?.builders ?? []) {
       const statement = is.ExportNamedDeclaration(builder.statement) ? builder.statement.declaration : builder.statement;
 
-      if (statement === null) {
+      // Only body statements build a binding for readiness, as in the reference
+      // (`GUARDABLE_STATEMENTS`). Another binding's initializer that may change
+      // this one (`let total = items.reduce(…)`) does not make `items` wait:
+      // its readers show the current value and update if that initializer
+      // later changes it, through the ordinary builder observation.
+      if (statement === null || is.VariableDeclaration(statement) || containsSuspension(statement)) {
         continue;
       }
 
-      const steps = is.VariableDeclaration(statement) ? statement.declarations : [statement];
+      const owner = runnerOf(module, statement);
+      const returns = findAll(statement, 'ReturnStatement').some((returned) => runnerOf(module, returned) === owner);
 
-      for (const step of steps) {
-        const expression = is.VariableDeclarator(step) ? step.init : step;
-
-        if (expression === null || containsSuspension(expression)) {
-          continue;
-        }
-
-        const owner = runnerOf(module, step);
-        const returns = findAll(step, 'ReturnStatement').some((returned) => runnerOf(module, returned) === owner);
-        const inputs = inputPlan(expression);
-
-        if (returns) {
-          continue;
-        }
-
-        const previous = builders.get(step);
-        const targets = [...new Set([...(previous?.targets ?? []), binding])];
-
-        builders.set(step, { inputs, targets, owner });
-
-        const owned = bindingBuilders.get(binding) ?? [];
-
-        if (!owned.includes(step)) {
-          owned.push(step);
-        }
-
-        bindingBuilders.set(binding, owned);
+      if (returns) {
+        continue;
       }
+
+      const previous = builders.get(statement);
+      const targets = [...new Set([...(previous?.targets ?? []), binding])];
+
+      builders.set(statement, { inputs: inputPlan(statement), targets, owner });
+
+      const owned = bindingBuilders.get(binding) ?? [];
+
+      if (!owned.includes(statement)) {
+        owned.push(statement);
+      }
+
+      bindingBuilders.set(binding, owned);
     }
   }
   const guard = (root: Expression): void => {

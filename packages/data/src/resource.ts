@@ -92,12 +92,16 @@ interface MutableSnapshot<T> {
   refreshing: boolean;
 }
 
-/** A null target has already resolved to null; it is not an unfinished request. */
+/**
+ * A null target pauses the request: no request runs, so the status stays
+ * `idle` (and no `onSuccess` fires), while the payload is cleared to `null`.
+ * Payload readers see that `null` as committed (`fetchResourcePayloadSnapshot`).
+ */
 function initialSnapshot<T>(paused = false): MutableSnapshot<T> {
   return {
     data: paused ? (null as T) : undefined,
     error: null,
-    status: paused ? 'success' : 'idle',
+    status: 'idle',
     pending: false,
     refreshing: false,
   };
@@ -878,6 +882,32 @@ export function fetchResourceSnapshot<T>(
   if (isFormSource(resource)) return formSourceSnapshot(resource) as ResourceSnapshot<T>;
   if (isReadResource(resource)) return readResourceSnapshot(resource);
   return publicSnapshot(resourceController(resource).snapshot);
+}
+
+/** Whether a `$fetch` resource currently has a `null` target. */
+export function fetchResourceIsPaused<T>(resource: FetchResource<T>): boolean {
+  if (isFormSource(resource) || isReadResource(resource)) {
+    return false;
+  }
+
+  return resourceController(resource).paused;
+}
+
+/**
+ * The snapshot as payload readers (render sites, derivations, readiness) see
+ * it. A paused resource reports `idle` publicly, but its payload is a known
+ * `null`, so nothing that depends on the payload waits for it.
+ */
+export function fetchResourcePayloadSnapshot<T>(
+  resource: FetchResource<T>,
+): ResourceSnapshot<T> {
+  const snapshot = fetchResourceSnapshot(resource);
+
+  if (!fetchResourceIsPaused(resource)) {
+    return snapshot;
+  }
+
+  return Object.freeze({ ...snapshot, data: null as T, status: 'success' });
 }
 
 /** Identity of the current execution behind one hidden fetch resource. */

@@ -246,8 +246,14 @@ Features build their own pieces. Optimizations replace pieces (`optimize.md`).
 rewrites. Later local rewrites can reach callbacks already copied into a shared
 call wrapper, without reapplying a wrapper to its own payload. Completed component
 trees are sealed with `finishCopy` before the final module copy, preserving their
-combined local/shared operations. Noncomputed property keys remain syntax;
-rewritten shorthand values expand when needed.
+combined local/shared operations. Inside a sealed tree, copying never follows a
+node's authored origin back to an earlier rewrite, but a later pass may still
+replace a node it found in that tree by identity: exception recovery
+(`recovery.ts`) runs over the final module and must reach every authored `try`
+(2026-10-27; a Phase 8 change that cloned sealed trees wholesale dropped
+`captureBuildScope` and failed `features/derived/recovery.test.ts`).
+Noncomputed property keys remain syntax; rewritten shorthand values expand when
+needed.
 
 A template whose roots are elements or static text is built the old compiler's
 way (`emitNodes` in `core/emit/template.ts`): a hoisted builder creates its

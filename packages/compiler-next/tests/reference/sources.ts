@@ -123,9 +123,12 @@ export class Source {
     if (!this.moduleOwned && this.owners.size === 0) this.dispose();
   }
 
+  /** A `null` target: no request exists, so nothing may start one. */
+  private paused = false;
+
   /** A lazy module `$fetch` starts when something first reads it. */
   ensureStarted(): void {
-    if (this.status === 'idle') void this.start();
+    if (this.status === 'idle' && !this.paused) void this.start();
   }
 
   /** `$track(source).id`: one id per request. */
@@ -142,10 +145,27 @@ export class Source {
   }
 
   refresh(): Promise<unknown> {
+    if (this.paused) {
+      return Promise.reject(new TypeError('Cannot refresh a fetch resource with a null target'));
+    }
+
     return this.start();
   }
 
-  /** A payload known without a request: `$fetch(null)` is `null` at once. */
+  /**
+   * `$fetch(null)`: "pauses the request and clears the payload". The payload is
+   * a known `null` that nothing waits for, but no request ran, so the status
+   * stays `idle` and no success is reported (decisions, 2026-10-27).
+   */
+  pause(): void {
+    this.paused = true;
+    this.data = null;
+    this.hasValue = true;
+    this.status = 'idle';
+    this.version++;
+  }
+
+  /** A request's payload arrived. */
   settle(data: unknown): void {
     this.data = data;
     this.hasValue = true;
@@ -342,6 +362,55 @@ export function $value(value: unknown): any {
   return value instanceof Source ? value.data : value;
 }
 
+/** One link of an optional chain: a property get or a call, each lazily evaluated. */
+export type ChainLink =
+  | readonly ['get', boolean, () => PropertyKey]
+  | readonly ['call', boolean, () => unknown[]];
+
+/**
+ * An optional chain that reads through a source handle (`props?.user.name`).
+ * Unwrapping a receiver must not cut the chain in two: `?.` short-circuits the
+ * whole chain in JavaScript, so `$value(props?.user).name` would throw where
+ * the authored code yields `undefined`. Links run in authored order: a key or
+ * the arguments are evaluated only when the chain has not short-circuited,
+ * and a call keeps the object it was read from as `this`.
+ */
+export function $chain(base: unknown, links: readonly ChainLink[]): unknown {
+  let value = base;
+  let receiver: unknown = undefined;
+  let previous: 'base' | 'get' | 'call' = 'base';
+
+  for (const [kind, optional, evaluate] of links) {
+    if (kind === 'get') {
+      // The same receivers `prepareModuleReads` unwraps outside chains.
+      const object = previous === 'get' ? $value(value) : value;
+
+      if (optional && (object === null || object === undefined)) {
+        return undefined;
+      }
+
+      const key = evaluate() as PropertyKey;
+
+      receiver = object;
+      value = (object as Record<PropertyKey, unknown>)[key];
+    } else {
+      if (optional && (value === null || value === undefined)) {
+        return undefined;
+      }
+
+      const args = evaluate() as unknown[];
+      const callee = value as (...args: unknown[]) => unknown;
+
+      value = Reflect.apply(callee, previous === 'get' ? receiver : undefined, args);
+      receiver = undefined;
+    }
+
+    previous = kind;
+  }
+
+  return value;
+}
+
 /** Status reads (`$track`) do not wait for the payload. Also used for memo input snapshots. */
 export function $sourceState(value: unknown): unknown {
   if (value instanceof Source) {
@@ -364,7 +433,7 @@ export function $fetch(target: string | URL | null, options?: FetchOptions): Sou
   // "Changing the target to `null` pauses the request and clears the payload."
   if (target === null) {
     const paused = new Source(() => Promise.resolve(null), undefined, true);
-    paused.settle(null);
+    paused.pause();
     return paused;
   }
 

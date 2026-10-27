@@ -99,7 +99,7 @@ const GUARDABLE_STATEMENTS = new Set<string>([
 
 const RUNTIME_EXPORTS = [
   '$h', 'Fragment as $Fragment', '$enter', '$assignRef', '$moduleEffect', '$ownedEffect', '$moduleMemo',
-  '$when', '$value', '$waiting', '$sourceState', '$branch', '$switch', '$path', '$ready',
+  '$when', '$value', '$chain', '$waiting', '$sourceState', '$branch', '$switch', '$path', '$ready',
   '$captureRead', '$closureCell', '$closureRead',
   '$privateTarget',
 ];

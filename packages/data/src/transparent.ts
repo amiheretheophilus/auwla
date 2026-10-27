@@ -15,6 +15,7 @@ import {
   disposeFetchResource,
   fetchResourceOperationId,
   fetchResourceSnapshot,
+  fetchResourcePayloadSnapshot,
   fetchResourceIsFiniteStream,
   fetchResourceIsLive,
   isFetchResource,
@@ -140,7 +141,7 @@ function trackSourceRead(value: unknown): void {
 }
 
 function snapshotOf<T>(value: ResolvedValue<T> | ModuleSourceRef): ResourceSnapshot<T> {
-  if (isSource(value)) return fetchResourceSnapshot(source(value));
+  if (isSource(value)) return fetchResourcePayloadSnapshot(source(value));
   return { data: value as T, error: null, status: 'success', pending: false, refreshing: false } as ResourceSnapshot<T>;
 }
 
@@ -154,7 +155,7 @@ function consumeRenderSource<T>(value: ResolvedValue<T>): FetchResource<T> {
     key: resource,
     isLive: () => fetchResourceIsLive(resource),
     snapshot() {
-      const snapshot = fetchResourceSnapshot(resource);
+      const snapshot = fetchResourcePayloadSnapshot(resource);
       if (snapshot.error !== null) return { status: 'error', error: snapshot.error };
       return { status: snapshot.status === 'success' ? 'ready' : 'pending' };
     },
@@ -459,7 +460,7 @@ export function settleRoutedValue(
   signal: AbortSignal,
 ): Promise<unknown> | undefined {
   if (!isFetchResource(value)) return undefined;
-  const snapshot = fetchResourceSnapshot(value);
+  const snapshot = fetchResourcePayloadSnapshot(value);
   if (snapshot.status === 'success' && !snapshot.pending && !snapshot.refreshing) {
     return Promise.resolve(snapshot.data);
   }
@@ -472,7 +473,9 @@ export function settleRoutedValue(
       unsubscribe();
       reject(signal.reason ?? new DOMException('Route preparation aborted', 'AbortError'));
     };
-    unsubscribe = subscribeFetchResource(value, next => {
+    unsubscribe = subscribeFetchResource(value, () => {
+      // A rebind to `null` settles the payload as `null` while staying `idle`.
+      const next = fetchResourcePayloadSnapshot(value);
       if (next.status === 'success' && !next.pending && !next.refreshing) {
         signal.removeEventListener('abort', onAbort);
         unsubscribe();

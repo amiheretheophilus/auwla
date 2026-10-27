@@ -37,6 +37,28 @@ describe('action execution contracts', () => {
     `)).toThrow('PATCH action');
   });
 
+  it('rejects an action inside a body if and a destructuring default', () => {
+    expect(() => compile(`
+      import { $fetch } from '@memoized-dom/data';
+
+      export function App(props) {
+        if (props.ready) {
+          $fetch('/save', { method: 'PUT' });
+        }
+        return <p />;
+      }
+    `)).toThrow('PUT action');
+
+    expect(() => compile(`
+      import { $fetch } from '@memoized-dom/data';
+
+      export function App(props) {
+        const { saved = $fetch('/save', { method: 'POST' }) } = props;
+        return <p>{saved}</p>;
+      }
+    `)).toThrow('POST action');
+  });
+
   it('follows an imported action facade reached from setup', () => {
     expect(() => compile(`
       import { save } from './client';

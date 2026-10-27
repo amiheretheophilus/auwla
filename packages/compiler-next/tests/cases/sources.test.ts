@@ -409,8 +409,10 @@ behaves('component sources: an initial null target is ready without a request', 
     }
   `,
   check(container) {
+    // No request ran: the payload is a ready `null`, the status stays `idle`
+    // (`../../wiki/decisions.md`, 2026-10-27).
     expect(container.querySelector('p')?.textContent).toBe('none');
-    expect(container.querySelector('span')?.textContent).toBe('success');
+    expect(container.querySelector('span')?.textContent).toBe('idle');
     expect(requestedUrls()).toEqual([]);
   },
 });

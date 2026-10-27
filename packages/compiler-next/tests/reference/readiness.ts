@@ -440,6 +440,74 @@ function stringLiteral(value: string): Expression {
   return b.Literal({ value, raw: JSON.stringify(value) });
 }
 
+/** Whether a member/call chain contains a `?.` link whose short-circuit reaches above it. */
+function hasOptionalLink(node: Node): boolean {
+  let current = node;
+
+  while (is.MemberExpression(current) || is.CallExpression(current)) {
+    if (current.optional) {
+      return true;
+    }
+
+    current = is.MemberExpression(current) ? current.object : current.callee;
+  }
+
+  return false;
+}
+
+/**
+ * Rewrite `a?.b.c` as `$chain(a, [get b?, get c])` when one of its receivers
+ * would need unwrapping. `delete a?.b.c` must keep its reference, and `super`
+ * and private names cannot be passed around, so those chains stay as written:
+ * their receivers are not unwrapped, which never changes plain JavaScript.
+ */
+function unwrapOptionalChain(module: Module, chain: Extract<Node, { type: 'ChainExpression' }>): void {
+  const parent = module.parentOf(chain);
+
+  if (is.UnaryExpression(parent) && parent.operator === 'delete') {
+    return;
+  }
+
+  const links: Expression[] = [];
+  let needed = false;
+  let current: Node = chain.expression;
+
+  while (is.MemberExpression(current) || is.CallExpression(current)) {
+    const optional = b.Literal({ value: current.optional, raw: String(current.optional) });
+
+    if (is.MemberExpression(current)) {
+      if (is.PrivateIdentifier(current.property)) {
+        return;
+      }
+
+      if (is.MemberExpression(current.object) && hasOptionalLink(current.object)) {
+        needed = true;
+      }
+
+      const key = current.computed
+        ? current.property as Expression
+        : stringLiteral((current.property as { name: string }).name);
+
+      links.unshift(b.ArrayExpression({ elements: [stringLiteral('get'), optional, thunk(key)] }));
+      current = current.object;
+    } else {
+      const args = b.ArrayExpression({ elements: current.arguments });
+
+      links.unshift(b.ArrayExpression({ elements: [stringLiteral('call'), optional, thunk(args)] }));
+      current = current.callee;
+    }
+  }
+
+  if (!needed || is.Super(current)) {
+    return;
+  }
+
+  // A chain wrapping a plain call prints as that call.
+  const rewritten = runtimeCall('$chain', [current as Expression, b.ArrayExpression({ elements: links })]);
+
+  chain.expression = rewritten as typeof chain.expression;
+}
+
 // ---------------------------------------------------------------------------
 // Module derivations: `export const title = user.name.toUpperCase()`
 
@@ -675,8 +743,14 @@ export function prepareModuleReads(
 
   // Props can contain handles several members deep. Unwrap the receiver of
   // each nested access, while leaving the final value available for forwarding.
+  // An optional chain cannot be split by a call around its receiver, so a
+  // chain that needs this runs link by link through `$chain` instead.
+  for (const chain of module.findAll('ChainExpression')) {
+    unwrapOptionalChain(module, chain);
+  }
+
   for (const member of module.findAll('MemberExpression')) {
-    if (is.MemberExpression(member.object)) {
+    if (is.MemberExpression(member.object) && !hasOptionalLink(member.object)) {
       member.object = runtimeCall('$value', [member.object]);
     }
   }
