@@ -9,9 +9,10 @@ The order of work for the new compiler, from an empty `src/` to replacing
 - **Do the next unchecked step.** Do not start a later phase before the current
   phase's exit check passes, except for the user-approved performance pause below.
   Do not skip ahead to optimizations.
-- **Performance is paused (2026-10-26).** Continue the remaining feature phases,
-  currently Phase 8. Phase 5/6 performance work and VM speed/memory measurements are
-  deferred, not passed; they remain release gates before replacing the old
+- **Performance resumes after Phase 8 (2026-10-27).** The user paused it on
+  2026-10-26 for Phase 8 and asked for the restructuring and performance work
+  once Phase 8 and its review are done. Phase 5/6 performance work and VM
+  speed/memory measurements remain release gates before replacing the old
   compiler. The paused row-list step is saved on `tmp/perf-rows` at `b5166fb7`.
 - **Semantics are decided.** `../rules.md`, `../decisions.md` and the concept pages
   say what correct is; the tests in `packages/compiler-next/tests/` are the spec.
@@ -306,18 +307,26 @@ array child). Remove each check when its phase is built.
   dependencies reactive without waiting for their payload, including simple
   visible helper parameters. Four new reference cases pin status availability,
   forwarding and mixed uses, fixing reference guards and handle lowering.
-- [ ] `$fetch`, `$read`, `$track`, GET server functions; readiness (`pending`),
+- [x] `$fetch`, `$read`, `$track`, GET server functions; readiness (`pending`),
   `Group` policies, `suspend`; the non-GET contract check and its compiler tests
   (`sources.md`).
   - [x] First component execution slice: direct sources, payload guards, delayed
     derivations/seeds, request input rebinding and source lifetime. Ten new
     reference cases and four planning checks pin this slice; three data checks
     fix null-target snapshots. Existing source status cases begin passing.
-  - [ ] Complete general source flow, module/helper/callback ownership, patterns,
+  - [x] Complete general source flow, module/helper/callback ownership, patterns,
     lazy statements/branches, effects and source reassignment; then Group policies
-    and atomic preparation. Remaining comparisons keep explicit Phase 8 errors.
+    and atomic preparation (2026-10-27). The Phase 8 guard is removed.
+  - [x] Review (2026-10-27): the paused agent's work was checked against the
+    rules and every suite, including the data package, which CI does not run.
+    Fixes: exception recovery inside sealed trees, the reference's optional
+    chains, the null-target status (`idle`), status-only transitions re-deriving
+    payloads, stale and self-referential builder records, member arguments,
+    takeovers releasing skipped statements, the proven array-edit fast path
+    reporting no-op edits, and five reference limits found once the source
+    generator compared compiled output with the reference. Each has a case.
 - **Exit:** `cases/sources` passes; the generated source programs also run
-  against compiler-next.
+  against compiler-next. Met 2026-10-27: see `../status.md`.
 
 ## Phase 9: linking and packages
 

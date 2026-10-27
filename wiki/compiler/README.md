@@ -15,19 +15,19 @@ settling, symbol/rest props, destination namespaces and retention checks; exact
 results and commits are in `../status.md`.
 
 Phase 7 effects, cleanup and reactive refs pass their reference comparisons and
-the full CI gate at `4e15dc31`. Phase 8 now executes direct component-owned
-sources with payload guards, delayed seeds, request rebinding and cleanup,
-using the existing data/runtime hooks. Source snapshots and request initializer
-inputs are tracked separately by the memo engine. The wider source flow,
-Group policies and atomic preparation remain unfinished, with explicit Phase 8
-diagnostics (`sources.md`). Validation counts and CI results are in `../status.md`.
+the full CI gate at `4e15dc31`. Phase 8 (sources, readiness, `Group`, `suspend`,
+the action contract) is built and reviewed (2026-10-27): every source case
+passes on the reference and compiler-next in both modes, and the generated
+source programs now compare compiled output with the reference
+(`sources.md`). Validation counts and CI results are in `../status.md`.
 The supplied VM report at `874c826` fails the performance floor: the old compiler
 is faster on all 24 Octane operations, and the DOM update-style run ends in an
 OOM. Phase 5 fast paths and repeat measurements remain before the Phase 6 exit;
 the correctness audit does not establish the cause or resolution of that OOM.
-Remaining conformance gaps stay on their concept pages. Performance work is paused
-at the user's request (2026-10-26); continue with Phase 8 in `plan.md`. Outstanding
-performance gates remain required before replacing the old compiler.
+Remaining conformance gaps stay on their concept pages. Performance work, paused
+for Phase 8 on 2026-10-26, resumes with the restructuring planned in
+`optimize.md`. Outstanding performance gates remain required before replacing
+the old compiler.
 
 The optimization stage and on/off comparisons are built. Passes retain private
 row-matching tables, skip snapshots for proven intrinsic calls, reuse eligible

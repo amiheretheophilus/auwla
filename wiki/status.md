@@ -1,6 +1,6 @@
 # Status
 
-Last updated: 2026-10-26.
+Last updated: 2026-10-27.
 
 ## Branches
 
@@ -9,13 +9,13 @@ Last updated: 2026-10-26.
   disabled. Its account has a billing lock, so CI cannot run there. See `../AGENTS.md`.
 - `compiler-rewrite` (working branch, from `compiler-refactor` at `6230c27`):
   the new compiler, designed in `compiler/`. Phases 1–4, the Phase 5 general list
-  rule, Phase 6 components/props and Phase 7 effects/cleanup/refs are built. Existing suites pass
-  within their coverage, with later-phase failures explicitly diagnosed. The
-  supplied `874c826` benchmark report passes correctness gates but fails the
-  performance floor: old wins all 24 Octane operations, and the DOM update-style
-  run ends in an OOM. Boundary fixes and their validation are below. Phase 5 fast
-  paths and new VM measurements remain deferred release gates. The user paused
-  performance work on 2026-10-26; continue feature correctness with Phase 8.
+  rule, Phase 6 components/props, Phase 7 effects/cleanup/refs and Phase 8
+  sources/Group are built. Existing suites pass within their coverage, with
+  later-phase failures explicitly diagnosed. The `30c9b29` VM report ranks the
+  new compiler 3rd and the old 2nd of ten in Octane; the new compiler's Octane
+  app is 82.20 kB minified against 35.62 kB. Phase 5 fast paths and VM
+  measurements remain release gates. Next: the restructuring and performance
+  plan (`compiler/optimize.md`), starting from `tmp/perf-rows`.
 - `compiler-refactor`: the old compiler's refactor, stopped on 2026-10-19. The
   sections below record that work.
 - `codex/package-conditional-sync` at `9e35480` (third-party package compilation,
@@ -24,6 +24,34 @@ Last updated: 2026-10-26.
 - The user put the agent in charge of the refactor on 2026-10-18 ("you are in charge now").
 
 ## Done
+
+- Phase 8 completed and reviewed (2026-10-27). The paused agent left source
+  flow, `Group` policies, `suspend` and the action contract uncommitted; the
+  review committed that work on `tmp/phase8-review` and checked it against
+  `rules.md` and every suite. The data package tests, which CI does not run,
+  showed a broken existing assertion; full CI showed six exception-recovery
+  unit failures and a reference crash. Once the source generator compared
+  compiled output with the reference, it found eleven more programs; each now
+  has a case under "Found by the generated source programs".
+  Fixed in the compiler, data and runtime: `copy.ts` hid sealed trees from
+  exception recovery; the null-target status (`idle`, decisions); status-only
+  transitions re-derived payload values (separate status/payload keys); stale
+  builder records deadlocked two builders of one value; member arguments made
+  values wait; takeovers did not release skipped statements or initializers;
+  statements seen not to change a value made it wait again; the proven
+  array-edit fast path reported no-op edits (`optimize.md`). Fixed in the
+  reference: optional chains split by unwrapping (`$chain`), builder readiness
+  moved from a declaration-time thunk to run-time tracking, a builder's own
+  record, retrying blocked statements and waiting memos, and initializers
+  overwritten by body writes. Added: the action compile errors for a body `if`
+  and a destructuring default, and the replay-count case the Phase 8 exit
+  listed. Structure: case files renamed to `<page>.<topic>.test.ts`,
+  `sources/flow.ts` to `flow-plan.ts`, two unmapped core files documented, and
+  `src/structure.test.ts` enforces file mapping and feature boundaries.
+  Local: 392 reference cases, 108 source comparisons in both modes, 339
+  compiler unit, 161 runtime and 170 data tests pass. CI passes every job at
+  `cd3b3443` (generators at 200 programs), with at least three further random
+  generator samples passing. No timing benchmark or full root suite was run.
 
 - Phase 8 component source execution (2026-10-26, `1478f380`, `9c8711ea`): direct component-owned
   `$read`/GET `$fetch` declarations, payload readiness, delayed seeds and early
