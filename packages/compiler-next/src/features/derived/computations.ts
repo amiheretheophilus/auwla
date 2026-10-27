@@ -15,15 +15,27 @@ export function collectComputations(
 ): ReadonlyMap<Binding, BindingComputation> {
   const candidates = new Map<Binding, BodyBuilder[]>();
 
-  function addBuilder(binding: Binding, statement: Node, certainty: BodyBuilder['certainty'], invocation?: 'runtime') {
+  function addBuilder(
+    binding: Binding, statement: Node, certainty: BodyBuilder['certainty'], waits: boolean, invocation?: 'runtime',
+  ) {
     const list = candidates.get(binding) ?? [];
     const existing = list.findIndex((builder) => builder.statement === statement);
     if (existing === -1) {
-      list.push({ statement, certainty, invocation });
-    } else if (certainty === 'definite') {
-      list[existing] = { ...list[existing]!, certainty };
+      list.push({ statement, certainty, invocation, waits });
+    } else {
+      const previous = list[existing]!;
+      list[existing] = {
+        ...previous,
+        certainty: certainty === 'definite' ? certainty : previous.certainty,
+        waits: previous.waits || waits,
+      };
     }
     candidates.set(binding, list);
+  }
+
+  /** Only a member passed as an argument (`f(items.length)`) does not make `items` wait. */
+  function siteWaits(site: { kind: string; path: readonly unknown[] }): boolean {
+    return !(site.kind === 'argument' && site.path.length > 0);
   }
 
   for (const entry of resolved.modules) {
@@ -39,7 +51,7 @@ export function collectComputations(
         // guards re-run it (`conditionals-and-lists.md`, "Early returns").
         if (containsReturn(statement)) continue;
         const certainty = site.kind === 'call' || site.kind === 'argument' ? 'possible' : 'definite';
-        addBuilder(binding, statement, certainty);
+        addBuilder(binding, statement, certainty, siteWaits(site));
       }
     }
 
@@ -54,7 +66,7 @@ export function collectComputations(
         if (statement === null || containsReturn(statement)) continue;
         if (ownedBy(binding, statement)) continue;
         const certainty = site.kind === 'call' || site.kind === 'argument' ? 'possible' : 'definite';
-        addBuilder(binding, statement, certainty);
+        addBuilder(binding, statement, certainty, siteWaits(site));
       }
 
       // An unknown caller may run a supplied callback now, later, or both.
@@ -69,7 +81,7 @@ export function collectComputations(
           if (binding.module !== module || declaringRunner(module, binding) !== owner) continue;
           const statement = bodyStatement(module, call, builderOwner(binding));
           if (statement === null || containsReturn(statement)) continue;
-          if (!ownedBy(binding, statement)) addBuilder(binding, statement, 'possible', 'runtime');
+          if (!ownedBy(binding, statement)) addBuilder(binding, statement, 'possible', true, 'runtime');
         }
       }
     }
@@ -86,7 +98,7 @@ export function collectComputations(
       // statement (`for (var i = 0; i < n; i++)`): it declares and builds it.
       const declaring = nestedVarStatement(binding);
       if (declaring !== null && !builders.some((builder) => builder.statement === declaring)) {
-        builders.push({ statement: declaring, certainty: 'definite' });
+        builders.push({ statement: declaring, certainty: 'definite', waits: true });
       }
       const reads: ReadFact[] = [];
       const seen = new Set<ReadFact['reference']>();

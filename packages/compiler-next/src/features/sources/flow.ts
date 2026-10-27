@@ -72,7 +72,9 @@ export function planSourceFlow(
     for (const builder of binding.initial?.builders ?? []) {
       const statement = is.ExportNamedDeclaration(builder.statement) ? builder.statement.declaration : builder.statement;
 
-      if (statement === null) {
+      // `Math.max(count, items.length)` passes only a member of `items`: it is
+      // observed as a builder, but `items` does not wait for it (`BodyBuilder.waits`).
+      if (statement === null || !builder.waits) {
         continue;
       }
 

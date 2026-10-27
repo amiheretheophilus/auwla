@@ -570,6 +570,28 @@ behaves('an effect waits through a derived source value', {
   },
 });
 
+behaves('a status-only transition does not re-derive a payload value', {
+  source: `
+    import { $read, $track, Group } from '@memoized-dom/data';
+    export function App() {
+      const user = $read(defer('user'));
+      const state = $track(user);
+      const view = { name: user.name };
+      let runs = 0;
+      $effect(() => { view; runs++; });
+      return <Group pending={() => <i>loading</i>}><h1>{view.name}</h1>
+        <p>{state.refreshing ? 'refreshing' : 'idle'} {runs}</p>
+        <button onClick={() => state.refresh()}>refresh</button></Group>;
+    }`,
+  steps: [{ resolve: 'user', value: { name: 'Ada' } }, { click: 'button' }],
+  check(container, observation) {
+    // Starting a refresh changes only the status. \`view\` is not derived again,
+    // so the effect that reads it does not run again.
+    expect(container.querySelector('h1')?.textContent).toBe(['loading', 'Ada', 'Ada'][observation]);
+    expect(container.querySelector('p')?.textContent).toBe(['idle 0', 'idle 1', 'refreshing 1'][observation]);
+  },
+});
+
 behaves('an early return waits for its condition', {
   source: `
     import { $read } from '@memoized-dom/data';
@@ -2052,6 +2074,27 @@ behaves('a value an initializer may change stops waiting once that initializer r
   steps: [{ respond: '/s0', value: { value: 0 } }],
   check(container, observation) {
     expect(container.querySelector('p')?.textContent).toBe(['loading', '0'][observation]);
+  },
+});
+
+behaves('passing only a member of a value to a waiting call does not make the value wait', {
+  source: `
+    import { $fetch, Group } from '@memoized-dom/data';
+    export function App() {
+      const s0 = $fetch('/s0');
+      let items = [];
+      let largest = Math.max(s0.value, items.length);
+      if (!(0 > 0)) largest = 0;
+      return (
+        <Group pending={() => <i>loading</i>}>
+          <p>{items.reduce((sum, x) => sum + x, 0)}</p>
+        </Group>
+      );
+    }`,
+  steps: [{ respond: '/s0', value: { value: 0 } }],
+  check(container) {
+    // \`items.length\` is passed, not \`items\` (decisions, 2026-10-19).
+    expect(container.querySelector('p')?.textContent).toBe('0');
   },
 });
 

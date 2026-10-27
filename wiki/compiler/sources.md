@@ -66,6 +66,16 @@ methods use the existing mutation observer with a payload reader and
 `notifyResolvedValueMutation`, including unlisted methods. Root observation and
 possible-builder snapshots inspect that same payload.
 
+Compiled reads report a source dependency through `trackSourceRead`
+(`packages/data/src/transparent.ts`) under one of two keys. `$track` getters and
+`sourceStatusInput` read the status key, bumped on every transition. Payload
+reads and readiness checks read the payload key, bumped unless the transition
+only moved the request's progress (`statusOnly`: same data, error and
+readiness, with a changed status, pending, refreshing or streaming flag). A
+notification that changes nothing visible is an in-place write and counts as a
+payload change. Before 2026-10-27 one key served both, so starting a refresh
+re-derived `const view = { name: user.name }` and re-ran effects reading it.
+
 A value's readiness (`sourceBindingInput`) counts a builder step's recorded
 waiting only while one of that step's sources is still unsettled. Two builders
 of one value each ignore only their own step, so without this they kept each
@@ -406,9 +416,9 @@ behaviour. Each gets a case when a compiler slice touches it:
   re-export, closure and alias combinations.
 - Full `$track` lifecycle callbacks/cancellation, fetch validation/non-JSON
   transports, complete error details and remaining request API contracts.
-- Status-only transitions with side-effectful source derivations need explicit
-  replay-count coverage before the Phase 8 exit, alongside more callback/alias
-  and failed-setup ownership interleavings.
+- More callback/alias and failed-setup ownership interleavings. (Status-only
+  transitions now have replay-count coverage: "a status-only transition does not
+  re-derive a payload value".)
 - Live/generator/`page()` server functions are not modeled.
 
 ## Compiler tests to write (not reference cases)

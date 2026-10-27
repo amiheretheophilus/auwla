@@ -95,14 +95,58 @@ export function isResolvedSource(value: unknown): boolean {
 const isSource = isResolvedSource;
 
 interface SourceReadDependency {
-  version: number;
-  readonly key: object;
-  readonly current: () => number;
+  /** Any transition: what `$track(source)` readers see. */
+  status: number;
+  /** A transition payload readers can see: data, error, readiness or a write. */
+  payload: number;
+  readonly statusKey: object;
+  readonly payloadKey: object;
+  readonly currentStatus: () => number;
+  readonly currentPayload: () => number;
   disconnect(): void;
 }
 
+/** `$track` getters read the status; everything else reads the payload. */
+type SourceRead = 'status' | 'payload';
+
+interface SourceView {
+  readonly data: unknown;
+  readonly error: unknown;
+  readonly status: string;
+  readonly pending: boolean;
+  readonly refreshing: boolean;
+  readonly streaming: boolean;
+}
+
+function sourceView(resource: FetchResource<unknown>): SourceView {
+  const snapshot = fetchResourcePayloadSnapshot(resource);
+
+  return {
+    data: snapshot.data,
+    error: snapshot.error,
+    status: snapshot.status,
+    pending: snapshot.pending,
+    refreshing: snapshot.refreshing,
+    streaming: snapshot.streaming === true,
+  };
+}
+
+/**
+ * A status-only transition changes the request's progress (a refresh starting,
+ * a stream opening) and nothing a payload reader sees. A notification that
+ * changes nothing visible is a write to the payload in place, so it counts.
+ */
+function statusOnly(before: SourceView, after: SourceView): boolean {
+  const samePayload = Object.is(before.data, after.data) && before.error === after.error
+    && (before.status === 'success') === (after.status === 'success');
+  const progressed = before.status !== after.status || before.pending !== after.pending
+    || before.refreshing !== after.refreshing || before.streaming !== after.streaming;
+
+  return samePayload && progressed;
+}
+
 /** Source transitions participate in the existing computation collector. */
-function trackSourceRead(value: unknown): void {
+function trackSourceRead(value: unknown, read: SourceRead): void {
   if (!isSource(value)) {
     return;
   }
@@ -114,18 +158,34 @@ function trackSourceRead(value: unknown): void {
   if (dependency === undefined) {
     const runtime = getActiveApplicationRuntime();
     const created: SourceReadDependency = {
-      version: 0,
-      key: {},
-      current: () => created.version,
+      status: 0,
+      payload: 0,
+      statusKey: {},
+      payloadKey: {},
+      currentStatus: () => created.status,
+      currentPayload: () => created.payload,
       disconnect: () => {},
     };
+    let seen = sourceView(resource as FetchResource<unknown>);
 
     reads.set(resource, created);
 
     created.disconnect = observeResolvedValue(value as ResolvedValue<unknown>, () => {
       runWithApplicationRuntime(runtime, () => {
-        created.version++;
-        publishVersions([created.key]);
+        const next = sourceView(resource as FetchResource<unknown>);
+        const keys = [created.statusKey];
+
+        created.status++;
+
+        // `const view = { name: user.name }` must not be derived again
+        // because a refresh started.
+        if (!statusOnly(seen, next)) {
+          created.payload++;
+          keys.push(created.payloadKey);
+        }
+
+        seen = next;
+        publishVersions(keys);
       });
     });
 
@@ -137,7 +197,11 @@ function trackSourceRead(value: unknown): void {
     dependency = created;
   }
 
-  trackRead(dependency.current, undefined, dependency.key);
+  if (read === 'status') {
+    trackRead(dependency.currentStatus, undefined, dependency.statusKey);
+  } else {
+    trackRead(dependency.currentPayload, undefined, dependency.payloadKey);
+  }
 }
 
 function snapshotOf<T>(value: ResolvedValue<T> | ModuleSourceRef): ResourceSnapshot<T> {
@@ -234,27 +298,27 @@ export function trackResolvedValue<T>(
   if (existing !== undefined) return existing as TrackedValue<T>;
   const tracked: TrackedValue<T> = Object.freeze({
     get id() {
-      trackSourceRead(value);
+      trackSourceRead(value, 'status');
       return fetchResourceOperationId(resource);
     },
     get status() {
-      trackSourceRead(value);
+      trackSourceRead(value, 'status');
       return resource.status;
     },
     get pending() {
-      trackSourceRead(value);
+      trackSourceRead(value, 'status');
       return resource.pending;
     },
     get refreshing() {
-      trackSourceRead(value);
+      trackSourceRead(value, 'status');
       return resource.refreshing;
     },
     get streaming() {
-      trackSourceRead(value);
+      trackSourceRead(value, 'status');
       return fetchResourceSnapshot(resource).streaming === true;
     },
     get error() {
-      trackSourceRead(value);
+      trackSourceRead(value, 'status');
       return resource.error;
     },
     onSuccess(callback: (data: T, requestId: string) => void) {
@@ -308,7 +372,7 @@ export function readResolvedValue<T>(
   binding?: string,
   site?: string,
 ): T {
-  trackSourceRead(value);
+  trackSourceRead(value, 'payload');
   const snapshot = snapshotOf(value);
   if (snapshot.status === 'success') return snapshot.data as T;
   if (snapshot.status === 'error' && snapshot.error !== null) {
@@ -530,10 +594,12 @@ export function withRoutedSources<TContext extends { readonly signal: AbortSigna
   };
 }
 
+/** Readiness checks read the payload; `sourceStatusInput` reads only the status. */
 export function resolvedValueSnapshot<T>(
   value: ResolvedValue<T>,
+  read: 'status' | 'payload' = 'payload',
 ): ResourceSnapshot<T> {
-  trackSourceRead(value);
+  trackSourceRead(value, read);
   return snapshotOf(value);
 }
 

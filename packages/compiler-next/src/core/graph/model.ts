@@ -25,6 +25,15 @@ export interface BodyBuilder {
   readonly certainty: 'definite' | 'possible';
   /** The statement may invoke a callback now or retain it for later execution. */
   readonly invocation?: 'runtime';
+  /**
+   * Whether the value waits while this builder waits for a source
+   * (`wiki/compiler/sources.md`, readiness; decisions 2026-10-19): it writes
+   * the value, calls a method on it, or passes the value itself to a call.
+   * Passing only a member (`Math.max(items.length)`) can still change nested
+   * data, so it stays a builder that is observed, but it does not make the
+   * value wait.
+   */
+  readonly waits: boolean;
 }
 
 export interface InitialComputation {

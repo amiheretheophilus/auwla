@@ -210,8 +210,8 @@ describe('graph assembly', () => {
     const first = module.findAll('IfStatement')[0]!;
     const second = module.findAll('ForOfStatement')[0]!;
     const builders = [
-      { statement: second, certainty: 'possible' as const },
-      { statement: first, certainty: 'definite' as const },
+      { statement: second, certainty: 'possible' as const, waits: true },
+      { statement: first, certainty: 'definite' as const, waits: true },
     ];
     input.facts.set(total, {
       kind: 'Derived',

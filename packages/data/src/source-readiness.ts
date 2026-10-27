@@ -152,7 +152,7 @@ export function sourceBuilderWaiting(inputs: () => readonly unknown[]): WaitingS
 /** Status dependencies update readers without making their payload a prerequisite. */
 export function sourceStatusInput(value: unknown): undefined {
   if (isResolvedSource(value)) {
-    resolvedValueSnapshot(value as ResolvedValue<unknown>);
+    resolvedValueSnapshot(value as ResolvedValue<unknown>, 'status');
   }
 
   return undefined;
