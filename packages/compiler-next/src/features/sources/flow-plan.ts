@@ -97,8 +97,11 @@ export function planSourceFlow(
 
         const previous = builders.get(step);
         const targets = [...new Set([...(previous?.targets ?? []), binding])];
+        const definite = builder.certainty === 'definite'
+          ? [...new Set([...(previous?.definite ?? []), binding])]
+          : previous?.definite ?? [];
 
-        builders.set(step, { inputs, targets, owner });
+        builders.set(step, { inputs, targets, definite, owner });
 
         const owned = bindingBuilders.get(binding) ?? [];
 

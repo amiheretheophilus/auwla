@@ -21,7 +21,7 @@ export function emitSourceFlow(
   const module = plan.module.module;
   const groupPolicies = new Map(flow?.groups.map((group) => [group, names.fresh('_groupPolicy')]) ?? []);
   const blockedSteps = sourceBlockedSteps(plan, names);
-  const takenBindings = sourceTakeovers(plan, names);
+  const takenBindings = sourceTakeovers(plan, names, data);
 
   const policyOf = (node: Node): Expression => {
     for (const ancestor of module.ancestors(node)) {
@@ -345,7 +345,16 @@ export function sourceReadinessStorage(plan: ModulePlan, owner: Node | null, nam
 
   for (const [root, builder] of flow?.builders ?? []) {
     if (builder.owner === owner) {
-      declarations.push(statement('const $$step = { waiting: void 0 };', { step: names.of(root, '_sourceStep') }));
+      // `builds` counts the values it definitely builds that no write took over
+      // yet (`takeSourceBinding`); a step that builds none definitely has none.
+      const step = names.of(root, '_sourceStep');
+
+      declarations.push(builder.definite.length === 0
+        ? statement('const $$step = { waiting: void 0 };', { step })
+        : statement('const $$step = { waiting: void 0, builds: $$builds };', {
+          step,
+          builds: expression(String(builder.definite.length)),
+        }));
     }
   }
 
@@ -369,10 +378,27 @@ export function sourceBlockedSteps(plan: ModulePlan, names: Names): ReadonlyMap<
   ]));
 }
 
-export function sourceTakeovers(plan: ModulePlan, names: Names): ReadonlyMap<BindingNode, Expression> {
-  return new Map([...(plan.sourceFlow?.bindingBuilders.keys() ?? [])].map((binding) => [binding,
-    expression('$$cell.taken = true', { cell: names.of(binding.binding.declarations[0]!, '_sourceBinding') }),
-  ]));
+/** A later write takes the binding over and releases the steps it alone kept running. */
+export function sourceTakeovers(
+  plan: ModulePlan, names: Names, data: string | undefined,
+): ReadonlyMap<BindingNode, Expression> {
+  const flow = plan.sourceFlow;
+
+  if (flow === undefined || data === undefined) {
+    return new Map();
+  }
+
+  return new Map([...flow.bindingBuilders.keys()].map((binding) => {
+    const builds = [...flow.builders]
+      .filter(([, builder]) => builder.definite.includes(binding))
+      .map(([step]) => expression('$$step', { step: names.of(step, '_sourceStep') }));
+
+    return [binding, expression('$$data.takeSourceBinding($$cell, $$builds)', {
+      data,
+      cell: names.of(binding.binding.declarations[0]!, '_sourceBinding'),
+      builds: b.ArrayExpression({ elements: builds }),
+    })];
+  }));
 }
 
 function withChoices(cache: string | null, value: Expression): Expression {

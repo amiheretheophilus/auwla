@@ -83,6 +83,13 @@ other waiting forever after the source settled (2026-10-27, source generator
 seed 1066878729; case "a value an initializer may change stops waiting once
 that initializer runs").
 
+A builder step counts the values it definitely builds (`builds`). When later
+writes take all of them over (`takeSourceBinding`), the statement counts as
+skipped (decisions, 2026-10-19) and stops making the values it only may change
+wait, even though replay may still run it for them; the release is published
+through the step's own version, since no source changed (2026-10-27, source
+generator seed 271311366).
+
 `packages/data/src/resource.ts` gives a null-target source a `null` payload with
 status `idle`. Both direct and factory rebinding to null clear committed data
 without sending a request. Data regressions pin those paths, and that an

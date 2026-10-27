@@ -11,6 +11,7 @@ export {
   selectSourceBranch,
   sourceStatusInput,
   sourceBindingInput,
+  takeSourceBinding,
   recordSourceBuilder,
   sourceBuilderWaiting,
   noteSourceReplacement,

@@ -1,5 +1,15 @@
 /** Compiler readiness values describe blocked work; payloads stay ordinary data. */
-import { createBuildScope, createPresentationValue, currentBuildFrame, getActiveApplicationRuntime, toPresentationError, type BuildFrame, type BuildScope } from '@memoized-dom/runtime';
+import {
+  createBuildScope,
+  createPresentationValue,
+  currentBuildFrame,
+  getActiveApplicationRuntime,
+  publishVersions,
+  toPresentationError,
+  trackRead,
+  type BuildFrame,
+  type BuildScope,
+} from '@memoized-dom/runtime';
 import {
   isResolvedSource,
   readResolvedValue,
@@ -104,6 +114,63 @@ export function noteSourceReplacement(previous: unknown, next: unknown, owner?: 
 
 export interface SourceBuilderReadiness {
   waiting: WaitingSourceInputs | undefined;
+  /**
+   * Values it definitely builds that no later write has taken over yet;
+   * absent when it builds none definitely.
+   */
+  builds?: number;
+}
+
+/**
+ * A later write (a handler, an effect) took `binding` over. A statement whose
+ * definitely built values are all taken over counts as skipped (decisions,
+ * 2026-10-19): it stops making the values it only may change wait, even if
+ * replay runs it again for them.
+ */
+export function takeSourceBinding(binding: SourceBindingReadiness, builds: readonly SourceBuilderReadiness[]): void {
+  if (binding.taken) {
+    return;
+  }
+
+  binding.taken = true;
+
+  for (const step of builds) {
+    if (step.builds === undefined || step.builds === 0) {
+      continue;
+    }
+
+    step.builds--;
+
+    // No source changed, so readers of the values it may change hear of the
+    // release through the step's own version (`sourceBindingInput`).
+    if (step.builds === 0) {
+      const release = releaseOf(step);
+
+      release.version++;
+      publishVersions([release.key]);
+    }
+  }
+}
+
+interface StepRelease {
+  version: number;
+  readonly key: object;
+  readonly current: () => number;
+}
+
+const releases = new WeakMap<SourceBuilderReadiness, StepRelease>();
+
+function releaseOf(step: SourceBuilderReadiness): StepRelease {
+  let release = releases.get(step);
+
+  if (release === undefined) {
+    const created: StepRelease = { version: 0, key: {}, current: () => created.version };
+
+    releases.set(step, created);
+    release = created;
+  }
+
+  return release;
 }
 
 export interface SourceBindingReadiness {
@@ -121,7 +188,15 @@ export function sourceBindingInput(value: unknown, binding: SourceBindingReadine
   // builders of one value (`let a = items.includes(…)`, `let b =
   // items.reduce(…)`) must not keep each other waiting on stale records.
   const waits = binding.steps.flatMap((step) => {
-    if (step === ignore || step.waiting === undefined) {
+    // A step a takeover can release is a dependency of this read.
+    if (step.builds !== undefined && step !== ignore) {
+      const release = releaseOf(step);
+
+      trackRead(release.current, undefined, release.key);
+    }
+
+    // `builds === 0`: later writes took over everything it definitely builds.
+    if (step === ignore || step.waiting === undefined || step.builds === 0) {
       return [];
     }
 

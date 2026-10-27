@@ -375,6 +375,12 @@ export interface SourceFlowPlan {
 export interface SourceBuilderPlan {
   readonly inputs: SourceInputPlan;
   readonly targets: readonly BindingNode[];
+  /**
+   * The targets it definitely builds. Once later writes take all of them over,
+   * the statement is skipped (decisions, 2026-10-19), so it no longer makes the
+   * values it only may change wait.
+   */
+  readonly definite: readonly BindingNode[];
   readonly owner: Node | null;
 }
 

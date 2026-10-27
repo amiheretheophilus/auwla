@@ -23,7 +23,7 @@ export function emitShared(plan: ModulePlan, names: Names, runtime: string, init
   const state = emitSharedState(plan, names, runtime, new Map([...initial, ...receivers]), data);
   let replacements = new Map(state.replacements);
   const takeovers = new Map(state.owners.map((owner) => [owner, emitTakeovers(
-    owner.plan.takeovers, owner.versions, names, owner.scope, owner.batch, owner.keys, sourceTakeovers(plan, names),
+    owner.plan.takeovers, owner.versions, names, owner.scope, owner.batch, owner.keys, sourceTakeovers(plan, names, data),
     data === undefined ? undefined : expression('$$data.noteSourceReplacement', { data }),
   )]));
   for (const owner of state.owners) {

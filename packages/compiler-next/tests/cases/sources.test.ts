@@ -2098,6 +2098,29 @@ behaves('passing only a member of a value to a waiting call does not make the va
   },
 });
 
+behaves('taking over every value a waiting statement builds stops the values it may change from waiting', {
+  source: `
+    import { $fetch, Group } from '@memoized-dom/data';
+    export function App() {
+      const s0 = $fetch('/s0');
+      let items = [];
+      let found = 0;
+      if (items.reduce((sum, x) => sum + x, 0) > Math.max(0, s0.value)) found = 1;
+      return (
+        <Group pending={() => <i>loading</i>}>
+          <p>{items.length}</p>
+          <button onClick={() => { found = 2; }}>take</button>
+        </Group>
+      );
+    }`,
+  steps: [{ click: 'button' }, { respond: '/s0', value: { value: 0 } }],
+  check(container, observation) {
+    // The click takes \`found\` over, so the \`if\` that built it is skipped
+    // (decisions, 2026-10-19) and can no longer change \`items\`.
+    expect(container.querySelector('p')?.textContent).toBe(['loading', '0', '0'][observation]);
+  },
+});
+
 behaves('a snapshot written before its source loads keeps the write', {
   source: `
     import { $fetch, Group } from '@memoized-dom/data';
