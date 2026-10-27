@@ -12,6 +12,8 @@ export {
   sourceStatusInput,
   sourceBindingInput,
   takeSourceBinding,
+  settleSourceStep,
+  noteSourceChange,
   recordSourceBuilder,
   sourceBuilderWaiting,
   noteSourceReplacement,

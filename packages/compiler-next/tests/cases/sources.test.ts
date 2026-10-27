@@ -2169,6 +2169,29 @@ behaves('a statement that ran before a later statement blocked does not wait aft
   },
 });
 
+behaves('a value does not wait again for a statement seen not to change it', {
+  source: `
+    import { $fetch, Group } from '@memoized-dom/data';
+    export function App() {
+      const s0 = $fetch('/s0');
+      let items = [1];
+      let found = 0;
+      if (!items.includes(items.length)) found = s0.value;
+      return (
+        <Group pending={() => <i>loading</i>}>
+          <p>{items.length}</p>
+          <button onClick={() => { items.pop(); }}>pop</button>
+        </Group>
+      );
+    }`,
+  steps: [{ click: 'button' }, { respond: '/s0', value: { value: 0 } }],
+  check(container, observation) {
+    // The \`if\` ran at setup without changing \`items\`. After the pop it
+    // waits for \`s0\`, but \`items\` no longer waits with it (decisions, 2026-10-19).
+    expect(container.querySelector('p')?.textContent).toBe(['1', '0', '0'][observation]);
+  },
+});
+
 behaves('a snapshot written before its source loads keeps the write', {
   source: `
     import { $fetch, Group } from '@memoized-dom/data';

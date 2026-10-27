@@ -119,6 +119,24 @@ export interface SourceBuilderReadiness {
    * absent when it builds none definitely.
    */
   builds?: number;
+  /** It has completed a run (`settleSourceStep`). */
+  ran?: boolean;
+  /** Values it only may change that a run was seen to change (`noteSourceChange`). */
+  changed?: Set<SourceBindingReadiness>;
+}
+
+/** Record a step's attempt: still waiting, or completed. */
+export function settleSourceStep(step: SourceBuilderReadiness, waiting: WaitingSourceInputs | undefined): void {
+  step.waiting = waiting;
+
+  if (waiting === undefined) {
+    step.ran = true;
+  }
+}
+
+/** The builder observation saw `step` change a value it only may change. */
+export function noteSourceChange(step: SourceBuilderReadiness, binding: SourceBindingReadiness): void {
+  (step.changed ??= new Set()).add(binding);
 }
 
 /**
@@ -176,6 +194,8 @@ function releaseOf(step: SourceBuilderReadiness): StepRelease {
 export interface SourceBindingReadiness {
   taken: boolean;
   readonly steps: readonly SourceBuilderReadiness[];
+  /** The steps that only may change it (a method call, an argument). */
+  readonly possible?: readonly SourceBuilderReadiness[];
 }
 
 export function sourceBindingInput(value: unknown, binding: SourceBindingReadiness, ignore?: SourceBuilderReadiness): unknown {
@@ -200,6 +220,13 @@ export function sourceBindingInput(value: unknown, binding: SourceBindingReadine
       return [];
     }
 
+    // A statement that only may change the value makes it wait until it has
+    // run once; after that, only if a run was seen to change it (decisions,
+    // 2026-10-19; the reference's `mayChange`).
+    if (binding.possible?.includes(step) && step.ran && !step.changed?.has(binding)) {
+      return [];
+    }
+
     const unsettled = step.waiting.sources.filter(isUnsettled);
 
     return unsettled.length === 0 ? [] : [new WaitingSourceInputs(unsettled)];
@@ -215,7 +242,7 @@ function isUnsettled(source: ResolvedValue<unknown>): boolean {
 }
 
 export function recordSourceBuilder<T>(step: SourceBuilderReadiness, result: T): T {
-  step.waiting = result instanceof WaitingSourceInputs ? result : undefined;
+  settleSourceStep(step, result instanceof WaitingSourceInputs ? result : undefined);
 
   return result;
 }

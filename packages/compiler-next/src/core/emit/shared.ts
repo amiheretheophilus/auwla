@@ -16,7 +16,7 @@ import { emitRefs } from '../../features/refs/dom';
 import { refWrites } from '../../features/refs/plan';
 import { emitEffectGroups } from '../../features/effects/dom';
 import { statement, stringLiteral } from './quote';
-import { sourceBlockedSteps, sourceReadinessStorage, sourceTakeovers } from '../../features/sources/flow-dom';
+import { sourceBlockedSteps, sourceChanges, sourceReadinessStorage, sourceTakeovers } from '../../features/sources/flow-dom';
 
 export function emitShared(plan: ModulePlan, names: Names, runtime: string, initial: ReadonlyMap<Node, Node> = new Map(), data?: string) {
   const receivers = emitReceiverTargets(plan.receiverTargets, plan.module.module, names, runtime);
@@ -65,7 +65,8 @@ export function emitShared(plan: ModulePlan, names: Names, runtime: string, init
     }
     const replay = emitMutations(owner.plan.replayMutations, owner.versions, names, runtime, null, replayBase);
     const memos = emitMemos(owner.plan, owner.versions, names, effects.replacements, replay.replacements,
-      takeovers.get(owner)!, runtime, owner.keys, { batch: owner.batch }, undefined, undefined, sourceBlockedSteps(plan, names));
+      takeovers.get(owner)!, runtime, owner.keys, { batch: owner.batch }, undefined, undefined, sourceBlockedSteps(plan, names),
+      sourceChanges(plan, names, data));
     const enterSource = data !== undefined && owner.plan.fn === null && owner.plan.block === null
       ? [statement('$$data.ownSourceFrame($$frame, null);', { data, frame: owner.frame })]
       : [];

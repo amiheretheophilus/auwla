@@ -29,6 +29,8 @@ export function emitMemos(
   deferred: DeferredSetup = { statements: new Map(), flags: [] },
   values: ReadonlyMap<BindingNode, Expression> = new Map(),
   pendingSteps: ReadonlyMap<Node, Expression> = new Map(),
+  /** Per step and target: also run when its builder observation sees a change. */
+  observedChanges: ReadonlyMap<Node, ReadonlyMap<BindingNode, Expression>> = new Map(),
 ) {
   const setup: Statement[] = [];
   const snapshots: Statement[] = [];
@@ -116,7 +118,13 @@ export function emitMemos(
           observed.set(target, enabled);
           setup.push(statement('let $$enabled = false;', { enabled }));
         }
-        return expression(enabled === undefined ? '() => { $$used = true; }' : '() => { $$used = true; $$enabled = true; }', { used, ...(enabled === undefined ? {} : { enabled }) });
+        const also = observedChanges.get(step)?.get(target);
+        const tail = also === undefined ? '' : ' $$also;';
+        return expression(enabled === undefined
+          ? `() => { $$used = true;${tail} }`
+          : `() => { $$used = true; $$enabled = true;${tail} }`, {
+          used, ...(also === undefined ? {} : { also }), ...(enabled === undefined ? {} : { enabled }),
+        });
       });
       const observation = names.fresh('_builderObservation');
       observationBefore.set(step, [statement('const $$observation = $$runtime.observeMutation($$reads, $$callbacks);', {

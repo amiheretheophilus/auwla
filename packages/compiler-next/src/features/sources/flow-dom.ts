@@ -22,6 +22,7 @@ export function emitSourceFlow(
   const groupPolicies = new Map(flow?.groups.map((group) => [group, names.fresh('_groupPolicy')]) ?? []);
   const blockedSteps = sourceBlockedSteps(plan, names);
   const takenBindings = sourceTakeovers(plan, names, data);
+  const changedBindings = sourceChanges(plan, names, data);
 
   const policyOf = (node: Node): Expression => {
     for (const ancestor of module.ancestors(node)) {
@@ -78,7 +79,7 @@ export function emitSourceFlow(
   };
 
   if (flow === undefined) {
-    return { replacements, policyOf, declarations, suspendValue, elementValue, blockedSteps, takenBindings };
+    return { replacements, policyOf, declarations, suspendValue, elementValue, blockedSteps, takenBindings, changedBindings };
   }
 
   const raw = (node: Node, ignore?: Node): Expression => {
@@ -198,7 +199,7 @@ export function emitSourceFlow(
         consequent: b.BlockStatement({ body: [body as Statement] }),
         alternate: statement('$$data.recordSourceWaiting($$waiting);', { data, waiting }),
       }),
-      statement('$$step.waiting = $$data.finishSourceEvaluation($$evaluation);', { step, data, evaluation }),
+      statement('$$data.settleSourceStep($$step, $$data.finishSourceEvaluation($$evaluation));', { step, data, evaluation }),
     ] }));
   }
 
@@ -335,7 +336,7 @@ export function emitSourceFlow(
     }
   }
 
-  return { replacements, policyOf, declarations, suspendValue, elementValue, blockedSteps, takenBindings };
+  return { replacements, policyOf, declarations, suspendValue, elementValue, blockedSteps, takenBindings, changedBindings };
 }
 
 /** Each invocation owns its pending builder records, alongside native bindings. */
@@ -363,13 +364,40 @@ export function sourceReadinessStorage(plan: ModulePlan, owner: Node | null, nam
       continue;
     }
 
-    declarations.push(statement('const $$cell = { taken: false, steps: $$steps };', {
+    const stepOf = (step: Node) => expression('$$step', { step: names.of(step, '_sourceStep') });
+    const possible = steps.filter((step) => !flow!.builders.get(step)!.definite.includes(binding));
+
+    declarations.push(statement('const $$cell = { taken: false, steps: $$steps, possible: $$possible };', {
       cell: names.of(binding.binding.declarations[0]!, '_sourceBinding'),
-      steps: b.ArrayExpression({ elements: steps.map((step) => expression('$$step', { step: names.of(step, '_sourceStep') })) }),
+      steps: b.ArrayExpression({ elements: steps.map(stepOf) }),
+      possible: b.ArrayExpression({ elements: possible.map(stepOf) }),
     }));
   }
 
   return declarations;
+}
+
+/**
+ * For each step, what its builder observation runs when it sees the step
+ * change a value it only may change. The memo engine owns that observation;
+ * readiness only needs to hear of the change (`noteSourceChange`).
+ */
+export function sourceChanges(
+  plan: ModulePlan, names: Names, data: string | undefined,
+): ReadonlyMap<Node, ReadonlyMap<BindingNode, Expression>> {
+  const flow = plan.sourceFlow;
+
+  if (flow === undefined || data === undefined) {
+    return new Map();
+  }
+
+  return new Map([...flow.builders].map(([step, builder]) => [step, new Map(builder.targets
+    .filter((target) => !builder.definite.includes(target))
+    .map((target) => [target, expression('$$data.noteSourceChange($$step, $$cell)', {
+      data,
+      step: names.of(step, '_sourceStep'),
+      cell: names.of(target.binding.declarations[0]!, '_sourceBinding'),
+    })]))]));
 }
 
 export function sourceBlockedSteps(plan: ModulePlan, names: Names): ReadonlyMap<Node, Expression> {

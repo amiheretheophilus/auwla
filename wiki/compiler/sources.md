@@ -83,6 +83,12 @@ other waiting forever after the source settled (2026-10-27, source generator
 seed 1066878729; case "a value an initializer may change stops waiting once
 that initializer runs").
 
+A step that only may change a value makes it wait until the step has run once
+(`settleSourceStep` marks `ran`); after that, only if the memo engine's builder
+observation saw a run change it (`noteSourceChange`, passed to `emitMemos` as
+`observedChanges`). This is the reference's `mayChange` (2026-10-27, source
+generator seed -25242095).
+
 A builder step counts the values it definitely builds (`builds`). When later
 writes take all of them over (`takeSourceBinding`), the statement counts as
 skipped (decisions, 2026-10-19) and stops making the values it only may change

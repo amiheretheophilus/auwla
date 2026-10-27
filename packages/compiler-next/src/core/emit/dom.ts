@@ -114,6 +114,7 @@ export function emitDom(plan: ModulePlan, options: CompileModulesOptions): Node 
         storage: sourceReadinessStorage(plan, component.fn, names),
         blocked: sourceFlow.blockedSteps,
         taken: sourceFlow.takenBindings,
+        changed: sourceFlow.changedBindings,
       });
     const enclosingFunction = [...module.ancestors(component.fn)].find((ancestor) => {
       return ancestor !== component.fn && is.Function(ancestor);
@@ -174,6 +175,7 @@ function emitComponent(
     readonly storage: readonly Statement[];
     readonly blocked: ReadonlyMap<Node, Expression>;
     readonly taken: ReadonlyMap<import('../graph').BindingNode, Expression>;
+    readonly changed: ReadonlyMap<Node, ReadonlyMap<import('../graph').BindingNode, Expression>>;
   },
 ): Node {
   const document = names.fresh('_document');
@@ -272,7 +274,7 @@ function emitComponent(
   const reached = [...new Set(plan.deferred.values())].map(() => names.fresh('_reached'));
   const memos = emitMemos(plan, state.versions, names, effects.replacements, replay.replacements, takeovers, runtime, trackKeys,
     batch === null ? undefined : { batch, entity }, { statements: plan.deferred, flags: reached }, sources.values,
-    readiness.blocked);
+    readiness.blocked, readiness.changed);
   const once = (statements: readonly Statement[]): Statement[] => {
     const flag = reached[plan.deferred.get(statements[0]!)!]!;
     return [...effects.reach(statements), b.IfStatement({
