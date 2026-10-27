@@ -162,6 +162,7 @@ export function observeMethod(
     const added = proof!.added;
     const from = added?.[0] ?? 0;
     const to = added === undefined ? 0 : added[1] ?? args.length;
-    return observeReceiverEdit(receiver, notify, args, from, to).finish(apply(method, receiver, args));
+    const compare = proof!.resizes ? 'length' : 'snapshot';
+    return observeReceiverEdit(receiver, notify, args, from, to, compare).finish(apply(method, receiver, args));
   };
 }

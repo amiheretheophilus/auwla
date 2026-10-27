@@ -2144,6 +2144,31 @@ behaves('a value stops waiting when a mutation lets the initializer that may cha
   },
 });
 
+behaves('a statement that ran before a later statement blocked does not wait after a no-op mutation', {
+  source: `
+    import { $fetch, Group } from '@memoized-dom/data';
+    export function App() {
+      const s0 = $fetch('/s0');
+      let n0 = 0;
+      let l0 = [];
+      let o0 = { a: 0, b: 0 };
+      let d0 = 0;
+      if ((l0.reduce((total, x) => total + x, 0) > 0)) d0 = 0;
+      let d1 = 0;
+      if (l0.includes(s0.value)) d1 = 0;
+      return (
+        <Group pending={() => <i>loading</i>}>
+          <p>{d0}</p>
+          <button onClick={() => { l0.pop(); }}>pop</button>
+        </Group>
+      );
+    }`,
+  steps: [{ click: 'button' }, { respond: '/s0', value: { value: 0 } }],
+  check(container, observation) {
+    expect(container.querySelector('p')?.textContent).toBe(['0', '0', '0'][observation]);
+  },
+});
+
 behaves('a snapshot written before its source loads keeps the write', {
   source: `
     import { $fetch, Group } from '@memoized-dom/data';

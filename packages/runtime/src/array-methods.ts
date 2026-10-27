@@ -16,11 +16,13 @@ export interface ArrayMethod {
   readonly added?: readonly [from: number, to?: number];
   /** Whether the current whole-helper proof supports this intrinsic. */
   readonly helperProof: boolean;
+  /** An edit that changes the receiver exactly when it changes its length. */
+  readonly resizes: boolean;
 }
 
 function method(kind: ArrayMethod['kind'], options: Partial<Omit<ArrayMethod, 'kind'>> = {}): ArrayMethod {
   return Object.freeze({
-    kind, species: false, callback: -1, returnsPrimitive: false, helperProof: true,
+    kind, species: false, callback: -1, returnsPrimitive: false, helperProof: true, resizes: false,
     ...options,
     converted: Object.freeze([...(options.converted ?? [])]),
     ...(options.added === undefined ? {} : { added: Object.freeze([...options.added]) as ArrayMethod['added'] }),
@@ -47,10 +49,10 @@ export const ARRAY_METHODS: Readonly<Record<string, ArrayMethod>> = Object.freez
   every: method('read', { callback: 0, returnsPrimitive: true }),
   reduce: method('read', { callback: 0, helperProof: false }),
   reduceRight: method('read', { callback: 0, helperProof: false }),
-  push: method('edit', { added: [0], returnsPrimitive: true }),
-  unshift: method('edit', { added: [0], returnsPrimitive: true }),
-  pop: method('edit'),
-  shift: method('edit'),
+  push: method('edit', { added: [0], returnsPrimitive: true, resizes: true }),
+  unshift: method('edit', { added: [0], returnsPrimitive: true, resizes: true }),
+  pop: method('edit', { resizes: true }),
+  shift: method('edit', { resizes: true }),
   reverse: method('edit'),
   splice: method('edit', { species: true, converted: [0, 1], added: [2] }),
   fill: method('edit', { converted: [1, 2], added: [0, 1] }),

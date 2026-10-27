@@ -649,9 +649,16 @@ export function observeMutation(reads: readonly (() => unknown)[], notify: reado
 
 /**
  * A call proven to edit only `object`, which every read returns
- * (`method-calls.ts`). No snapshot: it reports `object` as an observation that
- * found it changed would. A call that throws stays pending, so its partial
+ * (`method-calls.ts`). No deep snapshot: it reports `object` as an observation
+ * that found it changed would. A call that throws stays pending, so its partial
  * edit is reported at the next recovery, as for any observation.
+ *
+ * Like the general path, it reports only an actual change, so an edit that
+ * changes nothing (`[].pop()`, `push()` with no items, sorting a sorted array)
+ * re-runs nothing. `compare: 'length'` is for edits that change the array
+ * exactly when they change its length (push, pop, shift, unshift): O(1).
+ * `'snapshot'` compares the array's own shallow state, which the other edits
+ * already cost.
  *
  * Dense data arrays add only the indicated argument values. A root containing
  * accessors or sparse arrays forgets its reach: a native read can materialize a
@@ -663,14 +670,27 @@ export function observeReceiverEdit(
   added: readonly unknown[],
   from = 0,
   to = added.length,
+  compare: 'length' | 'snapshot' = 'snapshot',
 ): Observation {
   const state = mutationStore();
   let complete = false;
-  const report = () => {
-    if (complete) return;
+  const length = compare === 'length' ? (object as unknown[]).length : 0;
+  const before = compare === 'snapshot' ? snapshot(object) : null;
+  const changed = () => before === null
+    ? (object as unknown[]).length !== length
+    : differs(before, snapshot(object));
+  const settle = () => {
     complete = true;
     state.pending.delete(reference);
     state.unrecovered.delete(reference);
+  };
+  const report = () => {
+    if (complete) return;
+    if (!changed()) {
+      settle();
+      return;
+    }
+    settle();
     stamp(object);
     for (const callback of notify) callback();
     notifyAliases({ one: object, many: null }, { kind: 'receiver', added, from, to }, notify);

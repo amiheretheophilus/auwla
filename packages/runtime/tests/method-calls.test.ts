@@ -274,7 +274,8 @@ it('tracks an inherited element moved into a sparse array by an intrinsic', () =
 
 it('does not register a comparator as data added by sorting', () => {
   const items = rows();
-  const comparator = Object.assign((a: { id: number }, b: { id: number }) => a.id - b.id, { count: 0 });
+  // Descending, so the sort really reorders the rows and reports once.
+  const comparator = Object.assign((a: { id: number }, b: { id: number }) => b.id - a.id, { count: 0 });
   let notified = 0;
   const owner = {};
   registerSharedMutationRoots(owner, [{ read: () => items, notify: () => notified++ }]);
@@ -285,6 +286,42 @@ it('does not register a comparator as data added by sorting', () => {
   mutationTarget(comparator, 'count', () => {}).value = 1;
   expect(notified).toBe(1);
 });
+
+it('reports a proven edit only when it changes the array, as the general path does', () => {
+  for (const [label, edit] of [
+    ['an empty pop', (items: { id: number }[]) => observeMethod(...watched(items), items, 'pop', 0)()],
+    ['an empty shift', (items: { id: number }[]) => observeMethod(...watched(items), items, 'shift', 0)()],
+    ['a push of nothing', (items: { id: number }[]) => observeMethod(...watched(items), items, 'push', 0)()],
+    ['a sort of sorted rows', (items: { id: number }[]) => {
+      observeMethod(...watched(items), items, 'sort', 1)((a: { id: number }, b: { id: number }) => a.id - b.id);
+    }],
+    ['a reverse of one row', (items: { id: number }[]) => observeMethod(...watched(items), items, 'reverse', 0)()],
+  ] as const) {
+    const items = label.startsWith('an empty') ? [] : label === 'a reverse of one row' ? rows().slice(0, 1) : rows();
+    let notified = 0;
+
+    registerSharedMutationRoots({}, [{ read: () => items, notify: () => notified++ }]);
+    mutationTarget({}, 'prime', () => {}).value = 1;
+    edit(items);
+
+    expect([label, notified]).toEqual([label, 0]);
+  }
+
+  const items = rows();
+  let notified = 0;
+
+  registerSharedMutationRoots({}, [{ read: () => items, notify: () => notified++ }]);
+  mutationTarget({}, 'prime', () => {}).value = 1;
+  observeMethod(...watched(items), items, 'pop', 0)();
+
+  expect(notified).toBe(1);
+});
+
+/** `watch`'s reads and notifications as `observeMethod`'s first two arguments. */
+function watched(items: { id: number }[]): [readonly (() => unknown)[], readonly (() => void)[]] {
+  const { reads, notify } = watch(() => items);
+  return [reads, notify];
+}
 
 it('recovers aliases materialized before an intrinsic throws', () => {
   const added = { id: 10 };

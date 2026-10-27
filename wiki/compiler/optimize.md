@@ -134,7 +134,13 @@ Such a call retains the captured callee and takes the general observation path.
 A proven read-only call then runs with no observation. A proven edit is reported
 with `observeReceiverEdit`: stamp, notify every read, then notify aliases. It keeps
 a pending entry, so a call that throws midway is still reported at the next
-recovery. Anything unproven is observed as before. An unknown callee starts its
+recovery. Like the general path, it reports only an actual change: `push`,
+`pop`, `shift` and `unshift` (`resizes` in `array-methods.ts`) change the array
+exactly when its length changes, an O(1) check; the other edits compare the
+array's shallow snapshot, which their own O(n) work already covers. Before
+2026-10-27 every proven edit reported a change, so `[].pop()` re-ran readers;
+with sources that could make a value wait again (source generator seed
+600622771). The fast path must never differ from the general path. Anything unproven is observed as before. An unknown callee starts its
 observation before its arguments are evaluated, as the general form does.
 
 Descriptor reaches remember when they encounter accessors or sparse arrays.
