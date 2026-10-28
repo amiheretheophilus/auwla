@@ -20,6 +20,19 @@ it('observes descriptor and prototype edits without invoking an unused getter', 
   expect(module.log).toEqual([]);
 });
 
+it('observes an imported value passed to an unknown call, but not to a framework call', () => {
+  const output = compileModules({
+    './App.tsx': 'export const items = []; export function App() { return <p>{items.length}</p>; }',
+    './main.ts': `import { mount } from '@memoized-dom/runtime';
+      import { App, items } from './App';
+      record(items);
+      mount('root', App);`,
+  });
+
+  expect(output['./main.ts']).toMatch(/observeMutation\(\[\(\) => items\]/);
+  expect(output['./main.ts']).not.toMatch(/observeMutation\(\[\(\) => App\]/);
+});
+
 async function compile(body: string, handlers: string) {
   const code = compileModules({ './App.tsx': `export const log = []; export let run;
     export function App() { ${body}

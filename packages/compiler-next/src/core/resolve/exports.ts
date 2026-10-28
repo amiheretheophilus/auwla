@@ -44,7 +44,8 @@ function exportsOf(module: Module) {
   return indexed;
 }
 
-function importOf(binding: Binding): Import | undefined {
+/** The import declaring `binding`, if it is one. */
+export function importOf(binding: Binding): Import | undefined {
   let indexed = imports.get(binding.module);
 
   if (indexed === undefined) {
@@ -55,6 +56,14 @@ function importOf(binding: Binding): Import | undefined {
   }
 
   return indexed.get(binding);
+}
+
+/** The `@memoized-dom/*` package a value import names, when this build does not compile it. */
+export function frameworkPackage(binding: Binding): string | null {
+  const entry = importOf(binding);
+  const framework = entry !== undefined && !entry.typeOnly && entry.resolvedModule === null
+    && entry.specifier.startsWith('@memoized-dom/');
+  return framework ? entry.specifier : null;
 }
 
 export function isValueImport(binding: Binding): boolean {

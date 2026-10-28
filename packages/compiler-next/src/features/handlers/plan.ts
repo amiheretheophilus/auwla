@@ -5,6 +5,7 @@ import type { BindingNode, SemanticGraph } from '../../core/graph';
 import type { ResolvedModule } from '../../core/resolve';
 import type { MutationPlan, WritePlan } from '../../core/plan/model';
 import { variableDeclaration } from '../../core/graph/inputs';
+import { frameworkPackage } from '../../core/resolve/exports';
 
 export function planReadonlyBindings(bindings: readonly BindingNode[]): readonly BindingNode[] {
   return bindings.filter((target) => {
@@ -64,6 +65,11 @@ export function planImportedMutations(
   const grouped = new Map<Node | null, MutationPlan[]>();
 
   for (const mutation of planMutations(bindings)) {
+    // A framework call (`mount('root', App)`) never edits the values it receives.
+    if (is.CallExpression(mutation.operation) && frameworkCall(entry, mutation.operation)) {
+      continue;
+    }
+
     let owner: Node | null = null;
     for (const ancestor of entry.module.ancestors(mutation.operation)) {
       if (owners.has(ancestor)) {
@@ -76,6 +82,11 @@ export function planImportedMutations(
     grouped.set(owner, plans);
   }
   return grouped;
+}
+
+function frameworkCall(entry: ResolvedModule, call: Extract<Node, { type: 'CallExpression' }>): boolean {
+  const binding = is.Identifier(call.callee) ? entry.module.referenceOf(call.callee)?.binding ?? null : null;
+  return binding !== null && frameworkPackage(binding) !== null;
 }
 
 /** One observer per operation, even when it receives both local and imported values. */

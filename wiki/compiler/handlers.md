@@ -55,7 +55,10 @@ Phase 9 imports reuse the same mutation plans. Imported bindings have no writabl
 local version: mutation helpers notify the actual data roots. Local/imported
 targets of one call merge into one observer. Namespace targets supply separate,
 guarded export-value reads, preserving native identity without reflecting over
-uninitialized cyclic exports (`linking.md`).
+uninitialized cyclic exports (`linking.md`). A call to a `@memoized-dom/*` export
+(`mount('root', App)`) never edits the values it receives, so it adds no
+imported observer. Before 2026-10-28 every application entry emitted an empty
+notifier and an observer around `mount`.
 
 Each contiguous group of batches from the same application enters one kernel
 commit. First-mark order is retained across interleaved applications; the kernel
