@@ -14,6 +14,7 @@ import type { ParsedModule } from '../parse';
 import { withAmbientImports } from './ambient';
 import { findGlobalWrites, type GlobalWrites } from './globals';
 import { importResolver } from './imports';
+import { importedBinding } from './exports';
 import { findWrites, type WriteSite } from './writes';
 
 export type { GlobalWrites } from './globals';
@@ -21,6 +22,7 @@ export { isWrittenGlobal } from './globals';
 export type { PathKey, WriteKind, WriteSite } from './writes';
 export type { Binding, Module, Reference } from 'yuku-analyzer';
 export { declaringRunner, runnerOf } from './writes';
+export { namespaceModule } from './exports';
 
 export interface ResolvedModule {
   readonly path: string;
@@ -72,8 +74,7 @@ export function isParameter(binding: Binding): boolean {
 
 /** For an import, the binding it names in a compiled module (through re-exports); otherwise null. */
 export function importedDefinition(binding: Binding): Binding | null {
-  const definition = binding.definition()?.binding;
-  return definition != null && definition !== binding ? definition : null;
+  return importedBinding(binding);
 }
 
 export function resolve(parsed: readonly ParsedModule[], options: CompileModulesOptions): Resolved {

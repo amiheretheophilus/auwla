@@ -6,6 +6,8 @@ import type { MutationPlan } from '../../core/plan/model';
 import type { Names } from '../../core/emit/names';
 import { copy } from '../../core/emit/copy';
 import { expression, numberLiteral, statement, stringLiteral } from '../../core/emit/quote';
+import { isValueImport } from '../../core/resolve/exports';
+import type { Binding } from 'yuku-analyzer';
 
 interface MutationEmitOptions {
   readonly keys?: ReadonlyMap<BindingNode, string>;
@@ -13,6 +15,8 @@ interface MutationEmitOptions {
   readonly notifiers?: ReadonlyMap<BindingNode, string>;
   /** A transparent binding is observed through its payload, not its handle. */
   readonly values?: ReadonlyMap<BindingNode, Expression>;
+  /** Native namespaces expose initialized data roots without enumerating TDZ exports. */
+  readonly importedValues?: ReadonlyMap<Binding, readonly Expression[]>;
   readonly changed?: ReadonlyMap<BindingNode, Expression>;
 }
 
@@ -32,11 +36,23 @@ export function emitMutations(
   // and marks the same batch, wherever the edit is.
   const notifiers = new Map<BindingNode, string>(options.notifiers);
   const refNotifiers = new Map<BindingNode, string>();
+  let importedNotify: string | undefined;
 
   const notifierOf = (binding: BindingNode): string => {
     let notify = notifiers.get(binding);
 
     if (notify === undefined) {
+      if (!versions.has(binding) && isValueImport(binding.binding)) {
+        // Mutating the value cannot reassign its import. The runtime mutation
+        // helper notifies the actual data roots, including a captured default;
+        // a second clock in this importing component would be incorrect.
+        if (importedNotify === undefined) {
+          importedNotify = names.fresh('_importedMutation');
+          declarations.push(statement('function $$notify() {}', { notify: importedNotify }));
+        }
+        notifiers.set(binding, importedNotify);
+        return importedNotify;
+      }
       notify = names.fresh(`_mutated_${binding.binding.name}`);
       notifiers.set(binding, notify);
 
@@ -88,10 +104,15 @@ export function emitMutations(
       if (plan.kind !== 'call' && !is.MemberExpression(member)) continue;
       const notify = notifierOf(binding);
       if (plan.kind === 'call') {
-        notifications.push(expression('$$notify', { notify }));
-        const value = options.values?.get(binding) ?? expression('$$binding', { binding: binding.binding.name });
+        const payload = options.values?.get(binding);
+        const values = payload === undefined
+          ? options.importedValues?.get(binding.binding) ?? [expression('$$binding', { binding: binding.binding.name })]
+          : [payload];
 
-        reads.push(expression('() => $$value', { value }));
+        for (const value of values) {
+          notifications.push(expression('$$notify', { notify }));
+          reads.push(expression('() => $$value', { value }));
+        }
         continue;
       }
       if (plan.kind === 'delete') {

@@ -66,6 +66,7 @@ removing its placeholder, so later branch mounts inherit it too.
 | --- | --- |
 | `index.ts` | `resolve(parsed, options)`: one linked `yuku-analyzer` project; returns `Resolved`. Exposes binding/reference types and `isRuntimeBinding` for later stages |
 | `imports.ts` | which compiled module an import names: relative paths with extension and `index` probing, `options.resolveImport` first; packages are outside |
+| `exports.ts` | shared value-export identities, captured defaults, namespaces, type erasure, conflicts and cycles (`linking.md`) |
 | `writes.ts` | write sites per binding, and `runnerOf` / `declaringRunner` |
 | `globals.ts` | which host globals the program writes; every other global is not an input (`state-and-derived.md`) |
 | `ambient.ts` | appends the import of an ambient framework data call (`$fetch`, `$read`, `$track`, `$forms`) a module uses without a binding, before analysis, so later stages resolve it by binding identity (`sources.md`) |

@@ -17,9 +17,12 @@ Last updated: 2026-10-28.
   measurements remain release gates. The first two size batches share namespace
   emission and remove duplicate SVG planning. Primitive-only local storage/site
   proofs now retain disposal semantics. Callable aliases preserve their identity
-  and factories; root-only adapters no longer retain opaque rendering. Next:
-  more precise readiness capabilities, followed by the measured runtime work in
-  `compiler/optimize.md`. `tmp/perf-rows` preserves the earlier paused step.
+  and factories; root-only adapters no longer retain opaque rendering. Bundle
+  work is paused for Phase 9 at the user's request. Native module boundaries,
+  default-export identity and namespace observation are the first slice; next
+  is the independent package artifact contract and its reference cases. Speed,
+  memory and bundle gates remain open. `tmp/perf-rows` preserves the earlier
+  paused step.
 - `compiler-refactor`: the old compiler's refactor, stopped on 2026-10-19. The
   sections below record that work.
 - `codex/package-conditional-sync` at `9e35480` (third-party package compilation,
@@ -28,6 +31,23 @@ Last updated: 2026-10-28.
 - The user put the agent in charge of the refactor on 2026-10-18 ("you are in charge now").
 
 ## Done
+
+- Phase 9 native-linking batch (2026-10-28, local validation): live re-exports,
+  captured default values and native namespace boundaries now share the existing
+  state/mutation machinery. Public namespaces exclude private compiler exports;
+  cyclic hoisted calls avoid reading unrelated uninitialized exports. Captured
+  objects keep their own identity after the source variable is replaced, and
+  anonymous default expressions retain their native name. New coverage: 27
+  reference/compiled comparisons in both optimizer modes and 11 export-fact
+  checks, including cached star conflicts. Existing test expectations are unchanged.
+  Compiler types pass (170 files); the broader affected graph/resolve, pipeline,
+  structure, shared-state and component batch passes 115 tests, with 14 additional
+  source/helper comparisons and five existing mutation checks passing. Emitted
+  JavaScript hashes match `ab177c86` exactly for eight unchanged fixtures: counter,
+  primitive inline/component lists, composition, static children, Octane, FlowOS
+  and request/data. These are output checks, not VM timing or memory results.
+  Full shared-machinery CI is pending. Separate package artifacts, incremental
+  invalidation and Phase 9 benchmark gates remain open (`compiler/linking.md`).
 
 - Root-adapter validation (2026-10-28): correctness `14c1aec9` and dependency
   reduction `89c3a788` are pushed to `origin/compiler-rewrite`. All jobs pass at

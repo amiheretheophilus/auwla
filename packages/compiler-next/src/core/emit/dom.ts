@@ -1,6 +1,7 @@
 /** DOM emission from the render plan, with feature-owned state and write emission. */
 import { b, findAll, is } from 'yuku-ast';
 import type { Expression, Node, Statement } from 'yuku-parser';
+import type { Binding } from 'yuku-analyzer';
 import type { CompileModulesOptions } from '../../options';
 import { DEFAULT_RUNTIME_PATH } from '../../options';
 import type { ComponentPlan, ModulePlan, Site } from '../plan';
@@ -22,6 +23,7 @@ import { RowComponents } from './row-list';
 import { emitComponentCall } from '../../features/components/dom';
 import { emitProps } from '../../features/props/dom';
 import { functionValue } from '../resolve/functions';
+import { namespaceModule } from '../resolve';
 import { emitRefs } from '../../features/refs/dom';
 import { emitEffectGroups, emitLifecycleCalls } from '../../features/effects/dom';
 import { emitSources } from '../../features/sources/dom';
@@ -32,7 +34,9 @@ export function emitDom(plan: ModulePlan, options: CompileModulesOptions): Node 
   const module = plan.module.module;
   const hasRenderWork = plan.components.size > 0 || plan.sharedOwners.length > 0
     || plan.values.length > 0 || plan.calls.length > 0 || plan.componentReferences.size > 0 || plan.effects.calls.length > 0
-    || plan.sourceFlow !== undefined;
+    || plan.sourceFlow !== undefined || (plan.capturedImports?.size ?? 0) > 0
+    || (plan.importedMutations?.length ?? 0) > 0
+    || module.bindings.some((binding) => namespaceModule(binding) !== null);
   if (!hasRenderWork) {
     const hasBoundaries = findAll(module.ast, ['TryStatement', 'AwaitExpression']).length > 0;
     if (!hasBoundaries) {
@@ -41,6 +45,10 @@ export function emitDom(plan: ModulePlan, options: CompileModulesOptions): Node 
   }
 
   const names = new Names(module);
+  for (const capture of plan.capturedExports ?? []) {
+    names.reserve(capture.reader);
+    names.reserve(capture.observer);
+  }
   const runtime = names.fresh('_MD');
   const data = names.fresh('_data');
   const runtimePath = JSON.stringify(options.runtimePath ?? DEFAULT_RUNTIME_PATH);
@@ -103,7 +111,7 @@ export function emitDom(plan: ModulePlan, options: CompileModulesOptions): Node 
   const components = [...plan.components.values()].sort((left, right) => right.fn.start - left.fn.start);
   for (const component of components) {
     let emitted = emitComponent(component, names, runtime, replacements, rowComponents, plan.refs, plan.effects.groups,
-      plan.effects.calls.some((call) => call.owner === component.fn), data, plan.sourceFlow !== undefined, {
+      plan.effects.calls.some((call) => call.owner === component.fn), data, plan.sourceFlow !== undefined, shared.importedValues, {
         storage: sourceReadinessStorage(plan, component.fn, names),
         blocked: sourceFlow.blockedSteps,
         taken: sourceFlow.takenBindings,
@@ -163,6 +171,7 @@ function emitComponent(
   ownsLifecycle: boolean,
   data: string,
   sourceFlow: boolean,
+  importedValues: ReadonlyMap<Binding, readonly Expression[]>,
   readiness: {
     readonly storage: readonly Statement[];
     readonly blocked: ReadonlyMap<Node, Expression>;
@@ -236,7 +245,7 @@ function emitComponent(
     readonly.set(node, node.operator === '!==' ? expression('!$$equals', { equals }) : equals);
   }
   const handled = new Set(plan.takeovers);
-  const sources = emitSources(plan.sources, data);
+  const sources = { ...emitSources(plan.sources, data), importedValues };
   const mutations = emitMutations(plan.mutations, state.versions, names, runtime, batch, readonly, sources);
   const writes = batch === null
     ? { replacements: mutations.replacements, declarations: [] }

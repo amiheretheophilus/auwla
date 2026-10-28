@@ -3,7 +3,7 @@
  * Allocate nodes before connecting them so forward edges and cycles are ordinary.
  */
 import type { Node } from 'yuku-parser';
-import { declaringRunner, isRuntimeBinding, isWrittenGlobal, runnerOf } from '../resolve';
+import { declaringRunner, importedDefinition, isRuntimeBinding, isWrittenGlobal, runnerOf } from '../resolve';
 import type { Binding, Reference, Resolved, ResolvedModule } from '../resolve';
 import type {
   BindingFacts, BindingNode, EscapingFunction, FunctionFacts, GraphNode, GraphOwner,
@@ -105,9 +105,9 @@ export function buildGraph(
 
     // Keep the local import node and its identity, then link to the definition.
     // Re-exports and circular imports are resolved by yuku, not by name matching.
-    const definition = binding.definition();
-    if (definition?.binding != null && definition.binding !== binding) {
-      const target = bindings.get(definition.binding);
+    const definition = importedDefinition(binding);
+    if (definition !== null) {
+      const target = bindings.get(definition);
       if (target !== undefined) {
         node.reads.push({ target, reference: null, path: [] });
       }

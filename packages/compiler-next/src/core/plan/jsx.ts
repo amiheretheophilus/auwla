@@ -6,7 +6,9 @@ import { is } from 'yuku-ast';
 import type { Expression, Node } from 'yuku-parser';
 
 /** Parentheses and erased type annotations do not change the returned value. */
-export function unwrap(expression: Expression): Expression {
+export function unwrap(expression: Expression): Expression;
+export function unwrap(expression: Node): Node;
+export function unwrap(expression: Node): Node {
   let current = expression;
   while (is.ParenthesizedExpression(current) || is.TSAsExpression(current)
     || is.TSSatisfiesExpression(current) || is.TSNonNullExpression(current)) {

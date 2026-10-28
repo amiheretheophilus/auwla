@@ -101,6 +101,13 @@ the 19 that currently fail on the old compiler, must pass on the new compiler.
 The test reference can also contain bugs: when it disagrees with JavaScript or an
 agreed rule, fix the reference rather than copying its mistake into the compiler.
 
+Phase 9's linking cases exposed invalid wrapping of live export specifiers and
+eager namespace snapshots during cyclic module initialization. The reference
+keeps specifiers native and freezes namespace descriptor snapshots after static
+imports finish, before mounting or handlers. It shares no linking code with the
+compiler. Prototype checks compare with an uncompiled native-module control,
+accounting for Bun's host-specific namespace prototype (`linking.md`).
+
 Discarded calls to local components and stable identifier aliases use an isolated
 reference setup instance, including calls from handlers. They run once and
 dispose their cleanup immediately, without mounting markup. The new native and

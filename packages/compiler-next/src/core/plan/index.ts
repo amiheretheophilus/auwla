@@ -18,7 +18,7 @@ import { buildTemplate, containsJsx, unsupported, type TemplateContext } from '.
 import { canPlanConditional, planReturnProgram } from '../../features/conditionals/plan';
 import { unwrap } from './jsx';
 import { planLocalState } from '../../features/state/plan';
-import { planMutations, planReadonlyBindings, planWrites } from '../../features/handlers/plan';
+import { mergeMutations, planImportedMutations, planMutations, planReadonlyBindings, planWrites } from '../../features/handlers/plan';
 import { planMemos } from '../../features/derived/plan';
 import { planSharedReads, sharedSetup } from '../../features/state/shared-plan';
 import { planReceiverTargets } from '../../features/handlers/receivers';
@@ -44,7 +44,10 @@ export function planModules(
   const owners = new Set<Node | null>([...components, ...[...sharedReads.keys()].map(storageOwner)]);
   const memos = planMemos(graph, queries, owners);
   const refs = planRefs(graph);
-  return graph.resolved.modules.map((entry) => planModule(graph, queries, components, entry, state, memos, sharedReads, refs));
+  return graph.resolved.modules.map((entry) => {
+    const imported = planImportedMutations(graph, entry, owners);
+    return planModule(graph, queries, components, entry, state, memos, sharedReads, refs, imported);
+  });
 }
 
 function planModule(
@@ -56,6 +59,7 @@ function planModule(
   memos: ReadonlyMap<Node | null, readonly MemoGroupPlan[]>,
   sharedReads: ReadonlyMap<BindingNode, SharedReadPlan>,
   allRefs: ModulePlan['refs'],
+  imported: ReadonlyMap<Node | null, readonly import('./model').MutationPlan[]>,
 ): ModulePlan {
   const module = entry.module;
   const refs = allRefs.filter((ref) => ref.binding.binding.module === module);
@@ -91,7 +95,7 @@ function planModule(
     const { siteInputs, dynamicSites } = planSiteInputs(component.sites, fn, graph, queries, entry);
     const ownedRefs = refs.filter((ref) => local.includes(ref.binding));
     const writes = [...planWrites(local), ...refWrites(ownedRefs)];
-    const mutations = [...planMutations(local), ...refMutations(ownedRefs)];
+    const mutations = mergeMutations([...planMutations(local), ...refMutations(ownedRefs)], imported.get(fn) ?? []);
     const readonlyBindings = planReadonlyBindings(local);
     const takeovers = targets.filter((target) => {
       return target.takeovers.length > 0 && !readonlyBindings.includes(target);
@@ -226,7 +230,7 @@ function planModule(
     const local = [...new Set([...bindings, ...targets])];
     const ownedRefs = refs.filter((ref) => local.includes(ref.binding));
     const writes = [...planWrites(local), ...refWrites(ownedRefs)];
-    const mutations = [...planMutations(local), ...refMutations(ownedRefs)];
+    const mutations = mergeMutations([...planMutations(local), ...refMutations(ownedRefs)], imported.get(owner) ?? []);
     const runner = bindings[0]!.owner.runner;
     const replayed = (operation: Node) => {
       return runnerOf(module, operation) === runner && computations.some((group) => {
@@ -261,6 +265,9 @@ function planModule(
     });
   }
   return {
+    importedMutations: sharedOwners.some((owner) => owner.fn === null && owner.block === null)
+      ? []
+      : imported.get(null) ?? [],
     sourceFlow,
     effects,
     refs,

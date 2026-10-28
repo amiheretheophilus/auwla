@@ -336,6 +336,12 @@ array child). Remove each check when its phase is built.
 
 - [ ] Cross-module facts (`linking.md`): imported state, derivations and
   components; third-party package compilation.
+  - [x] First reference/implementation slice: native live versus captured default
+    exports, namespace updates and reflection, receiver/identity preservation,
+    cyclic hoisted calls, private metadata boundaries and collision handling.
+    Cases and remaining limits are on `linking.md`.
+  - [ ] Package artifact contract and independent reference cases, then separate
+    package compilation/linking and incremental invalidation.
 - **Exit:** multi-module cases pass; `bench/linker` and `bench/package-compilation`
   gates pass.
 

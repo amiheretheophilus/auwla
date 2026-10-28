@@ -1,9 +1,11 @@
 /** Shared owners keep native values; readers expose versions across lexical/module boundaries. */
 import { b, findAll, is } from 'yuku-ast';
-import type { Node, Statement } from 'yuku-parser';
+import type { Expression, Node, Statement } from 'yuku-parser';
+import type { Binding } from 'yuku-analyzer';
 import type { BindingNode } from '../../core/graph';
-import type { ModulePlan, SharedOwnerPlan } from '../../core/plan/model';
-import { importedDefinition, runnerOf } from '../../core/resolve';
+import type { ModulePlan, SharedOwnerPlan, SharedReadPlan } from '../../core/plan/model';
+import { importedDefinition, namespaceModule, runnerOf } from '../../core/resolve';
+import { relativeModule } from '../../core/resolve/imports';
 import type { Names } from '../../core/emit/names';
 import { copy } from '../../core/emit/copy';
 import { expression, statement } from '../../core/emit/quote';
@@ -31,6 +33,7 @@ export function emitSharedState(plan: ModulePlan, names: Names, runtime: string,
   const replacements = new Map(initial);
   const imports: Statement[] = [];
   const owners: SharedOwnerEmit[] = [];
+  const importedValues = new Map<Binding, readonly Expression[]>();
   for (const read of plan.sharedReads.values()) {
     if (read.binding.binding.module === plan.module.module) {
       names.reserve(read.name);
@@ -47,7 +50,9 @@ export function emitSharedState(plan: ModulePlan, names: Names, runtime: string,
     const invocation = names.fresh('_effectInvocation');
     const declarations: Statement[] = [];
     const notifiers = new Map<BindingNode, string>();
+    const observed = owner.state.some((binding) => plan.sharedReads.get(binding)?.observer !== undefined);
     for (const binding of owner.state) {
+      const read = plan.sharedReads.get(binding);
       const version = names.fresh(`_${binding.binding.name}Version`);
       // Named per binding (`Names.of`) so a row list routing on it can pass them.
       const declared = binding.binding.declarations[0]!;
@@ -57,9 +62,11 @@ export function emitSharedState(plan: ModulePlan, names: Names, runtime: string,
       keys.set(binding, key);
       notifiers.set(binding, notify);
       declarations.push(statement('let $$version = 0;', { version }));
-      declarations.push(statement('const $$key = {};', { key }));
+      // A cyclic namespace call can reach the observer before this module's
+      // body executes. Only observed keys need a safely testable hoisted slot.
+      const keyDeclaration = read?.observer === undefined ? 'const $$key = {};' : 'var $$key = {};';
+      declarations.push(statement(keyDeclaration, { key }));
       declarations.push(statement('function $$notify() { $$version++; $$batch.mark($$key); }', { notify, version, batch, key }));
-      const read = plan.sharedReads.get(binding);
       if (read === undefined) {
         continue;
       }
@@ -68,9 +75,9 @@ export function emitSharedState(plan: ModulePlan, names: Names, runtime: string,
       // function per binding: a computation reading it again records nothing new.
       const current = names.of(declared, `_version_${binding.binding.name}`);
       declarations.push(statement(`function $$current() {
-        if ($$runtime.isBuilding()) $$refresh();
+        if ($$runtime.isBuilding()${observed ? ' && $$ready' : ''}) $$refresh();
         return $$version;
-      }`, { current, refresh, runtime, version }));
+      }`, { current, refresh, runtime, version, ready }));
       const hasReadiness = data !== undefined && plan.sourceFlow?.bindingBuilders.has(binding);
       const readiness = names.fresh('_readReadiness');
       const value = hasReadiness ? expression('$$readiness ? $$data.sourceBindingInput($$binding, $$cell, $$readiness === true ? void 0 : $$readiness) : $$binding', {
@@ -84,6 +91,19 @@ export function emitSharedState(plan: ModulePlan, names: Names, runtime: string,
         if ($$runtime.isBuilding()) $$refresh();
         return $$runtime.trackRead($$current, $$value, $$key);
       }`, { reader: read.name, current, refresh, runtime, value, key, readiness }));
+      if (read.observer !== undefined) {
+        // A namespace is an exotic native object. Observe its version without
+        // copying it, changing a method's receiver, or eagerly reading exports
+        // that might still be in the temporal dead zone of a module cycle.
+        const snapshot = names.fresh('_snapshot');
+        declarations.push(statement(`function $$observer($$snapshot) {
+          if ($$key !== void 0) {
+            $$runtime.trackRead($$current, void 0, $$key);
+            if ($$snapshot && $$ready) return $$binding;
+          }
+        }`, { observer: read.observer, runtime, current, key, ready, snapshot, binding: binding.binding.name }));
+        declarations.push(statement('export { $$observer };', { observer: read.observer }));
+      }
       if (owner.fn === null && owner.block === null) {
         declarations.push(statement('export { $$reader };', { reader: read.name }));
       }
@@ -119,7 +139,9 @@ export function emitSharedState(plan: ModulePlan, names: Names, runtime: string,
     }
     declarations.push(statement(`const $$scope = $$runtime.createBuildScope(true, ${owner.block !== null});`, { scope, runtime }));
     declarations.push(statement('const $$invocation = $$runtime.isEffectInvocation();', { invocation, runtime }));
-    declarations.push(statement('let $$ready = false;', { ready }));
+    // Module namespace observers can be called before module evaluation. A
+    // hoisted flag guards their data reads; lexical owners retain activation scope.
+    declarations.push(statement(observed ? 'var $$ready = false;' : 'let $$ready = false;', { ready }));
     // A write wakes readers of what it wrote and of every derived binding,
     // which recomputes on read; readers of other state stay asleep.
     const recomputed = new Set<BindingNode>();
@@ -142,22 +164,73 @@ export function emitSharedState(plan: ModulePlan, names: Names, runtime: string,
     }));
     owners.push({ plan: owner, versions, keys, scope, frame, batch, refresh, ready, invocation, declarations, notifiers });
   }
-  const importedReaders = new Map<BindingNode, string>();
+  type ReadableModule = Pick<SharedReadPlan, 'path'>;
+  const imported = new Map<ReadableModule, Map<string, string>>();
+  const readsByBinding = new Map([...plan.sharedReads.values()].map((read) => [read.binding.binding, read]));
+
+  const importShared = (read: ReadableModule, exported: string, base: string): string => {
+    const aliases = imported.get(read) ?? new Map<string, string>();
+    let alias = aliases.get(exported);
+
+    if (alias === undefined) {
+      alias = names.fresh(base);
+      const source = JSON.stringify(relativeModule(plan.module.path, read.path));
+      imports.push(statement(`import { ${exported} as ${alias} } from ${source};`));
+      aliases.set(exported, alias);
+      imported.set(read, aliases);
+    }
+    return alias;
+  };
+
   for (const binding of plan.module.module.bindings) {
+    const namespace = namespaceModule(binding);
+    if (namespace !== null) {
+      const observers = new Set<string>();
+
+      for (const name of namespace.exportedNames()) {
+        const definition = namespace.resolveExport(name)?.binding;
+        const read = definition == null ? undefined : readsByBinding.get(definition);
+        if (read?.observer === undefined) {
+          continue;
+        }
+        observers.add(importShared(read, read.observer, '_importedObserve'));
+      }
+
+      for (const capture of plan.capturedNamespaces?.get(namespace) ?? []) {
+        observers.add(importShared(capture, capture.observer, '_importedObserve'));
+      }
+
+      // Separate reads preserve identity in the general mutation observer. A
+      // newly allocated array would look replaced after every unchanged call.
+      importedValues.set(binding, [...observers].map((observer) => expression('$$observer(true)', { observer })));
+
+      if (observers.size > 0) {
+        for (const reference of binding.references) {
+          const parent = plan.module.module.parentOf(reference.node);
+          if (reference.isWrite || reference.inTypePosition || is.ExportSpecifier(parent)) {
+            continue;
+          }
+
+          const calls = [...observers].map((observer) => expression('$$observer()', { observer }));
+          const value = copy(reference.node) as Extract<Node, { type: 'Identifier' }>;
+          value.type = 'Identifier';
+          replacements.set(reference.node, b.SequenceExpression({
+            expressions: [...calls, value],
+          }));
+        }
+      }
+      continue;
+    }
+
+    const captured = plan.capturedImports?.get(binding);
     const definition = importedDefinition(binding);
-    if (definition === null) {
+    const read = definition === null ? undefined : readsByBinding.get(definition);
+    if (read === undefined && captured === undefined) {
       continue;
     }
-    const read = [...plan.sharedReads.values()].find((read) => read.binding.binding === definition);
-    if (read === undefined) {
-      continue;
-    }
-    let reader = importedReaders.get(read.binding);
-    if (reader === undefined) {
-      reader = names.fresh('_importedRead');
-      importedReaders.set(read.binding, reader);
-      imports.push(statement(`import { ${read.name} as ${reader} } from ${JSON.stringify(relativeModule(plan.module.path, read.path))};`));
-    }
+    const reader = captured !== undefined
+      ? importShared(captured, captured.reader, '_importedRead')
+      : importShared(read!, read!.name, '_importedRead');
     for (const reference of binding.references) {
       const parent = plan.module.module.parentOf(reference.node);
       if (reference.isWrite || reference.inTypePosition || is.ExportSpecifier(parent)) {
@@ -166,7 +239,7 @@ export function emitSharedState(plan: ModulePlan, names: Names, runtime: string,
       replacements.set(reference.node, expression('$$reader()', { reader }));
     }
   }
-  return { replacements, imports, owners };
+  return { replacements, imports, owners, importedValues };
 }
 
 /** Finalize snapshots before any authored return without moving its evaluation. */
@@ -327,16 +400,4 @@ function declaredIdentifiers(declaration: Node) {
     return [declaration.id];
   }
   return [];
-}
-
-function relativeModule(importer: string, target: string): string {
-  const from = importer.replace(/^\.\//, '').split('/');
-  from.pop();
-  const to = target.replace(/^\.\//, '').split('/');
-  while (from.length > 0 && from[0] === to[0]) {
-    from.shift();
-    to.shift();
-  }
-  const path = [...from.map(() => '..'), ...to].join('/').replace(/\.tsx?$/, '');
-  return path.startsWith('.') ? path : `./${path}`;
 }

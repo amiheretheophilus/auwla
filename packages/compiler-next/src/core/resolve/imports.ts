@@ -6,6 +6,22 @@ import type { CompileModulesOptions } from '../../options';
 
 const EXTENSIONS = ['', '.ts', '.tsx', '.js', '.jsx', '/index.ts', '/index.tsx', '/index.js', '/index.jsx'];
 
+/** A generated dependency, preserving the existing extensionless TypeScript convention. */
+export function relativeModule(importer: string, target: string, preserveExtension = false): string {
+  const from = importer.replace(/^\.\//, '').split('/');
+  from.pop();
+  const to = target.replace(/^\.\//, '').split('/');
+
+  while (from.length > 0 && from[0] === to[0]) {
+    from.shift();
+    to.shift();
+  }
+
+  const relative = [...from.map(() => '..'), ...to].join('/');
+  const path = preserveExtension ? relative : relative.replace(/\.tsx?$/, '');
+  return path.startsWith('.') ? path : `./${path}`;
+}
+
 /**
  * The analyzer's `resolve`: a module path, `false` for a module outside the
  * compiled set (a package), or `null` when a relative import names no module.

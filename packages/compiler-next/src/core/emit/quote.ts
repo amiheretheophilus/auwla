@@ -46,8 +46,8 @@ export function identifier(name: string): Expression {
   return b.Identifier({ name });
 }
 
-export function stringLiteral(value: string): Expression {
-  return b.Literal({ value, raw: JSON.stringify(value) });
+export function stringLiteral(value: string): Extract<Node, { type: 'Literal'; value: string }> {
+  return b.Literal({ value, raw: JSON.stringify(value) }) as Extract<Node, { type: 'Literal'; value: string }>;
 }
 
 export function numberLiteral(value: number): Expression {

@@ -779,6 +779,9 @@ export function prepareModuleReads(
     Identifier(_node, ctx) {
       const reference = ctx.reference;
       if (!reference?.binding || reference.inTypePosition || reference.isWrite) return;
+      // Export specifiers name native live bindings. A payload-read wrapper
+      // belongs at a consuming expression, never inside `export { local }`.
+      if (is.ExportSpecifier(ctx.parent)) return;
       if (rawUses.raw.has(reference.node)) return;
       // `{ x }` must become `{ x: $value(x) }`.
       if (is.Property(ctx.parent) && ctx.parent.shorthand && ctx.key === 'value') {

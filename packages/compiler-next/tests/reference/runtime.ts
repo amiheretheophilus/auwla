@@ -15,6 +15,7 @@
  */
 import { $waiting, enterSourceOwner, Group, noteReplacement, Source, Waiting } from './sources';
 import { childPosition, elementPosition, isElement, Preparation } from './preparation';
+import { types } from 'node:util';
 export {
   $branch, $chain, $fetch, $path, $read, $switch, $track, $value, $waiting, $when, $sourceState, Group,
 } from './sources';
@@ -109,6 +110,8 @@ interface Computation {
 let computation: Computation | undefined;
 const externalReads = new Map<string, ReadValue>();
 const privateVersions = new WeakMap<object, number>();
+let importingModules = false;
+let namespaceSnapshots: Array<() => void> = [];
 
 /** Native private stores cannot be inspected by a descriptor snapshot. */
 export function $privateTarget(read: () => unknown, write: (value: unknown) => void, object: object) {
@@ -819,12 +822,18 @@ export function beginReferenceScope(): () => void {
   runningModuleEffects = undefined;
   rendering = null;
   externalReads.clear();
+  const previousImporting = importingModules;
+  const previousSnapshots = namespaceSnapshots;
+  importingModules = true;
+  namespaceSnapshots = [];
   const previous = unclaimedModuleEffects;
   const current = new ModuleEffects();
   unclaimedModuleEffects = current;
   return () => {
     current.unmount();
     unclaimedModuleEffects = previous;
+    importingModules = previousImporting;
+    namespaceSnapshots = previousSnapshots;
   };
 }
 
@@ -879,6 +888,29 @@ function deepCopy(value: unknown, copies = new Map<object, unknown>()): unknown 
   if (value instanceof Node || value instanceof AssignRef) return value;
   if (copies.has(value)) return copies.get(value);
 
+  if (types.isModuleNamespaceObject(value)) {
+    const fields: unknown[] = [];
+    const snapshot = { namespace: value, fields };
+    copies.set(value, snapshot);
+    const capture = () => {
+      for (const key of Reflect.ownKeys(value)) {
+        const descriptor = Object.getOwnPropertyDescriptor(value, key)!;
+        fields.push([key, copy(descriptor.value)]);
+      }
+    };
+
+    // A namespace descriptor evaluates its live export. A cyclic importer can
+    // call an initialized function while other exports are in their temporal
+    // dead zone. Freeze these inputs after static imports finish, before any
+    // mounting or handlers, without replaying the authored setup.
+    if (importingModules) {
+      namespaceSnapshots.push(capture);
+    } else {
+      capture();
+    }
+    return snapshot;
+  }
+
   if (value instanceof Date) return { date: value.getTime() };
 
   if (value instanceof Map) {
@@ -922,6 +954,7 @@ function deepCopy(value: unknown, copies = new Map<object, unknown>()): unknown 
 function deepEqual(left: unknown, right: unknown, visited = new Set<unknown>()): boolean {
   if (Object.is(left, right)) return true;
   if (typeof left !== 'object' || typeof right !== 'object' || left === null || right === null) return false;
+  if (types.isModuleNamespaceObject(left) || types.isModuleNamespaceObject(right)) return false;
   if (left instanceof Node || right instanceof Node) return false;
   if (visited.has(left)) return true;
   visited.add(left);
@@ -1392,6 +1425,13 @@ export interface ReferenceApp {
 }
 
 export function renderApp(root: Component, container: HTMLElement): ReferenceApp {
+  importingModules = false;
+  const pending = namespaceSnapshots;
+  namespaceSnapshots = [];
+  for (const capture of pending) {
+    capture();
+  }
+
   const renderer = new Renderer(root, container);
   renderer.update();
   return { container, render: () => renderer.update(), unmount: () => renderer.unmount() };

@@ -1,7 +1,8 @@
 /** Group actual assignment operations by the analyzer bindings they write. */
 import { is } from 'yuku-ast';
 import type { Node } from 'yuku-parser';
-import type { BindingNode } from '../../core/graph';
+import type { BindingNode, SemanticGraph } from '../../core/graph';
+import type { ResolvedModule } from '../../core/resolve';
 import type { MutationPlan, WritePlan } from '../../core/plan/model';
 import { variableDeclaration } from '../../core/graph/inputs';
 
@@ -48,4 +49,58 @@ export function planMutations(bindings: readonly BindingNode[]): readonly Mutati
     }
   }
   return [...operations].map(([operation, entry]) => ({ operation, ...entry }));
+}
+
+/** Imports are immutable bindings, but their values can still be mutated. */
+export function planImportedMutations(
+  graph: SemanticGraph,
+  entry: ResolvedModule,
+  owners: ReadonlySet<Node | null>,
+): ReadonlyMap<Node | null, readonly MutationPlan[]> {
+  const bindings = entry.module.imports.flatMap((imported) => {
+    const binding = imported.local === null ? undefined : graph.bindings.get(imported.local);
+    return imported.typeOnly || binding === undefined ? [] : [binding];
+  });
+  const grouped = new Map<Node | null, MutationPlan[]>();
+
+  for (const mutation of planMutations(bindings)) {
+    let owner: Node | null = null;
+    for (const ancestor of entry.module.ancestors(mutation.operation)) {
+      if (owners.has(ancestor)) {
+        owner = ancestor;
+        break;
+      }
+    }
+    const plans = grouped.get(owner) ?? [];
+    plans.push(mutation);
+    grouped.set(owner, plans);
+  }
+  return grouped;
+}
+
+/** One observer per operation, even when it receives both local and imported values. */
+export function mergeMutations(
+  local: readonly MutationPlan[],
+  imported: readonly MutationPlan[],
+): readonly MutationPlan[] {
+  if (imported.length === 0) {
+    return local;
+  }
+  const operations = new Map(local.map((plan) => [plan.operation, plan]));
+
+  for (const plan of imported) {
+    const existing = operations.get(plan.operation);
+    if (existing === undefined) {
+      operations.set(plan.operation, plan);
+      continue;
+    }
+    const targets = [...existing.targets];
+    for (const target of plan.targets) {
+      if (!targets.some((candidate) => candidate.binding === target.binding)) {
+        targets.push(target);
+      }
+    }
+    operations.set(plan.operation, { ...existing, targets });
+  }
+  return [...operations.values()];
 }

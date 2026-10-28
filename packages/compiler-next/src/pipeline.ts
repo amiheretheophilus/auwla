@@ -8,6 +8,7 @@
  * their authored behavior; the plan replaces only component functions.
  */
 import { findAll } from 'yuku-ast';
+import type { Node } from 'yuku-parser';
 import { CompileError } from './core/diagnostics';
 import { emitDom } from './core/emit/dom';
 import { printJavaScript } from './core/emit/print';
@@ -17,6 +18,9 @@ import { resolve } from './core/resolve';
 import { planModules } from './core/plan';
 import type { CompileModulesOptions } from './options';
 import { optimizeModules } from './optimize';
+import { linkModuleNamespaces, type EmittedModule } from './link/modules';
+import { planCapturedValues } from './link/captured-plan';
+import { emitCapturedValues } from './link/captured-dom';
 
 /** Compiles a set of modules that may import each other. Returns JavaScript by path. */
 export function compileModules(
@@ -26,10 +30,10 @@ export function compileModules(
   const parsed = Object.entries(modules).map(([path, source]) => parseModule(path, source));
   const resolved = resolve(parsed, options);
   const graph = classifyGraph(resolved);
-  const general = planModules(graph, graph.queries, graph.components);
+  const general = planCapturedValues(planModules(graph, graph.queries, graph.components));
   const plans = optimizeModules(general, graph, options.optimize !== false);
 
-  const output: Record<string, string> = {};
+  const emitted = new Map<string, EmittedModule>();
   for (const plan of plans) {
     const tree = emitDom(plan, options);
     const module = plan.module;
@@ -39,7 +43,15 @@ export function compileModules(
     if (leftover !== undefined) {
       throw CompileError.at('compiler-next left JSX in its output (a compiler bug)', module.path, module.module.source, leftover.start);
     }
-    output[module.path] = printJavaScript(tree, module.path, module.module.source);
+    const output = { module, tree: tree as Extract<Node, { type: 'Program' }> };
+    emitted.set(module.path, emitCapturedValues(plan, output, options));
   }
+
+  const linked = linkModuleNamespaces(plans, emitted, options);
+  const output: Record<string, string> = {};
+  for (const [path, emitted] of linked) {
+    output[path] = printJavaScript(emitted.tree, emitted.module.path, emitted.module.module.source);
+  }
+
   return output;
 }

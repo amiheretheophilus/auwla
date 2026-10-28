@@ -21,7 +21,11 @@ import { sourceBlockedSteps, sourceChanges, sourceReadinessStorage, sourceTakeov
 export function emitShared(plan: ModulePlan, names: Names, runtime: string, initial: ReadonlyMap<Node, Node> = new Map(), data?: string) {
   const receivers = emitReceiverTargets(plan.receiverTargets, plan.module.module, names, runtime);
   const state = emitSharedState(plan, names, runtime, new Map([...initial, ...receivers]), data);
-  let replacements = new Map(state.replacements);
+  const imported = emitMutations(plan.importedMutations ?? [], new Map(), names, runtime, null, state.replacements, {
+    importedValues: state.importedValues,
+  });
+  state.imports.push(...imported.declarations);
+  let replacements = new Map(imported.replacements);
   const takeovers = new Map(state.owners.map((owner) => [owner, emitTakeovers(
     owner.plan.takeovers, owner.versions, names, owner.scope, owner.batch, owner.keys, sourceTakeovers(plan, names, data),
     data === undefined ? undefined : expression('$$data.noteSourceReplacement', { data }),
@@ -48,6 +52,7 @@ export function emitShared(plan: ModulePlan, names: Names, runtime: string, init
     const mutations = emitMutations(owner.plan.mutations, owner.versions, names, runtime, owner.batch, replacements, {
       keys: owner.keys,
       notifiers: owner.notifiers,
+      importedValues: state.importedValues,
     });
     replacements = new Map(mutations.replacements);
     const refs = plan.refs.filter((ref) => owner.plan.state.includes(ref.binding));
@@ -63,7 +68,9 @@ export function emitShared(plan: ModulePlan, names: Names, runtime: string, init
       replayBase.delete(mutation.operation);
       for (const target of mutation.targets) replayBase.delete(target.member);
     }
-    const replay = emitMutations(owner.plan.replayMutations, owner.versions, names, runtime, null, replayBase);
+    const replay = emitMutations(owner.plan.replayMutations, owner.versions, names, runtime, null, replayBase, {
+      importedValues: state.importedValues,
+    });
     const memos = emitMemos(owner.plan, owner.versions, names, effects.replacements, replay.replacements,
       takeovers.get(owner)!, runtime, owner.keys, { batch: owner.batch }, undefined, undefined, sourceBlockedSteps(plan, names),
       sourceChanges(plan, names, data));
@@ -99,7 +106,7 @@ export function emitShared(plan: ModulePlan, names: Names, runtime: string, init
   for (const owner of state.owners) for (const binding of owner.plan.state) owned.add(binding);
   replacements = emitRefs(plan.refs.filter((ref) => !owned.has(ref.binding)), runtime, replacements, true);
   return {
-    replacements, imports: state.imports,
+    replacements, imports: state.imports, importedValues: state.importedValues,
     moduleBody: () => moduleOwner === undefined ? null : emitOwner(moduleOwner),
   };
 }

@@ -51,6 +51,12 @@ watched roots. A completed payload edit calls the data runtime's existing
 Unlisted methods retain the general observer; no new method list decides source
 semantics (`sources.md`).
 
+Phase 9 imports reuse the same mutation plans. Imported bindings have no writable
+local version: mutation helpers notify the actual data roots. Local/imported
+targets of one call merge into one observer. Namespace targets supply separate,
+guarded export-value reads, preserving native identity without reflecting over
+uninitialized cyclic exports (`linking.md`).
+
 Each contiguous group of batches from the same application enters one kernel
 commit. First-mark order is retained across interleaved applications; the kernel
 orders parents before children within a group. A weak per-application entity

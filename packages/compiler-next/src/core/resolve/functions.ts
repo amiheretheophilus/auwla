@@ -58,6 +58,9 @@ export function functionValue(module: Module, value: Node, visited = new Set<Bin
   visited.add(binding);
   if (binding.references.some((reference) => reference.isWrite)) return null;
 
+  // A captured default can still identify a function. The recursive check
+  // rejects any reassigned binding; this proves callable identity rather
+  // than treating the captured export as a live reactive binding.
   const definition = binding.definition()?.binding;
   if (definition != null && definition !== binding) {
     const name = definition.declarations[0];

@@ -18,6 +18,7 @@ import type { Binding, Module } from 'yuku-analyzer';
 import type { Node } from 'yuku-parser';
 import { isWrittenGlobal } from './globals';
 import type { Resolved } from '.';
+import { importedBinding } from './exports';
 
 export interface PropertyReads {
   /** True when reading `member` may run code that reads other values. */
@@ -68,7 +69,7 @@ function memberRoot(member: Node): Node {
 
 /** The binding an import names, or the binding itself. */
 function definitionOf(binding: Binding): Binding {
-  const definition = binding.definition()?.binding;
+  const definition = importedBinding(binding);
   return definition ?? binding;
 }
 

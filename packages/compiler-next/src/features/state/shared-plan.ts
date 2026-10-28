@@ -3,12 +3,32 @@ import { b, is } from 'yuku-ast';
 import type { Node, Statement } from 'yuku-parser';
 import type { BindingNode, SemanticGraph } from '../../core/graph';
 import { variableDeclaration } from '../../core/graph/inputs';
-import { importedDefinition, runnerOf } from '../../core/resolve';
+import { importedDefinition, namespaceModule, runnerOf } from '../../core/resolve';
 import type { SharedReadPlan } from '../../core/plan/model';
 import { storageOwner } from '../../core/plan/storage';
 
 export function planSharedReads(graph: SemanticGraph, components: ReadonlySet<Node>): ReadonlyMap<BindingNode, SharedReadPlan> {
   const reads = new Map<BindingNode, SharedReadPlan>();
+  const namespaceBindings = new Set<BindingNode['binding']>();
+  const namespaces = new Set<BindingNode['binding']['module']>();
+
+  for (const entry of graph.resolved.modules) {
+    for (const binding of entry.module.bindings) {
+      const namespace = namespaceModule(binding);
+      if (namespace === null || namespaces.has(namespace)) {
+        continue;
+      }
+      namespaces.add(namespace);
+
+      for (const name of namespace.exportedNames()) {
+        const definition = namespace.resolveExport(name)?.binding;
+        if (definition != null) {
+          namespaceBindings.add(definition);
+        }
+      }
+    }
+  }
+
   for (const entry of graph.resolved.modules) {
     const taken = new Set([...entry.module.bindings.map((binding) => binding.name), ...entry.module.references.map((reference) => reference.name)]);
     for (const binding of graph.bindings.values()) {
@@ -38,7 +58,18 @@ export function planSharedReads(graph: SemanticGraph, components: ReadonlySet<No
       let name = base;
       for (let index = 2; taken.has(name); index++) name = `${base}${index}`;
       taken.add(name);
-      reads.set(binding, { binding, name, path: entry.path });
+
+      let observer: string | undefined;
+      if (owner === null && namespaceBindings.has(binding.binding)) {
+        const base = `_observe_${binding.binding.name}`;
+        observer = base;
+        for (let index = 2; taken.has(observer); index++) {
+          observer = `${base}${index}`;
+        }
+        taken.add(observer);
+      }
+
+      reads.set(binding, { binding, name, path: entry.path, observer });
     }
   }
   return reads;

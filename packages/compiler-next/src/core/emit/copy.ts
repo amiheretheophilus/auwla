@@ -6,6 +6,11 @@ import type { Node } from 'yuku-parser';
 const origins = new WeakMap<object, object>();
 const finished = new WeakSet<object>();
 
+/** Distinguish authored syntax from generated nodes after copying a module. */
+export function originOf(node: Node): Node {
+  return (origins.get(node) ?? node) as Node;
+}
+
 /** A fully composed component must not receive an earlier module-only rewrite. */
 export function finishCopy<T extends Node>(node: T): T {
   finished.add(node);

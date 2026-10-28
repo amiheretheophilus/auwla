@@ -6,6 +6,7 @@ import type { Expression, Node, Statement, VariableDeclaration, VariableDeclarat
 import type { ResolvedModule } from '../resolve';
 import type { FunctionNode } from '../resolve/functions';
 import type { BindingNode } from '../graph';
+import type { Binding, Export, Module } from 'yuku-analyzer';
 
 /** One node of a template, in the creation order `materializeMarkup` returns (post-order). */
 export type TemplateNode =
@@ -341,6 +342,10 @@ export interface MutationPlan {
 }
 
 export interface ModulePlan {
+  readonly importedMutations?: readonly MutationPlan[];
+  readonly capturedExports?: readonly CapturedValuePlan[];
+  readonly capturedImports?: ReadonlyMap<Binding, CapturedValuePlan>;
+  readonly capturedNamespaces?: ReadonlyMap<Module, readonly CapturedValuePlan[]>;
   /** Source readiness is planned from the same graph, including helper scopes. */
   readonly sourceFlow?: SourceFlowPlan;
   readonly effects: { readonly calls: readonly LifecycleCallPlan[]; readonly groups: readonly EffectGroupPlan[] };
@@ -437,6 +442,16 @@ export interface SharedReadPlan {
   readonly binding: BindingNode;
   readonly name: string;
   readonly path: string;
+  /** Observe a namespace without reading any of its possibly uninitialized exports. */
+  readonly observer?: string;
+}
+
+/** One native default-expression value, with its own mutation/version identity. */
+export interface CapturedValuePlan {
+  readonly exported: Export;
+  readonly path: string;
+  readonly reader: string;
+  readonly observer: string;
 }
 
 export interface SharedOwnerPlan {
