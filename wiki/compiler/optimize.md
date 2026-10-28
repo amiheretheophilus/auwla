@@ -8,6 +8,12 @@ method-call pass are built. Further list fast paths remain below.
 Holds every fast path. The general rules in `features/` handle all valid code;
 an optimization only makes a case faster.
 
+Production minified and gzip size are measured alongside speed and memory
+(user, 2026-10-28). General emitter refactors can remove duplicated compiler-owned
+structure without an optional pass: stored views share their HTML/SVG site program
+through the existing namespace-aware template emitter (`core.md`). Both optimizer
+modes keep the same namespace, capture-order, update and disposal contract.
+
 ## The contract
 
 ```ts

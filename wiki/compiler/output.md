@@ -6,7 +6,9 @@ which the old one didnt have any issue with". Details of the emitted shape are t
 Phase 3 design step of `plan.md`.
 
 The user: "we have to be at least on par with the current one in terms of perf
-whilst being more correct". Emitted code is judged on speed only (`../decisions.md`).
+whilst being more correct". The 2026-10-28 bundle work also measures production
+minified and compressed output; the old compiler is a comparison, not a size goal
+(`../decisions.md`).
 
 ## What the old compiler emits (the speed baseline)
 
@@ -271,6 +273,8 @@ values at that expression's native evaluation point. The compiler hoists a DOM
 binding program and emits `createRenderValue(program, captures)` at the expression.
 Each consuming slot mounts separate DOM, selects HTML/SVG from its destination,
 updates captures in place for the same program and disposes replaced ranges.
+The mount/update/disposal program is shared between namespaces; node creation
+uses the component template emitter and its separate HTML/SVG prototype caches.
 Values remain ordinary lexical variables; this adds no signals or generic virtual
 tree reconciliation. Array children are lists (Phase 5's general rule).
 

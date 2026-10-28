@@ -1,6 +1,6 @@
 # Status
 
-Last updated: 2026-10-27.
+Last updated: 2026-10-28.
 
 ## Branches
 
@@ -24,6 +24,20 @@ Last updated: 2026-10-27.
 - The user put the agent in charge of the refactor on 2026-10-18 ("you are in charge now").
 
 ## Done
+
+- Stored-view emission batch (2026-10-28): share one mount/update/disposal
+  program across HTML and SVG, using the existing namespace-aware component
+  template emitter. No authored-code proof or runtime behavior changed. Added
+  reference comparisons for dual-namespace update/remounting and fragment text
+  roots; all existing cases and expectations are unchanged. Local type checking,
+  29 focused emitter/component/capture checks and 79 component/list comparisons
+  pass, plus three benchmark correctness checks and 28 Group/suspend comparisons.
+  Source-runtime production builds against `cf3ce626`, using unchanged
+  size fixtures: 60 static children 153,898 -> 135,188 B minified (25,831 ->
+  24,069 B gzip); FlowOS 225,288 -> 208,607 B (62,495 -> 59,420 B gzip);
+  Octane 82,747 -> 80,224 B (22,428 -> 21,906 B gzip). The counter and
+  direct-data fixtures are unchanged. These are payload savings, not VM timings;
+  the performance/memory floor and OOM reproduction remain open.
 
 - Phase 8 completed and reviewed (2026-10-27). The paused agent left source
   flow, `Group` policies, `suspend` and the action contract uncommitted; the

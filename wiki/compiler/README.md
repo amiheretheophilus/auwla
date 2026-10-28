@@ -47,8 +47,10 @@ have to be better than the old compiler both correctness and performance". On th
 earlier baseline (`d6e678b`, see `testing.md`) the old compiler ranked second of
 ten in Octane. In the supplied `874c826` report it ranks third and the rewrite
 tenth; the rewrite must improve on the old compiler's performance.
-Emitted code is judged on speed only. Order of work: a case gets a correct general
-path first, then its fast paths (`optimize.md`).
+Emitted code is judged on correctness, speed and production bundle size. The old
+compiler is a performance floor and bundle comparison, not the final size goal
+(user, 2026-10-28). Order of work: a case gets a correct general path first, then
+its fast paths (`optimize.md`).
 
 **Why a rewrite.** In the old compiler, one shared mutable `Ctx` (121 fields, used by
 133 files) is read and written by passes that edit one AST in place. Each concept

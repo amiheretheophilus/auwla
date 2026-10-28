@@ -234,6 +234,7 @@ Features build their own pieces. Optimizations replace pieces (`optimize.md`).
 | `await.ts` | Adds write boundaries around native await operands and resumption, preserving suspension and rejection |
 | `sites.ts` | Emits mount values and per-site version checks; skips unchanged DOM values and updates native listeners when their value changes |
 | `render-value.ts` | Separates a stored JSX program's mount/update/disposal from the native expression that captures its inputs |
+| `render-value.test.ts` | Reference comparisons for one stored template consumed in HTML and SVG, updates/remounting, fragment text roots, custom tags and foreignObject boundaries |
 | `packages/runtime/src/render-value.ts` | Keeps program metadata in a WeakMap and gives each consuming slot its own anchored DOM range |
 | `packages/runtime/src/computation.ts` | Captures executed hidden version reads for opaque memos/sites, with stable keys and nested restoration |
 | `template.ts` | Calls runtime `materializeMarkup`, or creates nodes directly when HTML parsing would alter the tree |
@@ -268,6 +269,13 @@ no special case. Hydration claims existing nodes and a server document builds
 its own output; for those `cloneTemplate` returns null and the general creation
 below runs, emitted beside it. A template with no roots, or whose root is itself
 a text or region site, uses only the general creation.
+
+Stored JSX emits one mount/update/disposal program for both namespaces. It passes
+the consuming namespace to the same `emitNodes` implementation used by components;
+the template cache keeps independent HTML and SVG prototypes. General creation
+still handles server/hydration documents, parser-sensitive trees and fragment
+roots. Destination namespaces, including custom tags and `foreignObject`, do not
+require a second copy of the site's values, listeners, updates or disposal code.
 
 General creation: ordinary HTML uses hoisted markup and cached template cloning. Tables, raw-text
 elements, parser-sensitive nesting, SVG and unproven tags use direct creation.

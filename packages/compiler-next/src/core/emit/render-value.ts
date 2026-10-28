@@ -1,10 +1,10 @@
 /** A stored JSX expression captures native values for a compiled binding program. */
 import { b } from 'yuku-ast';
 import type { Expression, Node, Statement } from 'yuku-parser';
-import type { RenderValuePlan, Site, Template } from '../plan/model';
+import type { RenderValuePlan, Site } from '../plan/model';
 import type { Names } from './names';
 import { expression, statement, stringLiteral } from './quote';
-import { emitNodes, inheritedNodes } from './template';
+import { emitNodes } from './template';
 import { emitSites } from './sites';
 
 export function emitRenderValue(plan: RenderValuePlan, names: Names, runtime: string, sourceValues = false) {
@@ -18,61 +18,48 @@ export function emitRenderValue(plan: RenderValuePlan, names: Names, runtime: st
   const document = names.fresh('_document');
   const namespace = names.fresh('_namespace');
 
-  function emitVariant(shape: Template): Statement[] {
-    const markup = shape.markup === null ? null : names.fresh('_valueMarkup');
-    const slots = emitNodes(shape, plan.sites, { names, runtime, document, markup });
-    const sites = emitSites(
-      { sites: plan.sites, siteInputs: new Map(), dynamicSites: new Set() },
-      {
-        names,
-        runtime,
-        document,
-        id,
-        entity,
-        batch,
-        values,
-        sourceValues,
-        namespace,
-        versions: new Map(),
-        replacements: new Map(),
-        ref: slots.ref,
-      },
-    );
-    const roots = shape.roots.map(slots.root);
-    const entry = renderEntry(roots, next, [
-      statement('$$values = $$next;', { values, next }),
-      ...sites.update,
-    ], sites.dispose);
+  // The consuming slot chooses the namespace. The shared template emitter
+  // already handles inherited SVG, foreignObject, and per-namespace cloning;
+  // only node creation differs, not the site's updates or disposal program.
+  const shape = plan.template;
+  const markup = shape.markup === null ? null : names.fresh('_valueMarkup');
+  const slots = emitNodes(shape, plan.sites, { names, runtime, document, markup, namespace });
+  const sites = emitSites(
+    { sites: plan.sites, siteInputs: new Map(), dynamicSites: new Set() },
+    {
+      names,
+      runtime,
+      document,
+      id,
+      entity,
+      batch,
+      values,
+      sourceValues,
+      namespace,
+      versions: new Map(),
+      replacements: new Map(),
+      ref: slots.ref,
+    },
+  );
+  const roots = shape.roots.map(slots.root);
+  const entry = renderEntry(roots, next, [
+    statement('$$values = $$next;', { values, next }),
+    ...sites.update,
+  ], sites.dispose);
 
-    const declarations = markup === null ? [] : [
-      statement('const $$markup = $$html;', { markup, html: stringLiteral(shape.markup!) }),
-    ];
-    return [
-      ...declarations,
-      ...slots.statements,
-      ...sites.mount,
-      b.ReturnStatement({ argument: entry }),
-    ];
-  }
-
-  // Stored JSX can be consumed in either namespace. Choose at mount time,
-  // when the consuming slot knows where its independent DOM will live.
-  // Any tag can inherit SVG, including custom tags. Omit the variant only when
-  // the template's structure proves that no element inherits the destination.
-  const svg = inheritedNodes(plan.template).size > 0 ? emitVariant(plan.svgTemplate) : null;
-  const html = emitVariant(plan.template);
   const mountBody = [
     statement('const $$document = $$runtime.getActiveEnvironment().document;', { document, runtime }),
     statement('const $$id = $$owner.id;', { id, owner }),
     statement('const $$entity = $$owner.entity;', { entity, owner }),
     statement('const $$batch = $$owner.batch;', { batch, owner }),
     statement('const $$namespace = $$owner.namespace;', { namespace, owner }),
-    ...(svg === null ? [] : [b.IfStatement({
-      test: expression('$$namespace === "svg"', { namespace }),
-      consequent: b.BlockStatement({ body: svg }),
-      alternate: null,
+    ...(markup === null ? [] : [statement('const $$markup = $$html;', {
+      markup,
+      html: stringLiteral(shape.markup!),
     })]),
-    ...html,
+    ...slots.statements,
+    ...sites.mount,
+    b.ReturnStatement({ argument: entry }),
   ];
   const declaration = programDeclaration(program, values, owner, mountBody);
 

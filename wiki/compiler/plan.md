@@ -14,6 +14,10 @@ The order of work for the new compiler, from an empty `src/` to replacing
   once Phase 8 and its review are done. Phase 5/6 performance work and VM
   speed/memory measurements remain release gates before replacing the old
   compiler. The paused row-list step is saved on `tmp/perf-rows` at `b5166fb7`.
+- **Bundle improvements run in verified batches (2026-10-28).** The user resumed
+  this work after the bundle assessment. Share namespace-aware template emission
+  before expanding authored-code proofs, measure unchanged production fixtures,
+  preserve every existing expectation, and commit/push each verified batch.
 - **Semantics are decided.** `../rules.md`, `../decisions.md` and the concept pages
   say what correct is; the tests in `packages/compiler-next/tests/` are the spec.
   Do not change a rule or a test expectation without the user. If a case seems
