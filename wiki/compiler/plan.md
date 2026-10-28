@@ -340,8 +340,10 @@ array child). Remove each check when its phase is built.
     exports, namespace updates and reflection, receiver/identity preservation,
     cyclic hoisted calls, private metadata boundaries and collision handling.
     Cases and remaining limits are on `linking.md`.
-  - [ ] Package artifact contract and independent reference cases, then separate
-    package compilation/linking and incremental invalidation.
+  - [x] First source-graph package oracle: forwarded status/payload parameters,
+    returned sources, shared package state and retained component state.
+  - [ ] Versioned package artifacts, compilation/linking without package sources,
+    JSON-round-trip comparisons against that oracle, then incremental invalidation.
 - **Exit:** multi-module cases pass; `bench/linker` and `bench/package-compilation`
   gates pass.
 

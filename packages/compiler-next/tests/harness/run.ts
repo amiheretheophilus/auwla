@@ -7,7 +7,7 @@ import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { beginReferenceScope, renderApp, type Component } from '../reference/runtime';
-import { toReference } from '../reference/transform';
+import { toReferenceModules } from '../reference/transform';
 import { beginSources, finishSourceDeclarations } from '../reference/sources';
 import { clearDeferred, describeStep, rejectDeferred, resolveDeferred, usesClock, type Case, type Step } from './case';
 import { clearRequests, fetchForCase, rejectRequest, respond } from './requests';
@@ -86,8 +86,7 @@ export async function runOnReference(name: string, testCase: Case): Promise<Obse
   const disposeSources = track(beginSources(fetchForCase));
   const disposeModules = track(beginReferenceScope());
   const authored = { ...testCase.modules, './App.tsx': testCase.source };
-  const files = Object.fromEntries(Object.entries(authored).map(([path, source]) =>
-    [path, toReference(source, path, RUNTIME_URL)]));
+  const files = toReferenceModules(authored, RUNTIME_URL);
   const module = await importFiles(name, 'reference', files, 'App.tsx');
   finishSourceDeclarations();
 

@@ -32,7 +32,18 @@ Last updated: 2026-10-28.
 
 ## Done
 
-- Phase 9 native-linking batch (2026-10-28, local validation): live re-exports,
+- Phase 9 package reference foundation (2026-10-28, local validation): four new
+  source-graph cases pin status-only and mixed status/payload forwarding, returned
+  sources, shared package state and retained per-component state. The independent
+  reference now links untouched modules before proving cross-file parameter flow;
+  all proofs finish before any reference AST rewrite. This fixes premature payload
+  unwrapping and unnecessary waiting across helper barrels. Existing expectations
+  remain unchanged. Types pass (171 files), the four reference-only cases pass,
+  and all 56 linking/package/component/shared-state comparisons pass in both
+  compiler modes. Separate package artifacts are still unimplemented; the next
+  gate runs these same expectations with package sources absent and JSON metadata.
+
+- Phase 9 native-linking batch (`cf3c7d1e`, 2026-10-28): live re-exports,
   captured default values and native namespace boundaries now share the existing
   state/mutation machinery. Public namespaces exclude private compiler exports;
   cyclic hoisted calls avoid reading unrelated uninitialized exports. Captured
@@ -46,7 +57,9 @@ Last updated: 2026-10-28.
   JavaScript hashes match `ab177c86` exactly for eight unchanged fixtures: counter,
   primitive inline/component lists, composition, static children, Octane, FlowOS
   and request/data. These are output checks, not VM timing or memory results.
-  Full shared-machinery CI is pending. Separate package artifacts, incremental
+  Full shared-machinery [CI 40709432600](https://github.com/amiheretheophilus/auwla/actions/runs/40709432600)
+  passes: compiler types/units, runtime/data types and tests, every reference and
+  compiled case, and generators at 200 programs. Separate package artifacts, incremental
   invalidation and Phase 9 benchmark gates remain open (`compiler/linking.md`).
 
 - Root-adapter validation (2026-10-28): correctness `14c1aec9` and dependency

@@ -28,7 +28,8 @@
  * Destructured aliases follow the same memo rules. JavaScript evaluates the
  * native pattern once per input change, after its source is ready.
  */
-import { analyze, BindingFlags, type Binding, type Module, type Reference } from 'yuku-analyzer';
+import { analyze, Analyzer, BindingFlags, type Binding, type Module, type Reference } from 'yuku-analyzer';
+import { posix } from 'node:path';
 import { b, findAll, is, walk } from 'yuku-ast';
 import { generate } from 'yuku-codegen';
 import { parse } from 'yuku-parser';
@@ -127,15 +128,54 @@ function withAmbientDataImports(source: string, path: string): string {
 }
 
 export function toReference(source: string, path: string, runtimeUrl: string): string {
+  const module = prepareReferenceModule(source, path);
+  return transformReference(module, runtimeUrl, sourceUses(module));
+}
+
+/** Link untouched reference inputs before proving parameter flow across files. */
+export function toReferenceModules(sources: Readonly<Record<string, string>>, runtimeUrl: string): Record<string, string> {
+  const paths = new Map(Object.keys(sources).map((path) => [posix.normalize(path), path]));
+  const analyzer = new Analyzer({
+    resolve(specifier, importer) {
+      if (!specifier.startsWith('.')) {
+        return false;
+      }
+      const base = posix.join(posix.dirname(importer), specifier);
+      for (const suffix of ['', '.ts', '.tsx', '.js', '.jsx', '/index.ts', '/index.tsx', '/index.js', '/index.jsx']) {
+        const path = paths.get(base + suffix);
+        if (path !== undefined) {
+          return path;
+        }
+      }
+      return null;
+    },
+  });
+  const modules = Object.entries(sources).map(([path, source]) => {
+    const prepared = prepareReferenceModule(source, path);
+    return analyzer.setFile(path, prepared.source, { lang: 'tsx', sourceType: 'module' });
+  });
+  analyzer.link();
+
+  // Every proof finishes before transforming any module. Readiness must never
+  // inspect another file after the oracle has rewritten its authored syntax.
+  const uses = modules.map((module) => sourceUses(module));
+  return Object.fromEntries(modules.map((module, index) => {
+    return [module.path, transformReference(module, runtimeUrl, uses[index]!)];
+  }));
+}
+
+function prepareReferenceModule(source: string, path: string): Module {
   let module = analyze(withAmbientDataImports(prepareJsx(source), path), { path });
   if (module.diagnostics.length > 0) {
     const messages = module.diagnostics.map((diagnostic) => diagnostic.message).join('; ');
     throw new Error(`reference: ${path} does not parse: ${messages}`);
   }
   module = prepareDiscardedCalls(module, path);
+  return module;
+}
 
+function transformReference(module: Module, runtimeUrl: string, rawUses: SourceUses): string {
   const readCalls = module.findAll('CallExpression').filter((call) => isDataCall(module, call, '$read'));
-  const rawUses = sourceUses(module);
   buildModuleMemos(module, rawUses);
   const handledSites = new Set<Node>();
   const components = findComponents(module);

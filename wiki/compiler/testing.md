@@ -15,7 +15,7 @@ per-run cleanup captures, remain unchanged (`effects.md`, `refs.md`).
 
 | File | What it does |
 | --- | --- |
-| `tests/reference/transform.ts` | Turns a module into a reference module: decides which bindings need a slot (built on `yuku-analyzer`, `yuku-ast`, `yuku-codegen`) |
+| `tests/reference/transform.ts` | Turns modules into reference modules: decides which bindings need a slot; `toReferenceModules` links untouched inputs before cross-file source-use proofs (built on `yuku-analyzer`, `yuku-ast`, `yuku-codegen`) |
 | `tests/reference/runtime.ts` | Runs the reference: re-renders everything, keeps slots per component instance |
 | `tests/reference/sources.ts` | Independent source state, readiness values, JSON fetches and promise reads |
 | `tests/reference/readiness.ts` | Source-aware expressions, imports and module derivations |

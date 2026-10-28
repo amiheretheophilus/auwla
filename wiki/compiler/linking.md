@@ -25,6 +25,7 @@ objects; it does not introduce a second state model.
 | `features/state/shared-plan.ts` | Shared binding readers and the versions a compiled namespace can observe |
 | `features/state/shared-dom.ts` | Namespace version observation and guarded mutation inputs, preserving the native receiver and avoiding uninitialized export reads |
 | `tests/cases/linking.test.ts` | Reference and optimized/general comparisons for live/default exports, namespaces, cycles, collisions, components and readiness |
+| `tests/cases/linking.packages.test.ts` | Source-graph oracle for separate package compilation: forwarded status/payload use, returned sources, shared package state and retained component state |
 
 ## Rules
 
@@ -113,6 +114,29 @@ cached-conflict check preserves an ambiguity through another star barrel. The
 24-level repeated-star diamond guards against expanding every possible path;
 type-only namespace imports do not request runtime observation or facades.
 
+## Separate package contract: reference foundation
+
+Four source-graph comparisons establish behavior that a separately compiled
+package must preserve. Status-only parameters keep their source handle and run
+during initial loading and refresh. Mixed status/payload parameters also keep
+the handle, but the call waits for payload readiness. Forwarded source factories
+retain source identity, replacement and request counts. Package state remains
+one shared owner while each component instance keeps its own local state.
+
+The reference links its own untouched inputs and finishes parameter-flow proofs
+for every file before rewriting any of them. It uses neither compiler summaries
+nor compiler linking code. The same explicit expectations will also apply to
+artifact-linked output; these cases currently exercise source-graph compilation.
+
+The artifact implementation must compile package code once and let consumers
+analyze only their own sources. Its metadata must be serializable data with an
+explicit compatibility version, exported value identities, parameter-relative
+source use and conservative unknown behavior. Native public exports must exclude
+compiler-only readers for consumers outside the build. Do not serialize the
+authored AST, copy package sources into the application build, or rebuild the
+old compiler's mutable linking context. Runtime paths and semantic metadata must
+identify the same package instance; incomplete information retains opaque checks.
+
 ## Inputs and outputs
 
 - Input: the caller's source graph and `resolveImport`, using the existing
@@ -131,8 +155,9 @@ optimization, emission, namespace linking and printing.
 ## Remaining Phase 9 work
 
 - Separate package compilation and a serializable, versioned semantic artifact.
-  Establish the reference cases for status/payload parameter forwarding,
-  components and shared package state before selecting its contract. Audit the
+  The first source-graph reference cases for status/payload parameter forwarding,
+  components and shared package state pass. Next, make these same observations
+  through a JSON-round-tripped artifact with package sources absent. Audit the
   old compiler's useful requirements; do not transplant its mutable linker.
 - Public package entry boundaries must hide private exports for external
   consumers even when the package source has no namespace importer. Current

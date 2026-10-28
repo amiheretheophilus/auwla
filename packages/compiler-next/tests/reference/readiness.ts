@@ -64,8 +64,6 @@ export function sourceUses(module: Module): SourceUses {
     }
   }
 
-  const reads = new Reads(module);
-
   interface Use {
     raw: boolean;
     payload: boolean;
@@ -73,14 +71,10 @@ export function sourceUses(module: Module): SourceUses {
 
   const ordinary: Use = { raw: false, payload: true };
 
-  const examine = (start: Node, seen: Set<Binding>): Use => {
+  const examine = (owner: Module, start: Node, seen: Set<Binding>): Use => {
     let value = start;
 
-    if (direct.has(value)) {
-      return { raw: true, payload: false };
-    }
-
-    for (const parent of module.ancestors(start)) {
+    for (const parent of owner.ancestors(start)) {
       if (parent === start) {
         continue;
       }
@@ -92,10 +86,6 @@ export function sourceUses(module: Module): SourceUses {
 
       if (wrapper) {
         value = parent;
-
-        if (direct.has(value)) {
-          return { raw: true, payload: false };
-        }
 
         continue;
       }
@@ -110,13 +100,21 @@ export function sourceUses(module: Module): SourceUses {
         return ordinary;
       }
 
-      const callee = module.referenceOf(parent.callee)?.binding;
+      if (index === 0 && isDataCall(owner, parent, '$track')) {
+        return { raw: true, payload: false };
+      }
+
+      const callee = owner.referenceOf(parent.callee)?.binding;
 
       if (callee == null || callee.references.some((reference) => reference.isWrite)) {
         return ordinary;
       }
 
-      const fn = reads.functionOf(callee);
+      const definition = callee.definition()?.binding ?? callee;
+      if (definition.references.some((reference) => reference.isWrite)) {
+        return ordinary;
+      }
+      const fn = new Reads(definition.module).functionOf(definition);
       let parameter: Node | undefined = fn?.params[index];
 
       if (is.AssignmentPattern(parameter)) {
@@ -127,7 +125,7 @@ export function sourceUses(module: Module): SourceUses {
         return ordinary;
       }
 
-      const binding = module.bindingOf(parameter);
+      const binding = definition.module.bindingOf(parameter);
 
       if (binding === null || seen.has(binding)) {
         return ordinary;
@@ -145,7 +143,7 @@ export function sourceUses(module: Module): SourceUses {
       // A mixed-use parameter still needs the handle for $track, while its
       // payload reads keep the caller's readiness guard in place.
       for (const use of uses) {
-        const reached = use.isWrite ? ordinary : examine(use.node, next);
+        const reached = use.isWrite ? ordinary : examine(binding.module, use.node, next);
 
         result.raw ||= reached.raw;
         result.payload ||= reached.payload;
@@ -174,7 +172,7 @@ export function sourceUses(module: Module): SourceUses {
       continue;
     }
 
-    const use = examine(reference.node, new Set());
+    const use = examine(module, reference.node, new Set());
 
     if (use.raw) {
       result.raw.add(reference.node);
