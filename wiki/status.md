@@ -19,8 +19,9 @@ Last updated: 2026-10-28.
   proofs now retain disposal semantics. Callable aliases preserve their identity
   and factories; root-only adapters no longer retain opaque rendering. Bundle
   work is paused for Phase 9 at the user's request. Native module boundaries,
-  default-export identity and namespace observation are the first slice; next
-  is the independent package artifact contract and its reference cases. Speed,
+  default-export identity and namespace observation are built and verified. The
+  independent package source-graph oracle also passes; next is artifact-linked
+  compilation with package sources absent. Speed,
   memory and bundle gates remain open. `tmp/perf-rows` preserves the earlier
   paused step.
 - `compiler-refactor`: the old compiler's refactor, stopped on 2026-10-19. The
@@ -32,7 +33,7 @@ Last updated: 2026-10-28.
 
 ## Done
 
-- Phase 9 package reference foundation (2026-10-28, local validation): four new
+- Phase 9 package reference foundation (`cb7f4ba1`, 2026-10-28): four new
   source-graph cases pin status-only and mixed status/payload forwarding, returned
   sources, shared package state and retained per-component state. The independent
   reference now links untouched modules before proving cross-file parameter flow;
@@ -40,7 +41,10 @@ Last updated: 2026-10-28.
   unwrapping and unnecessary waiting across helper barrels. Existing expectations
   remain unchanged. Types pass (171 files), the four reference-only cases pass,
   and all 56 linking/package/component/shared-state comparisons pass in both
-  compiler modes. Separate package artifacts are still unimplemented; the next
+  compiler modes. Full [CI 40711206850](https://github.com/amiheretheophilus/auwla/actions/runs/40711206850)
+  passes all four jobs: compiler types/units, runtime/data types and tests, every
+  reference and compiled case, and generators at 200 programs. Separate package
+  artifacts are still unimplemented; the next
   gate runs these same expectations with package sources absent and JSON metadata.
 
 - Phase 9 native-linking batch (`cf3c7d1e`, 2026-10-28): live re-exports,
