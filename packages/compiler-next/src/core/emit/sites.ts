@@ -6,7 +6,7 @@ import type { ComponentPlan, Site } from '../plan';
 import type { ConditionalBranch } from '../plan/model';
 import { copy } from './copy';
 import type { Names } from './names';
-import { expression as buildExpression, statement, statements, stringLiteral } from './quote';
+import { expression as buildExpression, statement, stringLiteral } from './quote';
 import { emitSelection, type EmitOnce } from '../../features/conditionals/dom';
 import { emitNodes } from './template';
 import { siteValue } from './render-value';
@@ -42,6 +42,12 @@ export interface SitesContext {
   rows?: boolean;
   /** Leaf component rows compiled at module level (`row-list.ts`). */
   rowComponents?: RowComponents;
+  /**
+   * A variable already holding `renderOwner(context)`, declared where it is
+   * shared: a row list declares one for all its rows. Without it, the sites
+   * declare their own the first time a value slot needs one.
+   */
+  owner?: string;
   /** Ownership reconciled alongside a component's early-return selector. */
   select?(site: Site, value: Expression): Expression;
   readonly source?: { readonly data: string; readonly policy: Expression };
@@ -58,6 +64,14 @@ export function emitSites(
   const mount: Statement[] = [];
   const update: Statement[] = [];
   const dispose: Statement[] = [];
+  let owner = context.owner;
+  const slotOwner = (): string => {
+    if (owner === undefined) {
+      owner = names.fresh('_slotOwner');
+      mount.push(statement('const $$owner = $$value;', { owner, value: renderOwner(context) }));
+    }
+    return owner;
+  };
   // Duplicate attributes still evaluate in source order, but only their last
   // value reaches the DOM. Discarding earlier expressions would lose effects.
   const lastSiteByKey = new Map<string, Site>();
@@ -187,11 +201,11 @@ export function emitSites(
       // Most such sites only ever show text. The slot, which also shows stored
       // JSX and arrays, is created by the first value that is an object.
       const slot = names.fresh('_valueSlot');
-      const factory = site.listStrategy === 'retained-index' ? 'createIndexedValueSlot' : 'createValueSlot';
       valueSlot = {
         name: slot,
         always: context.source !== undefined || context.sourceValues === true,
-        create: buildExpression(`$$runtime.${factory}($$text, $$owner)`, { runtime, text: node, owner: renderOwner(context) }),
+        indexed: site.listStrategy === 'retained-index',
+        owner: slotOwner(),
       };
       mount.push(statement('let $$slot = null;', { slot }));
       dispose.push(statement('if ($$slot !== null) $$slot.dispose();', { slot }));
@@ -210,7 +224,8 @@ export function emitSites(
         namespace, runtime, slot: node,
         inherited: context.namespace ?? stringLiteral(site.namespace),
       }));
-      const branchContext = { ...context, namespace };
+      // A branch has its own namespace, so its slots need their own owner.
+      const branchContext = { ...context, namespace, owner: undefined };
       const factories = site.branches.map((branch) => emitBranch(branch, value, plan, branchContext));
       if (context.source !== undefined) {
         factories.push(emitBranch({ template: null, sites: [] }, value, plan, branchContext));
@@ -299,8 +314,12 @@ function isFunctionLiteral(node: Node): boolean {
 /** A text site's value slot, created on the first value that is an object. */
 interface LazySlot {
   readonly name: string;
-  readonly create: Expression;
+  /** A pending source view is an object from the start: create the slot at once. */
   readonly always: boolean;
+  /** Retains a private row index (`retained-list-index.ts`). */
+  readonly indexed: boolean;
+  /** The variable holding the slot's `RenderOwner`. */
+  readonly owner: string;
 }
 
 function guardedStatements(test: Expression, body: Statement[]): Statement {
@@ -400,17 +419,16 @@ function writeValue(
       return [statement('$$list.write($$value);', { list: rowList, value })];
     }
     if (valueSlot !== null) {
+      const { name: slot, owner, indexed } = valueSlot;
       if (valueSlot.always) {
-        return [statement(`(${valueSlot.name} ??= $$create).write($$value);`, { create: valueSlot.create, value })];
+        const factory = indexed ? 'createIndexedValueSlot' : 'createValueSlot';
+        return [statement(`(${slot} ??= $$runtime.${factory}($$node, $$owner)).write($$value);`, { runtime, node, owner, value })];
       }
-      // Before a slot exists, a value that is not an object is text, exactly
-      // what a new slot would write (`render-value.ts`, `write`).
-      return statements(`
-        if (${valueSlot.name} === null && ($$value === null || typeof $$value !== "object")) {
-          $$runtime.setTextData($$node, $$value);
-        } else {
-          (${valueSlot.name} ??= $$create).write($$value);
-        }`, { runtime, node, value, create: valueSlot.create });
+      // Text until the first object value, then a slot (`runtime/src/render-value.ts`).
+      // The slot is stored before its first write, which can throw.
+      return [statement(`(${slot} = $$runtime.childSlot(${slot}, $$node, $$value, $$owner, $$indexed))?.write($$value);`, {
+        runtime, node, value, owner, indexed: b.Literal({ value: indexed, raw: String(indexed) }),
+      })];
     }
     return [statement('$$runtime.setTextData($$node, $$value);', { runtime, node, value })];
   }

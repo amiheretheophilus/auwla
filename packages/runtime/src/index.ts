@@ -159,6 +159,7 @@ export { classValue, setClassValue, setStyleValue } from './dom-values';
 export { createCondRegion } from './cond';
 export {
   createRenderValue, createKeyedRenderValue, createPresentationValue, createValueSlot, createIndexedValueSlot, disposedValueSlot, renderNamespace,
+  childSlot,
 } from './render-value';
 export {
   componentValue, componentSetup, createComponentValue, createPropsCell,

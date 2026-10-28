@@ -23,19 +23,12 @@ function _Row_row(props, _rowOwner2) {
     _MD.observeMethod([() => props], [_invalidate], props, "select", 0, void 0)(props.item.id);
   }, _rowWrites);
   let _value17 = props.item.id;
+  const _slotOwner = { id: _rowId, batch: _rowWrites, entity: _rowEntity, namespace: _rowNamespace2 };
   let _valueSlot = null;
-  if (_valueSlot === null && (_value17 === null || typeof _value17 !== "object")) {
-    _MD.setTextData(_text2, _value17);
-  } else {
-    (_valueSlot ??= _MD.createIndexedValueSlot(_text2, { id: _rowId, batch: _rowWrites, entity: _rowEntity, namespace: _rowNamespace2 })).write(_value17);
-  }
+  (_valueSlot = _MD.childSlot(_valueSlot, _text2, _value17, _slotOwner, true))?.write(_value17);
   let _value18 = props.item.label;
   let _valueSlot2 = null;
-  if (_valueSlot2 === null && (_value18 === null || typeof _value18 !== "object")) {
-    _MD.setTextData(_text3, _value18);
-  } else {
-    (_valueSlot2 ??= _MD.createIndexedValueSlot(_text3, { id: _rowId, batch: _rowWrites, entity: _rowEntity, namespace: _rowNamespace2 })).write(_value18);
-  }
+  (_valueSlot2 = _MD.childSlot(_valueSlot2, _text3, _value18, _slotOwner, true))?.write(_value18);
   return { node: _clone2, update(_nextProps) {
     if (!_MD.sameProps(props, _nextProps)) props = _nextProps;
     const _next = props.selected ? 'danger' : '';
@@ -49,20 +42,12 @@ function _Row_row(props, _rowOwner2) {
     }
     const _next2 = props.item.id;
     if (_next2 !== _value17 && !(_next2 !== _next2 && _value17 !== _value17)) {
-      if (_valueSlot === null && (_next2 === null || typeof _next2 !== "object")) {
-        _MD.setTextData(_text2, _next2);
-      } else {
-        (_valueSlot ??= _MD.createIndexedValueSlot(_text2, { id: _rowId, batch: _rowWrites, entity: _rowEntity, namespace: _rowNamespace2 })).write(_next2);
-      }
+      (_valueSlot = _MD.childSlot(_valueSlot, _text2, _next2, _slotOwner, true))?.write(_next2);
       _value17 = _next2;
     }
     const _next3 = props.item.label;
     if (_next3 !== _value18 && !(_next3 !== _next3 && _value18 !== _value18)) {
-      if (_valueSlot2 === null && (_next3 === null || typeof _next3 !== "object")) {
-        _MD.setTextData(_text3, _next3);
-      } else {
-        (_valueSlot2 ??= _MD.createIndexedValueSlot(_text3, { id: _rowId, batch: _rowWrites, entity: _rowEntity, namespace: _rowNamespace2 })).write(_next3);
-      }
+      (_valueSlot2 = _MD.childSlot(_valueSlot2, _text3, _next3, _slotOwner, true))?.write(_next3);
       _value18 = _next3;
     }
   }, dispose() {
@@ -138,23 +123,16 @@ function Row(_id2, _parent2, _props2, _namespace2, _setupOnly2) {
   _siteComputation3.begin();
   let _value21 = props.item.id;
   _siteComputation3.end();
+  const _slotOwner2 = { id: _id2, batch: _writes2, entity: _entity2, namespace: _namespace2 };
   let _valueSlot3 = null;
-  if (_valueSlot3 === null && (_value21 === null || typeof _value21 !== "object")) {
-    _MD.setTextData(_text4, _value21);
-  } else {
-    (_valueSlot3 ??= _MD.createIndexedValueSlot(_text4, { id: _id2, batch: _writes2, entity: _entity2, namespace: _namespace2 })).write(_value21);
-  }
+  (_valueSlot3 = _MD.childSlot(_valueSlot3, _text4, _value21, _slotOwner2, true))?.write(_value21);
   let _seen3 = _propsVersion;
   const _siteComputation4 = _MD.createComputation(_writes2.mark, _entity2);
   _siteComputation4.begin();
   let _value22 = props.item.label;
   _siteComputation4.end();
   let _valueSlot4 = null;
-  if (_valueSlot4 === null && (_value22 === null || typeof _value22 !== "object")) {
-    _MD.setTextData(_text5, _value22);
-  } else {
-    (_valueSlot4 ??= _MD.createIndexedValueSlot(_text5, { id: _id2, batch: _writes2, entity: _entity2, namespace: _namespace2 })).write(_value22);
-  }
+  (_valueSlot4 = _MD.childSlot(_valueSlot4, _text5, _value22, _slotOwner2, true))?.write(_value22);
   let _seen4 = _propsVersion;
   let _publishedVersion3 = _propsVersion;
   _MD.cleanup(_id2, () => {
@@ -187,11 +165,7 @@ function Row(_id2, _parent2, _props2, _namespace2, _setupOnly2) {
       const _next6 = props.item.id;
       _siteComputation3.end();
       if (_next6 !== _value21 && !(_next6 !== _next6 && _value21 !== _value21)) {
-        if (_valueSlot3 === null && (_next6 === null || typeof _next6 !== "object")) {
-          _MD.setTextData(_text4, _next6);
-        } else {
-          (_valueSlot3 ??= _MD.createIndexedValueSlot(_text4, { id: _id2, batch: _writes2, entity: _entity2, namespace: _namespace2 })).write(_next6);
-        }
+        (_valueSlot3 = _MD.childSlot(_valueSlot3, _text4, _next6, _slotOwner2, true))?.write(_next6);
         _value21 = _next6;
       }
       _seen3 = _propsVersion;
@@ -201,11 +175,7 @@ function Row(_id2, _parent2, _props2, _namespace2, _setupOnly2) {
       const _next7 = props.item.label;
       _siteComputation4.end();
       if (_next7 !== _value22 && !(_next7 !== _next7 && _value22 !== _value22)) {
-        if (_valueSlot4 === null && (_next7 === null || typeof _next7 !== "object")) {
-          _MD.setTextData(_text5, _next7);
-        } else {
-          (_valueSlot4 ??= _MD.createIndexedValueSlot(_text5, { id: _id2, batch: _writes2, entity: _entity2, namespace: _namespace2 })).write(_next7);
-        }
+        (_valueSlot4 = _MD.childSlot(_valueSlot4, _text5, _next7, _slotOwner2, true))?.write(_next7);
         _value22 = _next7;
       }
       _seen4 = _propsVersion;

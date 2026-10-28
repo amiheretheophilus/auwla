@@ -1,6 +1,8 @@
 import { expect, it } from 'bun:test';
 import { Window } from 'happy-dom';
-import { createPresentationValue, createRenderValue, createValueSlot, type RenderProgram } from '../src/render-value';
+import {
+  childSlot, createPresentationValue, createRenderValue, createValueSlot, disposedValueSlot, type RenderProgram, type ValueSlot,
+} from '../src/render-value';
 
 const document = new Window().document as unknown as Document;
 
@@ -232,4 +234,33 @@ it('does not call an authored array method to render its children', () => {
   output.slot.write(values);
   expect(output.root.textContent).toBe('child');
   output.slot.dispose();
+});
+
+it('keeps a child site as text until an object, then stores its slot before the first write', () => {
+  const root = document.createElement('div');
+  const text = document.createTextNode('');
+  root.append(text);
+  const owner = { id: 'child', entity: undefined, batch: null };
+  let site: ValueSlot | null = null;
+
+  for (const value of ['a', 1, null, false]) {
+    site = childSlot(site, text, value, owner, false);
+    expect(site).toBeNull();
+  }
+  expect(root.textContent).toBe('');
+  site = childSlot(site, text, 'b', owner, false);
+  expect(root.textContent).toBe('b');
+
+  // A program whose mount throws: the caller already holds the new slot.
+  const failing = createRenderValue({ mount() { throw new Error('mount failed'); } }, []);
+  expect(() => (site = childSlot(site, text, failing, owner, false))?.write(failing)).toThrow('mount failed');
+  expect(site).not.toBeNull();
+  const created = site!;
+
+  // The slot stays for later text, and a disposed site ignores writes.
+  expect(childSlot(site, text, 'c', owner, false)).toBe(created);
+  created.write('c');
+  expect(root.textContent).toBe('c');
+  created.dispose();
+  expect(childSlot(disposedValueSlot, text, 'd', owner, false)).toBe(disposedValueSlot);
 });

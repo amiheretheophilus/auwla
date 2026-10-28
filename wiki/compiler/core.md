@@ -293,12 +293,24 @@ template cache keeps independent HTML and SVG prototypes. Compiled element rows
 use the same creation. `RenderValuePlan` therefore keeps one template; row keys,
 captures and site order still come from the same authored syntax.
 `Template.markup` is no longer emitted; it records whether the HTML parser
-would keep the tree, for hydration in Phase 10. A text site that the syntax does not prove primitive creates its
-value slot on the first value that is an object (stored JSX, an array). Until
-then it writes text directly, which is what a new slot writes for any other
-value; once created, the slot stays, and after disposal the site holds
-`disposedValueSlot`, which ignores writes as a disposed slot does. Most such
-sites (`{props.item.label}`) only ever show text and never allocate a slot. Unclaimed JSX becomes a captured program after component templates
+would keep the tree, for hydration in Phase 10.
+
+A text site that the syntax does not prove primitive creates its value slot on
+the first value that is an object (stored JSX, an array). Until then it writes
+text directly, which is what a new slot writes for any other value; once
+created, the slot stays, and after disposal the site holds `disposedValueSlot`,
+which ignores writes as a disposed slot does. Most such sites
+(`{props.item.label}`) only ever show text and never allocate a slot. Each write
+is one line, `(slot = childSlot(slot, text, value, owner, indexed))?.write(value)`
+(`runtime/src/render-value.ts`): the slot is stored before its first write,
+which can throw, so disposal still reaches it. The slot's `RenderOwner` is
+declared once: per row list for its rows (`_rowOwner`), otherwise where the sites
+first need one (`_slotOwner`); a branch declares its own, since its namespace
+differs. Until 2026-10-28 every write repeated the text/slot choice inline and
+built the owner object literal at each slot creation; one line per write took
+Octane's compiled app from 11.6 KB to 10.8 KB minified.
+
+Unclaimed JSX becomes a captured program after component templates
 are planned; the authored AST and lexical capture expressions remain unchanged.
 
 The current emitters keep each operation on its own line and use named helpers

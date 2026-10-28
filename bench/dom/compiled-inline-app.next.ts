@@ -19,19 +19,12 @@ const _renderProgram = { mount(_values, _owner) {
   let _value2 = _values[2];
   let _listener = _MD.setListener(_clone, "click", void 0, _value2, _valueWrites);
   let _value3 = _values[3];
+  const _slotOwner = { id: _valueId, batch: _valueWrites, entity: _valueEntity, namespace: _namespace };
   let _valueSlot = null;
-  if (_valueSlot === null && (_value3 === null || typeof _value3 !== "object")) {
-    _MD.setTextData(_text, _value3);
-  } else {
-    (_valueSlot ??= _MD.createIndexedValueSlot(_text, { id: _valueId, batch: _valueWrites, entity: _valueEntity, namespace: _namespace })).write(_value3);
-  }
+  (_valueSlot = _MD.childSlot(_valueSlot, _text, _value3, _slotOwner, true))?.write(_value3);
   let _value4 = _values[4];
   let _valueSlot2 = null;
-  if (_valueSlot2 === null && (_value4 === null || typeof _value4 !== "object")) {
-    _MD.setTextData(_text2, _value4);
-  } else {
-    (_valueSlot2 ??= _MD.createIndexedValueSlot(_text2, { id: _valueId, batch: _valueWrites, entity: _valueEntity, namespace: _namespace })).write(_value4);
-  }
+  (_valueSlot2 = _MD.childSlot(_valueSlot2, _text2, _value4, _slotOwner, true))?.write(_value4);
   return { nodes: [_clone], update(_values2) {
     _values = _values2;
     const _next = _values[1];
@@ -50,20 +43,12 @@ const _renderProgram = { mount(_values, _owner) {
     }
     const _next3 = _values[3];
     if (_next3 !== _value3 && !(_next3 !== _next3 && _value3 !== _value3)) {
-      if (_valueSlot === null && (_next3 === null || typeof _next3 !== "object")) {
-        _MD.setTextData(_text, _next3);
-      } else {
-        (_valueSlot ??= _MD.createIndexedValueSlot(_text, { id: _valueId, batch: _valueWrites, entity: _valueEntity, namespace: _namespace })).write(_next3);
-      }
+      (_valueSlot = _MD.childSlot(_valueSlot, _text, _next3, _slotOwner, true))?.write(_next3);
       _value3 = _next3;
     }
     const _next4 = _values[4];
     if (_next4 !== _value4 && !(_next4 !== _next4 && _value4 !== _value4)) {
-      if (_valueSlot2 === null && (_next4 === null || typeof _next4 !== "object")) {
-        _MD.setTextData(_text2, _next4);
-      } else {
-        (_valueSlot2 ??= _MD.createIndexedValueSlot(_text2, { id: _valueId, batch: _valueWrites, entity: _valueEntity, namespace: _namespace })).write(_next4);
-      }
+      (_valueSlot2 = _MD.childSlot(_valueSlot2, _text2, _next4, _slotOwner, true))?.write(_next4);
       _value4 = _next4;
     }
   }, dispose() {
@@ -265,6 +250,7 @@ export function BenchAppInline(_id, _parent, _props, _namespace2, _setupOnly) {
     } }).value = null;
   }, _writes);
   const _rowNamespace = _MD.renderNamespace(_text3.parentNode, _namespace2);
+  const _rowOwner = { id: _id, batch: _writes, entity: _entity, namespace: _rowNamespace };
   const _rowList = _MD.createRowList(_text3, { id: _id, batch: _writes, entity: _entity, namespace: _namespace2 }, (item) => item.id, (item) => {
     const _clone3 = _MD.cloneTemplate(_template3, _rowNamespace);
     const _text4 = _clone3.firstChild;
@@ -287,18 +273,10 @@ export function BenchAppInline(_id, _parent, _props, _namespace2, _setupOnly) {
     }, _writes);
     let _value19 = item.id;
     let _valueSlot3 = null;
-    if (_valueSlot3 === null && (_value19 === null || typeof _value19 !== "object")) {
-      _MD.setTextData(_text4, _value19);
-    } else {
-      (_valueSlot3 ??= _MD.createIndexedValueSlot(_text4, { id: _id, batch: _writes, entity: _entity, namespace: _rowNamespace })).write(_value19);
-    }
+    (_valueSlot3 = _MD.childSlot(_valueSlot3, _text4, _value19, _rowOwner, true))?.write(_value19);
     let _value20 = item.label;
     let _valueSlot4 = null;
-    if (_valueSlot4 === null && (_value20 === null || typeof _value20 !== "object")) {
-      _MD.setTextData(_text5, _value20);
-    } else {
-      (_valueSlot4 ??= _MD.createIndexedValueSlot(_text5, { id: _id, batch: _writes, entity: _entity, namespace: _rowNamespace })).write(_value20);
-    }
+    (_valueSlot4 = _MD.childSlot(_valueSlot4, _text5, _value20, _rowOwner, true))?.write(_value20);
     return { node: _clone3, update(_item2) {
       item = _item2;
       const _next5 = _peek_selected() === item.id ? 'danger' : '';
@@ -312,20 +290,12 @@ export function BenchAppInline(_id, _parent, _props, _namespace2, _setupOnly) {
       }
       const _next6 = item.id;
       if (_next6 !== _value19 && !(_next6 !== _next6 && _value19 !== _value19)) {
-        if (_valueSlot3 === null && (_next6 === null || typeof _next6 !== "object")) {
-          _MD.setTextData(_text4, _next6);
-        } else {
-          (_valueSlot3 ??= _MD.createIndexedValueSlot(_text4, { id: _id, batch: _writes, entity: _entity, namespace: _rowNamespace })).write(_next6);
-        }
+        (_valueSlot3 = _MD.childSlot(_valueSlot3, _text4, _next6, _rowOwner, true))?.write(_next6);
         _value19 = _next6;
       }
       const _next7 = item.label;
       if (_next7 !== _value20 && !(_next7 !== _next7 && _value20 !== _value20)) {
-        if (_valueSlot4 === null && (_next7 === null || typeof _next7 !== "object")) {
-          _MD.setTextData(_text5, _next7);
-        } else {
-          (_valueSlot4 ??= _MD.createIndexedValueSlot(_text5, { id: _id, batch: _writes, entity: _entity, namespace: _rowNamespace })).write(_next7);
-        }
+        (_valueSlot4 = _MD.childSlot(_valueSlot4, _text5, _next7, _rowOwner, true))?.write(_next7);
         _value20 = _next7;
       }
     }, dispose() {

@@ -47,8 +47,10 @@ it('selects nested branch and stored-value slots without treating method names a
   `;
   const enabled = compileModules({ './App.tsx': source })['./App.tsx']!;
   const disabled = compileModules({ './App.tsx': source }, { optimize: false })['./App.tsx']!;
-  expect(enabled).toContain('createIndexedValueSlot');
-  expect(disabled).not.toContain('createIndexedValueSlot');
+  // `childSlot(slot, text, value, owner, indexed)`: the last argument selects the retained index.
+  const indexed = /childSlot\([^;]*, true\)\)/;
+  expect(enabled).toMatch(indexed);
+  expect(disabled).not.toMatch(indexed);
   expect(disabled).toContain('.unfamiliar(');
   expect(disabled).toContain('.map(');
   expect(disabled).toContain('.observeMutation(');

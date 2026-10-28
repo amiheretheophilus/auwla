@@ -131,6 +131,29 @@ export function createIndexedValueSlot(text: Text, owner: RenderOwner): ValueSlo
   return createSlot(text, owner, true);
 }
 
+/**
+ * compiler-next's child site that the syntax does not prove primitive. Until a
+ * value is an object (stored JSX, an array) it is text, written here exactly as
+ * a new slot writes such a value, and the result is null. Otherwise the result
+ * is the site's slot, created by the first object and kept, for the caller to
+ * write: `(slot = childSlot(slot, …))?.write(value)` stores a new slot before
+ * its first write can throw, so disposal still reaches it. A disposed site
+ * holds `disposedValueSlot`, which ignores writes.
+ */
+export function childSlot(
+  slot: ValueSlot | null,
+  text: Text,
+  value: unknown,
+  owner: RenderOwner,
+  indexed: boolean,
+): ValueSlot | null {
+  if (slot === null && (value === null || typeof value !== 'object')) {
+    setTextData(text, value);
+    return null;
+  }
+  return slot ?? createSlot(text, owner, indexed);
+}
+
 function createSlot(text: Text, owner: RenderOwner, indexed: boolean): ValueSlot {
   let currentProgram: RenderProgram | null = null;
   let currentKey: unknown;

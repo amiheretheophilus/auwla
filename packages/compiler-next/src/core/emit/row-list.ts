@@ -56,8 +56,14 @@ export function emitRowList(plan: RowListPlan, anchor: string, context: SitesCon
     const value = plan.row.value;
     const sites = value.keyIndex === null ? value.sites : value.sites.filter((_, index) => index !== value.keyIndex);
     // A row has one destination namespace. Share its sites and entry across
-    // HTML/SVG, as stored values and leaf component rows already do.
-    body = emitRow(value.template, sites, { ...rowContext, namespace }, (emitted, root) => {
+    // HTML/SVG, as stored values and leaf component rows already do. Every row
+    // shares one owner for its value slots, as component rows do.
+    let owner: string | undefined;
+    if (sites.some((site) => site.kind === 'text' && !site.primitive)) {
+      owner = names.fresh('_rowOwner');
+      declarations.push(statement('const $$owner = $$value;', { owner, value: renderOwner({ ...context, namespace }) }));
+    }
+    body = emitRow(value.template, sites, { ...rowContext, namespace, owner }, (emitted, root) => {
       const next = params.map((param) => names.fresh(`_${param}`));
       return entry(root, next, [...assign(params, next), ...emitted.update], emitted.dispose);
     });
