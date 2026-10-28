@@ -104,6 +104,13 @@ whether to mark takeover and notify. Writes during that owner's setup/replay bui
 the value without taking over, and taken targets ignore replay stores while sibling
 targets remain active (`state-and-derived.md`).
 
+An event site installs its value through `setListener`
+(`packages/runtime/src/setters.ts`): it removes the previous listener, installs
+nothing for a value that is not a function, and wraps a function in the
+component's write batch. A site whose value never changes is one call with no
+variables; a changing one keeps the installed listener for the next call
+(`core/emit/sites.ts`).
+
 Native listeners preserve their receiver, arguments and return value. Their outer
 return flushes pending writes, even with an immediate test scheduler; nested
 listeners do not flush an intermediate value. Listener depth is shared across

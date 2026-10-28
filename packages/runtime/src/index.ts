@@ -98,6 +98,7 @@ export { bindInitialInputValue } from './initial-input';
 export {
   setText,
   setTextData,
+  setListener,
   textValue,
   setClassName,
   setClass,

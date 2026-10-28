@@ -19,6 +19,7 @@
  */
 
 import { isAriaAttribute, isHtmlBooleanAttribute } from './html-attributes';
+import type { WriteBatch } from './write-batch';
 
 export type SlotCache = Record<string, unknown>;
 
@@ -41,6 +42,25 @@ export function setText(
 export function setTextData(node: Text, value: unknown): void {
   const next = textValue(value);
   if (node.data !== next) node.data = next;
+}
+
+/**
+ * compiler-next's event site: replace `previous` with the authored value,
+ * wrapped so its writes commit as one batch. A value that is not a function
+ * installs nothing. Returns what is installed, the next call's `previous`.
+ */
+export function setListener(
+  node: Node,
+  event: string,
+  previous: EventListener | undefined,
+  value: unknown,
+  batch: WriteBatch | null,
+): EventListener | undefined {
+  if (previous !== undefined) node.removeEventListener(event, previous);
+  if (typeof value !== 'function') return undefined;
+  const listener = batch === null ? value as EventListener : batch.listener(value as EventListener);
+  node.addEventListener(event, listener);
+  return listener;
 }
 
 /** Normalize a dynamic text slot before comparing its cached value. */

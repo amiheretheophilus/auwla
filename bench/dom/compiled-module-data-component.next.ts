@@ -19,16 +19,9 @@ function _Row_row(props, _rowOwner2) {
   } else {
     _clone2.removeAttribute("class");
   }
-  let _value15 = () => {
+  _MD.setListener(_clone2, "click", void 0, () => {
     _MD.observeMethod([() => props], [_invalidate], props, "select", 0, void 0)(props.item.id);
-  };
-  let _listener12;
-  if (_listener12 !== undefined) _clone2.removeEventListener("click", _listener12);
-  _listener12 = undefined;
-  if (typeof _value15 === "function") {
-    _listener12 = _rowWrites === null ? _value15 : _rowWrites.listener(_value15);
-    _clone2.addEventListener("click", _listener12);
-  }
+  }, _rowWrites);
   let _value16 = props.item.id;
   let _valueSlot = null;
   if (_valueSlot === null && (_value16 === null || typeof _value16 !== "object")) {
@@ -172,16 +165,9 @@ function Row(_id2, _parent2, _props2, _namespace2, _setupOnly2) {
     _clone3.removeAttribute("class");
   }
   let _seen = _propsVersion;
-  let _value19 = () => {
+  _MD.setListener(_clone3, "click", void 0, () => {
     _MD.observeMethod([() => props], [_mutated_props], _MD.trackRead(() => _propsVersion, props, _readKey2), "select", 0, void 0)(_MD.trackRead(() => _propsVersion, props, _readKey2).item.id);
-  };
-  let _listener13;
-  if (_listener13 !== undefined) _clone3.removeEventListener("click", _listener13);
-  _listener13 = undefined;
-  if (typeof _value19 === "function") {
-    _listener13 = _writes2 === null ? _value19 : _writes2.listener(_value19);
-    _clone3.addEventListener("click", _listener13);
-  }
+  }, _writes2);
   const _siteComputation3 = _MD.createComputation(_writes2.mark, _entity2);
   _siteComputation3.begin();
   let _value20 = props.item.id;
@@ -311,7 +297,7 @@ export function BenchModuleDataComponent(_id, _parent, _props, _namespace, _setu
   const _button11 = _button10.nextSibling;
   const _node2 = _node.nextSibling;
   const _text = _node2.firstChild;
-  let _value2 = () => {
+  _MD.setListener(_button, "click", void 0, () => {
     ({ get value() {
       return data;
     }, set value(_assigned) {
@@ -320,15 +306,8 @@ export function BenchModuleDataComponent(_id, _parent, _props, _namespace, _setu
       if (!_sharedScope.building()) _sharedWrites.mark(_sharedKey);
     } }).value = buildData(1000);
     _write(selected = null);
-  };
-  let _listener;
-  if (_listener !== undefined) _button.removeEventListener("click", _listener);
-  _listener = undefined;
-  if (typeof _value2 === "function") {
-    _listener = _writes === null ? _value2 : _writes.listener(_value2);
-    _button.addEventListener("click", _listener);
-  }
-  let _value3 = () => {
+  }, _writes);
+  _MD.setListener(_button2, "click", void 0, () => {
     ({ get value() {
       return data;
     }, set value(_assigned) {
@@ -337,15 +316,8 @@ export function BenchModuleDataComponent(_id, _parent, _props, _namespace, _setu
       if (!_sharedScope.building()) _sharedWrites.mark(_sharedKey);
     } }).value = buildData(10000);
     _write(selected = null);
-  };
-  let _listener2;
-  if (_listener2 !== undefined) _button2.removeEventListener("click", _listener2);
-  _listener2 = undefined;
-  if (typeof _value3 === "function") {
-    _listener2 = _writes === null ? _value3 : _writes.listener(_value3);
-    _button2.addEventListener("click", _listener2);
-  }
-  let _value4 = () => {
+  }, _writes);
+  _MD.setListener(_button3, "click", void 0, () => {
     ({ get value() {
       return data;
     }, set value(_assigned) {
@@ -353,15 +325,8 @@ export function BenchModuleDataComponent(_id, _parent, _props, _namespace, _setu
       _dataVersion++;
       if (!_sharedScope.building()) _sharedWrites.mark(_sharedKey);
     } }).value = _MD.observeMethod([() => data], [_mutated_data], _read_data(), "concat", 0, void 0)(buildData(1000));
-  };
-  let _listener3;
-  if (_listener3 !== undefined) _button3.removeEventListener("click", _listener3);
-  _listener3 = undefined;
-  if (typeof _value4 === "function") {
-    _listener3 = _writes === null ? _value4 : _writes.listener(_value4);
-    _button3.addEventListener("click", _listener3);
-  }
-  let _value5 = () => {
+  }, _writes);
+  _MD.setListener(_button4, "click", void 0, () => {
     ({ get value() {
       return data;
     }, set value(_assigned) {
@@ -369,15 +334,8 @@ export function BenchModuleDataComponent(_id, _parent, _props, _namespace, _setu
       _dataVersion++;
       if (!_sharedScope.building()) _sharedWrites.mark(_sharedKey);
     } }).value = _MD.observeMethod([() => data], [_mutated_data], buildData(1000), "concat", 0, void 0)(_read_data());
-  };
-  let _listener4;
-  if (_listener4 !== undefined) _button4.removeEventListener("click", _listener4);
-  _listener4 = undefined;
-  if (typeof _value5 === "function") {
-    _listener4 = _writes === null ? _value5 : _writes.listener(_value5);
-    _button4.addEventListener("click", _listener4);
-  }
-  let _value6 = () => {
+  }, _writes);
+  _MD.setListener(_button5, "click", void 0, () => {
     ({ get value() {
       return data;
     }, set value(_assigned) {
@@ -385,59 +343,24 @@ export function BenchModuleDataComponent(_id, _parent, _props, _namespace, _setu
       _dataVersion++;
       if (!_sharedScope.building()) _sharedWrites.mark(_sharedKey);
     } }).value = _MD.observeMethod([() => data], [_mutated_data], _read_data(), "slice", 0, void 0)(0, -1000);
-  };
-  let _listener5;
-  if (_listener5 !== undefined) _button5.removeEventListener("click", _listener5);
-  _listener5 = undefined;
-  if (typeof _value6 === "function") {
-    _listener5 = _writes === null ? _value6 : _writes.listener(_value6);
-    _button5.addEventListener("click", _listener5);
-  }
-  let _value7 = () => {
+  }, _writes);
+  _MD.setListener(_button6, "click", void 0, () => {
     for (let i = 0; i < _read_data().length; i += 10) _MD.mutationTarget(_read_data()[i], "label", _mutated_data).value += ' !!!';
-  };
-  let _listener6;
-  if (_listener6 !== undefined) _button6.removeEventListener("click", _listener6);
-  _listener6 = undefined;
-  if (typeof _value7 === "function") {
-    _listener6 = _writes === null ? _value7 : _writes.listener(_value7);
-    _button6.addEventListener("click", _listener6);
-  }
-  let _value8 = () => {
+  }, _writes);
+  _MD.setListener(_button7, "click", void 0, () => {
     if (_read_data().length > 998) {
       const t = _read_data()[1];
       _MD.mutationTarget(_read_data(), 1, _mutated_data).value = _read_data()[998];
       _MD.mutationTarget(_read_data(), 998, _mutated_data).value = t;
     }
-  };
-  let _listener7;
-  if (_listener7 !== undefined) _button7.removeEventListener("click", _listener7);
-  _listener7 = undefined;
-  if (typeof _value8 === "function") {
-    _listener7 = _writes === null ? _value8 : _writes.listener(_value8);
-    _button7.addEventListener("click", _listener7);
-  }
-  let _value9 = () => {
+  }, _writes);
+  _MD.setListener(_button8, "click", void 0, () => {
     _MD.observeMethod([() => data], [_mutated_data], _read_data(), "reverse", 0, void 0)();
-  };
-  let _listener8;
-  if (_listener8 !== undefined) _button8.removeEventListener("click", _listener8);
-  _listener8 = undefined;
-  if (typeof _value9 === "function") {
-    _listener8 = _writes === null ? _value9 : _writes.listener(_value9);
-    _button8.addEventListener("click", _listener8);
-  }
-  let _value10 = () => {
+  }, _writes);
+  _MD.setListener(_button9, "click", void 0, () => {
     _MD.observeMethod([() => data], [_mutated_data], _read_data(), "splice", 0, void 0)(500, 1);
-  };
-  let _listener9;
-  if (_listener9 !== undefined) _button9.removeEventListener("click", _listener9);
-  _listener9 = undefined;
-  if (typeof _value10 === "function") {
-    _listener9 = _writes === null ? _value10 : _writes.listener(_value10);
-    _button9.addEventListener("click", _listener9);
-  }
-  let _value11 = () => {
+  }, _writes);
+  _MD.setListener(_button10, "click", void 0, () => {
     ({ get value() {
       return data;
     }, set value(_assigned) {
@@ -445,15 +368,8 @@ export function BenchModuleDataComponent(_id, _parent, _props, _namespace, _setu
       _dataVersion++;
       if (!_sharedScope.building()) _sharedWrites.mark(_sharedKey);
     } }).value = _MD.observeMethod([() => data], [_mutated_data], _read_data(), "filter", 1, void 0)((_item, index) => index % 100 !== 0);
-  };
-  let _listener10;
-  if (_listener10 !== undefined) _button10.removeEventListener("click", _listener10);
-  _listener10 = undefined;
-  if (typeof _value11 === "function") {
-    _listener10 = _writes === null ? _value11 : _writes.listener(_value11);
-    _button10.addEventListener("click", _listener10);
-  }
-  let _value12 = () => {
+  }, _writes);
+  _MD.setListener(_button11, "click", void 0, () => {
     ({ get value() {
       return data;
     }, set value(_assigned) {
@@ -462,14 +378,7 @@ export function BenchModuleDataComponent(_id, _parent, _props, _namespace, _setu
       if (!_sharedScope.building()) _sharedWrites.mark(_sharedKey);
     } }).value = [];
     _write(selected = null);
-  };
-  let _listener11;
-  if (_listener11 !== undefined) _button11.removeEventListener("click", _listener11);
-  _listener11 = undefined;
-  if (typeof _value12 === "function") {
-    _listener11 = _writes === null ? _value12 : _writes.listener(_value12);
-    _button11.addEventListener("click", _listener11);
-  }
+  }, _writes);
   const _rowNamespace = _MD.renderNamespace(_text.parentNode, _namespace);
   const _rowOwner = { id: _id, batch: _writes, entity: _entity, namespace: _rowNamespace, invalidate: () => _rowList.invalidate() };
   const _rowList = _MD.createRowList(_text, { id: _id, batch: _writes, entity: _entity, namespace: _namespace }, (item) => item.id, (item) => {

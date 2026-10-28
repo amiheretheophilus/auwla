@@ -144,15 +144,33 @@ export function emitSites(
       mount.push(statement('$$computation.begin();', { computation }));
       dispose.push(statement('$$computation.dispose();', { computation }));
     }
+    const used = site.kind !== 'key' && lastSiteByKey.get(siteKey(site)) === site;
+    // Evaluating a row's function literal again would create the same function
+    // over the same row bindings; only its identity, which no authored code
+    // sees, would differ.
+    const rowLiteral = context.rows === true && site.kind === 'event' && isFunctionLiteral(site.expression);
+    const inputs = new Set<string>();
+    const bindings = context.values === undefined ? plan.siteInputs.get(site.expression) ?? [] : [];
+    for (const binding of bindings) {
+      const version = versions.get(binding);
+      if (version !== undefined) {
+        inputs.add(version);
+      }
+    }
+    const updates = !rowLiteral && (inputs.size > 0 || computation !== null || replays);
+    const eventBatch = batch === null ? buildExpression('null') : buildExpression(batch);
+    if (site.kind === 'event' && used && !updates) {
+      // Installed once: nothing needs the value or its listener again.
+      mount.push(statement('$$runtime.setListener($$node, $$event, void 0, $$expression, $$batch);', {
+        runtime, node, event: stringLiteral(site.event), expression, batch: eventBatch,
+      }));
+      continue;
+    }
     mount.push(statement('let $$value = $$expression;', { value, expression }));
     if (computation !== null) {
       mount.push(statement('$$computation.end();', { computation }));
     }
-    const used = site.kind !== 'key' && lastSiteByKey.get(siteKey(site)) === site;
     const listener = used && site.kind === 'event' ? names.fresh('_listener') : null;
-    if (listener !== null) {
-      mount.push(statement('let $$listener;', { listener }));
-    }
     let region: string | null = null;
     let valueSlot: LazySlot | null = null;
     // A former value slot ignored writes after disposal, including when an
@@ -180,7 +198,7 @@ export function emitSites(
       dispose.push(statement('$$slot = $$runtime.disposedValueSlot;', { slot, runtime }));
     }
     const write = (next: string): Statement[] => {
-      const body = writeValue(site, next, node, runtime, batch, listener, valueSlot, rowList?.list ?? null);
+      const body = writeValue(site, next, node, runtime, eventBatch, listener, valueSlot, rowList?.list ?? null);
 
       return textActive === null ? body : [guardedStatements(buildExpression('$$active', { active: textActive }), body)];
     };
@@ -208,24 +226,14 @@ export function emitSites(
       }));
       mount.push(statement('$$slot.remove();', { slot: node }));
       dispose.push(statement('$$region.dispose();', { region }));
+    } else if (listener !== null && site.kind === 'event') {
+      mount.push(statement('let $$listener = $$runtime.setListener($$node, $$event, void 0, $$value, $$batch);', {
+        listener, runtime, node, event: stringLiteral(site.event), value, batch: eventBatch,
+      }));
     } else if (used) {
       mount.push(...write(value));
     }
-    if (context.rows === true && site.kind === 'event' && isFunctionLiteral(site.expression)) {
-      // Evaluating it again would create the same function over the same row
-      // bindings; only its identity, which no authored code sees, would differ.
-      continue;
-    }
-
-    const inputs = new Set<string>();
-    const bindings = context.values === undefined ? plan.siteInputs.get(site.expression) ?? [] : [];
-    for (const binding of bindings) {
-      const version = versions.get(binding);
-      if (version !== undefined) {
-        inputs.add(version);
-      }
-    }
-    if (inputs.size === 0 && computation === null && !replays) {
+    if (!updates) {
       if (region !== null) {
         update.push(statement('$$region.update();', { region }));
       }
@@ -377,7 +385,8 @@ function writeValue(
   value: string,
   node: string,
   runtime: string,
-  batch: string | null,
+  /** An event's write batch, or `null` where none commits its writes. */
+  batch: Expression,
   listener: string | null,
   valueSlot: LazySlot | null,
   rowList: string | null,
@@ -413,12 +422,7 @@ function writeValue(
       $$node.setAttribute($$name, $$value === true ? "" : $$runtime.textValue($$value));
     } else { $$node.removeAttribute($$name); }`, { node, value, runtime, name: stringLiteral(site.name) })];
   }
-  const wrapped = batch === null ? value : `${batch} === null ? ${value} : ${batch}.listener(${value})`;
-  return statements(`
-    if (${listener} !== undefined) $$node.removeEventListener($$event, ${listener});
-    ${listener} = undefined;
-    if (typeof $$value === "function") {
-      ${listener} = ${wrapped};
-      $$node.addEventListener($$event, ${listener});
-    }`, { node, value, event: stringLiteral(site.event) });
+  return [statement(`${listener} = $$runtime.setListener($$node, $$event, ${listener}, $$value, $$batch);`, {
+    runtime, node, value, event: stringLiteral(site.event), batch,
+  })];
 }
