@@ -14,8 +14,10 @@ Last updated: 2026-10-28.
   later-phase failures explicitly diagnosed. The `30c9b29` VM report ranks the
   new compiler 3rd and the old 2nd of ten in Octane; the new compiler's Octane
   app is 82.20 kB minified against 35.62 kB. Phase 5 fast paths and VM
-  measurements remain release gates. Next: the restructuring and performance
-  plan (`compiler/optimize.md`), starting from `tmp/perf-rows`.
+  measurements remain release gates. The first two size batches share namespace
+  emission and remove duplicate SVG planning. Next: primitive-only storage/site
+  proofs and more precise readiness capabilities, followed by the measured runtime
+  work in `compiler/optimize.md`. `tmp/perf-rows` preserves the earlier paused step.
 - `compiler-refactor`: the old compiler's refactor, stopped on 2026-10-19. The
   sections below record that work.
 - `codex/package-conditional-sync` at `9e35480` (third-party package compilation,
@@ -24,6 +26,17 @@ Last updated: 2026-10-28.
 - The user put the agent in charge of the refactor on 2026-10-18 ("you are in charge now").
 
 ## Done
+
+- Namespace batch validation (2026-10-28): implementation commits `50d37266`
+  and `d32fd7d7` are pushed to `origin/compiler-rewrite`. At `d32fd7d7`,
+  [CI 40651032963](https://github.com/amiheretheophilus/auwla/actions/runs/40651032963)
+  passes the complete compiled-case gate, reference cases and generators at
+  200 programs. Its unit runner stalled during dependency installation before
+  checks ran, so it was replaced with the unit-only
+  [CI 40651844616](https://github.com/amiheretheophilus/auwla/actions/runs/40651844616),
+  which passes compiler types/units, runtime tests and data types/tests at the
+  same implementation commit. No failing test was bypassed or changed. Existing
+  uncommitted DOM benchmark changes were preserved and excluded from the commits.
 
 - Row-factory emission batch (2026-10-28): extend the shared namespace-aware
   emitter to compiled element rows, and remove the duplicate SVG template from
