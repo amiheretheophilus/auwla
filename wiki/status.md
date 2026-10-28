@@ -25,6 +25,21 @@ Last updated: 2026-10-28.
 
 ## Done
 
+- Row-factory emission batch (2026-10-28): extend the shared namespace-aware
+  emitter to compiled element rows, and remove the duplicate SVG template from
+  `RenderValuePlan` and planning. The stored-view batch is pushed as `50d37266`.
+  Existing expectations and benchmark sources remain unchanged; a new reference
+  comparison covers custom rows, explicit SVG and foreignObject across both
+  destinations, edits, reordering and clearing. Local type checking, 49
+  row/planning checks, all 18 authored benchmark correctness checks, seven
+  stored-view/plan/structure checks and 18 selected list comparisons pass.
+  Relative to `50d37266`, Octane falls from 80,224 to 77,895 B minified
+  (21,906 -> 21,286 B gzip); primitive inline rows 40,514 -> 40,216 B
+  (14,773 -> 14,669 B gzip). Other sampled fixtures retain the stored-view
+  batch's sizes. Cumulatively against `cf3ce626`, Octane saves 4,852 B
+  minified / 1,142 B gzip, FlowOS 16,681 / 3,075 B, and the 60-static-child
+  fixture 18,710 / 1,762 B. No VM timing or OOM resolution is claimed.
+
 - Stored-view emission batch (2026-10-28): share one mount/update/disposal
   program across HTML and SVG, using the existing namespace-aware component
   template emitter. No authored-code proof or runtime behavior changed. Added

@@ -16,7 +16,7 @@ import type { FunctionNode } from '../resolve/functions';
 import type { Names } from './names';
 import { copy } from './copy';
 import { expression, statement, stringLiteral } from './quote';
-import { emitNodes, inheritedNodes } from './template';
+import { emitNodes } from './template';
 import { emitSites, renderOwner, type SitesContext } from './sites';
 import { emitMutations } from '../../features/handlers/mutations';
 
@@ -55,19 +55,12 @@ export function emitRowList(plan: RowListPlan, anchor: string, context: SitesCon
   if (plan.row.kind === 'element') {
     const value = plan.row.value;
     const sites = value.keyIndex === null ? value.sites : value.sites.filter((_, index) => index !== value.keyIndex);
-    const variant = (shape: Template) => emitRow(shape, sites, { ...rowContext, namespace }, (emitted, root) => {
+    // A row has one destination namespace. Share its sites and entry across
+    // HTML/SVG, as stored values and leaf component rows already do.
+    body = emitRow(value.template, sites, { ...rowContext, namespace }, (emitted, root) => {
       const next = params.map((param) => names.fresh(`_${param}`));
       return entry(root, next, [...assign(params, next), ...emitted.update], emitted.dispose);
     });
-    // Stored JSX takes the namespace where it is shown (`render-value.ts`); a
-    // row list is shown at one anchor, so its rows choose once.
-    body = inheritedNodes(value.template).size > 0
-      ? [b.IfStatement({
-        test: expression('$$namespace === "svg"', { namespace }),
-        consequent: b.BlockStatement({ body: variant(value.svgTemplate) }),
-        alternate: null,
-      }), ...variant(value.template)]
-      : variant(value.template);
   } else {
     const rows = context.rowComponents;
     if (rows === undefined) throw new Error('memo-dom: a component row list needs the module\'s row components');
@@ -177,7 +170,7 @@ export class RowComponents {
         ? statement('if (!$$runtime.sameProps($$props, $$next)) $$props = $$next;', { runtime, props, next })
         : statement('$$props = $$next;', { props, next });
       return entry(root, [next], [receive, ...emitted.update], emitted.dispose);
-    }, true);
+    });
     const declaration = statement(`function ${name}($$props, $$owner) {}`, { props, owner });
     if (is.FunctionDeclaration(declaration)) {
       declaration.body!.body = [
@@ -216,13 +209,11 @@ function emitRow(
   sites: readonly Site[],
   context: SitesContext,
   finish: (emitted: ReturnType<typeof emitSites>, root: string) => Expression,
-  /** A component's template takes its namespace at mount; an element row's variant is chosen already. */
-  inherits = false,
 ): Statement[] {
   const { names, runtime } = context;
   const markup = shape.markup === null ? null : names.fresh('_rowMarkup');
   const slots = emitNodes(shape, sites, {
-    names, runtime, document: context.document, markup, namespace: inherits ? context.namespace : undefined,
+    names, runtime, document: context.document, markup, namespace: context.namespace,
   });
   const emitted = emitSites({ sites, siteInputs: new Map(), dynamicSites: new Set() },
     { ...context, ref: slots.ref, rows: true, once: undefined });

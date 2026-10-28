@@ -324,6 +324,14 @@ function literal is created once and reads the assigned parameters. The mutation
 lowering passes the list to `observeMethod` (`Names.of` gives both emitters the
 same name). The site writes `list.write(value)`.
 
+Compiled rows share one destination-aware template and site program, just like
+stored values and leaf component rows. The template emitter selects node creation
+and caches prototypes by document/namespace; updates, listeners, keys and disposal
+are emitted once. Planning no longer builds an unused second SVG template per
+stored expression. `core/emit/row-list.test.ts` checks custom tags, explicit SVG
+and `foreignObject` in both destinations through edits, reorder and clear, against
+the reference and both optimizer modes.
+
 `runtime/src/row-list.ts` reconciles with the general path's identity and order
 (`list-values.ts`, `list-index.ts`, `render-value.ts`): `key=` and the key as a
 string, or `#index`; each identity reuses its first old row; old duplicates are

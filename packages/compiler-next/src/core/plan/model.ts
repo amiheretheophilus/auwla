@@ -419,7 +419,6 @@ export interface RenderValuePlan {
   /** Identity of the JSX creation expression, shared across its consumers. */
   readonly node: Extract<Node, { type: 'JSXElement' | 'JSXFragment' }>;
   readonly template: Template;
-  readonly svgTemplate: Template;
   /** Source order is also the capture-array order used by the emitted program. */
   readonly sites: readonly Site[];
   /** Capture index of the root's final `key` attribute, or null without one. */

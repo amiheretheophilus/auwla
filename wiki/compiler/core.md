@@ -213,7 +213,7 @@ evaluation: parent attributes evaluate before child expressions.
 - `LifecycleCallPlan` and `EffectGroupPlan` keep registration calls and their
   activation roots. Early-return ownership is reconciled with the selector.
 - `ConditionalSite`: native selection tree, selector inputs and branch templates/sites (expression form built).
-- `RenderValuePlan`: stored JSX, with source-ordered captured sites and HTML/SVG template variants in `ModulePlan.values`.
+- `RenderValuePlan`: stored JSX, with source-ordered captured sites and one destination-aware template in `ModulePlan.values`.
 - `List { source, key, row: Plan }` _(planned)_.
 - `ComponentCall { component, props, slots }` _(planned)_.
 - `Boundary { sources, pending, error }` _(planned)_, for loading and error UI.
@@ -235,6 +235,7 @@ Features build their own pieces. Optimizations replace pieces (`optimize.md`).
 | `sites.ts` | Emits mount values and per-site version checks; skips unchanged DOM values and updates native listeners when their value changes |
 | `render-value.ts` | Separates a stored JSX program's mount/update/disposal from the native expression that captures its inputs |
 | `render-value.test.ts` | Reference comparisons for one stored template consumed in HTML and SVG, updates/remounting, fragment text roots, custom tags and foreignObject boundaries |
+| `core/emit/row-list.test.ts` | Reference comparison for custom compiled rows consumed in both namespaces through edits, reordering and clearing |
 | `packages/runtime/src/render-value.ts` | Keeps program metadata in a WeakMap and gives each consuming slot its own anchored DOM range |
 | `packages/runtime/src/computation.ts` | Captures executed hidden version reads for opaque memos/sites, with stable keys and nested restoration |
 | `template.ts` | Calls runtime `materializeMarkup`, or creates nodes directly when HTML parsing would alter the tree |
@@ -276,6 +277,10 @@ the template cache keeps independent HTML and SVG prototypes. General creation
 still handles server/hydration documents, parser-sensitive trees and fragment
 roots. Destination namespaces, including custom tags and `foreignObject`, do not
 require a second copy of the site's values, listeners, updates or disposal code.
+Compiled element rows use that same namespace-aware creation. `RenderValuePlan`
+therefore keeps one template, rather than planning a second SVG tree for every
+stored expression; row keys, captures and site order still come from the same
+authored syntax.
 
 General creation: ordinary HTML uses hoisted markup and cached template cloning. Tables, raw-text
 elements, parser-sensitive nesting, SVG and unproven tags use direct creation.

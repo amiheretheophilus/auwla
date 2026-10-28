@@ -190,7 +190,6 @@ function planModule(
       continue;
     }
     const value = buildTemplate(jsx, { ...context, captureValues: true });
-    const svg = buildTemplate(jsx, { ...context, captureValues: true }, [], 'svg');
     let keyIndex: number | null = null;
     if (is.JSXElement(jsx)) {
       const root = value.template.roots[0];
@@ -200,7 +199,7 @@ function planModule(
         }
       }
     }
-    values.push({ node: jsx, ...value, svgTemplate: { ...svg.template, markup: null }, keyIndex });
+    values.push({ node: jsx, ...value, keyIndex });
   }
   const sharedOwners: SharedOwnerPlan[] = [];
   const shared = moduleBindings;
