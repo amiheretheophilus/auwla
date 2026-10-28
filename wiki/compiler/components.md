@@ -182,6 +182,12 @@ as their parent closures are refreshed. Cases and fixes are in
 
 ## Open questions
 
+- Root-adapter bundle retention: an authored `mount(target, App)` currently
+  receives `componentValue(App)`, retaining the generic component-rendering
+  program even for a primitive-only root. Establish canonical adapter identity,
+  ordinary callable arguments/results and root-factory registration/rebinding
+  observations before narrowing this path. Replacing only the mount argument
+  with the raw component is not yet proven to preserve those observations.
 - Which component forms does the old compiler support that are not listed here
   (`page(...)`, presentation components)? Port each with a test.
 - Extend the generated combinations with recursive trees, nested slots, native

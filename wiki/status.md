@@ -15,9 +15,10 @@ Last updated: 2026-10-28.
   new compiler 3rd and the old 2nd of ten in Octane; the new compiler's Octane
   app is 82.20 kB minified against 35.62 kB. Phase 5 fast paths and VM
   measurements remain release gates. The first two size batches share namespace
-  emission and remove duplicate SVG planning. Next: primitive-only storage/site
-  proofs and more precise readiness capabilities, followed by the measured runtime
-  work in `compiler/optimize.md`. `tmp/perf-rows` preserves the earlier paused step.
+  emission and remove duplicate SVG planning. Primitive-only local storage/site
+  proofs now retain disposal semantics. Next: root-adapter bundle retention and
+  more precise readiness capabilities, followed by the measured runtime work in
+  `compiler/optimize.md`. `tmp/perf-rows` preserves the earlier paused step.
 - `compiler-refactor`: the old compiler's refactor, stopped on 2026-10-19. The
   sections below record that work.
 - `codex/package-conditional-sync` at `9e35480` (third-party package compilation,
@@ -26,6 +27,16 @@ Last updated: 2026-10-28.
 - The user put the agent in charge of the refactor on 2026-10-18 ("you are in charge now").
 
 ## Done
+
+- Primitive-value validation (2026-10-28): `ec1f45b6` is pushed to
+  `origin/compiler-rewrite` and every job passes in
+  [CI 40656699839](https://github.com/amiheretheophilus/auwla/actions/runs/40656699839):
+  compiler types/units, runtime tests, data types/tests, all reference and compiled
+  cases, and generators at 200 programs. The root-adapter review explains why
+  the counter still retains generic component rendering after its text slot is
+  removed: the authored mount argument becomes a callable component adapter.
+  Skipping that adapter just at mount is not yet proven to retain canonical
+  function identity and root-factory behavior (`compiler/components.md`).
 
 - Primitive-value batch (2026-10-28): an optional, binding-identity proof checks
   component-local lexical initialization and every reassignment before omitting
