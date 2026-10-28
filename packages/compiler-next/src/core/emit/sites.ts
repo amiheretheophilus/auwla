@@ -155,6 +155,16 @@ export function emitSites(
     }
     let region: string | null = null;
     let valueSlot: LazySlot | null = null;
+    // A former value slot ignored writes after disposal, including when an
+    // earlier coercion unmounted this view in the middle of its update. Keep
+    // that lifetime without allocating a slot that can only ever show text.
+    const textActive = site.kind === 'text' && site.guardDisposal === true ? names.fresh('_textActive') : null;
+
+    if (textActive !== null) {
+      mount.push(statement('let $$active = true;', { active: textActive }));
+      dispose.push(statement('$$active = false;', { active: textActive }));
+    }
+
     if (site.kind === 'text' && !site.primitive && rowList === null) {
       // Most such sites only ever show text. The slot, which also shows stored
       // JSX and arrays, is created by the first value that is an object.
@@ -169,6 +179,12 @@ export function emitSites(
       dispose.push(statement('if ($$slot !== null) $$slot.dispose();', { slot }));
       dispose.push(statement('$$slot = $$runtime.disposedValueSlot;', { slot, runtime }));
     }
+    const write = (next: string): Statement[] => {
+      const body = writeValue(site, next, node, runtime, batch, listener, valueSlot, rowList?.list ?? null);
+
+      return textActive === null ? body : [guardedStatements(buildExpression('$$active', { active: textActive }), body)];
+    };
+
     if (site.kind === 'conditional') {
       region = names.fresh('_conditional');
       const namespace = names.fresh('_branchNamespace');
@@ -193,7 +209,7 @@ export function emitSites(
       mount.push(statement('$$slot.remove();', { slot: node }));
       dispose.push(statement('$$region.dispose();', { region }));
     } else if (used) {
-      mount.push(...writeValue(site, value, node, runtime, batch, listener, valueSlot, rowList?.list ?? null));
+      mount.push(...write(value));
     }
     if (context.rows === true && site.kind === 'event' && isFunctionLiteral(site.expression)) {
       // Evaluating it again would create the same function over the same row
@@ -226,7 +242,7 @@ export function emitSites(
       body.unshift(statement('$$computation.begin();', { computation }));
       body.push(statement('$$computation.end();', { computation }));
     }
-    const writes = used ? writeValue(site, next, node, runtime, batch, listener, valueSlot, rowList?.list ?? null) : [];
+    const writes = used ? write(next) : [];
     writes.push(statement('$$value = $$next;', { value, next }));
     // Equality also keeps an unchanged prop from replacing text a user typed.
     // The NaN check avoids relying on an authored binding named Object.

@@ -285,15 +285,21 @@ function constantAttribute(expression: Expression): string | null | undefined {
  * Whether the expression's own syntax guarantees a primitive result. Every
  * unary, binary and update operator returns one, as do template text and
  * non-regex literals. A choice is primitive when every result it can pick is.
+ * An optional caller proof can establish identifiers; general planning supplies
+ * none, while optimize/primitive-values.ts checks initialization and all writes.
  */
-function alwaysPrimitive(expression: Expression): boolean {
+export function alwaysPrimitive(
+  expression: Expression,
+  identifier?: (node: Extract<Node, { type: 'Identifier' }>) => boolean,
+): boolean {
   const value = unwrap(expression);
+  if (is.Identifier(value)) return identifier?.(value) ?? false;
   if (is.Literal(value)) return !('regex' in value);
   if (is.TemplateLiteral(value)) return true;
   if (is.BinaryExpression(value) || is.UnaryExpression(value) || is.UpdateExpression(value)) return true;
-  if (is.LogicalExpression(value)) return alwaysPrimitive(value.left) && alwaysPrimitive(value.right);
-  if (is.ConditionalExpression(value)) return alwaysPrimitive(value.consequent) && alwaysPrimitive(value.alternate);
-  if (is.SequenceExpression(value)) return alwaysPrimitive(value.expressions.at(-1)!);
+  if (is.LogicalExpression(value)) return alwaysPrimitive(value.left, identifier) && alwaysPrimitive(value.right, identifier);
+  if (is.ConditionalExpression(value)) return alwaysPrimitive(value.consequent, identifier) && alwaysPrimitive(value.alternate, identifier);
+  if (is.SequenceExpression(value)) return alwaysPrimitive(value.expressions.at(-1)!, identifier);
   return false;
 }
 

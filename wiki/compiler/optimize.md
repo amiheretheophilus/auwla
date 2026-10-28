@@ -50,6 +50,7 @@ interface Optimization {
 
 | File | Makes faster |
 | --- | --- |
+| `primitive-values.ts` (built) | Proves component-local bindings remain primitive; writes text without a generic child slot and omits immutable mutation roots, preserving disposal and version behavior |
 | `retained-list-index.ts` (built) | Selects private row-index retention for non-primitive child sites, without changing authored expression evaluation |
 | `methods.ts` (built) | Lowers observed member calls to `observeMethod`; the runtime skips the snapshot only when the actual callee, receiver, arguments and callbacks satisfy its proof. Unknown or overridden calls retain the before/after check ("Method calls" below) |
 | `keyed-map.ts` | keyed `.map` over state reuses rows |
@@ -57,6 +58,49 @@ interface Optimization {
 | `dom-only-rows.ts` | rows with no reactive work are plain DOM |
 | `reason-routing.ts` | a write updates only the sites on its paths |
 | `static-hoist.ts` | static templates are created once |
+
+## Primitive values
+
+`primitive-values.ts` runs before retained-list indexing. Its proof is keyed by
+resolved binding identity, never a type annotation or the binding's spelling:
+
+- The binding belongs to a compiled component, is Constant/State/Derived, and has
+  one plain `let`/`const` declarator. Parameters, patterns, var/redeclarations,
+  refs/sources and implicit `for...of`/`for...in` values retain the general path.
+- Its initializer is absent (undefined) or has a syntactically guaranteed
+  primitive result (`core/plan/template.ts`, `alwaysPrimitive`). Identifier and
+  call initializers remain unproven; there is no alias fixed-point inference.
+- Every resolved reassignment, including nested callbacks/getters, must write
+  that exact identifier. Destructuring/iteration stores retain the fallback.
+  Plain/logical stores require a syntactically primitive RHS; successful numeric,
+  bitwise and update operations store primitives. Native coercions and throws
+  still execute as written. An untaken unknown store still defeats the proof.
+- Calls/member operations cannot turn a primitive argument/receiver into an
+  object. Their existing mutation observation and notifications are retained.
+  Modules with direct eval, with, or source-flow presentation are not specialized;
+  a source's native primitive result can still need an object-valued pending view.
+
+The shared primitive-expression query accepts these proven identifiers only at
+text sites. Conditional branches and stored captures use the same binding facts;
+spread children stay general. The pass returns new plans and leaves the authored
+AST, versions, memo/takeover execution, inputs and write instrumentation unchanged.
+Only proven primitive roots leave `ComponentPlan.mutationRoots`.
+
+A former slot keeps a per-site active flag (`TextSite.guardDisposal`). Disposal
+clears it at that site's original position; later writes are ignored. It retains
+component/entity ownership even for otherwise static scalar components, so those
+cleanup registrations cannot leak. This is necessary when an earlier attribute
+coercion unmounts a view during its update: without the flag the detached text
+changed after disposal in optimized mode, while the unchanged general path left
+it alone. The native regression fails with that guard removed. This removes the
+generic slot machinery, not its lifetime semantics.
+
+`primitive-values.test.ts` checks admitted/excluded stores, shadowing, branch and
+capture facts, immutable general plans and dynamic-scope/source fallbacks.
+`primitive-values.dom.test.ts` compares replay/takeover, later object writes,
+implicit iterable values and pending presentation against the reference in both
+modes. Native both-mode checks cover interrupted updates and static cleanup
+ownership. Existing state, callbacks, mutations and refs cases stay unchanged.
 
 ## Retained row index
 

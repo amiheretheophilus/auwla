@@ -17,6 +17,11 @@ versions a site read and reevaluates only when one changes, preserving unchanged
 DOM properties such as typed input text. Unknown calls with no known changed
 input are not replayed merely because another value was written.
 
+The optional primitive-values pass (`optimize.md`) can omit a local binding's
+mutation root and generic text slot only after checking every initializer/store.
+Versions, derivations, takeovers and call observations remain unchanged. Its
+disposal guard still owns cleanup even in a static scalar component.
+
 Phase 6 includes every component parameter binding in local versions, including
 unused or unwritten props, defaults, aliases, nested patterns and rest parameters.
 `features/props/dom.ts` retains each binding's last parent value separately from

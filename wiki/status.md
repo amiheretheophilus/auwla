@@ -27,6 +27,22 @@ Last updated: 2026-10-28.
 
 ## Done
 
+- Primitive-value batch (2026-10-28): an optional, binding-identity proof checks
+  component-local lexical initialization and every reassignment before omitting
+  mutable-root registration or a generic child slot. Unsupported stores, props,
+  refs, sources, implicit iteration values, var, aliases and dynamic scope stay
+  general (`compiler/optimize.md`). Native coercion can dispose a view during its
+  update: the new fast path retains per-site disposal guards and static cleanup
+  ownership. The new native regression failed optimized-only before that guard;
+  existing expectations were not changed. Local package types, 53 primitive/
+  component checks, 105 state/memo/callback comparisons, 44 mutation/ref/benchmark
+  checks and 21 plan/structure/stored-view checks pass. Against `e514b8ae`,
+  identical source-runtime production builds: counter 24,356 -> 23,632 B
+  minified (9,150 -> 8,909 B gzip), composition 35,517 -> 35,043 B
+  (12,998 -> 12,830 B gzip), 60 static children 135,188 -> 134,496 B
+  (24,069 -> 23,893 B gzip). The other five sampled fixtures are unchanged.
+  These are payload results; VM speed/memory gates remain open.
+
 - Namespace batch validation (2026-10-28): implementation commits `50d37266`
   and `d32fd7d7` are pushed to `origin/compiler-rewrite`. At `d32fd7d7`,
   [CI 40651032963](https://github.com/amiheretheophilus/auwla/actions/runs/40651032963)

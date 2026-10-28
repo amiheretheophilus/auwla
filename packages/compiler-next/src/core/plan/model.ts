@@ -60,6 +60,8 @@ export interface TextSite extends SiteBase {
    * node directly. Otherwise a value slot also accepts stored JSX and arrays.
    */
   readonly primitive: boolean;
+  /** An optimized former value slot must still ignore writes after its disposal. */
+  readonly guardDisposal?: boolean;
   /** `{...items}`: each item is a child, so the site shows `[...items]`. */
   readonly spread?: boolean;
 }

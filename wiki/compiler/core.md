@@ -30,7 +30,9 @@ policy; the kernel does not import those features or wrap entity callbacks.
 Write-batch acknowledgement uses a weak entity index (`handlers.md`).
 
 After general planning, `optimize/index.ts` may replace a plan; `optimize: false`
-bypasses all passes. The first pass annotates non-primitive `TextSite`s with
+bypasses all passes. Primitive binding specialization first removes generic
+slots/roots only with a complete primitive-storage proof (`optimize.md`). The
+retained-index pass then annotates remaining non-primitive `TextSite`s with
 `listStrategy: 'retained-index'`. Site emission selects the indexed value-slot
 factory while preserving the original expression and all collectors/writes.
 
@@ -203,7 +205,7 @@ evaluation: parent attributes evaluate before child expressions.
 | `model.ts` | `ModulePlan`, `ComponentPlan`, `Template`, memo groups, writes and text/attribute/property/event site contracts |
 | `index.ts` | Plans component setup and returned markup, retains each site's binding inputs and invokes state/write/memo feature planning; selects writable takeover candidates and distinguishes direct replay writes from nested callback writes |
 | `storage.ts` | Selects the lexical activation retaining a binding: module, function or nested block; var retains its function owner |
-| `template.ts` | Builds the node sequence, static markup and expression sites; keeps repeated attributes in authored order |
+| `template.ts` | Builds the node sequence, static markup and expression sites; keeps repeated attributes in authored order; shares the primitive-result query with the optional binding proof |
 | `jsx.ts` | JSX whitespace, attribute aliases, namespaces and conservative template-parsing eligibility |
 | `plan.test.ts` | Node addressing, expression order, graph reactivity, fallback creation and unchanged authored AST |
 
@@ -232,7 +234,7 @@ Features build their own pieces. Optimizations replace pieces (`optimize.md`).
 | `dom.ts` | Copies module syntax, hoists markup, composes state/write feature emission, registers the component update and initializes sites |
 | `shared.ts` | Composes native shared-owner versions, memo/takeover emission and cross-module readers before replacing component functions |
 | `await.ts` | Adds write boundaries around native await operands and resumption, preserving suspension and rejection |
-| `sites.ts` | Emits mount values and per-site version checks; skips unchanged DOM values and updates native listeners when their value changes |
+| `sites.ts` | Emits mount values and per-site version checks; skips unchanged DOM values, retains optimized text disposal guards, and updates native listeners when their value changes |
 | `render-value.ts` | Separates a stored JSX program's mount/update/disposal from the native expression that captures its inputs |
 | `render-value.test.ts` | Reference comparisons for one stored template consumed in HTML and SVG, updates/remounting, fragment text roots, custom tags and foreignObject boundaries |
 | `core/emit/row-list.test.ts` | Reference comparison for custom compiled rows consumed in both namespaces through edits, reordering and clearing |

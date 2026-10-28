@@ -182,10 +182,11 @@ function emitComponent(
   const id = names.of(plan.fn, '_id');
   const parent = names.fresh('_parent');
   const state = emitLocalState(plan.state, names);
-  // Value slots can own nested DOM even when the component has no local state.
-  // Their listeners and disposal still need the component's batch and entity.
+  // Value slots and optimized text guards can need disposal even without
+  // local state. Keep their batch/entity ownership until that cleanup runs.
   const ownsRegions = plan.sites.some((site) => {
-    return site.kind === 'conditional' || (site.kind === 'text' && !site.primitive);
+    return site.kind === 'conditional'
+      || (site.kind === 'text' && (!site.primitive || site.guardDisposal === true));
   });
   const ownsRefs = (sites: readonly Site[]): boolean => sites.some((site) => {
     return site.kind === 'ref' || (site.kind === 'conditional' && site.branches.some((branch) => ownsRefs(branch.sites)));
