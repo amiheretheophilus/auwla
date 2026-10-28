@@ -112,16 +112,28 @@ function planModule(
         return write.operation.start >= root.start && write.operation.end <= root.end;
       }));
     });
-    const trackedReads = graph.escaping.flatMap((escaping) => escaping.reads.flatMap((read) => {
-      if (read.target.binding === null || !local.includes(read.target as BindingNode) || read.reference === null) {
-        return [];
+    // One entry per read node. Several escaping functions can reach the same
+    // read (`displace(3)` and `displace(4)` both reach `displace`'s body), and
+    // each entry wraps the node once more when emitted.
+    const trackedReads: { node: Node; binding: BindingNode }[] = [];
+    const tracked = new Set<Node>();
+    const track = (node: Node, binding: BindingNode): void => {
+      if (tracked.has(node)) return;
+      tracked.add(node);
+      trackedReads.push({ node, binding });
+    };
+    for (const escaping of graph.escaping) {
+      for (const read of escaping.reads) {
+        if (read.target.binding === null || !local.includes(read.target as BindingNode) || read.reference === null) {
+          continue;
+        }
+        track(read.reference.node, read.target as BindingNode);
       }
-      return [{ node: read.reference.node, binding: read.target as BindingNode }];
-    }));
+    }
     for (const group of effects.groups) {
       if (group.owner !== fn) continue;
       for (const read of group.reads) {
-        if (local.includes(read.binding) && !trackedReads.some((existing) => existing.node === read.node)) trackedReads.push(read);
+        if (local.includes(read.binding)) track(read.node, read.binding);
       }
     }
     for (const binding of local) {
@@ -137,9 +149,7 @@ function planModule(
         if (!insideLexicalBlock && !insideChild) {
           continue;
         }
-        if (!trackedReads.some((read) => read.node === reference.node)) {
-          trackedReads.push({ node: reference.node, binding });
-        }
+        track(reference.node, binding);
       }
     }
     const mutationRoots = local.filter((binding) => {

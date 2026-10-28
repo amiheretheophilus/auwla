@@ -81,6 +81,22 @@ describe('template planning and emission', () => {
   });
 });
 
+describe('tracked reads', () => {
+  it('tracks a read once when several escaping callbacks reach it', () => {
+    const source = `export function App() {
+      let items = [1, 2, 3];
+      const displace = (count: number) => { items = items.slice(count); };
+      return <main><button onClick={() => displace(3)}>a</button><button onClick={() => displace(4)}>b</button>
+        <button onClick={() => displace(5)}>c</button><p>{items.length}</p></main>;
+    }`;
+    const { plan, component } = inspect(source);
+    const nodes = component.trackedReads.map((read) => read.node);
+    expect(new Set(nodes).size).toBe(nodes.length);
+    const code = printJavaScript(emitDom(plan, { runtimePath: '@memoized-dom/runtime/testing' }), 'App.tsx', source);
+    expect(code).not.toMatch(/trackRead\([^;]*trackRead\(/);
+  });
+});
+
 describe('primitive text sites', () => {
   it('writes text directly only when the syntax guarantees a primitive', () => {
     const source = `export function App() {
