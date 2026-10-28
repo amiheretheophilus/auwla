@@ -29,6 +29,18 @@ Last updated: 2026-10-28.
 
 ## Done
 
+- Root-adapter validation (2026-10-28): correctness `14c1aec9` and dependency
+  reduction `89c3a788` are pushed to `origin/compiler-rewrite`. All jobs pass at
+  `89c3a788` in
+  [CI 40663381136](https://github.com/amiheretheophilus/auwla/actions/runs/40663381136):
+  compiler types/units, runtime tests, data types/tests, every reference and
+  compiled case, and generators at 200 programs. The additional local
+  Group/suspend slice passes all 28 comparisons in both compiler modes. Existing
+  case expectations and the eight uncommitted benchmark edits remain unchanged.
+  Next, establish which readiness capabilities can be omitted without excluding
+  opaque, cross-module or child-provided loading values; retain general behavior
+  wherever that absence cannot be proved. VM speed and memory remain open gates.
+
 - Root-adapter dependency batch (2026-10-28): only dynamic tags supply the native
   program factory. The canonical callable adapter remains intact; one shared
   cache preserves native-before-branding programs and avoids repeat brand checks
