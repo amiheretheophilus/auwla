@@ -16,7 +16,8 @@ Last updated: 2026-10-28.
   app is 82.20 kB minified against 35.62 kB. Phase 5 fast paths and VM
   measurements remain release gates. The first two size batches share namespace
   emission and remove duplicate SVG planning. Primitive-only local storage/site
-  proofs now retain disposal semantics. Next: root-adapter bundle retention and
+  proofs now retain disposal semantics. Callable aliases preserve their identity
+  and factories; root-only adapters no longer retain opaque rendering. Next:
   more precise readiness capabilities, followed by the measured runtime work in
   `compiler/optimize.md`. `tmp/perf-rows` preserves the earlier paused step.
 - `compiler-refactor`: the old compiler's refactor, stopped on 2026-10-19. The
@@ -28,7 +29,30 @@ Last updated: 2026-10-28.
 
 ## Done
 
-- Callable-alias correctness (2026-10-28): cache each adapter as its own canonical
+- Root-adapter dependency batch (2026-10-28): only dynamic tags supply the native
+  program factory. The canonical callable adapter remains intact; one shared
+  cache preserves native-before-branding programs and avoids repeat brand checks
+  on cached calls. New production bundle checks distinguish root-only from opaque
+  tag graphs. Runtime/compiler types, 32 focused runtime checks and 72 component,
+  primitive, structure and unchanged benchmark correctness checks pass locally.
+  Against `14c1aec9`, identical source-runtime production builds:
+
+  | Fixture | Minified before -> after (B) | Gzip before -> after (B) |
+  | --- | ---: | ---: |
+  | Counter | 23,644 -> 17,213 | 8,912 -> 6,690 |
+  | Primitive inline list | 40,228 -> 39,652 | 14,678 -> 14,455 |
+  | Primitive component list | 46,245 -> 46,274 | 16,574 -> 16,603 |
+  | Composition | 35,055 -> 35,084 | 12,836 -> 12,861 |
+  | 60 static children | 134,508 -> 134,537 | 23,900 -> 23,917 |
+  | Octane | 77,907 -> 77,328 | 21,286 -> 21,090 |
+  | FlowOS | 208,619 -> 208,648 | 59,415 -> 59,438 |
+  | Request/data | 62,320 -> 61,746 | 20,531 -> 20,290 |
+
+  Full-renderer graphs pay 29 B minified for the dependency boundary. These are
+  payload measurements, not timing evidence; VM performance and the reported
+  OOM remain open. Existing cases and benchmark sources are unchanged.
+
+- Callable-alias correctness (`14c1aec9`, 2026-10-28): cache each adapter as its own canonical
   value, and unwrap it for discarded setup calls. New native checks exposed
   double wrapping: aliases compared unequal and authored root-factory overrides
   could be lost in either compiler mode. Discarded aliases also failed to run

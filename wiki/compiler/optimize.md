@@ -14,6 +14,15 @@ structure without an optional pass: stored views share their HTML/SVG site progr
 through the existing namespace-aware template emitter (`core.md`). Both optimizer
 modes keep the same namespace, capture-order, update and disposal contract.
 
+Runtime dependency boundaries also apply to both modes: callable adapters omit
+the opaque component factory dependency after branding their function, while
+dynamic tags retain it (`components.md`). This removes unused rendering capability
+without adding an authored-code proof. The shared program cache and the checks on
+cached calls are unchanged. The primitive counter saves 6,431 B minified and
+2,222 B gzip against the preceding alias-correctness batch. Four sampled graphs
+that still need the full renderer grow by 29 B minified (17–29 B gzip); VM speed
+and memory measurements remain required.
+
 ## The contract
 
 ```ts

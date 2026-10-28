@@ -150,7 +150,8 @@ export function createComponentValue(callee: unknown, props: unknown, key?: unkn
   }
   if (typeof callee === 'function') {
     const component = valueComponents.get(callee) ?? callee;
-    return createRenderValue(componentProgram(component as Component), [inputs, undefined, presentation], identity);
+    const program = componentProgram(component as Component, nativeComponentProgram);
+    return createRenderValue(program, [inputs, undefined, presentation], identity);
   }
   if (typeof callee === 'string') {
     return createRenderValue(hostProgram(callee), [inputs], identity);
@@ -170,7 +171,12 @@ export function componentValue(component: Function): (...args: unknown[]) => obj
     defineComponent(component);
     // An ordinary call receives its authored object unchanged. Copying it here
     // would invoke unused getters and change parameter/default semantics.
-    adapter = (...args: unknown[]) => createRenderValue(componentProgram(component as Component), [args[0], args]);
+    // Branding above already established the calling convention. Omit the
+    // opaque factory here so root-only adapters do not retain its renderer.
+    adapter = (...args: unknown[]) => {
+      const program = componentProgram(component as Component);
+      return createRenderValue(program, [args[0], args]);
+    };
     // `Row.name` reads the same through the adapter as through the function.
     Object.defineProperty(adapter, 'name', { value: component.name, configurable: true });
     valueFunctions.set(component, adapter);
@@ -210,16 +216,24 @@ function nodesOf(output: unknown): Node[] {
   return [node];
 }
 
-function componentProgram(component: Component): RenderProgram {
+/** Only dynamic tags supply the native factory; adapters brand their function first. */
+function componentProgram(
+  component: Component,
+  fallback?: (component: Component) => RenderProgram,
+): RenderProgram {
   let program = componentPrograms.get(component);
   if (program !== undefined) {
     return program;
   }
-  if (!compiledComponents.has(component)) {
-    program = nativeComponentProgram(component);
+
+  // A native program created before branding must remain native. Passing its
+  // factory keeps one shared cache and avoids brand checks on cached calls.
+  if (fallback && !compiledComponents.has(component)) {
+    program = fallback(component);
     componentPrograms.set(component, program);
     return program;
   }
+
   program = {
     mount(values: readonly unknown[], owner: RenderOwner): RenderEntry {
       const id = `${owner.id}/c${nextChild++}`;

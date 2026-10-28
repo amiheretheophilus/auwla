@@ -19,6 +19,7 @@ Finds components, and compiles calls to them: props, children and slots.
 | `features/props/dom.ts` | Native parameter patterns, defaults/rest, per-binding parent snapshots and prop reception |
 | `packages/runtime/src/components.ts` | Props cells, callable adapters, compiled/native tag mounting, generic host props and subtree disposal |
 | `packages/runtime/tests/components.test.ts` | Adapter identity/metadata, native argument lists, shared program caches, consumer isolation and setup disposal |
+| `packages/runtime/tests/component-bundle.test.ts` | Production tree shaking excludes opaque value/list mounting from root-only adapters and retains it for dynamic tags |
 | `tests/generator/components.test.ts` | Named/member/factory components, symbol/rest props, key order, retained state, and markup consumed in independent HTML/SVG destinations |
 
 ## General path
@@ -61,6 +62,14 @@ the raw function does not silently replace the adapter's factory. Discarded
 calls unwrap adapted aliases before invoking the compiled setup convention,
 then dispose that invocation immediately. The root and runtime tests establish
 these observations without changing the mount argument to the raw function.
+
+`componentProgram` keeps one cache for adapted calls and JSX. Only dynamic tags
+pass the native program factory; an adapter has already branded its function and
+can omit that dependency. The cache is checked before branding, preserving a
+native program created before a later adapter. Cached calls do not repeat the
+brand check or allocate a factory closure. Root-only bundles can now omit opaque
+mounting and its generic value/list renderer without altering adapter identity,
+native arguments, program identity or root-factory observations.
 
 Props are the bindings declared in the component's own parameter list, at any
 position. A name inside a parameter's type (`id` in
@@ -198,12 +207,6 @@ as their parent closures are refreshed. Cases and fixes are in
 
 ## Open questions
 
-- Root-adapter bundle retention: an authored `mount(target, App)` currently
-  receives `componentValue(App)`, retaining the generic component-rendering
-  program even for a primitive-only root. Establish canonical adapter identity,
-  ordinary callable arguments/results and root-factory registration/rebinding
-  observations before narrowing this path. Replacing only the mount argument
-  with the raw component is not yet proven to preserve those observations.
 - Which component forms does the old compiler support that are not listed here
   (`page(...)`, presentation components)? Port each with a test.
 - Extend the generated combinations with recursive trees, nested slots, native
