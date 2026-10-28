@@ -573,6 +573,14 @@ What each gap consists of:
   Old's compiler proves rows own no resources (`resourceFree`) and clears the
   whole range with no per-row work.
 - **Swap/remove** are within noise of old locally (CI: 2.1 vs 1.1 ms swap).
+- **The update-style matrix's slow update is not retention (2026-10-28).**
+  `__measureUpdateStyle` in `bench/dom/update-style-browser.ts` times one
+  variant on a fresh page and after every other variant ran, with a forced GC
+  before each sample. Module-component-mutable update 10k is 73–107 ms fresh and
+  79–149 ms afterwards in local Chrome. The module-level shared-owner registry
+  stays at about 12 entries. The main matrix shows the same gap on its own
+  (`quick.ts`, module-component update 10k: old 8.8 ms, next 31.0 ms), so the cost
+  is the general update path listed above, not a long-lived-page effect.
 
 The old compiler's shapes worth keeping:
 

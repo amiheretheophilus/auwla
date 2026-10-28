@@ -196,6 +196,7 @@ function _peek_selected() {
   return selected;
 }
 const _sharedScope = _MD.createBuildScope(true, false);
+const _effectInvocation = _MD.isEffectInvocation();
 let _sharedReady = false;
 const _sharedWrites = _MD.createSharedWrites([_sharedKey], []);
 function _completeShared(_result) {
@@ -204,7 +205,7 @@ function _completeShared(_result) {
   return _result;
 }
 function _refreshShared() {
-  if (!_sharedReady || !_sharedWrites.stale() || _sharedScope.active()) return;
+  if (_effectInvocation || !_sharedReady || !_sharedWrites.stale() || _sharedScope.active()) return;
   _sharedWrites.refreshing();
   const _sharedFrame = _sharedScope.enter();
   _sharedWrites.check();
@@ -675,7 +676,7 @@ export function BenchModuleSelectionComponent(_id, _parent, _props, _namespace, 
   _rowList.route(_peek_selected, _version_selected, _sharedKey);
   const _siteComputation = _MD.createComputation(_writes.mark, _entity);
   _siteComputation.begin();
-  let _value13 = _MD.observeMethod([() => data], [_mutated_data], data, "map", 1, _rowList)((item) => (_MD.createComponentValue(Row, { "key": item.id, "item": item })));
+  let _value13 = _MD.observeMethod([() => data], [_mutated_data], data, "map", 1, _rowList)((item) => (_MD.createComponentValue(Row, { "key": item.id, "item": item }, void 0, void 0)));
   _siteComputation.end();
   _rowList.write(_value13);
   let _seen = _dataVersion;
@@ -692,7 +693,7 @@ export function BenchModuleSelectionComponent(_id, _parent, _props, _namespace, 
     const _updateFrame = _scope.enter();
     if (_dataVersion !== _seen || _siteComputation.changed() || _rowList.changed()) {
       _siteComputation.begin();
-      const _next4 = _MD.observeMethod([() => data], [_mutated_data], data, "map", 1, _rowList)((item) => (_MD.createComponentValue(Row, { "key": item.id, "item": item })));
+      const _next4 = _MD.observeMethod([() => data], [_mutated_data], data, "map", 1, _rowList)((item) => (_MD.createComponentValue(Row, { "key": item.id, "item": item }, void 0, void 0)));
       _siteComputation.end();
       if (_next4 !== _value13 && !(_next4 !== _next4 && _value13 !== _value13)) {
         _rowList.write(_next4);

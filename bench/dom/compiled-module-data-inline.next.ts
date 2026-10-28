@@ -302,6 +302,7 @@ function _read_data() {
 }
 export { _read_data };
 const _sharedScope = _MD.createBuildScope(true, false);
+const _effectInvocation = _MD.isEffectInvocation();
 let _sharedReady = false;
 const _sharedWrites = _MD.createSharedWrites([_sharedKey], []);
 function _completeShared(_result) {
@@ -310,7 +311,7 @@ function _completeShared(_result) {
   return _result;
 }
 function _refreshShared() {
-  if (!_sharedReady || !_sharedWrites.stale() || _sharedScope.active()) return;
+  if (_effectInvocation || !_sharedReady || !_sharedWrites.stale() || _sharedScope.active()) return;
   _sharedWrites.refreshing();
   const _sharedFrame = _sharedScope.enter();
   _sharedWrites.check();

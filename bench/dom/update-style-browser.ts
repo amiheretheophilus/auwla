@@ -46,7 +46,7 @@ function validate(id: string, root: HTMLElement, operation: Operation, before: S
     return row.id !== wanted.id || row.text !== wanted.text || row.className !== wanted.className;
   })) throw new Error(`${id}/${operation}: incorrect text, order, classes or count`);
 }
-function exercise(variant: typeof variants[number], count: number, operation: Operation, timed: boolean): number {
+function exercise(variant: typeof variants[number], count: number, operation: Operation, timed: boolean, collect = false): number {
   seed = 123;
   const root = variant.create(); document.body.append(root);
   try {
@@ -56,6 +56,9 @@ function exercise(variant: typeof variants[number], count: number, operation: Op
     (rows[500]!.node as HTMLElement).click();
     const before = snapshot(root);
     if (before.some((row,index) => row.node !== rows[index]!.node || row.text !== rows[index]!.text || row.className !== (index === 500 ? 'danger' : ''))) throw new Error(variant.id + ': incorrect selection');
+    // With `--js-flags=--expose-gc`, a collection before the timed click keeps
+    // earlier garbage out of the measurement (`measureOne` only).
+    if (collect) (globalThis as unknown as { gc?: () => void }).gc?.();
     const start = timed ? performance.now() : 0;
     click(root,operation);
     const elapsed = timed ? performance.now() - start : 0;
@@ -100,5 +103,16 @@ function runAll(samples = 7): UpdateStyleRow[] {
   }
   return results;
 }
+/**
+ * One variant's timings, for isolating effects of the shared page: compare a
+ * fresh page with one where every variant already ran (`validateAll`).
+ */
+function measureOne(id: string, count: number, operation: Operation, samples = 5): number[] {
+  const variant = variants.find(entry => entry.id === id);
+  if (!variant) throw new Error('Unknown update-style variant: ' + id);
+  exercise(variant,count,operation,false);
+  return Array.from({length:samples},() => exercise(variant,count,operation,true,true));
+}
+(window as unknown as Record<string,unknown>).__measureUpdateStyle = measureOne;
 (window as unknown as Record<string,unknown>).__validateUpdateStyles = validateAll;
 (window as unknown as Record<string,unknown>).__runUpdateStyles = runAll;

@@ -625,7 +625,7 @@ export function BenchAppOwned(_id, _parent, _props, _namespace, _setupOnly) {
   _rowList.route(() => selected, () => _selectedVersion, void 0);
   const _siteComputation = _MD.createComputation(_writes.mark, _entity);
   _siteComputation.begin();
-  let _value14 = _MD.observeMethod([() => data], [_mutated_data], data, "map", 1, _rowList)((item) => (_MD.createComponentValue(Row, { "key": item.id, "item": item, "selected": _MD.trackEquals(selected, item.id, () => selected, () => _selectedVersion, _readKey2), "select": select })));
+  let _value14 = _MD.observeMethod([() => data], [_mutated_data], data, "map", 1, _rowList)((item) => (_MD.createComponentValue(Row, { "key": item.id, "item": item, "selected": _MD.trackEquals(selected, item.id, () => selected, () => _selectedVersion, _readKey2), "select": select }, void 0, void 0)));
   _siteComputation.end();
   _rowList.write(_value14);
   let _seen = _dataVersion;
@@ -649,7 +649,7 @@ export function BenchAppOwned(_id, _parent, _props, _namespace, _setupOnly) {
     const _updateFrame = _scope.enter();
     if (_dataVersion !== _seen || _siteComputation.changed() || _rowList.changed()) {
       _siteComputation.begin();
-      const _next4 = _MD.observeMethod([() => data], [_mutated_data], data, "map", 1, _rowList)((item) => (_MD.createComponentValue(Row, { "key": item.id, "item": item, "selected": _MD.trackEquals(selected, item.id, () => selected, () => _selectedVersion, _readKey2), "select": select })));
+      const _next4 = _MD.observeMethod([() => data], [_mutated_data], data, "map", 1, _rowList)((item) => (_MD.createComponentValue(Row, { "key": item.id, "item": item, "selected": _MD.trackEquals(selected, item.id, () => selected, () => _selectedVersion, _readKey2), "select": select }, void 0, void 0)));
       _siteComputation.end();
       if (_next4 !== _value14 && !(_next4 !== _next4 && _value14 !== _value14)) {
         _rowList.write(_next4);
