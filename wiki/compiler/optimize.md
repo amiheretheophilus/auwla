@@ -59,6 +59,7 @@ interface Optimization {
 
 | File | Makes faster |
 | --- | --- |
+| `called-functions.ts` (built) | Removes component functions that are only called or installed as listeners from state: no version, mutation root, tracked read or site update |
 | `primitive-values.ts` (built) | Proves component-local bindings remain primitive; writes text without a generic child slot and omits immutable mutation roots, preserving disposal and version behavior |
 | `retained-list-index.ts` (built) | Selects private row-index retention for non-primitive child sites, without changing authored expression evaluation |
 | `methods.ts` (built) | Lowers observed member calls to `observeMethod`; the runtime skips the snapshot only when the actual callee, receiver, arguments and callbacks satisfy its proof. Unknown or overridden calls retain the before/after check ("Method calls" below) |
@@ -68,9 +69,41 @@ interface Optimization {
 | `reason-routing.ts` | a write updates only the sites on its paths |
 | `static-hoist.ts` | static templates are created once |
 
+## Called functions
+
+`called-functions.ts` runs first. General planning makes every declared
+component local state, so `const run = () => { … }` received a version, a
+mutation root, `trackRead` wrappers and an update check at each listener site,
+although its value never changes. In Octane that was 20 such handlers. The pass
+removes a binding from `ComponentPlan.state`, `mutationRoots`, `trackedReads`,
+`keyedComparisons` and every site's inputs when:
+
+- it has one `const` declarator whose initializer is an arrow or an unnamed
+  function expression (a named one can reach itself by its own name);
+- the graph records no write of any kind: no reassignment, member store,
+  method call (`run.call`) or argument (`register(run)`);
+- every reference is the callee of a call (`run()`, `run?.()`; not `new`) or the
+  value of an intrinsic element's event site in a component, branch or stored
+  value. A component prop (`<Child run={run} />`), alias, property read, text,
+  attribute or `typeof` keeps it general;
+- it is no memo target, and the module has no `eval`, `with` or source flow.
+
+Then nothing can reassign the function or reach its object to edit it, so no
+output can change through it. The component compiles the binding as it compiles
+the equivalent inline `onClick={() => { … }}`, including when that leaves the
+component without local state or a write batch. The listener receives the same
+function either way. Octane's compiled app fell from 14.4 KB to 11.6 KB
+minified (3.7 to 2.9 KB gzip).
+
+`called-functions.test.ts` checks each admitted and excluded reference form,
+dynamic scope, the unchanged authored AST, and compares listeners, calls,
+recursion, branch/stored listeners and row handlers against the reference in
+both modes. The reference's wider gap for function-valued bindings is recorded
+in `state-and-derived.md`; this pass only covers bindings where both agree.
+
 ## Primitive values
 
-`primitive-values.ts` runs before retained-list indexing. Its proof is keyed by
+`primitive-values.ts` runs after called functions, before retained-list indexing. Its proof is keyed by
 resolved binding identity, never a type annotation or the binding's spelling:
 
 - The binding belongs to a compiled component, is Constant/State/Derived, and has

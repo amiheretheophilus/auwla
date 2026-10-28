@@ -549,6 +549,24 @@ callbacks before their first `await`; module body callback builders; callback
 dependencies in arbitrary factory closures. These are reference limits, not
 exceptions to the uniform rule. Do not assume the current passing set proves them.
 
+**Known reference gap: function-valued bindings (found 2026-10-28, open).** The
+reference never treats a binding initialized with a function literal
+(`Reads.functionOf`) as an input or a slot, and `deepCopy` collapses a function
+without own data to one `FUNCTION` marker. compiler-next treats such a binding as
+it treats any object, as rule 1 requires. Neither generated programs nor cases
+reach the difference yet. Probes run against the reference on 2026-10-28:
+
+| Program | Reference | compiler-next |
+| --- | --- | --- |
+| `run.calls++` in a handler, `<p>{run.calls}</p>` (arrow or function declaration) | stays `0` | `1`, `2` |
+| `const doubled = run.calls * 2` after `run.calls++` | stays `2` | `4`, `6` |
+| `let format = …; format = (n) => 'b' + n` in a handler, `<p>{format(count)}</p>` | `a1` | `b1` |
+| `const holder = { run, label: '' }`; a handler sets `holder.run.calls`, then `holder.label` | shows the label | `holder` re-derives from its mutated input, dropping the label, as the spread cases do |
+
+The reference needs fixing before these become cases; its expectations are the
+spec, so the fix waits for the user. `optimize/called-functions.ts` only removes
+functions that nothing can reassign or reach to mutate, where both agree.
+
 ### Mixed state, classes and accessors
 
 Fourteen `complex state:` cases combine module and component state with native
