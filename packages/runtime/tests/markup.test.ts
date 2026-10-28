@@ -1,57 +1,74 @@
 import { expect, it } from 'bun:test';
 import { Window } from 'happy-dom';
 import { createApplicationRuntime, runWithApplicationRuntime, runWithRenderEnvironment } from '../src/kernel';
-import { cloneTemplate, createTemplateCache } from '../src/markup';
+import { cloneTemplate, createTemplateCache, type TemplateNode } from '../src/markup';
 import type { DocumentLike } from '../src/environment';
 
 const document = new Window().document as unknown as Document;
+const SVG = 'http://www.w3.org/2000/svg';
+const HTML = 'http://www.w3.org/1999/xhtml';
 
-function build(counter: { builds: number }) {
-  return (target: DocumentLike, namespace: 'html' | 'svg') => {
-    counter.builds++;
-    const item = namespace === 'svg'
-      ? target.createElementNS('http://www.w3.org/2000/svg', 'g')
-      : target.createElement('li');
-    // Adjacent text slots stay separate nodes, as a parsed template would not keep them.
-    item.append(target.createTextNode(''), target.createTextNode(': '), target.createTextNode(''));
-    return item;
-  };
+/** Counts builds through the document's element creation. */
+function counting(target: Document) {
+  const counter = { builds: 0 };
+  const proxy = Object.create(target, {
+    createDocumentFragment: { value: () => { counter.builds++; return target.createDocumentFragment(); } },
+  }) as DocumentLike;
+  return { counter, proxy };
 }
 
+// Adjacent text slots stay separate nodes, as a parsed template would not keep them.
+const item: TemplateNode[] = [null, ['li', ['class', 'row'], '', ': ', ''], 'after'];
+
 it('builds a template once per document and namespace and clones it with separate text nodes', () => {
-  runWithApplicationRuntime(createApplicationRuntime(), () => runWithRenderEnvironment({ document: document as unknown as DocumentLike }, () => {
-    const counter = { builds: 0 };
-    const cache = createTemplateCache();
-    const first = cloneTemplate(cache, undefined, build(counter)) as Element;
-    const second = cloneTemplate(cache, 'html', build(counter)) as Element;
-    expect(counter.builds).toBe(1);
-    expect(first).not.toBe(second);
-    expect(first.childNodes).toHaveLength(3);
-    expect(first.localName).toBe('li');
-    const svg = cloneTemplate(cache, 'svg', build(counter)) as Element;
-    expect(counter.builds).toBe(2);
-    expect(svg.namespaceURI).toBe('http://www.w3.org/2000/svg');
+  runWithApplicationRuntime(createApplicationRuntime(), () => {
+    const { counter, proxy } = counting(document);
+    const cache = createTemplateCache(item);
+    runWithRenderEnvironment({ document: proxy }, () => {
+      const first = cloneTemplate(cache) as DocumentFragment;
+      const second = cloneTemplate(cache, 'html') as DocumentFragment;
+      expect(counter.builds).toBe(1);
+      expect(first).not.toBe(second);
+      expect([...first.childNodes].map((node) => node.nodeType)).toEqual([8, 1, 3]);
+      const li = first.childNodes[1] as Element;
+      expect(li.localName).toBe('li');
+      expect(li.getAttribute('class')).toBe('row');
+      expect(li.childNodes).toHaveLength(3);
+      const svg = cloneTemplate(cache, 'svg') as DocumentFragment;
+      expect(counter.builds).toBe(2);
+      expect((svg.childNodes[1] as Element).namespaceURI).toBe(SVG);
+    });
     const other = new Window().document as unknown as DocumentLike;
     runWithRenderEnvironment({ document: other }, () => {
-      const clone = cloneTemplate(cache, undefined, build(counter)) as Node;
+      const clone = cloneTemplate(cache) as Node;
       expect(clone.ownerDocument).toBe(other as unknown as Document);
     });
-    expect(counter.builds).toBe(3);
+  });
+});
+
+it('follows the destination namespace until foreignObject, and an svg tag starts SVG', () => {
+  runWithApplicationRuntime(createApplicationRuntime(), () => runWithRenderEnvironment({ document: document as unknown as DocumentLike }, () => {
+    const cache = createTemplateCache([
+      ['g', 0, ['foreignObject', 0, ['b', 0, ['svg', 0, ['circle', ['r', '1']]]]]],
+    ]);
+    for (const namespace of ['html', 'svg'] as const) {
+      const root = cloneTemplate(cache, namespace) as Element;
+      const outer = namespace === 'svg' ? SVG : HTML;
+      expect(root.namespaceURI).toBe(outer);
+      expect(root.firstElementChild!.namespaceURI).toBe(outer);
+      expect(root.querySelector('b')!.namespaceURI).toBe(HTML);
+      expect(root.querySelector('svg')!.namespaceURI).toBe(SVG);
+      expect(root.querySelector('circle')!.namespaceURI).toBe(SVG);
+      expect(root.querySelector('circle')!.getAttribute('r')).toBe('1');
+    }
   }));
 });
 
-it('leaves hydration and server documents to the general creation', () => {
+it('refuses hydration, which compiler-next does not emit yet', () => {
   runWithApplicationRuntime(createApplicationRuntime(), () => {
-    const counter = { builds: 0 };
-    const cache = createTemplateCache();
-    const hydration = {} as never;
-    runWithRenderEnvironment({ document: document as unknown as DocumentLike, hydration }, () => {
-      expect(cloneTemplate(cache, undefined, build(counter))).toBeNull();
+    const cache = createTemplateCache([['p', 0]]);
+    runWithRenderEnvironment({ document: document as unknown as DocumentLike, hydration: {} as never }, () => {
+      expect(() => cloneTemplate(cache)).toThrow('cannot hydrate');
     });
-    const server = Object.assign(Object.create(document), { materializeMarkup: () => [] }) as DocumentLike;
-    runWithRenderEnvironment({ document: server, hydration: undefined }, () => {
-      expect(cloneTemplate(cache, undefined, build(counter))).toBeNull();
-    });
-    expect(counter.builds).toBe(0);
   });
 });

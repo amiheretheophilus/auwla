@@ -32,6 +32,12 @@ export interface Template {
   /** Top-level nodes, in document order. */
   readonly roots: readonly number[];
   /**
+   * The namespace the roots were planned in: `svg` for a branch inside
+   * `<svg>`. A component or stored value planned in HTML can still follow its
+   * destination (`emit/template.ts`, `inheritedNodes`).
+   */
+  readonly namespace: 'html' | 'svg';
+  /**
    * The HTML for `materializeMarkup`, or null when the HTML parser would build a
    * different tree (`jsx.ts`, `parsesAsWritten`): then emit creates the nodes.
    */

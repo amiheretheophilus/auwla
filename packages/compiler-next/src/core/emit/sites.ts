@@ -328,16 +328,10 @@ function emitBranch(branch: ConditionalBranch, selected: string, plan: SitesPlan
     update = [statement('$$slot.write($$selected.value);', { slot, selected })];
     dispose = [statement('$$slot.dispose();', { slot })];
   } else {
-    const markup = branch.template.markup === null ? null : names.fresh('_branchMarkup');
-    const templateContext = { names, runtime, document, markup, namespace: context.namespace };
-    const slots = emitNodes(branch.template, branch.sites, templateContext);
+    const slots = emitNodes(branch.template, branch.sites, { names, runtime, document, namespace: context.namespace });
     const sites = emitSites({ ...plan, sites: branch.sites }, { ...context, ref: slots.ref });
     roots = branch.template.roots.map(slots.root);
-    const declarations = markup === null ? [] : [
-      statement('const $$markup = $$html;', { markup, html: stringLiteral(branch.template.markup!) }),
-    ];
     body = [
-      ...declarations,
       ...slots.statements,
       ...sites.mount,
     ];

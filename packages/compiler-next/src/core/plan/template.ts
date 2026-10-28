@@ -45,7 +45,7 @@ export function buildTemplate(root: JsxRoot, context: TemplateContext, ancestors
   const roots = builder.children([root], ancestors, namespace);
   const nodes = builder.nodes;
   const markup = builder.parsable ? roots.map((index) => serialize(nodes, index)).join('') : null;
-  return { template: { nodes, roots, markup }, sites: builder.sites };
+  return { template: { nodes, roots, namespace, markup }, sites: builder.sites };
 }
 
 /** Phases that compile what this slice does not (`wiki/compiler/plan.md`). */

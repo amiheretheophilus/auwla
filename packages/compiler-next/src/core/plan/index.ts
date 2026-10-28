@@ -391,7 +391,7 @@ function planComponent(
     reactive: true,
     ...program,
   };
-  const template: Template = { nodes: [{ kind: 'placeholder' }], roots: [0], markup: '<!---->' };
+  const template: Template = { nodes: [{ kind: 'placeholder' }], roots: [0], namespace: 'html', markup: '<!---->' };
   return { fn, setup: returned.setup, deferred: returned.deferred, template, sites: [site] };
 
   function returnedMarkup(expression: Expression): Markup {

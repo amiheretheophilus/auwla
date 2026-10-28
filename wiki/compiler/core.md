@@ -240,7 +240,7 @@ Features build their own pieces. Optimizations replace pieces (`optimize.md`).
 | `core/emit/row-list.test.ts` | Reference comparison for custom compiled rows consumed in both namespaces through edits, reordering and clearing |
 | `packages/runtime/src/render-value.ts` | Keeps program metadata in a WeakMap and gives each consuming slot its own anchored DOM range |
 | `packages/runtime/src/computation.ts` | Captures executed hidden version reads for opaque memos/sites, with stable keys and nested restoration |
-| `template.ts` | Calls runtime `materializeMarkup`, or creates nodes directly when HTML parsing would alter the tree |
+| `template.ts` | Hoists one description per template and emits its clone and `firstChild`/`nextSibling` navigation (`packages/runtime/src/markup.ts` builds and caches it) |
 | `names.ts` | Allocates generated names against authored names; `of(node, base)` shares distinct roles for one authored node |
 | `quote.ts` | Parses and copies generated statement snippets, filling AST holes; syntax that cannot parse at module scope uses builders directly |
 | `copy.ts` | Copies authored syntax with identity-keyed replacements, without changing analyzer nodes |
@@ -262,36 +262,38 @@ replace a node it found in that tree by identity: exception recovery
 Noncomputed property keys remain syntax; rewritten shorthand values expand when
 needed.
 
-A template whose roots are elements or static text is built the old compiler's
-way (`emitNodes` in `core/emit/template.ts`): a hoisted builder creates its
-nodes with DOM calls once per document and namespace, text slots included as
-empty text nodes, and each mount clones it (`cloneTemplate`) and reaches every
-node it needs through `firstChild` and `nextSibling`. No markup is parsed, so
-adjacent text slots stay separate without placeholders, and tables or SVG need
-no special case. Hydration claims existing nodes and a server document builds
-its own output; for those `cloneTemplate` returns null and the general creation
-below runs, emitted beside it. A template with no roots, or whose root is itself
-a text or region site, uses only the general creation.
+Every template is one hoisted description (`emitNodes` in
+`core/emit/template.ts`; format: `TemplateNode` in `runtime/src/markup.ts`):
+nested `[tag, attributes, ...children]` arrays, strings for text, `''` for a
+text slot and `null` for a region's comment. The runtime builds it with DOM
+calls once per document and namespace, and each mount clones it
+(`cloneTemplate`) and reaches every node it needs through `firstChild` and
+`nextSibling`. No markup is parsed, so adjacent text slots stay separate, and
+tables, raw-text elements, parser-sensitive nesting and SVG need no special
+case. Several roots arrive in a `DocumentFragment`. A root that is itself a
+text or region site is moved into its own fragment after navigation: its value
+can expand beyond its anchor, and the caller inserts that whole range. A server
+document builds and clones the same way. compiler-next emits no hydration yet
+(Phase 10), so `cloneTemplate` refuses a hydrating environment instead of
+creating new nodes.
 
-Stored JSX emits one mount/update/disposal program for both namespaces. It passes
-the consuming namespace to the same `emitNodes` implementation used by components;
-the template cache keeps independent HTML and SVG prototypes. General creation
-still handles server/hydration documents, parser-sensitive trees and fragment
-roots. Destination namespaces, including custom tags and `foreignObject`, do not
-require a second copy of the site's values, listeners, updates or disposal code.
-Compiled element rows use that same namespace-aware creation. `RenderValuePlan`
-therefore keeps one template, rather than planning a second SVG tree for every
-stored expression; row keys, captures and site order still come from the same
-authored syntax.
+Until 2026-10-28 each template was emitted three times: the builder, a
+`materializeMarkup` fallback for hydration and server documents, and an SVG
+copy of that fallback. Octane's compiled app fell from 41.1 KB to 19.0 KB
+minified (7.2 to 4.5 KB gzip) when they became one description.
 
-General creation: ordinary HTML uses hoisted markup and cached template cloning. Tables, raw-text
-elements, parser-sensitive nesting, SVG and unproven tags use direct creation.
-This fallback preserves the authored tree and SVG/foreignObject namespaces;
-template eligibility is an optimization, not a restriction on accepted tags.
-Text expressions replace comment placeholders so adjacent values retain separate
-nodes. Empty or multi-root fragments return a `DocumentFragment`.
-Root value slots use movable fragments too: a stored value can expand beyond its
-text anchor. A text site that the syntax does not prove primitive creates its
+Namespaces are the planner's rule, applied again by the runtime builder
+(`buildNode`): a template starts in the namespace it was planned in
+(`Template.namespace`: `svg` for a branch inside `<svg>`), or in the consuming
+slot's namespace when an element follows the destination (`inheritedNodes`);
+an `svg` tag starts SVG and `foreignObject` restarts HTML below itself.
+Stored JSX emits one mount/update/disposal program for both namespaces and
+passes the consuming namespace to the same `emitNodes` used by components; the
+template cache keeps independent HTML and SVG prototypes. Compiled element rows
+use the same creation. `RenderValuePlan` therefore keeps one template; row keys,
+captures and site order still come from the same authored syntax.
+`Template.markup` is no longer emitted; it records whether the HTML parser
+would keep the tree, for hydration in Phase 10. A text site that the syntax does not prove primitive creates its
 value slot on the first value that is an object (stored JSX, an array). Until
 then it writes text directly, which is what a new slot writes for any other
 value; once created, the slot stays, and after disposal the site holds

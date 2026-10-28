@@ -211,14 +211,12 @@ function emitRow(
   finish: (emitted: ReturnType<typeof emitSites>, root: string) => Expression,
 ): Statement[] {
   const { names, runtime } = context;
-  const markup = shape.markup === null ? null : names.fresh('_rowMarkup');
   const slots = emitNodes(shape, sites, {
-    names, runtime, document: context.document, markup, namespace: context.namespace,
+    names, runtime, document: context.document, namespace: context.namespace,
   });
   const emitted = emitSites({ sites, siteInputs: new Map(), dynamicSites: new Set() },
     { ...context, ref: slots.ref, rows: true, once: undefined });
   return [
-    ...(markup === null ? [] : [statement('const $$markup = $$html;', { markup, html: stringLiteral(shape.markup!) })]),
     ...slots.statements,
     ...emitted.mount,
     b.ReturnStatement({ argument: finish(emitted, slots.root(shape.roots[0]!)) }),

@@ -3,7 +3,7 @@ import { b } from 'yuku-ast';
 import type { Expression, Node, Statement } from 'yuku-parser';
 import type { RenderValuePlan, Site } from '../plan/model';
 import type { Names } from './names';
-import { expression, statement, stringLiteral } from './quote';
+import { expression, statement } from './quote';
 import { emitNodes } from './template';
 import { emitSites } from './sites';
 
@@ -22,8 +22,7 @@ export function emitRenderValue(plan: RenderValuePlan, names: Names, runtime: st
   // already handles inherited SVG, foreignObject, and per-namespace cloning;
   // only node creation differs, not the site's updates or disposal program.
   const shape = plan.template;
-  const markup = shape.markup === null ? null : names.fresh('_valueMarkup');
-  const slots = emitNodes(shape, plan.sites, { names, runtime, document, markup, namespace });
+  const slots = emitNodes(shape, plan.sites, { names, runtime, document, namespace });
   const sites = emitSites(
     { sites: plan.sites, siteInputs: new Map(), dynamicSites: new Set() },
     {
@@ -53,10 +52,6 @@ export function emitRenderValue(plan: RenderValuePlan, names: Names, runtime: st
     statement('const $$entity = $$owner.entity;', { entity, owner }),
     statement('const $$batch = $$owner.batch;', { batch, owner }),
     statement('const $$namespace = $$owner.namespace;', { namespace, owner }),
-    ...(markup === null ? [] : [statement('const $$markup = $$html;', {
-      markup,
-      html: stringLiteral(shape.markup!),
-    })]),
     ...slots.statements,
     ...sites.mount,
     b.ReturnStatement({ argument: entry }),

@@ -102,14 +102,7 @@ export function emitDom(plan: ModulePlan, options: CompileModulesOptions): Node 
   // function first, before finishCopy seals the parent's emitted tree.
   const components = [...plan.components.values()].sort((left, right) => right.fn.start - left.fn.start);
   for (const component of components) {
-    const markup = component.template.markup === null ? null : names.fresh('_markup');
-    if (markup !== null) {
-      hoisted.push(statement('const $$markup = $$html;', {
-        markup,
-        html: stringLiteral(component.template.markup!),
-      }));
-    }
-    let emitted = emitComponent(component, names, runtime, markup, replacements, rowComponents, plan.refs, plan.effects.groups,
+    let emitted = emitComponent(component, names, runtime, replacements, rowComponents, plan.refs, plan.effects.groups,
       plan.effects.calls.some((call) => call.owner === component.fn), data, plan.sourceFlow !== undefined, {
         storage: sourceReadinessStorage(plan, component.fn, names),
         blocked: sourceFlow.blockedSteps,
@@ -163,7 +156,6 @@ function emitComponent(
   plan: ComponentPlan,
   names: Names,
   runtime: string,
-  markup: string | null,
   external: ReadonlyMap<Node, Node>,
   rowComponents: RowComponents,
   refs: ModulePlan['refs'],
@@ -337,8 +329,7 @@ function emitComponent(
     ...(batch === null ? [] : [statement('$$batch.beginMount();', { batch })]),
     statement('const $$document = $$runtime.getActiveEnvironment().document;', { document, runtime }),
   );
-  // Placeholders keep neighbouring values as distinct text nodes after parsing.
-  const slots = emitNodes(plan.template, plan.sites, { names, runtime, document, markup, namespace });
+  const slots = emitNodes(plan.template, plan.sites, { names, runtime, document, namespace });
   body.push(...slots.statements);
 
   const sites = emitSites(plan, {
