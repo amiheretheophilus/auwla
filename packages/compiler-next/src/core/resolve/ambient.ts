@@ -11,7 +11,9 @@
  * `$routed` and `$snapshot` are declared there too; they arrive with their own
  * phases (`wiki/compiler/plan.md`).
  */
+import { is } from 'yuku-ast';
 import type { Module } from 'yuku-analyzer';
+import type { Node } from 'yuku-parser';
 
 const AMBIENT_DATA = new Set(['$fetch', '$read', '$track', '$forms']);
 
@@ -41,4 +43,14 @@ export function withAmbientImports(module: Module, source: string): string | nul
   }
 
   return `${source}\nimport { ${names.join(', ')} } from '@memoized-dom/data';\n`;
+}
+
+/**
+ * The ambient lifecycle call `node` makes, recognized by binding: a local
+ * `$effect` is an ordinary function (`effects.md`).
+ */
+export function lifecycleKind(module: Module, node: Node): '$effect' | '$cleanup' | null {
+  if (!is.CallExpression(node) || !is.Identifier(node.callee)) return null;
+  if (node.callee.name !== '$effect' && node.callee.name !== '$cleanup') return null;
+  return module.referenceOf(node.callee)?.binding == null ? node.callee.name : null;
 }

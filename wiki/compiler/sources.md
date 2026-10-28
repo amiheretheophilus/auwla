@@ -20,6 +20,7 @@ All compiler paths below are under `packages/compiler-next/src/`.
 | `features/sources/plan.test.ts` | Request/settlement dependencies, delayed seed paths, immutable syntax and absence of generated exception wrappers |
 | `features/sources/flow-plan.ts` | Readiness along authored control flow: payload reads, guarded sites, lazy branches, patterns, `Group`/`suspend` elements, body builders and callback statements |
 | `features/sources/flow-dom.ts` | Emits that flow on fresh syntax: readiness inputs that keep the handle, builder steps, branch choices and lexical presentation |
+| `features/sources/reach.ts`, `reach.test.ts` | Which values can hold a handle or a pending marker, over the whole graph; readiness is emitted only for those ("Where readiness is emitted") |
 | `features/sources/actions.ts`, `actions.test.ts` | The non-GET contract: a `$fetch` action (or a facade around one) reached from setup or module scope is a compile error; callbacks are not calls |
 | `core/graph/model.ts`, `index.ts`, `rules.ts` | Readiness edges, separate from ordinary reactive dependencies |
 
@@ -337,6 +338,57 @@ request cancellation through `$track` is still separate, unfinished work.
 
 - A new kind of source: one recognizer in `classify.ts`. Readiness follows from
   the graph and needs no new code.
+
+## Where readiness is emitted
+
+Every readiness helper is the identity for a value that is neither a source
+handle nor a pending marker (`WaitingSourceInputs`): `readSourceValue` returns
+it, `whenSourceInputs` ignores it as an input, `presentSourceValue` returns it.
+Until 2026-10-28 any module of a graph importing `@memoized-dom/data` wrapped
+every read, guard and JSX child, so FlowOS emitted 439 `readSourceValue` and 243
+`whenSourceInputs` calls. `features/sources/reach.ts` proves which values can
+hold one, and readiness is emitted only for those. FlowOS keeps 82 and 52.
+
+The proof is one fixpoint over the whole graph with facts that only grow:
+bindings that may hold one, functions that may return one, functions whose run
+may wait, and two flags for unknown code. A binding may hold one when:
+
+- its initializer or an assigned value is a data call other than `$track`, a
+  call of a graph function that may return one, or an alias of a binding that
+  holds one;
+- its initializer is a guarded root that reads such a binding or runs a function
+  that waits (the guard returns the marker);
+- a statement that builds it may wait (`BodyBuilder.waits`): it has a readiness cell;
+- it is a parameter, and some known call or JSX attribute passes such a value.
+  A component's props object also carries attribute values as they are, so a
+  path through props, an alias of props or a helper given props is followed;
+- it is an exported function's parameter, an import from outside the graph, or
+  a captured default (assumed);
+- it comes from unknown code (a host call result, a callback parameter, a payload
+  property, a global, `this`) and the unknown-code flag is set.
+
+The unknown-code flag is set by a dynamic import, an import from outside the
+graph other than `@memoized-dom/*`, or a raw handle or marker reaching unknown
+code. An identifier read in an ordinary position is unwrapped to its payload, so
+passing it hands unknown code the payload. Raw values escape through: a
+non-identifier argument of an unknown call, an array or object element, a member
+assignment, `throw`, `yield`, a tagged template, an unknown component's
+attributes, a props object passed on, an exported binding that holds one, or the
+return of a function unknown code calls.
+
+A function's run may wait when it reads such a binding or runs another that may
+wait. A second flag records whether unknown code can run such a function. Host
+calls, getters, coercion and iteration then may wait too. Native listeners,
+`ref` callbacks and `$effect`/`$cleanup` callbacks run from the runtime outside
+readiness computations, also when passed through a component's prop. They do
+not set this flag. (Assumption: authored code does not dispatch a DOM event
+synchronously inside a render expression.)
+
+Removing an input never changes waiting, because a value that cannot wait
+contributes nothing. A guard is removed only when it can neither return a marker
+nor collect waiting from what it runs. Retained declarations
+(`retainSourceValue`) keep every input: that list is the request's identity.
+`eval` or `with` anywhere in the graph keeps everything.
 
 ## Cases to test
 

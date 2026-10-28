@@ -4,14 +4,9 @@ import type { Expression, Node } from 'yuku-parser';
 import type { SemanticGraph } from '../../core/graph';
 import type { InputQueries } from '../../core/graph/inputs';
 import type { LifecycleCallPlan, EffectGroupPlan } from '../../core/plan/model';
-import { runnerOf, type Binding, type Module, type ResolvedModule } from '../../core/resolve';
+import { runnerOf, type Binding, type ResolvedModule } from '../../core/resolve';
 import { functionValue, type FunctionNode } from '../../core/resolve/functions';
-
-export function lifecycleKind(module: Module, node: Node): '$effect' | '$cleanup' | null {
-  if (!is.CallExpression(node) || !is.Identifier(node.callee)) return null;
-  if (node.callee.name !== '$effect' && node.callee.name !== '$cleanup') return null;
-  return module.referenceOf(node.callee)?.binding == null ? node.callee.name : null;
-}
+import { lifecycleKind } from '../../core/resolve/ambient';
 
 export function planEffects(graph: SemanticGraph, queries: InputQueries, entry: ResolvedModule, components: ReadonlySet<Node>) {
   const module = entry.module;

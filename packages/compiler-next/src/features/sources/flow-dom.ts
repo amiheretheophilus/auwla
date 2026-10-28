@@ -248,7 +248,7 @@ export function emitSourceFlow(
   for (const container of module.findAll('JSXExpressionContainer')) {
     const parent = module.parentOf(container);
 
-    if (is.JSXEmptyExpression(container.expression) || is.JSXAttribute(parent) || is.Function(container.expression)) {
+    if (!flow.presented.has(container.expression) || is.JSXAttribute(parent)) {
       continue;
     }
 

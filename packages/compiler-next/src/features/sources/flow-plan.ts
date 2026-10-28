@@ -9,6 +9,7 @@ import { intrinsicTag, unwrap } from '../../core/plan/jsx';
 import { isParameter, runnerOf, type Module, type ResolvedModule } from '../../core/resolve';
 import { functionValue } from '../../core/resolve/functions';
 import { dataApi, dataExport, SourceQueries } from './classify';
+import { sourceReach, type SourceReach } from './reach';
 
 const EMPTY_INPUTS: SourceInputPlan = { reads: [], branches: [] };
 
@@ -30,8 +31,10 @@ export function planSourceFlow(
   }
 
   const module = entry.module;
+  const reach = sourceReach(graph, components);
   const payloadReads: Node[] = [];
   const memberObjects: Expression[] = [];
+  const presented = new Set<Node>();
   const guards = new Map<Expression, SourceInputPlan>();
   const retained = new Map<Expression, SourceInputPlan>();
   const patterns = new Map<VariableDeclarator, SourceInputPlan>();
@@ -58,7 +61,7 @@ export function planSourceFlow(
     }
   }
 
-  const inputPlan = (root: Node): SourceInputPlan => planInputs(module, root, queries, sources);
+  const inputPlan = (root: Node): SourceInputPlan => planInputs(module, root, queries, sources, reach);
   const elements = new Map<Extract<Node, { type: 'JSXElement' }>, SourceInputPlan>();
   const builders = new Map<Node, SourceBuilderPlan>();
   const callbackStatements = new Map<Statement, SourceInputPlan>();
@@ -83,7 +86,8 @@ export function planSourceFlow(
       for (const step of steps) {
         const expression = is.VariableDeclarator(step) ? step.init : step;
 
-        if (expression === null || containsSuspension(expression)) {
+        // A step that cannot wait never makes its values wait (`reach.ts`).
+        if (expression === null || containsSuspension(expression) || !reach.waits(module, expression)) {
           continue;
         }
 
@@ -124,8 +128,11 @@ export function planSourceFlow(
       }
     }
   }
+  // A guard is the identity when nothing it evaluates can be a handle, a
+  // pending marker or a function that reports waiting (`reach.ts`).
   const guard = (root: Expression): void => {
-    if (is.Function(unwrap(root)) || is.JSXElement(root) || is.JSXFragment(root) || containsSuspension(root)) {
+    if (is.Function(unwrap(root)) || is.JSXElement(root) || is.JSXFragment(root) || containsSuspension(root)
+      || !reach.guards(module, root)) {
       return;
     }
 
@@ -147,12 +154,17 @@ export function planSourceFlow(
     }
 
     if (source !== null && owner !== null && components.has(owner) && !is.Identifier(unwrap(declaration.init))) {
-      retained.set(declaration.init, inputPlan(declaration.init));
+      // A retained source compares every input to decide whether its request
+      // changed, so this list is its identity, not only its readiness.
+      retained.set(declaration.init, planInputs(module, declaration.init, queries, sources, null));
     }
 
     if (!is.Identifier(declaration.id)) {
-      patterns.set(declaration, inputPlan(declaration.init));
-      guard(declaration.init);
+      if (reach.guards(module, declaration.init)) {
+        patterns.set(declaration, inputPlan(declaration.init));
+        guard(declaration.init);
+      }
+
       continue;
     }
 
@@ -202,7 +214,7 @@ export function planSourceFlow(
 
       const inputs = inputPlan(statement);
 
-      if (inputs.reads.length > 0 || inputs.branches.length > 0) {
+      if (hasInputs(inputs)) {
         callbackStatements.set(statement as Statement, inputs);
       }
     }
@@ -242,9 +254,13 @@ export function planSourceFlow(
       }
 
       if (forwarded && is.MemberExpression(container.expression)) {
-        guards.set(container.expression, inputPlan(container.expression.object));
+        if (reach.guards(module, container.expression)) {
+          guards.set(container.expression, inputPlan(container.expression.object));
+        }
         continue;
       }
+    } else if (!is.Function(container.expression) && presents(module, container.expression, reach, groups)) {
+      presented.add(container.expression);
     }
 
     guard(container.expression);
@@ -261,7 +277,8 @@ export function planSourceFlow(
         && is.JSXExpressionContainer(attribute.value));
     });
 
-    if (intrinsic === null || dynamicAttribute) {
+    // The element's guard also collects waiting reported by its attributes.
+    if ((intrinsic === null || dynamicAttribute) && reach.waits(module, element.openingElement)) {
       const parts = intrinsic === null ? [inputPlan(element.openingElement.name)] : [];
 
       for (const attribute of element.openingElement.attributes) {
@@ -289,6 +306,11 @@ export function planSourceFlow(
       continue;
     }
 
+    // `readSourceValue` returns any other value unchanged.
+    if (!reach.holds(reference.binding)) {
+      continue;
+    }
+
     const use = sources.readUse({ reference });
 
     if (use.handle || forwardsValue(module, reference.node, components, sources)) {
@@ -299,12 +321,12 @@ export function planSourceFlow(
   }
 
   for (const member of module.findAll('MemberExpression')) {
-    if (!is.Super(member.object)) {
+    if (!is.Super(member.object) && reach.value(module, member.object)) {
       memberObjects.push(member.object);
     }
   }
 
-  return { payloadReads, memberObjects, guards, patterns, groups, calls, moduleSources, retained, suspends, builders, bindingBuilders, callbackStatements, elements };
+  return { payloadReads, memberObjects, presented, guards, patterns, groups, calls, moduleSources, retained, suspends, builders, bindingBuilders, callbackStatements, elements };
 }
 
 function suspensionInputs(module: Module, root: Node, queries: InputQueries): Node[] {
@@ -400,7 +422,17 @@ function containsSuspension(root: Node): boolean {
   return suspends;
 }
 
-function planInputs(module: Module, root: Node, queries: InputQueries, sources: SourceQueries): SourceInputPlan {
+/**
+ * Inputs a guard lists. With `reach`, a value that can never wait is not one;
+ * without it, every read is listed.
+ */
+function planInputs(
+  module: Module,
+  root: Node,
+  queries: InputQueries,
+  sources: SourceQueries,
+  reach: SourceReach | null,
+): SourceInputPlan {
   const branches: Node[] = [];
   const views: Node[] = [];
 
@@ -440,7 +472,7 @@ function planInputs(module: Module, root: Node, queries: InputQueries, sources: 
     const declaredWithin = binding.declarations.some((node) => node.start >= root.start && node.end <= root.end);
     const insideExcluded = excluded.some((node) => position.start >= node.start && position.end <= node.end);
 
-    if (!inScope || declaredWithin || insideExcluded) {
+    if (!inScope || declaredWithin || insideExcluded || (reach !== null && !reach.reaches(binding))) {
       continue;
     }
 
@@ -448,8 +480,9 @@ function planInputs(module: Module, root: Node, queries: InputQueries, sources: 
     const path = read.path?.filter((key): key is string => key !== null) ?? [];
 
     // Parameter paths can contain a resource even when the parameter itself
-    // is a plain props object. Data descriptors avoid speculative getters.
-    const needsPath = path.length > 0 && isParameter(binding);
+    // is a plain props object, and so can an alias of props or a helper's
+    // parameter given props (`reach.ts`). Data descriptors avoid speculative getters.
+    const needsPath = path.length > 0 && (isParameter(binding) || (reach !== null && reach.contains(binding)));
     const signature = JSON.stringify([!use.payload, needsPath ? path : []]);
     const uses = seen.get(binding) ?? new Set<string>();
 
@@ -462,38 +495,66 @@ function planInputs(module: Module, root: Node, queries: InputQueries, sources: 
     seen.set(binding, uses);
   }
 
-  return {
-    reads,
-    branches: branches.map((branch): SourceBranchInputs => {
-      if (is.SwitchStatement(branch)) {
-        return {
-          kind: 'switch',
-          test: branch.discriminant,
-          testInputs: planInputs(module, branch.discriminant, queries, sources),
-          cases: branch.cases.map((entry) => ({
-            test: entry.test,
-            testInputs: entry.test === null ? EMPTY_INPUTS : planInputs(module, entry.test, queries, sources),
-            body: planInputs(module, entry, queries, sources),
-            ends: endsCase(entry.consequent),
-          })),
-        };
-      }
+  const inputs = (part: Node): SourceInputPlan => planInputs(module, part, queries, sources, reach);
 
-      const logical = is.LogicalExpression(branch);
-      const test = logical ? branch.left : (branch as Extract<Node, { type: 'IfStatement' | 'ConditionalExpression' }>).test;
-      const consequent = logical ? branch.right : (branch as Extract<Node, { type: 'IfStatement' | 'ConditionalExpression' }>).consequent;
-      const alternate = logical ? null : (branch as Extract<Node, { type: 'IfStatement' | 'ConditionalExpression' }>).alternate;
-
+  // A branch without inputs on either side selects nothing; its test stays native.
+  const selections = branches.map((branch): SourceBranchInputs => {
+    if (is.SwitchStatement(branch)) {
       return {
-        kind: 'branch',
-        operator: logical ? branch.operator : '?',
-        test,
-        testInputs: planInputs(module, test, queries, sources),
-        consequent: planInputs(module, consequent, queries, sources),
-        alternate: alternate === null ? EMPTY_INPUTS : planInputs(module, alternate, queries, sources),
+        kind: 'switch',
+        test: branch.discriminant,
+        testInputs: inputs(branch.discriminant),
+        cases: branch.cases.map((entry) => ({
+          test: entry.test,
+          testInputs: entry.test === null ? EMPTY_INPUTS : inputs(entry.test),
+          body: inputs(entry),
+          ends: endsCase(entry.consequent),
+        })),
       };
-    }),
-  };
+    }
+
+    const logical = is.LogicalExpression(branch);
+    const test = logical ? branch.left : (branch as Extract<Node, { type: 'IfStatement' | 'ConditionalExpression' }>).test;
+    const consequent = logical ? branch.right : (branch as Extract<Node, { type: 'IfStatement' | 'ConditionalExpression' }>).consequent;
+    const alternate = logical ? null : (branch as Extract<Node, { type: 'IfStatement' | 'ConditionalExpression' }>).alternate;
+
+    return {
+      kind: 'branch',
+      operator: logical ? branch.operator : '?',
+      test,
+      testInputs: inputs(test),
+      consequent: inputs(consequent),
+      alternate: alternate === null ? EMPTY_INPUTS : inputs(alternate),
+    };
+  });
+
+  return { reads, branches: reach === null ? selections : selections.filter(selects) };
+}
+
+function hasInputs(plan: SourceInputPlan): boolean {
+  return plan.reads.length > 0 || plan.branches.length > 0;
+}
+
+function selects(branch: SourceBranchInputs): boolean {
+  if (branch.kind === 'switch') {
+    return hasInputs(branch.testInputs) || branch.cases.some((entry) => hasInputs(entry.testInputs) || hasInputs(entry.body));
+  }
+
+  return hasInputs(branch.testInputs) || hasInputs(branch.consequent) || hasInputs(branch.alternate);
+}
+
+/**
+ * A JSX child is presented through its boundary when its value may be a
+ * pending marker. Suspended regions and groups keep their presentation.
+ */
+function presents(module: Module, child: Expression, reach: SourceReach, groups: readonly Node[]): boolean {
+  const suspends = findAll(child, 'JSXElement').some((element) => {
+    return groups.includes(element) || element.openingElement.attributes.some((attribute) => {
+      return is.JSXAttribute(attribute) && is.JSXIdentifier(attribute.name) && attribute.name.name === 'suspend';
+    });
+  });
+
+  return suspends || reach.guards(module, child) || reach.waits(module, child);
 }
 
 function endsCase(statements: readonly Node[]): boolean {

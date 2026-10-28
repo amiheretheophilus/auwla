@@ -2340,3 +2340,88 @@ behaves('a snapshot written before its source loads keeps the write', {
     expect(container.querySelector('p')?.textContent).toBe(['loading', 'clicked', 'clicked'][observation]);
   },
 });
+
+// Where readiness is emitted (sources.md): values that can hold a handle or a
+// pending marker keep their guards, including after one reaches unknown code.
+
+behaves('readiness reach: a source stored in an array waits at a callback parameter', {
+  source: `
+    import { $read, Group } from '@memoized-dom/data';
+    export function App() {
+      const users = [$read(defer('user'))];
+      const names = users.map((user) => user.name);
+      return <Group pending={() => <i>loading</i>}><p>{names.join(',')}</p></Group>;
+    }`,
+  steps: [{ resolve: 'user', value: { name: 'Ada' } }],
+  check(container, observation) {
+    expect(container.querySelector('p')?.textContent).toBe(['loading', 'Ada'][observation]);
+  },
+});
+
+behaves('readiness reach: a source returned to unknown code waits where it is read', {
+  source: `
+    import { $read, Group } from '@memoized-dom/data';
+    export function App() {
+      const user = [0].map(() => $read(defer('user')))[0];
+      return <Group pending={() => <i>loading</i>}><p>{user.name}</p></Group>;
+    }`,
+  steps: [{ resolve: 'user', value: { name: 'Ada' } }],
+  check(container, observation) {
+    expect(container.querySelector('p')?.textContent).toBe(['loading', 'Ada'][observation]);
+  },
+});
+
+behaves('readiness reach: a source reached through an alias of props waits', {
+  source: `
+    import { $read, Group } from '@memoized-dom/data';
+    function Name(props) {
+      const own = props;
+      return <p>{own.user.name}</p>;
+    }
+    export function App() {
+      const user = $read(defer('user'));
+      return <Group pending={() => <i>loading</i>}><Name user={user} /></Group>;
+    }`,
+  steps: [{ resolve: 'user', value: { name: 'Ada' } }],
+  check(container, observation) {
+    expect(container.querySelector('p')?.textContent).toBe(['loading', 'Ada'][observation]);
+  },
+});
+
+behaves('readiness reach: props handed to a helper keep their source', {
+  source: `
+    import { $read, Group } from '@memoized-dom/data';
+    function nameOf(values) {
+      return values.user.name;
+    }
+    function Name(props) {
+      return <p>{nameOf(props)}</p>;
+    }
+    export function App() {
+      const user = $read(defer('user'));
+      return <Group pending={() => <i>loading</i>}><Name user={user} /></Group>;
+    }`,
+  steps: [{ resolve: 'user', value: { name: 'Ada' } }],
+  check(container, observation) {
+    expect(container.querySelector('p')?.textContent).toBe(['loading', 'Ada'][observation]);
+  },
+});
+
+behaves('readiness reach: a counter beside a source updates while the source loads', {
+  source: `
+    import { $read, Group } from '@memoized-dom/data';
+    export function App() {
+      const user = $read(defer('user'));
+      let count = 0;
+      return <Group pending={() => <i>loading</i>}>
+        <b>{count}</b>
+        <p>{user.name}</p>
+        <button onClick={(event) => { count += event.detail >= 0 ? 1 : 0; }}>add</button>
+      </Group>;
+    }`,
+  steps: [{ click: 'button' }, { resolve: 'user', value: { name: 'Ada' } }],
+  check(container, observation) {
+    // The group keeps ready siblings mounted; only the waiting site is pending.
+    expect(container.textContent).toBe(['0loadingadd', '1loadingadd', '1Adaadd'][observation]!);
+  },
+});

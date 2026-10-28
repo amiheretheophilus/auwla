@@ -378,6 +378,8 @@ export interface SourceFlowPlan {
   readonly retained: ReadonlyMap<Expression, SourceInputPlan>;
   readonly payloadReads: readonly Node[];
   readonly memberObjects: readonly Expression[];
+  /** JSX children whose value may be a pending marker, presented through their boundary. */
+  readonly presented: ReadonlySet<Node>;
   readonly guards: ReadonlyMap<Expression, SourceInputPlan>;
   readonly patterns: ReadonlyMap<VariableDeclarator, SourceInputPlan>;
   readonly groups: readonly Extract<Node, { type: 'JSXElement' }>[];
