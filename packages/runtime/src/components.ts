@@ -174,6 +174,9 @@ export function componentValue(component: Function): (...args: unknown[]) => obj
     // `Row.name` reads the same through the adapter as through the function.
     Object.defineProperty(adapter, 'name', { value: component.name, configurable: true });
     valueFunctions.set(component, adapter);
+    // Aliases can already hold this adapter. Re-reading one must preserve its
+    // identity, arguments and root factory, rather than wrapping it again.
+    valueFunctions.set(adapter, adapter);
     valueComponents.set(adapter, component);
     const root = rootFactoryStore().get(component);
     if (root !== undefined) {
@@ -187,9 +190,10 @@ export function componentValue(component: Function): (...args: unknown[]) => obj
 
 /** A discarded native call runs setup without mounting its returned markup. */
 export function componentSetup(component: Component): (...args: unknown[]) => void {
+  const callable = (valueComponents.get(component) ?? component) as Component;
   return (...args: unknown[]) => {
     const id = `mmd:setup:${nextChild++}`;
-    component(id, null, createPropsCell(args[0], args), 'html', true);
+    callable(id, null, createPropsCell(args[0], args), 'html', true);
     unregisterSubtree(id);
   };
 }

@@ -28,6 +28,17 @@ Last updated: 2026-10-28.
 
 ## Done
 
+- Callable-alias correctness (2026-10-28): cache each adapter as its own canonical
+  value, and unwrap it for discarded setup calls. New native checks exposed
+  double wrapping: aliases compared unequal and authored root-factory overrides
+  could be lost in either compiler mode. Discarded aliases also failed to run
+  their original setup. The reference now gives known discarded component calls
+  separate setup slots and immediate cleanup when invoked from handlers;
+  assertions remain unchanged. Runtime source types (77 files), compiler types
+  (162 files), 30 focused runtime checks and 46 component/structure checks pass.
+  Existing benchmark edits are preserved. Root-adapter retention is the next
+  separate batch; this correctness fix alone adds 12 B to sampled bundles.
+
 - Primitive-value validation (2026-10-28): `ec1f45b6` is pushed to
   `origin/compiler-rewrite` and every job passes in
   [CI 40656699839](https://github.com/amiheretheophilus/auwla/actions/runs/40656699839):

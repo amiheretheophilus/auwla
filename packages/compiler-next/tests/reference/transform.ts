@@ -101,7 +101,7 @@ const RUNTIME_EXPORTS = [
   '$h', 'Fragment as $Fragment', '$enter', '$assignRef', '$moduleEffect', '$ownedEffect', '$moduleMemo',
   '$when', '$value', '$chain', '$waiting', '$sourceState', '$branch', '$switch', '$path', '$ready',
   '$captureRead', '$closureCell', '$closureRead',
-  '$privateTarget',
+  '$privateTarget', '$setup',
 ];
 
 // ---------------------------------------------------------------------------
@@ -127,11 +127,12 @@ function withAmbientDataImports(source: string, path: string): string {
 }
 
 export function toReference(source: string, path: string, runtimeUrl: string): string {
-  const module = analyze(withAmbientDataImports(prepareJsx(source), path), { path });
+  let module = analyze(withAmbientDataImports(prepareJsx(source), path), { path });
   if (module.diagnostics.length > 0) {
     const messages = module.diagnostics.map((diagnostic) => diagnostic.message).join('; ');
     throw new Error(`reference: ${path} does not parse: ${messages}`);
   }
+  module = prepareDiscardedCalls(module, path);
 
   const readCalls = module.findAll('CallExpression').filter((call) => isDataCall(module, call, '$read'));
   const rawUses = sourceUses(module);
@@ -153,6 +154,50 @@ export function toReference(source: string, path: string, runtimeUrl: string): s
 
   const header = `import { ${RUNTIME_EXPORTS.join(', ')} } from ${JSON.stringify(runtimeUrl)};\n`;
   return lowerJsxAndTypes(header + generate(module.ast).code);
+}
+
+/** Discarded component calls need their own setup slots, including in handlers. */
+function prepareDiscardedCalls(module: Module, path: string): Module {
+  const components = new Set(findComponents(module));
+  const reads = new Reads(module);
+
+  const isComponent = (binding: Binding | null | undefined, visited = new Set<Binding>()): boolean => {
+    if (!binding || visited.has(binding) || binding.references.some((use) => use.isWrite)) {
+      return false;
+    }
+    visited.add(binding);
+
+    const fn = reads.functionOf(binding);
+    if (fn !== undefined) {
+      return components.has(fn);
+    }
+
+    const name = binding.declarations[0];
+    const declaration = name && module.parentOf(name);
+    if (is.VariableDeclarator(declaration) && declaration.id === name && is.Identifier(declaration.init)) {
+      return isComponent(module.referenceOf(declaration.init)?.binding, visited);
+    }
+    return false;
+  };
+
+  let changed = false;
+  module.walk({
+    ExpressionStatement: (node) => {
+      const call = node.expression;
+      if (!is.CallExpression(call) || !is.Identifier(call.callee)) {
+        return;
+      }
+      if (!isComponent(module.referenceOf(call.callee)?.binding)) {
+        return;
+      }
+
+      // Re-analyze after introducing the thunk, so dependency and closure
+      // queries see its real invocation boundary rather than a stale snapshot.
+      node.expression = runtimeCall('$setup', [thunk(call)]);
+      changed = true;
+    },
+  });
+  return changed ? analyze(generate(module.ast).code, { path }) : module;
 }
 
 /**

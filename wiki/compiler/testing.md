@@ -101,6 +101,14 @@ the 19 that currently fail on the old compiler, must pass on the new compiler.
 The test reference can also contain bugs: when it disagrees with JavaScript or an
 agreed rule, fix the reference rather than copying its mistake into the compiler.
 
+Discarded calls to local components and stable identifier aliases use an isolated
+reference setup instance, including calls from handlers. They run once and
+dispose their cleanup immediately, without mounting markup. The new native and
+comparison assertions in `features/components/root.test.ts` retain canonical
+alias identity, authored root-factory overrides and independent setup lifetimes
+(`components.md`). The initial handler comparison exposed the oracle's missing
+setup context; its expectations were preserved.
+
 The memo slice adds six comparisons in `cases/state-and-derived.memos.test.ts` and direct native
 execution checks in `src/features/derived/dom.test.ts`. Shared-builder cases caught
 a feedback loop in the reference: co-written outputs must be internal to the

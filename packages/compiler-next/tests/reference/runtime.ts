@@ -714,6 +714,22 @@ export function $enter(): Instance {
   return rendering;
 }
 
+/** A discarded call runs setup once, with isolated slots and immediate cleanup. */
+export function $setup(call: () => unknown): void {
+  const instance = new Instance();
+  const outer = rendering;
+  rendering = instance;
+  const leaveSourceOwner = enterSourceOwner(instance.sources);
+
+  instance.beginRender();
+  call();
+  instance.finishSetup();
+
+  leaveSourceOwner();
+  rendering = outer;
+  instance.unmount();
+}
+
 // ---------------------------------------------------------------------------
 // Module effects: `$effect` at the top level of a module.
 

@@ -13,10 +13,12 @@ Finds components, and compiles calls to them: props, children and slots.
 | `features/components/plan.ts` | Recognizes component calls and spread-bearing hosts that use ordered props |
 | `features/components/dom.ts` | Tag evaluation, ordered attributes/spreads, children, and component-value creation |
 | `features/components/dom.test.ts` | Native ordering, reserved props, disposal, SVG, direct arguments, opaque tags and shared tag reads |
+| `features/components/root.test.ts` | Canonical callable aliases, authored root-factory overrides in both modes, and discarded alias setup/cleanup |
 | `features/components/bench.test.ts` | Unchanged Octane inline rows and DOM component rows, mounted through the real application API with 1,000-row correctness and disposal checks |
 | `features/props/classify.ts` | Component identities and native parameter bindings |
 | `features/props/dom.ts` | Native parameter patterns, defaults/rest, per-binding parent snapshots and prop reception |
 | `packages/runtime/src/components.ts` | Props cells, callable adapters, compiled/native tag mounting, generic host props and subtree disposal |
+| `packages/runtime/tests/components.test.ts` | Adapter identity/metadata, native argument lists, shared program caches, consumer isolation and setup disposal |
 | `tests/generator/components.test.ts` | Named/member/factory components, symbol/rest props, key order, retained state, and markup consumed in independent HTML/SVG destinations |
 
 ## General path
@@ -51,6 +53,14 @@ updates only when a binding changed. Direct call adapters retain every argument,
 including map's index/array and rest parameters; an adapter keeps the
 component's `name`. A discarded direct call runs setup without mounting returned
 markup.
+
+An adapter is canonical even when read through an alias: adapting the adapter
+returns the same function. Its root factory is the snapshot copied on creation;
+an authored registration on that adapter takes precedence at mount. Rebranding
+the raw function does not silently replace the adapter's factory. Discarded
+calls unwrap adapted aliases before invoking the compiled setup convention,
+then dispose that invocation immediately. The root and runtime tests establish
+these observations without changing the mount argument to the raw function.
 
 Props are the bindings declared in the component's own parameter list, at any
 position. A name inside a parameter's type (`id` in
@@ -95,6 +105,12 @@ The reference retains a nested function declaration per setup invocation
 render made each nested component a new type, which never settled. This changes
 the oracle for every nested function declaration, components or not; it is
 recorded in `../decisions.md` (2026-10-25).
+
+The reference recognizes discarded calls to local components through stable
+identifier aliases. Each call receives a separate setup instance and immediate
+cleanup, including calls from handlers; otherwise `$enter` had no active
+instance there. The transform re-analyzes the introduced invocation boundary
+before dependency queries. This is test-only and uses no production helpers.
 
 ## Rules
 
