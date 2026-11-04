@@ -80,9 +80,8 @@ function lowerCall(
   // reactive changes, unless the receiver is a library's namespace, whose `map`
   // or `fill` can do anything with what it receives (`_.fill(items, 0)`).
   const receivers = plan.targets.filter(({ member }) => member.start >= callee.start && member.end <= callee.end);
-  if (receivers.length === 0) {
-    return foreignObject(module, callee.object) ? plan : { ...plan, method: { kind: 'read' } };
-  }
+  if (receivers.length < plan.targets.length && foreignObject(module, callee.object)) return plan;
+  if (receivers.length === 0) return { ...plan, method: { kind: 'read' } };
 
   // Source flow already replaced this call with its readiness wrapper, around
   // the authored call: a read stays inside it, an edit keeps the general form.
