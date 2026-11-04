@@ -2,6 +2,7 @@
 import { b } from 'yuku-ast';
 import type { Expression, Node, Statement } from 'yuku-parser';
 import type { RenderValuePlan, Site } from '../plan/model';
+import { withoutUnusedLocals } from './locals';
 import type { Names } from './names';
 import { expression, statement } from './quote';
 import { emitNodes } from './template';
@@ -46,7 +47,7 @@ export function emitRenderValue(plan: RenderValuePlan, names: Names, runtime: st
     ...sites.update,
   ], sites.dispose);
 
-  const mountBody = [
+  const mountBody = withoutUnusedLocals([
     statement('const $$document = $$runtime.getActiveEnvironment().document;', { document, runtime }),
     statement('const $$id = $$owner.id;', { id, owner }),
     statement('const $$entity = $$owner.entity;', { entity, owner }),
@@ -55,7 +56,7 @@ export function emitRenderValue(plan: RenderValuePlan, names: Names, runtime: st
     ...slots.statements,
     ...sites.mount,
     b.ReturnStatement({ argument: entry }),
-  ];
+  ], [document, id, entity, batch, namespace]);
   const declaration = programDeclaration(program, values, owner, mountBody);
 
   // Captures stay at the authored expression, outside the hoisted program.

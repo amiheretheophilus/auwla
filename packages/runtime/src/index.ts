@@ -98,6 +98,7 @@ export {
   setText,
   setTextData,
   setListener,
+  setAttributeValue,
   textValue,
   setClassName,
   setClass,
@@ -158,7 +159,7 @@ export { classValue, setClassValue, setStyleValue } from './dom-values';
 export { createCondRegion } from './cond';
 export {
   createRenderValue, createKeyedRenderValue, createPresentationValue, createValueSlot, createIndexedValueSlot, disposedValueSlot, renderNamespace,
-  childSlot,
+  childSlot, disposeSlot,
 } from './render-value';
 export {
   componentValue, componentSetup, createComponentValue, createPropsCell,

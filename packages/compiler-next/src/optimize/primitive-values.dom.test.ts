@@ -137,7 +137,8 @@ it.each([true, false])('releases static scalar component disposal ownership (opt
   applications.push(app);
   const cleanups = getExtensionStore<{ cleanups: Map<string, unknown> }>('cleanup', () => ({ cleanups: new Map() })).cleanups;
 
-  expect(cleanups.has('./App.tsx#App')).toBe(true);
+  // Optimized, a static scalar has nothing to release at all; nothing may leak either way.
+  expect(cleanups.has('./App.tsx#App')).toBe(!optimize);
   app.unmount();
   expect(cleanups.has('./App.tsx#App')).toBe(false);
 });

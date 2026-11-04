@@ -236,6 +236,7 @@ Features build their own pieces. Optimizations replace pieces (`optimize.md`).
 | `shared.ts` | Composes native shared-owner versions, memo/takeover emission and cross-module readers before replacing component functions |
 | `await.ts` | Adds write boundaries around native await operands and resumption, preserving suspension and rejection |
 | `sites.ts` | Emits mount values and per-site version checks; skips unchanged DOM values, retains optimized text disposal guards, and updates native listeners when their value changes |
+| `locals.ts` | Removes generated locals a view's body turned out not to use, which a minifier cannot prove safe to drop |
 | `render-value.ts` | Separates a stored JSX program's mount/update/disposal from the native expression that captures its inputs |
 | `render-value.test.ts` | Reference comparisons for one stored template consumed in HTML and SVG, updates/remounting, fragment text roots, custom tags and foreignObject boundaries |
 | `core/emit/row-list.test.ts` | Reference comparison for custom compiled rows consumed in both namespaces through edits, reordering and clearing |

@@ -6,6 +6,7 @@ import type { CompileModulesOptions } from '../../options';
 import { DEFAULT_RUNTIME_PATH } from '../../options';
 import type { ComponentPlan, ModulePlan, Site } from '../plan';
 import { copy, finishCopy } from './copy';
+import { withoutUnusedLocals } from './locals';
 import { Names } from './names';
 import { expression, statement, stringLiteral } from './quote';
 import { emitNodes } from './template';
@@ -419,7 +420,7 @@ function emitComponent(
 
   const fn = copy(plan.fn);
   fn.params = [id, parent, props.parameter, namespace, setupOnly].map((name) => b.Identifier({ name }));
-  fn.body = b.BlockStatement({ body });
+  fn.body = b.BlockStatement({ body: withoutUnusedLocals(body, [document]) });
   if (fn.type === 'ArrowFunctionExpression') fn.expression = false;
   return fn;
 }

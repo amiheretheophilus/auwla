@@ -91,6 +91,12 @@ export const disposedValueSlot: ValueSlot = Object.freeze({
   remove() {},
 });
 
+/** Dispose a site's slot, if it made one; the result is what the site holds from now on. */
+export function disposeSlot(slot: ValueSlot | null): ValueSlot {
+  slot?.dispose();
+  return disposedValueSlot;
+}
+
 /** One row of a list: its identity and the slot that renders it. */
 interface Row {
   readonly identity: string;

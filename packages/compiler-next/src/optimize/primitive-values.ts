@@ -126,20 +126,47 @@ export const primitiveValues: Optimization = {
       const binding = module.referenceOf(identifier)?.binding;
       return binding != null && primitives.has(binding);
     };
-    const specialize = (sites: readonly Site[]): readonly Site[] => {
+    /**
+     * Evaluating this runs no authored code: no call, getter or conversion of an
+     * object. Such an expression cannot dispose the view it belongs to.
+     */
+    const runsNoCode = (expression: Expression): boolean => {
+      const value = unwrap(expression);
+      if (is.Literal(value)) return !('regex' in value);
+      if (is.Identifier(value)) return proven(value);
+      // Creating a function runs none of it.
+      if (is.ArrowFunctionExpression(value) || is.FunctionExpression(value)) return true;
+      if (is.BinaryExpression(value) || is.LogicalExpression(value)) return runsNoCode(value.left as Expression) && runsNoCode(value.right);
+      if (is.UnaryExpression(value)) return value.operator !== 'delete' && runsNoCode(value.argument);
+      if (is.ConditionalExpression(value)) return runsNoCode(value.test) && runsNoCode(value.consequent) && runsNoCode(value.alternate);
+      return false;
+    };
+
+    /**
+     * `quiet`: nothing that runs before this view's sites update can run authored
+     * code, as when no memo precedes them. Stored values capture elsewhere, so
+     * their writes can follow anything.
+     */
+    const specialize = (sites: readonly Site[], quiet: boolean): readonly Site[] => {
       let changed = false;
+      let settled = quiet;
       const next = sites.map((site): Site => {
         if (site.kind === 'text' && !site.primitive && !site.spread && alwaysPrimitive(site.expression, proven)) {
           changed = true;
-          return { ...site, primitive: true, guardDisposal: true };
+          // A former value slot ignored writes after disposal. Only authored code
+          // running since this update began can have disposed this view.
+          settled &&= runsNoCode(site.expression);
+          return { ...site, primitive: true, guardDisposal: !settled };
         }
+
+        settled &&= site.kind !== 'conditional' && runsNoCode(site.expression);
 
         if (site.kind !== 'conditional') {
           return site;
         }
 
         const branches = site.branches.map((branch) => {
-          const nested = specialize(branch.sites);
+          const nested = specialize(branch.sites, false);
 
           if (nested === branch.sites) {
             return branch;
@@ -161,7 +188,8 @@ export const primitiveValues: Optimization = {
     const components = new Map(general.components);
 
     for (const [fn, component] of general.components) {
-      const sites = specialize(component.sites);
+      // Setup runs once, before the sites exist; only memos run again before them.
+      const sites = specialize(component.sites, component.memos.length === 0 && component.deferred.size === 0);
       const mutationRoots = component.mutationRoots.filter((node) => !primitives.has(node.binding));
 
       if (sites !== component.sites || mutationRoots.length !== component.mutationRoots.length) {
@@ -171,7 +199,7 @@ export const primitiveValues: Optimization = {
     }
 
     const values = general.values.map((value) => {
-      const sites = specialize(value.sites);
+      const sites = specialize(value.sites, false);
 
       if (sites === value.sites) {
         return value;

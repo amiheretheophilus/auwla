@@ -54,6 +54,14 @@ export interface SitesContext {
   readonly sourceValues?: boolean;
 }
 
+/** The update block the next site with the same inputs joins. */
+interface SiteGroup {
+  readonly key: string;
+  readonly body: Statement[];
+  /** How many trailing `seen = version` statements stay last. */
+  readonly tail: number;
+}
+
 export function emitSites(
   plan: SitesPlan,
   context: SitesContext,
@@ -65,6 +73,7 @@ export function emitSites(
   const update: Statement[] = [];
   const dispose: Statement[] = [];
   let owner = context.owner;
+  let group: SiteGroup | null = null;
   const slotOwner = (): string => {
     if (owner === undefined) {
       owner = names.fresh('_slotOwner');
@@ -211,8 +220,7 @@ export function emitSites(
         owner: slotOwner(),
       };
       mount.push(statement('let $$slot = null;', { slot }));
-      dispose.push(statement('if ($$slot !== null) $$slot.dispose();', { slot }));
-      dispose.push(statement('$$slot = $$runtime.disposedValueSlot;', { slot, runtime }));
+      dispose.push(statement('$$slot = $$runtime.disposeSlot($$slot);', { slot, runtime }));
     }
     const write = (next: string): Statement[] => {
       const body = writeValue(site, next, node, runtime, eventBatch, listener, valueSlot);
@@ -254,11 +262,20 @@ export function emitSites(
     if (!updates) {
       if (region !== null) {
         update.push(statement('$$region.update();', { region }));
+        group = null;
       }
       continue;
     }
 
-    const snapshots = [...inputs].map((version) => ({ version, seen: names.fresh('_seen') }));
+    // Consecutive sites with the same inputs share one version check. The first
+    // site's snapshot is the earliest, so a write while a later one mounts still
+    // re-runs the whole group.
+    const groupKey = computation === null && !replays && !routed && inputs.size > 0 ? [...inputs].sort().join() : null;
+    const open: SiteGroup | null = group;
+    const joined: SiteGroup | null = groupKey !== null && open?.key === groupKey ? open : null;
+    const snapshots: { version: string; seen: string }[] = joined === null
+      ? [...inputs].map((version) => ({ version, seen: names.fresh('_seen') }))
+      : [];
     for (const { version, seen } of snapshots) {
       mount.push(statement('let $$seen = $$version;', { seen, version }));
     }
@@ -274,22 +291,27 @@ export function emitSites(
       const writes = used ? write(next) : [];
       writes.push(statement('$$value = $$next;', { value, next }));
       // Equality also keeps an unchanged prop from replacing text a user typed.
-      // The NaN check avoids relying on an authored binding named Object.
-      const changed = buildExpression(`(${next} !== ${value} && !(${next} !== ${next} && ${value} !== ${value}))`);
-      body.push(guardedStatements(changed, writes));
+      // NaN compares unequal and writes the same thing again, which shows nothing.
+      body.push(guardedStatements(buildExpression(`${next} !== ${value}`), writes));
     }
-    for (const { version, seen } of snapshots) {
-      body.push(statement('$$seen = $$version;', { seen, version }));
-    }
-    const conditions = snapshots.map(({ version, seen }) => `${version} !== ${seen}`);
-    if (computation !== null) {
-      conditions.push(`${computation}.changed()`);
-    }
-    if (routed) conditions.push(`${rowList.list}.changed()`);
-    if (replays) {
-      update.push(...body);
+
+    if (joined !== null) {
+      // Inserted before the group's trailing `seen = version`.
+      joined.body.splice(joined.body.length - joined.tail, 0, ...body);
     } else {
-      update.push(guardedStatements(buildExpression(conditions.join(' || ')), body));
+      const tail = snapshots.map(({ version, seen }) => statement('$$seen = $$version;', { seen, version }));
+      body.push(...tail);
+      const conditions = snapshots.map(({ version, seen }) => `${version} !== ${seen}`);
+      if (computation !== null) {
+        conditions.push(`${computation}.changed()`);
+      }
+      if (routed) conditions.push(`${rowList.list}.changed()`);
+      if (replays) {
+        update.push(...body);
+      } else {
+        update.push(guardedStatements(buildExpression(conditions.join(' || ')), body));
+      }
+      group = groupKey === null ? null : { key: groupKey, body, tail: tail.length };
     }
     if (routed) update.push(statement('$$list.refresh($$computation);', { list: rowList.list, computation: computation! }));
 
@@ -297,6 +319,7 @@ export function emitSites(
     // changed. Always reach that branch; its sites apply their own guards.
     if (region !== null) {
       update.push(statement('$$region.update();', { region }));
+      group = null;
     }
   }
   return { mount, update, dispose };
@@ -438,9 +461,7 @@ function writeValue(
     return [statement('$$node[$$name] = $$value;', { node, value, name: stringLiteral(site.name) })];
   }
   if (site.kind === 'attribute') {
-    return [statement(`if ($$value != null && $$value !== false) {
-      $$node.setAttribute($$name, $$value === true ? "" : $$runtime.textValue($$value));
-    } else { $$node.removeAttribute($$name); }`, { node, value, runtime, name: stringLiteral(site.name) })];
+    return [statement('$$runtime.setAttributeValue($$node, $$name, $$value);', { node, value, runtime, name: stringLiteral(site.name) })];
   }
   return [statement(`${listener} = $$runtime.setListener($$node, $$event, ${listener}, $$value, $$batch);`, {
     runtime, node, value, event: stringLiteral(site.event), batch,

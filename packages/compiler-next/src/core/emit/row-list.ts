@@ -15,6 +15,7 @@ import type { ModulePlan, RowListPlan, Site, Template } from '../plan/model';
 import type { FunctionNode } from '../resolve/functions';
 import type { Names } from './names';
 import { copy } from './copy';
+import { withoutUnusedLocals } from './locals';
 import { expression, statement, stringLiteral } from './quote';
 import { emitNodes } from './template';
 import { emitSites, renderOwner, type SitesContext } from './sites';
@@ -178,7 +179,7 @@ export class RowComponents {
     });
     const declaration = statement(`function ${name}($$props, $$owner) {}`, { props, owner });
     if (is.FunctionDeclaration(declaration)) {
-      declaration.body!.body = [
+      declaration.body!.body = withoutUnusedLocals([
         statement('const $$document = $$runtime.getActiveEnvironment().document;', { document, runtime }),
         statement('const $$id = $$owner.id;', { id, owner }),
         statement('const $$batch = $$owner.batch;', { batch, owner }),
@@ -187,7 +188,7 @@ export class RowComponents {
         ...(component.mutations.length === 0 ? [] : [statement('const $$invalidate = $$owner.invalidate;', { invalidate, owner })]),
         ...handlers.declarations,
         ...body,
-      ];
+      ], [document, id, batch, entity, namespace]);
     }
     this.declarations.push(declaration);
     return name;

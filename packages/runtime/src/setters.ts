@@ -63,6 +63,15 @@ export function setListener(
   return listener;
 }
 
+/** compiler-next's attribute site: `true` is present, `null`, `undefined` and `false` absent. */
+export function setAttributeValue(node: Element, name: string, value: unknown): void {
+  if (value != null && value !== false) {
+    node.setAttribute(name, value === true ? '' : textValue(value));
+  } else {
+    node.removeAttribute(name);
+  }
+}
+
 /** Normalize a dynamic text slot before comparing its cached value. */
 export function textValue(value: unknown): string {
   return value == null || typeof value === 'boolean' ? '' : String(value);
