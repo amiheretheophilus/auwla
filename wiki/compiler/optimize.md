@@ -37,11 +37,10 @@ interface Optimization {
 
 1. **An optimization never rejects code.** When it cannot prove its case, it returns
    `null` and the general path runs.
-2. **Names never establish semantics or purity.** No feature decides behaviour
-   from a method or API name (`../rules.md`, rule 3). Recognizing a spelling can
-   suggest a candidate, but cannot authorize a fast path. The actual callee,
-   receiver, aliases, property access and executed callback effects must satisfy
-   its proof conditions; otherwise retain the general observation.
+2. **A known method name is what it says, decided at compile time.** The compiler
+   never checks at runtime that `items.slice` is the array method
+   (`../rules.md`, rule 3, and "Method calls" below). What a callback does, what a
+   helper edits and what a module redefines are still proven from the source.
 3. **Each optimization states its proof conditions and tests both paths.** Every
    comparison test runs with optimizations on and off, and both must match the
    reference (`testing.md`). Tests support the contract; a passing benchmark
@@ -62,7 +61,9 @@ interface Optimization {
 | `called-functions.ts` (built) | Removes component functions that are only called or installed as listeners from state: no version, mutation root, tracked read or site update |
 | `primitive-values.ts` (built) | Proves component-local bindings remain primitive; writes text without a generic child slot and omits immutable mutation roots, preserving disposal and version behavior |
 | `retained-list-index.ts` (built) | Selects private row-index retention for non-primitive child sites, without changing authored expression evaluation |
-| `methods.ts` (built) | Lowers observed member calls to `observeMethod`; the runtime skips the snapshot only when the actual callee, receiver, arguments and callbacks satisfy its proof. Unknown or overridden calls retain the before/after check ("Method calls" below) |
+| `method-facts.ts` (built) | What each known method name does: copy, read or edit ("Method calls" below) |
+| `methods.ts` (built) | Known reads stay plain calls and known edits report their root, decided at compile time. Unknown names keep the before/after check ("Method calls" below) |
+| `effects.ts` (built) | Whether a callback or argument can do more than read and create values |
 | `keyed-map.ts` | keyed `.map` over state reuses rows |
 | `array-ops.ts` | `push`, `splice`, `sort` update only the rows they touch |
 | `dom-only-rows.ts` | rows with no reactive work are plain DOM |
@@ -180,95 +181,53 @@ These are work counts, not VM timing or memory results.
 
 ## Method calls
 
-`packages/runtime/src/array-methods.ts`, exposed as
-`@memoized-dom/runtime/array-methods`, is the single data-only catalog of array
-method facts: copy/read/edit kind, species, callback and converted-argument
-positions, inserted values, primitive results and current helper eligibility.
-`helpers.ts` reads those facts directly; `runtime/src/method-calls.ts` associates
-the same records with the captured intrinsic identities. There are no separate
-compiler method sets to maintain. The catalog imports no runtime kernel or DOM.
-Names still only select candidates: compiler effect proofs and runtime callee,
-receiver and argument guards remain necessary.
-The catalog is never a language whitelist. A dynamically installed, unlisted
-`renameFirst` method updates the UI both directly and through a helper in the
-reference comparison. A native `slice` reached through an unlisted alias can
-still use its identity proof; a custom function with any name stays observed.
+A method name is decided at compile time and nothing checks it at runtime. The
+user, 2026-11-04: if the code says `arrays.one` exists, it is "not up to us to check
+it at runtime to see if it exist that is the user bug" (`../decisions.md`). There
+is no callee identity, species, prototype or descriptor check anywhere.
 
-The general path observes every call that may edit state by snapshotting all the
-data its reads reach, before and after (`handlers.md`). On 10k rows that is about
-70 ms per call, for `items.slice(1)` as for `items.map(row => <tr …/>)` in a
-render site, so every update of a large list paid it.
+`optimize/method-facts.ts` lists what each known name does: `copy` and `read` only
+read their receiver, `edit` changes only its receiver. `optimize/methods.ts` uses
+it for each `receiver.name(…)` that would otherwise be observed:
 
-`optimize/methods.ts` lowers each observed plain member call to
-`observeMethod(reads, notifications, receiver, key, proven)(...arguments)`. That
-keeps native order: receiver, key, one method read, arguments, call. Calls with an
-optional link anywhere in the callee chain, spread arguments, `super` or a private
-name keep the general form. The pass never reads the method name. For each inline
-function argument it sets bit `i` of `proven` when the body makes no explicit call,
-`new`, tagged template, store or update outside its own locals, `delete`, class,
-array destructuring, `for…of`/`for…in`, array spread or suspension. Nested function
-bodies are skipped: creating a function runs none of its body.
+| Call | Emitted |
+| --- | --- |
+| A known read, with no callback or an inline effect-free one | The call as written, with no observation |
+| `map` shown by a row list, or with reusable rows | `list.map(receiver)` or `mapRows(receiver, cache, callback)` |
+| A known edit (`push`, `splice`, `sort`, …) | `editArray(receiver, "push", [args], notify)`: the native call, then the root is reported |
+| A callback that can edit, a named callback, an unknown name | The general `observeMutation` (`handlers.md`) |
 
-`runtime/src/method-calls.ts` holds the proof. It keys on the callee's identity:
-the `Array.prototype` intrinsics captured when the runtime loaded. The conditions:
+`editArray` reports only an actual change: `push`, `pop`, `shift` and `unshift`
+change an array exactly when its length changes, and the others compare a shallow
+copy, which their own O(n) work already costs. `[].pop()` re-runs nothing (source
+generator seed 600622771 pins this). A receiver that is not an array has its own
+method and is always reported, so `stack.push(x)` on a custom class still updates.
 
-- the receiver is an array, and for species-creating intrinsics its prototype is
-  `Array.prototype`, with no own `constructor` and the intrinsic species. These are
-  checked through descriptors, so no getter runs;
-- every argument the intrinsic converts to an integer is a primitive;
-- its callback argument has its `proven` bit (`sort` may also omit it);
-- for intrinsics that edit their receiver, every read returns that receiver.
+`effects.ts` judges callbacks: a callback is effect-free when it stores nothing
+outside its own locals, deletes nothing and does not suspend. Calls are allowed
+when the compiler knows they only read: the methods above, pure host functions
+(`String`, `Math.*`, `JSON.*`, `Object.keys`, …) and, for observation only
+(`ownFunctions`), the program's own effect-free functions. Row reuse does not accept
+those, because it skips the callback and cannot see the function's reads.
 
-Species eligibility is checked again after arguments finish: argument evaluation
-can install a different constructor or species after the native method read.
-Such a call retains the captured callee and takes the general observation path.
+The list is not a language whitelist. An unknown name still works through the
+general observation. A name the module itself gives another meaning
+(`redefinedNames`: a class or object method, `x.slice = …`, `Object.defineProperty`)
+is unknown in that module. `{ filter: 'all' }` defines no method. A known name is
+trusted on a receiver from another module.
 
-A proven read-only call then runs with no observation. A proven edit is reported
-with `observeReceiverEdit`: stamp, notify every read, then notify aliases. It keeps
-a pending entry, so a call that throws midway is still reported at the next
-recovery. Like the general path, it reports only an actual change: `push`,
-`pop`, `shift` and `unshift` (`resizes` in `array-methods.ts`) change the array
-exactly when its length changes, an O(1) check; the other edits compare the
-array's shallow snapshot, which their own O(n) work already covers. Before
-2026-10-27 every proven edit reported a change, so `[].pop()` re-ran readers;
-with sources that could make a value wait again (source generator seed
-600622771). The fast path must never differ from the general path. Anything unproven is observed as before. An unknown callee starts its
-observation before its arguments are evaluated, as the general form does.
+A known method reads its arguments and edits at most its receiver, so
+`buildData(1).concat(items)` and `out.push(item)` change nothing reactive. The
+exception is a receiver rooted in a host global or an import: `_.fill(items, 0)`
+passes `items` to a library that can do anything with it, so that call stays
+observed. An edit through an optional
+link keeps the general form, since the call may not happen. Source flow wraps some
+calls in a readiness wrapper (`wrappedBySources`): a read stays plain inside it and
+an edit stays observed.
 
-Descriptor reaches remember when they encounter accessors or sparse arrays.
-A receiver edit discards such a reach: native `reverse` can move a getter or
-inherited value into an own data element without taking that object as an
-argument. The next alias lookup rebuilds from the resulting data, including after
-an interrupted native call. Dense data reaches record only arguments actually
-inserted: all arguments of push/unshift, splice's arguments after index 1, and
-fill's first argument. Sorting adds no comparator, and the temporary argument
-array is never indexed as receiver data. Native regressions and a both-mode DOM
-check cover the previously missed later notification; unused getters stay unused.
-
-The proof boundary is the same one compiled code already uses elsewhere. What a
-proven call can still run is property reads (getters, proxy traps) and implicit
-conversions. Compiled code never observes those for an ordinary `row.label` read
-or `a + b` either, and compiled getter bodies report their own state writes.
-Replacing `Array.prototype.slice` after the runtime loads installs a function
-without a proof. Replacing it before then is a known limit.
-
-The proven set: `slice`, `concat`, `indexOf`, `lastIndexOf`, `includes`, `at`,
-`toReversed`, `with` and `toSpliced` allocate a fresh result. `map`, `filter`,
-`find`, `findIndex`, `findLast`, `findLastIndex`, `some`, `every`, `reduce` and
-`reduceRight` call a proven callback. `push`, `pop`, `shift`, `unshift`, `reverse`,
-`splice`, `fill` and `sort` edit the receiver. Calls into compiled helpers
-(`updateRows(items)`) stay observed. A helper's body does not report edits to the
-objects it receives, so compiling the callee is no proof.
-
-Checks: `runtime/tests/method-calls.test.ts` covers that proven calls never take a
-snapshot. It also covers own or replaced methods, subclass species,
-`valueOf`-converting arguments, effectful callbacks, a receiver that is not the
-read value, native order, and a throw mid-edit. `optimize/methods.dom.test.ts`
-covers the callback classification and native updates, overridden methods,
-effectful callbacks and evaluation order, in both modes. On 10k plain rows (Bun,
-runtime source), `slice(1)` goes from 84 ms to 0.11 ms, `map` from 68 ms to
-0.47 ms, and `reverse()` from 82 ms to 0.03 ms. These are micro timings; VM
-results are still needed.
+Checks: `optimize/methods.dom.test.ts` pins each decision and that no output contains
+a callee check; it also compares native updates, overridden methods, effectful
+callbacks and evaluation order in both modes.
 
 ## Keyed comparisons
 
@@ -323,9 +282,9 @@ the method name. The callback must:
   writes. Bodies of nested functions are not run, so they do not count.
 
 `optimize/methods.ts` records `rowReuse` on the call. The emitter declares one
-`createRowCache(usesIndex)` per call site and owner instance, and passes it to
-`observeMethod`. It is used only once the runtime has proven the callee is the
-intrinsic `map` on an ordinary array.
+`createRowCache(usesIndex)` per call site and owner instance, and emits
+`mapRows(receiver, cache, callback)`. A receiver that is not an array has its own
+`map`, which runs as written.
 
 `runtime/src/list-map.ts` reuses an item's previous result when all of these hold:
 
@@ -393,8 +352,7 @@ row closure or nested value slot per row.
 `optimize/row-lists.ts` marks the site (`TextSite.listStrategy: 'rows'`) and its
 call (`method.rowList`) when:
 
-- the call has row reuse (`row-reuse.ts`), so the runtime proves the intrinsic
-  `map` before the list is used, and otherwise the callback runs as written;
+- the call has row reuse (`row-reuse.ts`);
 - the callback's body is one element with one root, and its parameters are
   plain identifiers;
 - the root's `key`, if any, is its first site, so evaluating it before the row
@@ -407,8 +365,10 @@ a row factory taking the callback's parameter names, and
 `createRowList(anchor, owner, key, create)`. A row's update assigns its
 parameters and evaluates every site again in order; a handler written as a
 function literal is created once and reads the assigned parameters. The mutation
-lowering passes the list to `observeMethod` (`Names.of` gives both emitters the
-same name). The site writes `list.write(value)`.
+lowering replaces the call with `list.map(receiver)` (`Names.of` gives both emitters
+the same name). The callback is gone, so its stored JSX emits no render program:
+each row exists once in the output. A receiver that is not an array has its own
+`map`, which supplies the items.
 
 Compiled rows share one destination-aware template and site program, just like
 stored values and leaf component rows. The template emitter selects node creation
@@ -693,10 +653,6 @@ allocates (`../decisions.md`, 2026-10-26):
   locally built keys whose string concatenation could produce that name keep
   observation. Computed object-literal keys use data-property creation and need
   only the primitive conversion check;
-- a fresh array with explicit member stores is not also used as a method
-  receiver. A store can replace a native method after the entry guard, including
-  on a later loop iteration. This conservatively keeps observation even for
-  disjoint index stores and method calls until that stronger proof exists;
 - it calls only array methods: copying (`slice`, `concat`, `filter`, `map`,
   `toReversed`, `toSpliced`, `with`) and reading (`indexOf`, `includes`, `at`,
   `find…`, `some`, `every`) on parameters or its own arrays, and editing
@@ -705,38 +661,25 @@ allocates (`../decisions.md`, 2026-10-26):
   have no explicit effect. A named or parameter callback stays observed: reading
   its function value does not prove what calling it does;
 - every argument a native method converts, computed store key and computed
-  object-literal key is a proven primitive or a helper parameter checked as
-  primitive at the call boundary. Literal primitives, local aliases whose
-  initializer and all assignments remain primitive, and proven primitive
-  intrinsic results qualify. Numeric loop indices retain the fast path;
-  unproven values computed inside the helper keep observation. No argument is
-  evaluated early just to check its type;
-- it constructs, deletes, iterates, spreads, destructures and suspends nothing.
+  object-literal key is a proven primitive, or a helper parameter whose argument is
+  a primitive at the call: an expression that always gives one, or a `const` with
+  such an initializer. A computed key must also be a literal other than `__proto__`.
+  This is decided at compile time; an object passed there, or a value the compiler
+  cannot see, keeps observation. Numeric loop indices retain the fast path;
+- it constructs, deletes and suspends nothing.
 
-The names only select candidates. `observeHelper` (`runtime/src/method-calls.ts`)
-skips the snapshot only when each argument the helper calls a method on is an
-ordinary array without its own such property, with the intrinsic species, and
-each method used is still the intrinsic captured at load, and every parameter
-marked for conversion is primitive, with computed store keys excluding
-`__proto__`; otherwise it observes the call as before.
-This preserves edits from `valueOf`/`Symbol.toPrimitive`, including a conversion
-that throws. Octane's `updateRows`, `swapRows` and `removeRow` qualify;
-`shuffleRows` calls a generated `random()` and stays observed.
+A proven call stays a plain call, with no runtime guard. This preserves edits from
+`valueOf`/`Symbol.toPrimitive`, including a conversion that throws. Octane's
+`updateRows`, `swapRows` and `removeRow` qualify; `shuffleRows` calls a generated
+`random()` and stays observed.
 
-Checks: `optimize/helpers.dom.test.ts` qualifies each rule, and in both modes
-shows a helper's result and catches an argument whose `slice` (subclass or own
-property) edits rows. Named callbacks and unproven conversions cannot establish
-the helper proof. `tests/cases/handlers.test.ts` compares callback edits, index
-and property-key coercion, own/inherited setters, getters, and a setter that
-edits before throwing against the reference in both compiler modes.
-Own/computed method replacement, direct/computed prototype replacement and a
-locally concatenated prototype key also match the reference. All five replacement
-cases and the concatenation case failed before their corresponding fixes.
-`runtime/tests/method-calls.test.ts` counts no snapshot for a proven call, and
-observes an own `slice`, a replaced `splice`, an object converted to an index,
-and a conversion that edits before throwing. Its computed-key check skips
-snapshots for ordinary strings/symbols and observes a prototype change or
-authored key conversion.
+Checks: `optimize/helpers.dom.test.ts` qualifies each rule and shows a helper's result
+in both modes. Named callbacks and unproven conversions cannot establish the helper
+proof. `tests/cases/handlers.test.ts` compares callback edits, index and property-key
+coercion, own/inherited setters, getters, and a setter that edits before throwing
+against the reference in both compiler modes. Own/computed method replacement,
+direct/computed prototype replacement and a locally concatenated prototype key also
+match the reference.
 
 ### Outside review and correctness gate (2026-10-26)
 

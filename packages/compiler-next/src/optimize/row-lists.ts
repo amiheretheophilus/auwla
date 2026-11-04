@@ -8,9 +8,7 @@
  * work in the same order only when:
  *
  * - the call is lowered with row reuse (`methods.ts`, `row-reuse.ts`): an arrow
- *   with at most `(item, index)` and no explicit effect, so the runtime proves
- *   the intrinsic `map` before using the list, and the callback runs as written
- *   otherwise;
+ *   with at most `(item, index)` and no explicit effect;
  * - the arrow's body is one JSX element and its parameters are plain
  *   identifiers the row can assign on each update;
  * - the root's `key`, if any, is its first attribute, so evaluating it before
@@ -20,7 +18,7 @@
  * (`leafComponent`): one whose instance does nothing but show its props, so its
  * template can be compiled once more as a row that receives the props object.
  *
- * Nothing here reads the method name; the runtime checks the callee.
+ * The list replaces the callback, so its stored JSX is not emitted at all.
  */
 import type { Binding, Module } from 'yuku-analyzer';
 import { is } from 'yuku-ast';
@@ -229,6 +227,17 @@ function rowSites(sites: readonly Site[], plan: (site: Site) => RowListPlan | nu
   return changed ? next : sites;
 }
 
+/** The stored JSX of every element row in these sites. */
+function collectRows(sites: readonly Site[], shown: Set<Node>): void {
+  for (const site of sites) {
+    if (site.kind === 'conditional') {
+      for (const branch of site.branches) collectRows(branch.sites, shown);
+    } else if (site.kind === 'text' && site.rows?.row.kind === 'element') {
+      shown.add(site.rows.row.value.node);
+    }
+  }
+}
+
 function markCalls(plans: readonly MutationPlan[], found: ReadonlySet<Node>): readonly MutationPlan[] {
   let changed = false;
   const next = plans.map((plan) => {
@@ -262,6 +271,15 @@ export const rowLists: Optimization = {
       if (sites !== component.sites) components.set(fn, { ...component, sites, siteInputs: inputs });
     }
     if (found.size === 0) return null;
+
+    // The row list replaced these callbacks: nothing evaluates their JSX as a
+    // stored value any more, so its render program must not be emitted.
+    const shown = new Set<Node>();
+    for (const component of components.values()) {
+      collectRows(component.sites, shown);
+    }
+    const remaining = general.values.filter((value) => !shown.has(value.node));
+
     for (const [fn, component] of components) {
       const mutations = markCalls(component.mutations, found);
       if (mutations !== component.mutations) components.set(fn, { ...component, mutations });
@@ -270,6 +288,6 @@ export const rowLists: Optimization = {
       const mutations = markCalls(owner.mutations, found);
       return mutations === owner.mutations ? owner : { ...owner, mutations };
     });
-    return { ...general, components, sharedOwners, ...(routed.size > 0 ? { routedComparisons: routed } : {}) };
+    return { ...general, values: remaining, components, sharedOwners, ...(routed.size > 0 ? { routedComparisons: routed } : {}) };
   },
 };

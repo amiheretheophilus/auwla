@@ -1,5 +1,5 @@
 /**
- * The rows of a text site whose value is a proven `map` call
+ * The rows of a text site whose value is a `map` call
  * (`optimize/row-lists.ts`, `runtime/src/row-list.ts`): a key function and a
  * row factory, declared where the callback is evaluated so they read the same
  * bindings. The factory takes the callback's own parameter names; a row's
@@ -35,8 +35,7 @@ export function emitRowList(plan: RowListPlan, anchor: string, context: SitesCon
     const local = context.versions.has(route.binding);
     const left = local ? expression(binding.name)
       : expression('$$peek()', { peek: names.of(binding.declarations[0]!, `_peek_${binding.name}`) });
-    // Only the compiled row copy reads without tracking. The authored callback
-    // retains its ordinary dependencies when a custom map takes the fallback.
+    // The compiled row reads without tracking; the list refreshes these rows.
     const comparison = b.BinaryExpression({ operator: route.node.operator, left, right: route.node.right });
     untracked.set(route.node, comparison);
     replacements.set(route.node, comparison);

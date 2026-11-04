@@ -104,20 +104,20 @@ it('calls again for an item edited in place, and for a moved item when the index
   expect(two.calls).toEqual(reordered);
 });
 
-it('keeps native map shape: holes, duplicates, thisArg and arguments', () => {
+it('keeps native map shape: holes, duplicates and arguments', () => {
   const cache = createRowCache(true);
   const item = { id: 1 };
   const seen: unknown[][] = [];
   const array = [item, , item] as { id: number }[];
-  const result = cache.map(array, function (this: unknown, ...args: unknown[]) {
-    seen.push([this, ...args]);
+  const result = cache.map(array, (...args: unknown[]) => {
+    seen.push(args);
     return { args };
-  }, 'self');
+  });
   expect(result).toHaveLength(3);
   expect(1 in result).toBe(false);
-  expect(seen).toEqual([['self', item, 0, array], ['self', item, 2, array]]);
+  expect(seen).toEqual([[item, 0, array], [item, 2, array]]);
   expect(result[0]).not.toBe(result[2]);
-  const again = cache.map(array, () => ({}), 'self');
+  const again = cache.map(array, () => ({}));
   expect(again[0]).toBe(result[0]);
   expect(again[2]).toBe(result[2]);
 });

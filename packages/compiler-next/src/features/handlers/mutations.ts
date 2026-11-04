@@ -5,7 +5,7 @@ import type { BindingNode } from '../../core/graph';
 import type { MutationPlan } from '../../core/plan/model';
 import type { Names } from '../../core/emit/names';
 import { copy } from '../../core/emit/copy';
-import { expression, numberLiteral, statement, stringLiteral } from '../../core/emit/quote';
+import { expression, statement, stringLiteral } from '../../core/emit/quote';
 import { isValueImport } from '../../core/resolve/exports';
 import type { Binding } from 'yuku-analyzer';
 
@@ -98,6 +98,10 @@ export function emitMutations(
     return refNotify;
   };
   for (const plan of [...plans].sort((a, b) => (a.operation.end - a.operation.start) - (b.operation.end - b.operation.start))) {
+    if (plan.kind === 'call' && plan.method !== undefined) {
+      emitKnownCall(plan, replacements, declarations, notifierOf, names, runtime);
+      continue;
+    }
     const notifications = [];
     const reads = [];
     for (const { binding, member } of plan.targets) {
@@ -132,53 +136,6 @@ export function emitMutations(
         }));
       }
     }
-    if (plan.kind === 'call' && plan.method !== undefined) {
-      // `observeMethod(…, receiver, key, proven)(...arguments)` keeps native
-      // order: receiver, key, method read, arguments, call (`optimize/methods.ts`).
-      const call = copy(plan.operation, replacements);
-      if (is.CallExpression(call) && is.MemberExpression(call.callee)) {
-        const member = call.callee;
-        // One row cache per call site and owner instance (`runtime/src/list-map.ts`),
-        // or the rows of the text site this call is (`core/emit/row-list.ts`).
-        let rows: Expression = expression('void 0');
-        if (plan.method.rowList === true) {
-          rows = expression('$$list', { list: names.of(plan.operation, '_rowList') });
-        } else if (plan.method.rowReuse !== undefined) {
-          const cache = names.fresh('_rows');
-          declarations.push(statement(`const $$cache = $$runtime.createRowCache(${plan.method.rowReuse.usesIndex});`, {
-            cache, runtime,
-          }));
-          rows = expression('$$cache', { cache });
-        }
-        call.callee = expression('$$runtime.observeMethod($$reads, $$notifications, $$receiver, $$key, $$proven, $$rows)', {
-          runtime, receiver: member.object,
-          key: member.computed ? member.property : stringLiteral((member.property as { name: string }).name),
-          reads: b.ArrayExpression({ elements: reads }), notifications: b.ArrayExpression({ elements: notifications }),
-          proven: numberLiteral(plan.method.provenCallbacks), rows,
-        });
-        replacements.set(plan.operation, call);
-        continue;
-      }
-    }
-    if (plan.kind === 'call' && plan.helper !== undefined) {
-      // `observeHelper(…, helper)(...arguments)`: the callee is read before the
-      // arguments, which are effect-free (`optimize/helpers.ts`).
-      const call = copy(plan.operation, replacements);
-      if (is.CallExpression(call)) {
-        const copies = b.ArrayExpression({
-          elements: plan.helper.copies.map(([index, name]) => b.ArrayExpression({ elements: [numberLiteral(index), stringLiteral(name)] })),
-        });
-        const methods = b.ArrayExpression({ elements: plan.helper.methods.map((name) => stringLiteral(name)) });
-        const primitives = b.ArrayExpression({ elements: plan.helper.primitives.map(numberLiteral) });
-        const propertyKeys = b.ArrayExpression({ elements: plan.helper.propertyKeys.map(numberLiteral) });
-        call.callee = expression('$$runtime.observeHelper($$reads, $$notifications, $$copies, $$methods, $$helper, $$primitives, $$propertyKeys)', {
-          runtime, helper: call.callee, copies, methods, primitives, propertyKeys,
-          reads: b.ArrayExpression({ elements: reads }), notifications: b.ArrayExpression({ elements: notifications }),
-        });
-        replacements.set(plan.operation, call);
-        continue;
-      }
-    }
     if (plan.kind === 'call') {
       const operation = copy(plan.operation, replacements);
       replacements.set(plan.operation, expression('$$runtime.observeMutation($$reads, $$notifications).finish($$operation)', {
@@ -188,4 +145,62 @@ export function emitMutations(
     }
   }
   return { replacements, declarations, notifiers: notifiers as ReadonlyMap<BindingNode, string> };
+}
+
+/**
+ * A call the compiler knows the effect of (`MutationPlan.method`):
+ *
+ * - `read`: the authored call as written, or the row list or row cache that
+ *   stands in for `map`;
+ * - `edit`: `editArray(receiver, "push", [arguments], notify)`, the native call
+ *   followed by a report of the receiver's root.
+ */
+function emitKnownCall(
+  plan: MutationPlan,
+  replacements: Map<Node, Node>,
+  declarations: Statement[],
+  notifierOf: (binding: BindingNode) => string,
+  names: Names,
+  runtime: string,
+): void {
+  const method = plan.method!;
+  if (method.kind === 'read' && method.rowList !== true && method.rowReuse === undefined) {
+    return;
+  }
+
+  const call = copy(plan.operation, replacements);
+  if (!is.CallExpression(call) || !is.MemberExpression(call.callee)) {
+    return;
+  }
+  const receiver = call.callee.object;
+
+  if (method.kind === 'edit') {
+    replacements.set(plan.operation, expression('$$runtime.editArray($$receiver, $$name, $$arguments, $$notify)', {
+      runtime,
+      receiver,
+      name: stringLiteral((call.callee.property as { name: string }).name),
+      arguments: b.ArrayExpression({ elements: call.arguments }),
+      notify: notifierOf(plan.targets[0]!.binding),
+    }));
+    return;
+  }
+
+  if (method.rowList === true) {
+    // The rows of the text site this call is (`core/emit/row-list.ts`).
+    replacements.set(plan.operation, expression('$$list.map($$receiver)', {
+      list: names.of(plan.operation, '_rowList'),
+      receiver,
+    }));
+    return;
+  }
+
+  // One row cache per call site and owner instance (`runtime/src/list-map.ts`).
+  const cache = names.fresh('_rows');
+  declarations.push(statement(`const $$cache = $$runtime.createRowCache(${method.rowReuse!.usesIndex});`, { cache, runtime }));
+  replacements.set(plan.operation, expression('$$runtime.mapRows($$receiver, $$cache, $$callback)', {
+    runtime,
+    receiver,
+    cache,
+    callback: call.arguments[0]!,
+  }));
 }

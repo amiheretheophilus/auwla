@@ -1,69 +1,10 @@
 /* oxlint-disable no-unused-expressions -- compiler-generated mutation sequences */
 import * as _MD from "@memoized-dom/runtime";
-const _renderProgram = { mount(_values, _owner) {
-  const _document = _MD.getActiveEnvironment().document;
-  const _valueId = _owner.id;
-  const _valueEntity = _owner.entity;
-  const _valueWrites = _owner.batch;
-  const _namespace = _owner.namespace;
-  const _clone = _MD.cloneTemplate(_template, _namespace);
-  const _text = _clone.firstChild;
-  const _node = _text.nextSibling;
-  const _text2 = _node.nextSibling;
-  let _value = _values[1];
-  if (_value != null && _value !== false) {
-    _clone.setAttribute("class", _value === true ? "" : _MD.textValue(_value));
-  } else {
-    _clone.removeAttribute("class");
-  }
-  let _value2 = _values[2];
-  let _listener = _MD.setListener(_clone, "click", void 0, _value2, _valueWrites);
-  let _value3 = _values[3];
-  const _slotOwner = { id: _valueId, batch: _valueWrites, entity: _valueEntity, namespace: _namespace };
-  let _valueSlot = null;
-  (_valueSlot = _MD.childSlot(_valueSlot, _text, _value3, _slotOwner, true))?.write(_value3);
-  let _value4 = _values[4];
-  let _valueSlot2 = null;
-  (_valueSlot2 = _MD.childSlot(_valueSlot2, _text2, _value4, _slotOwner, true))?.write(_value4);
-  return { nodes: [_clone], update(_values2) {
-    _values = _values2;
-    const _next = _values[1];
-    if (_next !== _value && !(_next !== _next && _value !== _value)) {
-      if (_next != null && _next !== false) {
-        _clone.setAttribute("class", _next === true ? "" : _MD.textValue(_next));
-      } else {
-        _clone.removeAttribute("class");
-      }
-      _value = _next;
-    }
-    const _next2 = _values[2];
-    if (_next2 !== _value2 && !(_next2 !== _next2 && _value2 !== _value2)) {
-      _listener = _MD.setListener(_clone, "click", _listener, _next2, _valueWrites);
-      _value2 = _next2;
-    }
-    const _next3 = _values[3];
-    if (_next3 !== _value3 && !(_next3 !== _next3 && _value3 !== _value3)) {
-      (_valueSlot = _MD.childSlot(_valueSlot, _text, _next3, _slotOwner, true))?.write(_next3);
-      _value3 = _next3;
-    }
-    const _next4 = _values[4];
-    if (_next4 !== _value4 && !(_next4 !== _next4 && _value4 !== _value4)) {
-      (_valueSlot2 = _MD.childSlot(_valueSlot2, _text2, _next4, _slotOwner, true))?.write(_next4);
-      _value4 = _next4;
-    }
-  }, dispose() {
-    if (_valueSlot !== null) _valueSlot.dispose();
-    _valueSlot = _MD.disposedValueSlot;
-    if (_valueSlot2 !== null) _valueSlot2.dispose();
-    _valueSlot2 = _MD.disposedValueSlot;
-  } };
-} };
 _MD.defineComponent(BenchAppInlineOwned, "./bench/dom/AppInlineOwned.tsx#BenchAppInlineOwned");
-const _template = _MD.createTemplateCache([["li", 0, "", ": ", ""]]);
-const _template2 = _MD.createTemplateCache([["div", 0, ["div", ["class", "toolbar"], ["button", 0, "create1k"], ["button", 0, "create10k"], ["button", 0, "append1k"], ["button", 0, "prepend1k"], ["button", 0, "pop1k"], ["button", 0, "update"], ["button", 0, "swap"], ["button", 0, "reverse"], ["button", 0, "remove"], ["button", 0, "remove100"], ["button", 0, "clear"]], ["ul", 0, ""]]]);
-const _template3 = _MD.createTemplateCache([["li", 0, "", ": ", ""]]);
+const _template = _MD.createTemplateCache([["div", 0, ["div", ["class", "toolbar"], ["button", 0, "create1k"], ["button", 0, "create10k"], ["button", 0, "append1k"], ["button", 0, "prepend1k"], ["button", 0, "pop1k"], ["button", 0, "update"], ["button", 0, "swap"], ["button", 0, "reverse"], ["button", 0, "remove"], ["button", 0, "remove100"], ["button", 0, "clear"]], ["ul", 0, ""]]]);
+const _template2 = _MD.createTemplateCache([["li", 0, "", ": ", ""]]);
 import { buildData } from './data';
-export function BenchAppInlineOwned(_id, _parent, _props, _namespace2, _setupOnly) {
+export function BenchAppInlineOwned(_id, _parent, _props, _namespace, _setupOnly) {
   let _dataVersion = 0;
   let _selectedVersion = 0;
   const _readKey = {};
@@ -72,15 +13,15 @@ export function BenchAppInlineOwned(_id, _parent, _props, _namespace2, _setupOnl
     _dataVersion++;
     _writes.mark();
   }
-  function _write(_value5) {
+  function _write(_value) {
     _dataVersion++;
     _writes.mark();
-    return _value5;
+    return _value;
   }
-  function _write2(_value6) {
+  function _write2(_value2) {
     _selectedVersion++;
     _writes.mark();
-    return _value6;
+    return _value2;
   }
   const _entity = { id: _id, parent: _parent, render: _update };
   const _writes = _MD.createWriteBatch(_entity);
@@ -98,10 +39,10 @@ export function BenchAppInlineOwned(_id, _parent, _props, _namespace2, _setupOnl
     return;
   }
   _writes.beginMount();
-  const _document2 = _MD.getActiveEnvironment().document;
-  const _clone2 = _MD.cloneTemplate(_template2, _namespace2);
-  const _node2 = _clone2.firstChild;
-  const _button = _node2.firstChild;
+  const _document = _MD.getActiveEnvironment().document;
+  const _clone = _MD.cloneTemplate(_template, _namespace);
+  const _node = _clone.firstChild;
+  const _button = _node.firstChild;
   const _button2 = _button.nextSibling;
   const _button3 = _button2.nextSibling;
   const _button4 = _button3.nextSibling;
@@ -112,8 +53,8 @@ export function BenchAppInlineOwned(_id, _parent, _props, _namespace2, _setupOnl
   const _button9 = _button8.nextSibling;
   const _button10 = _button9.nextSibling;
   const _button11 = _button10.nextSibling;
-  const _node3 = _node2.nextSibling;
-  const _text3 = _node3.firstChild;
+  const _node2 = _node.nextSibling;
+  const _text = _node2.firstChild;
   _MD.setListener(_button, "click", void 0, () => {
     _write(data = buildData(1000));
     _write2(selected = null);
@@ -123,13 +64,13 @@ export function BenchAppInlineOwned(_id, _parent, _props, _namespace2, _setupOnl
     _write2(selected = null);
   }, _writes);
   _MD.setListener(_button3, "click", void 0, () => {
-    _write(data = _MD.observeMethod([() => data], [_mutated_data], _MD.trackRead(() => _dataVersion, data, _readKey), "concat", 0, void 0)(buildData(1000)));
+    _write(data = _MD.trackRead(() => _dataVersion, data, _readKey).concat(buildData(1000)));
   }, _writes);
   _MD.setListener(_button4, "click", void 0, () => {
-    _write(data = _MD.observeMethod([() => data], [_mutated_data], buildData(1000), "concat", 0, void 0)(_MD.trackRead(() => _dataVersion, data, _readKey)));
+    _write(data = _MD.observeMutation([() => data], [_mutated_data]).finish(buildData(1000).concat(_MD.trackRead(() => _dataVersion, data, _readKey))));
   }, _writes);
   _MD.setListener(_button5, "click", void 0, () => {
-    _write(data = _MD.observeMethod([() => data], [_mutated_data], _MD.trackRead(() => _dataVersion, data, _readKey), "slice", 0, void 0)(0, -1000));
+    _write(data = _MD.trackRead(() => _dataVersion, data, _readKey).slice(0, -1000));
   }, _writes);
   _MD.setListener(_button6, "click", void 0, () => {
     for (let i = 0; i < _MD.trackRead(() => _dataVersion, data, _readKey).length; i += 10) _MD.mutationTarget(_MD.trackRead(() => _dataVersion, data, _readKey)[i], "label", _mutated_data).value += ' !!!';
@@ -142,76 +83,73 @@ export function BenchAppInlineOwned(_id, _parent, _props, _namespace2, _setupOnl
     }
   }, _writes);
   _MD.setListener(_button8, "click", void 0, () => {
-    _MD.observeMethod([() => data], [_mutated_data], _MD.trackRead(() => _dataVersion, data, _readKey), "reverse", 0, void 0)();
+    _MD.editArray(_MD.trackRead(() => _dataVersion, data, _readKey), "reverse", [], _mutated_data);
   }, _writes);
   _MD.setListener(_button9, "click", void 0, () => {
-    _MD.observeMethod([() => data], [_mutated_data], _MD.trackRead(() => _dataVersion, data, _readKey), "splice", 0, void 0)(500, 1);
+    _MD.editArray(_MD.trackRead(() => _dataVersion, data, _readKey), "splice", [500, 1], _mutated_data);
   }, _writes);
   _MD.setListener(_button10, "click", void 0, () => {
-    _write(data = _MD.observeMethod([() => data], [_mutated_data], _MD.trackRead(() => _dataVersion, data, _readKey), "filter", 1, void 0)((_item, index) => index % 100 !== 0));
+    _write(data = _MD.trackRead(() => _dataVersion, data, _readKey).filter((_item, index) => index % 100 !== 0));
   }, _writes);
   _MD.setListener(_button11, "click", void 0, () => {
     _write(data = []);
     _write2(selected = null);
   }, _writes);
-  const _rowNamespace = _MD.renderNamespace(_text3.parentNode, _namespace2);
+  const _rowNamespace = _MD.renderNamespace(_text.parentNode, _namespace);
   const _rowOwner = { id: _id, batch: _writes, entity: _entity, namespace: _rowNamespace };
-  const _rowList = _MD.createRowList(_text3, { id: _id, batch: _writes, entity: _entity, namespace: _namespace2 }, (item) => item.id, (item) => {
-    const _clone3 = _MD.cloneTemplate(_template3, _rowNamespace);
-    const _text4 = _clone3.firstChild;
-    const _node4 = _text4.nextSibling;
-    const _text5 = _node4.nextSibling;
-    let _value19 = selected === item.id ? 'danger' : '';
-    if (_value19 != null && _value19 !== false) {
-      _clone3.setAttribute("class", _value19 === true ? "" : _MD.textValue(_value19));
+  const _rowList = _MD.createRowList(_text, { id: _id, batch: _writes, entity: _entity, namespace: _namespace }, (item) => item.id, (item) => {
+    const _clone2 = _MD.cloneTemplate(_template2, _rowNamespace);
+    const _text2 = _clone2.firstChild;
+    const _node3 = _text2.nextSibling;
+    const _text3 = _node3.nextSibling;
+    let _value15 = selected === item.id ? 'danger' : '';
+    if (_value15 != null && _value15 !== false) {
+      _clone2.setAttribute("class", _value15 === true ? "" : _MD.textValue(_value15));
     } else {
-      _clone3.removeAttribute("class");
+      _clone2.removeAttribute("class");
     }
-    _MD.setListener(_clone3, "click", void 0, () => {
+    _MD.setListener(_clone2, "click", void 0, () => {
       _write2(selected = item.id);
     }, _writes);
-    let _value21 = item.id;
-    let _valueSlot3 = null;
-    (_valueSlot3 = _MD.childSlot(_valueSlot3, _text4, _value21, _rowOwner, true))?.write(_value21);
-    let _value22 = item.label;
-    let _valueSlot4 = null;
-    (_valueSlot4 = _MD.childSlot(_valueSlot4, _text5, _value22, _rowOwner, true))?.write(_value22);
-    return { node: _clone3, update(_item2) {
+    let _value17 = item.id;
+    let _valueSlot = null;
+    (_valueSlot = _MD.childSlot(_valueSlot, _text2, _value17, _rowOwner, true))?.write(_value17);
+    let _value18 = item.label;
+    let _valueSlot2 = null;
+    (_valueSlot2 = _MD.childSlot(_valueSlot2, _text3, _value18, _rowOwner, true))?.write(_value18);
+    return { node: _clone2, update(_item2) {
       item = _item2;
-      const _next5 = selected === item.id ? 'danger' : '';
-      if (_next5 !== _value19 && !(_next5 !== _next5 && _value19 !== _value19)) {
-        if (_next5 != null && _next5 !== false) {
-          _clone3.setAttribute("class", _next5 === true ? "" : _MD.textValue(_next5));
+      const _next = selected === item.id ? 'danger' : '';
+      if (_next !== _value15 && !(_next !== _next && _value15 !== _value15)) {
+        if (_next != null && _next !== false) {
+          _clone2.setAttribute("class", _next === true ? "" : _MD.textValue(_next));
         } else {
-          _clone3.removeAttribute("class");
+          _clone2.removeAttribute("class");
         }
-        _value19 = _next5;
+        _value15 = _next;
       }
-      const _next6 = item.id;
-      if (_next6 !== _value21 && !(_next6 !== _next6 && _value21 !== _value21)) {
-        (_valueSlot3 = _MD.childSlot(_valueSlot3, _text4, _next6, _rowOwner, true))?.write(_next6);
-        _value21 = _next6;
+      const _next2 = item.id;
+      if (_next2 !== _value17 && !(_next2 !== _next2 && _value17 !== _value17)) {
+        (_valueSlot = _MD.childSlot(_valueSlot, _text2, _next2, _rowOwner, true))?.write(_next2);
+        _value17 = _next2;
       }
-      const _next7 = item.label;
-      if (_next7 !== _value22 && !(_next7 !== _next7 && _value22 !== _value22)) {
-        (_valueSlot4 = _MD.childSlot(_valueSlot4, _text5, _next7, _rowOwner, true))?.write(_next7);
-        _value22 = _next7;
+      const _next3 = item.label;
+      if (_next3 !== _value18 && !(_next3 !== _next3 && _value18 !== _value18)) {
+        (_valueSlot2 = _MD.childSlot(_valueSlot2, _text3, _next3, _rowOwner, true))?.write(_next3);
+        _value18 = _next3;
       }
     }, dispose() {
-      if (_valueSlot3 !== null) _valueSlot3.dispose();
-      _valueSlot3 = _MD.disposedValueSlot;
-      if (_valueSlot4 !== null) _valueSlot4.dispose();
-      _valueSlot4 = _MD.disposedValueSlot;
+      if (_valueSlot !== null) _valueSlot.dispose();
+      _valueSlot = _MD.disposedValueSlot;
+      if (_valueSlot2 !== null) _valueSlot2.dispose();
+      _valueSlot2 = _MD.disposedValueSlot;
     } };
   }, ["id"]);
   _rowList.route(() => selected, () => _selectedVersion, void 0);
   const _siteComputation = _MD.createComputation(_writes.mark, _entity);
   _siteComputation.begin();
-  let _value18 = _MD.observeMethod([() => data], [_mutated_data], data, "map", 1, _rowList)((item) => (_MD.createKeyedRenderValue(_renderProgram, [item.id, _MD.trackEquals(selected, item.id, () => selected, () => _selectedVersion, _readKey2) ? 'danger' : '', () => {
-    _write2(selected = item.id);
-  }, item.id, item.label], 0)));
+  _rowList.map(data);
   _siteComputation.end();
-  _rowList.write(_value18);
   let _seen = _dataVersion;
   let _publishedVersion = _dataVersion;
   let _publishedVersion2 = _selectedVersion;
@@ -230,14 +168,8 @@ export function BenchAppInlineOwned(_id, _parent, _props, _namespace2, _setupOnl
     const _updateFrame = _scope.enter();
     if (_dataVersion !== _seen || _siteComputation.changed() || _rowList.changed()) {
       _siteComputation.begin();
-      const _next8 = _MD.observeMethod([() => data], [_mutated_data], data, "map", 1, _rowList)((item) => (_MD.createKeyedRenderValue(_renderProgram, [item.id, _MD.trackEquals(selected, item.id, () => selected, () => _selectedVersion, _readKey2) ? 'danger' : '', () => {
-        _write2(selected = item.id);
-      }, item.id, item.label], 0)));
+      _rowList.map(data);
       _siteComputation.end();
-      if (_next8 !== _value18 && !(_next8 !== _next8 && _value18 !== _value18)) {
-        _rowList.write(_next8);
-        _value18 = _next8;
-      }
       _seen = _dataVersion;
     }
     _rowList.refresh(_siteComputation);
@@ -254,7 +186,7 @@ export function BenchAppInlineOwned(_id, _parent, _props, _namespace2, _setupOnl
   }
   _writes.activate();
   _scope.leave(_setupFrame);
-  return _clone2;
+  return _clone;
 }
 
 export function createCompiledInlineOwnedApp() {

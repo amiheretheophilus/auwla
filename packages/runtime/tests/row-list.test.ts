@@ -2,7 +2,6 @@ import { expect, it } from 'bun:test';
 import { Window } from 'happy-dom';
 import { createRowList, type RowEntry } from '../src/row-list';
 import { reconcileList } from '../src/list-values';
-import { createRenderValue, type RenderProgram } from '../src/render-value';
 import { createComputation, publishVersions, trackRead } from '../src/computation';
 
 const document = new Window().document as unknown as Document;
@@ -433,24 +432,12 @@ it('lets a reentrant pass replace the pass it interrupted', () => {
   expect(rows().map((row) => row.item.label)).toEqual(['a', 'b']);
 });
 
-it('shows any other value through a value slot and returns to rows', () => {
+it('shows the items of a receiver that has its own map', () => {
   const { parent, list, rows } = harness();
-  list.map([{ key: 1, label: 'one' }], () => {}, undefined);
-  const program: RenderProgram = {
-    mount: () => {
-      const node = document.createElement('i');
-      node.textContent = 'stored';
-      return { nodes: [node], update() {}, dispose() {} };
-    },
-  };
-  list.write([createRenderValue(program, [])]);
-  expect(rows()).toEqual([]);
-  expect(parent.textContent).toBe('stored');
-  list.write('text');
-  expect(parent.textContent).toBe('text');
-  const token = list.map([{ key: 2, label: 'two' }], () => {}, undefined);
-  list.write(token);
-  expect(parent.textContent).toBe('two');
+  const custom = { map(callback: (item: unknown) => void) { callback({ key: 1, label: 'one' }); callback({ key: 2, label: 'two' }); } };
+  list.map(custom);
+  expect(rows().map((row) => row.id)).toHaveLength(2);
+  expect(parent.textContent).toBe('onetwo');
   list.dispose();
   expect(parent.textContent).toBe('');
 });

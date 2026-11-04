@@ -21,9 +21,7 @@ Finds every place that changes state and makes the UI update after it.
 | `packages/runtime/src/mutation.ts` | Member target preserving native key conversion, getter/setter receiver and successful-store notification |
 | `packages/runtime/tests/mutation.test.ts` | Descriptor snapshots, cyclic/native data, partial-call recovery and key order |
 | `packages/runtime/tests/mutation-roots.test.ts` | Index membership cleanup on disposal/replacement, retained live aliases, opaque edits, interrupted rebuilds and disposal during reflection |
-| `packages/runtime/src/method-calls.ts` | `observeMethod`: skips the snapshot for a call whose actual callee is a proven array intrinsic (`optimize.md`, "Method calls") |
-| `packages/runtime/tests/method-calls.test.ts` | Proven calls take no snapshot; own/replaced methods, subclass species, converting arguments, effectful callbacks and throws stay observed |
-| `optimize/methods.ts` | Lowers observed member calls to `observeMethod` and marks effect-free inline callbacks |
+| `optimize/methods.ts`, `optimize/method-facts.ts` | Known reads stay plain calls and known edits report their root (`optimize.md`, "Method calls") |
 | `optimize/methods.dom.test.ts` | Callback classification and native updates, overrides and order, with optimizations on and off |
 | `tests/cases/handlers.test.ts` | Reference comparisons for handlers, async writes, helper callbacks, accessors, method/prototype replacement and index/property-key conversions whose edits must reach the UI |
 | `packages/runtime/src/write-batch.ts` | Captures the application and entity, publishes groups of pending writes, and shares recovery scheduling across unfinished batches |
@@ -238,11 +236,9 @@ root eagerly nor notifies it twice. Proxy-specific reflection behavior still nee
 coverage.
 
 The snapshot costs the size of the data the reads reach: about 70 ms per call on
-10k rows, even for `items.slice(1)`. With optimizations on, a plain member call
-lowers to `observeMethod`, which skips it when the runtime proves the actual
-callee (`optimize.md`, "Method calls"). An edit it proves touches only a receiver
-that every read returns; it is reported through `observeReceiverEdit`, which keeps
-a pending entry so a throw mid-call is still recovered.
+10k rows, even for `items.slice(1)`. With optimizations on, a method the compiler
+knows takes no snapshot: a read is a plain call and an edit goes through `editArray`
+(`optimize.md`, "Method calls"). Only an unknown call pays for one.
 
 Shared mutation notifications carry the exact written binding key. Hidden-read
 collectors exclude that computation's own outputs, while other shared inputs

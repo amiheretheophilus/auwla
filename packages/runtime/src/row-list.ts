@@ -3,13 +3,10 @@
  * list shape: compiled rows reconciled from the array, with no render value,
  * capture array or nested value slot per row (`compiler-next/src/optimize/row-lists.ts`).
  *
- * Used through `observeMethod` once the runtime has proven the callee is the
- * intrinsic `Array.prototype.map` on an ordinary array. The compiler proved the
- * callback is an arrow `(item, index) => <element …>` whose `key`, if any, is
- * its first dynamic attribute. Calling the compiled row instead of the callback
- * evaluates the same expressions in the same order: per item, the key, then the
- * other attributes and children as written. The value `map` would return only
- * reaches this site, so `map` returns a token the site's `write` ignores.
+ * The compiler proved the callback is an arrow `(item, index) => <element …>`
+ * whose `key`, if any, is its first dynamic attribute. Calling the compiled row
+ * instead of the callback evaluates the same expressions in the same order: per
+ * item, the key, then the other attributes and children as written.
  *
  * Row identity and matching are the general path's (`render-value.ts`,
  * `list-index.ts`): `key=` and the key as a string, or `#` and the index without
@@ -19,14 +16,11 @@
  * string, the identity index is kept across passes instead of rebuilt, moves
  * follow the longest increasing subsequence, and a list that is the whole of
  * its parent clears in one call.
- *
- * Any other value written to the site (the callee was not proven, so the
- * authored callback ran) goes to an ordinary value slot at the same anchor.
  */
 import { createComputation, publishVersions, trackRead } from './computation';
 import { readListLength } from './list-values';
 import { lisPositions } from './list';
-import { createIndexedValueSlot, type RenderOwner, type ValueSlot } from './render-value';
+import type { RenderOwner } from './render-value';
 
 export interface RowEntry {
   /** The row's only root, an element. */
@@ -59,13 +53,14 @@ interface Row {
 }
 
 export interface RowList {
-  /** The intrinsic `map` (`method-calls.ts`): reconcile the rows, return the token. */
-  map(array: readonly unknown[], callback: Function, thisArg: unknown): unknown;
-  /** The site's value: the token is already shown; anything else goes to a value slot. */
-  write(value: unknown): void;
+  /**
+   * `receiver.map(row)`: reconcile the rows. A receiver that is not an array has
+   * its own `map`, which decides the items.
+   */
+  map(receiver: readonly unknown[] | { map(callback: (item: unknown) => void): unknown }): void;
   /** Register a binding compared strictly with the row key, before the first map. */
   route(peek: () => unknown, version: () => number, key?: object): void;
-  /** Unsupported keys or the value-slot fallback need the authored map again. */
+  /** Unsupported keys need the authored map again. */
   changed(): boolean;
   /** Refresh only rows matching a routed binding's previous or current value. */
   refresh(computation?: ReturnType<typeof createComputation>): void;
@@ -109,12 +104,9 @@ export function createRowList(
   /** The compiler-proven member chain from the item to its key, for routing. */
   keyPath?: readonly string[],
 ): RowList {
-  const token = Object.freeze({});
   let rows: Row[] = [];
   /** Rows created by a pass that threw before committing them. */
   let pending: Row[] | null = null;
-  let slot: ValueSlot | null = null;
-  let showingSlot = false;
   let disposed = false;
   let routes: Route[] | null = null;
   let canRoute = false;
@@ -373,24 +365,21 @@ export function createRowList(
   let version = 0;
   const current = () => version;
   return {
-    map(array) {
-      if (disposed) return token;
+    map(receiver) {
+      if (disposed) return;
       trackRead(current, null, versionKey);
-      if (showingSlot) {
-        // Writing text clears whatever the slot showed; the anchor stays.
-        slot!.write('');
-        showingSlot = false;
+
+      let items: readonly unknown[];
+      if (Array.isArray(receiver)) {
+        items = receiver;
+      } else {
+        const collected: unknown[] = [];
+        (receiver as { map(callback: (item: unknown) => void): unknown }).map((item) => { collected.push(item); });
+        items = collected;
       }
-      reconcile(array);
+
+      reconcile(items);
       if (!disposed) syncRoutes();
-      return token;
-    },
-    write(value) {
-      if (disposed || value === token) return;
-      clearRows();
-      (slot ??= createIndexedValueSlot(anchor, owner)).write(value);
-      showingSlot = true;
-      syncRoutes();
     },
     route(peek, version, key) {
       if (disposed) return;
@@ -402,10 +391,10 @@ export function createRowList(
     changed() {
       if (disposed) return false;
       if (pending !== null) return true;
-      return (!canRoute || showingSlot) && (routes?.some(routeChanged) ?? false);
+      return !canRoute && (routes?.some(routeChanged) ?? false);
     },
     refresh(computation) {
-      if (disposed || showingSlot || !canRoute || pending !== null || routes === null) return;
+      if (disposed || !canRoute || pending !== null || routes === null) return;
       const changed = routes.filter(routeChanged);
       if (changed.length === 0) return;
       const affected = new Set<Row>();
@@ -427,7 +416,7 @@ export function createRowList(
       // A full map evaluates rows in DOM order, regardless of which key changed.
       for (const row of [...affected].sort((left, right) => left.position - right.position)) {
         row.entry.update(row.item, row.index);
-        if (disposed || showingSlot || pass !== stamp) {
+        if (disposed || pass !== stamp) {
           computation?.end(!disposed);
           return;
         }
@@ -448,7 +437,6 @@ export function createRowList(
       // A row's disposal can throw. Release subscriptions before authored work.
       for (const route of subscriptions ?? []) route.computation?.dispose();
       clearRows();
-      slot?.dispose();
     },
   };
 }

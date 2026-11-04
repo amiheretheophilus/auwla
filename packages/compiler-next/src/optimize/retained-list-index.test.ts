@@ -38,7 +38,7 @@ it('keeps proven primitive-only plans unchanged', () => {
   expect(optimized[0]).toBe(plans[0]);
 });
 
-it('selects nested branch and stored-value slots without treating method names as pure', () => {
+it('selects nested branch and stored-value slots', () => {
   const source = `
     export function App({ collection, shown }) {
       const view = <section>{collection.unfamiliar()}</section>;
@@ -54,8 +54,8 @@ it('selects nested branch and stored-value slots without treating method names a
   expect(disabled).toContain('.unfamiliar(');
   expect(disabled).toContain('.map(');
   expect(disabled).toContain('.observeMutation(');
-  // `optimize/methods.ts` still calls and observes both; the runtime proof
-  // keys on the callee's identity, never on these names.
-  expect(enabled).toContain('collection, "unfamiliar", 0, void 0)()');
-  expect(enabled).toContain('collection, "map", 0, void 0)()');
+  // `optimize/methods.ts`: the unknown method stays observed; `map` is known to read.
+  expect(enabled).toContain('collection.unfamiliar()');
+  expect(enabled).toContain('.observeMutation(');
+  expect(enabled).toContain('collection.map()');
 });

@@ -180,7 +180,10 @@ export function emitSites(
       }));
       continue;
     }
-    mount.push(statement('let $$value = $$expression;', { value, expression }));
+    // A row list shows its rows inside `map`; there is no value to keep.
+    mount.push(rowList === null
+      ? statement('let $$value = $$expression;', { value, expression })
+      : statement('$$expression;', { expression }));
     if (computation !== null) {
       mount.push(statement('$$computation.end();', { computation }));
     }
@@ -212,7 +215,7 @@ export function emitSites(
       dispose.push(statement('$$slot = $$runtime.disposedValueSlot;', { slot, runtime }));
     }
     const write = (next: string): Statement[] => {
-      const body = writeValue(site, next, node, runtime, eventBatch, listener, valueSlot, rowList?.list ?? null);
+      const body = writeValue(site, next, node, runtime, eventBatch, listener, valueSlot);
 
       return textActive === null ? body : [guardedStatements(buildExpression('$$active', { active: textActive }), body)];
     };
@@ -245,7 +248,7 @@ export function emitSites(
       mount.push(statement('let $$listener = $$runtime.setListener($$node, $$event, void 0, $$value, $$batch);', {
         listener, runtime, node, event: stringLiteral(site.event), value, batch: eventBatch,
       }));
-    } else if (used) {
+    } else if (used && rowList === null) {
       mount.push(...write(value));
     }
     if (!updates) {
@@ -260,17 +263,21 @@ export function emitSites(
       mount.push(statement('let $$seen = $$version;', { seen, version }));
     }
     const next = names.fresh('_next');
-    const body: Statement[] = [statement('const $$next = $$expression;', { next, expression })];
+    const body: Statement[] = [rowList === null
+      ? statement('const $$next = $$expression;', { next, expression })
+      : statement('$$expression;', { expression })];
     if (computation !== null) {
       body.unshift(statement('$$computation.begin();', { computation }));
       body.push(statement('$$computation.end();', { computation }));
     }
-    const writes = used ? write(next) : [];
-    writes.push(statement('$$value = $$next;', { value, next }));
-    // Equality also keeps an unchanged prop from replacing text a user typed.
-    // The NaN check avoids relying on an authored binding named Object.
-    const changed = buildExpression(`(${next} !== ${value} && !(${next} !== ${next} && ${value} !== ${value}))`);
-    body.push(guardedStatements(changed, writes));
+    if (rowList === null) {
+      const writes = used ? write(next) : [];
+      writes.push(statement('$$value = $$next;', { value, next }));
+      // Equality also keeps an unchanged prop from replacing text a user typed.
+      // The NaN check avoids relying on an authored binding named Object.
+      const changed = buildExpression(`(${next} !== ${value} && !(${next} !== ${next} && ${value} !== ${value}))`);
+      body.push(guardedStatements(changed, writes));
+    }
     for (const { version, seen } of snapshots) {
       body.push(statement('$$seen = $$version;', { seen, version }));
     }
@@ -408,16 +415,11 @@ function writeValue(
   batch: Expression,
   listener: string | null,
   valueSlot: LazySlot | null,
-  rowList: string | null,
 ): Statement[] {
   if (site.kind === 'conditional' || site.kind === 'key' || site.kind === 'ref') {
     return [];
   }
   if (site.kind === 'text') {
-    if (rowList !== null) {
-      // The list already showed its rows inside `map`; other values fall back to a slot.
-      return [statement('$$list.write($$value);', { list: rowList, value })];
-    }
     if (valueSlot !== null) {
       const { name: slot, owner, indexed } = valueSlot;
       if (valueSlot.always) {

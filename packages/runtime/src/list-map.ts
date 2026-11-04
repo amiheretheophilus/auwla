@@ -1,9 +1,7 @@
 /**
  * `items.map(callback)` that reuses each item's previous result while nothing
- * it depends on changed. Used only through `observeMethod` once the runtime has
- * proven the callee is the intrinsic `Array.prototype.map` on an ordinary array,
- * and only for callbacks the compiler proved (`compiler-next/src/optimize/methods.ts`,
- * "row reuse"). Such a callback:
+ * it depends on changed. Used only for callbacks the compiler proved
+ * (`compiler-next/src/optimize/row-reuse.ts`). Such a callback:
  *
  * - makes no explicit call, store, deletion or suspension (`effects.ts`);
  * - returns JSX, a compiler-owned value no authored code mutates;
@@ -19,7 +17,7 @@
  * the site that called `map` still re-runs when any of them changes.
  *
  * The result array has native `map`'s shape: the same length, holes where the
- * source has none, and the callback runs with `thisArg` and `(value, index, array)`.
+ * source has them, and the callback runs with `(value, index, array)`.
  */
 import { createComputation } from './computation';
 import { mutatedSince, mutationTime } from './mutation';
@@ -48,7 +46,12 @@ export function takeVerified(value: object): boolean {
 }
 
 export interface RowCache {
-  map(array: readonly unknown[], callback: Function, thisArg: unknown): unknown[];
+  map(array: readonly unknown[], callback: Function): unknown[];
+}
+
+/** `receiver.map(callback)`, through the cache when the receiver is an array. */
+export function mapRows(receiver: any, cache: RowCache, callback: Function): unknown {
+  return Array.isArray(receiver) ? cache.map(receiver, callback) : receiver.map(callback);
 }
 
 /**
@@ -122,7 +125,7 @@ class RowMatcher {
 export function createRowCache(usesIndex: boolean): RowCache {
   let rows: readonly Row[] | null = null;
   return {
-    map(array, callback, thisArg) {
+    map(array, callback) {
       const cached = rows;
       // Reading an array element can run a getter, reenter or throw. Detach
       // before that work: reentry gets its own lookup, and a failed pass never
@@ -155,7 +158,7 @@ export function createRowCache(usesIndex: boolean): RowCache {
           const computation = createComputation();
           const time = mutationTime();
           computation.begin();
-          const value = Reflect.apply(callback, thisArg, [item, index, array]);
+          const value = callback(item, index, array);
           computation.end();
           row = { item, index, result: value, time, computation };
         } else if (typeof row.result === 'object' && row.result !== null) {

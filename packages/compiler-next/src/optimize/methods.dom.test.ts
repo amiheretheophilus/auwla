@@ -43,24 +43,79 @@ const modes = [
   { mode: 'general', optimize: false },
 ];
 
-it('marks only inline callbacks without explicit effects as proven', () => {
-  const output = compile(`
+it('decides from the name at compile time, with no runtime check of the callee', () => {
+  const observed = (call: string) => compile(`
+    import { imported } from './library';
     let total = 0;
+    function fmt(value) { return value + 1; }
+    function touch(value) { value.seen = true; return value; }
     export function App() {
-      let items = [1, 2, 3];
-      const shown = items.map((item) => <li>{item * 2}</li>);
-      const counted = items.map((item) => { total += item; return item; });
-      const called = items.map((item) => String(item));
-      const local = items.filter((item) => { let seen = item; seen++; return seen > 1; });
-      return <ul onClick={() => { items = items.slice(1); }}>{shown}{counted}{called}{local}</ul>;
+      let items = [{ n: 1 }];
+      return <p onClick={() => { ${call}; }}>{items.length}</p>;
+    }
+  `, true).includes('observeMutation(');
+
+  // Reading methods stay plain calls, with a callback that reads, calls a host
+  // function, uses a known method, or calls the program's own pure function.
+  expect(observed('items.slice(1)')).toBe(false);
+  expect(observed('items.map((item) => item.n * 2)')).toBe(false);
+  expect(observed('items.map((item) => String(item.n))')).toBe(false);
+  expect(observed('items.filter((item) => { let seen = item.n; seen++; return seen > 1; })')).toBe(false);
+  expect(observed('items.filter((item) => `${item.n}`.includes("1"))')).toBe(false);
+  expect(observed('items.map((item) => fmt(item.n))')).toBe(false);
+
+  // A callback that can edit what it receives keeps the general observation.
+  expect(observed('items.map((item) => { total += item.n; return item; })')).toBe(true);
+  expect(observed('items.map((item) => { item.n++; return item; })')).toBe(true);
+  expect(observed('items.map((item) => touch(item))')).toBe(true);
+  expect(observed('items.map(touch)')).toBe(true);
+
+  // A known method only reads its arguments, whatever its receiver.
+  expect(observed('[1].concat(items)')).toBe(false);
+  expect(observed('make().concat(items)')).toBe(false);
+  expect(observed('const out = []; out.push(items)')).toBe(false);
+
+  // An unknown method, and a known name on an object from elsewhere.
+  expect(observed('items.unfamiliar()')).toBe(true);
+  expect(observed('other.map(items)')).toBe(true);
+  expect(observed('imported.fill(items, 0)')).toBe(true);
+
+  const output = compile(`
+    export function App() {
+      let items = [1];
+      return <p onClick={() => { items.slice(1); items.push(2); }}>{items.length}</p>;
     }
   `, true);
-  const proven = [...output.matchAll(/observeMethod\([^;]*?, "(\w+)", (\d+), /g)]
-    .map(([, method, bits]) => `${method}:${bits}`);
-  // Setup emits each derived call once, then the handler; replay repeats them.
-  expect(proven.slice(0, 5)).toEqual(['map:1', 'map:0', 'map:0', 'filter:1', 'slice:0']);
-  expect(compile('export function App() { let a = [1]; return <p onClick={() => { a = a.slice(1); }}>{a.length}</p>; }', false))
-    .not.toContain('observeMethod');
+  expect(output).toContain('.slice(1)');
+  expect(output).toMatch(/\.editArray\([^;]*, "push", \[2\], /);
+  for (const check of ['Array.prototype', 'getOwnPropertyDescriptor', 'observeMethod']) {
+    expect(output).not.toContain(check);
+  }
+});
+
+it('trusts no name the module itself gives another meaning', () => {
+  const observed = (setup: string) => compile(`
+    ${setup}
+    export function App() {
+      let items = [1];
+      return <p onClick={() => { items.slice(1); }}>{items.length}</p>;
+    }
+  `, true).includes('observeMutation(');
+
+  expect(observed('')).toBe(false);
+  expect(observed('class Rows { slice() {} }')).toBe(true);
+  expect(observed('const rows = { slice() {} };')).toBe(true);
+  expect(observed('const rows = { slice: () => {} };')).toBe(true);
+  expect(observed('const rows = {}; rows.slice = run;')).toBe(true);
+  expect(observed("Object.defineProperty(target, 'slice', { value() {} });")).toBe(true);
+  // A data field of the same name defines no method.
+  expect(observed("const query = { slice: 'all' };")).toBe(false);
+});
+
+it('leaves the general path observing every call', () => {
+  const output = compile('export function App() { let a = [1]; return <p onClick={() => { a = a.slice(1); }}>{a.length}</p>; }', false);
+  expect(output).toContain('observeMutation(');
+  expect(output).not.toContain('editArray');
 });
 
 it.each(modes)('updates for native array calls on state, read-only and editing ($mode)', async ({ optimize }) => {

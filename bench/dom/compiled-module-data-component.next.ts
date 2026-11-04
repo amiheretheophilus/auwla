@@ -20,7 +20,7 @@ function _Row_row(props, _rowOwner2) {
     _clone2.removeAttribute("class");
   }
   _MD.setListener(_clone2, "click", void 0, () => {
-    _MD.observeMethod([() => props], [_invalidate], props, "select", 0, void 0)(props.item.id);
+    _MD.observeMutation([() => props], [_invalidate]).finish(props.select(props.item.id));
   }, _rowWrites);
   let _value16 = props.item.id;
   const _slotOwner = { id: _rowId, batch: _rowWrites, entity: _rowEntity, namespace: _rowNamespace2 };
@@ -151,7 +151,7 @@ function Row(_id2, _parent2, _props2, _namespace2, _setupOnly2) {
   }
   let _seen = _propsVersion;
   _MD.setListener(_clone3, "click", void 0, () => {
-    _MD.observeMethod([() => props], [_mutated_props], _MD.trackRead(() => _propsVersion, props, _readKey2), "select", 0, void 0)(_MD.trackRead(() => _propsVersion, props, _readKey2).item.id);
+    _MD.observeMutation([() => props], [_mutated_props]).finish(_MD.trackRead(() => _propsVersion, props, _readKey2).select(_MD.trackRead(() => _propsVersion, props, _readKey2).item.id));
   }, _writes2);
   const _siteComputation3 = _MD.createComputation(_writes2.mark, _entity2);
   _siteComputation3.begin();
@@ -294,7 +294,7 @@ export function BenchModuleDataComponent(_id, _parent, _props, _namespace, _setu
       data = _assigned;
       _dataVersion++;
       if (!_sharedScope.building()) _sharedWrites.mark(_sharedKey);
-    } }).value = _MD.observeMethod([() => data], [_mutated_data], _read_data(), "concat", 0, void 0)(buildData(1000));
+    } }).value = _read_data().concat(buildData(1000));
   }, _writes);
   _MD.setListener(_button4, "click", void 0, () => {
     ({ get value() {
@@ -303,7 +303,7 @@ export function BenchModuleDataComponent(_id, _parent, _props, _namespace, _setu
       data = _assigned;
       _dataVersion++;
       if (!_sharedScope.building()) _sharedWrites.mark(_sharedKey);
-    } }).value = _MD.observeMethod([() => data], [_mutated_data], buildData(1000), "concat", 0, void 0)(_read_data());
+    } }).value = _MD.observeMutation([() => data], [_mutated_data]).finish(buildData(1000).concat(_read_data()));
   }, _writes);
   _MD.setListener(_button5, "click", void 0, () => {
     ({ get value() {
@@ -312,7 +312,7 @@ export function BenchModuleDataComponent(_id, _parent, _props, _namespace, _setu
       data = _assigned;
       _dataVersion++;
       if (!_sharedScope.building()) _sharedWrites.mark(_sharedKey);
-    } }).value = _MD.observeMethod([() => data], [_mutated_data], _read_data(), "slice", 0, void 0)(0, -1000);
+    } }).value = _read_data().slice(0, -1000);
   }, _writes);
   _MD.setListener(_button6, "click", void 0, () => {
     for (let i = 0; i < _read_data().length; i += 10) _MD.mutationTarget(_read_data()[i], "label", _mutated_data).value += ' !!!';
@@ -325,10 +325,10 @@ export function BenchModuleDataComponent(_id, _parent, _props, _namespace, _setu
     }
   }, _writes);
   _MD.setListener(_button8, "click", void 0, () => {
-    _MD.observeMethod([() => data], [_mutated_data], _read_data(), "reverse", 0, void 0)();
+    _MD.editArray(_read_data(), "reverse", [], _mutated_data);
   }, _writes);
   _MD.setListener(_button9, "click", void 0, () => {
-    _MD.observeMethod([() => data], [_mutated_data], _read_data(), "splice", 0, void 0)(500, 1);
+    _MD.editArray(_read_data(), "splice", [500, 1], _mutated_data);
   }, _writes);
   _MD.setListener(_button10, "click", void 0, () => {
     ({ get value() {
@@ -337,7 +337,7 @@ export function BenchModuleDataComponent(_id, _parent, _props, _namespace, _setu
       data = _assigned;
       _dataVersion++;
       if (!_sharedScope.building()) _sharedWrites.mark(_sharedKey);
-    } }).value = _MD.observeMethod([() => data], [_mutated_data], _read_data(), "filter", 1, void 0)((_item, index) => index % 100 !== 0);
+    } }).value = _read_data().filter((_item, index) => index % 100 !== 0);
   }, _writes);
   _MD.setListener(_button11, "click", void 0, () => {
     ({ get value() {
@@ -363,9 +363,8 @@ export function BenchModuleDataComponent(_id, _parent, _props, _namespace, _setu
   _rowList.route(() => selected, () => _selectedVersion, void 0);
   const _siteComputation = _MD.createComputation(_writes.mark, _entity);
   _siteComputation.begin();
-  let _value13 = _MD.observeMethod([() => data], [_mutated_data], _read_data(), "map", 1, _rowList)((item) => (_MD.createComponentValue(Row, { "key": item.id, "item": item, "selected": _MD.trackEquals(selected, item.id, () => selected, () => _selectedVersion, _readKey), "select": select }, void 0, void 0)));
+  _rowList.map(_read_data());
   _siteComputation.end();
-  _rowList.write(_value13);
   let _publishedVersion = _selectedVersion;
   _MD.cleanup(_id, () => {
     _rowList.dispose();
@@ -382,12 +381,8 @@ export function BenchModuleDataComponent(_id, _parent, _props, _namespace, _setu
     const _updateFrame = _scope.enter();
     if (_siteComputation.changed() || _rowList.changed()) {
       _siteComputation.begin();
-      const _next4 = _MD.observeMethod([() => data], [_mutated_data], _read_data(), "map", 1, _rowList)((item) => (_MD.createComponentValue(Row, { "key": item.id, "item": item, "selected": _MD.trackEquals(selected, item.id, () => selected, () => _selectedVersion, _readKey), "select": select }, void 0, void 0)));
+      _rowList.map(_read_data());
       _siteComputation.end();
-      if (_next4 !== _value13 && !(_next4 !== _next4 && _value13 !== _value13)) {
-        _rowList.write(_next4);
-        _value13 = _next4;
-      }
     }
     _rowList.refresh(_siteComputation);
     if (_publishedVersion !== _selectedVersion) {

@@ -75,9 +75,8 @@ export interface TextSite extends SiteBase {
 
 /**
  * `items.map((item, index) => <element key={…} …>)` as a text site's whole
- * value. When the runtime proves the intrinsic `map`, a row list evaluates the
- * row's sites directly per item instead of calling the callback
- * (`runtime/src/row-list.ts`); otherwise the callback runs as written.
+ * value. A row list evaluates the row's sites directly per item instead of
+ * calling the callback (`runtime/src/row-list.ts`).
  */
 export interface RowListPlan {
   readonly call: Extract<Node, { type: 'CallExpression' }>;
@@ -316,28 +315,18 @@ export interface MutationPlan {
   readonly targets: readonly { readonly binding: BindingNode; readonly member: Node }[];
   readonly kind: 'store' | 'delete' | 'call';
   /**
-   * Optional (`optimize/methods.ts`): a plain member call lowered to
-   * `observeMethod`, which skips the snapshot when the runtime proves the
-   * actual callee. Bit `i` of `provenCallbacks` marks argument `i` as an
-   * inline function proven to make no explicit call or outside store.
+   * Optional (`optimize/methods.ts`, `optimize/helpers.ts`): what the compiler
+   * knows this call does. Without it the call keeps the general observation.
+   *
+   * - `read`: edits nothing it was given, so it stays a plain call;
+   * - `edit`: edits only its receiver, which is reported after the native call.
    */
   readonly method?: {
-    readonly provenCallbacks: number;
-    /** The first argument also allows row reuse when the callee is the intrinsic `map` (`optimize/row-reuse.ts`). */
+    readonly kind: 'read' | 'edit';
+    /** The callback's result can be reused per item (`optimize/row-reuse.ts`). */
     readonly rowReuse?: { readonly usesIndex: boolean };
     /** The call is a text site's whole value, shown by a row list (`optimize/row-lists.ts`). */
     readonly rowList?: boolean;
-  };
-  /**
-   * Optional (`optimize/helpers.ts`): a call of a helper proven to edit only
-   * what it allocates, lowered to `observeHelper`, which skips the snapshot
-   * once the runtime proves the array methods the proof assumed.
-   */
-  readonly helper?: {
-    readonly copies: readonly (readonly [number, string])[];
-    readonly methods: readonly string[];
-    readonly primitives: readonly number[];
-    readonly propertyKeys: readonly number[];
   };
 }
 

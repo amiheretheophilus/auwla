@@ -12,8 +12,11 @@ Stated by the user on 2026-10-18. They apply to every design and every fix.
    let them replay in the browser ui".
 2. **`let` vs `const` does not decide reactivity.** "this is not svelte".
    `const` is recommended for derived values because it is stricter; `let` works too.
-3. **No method whitelists or blacklists for semantics.** Method lists exist only
-   to optimize. An unlisted method must still work, never be rejected.
+3. **Method lists only optimize; a known name is trusted.** An unlisted method must
+   still work, never be rejected. A listed name means what it says, decided at
+   compile time and never checked at runtime (2026-11-04). The user: "if the user
+   says arrays.one exist on array it not up to us to check it at runtime to see if
+   it exist that is the user bug".
 4. **Opaque fallback.** What the compiler cannot prove is handled conservatively
    (opaque), not rejected with an error.
 5. **No try/catch/finally.** Never wrap generated or authored code in them.

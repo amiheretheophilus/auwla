@@ -23,7 +23,6 @@ Other libraries:
 | --- | --- |
 | `happy-dom` | the DOM in tests (already used by `test-support/`) |
 | `fast-check` | generates test programs and shrinks failures (`testing.md`), so we don't write our own shrinker |
-| `@memoized-dom/runtime/array-methods` | Data-only intrinsic facts shared by compiler proofs and runtime guards; does not initialize the runtime (`optimize.md`) |
 
 Development uses Bun's native `bun check`, with the root engine floor
 `>=1.4.3-0`. The root now requests `@types/bun` `^1.4.4`, rather than `latest`;

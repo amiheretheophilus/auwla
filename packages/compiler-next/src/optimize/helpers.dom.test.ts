@@ -31,7 +31,7 @@ function app(call: string) {
 }
 
 it('proves helpers that edit only arrays and objects they allocate', () => {
-  const proven = (helper: string) => compile(helper).includes('observeHelper(');
+  const proven = (helper: string) => !compile(helper).includes('observeMutation(');
   expect(proven('export function help(rows) { const result = rows.slice(); result[0] = { id: 9, label: "x" }; return result; }')).toBe(true);
   expect(proven('export function help(rows) { const result = rows.slice(); result.splice(result.indexOf(rows[0]), 1); return result; }')).toBe(true);
   expect(proven('export function help(rows) { if (rows.length < 1) return rows; const out = []; for (let i = 0; i < rows.length; i++) out.push(rows[i]); return out; }')).toBe(true);
@@ -47,48 +47,79 @@ it('proves helpers that edit only arrays and objects they allocate', () => {
   expect(proven('export function help(rows) { return rows.filter((row) => { row.seen = true; return true; }); }')).toBe(false);
   expect(proven('function other(r) { r.length = 0; } export function help(rows) { other(rows); return rows; }')).toBe(false);
   expect(proven('export function help(rows) { delete rows[0]; return rows; }')).toBe(false);
-  expect(proven('export function help(rows) { return [...rows]; }')).toBe(false);
+  // Spreading an array only reads it (`method-facts.ts`).
+  expect(proven('export function help(rows) { return [...rows]; }')).toBe(true);
   expect(proven('let count = 0; export function help(rows) { count++; return rows.slice(); }')).toBe(false);
   expect(proven('export function help(rows) { return rows.slice(); } help = (rows) => rows;')).toBe(false);
   expect(proven('export function help(rows) { return rows.slice(); }')).toBe(true);
-  expect(compile('export function help(rows) { return rows.slice(); }', false)).not.toContain('observeHelper(');
+  expect(compile('export function help(rows) { return rows.slice(); }', false)).toContain('observeMutation(');
 });
 
 it('keeps callbacks opaque unless their executed body is proven', () => {
   const helper = `
     export function help(rows, callback) { return rows.map(callback); }
   `;
-  expect(compile(helper)).not.toContain('observeHelper(');
+  expect(compile(helper)).toContain('observeMutation(');
   expect(compile(`
     const edit = (row) => { row.label = 'edited'; return true; };
     export function help(rows) { return rows.filter(edit); }
-  `)).not.toContain('observeHelper(');
+  `)).toContain('observeMutation(');
 });
 
-it('guards converted parameters and keeps unproven conversion values observed', () => {
-  expect(compile('export function help(rows, start) { return rows.slice(start); }')).toContain('help, [1]');
-  expect(compile('export function help(rows) { return rows.slice(rows[0]); }').includes('observeHelper(')).toBe(false);
-  expect(compile(`
+/** A helper taking a second parameter, called with `argument` as written. */
+function compileCall(helper: string, argument: string): string {
+  return compileModules({
+    './App.tsx': `
+      import { help } from './model';
+      export function App() {
+        let rows = [{ id: 1, label: 'a' }];
+        const local = make();
+        const fixed = 1;
+        const named = '__proto__';
+        return <main><p>{rows.length}</p>
+          <button onClick={() => { rows = help(rows, ${argument}); }}>go</button></main>;
+      }
+      function make() { return {}; }`,
+    './model.ts': helper,
+  }, { runtimePath: '@memoized-dom/runtime/testing' })['./App.tsx']!;
+}
+
+it('converts a parameter only when the call passes a primitive, decided at compile time', () => {
+  const slice = 'export function help(rows, start) { return rows.slice(start); }';
+  const proven = (helper: string, argument: string) => !compileCall(helper, argument).includes('observeMutation(');
+
+  expect(proven(slice, '1')).toBe(true);
+  expect(proven(slice, 'fixed')).toBe(true);
+  expect(proven(slice, 'local')).toBe(false);
+
+  const key = 'export function help(rows, key) { const box = {}; box[key] = 1; return rows; }';
+  expect(proven(key, '"value"')).toBe(true);
+  expect(proven(key, 'named')).toBe(false);
+  expect(proven(key, '"__proto__"')).toBe(false);
+
+  const observed = (helper: string) => compile(helper).includes('observeMutation(');
+  expect(observed('export function help(rows) { return rows.slice(rows[0]); }')).toBe(true);
+  expect(observed(`
     const index = external.indexOf();
     export function help(rows) { return rows.slice(index); }
-  `).includes('observeHelper(')).toBe(false);
-  expect(compile('export function help(rows) { return rows.slice(/x/); }').includes('observeHelper(')).toBe(false);
+  `)).toBe(true);
+  expect(observed('export function help(rows) { return rows.slice(/x/); }')).toBe(true);
 });
 
 it('does not treat accessor or custom-prototype allocations as inert fresh data', () => {
-  const proof = (body: string) => compile(`export function help(rows) { ${body} return rows; }`).includes('observeHelper(');
+  const proof = (body: string) => !compile(`export function help(rows) { ${body} return rows; }`).includes('observeMutation(');
   expect(proof(`const box = { value: 0 }; box.value = 1;`)).toBe(true);
   expect(proof(`const box = { set value(next) { rows[0].label = next; } }; box.value = 'z';`)).toBe(false);
   expect(proof(`const box = { get value() { rows[0].label = 'z'; return 1; } }; const value = box.value;`)).toBe(false);
   expect(proof(`const box = { __proto__: { set value(next) { rows[0].label = next; } } }; box.value = 'z';`)).toBe(false);
   expect(proof(`let key = 0; key = { toString() { rows[0].label = 'z'; return 'value'; } }; const box = {}; box[key] = 1;`)).toBe(false);
-  expect(compile('export function help(rows, key) { const box = {}; box[key] = 1; return rows; }')).toContain('help, [1], [1]');
 });
 
-it('keeps observation when fresh member writes can invalidate native method guards', () => {
-  const proof = (body: string) => compile(`export function help(rows) { ${body} return rows; }`).includes('observeHelper(');
+it('keeps observation when the helper redefines a method or a prototype', () => {
+  const proof = (body: string) => !compile(`export function help(rows) { ${body} return rows; }`).includes('observeMutation(');
   expect(proof(`const box = []; box.push = () => { rows[0].label = 'z'; }; box.push();`)).toBe(false);
-  expect(proof(`const box = []; box[0] = rows[0]; box.push(rows[1]);`)).toBe(false);
+  // Storing an element does not redefine `push`.
+  expect(proof(`const box = []; box[0] = rows[0]; box.push(rows[1]);`)).toBe(true);
   expect(proof(`const box = {}; box.__proto__ = rows[0]; box.value = 1;`)).toBe(false);
   expect(proof(`const box = {}; box['__proto__'] = rows[0]; box.value = 1;`)).toBe(false);
   expect(proof(`let key = '__'; key += 'proto__'; const box = {}; box[key] = rows[0]; box.value = 1;`)).toBe(false);

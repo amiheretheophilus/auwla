@@ -79,11 +79,10 @@ export { createWriteBatch, rejectConstAssignment, flushWritesBeforeAwait, resume
 export type { WriteBatch } from './write-batch';
 export { createBuildScope, captureBuildScope, currentBuildFrame, isBuilding, isEffectInvocation } from './build-scope';
 export {
-  mutationTarget, deleteMutation, receiverMutationTarget, observeMutation, watchMutationRoots, checkMutationRoots,
+  mutationTarget, deleteMutation, receiverMutationTarget, observeMutation, editArray, watchMutationRoots, checkMutationRoots,
   mutatedSince, mutationTime,
 } from './mutation';
-export { observeHelper, observeMethod } from './method-calls';
-export { createRowCache } from './list-map';
+export { createRowCache, mapRows } from './list-map';
 export { createRowList } from './row-list';
 export { createComputation, trackEquals, trackRead } from './computation';
 export { createSharedWrites } from './shared-writes';

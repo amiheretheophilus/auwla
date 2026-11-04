@@ -64,7 +64,10 @@ it('allows reuse only for JSX-returning arrows that read tracked or constant val
   expect(caches('(item) => <li>{prop}</li>')).toEqual(['createRowList(']);
   // Returned objects must stay fresh.
   expect(caches('(item) => ({ id: item.id })')).toEqual([]);
-  expect(caches('(item) => <li>{String(item.id)}</li>')).toEqual([]);
+  // A pure host function, or a method known to read, is no effect.
+  expect(caches('(item) => <li>{String(item.id)}</li>')).toEqual(['createRowList(']);
+  expect(caches('(item) => <li>{item.label.toUpperCase()}</li>')).toEqual(['createRowList(']);
+  expect(caches('(item) => <li>{unknown(item)}</li>')).toEqual([]);
   expect(caches('(item, index, all) => <li>{all.length}</li>')).toEqual([]);
   expect(caches('function (item) { return <li>{item.id}</li>; }')).toEqual([]);
   expect(caches('(item) => <li>{changing}</li>', 'globalThis.changing = 1; changing = 2;')).toEqual([]);
