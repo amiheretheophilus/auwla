@@ -32,12 +32,13 @@ Compiler bugs and cases live on their `compiler/` page, under "Cases to test".
 
 ## To discuss with the user first (2026-11-05)
 
-- **Should an installed package keep plain JavaScript meaning?** For
-  `let x = 1; const snap = x; return { inc() { x++; }, x: () => x, snap: () => snap };`
-  all three renderers show `2:2` after `inc()`, and JavaScript gives `2:1`. Outside a
-  render the same `snap()` returns 1. This is the uniform rule, which the user's own
-  components opt into by being written for the framework. A library author did not, so
-  compiling packages by default would change what they do.
+- **How a native package ships: its source, or compiled output with metadata.** The
+  wiki's plan is the second (`compiler/linking.md`), but no decision records it, and the
+  first would need no metadata format. Waiting on the user.
+- **An opaque call snapshots everything the argument's root can reach.**
+  `dset(models[index], …)` walks all of `models`: about 0.5 ms per click at 128 items.
+  Narrowing to `models[index]` would miss a package that was given the whole list earlier
+  and edits it when handed one element, which the full snapshot catches. Left as it is.
 
 ## To discuss with the user first (2026-11-04)
 

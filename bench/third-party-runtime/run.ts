@@ -7,6 +7,7 @@ import { execFileSync } from 'node:child_process';
 import { gzipSync } from 'node:zlib';
 import puppeteer, { type Page } from 'puppeteer-core';
 import { compileModulesDetailed, experimentalCompilePackage, experimentalFinalizePackage } from '@memoized-dom/compiler';
+import { compileModules as compileNext } from '../../packages/compiler-next/src/index';
 import { closeBrowser } from '../../test-support/browser';
 import { fixture } from './fixtures';
 import { benchmarkOptions, summary } from './options';
@@ -76,12 +77,15 @@ try {
       await put(join(dependency, 'memoized-dom.package.json'), JSON.stringify(artifact));
     }
     const start = performance.now();
-    const app = compileModulesDetailed(fixture(config.scenario, config.size), {
-      experimentalPackageArtifacts: config.mode === 'compiled' ? [packaged.artifact] : [],
-      runtimePath: '@memoized-dom/runtime', hot: false, initialContent: false,
-    });
+    const authored = fixture(config.scenario, config.size);
+    const output = config.mode === 'next-opaque'
+      ? compileNext(authored, { runtimePath: '@memoized-dom/runtime' })
+      : compileModulesDetailed(authored, {
+        experimentalPackageArtifacts: config.mode === 'compiled' ? [packaged.artifact] : [],
+        runtimePath: '@memoized-dom/runtime', hot: false, initialContent: false,
+      }).output;
     const applicationCompilationMs = performance.now() - start;
-    for (const [file, code] of Object.entries(app.output)) await put(join(folder, file), code);
+    for (const [file, code] of Object.entries(output)) await put(join(folder, file), code);
     await put(join(folder, 'entry.ts'), `import {App} from './App.tsx';import {installBenchmark} from ${JSON.stringify(join(import.meta.dirname, 'browser.ts').replaceAll('\\', '/'))};installBenchmark(App,${JSON.stringify(config)});`);
     const bundleStart = performance.now();
     const build = await Bun.build({ entrypoints: [join(folder, 'entry.ts')], target: 'browser', format: 'esm', minify: true });
@@ -108,20 +112,24 @@ try {
   for (const scenario of scenarios) for (const size of options.sizes) {
     const opaque = await open({ scenario, size, mode: 'opaque' });
     const compiled = await open({ scenario, size, mode: 'compiled' });
+    const nextOpaque = await open({ scenario, size, mode: 'next-opaque' });
+    const items = [opaque, compiled, nextOpaque];
     try {
       for (let round = -options.warmups; round < options.samples; round++) {
-        const order = ((round + options.warmups) & 1) ? [compiled, opaque] : [opaque, compiled];
+        // Each round starts one mode later, so no mode always runs first.
+        const first = (round + options.warmups) % items.length;
+        const order = [...items.slice(first), ...items.slice(0, first)];
         for (const phase of phases) for (const item of order) {
           const ms = await run(item.page, phase);
           if (round >= 0) item.samples[phase].push(ms);
         }
         if (browserErrors.length) throw new Error(browserErrors.join('\n'));
       }
-      for (const item of [opaque, compiled]) rows.push({ config: item.config, applicationCompilationMs: item.applicationCompilationMs, bundlingMs: item.bundlingMs,
+      for (const item of items) rows.push({ config: item.config, applicationCompilationMs: item.applicationCompilationMs, bundlingMs: item.bundlingMs,
         bundleBytes: item.bundleBytes, gzipBytes: item.gzipBytes, diagnostics: item.diagnostics,
         timings: Object.fromEntries(phases.map(phase => [phase, summary(item.samples[phase])])) as Record<Phase, ReturnType<typeof summary>> });
-      console.log(`${scenario.padEnd(7)} n=${String(size).padEnd(4)} volatile ${opaque.diagnostics.volatileEntities} → ${compiled.diagnostics.volatileEntities}; correctness passed`);
-    } finally { await opaque.page.close(); await compiled.page.close(); }
+      console.log(`${scenario.padEnd(7)} n=${String(size).padEnd(4)} volatile ${opaque.diagnostics.volatileEntities} → ${compiled.diagnostics.volatileEntities}, new opaque ${nextOpaque.diagnostics.volatileEntities}; correctness passed`);
+    } finally { for (const item of items) await item.page.close(); }
   }
   if (browserErrors.length) throw new Error(browserErrors.join('\n'));
   const report = { schema: 'mmd-third-party-runtime-v1', timestamp: new Date().toISOString(), options,
@@ -135,13 +143,13 @@ try {
       updates: 'Synchronous DOM click + commit, no frame pump', updatesFrame: 'One click + one simulated frame per operation',
       diagnostics: 'Separate untimed run; counters never installed in timing trials', installedPackageOptInUsed: false }, rows };
   console.log('\nMedian microseconds per frame/op (P25–P75); below-resolution values are not speedup evidence.');
-  console.log('scenario size mode      idle frame        click+commit      click+frame');
+  console.log('scenario size mode        idle frame        click+commit      click+frame');
   for (const row of rows) {
     const cells = phases.map(phase => {
       const count = phase === 'idle' ? options.frames : options.operations, value = row.timings[phase];
       return `${(value.medianMs * 1000 / count).toFixed(2)} [${(value.p25Ms * 1000 / count).toFixed(2)}–${(value.p75Ms * 1000 / count).toFixed(2)}]`.padEnd(22);
     });
-    console.log(`${row.config.scenario.padEnd(8)} ${String(row.config.size).padEnd(4)} ${row.config.mode.padEnd(9)} ${cells.join(' ')}`);
+    console.log(`${row.config.scenario.padEnd(8)} ${String(row.config.size).padEnd(4)} ${row.config.mode.padEnd(11)} ${cells.join(' ')}`);
   }
   const destination = resolve(options.output ?? join(import.meta.dirname, 'results', `${report.timestamp.replace(/[:.]/g, '-')}-${process.pid}.json`));
   await mkdir(dirname(destination), { recursive: true }); await writeFile(destination, JSON.stringify(report, null, 2) + '\n', { flag: 'wx' });

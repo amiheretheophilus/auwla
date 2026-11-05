@@ -137,15 +137,30 @@ authored AST, copy package sources into the application build, or rebuild the
 old compiler's mutable linking context. Runtime paths and semantic metadata must
 identify the same package instance; incomplete information retains opaque checks.
 
-## Installed packages by default
+## Installed packages run opaque
 
-The goal (`../decisions.md`, 2026-11-05): an installed package used by frontend code is
-compiled by default, and the user can opt out to run it opaque. The old compiler is
-opt-in (`compilePackages`) and a package it cannot compile is an error. A default cannot
-fail a build that way, so a package that cannot be compiled must fall back to opaque.
+An ordinary npm package is not compiled (`../decisions.md`, 2026-11-05). This page's work
+is linking for native packages.
 
-Real packages already in `node_modules` were compiled whole, one process each, on
-2026-11-05. This is the current whole-rewrite path, not a design:
+The old compiler's opaque path is why third-party compilation existed: a reader of an
+opaque value was re-checked every frame. compiler-next checks only at the call.
+`bench/third-party-runtime` compares them on real Chromium, with correct results in every
+mode. One local run at 128 instances, 3 samples, so only a guide (microseconds; the VM is
+still to repeat it):
+
+| Scenario | Measure | Old opaque | Old compiled | New opaque |
+| --- | --- | ---: | ---: | ---: |
+| `local` | idle frame | 108.7 | 0.3 | 0.3 |
+| `local` | click | 56.6 | 4.5 | 23.7 |
+| `shared` | idle frame | 99.8 | 0.2 | 0.2 |
+| `shared` | click | 125.1 | 37.5 | 481.9 |
+| `fetch` | idle frame | 2,843.7 | 0.3 | 0.3 |
+| `fetch` | click | 2,916.8 | 11.8 | 34.3 |
+
+`shared` is slower because the snapshot walks all of `models` (`../open-issues.md`).
+
+To find compiler bugs, real packages in `node_modules` were compiled whole, one process
+each. This is the whole-rewrite path, which is not how they run:
 
 | Package | Modules | In | Out | Time |
 | --- | ---: | ---: | ---: | ---: |
@@ -164,20 +179,18 @@ general bugs, now fixed, with cases: `groupsOfModule` and `cannotReplay`. "Valid
 means the output parses; running these packages against their native behaviour has not
 been done yet.
 
-What this says about the design:
+What this says for native packages too:
 
 - **Emit is the cost, not analysis.** On `gsap`, parse, resolve and classify took about
   0.6 s and emit 14.4 s. On `zod`, about 0.6 s and 2.1 s.
 - **A consumer needs no second path to judge a package call.** `InputQueries.callFacts`
   follows visible functions across files, and reports what they read and write, with
   `opaque` when it cannot tell. This argues for analysing package source over the
-  serialized artifact described above. Not decided.
-- **Rewriting every local is what costs.** `aliasBindings` and the factory owners apply to
-  all code, whether or not state ever reaches it. In `mitt`, which has no state, every
-  array call becomes `observeMutation`.
-
-Open question for the user: a package's `const` is rederived while rendering
-(`open-issues.md`).
+  serialized artifact described above. Not decided (`../open-issues.md`).
+- **A factory costs far too much.** `aliasBindings` and factory owners apply whether or
+  not state ever reaches the code. `packages/utils/src/optimistic.ts`, a real native
+  package, compiles to 115 KB, where the old compiler publishes all of `utils` in 3.4 KB.
+  `request-state.ts` beside it, with only plain helpers, stays at 848 bytes.
 
 ## Inputs and outputs
 

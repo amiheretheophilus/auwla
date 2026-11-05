@@ -2,11 +2,15 @@
 
 Last updated: 2026-11-05.
 
-## Current: Phase 9, installed packages by default (2026-11-05)
+## Current: Phase 9, linking for native packages (2026-11-05)
 
-The user's goal for this phase: linking correct and fast enough to compile installed
-packages by default, with an opt-out to opaque (`compiler/linking.md`, "Installed packages
-by default"). Compiling real npm packages found four crashes and four files that did not
+The goal, from the user: linking that lets us write native packages effectively. Ordinary
+npm packages run opaque, since `bench/third-party-runtime` shows the new opaque path has no
+idle work and correct results (`compiler/linking.md`, "Installed packages run opaque").
+Next: `packages/utils/src/optimistic.ts` compiles to 115 KB against 3.4 KB published for
+all of `utils`, and the user decides how a native package ships (`open-issues.md`).
+
+Compiling real npm packages as a bug hunt found four crashes and four files that did not
 parse, all general compiler bugs:
 
 - Module-level groups of every file are planned as one list, and each file filtered it
@@ -20,9 +24,8 @@ Verified: compiler-next 496 unit, 602 cases and 10 generators at 200 runs; runti
 data 171. The other package suites and root were not rerun for this fix, since no
 runtime or data code changed. Of 28 packages tried, 26 compile to files that parse.
 `happy-dom` still takes over 180 s, and `pure-rand` was not tried because the probe did
-not find its entry. Whether their output behaves as the native package does is not yet
-checked. Size and compile time are far from acceptable for a default, which is the next
-design question, and one semantic question waits on the user (`open-issues.md`).
+not find its entry. Whether their output behaves as the original package does was not
+checked, since these packages are no longer compiled.
 
 ## The VM report for `a98c1e88`, and what followed (2026-11-05)
 
