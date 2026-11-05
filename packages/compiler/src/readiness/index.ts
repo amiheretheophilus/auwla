@@ -122,10 +122,10 @@ function planComponent(ctx: Ctx, facts: ReadFacts, edits: Map<BaseNode, BaseNode
     const gate = lower.gate('deriveResolvedValues', derivation.sources, init);
     if (authored.replay !== undefined) {
       // `$fetch('/api/comments/' + article.slug)`: until `article` commits the
-      // binding holds an idle source; each commit replays the owner, whose
-      // replay rebinds the request.
+      // binding holds a source waiting for its target; each commit replays the
+      // owner, whose replay rebinds the request.
       const idle = astFactory.logicalExpression('??', gate,
-        astFactory.callExpression(mdd(ctx, 'createBodylessSource'), [astFactory.nullLiteral()]));
+        astFactory.callExpression(mdd(ctx, 'createWaitingSource'), []));
       claim(initNode, idle as unknown as BaseNode);
       authored.replay = { ...authored.replay, gate: cloneNode(gate, true) };
       authored.source = cloneNode(idle, true);

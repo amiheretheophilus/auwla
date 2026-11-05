@@ -484,6 +484,11 @@ class ResourceController<T> {
 
   descriptor: FetchDescriptor;
   paused: boolean;
+  /**
+   * The target is not known yet, because it is built from a value still loading. So
+   * this null is not final, unlike `$fetch(null)`: readers wait until a rebind.
+   */
+  awaitingTarget = false;
 
   /** Shared by initial construction and optional request replay. */
   bindSignal(signal: AbortSignal | undefined): boolean {
@@ -782,10 +787,12 @@ export function rebindFetchResource<T>(
     throw new Error('Cannot rebind a disposed fetch resource');
   }
   const unchanged =
+    !controller.awaitingTarget &&
     controller.paused === paused &&
     equalDescriptor(controller.descriptor, descriptor);
   if (unchanged) return;
 
+  controller.awaitingTarget = false;
   controller.operationId = createRequestId();
 
   const replaceSharedIdentity =
@@ -834,6 +841,7 @@ export function rebindFetchResourceFrom<T>(
   }
 
   const unchanged =
+    !controller.awaitingTarget &&
     controller.paused === incoming.paused &&
     equalDescriptor(controller.descriptor, incoming.descriptor);
   if (unchanged) {
@@ -841,6 +849,7 @@ export function rebindFetchResourceFrom<T>(
     return;
   }
 
+  controller.awaitingTarget = false;
   controller.operationId = incoming.operationId;
 
   const previous = controller.entry;
@@ -890,7 +899,13 @@ export function fetchResourceIsPaused<T>(resource: FetchResource<T>): boolean {
     return false;
   }
 
-  return resourceController(resource).paused;
+  const controller = resourceController(resource);
+  return controller.paused && !controller.awaitingTarget;
+}
+
+/** Marks a paused resource as waiting to learn its target (`awaitingTarget`). */
+export function awaitFetchResourceTarget<T>(resource: FetchResource<T>): void {
+  resourceController(resource).awaitingTarget = true;
 }
 
 /**

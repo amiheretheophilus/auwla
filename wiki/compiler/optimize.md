@@ -195,7 +195,7 @@ it for each `receiver.name(…)` that would otherwise be observed:
 
 | Call | Emitted |
 | --- | --- |
-| A known read, with no callback or an inline effect-free one | The call as written, with no observation |
+| A known read, with no callback or an inline one that edits no object | The call as written, with no observation |
 | `map` shown by a row list, or with reusable rows | `list.map(receiver)` or `mapRows(receiver, cache, callback)` |
 | A known edit (`push`, `splice`, `sort`, …) | `editArray(receiver, "push", [args], notify)`: the native call, then the root is reported |
 | A callback that can edit, a named callback, an unknown name | The general `observeMutation` (`handlers.md`) |
@@ -212,6 +212,14 @@ when the compiler knows they only read: the methods above, pure host functions
 (`String`, `Math.*`, `JSON.*`, `Object.keys`, …) and, for observation only
 (`ownFunctions`), the program's own effect-free functions. Row reuse does not accept
 those, because it skips the callback and cannot see the function's reads.
+
+Observation asks a narrower question: can this call edit an object? So it also accepts
+writes to plain names (`nameWrites`): `items.forEach((i) => { total += i.price; })`
+stores a number, edits no object, and that write reports itself. `row.n = 2`,
+`[row.n] = [2]`, `delete row.n` and a call it cannot judge stay observed. Row reuse and
+"does this call build its value?" keep the strict question, because skipping or
+replaying such a callback would lose the write. Cases:
+`tests/cases/handlers.unchanged.test.ts`, "a callback writing a name".
 
 ### Closed lists
 

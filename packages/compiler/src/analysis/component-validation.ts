@@ -39,7 +39,7 @@ const COLLECTING_METHODS = new Set(['push', 'unshift', 'splice']);
  * setup and never re-run. Name that shape instead of reporting its symptoms
  * (a misplaced key, or leftover JSX) so authors reach for `.map()`.
  */
-function isImperativeJsx(ctx: Ctx, element: BaseNode): boolean {
+export function isImperativeJsx(ctx: Ctx, element: BaseNode): boolean {
   let child = element;
   let parent = ctx.astAnalysis?.parentByNode.get(element) ?? null;
   while (parent !== null) {

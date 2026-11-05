@@ -9,6 +9,7 @@ import {
 import { advanceWriteEpoch } from './write-epoch';
 import { recoveryHooks } from './recovery-hooks';
 import { isRefNode } from './refs';
+import { isBuilding, isEffectInvocation } from './build-scope';
 
 const arrayIsArray = Array.isArray;
 
@@ -489,6 +490,11 @@ function snapshot(object: object): unknown[] {
     result.push(bytes.length, ...bytes);
   } else if (object instanceof ArrayBuffer) {
     result.push(object.byteLength, ...new Uint8Array(object));
+  } else if (object instanceof WeakMap || object instanceof WeakSet) {
+    // Its entries cannot be listed, so an edit cannot be seen: a call that reaches one
+    // may have made one, and a new object here never compares equal. Not during a
+    // render, where `cache.set(key, compute())` fills a cache and reporting would loop.
+    result.push(isBuilding() && !isEffectInvocation() ? null : {});
   }
   const keys = Reflect.ownKeys(object);
   result.push(keys.length);

@@ -792,6 +792,157 @@ behaves('derived: a value whose initializer calls a method replays from its init
   check(container, observation) { expect(container.querySelector('p')?.textContent).toBe(['0', '3'][observation]!); },
 });
 
+/** A weak collection cannot be listed, so an edit to one is assumed, not seen. */
+function weak(name: string, setup: string, write: string, shown: string, expected: [string, string]): void {
+  behaves(`state: a weak collection: ${name}`, {
+    source: `
+      export function App() {
+        const token = {};
+        ${setup}
+        return <main><button onClick={() => { ${write} }}>go</button><p>{${shown}}</p></main>;
+      }`,
+    steps: [{ click: 'button' }],
+    check(container, observation) {
+      expect(container.querySelector('p')?.textContent).toBe(expected[observation]!);
+    },
+  });
+}
+
+const labels = 'const labels = new WeakMap([[token, "a"]]);';
+weak('WeakMap.set', labels, 'labels.set(token, "b");', 'labels.get(token)', ['a', 'b']);
+weak('WeakMap.delete', labels, 'labels.delete(token);', 'String(labels.get(token))', ['a', 'undefined']);
+weak('WeakSet.add', 'const marks = new WeakSet();', 'marks.add(token);', 'String(marks.has(token))', ['false', 'true']);
+weak('WeakSet.delete', 'const marks = new WeakSet([token]);', 'marks.delete(token);', 'String(marks.has(token))', ['true', 'false']);
+weak('through a derived value', `${labels} const label = labels.get(token);`, 'labels.set(token, "b");', 'label', ['a', 'b']);
+weak('held in a field', 'const state = { labels: new WeakMap([[token, "a"]]) };', 'state.labels.set(token, "b");', 'state.labels.get(token)', ['a', 'b']);
+weak('edited by a helper', `${labels} const put = (map) => { map.set(token, "b"); };`, 'put(labels);', 'labels.get(token)', ['a', 'b']);
+
+behaves('state: a weak collection: a cache filled while rendering settles', {
+  source: `
+    const cache = new WeakMap();
+    let computed = 0;
+    function lookup(item) {
+      if (!cache.has(item)) { computed += 1; cache.set(item, item.n * 2); }
+      return cache.get(item);
+    }
+    export function App() {
+      const rows = [{ n: 1 }];
+      let shown = 0;
+      return <main>
+        <button onClick={() => { shown++; }}>go</button>
+        <p>{lookup(rows[0])}:{shown}</p>
+      </main>;
+    }`,
+  steps: [{ click: 'button' }],
+  check(container, observation) {
+    expect(container.querySelector('p')?.textContent).toBe(['2:0', '2:1'][observation]!);
+  },
+});
+
+// An object literal reading a prop is derived (`wiki/decisions.md`, 2026-10-19). A field
+// edited locally lasts until that prop changes, which builds the whole object again.
+behaves('derived: a literal built from a prop keeps a local edit until the prop changes', {
+  source: `
+    function Field({ counter }) {
+      const state = { value: counter, input: "" };
+      return <section>
+        <input id="in" value={state.input} onInput={(e) => { state.input = e.target.value; }} />
+        <p>{state.value}|{state.input}</p>
+      </section>;
+    }
+    export function App() {
+      let counter = 0;
+      let other = 0;
+      return <main>
+        <button id="next" onClick={() => { counter++; }}>next</button>
+        <button id="other" onClick={() => { other++; }}>other</button>
+        <i>{other}</i>
+        <Field counter={counter} />
+      </main>;
+    }`,
+  steps: [
+    { input: '#in', value: 'hello' },
+    { click: '#other' },
+    { click: '#next' },
+    { input: '#in', value: 'again' },
+  ],
+  check(container, observation) {
+    expect(container.querySelector('p')?.textContent).toBe(['0|', '0|hello', '0|hello', '1|', '1|again'][observation]!);
+    expect((container.querySelector('#in') as HTMLInputElement).value).toBe(['', 'hello', 'hello', '', 'again'][observation]!);
+  },
+});
+
+// Two collections built from one object share a computation group. Re-running the group
+// for one's edit must not rebuild the other and lose its edit.
+behaves('state: collections built from one object keep each other\'s edits', {
+  source: `
+    // Defining these makes the calls below unknown, so they may build what they receive.
+    class Box { get() {} set() {} }
+    export function App() {
+      const key = {};
+      const first = new Map([[key, 1]]);
+      const second = new Map([[key, 1]]);
+      const shownFirst = first.get(key);
+      const shownSecond = second.get(key);
+      return <main>
+        <button id="first" onClick={() => { first.set(key, 2); }}>first</button>
+        <button id="second" onClick={() => { second.set(key, 3); }}>second</button>
+        <p>{shownFirst}:{shownSecond}</p>
+      </main>;
+    }`,
+  steps: [{ click: '#first' }, { click: '#second' }],
+  check(container, observation) {
+    expect(container.querySelector('p')?.textContent).toBe(['1:1', '2:1', '2:3'][observation]!);
+  },
+});
+
+// `tests/r23-local-state.test.ts` on the old compiler, which rebuilds `weakLabels` from
+// `token` and so loses the edit. `token` is never written, so nothing rebuilds it here.
+behaves('state: views of Map, Set, WeakMap, WeakSet, object and class state follow their edits', {
+  source: `
+    class Box {
+      value;
+      constructor(value) { this.value = value; }
+      get() { return this.value; }
+      set(value) { this.value = value; }
+    }
+    export function App() {
+      const labels = new Map([[1, "a"]]);
+      const selected = new Set(["x"]);
+      const record = { first: 1 };
+      const token = {};
+      const weakLabels = new WeakMap([[token, "weak-a"]]);
+      const weakSelected = new WeakSet([token]);
+      const box = new Box("box-a");
+      const mapRows = Array.from(labels, ([id, title]) => ({ id, title }));
+      const setRows = Array.from(selected, value => ({ id: value, value }));
+      const objectRows = Object.entries(record).map(([id, value]) => ({ id, value }));
+      const weakLabel = weakLabels.get(token);
+      const isWeakSelected = weakSelected.has(token);
+      const boxValue = box.get();
+      return <main>
+        <button id="go" onClick={() => {
+          labels.set(2, "b");
+          selected.add("y");
+          record.second = 2;
+          weakLabels.set(token, "weak-b");
+          weakSelected.delete(token);
+          box.set("box-b");
+        }}>go</button>
+        <p>{weakLabel} {isWeakSelected ? "yes" : "no"} {boxValue}</p>
+        <div>{mapRows.map(row => <span key={row.id}>{row.title}</span>)}</div>
+        <div>{setRows.map(row => <span key={row.id}>{row.value}</span>)}</div>
+        <div>{objectRows.map(row => <span key={row.id}>{row.value}</span>)}</div>
+      </main>;
+    }`,
+  steps: [{ click: '#go' }],
+  check(container, observation) {
+    expect(container.querySelector('p')?.textContent).toBe(['weak-a yes box-a', 'weak-b no box-b'][observation]!);
+    const rows = [...container.querySelectorAll('div')].map((row) => row.textContent);
+    expect(rows).toEqual([['a', 'x', '1'], ['ab', 'xy', '12']][observation]!);
+  },
+});
+
 behaves('derived: a var declared in a loop header derives with its loop, as let does', {
   source: `export function App() {
     let n = 2;

@@ -1,6 +1,6 @@
 import {expect,it,vi} from 'bun:test';
 import {createDataRuntime} from '../src/client';
-import {rebindFetchResource} from '../src/resource';
+import {awaitFetchResourceTarget,fetchResourcePayloadSnapshot,rebindFetchResource,subscribeFetchResource} from '../src/resource';
 import type {FetchOptions} from '../src/types';
 
 it('preserves paused requests without reading query or body inputs',()=>{
@@ -10,6 +10,34 @@ it('preserves paused requests without reading query or body inputs',()=>{
     const source=runtime.$fetch(null,options);
     rebindFetchResource(source,null,options);
     expect(source.status).toBe('idle');expect(fetcher).not.toHaveBeenCalled();
+  } finally {runtime.clear();}
+});
+
+it('a null target is final, but a source waiting for its target is not',()=>{
+  const fetcher=vi.fn(()=>new Promise<Response>(()=>{}));const runtime=createDataRuntime({fetch:fetcher});
+  try {
+    const paused=runtime.$fetch(null);
+    expect(fetchResourcePayloadSnapshot(paused).status).toBe('success');
+
+    const waiting=runtime.$fetch(null);
+    awaitFetchResourceTarget(waiting);
+    expect(fetchResourcePayloadSnapshot(waiting).status).toBe('idle');
+    expect(fetcher).not.toHaveBeenCalled();
+
+    // The value it was built from loaded, and its target turned out to be null.
+    const notified=vi.fn();
+    subscribeFetchResource(waiting,notified);
+    notified.mockClear();
+    rebindFetchResource(waiting,null);
+    expect(fetchResourcePayloadSnapshot(waiting).status).toBe('success');
+    expect(notified).toHaveBeenCalledTimes(1);
+
+    // From there on it is an ordinary request.
+    const started=runtime.$fetch(null);
+    awaitFetchResourceTarget(started);
+    rebindFetchResource(started,'https://app.test/one');
+    expect(fetcher).toHaveBeenCalledTimes(1);
+    expect(fetchResourcePayloadSnapshot(started).pending).toBe(true);
   } finally {runtime.clear();}
 });
 

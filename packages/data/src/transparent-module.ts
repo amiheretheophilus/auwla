@@ -25,7 +25,7 @@ import { getExtensionStore } from '@memoized-dom/runtime';
 import { getActiveDataRuntime } from './active-runtime';
 import { enableRequestEncoding } from './request-encoding';
 import { installActiveDataRestoration } from './active-restoration';
-import { disposeFetchResource, rebindFetchResource, rebindFetchResourceFrom } from './resource';
+import { awaitFetchResourceTarget, disposeFetchResource, rebindFetchResource, rebindFetchResourceFrom } from './resource';
 import type { FetchOptions, FetchResource, ResolvedValue } from './types';
 import { enableDataReads, rebindReadResource } from './read-resource';
 import { registerDataRuntimeDisposer } from './runtime-lifetime';
@@ -142,6 +142,18 @@ export function createBodylessSource<T>(
 ): ResolvedValue<T> {
   installActiveDataRestoration();
   return createClientSource(target, options);
+}
+
+/**
+ * A request built from a value still loading (`$fetch('/c/' + article.slug)`): it has
+ * no target yet and starts at the first rebind. Readers wait for it, where a final
+ * `$fetch(null)` is a committed null that nothing waits for (`wiki/decisions.md`,
+ * 2026-10-27).
+ */
+export function createWaitingSource<T>(): ResolvedValue<T> {
+  const value = createBodylessSource<T>(null);
+  awaitFetchResourceTarget(value as unknown as FetchResource<T>);
+  return value;
 }
 
 /** Host-proved client delivery omits transfer setup on the same request engine. */

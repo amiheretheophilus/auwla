@@ -110,6 +110,48 @@ interface Computation {
 let computation: Computation | undefined;
 const externalReads = new Map<string, ReadValue>();
 const privateVersions = new WeakMap<object, number>();
+
+/**
+ * A weak collection's entries cannot be listed, so a copy cannot show an edit. The
+ * reference counts its real edits instead. The compiled runtime cannot wrap native
+ * methods, and assumes a call reaching one edited it (`observeMutation`).
+ */
+const weakEdits = new WeakMap<object, number>();
+const setWeakEdits = WeakMap.prototype.set;
+const getWeak = WeakMap.prototype.get;
+const hasInMap = WeakMap.prototype.has;
+const hasInSet = WeakSet.prototype.has;
+
+function countWeakEdit(target: object): void {
+  setWeakEdits.call(weakEdits, target, (getWeak.call(weakEdits, target) ?? 0) + 1);
+}
+
+const deleteFromMap = WeakMap.prototype.delete;
+WeakMap.prototype.delete = function (this: WeakMap<object, unknown>, key: object): boolean {
+  const removed = deleteFromMap.call(this, key);
+  if (removed) countWeakEdit(this);
+  return removed;
+};
+WeakMap.prototype.set = function <V>(this: WeakMap<object, V>, key: object, value: V) {
+  const changed = !hasInMap.call(this, key) || !Object.is(getWeak.call(this, key), value);
+  setWeakEdits.call(this, key, value);
+  if (changed && this !== weakEdits) countWeakEdit(this);
+  return this;
+};
+const addToSet = WeakSet.prototype.add;
+WeakSet.prototype.add = function (this: WeakSet<object>, value: object) {
+  const added = !hasInSet.call(this, value);
+  addToSet.call(this, value);
+  if (added) countWeakEdit(this);
+  return this;
+};
+const deleteFromSet = WeakSet.prototype.delete;
+WeakSet.prototype.delete = function (this: WeakSet<object>, value: object): boolean {
+  const removed = deleteFromSet.call(this, value);
+  if (removed) countWeakEdit(this);
+  return removed;
+};
+
 let importingModules = false;
 let namespaceSnapshots: Array<() => void> = [];
 
@@ -920,6 +962,7 @@ function deepCopy(value: unknown, copies = new Map<object, unknown>()): unknown 
   }
 
   if (value instanceof Date) return remember({ date: value.getTime() });
+  if (value instanceof WeakMap || value instanceof WeakSet) return remember({ weakEdits: weakEdits.get(value) ?? 0 });
 
   if (value instanceof Map) {
     const entries: unknown[] = [];

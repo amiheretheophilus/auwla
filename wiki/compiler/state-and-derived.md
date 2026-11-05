@@ -205,6 +205,17 @@ control of it (approved 2026-10-20, superseding snapshots from initialization).
 | something reactive | no | **derived**: re-run when what it reads changes |
 | something reactive | yes | **state**: holds the later assigned value; no further derivation |
 
+An edit of a field is not a reassignment. `const state = { value: counter, input: "" }`
+with `state.input = x` stays derived: the edit shows and lasts through unrelated updates,
+and when `counter` changes the whole object is built again, so `input` goes back to `""`.
+To keep the field across that change, hold it apart: `let input = ""`.
+
+Values that may build each other share a computation group. Re-running a group for one
+member's change does not create another member again unless that member's own inputs
+changed, or a possible builder was seen changing it. Otherwise it would lose edits made
+to it (`first.set(key, 2)`). A member with a definite builder starts from its initial
+value every time (`features/derived/dom.ts`, `keepsValue`).
+
 - **Reactive** means it reads a prop, state, derived value, source, ref or opaque node.
 - **A global the program never writes is not an input** (`../decisions.md`,
   2026-10-21). `Math.PI * r`, `document.title`, `setInterval` and `console` are

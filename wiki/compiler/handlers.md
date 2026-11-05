@@ -266,9 +266,16 @@ their setup scope when suspending, so their caller can continue building.
 The Phase 3 gate passes under the agreed view scope. A native regression covers
 Object.setPrototypeOf, Object.defineProperty and Reflect.deleteProperty without
 invoking an unused getter. **Known conformance gap:** snapshots and alias scans
-still invoke proxy reflection traps; hostile/revoked proxies and WeakMap-backed
-state need further coverage and fixes. These are not accepted failure semantics.
+still invoke proxy reflection traps; hostile/revoked proxies need further coverage and
+fixes. These are not accepted failure semantics.
 Nested-block storage, shared storage and explicit await boundaries are built.
+
+A `WeakMap` or `WeakSet` cannot be listed, so a snapshot cannot see an edit to one. An
+unknown call that reaches one reports a change, except during a render, where
+`cache.set(key, compute())` only fills a cache and reporting would loop. So
+`labels.set(token, sameValue)` re-runs an effect reading `labels` on the compilers but
+not on the reference, which counts real edits by wrapping the native methods. Cases:
+`tests/cases/state-and-derived.test.ts`, "a weak collection".
 
 ## Rules
 

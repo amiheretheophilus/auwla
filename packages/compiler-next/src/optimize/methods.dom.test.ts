@@ -63,9 +63,10 @@ it('decides from the name at compile time, with no runtime check of the callee',
   expect(observed('items.filter((item) => { let seen = item.n; seen++; return seen > 1; })')).toBe(false);
   expect(observed('items.filter((item) => `${item.n}`.includes("1"))')).toBe(false);
   expect(observed('items.map((item) => fmt(item.n))')).toBe(false);
+  // Writing a plain name edits no object, and that write reports itself.
+  expect(observed('items.map((item) => { total += item.n; return item; })')).toBe(false);
 
   // A callback that can edit what it receives keeps the general observation.
-  expect(observed('items.map((item) => { total += item.n; return item; })')).toBe(true);
   expect(observed('items.map((item) => { item.n++; return item; })')).toBe(true);
   expect(observed('items.map((item) => touch(item))')).toBe(true);
   expect(observed('items.map(touch)')).toBe(true);
@@ -189,6 +190,33 @@ it.each(modes)('evaluates receiver, method, arguments and call in native order (
   `, optimize);
   click('go');
   expect(module.log).toEqual(['receiver', 'argument', 'done']);
+});
+
+/** The optimized output for a handler that makes `call` on a list of records. */
+function handlerCalling(call: string): string {
+  return compile(`
+    export function App() {
+      let rows = [{ n: 1 }];
+      let total = 0;
+      let last = null;
+      return <main>
+        <button onClick={() => { ${call} }}>go</button>
+        <p>{rows[0].n}:{total}</p>
+      </main>;
+    }
+  `, true);
+}
+
+it('observes no call whose callback only writes plain names', () => {
+  expect(handlerCalling('rows.forEach((row) => { total += row.n; });')).not.toContain('observeMutation');
+  expect(handlerCalling('rows.forEach((row) => { last = row; });')).not.toContain('observeMutation');
+});
+
+it('observes a call whose callback edits an object, or whose callback it cannot see', () => {
+  expect(handlerCalling('rows.forEach((row) => { total += 1; row.n = 2; });')).toContain('observeMutation');
+  expect(handlerCalling('rows.forEach((row) => { last = row; last.n = 2; });')).toContain('observeMutation');
+  expect(handlerCalling('rows.forEach((row) => { [row.n] = [2]; });')).toContain('observeMutation');
+  expect(handlerCalling('rows.forEach(window.visit);')).toContain('observeMutation');
 });
 
 it.each(modes)('keeps a getter-returned object reactive after reverse stores it as data ($mode)', async ({ optimize }) => {

@@ -4,8 +4,17 @@
 
 Compiler bugs and cases live on their `compiler/` page, under "Cases to test".
 
-- **Server package tests** have pre-existing order-dependent failures.
 - **Compiler README** does not describe the readiness behaviour yet.
+- **Root tests are not in CI.** `compiler-next.yml` never runs them, which is how the
+  old-compiler failures below went unseen. Run them with `bun test --parallel=2 ./tests`:
+  a plain `bun test ./tests` shares one process, fails five files that pass alone and
+  dies asking for 34 GB. Packages need `--isolate` for the same reason.
+- **R23 on the old compiler** (`tests/r23-local-state.test.ts`, one failure):
+  `new WeakMap([[token, …]])` reads a local, so since `6230c271` it is rebuilt and loses
+  `.set`. Left unpatched by the 2026-10-19 decision to stop patching those passes.
+  compiler-next passes the same program (`tests/cases/state-and-derived.test.ts`), after
+  this test exposed two bugs there: weak collection edits were never seen, and a group
+  re-run created its other members again and lost their edits.
 
 ## To discuss with the user first (2026-11-04)
 

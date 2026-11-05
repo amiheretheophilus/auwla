@@ -125,6 +125,109 @@ behaves('what counts as a change: a same-value write in module state', {
   },
 });
 
+/**
+ * A known method's callback may write plain names without being observed, since that
+ * edits no object and reports itself. Each case shows `rows[0].n` and `count` after go.
+ */
+function callback(name: string, setup: string, write: string, expected: string): void {
+  behaves(`a callback writing a name: ${name}`, {
+    source: `
+      export function App() {
+        let rows = [{ n: 1, tags: [1, 2] }];
+        let count = 0;
+        let last = null;
+        ${setup}
+        return <main>
+          <button onClick={() => { ${write} }}>go</button>
+          <p>{rows.length ? rows[0].n : 'none'}:{count}</p>
+        </main>;
+      }`,
+    steps: [{ click: 'button' }],
+    check(container, observation) {
+      if (observation === 1) expect(container.querySelector('p')?.textContent).toBe(expected);
+    },
+  });
+}
+
+callback('it accumulates', '', 'rows.forEach((row) => { count += row.n; });', '1:1');
+callback('it counts inside map', '', 'rows = rows.map((row) => ({ n: row.n + 1, tags: row.tags, id: count++ }));', '2:1');
+callback('it counts in a nested call', '', 'rows.forEach((row) => { row.tags.forEach(() => { count++; }); });', '1:2');
+callback('it replaces the list it walks', '', 'rows.forEach(() => { rows = []; });', 'none:0');
+callback('it holds an item', '', 'rows.forEach((row) => { last = row; });', '1:0');
+callback('through a function of the program', 'const bump = () => { count++; };', 'rows.forEach(() => bump());', '1:1');
+
+// These edit an object as well, and must still show.
+callback('it also edits the item', '', 'rows.forEach((row) => { count++; row.n = 2; });', '2:1');
+callback('it edits through the name it wrote', '', 'rows.forEach((row) => { last = row; last.n = 2; });', '2:0');
+callback('it edits by destructuring', '', 'rows.forEach((row) => { [row.n] = [2]; });', '2:0');
+callback('it deletes a field', '', 'rows.forEach((row) => { count++; delete row.n; });', ':1');
+callback('a function of the program edits', 'const edit = (row) => { row.n = 2; };', 'rows.forEach((row) => edit(row));', '2:0');
+
+behaves('a callback writing a name: module state', {
+  source: `
+    let total = 0;
+    export function App() {
+      let rows = [{ n: 4 }];
+      return <main>
+        <button onClick={() => { rows = rows.map((row) => { total += row.n; return row; }); }}>go</button>
+        <p>{total}</p>
+      </main>;
+    }`,
+  steps: [{ click: 'button' }],
+  check(container, observation) {
+    expect(container.querySelector('p')?.textContent).toBe(['0', '4'][observation]);
+  },
+});
+
+behaves('a callback writing a name: the item it held can be edited later', {
+  source: `
+    export function App() {
+      let rows = [{ n: 1 }];
+      let last = null;
+      return <main>
+        <button id="hold" onClick={() => { rows.forEach((row) => { last = row; }); }}>hold</button>
+        <button id="edit" onClick={() => { last.n = 2; }}>edit</button>
+        <p>{rows[0].n}</p>
+      </main>;
+    }`,
+  steps: [{ click: '#hold' }, { click: '#edit' }],
+  check(container, observation) {
+    expect(container.querySelector('p')?.textContent).toBe(['1', '1', '2'][observation]);
+  },
+});
+
+behaves('a callback writing a name: a value built that way follows what it read', {
+  source: `
+    export function App() {
+      let rows = [{ n: 1 }, { n: 2 }];
+      let total = 0;
+      rows.forEach((row) => { total += row.n; });
+      return <main><button onClick={() => { rows[0].n = 5; }}>go</button><p>{total}</p></main>;
+    }`,
+  steps: [{ click: 'button' }],
+  check(container, observation) {
+    expect(container.querySelector('p')?.textContent).toBe(['3', '7'][observation]);
+  },
+});
+
+behaves('a callback writing a name: an effect reading the list does not re-run for it', {
+  source: `
+    export function App() {
+      let rows = [{ n: 1 }];
+      let count = 0;
+      let runs = [];
+      $effect(() => { runs.push(rows.length); });
+      return <main>
+        <button onClick={() => { rows.forEach(() => { count++; }); }}>go</button>
+        <p>{runs.length}:{count}</p>
+      </main>;
+    }`,
+  steps: [{ click: 'button' }],
+  check(container, observation) {
+    expect(container.querySelector('p')?.textContent).toBe(['1:0', '1:1'][observation]);
+  },
+});
+
 behaves('an edit through a call updates: a field', {
   source: `
     export function App() {

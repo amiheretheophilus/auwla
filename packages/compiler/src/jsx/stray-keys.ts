@@ -14,6 +14,7 @@ import * as astFactory from '../ast/factory';
 import { nodeFields as fields, walkAst, type BaseNode } from '../ast';
 import type { DomContext as Ctx } from '../dom/context';
 import { generatedIdentifier } from '../dom/identifiers';
+import { isImperativeJsx } from '../analysis/component-validation';
 
 interface StrayKey {
   element: t.JSXElement;
@@ -41,6 +42,8 @@ export function normalizeStrayKeys(ctx: Ctx): boolean {
             astFactory.isJSXIdentifier(candidate.name, { name: 'key' }),
         );
         if (attribute === undefined || returnedFromNestedFunction(parent, functions.at(-1), component)) return;
+        // `rows.push(<i key={x} />)` is not misplaced: it is rejected for what it is.
+        if (isImperativeJsx(ctx, node)) return;
         found.push({ element, attribute, parent, key, index });
       },
       leave(node) {

@@ -25,6 +25,12 @@ export interface EffectOptions {
    * component state are not visible in the callback.
    */
   readonly ownFunctions?: boolean;
+  /**
+   * Also accept writes to plain names (`n++`, `total += row.price`). Such a write
+   * stores a value and edits no object, and it reports itself. This answers "can this
+   * edit an object?", not "does this change nothing?".
+   */
+  readonly nameWrites?: boolean;
 }
 
 /** Whether `id` names a host global: nothing in the program declares it. */
@@ -92,7 +98,9 @@ export function callOnlyReads(module: Module, call: Node): boolean {
   return is.CallExpression(call) && is.MemberExpression(call.callee) && methodCallIsPure(module, call, {});
 }
 
+/** Verdicts on the program's own functions, one table for each question asked. */
 const ownFunctions = new WeakMap<Node, boolean>();
+const ownFunctionsWritingNames = new WeakMap<Node, boolean>();
 
 /** A call of a function declared in the program whose own body is effect-free. */
 function ownFunctionIsPure(module: Module, call: Extract<Node, { type: 'CallExpression' }>, options: EffectOptions): boolean {
@@ -116,13 +124,14 @@ function ownFunctionIsPure(module: Module, call: Extract<Node, { type: 'CallExpr
   }
   if (fn === null) return false;
 
-  const known = ownFunctions.get(fn);
+  const verdicts = options.nameWrites === true ? ownFunctionsWritingNames : ownFunctions;
+  const known = verdicts.get(fn);
   if (known !== undefined) return known;
 
   // A recursive call is judged by the rest of the body.
-  ownFunctions.set(fn, true);
+  verdicts.set(fn, true);
   const pure = effectFree(definition.module, fn, options);
-  ownFunctions.set(fn, pure);
+  verdicts.set(fn, pure);
   return pure;
 }
 
@@ -144,12 +153,14 @@ function constructsPure(module: Module, node: Extract<Node, { type: 'NewExpressi
  * outside its own locals, deletes nothing, and does not suspend. It may call what
  * the compiler knows only reads: the methods in `method-facts.ts`, pure host
  * functions, and, with `ownFunctions`, the program's own effect-free functions.
+ * With `nameWrites` it may also store to plain names outside its locals.
  */
 export function effectFree(module: Module, root: Node, options: EffectOptions = {}): boolean {
   if (is.Function(root) && (root.async || root.generator)) return false;
 
   const local = (target: Node): boolean => {
     if (!is.Identifier(target)) return false;
+    if (options.nameWrites === true) return true;
     const declaration = module.referenceOf(target)?.binding?.declarations[0];
     return declaration !== undefined && declaration.start >= root.start && declaration.end <= root.end;
   };

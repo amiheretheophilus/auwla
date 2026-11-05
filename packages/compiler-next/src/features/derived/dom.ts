@@ -2,7 +2,7 @@
 import { b, is, walk } from 'yuku-ast';
 import type { Expression, Node, Statement } from 'yuku-parser';
 import type { BindingNode } from '../../core/graph';
-import type { ComponentPlan, MemoGroupPlan } from '../../core/plan/model';
+import type { ComponentPlan, MemoGroupPlan, MemoPlan } from '../../core/plan/model';
 import type { Names } from '../../core/emit/names';
 import { copy } from '../../core/emit/copy';
 import { expression, statement } from '../../core/emit/quote';
@@ -99,9 +99,18 @@ export function emitMemos(
     initialTracking.set(step, { computation, changed });
   };
 
+  /**
+   * A member of a group re-run only for a sibling's change keeps its value: creating it
+   * again would lose edits made to it since (`first.set(key, 2)`). Not a member with a
+   * definite builder, which starts again from its initial value every time.
+   */
+  const keepsValue = (group: MemoGroupPlan, memo: MemoPlan): boolean => {
+    return group.steps.length > 1 && !memo.nested && memo.builders.length === 0;
+  };
+
   for (const group of plan.memos) {
     for (const memo of group.computations) {
-      if (memo.targets.some((target) => target.kind === 'Source')) {
+      if (memo.targets.some((target) => target.kind === 'Source') || keepsValue(group, memo)) {
         trackInitializer(group, memo.declarator);
       }
     }
@@ -158,8 +167,10 @@ export function emitMemos(
     dirty.set(group, changed);
     const conditions = [];
     for (const step of group.steps) {
+      // Its whole condition: an input may be another member of this group, which the
+      // group's own inputs leave out (`first.get(key)` after `first.set(key, 2)`).
       const collector = initialTracking.get(step);
-      if (collector !== undefined) conditions.push(expression('$$computation.changed()', { computation: collector.computation }));
+      if (collector !== undefined) conditions.push(collector.changed);
     }
     if (group.dynamic) {
       const computation = names.fresh('_computation');
@@ -386,17 +397,25 @@ export function emitMemos(
     const initializer = initialTracking.get(original);
     if (initializer !== undefined) {
       const used = possibleFlags.get(original);
+      // A possible builder that did change this value builds it from here on: replaying
+      // that builder needs the initial value again.
+      const memo = step.group.computations.find((computation) => computation.declarator === original);
+      const isSource = memo?.targets.some((target) => target.kind === 'Source') ?? false;
+      const changed = isSource ? initializer.changed : [...(memo?.possibleBuilders.keys() ?? [])].reduce((left, builder) => {
+        const flag = possibleFlags.get(builder);
+        return flag === undefined ? left : expression('$$left || $$flag', { left, flag });
+      }, initializer.changed);
 
       if (used === undefined) {
-        eligible = expression('$$changed && $$definite', {
-          changed: initializer.changed,
+        eligible = expression('($$changed) && $$definite', {
+          changed,
           definite: active(definite),
         });
       } else {
-        eligible = expression('($$used && $$possible) || ($$changed && $$definite)', {
+        eligible = expression('($$used && $$possible) || (($$changed) && $$definite)', {
           used,
           possible: active(possible),
-          changed: initializer.changed,
+          changed,
           definite: active(definite),
         });
       }

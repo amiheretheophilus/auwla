@@ -64,8 +64,10 @@ describe('external tester regressions', () => {
     })).not.toThrow();
   });
 
-  it('points a misplaced key diagnostic at the key attribute', () => {
-    const diagnostic = diagnose(
+  // A key outside a list follows React since 2026-10-19 (`stray-keys.test.ts`), so this
+  // is no longer reported. It used to check that the report pointed at the attribute.
+  it('reports no misplaced key for a literal key outside a list', () => {
+    const diagnostics = diagnose(
       'export function Card() {\n' +
       '  return (\n' +
       '    <article\n' +
@@ -74,11 +76,8 @@ describe('external tester regressions', () => {
       '  );\n' +
       '}\n',
       { moduleId: './Card.tsx' },
-    )[0];
-    expect(diagnostic).toMatchObject({
-      moduleId: './Card.tsx',
-      line: 4,
-    });
+    );
+    expect(diagnostics).toEqual([]);
   });
 
   it('points a missing linked export diagnostic at its import specifier', () => {

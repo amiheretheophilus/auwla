@@ -123,15 +123,16 @@ describe('M5.3 fixes — code generation', () => {
   });
 
   it('rejects the newly-validated misuses with actionable errors', () => {
-    // key on a static child (was: silent prop misalignment)
+    // A key outside a list follows React since 2026-10-19 (`stray-keys.test.ts`):
+    // a literal one has no effect, so it is not a misuse any more.
     expect(() =>
       compile(
         `let a = 0;\nfunction Badge() { return <span />; }\nfunction C() { return <div><Badge key="k" /></div>; }`,
       ),
-    ).toThrowError(/only meaningful on list rows/);
+    ).not.toThrow();
     expect(() =>
       compile(`function C() { return <div key="k">x</div>; }`),
-    ).toThrowError(/only meaningful on list rows/);
+    ).not.toThrow();
 
     // state-reading props on a static child: R10 — allowed, re-pushed via setProps
     {

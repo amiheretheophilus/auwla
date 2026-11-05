@@ -72,6 +72,7 @@ export {
 export {
   createSource,
   createBodylessSource,
+  createWaitingSource,
   createClientSource,
   createReadSource,
   describeModuleSource,

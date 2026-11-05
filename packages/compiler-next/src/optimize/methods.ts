@@ -3,8 +3,9 @@
  * decision is made here and nothing checks it at runtime:
  *
  * - a method that only reads stays a plain call with no observation. A callback
- *   it runs must be inline and effect-free, because a callback can edit the items
- *   it receives; any other callback keeps the general observation.
+ *   it runs must be inline and edit no object, because a callback can edit the items
+ *   it receives; any other callback keeps the general observation. Writing a plain
+ *   name is allowed (`total += row.price`): it edits no object and reports itself.
  * - a method that edits its receiver runs natively, then reports the receiver's
  *   root (`editArray` in `runtime/src/mutation.ts`).
  *
@@ -59,10 +60,15 @@ function foreignObject(module: Module, object: Node): boolean {
   return binding === null || module.imports.some((imported) => imported.local === binding);
 }
 
+/** A callback that runs during the call and can edit no object, so nothing needs observing. */
+function editsNoObject(module: Module, callback: Node): boolean {
+  return effectFree(module, callback, { ownFunctions: true, nameWrites: true });
+}
+
 function callbacksKnown(module: Module, call: Call, fact: MethodFact): boolean {
   return call.arguments.every((argument, index) => {
     if (is.SpreadElement(argument)) return fact.callback < 0;
-    if (is.Function(argument)) return effectFree(module, argument, { ownFunctions: true });
+    if (is.Function(argument)) return editsNoObject(module, argument);
     return index !== fact.callback;
   });
 }
@@ -76,7 +82,7 @@ function lowerCall(
 
   const call = plan.operation;
   if (callEditsNoArgument(general.module.module, call)
-    && call.arguments.every((argument) => !is.Function(argument) || effectFree(general.module.module, argument, { ownFunctions: true }) || !runsDuringCall(call))) {
+    && call.arguments.every((argument) => !is.Function(argument) || editsNoObject(general.module.module, argument) || !runsDuringCall(call))) {
     return { ...plan, method: { kind: 'read' } };
   }
 
