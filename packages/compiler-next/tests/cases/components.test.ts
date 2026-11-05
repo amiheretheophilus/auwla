@@ -147,6 +147,80 @@ behaves('complex JSX: render callbacks combine fragments module state and local 
   check(container, observation) { expect(container.querySelector('section')?.textContent).toBe(['MM:12', 'MM:24', 'NN:24', 'NN:2'][observation]); },
 });
 
+/** A name copied from a component holds its callable form, and still works as a tag. */
+function aliased(name: string, source: string, modules: Record<string, string> = {}): void {
+  behaves(`component alias: ${name}`, {
+    source,
+    modules,
+    steps: [{ click: 'button' }],
+    check(container, observation) {
+      expect(container.querySelector('ul')?.textContent).toBe(['1', '2'][observation]);
+    },
+  });
+}
+
+aliased('a tag', `
+  function Item({ id }) { return <li>{id}</li>; }
+  const Kept = Item;
+  export function App() {
+    let id = 1;
+    return <main><button onClick={() => { id = 2; }}>go</button><ul><Kept id={id} /></ul></main>;
+  }`);
+
+aliased('an alias of an alias', `
+  function Item({ id }) { return <li>{id}</li>; }
+  const First = Item;
+  export function App() {
+    const Second = First;
+    let id = 1;
+    return <main><button onClick={() => { id = 2; }}>go</button><ul><Second id={id} /></ul></main>;
+  }`);
+
+aliased('in a branch', `
+  function Item({ id }) { return <li>{id}</li>; }
+  const Kept = Item;
+  export function App() {
+    let id = 1;
+    return <main><button onClick={() => { id = 2; }}>go</button><ul>{id > 0 ? <Kept id={id} /> : null}</ul></main>;
+  }`);
+
+aliased('beside the component it copies', `
+  function Item({ id }) { return <li>{id}</li>; }
+  const Kept = Item;
+  export function App() {
+    let id = 1;
+    return <main><button onClick={() => { id = 2; }}>go</button><ul><Kept id={id} /></ul><ol><Item id={id} /></ol></main>;
+  }`);
+
+aliased('in a list', `
+  function Item({ row }) { return <li>{row.id}</li>; }
+  const Kept = Item;
+  export function App() {
+    let rows = [{ id: 1 }];
+    return <main>
+      <button onClick={() => { rows = [{ id: 2 }]; }}>go</button>
+      <ul>{rows.map((row) => <Kept key={row.id} row={row} />)}</ul>
+    </main>;
+  }`);
+
+aliased('exported by another module', `
+  import { Kept } from './item';
+  export function App() {
+    let id = 1;
+    return <main><button onClick={() => { id = 2; }}>go</button><ul><Kept id={id} /></ul></main>;
+  }`, {
+  './item.tsx': `
+    function Item({ id }) { return <li>{id}</li>; }
+    export const Kept = Item;`,
+});
+
+aliased('a function held in a name of its own', `
+  const Item = ({ id }) => <li>{id}</li>;
+  export function App() {
+    let id = 1;
+    return <main><button onClick={() => { id = 2; }}>go</button><ul><Item id={id} /></ul></main>;
+  }`);
+
 behaves('complex JSX: JSX variables helpers arrays and conditionals stay reactive', {
   source: `
     function label(value) { return <strong>{value}</strong>; }

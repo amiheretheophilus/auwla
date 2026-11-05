@@ -27,12 +27,14 @@ import type { BindingNode } from '../core/graph';
 import { qualifies } from './keyed-comparisons';
 import type { ComponentPlan, ModulePlan, MutationPlan, RenderValuePlan, RowListPlan, Site } from '../core/plan/model';
 import type { FunctionNode } from '../core/resolve/functions';
-import { cleanJsxText } from '../core/plan/jsx';
-import { isComponentCall } from '../features/components/plan';
+import { cleanJsxText, unwrap } from '../core/plan/jsx';
+import { destructuredProps, isComponentCall } from '../features/components/plan';
 import { attributeValue } from '../features/components/dom';
+import { hasDynamicScope } from './closed-lists';
 import type { Optimization } from '.';
 
 type Element = Extract<Node, { type: 'JSXElement' }>;
+type RowProp = Extract<RowListPlan['row'], { kind: 'component' }>['props'][number];
 
 function rowList(site: Site, general: ModulePlan, values: ReadonlyMap<Node, RenderValuePlan>, calls: ReadonlyMap<Node, MutationPlan>): RowListPlan | null {
   if (site.kind !== 'text' || site.primitive || site.spread === true) return null;
@@ -84,8 +86,9 @@ function componentRow(
  * A module-level component declaration, never reassigned, whose instance only
  * shows its props: no setup statements, local state, derivations, writes,
  * takeovers or refs, no edits except of its props inside its handlers, at most
- * one plain `props` parameter, and one element root. Compiled again at module
- * level, its names resolve as written.
+ * one parameter, either a plain `props` or a plain destructuring of it
+ * (`destructuredProps`), and one element root. Compiled again at module level,
+ * its names resolve as written.
  */
 function leafComponent(tag: Extract<Node, { type: 'JSXIdentifier' }>, general: ModulePlan): FunctionNode | null {
   const module = general.module.module;
@@ -99,7 +102,9 @@ function leafComponent(tag: Extract<Node, { type: 'JSXIdentifier' }>, general: M
   if (found === undefined) return null;
   const [fn, plan] = found;
   if ([...module.ancestors(fn)].some((ancestor) => ancestor !== fn && is.Function(ancestor))) return null;
-  if (fn.async || fn.generator || fn.params.length > 1 || (fn.params.length === 1 && !is.Identifier(fn.params[0]))) return null;
+  if (fn.async || fn.generator || fn.params.length > 1) return null;
+  const param = fn.params[0];
+  if (param !== undefined && !is.Identifier(param) && destructuredProps(param) === null) return null;
   // Edits of its props made by its handlers (`props.select(id)` passes `props`
   // as `this`) stay observed in the row; they re-render the list
   // (`core/emit/row-list.ts`). Nothing may edit them while the row renders.
@@ -128,18 +133,35 @@ function sameChain(module: Module, left: Node, right: Node, param: Binding): boo
   return sameChain(module, left.object, right.object, param);
 }
 
-/** Substitute a leaf's `props.item` with the corresponding authored row prop. */
+/**
+ * Substitute a leaf's prop with the authored row prop it holds: `props.item` read
+ * through the object, or `item` destructured from it.
+ */
 function componentKey(module: Module, node: Node, key: Node, rows: RowListPlan, param: Binding): boolean {
   if (rows.row.kind !== 'component') return false;
-  const props = rows.row.component.params[0];
-  if (props === undefined || !is.Identifier(props)) return false;
-  const binding = module.bindings.find((candidate) => candidate.declarations[0] === props);
-  if (binding === undefined) return false;
+  const { component, props: rowProps } = rows.row;
+  const parameter = component.params[0];
+  if (parameter === undefined) return false;
+
+  const propNamed = (name: string) => rowProps.find((prop) => prop.name === name);
+  const propsObject = is.Identifier(parameter)
+    ? module.bindings.find((candidate) => candidate.declarations[0] === parameter)
+    : undefined;
+  const fields = destructuredProps(parameter);
+
+  const holdsKey = (prop: RowProp | undefined, right: Node): boolean => {
+    return prop !== undefined && sameChain(module, prop.value, right, param);
+  };
+
   const match = (left: Node, right: Node): boolean => {
+    if (is.Identifier(left)) {
+      const declared = module.referenceOf(left)?.binding?.declarations[0];
+      const field = fields?.find((candidate) => candidate.local === declared);
+      return field !== undefined && holdsKey(propNamed(field.key), right);
+    }
     if (!is.MemberExpression(left) || left.computed || left.optional || !is.Identifier(left.property)) return false;
-    if (is.Identifier(left.object) && module.referenceOf(left.object)?.binding === binding) {
-      const prop = rows.row.kind === 'component' ? rows.row.props.find((prop) => prop.name === left.property.name) : undefined;
-      return prop !== undefined && sameChain(module, prop.value, right, param);
+    if (propsObject !== undefined && is.Identifier(left.object) && module.referenceOf(left.object)?.binding === propsObject) {
+      return holdsKey(propNamed(left.property.name), right);
     }
     return is.MemberExpression(right) && !right.computed && !right.optional && is.Identifier(right.property)
       && left.property.name === right.property.name && match(left.object, right.object);
@@ -206,6 +228,28 @@ function withRoutes(
   return routes.length === 0 ? rows : { ...rows, routes };
 }
 
+/**
+ * Whether the only uses of this leaf are rows, each compiled from its own factory. Nothing
+ * can then call the component itself, so it is not emitted. An export, a read of its
+ * name, a tag anywhere else, or a module that can reach names dynamically keeps it.
+ */
+function shownOnlyAsRows(module: Module, fn: FunctionNode, rowElements: ReadonlySet<Node>): boolean {
+  if (!is.FunctionDeclaration(fn) || fn.id === null || hasDynamicScope(module)) return false;
+  // `export function Row` is not a reference of its name.
+  if (module.parentOf(fn)?.type !== 'Program') return false;
+
+  const binding = module.bindings.find((candidate) => candidate.declarations[0] === fn.id);
+  if (binding === undefined) return false;
+
+  return binding.references.every((reference) => {
+    if (reference.inTypePosition) return true;
+    const tag = module.parentOf(reference.node);
+    if (!is.JSXOpeningElement(tag) && !is.JSXClosingElement(tag)) return false;
+    const element = module.parentOf(tag);
+    return element !== null && rowElements.has(element);
+  });
+}
+
 function rowSites(sites: readonly Site[], plan: (site: Site) => RowListPlan | null, found: Set<Node>): readonly Site[] {
   let changed = false;
   const next = sites.map((site): Site => {
@@ -258,6 +302,8 @@ export const rowLists: Optimization = {
     }
     const found = new Set<Node>();
     const routed = new Map<Node, BindingNode>();
+    const leaves = new Set<FunctionNode>();
+    const rowElements = new Set<Node>();
     // Only a component's own sites: the row is declared where its callback is
     // evaluated, in the component's scope. Rows inside stored JSX stay general.
     const components = new Map(general.components);
@@ -265,7 +311,12 @@ export const rowLists: Optimization = {
       const inputs = new Map(component.siteInputs);
       const plan = (site: Site) => {
         const rows = rowList(site, general, values, calls);
-        return rows === null ? null : withRoutes(rows, site, general, component, inputs, routed);
+        if (rows === null) return null;
+        if (rows.row.kind === 'component') {
+          leaves.add(rows.row.component);
+          rowElements.add(unwrap(rows.callback.body));
+        }
+        return withRoutes(rows, site, general, component, inputs, routed);
       };
       const sites = rowSites(component.sites, plan, found);
       if (sites !== component.sites) components.set(fn, { ...component, sites, siteInputs: inputs });
@@ -288,6 +339,15 @@ export const rowLists: Optimization = {
       const mutations = markCalls(owner.mutations, found);
       return mutations === owner.mutations ? owner : { ...owner, mutations };
     });
-    return { ...general, values: remaining, components, sharedOwners, ...(routed.size > 0 ? { routedComparisons: routed } : {}) };
+    const module = general.module.module;
+    const rowOnly = new Set([...leaves].filter((fn) => shownOnlyAsRows(module, fn, rowElements)));
+    return {
+      ...general,
+      values: remaining,
+      components,
+      sharedOwners,
+      ...(routed.size > 0 ? { routedComparisons: routed } : {}),
+      ...(rowOnly.size > 0 ? { rowOnly } : {}),
+    };
   },
 };

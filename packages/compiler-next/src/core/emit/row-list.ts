@@ -7,7 +7,8 @@
  *
  * A leaf component row is compiled once more at module level, beside the
  * component, as `function _Row_row(props, owner)`: its template and sites with
- * the props object as its parameter, which the row's update assigns.
+ * the props object as its parameter, which the row's update assigns. A leaf that
+ * destructures its props gets those names as locals, and the update assigns each.
  */
 import { b, is } from 'yuku-ast';
 import type { Expression, Node, Statement } from 'yuku-parser';
@@ -19,6 +20,7 @@ import { withoutUnusedLocals } from './locals';
 import { expression, statement, stringLiteral } from './quote';
 import { emitNodes } from './template';
 import { emitSites, renderOwner, type SitesContext } from './sites';
+import { destructuredProps } from '../../features/components/plan';
 import { emitMutations, seenEdits } from '../../features/handlers/mutations';
 
 type BlockStatement = Extract<Statement, { type: 'BlockStatement' }>;
@@ -89,15 +91,13 @@ export function emitRowList(plan: RowListPlan, anchor: string, context: SitesCon
     });
     const row = names.fresh('_row');
     const next = params.map((param) => names.fresh(`_${param}`));
+    const factory = rows.factory(plan.row.component, untracked, plan.row.props.map((prop) => prop.name), plan.row.scalarText);
     body = [
-      statement('const $$row = $$factory($$props, $$owner);', {
-        row, owner, props: props(),
-        factory: rows.factory(plan.row.component, untracked, plan.row.props.map((prop) => prop.name)),
-      }),
+      statement('const $$row = $$factory($$props, $$owner);', { row, owner, props: props(), factory: factory.name }),
       b.ReturnStatement({ argument: entry(`${row}.node`, next, [
         ...assign(params, next),
         statement('$$row.update($$props);', { row, props: props() }),
-      ], [statement('$$row.dispose();', { row })]) }),
+      ], factory.disposes ? [statement('$$row.dispose();', { row })] : []) }),
     ];
   }
   const create = arrow(params, b.BlockStatement({ body }));
@@ -129,10 +129,16 @@ export function emitRowList(plan: RowListPlan, anchor: string, context: SitesCon
   return { list, declarations };
 }
 
+/** A compiled leaf row. Its entry has a `dispose` only when there is something to dispose. */
+interface RowFactory {
+  readonly name: string;
+  disposes: boolean;
+}
+
 /** Leaf component rows, each compiled once per module (`emitRowList`). */
 export class RowComponents {
   readonly declarations: Statement[] = [];
-  readonly #factories = new Map<Node, Map<string, string>>();
+  readonly #factories = new Map<Node, Map<string, RowFactory>>();
 
   constructor(
     private readonly plan: ModulePlan,
@@ -142,19 +148,28 @@ export class RowComponents {
     private readonly replacements: ReadonlyMap<Node, Node>,
   ) {}
 
-  factory(fn: FunctionNode, untracked: ReadonlyMap<Node, Node>, propNames: readonly string[]): string {
+  factory(
+    fn: FunctionNode,
+    untracked: ReadonlyMap<Node, Node>,
+    propNames: readonly string[],
+    scalarText: ReadonlySet<Node> = new Set(),
+  ): RowFactory {
     const routed = [...untracked].filter(([node]) => node.start >= fn.start && node.end <= fn.end);
-    const signature = `${routed.map(([node]) => node.start).join(',')}|${JSON.stringify(propNames)}`;
+    const scalars = [...scalarText].map((node) => node.start).join(',');
+    const signature = `${routed.map(([node]) => node.start).join(',')}|${JSON.stringify(propNames)}|${scalars}`;
     let factories = this.#factories.get(fn);
     if (factories === undefined) this.#factories.set(fn, factories = new Map());
-    let name = factories.get(signature);
-    if (name !== undefined) return name;
+    const known = factories.get(signature);
+    if (known !== undefined) return known;
     const component = this.plan.components.get(fn)!;
     const { names, runtime } = this;
-    name = names.fresh(`_${is.FunctionDeclaration(fn) && fn.id !== null ? fn.id.name : 'component'}_row`);
-    factories.set(signature, name);
+    const name = names.fresh(`_${is.FunctionDeclaration(fn) && fn.id !== null ? fn.id.name : 'component'}_row`);
+    // Registered before its sites are compiled, so a row that shows itself ends here.
+    const factory: RowFactory = { name, disposes: false };
+    factories.set(signature, factory);
     const param = fn.params[0];
     const props = param !== undefined && is.Identifier(param) ? param.name : names.fresh('_props');
+    const fields = (param === undefined ? null : destructuredProps(param)) ?? [];
     const owner = names.fresh('_rowOwner');
     const document = names.fresh('_document');
     const id = names.fresh('_rowId');
@@ -172,15 +187,20 @@ export class RowComponents {
       names, runtime, batch, entity, id, document, namespace,
       versions: new Map(), replacements: handlers.replacements, ref: () => '', rows: true,
     };
-    const body = emitRow(component.template, component.sites, context, (emitted, root) => {
+    const sites = withScalarText(component.sites, scalarText);
+    const body = emitRow(component.template, sites, context, (emitted, root) => {
       const next = names.fresh('_nextProps');
       // The general receiver keeps the props object while its fields are the
       // same. Where the object is only read through members, its identity is
       // unobservable, so the row takes the new object without comparing. Both
       // objects come from this list's literal, so its fields are known here.
-      const receive = param !== undefined && is.Identifier(param) && !membersOnly(this.plan, param)
-        ? keepSameProps(props, next, propNames)
-        : [statement('$$props = $$next;', { props, next })];
+      // A destructuring leaf never holds the object, only what it read from it.
+      const receive = param !== undefined && !is.Identifier(param)
+        ? fields.map(({ key, local }) => statement('$$local = $$next[$$key];', { local: local.name, next, key: stringLiteral(key) }))
+        : param !== undefined && !membersOnly(this.plan, param)
+          ? keepSameProps(props, next, propNames)
+          : [statement('$$props = $$next;', { props, next })];
+      factory.disposes = emitted.dispose.length > 0;
       return entry(root, [next], [...receive, ...emitted.update], emitted.dispose);
     });
     const declaration = statement(`function ${name}($$props, $$owner) {}`, { props, owner });
@@ -192,13 +212,26 @@ export class RowComponents {
         statement('const $$entity = $$owner.entity;', { entity, owner }),
         statement('const $$namespace = $$owner.namespace;', { namespace, owner }),
         ...(component.mutations.length === 0 ? [] : [statement('const $$invalidate = $$owner.invalidate;', { invalidate, owner })]),
+        ...fields.map(({ key, local }) => statement('let $$local = $$props[$$key];', { local: local.name, props, key: stringLiteral(key) })),
         ...handlers.declarations,
         ...body,
       ], [document, id, batch, entity, namespace]);
     }
     this.declarations.push(declaration);
-    return name;
+    return factory;
   }
+}
+
+/**
+ * Text this list proved primitive writes directly. Text fusion ran after the proof, so
+ * a fused site counts when every part it took was proven.
+ */
+function withScalarText(sites: readonly Site[], scalarText: ReadonlySet<Node>): readonly Site[] {
+  return sites.map((site) => {
+    if (site.kind !== 'text' || site.primitive) return site;
+    const parts = site.parts === undefined ? [site.expression] : site.parts.filter((part) => typeof part !== 'string');
+    return parts.every((part) => scalarText.has(part)) ? { ...site, primitive: true, guardDisposal: false } : site;
+  });
 }
 
 /** `if (props.a !== next.a || props.b !== next.b) props = next;`. No field: nothing can differ. */

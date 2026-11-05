@@ -77,6 +77,32 @@ export function functionValue(module: Module, value: Node, visited = new Set<Bin
 }
 
 /**
+ * Whether this name was declared with the function itself. `const Kept = Item` follows to
+ * the same function, but reading `Item` as a value gives its callable adapter
+ * (`componentValue`), so `Kept` holds that and not the function.
+ */
+export function declaredWithFunction(module: Module, name: Node): boolean {
+  if (!is.Identifier(name) && !is.JSXIdentifier(name)) return false;
+  const binding = module.bindingOf(name);
+  if (binding === null) return false;
+
+  const definition = binding.definition()?.binding ?? binding;
+  const declaration = definition.declarations[0];
+  if (declaration === undefined) return false;
+
+  const parent = definition.module.parentOf(declaration);
+  if (is.Function(parent) && parent.id === declaration) return true;
+  if (!is.VariableDeclarator(parent) || parent.init === null) return false;
+
+  let value: Node = parent.init;
+  while (is.ParenthesizedExpression(value) || is.TSAsExpression(value)
+    || is.TSNonNullExpression(value) || is.TSSatisfiesExpression(value)) {
+    value = value.expression;
+  }
+  return is.Function(value);
+}
+
+/**
  * One summary per function. Each module is scanned once and every node is
  * attributed to the function whose run executes it (`runnerOf`), so the cost
  * grows with the module, not with the module times its functions.

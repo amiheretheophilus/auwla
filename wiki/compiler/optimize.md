@@ -455,12 +455,34 @@ that renders the same site again supersedes the pass it interrupted: the inner
 pass recovers the outer one's new rows and commits, and the outer pass stops.
 
 A row can also be `<Row key={…} a={…} />` for a **leaf component**: a
-module-level declaration, never reassigned, with at most one plain parameter,
-no setup statements, local state, derivations, writes, edits, takeovers or refs,
-and one element root. Its instance does nothing but show its props, so
+module-level declaration, never reassigned, with at most one parameter, either a
+plain name or a plain destructuring of it (`{ item, active: on }`), no setup
+statements, local state, derivations, writes, edits, takeovers or refs, and one
+element root. Its instance does nothing but show its props, so
 `RowComponents` (`core/emit/row-list.ts`) compiles its template once more at
 module level as `function _Row_row(props, owner)`, where its names resolve as
-written. The row builds the props object in authored order (after `key`) and
+written.
+
+A destructured field becomes a local of the row, and the row's update assigns each
+one from the new props object before its sites run. Only a field that reads a named
+prop into a name qualifies (`destructuredProps`): a default, a rest, a nested pattern
+or a computed key runs code or copies the object, so it stays a general component, and
+so does a field named `key`, which a row takes out of its props. A call through a local
+has no `this`, as written. In a closed list each local is followed as an alias of what
+its prop holds. A selection comparison matches through them too, so `selected ===
+item.id` and `selected === id` route by key as `selected === props.item.id` does.
+
+A component whose only uses are rows is not emitted (`ModulePlan.rowOnly`): each row
+comes from its factory, and nothing else can call it. An export, a read of its name, a
+tag anywhere else, or a module with `eval` or `with` keeps it.
+
+A closed list proves what each leaf's text gives, so the factory writes that text
+directly (`RowListPlan.row.scalarText`). The fact belongs to the list: the component's
+own sites stay general for other callers, and a list that holds objects gets its own
+factory. A row with nothing to clean up has no `dispose`, in the factory and in the
+list's entry around it.
+
+The row builds the props object in authored order (after `key`) and
 passes a new one on each update. The general receiver keeps the old object
 while its fields are the same; the row does that too (`sameProps`) unless every
 use of `props` is a plain member read, which cannot observe the object's
@@ -493,7 +515,8 @@ leaf conditions are checked one by one.
 `RowListPlan.routes` records strict comparisons of tracked bindings with the
 row's key member chain, such as `selected === row.id`. Only reads evaluated
 while rendering qualify; a handler's later reads do not. For a leaf component,
-`props.item.id` can be matched through `item={row}` to the outer `key={row.id}`.
+`props.item.id` or a destructured `item.id` can be matched through `item={row}` to the
+outer `key={row.id}`, and a destructured `id` through `id={row.id}`.
 `!==` qualifies too. Local site inputs lose the binding only if every read of
 it in the site is routed. Other inputs and plain reads still take the full path.
 

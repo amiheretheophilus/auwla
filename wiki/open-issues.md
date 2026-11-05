@@ -16,6 +16,12 @@ Compiler bugs and cases live on their `compiler/` page, under "Cases to test".
   this test exposed two bugs there: weak collection edits were never seen, and a group
   re-run created its other members again and lost their edits.
 
+- **The reference renderer rejects a module-level copy of a copy of a component**
+  (`const First = Item; const Second = First;`). Its transform compiles `Second` into a
+  computation that uses `$ctx`, which only exists inside a component, so it throws
+  before rendering. The compiler handles this program in both modes
+  (`optimize/row-lists.dom.test.ts`); only the oracle cannot run it.
+
 ## To discuss with the user first (2026-11-04)
 
 - **Unknown calls keep their deep before/after snapshot** (`observeMutation`,

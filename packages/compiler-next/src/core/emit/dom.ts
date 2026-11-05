@@ -23,7 +23,7 @@ import { emitRenderValue } from './render-value';
 import { RowComponents } from './row-list';
 import { emitComponentCall } from '../../features/components/dom';
 import { emitProps } from '../../features/props/dom';
-import { functionValue } from '../resolve/functions';
+import { declaredWithFunction, functionValue } from '../resolve/functions';
 import { namespaceModule } from '../resolve';
 import { frameworkPackage, importedName } from '../resolve/exports';
 import { emitRefs } from '../../features/refs/dom';
@@ -108,7 +108,7 @@ export function emitDom(plan: ModulePlan, options: CompileModulesOptions): Node 
     const value = emitComponentCall(call, runtime, nested,
       plan.sourceFlow === undefined ? undefined : sourceFlow.policyOf(call),
       plan.sourceFlow === undefined ? undefined : data,
-      fn !== null);
+      fn !== null && declaredWithFunction(module, tag));
 
     replacements.set(call, sourceFlow.suspendValue(call, sourceFlow.elementValue(call, value)));
   }
@@ -124,6 +124,12 @@ export function emitDom(plan: ModulePlan, options: CompileModulesOptions): Node 
   // function first, before finishCopy seals the parent's emitted tree.
   const components = [...plan.components.values()].sort((left, right) => right.fn.start - left.fn.start);
   for (const component of components) {
+    // Its rows have their own factory, and nothing else can call it.
+    if (plan.rowOnly?.has(component.fn) === true) {
+      replacements.set(component.fn, b.EmptyStatement({}));
+      continue;
+    }
+
     let emitted = emitComponent(component, names, runtime, replacements, rowComponents, plan.refs, plan.effects.groups,
       plan.effects.calls.some((call) => call.owner === component.fn), data, plan.sourceFlow !== undefined, shared.importedValues, {
         storage: sourceReadinessStorage(plan, component.fn, names),

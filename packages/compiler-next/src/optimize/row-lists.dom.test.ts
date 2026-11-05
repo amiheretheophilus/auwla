@@ -341,6 +341,46 @@ it.each(['<Item key={row.id} row={row} index={index} />', '<Item row={row} index
   },
 );
 
+it.each(['<Item key={row.id} row={row} index={index} />', '<Item row={row} index={index} />'])(
+  'keeps the general path\'s identity for destructuring component rows: %s',
+  async (row) => {
+    const source = `${steps}
+      let selected = 1;
+      function Item({ row, index: at }) {
+        return <li class={selected === row.id ? 'on' : ''}>{at}{row.l}</li>;
+      }
+      export function App() {
+        return <main><ul>{rows.map((row, index) => ${row})}</ul>
+          <button id="next" onClick={() => { changes[step++](); selected = 5; }}>next</button></main>;
+      }`;
+    expect(compile(source, true)).toContain('function _Item_row(');
+    const optimized = await trace(source, true, 10);
+    const general = await trace(source, false, 10);
+    expect(optimized).toEqual(general);
+  },
+);
+
+it('routes a selection through a destructured prop only where it holds the key', () => {
+  const source = (item: string, key: string, attributes: string) => compile(`
+    let selected = 0;
+    ${item}
+    export function App() {
+      let rows = [{ id: 1, other: 2 }];
+      return <main><ul>{rows.map((row) => <Item key={${key}} ${attributes} />)}</ul>
+        <button onClick={() => { selected = 1; }}>go</button></main>;
+    }`, true);
+  const routed = (output: string) => output.includes('.route(');
+  const reads = 'function Item({ row }) { return <li class={selected === row.id ? "on" : ""}>{row.id}</li>; }';
+  expect(routed(source(reads, 'row.id', 'row={row}'))).toBe(true);
+  expect(routed(source(reads, 'row.other', 'row={row}'))).toBe(false);
+  const scalar = 'function Item({ id }) { return <li class={selected === id ? "on" : ""}>{id}</li>; }';
+  expect(routed(source(scalar, 'row.id', 'id={row.id}'))).toBe(true);
+  expect(routed(source(scalar, 'row.id', 'id={row.other}'))).toBe(false);
+  // Its own `selected` is a prop here, not the module's state.
+  const shadowed = 'function Item({ selected, row }) { return <li class={selected === row.id ? "on" : ""}>{row.id}</li>; }';
+  expect(routed(source(shadowed, 'row.id', 'row={row} selected={2}'))).toBe(false);
+});
+
 it.each([true, false])('passes the same props object to a method a component row calls (optimize: %p)', async (optimize) => {
   const { host, click } = await mount(`
     let rows = [{ id: 1 }, { id: 2 }];
@@ -388,6 +428,77 @@ it.each([true, false])('shows edits a component row\'s handler makes through its
   expect(host.querySelector('ul')!.textContent).toBe('a!?b!?');
 });
 
+it('emits a component only if something other than its rows can use it', () => {
+  const emitted = (declaration: string, extra = '', outside = '') => compile(`
+    let rows = [{ id: 1 }];
+    ${declaration}
+    ${extra}
+    export function App() {
+      return <main>${outside}<ul>{rows.map((row) => <Item key={row.id} row={row} />)}</ul>
+        <button onClick={() => { rows = []; }}>clear</button></main>;
+    }`, true).includes('function Item(');
+
+  const item = 'function Item({ row }) { return <li>{row.id}</li>; }';
+  expect(emitted(item)).toBe(false);
+  expect(emitted('function Item(props) { return <li>{props.row.id}</li>; }')).toBe(false);
+  // With a closing tag too.
+  expect(compile(`
+    let rows = [{ id: 1 }];
+    ${item}
+    export function App() { return <ul>{rows.map((row) => <Item key={row.id} row={row}></Item>)}</ul>; }
+  `, true)).not.toContain('function Item(');
+
+  expect(emitted(`export ${item}`)).toBe(true);
+  expect(emitted(`export default ${item}`)).toBe(true);
+  expect(emitted(item, 'export { Item };')).toBe(true);
+  expect(emitted(item, 'export { Item as Other };')).toBe(true);
+  expect(emitted(item, 'export default Item;')).toBe(true);
+  expect(emitted(item, 'globalThis.keep = Item;')).toBe(true);
+  expect(emitted(item, 'console.log(Item.name);')).toBe(true);
+  expect(emitted(item, '', '<Item row={{ id: 0 }} />')).toBe(true);
+  expect(emitted(item, 'const stored = <Item row={{ id: 0 }} />;')).toBe(true);
+  expect(emitted(item, 'eval("Item");')).toBe(true);
+  // A list that keeps the general path uses the component itself.
+  expect(emitted(item, '', '<ol>{rows.map((row) => [<Item row={row} />])}</ol>')).toBe(true);
+  // Not a leaf, so it has no rows at all.
+  expect(emitted('function Item({ row }) { let n = 0; return <li onClick={() => n++}>{n}</li>; }')).toBe(true);
+});
+
+it.each([true, false])('reaches a component kept for a use outside its rows (optimize: %p)', async (optimize) => {
+  const { host, click } = await mount(`
+    function Item({ row }) { return <li>{row.id}</li>; }
+    const Kept = Item;
+    export function App() {
+      let rows = [{ id: 1 }];
+      let shown = true;
+      return <main>
+        <ul>{rows.map((row) => <Item key={row.id} row={row} />)}{shown ? <Kept row={{ id: 9 }} /> : null}</ul>
+        <button id="hide" onClick={() => { shown = false; }}>hide</button>
+      </main>;
+    }
+  `, optimize);
+  expect(host.querySelector('ul')!.textContent).toBe('19');
+  click('hide');
+  expect(host.querySelector('ul')!.textContent).toBe('1');
+});
+
+// The reference renderer cannot run this one: it compiles a module-level `const` copy of
+// a component into a computation that needs a component's context (`wiki/open-issues.md`).
+it.each([true, false])('takes a module-level copy of a copy of a component as a tag (optimize: %p)', async (optimize) => {
+  const { host, click } = await mount(`
+    function Item({ id }) { return <li>{id}</li>; }
+    const First = Item;
+    const Second = First;
+    export function App() {
+      let id = 1;
+      return <main><button id="go" onClick={() => { id = 2; }}>go</button><ul><Second id={id} /></ul></main>;
+    }
+  `, optimize);
+  expect(host.querySelector('ul')!.textContent).toBe('1');
+  click('go');
+  expect(host.querySelector('ul')!.textContent).toBe('2');
+});
+
 it('compiles only leaf components as rows', () => {
   const source = (item: string) => `
     let rows = [{ id: 1 }];
@@ -398,7 +509,16 @@ it('compiles only leaf components as rows', () => {
   expect(compile(source('function Item(props) { return <li>{props.row.id}</li>; }'), true)).toContain('_Item_row(');
   expect(compile(source('function Item(props) { let n = 0; return <li onClick={() => n++}>{n}</li>; }'), true)).not.toContain('_Item_row(');
   expect(compile(source('function Item(props) { const label = props.row.id + 1; return <li>{label}</li>; }'), true)).not.toContain('_Item_row(');
-  expect(compile(source('function Item({ row }) { return <li>{row.id}</li>; }'), true)).not.toContain('_Item_row(');
+  // A destructuring leaf is a row when each field only reads a named prop into a name.
+  expect(compile(source('function Item({ row }) { return <li>{row.id}</li>; }'), true)).toContain('_Item_row(');
+  expect(compile(source('function Item({ row: r, "row": s }) { return <li>{r.id}{s.id}</li>; }'), true)).toContain('_Item_row(');
+  expect(compile(source('function Item({ row = {} }) { return <li>{row.id}</li>; }'), true)).not.toContain('_Item_row(');
+  expect(compile(source('function Item({ row, ...rest }) { return <li>{row.id}</li>; }'), true)).not.toContain('_Item_row(');
+  expect(compile(source('function Item({ row: { id } }) { return <li>{id}</li>; }'), true)).not.toContain('_Item_row(');
+  expect(compile(source('function Item({ ["row"]: r }) { return <li>{r.id}</li>; }'), true)).not.toContain('_Item_row(');
+  expect(compile(source('function Item({ key, row }) { return <li>{row.id}</li>; }'), true)).not.toContain('_Item_row(');
+  expect(compile(source('function Item({ row } = {}) { return <li>{row.id}</li>; }'), true)).not.toContain('_Item_row(');
+  expect(compile(source('function Item({ row }) { return <li onClick={() => { row = null; }}>{String(row)}</li>; }'), true)).not.toContain('_Item_row(');
   // A fragment of one element mounts that element; two roots are not one row node.
   expect(compile(source('function Item(props) { return <><li>{props.row.id}</li></>; }'), true)).toContain('_Item_row(');
   expect(compile(source('function Item(props) { return <><li>{props.row.id}</li><li /></>; }'), true)).not.toContain('_Item_row(');

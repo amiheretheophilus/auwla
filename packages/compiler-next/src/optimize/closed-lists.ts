@@ -34,6 +34,7 @@ import type { ComponentPlan, ConditionalBranch, ModulePlan, MutationPlan, RowLis
 import { alwaysPrimitive } from '../core/plan/template';
 import { valueExportNames } from '../core/resolve/exports';
 import { functionValue, type FunctionNode } from '../core/resolve/functions';
+import { destructuredProps, type DestructuredProp } from '../features/components/plan';
 import { callOnlyReads, effectFree } from './effects';
 import { methodFact, redefinedNames } from './method-facts';
 import type { Optimization } from '.';
@@ -72,7 +73,8 @@ function fieldName(member: Member): string | null {
   return !member.computed && is.Identifier(member.property) ? member.property.name : null;
 }
 
-function hasDynamicScope(module: Module): boolean {
+/** `with` or a direct `eval` can reach any name, so no name's uses can all be seen. */
+export function hasDynamicScope(module: Module): boolean {
   return module.findAll('WithStatement').length > 0 || module.findAll('CallExpression').some((call) => {
     const callee = unwrap(call.callee);
     return is.Identifier(callee) && callee.name === 'eval';
@@ -946,11 +948,6 @@ class Proof {
     const param = fn.params[0];
     if (this.#rowComponents.has(fn) || param === undefined) return;
     this.#rowComponents.add(fn);
-    const props = bindingOfParameter(module, param);
-    if (props === null) {
-      this.#fail();
-      return;
-    }
 
     const kinds = new Map<string, Kind>();
     // An arrow function has no `this`, so calling it through the props object
@@ -966,6 +963,18 @@ class Proof {
       } else if (!is.Identifier(value) && alwaysPrimitive(value as Expression)) {
         kinds.set(prop.name, 'scalar');
       }
+    }
+
+    const fields = destructuredProps(param);
+    if (fields !== null) {
+      this.#destructuredRow(module, fields, kinds);
+      return;
+    }
+
+    const props = bindingOfParameter(module, param);
+    if (props === null) {
+      this.#fail();
+      return;
     }
     this.#props.set(props, kinds);
 
@@ -984,6 +993,24 @@ class Proof {
       }
       const kind = kinds.get(name);
       if (kind !== undefined) this.#use(module, member, kind);
+    }
+  }
+
+  /**
+   * `{ item, active }`: each name holds its prop, followed like any other alias. No
+   * object holds the item, and a call through one of these names has no `this`, so
+   * it reaches only what it is passed, and an item passed to it fails the proof.
+   */
+  #destructuredRow(module: Module, fields: readonly DestructuredProp[], kinds: ReadonlyMap<string, Kind>): void {
+    for (const { key, local } of fields) {
+      const binding = bindingOfParameter(module, local);
+      if (binding === null) {
+        this.#fail();
+        return;
+      }
+      const kind = kinds.get(key);
+      if (kind !== undefined) this.#alias(binding, kind);
+      if (!this.ok) return;
     }
   }
 
@@ -1140,6 +1167,7 @@ export const closedLists: Optimization = {
     const closed = new Map<Node, MutationPlan['closed']>();
     const moved = new Map<Node, BindingNode>();
     const direct = new Map<Node, Site>();
+    const scalarText = new Map<Node, ReadonlySet<Node>>();
     const rootNodes = new Set<BindingNode>();
     const editedRoots = new Set<BindingNode>();
     const readCalls = new Set<Node>();
@@ -1161,9 +1189,13 @@ export const closedLists: Optimization = {
         const sites = rowSites(general, rows);
         if (!proof.rowIsStable(module, rows, sites)) continue;
         moved.set(rows.call, node);
-        if (rows.row.kind !== 'element') continue;
-        for (const site of sites) {
-          if (site.kind === 'text' && !site.primitive && proof.isScalar(module, site.expression)) direct.set(site.expression, site);
+        const scalars = sites.filter((site): site is Extract<Site, { kind: 'text' }> => {
+          return site.kind === 'text' && !site.primitive && proof.isScalar(module, site.expression);
+        });
+        if (rows.row.kind === 'element') {
+          for (const site of scalars) direct.set(site.expression, site);
+        } else {
+          scalarText.set(rows.call, new Set(scalars.map((site) => site.expression)));
         }
       }
     }
@@ -1198,7 +1230,10 @@ export const closedLists: Optimization = {
     });
 
     const rewriteRow = (rows: RowListPlan): RowListPlan => {
-      if (rows.row.kind !== 'element') return rows;
+      if (rows.row.kind === 'component') {
+        const scalars = scalarText.get(rows.call);
+        return scalars === undefined ? rows : { ...rows, row: { ...rows.row, scalarText: scalars } };
+      }
       return { ...rows, row: { ...rows.row, value: { ...rows.row.value, sites: rewriteSites(rows.row.value.sites) } } };
     };
 

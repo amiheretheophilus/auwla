@@ -129,6 +129,10 @@ before dependency queries. This is test-only and uses no production helpers.
   - `<Box>`;
   - member tags `<UI.Box>`, which the old compiler rejected;
   - dynamic tags (`<Tag>` where `Tag` is state or a prop).
+- `const Kept = Item; <Kept />` works. Reading `Item` as a value gives its callable
+  adapter, so a tag takes the fast `createCompiledValue` only when its own name was
+  declared with the function (`declaredWithFunction`). Any other name takes
+  `createComponentValue`, which unwraps the adapter.
 - **Props are one object.** An extra prop the component does not declare is valid
   and simply unused; the old compiler rejected it. Spread props work.
 - Each prop is a `Prop` node in the child (`state-and-derived.md`). It is reactive

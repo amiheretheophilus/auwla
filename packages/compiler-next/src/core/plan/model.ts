@@ -116,6 +116,12 @@ export interface RowListPlan {
       readonly component: FunctionNode;
       /** The props after `key`, in authored order. */
       readonly props: readonly { readonly name: string; readonly value: Expression }[];
+      /**
+       * Optional (`optimize/closed-lists.ts`): text the leaf shows that only gives a
+       * primitive in this list. The fact belongs to the list, so the component's own
+       * sites, which other callers use, stay as planned.
+       */
+      readonly scalarText?: ReadonlySet<Node>;
     };
 }
 
@@ -397,6 +403,11 @@ export interface ModulePlan {
   readonly keyedComparisons?: ReadonlyMap<Node, BindingNode>;
   /** Comparisons whose compiled row copies read untracked; authored callbacks retain tracking. */
   readonly routedComparisons?: ReadonlyMap<Node, BindingNode>;
+  /**
+   * Optional (`optimize/row-lists.ts`): leaf components whose only uses are rows. Their
+   * plans stay, since each row is compiled from one, but the components are not emitted.
+   */
+  readonly rowOnly?: ReadonlySet<FunctionNode>;
   /** Optional (`optimize/handler-reads.ts`): reads that run in an event handler, so they stay plain. */
   readonly handlerReads?: ReadonlySet<Node>;
 }
