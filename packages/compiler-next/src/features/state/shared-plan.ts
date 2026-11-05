@@ -3,11 +3,16 @@ import { b, is } from 'yuku-ast';
 import type { Node, Statement } from 'yuku-parser';
 import type { BindingNode, SemanticGraph } from '../../core/graph';
 import { variableDeclaration } from '../../core/graph/inputs';
-import { importedDefinition, namespaceModule, runnerOf } from '../../core/resolve';
+import { importedDefinition, isParameter, namespaceModule, runnerOf } from '../../core/resolve';
 import type { SharedReadPlan } from '../../core/plan/model';
 import { storageOwner } from '../../core/plan/storage';
+import type { PlainFunctionValues } from '../../core/plan/plain-functions';
 
-export function planSharedReads(graph: SemanticGraph, components: ReadonlySet<Node>): ReadonlyMap<BindingNode, SharedReadPlan> {
+export function planSharedReads(
+  graph: SemanticGraph,
+  components: ReadonlySet<Node>,
+  plain: PlainFunctionValues,
+): ReadonlyMap<BindingNode, SharedReadPlan> {
   const reads = new Map<BindingNode, SharedReadPlan>();
   const namespaceBindings = new Set<BindingNode['binding']>();
   const namespaces = new Set<BindingNode['binding']['module']>();
@@ -33,12 +38,17 @@ export function planSharedReads(graph: SemanticGraph, components: ReadonlySet<No
     const taken = new Set([...entry.module.bindings.map((binding) => binding.name), ...entry.module.references.map((reference) => reference.name)]);
     for (const binding of graph.bindings.values()) {
       if (binding.binding.module !== entry.module || importedDefinition(binding.binding) !== null) continue;
+      if (plain.settled(binding)) continue;
       const owner = storageOwner(binding);
       if (owner !== null && (components.has(owner) || (!is.BlockStatement(owner) && (!is.Function(owner) || !is.BlockStatement(owner.body))))) continue;
       const declarator = variableDeclaration(binding.binding);
       if (declarator?.init !== null && declarator?.init !== undefined && components.has(declarator.init)) continue;
       const parent = entry.module.parentOf(binding.binding.declarations[0]!);
-      if (declarator === null && !is.Class(parent)) continue;
+      // A parameter has no declaration of its own, and is state only once a later call
+      // changes it: `function make(start) { return { set(v) { start = v; }, get: () => start }; }`.
+      const laterParameter = isParameter(binding.binding) && owner !== null
+        && binding.writes.some(({ site }) => site.runner !== binding.owner.runner);
+      if (declarator === null && !is.Class(parent) && !laterParameter) continue;
       if (owner !== null && !is.BlockStatement(owner) && !binding.binding.references.some((reference) => runnerOf(entry.module, reference.node) !== owner)) continue;
       // The same for a block in an ordinary function (`if (…) { const t = data[1]; … }`
       // in a handler): read only by the run that declared it, it is plain

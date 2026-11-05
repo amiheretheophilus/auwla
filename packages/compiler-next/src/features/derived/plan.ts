@@ -7,11 +7,12 @@ import type { Module } from '../../core/resolve';
 import type { FieldPlan, MemoGroupPlan, MemoPlan } from '../../core/plan/model';
 import { storageOwner } from '../../core/plan/storage';
 import { cannotReplay, nestedVarStatement } from './computations';
+import type { PlainFunctionValues } from '../../core/plan/plain-functions';
 import { literalFields } from './literal-fields';
 import { effectFree } from '../../optimize/effects';
 
 export function planMemos(
-  graph: SemanticGraph, queries: InputQueries, components: ReadonlySet<Node | null>,
+  graph: SemanticGraph, queries: InputQueries, components: ReadonlySet<Node | null>, plain: PlainFunctionValues,
 ): ReadonlyMap<Node | null, readonly MemoGroupPlan[]> {
   const declarations = new Map<VariableDeclarator, BindingNode[]>();
   for (const node of graph.bindings.values()) {
@@ -42,7 +43,7 @@ export function planMemos(
       return reactive || hasPossibleBuilder;
     });
 
-    if (!needsMemo) {
+    if (!needsMemo || !targets.some((target) => plain.replays(target))) {
       continue;
     }
     const first = targets[0]!;

@@ -335,17 +335,19 @@ array child). Remove each check when its phase is built.
 ## Phase 9: linking and packages
 
 - [ ] Cross-module facts (`linking.md`): imported state, derivations and
-  components; third-party package compilation.
+  components. A native package ships its source and compiles in the app's graph; an
+  ordinary npm package runs opaque (`../decisions.md`, 2026-11-05).
   - [x] First reference/implementation slice: native live versus captured default
     exports, namespace updates and reflection, receiver/identity preservation,
     cyclic hoisted calls, private metadata boundaries and collision handling.
     Cases and remaining limits are on `linking.md`.
   - [x] First source-graph package oracle: forwarded status/payload parameters,
     returned sources, shared package state and retained component state.
-  - [ ] Versioned package artifacts, compilation/linking without package sources,
-    JSON-round-trip comparisons against that oracle, then incremental invalidation.
+  - [ ] A package's output is in proportion to its source (`linking.md`, "Size").
+  - [ ] Bare specifiers, subpaths and several installed copies of a package in one graph.
+  - [ ] Compiling only what changed, and an emit whose cost is in proportion to its input.
 - **Exit:** multi-module cases pass; `bench/linker` and `bench/package-compilation`
-  gates pass.
+  gates pass, ported to compiler-next and to compiling a package in the app's graph.
 
 ## Phase 10: SSR, hydration, routing, acceptance
 

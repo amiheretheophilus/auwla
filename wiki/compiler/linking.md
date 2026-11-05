@@ -1,6 +1,6 @@
 # Linking: several modules
 
-**Folder:** `link/` (native module boundary built; package artifacts pending).
+**Folder:** `link/` (native module boundary built; native packages compile in the app's graph).
 
 ## What it does
 
@@ -114,28 +114,33 @@ cached-conflict check preserves an ambiguity through another star barrel. The
 24-level repeated-star diamond guards against expanding every possible path;
 type-only namespace imports do not request runtime observation or facades.
 
-## Separate package contract: reference foundation
+## Native packages
 
-Four source-graph comparisons establish behavior that a separately compiled
-package must preserve. Status-only parameters keep their source handle and run
-during initial loading and refresh. Mixed status/payload parameters also keep
-the handle, but the call waits for payload readiness. Forwarded source factories
-retain source identity, replacement and request counts. Package state remains
-one shared owner while each component instance keeps its own local state.
+A native package ships its source, and the app compiles it as part of its own graph
+(`../decisions.md`, 2026-11-05). So a component, state or source from a package behaves
+as if it were local, through the same code path and the same cases, and row lists and
+closed lists work across the package boundary. There is no semantic artifact, integrity
+hash or runtime compatibility check, since the app's own compiler and runtime build it.
+An earlier plan shipped compiled output with JSON metadata. That needed a second path in
+every feature that crosses a module, and stopped optimizations at the boundary.
 
-The reference links its own untouched inputs and finishes parameter-flow proofs
-for every file before rewriting any of them. It uses neither compiler summaries
-nor compiler linking code. The same explicit expectations will also apply to
-artifact-linked output; these cases currently exercise source-graph compilation.
+`tests/cases/linking.packages.test.ts` holds the contract. Status-only parameters keep
+their source handle and run during initial loading and refresh. Mixed status/payload
+parameters also keep the handle, but the call waits for payload readiness. Forwarded
+source factories retain source identity, replacement and request counts. Package state
+remains one shared owner while each component instance keeps its own local state. A
+factory's value follows a change the compiler can see, and its parameters are state once
+a later call changes them. The reference links its own untouched inputs and uses no
+compiler linking code.
 
-The artifact implementation must compile package code once and let consumers
-analyze only their own sources. Its metadata must be serializable data with an
-explicit compatibility version, exported value identities, parameter-relative
-source use and conservative unknown behavior. Native public exports must exclude
-compiler-only readers for consumers outside the build. Do not serialize the
-authored AST, copy package sources into the application build, or rebuild the
-old compiler's mutable linking context. Runtime paths and semantic metadata must
-identify the same package instance; incomplete information retains opaque checks.
+### Size
+
+A package's output should be in proportion to its source.
+`packages/utils/src/optimistic.ts` is the current measure: 8 KB of source compiled to
+115 KB, against 3.4 KB published for all of `utils` by the old compiler. The plain
+function rule (`state-and-derived.md`, "Plain functions") brought it to 100 KB. Most of the
+rest is source flow: `$read(result)` makes the module's values possible sources, and each
+read then checks readiness.
 
 ## Installed packages run opaque
 
@@ -185,12 +190,9 @@ What this says for native packages too:
   0.6 s and emit 14.4 s. On `zod`, about 0.6 s and 2.1 s.
 - **A consumer needs no second path to judge a package call.** `InputQueries.callFacts`
   follows visible functions across files, and reports what they read and write, with
-  `opaque` when it cannot tell. This argues for analysing package source over the
-  serialized artifact described above. Not decided (`../open-issues.md`).
-- **A factory costs far too much.** `aliasBindings` and factory owners apply whether or
-  not state ever reaches the code. `packages/utils/src/optimistic.ts`, a real native
-  package, compiles to 115 KB, where the old compiler publishes all of `utils` in 3.4 KB.
-  `request-state.ts` beside it, with only plain helpers, stays at 848 bytes.
+  `opaque` when it cannot tell.
+- **Rewriting every local costs the most.** `aliasBindings` and factory owners apply
+  whether or not state ever reaches the code.
 
 ## Inputs and outputs
 
@@ -209,19 +211,15 @@ optimization, emission, namespace linking and printing.
 
 ## Remaining Phase 9 work
 
-- Separate package compilation and a serializable, versioned semantic artifact.
-  The first source-graph reference cases for status/payload parameter forwarding,
-  components and shared package state pass. Next, make these same observations
-  through a JSON-round-tripped artifact with package sources absent. Audit the
-  old compiler's useful requirements; do not transplant its mutable linker.
-- Public package entry boundaries must hide private exports for external
-  consumers even when the package source has no namespace importer. Current
-  boundary selection only covers namespaces known in the supplied graph.
-- Incremental invalidation, dynamic-import combinations, external/unknown star
-  exports and broader cyclic graphs need further coverage.
-- `bench/linker` and `bench/package-compilation` still target the old compiler's
-  APIs. Their rewrite correctness gates and VM measurements remain Phase 9 exit
-  work, not results established by the first slice.
+- A package's size (see "Size").
+- Bare specifiers, subpaths and several installed copies of a package in one graph, each
+  copy with its own state. Which installed packages count as native is still to design.
+- Compiling only what changed. A dev server cannot compile every package on each edit.
+  Emit is also far from proportional to its input (`gsap`, above).
+- Dynamic-import combinations, external/unknown star exports and broader cyclic graphs
+  need further coverage.
+- `bench/linker` and `bench/package-compilation` still target the old compiler's APIs.
+  Porting them, and timing them on the VM, is Phase 9 exit work.
 
 ## Not designed yet
 
@@ -230,5 +228,4 @@ page:
 
 - routes and `$routed`;
 - server functions and their client stubs;
-- server pages;
-- package compilation (`experimentalCompilePackage`).
+- server pages.

@@ -6,9 +6,27 @@ Last updated: 2026-11-05.
 
 The goal, from the user: linking that lets us write native packages effectively. Ordinary
 npm packages run opaque, since `bench/third-party-runtime` shows the new opaque path has no
-idle work and correct results (`compiler/linking.md`, "Installed packages run opaque").
-Next: `packages/utils/src/optimistic.ts` compiles to 115 KB against 3.4 KB published for
-all of `utils`, and the user decides how a native package ships (`open-issues.md`).
+idle work and correct results (`compiler/linking.md`, "Installed packages run opaque"). A
+native package ships its source and compiles in the app's graph (`compiler/linking.md`,
+"Native packages"; the user approved this, replacing compiled output with metadata).
+
+Found while compiling `packages/utils`: a factory's parameter edited by a later call did
+not update the page, in any form (`make(start)`, `{ nested }`, `...rest`). Fixed. A new
+rule for plain functions (`compiler/state-and-derived.md`) stops replaying what the
+compiler cannot see change. It differs from the reference in one case, recorded in
+`open-issues.md`. `optimistic.ts` fell from 115 KB to 100 KB, still far too large; FlowOS and
+the other fixtures did not change, except `octane`, up 431 B: `mulberry32(seed)` returns a
+closure that writes its parameter, so `seed` now has the reader a `let` would have. Whether
+that shows in the shuffle timing is for the VM. Next: that size, then bare specifiers and
+copies.
+
+Verified on this batch: compiler-next 496 unit, 605 cases and 10 generators at 200 runs;
+runtime 179, data 171. The first full gate failed: the `sources` generator ran for an hour
+against its 10-minute limit, reached 125 of 200 programs, and took the next test down with
+it, as a generator did once before. That program passes alone. The `sources` generator
+then passed alone in 183 s, and the full gate in 660 s with a clock sampler showing no
+gaps. The cause is not established. The machine going to sleep would look like this, but
+a stall in the run cannot be ruled out.
 
 Compiling real npm packages as a bug hunt found four crashes and four files that did not
 parse, all general compiler bugs:

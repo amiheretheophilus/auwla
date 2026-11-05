@@ -351,6 +351,28 @@ Subsequent changes still rederive it normally. The stored-JSX comparison retains
 its explicit initial/later assertions; 200 reference cases across the five affected
 state/callback/source/shared/conditional files pass.
 
+### Plain functions
+
+A component's values follow what they read, including reads the compiler cannot see. A
+plain function, one that is not a component, runs when it is called, and JavaScript gives
+its locals their value then (`core/plan/plain-functions.ts`). So in a plain function:
+
+- A value is **computed again** only for a change the compiler can see, in any scope: an
+  assignment, store, `delete` or known edit (`push`, `set`) run by a later call, or a
+  source, prop or ref. `let twice = count * 2`, with `count++` in a returned method,
+  follows `count`. Only its declaration and definite builders count as its inputs.
+- A value that only an unknown call might change **runs once**: `const id = options.id`,
+  with `options` passed to an unknown call. The reference recomputes it, so a program can
+  differ from the reference here (`../decisions.md`, 2026-11-05).
+- A binding nothing can edit has **no reader**, so a read of it is a plain read. One that
+  an unknown call might edit keeps its reader, so a later read still shows the edit.
+- A **parameter is state** once a later call changes it, in any form:
+  `function make(start, options, { nested }, ...rest)`. Before, such an edit did not
+  update the page (`tests/cases/linking.packages.test.ts`).
+
+A statement that returns, suspends or jumps out of itself is never replayed
+(`cannotReplay` in `computations.ts`), and neither is a declaration that suspends.
+
 ## Inputs and outputs
 
 - In: `Resolved` (initializer references, write sites and where they run,
@@ -372,6 +394,7 @@ The graph classification is built (`core/graph/classify.ts`, described in
 | `features/derived/dom.ts` | source-ordered, version-guarded replay and writable memo storage |
 | `features/derived/literal-fields.ts` | which object literals update field by field, used by the plan and the reference |
 | `features/derived/takeover.ts` | local takeover flags and native store targets, checked against runtime execution ownership |
+| `core/plan/plain-functions.ts` | what can change in a plain function: which values are computed again, and which need no reader |
 | `features/state/shared-plan.ts` | native module/factory storage owners and live reader exports |
 | `features/state/shared-dom.ts` | per-owner versions, readers, source-ordered setup completion and shared refresh |
 | `features/state/shared-dom.test.ts` | shared module consumers in separate applications, identity reuse and disposal |

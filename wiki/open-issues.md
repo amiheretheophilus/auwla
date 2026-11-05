@@ -32,9 +32,9 @@ Compiler bugs and cases live on their `compiler/` page, under "Cases to test".
 
 ## To discuss with the user first (2026-11-05)
 
-- **How a native package ships: its source, or compiled output with metadata.** The
-  wiki's plan is the second (`compiler/linking.md`), but no decision records it, and the
-  first would need no metadata format. Waiting on the user.
+- **A plain function differs from the reference in one case.** A value only an unknown
+  call might change runs once in compiler-next, and is recomputed in the reference
+  (`decisions.md`, 2026-11-05). JavaScript agrees with compiler-next here. Reversible.
 - **An opaque call snapshots everything the argument's root can reach.**
   `dset(models[index], …)` walks all of `models`: about 0.5 ms per click at 128 items.
   Narrowing to `models[index]` would miss a package that was given the whole list earlier

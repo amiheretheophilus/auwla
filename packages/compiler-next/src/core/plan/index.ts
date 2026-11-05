@@ -19,6 +19,7 @@ import { canPlanConditional, planReturnProgram } from '../../features/conditiona
 import { unwrap } from './jsx';
 import { planLocalState } from '../../features/state/plan';
 import { mergeMutations, planImportedMutations, planMutations, planReadonlyBindings, planWrites } from '../../features/handlers/plan';
+import { plainFunctionValues } from './plain-functions';
 import { groupsOfModule, planMemos } from '../../features/derived/plan';
 import { planSharedReads, sharedSetup } from '../../features/state/shared-plan';
 import { planReceiverTargets } from '../../features/handlers/receivers';
@@ -40,9 +41,10 @@ export function planModules(
   components: ReadonlySet<Node>,
 ): ModulePlan[] {
   const state = planLocalState(graph, components);
-  const sharedReads = planSharedReads(graph, components);
+  const plain = plainFunctionValues(graph, components, queries);
+  const sharedReads = planSharedReads(graph, components, plain);
   const owners = new Set<Node | null>([...components, ...[...sharedReads.keys()].map(storageOwner)]);
-  const memos = planMemos(graph, queries, owners);
+  const memos = planMemos(graph, queries, owners, plain);
   const refs = planRefs(graph);
   const tracked = new Set<BindingNode>([...[...state.values()].flat(), ...sharedReads.keys()]);
   return graph.resolved.modules.map((entry) => {

@@ -99,6 +99,112 @@ behaves('package contract: a returned source preserves status and payload across
   },
 });
 
+behaves('package contract: a helper\'s value follows the status of the source beside it', {
+  modules: {
+    './package/user.ts': `
+      import { $fetch, $track } from '@memoized-dom/data';
+      export function userFor(id) {
+        const user = $fetch('/package/named/' + id, { cache: false });
+        const waiting = $track(user).pending;
+        return { waiting: () => waiting };
+      }
+    `,
+  },
+  source: `
+    import { userFor } from './package/user';
+    export function App() {
+      const user = userFor(1);
+      return <main><p>{String(user.waiting())}</p></main>;
+    }
+  `,
+  steps: [{ respond: '/package/named/1', value: { name: 'Ada' } }],
+  check(container, observation) {
+    expect(container.querySelector('p')?.textContent).toBe(['true', 'false'][observation]);
+    expect(requestedUrls()).toEqual(['/package/named/1']);
+  },
+});
+
+behaves('package contract: a helper\'s value follows a write the compiler can see, in any scope', {
+  modules: {
+    './package/counter.ts': `
+      let outside = 1;
+      export function bumpOutside() { outside++; }
+      export function create(start, options) {
+        let count = start;
+        const twice = count * 2;
+        const fixedOutside = outside;
+        const fixedOption = options.value;
+        return {
+          inc() { count++; },
+          edit() { options.value++; },
+          read: () => twice + ':' + fixedOutside + ':' + fixedOption,
+          live: () => count + ':' + outside + ':' + options.value,
+        };
+      }
+    `,
+  },
+  source: `
+    import { create, bumpOutside } from './package/counter';
+    const counter = create(1, { value: 5 });
+    export function App() {
+      return <main><p>{counter.read()}|{counter.live()}</p>
+        <button id="inc" onClick={() => counter.inc()}>inc</button>
+        <button id="edit" onClick={() => counter.edit()}>edit</button>
+        <button id="outside" onClick={bumpOutside}>outside</button></main>;
+    }
+  `,
+  steps: [{ click: '#inc' }, { click: '#edit' }, { click: '#outside' }],
+  check(container, observation) {
+    expect(container.querySelector('p')?.textContent).toBe([
+      '2:1:5|1:1:5',
+      '4:1:5|2:1:5',
+      '4:1:6|2:1:6',
+      '4:2:6|2:2:6',
+    ][observation]);
+  },
+});
+
+behaves('package contract: a factory\'s parameters are state once a later call changes them', {
+  modules: {
+    './package/store.ts': `
+      export function make(start, options, { nested }, ...rest) {
+        return {
+          set(value) { start = value; },
+          edit() { options.value++; },
+          push() { options.list.push(1); },
+          deep() { nested.n++; },
+          extra() { rest.push(9); },
+          show: () => start + ':' + options.value + ':' + options.list.length + ':' + nested.n + ':' + rest.length,
+        };
+      }
+    `,
+  },
+  source: `
+    import { make } from './package/store';
+    const first = make(1, { value: 5, list: [] }, { nested: { n: 0 } });
+    const second = make(10, { value: 50, list: [] }, { nested: { n: 7 } }, 'a');
+    export function App() {
+      return <main><p>{first.show()}|{second.show()}</p>
+        <button id="set" onClick={() => first.set(2)}>set</button>
+        <button id="edit" onClick={() => first.edit()}>edit</button>
+        <button id="push" onClick={() => first.push()}>push</button>
+        <button id="deep" onClick={() => second.deep()}>deep</button>
+        <button id="extra" onClick={() => second.extra()}>extra</button></main>;
+    }
+  `,
+  steps: [{ click: '#set' }, { click: '#edit' }, { click: '#push' }, { click: '#deep' }, { click: '#extra' }],
+  check(container, observation) {
+    expect(container.querySelector('p')?.textContent).toBe([
+      '1:5:0:0:0|10:50:0:7:1',
+      '2:5:0:0:0|10:50:0:7:1',
+      '2:6:0:0:0|10:50:0:7:1',
+      '2:6:1:0:0|10:50:0:7:1',
+      '2:6:1:0:0|10:50:0:8:1',
+      '2:6:1:0:0|10:50:0:8:2',
+    ][observation]);
+  },
+});
+
 behaves('package contract: public reexports share package state while components retain separate local state', {
   modules: {
     './package/store.ts': `
