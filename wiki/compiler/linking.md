@@ -239,12 +239,21 @@ Where a bundle's bytes are, minified before gzip:
 | Bundle | Total old | Total new | App | Runtime | Data |
 | --- | ---: | ---: | ---: | ---: | ---: |
 | FlowOS | 114.3 KB | 129.9 KB | 26.2 → 31.9 | 51.7 → 55.0 | 36.4 → 43.1 |
-| `composition` | 10.2 KB | 24.1 KB | 0.7 → 1.4 | 9.5 → 22.7 | none |
+| `composition` | 10.2 KB | 21.1 KB | 0.7 → 1.3 | 9.5 → 19.8 | none |
 
-A real app has no one problem. A small one does: `<Label value={count} />` adds 11 KB to
+A real app has no one problem. A small one does: `<Label value={count} />` adds about 8 KB to
 `owner-counter`, since a child component at a fixed position, and `{value}` inside it, go
-through the path for a value of any kind, which brings `render-value`, `computation`,
-`mutation` and even the list modules into an app with no list.
+through the path for a value of any kind, which brings `render-value`, `mutation` and even
+the list modules into an app with no list. Taking them out needs two things, neither built: a
+direct path for a known component at a fixed position, and a proof that a prop is always a
+primitive, following every call of its component. A real app pays for those modules anyway.
+
+A fixed tag no longer needs a computation (`isFixedTag`, `core/plan/index.ts`). `<Label />`
+counted as reading `Label`, which lives outside the component, so the site collected reads
+with nothing to collect: 3 KB off `composition`. The tag must be a module-level function that
+nothing reassigns, in its own file or the one it came from. "Nothing assigns it" alone is
+wrong, since a tag derived from state, a prop or a function declared in a callback changes
+with no assignment; the `tags:` cases in `components.test.ts` caught that.
 
 `packages/utils/src/optimistic.ts` is not the measure: 8 KB of source compiles to 100 KB,
 against 3.4 KB published for all of `utils`, because `$read(result)` hands it a raw handle

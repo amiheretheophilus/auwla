@@ -71,6 +71,15 @@ Verified: the two native package test files, 26 tests. `vite-adapter`,
 `fullstack-ssr-isolation`, `package-artifacts`, `installed-packages` and `library-build` give
 63 pass and 7 fail: the 6 that fail without this work, and one that needs `node`.
 
+A fixed child component no longer needs a computation, since `<Label />` counted as reading
+`Label` (`compiler/linking.md`, "Size"): `composition` and `route-lazy` each fall about 3.1 KB,
+and no fixture grows. A prop nothing assigns keeps no copy of its parent's value. Compile
+time needs no work: it grows with project size and is close to the old compiler's, and
+`gsap`, the one slow result, is not compiled in a real app. Verified on the batch with both:
+compiler-next 517 unit, 635 cases with `entries` and 635 with `ENTRIES=all`, 10 generators at
+200 runs in a 431 s gate with no clock gaps; runtime 179, data 171. Compile times and sizes
+are from local runs.
+
 Packages installed under `node_modules` and imported by a bare specifier
 (`compiler/linking.md`, "Installed copies and specifiers") found three general bugs, none
 about installing as such:

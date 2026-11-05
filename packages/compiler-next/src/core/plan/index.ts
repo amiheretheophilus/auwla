@@ -6,6 +6,7 @@
  */
 import { b, findAll, is } from 'yuku-ast';
 import type { Expression, Node, Statement } from 'yuku-parser';
+import type { Module } from 'yuku-analyzer';
 import { isReactive, type BindingNode, type SemanticGraph } from '../graph';
 import { variableDeclaration, type InputQueries } from '../graph/inputs';
 import { isWrittenGlobal, runnerOf, type ResolvedModule } from '../resolve';
@@ -300,6 +301,19 @@ function allSites(sites: readonly Site[]): Site[] {
   return result;
 }
 
+/**
+ * `<Label />` reads `Label`. If that is a function at module level that nothing reassigns,
+ * in this file or the one it came from, there is no change to notice. Any other tag can
+ * change with no assignment here: one derived from state, a prop, or a function declared
+ * in a callback, which is a new function each time.
+ */
+function isFixedTag(module: Module, node: Node, binding: BindingNode): boolean {
+  const parent = module.parentOf(node);
+
+  return is.JSXIdentifier(node) && is.JSXOpeningElement(parent) && parent.name === node
+    && binding.owner.runner === null && functionValue(module, node) !== null;
+}
+
 function planSiteInputs(
   sites: readonly Site[],
   owner: FunctionNode,
@@ -327,6 +341,9 @@ function planSiteInputs(
         const binding = read.binding ?? read.reference.binding;
         const node = binding === null ? undefined : graph.bindings.get(binding);
         if (node === undefined) {
+          continue;
+        }
+        if (isFixedTag(entry.module, read.reference.node, node)) {
           continue;
         }
         inputs.add(node);

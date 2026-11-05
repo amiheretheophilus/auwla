@@ -5,6 +5,11 @@
 Compiler bugs and cases live on their `compiler/` page, under "Cases to test".
 
 - **Compiler README** does not describe the readiness behaviour yet.
+- **The reference crashes on a module-level value that picks a function by state**
+  (`let on = true; const Shown = on ? First : Second;`): `$ctx is not defined`, from
+  `$ctx.callback` at module level. So this form has no comparison and no case. The compiled
+  form was not checked against a correct answer. The reference is unchanged, pending a
+  decision on what it should do.
 - **Root tests are not in CI.** `compiler-next.yml` never runs them, which is how the
   old-compiler failures below went unseen. Run them with `bun test --parallel=2 ./tests`:
   a plain `bun test ./tests` shares one process, fails five files that pass alone and

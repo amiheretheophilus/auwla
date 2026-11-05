@@ -4,6 +4,116 @@
 import { expect } from 'bun:test';
 import { behaves } from '../harness/run';
 
+// A tag nothing assigns needs no watching. Each of these can change, and must be noticed.
+const tags = `
+  function First({ value }) { return <b>first:{value}</b>; }
+  function Second({ value }) { return <i>second:{value}</i>; }
+`;
+const shownTag = (container: Element) => container.querySelector('b, i')?.textContent;
+
+behaves('tags: a fixed child follows its prop, with its own state kept', {
+  source: `
+    function Label({ value }) {
+      let clicks = 0;
+      return <b onClick={() => clicks++}>{value}:{clicks}</b>;
+    }
+    export function App() {
+      let count = 0;
+      return <main><button onClick={() => count++}>add</button><Label value={count} /></main>;
+    }
+  `,
+  steps: [{ click: 'b' }, { click: 'button' }, { click: 'b' }, { click: 'button' }],
+  check(container, observation) {
+    expect(container.querySelector('b')?.textContent).toBe(['0:0', '0:1', '1:1', '1:2', '2:2'][observation]);
+  },
+});
+
+behaves('tags: a module binding reassigned by a handler changes the component shown', {
+  source: `
+    ${tags}
+    let Shown = First;
+    export function App() {
+      return <main><Shown value="v" /><button onClick={() => { Shown = Second; }}>swap</button></main>;
+    }
+  `,
+  steps: [{ click: 'button' }],
+  check(container, observation) { expect(shownTag(container)).toBe(['first:v', 'second:v'][observation]); },
+});
+
+behaves('tags: a local binding reassigned by a handler changes the component shown', {
+  source: `
+    ${tags}
+    export function App() {
+      let Shown = First;
+      return <main><Shown value="v" /><button onClick={() => { Shown = Second; }}>swap</button></main>;
+    }
+  `,
+  steps: [{ click: 'button' }],
+  check(container, observation) { expect(shownTag(container)).toBe(['first:v', 'second:v'][observation]); },
+});
+
+behaves('tags: a binding derived from state changes the component shown', {
+  source: `
+    ${tags}
+    export function App() {
+      let on = true;
+      const Shown = on ? First : Second;
+      return <main><Shown value="v" /><button onClick={() => { on = !on; }}>swap</button></main>;
+    }
+  `,
+  steps: [{ click: 'button' }, { click: 'button' }],
+  check(container, observation) { expect(shownTag(container)).toBe(['first:v', 'second:v', 'first:v'][observation]); },
+});
+
+behaves('tags: a binding exported by another file and reassigned there changes the component shown', {
+  modules: {
+    './parts.tsx': `
+      ${tags}
+      export let Shown = First;
+      export function swap() { Shown = Second; }
+    `,
+  },
+  source: `
+    import { Shown, swap } from './parts';
+    export function App() {
+      return <main><Shown value="v" /><button onClick={swap}>swap</button></main>;
+    }
+  `,
+  steps: [{ click: 'button' }],
+  check(container, observation) { expect(shownTag(container)).toBe(['first:v', 'second:v'][observation]); },
+});
+
+behaves('tags: a component given as a prop changes with what the parent sends', {
+  source: `
+    ${tags}
+    function Frame({ As, value }) { return <section><As value={value} /></section>; }
+    export function App() {
+      let Shown = First;
+      let value = 1;
+      return <main><Frame As={Shown} value={value} />
+        <button id="swap" onClick={() => { Shown = Second; }}>swap</button>
+        <button id="add" onClick={() => value++}>add</button></main>;
+    }
+  `,
+  steps: [{ click: '#add' }, { click: '#swap' }, { click: '#add' }],
+  check(container, observation) { expect(shownTag(container)).toBe(['first:1', 'first:2', 'second:2', 'second:3'][observation]); },
+});
+
+behaves('tags: a fixed child whose prop reads shared state or calls a function still follows it', {
+  modules: {
+    './store.ts': `export let total = 1; export function bump() { total++; } export function doubled() { return total * 2; }`,
+  },
+  source: `
+    import { total, bump, doubled } from './store';
+    function Label({ a, b }) { return <b>{a}:{b}</b>; }
+    export function App() {
+      return <main><Label a={total} b={doubled()} /><button onClick={bump}>bump</button></main>;
+    }
+  `,
+  steps: [{ click: 'button' }, { click: 'button' }],
+  check(container, observation) { expect(container.querySelector('b')?.textContent).toBe(['1:2', '2:4', '3:6'][observation]); },
+});
+
 behaves('component values: direct calls and map callbacks keep native arguments', {
   source: `
     function Row(value) { return <li>{value}</li>; }
