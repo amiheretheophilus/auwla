@@ -24,12 +24,34 @@ import { RowComponents } from './row-list';
 import { emitComponentCall } from '../../features/components/dom';
 import { emitProps } from '../../features/props/dom';
 import { declaredWithFunction, functionValue } from '../resolve/functions';
-import { namespaceModule } from '../resolve';
+import { importedDefinition, namespaceModule } from '../resolve';
 import { isFrameworkMount } from '../resolve/exports';
 import { emitRefs } from '../../features/refs/dom';
 import { emitEffectGroups, emitLifecycleCalls } from '../../features/effects/dom';
 import { emitSources } from '../../features/sources/dom';
 import { emitSourceFlow, sourceReadinessStorage } from '../../features/sources/flow-dom';
+
+/**
+ * Whether code here reads state another module owns. A file of plain helpers can have
+ * nothing else to emit, and its reads must still reach the page. Only forwarding an
+ * import with `export { x }` reads nothing.
+ */
+function readsImportedState(plan: ModulePlan): boolean {
+  const module = plan.module.module;
+  const shared = new Set([...plan.sharedReads.values()].map((read) => read.binding.binding));
+
+  return module.bindings.some((binding) => {
+    const definition = importedDefinition(binding);
+
+    if (definition === null || !shared.has(definition)) {
+      return false;
+    }
+
+    return binding.references.some((reference) => {
+      return !reference.isWrite && !reference.inTypePosition && !is.ExportSpecifier(module.parentOf(reference.node));
+    });
+  });
+}
 
 /** Preserve module syntax and exports, replacing planned functions on a fresh tree. */
 export function emitDom(plan: ModulePlan, options: CompileModulesOptions): Node {
@@ -39,11 +61,9 @@ export function emitDom(plan: ModulePlan, options: CompileModulesOptions): Node 
     || plan.sourceFlow !== undefined || (plan.capturedImports?.size ?? 0) > 0
     || (plan.importedMutations?.length ?? 0) > 0
     || module.bindings.some((binding) => namespaceModule(binding) !== null);
-  if (!hasRenderWork) {
-    const hasBoundaries = findAll(module.ast, ['TryStatement', 'AwaitExpression']).length > 0;
-    if (!hasBoundaries) {
-      return copy(module.ast);
-    }
+  const usesRuntime = hasRenderWork || findAll(module.ast, ['TryStatement', 'AwaitExpression']).length > 0;
+  if (!usesRuntime && !readsImportedState(plan)) {
+    return copy(module.ast);
   }
 
   const names = new Names(module);
@@ -54,7 +74,8 @@ export function emitDom(plan: ModulePlan, options: CompileModulesOptions): Node 
   const runtime = names.fresh('_MD');
   const data = names.fresh('_data');
   const runtimePath = JSON.stringify(options.runtimePath ?? DEFAULT_RUNTIME_PATH);
-  const hoisted: Statement[] = [statement(`import * as $$runtime from ${runtimePath};`, { runtime })];
+  // A file that only reads imported state needs its readers and nothing of the runtime.
+  const hoisted: Statement[] = usesRuntime ? [statement(`import * as $$runtime from ${runtimePath};`, { runtime })] : [];
   if (plan.sourceFlow !== undefined) {
     hoisted.push(statement('import * as $$data from "@memoized-dom/data/internal";', { data }));
   }

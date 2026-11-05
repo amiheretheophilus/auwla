@@ -165,4 +165,43 @@ describe('imports', () => {
     });
     expect(modules[0]!.module.imports[0]!.resolvedModule?.path).toBe('./store/index.ts');
   });
+
+  /** Which compiled module `./target<...>` means, from a file beside it. */
+  function resolved(specifier: string, files: readonly string[]): string | null {
+    const sources = Object.fromEntries(files.map((file) => [file, 'export const value = 1;']));
+    const modules = resolveModules({ './App.ts': `import { value } from '${specifier}';`, ...sources });
+    return modules[0]!.module.imports[0]!.resolvedModule?.path ?? null;
+  }
+
+  it.each([
+    ['./a.js', './a.ts'],
+    ['./a.js', './a.tsx'],
+    ['./a.jsx', './a.tsx'],
+    ['./a.mjs', './a.mts'],
+    ['./a.cjs', './a.cts'],
+  ])('%s names the source %s it compiles from', (specifier, file) => {
+    expect(resolved(specifier, [file])).toBe(file);
+  });
+
+  it('prefers a file of exactly the name asked for over the source of that name', () => {
+    expect(resolved('./a.js', ['./a.ts', './a.js'])).toBe('./a.js');
+  });
+
+  it('does not take a .jsx specifier for a .ts file, which cannot hold its JSX', () => {
+    expect(resolved('./a.jsx', ['./a.ts'])).toBeNull();
+  });
+
+  it('keeps absolute paths absolute', () => {
+    const root = '/app/node_modules/.pnpm/kit@1.0.0/node_modules/kit';
+    const modules = resolveModules({
+      [`${root}/index.ts`]: "export * from './store'; export * from '../dep/index';",
+      [`${root}/store.ts`]: 'export const value = 1;',
+      '/app/node_modules/.pnpm/kit@1.0.0/node_modules/dep/index.ts': 'export const other = 1;',
+    });
+    expect(modules[0]!.module.imports.length).toBe(0);
+    expect(modules[0]!.module.exports.map((entry) => entry.resolvedModule?.path ?? null)).toEqual([
+      `${root}/store.ts`,
+      '/app/node_modules/.pnpm/kit@1.0.0/node_modules/dep/index.ts',
+    ]);
+  });
 });

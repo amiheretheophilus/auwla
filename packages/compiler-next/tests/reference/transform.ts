@@ -34,6 +34,7 @@ import { b, findAll, is, walk } from 'yuku-ast';
 import { generate } from 'yuku-codegen';
 import { parse } from 'yuku-parser';
 import type { BlockStatement, Expression, Node, Statement, VariableDeclarator } from 'yuku-parser';
+import { installedResolver, sourcesOfOutput } from '../harness/installed';
 import { callOnlyReads } from '../../src/optimize/effects';
 import { literalFields } from '../../src/features/derived/literal-fields';
 import { blockThunk, constDeclaration, identifier, member, numberLiteral, runtimeCall, thunk } from './ast';
@@ -138,14 +139,21 @@ export function toReference(source: string, path: string, runtimeUrl: string): s
 /** Link untouched reference inputs before proving parameter flow across files. */
 export function toReferenceModules(sources: Readonly<Record<string, string>>, runtimeUrl: string): Record<string, string> {
   const paths = new Map(Object.keys(sources).map((path) => [posix.normalize(path), path]));
+  const installed = installedResolver(Object.keys(sources));
   const analyzer = new Analyzer({
     resolve(specifier, importer) {
       if (!specifier.startsWith('.')) {
-        return false;
+        return installed(specifier, importer) ?? false;
       }
       const base = posix.join(posix.dirname(importer), specifier);
       for (const suffix of ['', '.ts', '.tsx', '.js', '.jsx', '/index.ts', '/index.tsx', '/index.js', '/index.jsx']) {
         const path = paths.get(base + suffix);
+        if (path !== undefined) {
+          return path;
+        }
+      }
+      for (const source of sourcesOfOutput(base)) {
+        const path = paths.get(source);
         if (path !== undefined) {
           return path;
         }

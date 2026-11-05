@@ -10,6 +10,7 @@ import { registeredIds, resetScheduler, setScheduler, unregisterSubtree } from '
 import { createDataRuntime, setActiveDataRuntime } from '@memoized-dom/data';
 import { spawnSync } from 'node:child_process';
 import { join } from 'node:path';
+import { installedResolver } from './installed';
 import { fetchForCase } from './requests';
 
 export interface CompiledApp {
@@ -84,13 +85,26 @@ const delivery = process.env.DATA_DELIVERY === 'client' ? { dataDelivery: 'clien
 /** Only the app's entry is used from outside, as in a real build. `ENTRIES=all` assumes every export is. */
 const entries = process.env.ENTRIES === 'all' ? {} : { entries: ['./App.tsx'] };
 
+/** Compile a case with compiler-next, seeing into any package the case installs. */
+function compileNext(source: string, modules: Record<string, string> | undefined, optimize: boolean): Record<string, string> {
+  const files = { ...modules, './App.tsx': source };
+
+  return compileModulesNext(files, {
+    runtimePath: '@memoized-dom/runtime/testing',
+    resolveImport: installedResolver(Object.keys(files)),
+    ...(optimize ? {} : { optimize: false }),
+    ...delivery,
+    ...entries,
+  });
+}
+
 const nextCompiler: Compiler = {
   ...oldCompiler,
   name: 'packages/compiler-next',
   output: 'next',
 
   compile(source, modules) {
-    return compileModulesNext({ ...modules, './App.tsx': source }, { runtimePath: '@memoized-dom/runtime/testing', ...delivery, ...entries });
+    return compileNext(source, modules, true);
   },
 };
 
@@ -100,12 +114,7 @@ const generalCompiler: Compiler = {
   output: 'next-general',
 
   compile(source, modules) {
-    return compileModulesNext({ ...modules, './App.tsx': source }, {
-      runtimePath: '@memoized-dom/runtime/testing',
-      optimize: false,
-      ...delivery,
-      ...entries,
-    });
+    return compileNext(source, modules, false);
   },
 };
 

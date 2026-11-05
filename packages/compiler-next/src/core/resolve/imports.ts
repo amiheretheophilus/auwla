@@ -6,6 +6,14 @@ import type { CompileModulesOptions } from '../../options';
 
 const EXTENSIONS = ['', '.ts', '.tsx', '.js', '.jsx', '/index.ts', '/index.tsx', '/index.js', '/index.jsx'];
 
+/** TypeScript's rule: a specifier may name the output of a source, as ESM requires it to. */
+const SOURCES_OF_OUTPUT: Readonly<Record<string, readonly string[]>> = {
+  '.js': ['.ts', '.tsx'],
+  '.jsx': ['.tsx'],
+  '.mjs': ['.mts'],
+  '.cjs': ['.cts'],
+};
+
 /** A generated dependency, preserving the existing extensionless TypeScript convention. */
 export function relativeModule(importer: string, target: string, preserveExtension = false): string {
   const from = importer.replace(/^\.\//, '').split('/');
@@ -39,6 +47,14 @@ export function importResolver(paths: readonly string[], options: CompileModules
       const candidate = base + extension;
       if (known.has(candidate)) return candidate;
     }
+
+    const dot = base.lastIndexOf('.');
+    const output = base.slice(dot);
+    for (const source of SOURCES_OF_OUTPUT[output] ?? []) {
+      const candidate = base.slice(0, dot) + source;
+      if (known.has(candidate)) return candidate;
+    }
+
     return null;
   };
 }
@@ -48,7 +64,7 @@ function directoryOf(path: string): string {
   return slash < 0 ? '.' : path.slice(0, slash);
 }
 
-/** Joins and normalizes, keeping a leading `./` when the directory had one. */
+/** Joins and normalizes, keeping the leading `./` or `/` the directory had. */
 function joinPath(directory: string, specifier: string): string {
   const parts: string[] = [];
   for (const part of `${directory}/${specifier}`.split('/')) {
@@ -60,5 +76,6 @@ function joinPath(directory: string, specifier: string): string {
     }
   }
   const joined = parts.join('/');
+  if (directory.startsWith('/')) return `/${joined}`;
   return directory.startsWith('.') && !joined.startsWith('..') ? `./${joined}` : joined;
 }

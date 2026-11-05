@@ -344,7 +344,10 @@ array child). Remove each check when its phase is built.
   - [x] First source-graph package oracle: forwarded status/payload parameters,
     returned sources, shared package state and retained component state.
   - [ ] A package's output is in proportion to its source (`linking.md`, "Size").
-  - [ ] Bare specifiers, subpaths and several installed copies of a package in one graph.
+  - [x] Bare specifiers, subpaths and several installed copies of a package in one graph
+    (`linking.md`, "Installed copies and specifiers"). The compiler part only: a build tool
+    gives it the paths.
+  - [ ] Which installed packages are native, and the Vite side of giving the app their source.
   - [ ] Compiling only what changed, and an emit whose cost is in proportion to its input.
 - **Exit:** multi-module cases pass; `bench/linker` and `bench/package-compilation`
   gates pass, ported to compiler-next and to compiling a package in the app's graph.

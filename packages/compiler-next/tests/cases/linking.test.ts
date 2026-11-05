@@ -599,3 +599,87 @@ behaves('linking: opaque namespace mutations observe captured and current object
   steps: [{ click: '#replace' }, { click: '#edit' }],
   check: paragraph(['1:1:0:0', '1:9:0:0', '2:10:1:1']),
 });
+
+// A file of helpers has no component of its own, and is still part of the graph.
+behaves('a file holding only helpers reads imported state', {
+  modules: {
+    './store.ts': `export let count = 1; export function increment() { count++; }`,
+    './barrel.ts': `export { count as forwarded } from './store';`,
+    // Only function declarations: a `const` here would give the file state of its own.
+    './helpers.ts': `
+      import { count } from './store';
+      import { forwarded } from './barrel';
+      export function direct() { return count; }
+      export function through() { return forwarded; }
+    `,
+    './arrows.ts': `
+      import { count as renamed } from './store';
+      export const arrow = () => renamed;
+    `,
+    './more.ts': `
+      import { direct } from './helpers';
+      export function chained() { return direct() * 10; }
+    `,
+  },
+  source: `
+    import { increment } from './store';
+    import { direct, through } from './helpers';
+    import { arrow } from './arrows';
+    import { chained } from './more';
+    export function App() {
+      return <main><p>{direct()}:{arrow()}:{through()}:{chained()}</p><button onClick={increment}>inc</button></main>;
+    }
+  `,
+  steps: [{ click: 'button' }, { click: 'button' }],
+  check: paragraph(['1:1:1:10', '2:2:2:20', '3:3:3:30']),
+});
+
+behaves('a file holding only helpers edits imported state', {
+  modules: {
+    './store.ts': `
+      export const list = [];
+      export const settings = { size: 1 };
+      export let current = { n: 1 };
+      export function replace() { current = { n: current.n + 10 }; }
+    `,
+    './helpers.ts': `
+      import { list, settings, current } from './store';
+      export function add(value) { list.push(value); }
+      export function grow() { settings.size++; }
+      export function bump() { current.n++; }
+      export function total() { return list.length + settings.size + current.n; }
+    `,
+  },
+  source: `
+    import { list, settings, current, replace } from './store';
+    import { add, grow, bump, total } from './helpers';
+    export function App() {
+      return <main><p>{list.length}:{settings.size}:{current.n}:{total()}</p>
+        <button id="add" onClick={() => add(1)}>add</button>
+        <button id="grow" onClick={grow}>grow</button>
+        <button id="bump" onClick={bump}>bump</button>
+        <button id="replace" onClick={replace}>replace</button></main>;
+    }
+  `,
+  steps: [{ click: '#add' }, { click: '#grow' }, { click: '#bump' }, { click: '#replace' }, { click: '#bump' }],
+  check: paragraph(['0:1:1:2', '1:1:1:3', '1:2:1:4', '1:2:2:5', '1:2:12:15', '1:2:13:16']),
+});
+
+behaves('a helper file read only from a handler, with nothing reading it on the page', {
+  modules: {
+    './store.ts': `export let count = 1; export function increment() { count++; }`,
+    './helpers.ts': `import { count } from './store'; export function direct() { return count; }`,
+  },
+  source: `
+    import { increment } from './store';
+    import { direct } from './helpers';
+    export function App() {
+      let seen = 0;
+      return <main><p>{seen}</p>
+        <button id="inc" onClick={increment}>inc</button>
+        <button id="see" onClick={() => { seen = direct(); }}>see</button></main>;
+    }
+  `,
+  steps: [{ click: '#see' }, { click: '#inc' }, { click: '#see' }],
+  check: paragraph(['0', '1', '1', '2']),
+});

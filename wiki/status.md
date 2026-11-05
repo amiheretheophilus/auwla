@@ -44,6 +44,32 @@ yet, so these sizes are all without it.
 Verified on this batch: compiler-next 509 unit, 610 cases with `entries`, 610 with
 `ENTRIES=all`, and 10 generators at 200 runs in a 649 s gate; runtime 179, data 171.
 
+Packages installed under `node_modules` and imported by a bare specifier
+(`compiler/linking.md`, "Installed copies and specifiers") found three general bugs, none
+about installing as such:
+
+- A file holding only `function` helpers was emitted untouched, so its reads of imported
+  state never reached the page. It failed with plain relative imports too, and no case had
+  this shape: a `const` in the same file hid it.
+- `./store.js` did not find `store.ts`, so that import did not link and its state was not
+  tracked.
+- Absolute paths lost their leading `/` in the default resolver, so relative imports
+  inside a package silently failed to link.
+
+Two copies of a package, subpaths, hoisted dependencies, cycles between packages,
+self-imports and `export *` from outside the graph needed no fix. The reference gained
+a test-only Node lookup, `tests/harness/installed.ts`, so it can see into a package.
+
+Verified: compiler-next 517 unit, 628 cases and 10 generators at 200 runs in a 741 s gate;
+runtime 179, data 171. With `ENTRIES=all`, 628 cases before a one-line change to one test,
+then the two affected files, 47, after it. The size audit shows no fixture changed, nor the
+sample package. One gate before this failed: the machine entered Modern Standby at 19:46
+and left it at 20:48 (Kernel-Power events 506 and 507, System log), matching a 3,800 s gap
+in the clock sampler, and the generators count wall-clock time. So that failure was the
+machine. The earlier hour-long generator failure looked the same but was not checked
+against the log. That gate also failed one new case of mine, racing a real file `import()`
+against the harness's wait, which is now loaded up front.
+
 Verified on the batch before `entries`: compiler-next 496 unit, 605 cases and 10 generators
 at 200 runs; runtime 179, data 171. The first full gate on it failed: the `sources` generator ran for an hour
 against its 10-minute limit, reached 125 of 200 programs, and took the next test down with

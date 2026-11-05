@@ -31,6 +31,7 @@ per-run cleanup captures, remain unchanged (`effects.md`, `refs.md`).
 | `tests/harness/compile-worker.ts` | Optional separate-process old compilation for cases that can synchronously loop |
 | `tests/harness/serialize.ts` | The visible DOM as a comparable string |
 | `tests/harness/requests.ts` | Queued JSON responses/rejections and normalized request history |
+| `tests/harness/installed.ts` | Node's lookup of a package over a case's files, used by the reference and the compilers alike. A case installs a package by giving it files under `./node_modules/<name>/` |
 | `tests/cases/<page>.test.ts` | One file per wiki page; holds that page's "Cases to test". A page with many cases may split them by topic as `<page>.<topic>.test.ts` (`state-and-derived.memos.test.ts`); every case file starts with its page's name |
 | `tests/generator/program.ts` | fast-check arbitraries: a random program as plain data (state, derived values, views, buttons, clicks) |
 | `tests/generator/print.ts` | Prints a program as `App.tsx` and its steps; checks it parses with `yuku-parser` |

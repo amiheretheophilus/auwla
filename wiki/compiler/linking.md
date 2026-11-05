@@ -26,6 +26,7 @@ objects; it does not introduce a second state model.
 | `features/state/shared-dom.ts` | Namespace version observation and guarded mutation inputs, preserving the native receiver and avoiding uninitialized export reads |
 | `tests/cases/linking.test.ts` | Reference and optimized/general comparisons for live/default exports, namespaces, cycles, collisions, components and readiness |
 | `tests/cases/linking.packages.test.ts` | Source-graph oracle for separate package compilation: forwarded status/payload use, returned sources, shared package state and retained component state |
+| `tests/cases/linking.installed.test.ts` | Packages under `node_modules`, imported by bare specifiers: subpaths, scoped names, two copies, hoisted dependencies, cycles, self-imports, `.js` names for TypeScript source, and dependencies outside the graph |
 
 ## Rules
 
@@ -133,6 +134,29 @@ factory's value follows a change the compiler can see, and its parameters are st
 a later call changes them. The reference links its own untouched inputs and uses no
 compiler linking code.
 
+### Installed copies and specifiers
+
+The compiler's unit is a path. The build tool turns a specifier into one, through
+`resolveImport`, after applying a package's `exports` map and following symlinks. Nothing
+in the compiler knows about `node_modules`. So:
+
+- A subpath and a barrel that reach the same file name one module, with one state.
+- Two copies at two paths are two modules, each with its own state and component
+  identity, even with every name the same. Two packages sharing a hoisted copy share it.
+- A generated reader import is a relative path to the owning file, not the authored
+  specifier, because `exports` need not list that file. The build must therefore give a
+  native package's files stable paths, and must not prebundle them.
+- A dependency outside the graph stays an ordinary import, including through `export *`.
+
+Without `resolveImport`, relative specifiers probe extensions and index files, and a
+`.js`, `.jsx`, `.mjs` or `.cjs` name also finds the TypeScript source it compiles from
+(`./store.js` for `store.ts`), since ESM requires that spelling. A file of exactly the name
+asked for wins. Absolute paths stay absolute.
+
+`tests/harness/installed.ts` models Node's lookup over a case's files, and the files are
+written out as given, so Bun then resolves each specifier by itself. `exports` maps are not
+modelled, since the compiler never sees them.
+
 ### Size
 
 A package's output should be in proportion to its source. A sample of ordinary package code
@@ -222,8 +246,12 @@ optimization, emission, namespace linking and printing.
 ## Remaining Phase 9 work
 
 - A package's size (see "Size").
-- Bare specifiers, subpaths and several installed copies of a package in one graph, each
-  copy with its own state. Which installed packages count as native is still to design.
+- Which installed packages count as native, and giving the app's build their source. The
+  direction, from the user: the author writes one config naming the public API
+  (`.lib.config.ts`, `entry` and `subpaths`, which `memoized-dom package` already reads),
+  and never writes an `exports` map. The tool generates that package's `package.json`, as
+  it does today, with a marker the app's Vite plugin finds in its dependencies. This
+  belongs in `packages/vite`, which still uses the old compiler. Not built yet.
 - Compiling only what changed. A dev server cannot compile every package on each edit.
   Emit is also far from proportional to its input (`gsap`, above).
 - Dynamic-import combinations, external/unknown star exports and broader cyclic graphs
