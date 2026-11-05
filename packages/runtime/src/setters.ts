@@ -70,38 +70,26 @@ export function setListener(
  * It removes only the per-row wrapper closure.
  */
 export function setRowListener(node: Node, event: string, handler: Function, batch: WriteBatch): void {
-  const shared = sharedListener(batch, event);
+  const shared = (batch.rowListeners ??= {})[event] ??= sharedListener(batch, event);
   (node as unknown as Record<string, Function>)[shared.key] = handler;
   node.addEventListener(event, shared.listener);
 }
 
-interface SharedListener {
+/** One event's listener for all the rows of a batch (`WriteBatch.rowListeners`). */
+export interface SharedListener {
   /** Where each element holds its handler. */
   readonly key: string;
   readonly listener: EventListener;
 }
 
-const sharedListeners = new WeakMap<WriteBatch, Map<string, SharedListener>>();
-
 function sharedListener(batch: WriteBatch, event: string): SharedListener {
-  let listeners = sharedListeners.get(batch);
-  if (listeners === undefined) {
-    listeners = new Map();
-    sharedListeners.set(batch, listeners);
-  }
-
-  let shared = listeners.get(event);
-  if (shared === undefined) {
-    const key = `$mmd:${event}`;
-    shared = {
-      key,
-      listener: batch.listener(function (this: Record<string, Function>, ...args: unknown[]) {
-        return Reflect.apply(this[key]!, this, args);
-      } as EventListener),
-    };
-    listeners.set(event, shared);
-  }
-  return shared;
+  const key = `$mmd:${event}`;
+  return {
+    key,
+    listener: batch.listener(function (this: Record<string, Function>, ...args: unknown[]) {
+      return Reflect.apply(this[key]!, this, args);
+    } as EventListener),
+  };
 }
 
 /** Adjacent children sharing one text node, each shown as it would be alone. */

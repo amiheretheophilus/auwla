@@ -316,7 +316,8 @@ it.each([true, false])('reuses, creates and removes exactly as the general path 
   }
 });
 
-it.each([true, false])('matches the model through long random sequences on one list (keyed: %p)', (keyed) => {
+/** Compare 60 sequences of 20 steps on one list each with the model, with keys from `pick`. */
+function followsModel(keyed: boolean, pick: (random: (limit: number) => number) => unknown) {
   let seed = 7;
   const random = (limit: number) => {
     seed = (seed * 1103515245 + 12345) % 2147483648;
@@ -339,7 +340,7 @@ it.each([true, false])('matches the model through long random sequences on one l
     let model: ModelRow[] = [];
     for (let step = 0; step < 20; step++) {
       const after = Array.from({ length: random(7) }, () => {
-        const key = alphabet[random(alphabet.length)];
+        const key = pick(random);
         return { key, label: String(key) };
       });
       log.length = 0;
@@ -357,6 +358,23 @@ it.each([true, false])('matches the model through long random sequences on one l
       expect(log.filter((line) => line.startsWith('dispose')).map((line) => Number(line.slice(8)))).toEqual(removed);
     }
   }
+}
+
+it.each([true, false])('matches the model through long random sequences on one list (keyed: %p)', (keyed) => {
+  followsModel(keyed, (random) => alphabet[random(alphabet.length)]);
+});
+
+// A new largest number takes no lookup, so these mix ids that keep growing with the
+// numbers and spellings that must still meet them.
+it('matches the model with keys that keep growing, and old keys among them', () => {
+  let newest = 0;
+  const others: unknown[] = ['3', 3, -0, 0, Infinity, -Infinity, NaN, null, '1e3', 1000];
+  followsModel(true, (random) => {
+    const choice = random(3);
+    if (choice === 0) return ++newest;
+    if (choice === 1) return random(newest + 1);
+    return others[random(others.length)];
+  });
 });
 
 it('keeps three-step sequences consistent with the model, including old duplicates', () => {
@@ -662,6 +680,100 @@ it('replacing every row keeps what else the parent holds', () => {
   list.map(items('x'));
   expect(texts()).toEqual(['x']);
   expect(other.parentNode).toBe(parent);
+});
+
+const numbered = (...keys: unknown[]): Item[] => keys.map((key) => ({ key, label: String(key) }));
+
+it('finds an old row after creating new ones in the same pass', () => {
+  const { list, rows } = harness();
+  list.map(numbered(10, 20));
+  const [ten, twenty] = rows();
+
+  // 30 is new with no lookup, 10 then needs the index, which must also hold the new 30.
+  list.map(numbered(30, 10, 30, 20));
+  const after = rows();
+  expect(after.map((row) => row.item.key)).toEqual([30, 10, 30, 20]);
+  expect(after[1]!.id).toBe(ten!.id);
+  expect(after[3]!.id).toBe(twenty!.id);
+  expect(after[0]!.id).not.toBe(after[2]!.id);
+
+  // The second 30 was a duplicate, so the first is the one that stays.
+  const first = after[0]!.id;
+  list.map(numbered(30));
+  expect(rows().map((row) => row.id)).toEqual([first]);
+});
+
+it('counts a new number and the string spelling it as one identity in the same pass', () => {
+  const { list, rows } = harness();
+  list.map(numbered(5, '5', 6));
+  const [number, spelled] = rows();
+  expect(number!.id).not.toBe(spelled!.id);
+
+  list.map(numbered(6, 5));
+  expect(rows()[1]!.id).toBe(number!.id);
+});
+
+it('moves rows that were created without an index', () => {
+  const { list, rows, parent } = harness();
+  list.map(numbered(1, 2, 3));
+  const nodes = [...parent.querySelectorAll('li')];
+  const ids = rows().map((row) => row.id);
+
+  list.map(numbered(3, 1, 2));
+  expect(rows().map((row) => row.id)).toEqual([ids[2], ids[0], ids[1]]);
+  expect([...parent.querySelectorAll('li')]).toEqual([nodes[2]!, nodes[0]!, nodes[1]!]);
+});
+
+it('takes the same ids again after the list was emptied', () => {
+  const { list, rows } = harness();
+  list.map(numbered(1, 2));
+  const before = rows().map((row) => row.id);
+  list.map([]);
+  list.map(numbered(1, 2));
+  const again = rows().map((row) => row.id);
+  expect(again.some((id) => before.includes(id))).toBe(false);
+
+  list.map(numbered(2, 1));
+  expect(rows().map((row) => row.id)).toEqual([again[1], again[0]]);
+});
+
+it('drops new rows from a pass that threw, and creates them again', () => {
+  const { list, text, failOn } = countingList();
+  list.map(numbered(1, 2));
+  const bad = { key: 4, label: 'bad' };
+  failOn(bad);
+  expect(() => list.map([...numbered(3), bad])).toThrow('row');
+  expect(text()).toEqual(['1', '2']);
+
+  failOn(null);
+  // 3 is no longer above the largest number seen, and nothing holds it any more.
+  list.map(numbered(3, 1));
+  expect(text()).toEqual(['3', '1']);
+});
+
+it('records indexes when an array loses or gains its holes', () => {
+  const { list, counts, text, reset } = countingList(true);
+  const [a, b] = items('a', 'b');
+  const holes: Item[] = [];
+  holes[0] = a!;
+  holes[2] = b!;
+  list.map(holes);
+  expect(text()).toEqual(['a:0', 'b:2']);
+
+  // Same rows in the same order, but the second is at another index now.
+  reset();
+  list.map([a!, b!], true);
+  expect(text()).toEqual(['a:0', 'b:1']);
+  expect(counts.updates).toBe(1);
+
+  reset();
+  list.map([a!, b!], true);
+  expect(counts.updates).toBe(0);
+
+  reset();
+  list.map(holes, true);
+  expect(text()).toEqual(['a:0', 'b:2']);
+  expect(counts.updates).toBe(1);
 });
 
 it('evaluates routed rows when the routed value changed before the pass', () => {

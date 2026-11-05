@@ -4,6 +4,7 @@ import {
   onEntityRender, runInApplicationRuntime, type Entity,
 } from './kernel';
 import { recoveryHooks } from './recovery-hooks';
+import type { SharedListener } from './setters';
 import { advanceWriteEpoch } from './write-epoch';
 
 const pendingBoundaries = new Set<LocalWriteBatch>();
@@ -132,6 +133,8 @@ export interface WriteBatch {
   flush(): void;
   /** Native listeners flush on return and preserve this, arguments and results. */
   listener<T extends (...args: any[]) => any>(callback: T): T;
+  /** The listener each event's rows share (`setters.ts`), read for every row created. */
+  rowListeners?: Record<string, SharedListener>;
 }
 
 /** State lives on the batch; helper methods are shared rather than per-row closures. */

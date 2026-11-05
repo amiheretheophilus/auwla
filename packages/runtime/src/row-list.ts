@@ -142,6 +142,8 @@ export function createRowList(
   let settled = false;
   /** A row edited what it shows (`invalidate`). */
   let invalidated = false;
+  /** The committed array had holes, so a row's index may differ from its position. */
+  let holes = false;
   /** Compiled rows take `(item, index)` only if they read the index. */
   const indexed = create.length > 1;
 
@@ -213,10 +215,19 @@ export function createRowList(
    */
   let identities: Map<Identity, Row> | null = null;
   let pass = 0;
+  /**
+   * The largest number any row has had as its identity. A key above it is new, so
+   * it needs no lookup, and a list keyed by growing ids never builds the index just
+   * to create rows. Rows only leave, so it stays an upper bound.
+   */
+  let greatest = -Infinity;
 
   function lookup(): Map<Identity, Row> {
     if (identities === null) {
       identities = new Map();
+      // The running pass may have created rows before anything needed the index.
+      // Committed rows go last: a row replacing one of them only takes over on commit.
+      for (const row of pending ?? []) if (!row.duplicate) identities.set(row.identity, row);
       for (const row of rows) if (!row.duplicate) identities.set(row.identity, row);
     }
     return identities;
@@ -249,9 +260,9 @@ export function createRowList(
     const previous = rows;
     const length = readListLength(array);
     const next: Row[] = [];
-    // Applied on commit: a pass that throws leaves the committed identities.
-    const keys: unknown[] = [];
-    const indexes: number[] = [];
+    // Applied on commit: a pass that throws leaves the committed rows as they were.
+    // A row's index is its position in `next` unless the array has holes.
+    let indexes: number[] | null = null;
     const created: Row[] = [];
     /** Matched rows whose key value changed, with the rows that replace them. */
     const replaced: [old: Row, row: Row][] = [];
@@ -266,6 +277,7 @@ export function createRowList(
     const superseded = (): boolean => pending !== created || disposed;
     for (let index = 0; index < length; index++) {
       if (!(index in array)) continue;
+      if (indexes === null && index !== next.length) indexes = next.map((_, position) => position);
       const item = array[index];
       let row: Row | undefined = previous[last + 1];
       // The same item in the next row or the one before: unedited, so its key is
@@ -278,8 +290,7 @@ export function createRowList(
           last = row.position;
           if (routeable && !canRoute) routeable = false;
           next.push(row);
-          keys.push(row.key);
-          indexes.push(index);
+          indexes?.push(index);
           continue;
         }
         row = previous[last + 1];
@@ -294,12 +305,17 @@ export function createRowList(
       let identity: Identity | null = null;
       let duplicate = false;
       if (!available(row, rowKey, index, stamp)) {
-        identity = identityOf(rowKey, index);
-        row = lookup().get(identity);
-        // Taken already by an earlier item (or created by it): a duplicate.
-        if (row !== undefined && row.taken === stamp) {
-          duplicate = true;
+        if (typeof rowKey === 'number' && rowKey > greatest && rowKey !== Infinity) {
+          identity = rowKey;
           row = undefined;
+        } else {
+          identity = identityOf(rowKey, index);
+          row = lookup().get(identity);
+          // Taken already by an earlier item (or created by it): a duplicate.
+          if (row !== undefined && row.taken === stamp) {
+            duplicate = true;
+            row = undefined;
+          }
         }
       }
       let old: Row | undefined;
@@ -321,8 +337,9 @@ export function createRowList(
         }
         row = { entry, item, identity: identity!, key: rowKey, index, position: -1, duplicate, taken: stamp };
         created.push(row);
+        if (typeof identity === 'number' && identity > greatest) greatest = identity;
         if (old !== undefined) replaced.push([old, row]);
-        else if (!duplicate) lookup().set(row.identity, row);
+        else if (!duplicate) identities?.set(row.identity, row);
       } else {
         if (row.position < last) ordered = false;
         last = row.position;
@@ -341,8 +358,7 @@ export function createRowList(
         if (superseded()) return;
       }
       next.push(row);
-      keys.push(rowKey);
-      indexes.push(index);
+      indexes?.push(index);
     }
 
     // Commit. Authored code runs again only in the removed rows' disposal.
@@ -357,14 +373,20 @@ export function createRowList(
     // Forgetting every row one by one costs more than building the index again.
     if (nothingStays || next.length === 0) identities = null;
     else for (const row of removed) forget(row);
+    // No row is left to collide with, so the same ids can come back without a lookup.
+    if (next.length === 0) greatest = -Infinity;
     for (const [, row] of replaced) identities?.set(row.identity, row);
     if (!nothingStays && (!ordered || created.length > 0)) place(next);
-    for (let position = 0; position < next.length; position++) {
-      const row = next[position]!;
-      row.key = keys[position];
-      row.index = indexes[position]!;
-      row.position = position;
+    // A matched row kept its key: another key value would have replaced it above. The
+    // same rows in the same order at the same indexes have nothing to record.
+    if (!ordered || created.length > 0 || next.length !== previous.length || indexes !== null || holes) {
+      for (let position = 0; position < next.length; position++) {
+        const row = next[position]!;
+        row.index = indexes === null ? position : indexes[position]!;
+        row.position = position;
+      }
     }
+    holes = indexes !== null;
     rows = next;
     canRoute = routeable;
     settled = true;

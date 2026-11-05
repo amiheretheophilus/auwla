@@ -443,7 +443,12 @@ untaken row whose identity agrees is the match. The list tries the rows after
 and before the last match first (unchanged, shifted, inserted and reversed runs
 need no lookup or key string), keeps its identity index across passes, updated
 only for rows created, removed or mounted again, and knows a new row is a
-duplicate when its identity was already taken in the pass. Moves follow the
+duplicate when its identity was already taken in the pass. A number above every
+number any row has had as its identity is new, so a list keyed by growing ids creates
+rows without building the index at all; the first lookup builds it, from the committed
+rows and those the running pass has created. A row's index is its position unless the
+array has holes, so only an array with holes allocates a list of them, and a pass that
+keeps the same rows in the same order records nothing. Moves follow the
 longest increasing subsequence (`list.ts`), and a list that is all of its parent
 clears with one `replaceChildren`. With no old row staying, the old rows leave before the
 new ones go in, as the general path does, so a replace clears in one call too. What a

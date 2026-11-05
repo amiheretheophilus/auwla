@@ -511,7 +511,9 @@ function writeValue(
         runtime, node, value, owner, indexed: b.Literal({ value: indexed, raw: String(indexed) }),
       })];
     }
-    return [statement('$$runtime.setTextData($$node, $$value);', { runtime, node, value })];
+    // Every caller compared the value first, so reading the node's text back would only
+    // build a string to compare again.
+    return [statement('$$node.data = $$runtime.textValue($$value);', { runtime, node, value })];
   }
   if (site.kind === 'property') {
     return [statement('$$node[$$name] = $$value;', { node, value, name: stringLiteral(site.name) })];
