@@ -353,6 +353,8 @@ array child). Remove each check when its phase is built.
   - [x] Compile time grows with project size and is close to the old compiler's, so it needs
     no work here (`linking.md`). Compiling only what changed is a dev server concern, and
     moves to Phase 10 with `packages/vite`.
+  - [x] `bench/linker` and `bench/package-compilation` ported, with checks that fail on a
+    wrong link. Timing them on the VM is still to do.
 - **Exit:** multi-module cases pass; `bench/linker` and `bench/package-compilation`
   gates pass, ported to compiler-next and to compiling a package in the app's graph.
 

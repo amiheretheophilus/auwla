@@ -71,6 +71,11 @@ Verified: the two native package test files, 26 tests. `vite-adapter`,
 `fullstack-ssr-isolation`, `package-artifacts`, `installed-packages` and `library-build` give
 63 pass and 7 fail: the 6 that fail without this work, and one that needs `node`.
 
+`bench/linker` and `bench/package-compilation` are ported to compiler-next and to compiling a
+package in the app's graph, and fail on a wrong link. Their checks pass locally; the VM has
+not timed them. Still open for Phase 9: a package's size, more dynamic-import, star-export and
+cycle coverage, and that VM run.
+
 A fixed child component no longer needs a computation, since `<Label />` counted as reading
 `Label` (`compiler/linking.md`, "Size"): `composition` and `route-lazy` each fall about 3.1 KB,
 and no fixture grows. A prop nothing assigns keeps no copy of its parent's value. Compile

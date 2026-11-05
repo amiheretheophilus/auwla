@@ -310,6 +310,12 @@ What this says for native packages too:
   code) took 388 ms to 7.0 s, 18 times the time, against the old compiler's 328 ms to 5.9 s.
   `packages/utils` (8.6 KB) took 211 ms against 39 ms, and FlowOS (8.6 KB) 157 against 156 ms.
   One local run, best of three.
+- **A native package costs an app little.** `bench/package-compilation`, one local run: a
+  package of 9, 33 and 65 files added 23, 37 and 70 ms to compiling the app. The old
+  compiler's linked source took 42, 69 and 115 ms for the app and package together, against
+  35, 46 and 79 ms here. Its artifact link took 11, 7 and 6 ms, which is what compiling in the
+  graph gives up. `bench/linker` shows the new compiler at 1.2x the old at 16 modules and 1.8x
+  at 256, the one place compile time may grow slightly faster than the graph.
 - **A consumer needs no second path to judge a package call.** `InputQueries.callFacts`
   follows visible functions across files, and reports what they read and write, with
   `opaque` when it cannot tell.
@@ -336,8 +342,8 @@ optimization, emission, namespace linking and printing.
 - A package's size (see "Size").
 - Dynamic-import combinations, external/unknown star exports and broader cyclic graphs
   need further coverage.
-- `bench/linker` and `bench/package-compilation` still target the old compiler's APIs.
-  Porting them, and timing them on the VM, is Phase 9 exit work.
+- `bench/linker` and `bench/package-compilation` are ported, and their correctness checks pass
+  locally. Timing them on the VM is Phase 9 exit work.
 
 ## Not designed yet
 

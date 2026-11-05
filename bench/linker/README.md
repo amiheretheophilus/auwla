@@ -1,7 +1,6 @@
 # Cross-Module Linker Benchmark
 
-> Date: 2026-07-25. Bun on Windows. This measures compiler throughput, not
-> application runtime.
+This measures compiler throughput, not application runtime.
 
 Run:
 
@@ -9,79 +8,33 @@ Run:
 bun run bench:linker
 ```
 
-The generated graph contains one state module and one importing TSX view per
-pair. Every state module exports a scalar, a module computed, and a mutator.
-Every view imports all three through the Vite-style `@` alias.
+The generated graph contains one state module and one importing TSX view per pair. Every
+state module exports a scalar, a module computed value and a mutator. Every view imports all
+three through a `@` alias. The same graph is compiled whole by the old compiler and by
+compiler-next, in alternating order, and the run reports the median of seven.
 
-Each process reports the median of seven alternating samples. The table below
-is the median of three independent processes.
+It fails if compiler-next leaves a module out, or a view does not read its own state module:
+a fast compiler that links wrongly proves nothing.
 
-| Modules | Source | Prelinked transforms | Linked graph | Linked/module | Overhead |
-|---:|---:|---:|---:|---:|---:|
-| 2 | 0.3 KiB | 28.0 ms | 76.4 ms | 38.2 ms | 2.42x |
-| 8 | 1.1 KiB | 88.8 ms | 201.0 ms | 25.1 ms | 2.18x |
-| 16 | 2.3 KiB | 112.1 ms | 327.0 ms | 20.4 ms | 2.78x |
+`bench/package-compilation` asks the question next to this one: what a native package costs
+the app that uses it.
 
-The prelinked baseline parses and transforms the same sources with `compile()`,
-stable module IDs, and the same canonical import metadata supplied directly.
-It isolates the graph discovery and summary-linking cost.
+## One local run, 2026-11-05
 
-## Interpretation
+Bun on Windows, so only a guide:
 
-The linker has three conceptual phases:
+| Modules | Source | Old | New | New per module | New/old |
+| ---: | ---: | ---: | ---: | ---: | ---: |
+| 2 | 0.3 KiB | 8.1 ms | 10.8 ms | 5.39 ms | 1.33x |
+| 8 | 1.1 KiB | 24.7 ms | 28.2 ms | 3.52 ms | 1.14x |
+| 16 | 2.3 KiB | 44.7 ms | 53.7 ms | 3.36 ms | 1.20x |
+| 64 | 9.1 KiB | 127.8 ms | 186.7 ms | 2.92 ms | 1.46x |
+| 256 | 36.7 KiB | 508.8 ms | 923.4 ms | 3.61 ms | 1.81x |
 
-1. parse once and discover local exports/imports;
-2. converge summaries with a reverse-dependency worklist;
-3. reuse the cached parsed AST for final linked emission.
+## Earlier measurements
 
-The worklist reanalyzes only importers of an export summary that actually
-changed; unrelated modules are no longer reparsed on whole-graph fixed-point
-passes. Timing remains sensitive to Babel traversal, AST cloning, source-map
-emission in the detailed API, process temperature, and machine variance, so
-performance claims require alternating A/B measurements. Correctness remains
-covered by `tests/r15.test.ts` and the linked component suites.
-
-The compiler-wide identifier-hygiene checkpoint added one source-tree
-reservation walk per final transform. Compared with the previous linked medians
-(`105.8`, `245.2`, and `411.4` ms), the new linked results are mixed within
-process noise (`103.3`, `249.0`, and `404.1` ms). These measurements support no
-performance claim in either direction; collision correctness is covered by
-`tests/r16.test.ts`.
-
-The R17 conservative-provenance checkpoint produced mixed linked medians versus that
-run: `121.8`, `241.8`, and `453.4` ms. The 2- and 16-module cases were slower
-while the 8-module case was slightly faster; 16-module linked samples ranged
-from `353.9` to `464.4` ms across processes. This supports no optimization
-claim and reinforces the dependency-worklist priority above.
-
-The R19 bounded-effect summary checkpoint serializes exact, receiver-bounded,
-and structured parameter-relative effects. Linked medians were `130.7`,
-`329.7`, and `543.8` ms; process ranges were `130.5-133.7`, `322.3-342.6`,
-and `531.6-577.4` ms. Absolute times rose from R17, but prelinked medians rose
-similarly. Normalized linker overhead is now `3.10x`, `2.62x`, and `3.14x`
-versus R17's `3.32x`, `2.63x`, and `3.30x`. This supports no speedup or
-regression claim; it records the cost after changing the summary contract.
-
-The R22 component-graph checkpoint adds component export discovery, placement
-edges, and one final graph traversal. Linked process ranges were `64.5-87.6`,
-`193.8-204.0`, and `312.0-334.5` ms for 2/8/16 modules. The corresponding
-prelinked baselines also fell substantially from the R19 run. Normalized
-overhead is now `2.42x`, `2.18x`, and `2.78x`; these measurements show no R22
-regression but do not isolate or support a speedup claim. Cross-file factory
-runtime parity is measured separately in `bench/components/README.md`.
-
-The 2026-07-26 canonical-prop checkpoint adds caller-side prop provenance
-collection and one topological propagation over the existing component graph.
-Three independent processes produced these per-cell medians:
-
-| Modules | Prelinked | Linked graph | Linked/module | Overhead |
-|---:|---:|---:|---:|---:|
-| 2 | 61.7 ms | 150.3 ms | 75.2 ms | 2.83x |
-| 8 | 154.4 ms | 375.9 ms | 47.0 ms | 2.45x |
-| 16 | 222.3 ms | 708.8 ms | 44.3 ms | 3.19x |
-
-The benchmark graph does not pass mutable state through props, so this measures
-the unconditional collection cost but does not isolate it from parser,
-fixed-point, dependency-version, or machine variance. The result supports no
-speedup or regression claim. A dedicated dependency-worklist implementation
-still needs an A/B run against this checkpoint.
+Before this comparison, the benchmark measured the old compiler against `compile()` given the
+same import metadata directly, which isolated its graph discovery and summary linking. That
+`compile()` does not exist in compiler-next, whose analysis is one graph with no second
+path to compare against. Those results, and the checkpoints they supported, are in git history
+up to `2240d1cb`, and none of them made a speedup or regression claim.

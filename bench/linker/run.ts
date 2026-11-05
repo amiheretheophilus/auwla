@@ -1,17 +1,21 @@
-import { compile } from '@memoized-dom/compiler';
-import { compileModules } from '@memoized-dom/compiler';
+/**
+ * What linking a graph costs as it grows: the same source graph, compiled whole, with the old
+ * compiler and with compiler-next. See `README.md`.
+ */
+import { compileModules as compileOld } from '@memoized-dom/compiler';
+import { compileModules as compileNext } from '../../packages/compiler-next/src';
 
 interface Row {
   modules: number;
   bytes: number;
-  prelinkedMs: number;
-  linkedMs: number;
-  linkedPerModuleMs: number;
-  overhead: number;
+  oldMs: number;
+  newMs: number;
 }
 
+/** One state module and one importing view for each pair, reached through a `@` alias. */
 function graph(pairs: number): Record<string, string> {
   const modules: Record<string, string> = {};
+
   for (let i = 0; i < pairs; i++) {
     modules[`./src/state-${i}.ts`] = `
       export let value = ${i};
@@ -25,7 +29,33 @@ function graph(pairs: number): Record<string, string> {
       }
     `;
   }
+
   return modules;
+}
+
+function linkOld(modules: Record<string, string>): Record<string, string> {
+  return compileOld(modules, { aliases: { '@': './src' } });
+}
+
+function linkNext(modules: Record<string, string>): Record<string, string> {
+  return compileNext(modules, {
+    resolveImport: (specifier) => specifier.startsWith('@/') ? `./src/${specifier.slice(2)}.ts` : undefined,
+  });
+}
+
+/** A fast compiler that links wrongly proves nothing: each view must read its own state. */
+function checkLinked(modules: Record<string, string>, output: Record<string, string>): void {
+  for (const path of Object.keys(modules)) {
+    if (output[path] === undefined) {
+      throw new Error(`compiler-next produced no output for ${path}`);
+    }
+
+    const view = /view-(\d+)\.tsx$/.exec(path);
+
+    if (view !== null && !output[path].includes(`./state-${view[1]}`)) {
+      throw new Error(`${path} does not read the state of ./state-${view[1]}`);
+    }
+  }
 }
 
 function median(values: number[]): number {
@@ -40,83 +70,60 @@ function time(operation: () => void): number {
 }
 
 function measure(modules: Record<string, string>): Row {
-  const prelinked = (): void => {
-    for (const [moduleId, source] of Object.entries(modules)) {
-      const match = /^\.\/src\/view-(\d+)\.tsx$/.exec(moduleId);
-      if (match === null) {
-        compile(source, { moduleId });
-        continue;
-      }
-      const stateId = `./src/state-${match[1]}.ts`;
-      compile(source, {
-        moduleId,
-        linkedImports: {
-          value: { type: 'state', kind: 'let', key: `${stateId}#value` },
-          doubled: { type: 'state', kind: 'computed', key: `${stateId}#doubled` },
-          bump: {
-            type: 'function',
-            reads: [`${stateId}#value`],
-            writes: [`${stateId}#value`],
-            boundedWrites: [],
-            parameterWrites: [],
-            unbounded: false,
-          },
-        },
-      });
-    }
+  const runOld = () => {
+    linkOld(modules);
   };
-  const linked = (): void => {
-    compileModules(modules, { aliases: { '@': './src' } });
+  const runNew = () => {
+    linkNext(modules);
   };
 
-  prelinked();
-  linked();
+  checkLinked(modules, linkNext(modules));
+  runOld();
 
-  const prelinkedSamples: number[] = [];
-  const linkedSamples: number[] = [];
+  const oldSamples: number[] = [];
+  const newSamples: number[] = [];
+
   for (let i = 0; i < 7; i++) {
     // Alternate order to reduce systematic temperature/JIT bias.
     if ((i & 1) === 0) {
-      prelinkedSamples.push(time(prelinked));
-      linkedSamples.push(time(linked));
+      oldSamples.push(time(runOld));
+      newSamples.push(time(runNew));
     } else {
-      linkedSamples.push(time(linked));
-      prelinkedSamples.push(time(prelinked));
+      newSamples.push(time(runNew));
+      oldSamples.push(time(runOld));
     }
   }
 
-  const prelinkedMs = median(prelinkedSamples);
-  const linkedMs = median(linkedSamples);
   return {
     modules: Object.keys(modules).length,
     bytes: Object.values(modules).reduce((sum, source) => sum + source.length, 0),
-    prelinkedMs,
-    linkedMs,
-    linkedPerModuleMs: linkedMs / Object.keys(modules).length,
-    overhead: linkedMs / prelinkedMs,
+    oldMs: median(oldSamples),
+    newMs: median(newSamples),
   };
 }
 
-const rows = [1, 4, 8].map((pairs) => measure(graph(pairs)));
+const rows = [1, 4, 8, 32, 128].map((pairs) => measure(graph(pairs)));
 
 console.log('\nCROSS-MODULE LINKER (Bun, median of 7)\n');
 console.log(
   'modules'.padStart(8),
   'source'.padStart(10),
-  'prelinked'.padStart(14),
-  'linked'.padStart(12),
-  'linked/mod'.padStart(12),
-  'overhead'.padStart(10),
+  'old'.padStart(12),
+  'new'.padStart(12),
+  'new/module'.padStart(12),
+  'new/old'.padStart(10),
 );
-console.log('-'.repeat(72));
+console.log('-'.repeat(68));
+
 for (const row of rows) {
   console.log(
     String(row.modules).padStart(8),
     `${(row.bytes / 1024).toFixed(1)}KiB`.padStart(10),
-    `${row.prelinkedMs.toFixed(1)}ms`.padStart(14),
-    `${row.linkedMs.toFixed(1)}ms`.padStart(12),
-    `${row.linkedPerModuleMs.toFixed(1)}ms`.padStart(12),
-    `${row.overhead.toFixed(2)}x`.padStart(10),
+    `${row.oldMs.toFixed(1)}ms`.padStart(12),
+    `${row.newMs.toFixed(1)}ms`.padStart(12),
+    `${(row.newMs / row.modules).toFixed(2)}ms`.padStart(12),
+    `${(row.newMs / row.oldMs).toFixed(2)}x`.padStart(10),
   );
 }
-console.log('\nPrelinked transforms receive the same canonical import metadata directly.');
+
+console.log('\nEvery view checked to read its own state module (compiler-next).');
