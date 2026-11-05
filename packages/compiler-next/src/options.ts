@@ -17,6 +17,12 @@ export interface CompileModulesOptions {
    */
   readonly dataDelivery?: 'universal' | 'client';
   /**
+   * The modules whose exports code outside this graph can use, such as the app's entry.
+   * Everything else is called only from modules in the graph, so the compiler can follow
+   * what those calls pass (`wiki/compiler/sources.md`). Default: every module.
+   */
+  readonly entries?: readonly string[];
+  /**
    * Maps an import specifier to the path of one of the compiled modules, when the
    * default rule (relative paths, probing extensions and index files) does not.
    * Return `undefined` to use the default.

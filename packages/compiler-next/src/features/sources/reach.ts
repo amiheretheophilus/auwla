@@ -72,6 +72,9 @@ export function sourceReach(graph: SemanticGraph, components: ReadonlySet<Node>)
 
 export class SourceReach {
   readonly #components: ReadonlySet<Node>;
+  readonly #usedOutside: SemanticGraph['resolved']['usedOutside'];
+  /** The import bindings naming each binding, through any re-exports. */
+  readonly #importers = new Map<Binding, Binding[]>();
   readonly #modules = new Map<FunctionNode, Module>();
   readonly #invocations = new Map<FunctionNode, Invocations>();
   readonly #exported: Binding[] = [];
@@ -92,6 +95,7 @@ export class SourceReach {
 
   constructor(graph: SemanticGraph, components: ReadonlySet<Node>) {
     this.#components = components;
+    this.#usedOutside = graph.resolved.usedOutside;
 
     for (const binding of graph.bindings.values()) {
       const statements = binding.initial?.builders.filter((builder) => builder.waits).map((builder) => builder.statement) ?? [];
@@ -124,6 +128,14 @@ export class SourceReach {
       for (const fn of module.findAll(FUNCTION_TYPES)) {
         this.#modules.set(fn, module);
       }
+
+      for (const binding of module.bindings) {
+        const definition = importedDefinition(binding);
+        if (definition === null) continue;
+        const importers = this.#importers.get(definition) ?? [];
+        importers.push(binding);
+        this.#importers.set(definition, importers);
+      }
     }
 
     for (const { module } of graph.resolved.modules) {
@@ -132,7 +144,7 @@ export class SourceReach {
       }
 
       this.#findEscapes(module);
-      this.#exported.push(...module.bindings.filter((binding) => exported(module, binding)));
+      this.#exported.push(...module.bindings.filter((binding) => exported(module, binding) && this.#usedOutside(module, binding)));
     }
 
     this.#solve();
@@ -826,17 +838,23 @@ export class SourceReach {
 
     if (is.FunctionDeclaration(fn)) {
       binding = fn.id === null ? null : module.bindingOf(fn.id);
-      invocations.exported ||= is.ExportNamedDeclaration(parent) || is.ExportDefaultDeclaration(parent);
+      invocations.exported ||= (is.ExportNamedDeclaration(parent) || is.ExportDefaultDeclaration(parent))
+        && this.#usedOutside(module, binding);
     } else if (is.VariableDeclarator(parent) && parent.init === position && is.Identifier(parent.id)) {
       binding = module.bindingOf(parent.id);
       const declaration = module.parentOf(parent);
-      invocations.exported ||= declaration !== null && is.ExportNamedDeclaration(module.parentOf(declaration));
+      invocations.exported ||= declaration !== null && is.ExportNamedDeclaration(module.parentOf(declaration))
+        && this.#usedOutside(module, binding);
     } else {
       this.#use(module, position, invocations, visited);
     }
 
     if (binding !== null) {
       this.#bindingUses(binding, invocations, visited);
+      // Each file that imports it has a binding of its own, with its own references.
+      for (const imported of this.#importers.get(binding) ?? []) {
+        this.#bindingUses(imported, invocations, visited);
+      }
     } else if (is.FunctionDeclaration(fn)) {
       invocations.exported = true;
     }
@@ -884,8 +902,15 @@ export class SourceReach {
       return;
     }
 
-    if (is.ExportSpecifier(parent) || is.ExportDefaultDeclaration(parent)) {
+    // `export default f` captures a value, and importers of it do not name `f`.
+    if (is.ExportDefaultDeclaration(parent)) {
       invocations.exported = true;
+      return;
+    }
+
+    if (is.ExportSpecifier(parent)) {
+      const named = is.Identifier(node) ? module.referenceOf(node)?.binding ?? null : null;
+      invocations.exported ||= named === null || this.#usedOutside(module, named);
       return;
     }
 

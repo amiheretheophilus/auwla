@@ -20,8 +20,14 @@ closure that writes its parameter, so `seed` now has the reader a `let` would ha
 that shows in the shuffle timing is for the VM. Next: that size, then bare specifiers and
 copies.
 
-Verified on this batch: compiler-next 496 unit, 605 cases and 10 generators at 200 runs;
-runtime 179, data 171. The first full gate failed: the `sources` generator ran for an hour
+`entries` (`compiler/sources.md`) tells the compiler which modules outside code can use,
+so the source proof follows the real calls of every other export. The harness now compiles
+with it. `optimistic.ts` hardly moves, because `$read` hands it a raw handle; without `$read`
+it would be 35 KB. It is runtime-level code, so the next measure of package size is a sample
+of ordinary package code rather than this file.
+
+Verified on the batch before `entries`: compiler-next 496 unit, 605 cases and 10 generators
+at 200 runs; runtime 179, data 171. The first full gate on it failed: the `sources` generator ran for an hour
 against its 10-minute limit, reached 125 of 200 programs, and took the next test down with
 it, as a generator did once before. That program passes alone. The `sources` generator
 then passed alone in 183 s, and the full gate in 660 s with a clock sampler showing no

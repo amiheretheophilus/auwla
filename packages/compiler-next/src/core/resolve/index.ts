@@ -14,7 +14,7 @@ import type { ParsedModule } from '../parse';
 import { withAmbientImports } from './ambient';
 import { findGlobalWrites, type GlobalWrites } from './globals';
 import { importResolver } from './imports';
-import { importedBinding } from './exports';
+import { importedBinding, namespaceModule } from './exports';
 import { findWrites, type WriteSite } from './writes';
 
 export type { GlobalWrites } from './globals';
@@ -41,6 +41,8 @@ export interface Resolved {
   readonly globals: GlobalWrites;
   /** The write sites of a binding in any module. */
   writesOf(binding: Binding): readonly WriteSite[];
+  /** Whether code outside this graph can reach this binding through an entry's exports. */
+  usedOutside(module: Module, binding: Binding | null): boolean;
 }
 
 /**
@@ -103,5 +105,41 @@ export function resolve(parsed: readonly ParsedModule[], options: CompileModules
   const byModule = new Map(modules.map((entry) => [entry.module, entry]));
   const globals = findGlobalWrites(modules.map((entry) => entry.module));
   const writesOf = (binding: Binding) => byModule.get(binding.module)?.writes.get(binding) ?? [];
-  return { analyzer, modules, globals, writesOf };
+  return { analyzer, modules, globals, writesOf, usedOutside: outsideUses(modules, options.entries) };
+}
+
+/**
+ * An entry's own exports, and what it forwards from other modules. A module that is
+ * not an entry is reached only through imports, which the graph can see by name. A
+ * namespace or a dynamic import is not followed by name, so its module counts as an entry.
+ */
+function outsideUses(
+  modules: readonly ResolvedModule[],
+  entries: readonly string[] | undefined,
+): Resolved['usedOutside'] {
+  if (entries === undefined) return () => true;
+
+  const named = new Set(entries);
+  const open = new Set(modules.filter((entry) => named.has(entry.path)).map((entry) => entry.module));
+  const byPath = new Map(modules.map((entry) => [entry.path, entry.module]));
+
+  for (const { module } of modules) {
+    for (const binding of module.bindings) {
+      const namespace = namespaceModule(binding);
+      if (namespace !== null) open.add(namespace);
+    }
+    for (const imported of module.imports) {
+      const target = imported.resolvedModule === null ? undefined : byPath.get(imported.resolvedModule.path);
+      if (imported.kind === 'dynamic' && target !== undefined) open.add(target);
+    }
+  }
+
+  const forwarded = new Set<Binding>();
+  for (const module of open) {
+    for (const name of module.exportedNames()) {
+      const binding = module.resolveExport(name)?.binding;
+      if (binding !== null && binding !== undefined) forwarded.add(binding);
+    }
+  }
+  return (module, binding) => open.has(module) || (binding !== null && forwarded.has(binding));
 }

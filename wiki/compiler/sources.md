@@ -377,6 +377,15 @@ every read, guard and JSX child, so FlowOS emitted 439 `readSourceValue` and 243
 `whenSourceInputs` calls. `features/sources/reach.ts` proves which values can
 hold one, and readiness is emitted only for those. FlowOS keeps 82 and 52.
 
+`entries` (`options.ts`) says which modules code outside the graph can use. An export of
+any other module is called only from the graph, so the proof follows what those calls pass,
+through each file's import binding and any re-exports. A component in another file drops
+its readiness: `request-component-structures` from 50 readiness calls to 14. What it cannot
+follow by name stays assumed open: a namespace or dynamic import of the module, a captured
+or anonymous default export, and anything an entry forwards. Without `entries`, every
+export is open, and the harness runs that form with `ENTRIES=all`. A build tool must list
+every module it loads directly, or a call the graph cannot see would lose its readiness.
+
 The proof is one fixpoint over the whole graph with facts that only grow:
 bindings that may hold one, functions that may return one, functions whose run
 may wait, and two flags for unknown code. A binding may hold one when:

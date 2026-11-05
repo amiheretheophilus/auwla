@@ -81,13 +81,16 @@ const oldCompiler: Compiler = {
 /** `DATA_DELIVERY=client` runs the cases as a client-only build compiles them. */
 const delivery = process.env.DATA_DELIVERY === 'client' ? { dataDelivery: 'client' as const } : {};
 
+/** Only the app's entry is used from outside, as in a real build. `ENTRIES=all` assumes every export is. */
+const entries = process.env.ENTRIES === 'all' ? {} : { entries: ['./App.tsx'] };
+
 const nextCompiler: Compiler = {
   ...oldCompiler,
   name: 'packages/compiler-next',
   output: 'next',
 
   compile(source, modules) {
-    return compileModulesNext({ ...modules, './App.tsx': source }, { runtimePath: '@memoized-dom/runtime/testing', ...delivery });
+    return compileModulesNext({ ...modules, './App.tsx': source }, { runtimePath: '@memoized-dom/runtime/testing', ...delivery, ...entries });
   },
 };
 
@@ -101,6 +104,7 @@ const generalCompiler: Compiler = {
       runtimePath: '@memoized-dom/runtime/testing',
       optimize: false,
       ...delivery,
+      ...entries,
     });
   },
 };

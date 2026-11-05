@@ -54,6 +54,83 @@ describe('readiness reach', () => {
     expect(output).toMatch(/readSourceValue\(box\)/);
   });
 
+  describe('entries', () => {
+    const helper = `export function shown(value) { return value + 1; }`;
+
+    it('follows what the graph passes to an export that is not an entry', () => {
+      const modules = {
+        './helper.ts': helper,
+        './App.tsx': `import { $fetch } from '@memoized-dom/data';
+          import { shown } from './helper';
+          export function App() {
+            const user = $fetch('/user');
+            return <p>{user.name}{shown(1)}</p>;
+          }`,
+      };
+      const everyExport = compileModules(modules)['./helper.ts']!;
+      const fromEntry = compileModules(modules, { entries: ['./App.tsx'] })['./helper.ts']!;
+
+      expect(everyExport).toMatch(/readSourceValue\(value\)/);
+      expect(fromEntry).not.toMatch(/readSourceValue/);
+    });
+
+    it('still sees a source the graph passes to that export', () => {
+      const modules = {
+        './helper.ts': helper,
+        './App.tsx': `import { $fetch } from '@memoized-dom/data';
+          import { shown } from './helper';
+          export function App() {
+            const user = $fetch('/user');
+            return <p>{shown(user)}</p>;
+          }`,
+      };
+      expect(compileModules(modules, { entries: ['./App.tsx'] })['./helper.ts']!).toMatch(/readSourceValue\(value\)/);
+    });
+
+    it('follows those calls through a barrel', () => {
+      const modules = {
+        './helper.ts': helper,
+        './barrel.ts': `export * from './helper';`,
+        './App.tsx': `import { $fetch } from '@memoized-dom/data';
+          import { shown } from './barrel';
+          export function App() {
+            const user = $fetch('/user');
+            return <p>{shown(user)}</p>;
+          }`,
+      };
+      expect(compileModules(modules, { entries: ['./App.tsx'] })['./helper.ts']!).toMatch(/readSourceValue\(value\)/);
+    });
+
+    it.each([
+      ['a named re-export', `export { shown } from './helper';`],
+      ['a star re-export', `export * from './helper';`],
+      ['an import exported again', `import { shown } from './helper'; export { shown };`],
+    ])('counts an export the entry forwards through %s as used from outside', (_name, forwarding) => {
+      const modules = {
+        './helper.ts': helper,
+        './App.tsx': `import { $fetch } from '@memoized-dom/data';
+          ${forwarding}
+          export function App() { const user = $fetch('/user'); return <p>{user.name}</p>; }`,
+      };
+      expect(compileModules(modules, { entries: ['./App.tsx'] })['./helper.ts']!).toMatch(/readSourceValue\(value\)/);
+    });
+
+    it.each([
+      ['a namespace import', helper, `import * as helper from './helper';`, 'helper.shown(user)'],
+      ['a dynamic import', helper, ``, `import('./helper').then((helper) => helper.shown(user)) && 1`],
+      ['a captured default export', `function shown(value) { return value + 1; } export default shown;`, `import shown from './helper';`, 'shown(user)'],
+      ['an anonymous default export', `export default (value) => value + 1;`, `import shown from './helper';`, 'shown(user)'],
+    ])('keeps what it cannot follow by name: %s', (_name, source, imports, use) => {
+      const modules = {
+        './helper.ts': source,
+        './App.tsx': `import { $fetch } from '@memoized-dom/data';
+          ${imports}
+          export function App() { const user = $fetch('/user'); return <p>{${use}}</p>; }`,
+      };
+      expect(compileModules(modules, { entries: ['./App.tsx'] })['./helper.ts']!).toMatch(/readSourceValue\(value\)/);
+    });
+  });
+
   it('assumes code outside the graph can create sources', () => {
     const output = compile(`
       import { $fetch } from '@memoized-dom/data';
