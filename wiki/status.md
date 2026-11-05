@@ -32,15 +32,49 @@ table only. VM runs are still needed:
 | reverse | 16.7 / 13.4 | 18.1 / 14.4 |
 | remove 100 | 3.7 / 1.7 | 4.1 / 1.8 |
 
-Moves now beat the old compiler. Still behind: replace (about 1.8x), component create
-(1.4x), clear (1.3x). Bundles (minified, against the previous commit): Octane 41,262 →
-38,246 (old 35,340), FlowOS 137,968 → 136,839 (old 114,310). Some apps grew, because
-alias edits now report: `closed-nested-structures` +2,224 (36,535, larger than
-`685e262c`'s 33,932), `request-nested-list` +1,775, `primitive-inline-list` +459.
+These two runs on the final code, old / now, in ms, show how noisy this machine is: the
+old compiler's own component create moved from 53.0 to 26.4 between them. Only trust what
+holds in both. VM runs are still needed.
 
-Verified at this commit: 452 unit, 168 runtime, 170 data and 465 case tests, and all
-10 generators at 200 programs on fresh seeds. Root, server, router, adapters, language
-service, utils and the vite CLI were not rerun for this batch. CI was not started.
+| Scenario (owner-inline) | Run 1 | Run 2 |
+| --- | ---: | ---: |
+| create | 32.8 / 29.2 | 32.1 / 35.6 |
+| replace | 41.5 / 53.7 | 29.1 / 40.8 |
+| update | 2.6 / 3.9 | 2.7 / 2.7 |
+| swap | 1.5 / 2.2 | 2.4 / 1.5 |
+| remove | 3.5 / 0.8 | 2.2 / 1.0 |
+| clear | 2.3 / 2.2 | 1.7 / 2.4 |
+| append 1k | 5.7 / 3.4 | 5.1 / 3.3 |
+| prepend 1k | 4.4 / 3.5 | 5.1 / 4.5 |
+| pop 1k | 2.8 / 1.2 | 2.5 / 1.3 |
+| reverse | 12.9 / 7.9 | 13.0 / 10.3 |
+| remove 100 | 2.4 / 1.1 | 3.2 / 1.4 |
+
+Ahead in both runs: remove, pop, remove 100, reverse, prepend, append. Behind in both:
+replace (about 1.3 to 1.4x). The rest moves with the noise.
+
+Bundles, minified, against the old compiler: Octane 38,525 (35,340), FlowOS 138,567
+(114,310), `closed-nested-structures` 32,344 (28,461; 33,932 at `685e262c`). Data apps
+are the largest gap: `request-data` 60,828 against 38,781. compiler-next has no client
+delivery (Phase 10) and imports the whole `$fetch`. Swapping it for `createClientSource`,
+as the old compiler does, measures about 9 kB less on each (`request-data` 51,879,
+`request-list` 54,151 against the old 54,443). That is a bundle measurement only: its
+behaviour is untested. `request-group` and `request-routed-group` are about 800 B above
+`685e262c`, because `a2ae5c2c` moved code they already needed; the other apps shrank.
+
+Later on 2026-11-05, running the root suite for the first time since it stopped building
+found these, now fixed: edits to a `WeakMap` or `WeakSet` never showed (`compiler/handlers.md`);
+re-running a computation group re-created its other members and lost their edits
+(`compiler/state-and-derived.md`); chained requests crashed at mount on the old compiler
+(`decisions.md`). A plain object literal now updates field by field, at the user's request.
+
+Verified at `0e836a95` and after: 454 unit, 168 runtime, 171 data and 531 case tests, and
+all 10 generators at 200 programs on fresh seeds. Server 242, utils 24, router 127,
+adapters 6, language service 11 and devtools 18 all pass. Root, with `bun test --parallel=2
+./tests`, is 2,966 passing and 2 failing: R23 (`open-issues.md`), and a Chromium test,
+since Chrome is not installed here. The vite suite was not completed: its CLI tests need
+`node`, which is not installed here, and it hit a 400s limit; the failures seen were all
+that. Browser tests did not run. CI was not started.
 
 ## Output and runtime reduction (2026-11-04)
 

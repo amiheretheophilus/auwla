@@ -18,6 +18,9 @@ function _read_data() {
 }
 export { _read_data };
 const _sharedWrites = _MD.createSharedWrites([_sharedKey], []);
+function _assign_data(_before, _after) {
+  return _MD.unchangedWrite(_before, _after) ? _after : _mutated_data(_after);
+}
 function _moved_data(_value2) {
   _mutated_data();
   return _value2;
@@ -37,6 +40,9 @@ export function BenchModuleDataInline(_id, _parent, _props, _namespace, _setupOn
     _selectedVersion++;
     _writes.mark();
     return _value4;
+  }
+  function _assign(_before2, _after2) {
+    return _MD.unchangedWrite(_before2, _after2) ? _after2 : _write(_after2);
   }
   const _entity = { id: _id, parent: _parent, render: _update };
   const _writes = _MD.createWriteBatch(_entity);
@@ -69,21 +75,21 @@ export function BenchModuleDataInline(_id, _parent, _props, _namespace, _setupOn
   const _node2 = _node.nextSibling;
   const _text = _node2.firstChild;
   _MD.setListener(_button, "click", void 0, () => {
-    _mutated_data(data = buildData(1000));
-    _write(selected = null);
+    _assign_data(data, data = buildData(1000));
+    _assign(selected, selected = null);
   }, _writes);
   _MD.setListener(_button2, "click", void 0, () => {
-    _mutated_data(data = buildData(10000));
-    _write(selected = null);
+    _assign_data(data, data = buildData(10000));
+    _assign(selected, selected = null);
   }, _writes);
   _MD.setListener(_button3, "click", void 0, () => {
-    _mutated_data(data = data.concat(buildData(1000)));
+    _assign_data(data, data = data.concat(buildData(1000)));
   }, _writes);
   _MD.setListener(_button4, "click", void 0, () => {
-    _mutated_data(data = buildData(1000).concat(data));
+    _assign_data(data, data = buildData(1000).concat(data));
   }, _writes);
   _MD.setListener(_button5, "click", void 0, () => {
-    _mutated_data(data = data.slice(0, -1000));
+    _assign_data(data, data = data.slice(0, -1000));
   }, _writes);
   _MD.setListener(_button6, "click", void 0, () => {
     for (let i = 0; i < data.length; i += 10) _edited_data(data[i].label += ' !!!');
@@ -102,11 +108,11 @@ export function BenchModuleDataInline(_id, _parent, _props, _namespace, _setupOn
     _MD.editArray(data, "splice", [500, 1], _moved_data);
   }, _writes);
   _MD.setListener(_button10, "click", void 0, () => {
-    _mutated_data(data = data.filter((_item, index) => index % 100 !== 0));
+    _assign_data(data, data = data.filter((_item, index) => index % 100 !== 0));
   }, _writes);
   _MD.setListener(_button11, "click", void 0, () => {
-    _mutated_data(data = []);
-    _write(selected = null);
+    _assign_data(data, data = []);
+    _assign(selected, selected = null);
   }, _writes);
   const _rowNamespace = _MD.renderNamespace(_text.parentNode, _namespace);
   let _seenEdits = 0;
@@ -116,7 +122,7 @@ export function BenchModuleDataInline(_id, _parent, _props, _namespace, _setupOn
     let _value17 = selected === item.id ? 'danger' : '';
     _MD.setAttributeValue(_clone2, "class", _value17);
     _MD.setRowListener(_clone2, "click", () => {
-      _write(selected = item.id);
+      _assign(selected, selected = item.id);
     }, _writes);
     let _part = item.id;
     let _part2 = item.label;

@@ -12,7 +12,7 @@ function _Row_row(props, _rowOwner2) {
   let _value17 = _peek_selected() === props.item.id ? 'danger' : '';
   _MD.setAttributeValue(_clone2, "class", _value17);
   _MD.setRowListener(_clone2, "click", () => {
-    _mutated_selected(selected = props.item.id);
+    _assign_selected(selected, selected = props.item.id);
   }, _rowWrites);
   let _part = props.item.id;
   let _part2 = props.item.label;
@@ -71,6 +71,12 @@ function _peek_selected() {
   return selected;
 }
 const _sharedWrites = _MD.createSharedWrites([_sharedKey, _sharedKey2], []);
+function _assign_data(_before, _after) {
+  return _MD.unchangedWrite(_before, _after) ? _after : _mutated_data(_after);
+}
+function _assign_selected(_before2, _after2) {
+  return _MD.unchangedWrite(_before2, _after2) ? _after2 : _mutated_selected(_after2);
+}
 function _moved_data(_value3) {
   _mutated_data();
   return _value3;
@@ -129,7 +135,7 @@ function Row(_id2, _parent2, _props2, _namespace2, _setupOnly2) {
   _MD.setAttributeValue(_clone3, "class", _value20);
   let _seen = _propsVersion;
   _MD.setListener(_clone3, "click", void 0, () => {
-    _mutated_selected(selected = props.item.id);
+    _assign_selected(selected, selected = props.item.id);
   }, _writes2);
   const _siteComputation3 = _MD.createComputation(_writes2.mark, _entity2);
   _siteComputation3.begin();
@@ -206,21 +212,21 @@ export function BenchApp(_id, _parent, _props, _namespace, _setupOnly) {
   const _node2 = _node.nextSibling;
   const _text = _node2.firstChild;
   _MD.setListener(_button, "click", void 0, () => {
-    _mutated_data(data = buildData(1000));
-    _mutated_selected(selected = null);
+    _assign_data(data, data = buildData(1000));
+    _assign_selected(selected, selected = null);
   }, _writes);
   _MD.setListener(_button2, "click", void 0, () => {
-    _mutated_data(data = buildData(10000));
-    _mutated_selected(selected = null);
+    _assign_data(data, data = buildData(10000));
+    _assign_selected(selected, selected = null);
   }, _writes);
   _MD.setListener(_button3, "click", void 0, () => {
-    _mutated_data(data = data.concat(buildData(1000)));
+    _assign_data(data, data = data.concat(buildData(1000)));
   }, _writes);
   _MD.setListener(_button4, "click", void 0, () => {
-    _mutated_data(data = buildData(1000).concat(data));
+    _assign_data(data, data = buildData(1000).concat(data));
   }, _writes);
   _MD.setListener(_button5, "click", void 0, () => {
-    _mutated_data(data = data.slice(0, -1000));
+    _assign_data(data, data = data.slice(0, -1000));
   }, _writes);
   _MD.setListener(_button6, "click", void 0, () => {
     for (let i = 0; i < data.length; i += 10) _edited_data(data[i].label += ' !!!');
@@ -239,11 +245,11 @@ export function BenchApp(_id, _parent, _props, _namespace, _setupOnly) {
     _MD.editArray(data, "splice", [500, 1], _moved_data);
   }, _writes);
   _MD.setListener(_button10, "click", void 0, () => {
-    _mutated_data(data = data.filter((_item, index) => index % 100 !== 0));
+    _assign_data(data, data = data.filter((_item, index) => index % 100 !== 0));
   }, _writes);
   _MD.setListener(_button11, "click", void 0, () => {
-    _mutated_data(data = []);
-    _mutated_selected(selected = null);
+    _assign_data(data, data = []);
+    _assign_selected(selected, selected = null);
   }, _writes);
   const _rowNamespace = _MD.renderNamespace(_text.parentNode, _namespace);
   let _seenEdits = 0;

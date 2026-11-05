@@ -27,10 +27,16 @@ export function BenchAppInlineOwned(_id, _parent, _props, _namespace, _setupOnly
     _writes.mark();
     return _value3;
   }
+  function _assign(_before, _after) {
+    return _MD.unchangedWrite(_before, _after) ? _after : _write(_after);
+  }
   function _write2(_value4) {
     _selectedVersion++;
     _writes.mark();
     return _value4;
+  }
+  function _assign2(_before2, _after2) {
+    return _MD.unchangedWrite(_before2, _after2) ? _after2 : _write2(_after2);
   }
   const _entity = { id: _id, parent: _parent, render: _update };
   const _writes = _MD.createWriteBatch(_entity);
@@ -64,21 +70,21 @@ export function BenchAppInlineOwned(_id, _parent, _props, _namespace, _setupOnly
   const _node2 = _node.nextSibling;
   const _text = _node2.firstChild;
   _MD.setListener(_button, "click", void 0, () => {
-    _write(data = buildData(1000));
-    _write2(selected = null);
+    _assign(data, data = buildData(1000));
+    _assign2(selected, selected = null);
   }, _writes);
   _MD.setListener(_button2, "click", void 0, () => {
-    _write(data = buildData(10000));
-    _write2(selected = null);
+    _assign(data, data = buildData(10000));
+    _assign2(selected, selected = null);
   }, _writes);
   _MD.setListener(_button3, "click", void 0, () => {
-    _write(data = data.concat(buildData(1000)));
+    _assign(data, data = data.concat(buildData(1000)));
   }, _writes);
   _MD.setListener(_button4, "click", void 0, () => {
-    _write(data = buildData(1000).concat(data));
+    _assign(data, data = buildData(1000).concat(data));
   }, _writes);
   _MD.setListener(_button5, "click", void 0, () => {
-    _write(data = data.slice(0, -1000));
+    _assign(data, data = data.slice(0, -1000));
   }, _writes);
   _MD.setListener(_button6, "click", void 0, () => {
     for (let i = 0; i < data.length; i += 10) _edited_data(data[i].label += ' !!!');
@@ -97,11 +103,11 @@ export function BenchAppInlineOwned(_id, _parent, _props, _namespace, _setupOnly
     _MD.editArray(data, "splice", [500, 1], _moved_data);
   }, _writes);
   _MD.setListener(_button10, "click", void 0, () => {
-    _write(data = data.filter((_item, index) => index % 100 !== 0));
+    _assign(data, data = data.filter((_item, index) => index % 100 !== 0));
   }, _writes);
   _MD.setListener(_button11, "click", void 0, () => {
-    _write(data = []);
-    _write2(selected = null);
+    _assign(data, data = []);
+    _assign2(selected, selected = null);
   }, _writes);
   const _rowNamespace = _MD.renderNamespace(_text.parentNode, _namespace);
   let _seenEdits = 0;
@@ -111,7 +117,7 @@ export function BenchAppInlineOwned(_id, _parent, _props, _namespace, _setupOnly
     let _value17 = selected === item.id ? 'danger' : '';
     _MD.setAttributeValue(_clone2, "class", _value17);
     _MD.setRowListener(_clone2, "click", () => {
-      _write2(selected = item.id);
+      _assign2(selected, selected = item.id);
     }, _writes);
     let _part = item.id;
     let _part2 = item.label;
