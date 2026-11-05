@@ -86,7 +86,11 @@ function staysPrimitive(node: BindingNode): boolean {
   return true;
 }
 
-/** Local component bindings only; source readiness and dynamic scope stay general. */
+function isModuleState(plan: ModulePlan, node: BindingNode): boolean {
+  return plan.sharedOwners.some((owner) => owner.fn === null && owner.block === null && owner.state.includes(node));
+}
+
+/** Component and module bindings; source readiness and dynamic scope stay general. */
 export function primitiveBindings(plan: ModulePlan, graph: SemanticGraph): ReadonlySet<Binding> {
   const module = plan.module.module;
 
@@ -103,8 +107,11 @@ export function primitiveBindings(plan: ModulePlan, graph: SemanticGraph): Reado
   for (const binding of module.bindings) {
     const node = graph.bindings.get(binding);
 
-    if (node !== undefined && node.owner.runner !== null
-      && plan.components.has(node.owner.runner) && staysPrimitive(node)) {
+    // Module state counts too: no other module can assign it. A lexical block's
+    // or factory's state has more than one activation and stays general.
+    const owned = node !== undefined
+      && (node.owner.runner === null ? isModuleState(plan, node) : plan.components.has(node.owner.runner));
+    if (owned && staysPrimitive(node)) {
       primitives.add(binding);
     }
   }
@@ -209,6 +216,15 @@ export const primitiveValues: Optimization = {
       return { ...value, sites };
     });
 
-    return changed ? { ...general, components, values } : null;
+    // A module's primitive binding has nothing an alias could edit.
+    const sharedOwners = general.sharedOwners.map((owner) => {
+      const primitive = new Set(owner.state.filter((node) => primitives.has(node.binding)));
+      if (primitive.size === 0) return owner;
+
+      changed = true;
+      return { ...owner, primitive };
+    });
+
+    return changed ? { ...general, components, values, sharedOwners } : null;
   },
 };

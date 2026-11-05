@@ -356,6 +356,8 @@ export interface ModulePlan {
   readonly keyedComparisons?: ReadonlyMap<Node, BindingNode>;
   /** Comparisons whose compiled row copies read untracked; authored callbacks retain tracking. */
   readonly routedComparisons?: ReadonlyMap<Node, BindingNode>;
+  /** Optional (`optimize/handler-reads.ts`): reads that run in an event handler, so they stay plain. */
+  readonly handlerReads?: ReadonlySet<Node>;
 }
 
 export interface SourceFlowPlan {
@@ -458,4 +460,6 @@ export interface SharedOwnerPlan {
   readonly replayMutations: readonly MutationPlan[];
   readonly readonlyBindings: readonly BindingNode[];
   readonly takeovers: readonly BindingNode[];
+  /** Optional (`optimize/primitive-values.ts`): bindings that can never hold an object. */
+  readonly primitive?: ReadonlySet<BindingNode>;
 }

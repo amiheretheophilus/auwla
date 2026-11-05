@@ -11,6 +11,12 @@ import { copy } from '../../core/emit/copy';
 import { expression, statement } from '../../core/emit/quote';
 
 export interface SharedOwnerEmit {
+  /**
+   * A module's plain state: no derivation, takeover, effect, ref or source, so
+   * nothing recomputes on read and no write can happen during a build. It needs
+   * no build scope, refresh or completion, only versions and keys.
+   */
+  readonly simple: boolean;
   readonly invocation: string;
   readonly plan: SharedOwnerPlan;
   readonly versions: ReadonlyMap<BindingNode, string>;
@@ -51,6 +57,11 @@ export function emitSharedState(plan: ModulePlan, names: Names, runtime: string,
     const declarations: Statement[] = [];
     const notifiers = new Map<BindingNode, string>();
     const observed = owner.state.some((binding) => plan.sharedReads.get(binding)?.observer !== undefined);
+    const simple = owner.fn === null && owner.block === null && !observed && data === undefined
+      && owner.memos.length === 0 && owner.takeovers.length === 0 && owner.replayMutations.length === 0
+      && owner.replayWrites.length === 0 && owner.readonlyBindings.length === 0
+      && !plan.effects.groups.some((group) => group.owner === null)
+      && !plan.refs.some((ref) => owner.state.includes(ref.binding));
     for (const binding of owner.state) {
       const read = plan.sharedReads.get(binding);
       const version = names.fresh(`_${binding.binding.name}Version`);
@@ -66,7 +77,9 @@ export function emitSharedState(plan: ModulePlan, names: Names, runtime: string,
       // body executes. Only observed keys need a safely testable hoisted slot.
       const keyDeclaration = read?.observer === undefined ? 'const $$key = {};' : 'var $$key = {};';
       declarations.push(statement(keyDeclaration, { key }));
-      declarations.push(statement('function $$notify() { $$version++; $$batch.mark($$key); }', { notify, version, batch, key }));
+      // Returns its argument so `_mutated_x(x = 1)` keeps the expression's value.
+      const written = names.fresh('_value');
+      declarations.push(statement('function $$notify($$written) { $$version++; $$batch.mark($$key); return $$written; }', { notify, version, batch, key, written }));
       if (read === undefined) {
         continue;
       }
@@ -74,7 +87,9 @@ export function emitSharedState(plan: ModulePlan, names: Names, runtime: string,
       // value (`_refreshShared` skips an active or unchanged owner). One version
       // function per binding: a computation reading it again records nothing new.
       const current = names.of(declared, `_version_${binding.binding.name}`);
-      declarations.push(statement(`function $$current() {
+      declarations.push(simple
+        ? statement('function $$current() { return $$version; }', { current, version })
+        : statement(`function $$current() {
         if ($$runtime.isBuilding()${observed ? ' && $$ready' : ''}) $$refresh();
         return $$version;
       }`, { current, refresh, runtime, version, ready }));
@@ -88,7 +103,7 @@ export function emitSharedState(plan: ModulePlan, names: Names, runtime: string,
       }) : expression('$$binding', { binding: binding.binding.name });
 
       declarations.push(statement(`function $$reader(${hasReadiness ? '$$readiness' : ''}) {
-        if ($$runtime.isBuilding()) $$refresh();
+        ${simple ? '' : 'if ($$runtime.isBuilding()) $$refresh();'}
         return $$runtime.trackRead($$current, $$value, $$key);
       }`, { reader: read.name, current, refresh, runtime, value, key, readiness }));
       if (read.observer !== undefined) {
@@ -112,7 +127,7 @@ export function emitSharedState(plan: ModulePlan, names: Names, runtime: string,
           continue;
         }
         const parent = plan.module.module.parentOf(reference.node);
-        if (is.ExportSpecifier(parent)) {
+        if (is.ExportSpecifier(parent) || plan.handlerReads?.has(reference.node)) {
           continue;
         }
         replacements.set(reference.node, expression('$$reader()', { reader: read.name }));
@@ -125,7 +140,7 @@ export function emitSharedState(plan: ModulePlan, names: Names, runtime: string,
         // reads it untracked and refreshes the rows keyed by it (`row-lists.ts`).
         const peek = names.of(declared, `_peek_${binding.binding.name}`);
         declarations.push(statement(`function $$peek() {
-          if ($$runtime.isBuilding()) $$refresh();
+          ${simple ? '' : 'if ($$runtime.isBuilding()) $$refresh();'}
           return $$binding;
         }`, { peek, refresh, runtime, binding: binding.binding.name }));
         for (const [node] of compared) {
@@ -137,11 +152,13 @@ export function emitSharedState(plan: ModulePlan, names: Names, runtime: string,
         }
       }
     }
-    declarations.push(statement(`const $$scope = $$runtime.createBuildScope(true, ${owner.block !== null});`, { scope, runtime }));
-    declarations.push(statement('const $$invocation = $$runtime.isEffectInvocation();', { invocation, runtime }));
-    // Module namespace observers can be called before module evaluation. A
-    // hoisted flag guards their data reads; lexical owners retain activation scope.
-    declarations.push(statement(observed ? 'var $$ready = false;' : 'let $$ready = false;', { ready }));
+    if (!simple) {
+      declarations.push(statement(`const $$scope = $$runtime.createBuildScope(true, ${owner.block !== null});`, { scope, runtime }));
+      declarations.push(statement('const $$invocation = $$runtime.isEffectInvocation();', { invocation, runtime }));
+      // Module namespace observers can be called before module evaluation. A
+      // hoisted flag guards their data reads; lexical owners retain activation scope.
+      declarations.push(statement(observed ? 'var $$ready = false;' : 'let $$ready = false;', { ready }));
+    }
     // A write wakes readers of what it wrote and of every derived binding,
     // which recomputes on read; readers of other state stay asleep.
     const recomputed = new Set<BindingNode>();
@@ -162,7 +179,7 @@ export function emitSharedState(plan: ModulePlan, names: Names, runtime: string,
     declarations.push(statement('const $$batch = $$runtime.createSharedWrites($$keys, $$recomputed);', {
       batch, runtime, keys: keyList(keys.keys()), recomputed: keyList(recomputed),
     }));
-    owners.push({ plan: owner, versions, keys, scope, frame, batch, refresh, ready, invocation, declarations, notifiers });
+    owners.push({ simple, plan: owner, versions, keys, scope, frame, batch, refresh, ready, invocation, declarations, notifiers });
   }
   type ReadableModule = Pick<SharedReadPlan, 'path'>;
   const imported = new Map<ReadableModule, Map<string, string>>();
@@ -236,6 +253,10 @@ export function emitSharedState(plan: ModulePlan, names: Names, runtime: string,
       if (reference.isWrite || reference.inTypePosition || is.ExportSpecifier(parent)) {
         continue;
       }
+      // A native import is a live binding. A captured default has only its reader.
+      if (captured === undefined && plan.handlerReads?.has(reference.node)) {
+        continue;
+      }
       replacements.set(reference.node, expression('$$reader()', { reader }));
     }
   }
@@ -252,6 +273,14 @@ export function finishSharedOwner(
   onEnter: readonly Statement[] = [],
 ) {
   const { scope, frame, ready, refresh, batch } = owner;
+
+  // Its setup runs as written, watching the bindings that can hold objects.
+  if (owner.simple) {
+    return [...setup, ...snapshots].flatMap((node) => {
+      return [copy(node), ...watchBindingsDeclaredBy(owner, node)];
+    });
+  }
+
   const declarations: Statement[] = [];
   const initialize: Statement[] = [];
   for (const original of snapshots) {
@@ -357,25 +386,35 @@ export function finishSharedOwner(
     ...onEnter,
   ];
   for (const node of setup) {
-    body.push(copy(node, returns));
-    for (const binding of owner.plan.state) {
-      const name = binding.binding.declarations[0]!;
-      const entry = node as unknown as Node;
-      const declaration = is.ExportNamedDeclaration(entry) ? entry.declaration : entry;
-      if (declaration === null) {
-        continue;
-      }
-      const ids = declaredIdentifiers(declaration);
-      if (!ids.some((id) => id.name === binding.binding.name && id.start === name.start)) {
-        continue;
-      }
-      body.push(statement('$$batch.watch([{ read: () => $$binding, notify: $$notify }]);', {
-        batch, binding: binding.binding.name, notify: owner.notifiers.get(binding)!,
-      }));
-    }
+    body.push(copy(node, returns), ...watchBindingsDeclaredBy(owner, node));
   }
   body.push(statement('$$complete(void 0);', { complete }));
   return body;
+}
+
+/** A binding joins the mutation roots right after its declaration, unless it stays primitive. */
+function watchBindingsDeclaredBy(owner: SharedOwnerEmit, node: Statement): Statement[] {
+  const watches: Statement[] = [];
+  for (const binding of owner.plan.state) {
+    if (owner.plan.primitive?.has(binding) === true) continue;
+
+    const name = binding.binding.declarations[0]!;
+    const entry = node as unknown as Node;
+    const declaration = is.ExportNamedDeclaration(entry) ? entry.declaration : entry;
+    if (declaration === null) {
+      continue;
+    }
+
+    const ids = declaredIdentifiers(declaration);
+    if (!ids.some((id) => id.name === binding.binding.name && id.start === name.start)) {
+      continue;
+    }
+
+    watches.push(statement('$$batch.watch([{ read: () => $$binding, notify: $$notify }]);', {
+      batch: owner.batch, binding: binding.binding.name, notify: owner.notifiers.get(binding)!,
+    }));
+  }
+  return watches;
 }
 
 function isJumpTarget(jump: Extract<Node, { type: 'BreakStatement' | 'ContinueStatement' }>, parent: Node): boolean {

@@ -1,11 +1,13 @@
 /** Compose shared storage and feature emission before replacing components. */
-import { b } from 'yuku-ast';
-import type { Node, Statement } from 'yuku-parser';
+import { b, is } from 'yuku-ast';
+import type { Expression, Node, Statement } from 'yuku-parser';
+import type { BindingNode } from '../graph';
 import type { ModulePlan } from '../plan';
+import { unwrap } from '../plan/jsx';
 import type { Names } from './names';
 import { copy } from './copy';
 import { expression } from './quote';
-import { emitSharedState, finishSharedOwner } from '../../features/state/shared-dom';
+import { emitSharedState, finishSharedOwner, type SharedOwnerEmit } from '../../features/state/shared-dom';
 import { emitConstWrites } from '../../features/handlers/dom';
 import { emitMutations } from '../../features/handlers/mutations';
 import { emitMemos } from '../../features/derived/dom';
@@ -18,6 +20,76 @@ import { emitEffectGroups } from '../../features/effects/dom';
 import { statement, stringLiteral } from './quote';
 import { sourceBlockedSteps, sourceChanges, sourceReadinessStorage, sourceTakeovers } from '../../features/sources/flow-dom';
 
+/**
+ * `x = 1`, `x += 1` and `x++` run natively inside `_write_x(…)`, which keeps their
+ * value and reports the write. A destructuring or `for…of` target has no single
+ * expression to wrap, so its store goes through an accessor at the target.
+ */
+function emitSharedWrites(
+  binding: BindingNode,
+  owner: SharedOwnerEmit,
+  names: Names,
+  replacements: Map<Node, Node>,
+  declarations: Map<SharedOwnerEmit, Statement[]>,
+): void {
+  const name = binding.binding.name;
+  const version = owner.versions.get(binding)!;
+  const key = owner.keys.get(binding)!;
+  const { scope, batch } = owner;
+  let helper: string | undefined;
+
+  const helperName = (): string => {
+    if (helper !== undefined) return helper;
+    if (owner.simple) {
+      // Nothing can write during a build: the notifier already does all of it.
+      helper = owner.notifiers.get(binding)!;
+      return helper;
+    }
+    helper = names.fresh(`_write_${name}`);
+    const value = names.fresh('_value');
+    const list = declarations.get(owner) ?? [];
+    list.push(statement(`function $$helper($$value) {
+      $$version++;
+      if (!$$scope.building()) $$batch.mark($$key);
+      return $$value;
+    }`, { helper, value, version, scope, batch, key }));
+    declarations.set(owner, list);
+    return helper;
+  };
+
+  for (const { site } of binding.writes) {
+    if (site.kind !== 'assign' && site.kind !== 'update') continue;
+
+    const operation = site.node;
+    // A pattern or loop target needs the accessor below.
+    const target = is.AssignmentExpression(operation) ? operation.left
+      : is.UpdateExpression(operation) ? operation.argument
+        : null;
+
+    if (target !== null && unwrap(target as Expression) === site.reference.node) {
+      const written = copy(operation, replacements) as Extract<Node, { type: 'AssignmentExpression' }>;
+      if (is.AssignmentExpression(written) && ['&&=', '||=', '??='].includes(written.operator)) {
+        // The short circuit decides whether the store and its report happen at all.
+        const operator = written.operator.slice(0, -1) as '&&' | '||' | '??';
+        const left = copy(written.left) as Expression;
+        written.operator = '=';
+        replacements.set(operation, b.LogicalExpression({
+          operator, left, right: expression('$$helper($$written)', { helper: helperName(), written }),
+        }));
+      } else {
+        replacements.set(operation, expression('$$helper($$written)', { helper: helperName(), written }));
+      }
+      continue;
+    }
+
+    const value = names.fresh('_assigned');
+    replacements.set(site.reference.node, expression(`({
+      get value() { return $$binding; },
+      set value($$value) { $$binding = $$value; $$helper($$value); }
+    }).value`, { binding: name, value, helper: helperName() }));
+  }
+}
+
 export function emitShared(plan: ModulePlan, names: Names, runtime: string, initial: ReadonlyMap<Node, Node> = new Map(), data?: string) {
   const receivers = emitReceiverTargets(plan.receiverTargets, plan.module.module, names, runtime);
   const state = emitSharedState(plan, names, runtime, new Map([...initial, ...receivers]), data);
@@ -26,6 +98,7 @@ export function emitShared(plan: ModulePlan, names: Names, runtime: string, init
   });
   state.imports.push(...imported.declarations);
   let replacements = new Map(imported.replacements);
+  const writeDeclarations = new Map<(typeof state.owners)[number], Statement[]>();
   const takeovers = new Map(state.owners.map((owner) => [owner, emitTakeovers(
     owner.plan.takeovers, owner.versions, names, owner.scope, owner.batch, owner.keys, sourceTakeovers(plan, names, data),
     data === undefined ? undefined : expression('$$data.noteSourceReplacement', { data }),
@@ -35,16 +108,7 @@ export function emitShared(plan: ModulePlan, names: Names, runtime: string, init
     for (const [node, replacement] of emitConstWrites(owner.plan.readonlyBindings, names, runtime)) replacements.set(node, replacement);
     for (const binding of owner.plan.state) {
       if (owner.plan.readonlyBindings.includes(binding) || owner.plan.takeovers.includes(binding)) continue;
-      const value = names.fresh('_assigned');
-      const receiver = expression(`({
-        get value() { return $$binding; },
-        set value($$value) { $$binding = $$value; $$version++; if (!$$scope.building()) $$batch.mark($$key); }
-      }).value`, {
-        binding: binding.binding.name, value, version: owner.versions.get(binding)!, scope: owner.scope, batch: owner.batch, key: owner.keys.get(binding)!,
-      });
-      for (const { site } of binding.writes) {
-        if (site.kind === 'assign' || site.kind === 'update') replacements.set(site.reference.node, receiver);
-      }
+      emitSharedWrites(binding, owner, names, replacements, writeDeclarations);
     }
   }
   const mutationDeclarations = new Map<(typeof state.owners)[number], readonly Statement[]>();
@@ -58,7 +122,7 @@ export function emitShared(plan: ModulePlan, names: Names, runtime: string, init
     const refs = plan.refs.filter((ref) => owner.plan.state.includes(ref.binding));
     const writes = emitWrites(refWrites(refs), owner.versions, names, owner.batch, replacements);
     replacements = emitRefs(refs, runtime, writes.replacements);
-    mutationDeclarations.set(owner, [...mutations.declarations, ...writes.declarations]);
+    mutationDeclarations.set(owner, [...(writeDeclarations.get(owner) ?? []), ...mutations.declarations, ...writes.declarations]);
   }
   const emitOwner = (owner: (typeof state.owners)[number]) => {
     const groups = plan.effects.groups.filter((group) => group.owner === owner.plan.fn && owner.plan.block === null);

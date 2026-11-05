@@ -95,6 +95,14 @@ with stable binding keys; dynamic memo edges participate in dirty propagation
 before replay. Nested collectors restore their callers and settle self writes.
 Authored catch boundaries and failed/abandoned builds restore tracking too.
 
+A module's plain state (no derivation, takeover, effect, ref or source) is a
+`simple` owner: a version, a key, a notifier and a reader, with no build scope,
+refresh or completion, since nothing recomputes on read. `x = 1`, `x += 1` and
+`x++` stay native inside `_mutated_x(…)`, which returns its argument; only a
+destructuring or `for…of` target needs an accessor. A module binding that stays
+primitive joins no mutation roots and writes its text directly
+(`optimize.md`, "Primitive values").
+
 `features/state/shared-plan.ts` plans module bindings and top-level captured
 bindings of factory invocations. `shared-dom.ts` retains native storage and emits
 version readers, owner scopes and shared write commits; `core/emit/shared.ts`
