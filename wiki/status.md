@@ -59,6 +59,18 @@ commit before, so they already failed on this machine. Not verified: 15 tests th
 before this work, so they neither break from it nor test it), every browser suite (no Chrome
 here), so a dev server in a real browser has not been tried, and the rest of the Vite suite.
 
+A package linked from the same workspace did not work: a fresh checkout failed to build, and
+the one form that ran needed a hand-written `exports` map and packaging after each edit. The
+plugin now reads a linked package's `.lib.config.ts` and uses its source directly, with
+generated `.d.ts` files in the package's root so TypeScript finds its imports. My first
+version of those types, a declared module in `.memoized`, passed by appearing to work:
+`skipLibCheck` hid TS2439 and every import was empty. The test now requires a real type
+check to report exactly three deliberate mistakes.
+
+Verified: the two native package test files, 26 tests. `vite-adapter`,
+`fullstack-ssr-isolation`, `package-artifacts`, `installed-packages` and `library-build` give
+63 pass and 7 fail: the 6 that fail without this work, and one that needs `node`.
+
 Packages installed under `node_modules` and imported by a bare specifier
 (`compiler/linking.md`, "Installed copies and specifiers") found three general bugs, none
 about installing as such:

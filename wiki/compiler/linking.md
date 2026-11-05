@@ -166,11 +166,29 @@ packages out of prebundling, which would give the app a second copy of their sta
 of SSR externals. Their files then count as the app's own source (`acceptsSource`). Vite
 never runs an installed package's config; it only reads its `package.json`.
 
+A package linked from the same workspace has nothing built and no `exports`, and needs
+neither. When a dependency's real path is outside `node_modules` and it has a `.lib.config.ts`
+with `source: true`, the plugin reads that config and aliases each public import to its source
+file. An edit reaches the dev server with no packaging step, and a stale `dist` is ignored.
+A published package has no such file, and one shipping it anyway stays inside `node_modules`,
+pnpm's store included, where it is not read.
+
+TypeScript cannot find those imports without help. Three things were tried against a real
+type check. A declared module in `.memoized` cannot work: `declare module` rejects relative
+and absolute paths alike (TS2439), which `skipLibCheck` hides, leaving every import empty.
+Writing `types` into the author's `package.json` breaks the promise that it is only read.
+Generated `paths` need every app to change its tsconfig. So the plugin writes `index.d.ts` and
+`tabs.d.ts` in the package's root, where TypeScript looks by itself. They hold relative paths
+only and can be committed. A file the author wrote at such a path is left alone, and
+`.memoized/linked-types.json` in the package records what to remove when a subpath goes.
+
 In an app this is compiled by the old compiler for now, since `packages/vite` moves to
 compiler-next in Phase 10. Nothing here depends on which compiler it is.
-`packages/vite/tests/native-package.test.ts` covers the whole path, including a built app run
-in happy-dom. Not covered: a dev server in a real browser, since this machine has no Chrome,
-and editing an installed package's file during development.
+`packages/vite/tests/native-package.test.ts` and `native-package-workspace.test.ts` cover the
+whole path, including built apps run in happy-dom, and a real type check. Not covered: a dev
+server in a real browser, since this machine has no Chrome, so live edits are checked by
+what the server returns rather than by a page updating; and editing a file of a package
+downloaded into `node_modules` during development, which Vite does not watch.
 
 ### Installed copies and specifiers
 

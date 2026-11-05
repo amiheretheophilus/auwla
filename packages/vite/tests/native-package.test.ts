@@ -11,7 +11,7 @@ import { pathToFileURL } from 'node:url';
 import { build, createServer } from 'vite';
 import memoizedDom from '../src';
 import { buildLibrary } from '../src/library-build';
-import { isNativePackageFile, nativeDependencies } from '../src/graph/native-packages';
+import { isNativePackageFile, nativePackages } from '../src/graph/native-packages';
 
 let fixture: string;
 let author: string;
@@ -171,7 +171,7 @@ it('tells a native package from an ordinary one by reading its manifest', async 
     'node_modules/@acme/kit/src/nested/package.json': `{ "type": "module" }`,
   });
 
-  expect([...nativeDependencies(app)].sort()).toEqual(['@acme/kit', 'tool']);
+  expect([...(await nativePackages(app)).names].sort()).toEqual(['@acme/kit', 'tool']);
   expect(isNativePackageFile(join(app, 'node_modules/@acme/kit/src/store.ts'))).toBe(true);
   expect(isNativePackageFile(join(app, 'node_modules/@acme/kit/src/nested/a.ts'))).toBe(true);
   expect(isNativePackageFile(join(app, 'node_modules/ordinary/esm/index.js'))).toBe(false);
@@ -187,7 +187,7 @@ it('follows a native package through another, but not through an ordinary one', 
     'node_modules/hidden/package.json': JSON.stringify({ name: 'hidden', 'memoized-dom': { source: true } }),
   });
 
-  expect([...nativeDependencies(app)].sort()).toEqual(['inner', 'outer']);
+  expect([...(await nativePackages(app)).names].sort()).toEqual(['inner', 'outer']);
 });
 
 const consumer = {

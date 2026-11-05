@@ -2,10 +2,9 @@ import { existsSync } from 'node:fs';
 import { copyFile, mkdir, mkdtemp, readFile, readdir, realpath, rename, rm, writeFile } from 'node:fs/promises';
 import { isBuiltin } from 'node:module';
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
-import { build, loadConfigFromFile, type Plugin } from 'vite';
+import { build, type Plugin } from 'vite';
 import { experimentalFinalizePackage, type ExperimentalCompiledPackage } from '@memoized-dom/compiler';
-import type { LibraryConfig } from './library-config';
-import { inside, libraryError, libraryLayout, publishingManifest, sourceFile } from './library-layout';
+import { inside, libraryError, libraryLayout, loadLibraryConfig, publishingManifest, sourceFile } from './library-layout';
 import { compileLibraryGraph, isLocalLibraryImport } from './library-graph';
 import { emitLibraryDeclarations, rebaseLibraryMap } from './library-declarations';
 import { writeSourcePackage } from './library-source';
@@ -15,10 +14,7 @@ export async function buildLibrary(options: { root?: string; config?: string } =
   const root = await realpath(resolve(options.root ?? process.cwd()));
   const file = resolve(root, options.config ?? '.lib.config.ts');
   if (!existsSync(file)) libraryError(`missing '${file}'; create .lib.config.ts with export default { entry: './src/index.ts' }`);
-  // The config is TS/ESM regardless of the project's own package.json type.
-  const loaded = await loadConfigFromFile({ command: 'build', mode: 'production' }, file, root, undefined, undefined, 'runner');
-  if (!loaded) libraryError(`could not load '${file}'`);
-  const config = loaded.config as unknown as LibraryConfig;
+  const config = await loadLibraryConfig(root, file);
   const { entries, outDir } = await libraryLayout(root, config);
   if (inside(outDir, file) || inside(outDir, join(root, 'package.json'))) libraryError('outDir cannot contain the library configuration or source manifest');
   const manifest = await publishingManifest(root, config, entries);

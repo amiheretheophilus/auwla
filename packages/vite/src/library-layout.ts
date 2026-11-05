@@ -1,6 +1,7 @@
 import { existsSync } from 'node:fs';
 import { readFile, readdir, realpath } from 'node:fs/promises';
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
+import { loadConfigFromFile } from 'vite';
 import type { LibraryConfig } from './library-config';
 
 export const sourceFile = (path: string) => /\.(?:ts|tsx|js|jsx|tsrx)$/.test(path) && !path.endsWith('.d.ts');
@@ -10,6 +11,13 @@ export function inside(root: string, file: string): boolean {
 }
 export function libraryError(message: string): never { throw new Error(`memoized-dom package: ${message}`); }
 export interface LibraryEntry { path: string; file: string; output: string }
+
+/** The config is TS/ESM regardless of the project's own package.json type. */
+export async function loadLibraryConfig(root: string, file: string): Promise<LibraryConfig> {
+  const loaded = await loadConfigFromFile({ command: 'build', mode: 'production' }, file, root, undefined, undefined, 'runner');
+  if (!loaded) libraryError(`could not load '${file}'`);
+  return loaded.config as unknown as LibraryConfig;
+}
 
 export async function libraryLayout(root: string, config: LibraryConfig): Promise<{ entries: LibraryEntry[]; outDir: string }> {
   if (!config || typeof config !== 'object' || typeof config.entry !== 'string' || !config.entry) libraryError('.lib.config.ts must specify entry');

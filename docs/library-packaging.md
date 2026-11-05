@@ -157,6 +157,27 @@ import { Tabs } from 'my-package/tabs';
 The package needs the app to build it with the memoized-dom Vite plugin, since what it
 publishes is source.
 
+### Developing it beside an app
+
+In a monorepo, list the package as a dependency of the app, and import it as usual. There
+is no packaging step, and the package needs no `exports`:
+
+```json
+{ "dependencies": { "my-package": "workspace:*" } }
+```
+
+The plugin sees that the package is linked rather than downloaded, reads its `.lib.config.ts`
+and uses its source directly, so an edit to a package file reaches the app in the dev server.
+A `dist` left over from packaging is ignored.
+
+To let TypeScript find the public imports, the plugin writes a small file for each one in the
+package's root (`index.d.ts`, `tabs.d.ts`), whenever the app's dev server or build starts. They
+hold only relative paths, so you can commit them, and a fresh clone then has types before
+anything runs. They are not published. A file you wrote at one of those paths is left alone.
+
+The plugin only reads a package's `.lib.config.ts` when the package's real path is outside
+`node_modules`. The config of a package that was downloaded is never run.
+
 `source: true` is required for now, while compiled output still exists. Everything below this
 section, up to "Options in the same file", describes compiled output.
 

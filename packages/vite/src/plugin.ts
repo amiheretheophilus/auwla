@@ -6,6 +6,7 @@ import { readFile, readdir } from 'node:fs/promises';
 import { watch, type FSWatcher } from 'node:fs';
 import remapping from '@jridgewell/remapping';
 import type { CompilerSourceMap } from '@memoized-dom/compiler';
+import { searchForWorkspaceRoot } from 'vite';
 import type {
   DevEnvironment,
   MinimalPluginContextWithoutEnvironment,
@@ -16,7 +17,7 @@ import type { GraphPluginContext } from './graph/collector';
 import { compileGraph } from './graph/collector';
 import { discoverPackageArtifact, packageArtifactSource } from './graph/package-artifacts';
 import { InstalledPackages } from './graph/installed-packages';
-import { nativeDependencies } from './graph/native-packages';
+import { nativePackages, writeLinkedTypes } from './graph/native-packages';
 import { writeRoutesDeclaration } from './routes';
 import { invalidateManagedModules } from './hmr';
 import {
@@ -91,7 +92,7 @@ export function memoizedDom(
   let config: ResolvedConfig | undefined;
   // Found from the app's dependencies when Vite starts. Prebundling one would give the app a
   // second copy of its state, and would hide its source from this build.
-  let nativePackages: readonly string[] = [];
+  let nativeNames: readonly string[] = [];
   let devServer: import('vite').ViteDevServer | undefined;
   let pageReloadPending = false;
   let entries: readonly string[] = [];
@@ -512,14 +513,27 @@ export function memoizedDom(
     name: 'memoized-dom',
     enforce: 'pre',
     api,
-    config(userConfig) {
+    async config(userConfig) {
       // These packages intentionally share realm/runtime state across public
       // subpath entries (`data` + `data/internal`, and router internals).
       // Prebundling deep imports as independent optimized entries duplicates
       // that state and can hide a registered root from mount(). Let Vite serve their emitted
       // ESM chunks directly so every subpath converges on one module record.
-      nativePackages = nativeDependencies(resolve(userConfig.root ?? process.cwd()));
+      const root = resolve(userConfig.root ?? process.cwd());
+      const native = await nativePackages(root);
+      nativeNames = native.names;
+      await writeLinkedTypes(native.linkedImports);
       return {
+        // A linked package has nothing built, so its config says what its imports mean.
+        ...(native.linkedImports.length === 0 ? {} : {
+          resolve: {
+            alias: native.linkedImports.map(({ specifier, file }) => ({
+              find: new RegExp(`^${specifier.replace(/[.*+?^${}()|[\]\\/]/g, '\\$&')}$`),
+              replacement: file.replaceAll('\\', '/'),
+            })),
+          },
+          server: { fs: { allow: [searchForWorkspaceRoot(root), ...native.linkedDirectories] } },
+        }),
         ...(options.serverEntry === undefined ? {} : { appType: 'custom' as const }),
         ...(options.serverEntry === undefined || userConfig.build?.ssr ? {} : {
           builder: { sharedPlugins: true, ...(options.runtime === 'cloudflare' ? { buildApp: async () => {} } : {}) },
@@ -533,7 +547,7 @@ export function memoizedDom(
           },
         }),
         optimizeDeps: {
-          exclude: [...statefulRuntimePackages, ...(options.compilePackages ?? []), ...nativePackages],
+          exclude: [...statefulRuntimePackages, ...(options.compilePackages ?? []), ...nativeNames],
         },
       };
     },
@@ -541,12 +555,12 @@ export function memoizedDom(
       if (name !== 'client' && name !== 'ssr') return;
       return {
         optimizeDeps: {
-          exclude: [...statefulRuntimePackages, ...(options.compilePackages ?? []), ...nativePackages],
+          exclude: [...statefulRuntimePackages, ...(options.compilePackages ?? []), ...nativeNames],
           // Scan uncompiled JSX without synthesizing a React runtime import.
           rolldownOptions: { transform: { jsx: 'preserve' as const } },
         },
-        ...(name === 'ssr' && (options.compilePackages?.length || nativePackages.length)
-          ? { resolve: { noExternal: [...(options.compilePackages ?? []), ...nativePackages] } }
+        ...(name === 'ssr' && (options.compilePackages?.length || nativeNames.length)
+          ? { resolve: { noExternal: [...(options.compilePackages ?? []), ...nativeNames] } }
           : {}),
       };
     },
