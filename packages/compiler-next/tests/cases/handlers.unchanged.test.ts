@@ -50,6 +50,52 @@ reruns('a new object with the same fields', 'let value = { a: 1 };', 'value = { 
 reruns('a new array with the same items', 'let value = [{ a: 1 }];', 'value = value.slice();', 2);
 reruns('a new object in a field', 'let value = { c: { a: 1 } };', 'value.c = { a: 1 };', 2);
 
+// An effect runs after the commit, so it builds nothing, even with a derived value beside it.
+behaves('an effect reading a derived number settles', {
+  source: `
+    export function App() {
+      let s = 1;
+      let n = s + 1;
+      let runs = [];
+      $effect(() => { runs.push(n); });
+      return <main><button onClick={() => { s = 2; }}>go</button><p>{runs.join(',')}</p></main>;
+    }`,
+  steps: [{ click: 'button' }],
+  check(container, observation) {
+    expect(container.querySelector('p')?.textContent).toBe(['2', '2,3'][observation]);
+  },
+});
+
+behaves('an effect reading a derived array settles', {
+  source: `
+    export function App() {
+      let s = [{ a: 1, b: 1 }];
+      let n = s.filter((x) => x.a);
+      let runs = [];
+      $effect(() => { runs.push(n.length); });
+      return <main><button onClick={() => { s[0].b = 2; }}>go</button><p>{runs.join(',')}</p></main>;
+    }`,
+  steps: [{ click: 'button' }],
+  check(container, observation) {
+    expect(container.querySelector('p')?.textContent).toBe(['1', '1,1'][observation]);
+  },
+});
+
+behaves('an effect reading a derived value that keeps its value does not re-run', {
+  source: `
+    export function App() {
+      let s = 1;
+      let n = s > 0;
+      let runs = [];
+      $effect(() => { runs.push(n); });
+      return <main><button onClick={() => { s = 2; }}>go</button><p>{runs.length}</p></main>;
+    }`,
+  steps: [{ click: 'button' }],
+  check(container) {
+    expect(container.querySelector('p')?.textContent).toBe('1');
+  },
+});
+
 behaves('what counts as a change: a same-value write updates nothing it did not change', {
   source: `
     export function App() {

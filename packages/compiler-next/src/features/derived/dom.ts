@@ -216,9 +216,20 @@ export function emitMemos(
       const value = declarator.init ?? expression('void 0');
       const assign = statement('($$target = $$value);', { target: declarator.id, value });
       const body = [assign];
-      for (const target of memo.targets) {
-        if (takeovers.targets.has(target)) continue;
-        body.push(statement('$$version++;', { version: versions.get(target)! }));
+      const only = memo.targets.length === 1 ? memo.targets[0]! : null;
+      if (only !== null && !takeovers.targets.has(only) && is.Identifier(declarator.id) && memo.builders.length === 0 && !group.dynamic) {
+        // Computing the same primitive again is not a change (`wiki/decisions.md`, 2026-11-05).
+        // With later statements building it, or readiness, this is not its final value.
+        const before = names.fresh('_before');
+        body.unshift(statement('const $$before = $$target;', { before, target: declarator.id.name }));
+        body.push(statement('if (!$$runtime.unchangedWrite($$before, $$target)) $$version++;', {
+          before, target: declarator.id.name, runtime, version: versions.get(only)!,
+        }));
+      } else {
+        for (const target of memo.targets) {
+          if (takeovers.targets.has(target)) continue;
+          body.push(statement('$$version++;', { version: versions.get(target)! }));
+        }
       }
       steps.set(memo.declarator, { group, body });
     }

@@ -3,6 +3,7 @@ import { is, walk } from 'yuku-ast';
 import type { Node } from 'yuku-parser';
 import type { Binding, Resolved } from '../../core/resolve';
 import { declaringRunner, isRuntimeBinding, runnerOf } from '../../core/resolve';
+import { lifecycleKind } from '../../core/resolve/ambient';
 import { functionValue } from '../../core/resolve/functions';
 import { bodyStatement, parameterPattern, variableDeclaration } from '../../core/graph/inputs';
 import type { InputQueries } from '../../core/graph/inputs';
@@ -75,6 +76,8 @@ export function collectComputations(
       // An unknown caller may run a supplied callback now, later, or both.
       // Retain a possible builder, without subscribing setup to its captures.
       if (!facts.opaque) continue;
+      // `$effect(cb)` runs `cb` after the commit, so it never builds a first value.
+      if (lifecycleKind(module, call) !== null) continue;
       for (const argument of call.arguments) {
         const summary = queries.summaryOf(functionValue(module, argument));
         if (summary === undefined || summary.fn.body === null) continue;
