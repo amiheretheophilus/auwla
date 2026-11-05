@@ -3,7 +3,6 @@ import * as _MD from "@memoized-dom/runtime";
 _MD.defineComponent(BenchAppOwned, "./bench/dom/AppOwned.tsx#BenchAppOwned");
 _MD.defineComponent(Row, "./bench/dom/AppOwned.tsx#Row");
 function _Row_row(props, _rowOwner2) {
-  const _document2 = _MD.getActiveEnvironment().document;
   const _rowId = _rowOwner2.id;
   const _rowWrites = _rowOwner2.batch;
   const _rowEntity = _rowOwner2.entity;
@@ -11,59 +10,40 @@ function _Row_row(props, _rowOwner2) {
   const _invalidate = _rowOwner2.invalidate;
   const _clone2 = _MD.cloneTemplate(_template2, _rowNamespace2);
   const _text2 = _clone2.firstChild;
-  const _node3 = _text2.nextSibling;
-  const _text3 = _node3.nextSibling;
   let _value15 = props.selected ? 'danger' : '';
-  if (_value15 != null && _value15 !== false) {
-    _clone2.setAttribute("class", _value15 === true ? "" : _MD.textValue(_value15));
-  } else {
-    _clone2.removeAttribute("class");
-  }
+  _MD.setAttributeValue(_clone2, "class", _value15);
   _MD.setListener(_clone2, "click", void 0, () => {
     _MD.observeMutation([() => props], [_invalidate]).finish(props.select(props.item.id));
   }, _rowWrites);
-  let _value17 = props.item.id;
+  let _part = props.item.id;
+  let _part2 = props.item.label;
+  let _fused = null;
   const _slotOwner = { id: _rowId, batch: _rowWrites, entity: _rowEntity, namespace: _rowNamespace2 };
-  let _valueSlot = null;
-  (_valueSlot = _MD.childSlot(_valueSlot, _text2, _value17, _slotOwner, true))?.write(_value17);
-  let _value18 = props.item.label;
-  let _valueSlot2 = null;
-  (_valueSlot2 = _MD.childSlot(_valueSlot2, _text3, _value18, _slotOwner, true))?.write(_value18);
+  _fused = _MD.fuseText(_fused, _text2, [_part, ": ", _part2], _slotOwner);
   return { node: _clone2, update(_nextProps) {
     if (!_MD.sameProps(props, _nextProps)) props = _nextProps;
     const _next = props.selected ? 'danger' : '';
-    if (_next !== _value15 && !(_next !== _next && _value15 !== _value15)) {
-      if (_next != null && _next !== false) {
-        _clone2.setAttribute("class", _next === true ? "" : _MD.textValue(_next));
-      } else {
-        _clone2.removeAttribute("class");
-      }
+    if (_next !== _value15) {
+      _MD.setAttributeValue(_clone2, "class", _next);
       _value15 = _next;
     }
-    const _next2 = props.item.id;
-    if (_next2 !== _value17 && !(_next2 !== _next2 && _value17 !== _value17)) {
-      (_valueSlot = _MD.childSlot(_valueSlot, _text2, _next2, _slotOwner, true))?.write(_next2);
-      _value17 = _next2;
-    }
-    const _next3 = props.item.label;
-    if (_next3 !== _value18 && !(_next3 !== _next3 && _value18 !== _value18)) {
-      (_valueSlot2 = _MD.childSlot(_valueSlot2, _text3, _next3, _slotOwner, true))?.write(_next3);
-      _value18 = _next3;
+    const _nextPart = props.item.id;
+    const _nextPart2 = props.item.label;
+    if (_nextPart !== _part || _nextPart2 !== _part2) {
+      _fused = _MD.fuseText(_fused, _text2, [_nextPart, ": ", _nextPart2], _slotOwner);
+      _part = _nextPart;
+      _part2 = _nextPart2;
     }
   }, dispose() {
-    if (_valueSlot !== null) _valueSlot.dispose();
-    _valueSlot = _MD.disposedValueSlot;
-    if (_valueSlot2 !== null) _valueSlot2.dispose();
-    _valueSlot2 = _MD.disposedValueSlot;
+    _fused = _MD.disposeFused(_fused);
   } };
 }
 const _template = _MD.createTemplateCache([["div", 0, ["div", ["class", "toolbar"], ["button", 0, "create1k"], ["button", 0, "create10k"], ["button", 0, "append1k"], ["button", 0, "prepend1k"], ["button", 0, "pop1k"], ["button", 0, "update"], ["button", 0, "swap"], ["button", 0, "reverse"], ["button", 0, "remove"], ["button", 0, "remove100"], ["button", 0, "clear"]], ["ul", 0, ""]]]);
-const _template2 = _MD.createTemplateCache([["li", 0, "", ": ", ""]]);
-const _template3 = _MD.createTemplateCache([["li", 0, "", ": ", ""]]);
+const _template2 = _MD.createTemplateCache([["li", 0, ""]]);
+const _template3 = _MD.createTemplateCache([["li", 0, ""]]);
 import { buildData } from './data';
 function Row(_id2, _parent2, _props2, _namespace2, _setupOnly2) {
   let _propsVersion = 0;
-  const _readKey3 = {};
   function _mutated_props() {
     _propsVersion++;
     _writes2.mark();
@@ -101,88 +81,54 @@ function Row(_id2, _parent2, _props2, _namespace2, _setupOnly2) {
     return;
   }
   _writes2.beginMount();
-  const _document3 = _MD.getActiveEnvironment().document;
   const _clone3 = _MD.cloneTemplate(_template3, _namespace2);
-  const _text4 = _clone3.firstChild;
-  const _node4 = _text4.nextSibling;
-  const _text5 = _node4.nextSibling;
+  const _text3 = _clone3.firstChild;
   const _siteComputation2 = _MD.createComputation(_writes2.mark, _entity2);
   _siteComputation2.begin();
-  let _value19 = props.selected ? 'danger' : '';
+  let _value18 = props.selected ? 'danger' : '';
   _siteComputation2.end();
-  if (_value19 != null && _value19 !== false) {
-    _clone3.setAttribute("class", _value19 === true ? "" : _MD.textValue(_value19));
-  } else {
-    _clone3.removeAttribute("class");
-  }
+  _MD.setAttributeValue(_clone3, "class", _value18);
   let _seen2 = _propsVersion;
   _MD.setListener(_clone3, "click", void 0, () => {
-    _MD.observeMutation([() => props], [_mutated_props]).finish(_MD.trackRead(() => _propsVersion, props, _readKey3).select(_MD.trackRead(() => _propsVersion, props, _readKey3).item.id));
+    _MD.observeMutation([() => props], [_mutated_props]).finish(props.select(props.item.id));
   }, _writes2);
   const _siteComputation3 = _MD.createComputation(_writes2.mark, _entity2);
   _siteComputation3.begin();
-  let _value21 = props.item.id;
+  let _part3 = props.item.id;
+  let _part4 = props.item.label;
   _siteComputation3.end();
+  let _fused2 = null;
   const _slotOwner2 = { id: _id2, batch: _writes2, entity: _entity2, namespace: _namespace2 };
-  let _valueSlot3 = null;
-  (_valueSlot3 = _MD.childSlot(_valueSlot3, _text4, _value21, _slotOwner2, true))?.write(_value21);
+  _fused2 = _MD.fuseText(_fused2, _text3, [_part3, ": ", _part4], _slotOwner2);
   let _seen3 = _propsVersion;
-  const _siteComputation4 = _MD.createComputation(_writes2.mark, _entity2);
-  _siteComputation4.begin();
-  let _value22 = props.item.label;
-  _siteComputation4.end();
-  let _valueSlot4 = null;
-  (_valueSlot4 = _MD.childSlot(_valueSlot4, _text5, _value22, _slotOwner2, true))?.write(_value22);
-  let _seen4 = _propsVersion;
-  let _publishedVersion3 = _propsVersion;
   _MD.cleanup(_id2, () => {
     _siteComputation2.dispose();
     _siteComputation3.dispose();
-    if (_valueSlot3 !== null) _valueSlot3.dispose();
-    _valueSlot3 = _MD.disposedValueSlot;
-    _siteComputation4.dispose();
-    if (_valueSlot4 !== null) _valueSlot4.dispose();
-    _valueSlot4 = _MD.disposedValueSlot;
+    _fused2 = _MD.disposeFused(_fused2);
   });
   function _update2() {
     const _updateFrame2 = _scope2.enter();
     if (_propsVersion !== _seen2 || _siteComputation2.changed()) {
       _siteComputation2.begin();
-      const _next5 = props.selected ? 'danger' : '';
+      const _next4 = props.selected ? 'danger' : '';
       _siteComputation2.end();
-      if (_next5 !== _value19 && !(_next5 !== _next5 && _value19 !== _value19)) {
-        if (_next5 != null && _next5 !== false) {
-          _clone3.setAttribute("class", _next5 === true ? "" : _MD.textValue(_next5));
-        } else {
-          _clone3.removeAttribute("class");
-        }
-        _value19 = _next5;
+      if (_next4 !== _value18) {
+        _MD.setAttributeValue(_clone3, "class", _next4);
+        _value18 = _next4;
       }
       _seen2 = _propsVersion;
     }
     if (_propsVersion !== _seen3 || _siteComputation3.changed()) {
       _siteComputation3.begin();
-      const _next6 = props.item.id;
+      const _nextPart3 = props.item.id;
+      const _nextPart4 = props.item.label;
       _siteComputation3.end();
-      if (_next6 !== _value21 && !(_next6 !== _next6 && _value21 !== _value21)) {
-        (_valueSlot3 = _MD.childSlot(_valueSlot3, _text4, _next6, _slotOwner2, true))?.write(_next6);
-        _value21 = _next6;
+      if (_nextPart3 !== _part3 || _nextPart4 !== _part4) {
+        _fused2 = _MD.fuseText(_fused2, _text3, [_nextPart3, ": ", _nextPart4], _slotOwner2);
+        _part3 = _nextPart3;
+        _part4 = _nextPart4;
       }
       _seen3 = _propsVersion;
-    }
-    if (_propsVersion !== _seen4 || _siteComputation4.changed()) {
-      _siteComputation4.begin();
-      const _next7 = props.item.label;
-      _siteComputation4.end();
-      if (_next7 !== _value22 && !(_next7 !== _next7 && _value22 !== _value22)) {
-        (_valueSlot4 = _MD.childSlot(_valueSlot4, _text5, _next7, _slotOwner2, true))?.write(_next7);
-        _value22 = _next7;
-      }
-      _seen4 = _propsVersion;
-    }
-    if (_publishedVersion3 !== _propsVersion) {
-      _publishedVersion3 = _propsVersion;
-      _MD.publishVersions([_readKey3]);
     }
     _scope2.leave(_updateFrame2);
   }
@@ -195,7 +141,6 @@ export function BenchAppOwned(_id, _parent, _props, _namespace, _setupOnly) {
   let _selectedVersion = 0;
   let _selectVersion = 0;
   const _readKey = {};
-  const _readKey2 = {};
   function _mutated_data() {
     _dataVersion++;
     _writes.mark();
@@ -229,7 +174,6 @@ export function BenchAppOwned(_id, _parent, _props, _namespace, _setupOnly) {
     return;
   }
   _writes.beginMount();
-  const _document = _MD.getActiveEnvironment().document;
   const _clone = _MD.cloneTemplate(_template, _namespace);
   const _node = _clone.firstChild;
   const _button = _node.firstChild;
@@ -254,32 +198,32 @@ export function BenchAppOwned(_id, _parent, _props, _namespace, _setupOnly) {
     _write2(selected = null);
   }, _writes);
   _MD.setListener(_button3, "click", void 0, () => {
-    _write(data = _MD.trackRead(() => _dataVersion, data, _readKey).concat(buildData(1000)));
+    _write(data = data.concat(buildData(1000)));
   }, _writes);
   _MD.setListener(_button4, "click", void 0, () => {
-    _write(data = _MD.observeMutation([() => data], [_mutated_data]).finish(buildData(1000).concat(_MD.trackRead(() => _dataVersion, data, _readKey))));
+    _write(data = buildData(1000).concat(data));
   }, _writes);
   _MD.setListener(_button5, "click", void 0, () => {
-    _write(data = _MD.trackRead(() => _dataVersion, data, _readKey).slice(0, -1000));
+    _write(data = data.slice(0, -1000));
   }, _writes);
   _MD.setListener(_button6, "click", void 0, () => {
-    for (let i = 0; i < _MD.trackRead(() => _dataVersion, data, _readKey).length; i += 10) _MD.mutationTarget(_MD.trackRead(() => _dataVersion, data, _readKey)[i], "label", _mutated_data).value += ' !!!';
+    for (let i = 0; i < data.length; i += 10) _MD.mutationTarget(data[i], "label", _mutated_data).value += ' !!!';
   }, _writes);
   _MD.setListener(_button7, "click", void 0, () => {
-    if (_MD.trackRead(() => _dataVersion, data, _readKey).length > 998) {
-      const t = _MD.trackRead(() => _dataVersion, data, _readKey)[1];
-      _MD.mutationTarget(_MD.trackRead(() => _dataVersion, data, _readKey), 1, _mutated_data).value = _MD.trackRead(() => _dataVersion, data, _readKey)[998];
-      _MD.mutationTarget(_MD.trackRead(() => _dataVersion, data, _readKey), 998, _mutated_data).value = t;
+    if (data.length > 998) {
+      const t = data[1];
+      _MD.mutationTarget(data, 1, _mutated_data).value = data[998];
+      _MD.mutationTarget(data, 998, _mutated_data).value = t;
     }
   }, _writes);
   _MD.setListener(_button8, "click", void 0, () => {
-    _MD.editArray(_MD.trackRead(() => _dataVersion, data, _readKey), "reverse", [], _mutated_data);
+    _MD.editArray(data, "reverse", [], _mutated_data);
   }, _writes);
   _MD.setListener(_button9, "click", void 0, () => {
-    _MD.editArray(_MD.trackRead(() => _dataVersion, data, _readKey), "splice", [500, 1], _mutated_data);
+    _MD.editArray(data, "splice", [500, 1], _mutated_data);
   }, _writes);
   _MD.setListener(_button10, "click", void 0, () => {
-    _write(data = _MD.trackRead(() => _dataVersion, data, _readKey).filter((_item, index) => index % 100 !== 0));
+    _write(data = data.filter((_item, index) => index % 100 !== 0));
   }, _writes);
   _MD.setListener(_button11, "click", void 0, () => {
     _write(data = []);
@@ -302,8 +246,7 @@ export function BenchAppOwned(_id, _parent, _props, _namespace, _setupOnly) {
   _rowList.map(data);
   _siteComputation.end();
   let _seen = _dataVersion;
-  let _publishedVersion = _dataVersion;
-  let _publishedVersion2 = _selectedVersion;
+  let _publishedVersion = _selectedVersion;
   _MD.cleanup(_id, () => {
     _rowList.dispose();
     _siteComputation.dispose();
@@ -327,13 +270,9 @@ export function BenchAppOwned(_id, _parent, _props, _namespace, _setupOnly) {
       _seen = _dataVersion;
     }
     _rowList.refresh(_siteComputation);
-    if (_publishedVersion !== _dataVersion) {
-      _publishedVersion = _dataVersion;
+    if (_publishedVersion !== _selectedVersion) {
+      _publishedVersion = _selectedVersion;
       _MD.publishVersions([_readKey]);
-    }
-    if (_publishedVersion2 !== _selectedVersion) {
-      _publishedVersion2 = _selectedVersion;
-      _MD.publishVersions([_readKey2]);
     }
     _MD.checkMutationRoots(_entity);
     _scope.leave(_updateFrame);

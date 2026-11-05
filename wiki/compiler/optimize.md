@@ -64,6 +64,7 @@ interface Optimization {
 | `method-facts.ts` (built) | What each known method name does: copy, read or edit ("Method calls" below) |
 | `methods.ts` (built) | Known reads stay plain calls and known edits report their root, decided at compile time. Unknown names keep the before/after check ("Method calls" below) |
 | `effects.ts` (built) | Whether a callback or argument can do more than read and create values |
+| `text-fusion.ts` (built) | Adjacent static text and read-only `{expression}` children share one text node, and expand into one slot per part if a part turns out to be an object at runtime |
 | `handler-reads.ts` (built) | Reads in an event handler are the plain variable: no computation is running there, so `trackRead` has nothing to tell. Nested functions that may be stored stay tracked |
 | `keyed-map.ts` | keyed `.map` over state reuses rows |
 | `array-ops.ts` | `push`, `splice`, `sort` update only the rows they touch |

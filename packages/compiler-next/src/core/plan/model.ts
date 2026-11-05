@@ -63,6 +63,11 @@ export interface TextSite extends SiteBase {
   readonly listStrategy?: 'retained-index' | 'rows';
   readonly rows?: RowListPlan;
   /**
+   * Optional (`optimize/text-fusion.ts`): this one text node shows these adjacent
+   * children: static text, or expressions in the order they evaluate.
+   */
+  readonly parts?: readonly (string | Expression)[];
+  /**
    * The expression can only produce a primitive, so the site writes its text
    * node directly. Otherwise a value slot also accepts stored JSX and arrays.
    */

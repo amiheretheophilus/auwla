@@ -189,10 +189,23 @@ export function emitSites(
       }));
       continue;
     }
-    // A row list shows its rows inside `map`; there is no value to keep.
-    mount.push(rowList === null
-      ? statement('let $$value = $$expression;', { value, expression })
-      : statement('$$expression;', { expression }));
+    const parts = site.kind === 'text' && site.parts !== undefined
+      ? site.parts.map((part) => typeof part === 'string'
+        ? { text: stringLiteral(part), value: null, source: null }
+        : { text: null, value: names.fresh('_part'), source: copy(part, replacements) })
+      : null;
+    const dynamicParts = parts?.filter((part) => part.value !== null) ?? [];
+
+    if (parts !== null) {
+      for (const part of dynamicParts) {
+        mount.push(statement('let $$value = $$source;', { value: part.value!, source: part.source! }));
+      }
+    } else {
+      // A row list shows its rows inside `map`; there is no value to keep.
+      mount.push(rowList === null
+        ? statement('let $$value = $$expression;', { value, expression })
+        : statement('$$expression;', { expression }));
+    }
     if (computation !== null) {
       mount.push(statement('$$computation.end();', { computation }));
     }
@@ -209,7 +222,14 @@ export function emitSites(
       dispose.push(statement('$$active = false;', { active: textActive }));
     }
 
-    if (site.kind === 'text' && !site.primitive && rowList === null) {
+    // Text until a part is an object, then one slot per part (`fuseText`).
+    const fused = parts !== null && site.kind === 'text' && !site.primitive ? names.fresh('_fused') : null;
+    if (fused !== null) {
+      mount.push(statement('let $$fused = null;', { fused }));
+      dispose.push(statement('$$fused = $$runtime.disposeFused($$fused);', { fused, runtime }));
+    }
+
+    if (site.kind === 'text' && !site.primitive && rowList === null && parts === null) {
       // Most such sites only ever show text. The slot, which also shows stored
       // JSX and arrays, is created by the first value that is an object.
       const slot = names.fresh('_valueSlot');
@@ -222,11 +242,23 @@ export function emitSites(
       mount.push(statement('let $$slot = null;', { slot }));
       dispose.push(statement('$$slot = $$runtime.disposeSlot($$slot);', { slot, runtime }));
     }
+    /** What this write shows: each part's value, by the names holding it now. */
+    const partList = (current: ReadonlyMap<string, string>): Expression => b.ArrayExpression({
+      elements: parts!.map((part) => part.text ?? b.Identifier({ name: current.get(part.value!) ?? part.value! })),
+    });
+    const writeParts = (current: ReadonlyMap<string, string>): Statement[] => fused === null
+      ? [statement('$$runtime.setTextData($$node, $$runtime.joinText($$parts));', { runtime, node, parts: partList(current) })]
+      : [statement('$$fused = $$runtime.fuseText($$fused, $$node, $$parts, $$owner);', {
+        fused, runtime, node, parts: partList(current), owner: slotOwner(),
+      })];
     const write = (next: string): Statement[] => {
       const body = writeValue(site, next, node, runtime, eventBatch, listener, valueSlot);
 
       return textActive === null ? body : [guardedStatements(buildExpression('$$active', { active: textActive }), body)];
     };
+    const guarded = (body: Statement[]): Statement[] => textActive === null
+      ? body
+      : [guardedStatements(buildExpression('$$active', { active: textActive }), body)];
 
     if (site.kind === 'conditional') {
       region = names.fresh('_conditional');
@@ -256,6 +288,8 @@ export function emitSites(
       mount.push(statement('let $$listener = $$runtime.setListener($$node, $$event, void 0, $$value, $$batch);', {
         listener, runtime, node, event: stringLiteral(site.event), value, batch: eventBatch,
       }));
+    } else if (parts !== null) {
+      mount.push(...guarded(writeParts(new Map())));
     } else if (used && rowList === null) {
       mount.push(...write(value));
     }
@@ -280,14 +314,23 @@ export function emitSites(
       mount.push(statement('let $$seen = $$version;', { seen, version }));
     }
     const next = names.fresh('_next');
-    const body: Statement[] = [rowList === null
-      ? statement('const $$next = $$expression;', { next, expression })
-      : statement('$$expression;', { expression })];
+    const nextParts = new Map(dynamicParts.map((part) => [part.value!, names.fresh('_nextPart')]));
+    const body: Statement[] = parts !== null
+      ? dynamicParts.map((part) => statement('const $$next = $$source;', { next: nextParts.get(part.value!)!, source: part.source! }))
+      : [rowList === null
+        ? statement('const $$next = $$expression;', { next, expression })
+        : statement('$$expression;', { expression })];
     if (computation !== null) {
       body.unshift(statement('$$computation.begin();', { computation }));
       body.push(statement('$$computation.end();', { computation }));
     }
-    if (rowList === null) {
+    if (parts !== null) {
+      const test = dynamicParts.map((part) => `${nextParts.get(part.value!)!} !== ${part.value!}`).join(' || ');
+      body.push(guardedStatements(buildExpression(test), [
+        ...guarded(writeParts(nextParts)),
+        ...dynamicParts.map((part) => statement('$$value = $$next;', { value: part.value!, next: nextParts.get(part.value!)! })),
+      ]));
+    } else if (rowList === null) {
       const writes = used ? write(next) : [];
       writes.push(statement('$$value = $$next;', { value, next }));
       // Equality also keeps an unchanged prop from replacing text a user typed.

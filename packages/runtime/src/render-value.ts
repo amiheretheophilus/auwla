@@ -1,6 +1,6 @@
 /** Stored JSX carries captured inputs for one compiled DOM binding program. */
 import type { Entity } from './kernel';
-import { setTextData } from './setters';
+import { joinText, setTextData } from './setters';
 import type { createWriteBatch } from './write-batch';
 import { reconcileList, type RowOperations } from './list-values';
 import { createRetainedListIndex, type RetainedListIndex } from './list-index';
@@ -95,6 +95,50 @@ export const disposedValueSlot: ValueSlot = Object.freeze({
 export function disposeSlot(slot: ValueSlot | null): ValueSlot {
   slot?.dispose();
   return disposedValueSlot;
+}
+
+/**
+ * Adjacent children sharing one text node (`compiler-next/src/optimize/text-fusion.ts`).
+ * While every part is text they are one string. The first part that is an object
+ * expands the node into one value slot per part, for good: returned as `fused`.
+ */
+export function fuseText(
+  fused: readonly ValueSlot[] | null,
+  text: Text,
+  parts: readonly unknown[],
+  owner: RenderOwner,
+): readonly ValueSlot[] | null {
+  if (fused === null) {
+    if (!parts.some((part) => part !== null && typeof part === 'object')) {
+      setTextData(text, joinText(parts));
+      return null;
+    }
+    fused = expandFused(text, parts.length, owner);
+  }
+  fused.forEach((slot, index) => slot.write(parts[index]));
+  return fused;
+}
+
+function expandFused(text: Text, count: number, owner: RenderOwner): readonly ValueSlot[] {
+  const parent = text.parentNode!;
+  const after = text.nextSibling;
+  text.data = '';
+
+  const slots = [createIndexedValueSlot(text, owner)];
+  for (let index = 1; index < count; index++) {
+    const anchor = text.ownerDocument.createTextNode('');
+    parent.insertBefore(anchor, after);
+    slots.push(createIndexedValueSlot(anchor, owner));
+  }
+  return slots;
+}
+
+const noSlots: readonly ValueSlot[] = Object.freeze([]);
+
+/** Dispose an expanded site; it writes nothing from now on. */
+export function disposeFused(fused: readonly ValueSlot[] | null): readonly ValueSlot[] {
+  fused?.forEach((slot) => slot.dispose());
+  return noSlots;
 }
 
 /** One row of a list: its identity and the slot that renders it. */

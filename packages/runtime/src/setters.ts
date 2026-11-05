@@ -63,6 +63,13 @@ export function setListener(
   return listener;
 }
 
+/** Adjacent children sharing one text node, each shown as it would be alone. */
+export function joinText(parts: readonly unknown[]): string {
+  let text = '';
+  for (const part of parts) text += textValue(part);
+  return text;
+}
+
 /** compiler-next's attribute site: `true` is present, `null`, `undefined` and `false` absent. */
 export function setAttributeValue(node: Element, name: string, value: unknown): void {
   if (value != null && value !== false) {
