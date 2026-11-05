@@ -17,7 +17,7 @@ import type { Node } from 'yuku-parser';
 import type { ComponentPlan, ModulePlan, MutationPlan, SharedOwnerPlan } from '../core/plan/model';
 import type { SemanticGraph } from '../core/graph';
 import type { Optimization } from '.';
-import { callEditsNoArgument, effectFree } from './effects';
+import { callEditsNoArgument, callOnlyStoresNames, effectFree } from './effects';
 import { methodFact, redefinedNames, type MethodFact } from './method-facts';
 import { rowReuse } from './row-reuse';
 
@@ -85,6 +85,8 @@ function lowerCall(
     && call.arguments.every((argument) => !is.Function(argument) || editsNoObject(general.module.module, argument) || !runsDuringCall(call))) {
     return { ...plan, method: { kind: 'read' } };
   }
+
+  if (callOnlyStoresNames(general.module.module, call)) return { ...plan, method: { kind: 'read' } };
 
   const callee = namedCallee(call);
   if (callee === null) return plan;

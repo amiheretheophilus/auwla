@@ -252,8 +252,15 @@ export function emitSites(
     const partList = (current: ReadonlyMap<string, string>): Expression => b.ArrayExpression({
       elements: parts!.map((part) => part.text ?? b.Identifier({ name: current.get(part.value!) ?? part.value! })),
     });
+    /** `textValue(a) + ": " + textValue(b)`: no array and no loop for every row. */
+    const joinedParts = (current: ReadonlyMap<string, string>): Expression => parts!.map((part): Expression => {
+      return part.text ?? buildExpression('$$runtime.textValue($$part)', {
+        runtime, part: b.Identifier({ name: current.get(part.value!) ?? part.value! }),
+      });
+    }).reduce((left, right) => b.BinaryExpression({ operator: '+', left, right }));
+    // Each write here follows a check that a part changed, or an empty template.
     const writeParts = (current: ReadonlyMap<string, string>): Statement[] => fused === null
-      ? [statement('$$runtime.setTextData($$node, $$runtime.joinText($$parts));', { runtime, node, parts: partList(current) })]
+      ? [statement('$$node.data = $$text;', { node, text: joinedParts(current) })]
       : [statement('$$fused = $$runtime.fuseText($$fused, $$node, $$parts, $$owner);', {
         fused, runtime, node, parts: partList(current), owner: slotOwner(),
       })];
@@ -510,6 +517,7 @@ function writeValue(
     return [statement('$$node[$$name] = $$value;', { node, value, name: stringLiteral(site.name) })];
   }
   if (site.kind === 'attribute') {
+    if (site.name === 'class') return [statement('$$runtime.setClassAttribute($$node, $$value);', { node, value, runtime })];
     return [statement('$$runtime.setAttributeValue($$node, $$name, $$value);', { node, value, runtime, name: stringLiteral(site.name) })];
   }
   return [statement(`${listener} = $$runtime.setListener($$node, $$event, ${listener}, $$value, $$batch);`, {

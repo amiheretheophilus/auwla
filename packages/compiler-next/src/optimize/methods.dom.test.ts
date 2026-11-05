@@ -212,6 +212,20 @@ it('observes no call whose callback only writes plain names', () => {
   expect(handlerCalling('rows.forEach((row) => { last = row; });')).not.toContain('observeMutation');
 });
 
+it('observes no direct call of a function that only writes plain names', () => {
+  const program = (setup: string, call: string) => compile(`
+    export function App() {
+      let rows = [{ n: 1 }];
+      let total = 0;
+      ${setup}
+      return <main><button onClick={() => { ${call} }}>go</button><p>{rows[0].n}:{total}</p></main>;
+    }
+  `, true);
+  expect(program('const pick = (n) => { total = n; };', 'pick(rows[0].n);')).not.toContain('observeMutation');
+  expect(program('const edit = (row) => { row.n = 2; };', 'edit(rows[0]);')).toContain('observeMutation');
+  expect(program('let pick = (n) => { total = n; }; pick = window.other;', 'pick(rows[0]);')).toContain('observeMutation');
+});
+
 it('observes a call whose callback edits an object, or whose callback it cannot see', () => {
   expect(handlerCalling('rows.forEach((row) => { total += 1; row.n = 2; });')).toContain('observeMutation');
   expect(handlerCalling('rows.forEach((row) => { last = row; last.n = 2; });')).toContain('observeMutation');

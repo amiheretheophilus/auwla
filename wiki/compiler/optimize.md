@@ -221,6 +221,13 @@ stores a number, edits no object, and that write reports itself. `row.n = 2`,
 replaying such a callback would lose the write. Cases:
 `tests/cases/handlers.unchanged.test.ts`, "a callback writing a name".
 
+A direct call of the program's own function needs more. `help(rows, start)` with `rows.slice(start)`
+looks effect-free, but `start` can be an object whose `valueOf` edits anything
+(`tests/cases/handlers.test.ts`). So only a body made entirely of `name = name` or
+`name = literal` counts (`callOnlyStoresNames`), which runs no authored code:
+`const select = (id) => { selected = id; }`. This keeps Octane's row click from
+retaining the snapshot.
+
 ### Closed lists
 
 The old compiler skipped rows whose item is the same object on a structural write.
@@ -438,7 +445,9 @@ need no lookup or key string), keeps its identity index across passes, updated
 only for rows created, removed or mounted again, and knows a new row is a
 duplicate when its identity was already taken in the pass. Moves follow the
 longest increasing subsequence (`list.ts`), and a list that is all of its parent
-clears with one `replaceChildren`.
+clears with one `replaceChildren`. With no old row staying, the old rows leave before the
+new ones go in, as the general path does, so a replace clears in one call too. What a
+row's cleanup sees in the DOM during a list update is not guaranteed: the renderers differ.
 
 Without `try`: a pass records the rows it creates. A throw leaves them pending,
 and the next pass or disposal removes them; the committed rows stay. A getter

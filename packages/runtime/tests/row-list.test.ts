@@ -609,6 +609,61 @@ it('keeps the same item twice as two rows without evaluating them', () => {
   expect(counts.created).toBeLessThanOrEqual(1);
 });
 
+/** A list of `li` rows whose cleanups call `onDispose`. */
+function replaceHarness(onDispose: (parent: Element) => void) {
+  const parent = document.createElement('ul');
+  const anchor = document.createTextNode('');
+  parent.append(anchor);
+  const list = createRowList(anchor, owner, (item) => (item as Item).key, (item) => {
+    const node = document.createElement('li');
+    node.textContent = (item as Item).key as string;
+    return { node, dispose() { onDispose(parent); }, update() {} };
+  }, []);
+  const texts = () => [...parent.querySelectorAll('li')].map((node) => node.textContent);
+  return { parent, anchor, list, texts };
+}
+
+it('replacing every row clears the parent in one call, then adds the new rows', () => {
+  const { parent, list, texts } = replaceHarness(() => {});
+  list.map(items('a', 'b', 'c'));
+  let clears = 0;
+  const replaceChildren = parent.replaceChildren.bind(parent);
+  parent.replaceChildren = (...nodes) => { clears++; replaceChildren(...nodes); };
+
+  list.map(items('x', 'y'));
+  expect(texts()).toEqual(['x', 'y']);
+  expect(clears).toBe(1);
+});
+
+it('a row\'s cleanup runs before the new rows arrive when every row is replaced', () => {
+  const seen: number[] = [];
+  const { list } = replaceHarness((parent) => { seen.push(parent.querySelectorAll('li').length); });
+  list.map(items('a', 'b'));
+  list.map(items('x'));
+  expect(seen).toEqual([2, 2]);
+});
+
+it('a row\'s cleanup that throws while every row is replaced leaves the new rows in the page', () => {
+  let failing = false;
+  const { list, texts } = replaceHarness(() => { if (failing) throw new Error('cleanup'); });
+  list.map(items('a', 'b'));
+  failing = true;
+  expect(() => list.map(items('x', 'y'))).toThrow('cleanup');
+  failing = false;
+  expect(texts()).toContain('x');
+  expect(texts()).toContain('y');
+});
+
+it('replacing every row keeps what else the parent holds', () => {
+  const { parent, anchor, list, texts } = replaceHarness(() => {});
+  const other = document.createElement('i');
+  parent.insertBefore(other, anchor);
+  list.map(items('a', 'b'));
+  list.map(items('x'));
+  expect(texts()).toEqual(['x']);
+  expect(other.parentNode).toBe(parent);
+});
+
 it('evaluates routed rows when the routed value changed before the pass', () => {
   const parent = document.createElement('ul');
   const anchor = document.createTextNode('');

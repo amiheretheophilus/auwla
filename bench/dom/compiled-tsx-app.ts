@@ -161,7 +161,7 @@ export function BenchApp(_id2, _parent, _dataPolicies) {
 		_region.reconcile(data, _MD.isStructuralListUpdate(_reasons, "./bench/dom/App.tsx#data"));
 	};
 
-	_MD.register({ id: _id2, parent: _parent, render: _update2 });
+	_MD.registerEntity({ id: _id2, parent: _parent, render: _update2 });
 
 	const _markup = _MD.materializeMarkup(_HTML_);
 	const _button = _markup[1];
@@ -291,7 +291,7 @@ export function BenchApp(_id2, _parent, _dataPolicies) {
 	const _listSelectionId = _id2 + "/data/$selection";
 	let _selectedModuleListKey = selected;
 
-	_MD.register({
+	_MD.registerEntity({
 		id: _listSelectionId,
 		parent: _id2,
 		render: () => {

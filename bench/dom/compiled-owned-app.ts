@@ -183,7 +183,7 @@ export function BenchAppOwned(_id2, _parent, _dataPolicies) {
 		}
 	};
 
-	_MD.register({ id: _id2, parent: _parent, render: _update2 });
+	_MD.registerEntity({ id: _id2, parent: _parent, render: _update2 });
 
 	const _markup = _MD.materializeMarkup(_HTML_);
 	const _button = _markup[1];

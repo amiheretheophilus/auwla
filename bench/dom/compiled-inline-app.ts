@@ -59,7 +59,7 @@ export function BenchAppInline(_id, _parent, _dataPolicies) {
 		_region.reconcile(data, _MD.isStructuralListUpdate(_reasons, "./bench/dom/AppInline.tsx#data"));
 	};
 
-	_MD.register({ id: _id, parent: _parent, render: _update });
+	_MD.registerEntity({ id: _id, parent: _parent, render: _update });
 
 	const _markup = _MD.materializeMarkup(_HTML_);
 	const _button = _markup[1];
@@ -280,7 +280,7 @@ export function BenchAppInline(_id, _parent, _dataPolicies) {
 	const _listSelectionId = _id + "/data/$selection";
 	let _selectedModuleListKey = selected;
 
-	_MD.register({
+	_MD.registerEntity({
 		id: _listSelectionId,
 		parent: _id,
 		render: () => {

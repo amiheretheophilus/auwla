@@ -64,7 +64,7 @@ export function BenchModuleSelectionInline(_id, _parent, _dataPolicies) {
 		}
 	};
 
-	_MD.register({ id: _id, parent: _parent, render: _update });
+	_MD.registerEntity({ id: _id, parent: _parent, render: _update });
 
 	const _markup = _MD.materializeMarkup(_HTML_);
 	const _button = _markup[1];
@@ -293,7 +293,7 @@ export function BenchModuleSelectionInline(_id, _parent, _dataPolicies) {
 	const _listSelectionId = _id + "/data/$selection";
 	let _selectedModuleListKey = selected;
 
-	_MD.register({
+	_MD.registerEntity({
 		id: _listSelectionId,
 		parent: _id,
 		render: () => {

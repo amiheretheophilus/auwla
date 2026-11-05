@@ -120,6 +120,18 @@ export function setAttributeValue(node: Element, name: string, value: unknown): 
   }
 }
 
+/**
+ * `setAttributeValue` for `class`: the same result, at half the cost of `setAttribute`.
+ * An SVG element's `className` is an object, and read-only.
+ */
+export function setClassAttribute(node: Element, value: unknown): void {
+  if (value != null && value !== false && typeof node.className === 'string') {
+    node.className = value === true ? '' : textValue(value);
+  } else {
+    setAttributeValue(node, 'class', value);
+  }
+}
+
 /** Normalize a dynamic text slot before comparing its cached value. */
 export function textValue(value: unknown): string {
   return value == null || typeof value === 'boolean' ? '' : String(value);

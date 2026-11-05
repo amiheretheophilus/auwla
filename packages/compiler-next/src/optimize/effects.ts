@@ -102,37 +102,67 @@ export function callOnlyReads(module: Module, call: Node): boolean {
 const ownFunctions = new WeakMap<Node, boolean>();
 const ownFunctionsWritingNames = new WeakMap<Node, boolean>();
 
-/** A call of a function declared in the program whose own body is effect-free. */
-function ownFunctionIsPure(module: Module, call: Extract<Node, { type: 'CallExpression' }>, options: EffectOptions): boolean {
-  if (!is.Identifier(call.callee)) return false;
+/** The function a plain call names, if the program declares it and never reassigns it. */
+function ownFunctionOf(module: Module, call: Extract<Node, { type: 'CallExpression' }>): { module: Module; fn: Node } | null {
+  if (!is.Identifier(call.callee)) return null;
 
   const binding = module.referenceOf(call.callee)?.binding ?? null;
-  if (binding === null) return false;
+  if (binding === null) return null;
 
   const definition = importedDefinition(binding) ?? binding;
-  if (definition.references.some((reference) => reference.isWrite)) return false;
+  if (definition.references.some((reference) => reference.isWrite)) return null;
 
   const name = definition.declarations[0];
-  if (name === undefined) return false;
+  if (name === undefined) return null;
 
   const parent = definition.module.parentOf(name);
-  let fn: Node | null = null;
   if (parent !== null && is.FunctionDeclaration(parent) && parent.id === name) {
-    fn = parent;
-  } else if (parent !== null && is.VariableDeclarator(parent) && parent.id === name && parent.init !== null && is.Function(parent.init)) {
-    fn = parent.init;
+    return { module: definition.module, fn: parent };
   }
-  if (fn === null) return false;
+  if (parent !== null && is.VariableDeclarator(parent) && parent.id === name && parent.init !== null && is.Function(parent.init)) {
+    return { module: definition.module, fn: parent.init };
+  }
+  return null;
+}
+
+/** A call of a function declared in the program whose own body is effect-free. */
+function ownFunctionIsPure(module: Module, call: Extract<Node, { type: 'CallExpression' }>, options: EffectOptions): boolean {
+  const own = ownFunctionOf(module, call);
+  if (own === null) return false;
 
   const verdicts = options.nameWrites === true ? ownFunctionsWritingNames : ownFunctions;
-  const known = verdicts.get(fn);
+  const known = verdicts.get(own.fn);
   if (known !== undefined) return known;
 
   // A recursive call is judged by the rest of the body.
-  verdicts.set(fn, true);
-  const pure = effectFree(definition.module, fn, options);
-  verdicts.set(fn, pure);
+  verdicts.set(own.fn, true);
+  const pure = effectFree(own.module, own.fn, options);
+  verdicts.set(own.fn, pure);
   return pure;
+}
+
+/** `selected = id` or `selected = null`: no conversion, member read or call that could run authored code. */
+function storesToName(node: Node): boolean {
+  return is.AssignmentExpression(node) && node.operator === '=' && is.Identifier(node.left)
+    && (is.Identifier(node.right) || is.Literal(node.right));
+}
+
+/**
+ * `select(row.id)`, with `const select = (id) => { selected = id; }`: the program's own
+ * function, whose whole body stores what it was given in plain names. It edits no object,
+ * whatever it receives, and those stores report themselves. A body that does more can run
+ * authored code on what it receives (`rows.slice(start)` converts `start`), so it does not
+ * count, even if it looks effect-free.
+ */
+export function callOnlyStoresNames(module: Module, call: Extract<Node, { type: 'CallExpression' }>): boolean {
+  if (call.optional || !call.arguments.every((argument) => !is.SpreadElement(argument) && effectFree(module, argument))) return false;
+
+  const fn = ownFunctionOf(module, call)?.fn;
+  if (fn === undefined || !is.Function(fn) || fn.async || fn.generator || fn.body === null) return false;
+  if (!fn.params.every((param) => is.Identifier(param))) return false;
+
+  if (!is.BlockStatement(fn.body)) return storesToName(fn.body);
+  return fn.body.body.every((statement) => is.ExpressionStatement(statement) && storesToName(statement.expression));
 }
 
 function callIsPure(module: Module, call: Extract<Node, { type: 'CallExpression' }>, options: EffectOptions): boolean {

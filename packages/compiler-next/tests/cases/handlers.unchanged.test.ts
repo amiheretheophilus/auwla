@@ -163,6 +163,15 @@ callback('it edits by destructuring', '', 'rows.forEach((row) => { [row.n] = [2]
 callback('it deletes a field', '', 'rows.forEach((row) => { count++; delete row.n; });', ':1');
 callback('a function of the program edits', 'const edit = (row) => { row.n = 2; };', 'rows.forEach((row) => edit(row));', '2:0');
 
+// A direct call of the program's own function follows the same rule as a callback.
+callback('a direct call that writes a name', 'const pick = (id) => { count = id + 5; };', 'pick(rows[0].n);', '1:6');
+callback('a direct call that keeps the item', 'const keep = (row) => { last = row; };', 'keep(rows[0]); last.n = 7;', '7:0');
+callback('a direct call that edits what it gets', 'const edit = (row) => { row.n = 2; };', 'edit(rows[0]);', '2:0');
+callback('a direct call edits through a name it wrote', 'const edit = (row) => { last = row; last.n = 2; };', 'edit(rows[0]);', '2:0');
+callback('a direct call through another function that edits', 'const edit = (row) => { row.n = 2; }; const go = (row) => { edit(row); };', 'go(rows[0]);', '2:0');
+callback('a direct call of a declared function', 'function pick(id) { count = id + 5; }', 'pick(rows[0].n);', '1:6');
+callback('a call of a function that was replaced', 'let pick = () => {}; pick = (row) => { row.n = 2; };', 'pick(rows[0]);', '2:0');
+
 behaves('a callback writing a name: module state', {
   source: `
     let total = 0;

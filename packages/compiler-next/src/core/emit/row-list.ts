@@ -253,9 +253,11 @@ function assign(params: readonly string[], next: readonly string[]): Statement[]
   return params.map((param, index) => statement('$$param = $$next;', { param, next: next[index]! }));
 }
 
-/** `{ node, update(...next) { … }, dispose() { … } }`. */
+/** `{ node, update(...next) { … }, dispose() { … } }`, with no `dispose` when it would be empty. */
 function entry(node: string, next: readonly string[], update: readonly Statement[], dispose: readonly Statement[]): Expression {
-  const value = expression('({ node: $$node, update() {}, dispose() {} })', { node: expression(node) });
+  const value = expression(dispose.length === 0 ? '({ node: $$node, update() {} })' : '({ node: $$node, update() {}, dispose() {} })', {
+    node: expression(node),
+  });
   if (value.type !== 'ObjectExpression') return value;
   for (const property of value.properties) {
     if (property.type !== 'Property' || property.key.type !== 'Identifier' || property.value.type !== 'FunctionExpression') {

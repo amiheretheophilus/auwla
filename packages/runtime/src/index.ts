@@ -100,6 +100,7 @@ export {
   setListener,
   setRowListener,
   setAttributeValue,
+  setClassAttribute,
   joinText,
   textValue,
   setClassName,

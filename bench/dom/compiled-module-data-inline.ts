@@ -65,7 +65,7 @@ export function BenchModuleDataInline(_id, _parent, _dataPolicies) {
 		}
 	};
 
-	_MD.register({ id: _id, parent: _parent, render: _update });
+	_MD.registerEntity({ id: _id, parent: _parent, render: _update });
 
 	const _markup = _MD.materializeMarkup(_HTML_);
 	const _button = _markup[1];

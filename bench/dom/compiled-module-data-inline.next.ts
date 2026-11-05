@@ -120,28 +120,28 @@ export function BenchModuleDataInline(_id, _parent, _props, _namespace, _setupOn
     const _clone2 = _MD.cloneTemplate(_template2, _rowNamespace);
     const _text2 = _clone2.firstChild;
     let _value17 = selected === item.id ? 'danger' : '';
-    _MD.setAttributeValue(_clone2, "class", _value17);
+    _MD.setClassAttribute(_clone2, _value17);
     _MD.setRowListener(_clone2, "click", () => {
       _assign(selected, selected = item.id);
     }, _writes);
     let _part = item.id;
     let _part2 = item.label;
-    _MD.setTextData(_text2, _MD.joinText([_part, ": ", _part2]));
+    _text2.data = _MD.textValue(_part) + ": " + _MD.textValue(_part2);
     return { node: _clone2, update(_item2) {
       item = _item2;
       const _next = selected === item.id ? 'danger' : '';
       if (_next !== _value17) {
-        _MD.setAttributeValue(_clone2, "class", _next);
+        _MD.setClassAttribute(_clone2, _next);
         _value17 = _next;
       }
       const _nextPart = item.id;
       const _nextPart2 = item.label;
       if (_nextPart !== _part || _nextPart2 !== _part2) {
-        _MD.setTextData(_text2, _MD.joinText([_nextPart, ": ", _nextPart2]));
+        _text2.data = _MD.textValue(_nextPart) + ": " + _MD.textValue(_nextPart2);
         _part = _nextPart;
         _part2 = _nextPart2;
       }
-    }, dispose() {} };
+    } };
   }, null);
   _rowList.route(() => selected, () => _selectedVersion, void 0);
   const _siteComputation = _MD.createComputation(_writes.mark, _entity);

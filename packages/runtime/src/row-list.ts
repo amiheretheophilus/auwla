@@ -27,7 +27,8 @@ export interface RowEntry {
   readonly node: ChildNode;
   /** Evaluate the row's sites again, now for `item` at `index`. */
   update(item: unknown, index: number): void;
-  dispose(): void;
+  /** Left out when the row holds nothing to release, which saves a closure per row. */
+  dispose?(): void;
 }
 
 /** The row's `key` attribute, evaluated first; null when the row has no key. */
@@ -190,12 +191,12 @@ export function createRowList(
       && parent.childNodes.length === removed.length + 1;
     if (!whole() || !removed.every((row) => row.entry.node.parentNode === parent)) {
       for (const row of removed) {
-        row.entry.dispose();
+        row.entry.dispose?.();
         detach(row);
       }
       return;
     }
-    for (const row of removed) row.entry.dispose();
+    for (const row of removed) row.entry.dispose?.();
     // A disposal can move nodes; then the rows leave one by one.
     if (whole()) {
       (parent as ParentNode).replaceChildren(anchor);
@@ -233,7 +234,7 @@ export function createRowList(
     pending = null;
     for (const row of created) {
       forget(row);
-      row.entry.dispose();
+      row.entry.dispose?.();
       row.entry.node.parentNode?.removeChild(row.entry.node);
     }
   }
@@ -315,7 +316,7 @@ export function createRowList(
       if (row === undefined) {
         const entry = create(item, index);
         if (superseded()) {
-          entry.dispose();
+          entry.dispose?.();
           return;
         }
         row = { entry, item, identity: identity!, key: rowKey, index, position: -1, duplicate, taken: stamp };
@@ -350,11 +351,14 @@ export function createRowList(
     const removed: Row[] = [];
     for (const row of previous) if (row.taken !== stamp && !row.duplicate) removed.push(row);
     for (const row of previous) if (row.taken !== stamp && row.duplicate) removed.push(row);
+    // With no old row staying, they leave first, as the general path removes them
+    // before it mounts anything. The parent then holds only them, and clears in one call.
+    const nothingStays = removed.length > 0 && removed.length === previous.length && replaced.length === 0;
     // Forgetting every row one by one costs more than building the index again.
-    if (next.length === 0) identities = null;
+    if (nothingStays || next.length === 0) identities = null;
     else for (const row of removed) forget(row);
     for (const [, row] of replaced) identities?.set(row.identity, row);
-    if (!ordered || created.length > 0) place(next);
+    if (!nothingStays && (!ordered || created.length > 0)) place(next);
     for (let position = 0; position < next.length; position++) {
       const row = next[position]!;
       row.key = keys[position];
@@ -364,17 +368,25 @@ export function createRowList(
     rows = next;
     canRoute = routeable;
     settled = true;
+    if (nothingStays) {
+      // A cleanup that throws must not leave the committed rows out of the page.
+      try {
+        removeRows(removed, 0);
+      } finally {
+        if (!disposed && next.length > 0) insertRows(next, 0, next.length - 1, anchor);
+      }
+      return;
+    }
     if (removed.length > 0) removeRows(removed, next.length);
     // A value slot writes its rows after the unmatched ones are removed.
     for (const [old] of replaced) {
-      old.entry.dispose();
+      old.entry.dispose?.();
       detach(old);
     }
   }
 
   /** Insert new rows and move retained ones, keeping the longest ordered run in place. */
   function place(next: readonly Row[]): void {
-    const parent = anchor.parentNode!;
     const sequence: number[] = [];
     let ordered = true;
     let last = -1;
@@ -396,19 +408,24 @@ export function createRowList(
         position--;
         continue;
       }
-      // A run of new or moved rows goes in as one fragment, as the old list did.
       let start = position;
       while (start > 0 && !stays(start - 1)) start--;
-      if (start === position) {
-        parent.insertBefore(next[position]!.entry.node, before);
-      } else {
-        const fragment = anchor.ownerDocument.createDocumentFragment();
-        for (let index = start; index <= position; index++) fragment.appendChild(next[index]!.entry.node);
-        parent.insertBefore(fragment, before);
-      }
+      insertRows(next, start, position, before);
       before = next[start]!.entry.node;
       position = start - 1;
     }
+  }
+
+  /** A run of new or moved rows goes in as one fragment, as the old list did. */
+  function insertRows(next: readonly Row[], start: number, end: number, before: Node): void {
+    const parent = anchor.parentNode!;
+    if (start === end) {
+      parent.insertBefore(next[start]!.entry.node, before);
+      return;
+    }
+    const fragment = anchor.ownerDocument.createDocumentFragment();
+    for (let index = start; index <= end; index++) fragment.appendChild(next[index]!.entry.node);
+    parent.insertBefore(fragment, before);
   }
 
   /** Leave rows mode the way a slot clears its rows: every row, in order. */
