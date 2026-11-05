@@ -1,11 +1,15 @@
 /** Group actual assignment operations by the analyzer bindings they write. */
+import type { Binding } from 'yuku-analyzer';
 import { is } from 'yuku-ast';
 import type { Node } from 'yuku-parser';
 import type { BindingNode, SemanticGraph } from '../../core/graph';
-import type { ResolvedModule } from '../../core/resolve';
+import { runnerOf, type ResolvedModule } from '../../core/resolve';
 import type { MutationPlan, WritePlan } from '../../core/plan/model';
+import { unwrap } from '../../core/plan/jsx';
+import { containsJsx } from '../../core/plan/template';
 import { variableDeclaration } from '../../core/graph/inputs';
-import { frameworkPackage } from '../../core/resolve/exports';
+import { frameworkPackage, isValueImport } from '../../core/resolve/exports';
+import { methodFact } from '../../optimize/method-facts';
 
 export function planReadonlyBindings(bindings: readonly BindingNode[]): readonly BindingNode[] {
   return bindings.filter((target) => {
@@ -52,19 +56,103 @@ export function planMutations(bindings: readonly BindingNode[]): readonly Mutati
   return [...operations].map(([operation, entry]) => ({ operation, ...entry }));
 }
 
-/** Imports are immutable bindings, but their values can still be mutated. */
+/** A new value, which nothing else holds while it is only read, stored into or returned. */
+function isFreshLocal(binding: Binding): boolean {
+  const module = binding.module;
+  const name = binding.declarations[0];
+  const declarator = name === undefined ? null : module.parentOf(name);
+  if (!is.VariableDeclarator(declarator) || declarator.init === null) return false;
+
+  const init = unwrap(declarator.init);
+  const allocates = is.ArrayExpression(init) || is.ObjectExpression(init) || is.NewExpression(init)
+    || (is.CallExpression(init) && is.MemberExpression(init.callee) && !init.callee.computed
+      && is.Identifier(init.callee.property) && methodFact(init.callee.property.name)?.kind === 'copy');
+  if (!allocates) return false;
+
+  return binding.references.every((reference) => {
+    if (reference.inTypePosition) return true;
+    const parent = module.parentOf(reference.node);
+    return is.ReturnStatement(parent) || (is.MemberExpression(parent) && parent.object === reference.node);
+  });
+}
+
+/**
+ * `const row = rows[0]; row.label = 'b'`, or a row's own `item.done = true`. These
+ * names are not state, but what they hold can be: such an edit reports through the
+ * alias index, which finds the state holding the object, as an imported value's does.
+ *
+ * Not included: a value the function just allocated, which nothing else holds yet;
+ * a plain function's parameter, whose caller observes the call; and a handler's own
+ * parameter, the event.
+ */
+function aliasBindings(graph: SemanticGraph, entry: ResolvedModule, tracked: ReadonlySet<BindingNode>): readonly BindingNode[] {
+  const module = entry.module;
+  const aliases: BindingNode[] = [];
+
+  for (const binding of module.bindings) {
+    const node = graph.bindings.get(binding);
+    if (node === undefined || tracked.has(node) || node.writes.length === 0 || node.kind === 'Prop') continue;
+    if (isValueImport(binding) || isFreshLocal(binding)) continue;
+
+    const name = binding.declarations[0];
+    const parent = name === undefined ? null : module.parentOf(name);
+    if (is.VariableDeclarator(parent) || (is.Function(parent) && containsJsx(parent))) aliases.push(node);
+  }
+  return aliases;
+}
+
+/** `first().label = 'b'`, `held.get('a').label = 'b'`: a store with no name to hold it. */
+function planCallRootedStores(graph: SemanticGraph, entry: ResolvedModule, owners: ReadonlySet<Node | null>): readonly MutationPlan[] {
+  const module = entry.module;
+  const plans: MutationPlan[] = [];
+
+  for (const assignment of module.findAll('AssignmentExpression')) {
+    const member = unwrap(assignment.left);
+    if (!is.MemberExpression(member)) continue;
+    if (owners.has(runnerOf(module, assignment))) continue;
+
+    let root: Node = unwrap(member.object);
+    let throughCall = false;
+    while (is.MemberExpression(root) || is.CallExpression(root)) {
+      if (is.CallExpression(root)) {
+        throughCall = true;
+        root = unwrap(root.callee);
+      } else {
+        root = unwrap(root.object);
+      }
+    }
+    if (!throughCall || !is.Identifier(root)) continue;
+
+    const binding = module.referenceOf(root)?.binding;
+    const node = binding === null || binding === undefined ? undefined : graph.bindings.get(binding);
+    if (node !== undefined) plans.push({ operation: assignment, kind: 'store', targets: [{ binding: node, member }] });
+  }
+  return plans;
+}
+
+/**
+ * Imports are immutable bindings, but their values can still be mutated. So can
+ * what other names hold, and neither has a version of its own to bump.
+ */
 export function planImportedMutations(
   graph: SemanticGraph,
   entry: ResolvedModule,
   owners: ReadonlySet<Node | null>,
+  /** State a component or module owner already reports through its own version. */
+  tracked: ReadonlySet<BindingNode>,
 ): ReadonlyMap<Node | null, readonly MutationPlan[]> {
   const bindings = entry.module.imports.flatMap((imported) => {
     const binding = imported.local === null ? undefined : graph.bindings.get(imported.local);
     return imported.typeOnly || binding === undefined ? [] : [binding];
   });
   const grouped = new Map<Node | null, MutationPlan[]>();
+  const planned = [
+    ...planMutations(bindings),
+    ...planMutations(aliasBindings(graph, entry, tracked)),
+    ...planCallRootedStores(graph, entry, owners),
+  ];
 
-  for (const mutation of planMutations(bindings)) {
+  for (const mutation of planned) {
     // A framework call (`mount('root', App)`) never edits the values it receives.
     if (is.CallExpression(mutation.operation) && frameworkCall(entry, mutation.operation)) {
       continue;

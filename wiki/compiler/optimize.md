@@ -65,6 +65,7 @@ interface Optimization {
 | `methods.ts` (built) | Known reads stay plain calls and known edits report their root, decided at compile time. Unknown names keep the before/after check ("Method calls" below) |
 | `effects.ts` (built) | Whether a callback or argument can do more than read and create values |
 | `text-fusion.ts` (built) | Adjacent static text and read-only `{expression}` children share one text node, and expand into one slot per part if a part turns out to be an object at runtime |
+| `closed-lists.ts` (built) | Proves nothing but compiled code can reach a list's items, then skips rows that kept their item, stores without an alias lookup, and writes row text directly ("Closed lists" below) |
 | `handler-reads.ts` (built) | Reads in an event handler are the plain variable: no computation is running there, so `trackRead` has nothing to tell. Nested functions that may be stored stay tracked |
 | `keyed-map.ts` | keyed `.map` over state reuses rows |
 | `array-ops.ts` | `push`, `splice`, `sort` update only the rows they touch |
@@ -211,6 +212,42 @@ when the compiler knows they only read: the methods above, pure host functions
 (`String`, `Math.*`, `JSON.*`, `Object.keys`, …) and, for observation only
 (`ownFunctions`), the program's own effect-free functions. Row reuse does not accept
 those, because it skips the callback and cannot see the function's reads.
+
+### Closed lists
+
+The old compiler skipped rows whose item is the same object on a structural write.
+`closed-lists.ts` does the same, with a proof that makes the skip exact: a row shows
+a function of its item, so it can show something new only if the item was edited,
+and every edit of a closed list's item is visible.
+
+A list is closed when every item is a record of primitives the program allocated,
+and no item or array of items reaches anything unproven. The proof follows values:
+`#kindOf` says what an expression produces (`scalar`, `item`, `fresh` or `view`),
+and `#use` follows where a value goes, through every reference of every alias, into
+the program's own functions and across modules. A use it does not know rejects the
+list, which then takes the general path.
+
+| Written | Closed? |
+| --- | --- |
+| `rows = buildData(10)`, `rows.slice()`, `rows.concat(…)`, `[...rows, { id }]` | yes |
+| `rows[i] = rows[j]`, `rows.reverse()`, `rows.splice(i, 1)` | yes: moves |
+| `rows[i].label = 'x'`, a row's own `item.done = true` | yes: edits |
+| `items = removeRow(items, row)`, where the helper only copies | yes, followed into it |
+| `lib.track(rows[0])`, `held.set('a', rows[0])`, `picked = rows[0]` | no: it left |
+| `{ meta: { n: 1 } }`, `new Row()`, `{ get label() {…} }` | no: not a record of primitives |
+| `const row = rows[0]; row.label = 'x'` | no: the edit needs the alias index |
+| `rows.map((row) => <li>{fmt(row)}</li>)` | closed, but rows are not skipped: `fmt` may read anything |
+
+What it buys, with nothing checked at runtime:
+
+- `RowListPlan.moved`: `list.map(rows, unedited)`. Each edit counts (`_edits_rows`), and
+  a pass with no edit since the last skips rows keeping their item, and their index
+  if they read one. A pass still evaluates everything after a routed value changed,
+  after `invalidate`, or after a pass that did not finish. A row skipped has only
+  item fields, its index, constants and routed comparisons to show.
+- `MutationPlan.closed`: `_moved_rows(rows[1] = t)`, `_edited_rows(rows[i].label = x)`.
+  No other root can hold an item, so the list needs no mutation root or alias walk.
+- Row text sites write directly, since a field holds a primitive.
 
 The list is not a language whitelist. An unknown name still works through the
 general observation. A name the module itself gives another meaning

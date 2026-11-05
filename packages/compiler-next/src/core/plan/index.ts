@@ -44,8 +44,9 @@ export function planModules(
   const owners = new Set<Node | null>([...components, ...[...sharedReads.keys()].map(storageOwner)]);
   const memos = planMemos(graph, queries, owners);
   const refs = planRefs(graph);
+  const tracked = new Set<BindingNode>([...[...state.values()].flat(), ...sharedReads.keys()]);
   return graph.resolved.modules.map((entry) => {
-    const imported = planImportedMutations(graph, entry, owners);
+    const imported = planImportedMutations(graph, entry, owners, tracked);
     return planModule(graph, queries, components, entry, state, memos, sharedReads, refs, imported);
   });
 }

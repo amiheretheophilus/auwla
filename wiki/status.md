@@ -2,7 +2,47 @@
 
 Last updated: 2026-11-05.
 
-## Current: output and runtime reduction (2026-11-04)
+## Current: closed lists and alias edits (2026-11-05)
+
+`optimize/closed-lists.ts` skips rows on a structural change, with a compile-time proof
+that it cannot show stale text (`compiler/optimize.md`, "Closed lists"). Six DOM
+benchmark apps and Octane's list are proven (`closed-lists.test.ts`). A value a known read method reads no longer
+waits for it, which fixes generator seed 194088594 (`decisions.md`).
+
+Bug found while testing this: an edit through a name that is not state (`const row =
+rows[0]; row.label = 'b'`, a row handler's `item.done = true`) did not update the page,
+in either compiler mode. The mutation planning that causes it is unchanged since
+`685e262c`, and the old compiler does not have it. Fixed (`compiler/handlers.md`).
+
+10k rows in local headless Edge, median of 7, in ms, old / now, measured in one run.
+This run was about 2.5x slower than the 2026-11-04 tables below, so compare within a
+table only. VM runs are still needed:
+
+| Scenario | Inline rows (owner) | Component rows (owner) |
+| --- | ---: | ---: |
+| create | 49.8 / 51.0 | 41.4 / 57.8 |
+| replace | 42.6 / 77.9 | 44.9 / 78.2 |
+| update | 3.4 / 3.7 | 4.4 / 5.2 |
+| swap | 3.5 / 2.1 | 4.2 / 2.3 |
+| remove | 3.7 / 0.9 | 4.3 / 1.0 |
+| clear | 3.0 / 3.9 | 2.7 / 3.4 |
+| append 1k | 7.6 / 5.0 | 9.0 / 5.7 |
+| prepend 1k | 6.4 / 5.6 | 6.7 / 5.9 |
+| pop 1k | 4.9 / 1.9 | 3.6 / 2.1 |
+| reverse | 16.7 / 13.4 | 18.1 / 14.4 |
+| remove 100 | 3.7 / 1.7 | 4.1 / 1.8 |
+
+Moves now beat the old compiler. Still behind: replace (about 1.8x), component create
+(1.4x), clear (1.3x). Bundles (minified, against the previous commit): Octane 41,262 →
+38,246 (old 35,340), FlowOS 137,968 → 136,839 (old 114,310). Some apps grew, because
+alias edits now report: `closed-nested-structures` +2,224 (36,535, larger than
+`685e262c`'s 33,932), `request-nested-list` +1,775, `primitive-inline-list` +459.
+
+Verified at this commit: 452 unit, 168 runtime, 170 data and 465 case tests, and all
+10 generators at 200 programs on fresh seeds. Root, server, router, adapters, language
+service, utils and the vite CLI were not rerun for this batch. CI was not started.
+
+## Output and runtime reduction (2026-11-04)
 
 The user: the rewrite made the output "more verborse and not optimized compared to
 the old one", and method checks at runtime are "the user bug", not ours

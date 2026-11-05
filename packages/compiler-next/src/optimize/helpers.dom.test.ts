@@ -25,6 +25,9 @@ function app(call: string) {
     import { help } from './model';
     export function App() {
       let rows = [{ id: 1, label: 'a' }, { id: 2, label: 'b' }];
+      // Reachable from anywhere, so this list is not closed (\`closed-lists.ts\`):
+      // only the helper proof these tests are about can skip the snapshot.
+      globalThis.rowsForTest = () => rows;
       return <main><ul>{rows.map((row) => <li key={row.id}>{row.label}</li>)}</ul>
         <button onClick={() => { rows = ${call}(rows); }}>go</button></main>;
     }`;

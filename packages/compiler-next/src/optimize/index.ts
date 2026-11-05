@@ -2,6 +2,7 @@
 import type { SemanticGraph } from '../core/graph';
 import type { ModulePlan } from '../core/plan';
 import { calledFunctions } from './called-functions';
+import { closedLists } from './closed-lists';
 import { handlerReads } from './handler-reads';
 import { helperCalls } from './helpers';
 import { keyedComparisons } from './keyed-comparisons';
@@ -22,7 +23,7 @@ export interface Optimization {
 // Row lists need the method lowering's row-reuse proof.
 const passes: readonly Optimization[] = [
   calledFunctions, handlerReads, primitiveValues, retainedListIndex, methodCalls, helperCalls, rowLists, keyedComparisons,
-  textFusion,
+  closedLists, textFusion,
 ];
 
 export function optimizeModules(

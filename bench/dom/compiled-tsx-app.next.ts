@@ -9,8 +9,8 @@ function _Row_row(props, _rowOwner2) {
   const _rowNamespace2 = _rowOwner2.namespace;
   const _clone2 = _MD.cloneTemplate(_template2, _rowNamespace2);
   const _text2 = _clone2.firstChild;
-  let _value15 = _peek_selected() === props.item.id ? 'danger' : '';
-  _MD.setAttributeValue(_clone2, "class", _value15);
+  let _value17 = _peek_selected() === props.item.id ? 'danger' : '';
+  _MD.setAttributeValue(_clone2, "class", _value17);
   _MD.setRowListener(_clone2, "click", () => {
     _mutated_selected(selected = props.item.id);
   }, _rowWrites);
@@ -22,9 +22,9 @@ function _Row_row(props, _rowOwner2) {
   return { node: _clone2, update(_nextProps) {
     props = _nextProps;
     const _next = _peek_selected() === props.item.id ? 'danger' : '';
-    if (_next !== _value15) {
+    if (_next !== _value17) {
       _MD.setAttributeValue(_clone2, "class", _next);
-      _value15 = _next;
+      _value17 = _next;
     }
     const _nextPart = props.item.id;
     const _nextPart2 = props.item.label;
@@ -71,9 +71,18 @@ function _peek_selected() {
   return selected;
 }
 const _sharedWrites = _MD.createSharedWrites([_sharedKey, _sharedKey2], []);
+function _moved_data(_value3) {
+  _mutated_data();
+  return _value3;
+}
+var _edits_data = 0;
+function _edited_data(_value4) {
+  _edits_data++;
+  _mutated_data();
+  return _value4;
+}
 import { buildData } from './data';
 let data = [];
-_sharedWrites.watch([{ read: () => data, notify: _mutated_data }]);
 let selected = null;
 _sharedWrites.watch([{ read: () => selected, notify: _mutated_selected }]);
 function Row(_id2, _parent2, _props2, _namespace2, _setupOnly2) {
@@ -115,9 +124,9 @@ function Row(_id2, _parent2, _props2, _namespace2, _setupOnly2) {
   const _text3 = _clone3.firstChild;
   const _siteComputation2 = _MD.createComputation(_writes2.mark, _entity2);
   _siteComputation2.begin();
-  let _value18 = _MD.trackEquals(_peek_selected(), props.item.id, _peek_selected, _version_selected, _sharedKey2) ? 'danger' : '';
+  let _value20 = _MD.trackEquals(_peek_selected(), props.item.id, _peek_selected, _version_selected, _sharedKey2) ? 'danger' : '';
   _siteComputation2.end();
-  _MD.setAttributeValue(_clone3, "class", _value18);
+  _MD.setAttributeValue(_clone3, "class", _value20);
   let _seen = _propsVersion;
   _MD.setListener(_clone3, "click", void 0, () => {
     _mutated_selected(selected = props.item.id);
@@ -142,9 +151,9 @@ function Row(_id2, _parent2, _props2, _namespace2, _setupOnly2) {
       _siteComputation2.begin();
       const _next4 = _MD.trackEquals(_peek_selected(), props.item.id, _peek_selected, _version_selected, _sharedKey2) ? 'danger' : '';
       _siteComputation2.end();
-      if (_next4 !== _value18) {
+      if (_next4 !== _value20) {
         _MD.setAttributeValue(_clone3, "class", _next4);
-        _value18 = _next4;
+        _value20 = _next4;
       }
       _seen = _propsVersion;
     }
@@ -214,20 +223,20 @@ export function BenchApp(_id, _parent, _props, _namespace, _setupOnly) {
     _mutated_data(data = data.slice(0, -1000));
   }, _writes);
   _MD.setListener(_button6, "click", void 0, () => {
-    for (let i = 0; i < data.length; i += 10) _MD.mutationTarget(data[i], "label", _mutated_data).value += ' !!!';
+    for (let i = 0; i < data.length; i += 10) _edited_data(data[i].label += ' !!!');
   }, _writes);
   _MD.setListener(_button7, "click", void 0, () => {
     if (data.length > 998) {
       const t = data[1];
-      _MD.mutationTarget(data, 1, _mutated_data).value = data[998];
-      _MD.mutationTarget(data, 998, _mutated_data).value = t;
+      _moved_data(data[1] = data[998]);
+      _moved_data(data[998] = t);
     }
   }, _writes);
   _MD.setListener(_button8, "click", void 0, () => {
-    _MD.editArray(data, "reverse", [], _mutated_data);
+    _MD.editArray(data, "reverse", [], _moved_data);
   }, _writes);
   _MD.setListener(_button9, "click", void 0, () => {
-    _MD.editArray(data, "splice", [500, 1], _mutated_data);
+    _MD.editArray(data, "splice", [500, 1], _moved_data);
   }, _writes);
   _MD.setListener(_button10, "click", void 0, () => {
     _mutated_data(data = data.filter((_item, index) => index % 100 !== 0));
@@ -237,6 +246,7 @@ export function BenchApp(_id, _parent, _props, _namespace, _setupOnly) {
     _mutated_selected(selected = null);
   }, _writes);
   const _rowNamespace = _MD.renderNamespace(_text.parentNode, _namespace);
+  let _seenEdits = 0;
   const _rowOwner = { id: _id, batch: _writes, entity: _entity, namespace: _rowNamespace, invalidate: () => _rowList.invalidate() };
   const _rowList = _MD.createRowList(_text, { id: _id, batch: _writes, entity: _entity, namespace: _namespace }, (item) => item.id, (item) => {
     const _row = _Row_row({ "item": item }, _rowOwner);
@@ -246,11 +256,11 @@ export function BenchApp(_id, _parent, _props, _namespace, _setupOnly) {
     }, dispose() {
       _row.dispose();
     } };
-  }, ["id"]);
+  }, null);
   _rowList.route(_peek_selected, _version_selected, _sharedKey2);
   const _siteComputation = _MD.createComputation(_writes.mark, _entity);
   _siteComputation.begin();
-  _rowList.map(_read_data());
+  _rowList.map(_read_data(), _seenEdits === (_seenEdits = _edits_data));
   _siteComputation.end();
   _MD.cleanup(_id, () => {
     _rowList.dispose();
@@ -260,7 +270,7 @@ export function BenchApp(_id, _parent, _props, _namespace, _setupOnly) {
     const _updateFrame = _scope.enter();
     if (_siteComputation.changed() || _rowList.changed()) {
       _siteComputation.begin();
-      _rowList.map(_read_data());
+      _rowList.map(_read_data(), _seenEdits === (_seenEdits = _edits_data));
       _siteComputation.end();
     }
     _rowList.refresh(_siteComputation);

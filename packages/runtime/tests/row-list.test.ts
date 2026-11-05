@@ -488,3 +488,144 @@ it('shows the items of a receiver that has its own map', () => {
   list.dispose();
   expect(parent.textContent).toBe('');
 });
+
+/** A keyed list counting what it evaluates, for `map(items, unedited)`. */
+function countingList(usesIndex = false) {
+  const parent = document.createElement('ul');
+  const anchor = document.createTextNode('');
+  parent.append(anchor);
+  const counts = { keys: 0, updates: 0, created: 0 };
+  let throwOn: Item | null = null;
+  const show = (node: HTMLElement, item: Item, index: number) => {
+    if (item === throwOn) throw new Error('row');
+    node.textContent = usesIndex ? `${item.label}:${index}` : item.label;
+  };
+  const create = usesIndex
+    ? (item: unknown, index: number): RowEntry => entry(item, index)
+    : (item: unknown): RowEntry => entry(item, 0);
+  function entry(item: unknown, index: number): RowEntry {
+    counts.created++;
+    const node = document.createElement('li');
+    show(node, item as Item, index);
+    return {
+      node, dispose() {},
+      update(next, at) { counts.updates++; show(node, next as Item, at); },
+    };
+  }
+  const list = createRowList(anchor, owner, (item) => { counts.keys++; return (item as Item).key; }, create);
+  const text = () => [...parent.querySelectorAll('li')].map((node) => node.textContent);
+  const reset = () => { counts.keys = 0; counts.updates = 0; counts.created = 0; };
+  return { list, counts, text, reset, failOn(item: Item | null) { throwOn = item; } };
+}
+
+const items = (...labels: string[]): Item[] => labels.map((label) => ({ key: label, label }));
+
+it('evaluates no row and no key when unedited rows keep their items in order', () => {
+  const { list, counts, text, reset } = countingList();
+  const rows = items('a', 'b', 'c');
+  list.map(rows);
+  reset();
+  list.map(rows.slice(), true);
+  expect(counts).toEqual({ keys: 0, updates: 0, created: 0 });
+  expect(text()).toEqual(['a', 'b', 'c']);
+});
+
+it('moves unedited rows without evaluating them, and creates only what is new', () => {
+  const { list, counts, text, reset } = countingList();
+  const [a, b, c] = items('a', 'b', 'c');
+  list.map([a, b, c]);
+  reset();
+  list.map([c, b, a], true);
+  expect(text()).toEqual(['c', 'b', 'a']);
+  expect(counts.updates).toBe(0);
+  reset();
+  const d: Item = { key: 'd', label: 'd' };
+  list.map([d, c, b, a], true);
+  expect(text()).toEqual(['d', 'c', 'b', 'a']);
+  expect(counts.updates).toBe(0);
+  expect(counts.created).toBe(1);
+});
+
+it('evaluates a row that keeps its key but holds another item', () => {
+  const { list, text } = countingList();
+  list.map([{ key: 'a', label: 'old' }]);
+  list.map([{ key: 'a', label: 'new' }], true);
+  expect(text()).toEqual(['new']);
+});
+
+it('evaluates every row of a pass without the promise', () => {
+  const { list, counts, text, reset } = countingList();
+  const rows = items('a', 'b');
+  list.map(rows);
+  reset();
+  (rows[0] as { label: string }).label = 'x';
+  list.map(rows);
+  expect(counts.updates).toBe(2);
+  expect(text()).toEqual(['x', 'b']);
+});
+
+it('evaluates a row that reads its index when it moves, and only then', () => {
+  const { list, counts, text, reset } = countingList(true);
+  const [a, b, c] = items('a', 'b', 'c');
+  list.map([a, b, c]);
+  reset();
+  list.map([b, c], true);
+  expect(text()).toEqual(['b:0', 'c:1']);
+  expect(counts.updates).toBe(2);
+  reset();
+  list.map([b, c], true);
+  expect(counts.updates).toBe(0);
+});
+
+it('evaluates every row after a pass that threw, and after an invalidation', () => {
+  const { list, counts, text, reset, failOn } = countingList();
+  const [a, b] = items('a', 'b');
+  list.map([a, b]);
+  (b as { label: string }).label = 'x';
+  failOn(b!);
+  expect(() => list.map([a, b])).toThrow('row');
+  failOn(null);
+  reset();
+  list.map([a, b], true);
+  expect(counts.updates).toBe(2);
+  expect(text()).toEqual(['a', 'x']);
+
+  reset();
+  list.invalidate();
+  list.map([a, b], true);
+  expect(counts.updates).toBe(2);
+  reset();
+  list.map([a, b], true);
+  expect(counts.updates).toBe(0);
+});
+
+it('keeps the same item twice as two rows without evaluating them', () => {
+  const { list, counts, text, reset } = countingList();
+  const [a] = items('a');
+  list.map([a, a]);
+  reset();
+  list.map([a, a], true);
+  expect(text()).toEqual(['a', 'a']);
+  expect(counts.created).toBeLessThanOrEqual(1);
+});
+
+it('evaluates routed rows when the routed value changed before the pass', () => {
+  const parent = document.createElement('ul');
+  const anchor = document.createTextNode('');
+  parent.append(anchor);
+  let selected = 'a';
+  let version = 0;
+  const list = createRowList(anchor, owner, (item) => (item as Item).key, (item) => {
+    const node = document.createElement('li');
+    const show = (row: Item) => { node.className = selected === row.key ? 'on' : ''; };
+    show(item as Item);
+    return { node, dispose() {}, update(next) { show(next as Item); } };
+  }, ['key']);
+  list.route(() => selected, () => version);
+  const rows = items('a', 'b');
+  list.map(rows);
+  selected = 'b';
+  version++;
+  list.map(rows.slice(), true);
+  expect([...parent.querySelectorAll('li')].map((node) => node.className)).toEqual(['', 'on']);
+});

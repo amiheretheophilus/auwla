@@ -6,7 +6,6 @@ import type { MutationPlan } from '../../core/plan/model';
 import type { Names } from '../../core/emit/names';
 import { copy } from '../../core/emit/copy';
 import { expression, statement, stringLiteral } from '../../core/emit/quote';
-import { isValueImport } from '../../core/resolve/exports';
 import type { Binding } from 'yuku-analyzer';
 
 interface MutationEmitOptions {
@@ -42,10 +41,10 @@ export function emitMutations(
     let notify = notifiers.get(binding);
 
     if (notify === undefined) {
-      if (!versions.has(binding) && isValueImport(binding.binding)) {
-        // Mutating the value cannot reassign its import. The runtime mutation
-        // helper notifies the actual data roots, including a captured default;
-        // a second clock in this importing component would be incorrect.
+      if (!versions.has(binding)) {
+        // Mutating the value cannot reassign its import, or an alias that is not
+        // state. The runtime mutation helper notifies the actual data roots,
+        // including a captured default; a second clock here would be incorrect.
         if (importedNotify === undefined) {
           importedNotify = names.fresh('_importedMutation');
           declarations.push(statement('function $$notify() {}', { notify: importedNotify }));
@@ -97,9 +96,43 @@ export function emitMutations(
 
     return refNotify;
   };
+
+  // `_moved_data(data[1] = t)`, `_edited_data(data[i].label = x)`: the native store,
+  // then its report. An edit also counts, so the data's row lists evaluate their rows.
+  const closedNotifiers = new Map<string, string>();
+  const closedNotifierOf = (closed: NonNullable<MutationPlan['closed']>): string => {
+    const name = closed.binding.binding.name;
+    const key = `${closed.kind}:${name}:${closed.binding.binding.declarations[0]!.start}`;
+    let notify = closedNotifiers.get(key);
+    if (notify !== undefined) return notify;
+
+    notify = names.fresh(closed.kind === 'edit' ? `_edited_${name}` : `_moved_${name}`);
+    closedNotifiers.set(key, notify);
+    const value = names.fresh('_value');
+    if (closed.kind === 'edit') {
+      const edits = editCounter(closed.binding, names);
+      declarations.push(statement('var $$edits = 0;', { edits }));
+      declarations.push(statement('function $$notify($$value) { $$edits++; $$report(); return $$value; }', {
+        notify, value, edits, report: notifierOf(closed.binding),
+      }));
+    } else {
+      declarations.push(statement('function $$notify($$value) { $$report(); return $$value; }', {
+        notify, value, report: notifierOf(closed.binding),
+      }));
+    }
+    return notify;
+  };
+
   for (const plan of [...plans].sort((a, b) => (a.operation.end - a.operation.start) - (b.operation.end - b.operation.start))) {
+    if (plan.closed !== undefined && plan.kind !== 'call') {
+      replacements.set(plan.operation, expression('$$notify($$operation)', {
+        notify: closedNotifierOf(plan.closed), operation: copy(plan.operation, replacements),
+      }));
+      continue;
+    }
     if (plan.kind === 'call' && plan.method !== undefined) {
-      emitKnownCall(plan, replacements, declarations, notifierOf, names, runtime);
+      const notify = plan.closed === undefined ? notifierOf : () => closedNotifierOf(plan.closed!);
+      emitKnownCall(plan, replacements, declarations, notify, names, runtime);
       continue;
     }
     const notifications = [];
@@ -147,6 +180,16 @@ export function emitMutations(
   return { replacements, declarations, notifiers: notifiers as ReadonlyMap<BindingNode, string> };
 }
 
+/** How many edits of a closed list's items have run, for its row lists to compare. */
+function editCounter(binding: BindingNode, names: Names): string {
+  return names.of(binding.binding.declarations[0]!, `_edits_${binding.binding.name}`);
+}
+
+/** The count a row list last evaluated its rows at; one per list instance (`emitRowList`). */
+export function seenEdits(call: Node, names: Names): string {
+  return names.of(call, '_seenEdits');
+}
+
 /**
  * A call the compiler knows the effect of (`MutationPlan.method`):
  *
@@ -187,10 +230,16 @@ function emitKnownCall(
 
   if (method.rowList === true) {
     // The rows of the text site this call is (`core/emit/row-list.ts`).
-    replacements.set(plan.operation, expression('$$list.map($$receiver)', {
-      list: names.of(plan.operation, '_rowList'),
-      receiver,
-    }));
+    const moved = method.moved;
+    replacements.set(plan.operation, moved === undefined
+      ? expression('$$list.map($$receiver)', { list: names.of(plan.operation, '_rowList'), receiver })
+      : expression('$$list.map($$receiver, $$unedited)', {
+        list: names.of(plan.operation, '_rowList'),
+        receiver,
+        unedited: moved.edited
+          ? expression('$$seen === ($$seen = $$edits)', { seen: seenEdits(plan.operation, names), edits: editCounter(moved.binding, names) })
+          : expression('true'),
+      }));
     return;
   }
 

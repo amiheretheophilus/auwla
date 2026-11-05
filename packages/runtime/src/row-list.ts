@@ -55,8 +55,12 @@ export interface RowList {
   /**
    * `receiver.map(row)`: reconcile the rows. A receiver that is not an array has
    * its own `map`, which decides the items.
+   *
+   * `unedited`: the compiler proved rows show only their item and index, and that
+   * no item was edited since the last call (`compiler-next/src/optimize/closed-lists.ts`).
+   * A row keeping its item, and its index if it reads one, then has nothing to evaluate.
    */
-  map(receiver: readonly unknown[] | { map(callback: (item: unknown) => void): unknown }): void;
+  map(receiver: readonly unknown[] | { map(callback: (item: unknown) => void): unknown }, unedited?: boolean): void;
   /** Register a binding compared strictly with the row key, before the first map. */
   route(peek: () => unknown, version: () => number, key?: object): void;
   /** Unsupported keys need the authored map again. */
@@ -120,8 +124,12 @@ function available(row: Row | undefined, key: unknown, index: number, stamp: num
 
 export function createRowList(
   anchor: Text, owner: RenderOwner, key: RowKey | null, create: RowFactory,
-  /** The compiler-proven member chain from the item to its key, for routing. */
-  keyPath?: readonly string[],
+  /**
+   * The compiler-proven member chain from the item to its key, for routing. Null
+   * when the items are records of plain fields (`optimize/closed-lists.ts`), whose
+   * key needs no check that a field read gives the same value again.
+   */
+  keyPath?: readonly string[] | null,
 ): RowList {
   let rows: Row[] = [];
   /** Rows created by a pass that threw before committing them. */
@@ -129,8 +137,15 @@ export function createRowList(
   let disposed = false;
   let routes: Route[] | null = null;
   let canRoute = false;
+  /** The last pass finished, so every row shows its item. */
+  let settled = false;
+  /** A row edited what it shows (`invalidate`). */
+  let invalidated = false;
+  /** Compiled rows take `(item, index)` only if they read the index. */
+  const indexed = create.length > 1;
 
   function stableKey(item: unknown, key: unknown): boolean {
+    if (keyPath === null) return true;
     if (keyPath === undefined) return false;
     let value = item;
     for (const member of keyPath) {
@@ -223,8 +238,13 @@ export function createRowList(
     }
   }
 
-  function reconcile(array: readonly unknown[]): void {
+  function reconcile(array: readonly unknown[], unedited: boolean): void {
     recover();
+    // Rows are current only after a pass that finished, with no routed value or
+    // invalidation since: those need the rows evaluated even with the same items.
+    const trusted = unedited && settled && !invalidated && !(routes?.some(routeChanged) ?? false);
+    settled = false;
+    invalidated = false;
     const previous = rows;
     const length = readListLength(array);
     const next: Row[] = [];
@@ -246,13 +266,29 @@ export function createRowList(
     for (let index = 0; index < length; index++) {
       if (!(index in array)) continue;
       const item = array[index];
+      let row: Row | undefined = previous[last + 1];
+      // The same item in the next row or the one before: unedited, so its key is
+      // the same too, and neither the key nor the row needs evaluating.
+      if (trusted && key !== null) {
+        if (row === undefined || row.item !== item || row.taken === stamp || row.duplicate) row = previous[last - 1];
+        if (row !== undefined && row.item === item && row.taken !== stamp && !row.duplicate && (!indexed || row.index === index)) {
+          row.taken = stamp;
+          if (row.position < last) ordered = false;
+          last = row.position;
+          if (routeable && !canRoute) routeable = false;
+          next.push(row);
+          keys.push(row.key);
+          indexes.push(index);
+          continue;
+        }
+        row = previous[last + 1];
+      }
       const rowKey = key === null ? undefined : key(item, index);
       if (superseded()) return;
       // First-unused matching: a committed row that is not a duplicate is the
       // only first occurrence of its identity, so any such untaken row whose
       // identity agrees is the match. Try the rows after and before the last
       // match (unchanged, shifted, inserted or reversed runs); else look it up.
-      let row: Row | undefined = previous[last + 1];
       if (!available(row, rowKey, index, stamp)) row = previous[last - 1];
       let identity: Identity | null = null;
       let duplicate = false;
@@ -289,9 +325,12 @@ export function createRowList(
       } else {
         if (row.position < last) ordered = false;
         last = row.position;
-        row.item = item;
-        row.entry.update(item, index);
-        if (superseded()) return;
+        // Found by key, further away: the same reasoning holds.
+        if (!trusted || row.item !== item || (indexed && row.index !== index)) {
+          row.item = item;
+          row.entry.update(item, index);
+          if (superseded()) return;
+        }
       }
       // These identities may alias or invoke authored conversion. Re-evaluate
       // the authored map on a routed change instead of using a cached lookup.
@@ -311,7 +350,9 @@ export function createRowList(
     const removed: Row[] = [];
     for (const row of previous) if (row.taken !== stamp && !row.duplicate) removed.push(row);
     for (const row of previous) if (row.taken !== stamp && row.duplicate) removed.push(row);
-    for (const row of removed) forget(row);
+    // Forgetting every row one by one costs more than building the index again.
+    if (next.length === 0) identities = null;
+    else for (const row of removed) forget(row);
     for (const [, row] of replaced) identities?.set(row.identity, row);
     if (!ordered || created.length > 0) place(next);
     for (let position = 0; position < next.length; position++) {
@@ -322,6 +363,7 @@ export function createRowList(
     }
     rows = next;
     canRoute = routeable;
+    settled = true;
     if (removed.length > 0) removeRows(removed, next.length);
     // A value slot writes its rows after the unmatched ones are removed.
     for (const [old] of replaced) {
@@ -384,7 +426,7 @@ export function createRowList(
   let version = 0;
   const current = () => version;
   return {
-    map(receiver) {
+    map(receiver, unedited = false) {
       if (disposed) return;
       trackRead(current, null, versionKey);
 
@@ -397,7 +439,7 @@ export function createRowList(
         items = collected;
       }
 
-      reconcile(items);
+      reconcile(items, unedited === true);
       if (!disposed) syncRoutes();
     },
     route(peek, version, key) {
@@ -445,6 +487,7 @@ export function createRowList(
     },
     invalidate() {
       if (disposed) return;
+      invalidated = true;
       version++;
       publishVersions([versionKey]);
     },

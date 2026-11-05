@@ -95,6 +95,15 @@ export interface RowListPlan {
    * new value instead of every row (`runtime/src/row-list.ts`, `route`).
    */
   readonly routes: readonly { readonly node: Extract<Node, { type: 'BinaryExpression' }>; readonly binding: BindingNode }[];
+  /**
+   * Optional (`optimize/closed-lists.ts`): a row with the same item cannot show
+   * anything new unless the list's items were edited, so the list skips it.
+   */
+  readonly moved?: {
+    readonly binding: BindingNode;
+    /** Whether anything edits its items; otherwise no pass can see an edit. */
+    readonly edited: boolean;
+  };
   readonly row:
     /** An element, planned as stored JSX. */
     | { readonly kind: 'element'; readonly value: RenderValuePlan }
@@ -332,7 +341,18 @@ export interface MutationPlan {
     readonly rowReuse?: { readonly usesIndex: boolean };
     /** The call is a text site's whole value, shown by a row list (`optimize/row-lists.ts`). */
     readonly rowList?: boolean;
+    /** The row list may skip rows whose item is the same (`RowListPlan.moved`). */
+    readonly moved?: NonNullable<RowListPlan['moved']>;
   };
+  /**
+   * Optional (`optimize/closed-lists.ts`): a store or edit of a closed list, or of
+   * one of its items. No other root can hold what it changes, so it needs no alias
+   * lookup: a native store and a report to `binding`.
+   *
+   * - `move`: changes which items the list holds;
+   * - `edit`: changes a field of an item, which rows must then evaluate.
+   */
+  readonly closed?: { readonly kind: 'move' | 'edit'; readonly binding: BindingNode };
 }
 
 export interface ModulePlan {

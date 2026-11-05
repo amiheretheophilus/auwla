@@ -19,7 +19,7 @@ import { withoutUnusedLocals } from './locals';
 import { expression, statement, stringLiteral } from './quote';
 import { emitNodes } from './template';
 import { emitSites, renderOwner, type SitesContext } from './sites';
-import { emitMutations } from '../../features/handlers/mutations';
+import { emitMutations, seenEdits } from '../../features/handlers/mutations';
 
 type BlockStatement = Extract<Statement, { type: 'BlockStatement' }>;
 
@@ -50,6 +50,7 @@ export function emitRowList(plan: RowListPlan, anchor: string, context: SitesCon
       namespace, runtime, anchor, inherited: context.namespace ?? expression('void 0'),
     }),
   ];
+  if (plan.moved?.edited === true) declarations.push(statement('let $$seen = 0;', { seen: seenEdits(plan.call, names) }));
 
   let body: Statement[];
   if (plan.row.kind === 'element') {
@@ -109,7 +110,8 @@ export function emitRowList(plan: RowListPlan, anchor: string, context: SitesCon
   }
   declarations.push(statement('const $$list = $$runtime.createRowList($$anchor, $$owner, $$key, $$create, $$path);', {
     list, runtime, anchor, owner: renderOwner(context), key, create,
-    path: plan.routes.length === 0 ? expression('void 0') : b.ArrayExpression({ elements: keyPath.map(stringLiteral) }),
+    path: plan.routes.length === 0 ? expression('void 0')
+      : plan.moved !== undefined ? expression('null') : b.ArrayExpression({ elements: keyPath.map(stringLiteral) }),
   }));
   for (const binding of new Set(plan.routes.map((route) => route.binding))) {
     const local = context.versions.get(binding);
