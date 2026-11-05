@@ -226,6 +226,42 @@ it('observes no direct call of a function that only writes plain names', () => {
   expect(program('let pick = (n) => { total = n; }; pick = window.other;', 'pick(rows[0]);')).toContain('observeMutation');
 });
 
+// The reference renderer cannot run this one: it reads `n` for the call's inputs outside
+// the authored `try`, so its dead zone throws out of the render.
+it.each(modes)('throws for a write before the declaration, with several writes sharing a store ($mode)', async ({ optimize }) => {
+  const { host, click } = await mount(`
+    const seen = { name: '' };
+    export function App() {
+      const early = () => { try { n = 5; } catch (error) { seen.name = error.name; } };
+      early();
+      let n = 1;
+      return <main>
+        <button id="a" onClick={() => { n = 2; }}>a</button>
+        <button id="b" onClick={() => { n = 3; }}>b</button>
+        <p>{seen.name}:{n}</p>
+      </main>;
+    }
+  `, optimize);
+  const text = () => host.querySelector('p')!.textContent;
+  expect(text()).toBe('ReferenceError:1');
+  click('a');
+  expect(text()).toBe('ReferenceError:2');
+  click('b');
+  expect(text()).toBe('ReferenceError:3');
+});
+
+it('keeps a large site expression holding an await where it was written', () => {
+  const big = 'n, n + 1, n + 2, n + 3, n + 4, n + 5, n + 6';
+  const program = (first: string, asynchronous: string) => compile(`
+    export ${asynchronous} function App() {
+      let n = 1;
+      return <main><button onClick={() => { n++; }}>go</button><p>{[${first}${big}].join('')}</p></main>;
+    }
+  `, true);
+  expect(program('', '')).toContain('_evaluate');
+  expect(program('await Promise.resolve(n), ', 'async')).not.toContain('_evaluate');
+});
+
 it('observes a call on a ref unless the ref can only hold a node', () => {
   const observed = (setup: string, attribute: string, tag = 'input') => compile(`
     ${tag === 'Comp' ? 'function Comp(props) { props.ref({ focus() {} }); return <i />; }' : ''}

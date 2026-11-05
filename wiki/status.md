@@ -2,7 +2,77 @@
 
 Last updated: 2026-11-05.
 
-## Current: the VM report for `a44b43e7`, and what followed (2026-11-05)
+## Current: the VM report for `a98c1e88`, and what followed (2026-11-05)
+
+Chrome Headless Shell 149 on an 8-CPU AMD EPYC VM, new compiler against old.
+
+- **Octane**: new ranks 2 of 10 (average 2.5833) and old 2 of 10 (3.0208), behind Ripple.
+  New has the lower median in 15 of 24 scenarios, old in 7, with 2 ties. Bundle 34.50 kB /
+  12.15 gzip against 35.69 / 12.74, so new is now the smaller one.
+- **Octane, where old is still ahead**: run 5.4 against 7.5, replace 10.4 against 12.9,
+  add 5.0 against 6.8, runlots 53.1 against 57.6, select 0.1 against 0.2.
+- **DOM tables, 10k rows**: new is ahead on moves, remove, pop, prepend and reverse, and
+  behind on create (15.4 to 21.2 against 12.7 to 15.1, vanilla 9.3 to 9.9), replace (16.9
+  to 22.4 against 12.9 to 18.2), update (1.1 to 2.3 against 0.9 to 1.8) and clear (1.1 to
+  1.4 against 0.6 to 0.7).
+- **Mutable/immutable matrix**: the 10x gap on component rows is gone. They are level with
+  inline rows and mostly ahead of old.
+
+This report ran the DOM tables one after another in one page, which the `a44b43e7` report
+did not, so its DOM numbers cannot be compared with that report's.
+
+What the numbers point at, measured locally and so only a guide:
+
+- Create is mostly browser time. Much of the remaining 10k gap is probably one listener
+  per row, which the decision against event delegation (2026-10-26) keeps.
+- `clear` pays for two checks old does not make: 0.3 ms for every row's `parentNode` and
+  0.2 ms for `childNodes.length` on 10k rows. They stay, since they are what makes clearing
+  a parent with other children correct.
+
+Done since, none of it timed on the VM yet:
+
+- `f4a97019`: a row-list pass does less for each row. A number above every identity seen
+  needs no lookup, the index map is only built when holes exist, and the commit loop is
+  skipped when the rows and their order did not change.
+- `eee7166e`: no deep snapshot where observing could never find a change. FlowOS now makes
+  no `observeMutation` calls. The possible builder stays in the plan, because its flags
+  also stop its own reads counting as inputs (`compiler/optimize.md`).
+- A large site expression is written once, and a value taken over by several writes shares
+  one store (`compiler/optimize.md`, "Repeated code"). Repeated generated lines in FlowOS
+  fell from 15.5% to 5.8%. Neither applies to the `bench/dom` sources, whose output did
+  not change.
+
+Sizes (minified source fixture, gzip in brackets), old against now:
+
+| Fixture | Old | Now |
+| --- | ---: | ---: |
+| `octane` | 35,340 (12,821) | 34,464 (12,299) |
+| `primitive-inline-list` | 24,268 (9,400) | 29,432 (11,071) |
+| `closed-nested-structures` | 28,461 (10,653) | 32,805 (12,423) |
+| `flowos` | 114,310 (35,481) | 130,014 (41,880) |
+| `request-data` | 38,781 (12,942) | 51,838 (17,364) |
+| `request-list` | 54,443 (18,389) | 53,963 (18,169) |
+| `request-nested-list` | 67,550 (22,382) | 66,947 (22,001) |
+| `owner-counter` | 8,372 (3,411) | 12,974 (5,180) |
+| `module-counter` | 11,703 (4,604) | 18,934 (7,066) |
+
+FlowOS fell by 7,112 B minified and 1,348 B gzip from the last table, so gzip gained less
+than the minified figure suggests. `octane` rose 140 B over the same stretch, from the
+row-list changes. What remains in FlowOS is about 10 kB of app code and these runtime
+modules: `mutation.ts` (6,038 against 1,257, the alias index), `components.ts`,
+`dom-props.ts`, `render-value.ts`, `source-readiness.ts`, `source-presentation.ts` and
+`effect-scope.ts`.
+
+Verified on this batch: compiler-next 492 unit, 596 cases and 10 generators at 200 runs;
+runtime 179, data 171, server 242, router 127, devtools 18, utils 24, language service
+11, adapters 6. Root is 2,966 passing and 2 failing, the same two as before: R23 and the
+Chromium launch. The vite suite still cannot finish here, since this machine has no
+`node`. The full gate's type check failed on two lines of a new test, which were fixed
+afterwards; `bun check` and that case file were then rerun, not the whole gate.
+
+Next: a VM run on this commit, then the phase after it, decided with the user.
+
+## The VM report for `a44b43e7`, and what followed (2026-11-05)
 
 Chrome Headless Shell 149 on an 8-CPU AMD EPYC VM, new compiler against old.
 

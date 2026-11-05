@@ -1,5 +1,5 @@
 /** Initial site values and version-guarded updates, in authored evaluation order. */
-import { b, is } from 'yuku-ast';
+import { b, findAll, is, walk } from 'yuku-ast';
 import type { Expression, Node, Statement } from 'yuku-parser';
 import type { BindingNode } from '../graph';
 import type { ComponentPlan, Site } from '../plan';
@@ -201,6 +201,14 @@ export function emitSites(
         : { text: null, value: names.fresh('_part'), source: copy(part, replacements) })
       : null;
     const dynamicParts = parts?.filter((part) => part.value !== null) ?? [];
+
+    // Mounting and updating evaluate the same expression. A large one is written once.
+    if (updates && parts === null && rowList === null && selection === null && context.rows !== true
+      && context.values === undefined && worthSharing(expression, site.expression)) {
+      const evaluate = names.fresh('_evaluate');
+      mount.push(statement('const $$evaluate = () => $$expression;', { evaluate, expression }));
+      expression = buildExpression('$$evaluate()', { evaluate });
+    }
 
     if (parts !== null) {
       for (const part of dynamicParts) {
@@ -483,6 +491,26 @@ function siteKey(site: Site): string {
     return `${site.node}:event:${site.event}`;
   }
   return `${site.node}:${site.kind}:${site.name}`;
+}
+
+/** Nodes in an expression before a function around it saves bytes, by measuring FlowOS. */
+const SHARED_EXPRESSION_NODES = 20;
+
+/**
+ * Whether a site's expression is large enough to write once. An `await` or `yield` must
+ * stay in the function that was written around it, so such an expression keeps its copies.
+ */
+function worthSharing(expression: Expression, authored: Node): boolean {
+  if (findAll(authored, ['AwaitExpression', 'YieldExpression']).length > 0) return false;
+
+  let nodes = 0;
+  walk(expression, {
+    enter: (_node, walker) => {
+      nodes++;
+      if (nodes >= SHARED_EXPRESSION_NODES) walker.stop();
+    },
+  });
+  return nodes >= SHARED_EXPRESSION_NODES;
 }
 
 function writeValue(

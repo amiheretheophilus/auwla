@@ -716,6 +716,21 @@ confirmed by an interleaved variant run before it lands. The order:
    The shared listener saves the wrapper allocation, and `addEventListener` per
    row remains.
 
+## Repeated code
+
+Gzip absorbs most of a repeat, so these show in minified size and in what the browser has
+to parse, more than in transfer size. FlowOS: 7.1 kB less minified, 1.3 kB less gzip,
+counting the snapshot calls above.
+
+- A site with updates evaluates the same expression when it mounts and when it updates.
+  From 20 syntax nodes up (`worthSharing` in `core/emit/sites.ts`, a limit measured on FlowOS)
+  it is written once, as `const _evaluate = () => expr`, which keeps `this` and `arguments`.
+  An `await` or `yield` must stay where it was written, and a row keeps its copies, since
+  it would pay for a closure per row.
+- A derived value written from several places shares one store
+  (`features/derived/takeover.ts`). It holds nothing per write. A single write stays inline,
+  so an instance that never writes does not pay for its closures.
+
 ## Read-only helpers
 
 `items = swapRows(items)` was observed by snapshotting everything `items`

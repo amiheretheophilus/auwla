@@ -32,7 +32,7 @@ export function emitTakeovers(
     // Native assignment/update/pattern semantics still evaluate their own RHS,
     // defaults, coercions and result. Only the final store is conditional.
     // Writing what it already holds still takes the binding over, but changes nothing.
-    const receiver = expression(`({
+    const accessor = expression(`({
       get value() { return $$binding; },
       set value($$value) {
         const $$building = $$scope.building();
@@ -43,16 +43,26 @@ export function emitTakeovers(
         if (!$$same) $$version++;
         if (!$$building) { $$taken = true; $$onTakeover; if (!$$same) $$commit; }
       }
-    }).value`, { binding: target.binding.name, value, building, scope, taken, version, runtime, same: names.fresh('_same'),
+    })`, { binding: target.binding.name, value, building, scope, taken, version, runtime, same: names.fresh('_same'),
       onTakeover: onTakeover.get(target) ?? expression('void 0'),
       beforeAssignment: beforeAssignment === undefined ? expression('void 0')
         : expression('$$hook($$binding, $$value)', { hook: beforeAssignment, binding: target.binding.name, value }),
       commit: keys.has(target) ? expression('$$batch.mark($$key)', { batch, key: keys.get(target)! }) : expression('$$batch.mark()', { batch }),
     });
-    targets.set(target, receiver);
-    for (const { site } of target.writes) {
-      if (site.kind === 'assign' || site.kind === 'update') replacements.set(site.reference.node, receiver);
+
+    const sites = target.writes.filter(({ site }) => site.kind === 'assign' || site.kind === 'update');
+    // It holds nothing per write, so several writes share one. A single write keeps it
+    // inline, where an instance that never writes does not pay for its closures.
+    let holder: Expression = accessor;
+    if (sites.length > 1) {
+      const shared = names.fresh(`_${target.binding.name}Store`);
+      declarations.push(statement('const $$shared = $$accessor;', { shared, accessor }));
+      holder = expression('$$shared', { shared });
     }
+
+    const receiver = expression('$$holder.value', { holder });
+    targets.set(target, receiver);
+    for (const { site } of sites) replacements.set(site.reference.node, receiver);
   }
   return { flags, targets, replacements, declarations };
 }

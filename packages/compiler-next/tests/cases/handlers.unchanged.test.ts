@@ -282,6 +282,106 @@ step('an effect-free call between two values',
   'let q = notes.length; console.log(q); const shown = q + 1;',
   "notes = [];", 'q + ":" + shown', ['2:3', '0:1']);
 
+// Each write form of a value that a later write takes over, sharing one store.
+behaves('a value taken over by several writes: every form of write', {
+  source: `
+    export function App() {
+      let start = 1;
+      let n = start + 1;
+      return <main>
+        <button id="set" onClick={() => { n = 10; }}>set</button>
+        <button id="add" onClick={() => { n += 5; }}>add</button>
+        <button id="inc" onClick={() => { n++; }}>inc</button>
+        <button id="pattern" onClick={() => { [n] = [40]; }}>pattern</button>
+        <button id="fields" onClick={() => { ({ a: n } = { a: 50 }); }}>fields</button>
+        <button id="loop" onClick={() => { for (n of [60, 61]); }}>loop</button>
+        <button id="result" onClick={() => { start = n++ + 100; }}>result</button>
+        <p>{n}:{start}</p>
+      </main>;
+    }`,
+  steps: [{ click: '#set' }, { click: '#add' }, { click: '#inc' }, { click: '#pattern' }, { click: '#fields' }, { click: '#loop' }, { click: '#result' }],
+  check(container, observation) {
+    expect(container.querySelector('p')?.textContent).toBe(
+      ['2:1', '10:1', '15:1', '16:1', '40:1', '50:1', '61:1', '62:161'][observation],
+    );
+  },
+});
+
+behaves('a value taken over by several writes: two instances keep their own', {
+  source: `
+    function Counter({ start }) {
+      let n = start;
+      return <p onClick={() => { n++; }}>{n}<i onClick={(event) => { event.stopPropagation(); n += 10; }}>+</i></p>;
+    }
+    export function App() {
+      return <main><Counter start={1} /><Counter start={5} /></main>;
+    }`,
+  steps: [{ click: 'p:first-child' }, { click: 'p:last-child i' }],
+  check(container, observation) {
+    expect([...container.querySelectorAll('p')].map((p) => p.textContent)).toEqual(
+      [['1+', '5+'], ['2+', '5+'], ['2+', '15+']][observation]!,
+    );
+  },
+});
+
+// A large site expression is written once, and evaluates as often as it did.
+behaves('a large site expression: evaluates once for each change, in order', {
+  source: `
+    const log = [];
+    const note = (name, value) => { log.push(name); return value; };
+    export function App() {
+      let a = 1;
+      let b = 2;
+      return <main>
+        <button id="a" onClick={() => { a++; }}>a</button>
+        <button id="b" onClick={() => { b++; }}>b</button>
+        <p title={[note('title', a), note('title', a), note('title', a), note('title', a)].join('')}>
+          {[note('text', b), note('text', b), note('text', b), note('text', b)].join('')}
+        </p>
+      </main>;
+    }`,
+  steps: [{ click: '#a' }, { click: '#b' }],
+  check(container, observation) {
+    const paragraph = container.querySelector('p')!;
+    expect(paragraph.getAttribute('title')).toBe(['1111', '2222', '2222'][observation]!);
+    expect(paragraph.textContent).toBe(['2222', '2222', '3333'][observation]!);
+  },
+});
+
+behaves('a large site expression: inside a branch, reading what the branch declares', {
+  source: `
+    export function App() {
+      let on = true;
+      let n = 1;
+      return <main>
+        <button id="n" onClick={() => { n++; }}>n</button>
+        <button id="off" onClick={() => { on = false; }}>off</button>
+        {on ? <p>{[n, n + 1, n + 2, n + 3, n + 4, n + 5].map((value) => value * 2).join(',')}</p> : <b>off</b>}
+      </main>;
+    }`,
+  steps: [{ click: '#n' }, { click: '#off' }],
+  check(container, observation) {
+    expect(container.querySelector('p, b')?.textContent).toBe(['2,4,6,8,10,12', '4,6,8,10,12,14', 'off'][observation]);
+  },
+});
+
+behaves('a large site expression: a new handler each time, with what it read', {
+  source: `
+    export function App() {
+      let n = 1;
+      let shown = '';
+      return <main>
+        <button id="n" onClick={() => { n++; }}>n</button>
+        <button id="go" onClick={n > 0 ? () => { shown = [n, n + 1, n + 2, n + 3, n + 4].join(''); } : null}>go</button>
+        <p>{shown}</p>
+      </main>;
+    }`,
+  steps: [{ click: '#go' }, { click: '#n' }, { click: '#go' }],
+  check(container, observation) {
+    expect(container.querySelector('p')?.textContent).toBe(['', '12345', '12345', '23456'][observation]);
+  },
+});
+
 // A ref that can only hold a node is not observed, and a call on it still works.
 behaves('a call on a node ref runs its own listeners, and their writes show', {
   source: `

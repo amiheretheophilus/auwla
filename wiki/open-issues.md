@@ -21,6 +21,10 @@ Compiler bugs and cases live on their `compiler/` page, under "Cases to test".
   computation that uses `$ctx`, which only exists inside a component, so it throws
   before rendering. The compiler handles this program in both modes
   (`optimize/row-lists.dom.test.ts`); only the oracle cannot run it.
+- **The reference renderer cannot catch a dead-zone write in a call's own `try`.** For
+  `const early = () => { try { n = 5; } catch {} }; early(); let n = 1;` it reads `n` for
+  the call's inputs outside the authored `try`, so the error leaves the render. Both
+  compiler modes behave as JavaScript does (`optimize/methods.dom.test.ts`).
 
 ## To discuss with the user first (2026-11-04)
 
