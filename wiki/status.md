@@ -57,8 +57,8 @@ Sizes (minified source fixture, gzip in brackets), old against now:
 | `module-counter` | 11,703 (4,604) | 18,934 (7,066) |
 
 FlowOS fell by 7,112 B minified and 1,348 B gzip from the last table, so gzip gained less
-than the minified figure suggests. `octane` rose 140 B over the same stretch, from the
-row-list changes. What remains in FlowOS is about 10 kB of app code and these runtime
+than the minified figure suggests. `octane` rose 140 B over the same stretch; which change
+added it was not isolated. What remains in FlowOS is about 10 kB of app code and these runtime
 modules: `mutation.ts` (6,038 against 1,257, the alias index), `components.ts`,
 `dom-props.ts`, `render-value.ts`, `source-readiness.ts`, `source-presentation.ts` and
 `effect-scope.ts`.
