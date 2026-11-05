@@ -6,6 +6,7 @@ import type { WritePlan } from '../../core/plan/model';
 import type { Names } from '../../core/emit/names';
 import { copy } from '../../core/emit/copy';
 import { expression, statement } from '../../core/emit/quote';
+import { unwrap } from '../../core/plan/jsx';
 
 export interface WritesEmit {
   readonly replacements: ReadonlyMap<Node, Node>;
@@ -31,7 +32,7 @@ export function emitConstWrites(bindings: readonly BindingNode[], names: Names, 
 }
 
 export function emitWrites(
-  writes: readonly WritePlan[], versions: ReadonlyMap<BindingNode, string>, names: Names, batch: string | null,
+  writes: readonly WritePlan[], versions: ReadonlyMap<BindingNode, string>, names: Names, runtime: string, batch: string | null,
   initial: ReadonlyMap<Node, Node> = new Map(),
   handled: ReadonlySet<BindingNode> = new Set(),
 ): WritesEmit {
@@ -55,6 +56,21 @@ export function emitWrites(
       body: b.BlockStatement({ body }), async: false, generator: false, expression: false,
     }));
     return helper;
+  };
+
+  // `_assign(n, n = 1)`: the value before and after, so a write that changes
+  // nothing reports nothing (`wiki/decisions.md`, 2026-11-05).
+  const assigners = new Map<string, string>();
+  const assignFor = (helper: string): string => {
+    const existing = assigners.get(helper);
+    if (existing !== undefined) return existing;
+    const assign = names.fresh('_assign');
+    assigners.set(helper, assign);
+    declarations.push(statement(
+      'function $$assign($$before, $$after) { return $$runtime.unchangedWrite($$before, $$after) ? $$after : $$helper($$after); }',
+      { assign, before: names.fresh('_before'), after: names.fresh('_after'), helper, runtime },
+    ));
+    return assign;
   };
 
   // Inner operations must be replaced before their containing expression is
@@ -116,6 +132,13 @@ export function emitWrites(
       operation.operator = '=';
       const assign = expression('$$helper($$operation)', { helper, operation });
       replacements.set(write.operation, b.LogicalExpression({ operator, left: target, right: assign }));
+    } else if (is.AssignmentExpression(operation) && targets.length === 1 && is.Identifier(unwrap(operation.left))
+      // Reading the binding first would change what a write in its dead zone does;
+      // only a write in the body can run there.
+      && targets[0]!.writes.some(({ site }) => site.node === original && site.timing === 'later')) {
+      replacements.set(write.operation, expression('$$assign($$before, $$operation)', {
+        assign: assignFor(helper), before: copy(unwrap(operation.left)) as Expression, operation,
+      }));
     } else {
       replacements.set(write.operation, expression('$$helper($$operation)', { helper, operation }));
     }

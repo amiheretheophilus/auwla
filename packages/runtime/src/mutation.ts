@@ -714,8 +714,11 @@ export function mutationTarget(object: any, key: any, notify: () => void) {
     get value() { return object[property]; },
     set value(value: unknown) {
       const edit = storeEdit(object, property, value);
+      // A store of what the field already holds changes nothing, and re-runs nothing.
+      const own = Object.getOwnPropertyDescriptor(object, property);
+      const same = own !== undefined && 'value' in own && Object.is(own.value, value);
       object[property] = value;
-      if (isRefNode(object)) return;
+      if (same || isRefNode(object)) return;
       stamp(object);
       notify();
       notifyAliases({ one: object, many: null }, edit, notify);
@@ -724,7 +727,9 @@ export function mutationTarget(object: any, key: any, notify: () => void) {
 }
 
 export function deleteMutation(object: any, key: any, notify: () => void): boolean {
+  const had = Object.prototype.hasOwnProperty.call(object, key);
   const result = delete object[key];
+  if (!had) return result;
   stamp(object);
   notify();
   notifyAliases({ one: object, many: null }, { kind: 'store', added: undefined, removed: true }, notify);

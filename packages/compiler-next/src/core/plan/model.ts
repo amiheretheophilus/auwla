@@ -353,6 +353,11 @@ export interface MutationPlan {
    * - `edit`: changes a field of an item, which rows must then evaluate.
    */
   readonly closed?: { readonly kind: 'move' | 'edit'; readonly binding: BindingNode };
+  /**
+   * `first().tags.push(1)`: the receiver is itself a call, which must run once, so
+   * the observation holds its result rather than reading a binding.
+   */
+  readonly chained?: boolean;
 }
 
 export interface ModulePlan {

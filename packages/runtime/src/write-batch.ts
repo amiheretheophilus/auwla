@@ -114,6 +114,15 @@ export function rejectConstAssignment(): never {
   throw new TypeError('Assignment to constant variable.');
 }
 
+/**
+ * Whether an assignment left a binding holding the same primitive. Reassigning the
+ * same object still reports: code the compiler cannot see may have edited it, and
+ * `rows = rows` is how a program says so.
+ */
+export function unchangedWrite(before: unknown, after: unknown): boolean {
+  return Object.is(before, after) && (before === null || (typeof before !== 'object' && typeof before !== 'function'));
+}
+
 export interface WriteBatch {
   /** Remember writes during initial rendering without entering unfinished sites. */
   beginMount(): void;

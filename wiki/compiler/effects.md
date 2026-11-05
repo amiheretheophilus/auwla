@@ -39,6 +39,11 @@ and runs their cleanup.
   `defer(...)` in the body starts once, and its writes update the UI later.
 - It runs after its owner commits and its refs have mounted, then again whenever a
   node it reads changes. Its cleanup runs before each re-run and at teardown.
+- A write that leaves the same primitive or field value is not a change (`n = 1` when
+  it is 1, `o.a = 1`). A new object is, even with equal contents (`rows =
+  rows.slice()`). See `tests/cases/handlers.unchanged.test.ts` and `../decisions.md`,
+  2026-11-05. Reassigning the same object still reports: an effect reading `rows`
+  re-runs after `rows = rows`, on the compilers but not the reference.
 - `$effect` inside `if`, a loop or a helper is accepted. Its reads include the
   condition.
 - An `async` callback is accepted: it runs, and its cleanup is whatever it resolves

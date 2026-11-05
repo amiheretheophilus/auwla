@@ -876,9 +876,17 @@ function hasOwnData(fn: Function): boolean {
 
 function deepCopy(value: unknown, copies = new Map<object, unknown>()): unknown {
   const copy = (entry: unknown) => deepCopy(entry, copies);
+  // The outermost value is the fresh array of a reader's inputs, new on every read.
+  const outermost = copies.size === 0;
+  const remember = <T extends object>(result: T): T => {
+    if (!outermost) originals.set(result, value as object);
+    return result;
+  };
 
   if (value instanceof Source) {
-    return { source: value.id, version: value.version, data: copy(value.data) };
+    // A reader of the payload: a refresh starting changes only the status, which
+    // status readers see through `$sourceState`.
+    return { source: value.id, hasValue: value.hasValue, failed: value.status === 'error', data: copy(value.data) };
   }
   if (value instanceof Waiting) return { waiting: value.sources.map(copy) };
 
@@ -911,27 +919,27 @@ function deepCopy(value: unknown, copies = new Map<object, unknown>()): unknown 
     return snapshot;
   }
 
-  if (value instanceof Date) return { date: value.getTime() };
+  if (value instanceof Date) return remember({ date: value.getTime() });
 
   if (value instanceof Map) {
     const entries: unknown[] = [];
     copies.set(value, entries);
     for (const [key, entry] of value) entries.push([copy(key), copy(entry)]);
-    return { map: entries };
+    return remember({ map: entries });
   }
 
   if (value instanceof Set) {
     const entries: unknown[] = [];
     copies.set(value, entries);
     for (const entry of value) entries.push(copy(entry));
-    return { set: entries };
+    return remember({ set: entries });
   }
 
   if (Array.isArray(value)) {
     const items: unknown[] = [];
     copies.set(value, items);
     for (const item of value) items.push(copy(item));
-    return items;
+    return remember(items);
   }
 
   // Inspect data descriptors, never getter results. Reads belong to authored
@@ -948,13 +956,22 @@ function deepCopy(value: unknown, copies = new Map<object, unknown>()): unknown 
     const field = descriptor.value;
     fields.push([key, copy(field)]);
   }
-  return snapshot;
+  return remember(snapshot);
 }
+
+/**
+ * The object each copy was taken from. Two copies of different objects are not
+ * equal, whatever they hold: `rows = rows.slice()` is a new value, and a reader
+ * re-runs for it (`wiki/decisions.md`, 2026-11-05). Comparing contents would ask the
+ * compiled runtime to keep a deep copy of everything an effect reads.
+ */
+const originals = new WeakMap<object, object>();
 
 function deepEqual(left: unknown, right: unknown, visited = new Set<unknown>()): boolean {
   if (Object.is(left, right)) return true;
   if (typeof left !== 'object' || typeof right !== 'object' || left === null || right === null) return false;
   if (types.isModuleNamespaceObject(left) || types.isModuleNamespaceObject(right)) return false;
+  if (originals.get(left) !== originals.get(right)) return false;
   if (left instanceof Node || right instanceof Node) return false;
   if (visited.has(left)) return true;
   visited.add(left);

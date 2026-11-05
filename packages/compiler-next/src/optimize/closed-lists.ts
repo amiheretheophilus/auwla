@@ -1100,6 +1100,9 @@ function candidate(plan: ModulePlan, node: BindingNode, rowLists: ReadonlyMap<No
   // While rendering, the only call on the list may be what shows it, or what reads it.
   const module = plan.module.module;
   if (node.writes.some(({ site }) => site.timing === 'body' && !rowLists.has(site.node) && !callOnlyReads(module, site.node))) return false;
+  // A plain store cannot tell that it changed nothing, and an effect would re-run.
+  const inEffect = (start: number, end: number) => plan.effects.calls.some(({ call }) => call.start <= start && end <= call.end);
+  if (node.binding.references.some((reference) => inEffect(reference.node.start, reference.node.end))) return false;
   if (node.owner.runner === null) {
     return isModuleState(plan, node) && !valueExportNames(plan.module.module).includes(node.binding.name);
   }

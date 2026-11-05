@@ -231,7 +231,7 @@ function emitComponent(
     data,
     id,
   }) : undefined;
-  const takeovers = emitTakeovers(plan.takeovers, state.versions, names, scope, batch!, new Map(), readiness.taken, beforeAssignment);
+  const takeovers = emitTakeovers(plan.takeovers, state.versions, names, runtime, scope, batch!, new Map(), readiness.taken, beforeAssignment);
   const trackKeys = new Map<import('../graph').BindingNode, string>();
   const readonly = new Map([
     ...external,
@@ -263,7 +263,7 @@ function emitComponent(
   const mutations = emitMutations(plan.mutations, state.versions, names, runtime, batch, readonly, sources);
   const writes = batch === null
     ? { replacements: mutations.replacements, declarations: [] }
-    : emitWrites(plan.writes, state.versions, names, batch, mutations.replacements, handled);
+    : emitWrites(plan.writes, state.versions, names, runtime, batch, mutations.replacements, handled);
   // Only writes executed by replay itself are silent. A function created by a
   // replayed initializer may run later and must keep its ordinary write commits.
   const refReplacements = emitRefs(refs.filter((ref) => plan.state.includes(ref.binding)), runtime, writes.replacements);
@@ -285,7 +285,7 @@ function emitComponent(
     for (const target of write.targets) restoreReplayInput(target.member);
   }
   const replayMutations = emitMutations(plan.replayMutations, state.versions, names, runtime, null, replayBase, sources);
-  const replay = emitWrites(plan.replayWrites, state.versions, names, null, replayMutations.replacements, handled);
+  const replay = emitWrites(plan.replayWrites, state.versions, names, runtime, null, replayMutations.replacements, handled);
   // One flag per setup segment after a return: whether control reached it.
   const reached = [...new Set(plan.deferred.values())].map(() => names.fresh('_reached'));
   const memos = emitMemos(plan, state.versions, names, effects.replacements, replay.replacements, takeovers, runtime, trackKeys,

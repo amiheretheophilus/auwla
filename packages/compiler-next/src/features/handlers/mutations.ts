@@ -1,5 +1,5 @@
 /** Direct member stores keep native evaluation and report each completed target. */
-import { b, is } from 'yuku-ast';
+import { b, findAll, is } from 'yuku-ast';
 import type { Expression, Node, Statement } from 'yuku-parser';
 import type { BindingNode } from '../../core/graph';
 import type { MutationPlan } from '../../core/plan/model';
@@ -133,6 +133,21 @@ export function emitMutations(
     if (plan.kind === 'call' && plan.method !== undefined) {
       const notify = plan.closed === undefined ? notifierOf : () => closedNotifierOf(plan.closed!);
       emitKnownCall(plan, replacements, declarations, notify, names, runtime);
+      continue;
+    }
+    if (plan.chained === true) {
+      const call = copy(plan.operation, replacements);
+      // An `await` in the arguments cannot move into a function. Such a call stays
+      // as written; what it edits is reported only by the next edit that shows it.
+      const suspends = findAll(plan.operation, 'AwaitExpression').length > 0 || findAll(plan.operation, 'YieldExpression').length > 0;
+      if (is.CallExpression(call) && is.MemberExpression(call.callee) && !suspends) {
+        const receiver = call.callee.object;
+        const held = names.fresh('_receiver');
+        call.callee.object = b.Identifier({ name: held });
+        replacements.set(plan.operation, expression('(($$held) => $$runtime.observeMutation([() => $$held], [$$notify]).finish($$call))($$receiver)', {
+          held, runtime, notify: notifierOf(plan.targets[0]!.binding), call, receiver,
+        }));
+      }
       continue;
     }
     const notifications = [];

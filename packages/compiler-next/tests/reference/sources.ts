@@ -76,7 +76,7 @@ export function finishSourceDeclarations(): void {
 
 export class Source {
   readonly id = ++nextId;
-  /** Changes whenever status, payload or error changes. Memo inputs compare it. */
+  /** Changes whenever status, payload or error changes. Status readers compare it (`$sourceState`). */
   version = 0;
   status: 'idle' | 'pending' | 'success' | 'error' = 'idle';
   data: unknown;

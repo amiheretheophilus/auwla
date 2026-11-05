@@ -9,6 +9,7 @@ import { unwrap } from '../../core/plan/jsx';
 import { containsJsx } from '../../core/plan/template';
 import { variableDeclaration } from '../../core/graph/inputs';
 import { frameworkPackage, isValueImport } from '../../core/resolve/exports';
+import { callOnlyReads } from '../../optimize/effects';
 import { methodFact } from '../../optimize/method-facts';
 
 export function planReadonlyBindings(bindings: readonly BindingNode[]): readonly BindingNode[] {
@@ -101,31 +102,47 @@ function aliasBindings(graph: SemanticGraph, entry: ResolvedModule, tracked: Rea
   return aliases;
 }
 
-/** `first().label = 'b'`, `held.get('a').label = 'b'`: a store with no name to hold it. */
-function planCallRootedStores(graph: SemanticGraph, entry: ResolvedModule, owners: ReadonlySet<Node | null>): readonly MutationPlan[] {
+/** The name a chain through a call starts from: `held` in `held.get('a').label`. Null without a call. */
+function callChainRoot(module: ResolvedModule['module'], graph: SemanticGraph, object: Node): BindingNode | null {
+  let root = unwrap(object);
+  let throughCall = false;
+  while (is.MemberExpression(root) || is.CallExpression(root)) {
+    if (is.CallExpression(root)) {
+      throughCall = true;
+      root = unwrap(root.callee);
+    } else {
+      root = unwrap(root.object);
+    }
+  }
+  if (!throughCall || !is.Identifier(root)) return null;
+  const binding = module.referenceOf(root)?.binding;
+  return binding === null || binding === undefined ? null : graph.bindings.get(binding) ?? null;
+}
+
+/**
+ * `first().label = 'b'`, `first().count++`, `delete first().label`,
+ * `first().tags.push(1)`: an edit with no name to hold what it edits.
+ */
+function planCallRootedEdits(graph: SemanticGraph, entry: ResolvedModule, owners: ReadonlySet<Node | null>): readonly MutationPlan[] {
   const module = entry.module;
   const plans: MutationPlan[] = [];
 
-  for (const assignment of module.findAll('AssignmentExpression')) {
-    const member = unwrap(assignment.left);
-    if (!is.MemberExpression(member)) continue;
-    if (owners.has(runnerOf(module, assignment))) continue;
+  const plan = (operation: Node, target: Node, kind: MutationPlan['kind']): void => {
+    if (owners.has(runnerOf(module, operation))) return;
+    const member = unwrap(target);
+    if (!is.MemberExpression(member)) return;
+    const root = callChainRoot(module, graph, member.object);
+    if (root !== null) plans.push({ operation, kind, targets: [{ binding: root, member }], chained: kind === 'call' });
+  };
 
-    let root: Node = unwrap(member.object);
-    let throughCall = false;
-    while (is.MemberExpression(root) || is.CallExpression(root)) {
-      if (is.CallExpression(root)) {
-        throughCall = true;
-        root = unwrap(root.callee);
-      } else {
-        root = unwrap(root.object);
-      }
-    }
-    if (!throughCall || !is.Identifier(root)) continue;
-
-    const binding = module.referenceOf(root)?.binding;
-    const node = binding === null || binding === undefined ? undefined : graph.bindings.get(binding);
-    if (node !== undefined) plans.push({ operation: assignment, kind: 'store', targets: [{ binding: node, member }] });
+  for (const assignment of module.findAll('AssignmentExpression')) plan(assignment, assignment.left, 'store');
+  for (const update of module.findAll('UpdateExpression')) plan(update, update.argument, 'store');
+  for (const unary of module.findAll('UnaryExpression')) {
+    if (unary.operator === 'delete') plan(unary, unary.argument, 'delete');
+  }
+  for (const call of module.findAll('CallExpression')) {
+    // `list.find(…)` is the chain, not an edit: a known read keeps it a plain call.
+    if (is.MemberExpression(unwrap(call.callee)) && !callOnlyReads(module, call)) plan(call, call.callee, 'call');
   }
   return plans;
 }
@@ -149,7 +166,7 @@ export function planImportedMutations(
   const planned = [
     ...planMutations(bindings),
     ...planMutations(aliasBindings(graph, entry, tracked)),
-    ...planCallRootedStores(graph, entry, owners),
+    ...planCallRootedEdits(graph, entry, owners),
   ];
 
   for (const mutation of planned) {

@@ -16,11 +16,9 @@ Compiler bugs and cases live on their `compiler/` page, under "Cases to test".
   with handler calls always reported, 3 of 18 effect cases failed, and doing it during
   render hung the suite. Proposed: keep it as the fallback, and skip it where only
   render sites read the value, since re-rendering there cannot be seen.
-- **Edits with no name to hold them.** `first().label = 'b'` reports, but only plain
-  assignment is planned (`planCallRootedStores`). From reading the code, not tested:
-  `first().count++`, `delete first().label` and `first().tags.push(1)` stay unreported.
-- **Effect after `rows = rows.slice()`.** An effect reading `rows.length` re-runs on
-  the compilers, old and new, and not on the reference. Not investigated.
+- **Edits through a call with `await` in its arguments.** `first().tags.push(await x)`
+  cannot be observed, since an `await` cannot move into the function holding the
+  receiver. It stays as written, and shows on the next update of that state.
 - **A known name is trusted across modules.** A class in another file with its own
   `slice` that edits its receiver is no longer observed. A class in the same file is
   (`redefinedNames`).

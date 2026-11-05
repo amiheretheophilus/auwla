@@ -148,7 +148,7 @@ the next microtask. Calls retain their native result and receiver.
 A name that is not state can still hold state's objects: `const row = rows[0];
 row.label = 'b'`, a row's `item.done = true`, `first().label = 'b'`. Those edits go
 through the same runtime helpers with no version of their own, as an imported
-value's do (`features/handlers/plan.ts`, `aliasBindings`, `planCallRootedStores`), and
+value's do (`features/handlers/plan.ts`, `aliasBindings`, `planCallRootedEdits`), and
 the alias index finds the state holding the object. Not included: a value the
 function just allocated and has not passed on (`isFreshLocal`), a plain function's
 parameter, whose caller observes the call, and a handler's own event parameter.

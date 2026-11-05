@@ -13,7 +13,7 @@ export interface TakeoverEmit {
 
 export function emitTakeovers(
   bindings: readonly BindingNode[], versions: ReadonlyMap<BindingNode, string>,
-  names: Names, scope: string, batch: string,
+  names: Names, runtime: string, scope: string, batch: string,
   keys: ReadonlyMap<BindingNode, string> = new Map(),
   onTakeover: ReadonlyMap<BindingNode, Expression> = new Map(),
   beforeAssignment?: Expression,
@@ -31,17 +31,19 @@ export function emitTakeovers(
     declarations.push(statement('let $$taken = false;', { taken }));
     // Native assignment/update/pattern semantics still evaluate their own RHS,
     // defaults, coercions and result. Only the final store is conditional.
+    // Writing what it already holds still takes the binding over, but changes nothing.
     const receiver = expression(`({
       get value() { return $$binding; },
       set value($$value) {
         const $$building = $$scope.building();
         if ($$building && $$taken) return;
         $$beforeAssignment;
+        const $$same = !$$building && $$runtime.unchangedWrite($$binding, $$value);
         $$binding = $$value;
-        $$version++;
-        if (!$$building) { $$taken = true; $$onTakeover; $$commit; }
+        if (!$$same) $$version++;
+        if (!$$building) { $$taken = true; $$onTakeover; if (!$$same) $$commit; }
       }
-    }).value`, { binding: target.binding.name, value, building, scope, taken, version,
+    }).value`, { binding: target.binding.name, value, building, scope, taken, version, runtime, same: names.fresh('_same'),
       onTakeover: onTakeover.get(target) ?? expression('void 0'),
       beforeAssignment: beforeAssignment === undefined ? expression('void 0')
         : expression('$$hook($$binding, $$value)', { hook: beforeAssignment, binding: target.binding.name, value }),

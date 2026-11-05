@@ -29,6 +29,7 @@ function emitSharedWrites(
   binding: BindingNode,
   owner: SharedOwnerEmit,
   names: Names,
+  runtime: string,
   replacements: Map<Node, Node>,
   declarations: Map<SharedOwnerEmit, Statement[]>,
 ): void {
@@ -57,6 +58,21 @@ function emitSharedWrites(
     return helper;
   };
 
+  let assign: string | undefined;
+  const assignName = (): string => {
+    if (assign !== undefined) return assign;
+    assign = names.fresh(`_assign_${name}`);
+    // First: this may add its own declaration to the list.
+    const helper = helperName();
+    const list = declarations.get(owner) ?? [];
+    list.push(statement(
+      'function $$assign($$before, $$after) { return $$runtime.unchangedWrite($$before, $$after) ? $$after : $$helper($$after); }',
+      { assign, before: names.fresh('_before'), after: names.fresh('_after'), helper, runtime },
+    ));
+    declarations.set(owner, list);
+    return assign;
+  };
+
   for (const { site } of binding.writes) {
     if (site.kind !== 'assign' && site.kind !== 'update') continue;
 
@@ -75,6 +91,12 @@ function emitSharedWrites(
         written.operator = '=';
         replacements.set(operation, b.LogicalExpression({
           operator, left, right: expression('$$helper($$written)', { helper: helperName(), written }),
+        }));
+      } else if (is.AssignmentExpression(written) && site.timing === 'later') {
+        // A write that changes nothing reports nothing (`wiki/decisions.md`, 2026-11-05).
+        // In the body, reading the binding first would change what a dead zone does.
+        replacements.set(operation, expression('$$assign($$before, $$written)', {
+          assign: assignName(), before: b.Identifier({ name }), written,
         }));
       } else {
         replacements.set(operation, expression('$$helper($$written)', { helper: helperName(), written }));
@@ -100,7 +122,7 @@ export function emitShared(plan: ModulePlan, names: Names, runtime: string, init
   let replacements = new Map(imported.replacements);
   const writeDeclarations = new Map<(typeof state.owners)[number], Statement[]>();
   const takeovers = new Map(state.owners.map((owner) => [owner, emitTakeovers(
-    owner.plan.takeovers, owner.versions, names, owner.scope, owner.batch, owner.keys, sourceTakeovers(plan, names, data),
+    owner.plan.takeovers, owner.versions, names, runtime, owner.scope, owner.batch, owner.keys, sourceTakeovers(plan, names, data),
     data === undefined ? undefined : expression('$$data.noteSourceReplacement', { data }),
   )]));
   for (const owner of state.owners) {
@@ -108,7 +130,7 @@ export function emitShared(plan: ModulePlan, names: Names, runtime: string, init
     for (const [node, replacement] of emitConstWrites(owner.plan.readonlyBindings, names, runtime)) replacements.set(node, replacement);
     for (const binding of owner.plan.state) {
       if (owner.plan.readonlyBindings.includes(binding) || owner.plan.takeovers.includes(binding)) continue;
-      emitSharedWrites(binding, owner, names, replacements, writeDeclarations);
+      emitSharedWrites(binding, owner, names, runtime, replacements, writeDeclarations);
     }
   }
   const mutationDeclarations = new Map<(typeof state.owners)[number], readonly Statement[]>();
@@ -120,7 +142,7 @@ export function emitShared(plan: ModulePlan, names: Names, runtime: string, init
     });
     replacements = new Map(mutations.replacements);
     const refs = plan.refs.filter((ref) => owner.plan.state.includes(ref.binding));
-    const writes = emitWrites(refWrites(refs), owner.versions, names, owner.batch, replacements);
+    const writes = emitWrites(refWrites(refs), owner.versions, names, runtime, owner.batch, replacements);
     replacements = emitRefs(refs, runtime, writes.replacements);
     mutationDeclarations.set(owner, [...(writeDeclarations.get(owner) ?? []), ...mutations.declarations, ...writes.declarations]);
   }
