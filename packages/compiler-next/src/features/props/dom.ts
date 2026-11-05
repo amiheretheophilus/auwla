@@ -31,6 +31,7 @@ export function emitProps(
   setup.push(...declareParameters(patterns, cell, 'let', external));
 
   const bindings = plan.state.filter((binding) => binding.kind === 'Prop');
+  const rests = restTargets(patterns);
   const temporaryPattern = new Map<Node, Node>(external);
   const entries = bindings.map((binding) => {
     const next = names.fresh(`_${binding.binding.name}Prop`);
@@ -45,10 +46,16 @@ export function emitProps(
         temporaryPattern.set(reference.node, b.Identifier({ name: next }));
       }
     }
-    setup.push(statement('let $$previous = $$binding;', {
-      previous, binding: binding.binding.name,
-    }));
-    return { binding, next, previous };
+    // Only a prop the child can change needs its last parent value kept apart. A rest
+    // pattern builds a new object each time, so its value is never the parent's either.
+    const rest = binding.binding.declarations.some((declaration) => rests.has(declaration));
+    const separate = rest || binding.writes.length > 0;
+    if (separate) {
+      setup.push(statement('let $$previous = $$binding;', {
+        previous, binding: binding.binding.name,
+      }));
+    }
+    return { binding, next, previous, rest, separate };
   });
 
   // A value passed again may have been edited in place since the child last
@@ -56,13 +63,24 @@ export function emitProps(
   const seen = names.fresh('_propsSeen');
   const changed = names.fresh('_propsChanged');
   setup.push(statement('let $$seen = $$runtime.mutationTime();', { seen, runtime }));
-  const rests = restTargets(patterns);
   const body = declareParameters(patterns, cell, 'const', temporaryPattern);
   body.push(statement('let $$changed = false;', { changed }));
-  for (const { binding, next, previous } of entries) {
+  for (const { binding, next, previous, rest, separate } of entries) {
     const version = versions.get(binding)!;
+
+    // Nothing in the child assigns this, so its value is what the parent last sent.
+    if (!separate) {
+      body.push(statement(`if (!$$runtime.sameValue($$next, $$binding) || $$runtime.mutatedSince($$binding, $$seen)) {
+        $$binding = $$next;
+        $$version++;
+        $$changed = true;
+      }`, {
+        runtime, next, binding: binding.binding.name, version, changed, seen,
+      }));
+      continue;
+    }
+
     // A rest pattern builds a new object each time; its fields are what count.
-    const rest = binding.binding.declarations.some((declaration) => rests.has(declaration));
     body.push(statement(`if (!$$same($$next, $$previous)) {
       $$binding = $$next;
       $$previous = $$next;

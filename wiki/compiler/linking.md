@@ -218,14 +218,33 @@ modelled, since the compiler never sees them.
 A package's output should be in proportion to its source. A sample of ordinary package code
 (a barrel, components with children and a list, a store, two factories, pure helpers, and
 an app using them) measures this: 4.7 KB of source, 15.8 KB minified from the old compiler
-without runtime, and from compiler-next 42.1 KB, now 35.1 KB:
+without runtime, and from compiler-next 42.1 KB, now 34.2 KB:
 
+- A prop nothing assigns needs no separate copy of its parent's value (`props/dom.ts`), about
+  100 B a prop on its own and less inside a bundle. A leaf component fell to 2,041 B.
 - A module that cannot touch a source skips source flow, even when others in the graph use
   it (`freeOfSources`, `reach.ts`). A leaf component fell from 3,485 to 2,239 B.
 - A factory or block with nothing to replay uses the `simple` owner form, with no build
   scope, refresh or completion (`shared-dom.ts`). `createToggle` fell from 1,393 to 659 B.
 - A plain function replays only what the compiler can see change
   (`state-and-derived.md`, "Plain functions").
+
+Moving each component's opening lines into one runtime call, `beginComponent`, was tried and
+rejected. It adds about 110 B raw and 50 B gzip to a typical app: the shared function costs
+more than a component saves, and at 60 components the raw size only breaks even and gzip is
+still worse. Repeated lines already compress well. Judge this kind of change by gzip.
+
+Where a bundle's bytes are, minified before gzip:
+
+| Bundle | Total old | Total new | App | Runtime | Data |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| FlowOS | 114.3 KB | 129.9 KB | 26.2 → 31.9 | 51.7 → 55.0 | 36.4 → 43.1 |
+| `composition` | 10.2 KB | 24.1 KB | 0.7 → 1.4 | 9.5 → 22.7 | none |
+
+A real app has no one problem. A small one does: `<Label value={count} />` adds 11 KB to
+`owner-counter`, since a child component at a fixed position, and `{value}` inside it, go
+through the path for a value of any kind, which brings `render-value`, `computation`,
+`mutation` and even the list modules into an app with no list.
 
 `packages/utils/src/optimistic.ts` is not the measure: 8 KB of source compiles to 100 KB,
 against 3.4 KB published for all of `utils`, because `$read(result)` hands it a raw handle
@@ -276,8 +295,12 @@ been done yet.
 
 What this says for native packages too:
 
-- **Emit is the cost, not analysis.** On `gsap`, parse, resolve and classify took about
-  0.6 s and emit 14.4 s. On `zod`, about 0.6 s and 2.1 s.
+- **Compile time is not a problem for real code.** On `gsap`, parse, resolve and classify
+  took about 0.6 s and emit 14.4 s, but `gsap` is opaque in a real app and that is its code's
+  shape, not its size. An app of 25 to 400 generated components (17 to 270 KB, 16 times the
+  code) took 388 ms to 7.0 s, 18 times the time, against the old compiler's 328 ms to 5.9 s.
+  `packages/utils` (8.6 KB) took 211 ms against 39 ms, and FlowOS (8.6 KB) 157 against 156 ms.
+  One local run, best of three.
 - **A consumer needs no second path to judge a package call.** `InputQueries.callFacts`
   follows visible functions across files, and reports what they read and write, with
   `opaque` when it cannot tell.
@@ -302,8 +325,6 @@ optimization, emission, namespace linking and printing.
 ## Remaining Phase 9 work
 
 - A package's size (see "Size").
-- Compiling only what changed. A dev server cannot compile every package on each edit.
-  Emit is also far from proportional to its input (`gsap`, above).
 - Dynamic-import combinations, external/unknown star exports and broader cyclic graphs
   need further coverage.
 - `bench/linker` and `bench/package-compilation` still target the old compiler's APIs.

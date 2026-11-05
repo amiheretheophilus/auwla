@@ -350,7 +350,9 @@ array child). Remove each check when its phase is built.
   - [x] Which installed packages are native, and the Vite side of giving the app their source
     (`linking.md`, "Publishing and installing one"), compiled by the old compiler until
     `packages/vite` moves in Phase 10.
-  - [ ] Compiling only what changed, and an emit whose cost is in proportion to its input.
+  - [x] Compile time grows with project size and is close to the old compiler's, so it needs
+    no work here (`linking.md`). Compiling only what changed is a dev server concern, and
+    moves to Phase 10 with `packages/vite`.
 - **Exit:** multi-module cases pass; `bench/linker` and `bench/package-compilation`
   gates pass, ported to compiler-next and to compiling a package in the app's graph.
 

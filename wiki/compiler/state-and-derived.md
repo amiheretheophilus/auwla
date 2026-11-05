@@ -24,9 +24,11 @@ disposal guard still owns cleanup even in a static scalar component.
 
 Phase 6 includes every component parameter binding in local versions, including
 unused or unwritten props, defaults, aliases, nested patterns and rest parameters.
-`features/props/dom.ts` retains each binding's last parent value separately from
-its current local value. An unchanged parent value preserves an override; a new
-one replaces it. Object mutations still invalidate consumers without requiring a
+`features/props/dom.ts` retains the last parent value of a binding the child writes
+separately from its current local value. An unchanged parent value preserves an
+override; a new one replaces it. A binding with no writes needs no such copy, since its
+value is what the parent last sent, and a rest binding always keeps one, since its object
+is new each time. Object mutations still invalidate consumers without requiring a
 new object identity. Component details and direct-call coverage live on
 `components.md`.
 
