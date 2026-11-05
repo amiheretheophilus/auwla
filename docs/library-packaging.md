@@ -58,6 +58,28 @@ Ambiguous star exports are not exposed; explicit names take precedence. Cyclic
 star barrels, namespace re-exports and opaque external stars need explicit named
 re-exports.
 
+## Publishing source
+
+```ts
+export default {
+  entry: './src/index.ts',
+  subpaths: ['./src/public'],
+  source: true,
+};
+```
+
+With `source: true`, the package ships the source of its public API, exactly as you wrote
+it, and the app's own build compiles it. A component, state or `$fetch` from the package then
+behaves as if it were in the app, and there is no compiled output to keep compatible.
+
+Whoever uses the package installs it and imports it. Their Vite plugin finds it from their
+dependencies, with nothing to configure.
+
+Only files your public entries reach are published. `memoized-dom package` compiles them once,
+and stops if something would break for a user: a dependency not in `dependencies` or
+`peerDependencies`, a missing file, a file outside the package, or an import that only means
+something in this project (`#local`, `aliases`). Use relative imports in published source.
+
 ## Output and publishing
 
 ```text

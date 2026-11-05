@@ -5,6 +5,11 @@ export interface LibraryConfig {
   entry: string;
   /** Each directory is an explicit public boundary, not a list of components. */
   subpaths?: readonly string[];
+  /**
+   * Publish the source of the public API, for the app's compiler to build in its own graph,
+   * instead of compiled output. It becomes the only behaviour once the old compiler goes.
+   */
+  source?: boolean;
   outDir?: string;
   minify?: boolean;
   sourcemap?: boolean;

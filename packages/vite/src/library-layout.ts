@@ -14,7 +14,7 @@ export interface LibraryEntry { path: string; file: string; output: string }
 export async function libraryLayout(root: string, config: LibraryConfig): Promise<{ entries: LibraryEntry[]; outDir: string }> {
   if (!config || typeof config !== 'object' || typeof config.entry !== 'string' || !config.entry) libraryError('.lib.config.ts must specify entry');
   if (config.subpaths !== undefined && (!Array.isArray(config.subpaths) || !config.subpaths.every(path => typeof path === 'string' && path))) libraryError('subpaths must be an array of directory paths');
-  for (const name of ['minify', 'sourcemap', 'runtimeOwnedState'] as const) {
+  for (const name of ['minify', 'sourcemap', 'runtimeOwnedState', 'source'] as const) {
     if (config[name] !== undefined && typeof config[name] !== 'boolean') libraryError(`${name} must be a boolean`);
   }
   if (config.declarations !== undefined && typeof config.declarations !== 'boolean' &&

@@ -347,7 +347,9 @@ array child). Remove each check when its phase is built.
   - [x] Bare specifiers, subpaths and several installed copies of a package in one graph
     (`linking.md`, "Installed copies and specifiers"). The compiler part only: a build tool
     gives it the paths.
-  - [ ] Which installed packages are native, and the Vite side of giving the app their source.
+  - [x] Which installed packages are native, and the Vite side of giving the app their source
+    (`linking.md`, "Publishing and installing one"), compiled by the old compiler until
+    `packages/vite` moves in Phase 10.
   - [ ] Compiling only what changed, and an emit whose cost is in proportion to its input.
 - **Exit:** multi-module cases pass; `bench/linker` and `bench/package-compilation`
   gates pass, ported to compiler-next and to compiling a package in the app's graph.

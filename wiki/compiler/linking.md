@@ -134,6 +134,44 @@ factory's value follows a change the compiler can see, and its parameters are st
 a later call changes them. The reference links its own untouched inputs and uses no
 compiler linking code.
 
+### Publishing and installing one
+
+The author writes `.lib.config.ts` and never an `exports` map (`../decisions.md`):
+
+```ts
+export default { entry: './src/index.ts', subpaths: ['./src/public'], source: true } satisfies LibraryConfig;
+```
+
+`entry` is the file exporting the public API, and each file under a `subpaths` directory is
+a public subpath. `memoized-dom package` then generates the package to publish:
+
+- the files the public entries reach, exactly as written, and nothing else;
+- a `package.json` with an `exports` map pointing at that source, and the marker
+  `"memoized-dom": { "source": true }`;
+- declarations, unless turned off.
+
+`source: true` is temporary. `packages/utils` and the tests of the older output still use
+compiled output with an artifact, and it becomes the only behaviour once those go.
+
+Packaging compiles the result once, so a package that cannot compile never gets published,
+and the output says which framework packages to add as peers, since `$fetch` needs no import.
+It stops on an import that would break for a user: a dependency not listed, a missing file,
+a file outside the package, a project-only specifier (`#x`), and `aliases`. Options that
+describe compiled output are refused.
+
+An app installs the package and imports it. The plugin finds the marker by reading the
+manifests of the app's dependencies, following native packages through each other but not
+through an ordinary package (`packages/vite/src/graph/native-packages.ts`). It keeps those
+packages out of prebundling, which would give the app a second copy of their state, and out
+of SSR externals. Their files then count as the app's own source (`acceptsSource`). Vite
+never runs an installed package's config; it only reads its `package.json`.
+
+In an app this is compiled by the old compiler for now, since `packages/vite` moves to
+compiler-next in Phase 10. Nothing here depends on which compiler it is.
+`packages/vite/tests/native-package.test.ts` covers the whole path, including a built app run
+in happy-dom. Not covered: a dev server in a real browser, since this machine has no Chrome,
+and editing an installed package's file during development.
+
 ### Installed copies and specifiers
 
 The compiler's unit is a path. The build tool turns a specifier into one, through
@@ -246,12 +284,6 @@ optimization, emission, namespace linking and printing.
 ## Remaining Phase 9 work
 
 - A package's size (see "Size").
-- Which installed packages count as native, and giving the app's build their source. The
-  direction, from the user: the author writes one config naming the public API
-  (`.lib.config.ts`, `entry` and `subpaths`, which `memoized-dom package` already reads),
-  and never writes an `exports` map. The tool generates that package's `package.json`, as
-  it does today, with a marker the app's Vite plugin finds in its dependencies. This
-  belongs in `packages/vite`, which still uses the old compiler. Not built yet.
 - Compiling only what changed. A dev server cannot compile every package on each edit.
   Emit is also far from proportional to its input (`gsap`, above).
 - Dynamic-import combinations, external/unknown star exports and broader cyclic graphs

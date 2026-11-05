@@ -8,6 +8,7 @@ import type { LibraryConfig } from './library-config';
 import { inside, libraryError, libraryLayout, publishingManifest, sourceFile } from './library-layout';
 import { compileLibraryGraph, isLocalLibraryImport } from './library-graph';
 import { emitLibraryDeclarations, rebaseLibraryMap } from './library-declarations';
+import { writeSourcePackage } from './library-source';
 import { resolvableFile } from './graph/package-artifacts';
 
 export async function buildLibrary(options: { root?: string; config?: string } = {}): Promise<string> {
@@ -86,7 +87,40 @@ export async function buildLibrary(options: { root?: string; config?: string } =
       }
     },
   };
+  /** Move the finished package into place, keeping what was there if that fails. */
+  const replaceOutput = async (): Promise<void> => {
+    await mkdir(dirname(outDir), { recursive: true });
+    const previous = join(stage, 'previous');
+    if (existsSync(outDir)) await rename(outDir, previous);
+    try { await rename(output, outDir); }
+    catch (error) {
+      if (existsSync(previous)) {
+        try { await rename(previous, outDir); }
+        catch (restoreError) {
+          cleanStage = false;
+          throw new AggregateError([error, restoreError], `memoized-dom package: could not restore output; previous build preserved at '${previous}'`);
+        }
+      }
+      throw error;
+    }
+    console.log(`Memoized DOM: packaged ${manifest.name} (${entries.length} public ${entries.length === 1 ? 'entry' : 'entries'}) → ${relative(root, outDir).split(sep).join('/')}`);
+  };
+  const copyPublishingFiles = async (): Promise<void> => {
+    for (const name of ['README.md', 'LICENSE', 'LICENSE.md', 'LICENCE']) if (existsSync(join(root, name))) {
+      if (!inside(root, await realpath(join(root, name)))) libraryError(`'${name}' resolves outside the package`);
+      await copyFile(join(root, name), join(output, name));
+    }
+  };
   try {
+    if (config.source === true) {
+      await mkdir(output, { recursive: true });
+      await writeSourcePackage(root, config, entries, manifest, outDir, output);
+      await emitLibraryDeclarations(root, output, config, entries);
+      await writeFile(join(output, 'package.json'), JSON.stringify(manifest, null, 2) + '\n');
+      await copyPublishingFiles();
+      await replaceOutput();
+      return outDir;
+    }
     await build({ root, configFile: false, publicDir: false, plugins: [plugin],
       resolve: { alias: config.aliases && Object.fromEntries(Object.entries(config.aliases).map(([name, path]) => [name, path.startsWith('.') ? resolve(root, path) : path])), tsconfigPaths: true },
       build: {
@@ -110,10 +144,7 @@ export async function buildLibrary(options: { root?: string; config?: string } =
       if (manifest.sideEffects === false) manifest.sideEffects = ['./style.css'];
     }
     await writeFile(join(output, 'package.json'), JSON.stringify(manifest, null, 2) + '\n');
-    for (const name of ['README.md', 'LICENSE', 'LICENSE.md', 'LICENCE']) if (existsSync(join(root, name))) {
-      if (!inside(root, await realpath(join(root, name)))) libraryError(`'${name}' resolves outside the package`);
-      await copyFile(join(root, name), join(output, name));
-    }
+    await copyPublishingFiles();
     const maps = async (directory: string): Promise<void> => {
       for (const entry of await readdir(directory, { withFileTypes: true })) {
         const file = join(directory, entry.name);
@@ -124,21 +155,7 @@ export async function buildLibrary(options: { root?: string; config?: string } =
     await maps(output);
     const artifact = await experimentalFinalizePackage(compiled.artifact, { packageRoot: output, outputDirectory: '.' });
     await writeFile(join(output, 'memoized-dom.package.json'), JSON.stringify(artifact, null, 2) + '\n');
-    await mkdir(dirname(outDir), { recursive: true });
-    const previous = join(stage, 'previous');
-    if (existsSync(outDir)) await rename(outDir, previous);
-    try { await rename(output, outDir); }
-    catch (error) {
-      if (existsSync(previous)) {
-        try { await rename(previous, outDir); }
-        catch (restoreError) {
-          cleanStage = false;
-          throw new AggregateError([error, restoreError], `memoized-dom package: could not restore output; previous build preserved at '${previous}'`);
-        }
-      }
-      throw error;
-    }
-    console.log(`Memoized DOM: packaged ${manifest.name} (${entries.length} public ${entries.length === 1 ? 'entry' : 'entries'}) → ${relative(root, outDir).split(sep).join('/')}`);
+    await replaceOutput();
     return outDir;
   } finally {
     // Only this invocation's validated, privately created staging directory.

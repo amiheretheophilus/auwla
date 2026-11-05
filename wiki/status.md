@@ -44,6 +44,21 @@ yet, so these sizes are all without it.
 Verified on this batch: compiler-next 509 unit, 610 cases with `entries`, 610 with
 `ENTRIES=all`, and 10 generators at 200 runs in a 649 s gate; runtime 179, data 171.
 
+A native package can now be published and installed (`compiler/linking.md`, "Publishing and
+installing one"): the author writes `.lib.config.ts`, `memoized-dom package` generates the
+package, and the app's plugin finds it from its dependencies. An app compiles it with the old
+compiler until `packages/vite` moves to compiler-next in Phase 10. `source: true` selects this
+for now, since `packages/utils` and the older output's tests use the artifact path.
+
+Verified: `packages/vite/tests/native-package.test.ts`, 14 tests, including a built app run
+with clicks in happy-dom; they fail if native detection is disabled. Of the suites loading
+this code in-process, `vite-adapter`, `fullstack-ssr-isolation`, `package-artifacts` and
+`installed-packages` give 43 pass and 6 fail. The same 6 fail on a clean worktree of the
+commit before, so they already failed on this machine. Not verified: 15 tests that need
+`node`, which is not installed here (14 in `cli.test.ts` run the built `dist/cli.js`, built
+before this work, so they neither break from it nor test it), every browser suite (no Chrome
+here), so a dev server in a real browser has not been tried, and the rest of the Vite suite.
+
 Packages installed under `node_modules` and imported by a bare specifier
 (`compiler/linking.md`, "Installed copies and specifiers") found three general bugs, none
 about installing as such:

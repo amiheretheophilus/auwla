@@ -8,6 +8,7 @@ import {
   resolve,
   sep,
 } from 'node:path';
+import { isNativePackageFile } from './graph/native-packages';
 import type { ResolvedAdapterOptions } from './options';
 
 const sourceExtensions = new Set(['.ts', '.tsx', '.tsrx', '.js', '.jsx']);
@@ -60,8 +61,10 @@ export function acceptsSource(
 ): boolean {
   const id = normalizeFile(file);
   if (!sourceExtensions.has(extname(id))) return false;
-  if (id.includes('/node_modules/')) return false;
   if (matches(options.exclude, id)) return false;
+  // A native package ships source for this build, wherever it is installed.
+  if (isNativePackageFile(id)) return true;
+  if (id.includes('/node_modules/')) return false;
   if (matches(options.include, id)) return true;
 
   const projectRelative = relative(root, id);
