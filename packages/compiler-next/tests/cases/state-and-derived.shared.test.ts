@@ -58,3 +58,98 @@ behaves('shared: a handler retains native intermediate reads before the update b
   steps: [{ click: 'button' }, { click: 'button' }],
   check: show(['2:', '4:2', '6:2,4']),
 });
+
+// A statement that can only run where it was written is never replayed (found in hono,
+// modern-tar, fast-check). Each of these once compiled to a file that did not parse.
+behaves('shared: a step that continues its enclosing loop stays where it was written', {
+  source: `
+    const routes = { a: [1], b: [2] };
+    const table = { b: 'x' };
+    function build() {
+      const out = {};
+      for (const path in routes) {
+        const handlers = routes[path];
+        const data = table[path];
+        if (!data) {
+          out[path] = handlers.map((h) => h);
+          continue;
+        }
+        out[path] = handlers.map((h) => data + h);
+      }
+      return out;
+    }
+    export function App() {
+      let n = 0;
+      const built = build();
+      return <main><p>{JSON.stringify(built)}:{n}</p><button onClick={() => n++}>n</button></main>;
+    }`,
+  steps: [{ click: 'button' }],
+  check: show(['{"a":[1],"b":["x2"]}:0', '{"a":[1],"b":["x2"]}:1']),
+});
+
+behaves('shared: a labelled jump out of nested loops stays where it was written', {
+  source: `
+    function first(rows) {
+      let found = null;
+      outer: for (const row of rows) {
+        for (const cell of row) {
+          const held = [cell];
+          if (cell > 1) {
+            held.push(cell);
+            found = held;
+            break outer;
+          }
+        }
+      }
+      return found;
+    }
+    export function App() {
+      let n = 2;
+      return <main><p>{String(first([[1], [n, 5]]))}</p><button onClick={() => n++}>n</button></main>;
+    }`,
+  steps: [{ click: 'button' }],
+  check: show(['2,2', '3,3']),
+});
+
+behaves('shared: a loop with its own continue still recomputes as one statement', {
+  source: `
+    export function App() {
+      let n = 1;
+      const seen = [];
+      for (const key of ['a', 'b', 'c']) {
+        const value = key + n;
+        if (key === 'b') {
+          seen.push(value + '!');
+          continue;
+        }
+        seen.push(value);
+      }
+      return <main><p>{seen.join(',')}</p><button onClick={() => n++}>n</button></main>;
+    }`,
+  steps: [{ click: 'button' }],
+  check: show(['a1,b1!,c1', 'a2,b2!,c2']),
+});
+
+behaves('shared: a statement that awaits runs once, when its function reaches it', {
+  source: `
+    async function pack(entries) {
+      let count = 0;
+      const seen = [];
+      await (async () => {
+        for (const entry of entries) {
+          seen.push(entry + count);
+          count++;
+        }
+      })();
+      return { list() { return seen.join(','); }, grow() { count++; } };
+    }
+    let packed = null;
+    pack(['a', 'b']).then((value) => { packed = value; });
+    export function App() {
+      let n = 0;
+      return <main><p>{packed === null ? 'none' : packed.list()}:{n}</p>
+        <button onClick={() => { packed.grow(); n++; }}>grow</button></main>;
+    }`,
+  steps: [{ click: 'button' }],
+  check: show(['a0,b1:0', 'a0,b1:1']),
+});

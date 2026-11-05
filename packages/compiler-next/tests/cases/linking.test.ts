@@ -521,6 +521,61 @@ behaves('linking: captured anonymous functions keep their native default name', 
   check: paragraph(['default:6', 'default:8']),
 });
 
+// Module-level groups of every file are planned as one list (found in css-what, gsap).
+behaves('linking: a module derived value reads one from another file with more of them', {
+  modules: {
+    './values.ts': `
+      let n = 1;
+      let m = 1;
+      export const x = n + 1;
+      export const y = m + 1;
+      export const z = n + m;
+      export function inc() { n++; }
+    `,
+    './use.ts': `
+      import { z } from './values';
+      export const w = z * 2;
+    `,
+  },
+  source: `
+    import { x, y, inc } from './values';
+    import { w } from './use';
+    export function App() {
+      return <main><p>{x}:{y}:{w}</p><button onClick={inc}>inc</button></main>;
+    }
+  `,
+  steps: [{ click: 'button' }],
+  check: paragraph(['2:2:4', '3:2:6']),
+});
+
+behaves('linking: a module derived value depends on its own group, whatever came before it', {
+  modules: {
+    './first.ts': `
+      let a = 1;
+      export const fromFirst = a + 1;
+      export function bump() { a++; }
+    `,
+    './second.ts': `
+      import { fromFirst } from './first';
+      let b = 1;
+      export const own = b * 10;
+      export const mixed = own + fromFirst;
+      export function grow() { b++; }
+    `,
+  },
+  source: `
+    import { bump } from './first';
+    import { mixed, grow } from './second';
+    export function App() {
+      return <main><p>{mixed}</p>
+        <button id="bump" onClick={bump}>bump</button>
+        <button id="grow" onClick={grow}>grow</button></main>;
+    }
+  `,
+  steps: [{ click: '#bump' }, { click: '#grow' }],
+  check: paragraph(['12', '13', '23']),
+});
+
 behaves('linking: opaque namespace mutations observe captured and current objects after replacement', {
   modules: {
     './store.ts': `

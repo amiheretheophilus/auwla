@@ -137,6 +137,48 @@ authored AST, copy package sources into the application build, or rebuild the
 old compiler's mutable linking context. Runtime paths and semantic metadata must
 identify the same package instance; incomplete information retains opaque checks.
 
+## Installed packages by default
+
+The goal (`../decisions.md`, 2026-11-05): an installed package used by frontend code is
+compiled by default, and the user can opt out to run it opaque. The old compiler is
+opt-in (`compilePackages`) and a package it cannot compile is an error. A default cannot
+fail a build that way, so a package that cannot be compiled must fall back to opaque.
+
+Real packages already in `node_modules` were compiled whole, one process each, on
+2026-11-05. This is the current whole-rewrite path, not a design:
+
+| Package | Modules | In | Out | Time |
+| --- | ---: | ---: | ---: | ---: |
+| `mitt` | 1 | 0.3 KB | 1 KB | 37 ms |
+| `pathe` | 2 | 13 KB | 763 KB | 2.2 s |
+| `zod` | 10 | 146 KB | 643 KB | 1.6 s |
+| `hono` | 26 | 70 KB | 284 KB | 0.8 s |
+| `acorn` | 1 | 228 KB | 842 KB | 1.8 s |
+| `animejs` | 50 | 405 KB | 2,192 KB | 7.4 s |
+| `gsap` | 3 | 232 KB | 1,504 KB | 13.4 s |
+| `fast-check` | 2 | 378 KB | 2,312 KB | 7.5 s |
+| `happy-dom` | | | | over 180 s |
+
+The first run also found four crashes and four files that did not parse. All were
+general bugs, now fixed, with cases: `groupsOfModule` and `cannotReplay`. "Valid" here
+means the output parses; running these packages against their native behaviour has not
+been done yet.
+
+What this says about the design:
+
+- **Emit is the cost, not analysis.** On `gsap`, parse, resolve and classify took about
+  0.6 s and emit 14.4 s. On `zod`, about 0.6 s and 2.1 s.
+- **A consumer needs no second path to judge a package call.** `InputQueries.callFacts`
+  follows visible functions across files, and reports what they read and write, with
+  `opaque` when it cannot tell. This argues for analysing package source over the
+  serialized artifact described above. Not decided.
+- **Rewriting every local is what costs.** `aliasBindings` and the factory owners apply to
+  all code, whether or not state ever reaches it. In `mitt`, which has no state, every
+  array call becomes `observeMutation`.
+
+Open question for the user: a package's `const` is rederived while rendering
+(`open-issues.md`).
+
 ## Inputs and outputs
 
 - Input: the caller's source graph and `resolveImport`, using the existing

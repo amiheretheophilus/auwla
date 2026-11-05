@@ -2,7 +2,29 @@
 
 Last updated: 2026-11-05.
 
-## Current: the VM report for `a98c1e88`, and what followed (2026-11-05)
+## Current: Phase 9, installed packages by default (2026-11-05)
+
+The user's goal for this phase: linking correct and fast enough to compile installed
+packages by default, with an opt-out to opaque (`compiler/linking.md`, "Installed packages
+by default"). Compiling real npm packages found four crashes and four files that did not
+parse, all general compiler bugs:
+
+- Module-level groups of every file are planned as one list, and each file filtered it
+  while `upstream` still held indexes into the whole list. That crashed, or silently
+  used the wrong edge in a multi-file program (`groupsOfModule`).
+- A statement with a `continue`, a labelled `break` or an `await`, or a declaration with
+  an `await` or `yield`, was replayed in a synchronous refresh outside its loop or
+  function (`cannotReplay`).
+
+Verified: compiler-next 496 unit, 602 cases and 10 generators at 200 runs; runtime 179,
+data 171. The other package suites and root were not rerun for this fix, since no
+runtime or data code changed. Of 28 packages tried, 26 compile to files that parse.
+`happy-dom` still takes over 180 s, and `pure-rand` was not tried because the probe did
+not find its entry. Whether their output behaves as the native package does is not yet
+checked. Size and compile time are far from acceptable for a default, which is the next
+design question, and one semantic question waits on the user (`open-issues.md`).
+
+## The VM report for `a98c1e88`, and what followed (2026-11-05)
 
 Chrome Headless Shell 149 on an 8-CPU AMD EPYC VM, new compiler against old.
 

@@ -16,8 +16,8 @@ afterEach(() => {
   clearCompiledApps();
 });
 
-async function compile(source: string) {
-  const code = compileModules({ './App.tsx': source }, { runtimePath: '@memoized-dom/runtime/testing' })['./App.tsx']!;
+async function compile(source: string, optimize = true) {
+  const code = compileModules({ './App.tsx': source }, { runtimePath: '@memoized-dom/runtime/testing', optimize })['./App.tsx']!;
   const parsed = parse(code, { lang: 'js', sourceType: 'module' });
   expect(parsed.diagnostics).toEqual([]);
   expect(findAll(parsed.program, 'TryStatement')).toHaveLength(0);
@@ -339,4 +339,52 @@ it('keeps write commits in functions created by a replayed initializer', async (
   click('#mode');
   click('#count');
   expect(root.querySelector('p')!.textContent).toBe('3');
+});
+
+// The reference renderer wraps an initializer in a plain arrow, so it rejects these two
+// programs (`wiki/open-issues.md`). Each once compiled to a file that did not parse.
+const modes = [
+  { mode: 'optimized', optimize: true },
+  { mode: 'general', optimize: false },
+];
+
+it.each(modes)('runs a declaration that awaits once, when its function reaches it ($mode)', async ({ optimize }) => {
+  const { root, click } = await compile(`
+    async function make(load) {
+      let a = 1;
+      const got = await load(a);
+      return { inc() { a++; }, a() { return a; }, got() { return got; } };
+    }
+    let made = null;
+    make(async (value) => value * 10).then((value) => { made = value; });
+    export function App() {
+      let n = 0;
+      return <main><p>{made === null ? 'none' : made.a() + ':' + made.got()}:{n}</p>
+        <button id="inc" onClick={() => { made.inc(); n++; }}>inc</button></main>;
+    }
+  `, optimize);
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  click('#inc');
+  expect(root.querySelector('p')!.textContent).toBe('2:10:1');
+  click('#inc');
+  expect(root.querySelector('p')!.textContent).toBe('3:10:2');
+});
+
+it.each(modes)('runs a declaration that yields once, when its generator reaches it ($mode)', async ({ optimize }) => {
+  const { root } = await compile(`
+    function* counter() {
+      let a = 1;
+      const given = yield a;
+      const read = () => a + given;
+      a++;
+      yield read();
+    }
+    export function App() {
+      const steps = counter();
+      steps.next();
+      const second = steps.next(5).value;
+      return <main><p>{second}</p></main>;
+    }
+  `, optimize);
+  expect(root.querySelector('p')!.textContent).toBe('7');
 });

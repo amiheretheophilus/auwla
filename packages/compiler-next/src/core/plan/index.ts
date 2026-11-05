@@ -19,7 +19,7 @@ import { canPlanConditional, planReturnProgram } from '../../features/conditiona
 import { unwrap } from './jsx';
 import { planLocalState } from '../../features/state/plan';
 import { mergeMutations, planImportedMutations, planMutations, planReadonlyBindings, planWrites } from '../../features/handlers/plan';
-import { planMemos } from '../../features/derived/plan';
+import { groupsOfModule, planMemos } from '../../features/derived/plan';
 import { planSharedReads, sharedSetup } from '../../features/state/shared-plan';
 import { planReceiverTargets } from '../../features/handlers/receivers';
 import { storageOwner } from './storage';
@@ -225,8 +225,7 @@ function planModule(
     const bindings = shared.filter((binding) => storageOwner(binding) === owner);
     // A shared setup must collect its own executed reads instead of adding them
     // to the component or factory computation that happened to invoke it.
-    const computations = (memos.get(owner) ?? []).filter((group) => group.computations[0]!.targets[0]!.binding.module === module)
-      .map((group) => ({ ...group, dynamic: true }));
+    const computations = groupsOfModule(memos.get(owner) ?? [], module);
     const targets = computations.flatMap((group) => group.computations.flatMap((memo) => memo.targets));
     const local = [...new Set([...bindings, ...targets])];
     const ownedRefs = refs.filter((ref) => local.includes(ref.binding));

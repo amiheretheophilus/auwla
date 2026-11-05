@@ -1,7 +1,7 @@
 /** Initializers and body builders, kept separately from later takeover candidates. */
 import { is, walk } from 'yuku-ast';
 import type { Node } from 'yuku-parser';
-import type { Binding, Resolved } from '../../core/resolve';
+import type { Binding, Module, Resolved } from '../../core/resolve';
 import { declaringRunner, isRuntimeBinding, runnerOf } from '../../core/resolve';
 import { lifecycleKind } from '../../core/resolve/ambient';
 import { functionValue } from '../../core/resolve/functions';
@@ -51,7 +51,7 @@ export function collectComputations(
         // A return consumes a value; it is not part of building that value. A
         // statement that returns belongs to the component's selector, whose
         // guards re-run it (`conditionals-and-lists.md`, "Early returns").
-        if (containsReturn(statement)) continue;
+        if (cannotReplay(module, statement)) continue;
         // `items.includes(x)` only reads `items`, so it does not build it.
         if (site.kind === 'call' && callOnlyReads(module, site.node)) continue;
         const certainty = site.kind === 'call' || site.kind === 'argument' ? 'possible' : 'definite';
@@ -67,7 +67,7 @@ export function collectComputations(
         // A child invocation writing a parent's state does not rebuild the parent.
         if (binding.module !== module || declaringRunner(module, binding) !== owner) continue;
         const statement = bodyStatement(module, call, builderOwner(binding));
-        if (statement === null || containsReturn(statement)) continue;
+        if (statement === null || cannotReplay(module, statement)) continue;
         if (ownedBy(binding, statement)) continue;
         const certainty = site.kind === 'call' || site.kind === 'argument' ? 'possible' : 'definite';
         addBuilder(binding, statement, certainty, siteWaits(site));
@@ -86,7 +86,7 @@ export function collectComputations(
           const binding = site.binding;
           if (binding.module !== module || declaringRunner(module, binding) !== owner) continue;
           const statement = bodyStatement(module, call, builderOwner(binding));
-          if (statement === null || containsReturn(statement)) continue;
+          if (statement === null || cannotReplay(module, statement)) continue;
           if (!ownedBy(binding, statement)) addBuilder(binding, statement, 'possible', true, 'runtime');
         }
       }
@@ -183,25 +183,58 @@ export function nestedVarStatement(binding: Binding): Node | null {
   const declaration = declarator === null ? null : binding.module.parentOf(declarator);
   if (!is.VariableDeclaration(declaration) || declaration.kind !== 'var') return null;
   const statement = bodyStatement(binding.module, declaration, builderOwner(binding));
-  if (statement === null || statement === declaration || containsReturn(statement)) return null;
+  if (statement === null || statement === declaration || cannotReplay(binding.module, statement)) return null;
   // `export var x` is still at the top of its module.
   if (is.ExportNamedDeclaration(statement) && statement.declaration === declaration) return null;
   return statement;
 }
 
-function containsReturn(root: Node): boolean {
+/**
+ * Whether `root` can only run where it was written, so it cannot be run again by
+ * itself in a later update. It returns from its function, suspends it (a refresh is
+ * synchronous), or jumps to a loop or label outside itself. These belong to the
+ * function they are in, and mean nothing anywhere else.
+ */
+export function cannotReplay(module: Module, root: Node): boolean {
   let found = false;
   walk(root, {
     enter(node, context) {
       if (is.Function(node)) {
         context.skip();
-      } else if (is.ReturnStatement(node)) {
+        return;
+      }
+
+      const leaves = is.ReturnStatement(node) || is.AwaitExpression(node) || is.YieldExpression(node)
+        || ((is.BreakStatement(node) || is.ContinueStatement(node)) && jumpsOutOf(module, node, root));
+      if (leaves) {
         found = true;
         context.stop();
       }
     },
   });
   return found;
+}
+
+/** Whether a `break` or `continue` lands outside `root`, rather than on a loop inside it. */
+function jumpsOutOf(
+  module: Module,
+  jump: Extract<Node, { type: 'BreakStatement' | 'ContinueStatement' }>,
+  root: Node,
+): boolean {
+  for (const ancestor of module.ancestors(jump)) {
+    if (jump.label !== null) {
+      if (is.LabeledStatement(ancestor) && ancestor.label.name === jump.label.name) return false;
+    } else if (isLoop(ancestor) || (is.BreakStatement(jump) && is.SwitchStatement(ancestor))) {
+      return false;
+    }
+    if (ancestor === root) return true;
+  }
+  return true;
+}
+
+function isLoop(node: Node): boolean {
+  return is.ForStatement(node) || is.ForInStatement(node) || is.ForOfStatement(node)
+    || is.WhileStatement(node) || is.DoWhileStatement(node);
 }
 
 function declaresInside(binding: Binding, node: Node): boolean {

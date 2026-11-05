@@ -25,6 +25,19 @@ Compiler bugs and cases live on their `compiler/` page, under "Cases to test".
   `const early = () => { try { n = 5; } catch {} }; early(); let n = 1;` it reads `n` for
   the call's inputs outside the authored `try`, so the error leaves the render. Both
   compiler modes behave as JavaScript does (`optimize/methods.dom.test.ts`).
+- **The reference renderer rejects a declaration that suspends in a factory.** For
+  `const got = await load(a)` or `const given = yield a` in a captured function, it
+  wraps the initializer in a plain arrow, which does not parse. Both compiler modes run
+  it once where it was written (`features/derived/dom.test.ts`).
+
+## To discuss with the user first (2026-11-05)
+
+- **Should an installed package keep plain JavaScript meaning?** For
+  `let x = 1; const snap = x; return { inc() { x++; }, x: () => x, snap: () => snap };`
+  all three renderers show `2:2` after `inc()`, and JavaScript gives `2:1`. Outside a
+  render the same `snap()` returns 1. This is the uniform rule, which the user's own
+  components opt into by being written for the framework. A library author did not, so
+  compiling packages by default would change what they do.
 
 ## To discuss with the user first (2026-11-04)
 

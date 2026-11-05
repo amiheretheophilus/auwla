@@ -3,9 +3,10 @@ import { is } from 'yuku-ast';
 import type { Node, Statement, VariableDeclaration, VariableDeclarator } from 'yuku-parser';
 import type { BindingNode, SemanticGraph } from '../../core/graph';
 import { variableDeclaration, type InputQueries } from '../../core/graph/inputs';
+import type { Module } from '../../core/resolve';
 import type { FieldPlan, MemoGroupPlan, MemoPlan } from '../../core/plan/model';
 import { storageOwner } from '../../core/plan/storage';
-import { nestedVarStatement } from './computations';
+import { cannotReplay, nestedVarStatement } from './computations';
 import { literalFields } from './literal-fields';
 import { effectFree } from '../../optimize/effects';
 
@@ -46,6 +47,10 @@ export function planMemos(
     }
     const first = targets[0]!;
     const module = first.binding.module;
+    // `const value = await load()` runs once, when its function reaches it.
+    if (cannotReplay(module, declarator)) {
+      continue;
+    }
     const builders = new Set<Statement | VariableDeclarator>();
     const builderTargets = new Map<Node, Set<BindingNode>>();
     const possibleBuilders = new Map<Node, Set<BindingNode>>();
@@ -148,6 +153,26 @@ export function planMemos(
     owners.set(owner, list);
   }
   return new Map([...owners].map(([owner, memos]) => [owner, groupMemos(memos, queries)]));
+}
+
+/**
+ * The groups one module emits, always dynamic since they refresh through readers.
+ *
+ * Module-level groups of every file are planned as one list, and `upstream` holds
+ * indexes into that list, so they are recounted here. A group in another file is
+ * dropped from `upstream`: this module has no flag for it, and sees its changes
+ * through the version its reader records.
+ */
+export function groupsOfModule(groups: readonly MemoGroupPlan[], module: Module): readonly MemoGroupPlan[] {
+  const own = groups.filter((group) => group.computations[0]!.targets[0]!.binding.module === module);
+  return own.map((group) => ({
+    ...group,
+    dynamic: true,
+    upstream: group.upstream.flatMap((edge) => {
+      const index = own.indexOf(groups[edge.group]!);
+      return index < 0 ? [] : [{ ...edge, group: index }];
+    }),
+  }));
 }
 
 interface Group {
