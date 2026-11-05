@@ -29,8 +29,8 @@ const compileFixture = compilerPath === null
   ? (await import('@memoized-dom/compiler')).compileModulesDetailed
   : await (async () => {
     const { compileModules } = await import(new URL(`file:///${compilerPath.replaceAll('\\', '/')}`).href);
-    return (sources: Record<string, string>) => ({
-      output: compileModules(sources) as Record<string, string>,
+    return (sources: Record<string, string>, options: { dataDelivery: 'universal' | 'client' }) => ({
+      output: compileModules(sources, options) as Record<string, string>,
       hydrationCapabilities: { list: false, markup: false },
     });
   })();

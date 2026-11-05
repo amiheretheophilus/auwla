@@ -21,6 +21,7 @@ All compiler paths below are under `packages/compiler-next/src/`.
 | `features/sources/flow-plan.ts` | Readiness along authored control flow: payload reads, guarded sites, lazy branches, patterns, `Group`/`suspend` elements, body builders and callback statements |
 | `features/sources/flow-dom.ts` | Emits that flow on fresh syntax: readiness inputs that keep the handle, builder steps, branch choices and lexical presentation |
 | `features/sources/reach.ts`, `reach.test.ts` | Which values can hold a handle or a pending marker, over the whole graph; readiness is emitted only for those ("Where readiness is emitted") |
+| `features/sources/delivery.ts`, `delivery.test.ts` | The smaller `$fetch` for a module whose calls load with no body ("Delivery" below) |
 | `features/sources/actions.ts`, `actions.test.ts` | The non-GET contract: a `$fetch` action (or a facade around one) reached from setup or module scope is a compile error; callbacks are not calls |
 | `core/graph/model.ts`, `index.ts`, `rules.ts` | Readiness edges, separate from ordinary reactive dependencies |
 
@@ -335,6 +336,31 @@ request cancellation through `$track` is still separate, unfinished work.
 
 - In: `Resolved`, linked module summaries (`linking.md`).
 - Out: `Source` nodes and their `pending` sets; `Boundary` regions in the plan.
+
+## Delivery
+
+The public `$fetch` carries what any call might need: body encoding, a promise for an
+action, and restoring server data. `features/sources/delivery.ts` gives a module the
+smaller function when every use of its `$fetch` import is a direct call that loads with
+no body. The check is per module: one call needing more keeps the public function for
+that module.
+
+| Build | Import becomes | Leaves out |
+| --- | --- | --- |
+| `dataDelivery: 'universal'` (default) | `createBodylessSource` | Body encoding |
+| `dataDelivery: 'client'` | `createClientSource` | Body encoding and restoring server data, about 9 kB |
+
+Only a proven GET counts. The old compiler also accepts `HEAD`, but the public `$fetch`
+returns a promise for anything that is not a GET, so that would change what the call
+returns. Options the compiler cannot read, spread arguments, passing `$fetch` along,
+copying it and re-exporting it all keep the public function.
+
+Vite already passes `dataDelivery` (`packages/vite/src/graph/collector.ts`): `client`
+unless the app has a server entry. Phase 10 must force `universal` for a server build,
+as the old compiler does for `routedEnvironment: 'server'`.
+
+`DATA_DELIVERY=client` runs the cases and generators as a client-only build. Whether a
+call qualifies is tested in `features/sources/delivery.test.ts`.
 
 ## Where to add things
 

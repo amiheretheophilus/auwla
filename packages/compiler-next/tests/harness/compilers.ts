@@ -78,13 +78,16 @@ const oldCompiler: Compiler = {
   },
 };
 
+/** `DATA_DELIVERY=client` runs the cases as a client-only build compiles them. */
+const delivery = process.env.DATA_DELIVERY === 'client' ? { dataDelivery: 'client' as const } : {};
+
 const nextCompiler: Compiler = {
   ...oldCompiler,
   name: 'packages/compiler-next',
   output: 'next',
 
   compile(source, modules) {
-    return compileModulesNext({ ...modules, './App.tsx': source }, { runtimePath: '@memoized-dom/runtime/testing' });
+    return compileModulesNext({ ...modules, './App.tsx': source }, { runtimePath: '@memoized-dom/runtime/testing', ...delivery });
   },
 };
 
@@ -97,6 +100,7 @@ const generalCompiler: Compiler = {
     return compileModulesNext({ ...modules, './App.tsx': source }, {
       runtimePath: '@memoized-dom/runtime/testing',
       optimize: false,
+      ...delivery,
     });
   },
 };

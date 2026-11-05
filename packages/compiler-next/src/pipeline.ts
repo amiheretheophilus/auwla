@@ -21,6 +21,7 @@ import { optimizeModules } from './optimize';
 import { linkModuleNamespaces, type EmittedModule } from './link/modules';
 import { planCapturedValues } from './link/captured-plan';
 import { emitCapturedValues } from './link/captured-dom';
+import { lowerFetchImport } from './features/sources/delivery';
 
 /** Compiles a set of modules that may import each other. Returns JavaScript by path. */
 export function compileModules(
@@ -50,6 +51,7 @@ export function compileModules(
   const linked = linkModuleNamespaces(plans, emitted, options);
   const output: Record<string, string> = {};
   for (const [path, emitted] of linked) {
+    lowerFetchImport(emitted.tree, emitted.module.module, options);
     output[path] = printJavaScript(emitted.tree, emitted.module.path, emitted.module.module.source);
   }
 

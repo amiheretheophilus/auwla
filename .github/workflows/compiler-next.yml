@@ -81,6 +81,9 @@ jobs:
         working-directory: packages/compiler-next
       - run: bun scripts/phase-gate.ts cases.log
         working-directory: packages/compiler-next
+      # The same source cases as a client-only build compiles them.
+      - run: DATA_DELIVERY=client COMPILER=next bun test tests/cases/sources.test.ts
+        working-directory: packages/compiler-next
       - if: always()
         uses: actions/upload-artifact@v5
         with:

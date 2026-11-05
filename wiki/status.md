@@ -53,14 +53,13 @@ holds in both. VM runs are still needed.
 Ahead in both runs: remove, pop, remove 100, reverse, prepend, append. Behind in both:
 replace (about 1.3 to 1.4x). The rest moves with the noise.
 
-Bundles, minified, against the old compiler: Octane 38,525 (35,340), FlowOS 138,567
-(114,310), `closed-nested-structures` 32,344 (28,461; 33,932 at `685e262c`). Data apps
-are the largest gap: `request-data` 60,828 against 38,781. compiler-next has no client
-delivery (Phase 10) and imports the whole `$fetch`. Swapping it for `createClientSource`,
-as the old compiler does, measures about 9 kB less on each (`request-data` 51,879,
-`request-list` 54,151 against the old 54,443). That is a bundle measurement only: its
-behaviour is untested. `request-group` and `request-routed-group` are about 800 B above
-`685e262c`, because `a2ae5c2c` moved code they already needed; the other apps shrank.
+Bundles, minified, against the old compiler: Octane 38,525 (35,340), FlowOS 137,051
+(114,310), `closed-nested-structures` 32,344 (28,461; 33,932 at `685e262c`). No app is
+above its `685e262c` size any more, and 4 of 50 are below the old compiler. Client-only
+data delivery took about 9 kB off each data app that qualifies (`compiler/sources.md`,
+"Delivery"): `request-data` 60,828 → 51,879 (old 38,781), `request-group` 62,900 → 53,947
+(old 38,964), `request-list` 63,109 → 54,151 (old 54,443). Data apps remain the largest
+gap. `promise-data` and `request-opaque` did not change.
 
 Later on 2026-11-05, running the root suite for the first time since it stopped building
 found these, now fixed: edits to a `WeakMap` or `WeakSet` never showed (`compiler/handlers.md`);
@@ -68,8 +67,9 @@ re-running a computation group re-created its other members and lost their edits
 (`compiler/state-and-derived.md`); chained requests crashed at mount on the old compiler
 (`decisions.md`). A plain object literal now updates field by field, at the user's request.
 
-Verified at `0e836a95` and after: 454 unit, 168 runtime, 171 data and 531 case tests, and
-all 10 generators at 200 programs on fresh seeds. Server 242, utils 24, router 127,
+Verified at `0e836a95` and after: 454 unit (477 with delivery), 168 runtime, 171 data and
+531 case tests, and all 10 generators at 200 programs on fresh seeds, with all cases and
+generators passing again as a client-only build (`DATA_DELIVERY=client`). Server 242, utils 24, router 127,
 adapters 6, language service 11 and devtools 18 all pass. Root, with `bun test --parallel=2
 ./tests`, is 2,966 passing and 2 failing: R23 (`open-issues.md`), and a Chromium test,
 since Chrome is not installed here. The vite suite was not completed: its CLI tests need

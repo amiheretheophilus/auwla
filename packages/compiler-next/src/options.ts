@@ -12,6 +12,11 @@ export interface CompileModulesOptions {
   /** The runtime module the emitted code imports. Default `@memoized-dom/runtime`. */
   readonly runtimePath?: string;
   /**
+   * `client`: this build never receives data from a server, so it can leave out
+   * restoring it. Default `universal`. Vite passes this (`packages/vite/src/graph/collector.ts`).
+   */
+  readonly dataDelivery?: 'universal' | 'client';
+  /**
    * Maps an import specifier to the path of one of the compiled modules, when the
    * default rule (relative paths, probing extensions and index files) does not.
    * Return `undefined` to use the default.

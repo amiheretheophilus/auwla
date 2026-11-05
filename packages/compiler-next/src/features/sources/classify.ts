@@ -413,7 +413,7 @@ function isTransparentWrapper(node: Node): boolean {
     || is.TSSatisfiesExpression(node);
 }
 
-function staticPropertyName(key: Node, computed: boolean): string | null {
+export function staticPropertyName(key: Node, computed: boolean): string | null {
   if (!computed && is.Identifier(key)) {
     return key.name;
   }
