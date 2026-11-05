@@ -249,6 +249,22 @@ The snapshot costs the size of the data the reads reach: about 70 ms per call on
 knows takes no snapshot: a read is a plain call and an edit goes through `editArray`
 (`optimize.md`, "Method calls"). Only an unknown call pays for one.
 
+Three more calls take none, because observing them could never find a change:
+
+- a call whose receiver is a ref that can only hold a node (`el?.focus()`): the name is
+  declared empty, never written, and only given as `ref={el}` on host elements. A snapshot
+  does not look inside a ref's node anyway. A component's `ref` is an ordinary prop, so it
+  does not count;
+- a method called directly on a `$track` handle with no arguments (`tracked.refresh()`):
+  it is the data package's, and what it changes shows through the handle's tracked reads.
+  `tracked.data.touch()` reaches the payload and is observed;
+- a step of a derived value that can edit nothing and writes none of the values it was
+  suspected of building (`visible = notes.filter((n) => n.title.includes(q))` for `q`). Only
+  the observation goes: the plan keeps the step, so what waits for it still waits, and the
+  flags that would have recorded a change stay false (`MemoGroupPlan.idleBuilders`).
+
+A program with no other unknown call then leaves the snapshot code out of its bundle.
+
 Shared mutation notifications carry the exact written binding key. Hidden-read
 collectors exclude that computation's own outputs, while other shared inputs
 remain subscribed (`state-and-derived.md`). Call wrappers composed at module and

@@ -3,6 +3,7 @@ import type { Module } from 'yuku-analyzer';
 import { is, walk } from 'yuku-ast';
 import type { Node } from 'yuku-parser';
 import { importedDefinition } from '../core/resolve';
+import { frameworkPackage, importedName } from '../core/resolve/exports';
 import { methodFact, redefinedNames } from './method-facts';
 
 /** Host functions that only compute from their arguments. */
@@ -31,6 +32,8 @@ export interface EffectOptions {
    * edit an object?", not "does this change nothing?".
    */
   readonly nameWrites?: boolean;
+  /** Also accept calls of host functions that edit nothing they are given (`callEditsNoArgument`). */
+  readonly hostCalls?: boolean;
 }
 
 /** Whether `id` names a host global: nothing in the program declares it. */
@@ -47,6 +50,21 @@ const NON_EDITING_GLOBALS = new Set([
 /** The compiler's own intrinsics that read a value without editing it. */
 const READING_INTRINSICS = new Set(['$track']);
 
+/** `$track(source)`, as a global or imported from the framework under any local name. */
+export function isReadingIntrinsic(module: Module, callee: Extract<Node, { type: 'Identifier' }>): boolean {
+  const binding = module.referenceOf(callee)?.binding ?? null;
+  if (binding === null) return READING_INTRINSICS.has(callee.name);
+  return frameworkPackage(binding) !== null && READING_INTRINSICS.has(importedName(binding) ?? '');
+}
+
+/**
+ * A callback passed to a timer runs later, on its own, and reports its own writes.
+ * Only `structuredClone` and the like could call one during the call, and none do.
+ */
+export function runsDuringCall(call: Extract<Node, { type: 'CallExpression' }>): boolean {
+  return !(is.Identifier(call.callee) && /^(setTimeout|setInterval|queueMicrotask|requestAnimationFrame)$/.test(call.callee.name));
+}
+
 /**
  * `clearInterval(timer)`, `console.log(row)`, `JSON.stringify(rows)`: the callee is a
  * host or framework function, so the value it receives cannot change through this call.
@@ -55,7 +73,7 @@ export function callEditsNoArgument(module: Module, call: Extract<Node, { type: 
   const callee = call.callee;
 
   if (is.Identifier(callee)) {
-    if (READING_INTRINSICS.has(callee.name) && module.referenceOf(callee)?.binding == null) return true;
+    if (isReadingIntrinsic(module, callee)) return true;
     if (!isGlobal(module, callee)) return false;
     return PURE_GLOBALS.has(callee.name) || NON_EDITING_GLOBALS.has(callee.name);
   }
@@ -168,6 +186,9 @@ export function callOnlyStoresNames(module: Module, call: Extract<Node, { type: 
 function callIsPure(module: Module, call: Extract<Node, { type: 'CallExpression' }>, options: EffectOptions): boolean {
   if (is.Identifier(call.callee) && isGlobal(module, call.callee) && PURE_GLOBALS.has(call.callee.name)) return true;
   if (methodCallIsPure(module, call, options)) return true;
+  if (options.hostCalls === true && callEditsNoArgument(module, call)) {
+    return call.arguments.every((argument) => !is.Function(argument) || !runsDuringCall(call) || effectFree(module, argument, options));
+  }
   return options.ownFunctions === true && ownFunctionIsPure(module, call, options);
 }
 

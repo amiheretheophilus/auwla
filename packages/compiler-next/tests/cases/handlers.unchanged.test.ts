@@ -237,6 +237,85 @@ behaves('a callback writing a name: an effect reading the list does not re-run f
   },
 });
 
+/**
+ * A step of a derived value is only watched if it can build what it was suspected of
+ * (`optimize/methods.ts`). Each case shows `p` before and after the click.
+ */
+function step(name: string, setup: string, write: string, shown: string, expected: [string, string]): void {
+  behaves(`a step of a derived value: ${name}`, {
+    source: `
+      export function App() {
+        let search = 'A';
+        let notes = [{ title: 'a' }, { title: 'b' }];
+        ${setup}
+        return <main><button onClick={() => { ${write} }}>go</button><p>{${shown}}</p></main>;
+      }`,
+    steps: [{ click: 'button' }],
+    check(container, observation) {
+      expect(container.querySelector('p')?.textContent).toBe(expected[observation]);
+    },
+  });
+}
+
+step('a filter that reads what it was given follows its inputs',
+  'const q = search.toLowerCase(); const shown = notes.filter((note) => note.title.includes(q));',
+  "search = 'B';", 'shown.map((note) => note.title).join("")', ['a', 'b']);
+step('the value it was given follows its input',
+  'const q = search.toLowerCase(); const shown = notes.filter((note) => note.title.includes(q));',
+  "search = 'B';", 'q', ['a', 'b']);
+step('a value it was given keeps a later edit',
+  'let q = search.toLowerCase(); const shown = notes.filter((note) => note.title.includes(q));',
+  "q = 'b';", 'shown.length + q', ['1a', '1b']);
+step('a conversion that edits what it converts',
+  'const box = { n: 0, valueOf() { this.n++; return 1; } }; const shown = notes.slice(box);',
+  "search = 'B';", 'box.n + ":" + shown.length', ['1:1', '1:1']);
+step('a callback that writes a name during the call',
+  'let total = 0; Array.from(notes, (note) => { total += 1; return note; });',
+  "notes = [{ title: 'c' }];", 'total', ['2', '1']);
+step('a callback that edits an object during the call',
+  'const box = { n: 0 }; JSON.stringify(notes, (key, value) => { box.n++; return value; });',
+  "search = 'B';", 'box.n > 0 ? "edited" : "not"', ['edited', 'edited']);
+step('a timer that writes later',
+  'let later = 0; queueMicrotask(() => { later = 5; });',
+  "search = 'B';", 'later + search', ['5A', '5B']);
+step('an effect-free call between two values',
+  'let q = notes.length; console.log(q); const shown = q + 1;',
+  "notes = [];", 'q + ":" + shown', ['2:3', '0:1']);
+
+// A ref that can only hold a node is not observed, and a call on it still works.
+behaves('a call on a node ref runs its own listeners, and their writes show', {
+  source: `
+    export function App() {
+      let target;
+      let clicks = 0;
+      return <main>
+        <button id="target" ref={target} onClick={() => { clicks++; }}>target</button>
+        <button id="go" onClick={() => { target?.click(); }}>go</button>
+        <p>{clicks}</p>
+      </main>;
+    }`,
+  steps: [{ click: '#go' }, { click: '#go' }],
+  check(container, observation) {
+    expect(container.querySelector('p')?.textContent).toBe(String(observation));
+  },
+});
+
+behaves('a call on a ref that also holds an object still shows its edit', {
+  source: `
+    export function App() {
+      let box = { n: 1, bump() { this.n++; } };
+      return <main>
+        <i ref={(node) => {}} />
+        <button onClick={() => { box.bump(); }}>go</button>
+        <p>{box.n}</p>
+      </main>;
+    }`,
+  steps: [{ click: 'button' }],
+  check(container, observation) {
+    expect(container.querySelector('p')?.textContent).toBe(['1', '2'][observation]);
+  },
+});
+
 behaves('an edit through a call updates: a field', {
   source: `
     export function App() {

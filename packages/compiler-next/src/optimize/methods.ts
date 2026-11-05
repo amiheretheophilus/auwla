@@ -14,10 +14,11 @@
 import type { Module } from 'yuku-analyzer';
 import { is } from 'yuku-ast';
 import type { Node } from 'yuku-parser';
-import type { ComponentPlan, ModulePlan, MutationPlan, SharedOwnerPlan } from '../core/plan/model';
-import type { SemanticGraph } from '../core/graph';
+import { intrinsicTag, unwrap } from '../core/plan/jsx';
+import type { ComponentPlan, MemoGroupPlan, ModulePlan, MutationPlan, SharedOwnerPlan } from '../core/plan/model';
+import type { BindingNode, SemanticGraph } from '../core/graph';
 import type { Optimization } from '.';
-import { callEditsNoArgument, callOnlyStoresNames, effectFree } from './effects';
+import { callEditsNoArgument, callOnlyStoresNames, effectFree, isReadingIntrinsic, runsDuringCall } from './effects';
 import { methodFact, redefinedNames, type MethodFact } from './method-facts';
 import { rowReuse } from './row-reuse';
 
@@ -40,12 +41,55 @@ function shortCircuits(node: Node): boolean {
   return false;
 }
 
+/** `let el;`, never written: the name starts out holding nothing. */
+function declaredEmpty(module: Module, name: Node): boolean {
+  const declarator = module.parentOf(name);
+  if (!is.VariableDeclarator(declarator) || declarator.id !== name) return false;
+  const init = declarator.init;
+  return init === null || (is.Literal(init) && init.value === null) || (is.Identifier(init) && init.name === 'undefined');
+}
+
 /**
- * A callback passed to a timer runs later, on its own, and reports its own writes.
- * Only `structuredClone` and the like could call one during the call, and none do.
+ * Whether a binding can only ever hold a DOM node or nothing: declared empty, never
+ * written, and only ever given as `ref={name}` on a host element. A component's `ref` is
+ * an ordinary prop, which could store anything there. Observing such a binding finds
+ * nothing, because a mutation snapshot does not look inside a ref's node.
  */
-function runsDuringCall(call: Call): boolean {
-  return !(is.Identifier(call.callee) && /^(setTimeout|setInterval|queueMicrotask|requestAnimationFrame)$/.test(call.callee.name));
+function holdsOnlyNodes(module: Module, node: BindingNode): boolean {
+  const { binding } = node;
+  const name = binding.declarations[0];
+  if (node.kind !== 'Ref' || name === undefined || binding.declarations.length !== 1 || !declaredEmpty(module, name)) return false;
+  if (binding.references.some((reference) => reference.isWrite)) return false;
+
+  return module.findAll('JSXAttribute').every((attribute) => {
+    if (!is.JSXIdentifier(attribute.name) || attribute.name.name !== 'ref' || !is.JSXExpressionContainer(attribute.value)) return true;
+    const value = attribute.value.expression;
+    const mentions = binding.references.some((reference) => reference.node.start >= value.start && reference.node.end <= value.end);
+    if (!mentions) return true;
+    const element = module.parentOf(module.parentOf(attribute) as Node);
+    return is.Identifier(unwrap(value)) && element !== null && is.JSXElement(element) && intrinsicTag(element) !== null;
+  });
+}
+
+/**
+ * `tracked.refresh()`, with `const tracked = $track(source)` never written: the method is the
+ * data package's, and what it changes reaches the page through the handle's tracked reads.
+ * Only a method of the handle itself: `tracked.data.push(1)` edits the payload.
+ */
+function callsTrackedHandle(module: Module, call: Call): boolean {
+  const callee = unwrap(call.callee);
+  if (!is.MemberExpression(callee) || !is.Identifier(callee.object)) return false;
+
+  const binding = module.referenceOf(callee.object)?.binding ?? null;
+  const name = binding?.declarations[0];
+  if (binding === null || name === undefined || binding.references.some((reference) => reference.isWrite)) return false;
+
+  const declarator = module.parentOf(name);
+  if (!is.VariableDeclarator(declarator) || declarator.id !== name || declarator.init === null) return false;
+
+  const init = unwrap(declarator.init);
+  return is.CallExpression(init) && is.Identifier(init.callee) && isReadingIntrinsic(module, init.callee)
+    && call.arguments.length === 0;
 }
 
 /** Rooted in a host global or an import: an object this module knows nothing about. */
@@ -87,6 +131,13 @@ function lowerCall(
   }
 
   if (callOnlyStoresNames(general.module.module, call)) return { ...plan, method: { kind: 'read' } };
+
+  // `el?.focus()`: a call on a node can only change the page, which observing never saw.
+  if (plan.targets.length > 0 && plan.targets.every((target) => holdsOnlyNodes(general.module.module, target.binding))) {
+    return { ...plan, method: { kind: 'read' } };
+  }
+
+  if (callsTrackedHandle(general.module.module, call)) return { ...plan, method: { kind: 'read' } };
 
   const callee = namedCallee(call);
   if (callee === null) return plan;
@@ -138,12 +189,58 @@ function lowered(plans: readonly MutationPlan[], general: ModulePlan, graph: Sem
   return changed ? next : plans;
 }
 
+/**
+ * Whether this write runs after the step, in a callback a timer was given. It builds
+ * nothing, since the step has finished by then, and it reports itself.
+ */
+function runsAfterStep(module: Module, write: Node, step: Node): boolean {
+  for (const ancestor of module.ancestors(write)) {
+    if (ancestor === step) return false;
+    if (!is.Function(ancestor)) continue;
+    const parent = module.parentOf(ancestor);
+    if (parent !== null && is.CallExpression(parent) && !runsDuringCall(parent)) return true;
+  }
+  return false;
+}
+
+/**
+ * A step that can edit nothing, and writes none of the values it was suspected of
+ * building while it runs. `visible = notes.filter((n) => n.title.includes(q))` cannot
+ * change `q`, and `setInterval(tick)` runs nothing yet. `rows.forEach((row) => { total +=
+ * row.n; })` does build `total`.
+ */
+function buildsNothing(module: Module, step: Node, suspected: readonly BindingNode[]): boolean {
+  if (!effectFree(module, step, { nameWrites: true, hostCalls: true })) return false;
+
+  return suspected.every(({ binding }) => binding.references.every((reference) => {
+    const inStep = reference.node.start >= step.start && reference.node.end <= step.end;
+    return !reference.isWrite || !inStep || runsAfterStep(module, reference.node, step);
+  }));
+}
+
+/**
+ * Observing a step that builds nothing could never find a change. The plan stays as it
+ * is, so what waits for the step still waits (`wiki/decisions.md`, 2026-11-05) and a value
+ * it was suspected of building stays undecided for good, as it would have anyway.
+ */
+function withoutIdleObservation(groups: readonly MemoGroupPlan[], module: Module): readonly MemoGroupPlan[] {
+  let changed = false;
+  const next = groups.map((group) => {
+    const idle = [...group.possibleOutputs].filter(([step, suspected]) => buildsNothing(module, step, suspected));
+    if (idle.length === 0) return group;
+    changed = true;
+    return { ...group, idleBuilders: new Set(idle.map(([step]) => step)) };
+  });
+  return changed ? next : groups;
+}
+
 function loweredOwner<T extends ComponentPlan | SharedOwnerPlan>(owner: T, general: ModulePlan, graph: SemanticGraph): T {
   const mutations = lowered(owner.mutations, general, graph);
   const replayMutations = lowered(owner.replayMutations, general, graph);
-  return mutations === owner.mutations && replayMutations === owner.replayMutations
+  const memos = withoutIdleObservation(owner.memos, general.module.module);
+  return mutations === owner.mutations && replayMutations === owner.replayMutations && memos === owner.memos
     ? owner
-    : { ...owner, mutations, replayMutations };
+    : { ...owner, mutations, replayMutations, memos };
 }
 
 export const methodCalls: Optimization = {

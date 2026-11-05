@@ -226,6 +226,81 @@ it('observes no direct call of a function that only writes plain names', () => {
   expect(program('let pick = (n) => { total = n; }; pick = window.other;', 'pick(rows[0]);')).toContain('observeMutation');
 });
 
+it('observes a call on a ref unless the ref can only hold a node', () => {
+  const observed = (setup: string, attribute: string, tag = 'input') => compile(`
+    ${tag === 'Comp' ? 'function Comp(props) { props.ref({ focus() {} }); return <i />; }' : ''}
+    export function App() {
+      ${setup}
+      return <main><${tag} ${attribute} /><button onClick={() => { el?.focus(); }}>go</button></main>;
+    }
+  `, true).includes('observeMutation(');
+
+  expect(observed('let el;', 'ref={el}')).toBe(false);
+  expect(observed('let el = null;', 'ref={el}')).toBe(false);
+  expect(observed('let el = undefined;', 'ref={el}')).toBe(false);
+
+  // These can hold something other than a node.
+  expect(observed('let el = { focus() {} };', 'ref={el}')).toBe(true);
+  expect(observed('let el; el = { focus() {} };', 'ref={el}')).toBe(true);
+  expect(observed('let el; const set = () => { el = { focus() {} }; };', 'ref={el}')).toBe(true);
+  expect(observed('let el; let other;', 'ref={[el, other]}')).toBe(true);
+  expect(observed('let el;', 'ref={el}', 'Comp')).toBe(true);
+});
+
+it('observes nothing for a method of a tracked handle, but does for its payload', () => {
+  const observed = (imported: string, tracked: string, call: string) => compile(`
+    ${imported}
+    export function App() {
+      const items = $fetch('/items');
+      const handle = ${tracked};
+      return <main><button onClick={() => { ${call} }}>go</button><p>{handle.refreshing ? 'y' : 'n'}</p></main>;
+    }
+  `, true).includes('observeMutation(');
+
+  const data = "import { $fetch, $track } from '@memoized-dom/data';";
+  expect(observed(data, '$track(items)', 'handle.refresh();')).toBe(false);
+  expect(observed("import { $fetch, $track as watch } from '@memoized-dom/data';", 'watch(items)', 'handle.refresh();')).toBe(false);
+
+  // A known edit of the payload reports itself; an unknown method of it is observed.
+  expect(compile(`
+    ${data}
+    export function App() {
+      const items = $fetch('/items');
+      const handle = $track(items);
+      return <main><button onClick={() => { handle.data.push(1); }}>go</button><p>{handle.refreshing ? 'y' : 'n'}</p></main>;
+    }
+  `, true)).toContain('editArray(');
+  expect(observed(data, '$track(items)', 'handle.data.touch();')).toBe(true);
+  expect(observed(data, '$track(items)', 'handle.refresh(items);')).toBe(true);
+  // A function of the program with that name is not the framework's.
+  expect(observed("import { $fetch } from '@memoized-dom/data'; function $track(value) { return { refresh() { value.n = 1; }, refreshing: false }; }", '$track(items)', 'handle.refresh();')).toBe(true);
+});
+
+it('does not watch a step of a derived value that can edit nothing', () => {
+  const observed = (body: string) => compile(`
+    export function App() {
+      let search = 'A';
+      let rows = [{ n: 1, title: 'a' }];
+      ${body}
+      return <main><button onClick={() => { search = 'B'; rows = []; }}>go</button><p>{String(q)}</p></main>;
+    }
+  `, true).includes('observeMutation(');
+
+  // Reading what it was suspected of building.
+  expect(observed("const q = search.toLowerCase(); const shown = rows.filter((row) => row.title.includes(q));")).toBe(false);
+  // A timer's callback runs after the step.
+  expect(observed('let q = 0; const timer = setInterval(() => { q++; }, 1000);')).toBe(false);
+  expect(observed('let q = rows.length; console.log(q);')).toBe(false);
+
+  // These really can build it.
+  expect(observed('let q = 0; rows.forEach((row) => { q += row.n; });')).toBe(true);
+  expect(observed('let q = 0; Array.from(rows, (row) => { q += row.n; });')).toBe(true);
+  expect(observed('let q = { n: 0 }; rows.forEach((row) => { q.n += row.n; });')).toBe(true);
+  expect(observed('let q = { n: 0 }; JSON.stringify(rows, (key, value) => { q.n++; return value; });')).toBe(true);
+  expect(observed('let q = { n: 0 }; const touch = (value) => { value.n = 1; }; touch(q);')).toBe(true);
+  expect(observed('let q = { n: 0 }; unknownGlobal(q);')).toBe(true);
+});
+
 it('observes a call whose callback edits an object, or whose callback it cannot see', () => {
   expect(handlerCalling('rows.forEach((row) => { total += 1; row.n = 2; });')).toContain('observeMutation');
   expect(handlerCalling('rows.forEach((row) => { last = row; last.n = 2; });')).toContain('observeMutation');

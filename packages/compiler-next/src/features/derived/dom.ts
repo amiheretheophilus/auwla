@@ -135,17 +135,20 @@ export function emitMemos(
           used, ...(also === undefined ? {} : { also }), ...(enabled === undefined ? {} : { enabled }),
         });
       });
-      const observation = names.fresh('_builderObservation');
-      observationBefore.set(step, [statement('const $$observation = $$runtime.observeMutation($$reads, $$callbacks);', {
-        observation, runtime,
-        reads: b.ArrayExpression({ elements: targets.map((target) => {
-          const value = values.get(target) ?? expression('$$binding', { binding: target.binding.name });
+      // A step proven to build nothing has nothing to find, so its flags simply stay false.
+      if (group.idleBuilders?.has(step) !== true) {
+        const observation = names.fresh('_builderObservation');
+        observationBefore.set(step, [statement('const $$observation = $$runtime.observeMutation($$reads, $$callbacks);', {
+          observation, runtime,
+          reads: b.ArrayExpression({ elements: targets.map((target) => {
+            const value = values.get(target) ?? expression('$$binding', { binding: target.binding.name });
 
-          return expression('() => $$value', { value });
-        }) }),
-        callbacks: b.ArrayExpression({ elements: callbacks }),
-      })]);
-      observationAfter.set(step, [statement('$$observation.finish();', { observation })]);
+            return expression('() => $$value', { value });
+          }) }),
+          callbacks: b.ArrayExpression({ elements: callbacks }),
+        })]);
+        observationAfter.set(step, [statement('$$observation.finish();', { observation })]);
+      }
       if (is.VariableDeclarator(step)) {
         trackInitializer(group, step);
       }

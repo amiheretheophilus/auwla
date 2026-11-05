@@ -304,6 +304,11 @@ export interface MemoGroupPlan {
   readonly steps: readonly (Statement | VariableDeclarator)[];
   readonly outputs: ReadonlyMap<Node, readonly BindingNode[]>;
   readonly possibleOutputs: ReadonlyMap<Node, readonly BindingNode[]>;
+  /**
+   * Optional (`optimize/methods.ts`): possible builders proven to build nothing, so they
+   * are not observed. Everything else about them, including their flags, stays planned.
+   */
+  readonly idleBuilders?: ReadonlySet<Node>;
 }
 
 /** One native declaration/pattern and the statements that build its values. */
