@@ -112,7 +112,7 @@ export function BenchModuleSelectionInline(_id, _parent, _props, _namespace, _se
     const _text2 = _clone2.firstChild;
     let _value15 = _peek_selected() === item.id ? 'danger' : '';
     _MD.setAttributeValue(_clone2, "class", _value15);
-    _MD.setListener(_clone2, "click", void 0, () => {
+    _MD.setRowListener(_clone2, "click", () => {
       _mutated_selected(selected = item.id);
     }, _writes);
     let _part = item.id;

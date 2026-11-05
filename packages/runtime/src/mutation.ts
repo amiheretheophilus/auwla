@@ -270,12 +270,17 @@ function reachesAny(objects: { has(object: object): boolean }, changed: Readonly
 let clock = 0;
 const editedAt = new WeakMap<object, number>();
 
+// Until a reader asks for the time, no reader can compare an edit with one, so
+// edits need no record. Most programs have no such reader: no props, no row cache.
+let timed = false;
+
 function stamp(object: object): void {
   advanceWriteEpoch();
-  editedAt.set(object, ++clock);
+  if (timed) editedAt.set(object, ++clock);
 }
 
 export function mutationTime(): number {
+  timed = true;
   return clock;
 }
 

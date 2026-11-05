@@ -13,6 +13,8 @@ export class Names {
    * cache and builder); `emitDom` places them with its other hoisted statements.
    */
   readonly hoisted: Statement[] = [];
+  /** One hoisted template per distinct description: a row and its component share theirs. */
+  readonly templates = new Map<string, string>();
 
   constructor(module: Module) {
     for (const binding of module.bindings) this.#taken.add(binding.name);

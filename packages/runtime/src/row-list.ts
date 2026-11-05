@@ -39,8 +39,7 @@ interface Row {
   readonly entry: RowEntry;
   /** Last item supplied to the entry; targeted refreshes must keep its index. */
   item: unknown;
-  /** As the general path names it: `key=…`, or `#index` without a key. */
-  identity: string;
+  identity: Identity;
   /** The key last evaluated; a primitive key that stays the same keeps its identity. */
   key: unknown;
   index: number;
@@ -82,8 +81,28 @@ interface Route {
   ready: boolean;
 }
 
-function identityOf(key: unknown, index: number): string {
-  return key === undefined || key === null ? `#${index}` : `key=${String(key)}`;
+/**
+ * A row's identity: the key as a string, by value (`1` and `'1'` are one identity),
+ * or its position without a key. Building a string per row costs real time on a large
+ * list, so a number stands for itself and a string spelling that number becomes it.
+ */
+type Identity = number | string;
+
+function identityOf(key: unknown, index: number): Identity {
+  if (key === undefined || key === null) return `#${index}`;
+  if (typeof key === 'number' && Number.isFinite(key)) return key;
+
+  const text = String(key);
+  const first = text.charCodeAt(0);
+
+  // Only a digit or `-` can start a canonical finite number.
+  if ((first >= 48 && first <= 57) || first === 45) {
+    const value = +text;
+    if (Number.isFinite(value) && String(value) === text) return value;
+  }
+  // `#<index>` is a position. Doubling a key's leading `#` keeps every key apart
+  // from every position, and from every other key.
+  return first === 35 ? `#${text}` : text;
 }
 
 /** Whether `row` has the identity of `key` at `index`, without a string when that is decidable. */
@@ -176,10 +195,10 @@ export function createRowList(
    * A pass also enters its new first occurrences, so a later item with the same
    * identity becomes a duplicate. Built on first use.
    */
-  let identities: Map<string, Row> | null = null;
+  let identities: Map<Identity, Row> | null = null;
   let pass = 0;
 
-  function lookup(): Map<string, Row> {
+  function lookup(): Map<Identity, Row> {
     if (identities === null) {
       identities = new Map();
       for (const row of rows) if (!row.duplicate) identities.set(row.identity, row);
@@ -235,7 +254,7 @@ export function createRowList(
       // match (unchanged, shifted, inserted or reversed runs); else look it up.
       let row: Row | undefined = previous[last + 1];
       if (!available(row, rowKey, index, stamp)) row = previous[last - 1];
-      let identity: string | null = null;
+      let identity: Identity | null = null;
       let duplicate = false;
       if (!available(row, rowKey, index, stamp)) {
         identity = identityOf(rowKey, index);

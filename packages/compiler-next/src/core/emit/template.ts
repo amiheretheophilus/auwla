@@ -42,10 +42,14 @@ export function emitNodes(template: Template, sites: readonly Site[], context: T
     return { statements: [], ref: missing, root: missing };
   }
 
-  const cache = names.fresh('_template');
-  names.hoisted.push(statement('const $$cache = $$runtime.createTemplateCache($$roots);', {
-    cache, runtime, roots: b.ArrayExpression({ elements: template.roots.map((root) => describe(template, root, texts)) }),
-  }));
+  const description = b.ArrayExpression({ elements: template.roots.map((root) => describe(template, root, texts)) });
+  const shape = JSON.stringify(description);
+  let cache = names.templates.get(shape);
+  if (cache === undefined) {
+    cache = names.fresh('_template');
+    names.templates.set(shape, cache);
+    names.hoisted.push(statement('const $$cache = $$runtime.createTemplateCache($$roots);', { cache, runtime, roots: description }));
+  }
   // Elements planned in HTML follow the destination where one is given. A
   // template planned in SVG starts there; otherwise HTML is the default.
   const inherits = context.namespace !== undefined && inheritedNodes(template).size > 0;

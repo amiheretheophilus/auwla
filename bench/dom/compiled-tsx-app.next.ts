@@ -11,7 +11,7 @@ function _Row_row(props, _rowOwner2) {
   const _text2 = _clone2.firstChild;
   let _value15 = _peek_selected() === props.item.id ? 'danger' : '';
   _MD.setAttributeValue(_clone2, "class", _value15);
-  _MD.setListener(_clone2, "click", void 0, () => {
+  _MD.setRowListener(_clone2, "click", () => {
     _mutated_selected(selected = props.item.id);
   }, _rowWrites);
   let _part = props.item.id;
@@ -39,7 +39,6 @@ function _Row_row(props, _rowOwner2) {
 }
 const _template = _MD.createTemplateCache([["div", 0, ["div", ["class", "toolbar"], ["button", 0, "create1k"], ["button", 0, "create10k"], ["button", 0, "append1k"], ["button", 0, "prepend1k"], ["button", 0, "pop1k"], ["button", 0, "update"], ["button", 0, "swap"], ["button", 0, "reverse"], ["button", 0, "remove"], ["button", 0, "remove100"], ["button", 0, "clear"]], ["ul", 0, ""]]]);
 const _template2 = _MD.createTemplateCache([["li", 0, ""]]);
-const _template3 = _MD.createTemplateCache([["li", 0, ""]]);
 let _dataVersion = 0;
 const _sharedKey = {};
 function _mutated_data(_value) {
@@ -112,7 +111,7 @@ function Row(_id2, _parent2, _props2, _namespace2, _setupOnly2) {
     return;
   }
   _writes2.beginMount();
-  const _clone3 = _MD.cloneTemplate(_template3, _namespace2);
+  const _clone3 = _MD.cloneTemplate(_template2, _namespace2);
   const _text3 = _clone3.firstChild;
   const _siteComputation2 = _MD.createComputation(_writes2.mark, _entity2);
   _siteComputation2.begin();

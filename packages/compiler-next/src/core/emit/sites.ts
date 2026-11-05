@@ -182,6 +182,12 @@ export function emitSites(
     }
     const updates = !rowLiteral && (inputs.size > 0 || computation !== null || replays);
     const eventBatch = batch === null ? buildExpression('null') : buildExpression(batch);
+    if (site.kind === 'event' && used && rowLiteral && batch !== null) {
+      mount.push(statement('$$runtime.setRowListener($$node, $$event, $$expression, $$batch);', {
+        runtime, node, event: stringLiteral(site.event), expression, batch: eventBatch,
+      }));
+      continue;
+    }
     if (site.kind === 'event' && used && !updates) {
       // Installed once: nothing needs the value or its listener again.
       mount.push(statement('$$runtime.setListener($$node, $$event, void 0, $$expression, $$batch);', {

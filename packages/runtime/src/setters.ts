@@ -63,6 +63,47 @@ export function setListener(
   return listener;
 }
 
+/**
+ * A list row's event site. Every row of a batch shares one native listener, which
+ * runs the handler stored on its element (`wiki/decisions.md`, 2026-10-26: not
+ * delegation, so phase, order, `currentTarget` and detached dispatch stay native).
+ * It removes only the per-row wrapper closure.
+ */
+export function setRowListener(node: Node, event: string, handler: Function, batch: WriteBatch): void {
+  const shared = sharedListener(batch, event);
+  (node as unknown as Record<string, Function>)[shared.key] = handler;
+  node.addEventListener(event, shared.listener);
+}
+
+interface SharedListener {
+  /** Where each element holds its handler. */
+  readonly key: string;
+  readonly listener: EventListener;
+}
+
+const sharedListeners = new WeakMap<WriteBatch, Map<string, SharedListener>>();
+
+function sharedListener(batch: WriteBatch, event: string): SharedListener {
+  let listeners = sharedListeners.get(batch);
+  if (listeners === undefined) {
+    listeners = new Map();
+    sharedListeners.set(batch, listeners);
+  }
+
+  let shared = listeners.get(event);
+  if (shared === undefined) {
+    const key = `$mmd:${event}`;
+    shared = {
+      key,
+      listener: batch.listener(function (this: Record<string, Function>, ...args: unknown[]) {
+        return Reflect.apply(this[key]!, this, args);
+      } as EventListener),
+    };
+    listeners.set(event, shared);
+  }
+  return shared;
+}
+
 /** Adjacent children sharing one text node, each shown as it would be alone. */
 export function joinText(parts: readonly unknown[]): string {
   let text = '';

@@ -98,6 +98,7 @@ export {
   setText,
   setTextData,
   setListener,
+  setRowListener,
   setAttributeValue,
   joinText,
   textValue,

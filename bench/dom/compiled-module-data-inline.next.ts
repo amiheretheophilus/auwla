@@ -106,7 +106,7 @@ export function BenchModuleDataInline(_id, _parent, _props, _namespace, _setupOn
     const _text2 = _clone2.firstChild;
     let _value15 = selected === item.id ? 'danger' : '';
     _MD.setAttributeValue(_clone2, "class", _value15);
-    _MD.setListener(_clone2, "click", void 0, () => {
+    _MD.setRowListener(_clone2, "click", () => {
       _write(selected = item.id);
     }, _writes);
     let _part = item.id;

@@ -12,7 +12,7 @@ function _Row_row(props, _rowOwner2) {
   const _text2 = _clone2.firstChild;
   let _value15 = props.selected ? 'danger' : '';
   _MD.setAttributeValue(_clone2, "class", _value15);
-  _MD.setListener(_clone2, "click", void 0, () => {
+  _MD.setRowListener(_clone2, "click", () => {
     _MD.observeMutation([() => props], [_invalidate]).finish(props.select(props.item.id));
   }, _rowWrites);
   let _part = props.item.id;
@@ -21,7 +21,7 @@ function _Row_row(props, _rowOwner2) {
   const _slotOwner = { id: _rowId, batch: _rowWrites, entity: _rowEntity, namespace: _rowNamespace2 };
   _fused = _MD.fuseText(_fused, _text2, [_part, ": ", _part2], _slotOwner);
   return { node: _clone2, update(_nextProps) {
-    if (!_MD.sameProps(props, _nextProps)) props = _nextProps;
+    if (props["item"] !== _nextProps["item"] || props["selected"] !== _nextProps["selected"] || props["select"] !== _nextProps["select"]) props = _nextProps;
     const _next = props.selected ? 'danger' : '';
     if (_next !== _value15) {
       _MD.setAttributeValue(_clone2, "class", _next);
@@ -40,7 +40,6 @@ function _Row_row(props, _rowOwner2) {
 }
 const _template = _MD.createTemplateCache([["div", 0, ["div", ["class", "toolbar"], ["button", 0, "create1k"], ["button", 0, "create10k"], ["button", 0, "append1k"], ["button", 0, "prepend1k"], ["button", 0, "pop1k"], ["button", 0, "update"], ["button", 0, "swap"], ["button", 0, "reverse"], ["button", 0, "remove"], ["button", 0, "remove100"], ["button", 0, "clear"]], ["ul", 0, ""]]]);
 const _template2 = _MD.createTemplateCache([["li", 0, ""]]);
-const _template3 = _MD.createTemplateCache([["li", 0, ""]]);
 import { buildData } from './data';
 function Row(_id2, _parent2, _props2, _namespace2, _setupOnly2) {
   let _propsVersion = 0;
@@ -81,7 +80,7 @@ function Row(_id2, _parent2, _props2, _namespace2, _setupOnly2) {
     return;
   }
   _writes2.beginMount();
-  const _clone3 = _MD.cloneTemplate(_template3, _namespace2);
+  const _clone3 = _MD.cloneTemplate(_template2, _namespace2);
   const _text3 = _clone3.firstChild;
   const _siteComputation2 = _MD.createComputation(_writes2.mark, _entity2);
   _siteComputation2.begin();

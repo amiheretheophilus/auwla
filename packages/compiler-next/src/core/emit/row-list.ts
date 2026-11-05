@@ -89,7 +89,10 @@ export function emitRowList(plan: RowListPlan, anchor: string, context: SitesCon
     const row = names.fresh('_row');
     const next = params.map((param) => names.fresh(`_${param}`));
     body = [
-      statement('const $$row = $$factory($$props, $$owner);', { row, factory: rows.factory(plan.row.component, untracked), props: props(), owner }),
+      statement('const $$row = $$factory($$props, $$owner);', {
+        row, owner, props: props(),
+        factory: rows.factory(plan.row.component, untracked, plan.row.props.map((prop) => prop.name)),
+      }),
       b.ReturnStatement({ argument: entry(`${row}.node`, next, [
         ...assign(params, next),
         statement('$$row.update($$props);', { row, props: props() }),
@@ -137,9 +140,9 @@ export class RowComponents {
     private readonly replacements: ReadonlyMap<Node, Node>,
   ) {}
 
-  factory(fn: FunctionNode, untracked: ReadonlyMap<Node, Node>): string {
+  factory(fn: FunctionNode, untracked: ReadonlyMap<Node, Node>, propNames: readonly string[]): string {
     const routed = [...untracked].filter(([node]) => node.start >= fn.start && node.end <= fn.end);
-    const signature = routed.map(([node]) => node.start).join(',');
+    const signature = `${routed.map(([node]) => node.start).join(',')}|${JSON.stringify(propNames)}`;
     let factories = this.#factories.get(fn);
     if (factories === undefined) this.#factories.set(fn, factories = new Map());
     let name = factories.get(signature);
@@ -171,11 +174,12 @@ export class RowComponents {
       const next = names.fresh('_nextProps');
       // The general receiver keeps the props object while its fields are the
       // same. Where the object is only read through members, its identity is
-      // unobservable, so the row takes the new object without comparing.
+      // unobservable, so the row takes the new object without comparing. Both
+      // objects come from this list's literal, so its fields are known here.
       const receive = param !== undefined && is.Identifier(param) && !membersOnly(this.plan, param)
-        ? statement('if (!$$runtime.sameProps($$props, $$next)) $$props = $$next;', { runtime, props, next })
-        : statement('$$props = $$next;', { props, next });
-      return entry(root, [next], [receive, ...emitted.update], emitted.dispose);
+        ? keepSameProps(props, next, propNames)
+        : [statement('$$props = $$next;', { props, next })];
+      return entry(root, [next], [...receive, ...emitted.update], emitted.dispose);
     });
     const declaration = statement(`function ${name}($$props, $$owner) {}`, { props, owner });
     if (is.FunctionDeclaration(declaration)) {
@@ -193,6 +197,20 @@ export class RowComponents {
     this.declarations.push(declaration);
     return name;
   }
+}
+
+/** `if (props.a !== next.a || props.b !== next.b) props = next;`. No field: nothing can differ. */
+function keepSameProps(props: string, next: string, fields: readonly string[]): Statement[] {
+  if (fields.length === 0) return [];
+
+  const differs = fields
+    .map((field) => expression('$$props[$$field] !== $$next[$$field]', { props, next, field: stringLiteral(field) }))
+    .reduce((left, right) => b.LogicalExpression({ operator: '||', left, right }));
+  return [b.IfStatement({
+    test: differs,
+    consequent: statement('$$props = $$next;', { props, next }),
+    alternate: null,
+  })];
 }
 
 /** Whether every use of the parameter reads a member, never calling one with it as `this`. */

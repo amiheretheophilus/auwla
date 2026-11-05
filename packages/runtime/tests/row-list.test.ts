@@ -432,6 +432,53 @@ it('lets a reentrant pass replace the pass it interrupted', () => {
   expect(rows().map((row) => row.item.label)).toEqual(['a', 'b']);
 });
 
+it('gives a number and the string that spells it one identity, and no other key that one', () => {
+  const sameIdentity = (first: unknown, second: unknown): boolean => {
+    const { list, rows } = harness();
+    list.map([{ key: first, label: 'a' }, { key: second, label: 'b' }]);
+    // A later item with an earlier identity is a duplicate, never that row again.
+    const twoRows = rows().length === 2;
+    list.map([{ key: second, label: 'c' }]);
+    const reused = rows()[0]!.id === 1;
+    return twoRows && reused;
+  };
+
+  // `1` and `'1'` are one identity; a row with another key value mounts again.
+  const { list, rows } = harness();
+  list.map([{ key: 1, label: 'a' }]);
+  const before = rows()[0]!.id;
+  list.map([{ key: '1', label: 'b' }]);
+  expect(rows()).toHaveLength(1);
+  expect(rows()[0]!.id).not.toBe(before);
+  list.map([{ key: '1', label: 'c' }]);
+  expect(rows()[0]!.item.label).toBe('c');
+
+  // Spellings that are not that number's own are different keys.
+  expect(sameIdentity('1', '1.0')).toBe(false);
+  expect(sameIdentity('1', '01')).toBe(false);
+  expect(sameIdentity('1', '+1')).toBe(false);
+  expect(sameIdentity(0, '-0')).toBe(false);
+  // A key spelled like a position differs from a position.
+  expect(sameIdentity('#0', 'key=#0')).toBe(false);
+  expect(sameIdentity('#0', '##0')).toBe(false);
+  expect(sameIdentity(1, true)).toBe(false);
+
+  // The same key again is the same row.
+  const again = harness();
+  again.list.map([{ key: 7, label: 'a' }, { key: 8, label: 'b' }]);
+  const ids = again.rows().map((row) => row.id);
+  again.list.map([{ key: 8, label: 'c' }, { key: 7, label: 'd' }]);
+  expect(again.rows().map((row) => row.id)).toEqual([ids[1]!, ids[0]!]);
+});
+
+it('keeps a position apart from a key spelled like one', () => {
+  const unkeyed = harness();
+  unkeyed.list.map([{ key: undefined, label: 'position' }, { key: '#0', label: 'spelled' }]);
+  expect(unkeyed.rows().map((row) => row.item.label)).toEqual(['position', 'spelled']);
+  unkeyed.list.map([{ key: '#0', label: 'moved' }, { key: undefined, label: 'other' }]);
+  expect(unkeyed.parent.textContent).toBe('movedother');
+});
+
 it('shows the items of a receiver that has its own map', () => {
   const { parent, list, rows } = harness();
   const custom = { map(callback: (item: unknown) => void) { callback({ key: 1, label: 'one' }); callback({ key: 2, label: 'two' }); } };
