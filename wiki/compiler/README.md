@@ -30,7 +30,7 @@ for Phase 8 on 2026-10-26, resumes with the restructuring planned in
 the old compiler.
 
 The optimization stage and on/off comparisons are built. Passes retain private
-row-matching tables, skip snapshots for proven intrinsic calls, reuse eligible
+row-matching tables, skip snapshots for method names the compiler knows, reuse eligible
 map results and target strict comparisons through keyed dependencies. Each keeps
 its general fallback (`optimize.md`). Compiled rows, leaf component factories,
 template cloning, guarded helper calls and selection routing are built.

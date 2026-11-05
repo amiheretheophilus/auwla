@@ -36,6 +36,8 @@ export function emitRenderValue(plan: RenderValuePlan, names: Names, runtime: st
       values,
       sourceValues,
       namespace,
+      // What the sites would rebuild field by field is the object it was given.
+      owner,
       versions: new Map(),
       replacements: new Map(),
       ref: slots.ref,

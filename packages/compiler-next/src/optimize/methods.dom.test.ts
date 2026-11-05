@@ -75,6 +75,16 @@ it('decides from the name at compile time, with no runtime check of the callee',
   expect(observed('make().concat(items)')).toBe(false);
   expect(observed('const out = []; out.push(items)')).toBe(false);
 
+  // A host function does not edit what it is given.
+  expect(observed('clearInterval(items)')).toBe(false);
+  expect(observed('console.log(items)')).toBe(false);
+  expect(observed('JSON.stringify(items)')).toBe(false);
+  expect(observed('setTimeout(() => { items.length = 0; }, 0)')).toBe(false);
+  // A library or an unknown global might, and so might a host function's name rebound here.
+  expect(observed('unknownGlobal(items)')).toBe(true);
+  expect(observed('Object.assign(items, {})')).toBe(true);
+  expect(observed('const clearInterval = touch; clearInterval(items)')).toBe(true);
+
   // An unknown method, and a known name on an object from elsewhere.
   expect(observed('items.unfamiliar()')).toBe(true);
   expect(observed('other.map(items)')).toBe(true);

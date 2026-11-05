@@ -16,7 +16,7 @@ import type { Node } from 'yuku-parser';
 import type { ComponentPlan, ModulePlan, MutationPlan, SharedOwnerPlan } from '../core/plan/model';
 import type { SemanticGraph } from '../core/graph';
 import type { Optimization } from '.';
-import { effectFree } from './effects';
+import { callEditsNoArgument, effectFree } from './effects';
 import { methodFact, redefinedNames, type MethodFact } from './method-facts';
 import { rowReuse } from './row-reuse';
 
@@ -37,6 +37,14 @@ function shortCircuits(node: Node): boolean {
   if (is.CallExpression(node)) return node.optional || shortCircuits(node.callee);
   if (is.TSNonNullExpression(node)) return shortCircuits(node.expression);
   return false;
+}
+
+/**
+ * A callback passed to a timer runs later, on its own, and reports its own writes.
+ * Only `structuredClone` and the like could call one during the call, and none do.
+ */
+function runsDuringCall(call: Call): boolean {
+  return !(is.Identifier(call.callee) && /^(setTimeout|setInterval|queueMicrotask|requestAnimationFrame)$/.test(call.callee.name));
 }
 
 /** Rooted in a host global or an import: an object this module knows nothing about. */
@@ -67,6 +75,11 @@ function lowerCall(
   if (plan.kind !== 'call' || plan.method !== undefined || !is.CallExpression(plan.operation)) return plan;
 
   const call = plan.operation;
+  if (callEditsNoArgument(general.module.module, call)
+    && call.arguments.every((argument) => !is.Function(argument) || effectFree(general.module.module, argument, { ownFunctions: true }) || !runsDuringCall(call))) {
+    return { ...plan, method: { kind: 'read' } };
+  }
+
   const callee = namedCallee(call);
   if (callee === null) return plan;
 

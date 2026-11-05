@@ -164,8 +164,8 @@ is exact. A hit on a stale set walks that root again before notifying, so a
 removed object never notifies its old root.
 
 An edit of a root's own value is a hit even when its set is stale, so only a hit
-on an object the root may have dropped walks it again. A proven array method edit
-(`observeReceiverEdit`) records the objects it may add, its arguments, and marks
+on an object the root may have dropped walks it again. A known array method edit
+(`editArray`) records the objects it may add, its arguments, and marks
 the set stale, instead of forgetting it. Dense shared data roots can reuse that
 reach across consecutive structural edits. Component roots release stale index
 memberships after a completed update, as described below.

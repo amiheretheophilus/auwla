@@ -393,9 +393,7 @@ need no lookup or key string), keeps its identity index across passes, updated
 only for rows created, removed or mounted again, and knows a new row is a
 duplicate when its identity was already taken in the pass. Moves follow the
 longest increasing subsequence (`list.ts`), and a list that is all of its parent
-clears with one `replaceChildren`. `map` returns a token the site's `write` ignores; any other
-value (an unproven callee ran the callback) goes to a value slot at the same
-anchor, and the next proven `map` clears it.
+clears with one `replaceChildren`.
 
 Without `try`: a pass records the rows it creates. A throw leaves them pending,
 and the next pass or disposal removes them; the committed rows stay. A getter

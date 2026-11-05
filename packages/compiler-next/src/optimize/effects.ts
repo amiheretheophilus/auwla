@@ -32,6 +32,35 @@ function isGlobal(module: Module, id: Node): boolean {
   return is.Identifier(id) && module.referenceOf(id)?.binding === null;
 }
 
+/** Host functions that run other code but never edit an argument they are given. */
+const NON_EDITING_GLOBALS = new Set([
+  'setTimeout', 'setInterval', 'clearTimeout', 'clearInterval', 'queueMicrotask',
+  'requestAnimationFrame', 'cancelAnimationFrame', 'structuredClone', 'alert',
+]);
+
+/** The compiler's own intrinsics that read a value without editing it. */
+const READING_INTRINSICS = new Set(['$track']);
+
+/**
+ * `clearInterval(timer)`, `console.log(row)`, `JSON.stringify(rows)`: the callee is a
+ * host or framework function, so the value it receives cannot change through this call.
+ */
+export function callEditsNoArgument(module: Module, call: Extract<Node, { type: 'CallExpression' }>): boolean {
+  const callee = call.callee;
+
+  if (is.Identifier(callee)) {
+    if (READING_INTRINSICS.has(callee.name) && module.referenceOf(callee)?.binding == null) return true;
+    if (!isGlobal(module, callee)) return false;
+    return PURE_GLOBALS.has(callee.name) || NON_EDITING_GLOBALS.has(callee.name);
+  }
+
+  if (!is.MemberExpression(callee) || callee.computed || !is.Identifier(callee.property)
+    || !is.Identifier(callee.object) || !isGlobal(module, callee.object)) return false;
+
+  const owner = callee.object.name;
+  return owner === 'console' || PURE_NAMESPACES.has(owner) || PURE_MEMBERS.get(owner)?.has(callee.property.name) === true;
+}
+
 /** The method's callback, read before the callback itself is judged. */
 function methodCallIsPure(module: Module, call: Extract<Node, { type: 'CallExpression' }>, options: EffectOptions): boolean {
   const callee = call.callee;

@@ -1,6 +1,64 @@
 # Status
 
-Last updated: 2026-10-28.
+Last updated: 2026-11-05.
+
+## Current: output and runtime reduction (2026-11-04)
+
+The user: the rewrite made the output "more verborse and not optimized compared to
+the old one", and method checks at runtime are "the user bug", not ours
+(`decisions.md`). Runtime callee proofs are gone; method names are decided at compile
+time (`compiler/optimize.md`, "Method calls"). All suites run locally now, at the
+user's request ("run it on this machine"); `gh` is not installed here, so CI was not
+started. Open questions for the user are in `open-issues.md`.
+
+Minified bytes (gzip), source graph, against old and against `685e262c`:
+
+| Fixture | Old compiler | `685e262c` | Now |
+| --- | ---: | ---: | ---: |
+| static | 5,461 (2,333) | 9,481 (3,949) | 7,512 (3,163) |
+| counter | 8,372 (3,411) | 16,496 (6,481) | 13,016 (5,203) |
+| module counter | 11,703 (4,604) | 24,280 (9,167) | 18,976 (7,088) |
+| composition | 10,239 (4,035) | 33,689 (12,541) | 24,125 (9,043) |
+| inline list | 24,268 (9,400) | 37,626 (14,001) | 28,368 (10,681) |
+| Octane | 35,340 (12,821) | 48,110 (16,893) | 41,262 (14,702) |
+| request list | 54,443 (18,389) | 68,811 (22,764) | 62,874 (20,680) |
+| request component structures | 67,458 (22,486) | 139,971 (45,386) | 85,938 (28,417) |
+| FlowOS | 114,310 (35,481) | 177,456 (55,058) | 137,968 (43,489) |
+
+10k rows in local headless Edge, median of 7, in ms, old / now (`bench/dom/quick.ts`,
+one desktop machine, so compare large differences only; VM runs are still needed):
+
+| Scenario | Inline rows (owner) | Component rows (owner) |
+| --- | ---: | ---: |
+| create | 15.7 / 32.4 | 16.2 / 25.2 |
+| replace | 16.7 / 26.5 | 20.0 / 27.2 |
+| update | 1.6 / 5.2 | 2.1 / 6.6 |
+| swap | 1.6 / 2.5 | 2.0 / 3.9 |
+| remove | 1.8 / 2.0 | 2.6 / 3.3 |
+| clear | 1.1 / 2.4 | 1.0 / 2.8 |
+| append 1k | 2.9 / 4.0 | 4.7 / 5.5 |
+| prepend 1k | 3.6 / 4.3 | 4.8 / 5.8 |
+| pop 1k | 2.0 / 2.6 | 3.6 / 2.1 |
+| reverse | 7.7 / 7.7 | 10.4 / 9.2 |
+| remove 100 | 2.1 / 2.3 | 3.7 / 2.7 |
+
+At `685e262c`, three-sample, the same inline row was create 47, replace 59, update 7.5;
+the component row create 40, replace 45, update 10, append 19, prepend 19.
+
+Still behind the old compiler: bundles remain larger in every fixture, and create,
+replace, update and clear remain slower. Next, by what the profiles show: first-run
+store cost in `mutation.ts`, and the bytes it adds to any app with an unknown call
+(`open-issues.md`).
+
+Verified at the final commit: 441 unit, 160 runtime, 170 data and 430 case tests pass.
+Generators pass on fresh seeds; one seed fails exactly as it does at `685e262c`
+(`open-issues.md`). Router (127), adapters (6) and language service (11) pass.
+
+Compared with `685e262c`, run the same way on this machine, the root suite (12
+failures, 4 errors) and server package (8 failures) fail the identical tests, so
+those predate this work and are not explained here. Utils and the vite CLI tests cannot
+run on this machine: their build and CLI need `node`, which is not installed, so
+`bun run build` also stops at utils. They were not verified.
 
 ## Branches
 
