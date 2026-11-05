@@ -2,7 +2,61 @@
 
 Last updated: 2026-11-05.
 
-## Current: closed lists and alias edits (2026-11-05)
+## Current: the VM report for `a44b43e7`, and what followed (2026-11-05)
+
+Chrome Headless Shell 149 on an 8-CPU AMD EPYC VM, new compiler against old.
+
+- **Octane**: new ranks 2 of 10 (average 2.375) and old 2 of 10 (3.6458), behind Ripple
+  (1.6042). New has the lower median in 18 of 24 scenarios, old in 5, with 1 tie.
+  Bundle 38.70 kB / 13.57 gzip against 35.69 / 12.74.
+- **DOM tables, 10k rows**: new is ahead on moves, remove, pop, append, prepend and
+  reverse, and behind on create (about 24 to 35 ms against 15 to 20), replace (27 to 37.6
+  against 18 to 31), update (2.2 to 5.1 against 1.5 to 3.3) and clear (1.5 to 2.7 against
+  0.8 to 1.1).
+- **Mutable/immutable matrix, component rows**: about 10x slower. Update 10k took 18 to
+  33 ms against 2.2 to 3.1 for inline rows. The benchmark's `function Row({ item, … })`
+  destructures its props, and only a plain `props` parameter got the light row form.
+
+Done since, in `842bef22` and `798d5db3` (`compiler/optimize.md`, "Row lists"):
+
+- Destructured props get the row form. A closed list writes a leaf's text directly, and
+  a component used only as rows is not emitted, so a component row now costs what an
+  inline row costs. One local run of that matrix (Edge, median of 3, so noisy) shows them
+  level, with update 10k at 4 to 6 ms in most placements. Timing is still to be repeated
+  on the VM.
+- Sites are cheaper. Joined text writes `node.data`, `class` uses `className`, a row with
+  nothing to clean up has no `dispose`, and replacing every row removes the old ones
+  and then inserts the new ones in one step each.
+- A direct call of a function that only stores plain names is not observed.
+
+Two bugs fixed: removing a row with nothing to clean up threw (`842bef22` introduced
+it; `798d5db3` fixed it within the same stretch), and `const Kept = Item; <Kept />`
+crashed on mount in both modes (`compiler/components.md`).
+
+Sizes (minified source fixture, gzip in brackets), old against now:
+
+| Fixture | Old | Now |
+| --- | ---: | ---: |
+| `octane` | 35,340 (12,821) | 34,324 (12,242) |
+| `owner-list` | 23,786 (9,237) | 23,960 (9,255) |
+| `primitive-component-list` | 24,414 (9,444) | 29,828 (10,984) |
+| `primitive-inline-list` | 24,268 (9,400) | 29,221 (10,993) |
+| `closed-nested-structures` | 28,461 (10,653) | 32,528 (12,317) |
+| `flowos` | 114,310 (35,481) | 137,126 (43,228) |
+| `request-data` | 38,781 (12,942) | 51,879 (17,359) |
+| `request-list` | 54,443 (18,389) | 54,151 (18,188) |
+
+Verified at `798d5db3`: compiler-next 486 unit, 581 cases and 10 generators at 200 runs;
+runtime 172, data 171, server 242, router 127, devtools 18, utils 24, language service
+11, adapters 6; the update-style matrix's correctness check on all 16 variants. Root is
+2,966 passing and 2 failing, the same two as before: R23 and the Chromium launch, both
+below. One full gate run had its `components` generator time out and take two later
+tests down with it. It took 51 minutes for no reason I could find, and did not recur in
+three capped reruns at 200 runs or in the next full gate.
+
+Next: the data runtime and the counter fixtures are where the size gap is largest.
+
+## Closed lists and alias edits (2026-11-05)
 
 `optimize/closed-lists.ts` skips rows on a structural change, with a compile-time proof
 that it cannot show stale text (`compiler/optimize.md`, "Closed lists"). Six DOM
