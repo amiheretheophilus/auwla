@@ -95,6 +95,22 @@ it('generates the package from the config alone', async () => {
   expect(existsSync(join(output, 'memoized-dom.package.json'))).toBe(false);
 }, 60_000);
 
+it('gives each file in a subpath directory its public path, as the docs show', async () => {
+  await write(author, {
+    'src/public/forms/index.ts': `export const forms = 1;`,
+    'src/public/deep/field.tsx': `export function Field() { return <b>field</b>; }`,
+    'src/public/styles.d.ts': `export type Hidden = string;`,
+  });
+  const manifest = await json(join(await buildLibrary({ root: author }), 'package.json'));
+
+  expect(manifest.exports).toEqual({
+    '.': { default: './src/index.ts' },
+    './tabs': { default: './src/public/tabs.ts' },
+    './forms': { default: './src/public/forms/index.ts' },
+    './deep/field': { default: './src/public/deep/field.tsx' },
+  });
+}, 60_000);
+
 it('generates declarations for each public entry', async () => {
   await write(author, { '.lib.config.ts': `export default { entry: './src/index.ts', subpaths: ['./src/public'], source: true };` });
   const output = await buildLibrary({ root: author });

@@ -60,7 +60,28 @@ re-exports.
 
 ## Publishing source
 
+With `source: true`, the package ships the source of its public API, exactly as you wrote
+it, and the app's own build compiles it. A component, state or `$fetch` from the package then
+behaves as if it were in the app, and there is no compiled output to keep compatible. You
+write no `exports` map.
+
+### Writing the package
+
+```text
+my-package/
+  .lib.config.ts
+  package.json          # name, version and dependencies, as usual
+  src/
+    index.ts            # the root public API
+    Button.tsx
+    store.ts
+    public/
+      tabs.tsx          # a public subpath
+      forms/index.ts    # a public subpath; `index` takes its directory's name
+```
+
 ```ts
+// .lib.config.ts
 export default {
   entry: './src/index.ts',
   subpaths: ['./src/public'],
@@ -68,17 +89,76 @@ export default {
 };
 ```
 
-With `source: true`, the package ships the source of its public API, exactly as you wrote
-it, and the app's own build compiles it. A component, state or `$fetch` from the package then
-behaves as if it were in the app, and there is no compiled output to keep compatible.
+```ts
+// src/index.ts: everything exported here is the root of the package
+export { Button } from './Button';
+export { count, increment } from './store';
+```
 
-Whoever uses the package installs it and imports it. Their Vite plugin finds it from their
-dependencies, with nothing to configure.
+`entry` is required, and `subpaths` is optional. As above, `subpaths` lists directories, and
+every source file under one becomes public, so keep only public modules there. A file in
+`src/` that nothing public imports is not published.
 
-Only files your public entries reach are published. `memoized-dom package` compiles them once,
-and stops if something would break for a user: a dependency not in `dependencies` or
-`peerDependencies`, a missing file, a file outside the package, or an import that only means
-something in this project (`#local`, `aliases`). Use relative imports in published source.
+Two components or helpers in one package can share state freely, including across the root
+and a subpath: `store.ts` above is one module with one state however it is reached.
+
+### Publishing it
+
+```sh
+memoized-dom package
+cd dist
+npm publish
+```
+
+```text
+dist/
+  package.json          # generated, with the exports map and the native package marker
+  src/                  # your source, as written, for the files the public API reaches
+  index.d.ts            # declarations, unless `declarations: false`
+  entries/              # declarations of public subpaths
+  .types/               # the declarations they point to
+```
+
+Publish `dist`, not the project root. For the config above, the generated exports are:
+
+| Consumer import | Source | Types |
+| --- | --- | --- |
+| `my-package` | `./src/index.ts` | `./index.d.ts` |
+| `my-package/tabs` | `./src/public/tabs.tsx` | `./entries/tabs.d.ts` |
+| `my-package/forms` | `./src/public/forms/index.ts` | `./entries/forms.d.ts` |
+
+`memoized-dom package` compiles the package once, so one that cannot compile never gets
+published. It adds the framework packages it needs as peer dependencies, including the data
+package for `$fetch`, which your source need not import. It stops if something would break
+for a user:
+
+- a dependency that is not in `dependencies` or `peerDependencies`;
+- a relative import of a missing file, or of a file outside the package;
+- an import that only means something in this project (`#local`), or the `aliases` option.
+  Use relative imports in published source. `./store.js` may name `store.ts`.
+
+`minify`, `sourcemap`, `boundaries`, `compiler` and `runtimeOwnedState` describe compiled
+output, so they are refused with `source: true`.
+
+### Using it
+
+Install it and import it. There is nothing to configure: the app's Vite plugin finds the
+package from the app's dependencies.
+
+```sh
+npm install my-package
+```
+
+```tsx
+import { Button, count, increment } from 'my-package';
+import { Tabs } from 'my-package/tabs';
+```
+
+The package needs the app to build it with the memoized-dom Vite plugin, since what it
+publishes is source.
+
+`source: true` is required for now, while compiled output still exists. Everything below this
+section, up to "Options in the same file", describes compiled output.
 
 ## Output and publishing
 
