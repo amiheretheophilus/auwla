@@ -8,6 +8,7 @@ import { bodyStatement, parameterPattern, variableDeclaration } from '../../core
 import type { InputQueries } from '../../core/graph/inputs';
 import type { BindingComputation } from '../../core/graph/classification';
 import type { BodyBuilder, ReadFact } from '../../core/graph';
+import { callOnlyReads } from '../../optimize/effects';
 
 export function collectComputations(
   resolved: Resolved,
@@ -50,6 +51,8 @@ export function collectComputations(
         // statement that returns belongs to the component's selector, whose
         // guards re-run it (`conditionals-and-lists.md`, "Early returns").
         if (containsReturn(statement)) continue;
+        // `items.includes(x)` only reads `items`, so it does not build it.
+        if (site.kind === 'call' && callOnlyReads(module, site.node)) continue;
         const certainty = site.kind === 'call' || site.kind === 'argument' ? 'possible' : 'definite';
         addBuilder(binding, statement, certainty, siteWaits(site));
       }

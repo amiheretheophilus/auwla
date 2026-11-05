@@ -196,14 +196,16 @@ All paths below are under `packages/compiler-next/`. This is test code only.
 - A source inside an object waits where it is read: `props.user.name` waits for
   `props.user`, the way `user.name` waits for `user`.
 - A body statement that passes a value to a call, or calls a method on it
-  (`collect(names, users)`, `items.reduce(…)`), may build it. Until that statement
+  (`collect(names, users)`, `items.sort()`), may build it. Until that statement
   has run once, the value waits for the statement's sources; after that it waits
-  only if the call was seen to change it. This does not depend on a method list
-  (`optimize/methods.ts` may skip the runtime check, never change what waits).
-  Another binding's initializer is such a statement too (`let total =
-  items.reduce(…) + count` makes `items` wait while `count` loads), and the
-  statement's reads count wherever they are declared (2026-10-27, found by the
-  source generator against the compiled output).
+  only if the call was seen to change it. A method the compiler knows only reads
+  (`items.includes(x)`, `items.reduce(…)` with an inline callback that only
+  computes) builds nothing, so its value does not wait for it, in both compiler
+  modes and on the reference (`optimize/effects.ts`, `callOnlyReads`;
+  `../decisions.md`, 2026-11-05). Another binding's initializer is such a
+  statement too (`let total = sum(items) + count` makes `items` wait while `count`
+  loads), and the statement's reads count wherever they are declared (2026-10-27,
+  found by the source generator against the compiled output).
 - Waiting is about what the page shows, not about the value. Rendering,
   derivations and effects wait; a handler reads and writes the real value
   JavaScript has (`let items = [1, 2]` is `[1, 2]`, and `items.pop()` works).

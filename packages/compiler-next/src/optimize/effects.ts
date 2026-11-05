@@ -82,6 +82,16 @@ function methodCallIsPure(module: Module, call: Extract<Node, { type: 'CallExpre
   });
 }
 
+/**
+ * `items.includes(x)`, `items.reduce((a, b) => a + b, 0)`: a method the compiler
+ * knows reads, with an inline callback that only computes. Such a call changes
+ * nothing, so it never builds the value it reads, and that value does not wait for
+ * it (`wiki/decisions.md`, 2026-11-05). The reference renderer follows this too.
+ */
+export function callOnlyReads(module: Module, call: Node): boolean {
+  return is.CallExpression(call) && is.MemberExpression(call.callee) && methodCallIsPure(module, call, {});
+}
+
 const ownFunctions = new WeakMap<Node, boolean>();
 
 /** A call of a function declared in the program whose own body is effect-free. */

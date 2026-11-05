@@ -34,6 +34,7 @@ import { b, findAll, is, walk } from 'yuku-ast';
 import { generate } from 'yuku-codegen';
 import { parse } from 'yuku-parser';
 import type { BlockStatement, Expression, Node, Statement, VariableDeclarator } from 'yuku-parser';
+import { callOnlyReads } from '../../src/optimize/effects';
 import { blockThunk, constDeclaration, identifier, member, numberLiteral, runtimeCall, thunk } from './ast';
 import { ClosureCells } from './closures';
 import { enclosingFunction, Reads } from './reads';
@@ -1320,7 +1321,7 @@ function ctxCall(method: CtxMethod, args: Expression[]): Expression {
  * - `definite`: `x = 1`, `x += 1`, `x.a = 1`, `x.n++`, `delete x.a`;
  * - `possible`: `x.push(1)`, `x.anything()`, `f(x)`, `new F(x)`. Whether it really
  *   changes the value is seen at runtime;
- * - `none`: a plain read.
+ * - `none`: a plain read, or a method known to only read (`x.includes(1)`).
  */
 function changeOf(module: Module, use: Reference): 'definite' | 'possible' | 'none' {
   if (use.isWrite) return 'definite';
@@ -1342,6 +1343,7 @@ function changeOf(module: Module, use: Reference): 'definite' | 'possible' | 'no
   if (is.AssignmentExpression(above) && above.left === target) return 'definite';
   if (is.UpdateExpression(above)) return 'definite';
   if (is.UnaryExpression(above) && above.operator === 'delete') return 'definite';
-  if (is.CallExpression(above) && above.callee === target) return 'possible';
+  // The user, 2026-11-05: a method known to only read does not build what it reads.
+  if (is.CallExpression(above) && above.callee === target) return callOnlyReads(module, above) ? 'none' : 'possible';
   return 'none';
 }

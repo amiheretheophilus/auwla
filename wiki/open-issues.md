@@ -6,15 +6,6 @@ Compiler bugs and cases live on their `compiler/` page, under "Cases to test".
 
 - **Server package tests** have pre-existing order-dependent failures.
 - **Compiler README** does not describe the readiness behaviour yet.
-- **Source generator seed 194088594** (`FC_SEED=194088594 FC_RUNS=200 bun test
-  tests/generator/sources.test.ts`) fails, at `685e262c` too, so it predates the
-  2026-11-04 work. In `let l0 = []; if (0 > l0.reduce(…)) d0 = 0; if
-  (!l0.includes(0 + s0.value)) d1 = 0;` with `s0` loading, `{d0}` shows the pending
-  view after an unrelated click, where the reference shows `0`. `l0` waits because a
-  waiting statement calls a method on it, "whatever the method" (decision of
-  2026-10-19); the reference re-evaluates after the click, the compiled builder does
-  not. `includes` is now a known read, so `l0` need not wait at all, but that changes
-  the 2026-10-19 decision, so it is left for the user.
 
 ## To discuss with the user first (2026-11-04)
 

@@ -1959,7 +1959,7 @@ behaves('a POST server function in an effect runs when the effect runs', {
 // ---------------------------------------------------------------------------
 // Found by the generated source programs (tests/generator/sources.test.ts).
 
-behaves('a handler uses the real value while a statement that may change it waits', {
+behaves('a value a known read method reads does not wait with the statement', {
   source: `
     import { $fetch, Group } from '@memoized-dom/data';
     export function App() {
@@ -1977,7 +1977,80 @@ behaves('a handler uses the real value while a statement that may change it wait
     }`,
   steps: [{ click: 'button' }, { respond: '/settings', value: { on: true } }],
   check(container, observation) {
-    // `items.reduce(…)` may change `items` as far as anyone knows before it runs,
+    // `reduce` with this callback only reads, so `items` has nothing to wait for
+    // (decisions, 2026-11-05); `total` still waits for `settings`.
+    expect(container.querySelector('p')?.textContent).toBe(['2', '1', '1'][observation]);
+    expect(container.querySelector('span')?.textContent).toBe(['loading', 'loading', '1'][observation]);
+  },
+});
+
+behaves('a read method whose callback edits still makes its value wait', {
+  source: `
+    import { $fetch, Group } from '@memoized-dom/data';
+    export function App() {
+      const settings = $fetch('/settings');
+      let items = [1, 2];
+      let total = 0;
+      if (settings.on) items.forEach((x) => { items.push(x); });
+      return (
+        <Group pending={() => <i>loading</i>}>
+          <p>{items.length}</p>
+        </Group>
+      );
+    }`,
+  steps: [{ respond: '/settings', value: { on: false } }],
+  check(container, observation) {
+    expect(container.querySelector('p')?.textContent).toBe(['loading', '2'][observation]);
+  },
+});
+
+behaves('an unrelated click leaves a value a read method reads ready', {
+  source: `
+    import { $fetch, Group } from '@memoized-dom/data';
+    export function App() {
+      const s0 = $fetch('/s0');
+      let l0 = [];
+      let o0 = { a: 0, b: 0 };
+      let d0 = 0;
+      if (0 > l0.reduce((total, x) => total + x, 0)) d0 = 0;
+      let d1 = o0.a;
+      if (!l0.includes(0 + s0.value)) d1 = 0;
+      return (
+        <Group pending={() => <i>…</i>}>
+          <main>
+            <p id="v0">{d0}{0} {0}</p>
+            <button id="a0" onClick={() => { o0.a = 0; }}>a0</button>
+          </main>
+        </Group>
+      );
+    }`,
+  steps: [{ click: '#a0' }, { respond: '/s0', value: { value: 0, items: [] } }],
+  check(container) {
+    // Generator seed 194088594: `d0` reads `l0`, which nothing can change while `s0` loads.
+    expect(container.querySelector('p')?.textContent).toBe('00 0');
+  },
+});
+
+behaves('a handler uses the real value while a statement that may change it waits', {
+  source: `
+    import { $fetch, Group } from '@memoized-dom/data';
+    function sum(list) { return list.reduce((a, b) => a + b, 0); }
+    export function App() {
+      const settings = $fetch('/settings');
+      let items = [1, 2];
+      let total = 0;
+      if (settings.on) total = sum(items);
+      return (
+        <Group pending={() => <i>loading</i>}>
+          <p>{items.length}</p>
+          <span>{total}</span>
+          <button onClick={() => { items.pop(); }}>pop</button>
+        </Group>
+      );
+    }`,
+  steps: [{ click: 'button' }, { respond: '/settings', value: { on: true } }],
+  check(container, observation) {
+    // `sum(items)` may change `items` as far as anyone knows before it runs,
     // so `items` waits with it; the handler still pops the real array.
     expect(container.querySelector('p')?.textContent).toBe(['loading', 'loading', '1'][observation]);
     expect(container.querySelector('span')?.textContent).toBe(['loading', 'loading', '1'][observation]);
@@ -1987,12 +2060,13 @@ behaves('a handler uses the real value while a statement that may change it wait
 behaves('another binding\'s initializer that may change a value makes it wait', {
   source: `
     import { $fetch, Group } from '@memoized-dom/data';
+    function sum(list) { return list.reduce((a, b) => a + b, 0); }
     export function App() {
       const s0 = $fetch('/s0');
       let items = [];
       let count = 0;
       for (const x of s0.items) count += x;
-      let total = items.reduce((sum, x) => sum + x, 0) + count;
+      let total = sum(items) + count;
       return (
         <Group pending={() => <i>loading</i>}>
           <p>{items.length}</p>
@@ -2001,7 +2075,7 @@ behaves('another binding\'s initializer that may change a value makes it wait', 
     }`,
   steps: [{ respond: '/s0', value: { items: [] } }],
   check(container, observation) {
-    // \`items.reduce(…)\` waits for \`count\`, and may change \`items\` before it runs.
+    // \`sum(items)\` waits for \`count\`, and may change \`items\` before it runs.
     expect(container.querySelector('p')?.textContent).toBe(['loading', '0'][observation]);
   },
 });
@@ -2009,13 +2083,14 @@ behaves('another binding\'s initializer that may change a value makes it wait', 
 behaves('a statement that may change a value makes it wait for reads declared after the value', {
   source: `
     import { $fetch, Group } from '@memoized-dom/data';
+    function has(list, x) { return list.includes(x); }
     export function App() {
       const s0 = $fetch('/s0');
       let items = [];
       let count = 0;
       for (const x of s0.items) count += x;
       let found = 0;
-      if (items.includes(count)) found = 1;
+      if (has(items, count)) found = 1;
       return (
         <Group pending={() => <i>loading</i>}>
           <p>{items.length}</p>
@@ -2058,12 +2133,14 @@ behaves('a may-change statement whose test reads the value itself waits only whe
 behaves('a value an initializer may change stops waiting once that initializer runs', {
   source: `
     import { $fetch, Group } from '@memoized-dom/data';
+    function sum(list) { return list.reduce((a, b) => a + b, 0); }
+    function has(list, x) { return list.includes(x); }
     export function App() {
       const s0 = $fetch('/s0');
       let items = [];
-      let first = Math.max(0, items.includes(s0.value > 0 ? 1 : 0) ? 1 : 0);
+      let first = Math.max(0, has(items, s0.value > 0 ? 1 : 0) ? 1 : 0);
       if (0 > 0) first = 0;
-      let second = 0 + items.reduce((sum, x) => sum + x, 0);
+      let second = 0 + sum(items);
       if (0 > 0) second = 0;
       return (
         <Group pending={() => <i>loading</i>}>
@@ -2101,11 +2178,12 @@ behaves('passing only a member of a value to a waiting call does not make the va
 behaves('taking over every value a waiting statement builds stops the values it may change from waiting', {
   source: `
     import { $fetch, Group } from '@memoized-dom/data';
+    function sum(list) { return list.reduce((a, b) => a + b, 0); }
     export function App() {
       const s0 = $fetch('/s0');
       let items = [];
       let found = 0;
-      if (items.reduce((sum, x) => sum + x, 0) > Math.max(0, s0.value)) found = 1;
+      if (sum(items) > Math.max(0, s0.value)) found = 1;
       return (
         <Group pending={() => <i>loading</i>}>
           <p>{items.length}</p>
@@ -2124,11 +2202,13 @@ behaves('taking over every value a waiting statement builds stops the values it 
 behaves('a value stops waiting when a mutation lets the initializer that may change it run', {
   source: `
     import { $fetch, Group } from '@memoized-dom/data';
+    function sum(list) { return list.reduce((a, b) => a + b, 0); }
+    function has(list, x) { return list.includes(x); }
     export function App() {
       const s0 = $fetch('/s0');
       let items = [];
       const count = 0 + s0.value;
-      const pick = items.includes(items.reduce((sum, x) => sum + x, 0)) ? 0 : count;
+      const pick = has(items, sum(items)) ? 0 : count;
       return (
         <Group pending={() => <i>loading</i>}>
           <p>{items.length}</p>
@@ -2138,7 +2218,7 @@ behaves('a value stops waiting when a mutation lets the initializer that may cha
     }`,
   steps: [{ click: 'button' }, { respond: '/s0', value: { value: 0 } }],
   check(container, observation) {
-    // After the push, \`items.includes(0)\` is true: \`pick\` no longer needs
+    // After the push, \`has(items, 0)\` is true: \`pick\` no longer needs
     // \`count\`, its initializer runs, and \`items\` stops waiting.
     expect(container.querySelector('p')?.textContent).toBe(['loading', '1', '1'][observation]);
   },
@@ -2195,13 +2275,14 @@ behaves('a value does not wait again for a statement seen not to change it', {
 behaves('a loop builder blocked by a waiting value runs once that value is ready', {
   source: `
     import { $fetch, Group } from '@memoized-dom/data';
+    function has(list, x) { return list.includes(x); }
     export function App() {
       const s0 = $fetch('/s0');
       let items = [0, 1];
       let total = 0;
       for (const x of items) total += x;
       let found = 0;
-      if (items.includes(2) ? 0 : s0.value) found = 1;
+      if (has(items, 2) ? 0 : s0.value) found = 1;
       return (
         <Group pending={() => <i>loading</i>}>
           <p>{total}</p>
@@ -2244,10 +2325,11 @@ behaves('a derivation of a value a handler took over before its source loaded is
 behaves('a value waits for an initializer that may change it even when a body write follows', {
   source: `
     import { $fetch, Group } from '@memoized-dom/data';
+    function has(list, x) { return list.includes(x); }
     export function App() {
       const s0 = $fetch('/s0');
       let items = [];
-      let pick = 0 + (items.includes(0) ? 0 : s0.value);
+      let pick = 0 + (has(items, 0) ? 0 : s0.value);
       if (!(1 % 2 === 0)) pick = 0;
       return (
         <Group pending={() => <i>loading</i>}>
@@ -2266,10 +2348,11 @@ behaves('a value waits for an initializer that may change it even when a body wr
 behaves('taking over a binding releases what its waiting initializer may change', {
   source: `
     import { $fetch, Group } from '@memoized-dom/data';
+    function has(list, x) { return list.includes(x); }
     export function App() {
       const s0 = $fetch('/s0');
       let items = [];
-      let pick = items.includes(0) ? 0 : s0.value;
+      let pick = has(items, 0) ? 0 : s0.value;
       return (
         <Group pending={() => <i>loading</i>}>
           <p>{items.length}</p>
