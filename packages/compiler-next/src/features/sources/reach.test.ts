@@ -54,6 +54,52 @@ describe('readiness reach', () => {
     expect(output).toMatch(/readSourceValue\(box\)/);
   });
 
+  describe('mount', () => {
+    // A component that waits, and a call this proof cannot see into. If something unknown
+    // could run the component, that call could wait too, and every such call is guarded.
+    const app = `import { $fetch } from '@memoized-dom/data';
+      export function App() {
+        const user = $fetch('/user');
+        const label = String(Math.random());
+        return <p>{user.name}{label}</p>;
+      }`;
+
+    it('does not count as unknown code running a component from another file', () => {
+      const alone = compileModules({ './App.tsx': app })['./App.tsx']!;
+      const mounted = compileModules({
+        './App.tsx': app,
+        './main.ts': `import { mount } from '@memoized-dom/runtime';
+          import { App } from './App';
+          mount('root', App);`,
+      })['./App.tsx']!;
+
+      expect(mounted).toBe(alone);
+    });
+
+    it('does not count as unknown code running a component from the same file', () => {
+      const alone = compileModules({ './App.tsx': app })['./App.tsx']!;
+      const mounted = compileModules({
+        './App.tsx': `import { mount } from '@memoized-dom/runtime';
+          ${app}
+          mount('root', App);`,
+      })['./App.tsx']!;
+
+      expect(mounted.match(/whenSourceInputs|readSourceValue/g)).toEqual(alone.match(/whenSourceInputs|readSourceValue/g));
+    });
+
+    it('still counts a function of the same name from elsewhere as unknown code', () => {
+      const alone = compileModules({ './App.tsx': app })['./App.tsx']!;
+      const mounted = compileModules({
+        './App.tsx': app,
+        './main.ts': `import { mount } from 'some-other-package';
+          import { App } from './App';
+          mount('root', App);`,
+      })['./App.tsx']!;
+
+      expect(mounted).not.toBe(alone);
+    });
+  });
+
   describe('entries', () => {
     const helper = `export function shown(value) { return value + 1; }`;
 

@@ -205,6 +205,119 @@ behaves('package contract: a factory\'s parameters are state once a later call c
   },
 });
 
+behaves('package contract: a Group passes through a component that uses no sources', {
+  modules: {
+    './package/Layout.tsx': `
+      import { Inner } from './Inner';
+      export function Layout({ title, children }) {
+        return <section><h1>{title}</h1><Inner>{children}</Inner></section>;
+      }
+    `,
+    './package/Inner.tsx': `export function Inner({ children }) { return <div>{children}</div>; }`,
+    './Reader.tsx': `export function Reader() { const user = $fetch('/package/reader'); return <b>{user.name}</b>; }`,
+  },
+  source: `
+    import { Group } from '@memoized-dom/data';
+    import { Layout } from './package/Layout';
+    import { Reader } from './Reader';
+    export function App() {
+      return <Group pending={() => <i>loading</i>}><Layout title="t"><Reader /></Layout></Group>;
+    }
+  `,
+  steps: [{ respond: '/package/reader', value: { name: 'Ada' } }],
+  check(container, observation) {
+    expect(container.querySelector('b')?.textContent ?? container.querySelector('i')?.textContent).toBe(['loading', 'Ada'][observation]);
+    expect(requestedUrls()).toEqual(['/package/reader']);
+  },
+});
+
+behaves('package contract: a component that uses no sources shows a child that does', {
+  modules: {
+    './package/Frame.tsx': `
+      import { Reader } from '../Reader';
+      export function Frame() { return <section><Reader /></section>; }
+    `,
+    './Reader.tsx': `export function Reader() { const user = $fetch('/package/framed'); return <b>{user.name}</b>; }`,
+  },
+  source: `
+    import { Group } from '@memoized-dom/data';
+    import { Frame } from './package/Frame';
+    export function App() {
+      return <Group pending={() => <i>loading</i>}><Frame /></Group>;
+    }
+  `,
+  steps: [{ respond: '/package/framed', value: { name: 'Ada' } }],
+  check(container, observation) {
+    expect(container.querySelector('b')?.textContent ?? container.querySelector('i')?.textContent).toBe(['loading', 'Ada'][observation]);
+  },
+});
+
+behaves('package contract: a source given to a component that does nothing else with it still waits', {
+  modules: {
+    './package/Name.tsx': `export function Name({ user }) { return <b>{user.name}</b>; }`,
+    './package/Plain.tsx': `export function Plain({ text }) { return <em>{text}</em>; }`,
+  },
+  source: `
+    import { Group } from '@memoized-dom/data';
+    import { Name } from './package/Name';
+    import { Plain } from './package/Plain';
+    export function App() {
+      const user = $fetch('/package/named-prop');
+      return <main><Plain text="always" /><Group pending={() => <i>loading</i>}><Name user={user} /></Group></main>;
+    }
+  `,
+  steps: [{ respond: '/package/named-prop', value: { name: 'Ada' } }],
+  check(container, observation) {
+    expect(container.querySelector('em')?.textContent).toBe('always');
+    expect(container.querySelector('b')?.textContent ?? container.querySelector('i')?.textContent).toBe(['loading', 'Ada'][observation]);
+  },
+});
+
+// The proof must not take `mount` for unknown code that might run a component and wait.
+behaves('a component behaves the same when another file mounts it', {
+  modules: {
+    './start.ts': `
+      import { mount } from '@memoized-dom/runtime/testing';
+      import { App } from './App';
+      export function start(host) { return mount(host, App); }
+    `,
+  },
+  source: `
+    import { Group } from '@memoized-dom/data';
+    function Reader() {
+      const user = $fetch('/package/mounted');
+      const label = String(user.name.length);
+      return <b>{user.name}:{label}:{String(1 + 1)}</b>;
+    }
+    export function App() {
+      return <main><Group pending={() => <i>loading</i>}><Reader /></Group></main>;
+    }
+  `,
+  steps: [{ respond: '/package/mounted', value: { name: 'Ada' } }],
+  check(container, observation) {
+    expect(container.querySelector('b')?.textContent).toBe(['loading:loading:2', 'Ada:3:2'][observation]);
+    expect(requestedUrls()).toEqual(['/package/mounted']);
+  },
+});
+
+behaves('a component behaves the same when its own file mounts it', {
+  source: `
+    import { mount } from '@memoized-dom/runtime/testing';
+    export function App() {
+      const user = $fetch('/package/self-mounted');
+      const label = String(1 + 1);
+      return <main><p>{user?.name}</p><b>{label}</b></main>;
+    }
+    export function start(host) { return mount(host, App); }
+  `,
+  steps: [{ respond: '/package/self-mounted', value: { name: 'Ada' } }],
+  check(container, observation) {
+    expect(container.querySelector('p')?.textContent).toBe(['', 'Ada'][observation]);
+    expect(container.querySelector('b')?.textContent).toBe('2');
+    expect(requestedUrls()).toEqual(['/package/self-mounted']);
+  },
+});
+
 behaves('package contract: public reexports share package state while components retain separate local state', {
   modules: {
     './package/store.ts': `

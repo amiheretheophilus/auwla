@@ -26,6 +26,24 @@ with it. `optimistic.ts` hardly moves, because `$read` hands it a raw handle; wi
 it would be 35 KB. It is runtime-level code, so the next measure of package size is a sample
 of ordinary package code rather than this file.
 
+That sample (`compiler/linking.md`, "Size") fell from 42.1 KB to 35.1 KB; the old compiler
+gives 15.8 KB from 4.7 KB of source. A module that cannot touch a source skips source flow,
+and a factory or block with nothing to replay uses the `simple` owner form.
+
+`entries` as pushed in `7692e892` made real apps larger, and no test saw it, because
+behaviour stayed correct and the harness graphs have no `main.ts`. Following importers
+reached `mount('root', App)`, which counted as unknown code running a function that waits,
+so every host call in the graph was guarded: `request-list` +10.6 KB, FlowOS +4.5 KB. The
+size audit found it on the next batch; it was not run before that push. `mount` no longer
+counts (`compiler/sources.md`), which also fixes the older same-file form, and all those
+fixtures are back to their earlier sizes. Against the sizes before `entries`, `octane` is
+656 B smaller, two `request-recreated-slot` fixtures are 322 B smaller, and
+`request-row-children` is 70 B larger, not investigated. The audit does not pass `entries`
+yet, so these sizes are all without it.
+
+Verified on this batch: compiler-next 509 unit, 610 cases with `entries`, 610 with
+`ENTRIES=all`, and 10 generators at 200 runs in a 649 s gate; runtime 179, data 171.
+
 Verified on the batch before `entries`: compiler-next 496 unit, 605 cases and 10 generators
 at 200 runs; runtime 179, data 171. The first full gate on it failed: the `sources` generator ran for an hour
 against its 10-minute limit, reached 125 of 200 programs, and took the next test down with

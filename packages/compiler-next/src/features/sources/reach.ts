@@ -25,7 +25,7 @@ import type { SemanticGraph } from '../../core/graph';
 import { variableDeclaration } from '../../core/graph/inputs';
 import { intrinsicTag, unwrap } from '../../core/plan/jsx';
 import { importedDefinition, namespaceModule } from '../../core/resolve';
-import { frameworkPackage, importOf } from '../../core/resolve/exports';
+import { frameworkPackage, importOf, isFrameworkMount } from '../../core/resolve/exports';
 import { functionValue, type FunctionNode } from '../../core/resolve/functions';
 import { lifecycleKind } from '../../core/resolve/ambient';
 import { dataExport } from './classify';
@@ -75,6 +75,7 @@ export class SourceReach {
   readonly #usedOutside: SemanticGraph['resolved']['usedOutside'];
   /** The import bindings naming each binding, through any re-exports. */
   readonly #importers = new Map<Binding, Binding[]>();
+  readonly #free = new Map<Module, boolean>();
   readonly #modules = new Map<FunctionNode, Module>();
   readonly #invocations = new Map<FunctionNode, Invocations>();
   readonly #exported: Binding[] = [];
@@ -182,6 +183,49 @@ export class SourceReach {
   /** Whether evaluating `root` reads such a value or runs a function that waits. */
   waits(module: Module, root: Node): boolean {
     return this.#everything || this.#readsHeld(module, root) || this.#mayWait(module, root);
+  }
+
+  /**
+   * Whether readiness can never matter in this module, so it needs none of it, in a graph
+   * where other modules do. It does not use the data package, nothing in it can hold a
+   * source or wait, and every component it shows is the same. A `Group` policy passes
+   * down through the components between it and a source, so one that shows a component
+   * the proof cannot name, or one that needs readiness, keeps it. A source created by a
+   * callback run here belongs to the nearest frame above that owns sources.
+   */
+  freeOfSources(module: Module): boolean {
+    const known = this.#free.get(module);
+    if (known !== undefined) return known;
+
+    // A cycle of components is judged by the rest of what it shows.
+    this.#free.set(module, true);
+    const free = !this.#everything && !this.#unknown && this.#moduleIsFree(module);
+    this.#free.set(module, free);
+    return free;
+  }
+
+  #moduleIsFree(module: Module): boolean {
+    const usesData = module.imports.some((imported) => !imported.typeOnly && isDataPackage(imported.specifier));
+    if (usesData || module.bindings.some((binding) => this.#held.has(binding))) return false;
+
+    const roots = [module.ast, ...module.findAll(FUNCTION_TYPES)];
+    if (roots.some((root) => this.#readsHeld(module, root) || this.#mayWait(module, root))) return false;
+
+    return module.findAll('JSXElement').every((element) => {
+      if (intrinsicTag(element) !== null) return true;
+      const shown = this.#moduleOfTag(module, element);
+      return shown !== null && this.freeOfSources(shown);
+    });
+  }
+
+  /** The module declaring the component an element names, when the name says. */
+  #moduleOfTag(module: Module, element: JsxElement): Module | null {
+    const name = element.openingElement.name;
+    if (!is.JSXIdentifier(name)) return null;
+    const binding = module.referenceOf(name)?.binding ?? null;
+    if (binding === null) return null;
+    if (importOf(binding) === undefined) return binding.module;
+    return importedDefinition(binding)?.module ?? null;
   }
 
   #solve(): void {
@@ -897,6 +941,11 @@ export class SourceReach {
       return;
     }
 
+    // `mount('root', App)` starts a root of its own, with nothing from this caller.
+    if (is.CallExpression(parent) && parent.callee !== position && isFrameworkMount(module, parent)) {
+      return;
+    }
+
     if (is.JSXOpeningElement(parent) && parent.name === position) {
       invocations.elements.push({ module, element: module.parentOf(parent) as JsxElement });
       return;
@@ -1052,6 +1101,10 @@ function propertyKey(pattern: Extract<Node, { type: 'ObjectPattern' }>, declarat
 /** Framework packages: their exports are known and create sources only through `@memoized-dom/data`. */
 function isFramework(specifier: string): boolean {
   return specifier.startsWith('@memoized-dom/');
+}
+
+function isDataPackage(specifier: string): boolean {
+  return specifier === '@memoized-dom/data' || specifier.startsWith('@memoized-dom/data/');
 }
 
 /** A call to a framework export other than the data package's. */

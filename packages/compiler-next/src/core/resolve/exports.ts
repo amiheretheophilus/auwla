@@ -2,6 +2,7 @@
 import { is } from 'yuku-ast';
 import { BindingFlags } from 'yuku-analyzer';
 import type { Binding, Export, Import, Module } from 'yuku-analyzer';
+import type { Node } from 'yuku-parser';
 
 type ValueExport =
   | { readonly kind: 'binding'; readonly binding: Binding; readonly identity: Binding }
@@ -69,6 +70,19 @@ export function frameworkPackage(binding: Binding): string | null {
 /** The name a binding has in the module it was imported from. */
 export function importedName(binding: Binding): string | null {
   return importOf(binding)?.name ?? null;
+}
+
+/**
+ * A call to the runtime's `mount`. It looks up the root factory of the component it is
+ * given, and neither exposes that function nor passes it anything from the caller.
+ */
+export function isFrameworkMount(module: Module, call: Node): boolean {
+  if (!is.CallExpression(call) || !is.Identifier(call.callee)) {
+    return false;
+  }
+
+  const binding = module.referenceOf(call.callee)?.binding ?? null;
+  return binding !== null && frameworkPackage(binding) !== null && importedName(binding) === 'mount';
 }
 
 export function isValueImport(binding: Binding): boolean {

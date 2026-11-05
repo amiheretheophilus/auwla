@@ -386,6 +386,13 @@ or anonymous default export, and anything an entry forwards. Without `entries`, 
 export is open, and the harness runs that form with `ENTRIES=all`. A build tool must list
 every module it loads directly, or a call the graph cannot see would lose its readiness.
 
+A module where readiness can never matter skips source flow altogether, in a graph where
+other modules use it (`freeOfSources`). It does not import the data package, nothing in it
+can hold a source or wait, and every component it shows is the same. A `Group` policy
+passes down through the components between it and a source, so a module showing one that
+needs readiness, or one the proof cannot name, keeps it. A source created by a callback run
+in such a module belongs to the nearest frame above that owns sources.
+
 The proof is one fixpoint over the whole graph with facts that only grow:
 bindings that may hold one, functions that may return one, functions whose run
 may wait, and two flags for unknown code. A binding may hold one when:
@@ -419,7 +426,9 @@ calls, getters, coercion and iteration then may wait too. Native listeners,
 `ref` callbacks and `$effect`/`$cleanup` callbacks run from the runtime outside
 readiness computations, also when passed through a component's prop. They do
 not set this flag. (Assumption: authored code does not dispatch a DOM event
-synchronously inside a render expression.)
+synchronously inside a render expression.) Nor does `mount('root', App)`, which starts a
+root of its own with nothing from its caller. Every app calls it, so if it set the flag,
+every app whose root waits would guard all its host calls.
 
 Removing an input never changes waiting, because a value that cannot wait
 contributes nothing. A guard is removed only when it can neither return a marker

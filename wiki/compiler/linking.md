@@ -135,12 +135,22 @@ compiler linking code.
 
 ### Size
 
-A package's output should be in proportion to its source.
-`packages/utils/src/optimistic.ts` is the current measure: 8 KB of source compiled to
-115 KB, against 3.4 KB published for all of `utils` by the old compiler. The plain
-function rule (`state-and-derived.md`, "Plain functions") brought it to 100 KB. Most of the
-rest is source flow: `$read(result)` makes the module's values possible sources, and each
-read then checks readiness.
+A package's output should be in proportion to its source. A sample of ordinary package code
+(a barrel, components with children and a list, a store, two factories, pure helpers, and
+an app using them) measures this: 4.7 KB of source, 15.8 KB minified from the old compiler
+without runtime, and from compiler-next 42.1 KB, now 35.1 KB:
+
+- A module that cannot touch a source skips source flow, even when others in the graph use
+  it (`freeOfSources`, `reach.ts`). A leaf component fell from 3,485 to 2,239 B.
+- A factory or block with nothing to replay uses the `simple` owner form, with no build
+  scope, refresh or completion (`shared-dom.ts`). `createToggle` fell from 1,393 to 659 B.
+- A plain function replays only what the compiler can see change
+  (`state-and-derived.md`, "Plain functions").
+
+`packages/utils/src/optimistic.ts` is not the measure: 8 KB of source compiles to 100 KB,
+against 3.4 KB published for all of `utils`, because `$read(result)` hands it a raw handle
+and its values all become possible sources. It is runtime-level code. Calling an internal
+function instead of `$read` brings it to about 35 KB.
 
 ## Installed packages run opaque
 

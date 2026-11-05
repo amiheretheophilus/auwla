@@ -32,6 +32,10 @@ export function planSourceFlow(
 
   const module = entry.module;
   const reach = sourceReach(graph, components);
+  if (reach.freeOfSources(module)) {
+    return undefined;
+  }
+
   const payloadReads: Node[] = [];
   const memberObjects: Expression[] = [];
   const presented = new Set<Node>();

@@ -12,9 +12,9 @@ import { expression, statement } from '../../core/emit/quote';
 
 export interface SharedOwnerEmit {
   /**
-   * A module's plain state: no derivation, takeover, effect, ref or source, so
-   * nothing recomputes on read and no write can happen during a build. It needs
-   * no build scope, refresh or completion, only versions and keys.
+   * Plain state of a module, factory or block: no derivation, takeover, effect, ref or
+   * source, so nothing recomputes on read. It needs no build scope, refresh or completion,
+   * only versions and keys. A write during its own setup has no readers yet to tell.
    */
   readonly simple: boolean;
   readonly invocation: string;
@@ -57,10 +57,14 @@ export function emitSharedState(plan: ModulePlan, names: Names, runtime: string,
     const declarations: Statement[] = [];
     const notifiers = new Map<BindingNode, string>();
     const observed = owner.state.some((binding) => plan.sharedReads.get(binding)?.observer !== undefined);
-    const simple = owner.fn === null && owner.block === null && !observed && data === undefined
+    // A `const` only matters here if something assigns to it, which must throw.
+    const assignsConst = owner.readonlyBindings.some((binding) => {
+      return binding.writes.some(({ site }) => site.kind === 'assign' || site.kind === 'update');
+    });
+    const simple = !observed && data === undefined && !assignsConst
       && owner.memos.length === 0 && owner.takeovers.length === 0 && owner.replayMutations.length === 0
-      && owner.replayWrites.length === 0 && owner.readonlyBindings.length === 0
-      && !plan.effects.groups.some((group) => group.owner === null)
+      && owner.replayWrites.length === 0
+      && !plan.effects.groups.some((group) => group.owner === owner.fn)
       && !plan.refs.some((ref) => owner.state.includes(ref.binding));
     for (const binding of owner.state) {
       const read = plan.sharedReads.get(binding);

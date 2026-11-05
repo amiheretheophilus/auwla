@@ -25,17 +25,11 @@ import { emitComponentCall } from '../../features/components/dom';
 import { emitProps } from '../../features/props/dom';
 import { declaredWithFunction, functionValue } from '../resolve/functions';
 import { namespaceModule } from '../resolve';
-import { frameworkPackage, importedName } from '../resolve/exports';
+import { isFrameworkMount } from '../resolve/exports';
 import { emitRefs } from '../../features/refs/dom';
 import { emitEffectGroups, emitLifecycleCalls } from '../../features/effects/dom';
 import { emitSources } from '../../features/sources/dom';
 import { emitSourceFlow, sourceReadinessStorage } from '../../features/sources/flow-dom';
-
-function isFrameworkMount(module: ModulePlan['module']['module'], call: Extract<Node, { type: 'CallExpression' }>): boolean {
-  if (!is.Identifier(call.callee)) return false;
-  const binding = module.referenceOf(call.callee)?.binding ?? null;
-  return binding !== null && frameworkPackage(binding) !== null && importedName(binding) === 'mount';
-}
 
 /** Preserve module syntax and exports, replacing planned functions on a fresh tree. */
 export function emitDom(plan: ModulePlan, options: CompileModulesOptions): Node {
