@@ -24,6 +24,7 @@ Finds every place that changes state and makes the UI update after it.
 | `optimize/methods.ts`, `optimize/method-facts.ts` | Known reads stay plain calls and known edits report their root (`optimize.md`, "Method calls") |
 | `optimize/methods.dom.test.ts` | Callback classification and native updates, overrides and order, with optimizations on and off |
 | `tests/cases/handlers.test.ts` | Reference comparisons for handlers, async writes, helper callbacks, accessors, method/prototype replacement and index/property-key conversions whose edits must reach the UI |
+| `packages/runtime/src/recovery-hooks.ts` | Lets write batches and build scopes restore observations and computations after a throw without importing those modules, so a program that has neither does not retain them |
 | `packages/runtime/src/write-batch.ts` | Captures the application and entity, publishes groups of pending writes, and shares recovery scheduling across unfinished batches |
 | `packages/runtime/tests/write-batch.test.ts` | Scheduler independence, nested listeners, native receivers/results, exceptions, disposal and application isolation |
 | `packages/runtime/tests/write-batch-recovery.test.ts` | Commit/callback counts, parent-child overlap, later writes, explicit renders, cross-application order and recovery failures |

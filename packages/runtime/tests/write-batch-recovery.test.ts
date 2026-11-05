@@ -219,14 +219,17 @@ it('preserves remaining rows when opaque mutation recovery throws', () => {
   expect(renders).toBe(2);
 });
 
-it('preserves extracted batch methods used as callbacks', () => {
+// Computations hold `mark` as their notifier. The other methods are called on the
+// batch, so a component instance does not allocate a bound copy of each.
+it('preserves an extracted mark used as a callback', () => {
   const runtime = application();
   let renders = 0;
-  const { mark, flush, listener } = row(runtime, 'row', () => renders++);
+  const batch = row(runtime, 'row', () => renders++);
+  const { mark } = batch;
   holdRecovery();
-  listener(mark)();
+  batch.listener(mark)();
   expect(renders).toBe(1);
   mark();
-  flush();
+  batch.flush();
   expect(renders).toBe(2);
 });

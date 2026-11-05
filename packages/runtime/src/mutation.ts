@@ -3,10 +3,11 @@ import {
   getActiveApplicationRuntime,
   getExtensionStore,
   onEntityDispose,
-  runWithApplicationRuntime,
+  runInApplicationRuntime,
   type Entity,
 } from './kernel';
 import { advanceWriteEpoch } from './write-epoch';
+import { recoveryHooks } from './recovery-hooks';
 import { isRefNode } from './refs';
 
 const arrayIsArray = Array.isArray;
@@ -540,7 +541,7 @@ function scheduleRecovery(): void {
   state.queued = true;
   globalThis.queueMicrotask(() => {
     state.queued = false;
-    runWithApplicationRuntime(runtime, () => recoverPending(state));
+    runInApplicationRuntime(runtime, () => recoverPending(state));
   });
 }
 
@@ -560,6 +561,10 @@ export function captureMutationScope(): () => void {
     }
   };
 }
+
+recoveryHooks.recoverMutations = recoverMutations;
+recoveryHooks.resumeMutations = resumeMutations;
+recoveryHooks.captureMutations = captureMutationScope;
 
 function differs(prior: readonly unknown[], after: readonly unknown[]): boolean {
   return prior.length !== after.length || prior.some((value, i) => !Object.is(value, after[i]));

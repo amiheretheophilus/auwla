@@ -6,7 +6,15 @@ import { expression, stringLiteral } from '../../core/emit/quote';
 import { copy } from '../../core/emit/copy';
 import type { ComponentCall } from './plan';
 
-export function emitComponentCall(call: ComponentCall, runtime: string, compiled = false, presentation?: Expression, data?: string): Expression {
+export function emitComponentCall(
+  call: ComponentCall,
+  runtime: string,
+  compiled = false,
+  presentation?: Expression,
+  data?: string,
+  /** The tag names a component this compilation compiled, not an unknown value. */
+  known = false,
+): Expression {
   const intrinsic = intrinsicTag(call);
   let tag = intrinsic === null ? tagExpression(call.openingElement.name) : stringLiteral(intrinsic);
   if (compiled) {
@@ -60,8 +68,9 @@ export function emitComponentCall(call: ComponentCall, runtime: string, compiled
 
   // The runtime extracts key after evaluating the object. This preserves key
   // expressions and spread getters in their native left-to-right order.
+  const factory = known ? 'createCompiledValue' : 'createComponentValue';
   return expression(data === undefined
-    ? '$$runtime.createComponentValue($$tag, $$props, void 0, $$presentation)'
+    ? `$$runtime.${factory}($$tag, $$props, void 0, $$presentation)`
     : '$$data.createSourceComponentValue($$tag, $$props, void 0, $$presentation)', {
     data: data ?? runtime,
     runtime, tag, props: b.ObjectExpression({ properties }),

@@ -3,11 +3,10 @@ import {
   getActiveApplicationRuntime,
   getExtensionStore,
   onCommitFinished,
-  runWithApplicationRuntime,
+  runInApplicationRuntime,
   type ApplicationRuntime,
 } from './kernel';
-import { captureComputationScope, resetComputationScope } from './computation';
-import { captureMutationScope } from './mutation';
+import { recoveryHooks } from './recovery-hooks';
 
 interface BuildStore {
   readonly runtime: ApplicationRuntime;
@@ -15,7 +14,6 @@ interface BuildStore {
   epoch: number;
   queued: boolean;
 }
-const frameStores = new WeakMap<BuildFrame, BuildStore>();
 
 export interface BuildFrame {
   readonly owner: object;
@@ -24,6 +22,7 @@ export interface BuildFrame {
   readonly epoch: number;
   readonly invocation: boolean;
   readonly onAbandon?: () => void;
+  readonly store: BuildStore;
 }
 
 export interface BuildScope {
@@ -60,11 +59,11 @@ export function isEffectInvocation(): boolean {
 function reset(store: BuildStore): void {
   // A queued reset may run while another application is active. Both teardown
   // and collector recovery still belong to the application that owns the frames.
-  runWithApplicationRuntime(store.runtime, () => {
+  runInApplicationRuntime(store.runtime, () => {
     settleAbandoned(store, null);
     store.current = null;
     store.epoch++;
-    resetComputationScope();
+    recoveryHooks.resetComputations();
   });
 }
 
@@ -85,12 +84,12 @@ export function captureBuildScope(): () => void {
   const store = buildStore();
   const current = store.current;
   const epoch = store.epoch;
-  const restoreComputation = captureComputationScope();
-  const restoreMutations = captureMutationScope();
+  const restoreComputation = recoveryHooks.captureComputations();
+  const restoreMutations = recoveryHooks.captureMutations();
   return () => {
     // Recovery belongs to the captured application even if another one is
     // currently active. Mutation notifications can consult that active context.
-    runWithApplicationRuntime(store.runtime, () => {
+    runInApplicationRuntime(store.runtime, () => {
       // An async continuation must not revive an owner from a finished turn.
       if (store.epoch === epoch) {
         settleAbandoned(store, current);
@@ -102,60 +101,73 @@ export function captureBuildScope(): () => void {
   };
 }
 
-/** Each invocation has its own identity, even when an entity id is reused. */
-export function createBuildScope(shared = false, inheritOwner = false, invocation = false): BuildScope {
-  const runtime = getActiveApplicationRuntime();
-  const store = buildStore();
+/** A class, not closures: a component row creates one per instance. */
+class Scope implements BuildScope {
+  private readonly runtime = getActiveApplicationRuntime();
+  private readonly store = buildStore();
   // A lexical block shares its surrounding setup's write ownership, but needs
   // a distinct scope identity to tell whether that particular block is active.
-  const owner = inheritOwner ? store.current?.owner ?? {} : {};
-  const scope = {};
-  return {
-    enter(onAbandon) {
-      const active = shared ? buildStore() : store;
-      const frame: BuildFrame = {
-        owner, scope, previous: active.current, epoch: active.epoch, onAbandon,
-        invocation: invocation || (active.current?.invocation ?? false),
-      };
-      frameStores.set(frame, active);
-      active.current = frame;
-      if (!active.queued) {
-        active.queued = true;
-        // A throwing setup cannot execute its leave. Discard abandoned frames
-        // at the next synchronous boundary without wrapping authored code.
-        globalThis.queueMicrotask(() => {
-          active.queued = false;
-          reset(active);
-        });
-      }
-      return frame;
-    },
-    leave(frame) {
-      const active = frameStores.get(frame)!;
-      if (frame.epoch !== active.epoch) {
-        return;
-      }
-      active.current = frame.previous;
-    },
-    building() {
-      const active = shared ? buildStore() : store;
-      return (shared || getActiveApplicationRuntime() === runtime) && active.current?.owner === owner;
-    },
-    active() {
-      const active = shared ? buildStore() : store;
-      if (!shared && getActiveApplicationRuntime() !== runtime) {
-        return false;
-      }
-      for (let frame = active.current; frame !== null; frame = frame.previous) {
-        if (frame.scope === scope && frame.epoch === active.epoch) {
-          return true;
-        }
-      }
+  private readonly owner: object;
+
+  constructor(private readonly shared: boolean, inheritOwner: boolean, private readonly invocation: boolean) {
+    this.owner = inheritOwner ? this.store.current?.owner ?? {} : {};
+  }
+
+  private activeStore(): BuildStore {
+    return this.shared ? buildStore() : this.store;
+  }
+
+  enter(onAbandon?: () => void): BuildFrame {
+    const active = this.activeStore();
+    const frame: BuildFrame = {
+      owner: this.owner, scope: this, previous: active.current, epoch: active.epoch, onAbandon, store: active,
+      invocation: this.invocation || (active.current?.invocation ?? false),
+    };
+    active.current = frame;
+    if (!active.queued) {
+      active.queued = true;
+      // A throwing setup cannot execute its leave. Discard abandoned frames
+      // at the next synchronous boundary without wrapping authored code.
+      globalThis.queueMicrotask(() => {
+        active.queued = false;
+        reset(active);
+      });
+    }
+    return frame;
+  }
+
+  leave(frame: BuildFrame): void {
+    const active = frame.store;
+    if (frame.epoch !== active.epoch) {
+      return;
+    }
+    active.current = frame.previous;
+  }
+
+  building(): boolean {
+    return (this.shared || getActiveApplicationRuntime() === this.runtime) && this.activeStore().current?.owner === this.owner;
+  }
+
+  active(): boolean {
+    if (!this.shared && getActiveApplicationRuntime() !== this.runtime) {
       return false;
-    },
-    finish(frame, value) {
-      this.leave(frame);
-      return value;
-    },
-  };
+    }
+    const active = this.activeStore();
+    for (let frame = active.current; frame !== null; frame = frame.previous) {
+      if (frame.scope === this && frame.epoch === active.epoch) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  finish<T>(frame: BuildFrame, value: T): T {
+    this.leave(frame);
+    return value;
+  }
+}
+
+/** Each invocation has its own identity, even when an entity id is reused. */
+export function createBuildScope(shared = false, inheritOwner = false, invocation = false): BuildScope {
+  return new Scope(shared, inheritOwner, invocation);
 }

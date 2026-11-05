@@ -65,7 +65,19 @@ export function mountStore(): MountStore {
 
 /** Compiler-emitted metadata. Authored entries continue to call mount(). */
 export function registerRootFactory(component: Function, definition: RootFactoryDefinition): void {
-  rootFactoryStore().set(component, definition);
+  const store = rootFactoryStore();
+  store.set(component, definition);
+  // `mount('root', App)` passes the function itself, while any other reference to
+  // `App` holds its callable adapter. Registering through either serves both.
+  const aliased = rootAliases.get(component);
+  if (aliased !== undefined) store.set(aliased, definition);
+}
+
+const rootAliases = new WeakMap<Function, Function>();
+
+/** `adapter` is another reference to the root `component`. */
+export function aliasRoot(adapter: Function, component: Function): void {
+  rootAliases.set(adapter, component);
 }
 export function removeNodes(nodes: readonly Node[]): void {
   for (const node of nodes) node.parentNode?.removeChild(node);

@@ -17,7 +17,7 @@ Finds components, and compiles calls to them: props, children and slots.
 | `features/components/bench.test.ts` | Unchanged Octane inline rows and DOM component rows, mounted through the real application API with 1,000-row correctness and disposal checks |
 | `features/props/classify.ts` | Component identities and native parameter bindings |
 | `features/props/dom.ts` | Native parameter patterns, defaults/rest, per-binding parent snapshots and prop reception |
-| `packages/runtime/src/components.ts` | Props cells, callable adapters, compiled/native tag mounting, generic host props and subtree disposal |
+| `packages/runtime/src/components.ts` | Props cells, callable adapters, compiled/native tag mounting, generic host props and subtree disposal. A tag the compiler knows is a compiled component uses `createCompiledValue`, which retains no host-props or native renderer. `mount('root', App)` passes the function itself and needs no adapter; a root factory registered through either reference serves both (`aliasRoot`) |
 | `packages/runtime/tests/components.test.ts` | Adapter identity/metadata, native argument lists, shared program caches, consumer isolation and setup disposal |
 | `packages/runtime/tests/component-bundle.test.ts` | Production tree shaking excludes opaque value/list mounting from root-only adapters and retains it for dynamic tags |
 | `tests/generator/components.test.ts` | Named/member/factory components, symbol/rest props, key order, retained state, and markup consumed in independent HTML/SVG destinations |

@@ -13,7 +13,7 @@ import { patchDomProps } from './dom-props';
 import { createComputation } from './computation';
 import { createWriteBatch } from './write-batch';
 import { createBuildScope } from './build-scope';
-import { registerRootFactory, rootFactoryStore } from './mount-core';
+import { aliasRoot, registerRootFactory, rootFactoryStore } from './mount-core';
 import {
   createRenderValue,
   createValueSlot,
@@ -136,18 +136,32 @@ export function defineComponent<T extends Function>(component: T, rootId?: strin
   return component;
 }
 
+/**
+ * JSX-only controls participate in identity and readiness, never in the child's
+ * authored props object. Spreads have already evaluated their getters.
+ */
+function withoutControls(props: unknown): unknown {
+  const attributes = asProps(props);
+  const has = Object.prototype.hasOwnProperty;
+  if (!has.call(attributes, 'key') && !has.call(attributes, 'suspend')) return props;
+
+  const { key: _key, suspend: _suspend, ...forwarded } = attributes;
+  return forwarded;
+}
+
+/**
+ * `<Row a={1} />` where the compiler knows `Row` is a compiled component. It needs
+ * none of what an unknown tag might: a host element's props, or a native renderer.
+ */
+export function createCompiledValue(component: Function, props: unknown, key?: unknown, presentation?: unknown): object {
+  const identity = key === undefined ? asProps(props).key : key;
+  return createRenderValue(componentProgram(component as Component), [withoutControls(props), undefined, presentation], identity);
+}
+
 /** A component call, or a string tag, as a value a slot can show. */
 export function createComponentValue(callee: unknown, props: unknown, key?: unknown, presentation?: unknown): object {
-  const attributes = asProps(props);
-  const identity = key === undefined ? attributes.key : key;
-  let inputs = props;
-  const has = Object.prototype.hasOwnProperty;
-  if (has.call(attributes, 'key') || has.call(attributes, 'suspend')) {
-    // JSX-only controls participate in identity and readiness, never in the
-    // child's authored props object. Spreads have already evaluated their getters.
-    const { key: _key, suspend: _suspend, ...forwarded } = attributes;
-    inputs = forwarded;
-  }
+  const identity = key === undefined ? asProps(props).key : key;
+  const inputs = withoutControls(props);
   if (typeof callee === 'function') {
     const component = valueComponents.get(callee) ?? callee;
     const program = componentProgram(component as Component, nativeComponentProgram);
@@ -184,6 +198,7 @@ export function componentValue(component: Function): (...args: unknown[]) => obj
     // identity, arguments and root factory, rather than wrapping it again.
     valueFunctions.set(adapter, adapter);
     valueComponents.set(adapter, component);
+    aliasRoot(adapter, component);
     const root = rootFactoryStore().get(component);
     if (root !== undefined) {
       // An authored entry passes a value reference to mount(), which still

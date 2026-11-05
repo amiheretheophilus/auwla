@@ -66,6 +66,11 @@ export function frameworkPackage(binding: Binding): string | null {
   return framework ? entry.specifier : null;
 }
 
+/** The name a binding has in the module it was imported from. */
+export function importedName(binding: Binding): string | null {
+  return importOf(binding)?.name ?? null;
+}
+
 export function isValueImport(binding: Binding): boolean {
   const entry = importOf(binding);
   return entry !== undefined && !entry.typeOnly;

@@ -162,7 +162,7 @@ export {
   childSlot, disposeSlot,
 } from './render-value';
 export {
-  componentValue, componentSetup, createComponentValue, createPropsCell,
+  componentValue, componentSetup, createCompiledValue, createComponentValue, createPropsCell,
   defineComponent, sameProps, sameValue, type PropsCell,
 } from './components';
 export { publishVersions } from './computation';

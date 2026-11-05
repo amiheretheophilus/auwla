@@ -14,8 +14,10 @@ async function collectAfterTurn(reference?: WeakRef<object>): Promise<void> {
   // WeakRef targets stay alive for the job in which they were created. Cross
   // that boundary before forcing collection; never use heap-size thresholds.
   // Collection can defer weak processing or see conservative stack roots.
-  // Bound the retry count; a real queued strong reference cannot pass this.
-  for (let attempt = 0; attempt < 8; attempt++) {
+  // Bound the retry count; a real queued strong reference cannot pass this. A full
+  // suite leaves a larger heap, where one conservative root can outlive many
+  // collections, so this bound only decides how long such a root gets to clear.
+  for (let attempt = 0; attempt < 64; attempt++) {
     // Collect from a fresh native task, rather than the suspended test's
     // continuation. Warm JSC frames can conservatively retain retired locals.
     await produceInTask(() => Bun.gc(true));

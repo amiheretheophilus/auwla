@@ -1,9 +1,9 @@
 /** Compiler-owned local write commits, independent of scheduler eagerness. */
 import {
   enqueueEntityInvalidations, getActiveApplicationRuntime, getEntity, getExtensionStore,
-  onEntityRender, runWithApplicationRuntime, type Entity,
+  onEntityRender, runInApplicationRuntime, type Entity,
 } from './kernel';
-import { recoverMutations, resumeMutations } from './mutation';
+import { recoveryHooks } from './recovery-hooks';
 import { advanceWriteEpoch } from './write-epoch';
 
 const pendingBoundaries = new Set<LocalWriteBatch>();
@@ -15,7 +15,7 @@ let listenerDepth = 0;
 
 /** Preserve the operand while committing the synchronous stretch before await. */
 export function flushWritesBeforeAwait<T>(value: T): T {
-  recoverMutations();
+  recoveryHooks.recoverMutations();
   flushPendingWrites();
   return value;
 }
@@ -62,7 +62,7 @@ function recoverWrites(): void {
       scheduleRecovery();
     }
     listenerDepth = 0;
-    runWithApplicationRuntime(first.runtime, recoverMutations);
+    runInApplicationRuntime(first.runtime, recoveryHooks.recoverMutations);
     const group = takeGroup(pendingRecoveries, first);
     for (const batch of group) {
       batch.resumeRecovery();
@@ -73,7 +73,7 @@ function recoverWrites(): void {
 
 function commitBatches(batches: readonly LocalWriteBatch[], force: boolean): void {
   const runtime = batches[0]!.runtime;
-  runWithApplicationRuntime(runtime, () => {
+  runInApplicationRuntime(runtime, () => {
     const ids: string[] = [];
     for (const batch of batches) {
       const entity = batch.takeWrite(force);
@@ -105,7 +105,7 @@ onEntityRender((entity) => {
 
 /** A call containing an awaited argument can still throw after resumption. */
 export function resumeWritesAfterAwait<T>(value: T): T {
-  resumeMutations();
+  recoveryHooks.resumeMutations();
   return value;
 }
 
@@ -134,13 +134,9 @@ class LocalWriteBatch implements WriteBatch {
   private depth = 0;
 
   constructor(private readonly entity: Entity) {
-    // The original API allowed every public method to be passed as a callback.
-    // Keep that contract, including the mark callback used by computations.
-    this.beginMount = this.beginMount.bind(this);
-    this.activate = this.activate.bind(this);
+    // Computations hold `mark` as their notifier. The other methods are always
+    // called on the batch, and a component row should not pay for their closures.
     this.mark = this.mark.bind(this);
-    this.flush = this.flush.bind(this);
-    this.listener = this.listener.bind(this);
     batchIndex().set(entity, this);
   }
 

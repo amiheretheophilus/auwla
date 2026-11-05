@@ -25,10 +25,17 @@ import { emitComponentCall } from '../../features/components/dom';
 import { emitProps } from '../../features/props/dom';
 import { functionValue } from '../resolve/functions';
 import { namespaceModule } from '../resolve';
+import { frameworkPackage, importedName } from '../resolve/exports';
 import { emitRefs } from '../../features/refs/dom';
 import { emitEffectGroups, emitLifecycleCalls } from '../../features/effects/dom';
 import { emitSources } from '../../features/sources/dom';
 import { emitSourceFlow, sourceReadinessStorage } from '../../features/sources/flow-dom';
+
+function isFrameworkMount(module: ModulePlan['module']['module'], call: Extract<Node, { type: 'CallExpression' }>): boolean {
+  if (!is.Identifier(call.callee)) return false;
+  const binding = module.referenceOf(call.callee)?.binding ?? null;
+  return binding !== null && frameworkPackage(binding) !== null && importedName(binding) === 'mount';
+}
 
 /** Preserve module syntax and exports, replacing planned functions on a fresh tree. */
 export function emitDom(plan: ModulePlan, options: CompileModulesOptions): Node {
@@ -73,6 +80,11 @@ export function emitDom(plan: ModulePlan, options: CompileModulesOptions): Node 
       || is.ExportSpecifier(parent) || is.ExportDefaultDeclaration(parent)) {
       continue;
     }
+    // `mount('root', App)` looks up App's root factory and never calls or exposes
+    // the function, so it needs no callable adapter or the renderer behind one.
+    if (is.CallExpression(parent) && parent.arguments.includes(reference.node as never) && isFrameworkMount(module, parent)) {
+      continue;
+    }
     const discarded = is.CallExpression(parent) && parent.callee === reference.node
       && is.ExpressionStatement(module.parentOf(parent));
     replacements.set(reference.node, expression(discarded
@@ -95,7 +107,8 @@ export function emitDom(plan: ModulePlan, options: CompileModulesOptions): Node 
     });
     const value = emitComponentCall(call, runtime, nested,
       plan.sourceFlow === undefined ? undefined : sourceFlow.policyOf(call),
-      plan.sourceFlow === undefined ? undefined : data);
+      plan.sourceFlow === undefined ? undefined : data,
+      fn !== null);
 
     replacements.set(call, sourceFlow.suspendValue(call, sourceFlow.elementValue(call, value)));
   }

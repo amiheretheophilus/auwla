@@ -1,6 +1,7 @@
 /** Dependencies reached through compiled callbacks during an opaque computation. */
 import { getExtensionStore, onCommitFinished, onEntityDispose, type Entity } from './kernel';
 import { advanceWriteEpoch } from './write-epoch';
+import { recoveryHooks } from './recovery-hooks';
 
 type Version = () => number;
 interface Dependency {
@@ -193,6 +194,9 @@ onCommitFinished((failed) => {
     resetComputationScope();
   }
 });
+
+recoveryHooks.resetComputations = resetComputationScope;
+recoveryHooks.captureComputations = captureComputationScope;
 
 /**
  * One site's or memo's tracked reads. A class, not closures, and maps created
