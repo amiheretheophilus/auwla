@@ -293,9 +293,9 @@ export function readsWithPaths(
 }
 
 /** `$when(() => [inputs], () => expression)`: the expression runs once its inputs are ready. */
-export function waitForExpression(expression: Expression, readsOf: ReadsOf): Expression {
-  if (is.JSXElement(expression) || is.JSXFragment(expression)) return expression;
-  return runtimeCall('$when', [thunk(inputsOf(expression, readsOf)), thunk(expression)]);
+export function waitForExpression(expression: Expression, readsOf: ReadsOf, value: Expression = expression): Expression {
+  if (is.JSXElement(expression) || is.JSXFragment(expression)) return value;
+  return runtimeCall('$when', [thunk(inputsOf(expression, readsOf)), thunk(value)]);
 }
 
 /**

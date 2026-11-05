@@ -205,10 +205,21 @@ control of it (approved 2026-10-20, superseding snapshots from initialization).
 | something reactive | no | **derived**: re-run when what it reads changes |
 | something reactive | yes | **state**: holds the later assigned value; no further derivation |
 
-An edit of a field is not a reassignment. `const state = { value: counter, input: "" }`
-with `state.input = x` stays derived: the edit shows and lasts through unrelated updates,
-and when `counter` changes the whole object is built again, so `input` goes back to `""`.
-To keep the field across that change, hold it apart: `let input = ""`.
+A plain object literal updates field by field (`../decisions.md`, 2026-11-05). In
+`const state = { value: counter, input: "" }`, `input` does not read `counter`, so a
+change of `counter` leaves it and its edits alone:
+
+- The object stays the same one, so whoever holds it sees the changes.
+- A field is computed again only when what its own value reads changes, and then that
+  replaces any edit to it (`{ a: n }`, `state.a = 9`, then `n` changes: `a` is `n`).
+- A field that reads nothing runs once (`{ id: next++ }`).
+- A reassignment still takes control of the whole value (`state = other`).
+- A field that reads what the compiler cannot see (`{ a: make() }`) is computed whenever
+  any field is; a new object from it replaces any edit to it.
+- Only the top level: `{ a: { b: n, c: "" } }` builds `a` again when `n` changes. An
+  array literal (`[n, ""]`) and `new Map(…)` are also built again as a whole.
+- A literal with a spread, computed key or getter is built again as a whole, and so is
+  one that a body statement builds or may build (`state.c = m`, `register(state)`).
 
 Values that may build each other share a computation group. Re-running a group for one
 member's change does not create another member again unless that member's own inputs
@@ -359,6 +370,7 @@ The graph classification is built (`core/graph/classify.ts`, described in
 | `features/derived/classify.ts` | spreads reactivity through reads (a worklist, so cycles end); gives imports their definition's kind |
 | `features/derived/plan.ts` | native declarations, definite builders, shared-statement groups and their version inputs |
 | `features/derived/dom.ts` | source-ordered, version-guarded replay and writable memo storage |
+| `features/derived/literal-fields.ts` | which object literals update field by field, used by the plan and the reference |
 | `features/derived/takeover.ts` | local takeover flags and native store targets, checked against runtime execution ownership |
 | `features/state/shared-plan.ts` | native module/factory storage owners and live reader exports |
 | `features/state/shared-dom.ts` | per-owner versions, readers, source-ordered setup completion and shared refresh |

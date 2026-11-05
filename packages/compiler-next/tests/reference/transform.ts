@@ -35,6 +35,7 @@ import { generate } from 'yuku-codegen';
 import { parse } from 'yuku-parser';
 import type { BlockStatement, Expression, Node, Statement, VariableDeclarator } from 'yuku-parser';
 import { callOnlyReads } from '../../src/optimize/effects';
+import { literalFields } from '../../src/features/derived/literal-fields';
 import { blockThunk, constDeclaration, identifier, member, numberLiteral, runtimeCall, thunk } from './ast';
 import { ClosureCells } from './closures';
 import { enclosingFunction, Reads } from './reads';
@@ -50,6 +51,7 @@ import {
   shouldWaitAtAttribute,
   statusInput,
   sourceUses,
+  inputsOf as visibleInputs,
   waitForExpression,
   waitForRenderExpression,
   type ReadsOf,
@@ -898,6 +900,31 @@ class ComponentRewrite {
   // --- Building slot declarations and lifecycle calls ----------------------
 
   /**
+   * A plain object literal nothing else builds updates field by field
+   * (`wiki/decisions.md`, 2026-11-05):
+   *   `$ctx.literalFields(0, [["value", () => counter], ["input", () => ""]])`
+   */
+  private fieldsOf(binding: Binding, slot: Slot): Expression | undefined {
+    const declarator = this.declaratorOf(binding)!;
+    if (!is.Identifier(declarator.id)) return undefined;
+
+    const built = [...this.plans.values()].some((plan) => plan.builds.has(binding) || plan.mayBuild.includes(binding))
+      || [...this.initializerBuilds.values()].some((targets) => targets.includes(binding));
+    const fields = built ? null : literalFields(declarator.init);
+    if (fields === null) return undefined;
+
+    // A function's reads run when it is called, so they do not rebuild the field.
+    const entries = fields.map(({ key, value }) => b.ArrayExpression({
+      elements: [
+        b.Literal({ value: key, raw: JSON.stringify(key) }),
+        thunk(is.Function(value) ? b.ArrayExpression({ elements: [] }) : visibleInputs(value, this.readsOf())),
+        thunk(value as Expression),
+      ],
+    }));
+    return ctxCall('literalFields', [numberLiteral(slot.index), b.ArrayExpression({ elements: entries })]);
+  }
+
+  /**
    * `let x = init` becomes:
    *   `let $s0 = $ctx.memo(0, () => [inputs…], () => init)`
    * and `const { a } = init` becomes memos for the value, the pattern and each
@@ -910,7 +937,7 @@ class ComponentRewrite {
       if (slot.treatment === 'prop' || this.patternOrigins.has(binding)) continue;
       const declarator = this.declaratorOf(binding)!;
       const initialValue = declarator.init ?? identifier('undefined');
-      const initial = thunk(waitForExpression(initialValue, this.readsOf()));
+      const initial = thunk(waitForExpression(initialValue, this.readsOf(), this.fieldsOf(binding, slot) ?? initialValue));
       // The slot holds the initializer's value at once. While a statement that
       // builds it is blocked on a source, rendering waits too (`$ready`); the
       // runtime tracks that as statements run (`Instance.blockedFor`).
@@ -1305,7 +1332,7 @@ function rewriteModuleEffects(module: Module): void {
 // Component runtime calls
 
 type CtxMethod = Treatment | 'effect' | 'cleanup' | 'observe' | 'confirmed' | 'mayChange' | 'ran' | 'due' | 'statement' | 'callback'
-  | 'returning' | 'retainFunction';
+  | 'returning' | 'retainFunction' | 'literalFields';
 
 /** `$ctx.memo(...)`, `$ctx.prop(...)`, `$ctx.observe(...)`, … */
 function ctxCall(method: CtxMethod, args: Expression[]): Expression {

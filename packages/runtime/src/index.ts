@@ -79,7 +79,7 @@ export { createWriteBatch, rejectConstAssignment, unchangedWrite, flushWritesBef
 export type { WriteBatch } from './write-batch';
 export { createBuildScope, captureBuildScope, currentBuildFrame, isBuilding, isEffectInvocation } from './build-scope';
 export {
-  mutationTarget, deleteMutation, receiverMutationTarget, observeMutation, editArray, watchMutationRoots, checkMutationRoots,
+  mutationTarget, mergeFields, deleteMutation, receiverMutationTarget, observeMutation, editArray, watchMutationRoots, checkMutationRoots,
   mutatedSince, mutationTime,
 } from './mutation';
 export { createRowCache, mapRows } from './list-map';

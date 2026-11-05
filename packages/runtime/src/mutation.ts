@@ -732,6 +732,29 @@ export function mutationTarget(object: any, key: any, notify: () => void) {
   };
 }
 
+/**
+ * Computing a plain object literal again. The object stays, with its edits, and only the
+ * fields whose own inputs changed are stored (`keys`; a field that did not is `false`).
+ * With no object yet to keep, because the value was waiting for a source, or if it is
+ * waiting now, the new value replaces it.
+ */
+export function mergeFields(
+  current: any, next: any, keys: readonly (string | false)[], notify: () => void,
+): unknown {
+  if (!isPlainObject(current) || !isPlainObject(next)) {
+    notify();
+    return next;
+  }
+  for (const key of keys) {
+    if (key !== false) mutationTarget(current, key, notify).value = next[key];
+  }
+  return current;
+}
+
+function isPlainObject(value: unknown): boolean {
+  return isObject(value) && Object.getPrototypeOf(value) === Object.prototype;
+}
+
 export function deleteMutation(object: any, key: any, notify: () => void): boolean {
   const had = Object.prototype.hasOwnProperty.call(object, key);
   const result = delete object[key];

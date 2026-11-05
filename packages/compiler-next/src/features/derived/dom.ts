@@ -222,13 +222,45 @@ export function emitMemos(
         if (receiver === undefined) continue;
         for (const declaration of target.binding.declarations) replacements.set(declaration, receiver);
       }
+      const only = memo.targets.length === 1 ? memo.targets[0]! : null;
+      const fields = only !== null && !takeovers.targets.has(only) ? memo.fields : undefined;
+
+      // A field that reads nothing is never computed again: `{ id: nextId++ }` runs once.
+      const changing = (fields ?? []).filter((field) => field.unseen || field.inputs.some((input) => versions.has(input)));
+      for (const field of fields ?? []) {
+        // Reading a name or creating a function does nothing, and neither `{ token }` nor
+        // `{ run() {} }` has a value that could be anything else.
+        if (changing.includes(field) || is.Identifier(field.value) || is.Function(field.value)) continue;
+        replacements.set(field.value, expression('void 0'));
+      }
+
       const declarator = copy(memo.declarator, replacements);
       walk(declarator.id, { Property(node) { if (node.shorthand) node.shorthand = false; } });
       const value = declarator.init ?? expression('void 0');
       const assign = statement('($$target = $$value);', { target: declarator.id, value });
       const body = [assign];
-      const only = memo.targets.length === 1 ? memo.targets[0]! : null;
-      if (only !== null && !takeovers.targets.has(only) && is.Identifier(declarator.id) && memo.builders.length === 0 && !group.dynamic) {
+      if (fields !== undefined) {
+        // Each key is listed only when what its own value reads has changed.
+        const keys = changing.map((field) => {
+          const name = JSON.stringify(field.key);
+          if (field.unseen) return expression(name);
+
+          const moved = field.inputs.flatMap((input) => {
+            const version = versions.get(input);
+            if (version === undefined) return [];
+
+            const seen = names.fresh('_fieldFrom');
+            snapshots.push(statement('let $$seen = $$version;', { seen, version }));
+            settle(group, statement('$$seen = $$version;', { seen, version }));
+            return [expression('$$seen !== $$version', { seen, version })];
+          }).reduce((left, right) => b.LogicalExpression({ operator: '||', left, right }));
+          return expression(`($$moved) && ${name}`, { moved });
+        });
+        body[0] = statement('($$target = $$runtime.mergeFields($$target, $$value, $$keys, () => { $$version++; }));', {
+          target: declarator.id, value, runtime, version: versions.get(only!)!,
+          keys: b.ArrayExpression({ elements: keys }),
+        });
+      } else if (only !== null && !takeovers.targets.has(only) && is.Identifier(declarator.id) && memo.builders.length === 0 && !group.dynamic) {
         // Computing the same primitive again is not a change (`wiki/decisions.md`, 2026-11-05).
         // With later statements building it, or readiness, this is not its final value.
         const before = names.fresh('_before');

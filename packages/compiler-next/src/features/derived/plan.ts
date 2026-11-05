@@ -3,9 +3,11 @@ import { is } from 'yuku-ast';
 import type { Node, Statement, VariableDeclaration, VariableDeclarator } from 'yuku-parser';
 import type { BindingNode, SemanticGraph } from '../../core/graph';
 import { variableDeclaration, type InputQueries } from '../../core/graph/inputs';
-import type { MemoGroupPlan, MemoPlan } from '../../core/plan/model';
+import type { FieldPlan, MemoGroupPlan, MemoPlan } from '../../core/plan/model';
 import { storageOwner } from '../../core/plan/storage';
 import { nestedVarStatement } from './computations';
+import { literalFields } from './literal-fields';
+import { effectFree } from '../../optimize/effects';
 
 export function planMemos(
   graph: SemanticGraph, queries: InputQueries, components: ReadonlySet<Node | null>,
@@ -111,6 +113,24 @@ export function planMemos(
         inputs.add(dependency);
       }
     }
+    // Anything else that builds it starts again from its initial value each time.
+    const alone = targets.length === 1 && is.Identifier(declarator.id) && builders.size === 0 && possibleBuilders.size === 0;
+    const fields = alone ? literalFields(declarator.init)?.map((field): FieldPlan => {
+      const reads = is.Function(field.value) ? null : queries.inputsOf(module, field.value);
+      const dependencies = new Set<BindingNode>();
+      for (const read of reads?.reads ?? []) {
+        const binding = read.binding ?? read.reference.binding;
+        const dependency = binding === null ? undefined : graph.bindings.get(binding);
+        if (dependency !== undefined && !targets.includes(dependency)) dependencies.add(dependency);
+      }
+      return {
+        ...field,
+        inputs: [...dependencies],
+        // Known read methods and pure host functions hide no reads (`list.slice()`).
+        unseen: (reads?.opaque === true && !effectFree(module, field.value))
+          || [...dependencies].some((dependency) => dependency.kind === 'Source'),
+      };
+    }) : undefined;
     const memo: MemoPlan = {
       intrinsic,
       declaration: module.parentOf(declarator) as VariableDeclaration,
@@ -120,6 +140,7 @@ export function planMemos(
       builders: [...builders].sort((left, right) => left.start - right.start),
       builderTargets: new Map([...builderTargets].map(([node, outputs]) => [node, [...outputs]])),
       possibleBuilders: new Map([...possibleBuilders].map(([node, outputs]) => [node, [...outputs]])),
+      ...(fields === undefined ? {} : { fields }),
     };
     const owner = storageOwner(first);
     const list = owners.get(owner) ?? [];

@@ -317,6 +317,17 @@ export interface MemoPlan {
   readonly builders: readonly (Statement | VariableDeclarator)[];
   readonly builderTargets: ReadonlyMap<Node, readonly BindingNode[]>;
   readonly possibleBuilders: ReadonlyMap<Node, readonly BindingNode[]>;
+  /** A plain object literal nothing else builds, which updates field by field. */
+  readonly fields?: readonly FieldPlan[];
+}
+
+export interface FieldPlan {
+  readonly key: string;
+  readonly value: Node;
+  /** What its value reads. With none and not `unseen`, it never changes. */
+  readonly inputs: readonly BindingNode[];
+  /** It reads what the compiler cannot see, or a source: computed each time. */
+  readonly unseen: boolean;
 }
 
 export interface WritePlan {

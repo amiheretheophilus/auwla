@@ -839,9 +839,119 @@ behaves('state: a weak collection: a cache filled while rendering settles', {
   },
 });
 
-// An object literal reading a prop is derived (`wiki/decisions.md`, 2026-10-19). A field
-// edited locally lasts until that prop changes, which builds the whole object again.
-behaves('derived: a literal built from a prop keeps a local edit until the prop changes', {
+/**
+ * An object literal updates field by field (`wiki/decisions.md`, 2026-11-05). Each case
+ * has `n` and `m`, and shows `state` as JSON. `#n` and `#m` change them.
+ */
+function fields(name: string, setup: string, edit: string, expected: readonly string[], steps?: readonly object[]): void {
+  behaves(`derived fields: ${name}`, {
+    source: `
+      export function App() {
+        let n = 1;
+        let m = 1;
+        ${setup}
+        return <main>
+          <button id="n" onClick={() => { n++; }}>n</button>
+          <button id="m" onClick={() => { m++; }}>m</button>
+          <button id="edit" onClick={() => { ${edit} }}>edit</button>
+          <p>{JSON.stringify(state)}</p>
+        </main>;
+      }`,
+    steps: (steps ?? [{ click: '#edit' }, { click: '#n' }, { click: '#m' }]) as never,
+    check(container, observation) {
+      expect(container.querySelector('p')?.textContent).toBe(expected[observation]!);
+    },
+  });
+}
+
+fields('a field that reads nothing keeps its edit', 'const state = { value: n, input: "" };', 'state.input = "x";', [
+  '{"value":1,"input":""}', '{"value":1,"input":"x"}', '{"value":2,"input":"x"}', '{"value":2,"input":"x"}',
+]);
+fields('a field keeps its edit when another field\'s input changes', 'const state = { a: n, b: m };', 'state.b = 9;', [
+  '{"a":1,"b":1}', '{"a":1,"b":9}', '{"a":2,"b":9}', '{"a":2,"b":2}',
+]);
+fields('its own input changing replaces its edit', 'const state = { a: n };', 'state.a = 9;', [
+  '{"a":1}', '{"a":9}', '{"a":2}', '{"a":2}',
+]);
+fields('an array in a field keeps its edit', 'const state = { a: n, tags: [] };', 'state.tags.push(1);', [
+  '{"a":1,"tags":[]}', '{"a":1,"tags":[1]}', '{"a":2,"tags":[1]}', '{"a":2,"tags":[1]}',
+]);
+fields('a field built by a method keeps its edit', 'const list = [1]; const state = { a: n, items: list.slice() };', 'state.items.push(2);', [
+  '{"a":1,"items":[1]}', '{"a":1,"items":[1,2]}', '{"a":2,"items":[1,2]}', '{"a":2,"items":[1,2]}',
+]);
+fields('a shorthand field follows its name', 'const state = { n, other: 0 };', 'state.other = 5;', [
+  '{"n":1,"other":0}', '{"n":1,"other":5}', '{"n":2,"other":5}', '{"n":2,"other":5}',
+]);
+fields('a field that reads nothing runs once', 'let next = 0; const state = { a: n, id: next++ };', 'state.a = 7;', [
+  '{"a":1,"id":0}', '{"a":7,"id":0}', '{"a":2,"id":0}', '{"a":2,"id":0}',
+]);
+fields('a reassignment takes control of the whole value', 'let state = { a: n, b: 0 };', 'state = { a: 50, b: 50 };', [
+  '{"a":1,"b":0}', '{"a":50,"b":50}', '{"a":50,"b":50}', '{"a":50,"b":50}',
+]);
+fields('a field computed by a helper follows what the helper reads', 'const read = () => m * 10; const state = { a: read(), b: 0 };', 'state.b = 5;', [
+  '{"a":10,"b":0}', '{"a":10,"b":5}', '{"a":10,"b":5}', '{"a":20,"b":5}',
+]);
+fields('a spread builds the whole object again', 'const base = { z: n }; const state = { ...base, input: "" };', 'state.input = "x";', [
+  '{"z":1,"input":""}', '{"z":1,"input":"x"}', '{"z":2,"input":""}', '{"z":2,"input":""}',
+]);
+fields('a body statement building it starts it again', 'const state = { a: n, b: 0 }; state.c = m;', 'state.b = 5;', [
+  '{"a":1,"b":0,"c":1}', '{"a":1,"b":5,"c":1}', '{"a":2,"b":0,"c":1}', '{"a":2,"b":0,"c":2}',
+]);
+
+behaves('derived fields: the object stays the same one, so a holder sees its edits', {
+  source: `
+    export function App() {
+      let n = 1;
+      const state = { a: n, input: "" };
+      let held = null;
+      return <main>
+        <button id="hold" onClick={() => { held = state; }}>hold</button>
+        <button id="n" onClick={() => { n++; }}>n</button>
+        <button id="edit" onClick={() => { held.input = "x"; }}>edit</button>
+        <p>{state.a}:{state.input}</p>
+      </main>;
+    }`,
+  steps: [{ click: '#hold' }, { click: '#n' }, { click: '#edit' }],
+  check(container, observation) {
+    expect(container.querySelector('p')?.textContent).toBe(['1:', '1:', '2:', '2:x'][observation]!);
+  },
+});
+
+behaves('derived fields: an effect reading only the other field does not re-run for this one', {
+  source: `
+    export function App() {
+      let n = 1;
+      const state = { a: n, b: 0 };
+      let runs = [];
+      $effect(() => { runs.push(state.b); });
+      return <main><button id="same" onClick={() => { state.a = state.a; }}>same</button><p>{runs.length}</p></main>;
+    }`,
+  steps: [{ click: '#same' }],
+  check(container) {
+    expect(container.querySelector('p')?.textContent).toBe('1');
+  },
+});
+
+behaves('derived fields: a field read from a source keeps the local field across its load', {
+  source: `
+    import { $fetch } from '@memoized-dom/data';
+    export function App() {
+      const user = $fetch('/user');
+      const state = { name: user.name, input: "" };
+      return <main>
+        <button id="edit" onClick={() => { state.input = "x"; }}>edit</button>
+        <button id="reload" onClick={() => { user.refresh?.(); }}>reload</button>
+        <p>{state.name}|{state.input}</p>
+      </main>;
+    }`,
+  steps: [{ respond: '/user', value: { name: 'ada' } }, { click: '#edit' }],
+  check(container, observation) {
+    if (observation > 0) expect(container.querySelector('p')?.textContent).toBe(['', 'ada|', 'ada|x'][observation]!);
+  },
+});
+
+// The user's example (2026-11-05): `input` is not related to `counter`, so it stays.
+behaves('derived fields: a literal built from a prop keeps a local field when the prop changes', {
   source: `
     function Field({ counter }) {
       const state = { value: counter, input: "" };
@@ -867,8 +977,8 @@ behaves('derived: a literal built from a prop keeps a local edit until the prop 
     { input: '#in', value: 'again' },
   ],
   check(container, observation) {
-    expect(container.querySelector('p')?.textContent).toBe(['0|', '0|hello', '0|hello', '1|', '1|again'][observation]!);
-    expect((container.querySelector('#in') as HTMLInputElement).value).toBe(['', 'hello', 'hello', '', 'again'][observation]!);
+    expect(container.querySelector('p')?.textContent).toBe(['0|', '0|hello', '0|hello', '1|hello', '1|again'][observation]!);
+    expect((container.querySelector('#in') as HTMLInputElement).value).toBe(['', 'hello', 'hello', 'hello', 'again'][observation]!);
   },
 });
 

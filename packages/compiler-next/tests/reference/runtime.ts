@@ -96,6 +96,13 @@ interface ReadValue {
   peek(): unknown;
 }
 
+/** What one field of a literal read when it last ran, and those values then. */
+interface LiteralFieldRecord {
+  readInputs: () => unknown[];
+  reads: Set<ReadValue>;
+  inputs: unknown;
+}
+
 function readValues(reads: Iterable<ReadValue>): unknown[] {
   return [...reads].map((read) => read.peek());
 }
@@ -318,6 +325,7 @@ export class Instance {
   /** How many times the instance has rendered. A memo that reads it is computed on every render. */
   render = 0;
   private readonly slots = new Map<number, MemoSlot>();
+  private readonly literals = new Map<number, { object: object; fields: Map<string, LiteralFieldRecord> }>();
   private readonly effects = new Map<string, EffectSlot>();
   /** Effects called during the current render; the others are destroyed. */
   private readonly calledEffects = new Set<string>();
@@ -355,6 +363,55 @@ export class Instance {
       slot.fromParent = fromParent;
     }
     return slot;
+  }
+
+  /**
+   * A plain object literal computed again keeps its object, with the edits made to it,
+   * and computes only the fields whose own reads changed (`wiki/decisions.md`,
+   * 2026-11-05). What a field read is its visible reads plus those traced as it ran, so
+   * a read through a helper counts. A field that read nothing never runs again.
+   */
+  literalFields(index: number, entries: readonly (readonly [string, () => unknown[], () => unknown])[]): object {
+    const outer = computation;
+    const inputsOf = (field: LiteralFieldRecord): unknown => deepCopy([...field.readInputs(), ...readValues(field.reads)]);
+    const run = (field: LiteralFieldRecord, compute: () => unknown): unknown => {
+      const trace: Computation = { reads: new Set(), writes: new Set() };
+      computation = trace;
+      const value = compute();
+      computation = outer;
+      field.reads = trace.reads;
+      field.inputs = inputsOf(field);
+      for (const write of trace.writes) outer?.writes.add(write);
+      return value;
+    };
+
+    let record = this.literals.get(index);
+    const current = this.slots.get(index)?.peek();
+    if (record === undefined || current !== record.object) {
+      const object: Record<string, unknown> = {};
+      const fields = new Map<string, LiteralFieldRecord>();
+      for (const [key, readInputs, compute] of entries) {
+        const field: LiteralFieldRecord = { readInputs, reads: new Set(), inputs: undefined };
+        object[key] = run(field, compute);
+        fields.set(key, field);
+      }
+      record = { object, fields };
+      this.literals.set(index, record);
+    } else {
+      for (const [key, readInputs, compute] of entries) {
+        const field = record.fields.get(key)!;
+        // A new closure each render holds this render's parameters.
+        field.readInputs = readInputs;
+        if (!deepEqual(field.inputs, inputsOf(field))) {
+          (record.object as Record<string, unknown>)[key] = run(field, compute);
+        }
+      }
+    }
+    // What the memo waits on includes the fields that did not need to run.
+    for (const field of record.fields.values()) {
+      for (const read of field.reads) outer?.reads.add(read);
+    }
+    return record.object;
   }
 
   /**
