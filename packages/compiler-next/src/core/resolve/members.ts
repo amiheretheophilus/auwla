@@ -23,6 +23,11 @@ import { importedBinding } from './exports';
 export interface PropertyReads {
   /** True when reading `member` may run code that reads other values. */
   mayRunCode(module: Module, member: Node): boolean;
+  /**
+   * The same for a pattern: `const { value } = box` reads a property as much as `box.value`
+   * does, and an array pattern runs the value's iterator.
+   */
+  patternMayRunCode(module: Module, pattern: Node): boolean;
 }
 
 export function propertyReads(resolved: Resolved): PropertyReads {
@@ -37,17 +42,37 @@ export function propertyReads(resolved: Resolved): PropertyReads {
     return known;
   }
 
-  return {
-    mayRunCode(module, member) {
-      const root = memberRoot(member);
-      if (!is.Identifier(root)) return true;
+  function mayRunCode(module: Module, member: Node): boolean {
+    const root = memberRoot(member);
+    if (!is.Identifier(root)) return true;
 
-      const reference = module.referenceOf(root);
-      if (reference === null) return true;
-      if (reference.binding === null) {
-        return isWrittenGlobal(resolved.globals, reference.name);
+    const reference = module.referenceOf(root);
+    if (reference === null) return true;
+    if (reference.binding === null) {
+      return isWrittenGlobal(resolved.globals, reference.name);
+    }
+    return !isPlainData(definitionOf(reference.binding));
+  }
+
+  return {
+    mayRunCode,
+    patternMayRunCode(module, pattern) {
+      const parent = module.parentOf(pattern);
+
+      // Nothing is known about a parameter's value.
+      if (is.Function(parent)) return parent.params.includes(pattern as never);
+
+      if (is.VariableDeclarator(parent) && parent.id === pattern) {
+        if (parent.init !== null) return mayRunCode(module, parent.init);
+        const loop = module.parentOf(module.parentOf(parent)!);
+        return is.ForOfStatement(loop) && mayRunCode(module, loop.right);
       }
-      return !isPlainData(definitionOf(reference.binding));
+      if (is.AssignmentExpression(parent) && parent.left === pattern) {
+        return mayRunCode(module, parent.right);
+      }
+
+      // An inner pattern reads what the outer one read, which is already counted.
+      return false;
     },
   };
 }
@@ -65,6 +90,22 @@ function memberRoot(member: Node): Node {
       return current;
     }
   }
+}
+
+/**
+ * A binding whose value never changes: a function or class nothing assigns, or a `const`-like
+ * binding holding literals and functions that nothing writes. Reading it through a namespace
+ * needs no observer.
+ */
+export function neverChanges(resolved: Resolved, binding: Binding): boolean {
+  if (resolved.writesOf(binding).length > 0) return false;
+
+  const name = binding.declarations[0];
+  if (name === undefined) return false;
+
+  const declarator = binding.module.parentOf(name);
+  if (!is.VariableDeclarator(declarator)) return true;
+  return declarator.id === name && declarator.init !== null && isPlainValue(declarator.init);
 }
 
 /** The binding an import names, or the binding itself. */

@@ -482,8 +482,7 @@ it.each([true, false])('reaches a component kept for a use outside its rows (opt
   expect(host.querySelector('ul')!.textContent).toBe('1');
 });
 
-// The reference renderer cannot run this one: it compiles a module-level `const` copy of
-// a component into a computation that needs a component's context (`wiki/open-issues.md`).
+// Compared with the reference in `tests/cases/components.test.ts`. Here for its rows.
 it.each([true, false])('takes a module-level copy of a copy of a component as a tag (optimize: %p)', async (optimize) => {
   const { host, click } = await mount(`
     function Item({ id }) { return <li>{id}</li>; }

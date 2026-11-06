@@ -7,7 +7,7 @@ import type { ModulePlan } from '../core/plan';
 import { copy, originOf } from '../core/emit/copy';
 import { stringLiteral as literal } from '../core/emit/quote';
 import { importResolver, relativeModule } from '../core/resolve/imports';
-import { namespaceModule, type ResolvedModule } from '../core/resolve';
+import { dynamicallyImported, namespaceModule, type ResolvedModule } from '../core/resolve';
 import { explicitValueExportNames } from '../core/resolve/exports';
 
 type Program = Extract<Node, { type: 'Program' }>;
@@ -35,10 +35,8 @@ export function linkModuleNamespaces(
   emitted: ReadonlyMap<string, EmittedModule>,
   options: CompileModulesOptions,
 ): ReadonlyMap<string, EmittedModule> {
-  const needsBoundary = plans.some(({ module: { module } }) => {
-    return module.bindings.some((binding) => namespaceModule(binding) !== null)
-      || module.imports.some((entry) => !entry.typeOnly && entry.kind === 'dynamic' && entry.resolvedModule !== null);
-  });
+  const needsBoundary = dynamicallyImported(plans.map((plan) => plan.module)).size > 0
+    || plans.some(({ module: { module } }) => module.bindings.some((binding) => namespaceModule(binding) !== null));
 
   if (!needsBoundary) {
     return emitted;

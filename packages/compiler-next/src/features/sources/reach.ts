@@ -24,7 +24,7 @@ import type { Binding, Module } from 'yuku-analyzer';
 import type { SemanticGraph } from '../../core/graph';
 import { variableDeclaration } from '../../core/graph/inputs';
 import { intrinsicTag, unwrap } from '../../core/plan/jsx';
-import { importedDefinition, namespaceModule } from '../../core/resolve';
+import { hasComputedImport, importedDefinition, namespaceModule } from '../../core/resolve';
 import { frameworkPackage, importOf, isFrameworkMount } from '../../core/resolve/exports';
 import { functionValue, type FunctionNode } from '../../core/resolve/functions';
 import { lifecycleKind } from '../../core/resolve/ambient';
@@ -111,17 +111,16 @@ export class SourceReach {
       this.#everything ||= module.findAll('WithStatement').length > 0
         || module.findAll('CallExpression').some((call) => is.Identifier(call.callee) && call.callee.name === 'eval');
 
-      for (const imported of module.imports) {
-        if (imported.typeOnly) {
-          continue;
-        }
+      // Code outside the graph may create its own sources, and a dynamically
+      // imported namespace is read without this proof's member resolution.
+      const readsUnknown = hasComputedImport(module) || module.imports.some((imported) => {
+        return !imported.typeOnly
+          && (imported.kind === 'dynamic' || (imported.resolvedModule === null && !isFramework(imported.specifier)));
+      });
 
-        // Code outside the graph may create its own sources, and a dynamically
-        // imported namespace is read without this proof's member resolution.
-        if (imported.kind === 'dynamic' || (imported.resolvedModule === null && !isFramework(imported.specifier))) {
-          this.#unknown = true;
-          this.#unknownWaits = true;
-        }
+      if (readsUnknown) {
+        this.#unknown = true;
+        this.#unknownWaits = true;
       }
     }
 

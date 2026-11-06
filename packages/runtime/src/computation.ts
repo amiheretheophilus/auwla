@@ -136,6 +136,23 @@ export function trackRead<T>(version: Version, value: T, key: object = version):
 }
 
 /**
+ * Module namespaces reached by `import()`, and how to observe each. A native namespace reports
+ * no reads and can sit in any variable, so a property read of a value the compiler cannot
+ * identify asks here first (`wiki/compiler/linking.md`, "A namespace from import()").
+ */
+const namespaces = new WeakMap<object, () => void>();
+
+export function observeNamespace(namespace: object, observe: () => void): void {
+  namespaces.set(namespace, observe);
+}
+
+/** Returns `value`. A `WeakMap` gives nothing for a key that is not an object. */
+export function readNamespace<T>(value: T): T {
+  namespaces.get(value as object)?.();
+  return value;
+}
+
+/**
  * `value === other`, where `value` was just read from `peek` (the binding behind
  * `key`). The running computation depends only on the result, so it is notified
  * only when the value becomes or stops being `other` (`KeyedIndex`). A second

@@ -22,9 +22,11 @@ objects; it does not introduce a second state model.
 | `link/modules.ts` | Native public re-export boundaries that exclude compiler-only exports; collision-free private siblings and original diagnostic provenance |
 | `link/captured-plan.ts` | One value cell per captured default expression, shared by importing bindings and namespaces |
 | `link/captured-dom.ts` | Native default evaluation and contextual naming, with existing shared mutation roots for the captured value |
+| `link/open-namespaces.ts` | Reads through a namespace that came from `import()`: registering the module, asking the runtime before a read, and lowering an optional chain that continues past one |
 | `features/state/shared-plan.ts` | Shared binding readers and the versions a compiled namespace can observe |
 | `features/state/shared-dom.ts` | Namespace version observation and guarded mutation inputs, preserving the native receiver and avoiding uninitialized export reads |
 | `tests/cases/linking.test.ts` | Reference and optimized/general comparisons for live/default exports, namespaces, cycles, collisions, components and readiness |
+| `tests/cases/linking.graphs.test.ts` | Dynamic imports (lazy state, components, sources, effects, computed specifiers, top-level `await`), star exports meeting code outside the graph, and cycles of state, components, sources and re-exports |
 | `tests/cases/linking.packages.test.ts` | Source-graph oracle for separate package compilation: forwarded status/payload use, returned sources, shared package state and retained component state |
 | `tests/cases/linking.installed.test.ts` | Packages under `node_modules`, imported by bare specifiers: subpaths, scoped names, two copies, hoisted dependencies, cycles, self-imports, `.js` names for TypeScript source, and dependencies outside the graph |
 
@@ -92,7 +94,57 @@ to call a hoisted export while another export is still uninitialized. Native
 namespace detection is test-only (`node:util`); prototype assertions use an
 uncompiled native-module control because Bun and Node expose different prototypes.
 
+## A namespace from import()
+
+`import * as store` is a binding, so `store.count` is a known read and observes the module
+(above). `kit = await import('./store')` is only a value: `kit.count` looks like a property
+of any object, and a native namespace reports no reads. The page would not follow the state,
+though JavaScript and the reference show it. Handed-off functions work the same way:
+`onClick={kit.increment}` writes state nothing on the page knows it read.
+
+So a module reached by `import()` that exports something that can change (`openNamespaces`,
+`core/resolve/index.ts`) registers its own namespace with the runtime, with how to observe
+it. A property read of any value that might be one asks the runtime first:
+
+```js
+// In store.mmd.ts, the implementation of the module:
+import * as _namespace from "./store.ts";
+_namespaces.observeNamespace(_namespace, () => { _observe_count(); _observe_twice(); });
+
+// Wherever a value is read:
+_namespaces.readNamespace(kit).count
+```
+
+- **The module registers itself.** If the importer named the module's observers, it would have
+  to import them, loading the lazy file eagerly and undoing the code splitting.
+- **A lazy page costs nothing.** A module exporting only components, functions and constants
+  has nothing to observe, so nothing is emitted, for it or for the rest of the graph.
+- **Only such a graph pays.** With one, every property read of a value the compiler cannot
+  identify gains one `WeakMap` lookup.
+- **A specifier worked out at run time** could name any module, so every module counts as
+  reached (`dynamicallyImported`). The analyzer does not record these imports, so they are
+  found by syntax (`hasComputedImport`).
+- **`const { count } = kit`** reads as `kit.count` does, and is observed the same way.
+- **An optional chain that continues past the read** is rebuilt without `?.`, as
+  `(t = a) === null || t === void 0 ? void 0 : read(t.b).c`, since `read(a?.b).c` would throw
+  where the language stops at `a`. `a.b?.()` becomes `t.call(r)`, keeping its receiver. A chain
+  that is just `kit?.count` needs none of this: it stays `read(kit)?.count`.
+- **`(a?.b.c)()`** keeps its native form, since parentheses keep `a.b` as the receiver and the
+  rebuilt one could not. What is read there is the function to call, whose own reads are
+  observed when it runs.
+- **Code the compiler does not compile**, such as an npm package handed the namespace, reads it
+  without asking. That code's reads are opaque like any other (`state-and-derived.md`).
+
+The reference gets these from re-rendering. It needed two fixes of its own: a file loaded after
+mount never had its memos or effects run, since no app claimed them; and a module memo did not
+follow reads inside a helper from another file, while the compiler and JavaScript do (`$traced`,
+`ModuleEffects.adopt`).
+
 ## Cases and validation
+
+`tests/cases/linking.graphs.test.ts` covers the shapes a package graph can take beyond one
+import of one name. The cases found the namespace bug above, the two reference gaps, and that
+a pattern was not treated as a property read (`state-and-derived.md`, "Opaque property reads").
 
 The 27 comparisons in `tests/cases/linking.test.ts` establish the first slice:
 named/star/default forwarding, captured default values, direct/re-exported and
@@ -340,8 +392,6 @@ optimization, emission, namespace linking and printing.
 ## Remaining Phase 9 work
 
 - A package's size (see "Size").
-- Dynamic-import combinations, external/unknown star exports and broader cyclic graphs
-  need further coverage.
 - `bench/linker` and `bench/package-compilation` are ported, and their correctness checks pass
   locally. Timing them on the VM is Phase 9 exit work.
 

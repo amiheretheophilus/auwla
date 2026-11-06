@@ -13,7 +13,7 @@ on:
         description: Which slow batch to run
         type: choice
         default: all
-        options: [all, cases, reference, generators, unit]
+        options: [all, cases, reference, generators, unit, root]
 
 concurrency:
   group: compiler-next-${{ github.ref }}
@@ -47,6 +47,22 @@ jobs:
         working-directory: packages/data
       - run: bun test
         working-directory: packages/data
+
+  # The root tests pin the old compiler until the acceptance switch in Phase 10. `--parallel`,
+  # since one shared process fails files that pass alone and runs out of memory.
+  root:
+    name: root tests
+    if: inputs.suite == 'all' || inputs.suite == 'root'
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v5
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: canary
+      - run: bun install --frozen-lockfile
+      - run: bun run build
+      - run: bun test --parallel=2 ./tests
 
   reference:
     name: every case on the reference

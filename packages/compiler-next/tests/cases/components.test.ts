@@ -52,6 +52,33 @@ behaves('tags: a local binding reassigned by a handler changes the component sho
   check(container, observation) { expect(shownTag(container)).toBe(['first:v', 'second:v'][observation]); },
 });
 
+behaves('tags: a module value picks the component by state', {
+  source: `
+    ${tags}
+    let on = true;
+    const Shown = on ? First : Second;
+    export function App() {
+      return <main><Shown value="v" /><button onClick={() => { on = !on; }}>swap</button></main>;
+    }
+  `,
+  steps: [{ click: 'button' }, { click: 'button' }],
+  check(container, observation) { expect(shownTag(container)).toBe(['first:v', 'second:v', 'first:v'][observation]); },
+});
+
+behaves('tags: a module copy of a copy of a component', {
+  source: `
+    ${tags}
+    const Copy = First;
+    const Again = Copy;
+    export function App() {
+      let value = 1;
+      return <main><Again value={value} /><button onClick={() => { value++; }}>next</button></main>;
+    }
+  `,
+  steps: [{ click: 'button' }],
+  check(container, observation) { expect(shownTag(container)).toBe(['first:1', 'first:2'][observation]); },
+});
+
 behaves('tags: a binding derived from state changes the component shown', {
   source: `
     ${tags}

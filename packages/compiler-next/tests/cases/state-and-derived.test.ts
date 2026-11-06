@@ -4,6 +4,80 @@
 import { expect } from 'bun:test';
 import { behaves } from '../harness/run';
 
+behaves('a write before its declaration throws where the code catches it', {
+  source: `
+    const seen = { name: '' };
+    export function App() {
+      const early = () => { try { n = 5; } catch (error) { seen.name = error.name; } };
+      early();
+      let n = 1;
+      return <main>
+        <button id="a" onClick={() => { n = 2; }}>a</button>
+        <button id="b" onClick={() => { n = 3; }}>b</button>
+        <p>{seen.name}:{n}</p>
+      </main>;
+    }
+  `,
+  steps: [{ click: '#a' }, { click: '#b' }],
+  check(container, observation) {
+    expect(container.querySelector('p')?.textContent).toBe(['ReferenceError:1', 'ReferenceError:2', 'ReferenceError:3'][observation]!);
+  },
+});
+
+behaves('a declaration that awaits runs once, when its function reaches it', {
+  source: `
+    async function make(load) {
+      let a = 1;
+      const got = await load(a);
+      return { inc() { a++; }, a() { return a; }, got() { return got; } };
+    }
+    let made = null;
+    make(async (value) => value * 10).then((value) => { made = value; });
+    export function App() {
+      let n = 0;
+      return <main><p>{made === null ? 'none' : made.a() + ':' + made.got()}:{n}</p>
+        <button id="inc" onClick={() => { made.inc(); n++; }}>inc</button></main>;
+    }
+  `,
+  steps: [{ click: '#inc' }, { click: '#inc' }],
+  check(container, observation) {
+    expect(container.querySelector('p')?.textContent).toBe(['1:10:0', '2:10:1', '3:10:2'][observation]!);
+  },
+});
+
+behaves('a declaration that yields runs once, when its generator reaches it', {
+  source: `
+    function* counter() {
+      let a = 1;
+      const given = yield a;
+      const read = () => a + given;
+      a++;
+      yield read();
+    }
+    export function App() {
+      const steps = counter();
+      steps.next();
+      const second = steps.next(5).value;
+      return <main><p>{second}</p></main>;
+    }
+  `,
+  check(container) { expect(container.querySelector('p')?.textContent).toBe('7'); },
+});
+
+behaves('a module declaration that awaits a read of state runs once', {
+  source: `
+    let start = 1;
+    const got = await Promise.resolve(start * 10);
+    export function App() {
+      return <main><p>{start}:{got}</p><button onClick={() => start++}>inc</button></main>;
+    }
+  `,
+  steps: [{ click: 'button' }],
+  check(container, observation) {
+    expect(container.querySelector('p')?.textContent).toBe(['1:10', '2:10'][observation]!);
+  },
+});
+
 behaves('a counter', {
   source: `
     export function App() {

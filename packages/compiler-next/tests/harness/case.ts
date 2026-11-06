@@ -18,8 +18,12 @@ export interface Case {
 }
 
 export type Step =
-  /** Click the first element matching the selector. */
-  | { click: string }
+  /**
+   * Click the first element matching the selector. `until` names an element to wait for
+   * afterwards: a dynamic import of a file not yet loaded takes as long as the disk does,
+   * which no fixed number of timer rounds can promise to cover.
+   */
+  | { click: string; until?: string }
   /** Type a value into an input, as a user would: set `.value`, then fire `input`. */
   | { input: string; value: string }
   /** Resolve the promise the module got from `defer(name)`. */

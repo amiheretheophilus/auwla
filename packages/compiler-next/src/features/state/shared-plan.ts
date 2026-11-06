@@ -3,7 +3,7 @@ import { b, is } from 'yuku-ast';
 import type { Node, Statement } from 'yuku-parser';
 import type { BindingNode, SemanticGraph } from '../../core/graph';
 import { variableDeclaration } from '../../core/graph/inputs';
-import { importedDefinition, isParameter, namespaceModule, runnerOf } from '../../core/resolve';
+import { importedDefinition, isParameter, namespaceModule, openNamespaces, runnerOf } from '../../core/resolve';
 import type { SharedReadPlan } from '../../core/plan/model';
 import { storageOwner } from '../../core/plan/storage';
 import type { PlainFunctionValues } from '../../core/plan/plain-functions';
@@ -15,21 +15,20 @@ export function planSharedReads(
 ): ReadonlyMap<BindingNode, SharedReadPlan> {
   const reads = new Map<BindingNode, SharedReadPlan>();
   const namespaceBindings = new Set<BindingNode['binding']>();
-  const namespaces = new Set<BindingNode['binding']['module']>();
+  const namespaces = new Set(openNamespaces(graph.resolved));
 
   for (const entry of graph.resolved.modules) {
     for (const binding of entry.module.bindings) {
       const namespace = namespaceModule(binding);
-      if (namespace === null || namespaces.has(namespace)) {
-        continue;
-      }
-      namespaces.add(namespace);
+      if (namespace !== null) namespaces.add(namespace);
+    }
+  }
 
-      for (const name of namespace.exportedNames()) {
-        const definition = namespace.resolveExport(name)?.binding;
-        if (definition != null) {
-          namespaceBindings.add(definition);
-        }
+  for (const namespace of namespaces) {
+    for (const name of namespace.exportedNames()) {
+      const definition = namespace.resolveExport(name)?.binding;
+      if (definition != null) {
+        namespaceBindings.add(definition);
       }
     }
   }

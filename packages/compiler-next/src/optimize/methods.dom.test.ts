@@ -226,8 +226,8 @@ it('observes no direct call of a function that only writes plain names', () => {
   expect(program('let pick = (n) => { total = n; }; pick = window.other;', 'pick(rows[0]);')).toContain('observeMutation');
 });
 
-// The reference renderer cannot run this one: it reads `n` for the call's inputs outside
-// the authored `try`, so its dead zone throws out of the render.
+// Compared with the reference in `tests/cases/state-and-derived.test.ts`. Here for the
+// several writes sharing a store, which is what this file optimizes.
 it.each(modes)('throws for a write before the declaration, with several writes sharing a store ($mode)', async ({ optimize }) => {
   const { host, click } = await mount(`
     const seen = { name: '' };

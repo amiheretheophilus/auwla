@@ -20,6 +20,7 @@ import type { CompileModulesOptions } from './options';
 import { optimizeModules } from './optimize';
 import { linkModuleNamespaces, type EmittedModule } from './link/modules';
 import { planCapturedValues } from './link/captured-plan';
+import { emitNamespaceReads, markNamespaceReads } from './link/open-namespaces';
 import { emitCapturedValues } from './link/captured-dom';
 import { lowerFetchImport } from './features/sources/delivery';
 
@@ -31,8 +32,9 @@ export function compileModules(
   const parsed = Object.entries(modules).map(([path, source]) => parseModule(path, source));
   const resolved = resolve(parsed, options);
   const graph = classifyGraph(resolved);
-  const general = planCapturedValues(planModules(graph, graph.queries, graph.components));
+  const general = planCapturedValues(planModules(graph, graph.queries, graph.components), resolved);
   const plans = optimizeModules(general, graph, options.optimize !== false);
+  const opensNamespaces = markNamespaceReads(plans, resolved);
 
   const emitted = new Map<string, EmittedModule>();
   for (const plan of plans) {
@@ -46,6 +48,10 @@ export function compileModules(
     }
     const output = { module, tree: tree as Extract<Node, { type: 'Program' }> };
     emitted.set(module.path, emitCapturedValues(plan, output, options));
+  }
+
+  if (opensNamespaces) {
+    emitNamespaceReads(plans, emitted, resolved, options);
   }
 
   const linked = linkModuleNamespaces(plans, emitted, options);

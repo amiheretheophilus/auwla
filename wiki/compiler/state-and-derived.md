@@ -242,7 +242,9 @@ value every time (`features/derived/dom.ts`, `keepsValue`).
   reads other values, so it is opaque, except on a global the program never
   writes and on constant plain data: a never-written binding initialized with an
   object or array literal of literals, without accessors or spreads
-  (`const sizes = ['s', 'm']`). The rule is in `core/resolve/members.ts`.
+  (`const sizes = ['s', 'm']`). The rule is in `core/resolve/members.ts`. A pattern reads
+  properties too: `const { value } = box` is opaque as `box.value` is, and an array pattern
+  runs the value's iterator. So is a function taking one as a parameter, whose value is unknown.
 - **Reassigned later** means `x = …`, `x += …`, `x++` or `for (x of …)` in code that
   runs after the body: a handler, an effect, a callback ref, a timer or promise
   callback, or a function called from one of them. The executed write stops the

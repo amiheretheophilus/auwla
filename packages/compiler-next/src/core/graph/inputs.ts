@@ -89,6 +89,8 @@ export class InputQueries {
           } else if (is.MemberExpression(node)) {
             // Accessors and proxies can conceal dependencies (`members.ts`).
             if (this.#properties.mayRunCode(module, node)) opaque = true;
+          } else if (is.ObjectPattern(node) || is.ArrayPattern(node)) {
+            if (this.#properties.patternMayRunCode(module, node)) opaque = true;
           } else if (is.ThisExpression(node) || is.AwaitExpression(node)
             || is.YieldExpression(node) || is.TaggedTemplateExpression(node)) {
             // The receiver is unknown, suspension hides what runs next, and a

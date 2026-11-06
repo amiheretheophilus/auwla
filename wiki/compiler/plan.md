@@ -344,6 +344,8 @@ array child). Remove each check when its phase is built.
   - [x] First source-graph package oracle: forwarded status/payload parameters,
     returned sources, shared package state and retained component state.
   - [ ] A package's output is in proportion to its source (`linking.md`, "Size").
+  - [x] Dynamic imports, star exports meeting code outside the graph, and cycles
+    (`tests/cases/linking.graphs.test.ts`).
   - [x] Bare specifiers, subpaths and several installed copies of a package in one graph
     (`linking.md`, "Installed copies and specifiers"). The compiler part only: a build tool
     gives it the paths.

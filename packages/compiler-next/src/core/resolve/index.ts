@@ -7,14 +7,16 @@
  * program writes (`globals.ts`). Later stages ask `Resolved`
  * about bindings and never look names up themselves.
  */
-import { Analyzer, BindingFlags, type Binding, type Module } from 'yuku-analyzer';
+import { Analyzer, BindingFlags, type Binding, type Export, type Module } from 'yuku-analyzer';
+import { is } from 'yuku-ast';
 import type { CompileModulesOptions } from '../../options';
 import { CompileError } from '../diagnostics';
 import type { ParsedModule } from '../parse';
 import { withAmbientImports } from './ambient';
 import { findGlobalWrites, type GlobalWrites } from './globals';
 import { importResolver } from './imports';
-import { importedBinding, namespaceModule } from './exports';
+import { capturedExport, importedBinding, namespaceModule } from './exports';
+import { neverChanges } from './members';
 import { findWrites, type WriteSite } from './writes';
 
 export type { GlobalWrites } from './globals';
@@ -108,6 +110,58 @@ export function resolve(parsed: readonly ParsedModule[], options: CompileModules
   return { analyzer, modules, globals, writesOf, usedOutside: outsideUses(modules, options.entries) };
 }
 
+/** `import(name)` with a specifier only known at run time, which the analyzer does not record. */
+export function hasComputedImport(module: Module): boolean {
+  return module.findAll('ImportExpression').some((node) => !is.Literal(node.source));
+}
+
+/** Every module an `import()` can reach. A specifier worked out at run time could name any of them. */
+export function dynamicallyImported(modules: readonly ResolvedModule[]): ReadonlySet<Module> {
+  if (modules.some(({ module }) => hasComputedImport(module))) {
+    return new Set(modules.map(({ module }) => module));
+  }
+
+  const byPath = new Map(modules.map((entry) => [entry.path, entry.module]));
+  const reached = new Set<Module>();
+
+  for (const { module } of modules) {
+    for (const imported of module.imports) {
+      const target = imported.resolvedModule === null ? undefined : byPath.get(imported.resolvedModule.path);
+      if (imported.kind === 'dynamic' && !imported.typeOnly && target !== undefined) reached.add(target);
+    }
+  }
+
+  return reached;
+}
+
+/**
+ * The modules reached by `import()` that export something that can change. Their namespace
+ * can sit in any variable, so reading state through it is a read the compiler cannot name
+ * (`wiki/compiler/linking.md`, "A namespace from import()"). A lazy page exporting only its
+ * components and constants is not one, and costs nothing.
+ */
+export function openNamespaces(resolved: Resolved): ReadonlySet<Module> {
+  const open = new Set<Module>();
+
+  for (const module of dynamicallyImported(resolved.modules)) {
+    const canChange = module.exportedNames().some((name) => {
+      const captured = capturedExport(module, name);
+      if (captured !== null) return !isConstantDefault(captured);
+      const definition = module.resolveExport(name)?.binding;
+      return definition != null && !neverChanges(resolved, definition);
+    });
+    if (canChange) open.add(module);
+  }
+
+  return open;
+}
+
+/** `export default 42` or `export default () => …`: its value is fixed when the file runs. */
+function isConstantDefault(exported: Export): boolean {
+  const value = is.ExportDefaultDeclaration(exported.node) ? exported.node.declaration : null;
+  return is.Literal(value) || is.Function(value);
+}
+
 /**
  * An entry's own exports, and what it forwards from other modules. A module that is
  * not an entry is reached only through imports, which the graph can see by name. A
@@ -121,18 +175,14 @@ function outsideUses(
 
   const named = new Set(entries);
   const open = new Set(modules.filter((entry) => named.has(entry.path)).map((entry) => entry.module));
-  const byPath = new Map(modules.map((entry) => [entry.path, entry.module]));
 
   for (const { module } of modules) {
     for (const binding of module.bindings) {
       const namespace = namespaceModule(binding);
       if (namespace !== null) open.add(namespace);
     }
-    for (const imported of module.imports) {
-      const target = imported.resolvedModule === null ? undefined : byPath.get(imported.resolvedModule.path);
-      if (imported.kind === 'dynamic' && target !== undefined) open.add(target);
-    }
   }
+  for (const module of dynamicallyImported(modules)) open.add(module);
 
   const forwarded = new Set<Binding>();
   for (const module of open) {

@@ -104,6 +104,7 @@ export async function runOnReference(name: string, testCase: Case): Promise<Obse
     perform(step, container);
     await settle(clock);
     app.render();
+    await waitForElement(step, container, clock, () => app.render());
     errors.check(describeStep(step));
     observations.push(observe(describeStep(step), container));
     testCase.check?.(container, observations.length - 1);
@@ -146,6 +147,7 @@ async function runOnCompiler(name: string, testCase: Case, compiler: Compiler): 
   for (const step of testCase.steps ?? []) {
     perform(step, container);
     await settle(clock);
+    await waitForElement(step, container, clock, () => {});
     errors.check(describeStep(step));
     observations.push(observe(describeStep(step), container));
     testCase.check?.(container, observations.length - 1);
@@ -247,6 +249,22 @@ async function settle(clock: Clock): Promise<void> {
     } else {
       await new Promise((resolve) => setTimeout(resolve, 0));
     }
+  }
+}
+
+/**
+ * Wait for the element a click step names in `until`. The reference draws only when told to,
+ * so `refresh` draws it again each round; compiled code draws by itself.
+ */
+async function waitForElement(step: Step, container: HTMLElement, clock: Clock, refresh: () => void): Promise<void> {
+  if (!('click' in step) || step.until === undefined) return;
+
+  const deadline = performance.now() + 4000;
+
+  while (container.querySelector(step.until) === null) {
+    if (performance.now() > deadline) throw new Error(`case: nothing matched ${step.until} after ${describeStep(step)}`);
+    await settle(clock);
+    refresh();
   }
 }
 

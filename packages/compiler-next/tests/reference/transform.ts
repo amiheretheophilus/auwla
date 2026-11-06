@@ -105,7 +105,7 @@ const GUARDABLE_STATEMENTS = new Set<string>([
 const RUNTIME_EXPORTS = [
   '$h', 'Fragment as $Fragment', '$enter', '$assignRef', '$moduleEffect', '$ownedEffect', '$moduleMemo',
   '$when', '$value', '$chain', '$waiting', '$sourceState', '$branch', '$switch', '$path', '$ready',
-  '$captureRead', '$closureCell', '$closureRead',
+  '$captureRead', '$closureCell', '$closureRead', '$traced',
   '$privateTarget', '$setup',
 ];
 
@@ -868,6 +868,8 @@ class ComponentRewrite {
     const functions = this.module.findAll(['FunctionDeclaration', 'FunctionExpression', 'ArrowFunctionExpression']);
     for (const fn of functions) {
       if (fn === this.component || fn.async || fn.generator || fn.body === null) continue;
+      // Generated code has no position: it reads as 0, which is inside a component that opens the file.
+      if (fn.start === fn.end) continue;
       if (fn.start < this.component.start || fn.end > this.component.end) continue;
 
       const targets = [...this.slots].filter(([binding, slot]) => {
@@ -879,9 +881,11 @@ class ComponentRewrite {
         ? fn.body
         : b.BlockStatement({ body: [b.ReturnStatement({ argument: fn.body })] });
       const run = blockThunk(body.body as Statement[]);
-      const slots = b.ArrayExpression({
+      // A thunk, since a slot can still be in its dead zone here, and only the authored code
+      // inside `run` may report that, where its own `try` can catch it.
+      const slots = thunk(b.ArrayExpression({
         elements: targets.map(([, slot]) => identifier(slot.name)),
-      });
+      }));
       fn.body = b.BlockStatement({
         body: [b.ReturnStatement({ argument: ctxCall('callback', [inputs, run, slots]) })],
       });

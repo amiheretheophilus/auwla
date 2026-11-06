@@ -40,7 +40,7 @@ const FUNCTION_TYPES = ['FunctionDeclaration', 'FunctionExpression', 'ArrowFunct
 const BODY_TYPES = [
   'CallExpression', 'NewExpression', 'ThisExpression',
   'AssignmentExpression', 'UpdateExpression', 'UnaryExpression',
-  'MemberExpression', 'AwaitExpression', 'YieldExpression', 'TaggedTemplateExpression',
+  'MemberExpression', 'ObjectPattern', 'ArrayPattern', 'AwaitExpression', 'YieldExpression', 'TaggedTemplateExpression',
 ] as const;
 
 /** Follow immutable aliases and linked imports; changed function values remain opaque. */
@@ -164,6 +164,8 @@ function addBodyNode(summary: SummaryDraft, module: Module, node: Node, properti
     if (node.operator === 'delete' && receiverRoot(node.argument)) summary.receiverWrites.push(node);
   } else if (is.MemberExpression(node)) {
     if (properties.mayRunCode(module, node)) summary.opaque = true;
+  } else if (is.ObjectPattern(node) || is.ArrayPattern(node)) {
+    if (properties.patternMayRunCode(module, node)) summary.opaque = true;
   } else {
     // `await` and `yield` suspend; a tagged template calls an unknown tag.
     summary.opaque = true;

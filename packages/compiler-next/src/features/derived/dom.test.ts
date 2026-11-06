@@ -341,8 +341,8 @@ it('keeps write commits in functions created by a replayed initializer', async (
   expect(root.querySelector('p')!.textContent).toBe('3');
 });
 
-// The reference renderer wraps an initializer in a plain arrow, so it rejects these two
-// programs (`wiki/open-issues.md`). Each once compiled to a file that did not parse.
+// Each once compiled to a file that did not parse. Compared with the reference in
+// `tests/cases/state-and-derived.test.ts`.
 const modes = [
   { mode: 'optimized', optimize: true },
   { mode: 'general', optimize: false },

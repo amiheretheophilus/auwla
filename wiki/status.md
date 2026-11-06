@@ -1,8 +1,35 @@
 # Status
 
-Last updated: 2026-11-05.
+Last updated: 2026-11-06.
 
-## Current: Phase 9, linking for native packages (2026-11-05)
+## Current: closing documented issues before Phase 10 (2026-11-06)
+
+The user: fix every bug or issue that is documented or that we meet, rather than carrying
+known limits into the last phase. Items that are the user's to explain or decide stay in
+`open-issues.md`.
+
+Coverage for dynamic imports, star exports and cycles (`tests/cases/linking.graphs.test.ts`,
+39 cases) found:
+
+- **A namespace from `import()` held in a variable did not update the page**
+  (`compiler/linking.md`, "A namespace from import()"). Fixed; a graph pays only when a lazy
+  module exports something that can change.
+- **`const { value } = box` went stale when `value` was a getter**, while `box.value` worked.
+  A pattern now counts as a property read (`compiler/state-and-derived.md`). No fixture has
+  such a pattern, so the audit shows no change and cannot show the cost, which is one
+  computation per destructure of a non-constant value, the same as `box.value`.
+- **The reference never ran a lazy module's memos or effects, and a module memo did not follow
+  reads inside a helper from another file.** Both fixed in the reference.
+
+The reference's documented crashes are fixed, so those programs now have comparisons: a module
+value picking a component by state and a copy of a copy of one (generated code has no position,
+which read as inside a component that opens the file), a dead-zone write caught by the call's own
+`try`, and a declaration that awaits or yields. Root tests are in CI (`suite=root`).
+
+Gate: 517 unit, 179 runtime, 171 data, 680 cases, 10 generators at 200 programs. No standby
+during it; an earlier attempt was lost to one (Kernel-Power 506/507).
+
+## Phase 9, linking for native packages (2026-11-05)
 
 The goal, from the user: linking that lets us write native packages effectively. Ordinary
 npm packages run opaque, since `bench/third-party-runtime` shows the new opaque path has no

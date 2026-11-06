@@ -184,6 +184,40 @@ export function $captureRead(key: string, read: () => unknown): unknown {
   return read();
 }
 
+/**
+ * What a callback lists ahead of running, none of it if a name there is still in its dead zone.
+ * The authored code reads the same name when it runs, and throws at the place JavaScript does.
+ */
+function outsideDeadZone<T>(read: () => T[]): T[] {
+  try {
+    return read();
+  } catch (error) {
+    if (error instanceof ReferenceError) return [];
+    throw error;
+  }
+}
+
+/**
+ * A module derivation's compute function, which remembers what its last run read. A component
+ * memo gets this from its computation, but a module's first run happens while the file loads,
+ * before `$moduleMemo` exists to hold it.
+ */
+export function $traced<T>(compute: () => T): (() => T) & { reads(): unknown[] } {
+  let reads: ReadonlySet<ReadValue> = new Set();
+
+  const traced = () => {
+    const outer = computation;
+    const trace: Computation = { reads: new Set(), writes: new Set() };
+    computation = trace;
+    const value = compute();
+    computation = outer;
+    reads = trace.reads;
+    return value;
+  };
+
+  return Object.assign(traced, { reads: () => readValues(reads) });
+}
+
 /** A binding in a helper or factory, read by a function it created (`closures.ts`): one cell per invocation. */
 export function $closureCell(read: () => unknown): ReadValue {
   return { peek: read };
@@ -563,14 +597,14 @@ export class Instance {
   }
 
   /** Guard an actual body invocation, never the act of registering a callback. */
-  callback(readInputs: () => unknown[], run: () => unknown, targets: MemoSlot[]): unknown {
+  callback(readInputs: () => unknown[], run: () => unknown, targets: () => MemoSlot[]): unknown {
     if (rendering !== this) return run();
-    const pending = $waiting(readInputs());
+    const pending = $waiting(outsideDeadZone(readInputs));
     if (pending !== undefined && computation !== undefined) {
       computation.pending = pending;
     }
 
-    for (const target of targets) {
+    for (const target of outsideDeadZone(targets)) {
       if (target.writtenLater) continue;
       target.pending = pending;
       if (pending !== undefined) computation?.writes.add(target);
@@ -877,8 +911,15 @@ class ModuleEffects {
       noteReplacement(memo.value, value);
       memo.value = value;
       if (value instanceof Waiting) memo.sources = value.sources;
-      memo.inputs = deepCopy([...values, ...memo.sources]);
+      // Read again: this run may have read different things than the last one.
+      memo.inputs = deepCopy([...memo.readInputs(), ...memo.sources]);
     }
+  }
+
+  /** Take over what a file loaded after mount registered, since no later `renderApp` will. */
+  adopt(other: ModuleEffects): void {
+    this.effects.push(...other.effects.splice(0));
+    this.memos.push(...other.memos.splice(0));
   }
 
   add(readInputs: () => unknown[], callback: () => unknown): void {
@@ -1160,6 +1201,7 @@ class Renderer {
     const outer = runningModuleEffects;
     runningModuleEffects = this.moduleEffects;
     for (let round = 0; round < 10; round++) {
+      this.moduleEffects.adopt(unclaimedModuleEffects);
       this.moduleEffects.refreshMemos();
       const before = this.container.innerHTML;
       const lifecycleChanged = this.renderOnce();

@@ -314,6 +314,10 @@ development machine: one that takes seconds to minutes, not milliseconds.
 | every case on the reference | ~5 min | ~20 s |
 | the generators at 200 programs | ~5 min | ~45 s |
 | all unit and runtime tests at once | ~1 min | ~15 s |
+| the root tests (`suite=root`, `bun test --parallel=2 ./tests`) | do not run here | not yet timed |
+
+A plain `bun test ./tests` shares one process, fails five files that pass alone and dies asking
+for 34 GB. Packages need `--isolate` for the same reason.
 
 Reach for CI when one of these is due: at a phase exit, after a change to shared
 machinery (the reference oracle, the graph, the derived-value planner, the

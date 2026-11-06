@@ -524,6 +524,11 @@ function unwrapOptionalChain(module: Module, chain: Extract<Node, { type: 'Chain
  * Built before payload reads are rewritten (`prepareModuleReads`), which then
  * rewrites the authored code wherever these memos placed it.
  */
+/** `const $compute_x = $traced(() => value);` */
+function tracedCompute(compute: string, value: Expression): Statement {
+  return constDeclaration(compute, runtimeCall('$traced', [thunk(value)]));
+}
+
 export function buildModuleMemos(module: Module, rawUses: SourceUses): void {
   const builder = new ModuleMemos(module, rawUses);
   for (const statement of module.ast.body) builder.visit(statement);
@@ -562,6 +567,13 @@ class ModuleMemos {
 
     for (const declarator of [...declaration.declarations]) {
       if (!declarator.init || is.Function(declarator.init)) continue;
+      // It runs once, where it was written. A memo would move it into a plain arrow, where
+      // `await` and `yield` do not parse, and could not run it again in order anyway.
+      const owner = enclosingFunction(this.module, declarator);
+      const suspends = findAll(declarator.init, ['AwaitExpression', 'YieldExpression'])
+        .some((part) => enclosingFunction(this.module, part) === owner);
+      if (suspends) continue;
+
       const bindings = this.bindingsIn(declarator.id);
       if (this.reads.inside([declarator.init], bindings[0]).size === 0) continue;
 
@@ -597,7 +609,7 @@ class ModuleMemos {
   private name(statement: Node, declarator: VariableDeclarator, binding: Binding): void {
     const init = declarator.init!;
     const compute = `$compute_${binding.name}`;
-    this.add(this.before, statement, constDeclaration(compute, thunk(waitForExpression(init, this.readsOf(binding)))));
+    this.add(this.before, statement, tracedCompute(compute, waitForExpression(init, this.readsOf(binding))));
     declarator.init = runtimeCall(compute, []);
     this.add(this.after, statement, this.register(binding.name, compute, this.memoInputs(init, binding), binding));
   }
@@ -642,7 +654,7 @@ class ModuleMemos {
       });
       const inputs = b.ArrayExpression({ elements: [identifier(destructured)] });
       const compute = `$compute_${binding.name}`;
-      this.add(this.before, statement, constDeclaration(compute, thunk(runtimeCall('$when', [thunk(inputs), thunk(field)]))));
+      this.add(this.before, statement, tracedCompute(compute, runtimeCall('$when', [thunk(inputs), thunk(field)])));
       this.add(this.after, statement, this.register(binding.name, compute, structuredClone(inputs), binding));
       return b.VariableDeclarator({ id: b.Identifier({ name: binding.name }), init: runtimeCall(compute, []) });
     });
@@ -653,7 +665,7 @@ class ModuleMemos {
   /** `const $compute_x = () => value; let x = $compute_x(); $moduleMemo(…);`, before `statement`. */
   private declareMemo(statement: Node, name: string, value: Expression, inputs: Expression): void {
     const compute = `$compute_${name}`;
-    this.add(this.before, statement, constDeclaration(compute, thunk(value)));
+    this.add(this.before, statement, tracedCompute(compute, value));
     this.add(this.before, statement, b.VariableDeclaration({
       kind: 'let',
       declarations: [b.VariableDeclarator({ id: b.Identifier({ name }), init: runtimeCall(compute, []) })],
@@ -668,7 +680,11 @@ class ModuleMemos {
       left: b.Identifier({ name }),
       right: runtimeCall(compute, []),
     }));
-    const args = [thunk(inputs), update, identifier(name)];
+    // What this file shows it reads, plus what the last run did read: an imported helper's
+    // reads are in another file, where this one cannot see them.
+    const executed = b.SpreadElement({ argument: runtimeCall(`${compute}.reads`, []) });
+    const allInputs = b.ArrayExpression({ elements: [...(inputs as Extract<Node, { type: 'ArrayExpression' }>).elements, executed] });
+    const args = [thunk(allInputs), update, identifier(name)];
     if (!binding) {
       return b.ExpressionStatement({ expression: runtimeCall('$moduleMemo', args) }) as Statement;
     }
