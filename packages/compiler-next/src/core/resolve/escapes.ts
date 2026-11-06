@@ -6,7 +6,7 @@
  * code may then call it at any time, including in the middle of a computation, so
  * the compiler cannot list its reads at the call site. A function that is only
  * ever called directly (`multiply(price)`, an IIFE) does not escape: its reads are
- * expanded where it is called (`../graph/inputs.ts`).
+ * expanded where it is called (`../graph/inputs.ts`). A generator always does.
  *
  * Over-approximation is safe: an escaping function only reports what it reads.
  */
@@ -21,6 +21,10 @@ export function findEscapingFunctions(module: Module): FunctionNode[] {
 }
 
 function escapes(module: Module, fn: FunctionNode): boolean {
+  // Its body runs when something iterates it, in whatever computation is running then. So
+  // `const [one] = walk()` follows what it read, and `const steps = walk()` alone reads nothing.
+  if (fn.generator) return true;
+
   const parent = outerParent(module, fn);
 
   // `(() => { … })()`: called where it is created.

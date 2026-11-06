@@ -89,5 +89,13 @@ export function planEffects(graph: SemanticGraph, queries: InputQueries, entry: 
       }
     }
   }
-  return { calls, groups };
+  return { calls, groups, helperCleanups: hasHelperCleanup(graph, components) };
+}
+
+/** The whole graph: a helper can be in another file from the component calling it. */
+function hasHelperCleanup(graph: SemanticGraph, components: ReadonlySet<Node>): boolean {
+  return graph.resolved.modules.some(({ module }) => module.findAll('CallExpression').some((call) => {
+    if (lifecycleKind(module, call) !== '$cleanup') return false;
+    return ![...module.ancestors(call)].some((ancestor) => components.has(ancestor));
+  }));
 }

@@ -7,8 +7,19 @@ export function crossesFunction(module: Module, node: Node, scope: Node): boolea
   if (node === scope) return false;
   let current = module.parentOf(node);
   while (current !== null && current !== scope) {
-    if (is.Function(current)) return true;
+    if (is.Function(current) && !isCalledAtOnce(module, current)) return true;
     current = module.parentOf(current);
   }
   return false;
+}
+
+/** `(function () { … })()`: created to run here. Its reads are this expression's. */
+function isCalledAtOnce(module: Module, fn: Node): boolean {
+  let callee = fn;
+  let parent = module.parentOf(callee);
+  while (is.ParenthesizedExpression(parent)) {
+    callee = parent;
+    parent = module.parentOf(callee);
+  }
+  return is.CallExpression(parent) && parent.callee === callee;
 }

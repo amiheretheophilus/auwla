@@ -136,8 +136,26 @@ export function ownedEffect(site: string, args: readonly unknown[], inputs: Inpu
   registerEffect(`${owner}/effect${nextStandalone++}:${site}`, owner, callback, { inputs });
 }
 
+/**
+ * The component each build scope belongs to, for `$cleanup` in a helper. The helper cannot name
+ * its caller, and may be running under a component with no effects, and so no activation.
+ */
+const cleanupOwners = new WeakMap<object, string>();
+
+export function ownCleanups(scope: object, id: string): void {
+  cleanupOwners.set(scope, id);
+}
+
+function activeCleanupOwner(): string | undefined {
+  for (let frame = currentBuildFrame(); frame !== null; frame = frame.previous) {
+    const owner = activations.get(frame)?.parent ?? cleanupOwners.get(frame.scope);
+    if (owner !== undefined) return owner;
+  }
+  return undefined;
+}
+
 export function ownedCleanup(args: readonly unknown[], owner?: string): void {
-  const parent = active()?.parent ?? owner;
+  const parent = activeCleanupOwner() ?? owner;
   if (parent === undefined) throw new Error('[memo-dom] cleanup has no active owner');
   cleanup(parent, args[0] as () => void);
 }

@@ -105,7 +105,7 @@ const GUARDABLE_STATEMENTS = new Set<string>([
 const RUNTIME_EXPORTS = [
   '$h', 'Fragment as $Fragment', '$enter', '$assignRef', '$moduleEffect', '$ownedEffect', '$moduleMemo',
   '$when', '$value', '$chain', '$waiting', '$sourceState', '$branch', '$switch', '$path', '$ready',
-  '$captureRead', '$closureCell', '$closureRead', '$traced', '$moduleBuilder', '$reassigned',
+  '$captureRead', '$closureCell', '$closureRead', '$traced', '$moduleBuilder', '$reassigned', '$ownedCleanup',
   '$privateTarget', '$setup',
 ];
 
@@ -1325,6 +1325,10 @@ function rewriteModuleEffects(module: Module): void {
   const replacements = new Map<Node, Expression>();
 
   for (const call of module.findAll('CallExpression')) {
+    if (is.Identifier(call.callee, '$cleanup') && !module.referenceOf(call.callee)?.binding) {
+      replacements.set(call, b.CallExpression({ callee: identifier('$ownedCleanup'), arguments: call.arguments, optional: false }));
+      continue;
+    }
     if (!is.Identifier(call.callee, '$effect') || module.referenceOf(call.callee)?.binding) continue;
     const callback = call.arguments[0] as Expression;
     const inputs = [...reads.ofCallback(callback)].map((binding) => identifier(binding.name));

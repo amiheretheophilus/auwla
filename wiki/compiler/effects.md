@@ -90,7 +90,8 @@ These pass today and must keep passing:
 - setup code in the body runs once;
 - an effect tears down before it runs again;
 - an effect reads a ref;
-- `$cleanup` runs when the component unmounts;
+- `$cleanup` runs when the component unmounts, including one in a helper, which belongs to the
+  component running it (`ownCleanups`, emitted only in a graph with such a helper);
 - an effect at module scope.
 
 The reference compares effect inputs after refs mount, and records them after the
@@ -105,5 +106,5 @@ component slots are lowered, and async cleanup generations prevent stale results
 from overwriting current teardown. These fixes retain the explicit expectations,
 including the user-approved per-execution capture rule.
 
-Not covered yet: the rest of the `$cleanup` placement matrix and more async
-continuation/helper interleavings. Source-dependent effects remain Phase 8.
+`$cleanup` in a branch, a helper and a list row, and an async effect whose result arrives after a
+newer run, are in `tests/cases/coverage.test.ts`.

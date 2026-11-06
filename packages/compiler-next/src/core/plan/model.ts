@@ -389,7 +389,12 @@ export interface ModulePlan {
   readonly capturedNamespaces?: ReadonlyMap<Module, readonly CapturedValuePlan[]>;
   /** Source readiness is planned from the same graph, including helper scopes. */
   readonly sourceFlow?: SourceFlowPlan;
-  readonly effects: { readonly calls: readonly LifecycleCallPlan[]; readonly groups: readonly EffectGroupPlan[] };
+  readonly effects: {
+    readonly calls: readonly LifecycleCallPlan[];
+    readonly groups: readonly EffectGroupPlan[];
+    /** A `$cleanup` in the graph sits in a helper, which has to find the component running it. */
+    readonly helperCleanups: boolean;
+  };
   readonly refs: readonly RefPlan[];
   readonly module: ResolvedModule;
   readonly components: ReadonlyMap<Node, ComponentPlan>;

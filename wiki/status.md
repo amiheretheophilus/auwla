@@ -44,6 +44,11 @@ Probing every gap the concept pages list found these, all fixed with cases:
 In the reference: a reassigned function is a value, `rows = rows` reports as the 2026-11-05 decision
 says, and a module's body builds values as a component's does.
 
+A second round (`tests/cases/coverage.test.ts`) found two more: `const [one] = walk()` on a visible
+generator never ran again, and `$cleanup` in a helper never ran, since a component with no effects
+had no activation for the helper to find. Two questions for the user are in `open-issues.md`,
+"Decisions needed".
+
 ## Phase 9, linking for native packages (2026-11-05)
 
 The goal, from the user: linking that lets us write native packages effectively. Ordinary

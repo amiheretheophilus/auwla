@@ -97,8 +97,8 @@ compiles to a selector program (`features/conditionals/returns.ts`, `plan.ts`,
   folded expression is new syntax without an authored position, so its inputs
   could not be found and the view would never update.
 
-Known gap: a hoisted name is `undefined` before its segment runs, where
-JavaScript would throw a TDZ error if a handler read it that early.
+A hoisted name is still in its dead zone before its segment runs, as JavaScript requires
+(`tests/cases/coverage.test.ts`, r24).
 
 - **Statements inside a returning block** (`../decisions.md`, 2026-10-24): a
   plain statement there (`if (n > 0) { seen.push(n); return … }`) runs when

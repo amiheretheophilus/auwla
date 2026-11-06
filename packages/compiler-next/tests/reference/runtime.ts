@@ -845,6 +845,11 @@ export function $ownedEffect(site: string, inputs: () => unknown[], callback: ()
   else $moduleEffect(inputs, callback);
 }
 
+/** `$cleanup(fn)` in a helper: it belongs to the component running the helper, if any. */
+export function $ownedCleanup(callback: () => void): void {
+  rendering?.cleanup(callback);
+}
+
 /** Called first in every transformed component: the instance being rendered. */
 export function $enter(): Instance {
   if (rendering === null) throw new Error('reference: a component was called outside a render');

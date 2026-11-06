@@ -70,7 +70,7 @@ export type { CleanupDisposer } from './cleanup';
 export { mountRef, refAssign, assignRef, isRefNode } from './refs';
 export type { RefCallback, RefValue } from './refs';
 export { registerConditionalEffect, registerEffect } from './effect';
-export { createEffectScope, ownedEffect, ownedCleanup } from './effect-scope';
+export { createEffectScope, ownedEffect, ownedCleanup, ownCleanups } from './effect-scope';
 export type { EffectCallback, EffectCondition } from './effect';
 
 export { materializeMarkup, cloneTemplate, createTemplateCache } from './markup';

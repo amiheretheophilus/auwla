@@ -103,6 +103,8 @@ function leafComponent(tag: Extract<Node, { type: 'JSXIdentifier' }>, general: M
   const [fn, plan] = found;
   if ([...module.ancestors(fn)].some((ancestor) => ancestor !== fn && is.Function(ancestor))) return null;
   if (fn.async || fn.generator || fn.params.length > 1) return null;
+  // A row has no instance of its own for a helper's `$cleanup` to belong to.
+  if (general.effects.helperCleanups) return null;
   // A row is called with the row's values, which `arguments` would show.
   if (findAll(fn.body!, ['Identifier']).some((node) => node.name === 'arguments')) return null;
   const param = fn.params[0];

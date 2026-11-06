@@ -103,6 +103,8 @@ export class Reads {
 
       const parent = this.module.parentOf(reference.node);
       if (visited.has(fn) || !is.CallExpression(parent) || parent.callee !== reference.node) return;
+      // Creating a generator reads nothing. Only taking values from it runs its body.
+      if (fn.generator && !this.isConsumedAtOnce(parent)) return;
       visited.add(fn);
       this.collect(fn, fn, directOnly, found, visited, skip);
     };
@@ -133,6 +135,13 @@ export class Reads {
   isLocalTo(binding: Binding, root: Node): boolean {
     if (binding.declarations.some((name) => isWithin(name, [root]))) return true;
     return binding.references.some((reference) => reference.isWrite && isWithin(reference.node, [root]));
+  }
+
+  /** `const [a] = walk()`, `[...walk()]`, `for (x of walk())` and `walk().next()`. */
+  private isConsumedAtOnce(call: Node): boolean {
+    const parent = this.module.parentOf(call);
+    if (is.VariableDeclarator(parent)) return !is.Identifier(parent.id);
+    return is.SpreadElement(parent) || is.MemberExpression(parent) || (is.ForOfStatement(parent) && parent.right === call);
   }
 
   /** The function a binding names: `function f() {}` or `const f = () => {}`. */

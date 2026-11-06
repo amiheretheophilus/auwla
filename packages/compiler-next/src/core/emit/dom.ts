@@ -146,7 +146,7 @@ export function emitDom(plan: ModulePlan, options: CompileModulesOptions): Node 
     }
 
     let emitted = emitComponent(component, names, runtime, replacements, rowComponents, plan.refs, plan.effects.groups,
-      plan.effects.calls.some((call) => call.owner === component.fn), data, plan.sourceFlow !== undefined, shared.importedValues, {
+      plan.effects.calls.some((call) => call.owner === component.fn), plan.effects.helperCleanups, data, plan.sourceFlow !== undefined, shared.importedValues, {
         storage: sourceReadinessStorage(plan, component.fn, names),
         blocked: sourceFlow.blockedSteps,
         taken: sourceFlow.takenBindings,
@@ -204,6 +204,7 @@ function emitComponent(
   refs: ModulePlan['refs'],
   effectGroups: ModulePlan['effects']['groups'],
   ownsLifecycle: boolean,
+  helperCleanups: boolean,
   data: string,
   sourceFlow: boolean,
   importedValues: ReadonlyMap<Binding, readonly Expression[]>,
@@ -344,6 +345,7 @@ function emitComponent(
   }
   body.push(
     statement('const $$scope = $$runtime.createBuildScope();', { scope, runtime }),
+    ...(helperCleanups ? [statement('$$runtime.ownCleanups($$scope, $$id);', { runtime, scope, id })] : []),
     ...effects.declarations,
     statement(batch === null
       ? 'const $$setupFrame = $$scope.enter();'

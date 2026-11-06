@@ -602,10 +602,11 @@ now tracks state in helper and factory closures (`tests/reference/closures.ts`):
 | a host function that runs a callback at once follows its captures | fails: `2,4` after the factor changes, expected `3,6` |
 | a call with a side effect runs once across unrelated updates | passes |
 
-Remaining coverage: generator callbacks across `yield`; readiness inside async
-callbacks before their first `await`; module body callback builders; callback
-dependencies in arbitrary factory closures. These are reference limits, not
-exceptions to the uniform rule. Do not assume the current passing set proves them.
+A generator's body runs when something iterates it, in whatever computation is running then, so it
+counts as escaping (`core/resolve/escapes.ts`) and reports its reads at run time. So `const [one] =
+walk()` follows what it read, and `const steps = walk()` alone reads nothing and keeps its progress.
+Generators across `yield`, async helpers before their first `await` and factories that make
+components are in `tests/cases/coverage.test.ts`.
 
 ### Function values
 
