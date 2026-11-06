@@ -18,6 +18,7 @@
  *   - objects compare by identity -> new reference means "changed"
  */
 
+import { classValue } from './dom-values';
 import { isAriaAttribute, isHtmlBooleanAttribute } from './html-attributes';
 import type { WriteBatch } from './write-batch';
 
@@ -109,14 +110,16 @@ export function setAttributeValue(node: Element, name: string, value: unknown): 
 }
 
 /**
- * `setAttributeValue` for `class`: the same result, at half the cost of `setAttribute`.
- * An SVG element's `className` is an object, and read-only.
+ * `setAttributeValue` for `class`, at half the cost of `setAttribute`. A value can also be an array
+ * or an object of conditions (`classValue`). An SVG element's `className` is an object, and read-only.
  */
 export function setClassAttribute(node: Element, value: unknown): void {
-  if (value != null && value !== false && typeof node.className === 'string') {
-    node.className = value === true ? '' : textValue(value);
+  if (value == null || value === false) {
+    node.removeAttribute('class');
+  } else if (typeof node.className === 'string') {
+    node.className = classValue(value);
   } else {
-    setAttributeValue(node, 'class', value);
+    node.setAttribute('class', classValue(value));
   }
 }
 

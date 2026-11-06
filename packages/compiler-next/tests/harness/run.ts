@@ -11,6 +11,7 @@ import { toReferenceModules } from '../reference/transform';
 import { beginSources, finishSourceDeclarations } from '../reference/sources';
 import { clearDeferred, describeStep, rejectDeferred, resolveDeferred, usesClock, type Case, type Step } from './case';
 import { clearRequests, fetchForCase, rejectRequest, respond } from './requests';
+import { compileModulesDetailed } from '../../src';
 import { clearCompiledApps, comparisonCompilers, type Compiler } from './compilers';
 import { serialize } from './serialize';
 
@@ -56,7 +57,31 @@ export function behaves(name: string, testCase: Case): void {
     }
     const { reference, compiled } = await observeBoth(name, testCase);
     expect(compiled).toEqual(reference);
+    checkDelivery(testCase, reference);
   });
+}
+
+/**
+ * A page delivered as HTML has no program, so that HTML must be what the reference renders, and no
+ * step of the case may change it (`wiki/compiler/delivery.md`).
+ */
+function checkDelivery(testCase: Case, reference: Observations): void {
+  const { initialRender } = compileModulesDetailed({
+    ...testCase.modules,
+    './App.tsx': testCase.source,
+    './main.ts': `import { mount } from '@memoized-dom/runtime'; import { App } from './App'; mount('root', App);`,
+  });
+  if (initialRender.kind !== 'html') return;
+
+  // A style written property by property ends in `;`, and parsed from HTML it need not.
+  const withoutFinalSemicolon = (html: string) => html.replace(/;"/g, '"');
+
+  const page = document.createElement('div');
+  page.innerHTML = initialRender.html;
+  const delivered = withoutFinalSemicolon(serialize(page));
+  for (const observation of reference) {
+    expect(withoutFinalSemicolon(observation.slice(observation.indexOf('\n') + 1))).toBe(delivered);
+  }
 }
 
 /** One entry per observation: what happened, then the HTML. */

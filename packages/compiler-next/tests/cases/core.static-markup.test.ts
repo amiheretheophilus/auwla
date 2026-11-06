@@ -187,3 +187,63 @@ behaves('static markup: attribute conversion does not use an authored String bin
     expect(container.querySelector('div')!.getAttribute('data-label')).toBe('42');
   },
 });
+
+// An object would print as `[object Object]` through `setAttribute`.
+behaves('attributes: a style object, changing, losing a property and becoming a string', {
+  source: `export function App() {
+    let style = { color: 'red', marginTop: 4, opacity: 0.5 };
+    const go = () => {
+      style = style.color === 'red' ? { color: 'blue', marginTop: 4 } : 'width: 10px';
+    };
+    return <main><p style={style}>a</p><button id="go" onClick={go}>go</button></main>;
+  }`,
+  steps: [{ click: '#go' }, { click: '#go' }],
+  check(container, observation) {
+    const style = (container.querySelector('p') as HTMLElement).style;
+    expect(style.color).toBe(['red', 'blue', ''][observation]!);
+    expect(style.width).toBe(['', '', '10px'][observation]!);
+  },
+});
+
+behaves('attributes: a literal style object', {
+  source: `export function App() {
+    return <p style={{ color: 'red', fontSize: 12 }}>a</p>;
+  }`,
+  check(container) {
+    const style = (container.querySelector('p') as HTMLElement).style;
+    expect(style.color).toBe('red');
+    expect(style.fontSize).toBe('12px');
+  },
+});
+
+behaves('attributes: class as an array and an object of conditions', {
+  source: `export function App() {
+    let on = true;
+    const go = () => { on = !on; };
+    return <main>
+      <p id="a" class={['one', on && 'two', { three: on, four: !on }]}>a</p>
+      <p id="b" class={{ five: on }}>b</p>
+      <p id="c" class={on ? '  spaced  ' : null}>c</p>
+      <button id="go" onClick={go}>go</button>
+    </main>;
+  }`,
+  steps: [{ click: '#go' }, { click: '#go' }],
+  check(container, observation) {
+    const on = observation % 2 === 0;
+    expect(container.querySelector('#a')!.getAttribute('class')).toBe(on ? 'one two three' : 'one four');
+    expect(container.querySelector('#c')!.getAttribute('class')).toBe(on ? 'spaced' : null);
+  },
+});
+
+behaves('attributes: innerHTML is a property, and changes', {
+  source: `export function App() {
+    let markup = '<strong id="raw">first</strong>';
+    const go = () => { markup = '<em id="raw">second</em>'; };
+    return <main><section innerHTML={markup} /><button id="go" onClick={go}>go</button></main>;
+  }`,
+  steps: [{ click: '#go' }],
+  check(container, observation) {
+    expect(container.querySelector('#raw')!.tagName).toBe(observation === 0 ? 'STRONG' : 'EM');
+    expect(container.querySelector('section')!.hasAttribute('innerHTML')).toBe(false);
+  },
+});

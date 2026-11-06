@@ -118,6 +118,15 @@ export interface StringRenderableNode {
  * O(N) in `indexOf`/`splice`/relink work, and large lists O(N²).
  */
 abstract class StringContainer {
+  get ownerDocument(): StringDocument { return NODE_FACTORY; }
+
+  remove(): void { this.parentNode?.removeChild(this as unknown as StringRenderableNode); }
+
+  replaceChildren(...nodes: StringRenderableNode[]): void {
+    this.clearChildren();
+    for (const node of nodes) this.appendChild(node);
+  }
+
   parentNode: StringRenderableNode | null = null;
   previousSibling: StringRenderableNode | null = null;
   nextSibling: StringRenderableNode | null = null;
@@ -211,6 +220,10 @@ abstract class StringContainer {
 }
 
 export class StringComment implements StringRenderableNode {
+  get ownerDocument(): StringDocument { return NODE_FACTORY; }
+
+  remove(): void { this.parentNode?.removeChild(this); }
+
   readonly nodeType = 8;
   parentNode: StringRenderableNode | null = null;
   firstChild: StringRenderableNode | null = null;
@@ -245,6 +258,10 @@ export class StringComment implements StringRenderableNode {
 }
 
 export class StringText implements StringRenderableNode {
+  get ownerDocument(): StringDocument { return NODE_FACTORY; }
+
+  remove(): void { this.parentNode?.removeChild(this); }
+
   readonly nodeType = 3;
   parentNode: StringRenderableNode | null = null;
   firstChild: StringRenderableNode | null = null;
@@ -293,6 +310,15 @@ export class StringText implements StringRenderableNode {
     const value = this._value ?? '';
     return initialTexts && value === '' ? '<!--mmd:empty-->' : escapeHtml(value);
   }
+}
+
+/**
+ * How many listeners have been added, in this process. A listener does nothing on a server, but one
+ * existing means the page needs a browser program, which the compiler asks when it builds a page.
+ */
+let eventListeners = 0;
+export function noteEventListeners(): number {
+  return eventListeners;
 }
 
 export class StringElement extends StringContainer implements StringRenderableNode {
@@ -414,7 +440,7 @@ export class StringElement extends StringContainer implements StringRenderableNo
     this.setAttribute('tabindex', String(value));
   }
 
-  addEventListener(): void {}
+  addEventListener(): void { eventListeners++; }
   removeEventListener(): void {}
 
   cloneNode(deep = false): StringRenderableNode {
@@ -627,6 +653,12 @@ export class StringDocument implements DocumentLike {
     return null;
   }
 }
+
+/**
+ * What `node.ownerDocument` answers. Creating a node depends on no document state, so one is shared,
+ * and a node needs no field for it: the runtime asks only while inserting list rows and value anchors.
+ */
+const NODE_FACTORY = new StringDocument();
 
 /** One string tier shared by result and stream rendering. */
 export function stringTier() {

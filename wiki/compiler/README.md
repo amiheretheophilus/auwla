@@ -148,6 +148,7 @@ One page per group of related files:
 | [components.md](components.md) | components, props objects, children and slots |
 | [optimize.md](optimize.md) | the fast-path contract |
 | [linking.md](linking.md) | several modules, module state, routes, server functions |
+| [delivery.md](delivery.md) | shipping as little JavaScript as possible: static pages, adoption, the old compiler's baseline |
 | [testing.md](testing.md) | how the compiler is tested, locally and on CI |
 
 ## Keeping these pages true

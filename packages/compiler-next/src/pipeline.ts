@@ -14,7 +14,8 @@ import { emitDom } from './core/emit/dom';
 import { printJavaScript } from './core/emit/print';
 import { classifyGraph } from './core/graph/classify';
 import { parseModule } from './core/parse';
-import { resolve } from './core/resolve';
+import { resolve, type Resolved } from './core/resolve';
+import { planInitialDelivery, planInitialRender, type InitialDelivery, type InitialRender } from './features/delivery';
 import { planModules } from './core/plan';
 import type { CompileModulesOptions, CompileOptions } from './options';
 import { optimizeModules } from './optimize';
@@ -23,6 +24,13 @@ import { planCapturedValues } from './link/captured-plan';
 import { emitNamespaceReads, markNamespaceReads } from './link/open-namespaces';
 import { emitCapturedValues } from './link/captured-dom';
 import { lowerFetchImport } from './features/sources/delivery';
+
+export interface CompiledModules {
+  readonly output: Record<string, string>;
+  readonly initialRender: InitialRender;
+  /** Present when the page needs no browser program: its HTML is the whole page. */
+  readonly initialDelivery?: InitialDelivery;
+}
 
 /** Compiles one module on its own. Returns its JavaScript. */
 export function compile(source: string, options: CompileOptions = {}): string {
@@ -37,6 +45,24 @@ export function compileModules(
   modules: Readonly<Record<string, string>>,
   options: CompileModulesOptions = {},
 ): Record<string, string> {
+  return compileProgram(modules, options).output;
+}
+
+/** `compileModules`, plus what the whole page ships (`wiki/compiler/delivery.md`). */
+export function compileModulesDetailed(
+  modules: Readonly<Record<string, string>>,
+  options: CompileModulesOptions = {},
+): CompiledModules {
+  const { output, resolved } = compileProgram(modules, options);
+  const initialRender = planInitialRender(resolved, output, options);
+  const initialDelivery = planInitialDelivery(initialRender, modules);
+  return { output, initialRender, ...(initialDelivery === undefined ? {} : { initialDelivery }) };
+}
+
+function compileProgram(
+  modules: Readonly<Record<string, string>>,
+  options: CompileModulesOptions,
+): { output: Record<string, string>; resolved: Resolved } {
   const parsed = Object.entries(modules).map(([path, source]) => parseModule(path, source));
   const resolved = resolve(parsed, options);
   const graph = classifyGraph(resolved);
@@ -69,5 +95,5 @@ export function compileModules(
     output[path] = printJavaScript(emitted.tree, emitted.module.path, emitted.module.module.source);
   }
 
-  return output;
+  return { output, resolved };
 }

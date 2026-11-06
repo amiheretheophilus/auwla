@@ -548,6 +548,8 @@ function writeValue(
   }
   if (site.kind === 'attribute') {
     if (site.name === 'class') return [statement('$$runtime.setClassAttribute($$node, $$value);', { node, value, runtime })];
+    // A string or an object of properties, which `setAttribute` would print as `[object Object]`.
+    if (site.name === 'style') return [statement('$$runtime.setStyleValue($$node, $$value);', { node, value, runtime })];
     return [statement('$$runtime.setAttributeValue($$node, $$name, $$value);', { node, value, runtime, name: stringLiteral(site.name) })];
   }
   return [statement(`${listener} = $$runtime.setListener($$node, $$event, ${listener}, $$value, $$batch);`, {

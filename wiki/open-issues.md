@@ -13,6 +13,30 @@ Compiler bugs and cases live on their `compiler/` page, under "Cases to test".
 
 ## Decisions needed from the user (2026-11-06)
 
+- **Positional props: `function Count(value) { … }`.** On the old compiler, a parameter that is not
+  destructured is the prop of that name, so `<Count value={1} />` gives `value` the number, and
+  `function Row(props)` with `<Row a={1} />` is an error ("unknown prop 'a' … declared props: props").
+  On compiler-next it is plain JavaScript: the first parameter is the props object, so that `value`
+  prints `[object Object]`. Nothing warns about it. The README and every example destructure or take no
+  parameters, but 38 root test files use the old form. The two cannot both hold, since a compiler cannot
+  tell `Count(value)` from `Row(props)` by looking. Recommended: keep plain JavaScript, because it is what
+  TypeScript types and readers expect, and have the compiler report a prop read that can only be the
+  whole object in text. If you want positional props, it is a small change in `features/props`.
+- **What to do with root tests tied to the old compiler** (`compiler/testing.md`, "Acceptance"). 514 of
+  825 failures can never pass on any rewrite: 329 assert the old compiler's generated text, 94 its error
+  messages, and 91 call compiled components with its internal signature. Rule 7 forbids editing them
+  to pass. Recommended: delete the text assertions along with `packages/compiler` at exit, and go through
+  the error messages with you, since each one is a program the old compiler refused.
+
+- **Running authored code at build time to find static pages** (`compiler/delivery.md`). The old
+  compiler's rule is "planning never executes an authored function": it models JavaScript in a
+  1,095-line evaluator, and every builtin it does not model sends the whole page to the browser
+  (a pure helper, `.filter().map()`, `Math.max`, a `for` loop, `if (x) return`). compiler-next
+  instead runs the program in a closed world, with only modules in the graph and allowed globals, so
+  it has JavaScript's exact semantics and no list of builtins to keep up to date. The cost is that a
+  component with an endless loop would hang the build, as it would hang the browser. Recommended:
+  run it. Work is proceeding this way, and can be replaced by a model later if you prefer.
+
 - **A source reached in a way the compiler cannot name crashes while it loads.**
   `queries[tab].name`, `store.user.name` on a class instance and `map.get('user').name` throw
   `UnresolvedDataReadError` instead of waiting, against rule 8. Every such site already runs inside

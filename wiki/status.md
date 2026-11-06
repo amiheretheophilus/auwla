@@ -14,8 +14,24 @@ from a handler ran it again and reset it. `export enum E {}` written twice was a
 Gate: 534 unit, 179 runtime, 171 data, 744 cases, 10 generators at 200 programs. Sizes: about +20 B
 raw where a module has shared state.
 
-Next is the acceptance switch (`test-support/compiler-next.ts`), to find what the old suites still
-need, then server output, hydration and routes.
+**Done: a page that cannot change is plain HTML with no JavaScript** (`compiler/delivery.md`), at the
+compiler level; `packages/vite` does not use it yet. The compiled program runs at build time in a closed
+world, on the server's document. Pure helpers, `.filter().map()`, `Math.max`, loops, `if` returns,
+classes and well-formed tables are now static, and each of those sends the whole page to the browser on
+the old compiler. Every comparison case checks this: when the build says a page is static, its HTML must
+match the reference and no step of the case may change it.
+
+**Done: the acceptance switch** (`test-support/compiler-next.ts`, `compiler/testing.md`, "Acceptance"):
+1,060 pass and 826 fail on the 199 root files that use the public compiler. It found that `style={…}`,
+`class={[…]}` and `innerHTML` were written as plain attributes, in the browser too. All fixed, and the
+reference with them, since it shared the mistake. Server rendering also runs compiled output now:
+`string-document.ts` lacked `ownerDocument`, `remove()` and `replaceChildren()`.
+
+Gate: 568 unit, 179 runtime, 171 data, 748 cases. Sizes: FlowOS +60 B raw, Octane +247 B raw for class
+arrays and objects, which a class known to be a string should not pay for; that is still to do.
+
+Next: adoption of existing nodes in the browser (`compiler/delivery.md`), reading the 277 root failures
+that may be real, and `packages/vite`. Two new decisions are in `open-issues.md`.
 
 ## Closing documented issues before Phase 10 (2026-11-06)
 

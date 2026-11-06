@@ -69,6 +69,7 @@
       "version": "0.0.0",
       "dependencies": {
         "@memoized-dom/runtime": "workspace:*",
+        "@memoized-dom/server": "workspace:*",
         "yuku-analyzer": "0.19.0",
         "yuku-ast": "0.19.0",
         "yuku-codegen": "0.19.0",

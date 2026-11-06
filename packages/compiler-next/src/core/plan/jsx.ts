@@ -23,7 +23,7 @@ export const VOID_ELEMENTS = new Set([
 ]);
 
 /** Written as DOM properties, as the reference does (`tests/reference/runtime.ts`). */
-export const PROPERTIES = new Set(['value', 'checked', 'selected']);
+export const PROPERTIES = new Set(['value', 'checked', 'selected', 'muted', 'innerHTML']);
 
 /** Attributes the renderer handles itself, never written to the DOM. */
 export const RESERVED_ATTRIBUTES = new Set(['key', 'children', 'suspend']);

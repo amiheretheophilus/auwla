@@ -16,6 +16,7 @@
 import { $waiting, enterSourceOwner, Group, noteReplacement, Source, Waiting } from './sources';
 import { childPosition, elementPosition, isElement, Preparation } from './preparation';
 import { types } from 'node:util';
+import { classValue, setStyleValue } from '../../../runtime/src/dom-values';
 export {
   $branch, $chain, $fetch, $path, $read, $switch, $track, $value, $waiting, $when, $sourceState, Group,
 } from './sources';
@@ -1220,7 +1221,7 @@ function deepEqual(left: unknown, right: unknown, visited = new Set<unknown>()):
 
 const SVG_NAMESPACE = 'http://www.w3.org/2000/svg';
 /** Written as DOM properties, as a user's input would set them. */
-const PROPERTIES = new Set(['value', 'checked', 'selected']);
+const PROPERTIES = new Set(['value', 'checked', 'selected', 'muted', 'innerHTML']);
 
 /** A host element the renderer created, and what it last set on it. */
 interface HostRecord {
@@ -1637,9 +1638,16 @@ function updateProps(record: HostRecord, props: Record<string, unknown>): void {
       continue;
     }
 
+    if (name === 'style') {
+      // Held apart from the attributes below, because it changes properties one at a time.
+      setStyleValue(element, value);
+      continue;
+    }
+
     if (value === null || value === undefined || value === false) continue;
     const attribute = name === 'className' ? 'class' : name === 'htmlFor' ? 'for' : name;
-    attributes.set(attribute, value === true ? '' : String(value));
+    const written = attribute === 'class' ? classValue(value) : value === true ? '' : String(value);
+    attributes.set(attribute, written);
   }
 
   for (const name of record.attributes.keys()) {

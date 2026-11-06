@@ -218,8 +218,26 @@ checks before retention checks as well as in isolation when changing this fixtur
    `yuku-parser` are still planned for the compiler adapter. Imported output
    currently has to parse through Bun to run.
 7. **Acceptance.** The old suites (root `tests/`, package tests, Vite, the Conduit
-   flows) run against `compiler-next` through a switch. When they all pass, the old
+   flows) run against `compiler-next` through a switch,
+   `bun test --preload ./test-support/compiler-next.ts <file>`. When they all pass, the old
    compiler is deleted.
+
+   First run, 2026-11-06, on the 199 root files that import the public compiler, one file at a
+   time: **1,060 pass, 826 fail, 57 files clean.** The switch does not reach the 103 files that
+   test `packages/compiler/src/…` or no compiler at all. Sorted by each failing test's failing line:
+
+   | Tests | What the failing line checks | Can it pass? |
+   | --- | --- | --- |
+   | 329 | the old compiler's generated text, or a snapshot of it | Never, on any rewrite |
+   | 94 | an error the old compiler raises for a program compiler-next accepts | Only if we choose to refuse that program |
+   | 91 | the old internal signature, such as `App('App', null, [{ items }])` or `button.onclick` | Never, as written |
+   | 31 | hydration, not built yet | Yes |
+   | 277 | anything else, which includes real bugs and counts of old internal work | Each read one by one |
+   | 3 | syntax compiler-next does not parse, of which TSRX is by decision | No |
+
+   It has already found real bugs: `style={…}`, `class={[…]}` and `innerHTML` were written as plain
+   attributes, and the reference shared the mistake, so comparisons could not see it. Which of the 277
+   are real is in progress. The decisions it raises are in `../open-issues.md`.
 
 The first cases are the **Cases to test** section of each concept page, written in
 `tests/cases/<page>.test.ts`. Each one is a case the old compiler rejects or shows
