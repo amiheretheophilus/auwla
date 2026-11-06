@@ -35,6 +35,8 @@ import { generate } from 'yuku-codegen';
 import { parse } from 'yuku-parser';
 import type { BlockStatement, Expression, Node, Statement, VariableDeclarator } from 'yuku-parser';
 import { installedResolver, sourcesOfOutput } from '../harness/installed';
+import { parseModule } from '../../src/core/parse';
+import { withRequireImports } from '../../src/core/resolve/imports';
 import { callOnlyReads } from '../../src/optimize/effects';
 import { literalFields } from '../../src/features/derived/literal-fields';
 import { blockThunk, constDeclaration, identifier, member, numberLiteral, runtimeCall, thunk } from './ast';
@@ -140,30 +142,32 @@ export function toReference(source: string, path: string, runtimeUrl: string): s
 export function toReferenceModules(sources: Readonly<Record<string, string>>, runtimeUrl: string): Record<string, string> {
   const paths = new Map(Object.keys(sources).map((path) => [posix.normalize(path), path]));
   const installed = installedResolver(Object.keys(sources));
-  const analyzer = new Analyzer({
-    resolve(specifier, importer) {
-      if (!specifier.startsWith('.')) {
-        return installed(specifier, importer) ?? false;
+  const resolve = (specifier: string, importer: string): string | false | null => {
+    if (!specifier.startsWith('.')) {
+      return installed(specifier, importer) ?? false;
+    }
+    const base = posix.join(posix.dirname(importer), specifier);
+    for (const suffix of ['', '.ts', '.tsx', '.js', '.jsx', '/index.ts', '/index.tsx', '/index.js', '/index.jsx']) {
+      const path = paths.get(base + suffix);
+      if (path !== undefined) {
+        return path;
       }
-      const base = posix.join(posix.dirname(importer), specifier);
-      for (const suffix of ['', '.ts', '.tsx', '.js', '.jsx', '/index.ts', '/index.tsx', '/index.js', '/index.jsx']) {
-        const path = paths.get(base + suffix);
-        if (path !== undefined) {
-          return path;
-        }
+    }
+    for (const source of sourcesOfOutput(base)) {
+      const path = paths.get(source);
+      if (path !== undefined) {
+        return path;
       }
-      for (const source of sourcesOfOutput(base)) {
-        const path = paths.get(source);
-        if (path !== undefined) {
-          return path;
-        }
-      }
-      return null;
-    },
-  });
-  const modules = Object.entries(sources).map(([path, source]) => {
-    const prepared = prepareReferenceModule(source, path);
-    return analyzer.setFile(path, prepared.source, { lang: 'tsx', sourceType: 'module' });
+    }
+    return null;
+  };
+  const analyzer = new Analyzer({ resolve });
+  // A namespace and `export =` have no JavaScript form, so the reference reads what they lower to.
+  // That lowering is checked on its own, by running it (`src/core/parse/parse.test.ts`).
+  const parsed = Object.entries(sources).map(([path, source]) => parseModule(path, source));
+  const modules = parsed.map((input) => {
+    const prepared = prepareReferenceModule(withRequireImports(input, parsed, resolve), input.path);
+    return analyzer.setFile(input.path, prepared.source, { lang: 'tsx', sourceType: 'module' });
   });
   analyzer.link();
 

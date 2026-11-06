@@ -10,16 +10,22 @@ import { findAll } from 'yuku-ast';
 import { langFromPath, parse } from 'yuku-parser';
 import type { SourceLang } from 'yuku-parser';
 import { CompileError } from '../diagnostics';
-import { lowerTypeScript } from './lower-typescript';
+import { lowerTypeScript, type LoweredRequireImport } from './lower-typescript';
+
+export type { LoweredRequireImport } from './lower-typescript';
 
 export interface ParsedModule {
   /** The module's path, as the caller gave it. */
   readonly path: string;
   readonly lang: SourceLang;
-  /** The authored text, with `enum` and parameter properties lowered. */
+  /** The authored text, with the TypeScript that runs lowered to JavaScript. */
   readonly source: string;
   /** Whether the module contains JSX. */
   readonly hasJsx: boolean;
+  /** Each `import x = require('m')`, which `core/resolve/imports.ts` settles. */
+  readonly requireImports: readonly LoweredRequireImport[];
+  /** The module has `export =`, so its default export is what requiring it gives. */
+  readonly hasExportAssignment: boolean;
 }
 
 export function parseModule(path: string, authored: string): ParsedModule {
@@ -31,7 +37,9 @@ export function parseModule(path: string, authored: string): ParsedModule {
     throw CompileError.at(error.message, path, authored, error.start);
   }
 
-  const source = lang === 'ts' || lang === 'tsx' ? lowerTypeScript(program, authored) : authored;
   const hasJsx = findAll(program, ['JSXElement', 'JSXFragment']).length > 0;
-  return { path, lang, source, hasJsx };
+  if (lang !== 'ts' && lang !== 'tsx') {
+    return { path, lang, source: authored, hasJsx, requireImports: [], hasExportAssignment: false };
+  }
+  return { path, lang, hasJsx, ...lowerTypeScript(program, authored, lang, path) };
 }

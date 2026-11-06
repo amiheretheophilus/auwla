@@ -364,7 +364,7 @@ array child). Remove each check when its phase is built.
 
 - [ ] SSR and HTML backends from the same plan; hydration; routing (`$routed`,
   `page()`).
-- [ ] Lower a runtime TypeScript `namespace` and `export =` (`core.md`, parse).
+- [x] Lower a runtime TypeScript `namespace` and `export =` (`core.md`, parse).
 - [ ] Acceptance (`testing.md`, layer 7): the root `tests/`, package tests, the
   Vite suite and the Conduit flows run against compiler-next through a switch.
 - [ ] The user runs the full benchmark on the VM; every number at least matches

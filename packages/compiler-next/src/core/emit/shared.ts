@@ -51,9 +51,10 @@ function emitSharedWrites(
     const list = declarations.get(owner) ?? [];
     list.push(statement(`function $$helper($$value) {
       $$version++;
-      if (!$$scope.building()) $$batch.mark($$key);
+      if ($$scope.building()) $$runtime.noteOwnOutput($$key);
+      else $$batch.mark($$key);
       return $$value;
-    }`, { helper, value, version, scope, batch, key }));
+    }`, { helper, value, version, scope, batch, key, runtime }));
     declarations.set(owner, list);
     return helper;
   };

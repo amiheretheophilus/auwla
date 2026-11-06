@@ -16,13 +16,21 @@ import { classifyGraph } from './core/graph/classify';
 import { parseModule } from './core/parse';
 import { resolve } from './core/resolve';
 import { planModules } from './core/plan';
-import type { CompileModulesOptions } from './options';
+import type { CompileModulesOptions, CompileOptions } from './options';
 import { optimizeModules } from './optimize';
 import { linkModuleNamespaces, type EmittedModule } from './link/modules';
 import { planCapturedValues } from './link/captured-plan';
 import { emitNamespaceReads, markNamespaceReads } from './link/open-namespaces';
 import { emitCapturedValues } from './link/captured-dom';
 import { lowerFetchImport } from './features/sources/delivery';
+
+/** Compiles one module on its own. Returns its JavaScript. */
+export function compile(source: string, options: CompileOptions = {}): string {
+  const id = options.moduleId ?? './App.tsx';
+  // The extension chooses the language, and a bare id has none.
+  const path = /\.[cm]?[jt]sx?$/.test(id) ? id : `${id}.tsx`;
+  return compileModules({ [path]: source }, options)[path]!;
+}
 
 /** Compiles a set of modules that may import each other. Returns JavaScript by path. */
 export function compileModules(

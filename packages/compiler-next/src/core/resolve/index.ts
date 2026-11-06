@@ -14,7 +14,7 @@ import { CompileError } from '../diagnostics';
 import type { ParsedModule } from '../parse';
 import { withAmbientImports } from './ambient';
 import { findGlobalWrites, type GlobalWrites } from './globals';
-import { importResolver } from './imports';
+import { importResolver, withRequireImports } from './imports';
 import { capturedExport, importedBinding, namespaceModule } from './exports';
 import { neverChanges } from './members';
 import { findWrites, type WriteSite } from './writes';
@@ -83,12 +83,14 @@ export function importedDefinition(binding: Binding): Binding | null {
 
 export function resolve(parsed: readonly ParsedModule[], options: CompileModulesOptions): Resolved {
   const paths = parsed.map((module) => module.path);
-  const analyzer = new Analyzer({ resolve: importResolver(paths, options) });
+  const resolveImport = importResolver(paths, options);
+  const analyzer = new Analyzer({ resolve: resolveImport });
 
   const modules = parsed.map((input): ResolvedModule => {
     const settings = { lang: input.lang, sourceType: 'module' } as const;
-    let module = analyzer.setFile(input.path, input.source, settings);
-    const ambient = withAmbientImports(module, input.source);
+    const source = withRequireImports(input, parsed, resolveImport);
+    let module = analyzer.setFile(input.path, source, settings);
+    const ambient = withAmbientImports(module, source);
 
     if (ambient !== null) {
       module = analyzer.setFile(input.path, ambient, settings);
@@ -97,7 +99,7 @@ export function resolve(parsed: readonly ParsedModule[], options: CompileModules
     const error = module.diagnostics.find((diagnostic) => diagnostic.severity === 'error');
     if (error !== undefined) {
       // Parse already checked the authored text, so this is lowered code.
-      throw CompileError.at(`after lowering TypeScript: ${error.message}`, input.path, input.source, error.start);
+      throw CompileError.at(`after lowering TypeScript: ${error.message}`, input.path, source, error.start);
     }
     return { path: input.path, module, hasJsx: input.hasJsx, writes: findWrites(module) };
   });

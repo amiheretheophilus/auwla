@@ -48,24 +48,79 @@ removing its placeholder, so later branch mounts inherit it too.
 | --- | --- |
 | `index.ts` | `parseModule(path, source)`: language from the path (`langFromPath`), syntax errors as `CompileError` with line and column, JSX detection |
 | `lower-typescript.ts` | lowers `enum` (numbered members, reverse mapping, member names in initializers, `const enum`; `declare enum` removed) and constructor parameter properties, as `tsc` emits them, by editing the text |
+| `lower-namespace.ts` | lowers a runtime `namespace`, `import x = a.b`, `import x = require('m')` and `export =` as `tsc` emits them, and decides how an enum is declared when it merges or sits in a namespace |
+| `text-edits.ts` | replacing spans of source text, and where an edit lands afterwards |
 | `parse.test.ts` | unit tests |
 
 - Output: `ParsedModule` with the lowered source text. The analyzer parses that
   text again, because its model is a snapshot of the text (`toolchain.md`).
 - yuku positions (`start`, `end`, diagnostics) are UTF-16 offsets, like JavaScript
   string indexes, so text edits slice by them directly. Tested with non-ASCII text.
-- Not lowered yet: a runtime `namespace` and `export =`. Printing reports them as
-  a `CompileError` rather than dropping them; they are valid TypeScript and must be
-  lowered before acceptance (Phase 10).
 - Case to test: `enum Mode { A, B }`, which the old compiler rejects
   (`packages/compiler-next/tests/cases/core.test.ts`).
+
+### A namespace and `export =`
+
+`lower-namespace.ts` emits what `tsc` emits, so a namespace is ordinary JavaScript by
+the time anything else sees it. The old compiler rejects all of this.
+
+```ts
+namespace A {                    // var A; (function (A) {
+  export let count = 1;          //   A.count = 1;
+  const local = 2;               //   const local = 2;
+  export function read() {       //   function read() {
+    return count + local;        //     return A.count + local;
+  }                              //   } A.read = read;
+}                                // })(A || (A = {}));
+```
+
+- **An exported name is a property everywhere it is visible,** including later
+  `namespace A { … }` blocks, which share the object but not each other's unexported
+  names. Which uses change comes from the analyzer's scopes, not from names, so a
+  parameter called `count` is left alone. `core/resolve/identifier-uses.ts` hands those
+  answers to parse as plain records, which keeps `yuku-analyzer` in `core/resolve/`.
+- **Merging.** A class, function or enum already declares the name, so the namespace adds
+  no `var`. `export var` can only appear once, so merged exported enums and namespaces
+  declare it once. This also fixed `export enum E {}` written twice.
+- **The parameter takes the namespace's name,** unless something inside declares that name.
+  Then it becomes `A_1`, as `tsc` emits, so `function f(A) { return count; }` still works.
+- **A class reads itself by its inner name** inside its own body, because `A.C` is not
+  assigned until the class is finished. `static self = C` therefore works. This is the one
+  place the output is safer than `tsc`, whose `A.C` there is `undefined`.
+- **A namespace with only types has no runtime part.** It becomes `declare`, which printing
+  erases. The rule for what counts as a runtime part is `tsc`'s (`isInstantiated`).
+- **`import x = a.b`** becomes `var x = a.b`. If nothing reads `x` as a value, it is dropped,
+  because it may name a type.
+- **`export = value`** becomes `export default value`. It leaves nothing for a name with no
+  value.
+- **`import x = require('m')`** becomes `import x from 'm'` when `m` has `export =`, and
+  `import * as x from 'm'` when it does not, because that is what requiring each one gives.
+  That depends on the other module, so `withRequireImports` in `core/resolve/imports.ts`
+  settles it. A package stays `import x from 'm'`, where the bundler's interop gives
+  `module.exports` as the default.
+- **Refused, as `tsc` refuses:** `export { x }`, `export default` and `import x = require()`
+  inside a namespace, each a `CompileError` with its position.
+- **`import { x } from './m'` when `m` has only `export =`** is not a named export of `m`, so it
+  reads as a missing export. `tsc` allows it only for a namespace under `esModuleInterop`.
+  Import the default instead.
+
+The reference reads this lowered text too (`tests/reference/transform.ts`), since these forms
+have no JavaScript of their own. The lowering is checked on its own by running its output
+(`parse.test.ts`), and `tests/cases/core.namespaces.test.ts` compares state and components
+inside namespaces with the reference.
+
+A statement that assigns a value and reads it, as `(function (A) { … })(A || (A = {}))` does,
+must not depend on that value: an edit from a handler would run it again and reset the
+namespace. A build's assignment now reports its own output (`noteOwnOutput`, used by the helper
+in `core/emit/shared.ts`).
 
 ## resolve — `core/resolve/` (built, Phase 1)
 
 | File | What it does |
 | --- | --- |
 | `index.ts` | `resolve(parsed, options)`: one linked `yuku-analyzer` project; returns `Resolved`. Exposes binding/reference types and `isRuntimeBinding` for later stages |
-| `imports.ts` | which compiled module an import names: relative paths with extension and `index` probing, `options.resolveImport` first; packages are outside |
+| `imports.ts` | which compiled module an import names: relative paths with extension and `index` probing, `options.resolveImport` first; packages are outside. Also settles `import x = require('m')` once the other module is known |
+| `identifier-uses.ts` | scope answers for lowering a namespace, as plain records, so `core/parse/` does not import `yuku-analyzer` |
 | `exports.ts` | shared value-export identities, captured defaults, namespaces, type erasure, conflicts and cycles (`linking.md`) |
 | `writes.ts` | write sites per binding, and `runnerOf` / `declaringRunner` |
 | `globals.ts` | which host globals the program writes; every other global is not an input (`state-and-derived.md`) |

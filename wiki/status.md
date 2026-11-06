@@ -2,7 +2,22 @@
 
 Last updated: 2026-11-06.
 
-## Current: closing documented issues before Phase 10 (2026-11-06)
+## Current: Phase 10 (2026-11-06)
+
+**Done: a runtime `namespace`, `import x = a.b`, `import x = require('m')` and `export =` are
+lowered** (`compiler/core.md`, "A namespace and export ="), so `tests/cases/core.namespaces.test.ts`
+has state and components inside namespaces updating as the reference does. The old compiler rejects
+all of these. Writing the cases found one real bug, in any module: a statement that assigns a value
+and reads it (`let s; s = s || {}`, or what a namespace lowers to) depended on that value, so an edit
+from a handler ran it again and reset it. `export enum E {}` written twice was also a syntax error.
+
+Gate: 534 unit, 179 runtime, 171 data, 744 cases, 10 generators at 200 programs. Sizes: about +20 B
+raw where a module has shared state.
+
+Next is the acceptance switch (`test-support/compiler-next.ts`), to find what the old suites still
+need, then server output, hydration and routes.
+
+## Closing documented issues before Phase 10 (2026-11-06)
 
 The user: fix every bug or issue that is documented or that we meet, rather than carrying
 known limits into the last phase. Items that are the user's to explain or decide stay in

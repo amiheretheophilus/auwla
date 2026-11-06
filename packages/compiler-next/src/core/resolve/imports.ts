@@ -3,6 +3,31 @@
  * gave `compileModules` (`./App.tsx`, `./data/session.ts`).
  */
 import type { CompileModulesOptions } from '../../options';
+import type { ParsedModule } from '../parse';
+
+/**
+ * The text to analyze for a module, with `import x = require('m')` settled.
+ *
+ * Parse lowers it to `import x from 'm'`, because `export =` becomes a default export. Requiring a
+ * module without `export =` gives its namespace object, so here it becomes `import * as x`. Only
+ * now can that be known, since it depends on the other module. A package is left as written: the
+ * bundler's interop gives `module.exports` as its default.
+ */
+export function withRequireImports(
+  input: ParsedModule,
+  parsed: readonly ParsedModule[],
+  resolve: ReturnType<typeof importResolver>,
+): string {
+  let source = input.source;
+  // From the end, so earlier offsets stay valid.
+  for (const { at, local, specifier } of [...input.requireImports].reverse()) {
+    const target = parsed.find((module) => module.path === resolve(specifier, input.path));
+    if (target === undefined || target.hasExportAssignment) continue;
+    const written = `import ${local}`;
+    source = `${source.slice(0, at)}import * as ${local}${source.slice(at + written.length)}`;
+  }
+  return source;
+}
 
 const EXTENSIONS = ['', '.ts', '.tsx', '.js', '.jsx', '/index.ts', '/index.tsx', '/index.js', '/index.jsx'];
 

@@ -78,12 +78,19 @@ onEntityDispose((id) => {
   owned().delete(id);
 });
 
+/**
+ * The running computation assigned `written` while building it, which publishes nothing. It is
+ * still an output: `s = s || {}` must not depend on `s`, or a later edit of `s` would replay it.
+ */
+export function noteOwnOutput(written: object): void {
+  const current = store().current;
+  if (current !== null) (current.writes ??= new Set()).add(written);
+}
+
 export function publishVersions(keys: readonly object[], written?: object): void {
   advanceWriteEpoch();
+  if (written !== undefined) noteOwnOutput(written);
   const state = store();
-  if (written !== undefined && state.current !== null) {
-    (state.current.writes ??= new Set()).add(written);
-  }
 
   // A shared memo can publish another version while its subscriber runs. Keep
   // one notification set for the whole wave so cycles cannot notify forever.

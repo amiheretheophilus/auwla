@@ -30,4 +30,10 @@ export interface CompileModulesOptions {
   readonly resolveImport?: (specifier: string, importer: string) => string | undefined;
 }
 
+/** Options of `compile`, which takes one module. */
+export interface CompileOptions extends CompileModulesOptions {
+  /** The module's path, which also chooses its language. Default `./App.tsx`. */
+  readonly moduleId?: string;
+}
+
 export const DEFAULT_RUNTIME_PATH = '@memoized-dom/runtime';

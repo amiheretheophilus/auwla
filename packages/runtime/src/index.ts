@@ -84,7 +84,7 @@ export {
 } from './mutation';
 export { createRowCache, mapRows } from './list-map';
 export { createRowList } from './row-list';
-export { createComputation, observeNamespace, readNamespace, trackEquals, trackRead } from './computation';
+export { createComputation, noteOwnOutput, observeNamespace, readNamespace, trackEquals, trackRead } from './computation';
 export { createSharedWrites } from './shared-writes';
 export type { BuildScope, BuildFrame } from './build-scope';
 export { adoptInitialRoot } from './initial-root';
