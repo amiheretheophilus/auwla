@@ -4,6 +4,50 @@
 import { expect } from 'bun:test';
 import { behaves } from '../harness/run';
 
+behaves('an edit through a call with await in its arguments shows', {
+  source: `
+    const data = { tags: [] };
+    function first() { return data; }
+    export function App() {
+      let done = 0;
+      const go = async () => { first().tags.push(await Promise.resolve('x')); done++; };
+      return <main><p>{data.tags.join(',')}:{done}</p><button onClick={go}>go</button></main>;
+    }
+  `,
+  steps: [{ click: 'button' }],
+  check(container, observation) {
+    expect(container.querySelector('p')?.textContent).toBe([':0', 'x:1'][observation]!);
+  },
+});
+
+// Reading one of these is a question only the compiled code is asking, so it must not fail.
+for (const [name, setup, then] of [
+  ['a revoked proxy', `const { proxy: strange, revoke } = Proxy.revocable({ a: 1 }, {});`, 'revoke();'],
+  ['a proxy whose ownKeys throws', `const strange = new Proxy({ a: 1 }, { ownKeys() { throw new Error('no'); } });`, ''],
+  ['a proxy whose getOwnPropertyDescriptor throws', `const strange = new Proxy({ a: 1 }, { getOwnPropertyDescriptor() { throw new Error('no'); } });`, ''],
+  ['a proxy whose getPrototypeOf throws', `const strange = new Proxy({ a: 1 }, { getPrototypeOf() { throw new Error('no'); } });`, ''],
+] as const) {
+  behaves(`${name} in watched data does not stop the app`, {
+    source: `
+      ${setup}
+      const opaque = new Function('value', 'return value;');
+      const list = [strange];
+      export function App() {
+        let n = 1;
+        const held = { strange, list };
+        const go = () => { ${then} opaque(held); list.length; n++; };
+        const add = () => { held.extra = n; list.push(n); n++; };
+        return <main><p>{n}:{list.length}</p>
+          <button id="go" onClick={go}>go</button><button id="add" onClick={add}>add</button></main>;
+      }
+    `,
+    steps: [{ click: '#go' }, { click: '#add' }, { click: '#go' }],
+    check(container, observation) {
+      expect(container.querySelector('p')?.textContent).toBe(['1:1', '2:1', '3:2', '4:2'][observation]!);
+    },
+  });
+}
+
 for (const [name, key, body] of [
   ['replacing an own array method', 'push', `const box = []; box.push = () => { rows[0].label = 'z'; }; box.push();`],
   ['replacing a computed array method', 'push', `const box = []; box[key] = () => { rows[0].label = 'z'; }; box.push();`],

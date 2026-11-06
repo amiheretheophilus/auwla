@@ -547,8 +547,6 @@ carry the rest. These are limits of the test reference, not permitted compiler
 behaviour. Each gets a case when a compiler slice touches it:
 
 - More interleavings of shared owners and source generations under `suspend`.
-- Module-scope control flow (`let x = 0; if (flag) x = user.y` at module scope)
-  and module patterns with a name written later are not modeled.
 - Computed paths (`props[key].name`) and sources inside class instances or
   Maps: `$path` follows static names through plain data only.
 - Imported helpers whose sources are already warm on their first call, plus more

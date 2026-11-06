@@ -137,15 +137,26 @@ export function emitMutations(
     }
     if (plan.chained === true) {
       const call = copy(plan.operation, replacements);
-      // An `await` in the arguments cannot move into a function. Such a call stays
-      // as written; what it edits is reported only by the next edit that shows it.
+      if (!is.CallExpression(call) || !is.MemberExpression(call.callee)) continue;
+
+      const receiver = call.callee.object;
+      const held = names.fresh('_receiver');
+      const notify = notifierOf(plan.targets[0]!.binding);
+      call.callee.object = b.Identifier({ name: held });
+
+      // An `await` in the arguments cannot move into a function, so the receiver waits in a
+      // variable instead. It is read before anything can suspend: the call takes it as `this`
+      // ahead of its arguments, and the observation keeps its own copy.
       const suspends = findAll(plan.operation, 'AwaitExpression').length > 0 || findAll(plan.operation, 'YieldExpression').length > 0;
-      if (is.CallExpression(call) && is.MemberExpression(call.callee) && !suspends) {
-        const receiver = call.callee.object;
-        const held = names.fresh('_receiver');
-        call.callee.object = b.Identifier({ name: held });
+      if (suspends) {
+        const observed = names.fresh('_held');
+        declarations.push(statement('var $$held;', { held }));
+        replacements.set(plan.operation, expression('($$held = $$receiver, (($$observed) => $$runtime.observeMutation([() => $$observed], [$$notify]))($$held).finish($$call))', {
+          held, observed, runtime, notify, call, receiver,
+        }));
+      } else {
         replacements.set(plan.operation, expression('(($$held) => $$runtime.observeMutation([() => $$held], [$$notify]).finish($$call))($$receiver)', {
-          held, runtime, notify: notifierOf(plan.targets[0]!.binding), call, receiver,
+          held, runtime, notify, call, receiver,
         }));
       }
       continue;

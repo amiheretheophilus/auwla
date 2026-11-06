@@ -4,6 +4,22 @@ import { behaves } from '../harness/run';
 import { requestedUrls, requestSignals } from '../harness/requests';
 import { serverFunctionClient } from '../harness/server-functions';
 
+behaves('module builders: a statement waits for the source it reads', {
+  source: `
+    const user = $fetch('/module-builder');
+    let flag = true;
+    let name = 'none';
+    if (flag) name = user.name;
+    export function App() {
+      return <main><p>{name}</p></main>;
+    }
+  `,
+  steps: [{ respond: '/module-builder', value: { name: 'Ada' } }],
+  check(container, observation) {
+    expect(container.querySelector('p')?.textContent).toBe(['', 'Ada'][observation]!);
+  },
+});
+
 behaves('source regressions: a reducer predicate leaves an inactive source unread', {
   source: `
     import { $read, Group } from '@memoized-dom/data';

@@ -29,6 +29,21 @@ which read as inside a component that opens the file), a dead-zone write caught 
 Gate: 517 unit, 179 runtime, 171 data, 680 cases, 10 generators at 200 programs. No standby
 during it; an earlier attempt was lost to one (Kernel-Power 506/507).
 
+Probing every gap the concept pages list found these, all fixed with cases:
+
+- **One revoked or hostile proxy in watched data made every later handler in the app throw**,
+  since the compiled code asks it questions the authored code never did. It is now a leaf, and an
+  interrupted walk is tried again at the next edit. `mutation-roots.test.ts` had pinned the old
+  behaviour with `expect(() => store(…)).toThrow(…)`; that one line changed, for the reason in
+  `compiler/handlers.md`, and what it was there for, that indexing recovers, still holds.
+- **`run.calls++` on a function declaration** did not update a value derived from it.
+- **`arguments` in a component** read the compiled signature, and crashed. It now reads what the
+  parent sent, and follows the next thing it sends.
+- **`first().tags.push(await x)`** was never observed. The receiver now waits in a variable.
+
+In the reference: a reassigned function is a value, `rows = rows` reports as the 2026-11-05 decision
+says, and a module's body builds values as a component's does.
+
 ## Phase 9, linking for native packages (2026-11-05)
 
 The goal, from the user: linking that lets us write native packages effectively. Ordinary

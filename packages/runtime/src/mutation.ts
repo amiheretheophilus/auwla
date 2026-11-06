@@ -136,11 +136,34 @@ function hold(slot: Slot, object: object): void {
   }
 }
 
-/** Walk identities through data fields, without invoking an unused accessor. */
+/**
+ * Walk identities through data fields, without invoking an unused accessor.
+ *
+ * A proxy's traps can throw, and a revoked proxy always does, on a question only this code is
+ * asking. The authored code never asked it, so it must not fail: such an object shows no data
+ * to watch, here and in `editedBelow` and `snapshot`. It stays a leaf for one object at a time.
+ */
 function reachable(
   value: unknown,
   visit: (object: object) => void,
   seen = new Set<object>(),
+  onUntrackedRead?: () => void,
+): void {
+  try {
+    reachableFrom(value, visit, seen, onUntrackedRead);
+  } catch {
+    // Unreadable for now: a leaf, and `walk` tries again at the next edit.
+    interrupted = true;
+  }
+}
+
+/** A walk met an object it could not read, so what it found may be partial. */
+let interrupted = false;
+
+function reachableFrom(
+  value: unknown,
+  visit: (object: object) => void,
+  seen: Set<object>,
   onUntrackedRead?: () => void,
 ): void {
   if (value === null || (typeof value !== 'object' && typeof value !== 'function') || seen.has(value)) return;
@@ -227,9 +250,11 @@ function walk(root: Root, slot?: Slot): Reach {
   reaches.delete(root);
   const value = root.read();
   const reach: Reach = { value, objects: new WeakSet(), stale: false, untracked: false };
+  interrupted = false;
   extendReach(reach, value, slot);
   reaches.set(root, reach);
-  slot?.store.unwalked.delete(slot);
+  // Interrupted, it stays pending: a proxy that refused now may answer at the next edit.
+  if (!interrupted) slot?.store.unwalked.delete(slot);
   return reach;
 }
 
@@ -292,6 +317,14 @@ export function mutatedSince(value: unknown, time: number): boolean {
 }
 
 function editedBelow(value: object, time: number, seen: Set<object>): boolean {
+  try {
+    return editedWithin(value, time, seen);
+  } catch {
+    return false;
+  }
+}
+
+function editedWithin(value: object, time: number, seen: Set<object>): boolean {
   if (seen.has(value)) return false;
   seen.add(value);
   if ((editedAt.get(value) ?? 0) > time) return true;
@@ -458,17 +491,31 @@ function isObject(value: unknown): value is object {
  * Descriptors are read so that no getter runs; a setter can do anything.
  */
 function storeEdit(object: object, key: PropertyKey, value: unknown): Edit {
-  // Shrinking an array drops its elements without touching their descriptors.
-  if (Array.isArray(object) && key === 'length') return { kind: 'store', added: undefined, removed: true };
-  for (let owner: object | null = object; owner !== null; owner = Object.getPrototypeOf(owner)) {
-    const descriptor = Object.getOwnPropertyDescriptor(owner, key);
-    if (descriptor === undefined) continue;
-    if (!('value' in descriptor)) return { kind: 'unknown' };
-    // An inherited data field is shadowed by a new own field.
-    const removed = owner === object && isObject(descriptor.value);
-    return { kind: 'store', added: value, removed };
+  try {
+    // Shrinking an array drops its elements without touching their descriptors.
+    if (Array.isArray(object) && key === 'length') return { kind: 'store', added: undefined, removed: true };
+    for (let owner: object | null = object; owner !== null; owner = Object.getPrototypeOf(owner)) {
+      const descriptor = Object.getOwnPropertyDescriptor(owner, key);
+      if (descriptor === undefined) continue;
+      if (!('value' in descriptor)) return { kind: 'unknown' };
+      // An inherited data field is shadowed by a new own field.
+      const removed = owner === object && isObject(descriptor.value);
+      return { kind: 'store', added: value, removed };
+    }
+    return { kind: 'store', added: value, removed: false };
+  } catch {
+    // The store itself is the authored code's to attempt.
+    return { kind: 'unknown' };
   }
-  return { kind: 'store', added: value, removed: false };
+}
+
+/** The own field, or none when a proxy will not say (see `reachable`). */
+function ownField(object: object, key: PropertyKey): PropertyDescriptor | undefined {
+  try {
+    return Object.getOwnPropertyDescriptor(object, key);
+  } catch {
+    return undefined;
+  }
 }
 
 /**
@@ -476,6 +523,14 @@ function storeEdit(object: object, key: PropertyKey, value: unknown): Edit {
  * avoid running getters merely to check for a mutation.
  */
 function snapshot(object: object): unknown[] {
+  try {
+    return readSnapshot(object);
+  } catch {
+    return [object];
+  }
+}
+
+function readSnapshot(object: object): unknown[] {
   const result: unknown[] = [object, Object.getPrototypeOf(object)];
   if (object instanceof Map) {
     result.push('map', object.size);
@@ -721,7 +776,7 @@ export function mutationTarget(object: any, key: any, notify: () => void) {
     set value(value: unknown) {
       const edit = storeEdit(object, property, value);
       // A store of what the field already holds changes nothing, and re-runs nothing.
-      const own = Object.getOwnPropertyDescriptor(object, property);
+      const own = ownField(object, property);
       const same = own !== undefined && 'value' in own && Object.is(own.value, value);
       object[property] = value;
       if (same || isRefNode(object)) return;
@@ -752,11 +807,16 @@ export function mergeFields(
 }
 
 function isPlainObject(value: unknown): boolean {
-  return isObject(value) && Object.getPrototypeOf(value) === Object.prototype;
+  if (!isObject(value)) return false;
+  try {
+    return Object.getPrototypeOf(value) === Object.prototype;
+  } catch {
+    return false;
+  }
 }
 
 export function deleteMutation(object: any, key: any, notify: () => void): boolean {
-  const had = Object.prototype.hasOwnProperty.call(object, key);
+  const had = ownField(object, key) !== undefined;
   const result = delete object[key];
   if (!had) return result;
   stamp(object);

@@ -281,9 +281,15 @@ their setup scope when suspending, so their caller can continue building.
 
 The Phase 3 gate passes under the agreed view scope. A native regression covers
 Object.setPrototypeOf, Object.defineProperty and Reflect.deleteProperty without
-invoking an unused getter. **Known conformance gap:** snapshots and alias scans
-still invoke proxy reflection traps; hostile/revoked proxies need further coverage and
-fixes. These are not accepted failure semantics.
+invoking an unused getter.
+
+Snapshots and alias scans use reflection, so a proxy's reflection traps can run; a browser offers
+no way to tell a proxy apart without asking it. A trap that throws, or a revoked proxy, must not
+stop the app, since only the compiled code asked: one such object is a leaf with no data to
+watch (`reachable`, `snapshot`, `editedBelow`, `storeEdit`, `ownField`). Before this, one revoked
+proxy in watched data made every later handler in the app throw. Cases: `tests/cases/handlers.test.ts`,
+"does not stop the app".
+
 Nested-block storage, shared storage and explicit await boundaries are built.
 
 A `WeakMap` or `WeakSet` cannot be listed, so a snapshot cannot see an edit to one. An

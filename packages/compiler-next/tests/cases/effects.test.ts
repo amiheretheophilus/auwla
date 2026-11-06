@@ -4,6 +4,29 @@
 import { expect } from 'bun:test';
 import { behaves } from '../harness/run';
 
+// Code the compiler cannot see may have edited the object (`wiki/decisions.md`, 2026-11-05).
+for (const [name, declare, write] of [
+  ['a component binding', '', 'let rows = [1];'],
+  ['a module binding', 'let rows = [1];', ''],
+] as const) {
+  behaves(`assigning ${name} the same object re-runs an effect that reads it`, {
+    source: `
+      let runs = 0;
+      ${declare}
+      export function App() {
+        ${write}
+        $effect(() => { rows.length; runs++; });
+        const go = () => { rows = rows; };
+        return <main><p>{rows.length}:{runs}</p><button onClick={go}>go</button></main>;
+      }
+    `,
+    steps: [{ click: 'button' }, { click: 'button' }],
+    check(container, observation) {
+      expect(container.querySelector('p')?.textContent).toBe(['1:1', '1:2', '1:3'][observation]!);
+    },
+  });
+}
+
 behaves('setup code in the body runs once', {
   source: `
     export function App() {

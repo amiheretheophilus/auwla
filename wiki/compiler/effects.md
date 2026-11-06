@@ -43,7 +43,7 @@ and runs their cleanup.
   it is 1, `o.a = 1`). A new object is, even with equal contents (`rows =
   rows.slice()`). See `tests/cases/handlers.unchanged.test.ts` and `../decisions.md`,
   2026-11-05. Reassigning the same object still reports: an effect reading `rows`
-  re-runs after `rows = rows`, on the compilers but not the reference.
+  re-runs after `rows = rows`, since code the compiler cannot see may have edited it.
 - `$effect` inside `if`, a loop or a helper is accepted. Its reads include the
   condition.
 - An `async` callback is accepted: it runs, and its cleanup is whatever it resolves

@@ -137,6 +137,8 @@ export class Reads {
 
   /** The function a binding names: `function f() {}` or `const f = () => {}`. */
   functionOf(binding: Binding): FunctionNode | undefined {
+    // Reassigned, it holds a value like any other, and can be a different function next time.
+    if (binding.references.some((reference) => reference.isWrite)) return undefined;
     const name = binding.declarations[0];
     const parent = name && this.module.parentOf(name);
     if (is.FunctionDeclaration(parent) && parent.id === name) {

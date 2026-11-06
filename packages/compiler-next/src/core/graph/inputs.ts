@@ -84,6 +84,8 @@ export class InputQueries {
           if (is.Identifier(node) || is.JSXIdentifier(node)) {
             const reference = module.referenceOf(node);
             if (reference !== null && isValueRead(reference)) references.add(reference);
+            // `[...arguments]` reads what the function was called with, as `arguments[0]` does.
+            if (is.Identifier(node, 'arguments') && reference?.binding === null) opaque = true;
           } else if (is.CallExpression(node) || is.NewExpression(node)) {
             addCall(node);
           } else if (is.MemberExpression(node)) {

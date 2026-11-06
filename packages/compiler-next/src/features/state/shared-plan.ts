@@ -47,7 +47,9 @@ export function planSharedReads(
       // changes it: `function make(start) { return { set(v) { start = v; }, get: () => start }; }`.
       const laterParameter = isParameter(binding.binding) && owner !== null
         && binding.writes.some(({ site }) => site.runner !== binding.owner.runner);
-      if (declarator === null && !is.Class(parent) && !laterParameter) continue;
+      // A function with data on it, edited after it was set up (`run.calls++` in a handler).
+      const editedFunction = is.FunctionDeclaration(parent) && binding.writes.some(({ site }) => site.runner !== binding.owner.runner);
+      if (declarator === null && !is.Class(parent) && !laterParameter && !editedFunction) continue;
       if (owner !== null && !is.BlockStatement(owner) && !binding.binding.references.some((reference) => runnerOf(entry.module, reference.node) !== owner)) continue;
       // The same for a block in an ordinary function (`if (…) { const t = data[1]; … }`
       // in a handler): read only by the run that declared it, it is plain

@@ -246,6 +246,7 @@ class MemoSlot {
     // not take this binding back from a handler that already took control.
     if (rendering === this.owner && this.writtenLater) return;
     noteReplacement(this.value, value);
+    if (rendering !== this.owner) noteSameObject(this.value, value);
     this.value = value;
     computation?.writes.add(this);
     if (rendering === this.owner) return;
@@ -996,9 +997,78 @@ export function $moduleMemo(
     set v(value: unknown) {
       memo.writtenLater = true;
       noteReplacement(read?.(), value);
+      noteSameObject(read?.(), value);
       write?.(value);
     },
   };
+}
+
+type TracedStep = (() => unknown) & { reads(): unknown[] };
+
+/**
+ * Module statements that build a value (`ModuleMemos.planBuilders`). Each step runs where it was
+ * written. While one waits for a source, so does what it builds, and when anything they read
+ * changes they all run again from the initial value, unless a later write took the value over.
+ */
+export function $moduleBuilder(reset: () => void, wait: (waiting: Waiting) => void) {
+  const steps: TracedStep[] = [];
+  let firstWaiting: Waiting | undefined;
+  let memo: ModuleMemo | undefined;
+
+  const run = (step: TracedStep): Waiting | undefined => {
+    const value = step();
+    if (!(value instanceof Waiting)) return undefined;
+    wait(value);
+    return value;
+  };
+
+  return {
+    step(compute: TracedStep): void {
+      steps.push(compute);
+      firstWaiting = run(compute) ?? firstWaiting;
+    },
+    finish(readInputs: () => unknown[]): void {
+      memo = (runningModuleEffects ?? unclaimedModuleEffects).addMemo(
+        () => [...readInputs(), ...steps.flatMap((step) => step.reads())],
+        () => {
+          reset();
+          let waiting: Waiting | undefined;
+          for (const step of steps) waiting = run(step) ?? waiting;
+          return waiting;
+        },
+        firstWaiting,
+      );
+    },
+    target(read: () => unknown, write: (value: unknown) => void): { v: unknown } {
+      return {
+        get v() {
+          return read();
+        },
+        set v(value: unknown) {
+          if (memo !== undefined) memo.writtenLater = true;
+          noteReplacement(read(), value);
+          noteSameObject(read(), value);
+          write(value);
+        },
+      };
+    },
+  };
+}
+
+/**
+ * `rows = rows`. Code the compiler cannot see may have edited the object, so assigning it again
+ * reports (`wiki/decisions.md`, 2026-11-05). Counted, since a copy of the same contents is equal.
+ */
+function noteSameObject(previous: unknown, next: unknown): void {
+  if (previous === next && previous !== null && (typeof previous === 'object' || typeof previous === 'function')) {
+    privateVersions.set(previous, (privateVersions.get(previous) ?? 0) + 1);
+  }
+}
+
+/** A module variable's assignment: the same report as a slot's (`MemoSlot.v`). */
+export function $reassigned<T>(read: () => unknown, next: T): T {
+  noteSameObject(outsideDeadZone(() => [read()])[0], next);
+  return next;
 }
 
 // ---------------------------------------------------------------------------
@@ -1014,12 +1084,23 @@ function hasOwnData(fn: Function): boolean {
   });
 }
 
+/** A proxy's traps can throw, on a question only this copy is asking. It shows no data to compare. */
 function deepCopy(value: unknown, copies = new Map<object, unknown>()): unknown {
+  try {
+    return copyOf(value, copies);
+  } catch {
+    return { unreadable: value };
+  }
+}
+
+function copyOf(value: unknown, copies: Map<object, unknown>): unknown {
   const copy = (entry: unknown) => deepCopy(entry, copies);
   // The outermost value is the fresh array of a reader's inputs, new on every read.
   const outermost = copies.size === 0;
   const remember = <T extends object>(result: T): T => {
     if (!outermost) originals.set(result, value as object);
+    const reassigned = privateVersions.get(value as object);
+    if (reassigned !== undefined) (result as { privateVersion?: number }).privateVersion = reassigned;
     return result;
   };
 

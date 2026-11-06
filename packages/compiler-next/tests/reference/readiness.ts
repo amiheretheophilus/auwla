@@ -524,15 +524,11 @@ function unwrapOptionalChain(module: Module, chain: Extract<Node, { type: 'Chain
  * Built before payload reads are rewritten (`prepareModuleReads`), which then
  * rewrites the authored code wherever these memos placed it.
  */
-/** `const $compute_x = $traced(() => value);` */
-function tracedCompute(compute: string, value: Expression): Statement {
-  return constDeclaration(compute, runtimeCall('$traced', [thunk(value)]));
-}
-
 export function buildModuleMemos(module: Module, rawUses: SourceUses): void {
   const builder = new ModuleMemos(module, rawUses);
+  builder.planBuilders(module.ast.body);
   for (const statement of module.ast.body) builder.visit(statement);
-  const body = module.ast.body.flatMap((statement) => builder.around(statement));
+  const body = module.ast.body.flatMap((statement) => builder.aroundInModule(statement));
   module.ast.body = body as typeof module.ast.body;
   for (const fn of module.findAll(['FunctionDeclaration', 'FunctionExpression', 'ArrowFunctionExpression'])) {
     if (!is.BlockStatement(fn.body) || findAll(fn.body, ['JSXElement', 'JSXFragment']).length > 0) continue;
@@ -550,18 +546,201 @@ export function buildModuleMemos(module: Module, rawUses: SourceUses): void {
 
 type VariableDeclaration = Extract<Statement, { type: 'VariableDeclaration' }>;
 
+/** `const $compute_x = $traced(() => value);` */
+function tracedCompute(compute: string, value: Expression): Statement {
+  return constDeclaration(compute, runtimeCall('$traced', [thunk(value)]));
+}
+
+/**
+ * Module statements that build a value, as a component's body does (`state-and-derived.md`):
+ * `let name = 'none'; if (flag) name = user.name;`. The declaration and every such statement run
+ * again together, in order, when anything they read changes.
+ */
+interface BuilderGroup {
+  readonly name: string;
+  readonly bindings: Set<Binding>;
+  readonly statements: Node[];
+}
+
+/** Array methods that run their callback before they return, so its edits are part of the statement. */
+const IMMEDIATE_CALLBACKS = new Set(['forEach', 'map', 'filter', 'reduce', 'some', 'every', 'find', 'flatMap', 'sort']);
+
 class ModuleMemos {
   private readonly reads: Reads;
   private readonly before = new Map<Node, Statement[]>();
   private readonly after = new Map<Node, Statement[]>();
+  private readonly replaced = new Map<Node, Statement>();
   private nextPattern = 0;
   private readonly targets = new Map<Binding, string>();
+  private readonly groups: BuilderGroup[] = [];
 
   constructor(private readonly module: Module, private readonly rawUses: SourceUses) {
     this.reads = new Reads(module);
   }
 
+  /** Find the groups first: a declaration needs to know whether a later statement builds it. */
+  planBuilders(body: readonly Node[]): void {
+    const candidates = body.flatMap((statement) => {
+      const targets = this.builtBy(statement);
+      return targets.size === 0 ? [] : [{ statement, targets, reads: this.readsOthers(statement, targets) }];
+    });
+
+    const join = (candidate: (typeof candidates)[number]): void => {
+      const joined = this.groups.filter((group) => [...candidate.targets].some((binding) => group.bindings.has(binding)));
+      if (joined.length === 0 && !candidate.reads) return;
+
+      const group = joined[0] ?? { name: `$builder${this.groups.length}`, bindings: new Set(), statements: [] };
+      if (joined.length === 0) this.groups.push(group);
+      for (const other of joined.slice(1)) {
+        for (const binding of other.bindings) group.bindings.add(binding);
+        group.statements.push(...other.statements);
+        this.groups.splice(this.groups.indexOf(other), 1);
+      }
+      for (const binding of candidate.targets) group.bindings.add(binding);
+      if (!group.statements.includes(candidate.statement)) group.statements.push(candidate.statement);
+    };
+
+    // Those that read something start a group. Then anything else writing what a group builds.
+    for (const candidate of candidates) if (candidate.reads) join(candidate);
+    for (const candidate of candidates) if (!candidate.reads) join(candidate);
+    for (const group of this.groups) group.statements.sort((left, right) => left.start - right.start);
+  }
+
+  /** Whether it reads a value other than what it builds, even inside a callback it runs. */
+  private readsOthers(statement: Node, targets: ReadonlySet<Binding>): boolean {
+    return this.module.references.some((reference) => {
+      const { node, binding } = reference;
+      if (binding === null || reference.isWrite || reference.inTypePosition || targets.has(binding)) return false;
+      if (node.start < statement.start || node.end > statement.end) return false;
+      const declaredInside = binding.declarations.some((name) => name.start >= statement.start && name.end <= statement.end);
+      return !declaredInside && this.reads.functionOf(binding) === undefined;
+    });
+  }
+
+  /** The module variables a plain statement writes or edits when it runs. */
+  private builtBy(statement: Node): ReadonlySet<Binding> {
+    const targets = new Set<Binding>();
+    const plain = is.ExpressionStatement(statement) || is.IfStatement(statement) || is.ForStatement(statement)
+      || is.ForOfStatement(statement) || is.ForInStatement(statement) || is.WhileStatement(statement)
+      || is.DoWhileStatement(statement) || is.SwitchStatement(statement) || is.BlockStatement(statement);
+    if (!plain) return targets;
+    if (findAll(statement, ['AwaitExpression', 'YieldExpression']).length > 0) return targets;
+
+    for (const reference of this.module.references) {
+      const { node, binding } = reference;
+      if (binding === null || reference.inTypePosition) continue;
+      if (node.start < statement.start || node.end > statement.end) continue;
+      if (!is.Program(binding.scope.node) || !this.isVariable(binding)) continue;
+      if (this.runsLater(node, statement)) continue;
+      if (reference.isWrite || this.edits(node)) targets.add(binding);
+    }
+
+    return targets;
+  }
+
+  private isVariable(binding: Binding): boolean {
+    const name = binding.declarations[0];
+    const parent = name && this.module.parentOf(name);
+    return is.VariableDeclarator(parent) && parent.id === name && parent.init !== null && !is.Function(parent.init);
+  }
+
+  /** Inside a function that the statement does not itself run before it finishes. */
+  private runsLater(node: Node, statement: Node): boolean {
+    for (const ancestor of this.module.ancestors(node)) {
+      if (ancestor === statement) return false;
+      if (!is.Function(ancestor)) continue;
+      const call = this.module.parentOf(ancestor);
+      if (!is.CallExpression(call) || !is.MemberExpression(call.callee) || !is.Identifier(call.callee.property)) return true;
+      if (!IMMEDIATE_CALLBACKS.has(call.callee.property.name)) return true;
+    }
+    return false;
+  }
+
+  /** `x.a = 1`, `x.a++`, `delete x.a` and `x.push(1)`, with `x` as `node`. */
+  private edits(node: Node): boolean {
+    let current = node;
+    let parent = this.module.parentOf(current);
+    while (is.MemberExpression(parent) && parent.object === current) {
+      current = parent;
+      parent = this.module.parentOf(current);
+    }
+    if (current === node) return false;
+    return (is.AssignmentExpression(parent) && parent.left === current)
+      || (is.UpdateExpression(parent) && parent.argument === current)
+      || (is.UnaryExpression(parent) && parent.operator === 'delete')
+      || (is.CallExpression(parent) && parent.callee === current);
+  }
+
+  private groupOf(binding: Binding): BuilderGroup | undefined {
+    return this.groups.find((group) => group.bindings.has(binding));
+  }
+
+  /** `$builder0.step($traced(() => $when(() => [reads], () => { statement })));`, and what surrounds it. */
+  private buildStatement(statement: Node, group: BuilderGroup): void {
+    if (group.statements[0] === statement) {
+      const assign = (value: (binding: Binding) => Expression): Statement[] => [...group.bindings].map((binding) => {
+        return b.ExpressionStatement({
+          expression: b.AssignmentExpression({ operator: '=', left: b.Identifier({ name: binding.name }), right: value(binding) }),
+        }) as Statement;
+      });
+      const reset = blockThunk(assign((binding) => runtimeCall(`$init_${binding.name}`, [])));
+      const wait = b.ArrowFunctionExpression({
+        id: null,
+        params: [b.Identifier({ name: '$waiting' })],
+        body: b.BlockStatement({ body: assign(() => identifier('$waiting')) }),
+        expression: false,
+        async: false,
+        generator: false,
+      });
+      this.add(this.before, statement, constDeclaration(group.name, runtimeCall('$moduleBuilder', [reset, wait])));
+    }
+
+    const inputs = inputsOf(statement, this.readsOf());
+    const run = runtimeCall('$when', [thunk(inputs), blockThunk([statement as Statement])]);
+    this.replaced.set(statement, b.ExpressionStatement({
+      expression: runtimeCall(`${group.name}.step`, [runtimeCall('$traced', [thunk(run)])]),
+    }) as Statement);
+
+    if (group.statements.at(-1) === statement) {
+      this.finishGroup(statement, group);
+    }
+  }
+
+  private finishGroup(last: Node, group: BuilderGroup): void {
+    const inputs = [...group.bindings].flatMap((binding) => {
+      const declarator = this.module.parentOf(binding.declarations[0]!) as VariableDeclarator;
+      return [...this.reads.inside([this.initializers.get(binding) ?? declarator.init!], undefined)].filter((read) => !group.bindings.has(read));
+    });
+    const elements = [...new Set(inputs)].map((binding) => bindingRead(binding));
+    this.add(this.after, last, b.ExpressionStatement({
+      expression: runtimeCall(`${group.name}.finish`, [thunk(b.ArrayExpression({ elements }))]),
+    }) as Statement);
+
+    for (const binding of group.bindings) {
+      const target = `$target_${binding.name}`;
+      this.targets.set(binding, target);
+      const write = b.ArrowFunctionExpression({
+        id: null,
+        params: [b.Identifier({ name: '$next' })],
+        body: b.AssignmentExpression({ operator: '=', left: b.Identifier({ name: binding.name }), right: identifier('$next') }),
+        expression: true,
+        async: false,
+        generator: false,
+      });
+      this.add(this.after, last, constDeclaration(target, runtimeCall(`${group.name}.target`, [thunk(identifier(binding.name)), write])));
+    }
+  }
+
+  /** What each built binding was initialized with, moved into its `$init_x` function. */
+  private readonly initializers = new Map<Binding, Node>();
+
   visit(statement: Node): void {
+    const group = this.groups.find((candidate) => candidate.statements.includes(statement));
+    if (group !== undefined) {
+      this.buildStatement(statement, group);
+      return;
+    }
+
     const declaration = is.ExportNamedDeclaration(statement) ? statement.declaration : statement;
     if (!is.VariableDeclaration(declaration)) return;
 
@@ -575,6 +754,19 @@ class ModuleMemos {
       if (suspends) continue;
 
       const bindings = this.bindingsIn(declarator.id);
+
+      // A later statement builds it: the group runs its initializer again, with those statements.
+      const built = is.Identifier(declarator.id) && owner === undefined ? this.groupOf(bindings[0]!) : undefined;
+      if (built !== undefined) {
+        const init = declarator.init;
+        this.initializers.set(bindings[0]!, init);
+        const value = waitForExpression(init as Expression, this.readsOf(bindings[0]));
+        this.add(this.before, statement, constDeclaration(`$init_${bindings[0]!.name}`, thunk(value)));
+        declarator.init = runtimeCall(`$init_${bindings[0]!.name}`, []);
+        declaration.kind = 'let';
+        continue;
+      }
+
       if (this.reads.inside([declarator.init], bindings[0]).size === 0) continue;
 
       if (is.Identifier(declarator.id)) {
@@ -595,6 +787,11 @@ class ModuleMemos {
         if (!reference?.binding || !reference.isWrite) return;
         const target = this.targets.get(reference.binding);
         if (!target) return;
+        // The statements that build it write it as part of being derived.
+        const builds = this.groupOf(reference.binding)?.statements.some((statement) => {
+          return reference.node.start >= statement.start && reference.node.end <= statement.end;
+        });
+        if (builds) return;
         if (is.Property(ctx.parent) && ctx.parent.shorthand) ctx.parent.shorthand = false;
         ctx.replace(member(target, 'v'));
       },
@@ -604,6 +801,11 @@ class ModuleMemos {
   /** The statements to emit for one top-level statement, in order. */
   around(statement: Node): Node[] {
     return [...(this.before.get(statement) ?? []), statement, ...(this.after.get(statement) ?? [])];
+  }
+
+  /** The same for the module's own body, where a builder statement is now one step of its group. */
+  aroundInModule(statement: Node): Node[] {
+    return this.around(statement).map((node) => this.replaced.get(node) ?? node);
   }
 
   private name(statement: Node, declarator: VariableDeclarator, binding: Binding): void {
@@ -806,6 +1008,15 @@ export function prepareModuleReads(
       ctx.replace(runtimeCall('$value', [value]));
     },
   });
+
+  // After the walk, which replaces each right-hand side as it reaches it. By name, since an
+  // assignment a component rewrite moved has no reference any more. A local of the same name
+  // only gets a report nobody reads.
+  const moduleNames = new Set(module.bindings.filter((binding) => is.Program(binding.scope.node)).map((binding) => binding.name));
+  for (const assignment of findAll(module.ast, ['AssignmentExpression'])) {
+    if (assignment.operator !== '=' || !is.Identifier(assignment.left) || !moduleNames.has(assignment.left.name)) continue;
+    assignment.right = runtimeCall('$reassigned', [thunk(identifier(assignment.left.name)), assignment.right as Expression]);
+  }
 }
 
 /** Imports of the public source APIs point at the reference's own implementations. */

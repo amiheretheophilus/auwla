@@ -1,5 +1,5 @@
 /** Native parameter patterns, with a separate last-parent value per binding. */
-import { b, findAll, is } from 'yuku-ast';
+import { b, findAll, is, walk } from 'yuku-ast';
 import type { Expression, Node, Statement } from 'yuku-parser';
 import type { ComponentPlan } from '../../core/plan';
 import type { BindingNode } from '../../core/graph';
@@ -21,13 +21,36 @@ export function emitProps(
   const patterns = plan.fn.params;
   const setup: Statement[] = [];
   const receive: Statement[] = [];
-  if (patterns.length === 0) {
-    return { parameter, setup, receive };
+  const reads = argumentsReads(plan.fn);
+  const replacements = new Map<Node, Node>();
+  if (patterns.length === 0 && reads.length === 0) {
+    return { parameter, setup, receive, replacements };
   }
 
   setup.push(statement('const $$cell = $$parameter ?? $$runtime.createPropsCell({});', {
     cell, parameter, runtime,
   }));
+
+  // A compiled component's own parameters are its id, parent and so on, so `arguments` reads what
+  // the parent sent, and a read of it follows the next thing the parent sends.
+  const argumentsVersion = names.fresh('_argumentsVersion');
+  if (reads.length > 0) {
+    const current = names.fresh('_argumentsSeen');
+    setup.push(statement('let $$version = 0;', { version: argumentsVersion }));
+    setup.push(statement('const $$current = () => $$version;', { current, version: argumentsVersion }));
+    for (const read of reads) {
+      replacements.set(read, expression('$$runtime.trackRead($$current, $$cell.arguments)', { runtime, current, cell }));
+    }
+  }
+
+  if (patterns.length === 0) {
+    const mark = batch === null ? '' : '$$batch.mark();';
+    receive.push(statement(`$$cell.receive = () => { $$version++; ${mark} };`, {
+      cell, version: argumentsVersion, ...(batch === null ? {} : { batch }),
+    }));
+    return { parameter, setup, receive, replacements };
+  }
+
   setup.push(...declareParameters(patterns, cell, 'let', external));
 
   const bindings = plan.state.filter((binding) => binding.kind === 'Prop');
@@ -64,7 +87,10 @@ export function emitProps(
   const changed = names.fresh('_propsChanged');
   setup.push(statement('let $$seen = $$runtime.mutationTime();', { seen, runtime }));
   const body = declareParameters(patterns, cell, 'const', temporaryPattern);
-  body.push(statement('let $$changed = false;', { changed }));
+  body.push(statement(reads.length > 0 ? 'let $$changed = true;' : 'let $$changed = false;', { changed }));
+  if (reads.length > 0) {
+    body.push(statement('$$version++;', { version: argumentsVersion }));
+  }
   for (const { binding, next, previous, rest, separate } of entries) {
     const version = versions.get(binding)!;
 
@@ -107,7 +133,24 @@ export function emitProps(
     expression: false,
   });
   receive.push(statement('$$cell.receive = $$receiver;', { cell, receiver }));
-  return { parameter, setup, receive };
+  return { parameter, setup, receive, replacements };
+}
+
+/** Each `arguments` that means this component's own: an arrow has none, another function does. */
+function argumentsReads(fn: ComponentPlan['fn']): readonly Node[] {
+  const reads: Node[] = [];
+
+  walk(fn.body!, {
+    enter(node, ctx) {
+      if (is.Function(node) && !is.ArrowFunctionExpression(node)) {
+        ctx.skip();
+      } else if (is.Identifier(node, 'arguments')) {
+        reads.push(node);
+      }
+    },
+  });
+
+  return reads;
 }
 
 /** The identifiers a rest element collects into, at any depth of the patterns. */

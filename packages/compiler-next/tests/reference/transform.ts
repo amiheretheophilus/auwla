@@ -105,7 +105,7 @@ const GUARDABLE_STATEMENTS = new Set<string>([
 const RUNTIME_EXPORTS = [
   '$h', 'Fragment as $Fragment', '$enter', '$assignRef', '$moduleEffect', '$ownedEffect', '$moduleMemo',
   '$when', '$value', '$chain', '$waiting', '$sourceState', '$branch', '$switch', '$path', '$ready',
-  '$captureRead', '$closureCell', '$closureRead', '$traced',
+  '$captureRead', '$closureCell', '$closureRead', '$traced', '$moduleBuilder', '$reassigned',
   '$privateTarget', '$setup',
 ];
 
@@ -524,6 +524,10 @@ class ComponentRewrite {
 
   private planStatements(): void {
     for (const binding of this.ownBindings()) {
+      // One function for the instance's life (`retainFunction`), so `run.calls = 0` is setup,
+      // not a value built again each render.
+      if (this.reads.functionOf(binding) !== undefined) continue;
+
       const declaration = this.topStatementOf(binding.declarations[0]!);
 
       for (const use of this.usesOf(binding)) {

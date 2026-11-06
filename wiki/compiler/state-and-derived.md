@@ -607,23 +607,29 @@ callbacks before their first `await`; module body callback builders; callback
 dependencies in arbitrary factory closures. These are reference limits, not
 exceptions to the uniform rule. Do not assume the current passing set proves them.
 
-**Known reference gap: function-valued bindings (found 2026-10-28, open).** The
-reference never treats a binding initialized with a function literal
-(`Reads.functionOf`) as an input or a slot, and `deepCopy` collapses a function
-without own data to one `FUNCTION` marker. compiler-next treats such a binding as
-it treats any object, as rule 1 requires. Neither generated programs nor cases
-reach the difference yet. Probes run against the reference on 2026-10-28:
+### Function values
 
-| Program | Reference | compiler-next |
-| --- | --- | --- |
-| `run.calls++` in a handler, `<p>{run.calls}</p>` (arrow or function declaration) | stays `0` | `1`, `2` |
-| `const doubled = run.calls * 2` after `run.calls++` | stays `2` | `4`, `6` |
-| `let format = …; format = (n) => 'b' + n` in a handler, `<p>{format(count)}</p>` | `a1` | `b1` |
-| `const holder = { run, label: '' }`; a handler sets `holder.run.calls`, then `holder.label` | shows the label | `holder` re-derives from its mutated input, dropping the label, as the spread cases do |
+A function is a value like any other, as rule 1 requires
+(`tests/cases/state-and-derived.functions.test.ts`):
 
-The reference needs fixing before these become cases; its expectations are the
-spec, so the fix waits for the user. `optimize/called-functions.ts` only removes
-functions that nothing can reassign or reach to mutate, where both agree.
+- `run.calls++` in a handler shows on the page, and in a value derived from it. A function
+  declaration edited after setup gets the same reader a `const` holding one has
+  (`shared-plan.ts`). Edits made while the module runs (`run.calls = 1`) are its setup, so a
+  component with `App.displayName = 'x'` pays nothing.
+- A binding given a different function later (`format = (n) => 'b' + n`) is an input of whatever
+  calls it. The reference now agrees: `Reads.functionOf` names a function only for a binding nothing
+  reassigns.
+- `optimize/called-functions.ts` only removes functions that nothing can reassign or reach to mutate.
+
+### Module builders
+
+A module's body builds values the way a component's does. In `let total = 0; if (factor > 1)
+total = factor * 10;`, the declaration and the statement run again together, in order, when
+`factor` changes. A statement waits for a source it reads, and so does what it builds. A write
+from a handler takes the value over and stops the replay. A callback counts as part of the
+statement only when the statement runs it before finishing (`[1, 2].forEach(…)`), not when it runs
+later (`setTimeout(…)`). The compiler always did this; the reference now does too
+(`ModuleMemos.planBuilders`, `$moduleBuilder`).
 
 ### Mixed state, classes and accessors
 

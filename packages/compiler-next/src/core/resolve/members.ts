@@ -49,7 +49,8 @@ export function propertyReads(resolved: Resolved): PropertyReads {
     const reference = module.referenceOf(root);
     if (reference === null) return true;
     if (reference.binding === null) {
-      return isWrittenGlobal(resolved.globals, reference.name);
+      // Not a global: what a function was called with, which is different each call.
+      return reference.name === 'arguments' || isWrittenGlobal(resolved.globals, reference.name);
     }
     return !isPlainData(definitionOf(reference.binding));
   }

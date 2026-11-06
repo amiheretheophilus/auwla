@@ -52,6 +52,41 @@ behaves('tags: a local binding reassigned by a handler changes the component sho
   check(container, observation) { expect(shownTag(container)).toBe(['first:v', 'second:v'][observation]); },
 });
 
+behaves('arguments: a component reads what its parent sent', {
+  source: `
+    function Named(props) { return <b>{arguments[0].n}:{arguments.length}:{props.n}</b>; }
+    function Unnamed() { return <i>{arguments[0].n}:{[...arguments].length}</i>; }
+    export function App() {
+      let n = 1;
+      return <main><Named n={n} /><Unnamed n={n} /><button onClick={() => n++}>next</button></main>;
+    }
+  `,
+  steps: [{ click: 'button' }],
+  check(container, observation) {
+    expect(container.querySelector('b')?.textContent).toBe(['1:1:1', '2:1:2'][observation]!);
+    expect(container.querySelector('i')?.textContent).toBe(['1:1', '2:1'][observation]!);
+  },
+});
+
+behaves('arguments: a component in a list, and an inner function with its own', {
+  source: `
+    function Item(props) {
+      const own = function () { return arguments[0]; };
+      const arrow = () => arguments[0].row.id;
+      return <li>{arguments[0].row.id}:{own('inner')}:{arrow()}</li>;
+    }
+    export function App() {
+      let rows = [{ id: 1 }];
+      return <main><ul>{rows.map((row) => <Item key={row.id} row={row} />)}</ul>
+        <button onClick={() => { rows = [{ id: 2 }, { id: 3 }]; }}>next</button></main>;
+    }
+  `,
+  steps: [{ click: 'button' }],
+  check(container, observation) {
+    expect(container.querySelector('ul')?.textContent).toBe(['1:inner:1', '2:inner:23:inner:3'][observation]!);
+  },
+});
+
 behaves('tags: a module value picks the component by state', {
   source: `
     ${tags}

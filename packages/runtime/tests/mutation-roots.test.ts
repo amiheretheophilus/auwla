@@ -180,7 +180,8 @@ it('retries indexing after a reflection failure interrupted a stale reach rebuil
     indexPendingRoots();
     store(value, 'child', added);
     fail = true;
-    expect(() => store(dropped, 'count', 1)).toThrow('indexing interrupted');
+    // The store never asked the proxy anything, so its trap must not fail the store.
+    store(dropped, 'count', 1);
     fail = false;
     store(added, 'count', 1);
     expect(notices).toBe(2);

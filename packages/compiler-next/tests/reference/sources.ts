@@ -242,11 +242,23 @@ export function noteReplacement(previous: unknown, next: unknown): void {
   if (previous.hasValue || previous.replacesLoaded) next.replacesLoaded = true;
 }
 
+function isRevoked(value: unknown): boolean {
+  if (value === null || typeof value !== 'object') return false;
+  try {
+    Reflect.getPrototypeOf(value);
+    return false;
+  } catch {
+    return true;
+  }
+}
+
 /** The sources among `values` that have no payload yet, or failed. `undefined` when all are ready. */
 export function $waiting(values: readonly unknown[]): Waiting | undefined {
   const sources = new Set<Source>();
 
   for (const value of values) {
+    // `instanceof` asks a proxy for its prototype, and a revoked one throws. It is no source.
+    if (isRevoked(value)) continue;
     if (value instanceof Source) {
       value.claim();
       value.ensureStarted();
@@ -362,6 +374,7 @@ function isPlainData(value: unknown): value is object {
 
 /** The payload of a source. Only called inside a computation `$when` already checked. */
 export function $value(value: unknown): any {
+  if (isRevoked(value)) return value;
   const notReady = value instanceof Waiting || (value instanceof Source && !value.hasValue);
   if (notReady) throw new Error('reference: an unguarded read reached a loading source');
   return value instanceof Source ? value.data : value;

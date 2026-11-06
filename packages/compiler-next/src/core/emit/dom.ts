@@ -256,6 +256,7 @@ function emitComponent(
   const trackKeys = new Map<import('../graph').BindingNode, string>();
   const readonly = new Map([
     ...external,
+    ...props.replacements,
     ...takeovers.replacements,
     ...emitConstWrites(plan.readonlyBindings, names, runtime),
   ]);

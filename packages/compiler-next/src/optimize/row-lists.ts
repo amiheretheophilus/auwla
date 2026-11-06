@@ -21,7 +21,7 @@
  * The list replaces the callback, so its stored JSX is not emitted at all.
  */
 import type { Binding, Module } from 'yuku-analyzer';
-import { is } from 'yuku-ast';
+import { findAll, is } from 'yuku-ast';
 import type { Node } from 'yuku-parser';
 import type { BindingNode } from '../core/graph';
 import { qualifies } from './keyed-comparisons';
@@ -103,6 +103,8 @@ function leafComponent(tag: Extract<Node, { type: 'JSXIdentifier' }>, general: M
   const [fn, plan] = found;
   if ([...module.ancestors(fn)].some((ancestor) => ancestor !== fn && is.Function(ancestor))) return null;
   if (fn.async || fn.generator || fn.params.length > 1) return null;
+  // A row is called with the row's values, which `arguments` would show.
+  if (findAll(fn.body!, ['Identifier']).some((node) => node.name === 'arguments')) return null;
   const param = fn.params[0];
   if (param !== undefined && !is.Identifier(param) && destructuredProps(param) === null) return null;
   // Edits of its props made by its handlers (`props.select(id)` passes `props`
