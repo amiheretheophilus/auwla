@@ -49,10 +49,12 @@ describe('template planning and emission', () => {
     }
   });
 
-  it('keeps repeated attributes in evaluation order', () => {
-    const { component } = inspect(`export const App = () => <div id={first} id="last" />;`);
-    expect(component.sites.map((site) => site.kind)).toEqual(['attribute', 'attribute']);
-    expect(component.template.markup).toBe('<div></div>');
+  // An element writing one attribute twice takes the ordered path instead
+  // (`features/components/plan.ts`), checked by the cases in `core.static-markup.test.ts`.
+  it('writes a literal attribute into the template', () => {
+    const { component } = inspect(`export const App = () => <div id="last" />;`);
+    expect(component.sites).toEqual([]);
+    expect(component.template.markup).toBe('<div id="last"></div>');
   });
 
   it('uses graph dependencies for site reactivity, without treating callback creation as invocation', () => {

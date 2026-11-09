@@ -38,6 +38,7 @@ export {
   disposeFetchResource,
   fetchResourceSnapshot,
   isFetchResource,
+  markExplicitResource,
   subscribeFetchResource,
 } from './resource';
 export {

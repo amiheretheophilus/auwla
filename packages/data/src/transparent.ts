@@ -18,6 +18,7 @@ import {
   fetchResourcePayloadSnapshot,
   fetchResourceIsFiniteStream,
   fetchResourceIsLive,
+  isExplicitResource,
   isFetchResource,
   rebindFetchResource,
   retryFetchResourceIfLive,
@@ -89,7 +90,7 @@ function source<T>(value: ResolvedValue<T> | ModuleSourceRef): FetchResource<T> 
  * Plain data is already committed: it reads as itself and never changes here.
  */
 export function isResolvedSource(value: unknown): boolean {
-  return isModuleSourceRef(value) || isFetchResource(value);
+  return isModuleSourceRef(value) || (isFetchResource(value) && !isExplicitResource(value));
 }
 
 const isSource = isResolvedSource;

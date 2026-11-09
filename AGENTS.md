@@ -33,9 +33,10 @@ Read this file first. Then read `wiki/README.md`, which lists the rest in order.
 ## How to work
 
 - Edit files with your editor tools, not with `sed`, scripts or shell redirection.
-- The user's machine is slow and low on memory. Never run the full root suite
-  locally; run the files you changed. Root tests import `dist`, so rebuild the
-  package first (`bun run --cwd packages/<name> build`).
+- The user's machine is slow and low on memory. Do not run the full root suite
+  locally as a routine check; run the files you changed. The user allowed it for the
+  Phase 10 acceptance work (`wiki/decisions.md`, 2026-11-06). Root tests import `dist`, so
+  rebuild the package first (`bun run --cwd packages/<name> build`).
 - `packages/compiler-next` tests import `src` directly and need no build.
 - Test locally first: `bun check`, the touched feature's unit tests, and the case
   files a change affects. Only batches that are slow here (minutes, not

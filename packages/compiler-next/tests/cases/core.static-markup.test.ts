@@ -247,3 +247,58 @@ behaves('attributes: innerHTML is a property, and changes', {
     expect(container.querySelector('section')!.hasAttribute('innerHTML')).toBe(false);
   },
 });
+
+// HTML sees one attribute, and the later one wins, including after the earlier one changes.
+behaves('attributes: one written twice, in different case', {
+  source: `export function App() {
+    let n = 0;
+    const label = 'last';
+    return <button data-x={n} DATA-X={label} onClick={() => n++}>add</button>;
+  }`,
+  steps: [{ click: 'button' }],
+  check(container) {
+    expect(container.querySelector('button')!.getAttribute('data-x')).toBe('last');
+  },
+});
+
+behaves('attributes: class and className together, with the later one changing', {
+  source: `export function App() {
+    let n = 0;
+    return <button class="first" className={'n' + n} onClick={() => n++}>add</button>;
+  }`,
+  steps: [{ click: 'button' }],
+  check(container, observation) {
+    expect(container.querySelector('button')!.getAttribute('class')).toBe('n' + observation);
+  },
+});
+
+behaves('attributes: a literal class is trimmed like a written one', {
+  source: `export function App() { return <div className="  a b  " />; }`,
+  check(container) {
+    expect(container.querySelector('div')!.getAttribute('class')).toBe('a b');
+  },
+});
+
+// What `value` holds depends on `type`, which must be there first.
+for (const [type, expected] of [['range', '50'], ['checkbox', ''], ['radio', '']] as const) {
+  behaves(`attributes: an empty value on a ${type} input`, {
+    source: `export function App() {
+      let value = '';
+      return <input type="${type}" value={value} onInput={(event) => { value = event.target.value; }} />;
+    }`,
+    check(container) {
+      expect((container.querySelector('input') as HTMLInputElement).value).toBe(expected);
+    },
+  });
+}
+
+behaves('attributes: the same name twice, the later one changing', {
+  source: `export function App() {
+    let n = 0;
+    return <div id="first" id={'n' + n} onClick={() => n++} />;
+  }`,
+  steps: [{ click: 'div' }],
+  check(container, observation) {
+    expect(container.querySelector('div')!.id).toBe('n' + observation);
+  },
+});

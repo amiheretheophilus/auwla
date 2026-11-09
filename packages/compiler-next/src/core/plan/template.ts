@@ -11,7 +11,7 @@ import type { Expression, Node } from 'yuku-parser';
 import { CompileError } from '../diagnostics';
 import {
   PROPERTIES, RESERVED_ATTRIBUTES, VOID_ELEMENTS, attributeName, cleanJsxText, escapeAttribute,
-  escapeText, eventName, intrinsicTag, parsesAsWritten, unwrap,
+  escapeText, eventName, intrinsicTag, jsxAttributeName, parsesAsWritten, unwrap,
 } from './jsx';
 import type { Site, StaticAttribute, Template, TemplateNode, UnplacedSite } from './model';
 import { canPlanConditional, planConditional } from '../../features/conditionals/plan';
@@ -172,16 +172,8 @@ class TemplateBuilder {
     const childNamespace: Namespace = tag === 'foreignObject' ? 'html' : namespace;
     const attributes: StaticAttribute[] = [];
     const sites: UnplacedSite[] = [];
-    const counts = new Map<string, number>();
     for (const attribute of element.openingElement.attributes) {
-      if (!is.JSXAttribute(attribute)) continue;
-      const name = attributeName(jsxAttributeName(attribute));
-      counts.set(name, (counts.get(name) ?? 0) + 1);
-    }
-    for (const attribute of element.openingElement.attributes) {
-      const repeated = is.JSXAttribute(attribute)
-        && counts.get(attributeName(jsxAttributeName(attribute)))! > 1;
-      this.attribute(attribute, attributes, sites, repeated);
+      this.attribute(attribute, attributes, sites);
     }
 
     // Attribute expressions run before child expressions, even though template
@@ -196,7 +188,7 @@ class TemplateBuilder {
     return node;
   }
 
-  private attribute(attribute: Node, attributes: StaticAttribute[], sites: UnplacedSite[], repeated: boolean): void {
+  private attribute(attribute: Node, attributes: StaticAttribute[], sites: UnplacedSite[]): void {
     if (is.JSXSpreadAttribute(attribute)) unsupported(this.context, attribute, 'spread attributes', 6);
     if (!is.JSXAttribute(attribute)) return;
 
@@ -228,10 +220,11 @@ class TemplateBuilder {
     }
 
     const constant = constantAttribute(expression);
-    // A later literal must still overwrite an earlier dynamic value. Keep all
-    // occurrences at sites when the same DOM attribute is written more than once.
-    if (constant !== undefined && !repeated) {
-      if (constant !== null) attributes.push({ name: attributeName(name), value: constant });
+    // An element writing one attribute twice takes the ordered path (`isComponentCall`).
+    if (constant !== undefined) {
+      const isClass = attributeName(name) === 'class';
+      // A class written by a site is trimmed (`classValue`), so a literal one is too.
+      if (constant !== null) attributes.push({ name: attributeName(name), value: isClass ? constant.trim() : constant });
       return;
     }
     sites.push({ kind: 'attribute', name: attributeName(name), expression, reactive: this.context.reactive(expression) });
@@ -252,12 +245,6 @@ export function keyExpression(element: JsxElement): Expression | null {
     }
   }
   return key;
-}
-
-function jsxAttributeName(attribute: Extract<Node, { type: 'JSXAttribute' }>): string {
-  return is.JSXNamespacedName(attribute.name)
-    ? `${attribute.name.namespace.name}:${attribute.name.name.name}`
-    : attribute.name.name;
 }
 
 /** `attr` (true), `attr="x"` (a string literal), or `attr={expression}`. */

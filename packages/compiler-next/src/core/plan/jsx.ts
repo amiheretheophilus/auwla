@@ -28,6 +28,13 @@ export const PROPERTIES = new Set(['value', 'checked', 'selected', 'muted', 'inn
 /** Attributes the renderer handles itself, never written to the DOM. */
 export const RESERVED_ATTRIBUTES = new Set(['key', 'children', 'suspend']);
 
+/** A JSX attribute's name as written, with a namespace when it has one: `xlink:href`. */
+export function jsxAttributeName(attribute: Extract<Node, { type: 'JSXAttribute' }>): string {
+  return is.JSXNamespacedName(attribute.name)
+    ? `${attribute.name.namespace.name}:${attribute.name.name.name}`
+    : attribute.name.name;
+}
+
 export function attributeName(name: string): string {
   if (name === 'className') return 'class';
   if (name === 'htmlFor') return 'for';

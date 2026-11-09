@@ -2524,3 +2524,18 @@ behaves('readiness reach: a counter beside a source updates while the source loa
     expect(container.textContent).toBe(['0loadingadd', '1loadingadd', '1Adaadd'][observation]!);
   },
 });
+
+// A resource from `runtime.$fetch` is the author's to inspect: `.status` is its own, not a field of the data.
+behaves('a resource from a runtime the author holds shows its own status', {
+  source: `import { createDataRuntime } from '@memoized-dom/data';
+  const pending = () => new Promise(() => {});
+  export function App() {
+    const data = createDataRuntime({ fetch: pending });
+    const users = data.$fetch('/users');
+    return <main><output id="status">{users.status}</output>{users.pending ? <p id="loading">Loading</p> : null}</main>;
+  }`,
+  check(container) {
+    expect(container.querySelector('#status')!.textContent).toBe('pending');
+    expect(container.querySelector('#loading')).not.toBeNull();
+  },
+});

@@ -731,6 +731,22 @@ export function fetchResourceIsFiniteStream(resource: unknown): boolean {
   return mode === 'generator' || mode === 'page';
 }
 
+/**
+ * A resource from `runtime.$fetch`, whose author reads `.status` and `.data` on it directly. The
+ * compiler cannot tell it from an ambient `$fetch` source by looking, since it may arrive through any
+ * call, so this says it is a value like any other and is not waited on or read through.
+ */
+const explicitResources = new WeakSet<object>();
+
+export function markExplicitResource<T extends object>(resource: T): T {
+  explicitResources.add(resource);
+  return resource;
+}
+
+export function isExplicitResource(value: unknown): boolean {
+  return typeof value === 'object' && value !== null && explicitResources.has(value);
+}
+
 /** Internal capability check used by cross-runtime availability adapters. */
 export function isFetchResource(value: unknown): value is FetchResource<unknown> {
   return typeof value === 'object' && value !== null &&

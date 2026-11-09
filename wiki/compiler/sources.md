@@ -362,6 +362,18 @@ as the old compiler does for `routedEnvironment: 'server'`.
 `DATA_DELIVERY=client` runs the cases and generators as a client-only build. Whether a
 call qualifies is tested in `features/sources/delivery.test.ts`.
 
+### A resource the author holds
+
+`createDataRuntime().$fetch(url)` hands back the resource itself, whose `.status`, `.pending` and
+`.data` the author reads directly (`examples/data-reactivity`). An ambient `$fetch` returns the same
+kind of object, which compiled code reads through, so `.status` there is a field of the data. A value
+can reach any site by any route, so the runtime cannot tell the two apart by looking, and compiler-next
+read `users.status` of an explicit resource as a field of its data: blank while loading, then
+`undefined`. Found by replaying the old tests' programs (`testing.md`). Now each `x.$fetch(…)` call on
+an object is wrapped in `markExplicitResource` (`markExplicitFetches`, `features/sources/delivery.ts`),
+and `isResolvedSource` in `packages/data` leaves a marked resource alone. The case is `a resource from
+a runtime the author holds shows its own status`.
+
 ## Where to add things
 
 - A new kind of source: one recognizer in `classify.ts`. Readiness follows from

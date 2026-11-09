@@ -1620,6 +1620,7 @@ function updateProps(record: HostRecord, props: Record<string, unknown>): void {
   const element = record.node;
   const attributes = new Map<string, string>();
   const handlers = new Map<string, EventListener>();
+  const properties: [string, unknown][] = [];
 
   for (const [name, value] of Object.entries(props)) {
     if (name === 'key' || name === 'ref' || name === 'children' || name === 'suspend') continue;
@@ -1630,11 +1631,7 @@ function updateProps(record: HostRecord, props: Record<string, unknown>): void {
     }
 
     if (PROPERTIES.has(name)) {
-      // Written when the prop changes, so typed text stays until the state says otherwise.
-      if (!record.properties.has(name) || !Object.is(record.properties.get(name), value)) {
-        (element as unknown as Record<string, unknown>)[name] = value;
-        record.properties.set(name, value);
-      }
+      properties.push([name, value]);
       continue;
     }
 
@@ -1644,10 +1641,14 @@ function updateProps(record: HostRecord, props: Record<string, unknown>): void {
       continue;
     }
 
-    if (value === null || value === undefined || value === false) continue;
     const attribute = name === 'className' ? 'class' : name === 'htmlFor' ? 'for' : name;
-    const written = attribute === 'class' ? classValue(value) : value === true ? '' : String(value);
-    attributes.set(attribute, written);
+    // HTML attribute names ignore case, so `data-a` and `DATA-A` are one, and the later one wins.
+    const key = element.namespaceURI === SVG_NAMESPACE ? attribute : attribute.toLowerCase();
+    if (value === null || value === undefined || value === false) {
+      attributes.delete(key);
+      continue;
+    }
+    attributes.set(key, attribute === 'class' ? classValue(value) : value === true ? '' : String(value));
   }
 
   for (const name of record.attributes.keys()) {
@@ -1657,6 +1658,16 @@ function updateProps(record: HostRecord, props: Record<string, unknown>): void {
     if (element.getAttribute(name) !== value) element.setAttribute(name, value);
   }
   record.attributes = attributes;
+
+  // After the attributes: what `value` holds depends on an input's `type`, as a template's static
+  // attributes are there before any site runs.
+  for (const [name, value] of properties) {
+    // Written when the prop changes, so typed text stays until the state says otherwise.
+    if (!record.properties.has(name) || !Object.is(record.properties.get(name), value)) {
+      (element as unknown as Record<string, unknown>)[name] = value;
+      record.properties.set(name, value);
+    }
+  }
 
   // One listener per event name, calling whichever handler the latest render gave.
   for (const name of handlers.keys()) {

@@ -236,8 +236,26 @@ checks before retention checks as well as in isolation when changing this fixtur
    | 3 | syntax compiler-next does not parse, of which TSRX is by decision | No |
 
    It has already found real bugs: `style={…}`, `class={[…]}` and `innerHTML` were written as plain
-   attributes, and the reference shared the mistake, so comparisons could not see it. Which of the 277
-   are real is in progress. The decisions it raises are in `../open-issues.md`.
+   attributes, and the reference shared the mistake, so comparisons could not see it. The decisions it
+   raises are in `../open-issues.md`.
+
+   **Replaying the old tests' programs** (`tests/corpus/replay.test.ts`). Reading 277 assertions one
+   by one is slow, and many check the old compiler's internal work. Their programs are what matters.
+   `MEMO_DOM_CORPUS=<dir>` makes the old compiler record every program it compiles, so one run of the
+   root suite on it gives 1,679 programs. The replay runs each on compiler-next and the reference,
+   clicking and typing into whatever the source shows listening, twice, and comparing every step.
+   Programs that need their original test's props or globals, or use the clock, compare nothing.
+
+   | Run | Same | Differ |
+   | --- | --- | --- |
+   | First | 746 | 158, nearly all from the replay itself (a module imported twice kept its state) |
+   | After fixing the replay and the bugs below | 973 | 2 |
+
+   Bugs it found, each now a case: the reference wrote `value` before `type` and kept `data-a` and
+   `DATA-A` apart; compiler-next let an earlier `data-x={n}` overwrite a later `DATA-X`, did not trim a
+   literal `class`, and read `.status` of a resource from `runtime.$fetch` as a field of its data
+   (`sources.md`). The two left: a getter returning module state edited through `store.list.push`, and
+   a positional prop (`../open-issues.md`).
 
 The first cases are the **Cases to test** section of each concept page, written in
 `tests/cases/<page>.test.ts`. Each one is a case the old compiler rejects or shows

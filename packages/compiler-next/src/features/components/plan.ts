@@ -1,7 +1,7 @@
 /** Component calls share value slots with stored JSX and list rows. */
 import { is } from 'yuku-ast';
 import type { Node } from 'yuku-parser';
-import { intrinsicTag } from '../../core/plan/jsx';
+import { attributeName, intrinsicTag, jsxAttributeName } from '../../core/plan/jsx';
 
 export type ComponentCall = Extract<Node, { type: 'JSXElement' }>;
 
@@ -42,7 +42,7 @@ export function isComponentCall(node: Node): node is ComponentCall {
   if (intrinsicTag(node) === null) {
     return true;
   }
-  return node.openingElement.attributes.some((attribute) => {
+  return writesOneAttributeTwice(node) || node.openingElement.attributes.some((attribute) => {
     if (is.JSXSpreadAttribute(attribute)) {
       return true;
     }
@@ -52,4 +52,20 @@ export function isComponentCall(node: Node): node is ComponentCall {
       && is.JSXIdentifier(attribute.name)
       && (attribute.name.name === 'children' || attribute.name.name === 'suspend');
   });
+}
+
+/**
+ * `data-x={n} DATA-X={label}`, or `class` with `className`: HTML sees one attribute, and the later
+ * one wins, including after `n` changes. Each site writes on its own, so only the ordered path keeps
+ * that.
+ */
+function writesOneAttributeTwice(node: Extract<Node, { type: 'JSXElement' }>): boolean {
+  const seen = new Set<string>();
+  for (const attribute of node.openingElement.attributes) {
+    if (!is.JSXAttribute(attribute)) continue;
+    const name = attributeName(jsxAttributeName(attribute)).toLowerCase();
+    if (seen.has(name)) return true;
+    seen.add(name);
+  }
+  return false;
 }

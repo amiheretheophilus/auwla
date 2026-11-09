@@ -5,9 +5,9 @@
  * calls. In a client-only build it also needs no restoring (`wiki/compiler/sources.md`,
  * "Delivery").
  */
-import { is } from 'yuku-ast';
+import { findAll, is } from 'yuku-ast';
 import type { Node } from 'yuku-parser';
-import { statement } from '../../core/emit/quote';
+import { expression, statement } from '../../core/emit/quote';
 import type { Module } from '../../core/resolve';
 import type { CompileModulesOptions } from '../../options';
 import { unwrap } from '../../core/plan/jsx';
@@ -15,6 +15,7 @@ import { fetchMethod, staticPropertyName } from './classify';
 
 const PUBLIC_DATA = '@memoized-dom/data';
 const INTERNAL_DATA = '@memoized-dom/data/internal';
+const EXPLICIT = '_markExplicitResource';
 
 type Call = Extract<Node, { type: 'CallExpression' }>;
 
@@ -47,6 +48,25 @@ function everyUseLoads(module: Module, local: string): boolean {
     const parent = module.parentOf(reference.node);
     return parent !== null && is.CallExpression(parent) && parent.callee === reference.node && loadsWithoutBody(parent);
   });
+}
+
+/**
+ * `data.$fetch(url)` on a runtime the author holds gives them the resource to inspect: `.status`,
+ * `.pending` and `.data` are its own. Only an ambient `$fetch` is read through, and a value can come
+ * from either by any route, so the call says which it made.
+ */
+export function markExplicitFetches(program: Extract<Node, { type: 'Program' }>): void {
+  let found = false;
+  for (const call of findAll(program, 'CallExpression')) {
+    const callee = call.callee;
+    if (!is.MemberExpression(callee) || callee.computed || !is.Identifier(callee.property, '$fetch')) continue;
+    found = true;
+    const original = { ...call };
+    Object.assign(call, expression(`${EXPLICIT}($$call)`, { call: original }));
+  }
+  if (found) {
+    program.body.unshift(statement(`import { markExplicitResource as ${EXPLICIT} } from "${INTERNAL_DATA}";`) as never);
+  }
 }
 
 /** Rewrites this module's `$fetch` import in the emitted program, where proven. */

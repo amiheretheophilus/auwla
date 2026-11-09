@@ -24,7 +24,9 @@ Stated by the user on 2026-10-18. They apply to every design and every fix.
 6. **Keep list performance.** Lists sometimes beat Solid. Do not regress them;
    check `bench/` when touching list code.
 7. **Do not edit failing test cases to make them pass.** Fix the compiler or
-   report the failure.
+   report the failure. The old compiler's tests are the exception (`decisions.md`, 2026-11-06):
+   they are evidence, and one changes when compiler-next is genuinely better, or when it only pins
+   the old compiler's text, signature or limit.
 8. **Readiness:** every resolved value (server function, `$fetch`, `$read`)
    is waited on by everything that depends on it while it is loading.
 9. **Refs are reactive**, so users never need a ref plus an effect.

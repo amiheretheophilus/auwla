@@ -23,7 +23,7 @@ import { linkModuleNamespaces, type EmittedModule } from './link/modules';
 import { planCapturedValues } from './link/captured-plan';
 import { emitNamespaceReads, markNamespaceReads } from './link/open-namespaces';
 import { emitCapturedValues } from './link/captured-dom';
-import { lowerFetchImport } from './features/sources/delivery';
+import { lowerFetchImport, markExplicitFetches } from './features/sources/delivery';
 
 export interface CompiledModules {
   readonly output: Record<string, string>;
@@ -92,6 +92,7 @@ function compileProgram(
   const output: Record<string, string> = {};
   for (const [path, emitted] of linked) {
     lowerFetchImport(emitted.tree, emitted.module.module, options);
+    markExplicitFetches(emitted.tree);
     output[path] = printJavaScript(emitted.tree, emitted.module.path, emitted.module.module.source);
   }
 

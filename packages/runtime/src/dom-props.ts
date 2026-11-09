@@ -98,6 +98,7 @@ export function patchDomProps(
       applyDomProp(element, name, null, previous, eventRootId, safeEvents);
     }
   }
+  forgetRepeatedAttributes(next, previous);
   for (const [name, value] of Object.entries(next)) {
     applyDomProp(element, name, value, previous, eventRootId, safeEvents);
   }
@@ -107,6 +108,24 @@ export function patchDomProps(
     snapshot.set(name, snapshotValue(name, value));
   }
   propSnapshots.set(element, snapshot);
+}
+
+/**
+ * `data-x={n} DATA-X={label}`, or `class` with `className`: HTML sees one attribute, so a write to
+ * the earlier one undoes the later one, which has not changed and would not be written again. So
+ * these are all written, in order, every time.
+ */
+function forgetRepeatedAttributes(next: Record<string, unknown>, previous: Map<string, unknown>): void {
+  const owners = new Map<string, string>();
+  for (const name of Object.keys(next)) {
+    const attribute = (ATTRIBUTE_NAMES[name] ?? name).toLowerCase();
+    const earlier = owners.get(attribute);
+    if (earlier !== undefined) {
+      previous.delete(earlier);
+      previous.delete(name);
+    }
+    owners.set(attribute, name);
+  }
 }
 
 /** Set one mapped JSX DOM value outside a spread-bearing element. */
