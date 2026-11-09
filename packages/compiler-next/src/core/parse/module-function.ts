@@ -8,7 +8,7 @@
  * Imports stay live: a read of `b` reads the other module's export each time, and exports are
  * getters declared before the body runs, so a cycle sees hoisted functions as an ES module does.
  */
-import { findAll, is } from 'yuku-ast';
+import { findAll, is, walk } from 'yuku-ast';
 import { parse } from 'yuku-parser';
 import type { Node } from 'yuku-parser';
 import { identifierUses } from '../resolve/identifier-uses';
@@ -20,6 +20,12 @@ export interface ModuleFunction {
   readonly specifiers: readonly string[];
   /** Names it reads that nothing declares. */
   readonly globals: readonly string[];
+  /**
+   * Those of `globals` used other than by reading a property, calling or constructing:
+   * `typeof window`, `if (window)`, `window === x`, `f(window)`. A stand-in value cannot notice
+   * such a use, so a build that replaces the global cannot trust its result.
+   */
+  readonly bareGlobals: readonly string[];
 }
 
 const IMPORTS = '_imports';
@@ -113,7 +119,9 @@ export function toModuleFunction(source: string): ModuleFunction {
     if (!use.isReference) continue;
     const declaration = use.declaredAt.find((at) => imported.has(at));
     if (declaration !== undefined) {
-      const target = imported.get(declaration)!;
+      // `(0, …)` reads the binding as a plain value: `f()` and f`…` keep `this` undefined, as an
+      // imported binding gives them, instead of the imports object.
+      const target = `(0, ${imported.get(declaration)!})`;
       edits.push({ start: use.start, end: use.end, text: use.shorthand ? `${use.name}: ${target}` : target });
     } else if (use.declaredAt.length === 0) {
       globals.add(use.name);
@@ -142,7 +150,12 @@ export function toModuleFunction(source: string): ModuleFunction {
     ...stars.map((object) => `_exportStar(${EXPORTS}, ${object});`),
   ].join(' ');
 
-  return { body: `"use strict"; ${header}\n${applyEdits(source, kept)}`, specifiers, globals: [...globals] };
+  return {
+    body: `"use strict"; ${header}\n${applyEdits(source, kept)}`,
+    specifiers,
+    globals: [...globals],
+    bareGlobals: bareUses(program, new Set(uses.filter((use) => use.isReference && use.declaredAt.length === 0).map((use) => use.start))),
+  };
 }
 
 function patternNames(target: Node): string[] {
@@ -157,6 +170,22 @@ function patternNames(target: Node): string[] {
 }
 
 /** `import(x)` and `import.meta` become reads of a name the run does not allow. */
+/** The globals at `starts` used in a way a proxy has no trap for. */
+function bareUses(program: Node, starts: ReadonlySet<number>): string[] {
+  const bare = new Set<string>();
+  walk(program, {
+    Identifier(node, ctx) {
+      if (!starts.has(node.start)) return;
+      const parent = ctx.parent;
+      const trapped = (is.MemberExpression(parent) && ctx.key === 'object')
+        || ((is.CallExpression(parent) || is.NewExpression(parent)) && ctx.key === 'callee')
+        || (is.TaggedTemplateExpression(parent) && ctx.key === 'tag');
+      if (!trapped) bare.add(node.name);
+    },
+  });
+  return [...bare];
+}
+
 function findDynamicLoads(program: Node): { start: number; end: number; replacement: string; global: string }[] {
   return findAll(program, ['ImportExpression', 'MetaProperty']).map((node) => {
     return is.ImportExpression(node)

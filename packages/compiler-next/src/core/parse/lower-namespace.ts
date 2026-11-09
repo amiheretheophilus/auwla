@@ -63,8 +63,12 @@ interface Group {
   readonly members: Set<string>;
   /** Where those members are declared, to tell them from locals of the same block. */
   readonly declarations: Set<number>;
-  /** Inside its own body a class is read by its inner name, even before `A.C` is assigned. */
-  readonly classes: { readonly name: string; readonly start: number; readonly end: number }[];
+  /**
+   * Members declared by a function or class. In the block that declares one, it is read by its own
+   * name, as TypeScript emits it: a function is hoisted before `A.f = f` runs, a class's body sees
+   * its inner name, and `f()` keeps `this` undefined.
+   */
+  readonly named: Set<number>;
   readonly children: Map<string, Group>;
 }
 
@@ -126,14 +130,35 @@ class Lowering {
     };
   }
 
+  /**
+   * Names only types declare. A name merges across declarations, so `interface Box` beside
+   * `const Box = …`, or a type-only `namespace N` beside one with values, still has a value.
+   */
   #findTypeOnlyNames(): void {
+    const types = new Set<string>();
+    const values = new Set<string>();
     for (const statement of this.#program.body) {
       const inner = declarationOf(statement);
       if (is.TSInterfaceDeclaration(inner) || is.TSTypeAliasDeclaration(inner)) {
-        this.#typeOnly.add(inner.id.name);
-      } else if (is.TSModuleDeclaration(inner) && !isAmbient(inner) && !isInstantiated(inner)) {
-        this.#typeOnly.add(namespaceNames(inner)[0]!);
+        types.add(inner.id.name);
+      } else if (is.TSModuleDeclaration(inner)) {
+        (isAmbient(inner) || isInstantiated(inner) ? values : types).add(namespaceNames(inner)[0]!);
+      } else if (is.ImportDeclaration(inner)) {
+        if (inner.importKind === 'type') continue;
+        for (const specifier of inner.specifiers) {
+          if (!(is.ImportSpecifier(specifier) && specifier.importKind === 'type')) values.add(specifier.local.name);
+        }
+      } else if (is.TSImportEqualsDeclaration(inner)) {
+        if (inner.importKind !== 'type') values.add(inner.id.name);
+      } else if (is.VariableDeclaration(inner)) {
+        // `declare const Box` still names a value, which something else provides.
+        for (const declarator of inner.declarations) for (const id of patternNames(declarator.id)) values.add(id.name);
+      } else if ((is.FunctionDeclaration(inner) || is.ClassDeclaration(inner) || is.TSEnumDeclaration(inner)) && inner.id !== null) {
+        values.add(inner.id.name);
       }
+    }
+    for (const name of types) {
+      if (!values.has(name)) this.#typeOnly.add(name);
     }
   }
 
@@ -164,8 +189,8 @@ class Lowering {
           parent.members.add(id.name);
           parent.declarations.add(id.start);
         }
-        if (is.ClassDeclaration(inner) && inner.id !== null) {
-          parent.classes.push({ name: inner.id.name, start: inner.start, end: inner.end });
+        if ((is.ClassDeclaration(inner) || is.FunctionDeclaration(inner)) && inner.id !== null) {
+          parent.named.add(inner.id.start);
         }
       }
     }
@@ -175,7 +200,7 @@ class Lowering {
     const siblings = parent === null ? this.#groups : parent.children;
     let group = siblings.get(name);
     if (group === undefined) {
-      group = { members: new Set(), declarations: new Set(), classes: [], children: new Map() };
+      group = { members: new Set(), declarations: new Set(), named: new Set(), children: new Map() };
       siblings.set(name, group);
     }
     return group;
@@ -474,21 +499,14 @@ class Lowering {
       if (declaration !== undefined) {
         // Declared in this block, directly or in a function in it. Only a member changes.
         const own = block.levels[block.levels.length - 1]!;
-        return own.group.declarations.has(declaration) ? qualifierIn(own, use) : null;
+        return own.group.declarations.has(declaration) && !own.group.named.has(declaration) ? own.parameter : null;
       }
       for (const level of [...block.levels].reverse()) {
-        if (level.group.members.has(use.name)) return qualifierIn(level, use);
+        if (level.group.members.has(use.name)) return level.parameter;
       }
     }
     return null;
   }
-}
-
-function qualifierIn(level: Level, use: IdentifierUse): string | null {
-  const insideOwnClass = level.group.classes.some((own) => {
-    return own.name === use.name && use.start >= own.start && use.end <= own.end;
-  });
-  return insideOwnClass ? null : level.parameter;
 }
 
 /** `E || (E = {})`, or, for a member of `A`, `E = A.E || (A.E = {})`. */

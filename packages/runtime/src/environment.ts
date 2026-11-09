@@ -15,6 +15,7 @@
  */
 
 import type { HydrationController } from './hydration';
+import type { Creations } from './adoption';
 
 export type RenderMode =
   | 'client-create'
@@ -74,6 +75,11 @@ export interface RenderEnvironment {
   effects: Capability;
   refs: Capability;
   hydration?: HydrationController;
+  /**
+   * Numbers each node a creation call returns, in program order (`adoption.ts`). A server
+   * writes the numbers into its HTML; a browser adopting that HTML takes node N for creation N.
+   */
+  creations?: Creations;
 }
 
 function ambientDocument(): DocumentLike & Document {
@@ -121,5 +127,6 @@ export function resolveEnvironment(
     effects: overrides.effects ?? base.effects,
     refs: overrides.refs ?? base.refs,
     hydration: overrides.hydration,
+    creations: overrides.creations,
   };
 }

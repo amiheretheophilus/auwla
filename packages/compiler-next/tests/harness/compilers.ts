@@ -6,12 +6,15 @@
  */
 import { compileModules } from '@memoized-dom/compiler';
 import { compileModules as compileModulesNext } from '../../src';
-import { registeredIds, resetScheduler, setScheduler, unregisterSubtree } from '@memoized-dom/runtime/testing';
+import { createApplicationRuntime, registeredIds, resetScheduler, setActiveApplicationRuntime, setScheduler, unregisterSubtree } from '@memoized-dom/runtime/testing';
+import { adoptRoot } from '@memoized-dom/runtime/hydrate-program';
+import { renderToString } from '@memoized-dom/server';
 import { createDataRuntime, setActiveDataRuntime } from '@memoized-dom/data';
 import { spawnSync } from 'node:child_process';
 import { join } from 'node:path';
 import { installedResolver } from './installed';
 import { fetchForCase } from './requests';
+import { asServer, asServerAsync } from './case';
 
 export interface CompiledApp {
   /** Remove the app and everything the runtime registered for it. */
@@ -25,8 +28,10 @@ export interface Compiler {
   prepare(): () => void;
   /** Compile `App.tsx`. Returns the output files by name. */
   compile(source: string, modules?: Record<string, string>, timeoutMs?: number): Record<string, string>;
-  /** Mount the compiled `App` into `container`. */
-  mount(module: Record<string, unknown>, container: HTMLElement): CompiledApp;
+  /** Mount the compiled `App` into `container`; `served` is a second copy a server renders from. */
+  mount(module: Record<string, unknown>, container: HTMLElement, served?: Record<string, unknown>): CompiledApp;
+  /** Whether `mount` takes a server render, which needs its own copy of the modules. */
+  readonly serves?: boolean;
 }
 
 const oldCompiler: Compiler = {
@@ -118,10 +123,72 @@ const generalCompiler: Compiler = {
   },
 };
 
-/** Every next comparison also exercises the independently emitted general path. */
+/** A fetch for the server's side, which never answers: the browser's requests are the case's. */
+const neverAnswers = (() => new Promise(() => {})) as unknown as typeof fetch;
+
+/**
+ * Loads the server's copy of the modules as a server would: module effects do not run, and module
+ * sources and `defer` belong to a data runtime no step reaches.
+ */
+export async function importAsServer<T>(load: () => Promise<T>): Promise<T> {
+  const application = createApplicationRuntime('delivered-server', { effects: 'disabled', refs: 'disabled', schedule: null });
+  const data = createDataRuntime({ fetch: neverAnswers });
+  // A module's top level runs when the import settles, outside any synchronous scope, so the
+  // active runtimes are swapped around it. Cases run one at a time.
+  const previousApplication = setActiveApplicationRuntime(application);
+  const previousData = setActiveDataRuntime(data);
+  try {
+    return await asServerAsync(load);
+  } finally {
+    setActiveApplicationRuntime(previousApplication);
+    setActiveDataRuntime(previousData);
+  }
+}
+
+/**
+ * The page as delivered (`wiki/compiler/delivery.md`, "How it is tested"): the server's HTML first,
+ * then the client render adopting its nodes. A program the server cannot run is mounted fresh, as
+ * a browser would show it.
+ */
+const deliveredCompiler: Compiler = {
+  ...nextCompiler,
+  name: 'packages/compiler-next (adopting server HTML)',
+  output: 'next-delivered',
+  serves: true,
+
+  mount(module, container, served) {
+    const App = module.App as (id: string, parent: null) => Node;
+    setScheduler((run) => run());
+    let html: string | null = null;
+    try {
+      // Requests a server makes are its own, and never answered here.
+      html = asServer(() => renderToString(served!.App as never, { markers: true, fetch: neverAnswers }));
+    } catch {
+      html = null;
+    }
+    if (html === null) {
+      container.append(App('App', null));
+    } else {
+      container.innerHTML = html;
+      adoptRoot(container.firstChild!, container.lastChild!, () => container.append(App('App', null)));
+    }
+    return {
+      unmount() {
+        clearCompiledApps();
+        container.replaceChildren();
+      },
+    };
+  },
+};
+
+/**
+ * Every next comparison also exercises the independently emitted general path, and the page as
+ * delivered (`DELIVERED=0` leaves that out).
+ */
 export function comparisonCompilers(): readonly Compiler[] {
   const compiler = selectedCompiler();
-  return compiler === nextCompiler ? [nextCompiler, generalCompiler] : [compiler];
+  if (compiler !== nextCompiler) return [compiler];
+  return process.env.DELIVERED === '0' ? [nextCompiler, generalCompiler] : [nextCompiler, generalCompiler, deliveredCompiler];
 }
 
 /** Also used after a failed mount, which cannot return its unmount callback. */

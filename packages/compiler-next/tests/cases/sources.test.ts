@@ -2579,3 +2579,20 @@ for (const [label, holder, read] of [
     },
   });
 }
+
+// `refresh()` makes a bound promise again from its creation expression, with the state as it is now.
+behaves('refresh replays a promise made from state that changed', {
+  source: `
+    import { $read, $track } from '@memoized-dom/data';
+    export function App() {
+      let id = 1;
+      const promise = Promise.resolve({ id });
+      const user = $read(promise);
+      const request = $track(user);
+      return <main><span>{user.id}</span><button onClick={() => { id++; request.refresh(); }}>Next</button></main>;
+    }`,
+  steps: [{ click: 'button' }, { click: 'button' }],
+  check(container, observation) {
+    expect(container.querySelector('span')?.textContent).toBe(['1', '2', '3'][observation]!);
+  },
+});

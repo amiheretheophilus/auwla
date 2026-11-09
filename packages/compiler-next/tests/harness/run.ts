@@ -12,7 +12,7 @@ import { beginSources, finishSourceDeclarations } from '../reference/sources';
 import { clearDeferred, describeStep, rejectDeferred, resolveDeferred, usesClock, type Case, type Step } from './case';
 import { clearRequests, fetchForCase, rejectRequest, respond } from './requests';
 import { compileModulesDetailed } from '../../src';
-import { clearCompiledApps, comparisonCompilers, type Compiler } from './compilers';
+import { clearCompiledApps, comparisonCompilers, importAsServer, type Compiler } from './compilers';
 import { serialize } from './serialize';
 
 const OUT = join(import.meta.dirname, '..', 'out');
@@ -129,6 +129,10 @@ export async function runOnReference(name: string, testCase: Case): Promise<Obse
     perform(step, container);
     await settle(clock);
     app.render();
+    // The reference derives at render, so a source that render starts (`$read` of a promise made
+    // from changed state) begins only now. Compiled code derives at the write, so it already began.
+    await settle(clock);
+    app.render();
     await waitForElement(step, container, clock, () => app.render());
     errors.check(describeStep(step));
     observations.push(observe(describeStep(step), container));
@@ -158,11 +162,17 @@ async function runOnCompiler(name: string, testCase: Case, compiler: Compiler): 
     writeFiles(name, compiler.output, { 'ERROR.txt': `${compiler.name}\n\n${(error as Error).message}\n` });
     throw error;
   }
+  // A server renders from its own copy of the modules, whose state starts fresh as in another
+  // process. It loads first: module sources are described per process, and a later load replaces
+  // the description as a hot update would, so the browser's copy must be the last.
+  const served = compiler.serves === true
+    ? await importAsServer(() => importFiles(name, `${compiler.output}-server`, files, 'App.tsx'))
+    : undefined;
   const module = await importFiles(name, compiler.output, files, 'App.tsx');
 
   const container = attachContainer();
   const errors = watchErrors();
-  const app = compiler.mount(module, container);
+  const app = compiler.mount(module, container, served);
   const unmount = track(() => app.unmount());
   await settle(clock);
   errors.check('initial render');

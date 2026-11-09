@@ -30,6 +30,8 @@ export interface LoweredTypeScript {
 export function lowerTypeScript(program: Program, source: string, lang: 'ts' | 'tsx', path: string): LoweredTypeScript {
   const declarations = lowerDeclarations(program, source, lang, path);
   const edits: Edit[] = [...declarations.edits];
+  // Each enum's string members so far, in source order, for a later member that names one.
+  const stringMembers = new Map<string, Set<string>>();
 
   walk(program, {
     TSModuleDeclaration(node, ctx) {
@@ -43,7 +45,7 @@ export function lowerTypeScript(program: Program, source: string, lang: 'ts' | '
         edits.push({ start: statement.start, end: statement.end, text: '' });
         return;
       }
-      edits.push(lowerEnum(node, source, declarations.enums.get(node.start), declarations.renamed));
+      edits.push(lowerEnum(node, source, declarations.enums.get(node.start), declarations.renamed, stringMembers));
     },
     TSParameterProperty(node, ctx) {
       edits.push(...lowerParameterProperty(node, ctx.ancestors()));
@@ -86,11 +88,15 @@ function lowerEnum(
   source: string,
   placement: EnumPlacement | undefined,
   renamed: ReadonlyMap<number, string>,
+  stringMembers: Map<string, Set<string>>,
 ): Edit {
   const name = node.id.name;
   const memberNames = node.body.members.map(memberName);
   const statements: string[] = [];
   let previous: string | undefined;
+  // A merged enum adds to the members its earlier declarations made.
+  const strings = stringMembers.get(name) ?? new Set<string>();
+  stringMembers.set(name, strings);
 
   for (const member of node.body.members) {
     const key = JSON.stringify(memberName(member));
@@ -99,7 +105,8 @@ function lowerEnum(
 
     if (member.initializer !== null) {
       value = withMemberReferences(member.initializer, source, name, memberNames, renamed);
-      mapsBack = !isStringValue(member.initializer);
+      mapsBack = !isStringValue(member.initializer, name, memberNames, stringMembers);
+      if (!mapsBack) strings.add(memberName(member));
     } else if (previous === undefined) {
       value = '0';
     } else {
@@ -127,9 +134,31 @@ function memberName(member: EnumMember): string {
   return id.quasis.map((quasi) => quasi.value.cooked ?? quasi.value.raw).join('');
 }
 
-function isStringValue(initializer: Expression): boolean {
-  if (is.Literal(initializer)) return typeof initializer.value === 'string';
-  return is.TemplateLiteral(initializer);
+/**
+ * Whether a member's constant value is a string, as `tsc` decides it: a string or template, a
+ * string member named bare (`B = A`) or through an enum (`E.A`, `E['A']`), a `+` with a string on
+ * either side, or any of these in parentheses. Anything else is a number or computed, and maps back.
+ */
+function isStringValue(
+  initializer: Expression,
+  own: string,
+  ownMembers: readonly string[],
+  stringMembers: ReadonlyMap<string, ReadonlySet<string>>,
+): boolean {
+  const value = (node: Expression): boolean => {
+    if (is.Literal(node)) return typeof node.value === 'string';
+    if (is.TemplateLiteral(node)) return true;
+    if (is.ParenthesizedExpression(node)) return value(node.expression);
+    if (is.BinaryExpression(node) && node.operator === '+') return value(node.left as Expression) || value(node.right);
+    if (is.Identifier(node)) return ownMembers.includes(node.name) && stringMembers.get(own)!.has(node.name);
+    if (is.MemberExpression(node) && is.Identifier(node.object)) {
+      const key = !node.computed && is.Identifier(node.property) ? node.property.name
+        : is.Literal(node.property) && typeof node.property.value === 'string' ? node.property.value : null;
+      return key !== null && stringMembers.get(node.object.name)?.has(key) === true;
+    }
+    return false;
+  };
+  return value(initializer);
 }
 
 /**

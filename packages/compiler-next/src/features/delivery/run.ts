@@ -13,14 +13,12 @@ import { renderToString } from '@memoized-dom/server';
 import type { ServerComponent } from '@memoized-dom/server';
 import { noteEventListeners } from '@memoized-dom/server/internal';
 import { toModuleFunction } from '../../core/parse/module-function';
+import { STABLE_GLOBALS } from '../../optimize/effects';
 
 /** Globals with the same result on every machine and at every time. */
-const ALLOWED_GLOBALS: Readonly<Record<string, unknown>> = {
-  Array, BigInt, Boolean, Error, EvalError, JSON, Map, Number, Object, RangeError, ReferenceError, RegExp,
-  Set, String, Symbol, SyntaxError, TypeError, URIError, WeakMap, WeakSet,
-  Infinity, NaN, undefined,
-  decodeURI, decodeURIComponent, encodeURI, encodeURIComponent, isFinite, isNaN, parseFloat, parseInt,
-};
+const ALLOWED_GLOBALS: Readonly<Record<string, unknown>> = Object.fromEntries(
+  [...STABLE_GLOBALS].filter((name) => name !== 'Math').map((name) => [name, (globalThis as Record<string, unknown>)[name]]),
+);
 
 /** Runtime helpers whose use means the page does something after it is shown. */
 const LIVE_HELPERS = new Set(['setListener', 'setRowListener', 'ownedEffect', 'mountRef', 'assignRef']);
@@ -101,6 +99,12 @@ export function runAtBuild(
         Object.defineProperty(into, name, { enumerable: true, get: () => (from as Record<string, unknown>)[name] });
       }
     };
+    // `typeof window` would see the stand-in and say "function"; nothing notices, so stop here.
+    const unseen = module.bareGlobals.find((name) => !Object.hasOwn(ALLOWED_GLOBALS, name) && name !== 'Math');
+    if (unseen !== undefined) {
+      escaped = true;
+      throw new NotClosed(`${unseen} is used in a way the build cannot stand in for`);
+    }
     const globals = module.globals.map((name) => {
       if (name === 'Math') return math;
       return Object.hasOwn(ALLOWED_GLOBALS, name) ? ALLOWED_GLOBALS[name] : closedOff(name);

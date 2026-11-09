@@ -61,8 +61,33 @@ interface Deferred {
   reject(error: Error): void;
 }
 const pending = new Map<string, Deferred[]>();
+let onServer = false;
+
+/**
+ * Runs a server render. Its `defer` promises never settle and no step can reach them: a server is
+ * another process, and what the browser waits on is the browser's own.
+ */
+export function asServer<T>(render: () => T): T {
+  onServer = true;
+  try {
+    return render();
+  } finally {
+    onServer = false;
+  }
+}
+
+/** `asServer` for loading the server's copy of the modules, whose top level can call `defer`. */
+export async function asServerAsync<T>(load: () => Promise<T>): Promise<T> {
+  onServer = true;
+  try {
+    return await load();
+  } finally {
+    onServer = false;
+  }
+}
 
 function defer(name: string): Promise<unknown> {
+  if (onServer) return new Promise(() => {});
   return new Promise((resolve, reject) => {
     const queue = pending.get(name) ?? [];
     queue.push({ resolve, reject });

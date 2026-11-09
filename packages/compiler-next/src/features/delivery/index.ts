@@ -6,7 +6,7 @@ import { createHash } from 'node:crypto';
 import { is } from 'yuku-ast';
 import type { Module, Resolved } from '../../core/resolve';
 import { importedDefinition } from '../../core/resolve';
-import { isFrameworkMount } from '../../core/resolve/exports';
+import { frameworkPackage, isFrameworkMount } from '../../core/resolve/exports';
 import { importResolver } from '../../core/resolve/imports';
 import { DEFAULT_RUNTIME_PATH, type CompileModulesOptions } from '../../options';
 import { htmlKeepsItsShape } from './html-shape';
@@ -78,14 +78,23 @@ function findApplicationRoot(resolved: Resolved): ApplicationRoot | null {
     if (found !== null || calls.length > 1) return null;
 
     const call = calls[0]!;
-    const body = module.ast.body;
-    const onlyMounts = body.every((statement) => {
-      return is.ImportDeclaration(statement) || (is.ExpressionStatement(statement) && statement.expression === call);
-    });
     const [target, component, ...rest] = call.arguments;
-    if (!onlyMounts || rest.length > 0 || !is.Literal(target) || typeof target.value !== 'string' || !is.Identifier(component)) {
+    if (rest.length > 0 || !is.Literal(target) || typeof target.value !== 'string' || !is.Identifier(component)) {
       return null;
     }
+    // The build runs the root's module only. Any other import, `import './initialize'` too, runs
+    // code before the page that the build would not, so such an entry is the browser's.
+    const rootBinding = module.referenceOf(component)?.binding ?? null;
+    const onlyMounts = module.ast.body.every((statement) => {
+      if (is.ExpressionStatement(statement)) return statement.expression === call;
+      if (!is.ImportDeclaration(statement)) return false;
+      if (statement.specifiers.length === 0) return String(statement.source.value).startsWith('@memoized-dom/');
+      return statement.specifiers.every((specifier) => {
+        const binding = module.bindings.find((candidate) => candidate.declarations[0] === specifier.local);
+        return binding !== undefined && (binding === rootBinding || frameworkPackage(binding) !== null);
+      });
+    });
+    if (!onlyMounts) return null;
 
     const root = rootComponent(module, component);
     if (root === null) return null;

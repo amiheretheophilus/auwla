@@ -36,6 +36,17 @@ describe('enum', () => {
     expect(result).toEqual(['loud', 'soft', undefined]);
   });
 
+  // The keys `tsc` gives each enum: a string-valued member never maps back, however it is written.
+  it.each([
+    ['a bare alias', "enum E { A = 'a', B = A }", ['A', 'B']],
+    ['an alias through the enum', "enum E { A = 'a', B = E.A, C = E['A'] }", ['A', 'B', 'C']],
+    ['a concatenation and parentheses', "enum E { A = 'a', B = A + 'b', C = ('c'), D = 1 + 'd' }", ['A', 'B', 'C', 'D']],
+    ['a member of an earlier enum', "enum F { X = 'x' }\nenum E { A = F.X }", ['A']],
+    ['a numeric alias, which does map back', 'enum E { A = 1, B = A }', ['1', 'A', 'B']],
+  ])('gives %s exactly its members as keys', (_label, source, keys) => {
+    expect(run(source, 'return Object.keys(E).sort();')).toEqual(keys);
+  });
+
   it('lets an initializer name earlier members', () => {
     const result = run('enum Flag { A = 1, B = 2, AB = A | B }', 'return Flag.AB;');
     expect(result).toBe(3);
@@ -204,6 +215,17 @@ describe('import aliases and export =', () => {
     const lowered = parseModule('./m.ts', 'interface I {}\nexport = I;');
     expect(lowered.source).not.toContain('export default');
     expect(lowered.hasExportAssignment).toBe(false);
+  });
+
+  // A name merges across its declarations: one with a value is enough.
+  it.each([
+    ['an interface and a const', 'interface Box { value: number }\nconst Box = { value: 1 };\nexport = Box;'],
+    ['an interface and a declared const', 'interface Box { value: number }\ndeclare const Box: Box;\nexport = Box;'],
+    ['a type-only namespace and one with values', 'namespace N { export type T = 1; }\nnamespace N { export const v = 1; }\nexport = N;'],
+  ])('keeps export = of %s', (_label, source) => {
+    const lowered = parseModule('./m.ts', source);
+    expect(lowered.hasExportAssignment).toBe(true);
+    expect(lowered.source).toContain('export default');
   });
 
   it('records where each require import is in the lowered text', () => {

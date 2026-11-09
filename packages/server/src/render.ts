@@ -11,7 +11,7 @@ export function createPayloadScriptTag(rootId:string,payload:RenderPayload):stri
   return `<script type="application/mmd+json" data-mmd-root="${safeRootId}">${safeJson}</script>`;
 }
 function serializeString(session:RenderSession,root:Node):string {
-  return session.wrap((root as unknown as StringRenderableNode).toString(session.markers,session.initialBindings));
+  return session.wrap(session.serialize(root as unknown as StringRenderableNode));
 }
 /** Prepare routes, settle request data, and return request-isolated HTML and payload. */
 export async function render(component:ServerComponent,options:RenderOptions={}):Promise<RenderResult> {

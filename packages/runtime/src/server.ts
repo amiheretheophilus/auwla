@@ -16,3 +16,5 @@ export { parseMarkup } from './markup-parse';
 export type { MarkupChild, MarkupElement } from './markup-parse';
 export { initialBootstrapDescriptor, readInitialBootstrap } from './initial-delivery';
 export type { InitialBootstrap } from './initial-delivery';
+export { numberedDocument, serverCreations } from './adoption';
+export type { Creations } from './adoption';

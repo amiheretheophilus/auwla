@@ -47,7 +47,7 @@ removing its placeholder, so later branch mounts inherit it too.
 | File | What it does |
 | --- | --- |
 | `index.ts` | `parseModule(path, source)`: language from the path (`langFromPath`), syntax errors as `CompileError` with line and column, JSX detection |
-| `lower-typescript.ts` | lowers `enum` (numbered members, reverse mapping, member names in initializers, `const enum`; `declare enum` removed) and constructor parameter properties, as `tsc` emits them, by editing the text |
+| `lower-typescript.ts` | lowers `enum` (numbered members, reverse mapping, member names in initializers, `const enum`; `declare enum` removed) and constructor parameter properties, as `tsc` emits them, by editing the text. A member maps back unless its value is a string, which includes `B = A`, `E.A` and `A + 'x'` over a string member |
 | `lower-namespace.ts` | lowers a runtime `namespace`, `import x = a.b`, `import x = require('m')` and `export =` as `tsc` emits them, and decides how an enum is declared when it merges or sits in a namespace |
 | `text-edits.ts` | replacing spans of source text, and where an edit lands afterwards |
 | `parse.test.ts` | unit tests |
@@ -84,15 +84,19 @@ namespace A {                    // var A; (function (A) {
   declare it once. This also fixed `export enum E {}` written twice.
 - **The parameter takes the namespace's name,** unless something inside declares that name.
   Then it becomes `A_1`, as `tsc` emits, so `function f(A) { return count; }` still works.
-- **A class reads itself by its inner name** inside its own body, because `A.C` is not
-  assigned until the class is finished. `static self = C` therefore works. This is the one
-  place the output is safer than `tsc`, whose `A.C` there is `undefined`.
+- **An exported function or class is read by its own name in the block that declares it,**
+  as `tsc` emits it; other blocks read `A.f`. A function is hoisted, so
+  `export const value = read()` before `export function read()` works, where `A.read()` would
+  run before `A.read = read`. A call keeps `this` undefined, and a class's body sees its inner
+  name before `A.C` is assigned (`static self = C`). Until a review found it, functions were
+  read as `A.f` everywhere.
 - **A namespace with only types has no runtime part.** It becomes `declare`, which printing
   erases. The rule for what counts as a runtime part is `tsc`'s (`isInstantiated`).
 - **`import x = a.b`** becomes `var x = a.b`. If nothing reads `x` as a value, it is dropped,
   because it may name a type.
 - **`export = value`** becomes `export default value`. It leaves nothing for a name with no
-  value.
+  value. A name merges across declarations, so `interface Box` beside `const Box` (or
+  `declare const Box`, or a namespace with values) has one.
 - **`import x = require('m')`** becomes `import x from 'm'` when `m` has `export =`, and
   `import * as x from 'm'` when it does not, because that is what requiring each one gives.
   That depends on the other module, so `withRequireImports` in `core/resolve/imports.ts`

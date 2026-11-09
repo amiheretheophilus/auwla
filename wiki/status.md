@@ -30,8 +30,14 @@ reference with them, since it shared the mistake. Server rendering also runs com
 Gate: 568 unit, 179 runtime, 171 data, 748 cases. Sizes: FlowOS +60 B raw, Octane +247 B raw for class
 arrays and objects, which a class known to be a string should not pay for; that is still to do.
 
-Next: adoption of existing nodes in the browser (`compiler/delivery.md`), reading the 277 root failures
-that may be real, and `packages/vite`. Two new decisions are in `open-issues.md`.
+Adoption of server HTML is built (`compiler/delivery.md`, "Adopting existing nodes"): the server numbers
+creations, the browser pools numbered nodes and a client render takes them. Every case also runs
+**delivered** (server HTML, then adoption), and the reference now shares no code with compiler-next:
+TypeScript 7.1 lowers its input (`typescript/sync`). A review's eight findings are fixed with cases.
+Gate: 579 unit, 181 runtime, 171 data, 764 cases.
+
+Next: keep what a user typed before adoption, reading the 277 root failures that may be real, and
+`packages/vite`.
 
 ## Closing documented issues before Phase 10 (2026-11-06)
 

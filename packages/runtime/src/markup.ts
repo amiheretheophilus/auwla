@@ -23,6 +23,7 @@
 
 import { getActiveEnvironment } from './kernel';
 import type { DocumentLike } from './environment';
+import { adoptTemplate, noteTemplate, unnumbered } from './adoption';
 
 const templates = new WeakMap<DocumentLike, Map<string, Element>>();
 
@@ -84,27 +85,41 @@ function buildTemplate(document: DocumentLike, roots: readonly TemplateNode[], n
  * the old compiler's row templates were: text slots are text nodes in the
  * template, and the compiled code reaches each node through `firstChild` and
  * `nextSibling`. Several roots arrive in a fragment. A server document builds
- * and clones its own nodes the same way. compiler-next emits no hydration
- * yet (Phase 10), so a hydrating environment is refused rather than given
- * new nodes in place of the ones it should claim.
+ * and clones its own nodes the same way.
+ *
+ * A clone is a creation (`adoption.ts`): a server numbers it, and a browser
+ * adopting server HTML takes the server's nodes for it when they fit. The old
+ * compiler's hydration plans cannot claim it, so that environment is refused.
  */
 export function cloneTemplate(cache: TemplateCache, namespace?: 'html' | 'svg'): Node {
   const environment = getActiveEnvironment();
-  const document = environment.document;
+  // Template nodes are not creations (`adoption.ts`), so they come from the unnumbered document.
+  const document = unnumbered(environment.document);
   if (environment.hydration !== undefined) {
-    throw new Error('memo-dom: compiler-next output cannot hydrate yet');
+    throw new Error('memo-dom: compiler-next output adopts numbered server HTML, not hydration markers');
+  }
+  const creations = environment.creations;
+  const id = creations === undefined ? '' : String(creations.next());
+  if (creations !== undefined) {
+    creations.cloned = true;
+    const adopted = creations.take === undefined ? null : adoptTemplate(creations, id, cache.roots, namespace ?? 'html');
+    if (adopted !== null) return adopted;
   }
   if (cache.document !== document) {
     cache.document = document;
     cache.html = null;
     cache.svg = null;
   }
+  let clone: Node;
   if (namespace === 'svg') {
     cache.svg ??= buildTemplate(document, cache.roots, 'svg');
-    return cache.svg.cloneNode(true);
+    clone = cache.svg.cloneNode(true);
+  } else {
+    cache.html ??= buildTemplate(document, cache.roots, 'html');
+    clone = cache.html.cloneNode(true);
   }
-  cache.html ??= buildTemplate(document, cache.roots, 'html');
-  return cache.html.cloneNode(true);
+  if (creations?.note !== undefined) noteTemplate(creations, id, clone, cache.roots.length);
+  return clone;
 }
 
 /**

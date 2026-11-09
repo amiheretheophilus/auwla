@@ -33,7 +33,7 @@ async function streamRegions(
   root: StringRenderableNode,
   push: (part: string) => Promise<void>,
 ): Promise<void> {
-  const serialize = (node: StringRenderableNode) => node.toString(true, false);
+  const serialize = (node: StringRenderableNode) => session.serialize(node, true, false);
   const tracker = new RegionTracker(root, serialize);
   const payload = session.payload();
   const state = payload.state === undefined ? undefined : streamedState(payload.state);
@@ -129,7 +129,7 @@ export function prepareRenderToReadableStream(
       const root = current.mount() as unknown as StringRenderableNode;
       if (current.streamsRegions) return streamRegions(current, root, pushRegion);
       await current.settle();
-      push(current.wrap(root.toString(current.markers, current.initialBindings)));
+      push(current.wrap(current.serialize(root)));
       if (current.carriesPayload && (options.markers === true || current.initialBindings)) {
         push(createPayloadScriptTag(current.rootId, current.payload()));
       }

@@ -363,6 +363,7 @@ export function runWithRenderEnvironment<T>(
     // An explicit `hydration: undefined` leaves adoption, e.g. for a region
     // that recovers from a mismatch by rendering on the client.
     hydration: 'hydration' in overrides ? overrides.hydration : previous.hydration,
+    creations: 'creations' in overrides ? overrides.creations : previous.creations,
   };
   try {
     return run();

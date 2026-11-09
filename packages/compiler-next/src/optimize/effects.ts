@@ -19,6 +19,19 @@ const PURE_MEMBERS = new Map([
 ]);
 const PURE_CONSTRUCTORS = new Set(['Date', 'Map', 'Set', 'WeakMap', 'WeakSet', 'RegExp', 'Array', 'Object']);
 
+/**
+ * Host globals whose values depend on nothing outside the program, except `Math.random`. "Changes
+ * nothing" is not "gives the same result": `Date`, `window` and `Intl` edit nothing, yet give
+ * another answer later or on another machine. The build-time run allows only these
+ * (`features/delivery/run.ts`), and a cached row may read only these (`row-reuse.ts`).
+ */
+export const STABLE_GLOBALS: ReadonlySet<string> = new Set([
+  'Array', 'BigInt', 'Boolean', 'Error', 'EvalError', 'JSON', 'Map', 'Math', 'Number', 'Object', 'RangeError',
+  'ReferenceError', 'RegExp', 'Set', 'String', 'Symbol', 'SyntaxError', 'TypeError', 'URIError', 'WeakMap', 'WeakSet',
+  'Infinity', 'NaN', 'undefined',
+  'decodeURI', 'decodeURIComponent', 'encodeURI', 'encodeURIComponent', 'isFinite', 'isNaN', 'parseFloat', 'parseInt',
+]);
+
 export interface EffectOptions {
   /**
    * Also accept calls of the program's own functions whose bodies are effect-free.

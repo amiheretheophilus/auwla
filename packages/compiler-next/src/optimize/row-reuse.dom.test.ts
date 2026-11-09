@@ -71,6 +71,12 @@ it('allows reuse only for JSX-returning arrows that read tracked or constant val
   expect(caches('(item, index, all) => <li>{all.length}</li>')).toEqual([]);
   expect(caches('function (item) { return <li>{item.id}</li>; }')).toEqual([]);
   expect(caches('(item) => <li>{changing}</li>', 'globalThis.changing = 1; changing = 2;')).toEqual([]);
+  // Changing nothing is not giving the same result: mapping again would show a new value.
+  expect(caches('(row) => { const stamp = Math.random(); return <b>{stamp}</b>; }')).toEqual([]);
+  expect(caches('(row) => <li>{Math.random()}</li>')).toEqual([]);
+  expect(caches('(row) => <li>{Date.now()}</li>')).toEqual([]);
+  expect(caches('(row) => <li>{window.innerWidth}</li>')).toEqual([]);
+  expect(caches('(row) => { const most = Math.max(row.id, 1); return <li>{most}</li>; }')).toEqual(['createRowCache(false)']);
   expect(compile('export function App() { const a = [1]; return <ul>{a.map((x) => <li>{x}</li>)}</ul>; }', false))
     .not.toContain('createRowCache');
 });

@@ -332,8 +332,12 @@ the method name. The callback must:
   code a shared object;
 - read nothing reactive except through tracked readers (shared bindings), besides
   its own parameters and locals. Other free variables must be constants that
-  depend on nothing reactive (`isReactive`), or globals the program never
-  writes. Bodies of nested functions are not run, so they do not count.
+  depend on nothing reactive (`isReactive`), or globals whose values depend on nothing
+  (`STABLE_GLOBALS`, `effects.ts`; `Math` but not `Math.random`). "Changes nothing" is not
+  "gives the same result": `Math.random()`, `Date.now()` and `window.innerWidth` edit
+  nothing, yet mapping again would show another value, and a cached row would not. These
+  were accepted until a review found it. Bodies of nested functions are not run, so they
+  do not count.
 
 `optimize/methods.ts` records `rowReuse` on the call. The emitter declares one
 `createRowCache(usesIndex)` per call site and owner instance, and emits

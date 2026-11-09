@@ -2,6 +2,7 @@
  * Cases for wiki/compiler/core.md, "A namespace and export =": lowered TypeScript compiled like
  * the JavaScript it became, so state and components inside a namespace still update.
  */
+import { expect } from 'bun:test';
 import { behaves } from '../harness/run';
 
 const button = '<button id="go" onClick={go}>go</button>';
@@ -252,4 +253,23 @@ behaves('require: a module without export = gives its namespace object', {
     }
   `,
   steps: [{ click: '#go' }],
+});
+
+// TypeScript keeps an exported function local in its own block: it is hoisted before `N.read = read`
+// runs, and a call keeps `this` undefined. The reference lowers the same way, so the check is explicit.
+behaves('namespace: an exported function called before its declaration, and its receiver', {
+  source: `
+    namespace N {
+      export const value = read();
+      export const receiver = whoCalls();
+      export function read() { return 1; }
+      export function whoCalls() { return this === undefined ? 'none' : 'namespace'; }
+    }
+    export function App() {
+      return <main><p>{N.value}:{N.receiver}:{N.read()}</p></main>;
+    }
+  `,
+  check(container) {
+    expect(container.querySelector('p')!.textContent).toBe('1:none:1');
+  },
 });

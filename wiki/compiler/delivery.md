@@ -15,6 +15,8 @@ Status: a page that cannot change is built. The rest is designed. Phase 10 (`pla
 | `features/delivery/run.ts` | runs compiled modules at build time, in a closed world, on the server's document |
 | `features/delivery/html-shape.ts` | whether an HTML parser rebuilds exactly the tree the HTML came from |
 | `core/parse/module-function.ts` | a printed ES module as a function body, so the build can run it synchronously |
+| `packages/runtime/src/adoption.ts` | numbers creations, pools numbered server nodes, and lets a client render take them |
+| `tests/delivery/adopt.test.ts` | adoption through `mount`: nodes reused, page live, a mismatch made fresh |
 
 ## What the old compiler does
 
@@ -94,6 +96,17 @@ and server rendering are one path.
    - Not allowed: `Date`, `Math.random` and the `toLocale*` methods, whose results depend on the clock
      and the machine; `fetch`, `window`, `document`, `console` and any other global; and any import
      from outside the compiled modules, which can do anything when it loads.
+   - The allowed list is `STABLE_GLOBALS` (`optimize/effects.ts`), which row reuse uses too.
+   - A stand-in cannot notice every use: `typeof window`, `if (window)`, `window === x` and
+     `f(window)` run no trap, so `typeof window` would say "function" in HTML. A module that uses
+     a global not allowed in any such way (`bareGlobals`, `module-function.ts`) is not run at all,
+     even when the use is in a handler.
+   - The run starts at the root's module, so the entry may import only that component and
+     framework packages. Any other import, `import './initialize'` too, runs code first that the
+     build would not, and the page goes to the browser.
+   - An imported binding is read as `(0, _imports[0].f)`, so `f()` and f\`…\` keep `this`
+     undefined, as in the browser.
+   These four were found by a review.
 2. **Run it.** A pure helper, `.filter().map()`, a `for` loop and an `if` simply work, with
    JavaScript's exact semantics, and there is no list of builtins to keep up to date.
 3. **Decide.** The page is `html` only if nothing can happen after it is shown: no listener, effect
@@ -130,10 +143,43 @@ why this can go further than the old compiler's whole-page answer.
 
 ### Adopting existing nodes
 
-The compiled program already finds its nodes by walking from a template's root
-(`firstChild`, `nextSibling`). Adopting is the same walk, starting at the existing root instead of
-a clone. HTML cannot hold an empty text node, so an empty slot needs a marker, as in the old
-`<!--mmd:empty-->`.
+The compiled program finds its nodes by walking from a template's clone (`firstChild`,
+`nextSibling`). In server HTML that walk would step into what regions, components and rows put
+between a template's nodes, so adoption cannot start the walk at the existing root as it is. The
+old compiler's hydration plans claim one node per `createElement`, which compiled-next code never
+calls for a template's nodes. Instead (`packages/runtime/src/adoption.ts`):
+
+1. **Number creations.** Every node a creation call returns (a template's clone, `createTextNode`,
+   `createComment`, `createElement`) gets a number, in program order, through a numbered document
+   (`numberedDocument`) and `cloneTemplate`. A template's own nodes are not creations, and are built
+   through the unnumbered document, since how many get built depends on a cache. The program is the
+   same on the server and in the browser, so the numbers agree.
+2. **Write them.** With `markers: true`, the server writes `<!--[N-->` before creation N
+   (`writeCreations`, `packages/server/src/string-document.ts`), and `<!--[N/-->` for one HTML cannot
+   hold, such as an empty text. A template with several roots numbers them `N.0`, `N.1`. Only output
+   that cloned a template is numbered, so the old compiler's HTML is unchanged.
+3. **Pool them.** Before the program runs, the browser detaches every numbered node into a pool
+   (`collectCreations`). What is left of each is its template's own nodes, in the shape its clone has.
+4. **Run a client render.** Creation N takes pooled node N when it has the expected shape
+   (`adoptTemplate`): static text and attributes are reset to the template's, a text the parser
+   merged or a comment the program removed is made again, anything extra goes. The program then writes
+   every dynamic value as it does at creation, and its own insertions put each node back.
+
+So the page is always what a client render builds. Where the two programs disagree (a source
+resolved on one side only, a server render that failed), a creation finds nothing that fits and makes
+a new node, and an unused server node is dropped: there is no separate recovery path. Only how many
+nodes are reused depends on agreement.
+
+The cost is that numbered nodes leave the document for a moment, within one task, before any paint.
+Focus, the window's scroll, each element's scroll and a playing medium's time and state are restored
+(`rememberDetachedState`). An iframe inside a region, component or row loads its page again, which
+script cannot prevent; this is a decision for the user (`../open-issues.md`).
+
+`mount` adopts when the root range starts with a number (`hydrate-program.ts`), and otherwise uses the
+old compiler's hydration, which goes with that compiler. Every server serialization of a page goes
+through `RenderSession.serialize`, so streamed HTML is numbered too. A region the server streams after
+its data settles was created later on the server than the browser creates it, so its numbers do not
+match, and the browser makes those nodes fresh; the shell around it is reused.
 
 ### How it is tested
 

@@ -21,6 +21,9 @@ import {
   resetScheduler,
   type ApplicationRuntime,
   type DocumentLike,
+  type Creations,
+  numberedDocument,
+  serverCreations,
 } from '@memoized-dom/runtime/server';
 import {
   createMemoryRouteHistory,
@@ -41,6 +44,7 @@ import {
 import { nextDataRuntimeSettlement } from '@memoized-dom/data/internal';
 import type { RenderOptions, RenderPayload } from './index';
 import { serverRootId, type ServerComponent } from './root-id';
+import { writeCreations, type StringRenderableNode } from './string-document';
 
 /**
  * How data settlement concluded:
@@ -77,6 +81,10 @@ export class RenderSession {
   readonly initialDelivery;
   settlement: RenderSettlement = SHELL;
 
+  /** Each created node's number, for HTML a browser adopts. */
+  readonly creationIds = new WeakMap<object, string>();
+  /** Set only when rendering with markers. */
+  readonly creations: Creations | undefined;
   private readonly controller = new AbortController();
   private readonly unlinkSignals: Array<() => void> = [];
   private retained = false;
@@ -88,12 +96,18 @@ export class RenderSession {
     private readonly tier: SessionTier,
   ) {
     this.rootId = serverRootId(component);
+    // HTML a browser adopts numbers what the program creates (`runtime/src/adoption.ts`).
+    const creations = options.markers === true && options.initialKey === undefined
+      ? serverCreations(this.creationIds)
+      : undefined;
+    this.creations = creations;
     this.applicationRuntime = createApplicationRuntime(`ssr-${++sessionSequence}`, {
       mode: tier.mode,
-      document: tier.document,
+      document: creations === undefined ? tier.document : numberedDocument(tier.document, creations),
       schedule: null,
       effects: 'disabled',
       refs: 'disabled',
+      ...(creations === undefined ? {} : { creations }),
     });
     this.routeRuntime = createRouteRuntime({
       routeHistory: createMemoryRouteHistory({
@@ -233,6 +247,15 @@ export class RenderSession {
       ...(state.sources.length > 0 ? { state } : {}),
       ...(routed === undefined ? {} : { routed }),
     };
+  }
+
+  /**
+   * A node's HTML. compiler-next output (it clones templates) carries each created node's number,
+   * which a browser adopts (`runtime/src/adoption.ts`); the old compiler's output does not.
+   */
+  serialize(node: StringRenderableNode, markers = this.markers, initialBindings = this.initialBindings): string {
+    const write = () => node.toString(markers, initialBindings);
+    return this.creations?.cloned === true ? writeCreations(this.creationIds, write) : write();
   }
 
   /** Wrap serialized application HTML in the hydration root marker pair. */

@@ -49,7 +49,15 @@ Compiler bugs and cases live on their `compiler/` page, under "Cases to test".
   `list`, and a later unrelated call pushes to it: the reference shows it and compiled code does not
   until that state updates (`handlers.md`). Seeing it means snapshotting every root that ever reached
   unknown code on every unknown call, which is about 70 ms a call at 10k rows. `rows = rows` is the
-  way to report it by hand. Recommended: leave it, and document `rows = rows`.
+  way to report it by hand. Recommended: leave it, and document `rows = rows`. An animation library
+  (`animate(box, { value: 100 })`) is the plainest case: the old compiler re-read such a value every
+  frame, compiler-next shows only the value at the call (found by the replay, `compiler/testing.md`).
+- **Adopting server HTML detaches the nodes inside regions, components and rows for a moment**
+  (`compiler/delivery.md`, "Adopting existing nodes"). They go back within the same task, before any
+  paint. Focus, the window's scroll, each element's scroll and a playing medium's time and state are
+  restored. An iframe inside such a node loads its page again, which script cannot prevent. In-place
+  claiming would need every template walk to skip region content, which costs every client render.
+  Recommended: accept it for iframes.
 
 ## To discuss with the user first (2026-11-05)
 

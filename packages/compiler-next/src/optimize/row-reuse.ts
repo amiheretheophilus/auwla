@@ -27,7 +27,7 @@ import type { Node } from 'yuku-parser';
 import { isReactive, type SemanticGraph } from '../core/graph';
 import type { ModulePlan } from '../core/plan/model';
 import { importedDefinition } from '../core/resolve';
-import { effectFree } from './effects';
+import { effectFree, STABLE_GLOBALS } from './effects';
 
 export interface RowReuse {
   readonly usesIndex: boolean;
@@ -95,8 +95,13 @@ function freeReadsTracked(general: ModulePlan, graph: SemanticGraph, module: Mod
       if (reference === null || reference.inTypePosition) return;
       const binding = reference.binding;
       if (binding === null) {
-        // A global the program writes is reactive; one it never writes is not an input.
-        tracked = graph.unresolved.get(reference)?.reactive === false;
+        // A cached row is shown again only when its inputs change, where mapping would call the
+        // callback again. So a global must give the same value every time: `Math.max`, not
+        // `Math.random()`, `Date.now()` or `window.innerWidth`, which change with no write.
+        const parent = module.parentOf(node);
+        const random = node.name === 'Math' && is.MemberExpression(parent) && parent.object === node
+          && (parent.computed || !is.Identifier(parent.property) || parent.property.name === 'random');
+        tracked = STABLE_GLOBALS.has(node.name) && !random && graph.unresolved.get(reference)?.reactive === false;
       } else {
         const declaration = binding.declarations[0];
         const local = declaration !== undefined

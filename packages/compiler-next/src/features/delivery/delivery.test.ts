@@ -41,6 +41,12 @@ describe('a page that cannot change is HTML', () => {
     });
   }
 
+  // An imported function called bare gets `this` undefined, as in the browser, not the imports object.
+  it('calls an imported function with no receiver', () => {
+    const helper = { './helper.ts': `export function who() { return this === undefined ? 'none' : 'object'; } export function tag() { return this === undefined ? 'none' : 'object'; }` };
+    expect(html(`import { who, tag } from './helper'; export function App() { return <p>{who()}:{tag\`x\`}</p>; }`, helper)).toBe('<p>none:none</p>');
+  });
+
   it('prints a style object', () => {
     const printed = html(`export function App() { return <p style={{ color: 'red' }}>a</p>; }`);
     expect(printed).toContain('color: red');
@@ -113,6 +119,25 @@ describe('a page that needs the browser', () => {
     needsBrowser(`export function App() { return <p>{(1000).toLocaleString()}</p>; }`);
     needsBrowser(`export function App() { return <p>{window.innerWidth}</p>; }`);
     needsBrowser(`export function App() { console.log('hi'); return <p>a</p>; }`);
+  });
+
+  // A stand-in for `window` cannot notice these: `typeof` would say "function" and stay HTML.
+  it('looks at a browser global without touching it', () => {
+    needsBrowser(`export function App() { return <p>{typeof window}</p>; }`);
+    needsBrowser(`export function App() { return <p>{window ? 'yes' : 'no'}</p>; }`);
+    needsBrowser(`export function App() { return <p>{String(document === null)}</p>; }`);
+    needsBrowser(`function show(x) { return x === undefined; } export function App() { return <p>{String(show(navigator))}</p>; }`);
+  });
+
+  // The build runs the root's module, so whatever else the entry runs first is the browser's.
+  it('has an entry that runs other modules first', () => {
+    const app = `import { shared } from './shared'; export function App() { return <p>{shared.label}</p>; }`;
+    const modules = {
+      './shared.ts': `export const shared = { label: 'before' };`,
+      './initialize.ts': `import { shared } from './shared'; shared.label = 'after';`,
+    };
+    needsBrowser(app, modules, `import './initialize'; ${MAIN}`);
+    needsBrowser(app, modules, `import { shared } from './shared'; shared; ${MAIN}`);
   });
 
   it('notices a stopped run even when authored code catches it', () => {

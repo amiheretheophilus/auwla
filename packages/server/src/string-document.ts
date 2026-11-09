@@ -252,8 +252,8 @@ export class StringComment implements StringRenderableNode {
 
   toString(markers: boolean, initialBindings = false): string {
     const initial = /^(?:mmd:initial:(?:when|list):\d+:\d+|\/mmd:initial:(?:when|list))$/.test(this.data);
-    if (!(initial ? initialBindings : markers) || this.data.includes('-->') || this.data.endsWith('-')) return '';
-    return `<!--${this.data}-->`;
+    if (!(initial ? initialBindings : markers) || this.data.includes('-->') || this.data.endsWith('-')) return numbered(this, '');
+    return numbered(this, `<!--${this.data}-->`);
   }
 }
 
@@ -308,6 +308,7 @@ export class StringText implements StringRenderableNode {
 
   toString(_markers = false, initialTexts = false): string {
     const value = this._value ?? '';
+    if (creationIds?.has(this)) return numbered(this, escapeHtml(value));
     return initialTexts && value === '' ? '<!--mmd:empty-->' : escapeHtml(value);
   }
 }
@@ -317,6 +318,31 @@ export class StringText implements StringRenderableNode {
  * existing means the page needs a browser program, which the compiler asks when it builds a page.
  */
 let eventListeners = 0;
+
+/**
+ * Creation numbers of the nodes being written (`runtime/src/adoption.ts`): `<!--[N-->` goes before
+ * creation N, so a browser can take that node for it. A node HTML cannot hold, such as an empty
+ * text, is written `<!--[N/-->`, and the browser makes it again.
+ */
+let creationIds: WeakMap<object, string> | null = null;
+
+/** Serializes with each created node's number in front of it. */
+export function writeCreations<T>(ids: WeakMap<object, string>, write: () => T): T {
+  const previous = creationIds;
+  creationIds = ids;
+  try {
+    return write();
+  } finally {
+    creationIds = previous;
+  }
+}
+
+/** The number in front of a node, around what it serializes to. */
+function numbered(node: object, html: string): string {
+  const id = creationIds?.get(node);
+  if (id === undefined) return html;
+  return html === '' ? `<!--[${id}/-->` : `<!--[${id}-->${html}`;
+}
 export function noteEventListeners(): number {
   return eventListeners;
 }
@@ -461,6 +487,10 @@ export class StringElement extends StringContainer implements StringRenderableNo
   }
 
   override toString(markers: boolean, initialTexts = false): string {
+    return numbered(this, this.ownHtml(markers, initialTexts));
+  }
+
+  private ownHtml(markers: boolean, initialTexts: boolean): string {
     const tag = this.info.tag;
     const className = this.className;
     const cssText = this.ownStyle?.cssText;

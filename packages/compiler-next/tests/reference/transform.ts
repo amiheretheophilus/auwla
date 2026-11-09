@@ -35,10 +35,8 @@ import { generate } from 'yuku-codegen';
 import { parse } from 'yuku-parser';
 import type { BlockStatement, Expression, Node, Statement, VariableDeclarator } from 'yuku-parser';
 import { installedResolver, sourcesOfOutput } from '../harness/installed';
-import { parseModule } from '../../src/core/parse';
-import { withRequireImports } from '../../src/core/resolve/imports';
-import { callOnlyReads } from '../../src/optimize/effects';
-import { literalFields } from '../../src/features/derived/literal-fields';
+import { lowerWithTypeScript } from './typescript';
+import { callOnlyReads, literalFields } from './syntax-rules';
 import { blockThunk, constDeclaration, identifier, member, numberLiteral, runtimeCall, thunk } from './ast';
 import { ClosureCells } from './closures';
 import { enclosingFunction, Reads } from './reads';
@@ -162,12 +160,12 @@ export function toReferenceModules(sources: Readonly<Record<string, string>>, ru
     return null;
   };
   const analyzer = new Analyzer({ resolve });
-  // A namespace and `export =` have no JavaScript form, so the reference reads what they lower to.
-  // That lowering is checked on its own, by running it (`src/core/parse/parse.test.ts`).
-  const parsed = Object.entries(sources).map(([path, source]) => parseModule(path, source));
-  const modules = parsed.map((input) => {
-    const prepared = prepareReferenceModule(withRequireImports(input, parsed, resolve), input.path);
-    return analyzer.setFile(input.path, prepared.source, { lang: 'tsx', sourceType: 'module' });
+  // A namespace, an enum and `export =` have no JavaScript form. TypeScript itself lowers them
+  // here (`typescript.ts`), so a mistake in compiler-next's own lowering shows as a difference.
+  const lowered = lowerWithTypeScript(sources, resolve);
+  const modules = Object.entries(lowered).map(([path, source]) => {
+    const prepared = prepareReferenceModule(source, path);
+    return analyzer.setFile(path, prepared.source, { lang: 'tsx', sourceType: 'module' });
   });
   analyzer.link();
 
@@ -191,6 +189,10 @@ function prepareReferenceModule(source: string, path: string): Module {
 
 function transformReference(module: Module, runtimeUrl: string, rawUses: SourceUses): string {
   const readCalls = module.findAll('CallExpression').filter((call) => isDataCall(module, call, '$read'));
+  const boundPromises = new Map(readCalls.flatMap((call) => {
+    const declarator = boundPromise(module, call);
+    return declarator === null ? [] : [[call, declarator] as const];
+  }));
   buildModuleMemos(module, rawUses);
   const handledSites = new Set<Node>();
   const components = findComponents(module);
@@ -201,14 +203,40 @@ function transformReference(module: Module, runtimeUrl: string, rawUses: SourceU
   rewriteModuleEffects(module);
   prepareModuleReads(module, rawUses, handledSites, new Set(components), closures);
   closures.declare();
-  // Clone only after uses were lowered, so replay closes over live slots.
+  // Clone only after uses were lowered, so replay closes over live slots. A promise named by a
+  // `const` in the same function is made again from its initializer, as `refresh()` asks.
   for (const call of readCalls) {
-    if (call.arguments.length === 1) call.arguments.push(thunk(structuredClone(call.arguments[0]) as Expression));
+    if (call.arguments.length !== 1) continue;
+    const init = boundPromises.get(call)?.init ?? null;
+    // A lowered initializer is the memo `$ctx.memo(n, inputs, compute)`; its compute makes the promise.
+    const compute = init !== null && is.CallExpression(init) && is.MemberExpression(init.callee)
+      && is.Identifier(init.callee.property) && init.callee.property.name === 'memo' ? init.arguments[2] : undefined;
+    call.arguments.push(thunk(compute !== undefined
+      ? b.CallExpression({ callee: structuredClone(compute) as Expression, arguments: [], optional: false })
+      : structuredClone(init ?? call.arguments[0]) as Expression));
   }
   rewriteDataImports(module, runtimeUrl);
 
   const header = `import { ${RUNTIME_EXPORTS.join(', ')} } from ${JSON.stringify(runtimeUrl)};\n`;
   return lowerJsxAndTypes(header + generate(module.ast).code);
+}
+
+/**
+ * `const promise = load(id); $read(promise)`, in one function and never written: the declarator
+ * whose initializer makes the promise. Null for any other argument.
+ */
+function boundPromise(module: Module, call: Extract<Node, { type: 'CallExpression' }>): Extract<Node, { type: 'VariableDeclarator' }> | null {
+  const argument = call.arguments[0];
+  if (argument === undefined || !is.Identifier(argument)) return null;
+  const binding = module.referenceOf(argument)?.binding ?? null;
+  const name = binding?.declarations[0];
+  if (binding === null || name === undefined || binding.references.some((reference) => reference.isWrite)) return null;
+  const declarator = module.parentOf(name);
+  if (!is.VariableDeclarator(declarator) || declarator.id !== name || declarator.init === null) return null;
+  const declaration = module.parentOf(declarator);
+  if (!is.VariableDeclaration(declaration) || declaration.kind !== 'const') return null;
+  const functionOf = (node: Node) => [...module.ancestors(node)].find((ancestor) => is.Function(ancestor)) ?? null;
+  return functionOf(declarator) === functionOf(call) ? declarator : null;
 }
 
 /** Discarded component calls need their own setup slots, including in handlers. */

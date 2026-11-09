@@ -101,7 +101,7 @@
     "oxlint": "^1.79.0",
     "puppeteer-core": "^25.3.0",
     "rolldown": "^1.2.5",
-    "typescript": "^7",
+    "typescript": "7.1.0-beta",
     "vite": "^8.2.2",
     "wrangler": "^4.149.0",
     "yuku-parser": "^0.9.3"

@@ -25,6 +25,9 @@ per-run cleanup captures, remain unchanged (`effects.md`, `refs.md`).
 | `tests/reference/callbacks.ts` | Detects function boundaries so callback creation does not read its captures |
 | `tests/reference/closures.ts` | State in helper and factory closures: a dependency cell per invocation, recorded when a created function reads the binding |
 | `tests/reference/ast.ts` | Shared yuku AST builders for the test transforms |
+| `tests/reference/typescript.ts` | Lowers TypeScript with TypeScript itself (`typescript/sync`), so the reference shares no lowering with compiler-next |
+| `tests/reference/syntax-rules.ts` | The reference's own rules for methods that only read and literals that update field by field |
+| `tests/delivery/adopt.test.ts` | A browser adopting compiler-next's server HTML through `mount` |
 | `tests/harness/case.ts` | The `Case` and `Step` types, optional `check(container, observation)` assertions, and `defer(name)` for async cases |
 | `tests/harness/run.ts` | `behaves(name, case)`: runs the case on the reference and on a compiler, compares after each step. An exception in an event handler fails the run (the DOM only reports it as a window `error` event). `disposeRuns()` cleans up after a failed run |
 | `tests/harness/server-functions.ts` | Server function client modules, generated from `define.function` files by the framework's own generator |
@@ -134,6 +137,17 @@ passes 200 programs with seed 20261021 after stored-value support. The unchanged
 full generator still fails on lists; its nonempty-list regression is preserved as
 `tests/corpus/generated-20261023.json` for Phase 5.
 
+**The reference shares no code with compiler-next.** It used to run compiler-next's TypeScript
+lowering (`parseModule`) and import two of its rules (`callOnlyReads`, `literalFields`). A bug in
+shared code is in both, so comparisons agree and see nothing; a review found such bugs in namespace
+functions, merged type-only names and string enum aliases. Now TypeScript itself lowers the
+reference's input (`tests/reference/typescript.ts`, through the native compiler's `typescript/sync`
+API, TypeScript 7.1), and the reference writes its own rules (`tests/reference/syntax-rules.ts`).
+Only `export =` and `import x = require()` get compiler-next's meaning first, by syntax, since
+`tsc` drops them from ES modules. Optimizations are checked against the general path, which is
+emitted separately, and against explicit expectations where both could share a mistake
+(`row-reuse.dom.test.ts` lists which callbacks may be cached).
+
 ## Layers
 
 `bench/dom/compare.ts` can compare two compiler-next revisions with their matching
@@ -213,6 +227,10 @@ checks before retention checks as well as in isolation when changing this fixtur
    `next-general/` folders (`optimize.md`). Old-compiler and reference-only runs,
    including the source/readiness generator for later phases, retain their
    existing selection.
+   A third mode, **delivered**, renders the case on the server first, from its own copy of the
+   modules (`next-delivered-server/`), with `defer` and requests that never settle there, as in
+   another process. The browser then adopts that HTML (`delivery.md`, "Adopting existing nodes"),
+   and every step must match the reference. `DELIVERED=0` leaves this mode out.
 6. **Strict checks.** A compile error on valid input already fails a case. Explicit
    checks for newly introduced `try`/`catch`/`finally` and output parsing with
    `yuku-parser` are still planned for the compiler adapter. Imported output
