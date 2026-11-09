@@ -375,7 +375,8 @@ export function adoptRoot<T>(open: Node, end: Node, render: () => T): T {
     // took must not stay reachable through it.
     adopting = false;
     pool.clear();
-    if (focused instanceof Element && focused.isConnected && document.activeElement !== focused) {
+    // An element (nodeType 1), checked without a global `Element`, which a server has none of.
+    if (focused != null && focused.nodeType === 1 && focused.isConnected && document.activeElement !== focused) {
       (focused as HTMLElement).focus?.({ preventScroll: true });
     }
     if (scroll !== null && (view!.scrollX !== scroll[0] || view!.scrollY !== scroll[1])) view!.scrollTo(scroll[0], scroll[1]);

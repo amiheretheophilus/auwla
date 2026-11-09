@@ -186,7 +186,15 @@ Focus, the window's scroll, each element's scroll and a playing medium's time an
 script cannot prevent; this is a decision for the user (`../open-issues.md`).
 
 `mount` adopts when the root range starts with a number (`hydrate-program.ts`), and otherwise uses the
-old compiler's hydration, which goes with that compiler. Every server serialization of a page goes
+old compiler's hydration, which goes with that compiler. compiler-next output meeting the old markers
+without numbers is a mismatch (`cloneTemplate` throws `HydrationMismatchError`), so that hydration's own
+recovery reports it to `onHydrateError` and renders on the client in place of the server's HTML.
+
+Adoption itself reports nothing: a server node that does not fit is made fresh in silence. Reporting
+it needs numbers that agree for streamed regions too, or every streamed page would report one. Numbering
+per region rather than across the page would give that, and would let streamed regions be reused.
+
+Every server serialization of a page goes
 through `RenderSession.serialize`, so streamed HTML is numbered too. A region the server streams after
 its data settles was created later on the server than the browser creates it, so its numbers do not
 match, and the browser makes those nodes fresh; the shell around it is reused.

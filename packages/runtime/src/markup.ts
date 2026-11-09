@@ -24,6 +24,7 @@
 import { getActiveEnvironment } from './kernel';
 import type { DocumentLike } from './environment';
 import { adoptTemplate, noteTemplate, unnumbered } from './adoption';
+import { HydrationMismatchError } from './hydration-error';
 
 const templates = new WeakMap<DocumentLike, Map<string, Element>>();
 
@@ -89,14 +90,16 @@ function buildTemplate(document: DocumentLike, roots: readonly TemplateNode[], n
  *
  * A clone is a creation (`adoption.ts`): a server numbers it, and a browser
  * adopting server HTML takes the server's nodes for it when they fit. The old
- * compiler's hydration plans cannot claim it, so that environment is refused.
+ * compiler's hydration plans cannot claim it: HTML with the old markers and no
+ * numbers is a mismatch, which the hydration's own recovery answers with a
+ * client render in place of that HTML.
  */
 export function cloneTemplate(cache: TemplateCache, namespace?: 'html' | 'svg'): Node {
   const environment = getActiveEnvironment();
   // Template nodes are not creations (`adoption.ts`), so they come from the unnumbered document.
   const document = unnumbered(environment.document);
   if (environment.hydration !== undefined) {
-    throw new Error('memo-dom: compiler-next output adopts numbered server HTML, not hydration markers');
+    throw new HydrationMismatchError('template', 'numbered server HTML (compiler-next)', 'hydration markers without numbers');
   }
   const creations = environment.creations;
   const id = creations === undefined ? '' : String(creations.next());
