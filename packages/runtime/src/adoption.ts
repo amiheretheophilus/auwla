@@ -270,10 +270,70 @@ function rememberDetachedState(open: Node, end: Node): () => void {
   };
 }
 
+type FormControl = HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement;
+
+/**
+ * What the user typed, ticked or chose in the server's page before its program ran. The first
+ * client render writes each bound control's initial value, and no handler heard the user yet. So
+ * afterwards the user's value goes back into each control the render reused, and the control
+ * reports it as the user's input would have: `input`, and `change` for a choice. Its handlers then
+ * update state, and nothing the user did is lost.
+ */
+function rememberTyping(open: Node, end: Node): () => void {
+  const edited: [FormControl, () => boolean, () => void, boolean][] = [];
+  const visit = (node: Node | null, stop: Node | null): void => {
+    for (; node !== null && node !== stop; node = node.nextSibling) {
+      if (node.nodeType !== 1) continue;
+      const element = node as Element;
+      if (element.localName === 'input') {
+        const input = element as HTMLInputElement;
+        if (input.type === 'checkbox' || input.type === 'radio') {
+          const checked = input.checked;
+          if (checked !== input.hasAttribute('checked')) edited.push([input, () => input.checked === checked, () => { input.checked = checked; }, true]);
+        } else if (input.type !== 'file' && input.value !== (input.getAttribute('value') ?? '')) {
+          const value = input.value;
+          edited.push([input, () => input.value === value, () => { input.value = value; }, false]);
+        }
+      } else if (element.localName === 'textarea') {
+        const area = element as HTMLTextAreaElement;
+        const value = area.value;
+        if (value !== (area.textContent ?? '')) edited.push([area, () => area.value === value, () => { area.value = value; }, false]);
+      } else if (element.localName === 'select') {
+        const select = element as HTMLSelectElement;
+        const options = [...select.options];
+        const chosen = options.map((option) => option.selected);
+        // With no `selected` attribute, a single select starts on its first enabled option.
+        const initial = options.map((option) => option.hasAttribute('selected'));
+        if (!select.multiple && !initial.includes(true)) {
+          const first = options.findIndex((option) => !option.disabled);
+          if (first !== -1) initial[first] = true;
+        }
+        if (chosen.some((selected, index) => selected !== initial[index])) {
+          const same = () => options.every((option, index) => option.selected === chosen[index]);
+          edited.push([select, same, () => options.forEach((option, index) => { option.selected = chosen[index]!; }), true]);
+        }
+      }
+      visit(element.firstChild, null);
+    }
+  };
+  visit(open.nextSibling, end);
+  return () => {
+    for (const [control, same, put, choice] of edited) {
+      if (!control.isConnected) continue;
+      if (!same()) put();
+      const view = control.ownerDocument.defaultView;
+      const Event = view?.Event ?? globalThis.Event;
+      control.dispatchEvent(new Event('input', { bubbles: true }));
+      if (choice) control.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+  };
+}
+
 /**
  * Takes the server's nodes in [open, end] for the client render `render` runs, through a numbered
  * document. The markers and anything the pool does not hold leave the page first. Focus, the
- * window's scroll, elements' scroll and playing media survive the moment the nodes are detached.
+ * window's scroll, elements' scroll and playing media survive the moment the nodes are detached,
+ * and what the user typed is put back and reported (`rememberTyping`).
  */
 export function adoptRoot<T>(open: Node, end: Node, render: () => T): T {
   const document = open.ownerDocument!;
@@ -281,6 +341,7 @@ export function adoptRoot<T>(open: Node, end: Node, render: () => T): T {
   const view = document.defaultView;
   const scroll = view === null ? null : [view.scrollX, view.scrollY] as const;
   const restore = rememberDetachedState(open, end);
+  const replayTyping = rememberTyping(open, end);
 
   const pool = new Map<string, Node>();
   collectCreations(open.nextSibling, end, pool);
@@ -303,8 +364,9 @@ export function adoptRoot<T>(open: Node, end: Node, render: () => T): T {
       return node;
     },
   };
+  let rendered: T;
   try {
-    return runWithRenderEnvironment(
+    rendered = runWithRenderEnvironment(
       { document: numberedDocument(getActiveEnvironment().document, creations), creations },
       render,
     );
@@ -319,4 +381,7 @@ export function adoptRoot<T>(open: Node, end: Node, render: () => T): T {
     if (scroll !== null && (view!.scrollX !== scroll[0] || view!.scrollY !== scroll[1])) view!.scrollTo(scroll[0], scroll[1]);
     restore();
   }
+  // Only a finished render has the handlers that must hear what the user did.
+  replayTyping();
+  return rendered;
 }

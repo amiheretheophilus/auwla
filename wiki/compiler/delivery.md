@@ -170,6 +170,13 @@ resolved on one side only, a server render that failed), a creation finds nothin
 a new node, and an unused server node is dropped: there is no separate recovery path. Only how many
 nodes are reused depends on agreement.
 
+**Nothing the user did before the program ran is lost** (`rememberTyping`). A text typed, a box ticked
+or an option chosen differs from what the server's HTML says (its `value`, `checked` and `selected`
+attributes, or a textarea's text). The first client render writes each bound control's initial value,
+and no handler has heard the user yet. So after the render, each such control it reused gets the
+user's value back and reports it as the user's input would have: `input`, and `change` for a box,
+a radio or a select. Its handlers then update state (`tests/delivery/adopt.test.ts`).
+
 The cost is that numbered nodes leave the document for a moment, within one task, before any paint.
 Focus, the window's scroll, each element's scroll and a playing medium's time and state are restored
 (`rememberDetachedState`). An iframe inside a region, component or row loads its page again, which

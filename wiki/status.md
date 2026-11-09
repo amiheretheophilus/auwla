@@ -36,8 +36,9 @@ creations, the browser pools numbered nodes and a client render takes them. Ever
 TypeScript 7.1 lowers its input (`typescript/sync`). A review's eight findings are fixed with cases.
 Gate: 579 unit, 181 runtime, 171 data, 764 cases.
 
-Next: keep what a user typed before adoption, reading the 277 root failures that may be real, and
-`packages/vite`.
+What a user typed, ticked or chose before adoption is put back and reported to its handlers.
+
+Next: reading the 277 root failures that may be real, and `packages/vite`.
 
 ## Closing documented issues before Phase 10 (2026-11-06)
 

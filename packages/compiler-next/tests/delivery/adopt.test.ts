@@ -79,3 +79,61 @@ it('makes new nodes where the server built something else', async () => {
   host.querySelector('button')!.click();
   expect(host.textContent).toBe('2+');
 });
+
+// Typed before the program ran: the first render would write `name`'s initial value over it.
+it('keeps what the user typed and ticked before adoption, and its handlers hear it', async () => {
+  const { App } = await load('typing', `
+    export function App() {
+      let name = 'Ada';
+      let note = '';
+      let agreed = false;
+      return <main>
+        <input id="name" value={name} onInput={(event) => { name = event.target.value; }} />
+        <textarea id="note" onInput={(event) => { note = event.target.value; }}></textarea>
+        <input id="agree" type="checkbox" checked={agreed} onChange={(event) => { agreed = event.target.checked; }} />
+        <p>{name}|{note}|{agreed ? 'yes' : 'no'}</p>
+      </main>;
+    }`);
+  const html = renderToString(App as never, { markers: true });
+  const host = document.createElement('div');
+  host.id = 'root';
+  host.innerHTML = html;
+  document.body.append(host);
+  const name = host.querySelector<HTMLInputElement>('#name')!;
+  const note = host.querySelector<HTMLTextAreaElement>('#note')!;
+  const agree = host.querySelector<HTMLInputElement>('#agree')!;
+  name.value = 'Grace';
+  note.value = 'hello';
+  agree.checked = true;
+  setScheduler((run) => run());
+  mounted = mount('root', App as never);
+  expect(host.querySelector('#name') === name).toBe(true);
+  expect(name.value).toBe('Grace');
+  expect(note.value).toBe('hello');
+  expect(agree.checked).toBe(true);
+  expect(host.querySelector('p')!.textContent).toBe('Grace|hello|yes');
+});
+
+it('leaves an untouched select alone, and keeps a changed one', async () => {
+  const { App } = await load('select', `
+    export function App() {
+      let size = 's';
+      let changes = 0;
+      return <main>
+        <select id="plain" onChange={() => { changes++; }}><option>a</option><option>b</option></select>
+        <select id="size" value={size} onChange={(event) => { size = event.target.value; }}>
+          <option value="s">s</option><option value="m">m</option>
+        </select>
+        <p>{size}:{changes}</p>
+      </main>;
+    }`);
+  const html = renderToString(App as never, { markers: true });
+  const host = document.createElement('div');
+  host.id = 'root';
+  host.innerHTML = html;
+  document.body.append(host);
+  host.querySelector<HTMLSelectElement>('#size')!.value = 'm';
+  setScheduler((run) => run());
+  mounted = mount('root', App as never);
+  expect(host.querySelector('p')!.textContent).toBe('m:0');
+});
