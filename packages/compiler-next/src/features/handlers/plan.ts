@@ -39,6 +39,7 @@ export function planWrites(bindings: readonly BindingNode[]): readonly WritePlan
 
 export function planMutations(bindings: readonly BindingNode[]): readonly MutationPlan[] {
   const operations = new Map<Node, { kind: 'store' | 'delete' | 'call'; targets: { binding: BindingNode; member: Node }[] }>();
+  const byBinding = new Map(bindings.map((binding) => [binding.binding, binding]));
   for (const binding of bindings) {
     const module = binding.binding.module;
     for (const { site } of binding.writes) {
@@ -50,11 +51,40 @@ export function planMutations(bindings: readonly BindingNode[]): readonly Mutati
       }
       const kind = site.kind === 'call' || site.kind === 'argument' ? 'call' : site.kind === 'delete' ? 'delete' : 'store';
       const entry = operations.get(site.node) ?? { kind, targets: [] };
-      if (!entry.targets.some((target) => target.binding === binding)) entry.targets.push({ binding, member });
+      const reached = kind === 'call' ? [binding, ...stateBehindAccessors(binding, byBinding)] : [binding];
+      for (const target of reached) {
+        if (!entry.targets.some((existing) => existing.binding === target)) entry.targets.push({ binding: target, member });
+      }
       operations.set(site.node, entry);
     }
   }
   return [...operations].map(([operation, entry]) => ({ operation, ...entry }));
+}
+
+/**
+ * `const store = { get list() { return items; } }`, then `store.list.push(2)`. Watching `store`
+ * cannot see that edit, because a snapshot never runs a getter. What its own getters read is what
+ * such a call can reach, so those are watched too.
+ */
+function stateBehindAccessors(binding: BindingNode, byBinding: ReadonlyMap<Binding, BindingNode>): BindingNode[] {
+  const module = binding.binding.module;
+  const name = binding.binding.declarations[0];
+  const declarator = name === undefined ? null : module.parentOf(name);
+  if (!is.VariableDeclarator(declarator) || declarator.init === null) return [];
+  const init = unwrap(declarator.init);
+  if (!is.ObjectExpression(init)) return [];
+
+  const found = new Set<BindingNode>();
+  for (const property of init.properties) {
+    if (!is.Property(property) || property.kind !== 'get') continue;
+    module.walk({
+      Identifier: (_node, ctx) => {
+        const state = ctx.reference?.binding ? byBinding.get(ctx.reference.binding) : undefined;
+        if (state !== undefined && state !== binding) found.add(state);
+      },
+    }, property.value);
+  }
+  return [...found];
 }
 
 /** A new value, which nothing else holds while it is only read, stored into or returned. */

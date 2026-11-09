@@ -270,3 +270,16 @@ behaves('an async helper preserves return await', {
     expect(container.querySelector('p')?.textContent).toBe(['waiting', 'waiting', 'ready'][observation]);
   },
 });
+
+// A snapshot never runs a getter, so an edit through one reaches state the call's root cannot show.
+behaves('an edit through a getter that returns module state', {
+  source: `
+    const items = [1];
+    const store = { get list() { return items; } };
+    function Other() { return <p id="other">{items.length}</p>; }
+    export function App() {
+      return <div><button onClick={() => { store.list.push(2); }}>go</button><span id="inline">{items.length}</span><Other /></div>;
+    }
+  `,
+  steps: [{ click: 'button' }, { click: 'button' }],
+});

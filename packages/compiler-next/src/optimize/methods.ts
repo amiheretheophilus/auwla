@@ -160,7 +160,9 @@ function lowerCall(
   const wrapped = wrappedBySources(general, call);
 
   if (fact.kind === 'edit') {
-    if (wrapped || shortCircuits(callee) || call.optional) return plan;
+    // More than one root for one receiver: it is reached through a getter (`planMutations`), and the
+    // known edit reports only to the first. The general form watches them all.
+    if (wrapped || shortCircuits(callee) || call.optional || receivers.length > 1) return plan;
     return { ...plan, targets: receivers, method: { kind: 'edit' } };
   }
 

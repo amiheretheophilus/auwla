@@ -337,6 +337,12 @@ not on the reference, which counts real edits by wrapping the native methods. Ca
 - Each `writes` edge gets a reason id. A site updates only for reasons on its paths.
   This is an optimization (`optimize/reason-routing.ts` _(planned)_); without it the
   general path updates every reader of the binding.
+- **An edit through a getter.** `const store = { get list() { return items; } }`, then
+  `store.list.push(2)`. A snapshot of `store` never runs the getter, so it cannot see the edit. The
+  state a root's own getters read is what such a call can reach, so those are watched as well
+  (`stateBehindAccessors`, `features/handlers/plan.ts`), and the known-method fast path, which reports
+  to one root, leaves such a call to the general form. Found by replaying the old tests' programs
+  (`testing.md`).
 
 ## Inputs and outputs
 
