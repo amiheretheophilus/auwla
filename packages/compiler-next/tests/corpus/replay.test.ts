@@ -19,6 +19,13 @@ interface Recorded {
   readonly args: readonly [unknown, Record<string, unknown>?];
 }
 
+/**
+ * Programs that end the test process itself. `2a02ee0c60cd` recurses forever on a click
+ * (`apply` calls `forward` calls `apply`); inside a happy-dom event that kills Bun with no
+ * output, on the reference as much as on compiled code.
+ */
+const ENDS_THE_PROCESS = new Set(['2a02ee0c60cd']);
+
 const directory = process.env.CORPUS;
 const report = process.env.CORPUS_REPORT;
 const slice = process.env.CORPUS_SLICE?.split('/').map(Number);
@@ -95,15 +102,14 @@ function caseOf(recorded: Recorded): Case | string {
   if (!exported.test(root)) root = root.replace(new RegExp(`\\b(function|const)\\s+${rootName}\\b`), `export $1 ${rootName}`);
   modules[rootPath] = root;
 
-  // The harness runs `./App.tsx`, exporting `App`.
+  // The harness runs `./App.tsx`, exporting `App`. On a file system that ignores case,
+  // `./app.tsx` is that same file, so such a root becomes the entry itself.
   const isDefault = new RegExp(`export\\s+default\\s+(async\\s+)?function\\s+${rootName}\\b`).test(root);
   const exportName = isDefault ? 'default' : rootName;
   let source: string;
-  if (rootPath === './App.tsx' && rootName === 'App' && !isDefault) {
-    source = root;
+  if (/^\.\/app\.tsx?$/i.test(rootPath)) {
+    source = rootName === 'App' && !isDefault ? root : `${root}\nexport { ${rootName} as App };`;
     delete modules[rootPath];
-  } else if (rootPath === './App.tsx') {
-    return 'root is a differently named ./App.tsx';
   } else {
     source = `export { ${exportName} as App } from ${JSON.stringify(rootPath.replace(/\.tsx?$/, '').replace(/^\/?(?!\.)/, './'))};`;
   }
@@ -145,12 +151,21 @@ if (directory === undefined) {
   it.skip('needs CORPUS', () => {});
 } else {
   if (report !== undefined) writeFileSync(report, '');
+  // A program's handler can throw after its comparison is over, from a timer or a late event.
+  // One such program must not end the run for all the others.
+  const late = (error: unknown) => record(`late-error\t\t\t${String((error as Error)?.message ?? error).slice(0, 200)}`);
+  process.on('uncaughtException', late);
+  process.on('unhandledRejection', late);
   let files = readdirSync(directory).filter((file) => file.endsWith('.json')).sort();
   if (slice !== undefined) files = files.filter((_, index) => index % slice[1]! === slice[0]);
 
   for (const file of files) {
     const key = file.slice(0, 12);
     it(key, async () => {
+      if (ENDS_THE_PROCESS.has(key)) {
+        record(`skip\t${key}\tends the test process`);
+        return;
+      }
       const recorded = JSON.parse(readFileSync(join(directory, file), 'utf8')) as Recorded;
       const testCase = caseOf(recorded);
       if (typeof testCase === 'string') {
@@ -158,10 +173,16 @@ if (directory === undefined) {
         return;
       }
 
-      // The clock and chance differ between any two runs, so there is nothing to compare.
+      // The clock and chance differ between any two runs, so there is nothing to compare. An
+      // animation library edits its targets on animation frames, which are the clock too.
       const everything = [testCase.source, ...Object.values(testCase.modules ?? {})].join('\n');
-      if (/\b(Date\.now|new Date\(\)|Math\.random|performance\.now|setInterval|setTimeout)\b/.test(everything)) {
+      if (/\b(Date\.now|new Date\(\)|Math\.random|performance\.now|setInterval|setTimeout|requestAnimationFrame)\b|from ['"]animejs['"]/.test(everything)) {
         record(`skip\t${key}\tclock or chance`);
+        return;
+      }
+      // A custom element name can be defined once per process, and each program runs more than once.
+      if (/\bcustomElements\.define\b/.test(everything)) {
+        record(`skip\t${key}\tdefines a custom element`);
         return;
       }
 

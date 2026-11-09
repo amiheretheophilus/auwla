@@ -448,6 +448,19 @@ export class SourceReach {
       return this.#containerOf(module, inner.left, visiting) || this.#containerOf(module, inner.right, visiting);
     }
 
+    // `{ user: $read(…) }`, `[user]`: a literal holds what its entries hold.
+    const entry = (node: Node | null): boolean => {
+      if (node === null) return false;
+      if (is.SpreadElement(node)) return this.#unknown || this.#containerOf(module, node.argument, visiting);
+      return this.#value(module, node) || this.#containerOf(module, node, visiting);
+    };
+    if (is.ObjectExpression(inner)) {
+      return inner.properties.some((property) => is.SpreadElement(property) ? entry(property) : property.kind === 'init' && entry(property.value));
+    }
+    if (is.ArrayExpression(inner)) {
+      return inner.elements.some(entry);
+    }
+
     const binding = is.Identifier(inner) ? module.referenceOf(inner)?.binding ?? null : null;
     return binding !== null && this.#container(binding, null, visiting);
   }

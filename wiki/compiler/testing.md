@@ -249,13 +249,25 @@ checks before retention checks as well as in isolation when changing this fixtur
    | Run | Same | Differ |
    | --- | --- | --- |
    | First | 746 | 158, nearly all from the replay itself (a module imported twice kept its state) |
-   | After fixing the replay and the bugs below | 973 | 2 |
+   | After fixing the replay and the bugs below | 973 | 2 (of the programs reached before a stall) |
+   | Whole corpus, after the second round of fixes | 1,205 | 5 |
 
    Bugs it found, each now a case: the reference wrote `value` before `type` and kept `data-a` and
    `DATA-A` apart; compiler-next let an earlier `data-x={n}` overwrite a later `DATA-X`, did not trim a
    literal `class`, and read `.status` of a resource from `runtime.$fetch` as a field of its data
-   (`sources.md`). The two left: a getter returning module state edited through `store.list.push`, and
-   a positional prop (`../open-issues.md`).
+   (`sources.md`). A getter returning module state lost an edit through `store.list.push`
+   (`handlers.md`). The second round: an optional link under a source read (`forms.result?.photos.map`)
+   no longer skipped the rest of its chain; a source held in an object or array literal was read
+   before it committed; and a row's edit of module state (`todo.done = …` over a module-level
+   `todos`) never updated the page (`sources.md`, `handlers.md`).
+
+   The five left: four positional props (`../open-issues.md`), and a `refresh()` after the promise's
+   input changed, where compiler-next agrees with the old test and the reference does not
+   (`sources.md`, "Known limits of the reference"). Also not compared: an effect returning a value
+   that is not a function, which compiler-next rejects at run time; a `$fetch` POST at render, which
+   it rejects at compile time; animation libraries, which edit their targets on animation frames
+   (the clock), and which compiler-next sees only at the call (`linking.md`); custom elements, whose
+   names can be defined once per process; and one program that recurses forever on a click.
 
 The first cases are the **Cases to test** section of each concept page, written in
 `tests/cases/<page>.test.ts`. Each one is a case the old compiler rejects or shows

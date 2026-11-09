@@ -146,7 +146,7 @@ export function emitDom(plan: ModulePlan, options: CompileModulesOptions): Node 
     }
 
     let emitted = emitComponent(component, names, runtime, replacements, rowComponents, plan.refs, plan.effects.groups,
-      plan.effects.calls.some((call) => call.owner === component.fn), plan.effects.helperCleanups, data, plan.sourceFlow !== undefined, shared.importedValues, {
+      plan.effects.calls.some((call) => call.owner === component.fn), plan.effects.helperCleanups, data, plan.sourceFlow !== undefined, shared, {
         storage: sourceReadinessStorage(plan, component.fn, names),
         blocked: sourceFlow.blockedSteps,
         taken: sourceFlow.takenBindings,
@@ -207,7 +207,10 @@ function emitComponent(
   helperCleanups: boolean,
   data: string,
   sourceFlow: boolean,
-  importedValues: ReadonlyMap<Binding, readonly Expression[]>,
+  shared: {
+    readonly importedValues: ReadonlyMap<Binding, readonly Expression[]>;
+    readonly moduleNotifiers: ReadonlyMap<import('../graph').BindingNode, string>;
+  },
   readiness: {
     readonly storage: readonly Statement[];
     readonly blocked: ReadonlyMap<Node, Expression>;
@@ -282,7 +285,7 @@ function emitComponent(
     readonly.set(node, node.operator === '!==' ? expression('!$$equals', { equals }) : equals);
   }
   const handled = new Set(plan.takeovers);
-  const sources = { ...emitSources(plan.sources, data), importedValues };
+  const sources = { ...emitSources(plan.sources, data), importedValues: shared.importedValues, moduleNotifiers: shared.moduleNotifiers };
   const mutations = emitMutations(plan.mutations, state.versions, names, runtime, batch, readonly, sources);
   const writes = batch === null
     ? { replacements: mutations.replacements, declarations: [] }

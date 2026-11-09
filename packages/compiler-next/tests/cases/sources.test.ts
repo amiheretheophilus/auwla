@@ -2539,3 +2539,43 @@ behaves('a resource from a runtime the author holds shows its own status', {
     expect(container.querySelector('#loading')).not.toBeNull();
   },
 });
+
+// Wrapping `box.user?.tags` in a source read ends its chain, so the optional links are tested first.
+for (const [label, value, expected] of [
+  ['a user', { name: 'Ada', tags: ['admin'] }, '3|5'],
+  ['no user', null, 'none|none'],
+] as const) {
+  behaves(`an optional link under a source read still skips the rest of its chain: ${label}`, {
+    source: `
+      import { $read, Group } from '@memoized-dom/data';
+      export function App() {
+        const box = { user: $read(defer('user')) };
+        return <Group pending={() => <i>loading</i>}>
+          <p>{(box.user?.name.length ?? 'none') + '|' + (box.user?.tags.at?.(0).length ?? 'none')}</p>
+        </Group>;
+      }`,
+    steps: [{ resolve: 'user', value }],
+    check(container, observation) {
+      expect(container.textContent).toBe(['loading', expected][observation]!);
+    },
+  });
+}
+
+// A literal holding a source is an input of what reads through it, as a props object is.
+for (const [label, holder, read] of [
+  ['an object', '{ user: $read(defer(\'user\')) }', 'box.user.name'],
+  ['an array', '[$read(defer(\'user\'))]', 'box[0].name'],
+] as const) {
+  behaves(`a source held in ${label} literal waits before it is read`, {
+    source: `
+      import { $read, Group } from '@memoized-dom/data';
+      export function App() {
+        const box = ${holder};
+        return <Group pending={() => <i>loading</i>}><p>{${read}}</p></Group>;
+      }`,
+    steps: [{ resolve: 'user', value: { name: 'Ada' } }],
+    check(container, observation) {
+      expect(container.textContent).toBe(['loading', 'Ada'][observation]!);
+    },
+  });
+}

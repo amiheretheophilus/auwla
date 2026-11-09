@@ -283,3 +283,17 @@ behaves('an edit through a getter that returns module state', {
   `,
   steps: [{ click: 'button' }, { click: 'button' }],
 });
+
+// A row's own edit reports itself with no runtime helper, so module state needs its own notifier.
+behaves('a row edits an item of module state through its own name', {
+  source: `
+    let todos = [{ id: 1, done: false }, { id: 2, done: false }];
+    export function App() {
+      return <ul>{todos.map((todo) => <li key={todo.id} id={'t' + todo.id} onClick={() => { todo.done = !todo.done; }}>{todo.done ? 'y' : 'n'}</li>)}</ul>;
+    }
+  `,
+  steps: [{ click: '#t2' }, { click: '#t1' }, { click: '#t2' }],
+  check(container, observation) {
+    expect(container.textContent).toBe(['nn', 'ny', 'yy', 'yn'][observation]!);
+  },
+});

@@ -481,7 +481,9 @@ function planInputs(
     }
 
     const use = sources.readUse(read);
-    const path = read.path?.filter((key): key is string => key !== null) ?? [];
+    // Up to the first key it cannot name: `box[i].name` is a path into `box` only.
+    const known = read.path?.indexOf(null) ?? -1;
+    const path = (known === -1 ? read.path ?? [] : read.path!.slice(0, known)) as readonly string[];
 
     // Parameter paths can contain a resource even when the parameter itself
     // is a plain props object, and so can an alias of props or a helper's

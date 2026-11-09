@@ -17,6 +17,11 @@ interface MutationEmitOptions {
   /** Native namespaces expose initialized data roots without enumerating TDZ exports. */
   readonly importedValues?: ReadonlyMap<Binding, readonly Expression[]>;
   readonly changed?: ReadonlyMap<BindingNode, Expression>;
+  /**
+   * Module state's own notifiers. An edit that reports itself (`_edited_todos(todo.id = 2)`)
+   * runs no runtime helper to find the state holding the object, so it reports there directly.
+   */
+  readonly moduleNotifiers?: ReadonlyMap<BindingNode, string>;
 }
 
 export function emitMutations(
@@ -109,15 +114,17 @@ export function emitMutations(
     notify = names.fresh(closed.kind === 'edit' ? `_edited_${name}` : `_moved_${name}`);
     closedNotifiers.set(key, notify);
     const value = names.fresh('_value');
+    const moduleNotify = versions.has(closed.binding) ? undefined : options.moduleNotifiers?.get(closed.binding);
+    const report = moduleNotify ?? notifierOf(closed.binding);
     if (closed.kind === 'edit') {
       const edits = editCounter(closed.binding, names);
       declarations.push(statement('var $$edits = 0;', { edits }));
       declarations.push(statement('function $$notify($$value) { $$edits++; $$report(); return $$value; }', {
-        notify, value, edits, report: notifierOf(closed.binding),
+        notify, value, edits, report,
       }));
     } else {
       declarations.push(statement('function $$notify($$value) { $$report(); return $$value; }', {
-        notify, value, report: notifierOf(closed.binding),
+        notify, value, report,
       }));
     }
     return notify;

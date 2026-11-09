@@ -343,6 +343,13 @@ not on the reference, which counts real edits by wrapping the native methods. Ca
   (`stateBehindAccessors`, `features/handlers/plan.ts`), and the known-method fast path, which reports
   to one root, leaves such a call to the general form. Found by replaying the old tests' programs
   (`testing.md`).
+- **A row edits module state through its own name.** `let todos = […]` at module level, then
+  `todos.map((todo) => <li onClick={() => { todo.done = !todo.done; }}>…)`. The row's edit reports
+  itself (`_edited_todos(todo.done = …)`), with no runtime helper to find the state that holds the
+  object. In a component, the module state has no version of its own, so the edit reported to the
+  empty notifier meant for imports, and the page never changed. Module state's own notifier
+  (`_mutated_todos`) now comes from the shared owner (`moduleNotifiers` in `core/emit/shared.ts`).
+  Other edits still report through the runtime helper. Found by replaying the old tests' programs.
 
 ## Inputs and outputs
 

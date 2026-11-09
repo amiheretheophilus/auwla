@@ -4,7 +4,7 @@ import type { Expression, Node, Statement } from 'yuku-parser';
 import type { ModulePlan, SourceInputPlan } from '../../core/plan/model';
 import type { Names } from '../../core/emit/names';
 import { copy, finishCopy } from '../../core/emit/copy';
-import { expression, numberLiteral, statement, stringLiteral } from '../../core/emit/quote';
+import { expression, identifier, numberLiteral, statement, stringLiteral } from '../../core/emit/quote';
 import { cleanJsxText } from '../../core/plan/jsx';
 import type { BindingNode } from '../../core/graph';
 
@@ -321,6 +321,8 @@ export function emitSourceFlow(
     }));
   }
 
+  keepShortCircuits(module.findAll('ChainExpression'), new Set(flow.memberObjects), replacements, names, data, declarations);
+
   for (const fn of module.findAll(['FunctionDeclaration', 'FunctionExpression', 'ArrowFunctionExpression'])) {
     if (plan.components.has(fn) || plan.sharedOwners.some((owner) => owner.fn === fn)
       || !is.BlockStatement(fn.body)) {
@@ -337,6 +339,99 @@ export function emitSourceFlow(
   }
 
   return { replacements, policyOf, declarations, suspendValue, elementValue, blockedSteps, takenBindings, changedBindings };
+}
+
+/** The next link down a chain of member reads and calls, or null at its start. */
+function chainLink(node: Node): Node | null {
+  if (is.MemberExpression(node)) return node.object;
+  if (is.CallExpression(node)) return node.callee;
+  if (is.TSNonNullExpression(node)) return node.expression;
+  return null;
+}
+
+type Link = Extract<Node, { type: 'MemberExpression' | 'CallExpression' }>;
+
+/**
+ * `forms.result?.photos.map(…)`. A read wrapped in `readSourceValue(…)` ends the chain there,
+ * so an optional link inside the wrapper no longer skips the rest: with no `result`, `.map`
+ * would run on undefined. Such a chain tests the optional link's object first, once, in a
+ * module variable, and runs the rest only past that test:
+ *
+ *     (_chainHead = readSourceValue(forms).result) == null ? void 0
+ *       : readSourceValue(_chainHead.photos).map(…)
+ *
+ * A chain with several such links gets one test for each, innermost first, so any of them
+ * still skips everything after it. Every rewrite is a replacement of an authored node, so
+ * later passes still reach inside.
+ */
+function keepShortCircuits(
+  chains: readonly Extract<Node, { type: 'ChainExpression' }>[],
+  wrapped: ReadonlySet<Node>,
+  replacements: Map<Node, Node>,
+  names: Names,
+  data: string,
+  declarations: Statement[],
+): void {
+  const temporary = (hint: string): string => {
+    const name = names.fresh(hint);
+    declarations.push(statement('let $$name;', { name }));
+    return name;
+  };
+
+  /**
+   * The outermost optional link from `start` down whose skip a wrapper would end. With
+   * `anyLink`, every optional link counts: the caller reads on from it outside the chain.
+   */
+  const brokenLink = (start: Node | null, anyLink: boolean): Link | null => {
+    let underWrap = anyLink;
+    for (let node = start; node !== null; node = chainLink(node)) {
+      underWrap ||= wrapped.has(node);
+      if (underWrap && (is.MemberExpression(node) || is.CallExpression(node)) && node.optional) return node;
+    }
+    return null;
+  };
+
+  /** Rewrites the broken link from `start` down, adding the tests to pass before the chain goes on. */
+  const lift = (start: Node | null, anyLink: boolean, tests: Expression[]): void => {
+    const link = brokenLink(start, anyLink);
+    // A link another pass already rewrote holds more than a source read: it stays as it was.
+    if (link === null || (replacements.has(link) && !wrapped.has(link))) return;
+
+    const head = temporary('_chainHead');
+    let rest: Node;
+    if (is.CallExpression(link) && is.MemberExpression(link.callee) && !is.Super(link.callee.object)
+      && !replacements.has(link.callee)) {
+      // `list.at?.(0)`: the method is called on the object it was read from. That object is read
+      // outside its own chain here, so each of its optional links needs a test of its own.
+      const method = link.callee;
+      const receiver = temporary('_chainReceiver');
+      lift(method.object, true, tests);
+      const read = { ...method, object: identifier(receiver), optional: false } as Node;
+      tests.push(method.optional
+        ? expression('$$receiver = $$object', { receiver, object: method.object })
+        : expression('($$receiver = $$object, $$head = $$read)', { receiver, object: method.object, head, read }));
+      if (method.optional) tests.push(expression('$$head = $$read', { head, read }));
+      rest = { ...link, callee: expression('$$head.call', { head }), arguments: [identifier(receiver), ...link.arguments], optional: false } as Node;
+    } else {
+      // A short-circuit inside the object leaves it undefined, which this link's test catches.
+      const object = is.MemberExpression(link) ? link.object : link.callee;
+      lift(chainLink(object), false, tests);
+      tests.push(expression('$$head = $$object', { head, object }));
+      rest = is.MemberExpression(link)
+        ? { ...link, object: identifier(head), optional: false } as Node
+        : { ...link, callee: identifier(head), optional: false } as Node;
+    }
+    replacements.set(link, wrapped.has(link) ? expression('$$data.readSourceValue($$value)', { data, value: rest }) : rest);
+  };
+
+  for (const chain of chains) {
+    const tests: Expression[] = [];
+    lift(chainLink(chain.expression), false, tests);
+    if (tests.length === 0) continue;
+    const value = tests.reduceRight<Node>((rest, test) => expression('($$test) == null ? void 0 : $$rest', { test, rest }), chain.expression);
+    // A wrapper around the whole chain (a guard) keeps its key; the rewrite goes inside it.
+    replacements.set(replacements.has(chain) ? chain.expression : chain, value);
+  }
 }
 
 /** Each invocation owns its pending builder records, alongside native bindings. */

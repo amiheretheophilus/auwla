@@ -417,7 +417,12 @@ may wait, and two flags for unknown code. A binding may hold one when:
 - a statement that builds it may wait (`BodyBuilder.waits`): it has a readiness cell;
 - it is a parameter, and some known call or JSX attribute passes such a value.
   A component's props object also carries attribute values as they are, so a
-  path through props, an alias of props or a helper given props is followed;
+  path through props, an alias of props or a helper given props is followed.
+  So is a path through an object or array literal holding such a value:
+  `const box = { user: $read(…) }` makes `box.user.name` wait on the path
+  `['user', 'name']`, and `box[0]` names its key as `box.user` does. A path stops at
+  the first key it cannot name (`box[i]`). Before this, readiness never listed `box`,
+  and the read threw before the source committed;
 - it is an exported function's parameter, an import from outside the graph, or
   a captured default (assumed);
 - it comes from unknown code (a host call result, a callback parameter, a payload
@@ -441,6 +446,18 @@ not set this flag. (Assumption: authored code does not dispatch a DOM event
 synchronously inside a render expression.) Nor does `mount('root', App)`, which starts a
 root of its own with nothing from its caller. Every app calls it, so if it set the flag,
 every app whose root waits would guard all its host calls.
+
+A read wrapped in `readSourceValue(…)` ends its chain there. In `forms.result?.photos.map(…)`,
+wrapping `forms.result?.photos` meant `.map` ran on undefined when there was no `result`. A chain
+with an optional link under a wrapped read now tests the link's object first, in a module
+variable, and runs the rest only past the test (`keepShortCircuits`, `flow-dom.ts`):
+
+    (_chainHead = readSourceValue(forms).result) == null ? void 0
+      : readSourceValue(_chainHead.photos).map(…)
+
+Several such links get one test each, innermost first. A method call keeps its receiver
+(`_chainHead.call(_chainReceiver, …)`), whose own optional links are each tested, since it is read
+outside its chain. Found by replaying the old tests' programs (`testing.md`).
 
 Removing an input never changes waiting, because a value that cannot wait
 contributes nothing. A guard is removed only when it can neither return a marker
@@ -560,7 +577,11 @@ behaviour. Each gets a case when a compiler slice touches it:
 
 - More interleavings of shared owners and source generations under `suspend`.
 - Computed paths (`props[key].name`) and sources inside class instances or
-  Maps: `$path` follows static names through plain data only.
+  Maps: `$path` follows static names (and constant keys, `box[0]`) through plain data only.
+- `const promise = Promise.resolve({ id }); const user = $read(promise)`, then
+  `id++; $track(user).refresh()`. compiler-next shows the new `id`, as the old compiler's test
+  asserts (`data-forms-read-compile.test.ts`). The reference refreshes the first promise and keeps
+  the old one. Found by replaying the old tests' programs (`testing.md`).
 - Imported helpers whose sources are already warm on their first call, plus more
   re-export, closure and alias combinations.
 - Full `$track` lifecycle callbacks/cancellation, fetch validation/non-JSON

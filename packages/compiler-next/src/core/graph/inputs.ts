@@ -187,6 +187,13 @@ function isParameterOf(reference: Reference, fn: FunctionNode): boolean {
   return binding !== null && isParameter(binding) && declaringRunner(reference.module, binding) === fn;
 }
 
+/** The key a member read names: `user.name` and `list[0]` do, `list[i]` does not. */
+function memberKey(member: Extract<Node, { type: 'MemberExpression' }>): string | null {
+  if (!member.computed) return is.Identifier(member.property) ? member.property.name : null;
+  const key = member.property;
+  return is.Literal(key) && (typeof key.value === 'string' || typeof key.value === 'number') ? String(key.value) : null;
+}
+
 function readPath(reference: Reference, root?: Node): readonly (string | null)[] {
   const path: (string | null)[] = [];
   let child: Node = reference.node;
@@ -198,7 +205,7 @@ function readPath(reference: Reference, root?: Node): readonly (string | null)[]
       break;
     }
 
-    path.push(!parent.computed && is.Identifier(parent.property) ? parent.property.name : null);
+    path.push(memberKey(parent));
     child = parent;
     parent = reference.module.parentOf(child);
   }

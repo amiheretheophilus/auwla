@@ -194,6 +194,8 @@ export function emitShared(plan: ModulePlan, names: Names, runtime: string, init
   replacements = emitRefs(plan.refs.filter((ref) => !owned.has(ref.binding)), runtime, replacements, true);
   return {
     replacements, imports: state.imports, importedValues: state.importedValues,
+    /** `_mutated_todos` for module state, which a component's edit that reports itself calls. */
+    moduleNotifiers: moduleOwner?.notifiers ?? new Map<BindingNode, string>(),
     moduleBody: () => moduleOwner === undefined ? null : emitOwner(moduleOwner),
   };
 }

@@ -46,9 +46,15 @@ export class Reads {
       const path: string[] = [];
       let node: Node = reference.node;
       let parent = this.module.parentOf(node);
-      while (is.MemberExpression(parent) && parent.object === node && !parent.computed && is.Identifier(parent.property)
+      // `box.user` and `box[0]` name their key; `box[i]` does not.
+      const keyOf = (member: Extract<Node, { type: 'MemberExpression' }>): string | null => {
+        if (!member.computed) return is.Identifier(member.property) ? member.property.name : null;
+        const key = member.property;
+        return is.Literal(key) && (typeof key.value === 'string' || typeof key.value === 'number') ? String(key.value) : null;
+      };
+      while (is.MemberExpression(parent) && parent.object === node && keyOf(parent) !== null
         && parent.start >= root.start && parent.end <= root.end) {
-        path.push(parent.property.name);
+        path.push(keyOf(parent)!);
         node = parent;
         parent = this.module.parentOf(node);
       }
