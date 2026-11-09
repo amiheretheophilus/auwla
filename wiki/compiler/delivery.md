@@ -101,12 +101,15 @@ and server rendering are one path.
      `f(window)` run no trap, so `typeof window` would say "function" in HTML. A module that uses
      a global not allowed in any such way (`bareGlobals`, `module-function.ts`) is not run at all,
      even when the use is in a handler.
-   - The run starts at the root's module, so the entry may import only that component and
-     framework packages. Any other import, `import './initialize'` too, runs code first that the
-     build would not, and the page goes to the browser.
+   - The entry may import only the root component and framework packages. Any other import,
+     `import './initialize'` too, runs code first that the build would not, and the page goes to
+     the browser.
+   - The run starts at the module the entry imports the root from, under the name it imports, not
+     at the module that defines it. A module of re-exports in between (`import './initialize';
+     export { App } from './App'`) then runs with its imports, as in the browser.
    - An imported binding is read as `(0, _imports[0].f)`, so `f()` and f\`…\` keep `this`
      undefined, as in the browser.
-   These four were found by a review.
+   These were found by two reviews.
 2. **Run it.** A pure helper, `.filter().map()`, a `for` loop and an `if` simply work, with
    JavaScript's exact semantics, and there is no list of builtins to keep up to date.
 3. **Decide.** The page is `html` only if nothing can happen after it is shown: no listener, effect

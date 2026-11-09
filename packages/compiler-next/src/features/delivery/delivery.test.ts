@@ -140,6 +140,23 @@ describe('a page that needs the browser', () => {
     needsBrowser(app, modules, `import { shared } from './shared'; shared; ${MAIN}`);
   });
 
+  // The run starts where the entry imports the root from, so a module of re-exports runs first,
+  // with its own imports, as in the browser (found by a review).
+  it('runs a module of re-exports between the entry and the root', () => {
+    const app = `import { shared } from './shared'; export function App() { return <p>{shared.label}</p>; }`;
+    const modules = {
+      './shared.ts': `export const shared = { label: 'before' };`,
+      './initialize.ts': `import { shared } from './shared'; shared.label = 'after';`,
+      './index.ts': `import './initialize'; export { App } from './App';`,
+    };
+    const entry = `import { mount } from '@memoized-dom/runtime'; import { App } from './index'; mount('root', App);`;
+    const render = plan(app, modules, entry).initialRender;
+    expect(render.kind === 'html' ? render.html : null).toBe('<p>after</p>');
+    const renamed = { ...modules, './index.ts': `import './initialize'; export { App as Root } from './App';` };
+    const viaRename = plan(app, renamed, `import { mount } from '@memoized-dom/runtime'; import { Root } from './index'; mount('root', Root);`).initialRender;
+    expect(viaRename.kind === 'html' ? viaRename.html : null).toBe('<p>after</p>');
+  });
+
   it('notices a stopped run even when authored code catches it', () => {
     needsBrowser(`export function App() { let w = 0; try { w = window.innerWidth; } catch {} return <p>{w}</p>; }`);
   });

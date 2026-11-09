@@ -30,8 +30,9 @@ export interface LoweredTypeScript {
 export function lowerTypeScript(program: Program, source: string, lang: 'ts' | 'tsx', path: string): LoweredTypeScript {
   const declarations = lowerDeclarations(program, source, lang, path);
   const edits: Edit[] = [...declarations.edits];
-  // Each enum's string members so far, in source order, for a later member that names one.
-  const stringMembers = new Map<string, Set<string>>();
+  // Each enum's members so far, in source order, for a later member that names one. Keyed by scope
+  // and name (`enumKey`), so two enums named `E` in different namespaces stay apart.
+  const stringMembers = new Map<string, EnumMembers>();
 
   walk(program, {
     TSModuleDeclaration(node, ctx) {
@@ -45,7 +46,8 @@ export function lowerTypeScript(program: Program, source: string, lang: 'ts' | '
         edits.push({ start: statement.start, end: statement.end, text: '' });
         return;
       }
-      edits.push(lowerEnum(node, source, declarations.enums.get(node.start), declarations.renamed, stringMembers));
+      const scopes = enumScopes(ctx.ancestors(), source);
+      edits.push(lowerEnum(node, source, declarations.enums.get(node.start), declarations.renamed, stringMembers, scopes));
     },
     TSParameterProperty(node, ctx) {
       edits.push(...lowerParameterProperty(node, ctx.ancestors()));
@@ -88,15 +90,28 @@ function lowerEnum(
   source: string,
   placement: EnumPlacement | undefined,
   renamed: ReadonlyMap<number, string>,
-  stringMembers: Map<string, Set<string>>,
+  stringMembers: Map<string, EnumMembers>,
+  scopes: readonly string[],
 ): Edit {
   const name = node.id.name;
-  const memberNames = node.body.members.map(memberName);
   const statements: string[] = [];
   let previous: string | undefined;
-  // A merged enum adds to the members its earlier declarations made.
-  const strings = stringMembers.get(name) ?? new Set<string>();
-  stringMembers.set(name, strings);
+  // A merged enum (same name, same scope) adds to the members its earlier declarations made, and
+  // a bare name in it may be one of theirs.
+  const ownKey = enumKey(scopes[0]!, name);
+  const own = stringMembers.get(ownKey) ?? { names: new Set<string>(), strings: new Set<string>() };
+  stringMembers.set(ownKey, own);
+  for (const member of node.body.members) own.names.add(memberName(member));
+  const memberNames = [...own.names];
+  const strings = own.strings;
+  // `E.A` names the nearest enum `E` declared so far, looking outward from this one's scope.
+  const stringsOf = (enumName: string): ReadonlySet<string> | undefined => {
+    for (const scope of scopes) {
+      const found = stringMembers.get(enumKey(scope, enumName));
+      if (found !== undefined) return found.strings;
+    }
+    return undefined;
+  };
 
   for (const member of node.body.members) {
     const key = JSON.stringify(memberName(member));
@@ -105,7 +120,7 @@ function lowerEnum(
 
     if (member.initializer !== null) {
       value = withMemberReferences(member.initializer, source, name, memberNames, renamed);
-      mapsBack = !isStringValue(member.initializer, name, memberNames, stringMembers);
+      mapsBack = !isStringValue(member.initializer, name, memberNames, strings, stringsOf);
       if (!mapsBack) strings.add(memberName(member));
     } else if (previous === undefined) {
       value = '0';
@@ -143,22 +158,53 @@ function isStringValue(
   initializer: Expression,
   own: string,
   ownMembers: readonly string[],
-  stringMembers: ReadonlyMap<string, ReadonlySet<string>>,
+  ownStrings: ReadonlySet<string>,
+  stringsOf: (enumName: string) => ReadonlySet<string> | undefined,
 ): boolean {
   const value = (node: Expression): boolean => {
     if (is.Literal(node)) return typeof node.value === 'string';
     if (is.TemplateLiteral(node)) return true;
     if (is.ParenthesizedExpression(node)) return value(node.expression);
     if (is.BinaryExpression(node) && node.operator === '+') return value(node.left as Expression) || value(node.right);
-    if (is.Identifier(node)) return ownMembers.includes(node.name) && stringMembers.get(own)!.has(node.name);
+    if (is.Identifier(node)) return ownMembers.includes(node.name) && ownStrings.has(node.name);
     if (is.MemberExpression(node) && is.Identifier(node.object)) {
       const key = !node.computed && is.Identifier(node.property) ? node.property.name
         : is.Literal(node.property) && typeof node.property.value === 'string' ? node.property.value : null;
-      return key !== null && stringMembers.get(node.object.name)?.has(key) === true;
+      if (key === null) return false;
+      return (node.object.name === own ? ownStrings : stringsOf(node.object.name))?.has(key) === true;
     }
     return false;
   };
   return value(initializer);
+}
+
+/** One enum's members across its merged declarations: every name, and those whose value is a string. */
+interface EnumMembers {
+  readonly names: Set<string>;
+  readonly strings: Set<string>;
+}
+
+function enumKey(scope: string, name: string): string {
+  return `${scope}#${name}`;
+}
+
+/**
+ * The scopes an enum declaration can see, innermost first, each as a key. A namespace is keyed by
+ * its qualified name, since every `namespace A { … }` of one name is one scope and their exported
+ * enums merge; any other block by where it starts. The last key is the module's.
+ */
+function enumScopes(ancestors: readonly Node[], source: string): string[] {
+  const chain: string[] = [];
+  for (const ancestor of ancestors) {
+    if (is.TSModuleDeclaration(ancestor)) {
+      // `namespace A.B` is `namespace A { namespace B`, so both give `/ns:A/ns:B`.
+      const path = source.slice(ancestor.id.start, ancestor.id.end).split('.').map((part) => `/ns:${part.trim()}`).join('');
+      chain.push(`${chain.at(-1) ?? ''}${path}`);
+    } else if (is.BlockStatement(ancestor) || is.StaticBlock(ancestor)) {
+      chain.push(`${chain.at(-1) ?? ''}/b${ancestor.start}`);
+    }
+  }
+  return [...chain.reverse(), ''];
 }
 
 /**

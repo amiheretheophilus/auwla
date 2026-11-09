@@ -6,7 +6,7 @@ import { createHash } from 'node:crypto';
 import { is } from 'yuku-ast';
 import type { Module, Resolved } from '../../core/resolve';
 import { importedDefinition } from '../../core/resolve';
-import { frameworkPackage, isFrameworkMount } from '../../core/resolve/exports';
+import { frameworkPackage, importOf, isFrameworkMount } from '../../core/resolve/exports';
 import { importResolver } from '../../core/resolve/imports';
 import { DEFAULT_RUNTIME_PATH, type CompileModulesOptions } from '../../options';
 import { htmlKeepsItsShape } from './html-shape';
@@ -103,13 +103,16 @@ function findApplicationRoot(resolved: Resolved): ApplicationRoot | null {
   return found;
 }
 
+/**
+ * Where the run starts: the module the entry imports the root from, under the name it imports.
+ * Not the module that defines the root, which may sit behind a module of re-exports: the browser
+ * loads that one first, with whatever it imports (`import './initialize'`), so the build must too.
+ */
 function rootComponent(module: Module, tag: Parameters<Module['referenceOf']>[0]): Pick<ApplicationRoot, 'rootModule' | 'exportName'> | null {
   const binding = module.referenceOf(tag)?.binding ?? null;
-  if (binding === null) return null;
-  const definition = importedDefinition(binding);
-  if (definition === null) return null;
+  if (binding === null || importedDefinition(binding) === null) return null;
 
-  const rootModule = definition.module;
-  const exportName = rootModule.exportedNames().find((name) => rootModule.resolveExport(name)?.binding === definition);
-  return exportName === undefined ? null : { rootModule: rootModule.path, exportName };
+  const entry = importOf(binding);
+  if (entry?.resolvedModule == null || entry.name === null) return null;
+  return { rootModule: entry.resolvedModule.path, exportName: entry.name };
 }

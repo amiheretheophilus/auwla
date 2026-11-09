@@ -47,6 +47,19 @@ describe('enum', () => {
     expect(run(source, 'return Object.keys(E).sort();')).toEqual(keys);
   });
 
+  // Two enums named `E` are two enums: one's string members say nothing of the other's (found by
+  // a review). Merged declarations of one enum, in one scope, still share them.
+  it('keeps enums of one name in different scopes apart', () => {
+    const source = "namespace First { export enum E { A = 'a' } }\nnamespace Second { export enum E { A = 1, B = A } }";
+    expect(run(source, 'return [Second.E[1], Object.keys(First.E)];')).toEqual(['B', ['A']]);
+    const blocks = "{ enum E { A = 'a' } }\nenum E { A = 1, B = A }";
+    expect(run(blocks, 'return E[1];')).toBe('B');
+    const merged = "namespace N { export enum E { A = 'a' } }\nnamespace N { export enum E { B = A } }";
+    expect(run(merged, 'return Object.keys(N.E).sort();')).toEqual(['A', 'B']);
+    const outer = "enum F { X = 'x' }\nnamespace N { export enum E { A = F.X } }";
+    expect(run(outer, 'return Object.keys(N.E);')).toEqual(['A']);
+  });
+
   it('lets an initializer name earlier members', () => {
     const result = run('enum Flag { A = 1, B = 2, AB = A | B }', 'return Flag.AB;');
     expect(result).toBe(3);

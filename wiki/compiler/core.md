@@ -47,7 +47,7 @@ removing its placeholder, so later branch mounts inherit it too.
 | File | What it does |
 | --- | --- |
 | `index.ts` | `parseModule(path, source)`: language from the path (`langFromPath`), syntax errors as `CompileError` with line and column, JSX detection |
-| `lower-typescript.ts` | lowers `enum` (numbered members, reverse mapping, member names in initializers, `const enum`; `declare enum` removed) and constructor parameter properties, as `tsc` emits them, by editing the text. A member maps back unless its value is a string, which includes `B = A`, `E.A` and `A + 'x'` over a string member |
+| `lower-typescript.ts` | lowers `enum` (numbered members, reverse mapping, member names in initializers, `const enum`; `declare enum` removed) and constructor parameter properties, as `tsc` emits them, by editing the text. A member maps back unless its value is a string, which includes `B = A`, `E.A` and `A + 'x'` over a string member. Members are kept per enum, by scope and name, so two enums `E` in different namespaces or blocks stay apart, and merged declarations of one enum share names and string members |
 | `lower-namespace.ts` | lowers a runtime `namespace`, `import x = a.b`, `import x = require('m')` and `export =` as `tsc` emits them, and decides how an enum is declared when it merges or sits in a namespace |
 | `text-edits.ts` | replacing spans of source text, and where an edit lands afterwards |
 | `parse.test.ts` | unit tests |
