@@ -81,7 +81,21 @@ export function lowerWithTypeScript(
       return typeof target === 'string' && assigns.get(target) === true;
     });
     const fileName = /\.(tsx?|jsx?)$/.test(path) ? path : `${path}.tsx`;
-    const { outputText } = api!.transpileModule(forms, { fileName, compilerOptions: OPTIONS as never });
-    return [path, outputText];
+    return [path, transpile(forms, fileName)];
   }));
+}
+
+/**
+ * The native compiler is another process. On a machine short of memory it has died mid-run
+ * (`EPIPE` on its channel), and every later call failed with it; a new one is started once.
+ */
+function transpile(source: string, fileName: string): string {
+  const options = { fileName, compilerOptions: OPTIONS as never };
+  try {
+    return api!.transpileModule(source, options).outputText;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'EPIPE') throw error;
+    api = new API();
+    return api.transpileModule(source, options).outputText;
+  }
 }
