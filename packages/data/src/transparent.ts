@@ -39,13 +39,18 @@ import {
   type ModuleSourceRef,
 } from './transparent-module';
 
-/** Raised when imperative code reads a transparent value before first commit. */
+/**
+ * Raised when imperative code reads a transparent value before first commit. `sources` are the
+ * values it read, so a computation that reached them by a path the compiler could not name waits
+ * for them (`sourcesNotReady`, `whenSourceInputs`).
+ */
 export class UnresolvedDataReadError extends globalThis.Error {
   override readonly name = 'UnresolvedDataReadError';
 
   constructor(
     readonly binding?: string,
     readonly site?: string,
+    readonly sources: readonly ResolvedValue<unknown>[] = [],
   ) {
     const location = binding === undefined
       ? ''
@@ -376,10 +381,29 @@ export function readResolvedValue<T>(
   trackSourceRead(value, 'payload');
   const snapshot = snapshotOf(value);
   if (snapshot.status === 'success') return snapshot.data as T;
+  // `T` may itself be nullable; the handle is a source either way.
+  const handle = value as unknown as ResolvedValue<unknown>;
   if (snapshot.status === 'error' && snapshot.error !== null) {
+    if (typeof snapshot.error === 'object' || typeof snapshot.error === 'function') failedSources.set(snapshot.error, handle);
     throw snapshot.error;
   }
-  throw new UnresolvedDataReadError(binding, site);
+  throw new UnresolvedDataReadError(binding, site, [handle]);
+}
+
+/** The source whose failure each thrown error is, so a read of it waits as for a failed input. */
+const failedSources = new WeakMap<object, ResolvedValue<unknown>>();
+
+/**
+ * The sources an error thrown by a read is about: one with no payload yet, or one that failed.
+ * Undefined for any other error, which is the program's own.
+ */
+export function sourcesNotReady(error: unknown): readonly ResolvedValue<unknown>[] | undefined {
+  if (error instanceof UnresolvedDataReadError) return error.sources.length > 0 ? error.sources : undefined;
+  if ((typeof error === 'object' && error !== null) || typeof error === 'function') {
+    const failed = failedSources.get(error);
+    return failed === undefined ? undefined : [failed];
+  }
+  return undefined;
 }
 
 /**
@@ -503,7 +527,7 @@ export function throwResolvedValuesError(
 ): never {
   const error = resolvedValuesError(values);
   if (error !== null) throw error;
-  throw new UnresolvedDataReadError();
+  throw new UnresolvedDataReadError(undefined, undefined, values.filter((value) => snapshotOf(value).status !== 'success'));
 }
 
 /** Retry every failed prerequisite represented by one local error site. */

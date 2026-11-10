@@ -965,8 +965,10 @@ export function prepareModuleReads(
     unwrapOptionalChain(module, chain);
   }
 
+  // A call can return a handle too (`map.get('user').name`, `sources[0]().name`), which compiled
+  // code reads through as it would any source, waiting while it loads (`$when`).
   for (const member of module.findAll('MemberExpression')) {
-    if (is.MemberExpression(member.object) && !hasOptionalLink(member.object)) {
+    if ((is.MemberExpression(member.object) || is.CallExpression(member.object)) && !hasOptionalLink(member.object)) {
       member.object = runtimeCall('$value', [member.object]);
     }
   }

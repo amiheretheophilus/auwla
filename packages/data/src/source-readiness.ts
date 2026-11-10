@@ -1,5 +1,6 @@
 /** Compiler readiness values describe blocked work; payloads stay ordinary data. */
 import {
+  captureBuildScope,
   createBuildScope,
   createPresentationValue,
   currentBuildFrame,
@@ -16,6 +17,7 @@ import {
   resolvedValueSnapshot,
   resolvedValuesError,
   retryResolvedValues,
+  sourcesNotReady,
 } from './transparent';
 import type { ResolvedValue } from './types';
 import { claimCreatedSource, isSourceComputation } from './source-scope';
@@ -313,7 +315,7 @@ export function whenSourceInputs<T>(readInputs: () => readonly unknown[], comput
   let value: T | WaitingSourceInputs | undefined;
 
   if (blocked.size === 0) {
-    value = compute();
+    value = computeOrWait(compute);
 
     if (value instanceof WaitingSourceInputs) {
       blocked.add(value);
@@ -321,6 +323,27 @@ export function whenSourceInputs<T>(readInputs: () => readonly unknown[], comput
   }
 
   return finishSourceEvaluation(evaluation) ?? value as T;
+}
+
+/**
+ * The one runtime `catch` around authored code (`wiki/decisions.md`, 2026-11-10). A read the
+ * compiler could not name (`queries[tab].name`, a class field, `map.get(key).name`, a call) reaches
+ * a source with no payload yet, or a failed one, and throws. That computation waits for the source,
+ * as it would for a named input (rule 8). Any other error is the program's own and is rethrown.
+ * What the code left open when it threw (build frames, computations, observed calls) is restored as
+ * after an authored `try` (`captureBuildScope`).
+ */
+function computeOrWait<T>(compute: () => T): T | WaitingSourceInputs {
+  const restore = captureBuildScope();
+  try {
+    return compute();
+  } catch (error) {
+    const sources = sourcesNotReady(error);
+    if (sources === undefined) throw error;
+    restore();
+    for (const source of sources) resolvedValueSnapshot(source);
+    return new WaitingSourceInputs(sources);
+  }
 }
 
 /** The probe and authored branch share one evaluated test, including side effects. */

@@ -272,9 +272,28 @@ export function $waiting(values: readonly unknown[]): Waiting | undefined {
   return sources.size === 0 ? undefined : new Waiting([...sources]);
 }
 
-/** Evaluate authored code only when all of its inputs have values. */
+/** `$value` reached a source with no payload yet, or a failed one, by a path no input named. */
+class NotReady extends Error {
+  constructor(readonly sources: readonly Source[]) {
+    super('reference: an unguarded read reached a loading source');
+  }
+}
+
+/**
+ * Evaluate authored code only when all of its inputs have values. A source the inputs could not
+ * name (`queries[tab].name`, a class field, `map.get(key)`, a call) makes the computation wait as a
+ * named one does: only that error is caught, anything else is the program's own and still throws
+ * (`wiki/decisions.md`, 2026-11-10).
+ */
 export function $when(readInputs: () => unknown[], compute: () => unknown): unknown {
-  return $waiting(readInputs()) ?? compute();
+  const waiting = $waiting(readInputs());
+  if (waiting !== undefined) return waiting;
+  try {
+    return compute();
+  } catch (error) {
+    if (error instanceof NotReady) return $waiting(error.sources);
+    throw error;
+  }
 }
 
 /**
@@ -375,8 +394,8 @@ function isPlainData(value: unknown): value is object {
 /** The payload of a source. Only called inside a computation `$when` already checked. */
 export function $value(value: unknown): any {
   if (isRevoked(value)) return value;
-  const notReady = value instanceof Waiting || (value instanceof Source && !value.hasValue);
-  if (notReady) throw new Error('reference: an unguarded read reached a loading source');
+  if (value instanceof Waiting) throw new NotReady(value.sources);
+  if (value instanceof Source && !value.hasValue) throw new NotReady([value]);
   return value instanceof Source ? value.data : value;
 }
 
