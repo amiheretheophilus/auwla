@@ -177,6 +177,10 @@ All paths below are under `packages/compiler-next/`. This is test code only.
 - An ordinary `Group` adds no DOM and keeps static content mounted. Each consuming
   site settles independently. `pending` and `error` inherit separately through
   groups and component calls; an empty group passes both through.
+- A policy runs when its site evaluates (`createPresentationValue` calls it at once), so
+  what an inline policy reads, such as `pending={() => <i>{label}</i>}`, is that site's
+  input: writing `label` shows the policy again. The slot used to call it later, outside
+  any computation, and the shown policy never changed.
 - A `suspend` region prepares its active subtree off-screen and publishes together on initial mount.
   Its refs/effects run only on publication. Inactive branches and unused sources
   do not block publication. Child-owned sources and sources consumed by active

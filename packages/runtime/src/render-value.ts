@@ -31,13 +31,18 @@ interface CapturedRender {
 // Metadata stays outside the authored value. Looking it up must not invoke a
 // getter or proxy trap on an ordinary object passed to a child slot.
 const captures = new WeakMap<object, CapturedRender>();
-const presentations = new WeakMap<object, { readonly show: () => unknown; readonly retain: boolean }>();
+const presentations = new WeakMap<object, { readonly shown: unknown; readonly retain: boolean }>();
 
-/** A pending/error policy is presentation, not a new committed value for this slot. */
+/**
+ * A pending/error policy is presentation, not a new committed value for this slot. The policy
+ * runs now, in the site that asked for it, as a render value's inputs do: what it reads (an
+ * inline `pending={() => <i>{label}</i>}` reading the component's state) is that site's input,
+ * so a write shows the policy again. Run later, by the slot, its reads would reach no computation.
+ */
 export function createPresentationValue(show: () => unknown, retain = false): object {
   const value = {};
 
-  presentations.set(value, { show, retain });
+  presentations.set(value, { shown: show(), retain });
 
   return value;
 }
@@ -359,7 +364,7 @@ function createSlot(text: Text, owner: RenderOwner, indexed: boolean, scope = re
       const presentation = value !== null && typeof value === 'object' ? presentations.get(value) : undefined;
       const next = presentation === undefined ? value
         : presentation.retain && hasReadyValue ? lastReadyValue
-        : presentation.show();
+        : presentation.shown;
 
       show(next);
 

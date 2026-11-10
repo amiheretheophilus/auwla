@@ -702,6 +702,53 @@ behaves('a failed fetch exposes HTTP detail and retries', {
   },
 });
 
+// Asking whether `o` can hold a source reads its assignment, whose literal reads `o` again: the
+// question used to start over there and never end (generator seed 1474586170).
+behaves('source regressions: an object rebuilt from its own fields compiles beside a source', {
+  source: `
+    import { $fetch, Group } from '@memoized-dom/data';
+    export function App() {
+      const s0 = $fetch('/s0');
+      let o0 = { a: 0, b: 0 };
+      return <Group pending={() => <i>…</i>}>
+        <main>
+          <ul>{s0.items.map((x, i) => <li key={i}>{x * 2}</li>)}</ul>
+          <button onClick={() => { o0 = { a: o0.a, b: o0.b + 1 }; }}>{o0.b}</button>
+        </main>
+      </Group>;
+    }`,
+  steps: [{ respond: '/s0', value: { items: [1, 2] } }, { click: 'button' }],
+  check(container, observation) {
+    expect(container.querySelector('ul')?.textContent).toBe(['…', '24', '24'][observation]);
+    expect(container.querySelector('button')?.textContent).toBe(['0', '0', '1'][observation]);
+  },
+});
+
+// The policies are inline functions reading the component's state: a write updates the shown one.
+behaves('an inline Group policy shows the state it reads as it changes', {
+  source: `
+    import { $fetch, Group } from '@memoized-dom/data';
+    export function App() {
+      const user = $fetch('/user');
+      let label = 'Waiting';
+      return <main><Group pending={() => <i class="pending">{label}</i>}
+        error={({ error, retry }) => <button class="error" onClick={retry}>{label}: {error.message}</button>}>
+        <button id="change" onClick={() => { label = 'Still waiting'; }}>change</button>
+        <span id="value">{user.name}</span>
+      </Group></main>;
+    }`,
+  steps: [
+    { click: '#change' },
+    { respond: '/user', value: { message: 'offline' }, status: 503 },
+    { click: '.error' },
+    { respond: '/user', value: { name: 'Recovered' } },
+  ],
+  check(container, observation) {
+    // The waiting span shows the policy in its place.
+    expect(container.querySelector('#value')?.textContent).toBe(['Waiting', 'Still waiting', 'Still waiting: offline', 'Still waiting', 'Recovered'][observation]);
+  },
+});
+
 behaves('a module source and an imported helper preserve readiness', {
   modules: {
     './data/session.ts': `import { $fetch } from '@memoized-dom/data'; export const user = $fetch('/session');`,

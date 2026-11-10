@@ -93,6 +93,12 @@ export class SourceReach {
   #unknownWaits = false;
   /** `eval` or `with`: no binding can be excluded. */
   #everything = false;
+  /**
+   * The bindings the `#container` walk in progress has visited. A literal's entry is checked
+   * with `#value`, which can reach `#member` and ask about the same binding again
+   * (`o = { a: o.a }`): that inner question continues the walk instead of starting over.
+   */
+  #visiting: Set<Binding> | null = null;
 
   constructor(graph: SemanticGraph, components: ReadonlySet<Node>) {
     this.#components = components;
@@ -471,6 +477,16 @@ export class SourceReach {
    * are, without unwrapping; helpers and aliases can pass that object on.
    */
   #container(binding: Binding, key: string | null, visiting: Set<Binding>): boolean {
+    const outer = this.#visiting;
+    this.#visiting = visiting;
+    try {
+      return this.#walkContainer(binding, key, visiting);
+    } finally {
+      this.#visiting = outer;
+    }
+  }
+
+  #walkContainer(binding: Binding, key: string | null, visiting: Set<Binding>): boolean {
     const declaration = binding.declarations[0];
 
     if (declaration === undefined || visiting.has(binding) || importOf(binding) !== undefined) {
@@ -710,7 +726,7 @@ export class SourceReach {
         });
       }
 
-      if (this.#container(binding, key, new Set())) {
+      if (this.#container(binding, key, this.#visiting ?? new Set())) {
         return true;
       }
     }
