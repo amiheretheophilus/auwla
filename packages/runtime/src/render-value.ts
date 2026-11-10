@@ -5,6 +5,7 @@ import type { createWriteBatch } from './write-batch';
 import { reconcileList, type RowOperations } from './list-values';
 import { createRetainedListIndex, type RetainedListIndex } from './list-index';
 import { takeVerified } from './list-map';
+import { buildInScope, reserveCreationScope, type CreationScope } from './adoption';
 
 export interface RenderOwner {
   readonly id: string;
@@ -197,14 +198,20 @@ export function childSlot(
   owner: RenderOwner,
   indexed: boolean,
 ): ValueSlot | null {
+  // The site's number is taken at its first write, which every render makes at mount, so the
+  // slot an object makes later still numbers its content where the browser does (`adoption.ts`).
+  if (slot === null && !siteScopes.has(text)) siteScopes.set(text, reserveCreationScope());
   if (slot === null && (value === null || typeof value !== 'object')) {
     setTextData(text, value);
     return null;
   }
-  return slot ?? createSlot(text, owner, indexed);
+  return slot ?? createSlot(text, owner, indexed, siteScopes.get(text));
 }
+const siteScopes = new WeakMap<Text, CreationScope | undefined>();
 
-function createSlot(text: Text, owner: RenderOwner, indexed: boolean): ValueSlot {
+function createSlot(text: Text, owner: RenderOwner, indexed: boolean, scope = reserveCreationScope()): ValueSlot {
+  /** Rows made so far: each row's slot is numbered under this one by the order it was made. */
+  let rowsMade = 0;
   let currentProgram: RenderProgram | null = null;
   let currentKey: unknown;
   /** The stored JSX value last written through `writeProgram`. */
@@ -268,7 +275,7 @@ function createSlot(text: Text, owner: RenderOwner, indexed: boolean): ValueSlot
     open('mmd:value');
     const parent = text.parentNode!;
     const namespace = renderNamespace(parent, owner.namespace);
-    entry = captured.program.mount(captured.values, { ...owner, namespace });
+    entry = buildInScope(scope, 'v', () => captured.program.mount(captured.values, { ...owner, namespace }));
     currentProgram = captured.program;
     currentKey = captured.key;
 
@@ -292,7 +299,8 @@ function createSlot(text: Text, owner: RenderOwner, indexed: boolean): ValueSlot
       create(identity) {
         const anchor = text.ownerDocument.createTextNode('');
         text.parentNode!.insertBefore(anchor, text);
-        return { identity, slot: createSlot(anchor, owner, indexed), text: anchor };
+        const rowScope = scope === undefined ? undefined : { creations: scope.creations, id: `${scope.id}r${rowsMade++}` };
+        return { identity, slot: createSlot(anchor, owner, indexed, rowScope), text: anchor };
       },
       remove(row) {
         row.slot.remove();

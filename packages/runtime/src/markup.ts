@@ -102,7 +102,7 @@ export function cloneTemplate(cache: TemplateCache, namespace?: 'html' | 'svg'):
     throw new HydrationMismatchError('template', 'numbered server HTML (compiler-next)', 'hydration markers without numbers');
   }
   const creations = environment.creations;
-  const id = creations === undefined ? '' : String(creations.next());
+  const id = creations === undefined ? '' : creations.next();
   if (creations !== undefined) {
     creations.cloned = true;
     const adopted = creations.take === undefined ? null : adoptTemplate(creations, id, cache.roots, namespace ?? 'html');

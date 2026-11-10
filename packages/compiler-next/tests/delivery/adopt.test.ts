@@ -7,8 +7,8 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import '@memoized-dom/runtime/hydrate';
-import { mount, setScheduler, type MountedApplication } from '@memoized-dom/runtime';
-import { renderToString } from '@memoized-dom/server';
+import { HydrationMismatchError, mount, setScheduler, type MountedApplication } from '@memoized-dom/runtime';
+import { render, renderToString } from '@memoized-dom/server';
 import { compileModules } from '../../src';
 
 let mounted: MountedApplication | undefined;
@@ -59,6 +59,74 @@ it('takes the server nodes of a page with text, a branch, a component and rows, 
   host.querySelector('button')!.click();
   expect(host.textContent).toBe('count 2yesx2abc+');
   expect(host.querySelector('main') === before[0]).toBe(true);
+});
+
+// The server builds the pending branch, then the loaded one once its data settles; the browser,
+// given the data, builds the loaded one at once. Each region numbers its own content, so the
+// numbers still agree: the loaded branch and everything after it are taken, and nothing mismatches.
+it("takes a branch the server built after its data settled, and what follows it", async () => {
+  const { App } = await load('settled', `
+    import { $fetch } from '@memoized-dom/data';
+    export function App() {
+      const user = $fetch('/api/user');
+      let n = 1;
+      return <main>
+        {user.pending ? <span>wait</span> : <em>{user.name}</em>}
+        <ul>{[1, 2].map((k) => <li key={k}>{k}</li>)}</ul>
+        <p>after {n}</p><button onClick={() => n++}>+</button>
+      </main>;
+    }`);
+  const fetch = (() => Promise.resolve(new Response(JSON.stringify({ name: 'Ada' }), {
+    headers: { 'content-type': 'application/json' },
+  }))) as unknown as typeof globalThis.fetch;
+  const result = await render(App as never, { mode: 'resolve', fetch, markers: true });
+  expect(result.html).toContain('Ada');
+  const host = document.createElement('div');
+  host.id = 'root';
+  host.innerHTML = result.html;
+  document.body.append(host);
+  const script = document.createElement('div');
+  script.innerHTML = result.scriptTag;
+  document.body.append(script.firstElementChild!);
+  const selectors = ['main', 'em', 'li', 'p', 'button'];
+  const before = selectors.map((selector) => host.querySelector(selector));
+
+  const errors: unknown[] = [];
+  setScheduler((run) => run());
+  mounted = mount('root', App as never, { onHydrateError: (error) => { errors.push(error); } });
+  expect(errors).toEqual([]);
+  selectors.forEach((selector, index) => expect(host.querySelector(selector) === before[index]).toBe(true));
+  expect(host.textContent).toBe('Ada12after 1+');
+  host.querySelector('button')!.click();
+  expect(host.textContent).toBe('Ada12after 2+');
+});
+
+it('reports server nodes it could not use, and nothing for a page that agrees', async () => {
+  const { App } = await load('report', `
+    export function App() {
+      return <main><h1>Title</h1><p>body</p><img src="a.png" /></main>;
+    }`);
+  const html = renderToString(App as never, { markers: true });
+  for (const [served, reported] of [
+    [html, false],
+    [html.replace('<h1>', '<h3>').replace('</h1>', '</h3>'), true],
+    [html.replace(/<img[^>]*>/, ''), true],
+  ] as const) {
+    const host = document.createElement('div');
+    host.id = 'root';
+    host.innerHTML = served;
+    document.body.append(host);
+    const errors: unknown[] = [];
+    setScheduler((run) => run());
+    mounted = mount('root', App as never, { onHydrateError: (error) => { errors.push(error); } });
+    expect(errors.length > 0).toBe(reported);
+    if (reported) expect(errors[0]).toBeInstanceOf(HydrationMismatchError);
+    expect(host.querySelector('h1')!.textContent).toBe('Title');
+    expect(host.querySelector('img')).not.toBeNull();
+    mounted.unmount();
+    mounted = undefined;
+    document.body.replaceChildren();
+  }
 });
 
 it('makes new nodes where the server built something else', async () => {

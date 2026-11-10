@@ -21,7 +21,10 @@ export function installProgramHydration(capabilities: HydrationCapabilities): vo
       // compiler-next's server HTML numbers its nodes: the client render takes them (`adoption.ts`).
       const range = rootRange(host);
       if (range !== null && carriesCreations(range.open)) {
-        return initializePayload(host, definition, () => adoptRoot(range.open, range.end, () => createApplication(host, definition)));
+        return initializePayload(host, definition, () => adoptRoot(
+          range.open, range.end, () => createApplication(host, definition),
+          (error) => options.onHydrateError?.(error, 'region'),
+        ));
       }
       return initializePayload(host, definition, () => {
         const adopted = hydrateApplicationRoot(host, definition, shared);
@@ -31,8 +34,12 @@ export function installProgramHydration(capabilities: HydrationCapabilities): vo
         for (const error of adopted.recovered) options.onHydrateError?.(error, 'region');
         return mounted;
       }, error => error instanceof HydrationMismatchError);
-    } catch (error) {
-      if (!(error instanceof HydrationMismatchError)) throw error;
+    } catch (caught) {
+      if (!(caught instanceof HydrationMismatchError)) throw caught;
+      // A clone refusing the old markers (`cloneTemplate`) cannot know which root it is in.
+      const error = caught.boundary === 'template'
+        ? new HydrationMismatchError(definition.id, caught.expected, caught.actual)
+        : caught;
       options.onHydrateError?.(error, 'root');
       host.innerHTML = '';
       return createApplication(host, definition);

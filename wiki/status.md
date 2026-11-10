@@ -38,7 +38,17 @@ Gate: 579 unit, 181 runtime, 171 data, 764 cases.
 
 What a user typed, ticked or chose before adoption is put back and reported to its handlers.
 
-Next: reading the 277 root failures that may be real, and `packages/vite`.
+Adoption numbers creations by region, so a branch the server builds once its data settles is reused
+like the rest, and a server node the client could not use is reported to `onHydrateError`. Old
+hydration markers over compiler-next output recover with a client render. A second review's two
+findings are fixed (re-export modules before the root, same-named enums). Gate: 581 unit, 182 runtime,
+171 data, 764 cases.
+
+Re-running the root files with behaviour or hydration failures (2026-11-09): 31 of 283 now pass, plus
+the 4 hydration tests fixed since. Of the rest read so far, most check the old compiler's internal work
+(its generated text, its `App('App', null, [{ items }])` signature, hand-written old markers).
+
+Next: reading the rest of those root failures, and `packages/vite`.
 
 ## Closing documented issues before Phase 10 (2026-11-06)
 

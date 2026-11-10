@@ -18,28 +18,77 @@
 import type { DocumentLike } from './environment';
 import { getActiveEnvironment, runWithRenderEnvironment } from './kernel';
 import type { TemplateNode } from './markup';
+import { HydrationMismatchError } from './hydration-error';
 
 export interface Creations {
-  /** The number of the next creation. */
-  next(): number;
+  /** The number of the next creation, under the region being built: `4`, or `4b1:0` inside one. */
+  next(): string;
+  /** Runs `build` with its creations numbered under `scope`, from 0, and restores the numbering. */
+  within<T>(scope: string, build: () => T): T;
   /** Server: remember a created node's number, to write it into the HTML. */
   note?(node: Node, id: string): void;
   /** Browser: the server's node for creation `id`, while adopting. */
   take?(id: string): Node | undefined;
+  /** Browser: the node `take` gave for `id` was built differently, so a new one is made. */
+  misfit?(id: string, node: Node): void;
   /** Set once a template is cloned: compiler-next output, whose HTML carries the numbers. */
   cloned: boolean;
 }
 
 const SVG_NAMESPACE = 'http://www.w3.org/2000/svg';
 
-/** Numbers that only count, and remember each node's number for the server's HTML. */
-export function serverCreations(ids: WeakMap<object, string>): Creations {
+/**
+ * Numbering by region. A region (a conditional's branch, a list's row, a value slot's content)
+ * takes one number where it is created, and its content is numbered under it whenever it is
+ * built. So content the server builds late, such as a branch streamed once its data settles,
+ * gets the numbers the browser gives it at once, and the numbers after it are not moved.
+ */
+function numbering(): Pick<Creations, 'next' | 'within'> {
+  let prefix = '';
   let count = 0;
   return {
+    next: () => prefix + count++,
+    within(scope, build) {
+      const saved = [prefix, count] as const;
+      prefix = `${scope}:`;
+      count = 0;
+      try {
+        return build();
+      } finally {
+        [prefix, count] = saved;
+      }
+    },
+  };
+}
+
+/** Numbers that only count, and remember each node's number for the server's HTML. */
+export function serverCreations(ids: WeakMap<object, string>): Creations {
+  return {
+    ...numbering(),
     cloned: false,
-    next: () => count++,
     note: (node, id) => { ids.set(node, id); },
   };
+}
+
+/** Where a region's content is numbered: the number the region took where it was created. */
+export interface CreationScope {
+  readonly creations: Creations;
+  readonly id: string;
+}
+
+/** A region being created takes its number, for its content to be numbered under. */
+export function reserveCreationScope(): CreationScope | undefined {
+  const creations = getActiveEnvironment().creations;
+  return creations === undefined ? undefined : { creations, id: creations.next() };
+}
+
+/**
+ * Builds one part of a region (`key`: `b1` for branch 1, `r3` for the row at index 3, `v` for a
+ * value) with its creations numbered under the region. Building the same part again restarts its
+ * numbers, so the server's last build and the browser's first agree.
+ */
+export function buildInScope<T>(scope: CreationScope | undefined, key: string, build: () => T): T {
+  return scope === undefined ? build() : scope.creations.within(scope.id + key, build);
 }
 
 /**
@@ -48,9 +97,12 @@ export function serverCreations(ids: WeakMap<object, string>): Creations {
  */
 export function numberedDocument(base: DocumentLike, creations: Creations): DocumentLike {
   const created = <T extends Node>(make: () => T, fits: (node: Node) => boolean): T => {
-    const id = String(creations.next());
+    const id = creations.next();
     const taken = creations.take?.(id);
-    if (taken !== undefined && fits(taken)) return taken as T;
+    if (taken !== undefined) {
+      if (fits(taken)) return taken as T;
+      creations.misfit?.(id, taken);
+    }
     const node = make();
     creations.note?.(node, id);
     return node;
@@ -121,14 +173,20 @@ export function adoptTemplate(
   roots: readonly TemplateNode[],
   namespace: 'html' | 'svg',
 ): Node | null {
+  const fits = (node: Node | undefined, at: string, root: TemplateNode): node is Node => {
+    if (node === undefined) return false;
+    if (fitTemplate(node, root, namespace)) return true;
+    creations.misfit?.(at, node);
+    return false;
+  };
   if (roots.length === 1) {
     const node = creations.take!(id);
-    return node !== undefined && fitTemplate(node, roots[0]!, namespace) ? node : null;
+    return fits(node, id, roots[0]!) ? node : null;
   }
   const nodes: Node[] = [];
   for (let index = 0; index < roots.length; index++) {
     const node = creations.take!(`${id}.${index}`);
-    if (node === undefined || !fitTemplate(node, roots[index]!, namespace)) return null;
+    if (!fits(node, `${id}.${index}`, roots[index]!)) return null;
     nodes.push(node);
   }
   const fragment = nodes[0]!.ownerDocument!.createDocumentFragment();
@@ -212,7 +270,7 @@ export function collectCreations(start: Node | null, end: Node | null, pool: Map
   while (node !== null && node !== end) {
     let next = node.nextSibling;
     if (node.nodeType === 8) {
-      const number = /^\[(\d+(?:\.\d+)?)(\/?)$/.exec((node as Comment).data);
+      const number = /^\[(\d[\da-z:]*(?:\.\d+)?)(\/?)$/.exec((node as Comment).data);
       if (number !== null) {
         node.parentNode!.removeChild(node);
         if (number[2] === '' && next !== null && next !== end) {
@@ -334,8 +392,12 @@ function rememberTyping(open: Node, end: Node): () => void {
  * document. The markers and anything the pool does not hold leave the page first. Focus, the
  * window's scroll, elements' scroll and playing media survive the moment the nodes are detached,
  * and what the user typed is put back and reported (`rememberTyping`).
+ *
+ * Where the server built something else, `onMismatch` hears it once, after the render: a server
+ * node a creation took but could not use, or one no creation asked for. The page is right either
+ * way, since such a creation made its own node.
  */
-export function adoptRoot<T>(open: Node, end: Node, render: () => T): T {
+export function adoptRoot<T>(open: Node, end: Node, render: () => T, onMismatch?: (error: HydrationMismatchError) => void): T {
   const document = open.ownerDocument!;
   const focused = document.activeElement;
   const view = document.defaultView;
@@ -352,29 +414,36 @@ export function adoptRoot<T>(open: Node, end: Node, render: () => T): T {
     node = next;
   }
 
-  let count = 0;
   let adopting = true;
+  /** The first server node a creation took and could not use. */
+  let misfit: [string, Node] | null = null;
   const creations: Creations = {
+    ...numbering(),
     cloned: false,
-    next: () => count++,
     take(id) {
       if (!adopting) return undefined;
       const node = pool.get(id);
       pool.delete(id);
       return node;
     },
+    misfit(id, node) {
+      misfit ??= [id, node];
+    },
   };
   let rendered: T;
+  let mismatch: HydrationMismatchError | null = null;
   try {
     rendered = runWithRenderEnvironment(
       { document: numberedDocument(getActiveEnvironment().document, creations), creations },
       render,
     );
+    mismatch = adoptionMismatch(misfit, pool);
   } finally {
     // Compiled code keeps the numbered document, and with it `take`: server nodes no creation
     // took must not stay reachable through it.
     adopting = false;
     pool.clear();
+    misfit = null;
     // An element (nodeType 1), checked without a global `Element`, which a server has none of.
     if (focused != null && focused.nodeType === 1 && focused.isConnected && document.activeElement !== focused) {
       (focused as HTMLElement).focus?.({ preventScroll: true });
@@ -384,5 +453,20 @@ export function adoptRoot<T>(open: Node, end: Node, render: () => T): T {
   }
   // Only a finished render has the handlers that must hear what the user did.
   replayTyping();
+  if (mismatch !== null) onMismatch?.(mismatch);
   return rendered;
+}
+
+/** What the server built that the client render could not use, as one error, or null. */
+function adoptionMismatch(misfit: readonly [string, Node] | null, unused: ReadonlyMap<string, Node>): HydrationMismatchError | null {
+  if (misfit !== null) return new HydrationMismatchError(`creation ${misfit[0]}`, "the client's template", describe(misfit[1]));
+  for (const [id, node] of unused) {
+    return new HydrationMismatchError(`creation ${id}`, 'no node (the client did not create it)', describe(node));
+  }
+  return null;
+}
+
+function describe(node: Node): string {
+  if (node.nodeType === 1) return `<${(node as Element).localName}>`;
+  return node.nodeType === 3 ? `text "${(node as Text).data.slice(0, 40)}"` : `node of type ${node.nodeType}`;
 }

@@ -18,6 +18,7 @@
  * its parent clears in one call.
  */
 import { createComputation, publishVersions, trackRead } from './computation';
+import { buildInScope, reserveCreationScope } from './adoption';
 import { readListLength } from './list-values';
 import { lisPositions } from './list';
 import type { RenderOwner } from './render-value';
@@ -146,6 +147,8 @@ export function createRowList(
   let holes = false;
   /** Compiled rows take `(item, index)` only if they read the index. */
   const indexed = create.length > 1;
+  /** Each row is numbered under this list, by its index when it is built (`adoption.ts`). */
+  const scope = reserveCreationScope();
 
   function stableKey(item: unknown, key: unknown): boolean {
     if (keyPath === null) return true;
@@ -330,7 +333,7 @@ export function createRowList(
         }
       }
       if (row === undefined) {
-        const entry = create(item, index);
+        const entry = buildInScope(scope, `r${index}`, () => create(item, index));
         if (superseded()) {
           entry.dispose?.();
           return;

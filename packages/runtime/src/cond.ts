@@ -18,6 +18,7 @@
 
 import { getActiveEnvironment, getEntity, unregisterSubtree, type EntityId } from './kernel';
 import type { DirtyReasons } from './dirty-reasons';
+import { buildInScope, reserveCreationScope } from './adoption';
 
 export interface CondEntry {
   /** Root nodes of the mounted branch (elements or fragment children). */
@@ -78,6 +79,8 @@ export function createCondRegion(
   }
   let adopting = adoptedRange !== undefined;
   let bindingInitial = initial !== undefined;
+  // Each branch is numbered under this region, whenever it is built (`adoption.ts`).
+  const scope = reserveCreationScope();
 
   let current = -1;
   let currentIdentity: unknown;
@@ -137,7 +140,9 @@ export function createCondRegion(
     let factoryError: unknown;
     let factoryFailed = false;
     try {
-      if (factory !== null) entry = factory(bindingInitial ? true : undefined, adopting);
+      if (factory !== null) {
+        entry = buildInScope(scope, `b${idx}`, () => factory(bindingInitial ? true : undefined, adopting));
+      }
     } catch (error) {
       factoryFailed = true;
       factoryError = error;

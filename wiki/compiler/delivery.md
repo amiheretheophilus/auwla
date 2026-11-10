@@ -157,6 +157,14 @@ calls for a template's nodes. Instead (`packages/runtime/src/adoption.ts`):
    (`numberedDocument`) and `cloneTemplate`. A template's own nodes are not creations, and are built
    through the unnumbered document, since how many get built depends on a cache. The program is the
    same on the server and in the browser, so the numbers agree.
+   - **By region.** A region takes one number where it is created, and its content is numbered under
+     that number whenever it is built (`reserveCreationScope`, `buildInScope`): a conditional's branch
+     `i` as `Nbi:0`, `Nbi:1`, … (`cond.ts`), a list's row at index `i` as `Nri:…` (`row-list.ts`), a
+     value slot's content as `Nv:…` and its rows `Nri` (`render-value.ts`). Building the same part again
+     restarts its numbers. So a branch the server builds once its data settles, after a pending one,
+     gets the numbers the browser gives it at once, and nothing after it moves. A `childSlot` takes its
+     number at its first write, which every render makes at mount, though it makes its slot only for
+     the first object.
 2. **Write them.** With `markers: true`, the server writes `<!--[N-->` before creation N
    (`writeCreations`, `packages/server/src/string-document.ts`), and `<!--[N/-->` for one HTML cannot
    hold, such as an empty text. A template with several roots numbers them `N.0`, `N.1`. Only output
@@ -190,14 +198,13 @@ old compiler's hydration, which goes with that compiler. compiler-next output me
 without numbers is a mismatch (`cloneTemplate` throws `HydrationMismatchError`), so that hydration's own
 recovery reports it to `onHydrateError` and renders on the client in place of the server's HTML.
 
-Adoption itself reports nothing: a server node that does not fit is made fresh in silence. Reporting
-it needs numbers that agree for streamed regions too, or every streamed page would report one. Numbering
-per region rather than across the page would give that, and would let streamed regions be reused.
+**Adoption reports where the server built something else**, once, to `onHydrateError` (as a
+`'region'` error): the first server node a creation took and could not use (`misfit`), or else one no
+creation asked for. The page is right either way. Numbering by region is what makes this safe to
+report: a streamed region no longer looks like a mismatch (`tests/delivery/adopt.test.ts`).
 
-Every server serialization of a page goes
-through `RenderSession.serialize`, so streamed HTML is numbered too. A region the server streams after
-its data settles was created later on the server than the browser creates it, so its numbers do not
-match, and the browser makes those nodes fresh; the shell around it is reused.
+Every server serialization of a page goes through `RenderSession.serialize`, so streamed HTML is
+numbered too, and a region the server streams after its data settles is reused like the rest.
 
 ### How it is tested
 
