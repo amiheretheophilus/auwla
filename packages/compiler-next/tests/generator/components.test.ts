@@ -111,7 +111,9 @@ it('generated component combinations agree with native observations and the refe
     seed: process.env.FC_SEED === undefined ? undefined : Number(process.env.FC_SEED),
     verbose: true,
   });
-}, 120_000);
+// As long as the other generators allow: 200 programs take over two minutes on a slow machine,
+// and bun does not stop a property it timed out, which then fails the tests after it.
+}, 600_000);
 
 const customTag = fc.array(fc.constantFrom('a', 'b', 'c', 'x', 'y', 'z'), {
   minLength: 1,
@@ -181,4 +183,4 @@ it('generated markup takes each consuming namespace without changing its values'
     seed: process.env.FC_SEED === undefined ? undefined : Number(process.env.FC_SEED),
     verbose: true,
   });
-}, 120_000);
+}, 600_000);
