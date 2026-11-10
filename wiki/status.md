@@ -1,6 +1,6 @@
 # Status
 
-Last updated: 2026-11-06.
+Last updated: 2026-11-10.
 
 ## Current: Phase 10 (2026-11-06)
 
@@ -48,7 +48,23 @@ Re-running the root files with behaviour or hydration failures (2026-11-09): 31 
 the 4 hydration tests fixed since. Of the rest read so far, most check the old compiler's internal work
 (its generated text, its `App('App', null, [{ items }])` signature, hand-written old markers).
 
-Next: reading the rest of those root failures, and `packages/vite`.
+Reading the rest of those root failures (2026-11-10) found real bugs, each now fixed with a case:
+an inline `Group` policy, an object rebuilt from its own fields (stack overflow in source reach),
+region streaming of numbered pages, a module source that did not request again when its input
+changed, a closed list missing an item edit made earlier in the same pass, a custom element in an
+owner list, a stateless component's handler and a handed-out callback (a subscription, a timer, a
+listener added by hand) whose writes waited for a microtask instead of committing as they returned
+(`compiler/handlers.md`, "Callbacks"), and a `$read` whose replay went to a wrapper around the call,
+so `refresh()` threw. The rest of those files check the old compiler's generated text, its positional
+props (`Row(item)`), its entity ids or `setProps`, or differ by a decision: a global only test code
+writes is not an input, a binding follows its source until a callback reassigns it, a function with
+an effect in rows keeps them off row reuse, and refresh replays a promise from its initializer only
+when a `const` in the same function makes it. Adoption still creates one empty text node per empty
+dynamic slot (HTML cannot carry an empty text); the old compiler created none. Gate: 585 unit, 182
+runtime, 171 data, 774 cases, 10 generators at 200 programs (the component generators now allow 600 s,
+as the others do).
+
+Next: routes and `$routed`, then `packages/vite`.
 
 ## Closing documented issues before Phase 10 (2026-11-06)
 
