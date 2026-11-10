@@ -256,6 +256,14 @@ function editedMember(operation: Node): Extract<Node, { type: 'MemberExpression'
   return target !== null && is.MemberExpression(target) && !is.Super(target.object) ? target : null;
 }
 
+/**
+ * Rows that read state outside the list skip only in a pass where that state is unchanged:
+ * `whenQuiet` asks the site's computation, which keeps what it read (`core/emit/sites.ts`).
+ */
+function whenQuiet(outside: boolean, runtime: string, unedited: Expression): Expression {
+  return outside ? expression('$$runtime.whenQuiet($$unedited)', { runtime, unedited }) : unedited;
+}
+
 /** The count a row list last evaluated its rows at; one per list instance (`emitRowList`). */
 export function seenEdits(call: Node, names: Names): string {
   return names.of(call, '_seenEdits');
@@ -307,12 +315,12 @@ function emitKnownCall(
       : expression('$$list.map($$receiver, $$unedited)', {
         list: names.of(plan.operation, '_rowList'),
         receiver,
-        unedited: moved.edited
+        unedited: whenQuiet(moved.outside, runtime, moved.edited
           ? expression('$$runtime.uneditedItems($$editedAt, $$seen, $$seen = $$edits)', {
             runtime, editedAt: editedItems(moved.binding, names),
             seen: seenEdits(plan.operation, names), edits: editCounter(moved.binding, names),
           })
-          : expression('true'),
+          : expression('true')),
       }));
     return;
   }

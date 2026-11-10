@@ -17,7 +17,7 @@
  * follow the longest increasing subsequence, and a list that is the whole of
  * its parent clears in one call.
  */
-import { createComputation, publishVersions, trackRead } from './computation';
+import { createComputation, publishVersions, runningReadsChanged, trackRead } from './computation';
 import { buildInScope, reserveCreationScope } from './adoption';
 import { readListLength } from './list-values';
 import { lisPositions } from './list';
@@ -58,6 +58,16 @@ interface Row {
  * whether one item was left alone (`uneditedItems`). A row keeping such an item has nothing new.
  */
 export type Unedited = boolean | ((item: unknown) => boolean);
+
+/**
+ * For rows that also read state outside their list: `unedited` when nothing the site read has
+ * changed since its last pass, so only item edits brought it here; otherwise every row is
+ * evaluated (false). The site's computation is running and keeps its reads across passes
+ * (`begin(false)`), so `changed` still compares them with what the last pass saw.
+ */
+export function whenQuiet(unedited: Unedited): Unedited {
+  return runningReadsChanged() ? false : unedited;
+}
 
 /**
  * The items edited since `before` edits, for a closed list (`compiler-next/src/optimize/closed-lists.ts`).

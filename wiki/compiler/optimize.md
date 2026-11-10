@@ -71,7 +71,7 @@ interface Optimization {
 | `array-ops.ts` | `push`, `splice`, `sort` update only the rows they touch |
 | `dom-only-rows.ts` | rows with no reactive work are plain DOM |
 | `reason-routing.ts` | a write updates only the sites on its paths |
-| `row-edits.ts` | an edit of one item's field updates only that item's row also when rows read other state or call unknown functions, which `closed-lists.ts` cannot prove. A closed list already does this ("Closed lists"); any other list evaluates every row after an item edit. The old compiler kept the edited rows' keys (`ChangedKeys`). Measured by `tests/list-row-calculations.test.ts`, "same-row calculations": its rows call `trace()` and read `suffix`, so its text is right and its row-render counts are not (acceptance re-run, 2026-11-10) |
+| `row-edits.ts` | an edit of one item's field updates only that item's row in a list that is not closed (an item reaches unproven code). A closed list does this, also when its rows read other state or call the program's pure functions ("Closed lists"); any other list evaluates every row after an item edit. Rows calling a function with an effect (`trace()` logging) are not row lists at all, by the row-reuse rule, so the old tests' row-render counts for those stay higher. The old compiler kept the edited rows' keys (`ChangedKeys`). Measured by `tests/list-row-calculations.test.ts`, "same-row calculations": its rows call `trace()` and read `suffix`, so its text is right and its row-render counts are not (acceptance re-run, 2026-11-10) |
 | `static-hoist.ts` | static templates are created once |
 
 ## Called functions
@@ -211,8 +211,10 @@ method and is always reported, so `stack.push(x)` on a custom class still update
 outside its own locals, deletes nothing and does not suspend. Calls are allowed
 when the compiler knows they only read: the methods above, pure host functions
 (`String`, `Math.*`, `JSON.*`, `Object.keys`, …) and, for observation only
-(`ownFunctions`), the program's own effect-free functions. Row reuse does not accept
-those, because it skips the callback and cannot see the function's reads.
+(`ownFunctions`), the program's own effect-free functions. Row reuse cannot see such a
+function's reads, since they are not the callback's, so it accepts one only when nothing
+it reads can change and it reads only `STABLE_GLOBALS` (`pureOwnFunction`,
+`closed-lists.ts`): `format(price)`, not `track(id)` writing a log, nor one reading state.
 
 Observation asks a narrower question: can this call edit an object? So it also accepts
 writes to plain names (`nameWrites`): `items.forEach((i) => { total += i.price; })`
@@ -252,7 +254,9 @@ list, which then takes the general path.
 | `lib.track(rows[0])`, `held.set('a', rows[0])`, `picked = rows[0]` | no: it left |
 | `{ meta: { n: 1 } }`, `new Row()`, `{ get label() {…} }` | no: not a record of primitives |
 | `const row = rows[0]; row.label = 'x'` | no: the edit needs the alias index |
-| `rows.map((row) => <li>{fmt(row)}</li>)` | closed, but rows are not skipped: `fmt` may read anything |
+| `rows.map((row) => <li>{fmt(row)}</li>)` | closed, but rows are not skipped: `fmt` is passed an item and may read anything |
+| `rows.map((row) => <li>{format(row.label)}{suffix}</li>)` | yes, rows skipped: `format` has no effect and reads nothing that changes; `suffix` is tracked |
+| `rows.map((row) => <li>{track(row.id, row.label)}</li>)`, `track` writing a log | closed, but not a row list: skipping the row would skip the write |
 
 What it buys, with nothing checked at runtime:
 
@@ -266,8 +270,16 @@ What it buys, with nothing checked at runtime:
   all of them (`row-lists.dom.test.ts`, "evaluates only the rows whose items were
   edited"). An edit whose item is not a member store notes every item. A pass still
   evaluates everything after a routed value changed, after `invalidate`, or after a pass
-  that did not finish. A row skipped has only item fields, its index, constants and
-  routed comparisons to show.
+  that did not finish. A row skipped has only item fields, its index, constants,
+  routed comparisons, the program's own pure functions of those (`pureOwnFunction`: no
+  effect, reads nothing that changes, only `STABLE_GLOBALS`) and tracked state outside
+  the list to show.
+- Rows that read state outside the list (`State` or `Derived`, never the list itself) are
+  skipped only in a pass where nothing but items changed. The site's computation then
+  begins without a reset (`begin(false)`, `RowListPlan.moved.outside`), so a pass that skips
+  rows keeps what they read, and `whenQuiet(unedited)` returns `false`, every row, when any
+  of it changed (`row-lists.dom.test.ts`, "evaluates only edited rows when rows also read
+  outside state").
 - A list may start from the program's own builder (`let rows = build(30)`): the binding is
   derived from that call, which reads nothing that changes, so it is computed once
   (`readsNothingChanging`). A builder reading a counter that changes (`next++`) is not.

@@ -342,7 +342,10 @@ export function emitSites(
         ? statement('const $$next = $$expression;', { next, expression })
         : statement('$$expression;', { expression })];
     if (computation !== null) {
-      body.unshift(statement('$$computation.begin();', { computation }));
+      // Rows that read state outside their list keep the site's reads across passes: a pass
+      // that skips a row does not read again what that row read (`RowListPlan.moved`).
+      const keeps = rowList !== null && site.kind === 'text' && site.rows!.moved?.outside === true;
+      body.unshift(statement(keeps ? '$$computation.begin(false);' : '$$computation.begin();', { computation }));
       body.push(statement('$$computation.end();', { computation }));
     }
     if (parts !== null) {

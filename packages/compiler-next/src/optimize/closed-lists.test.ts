@@ -135,16 +135,27 @@ it('keeps a function from storing an unproven value through any of its calls', (
   expect(compile('lib.on(add);', { body, row: proven }).includes('.map(rows, ')).toBe(false);
 });
 
-it('closes a list but evaluates rows that read something other than their item', () => {
+it('closes a list but evaluates rows that read something that changes with no write', () => {
   for (const row of [
-    '<li key={row.id}>{format(row.id)}</li>',
-    '<li key={row.id}>{prefix}{row.id}</li>',
     '<li key={row.id}>{Math.random()}</li>',
     '<li key={row.id}>{Date.now()}</li>',
-    '<li key={row.id} title={prefix}>{row.id}</li>',
+    '<li key={row.id}>{stamp(row.id)}</li>',
+    '<li key={row.id}>{log(row.id)}</li>',
   ]) {
-    const code = compile('rows = rows.slice();', { row, top: 'function format(x) { return x; }', body: "let prefix = 'a'; const other = () => { prefix = 'b'; };" });
+    const code = compile('rows = rows.slice();', {
+      row, top: 'function stamp(x) { return x + Date.now(); } function log(x) { globalThis.seen = x; return x; }',
+    });
     expect([row, skips(code)]).toEqual([row, false]);
+  }
+  // A pure function of the item is the item's; state outside the list is tracked, and its rows
+  // skip only in a pass where nothing but items changed (`whenQuiet`).
+  for (const [row, quiet] of [
+    ['<li key={row.id}>{format(row.id)}</li>', false],
+    ['<li key={row.id}>{prefix}{row.id}</li>', true],
+    ['<li key={row.id} title={prefix}>{row.id}</li>', true],
+  ] as const) {
+    const code = compile('rows = rows.slice();', { row, top: 'function format(x) { return x; }', body: "let prefix = 'a'; const other = () => { prefix = 'b'; };" });
+    expect([row, skips(code), code.includes('whenQuiet(true)')]).toEqual([row, true, quiet]);
   }
   // A key that reads the index moves with it.
   const keyed = compile('rows.reverse();', { row: '<li key={index}>{row.id}</li>' });

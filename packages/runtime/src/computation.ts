@@ -197,6 +197,20 @@ function depend(frame: Frame, key: object, dependency: Dependency): void {
   }
 }
 
+/**
+ * Whether a value the running computation read has changed since it last settled. Only a
+ * computation begun without a reset (`begin(false)`) still holds its reads while it runs
+ * (`whenQuiet` in `row-list.ts`).
+ */
+export function runningReadsChanged(): boolean {
+  const dependencies = store().current?.dependencies;
+  if (dependencies == null) return false;
+  for (const dependency of dependencies.values()) {
+    if (dependency.read() !== dependency.seen) return true;
+  }
+  return false;
+}
+
 export function resetComputationScope(): void {
   const state = store();
   state.current = null;

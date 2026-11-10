@@ -36,7 +36,7 @@ import { alwaysPrimitive } from '../core/plan/template';
 import { valueExportNames } from '../core/resolve/exports';
 import { functionValue, type FunctionNode } from '../core/resolve/functions';
 import { destructuredProps, type DestructuredProp } from '../features/components/plan';
-import { callOnlyReads, effectFree } from './effects';
+import { callOnlyReads, effectFree, STABLE_GLOBALS } from './effects';
 import { methodFact, redefinedNames } from './method-facts';
 import type { Optimization } from '.';
 
@@ -115,8 +115,14 @@ class Proof {
   readonly #rowComponents = new Set<Node>();
   readonly #resolving = new Set<Binding>();
   readonly #afterwards: (() => void)[] = [];
+  /** Whether the row being checked reads state outside the list (`rowIsStable`). */
+  #outside = false;
+  /** Parameters of a function being checked by `#returnsFromInputs`: its inputs. */
+  readonly #inputs = new Set<Binding>();
+  readonly #checking = new Set<Node>();
 
   constructor(
+    private readonly graph: SemanticGraph,
     private readonly root: Binding,
     private readonly plan: ModulePlan,
     private readonly rowsByCall: ReadonlyMap<Node, RowListPlan>,
@@ -1020,8 +1026,17 @@ class Proof {
 
   // ---- Which rows need no update ----
 
-  /** Whether a row is a function of its item and index, and of nothing else. */
-  rowIsStable(module: Module, rows: RowListPlan, sites: readonly Site[]): boolean {
+  /**
+   * Whether a row is a function of its item and index, and of state outside the list (`outside`),
+   * and of nothing else. State outside the list is read through compiled reads the site's
+   * computation records, so the site can tell when only items were edited (`whenQuiet`).
+   */
+  rowIsStable(module: Module, rows: RowListPlan, sites: readonly Site[]): { readonly outside: boolean } | null {
+    this.#outside = false;
+    return this.#rowIsStable(module, rows, sites) ? { outside: this.#outside } : null;
+  }
+
+  #rowIsStable(module: Module, rows: RowListPlan, sites: readonly Site[]): boolean {
     const routed = new Set<Node>(rows.routes.map((route) => route.node));
     const stable = (expression: Node): boolean => this.#deterministic(module, expression, routed);
     if (rows.key !== null && !stable(rows.key)) return false;
@@ -1068,17 +1083,27 @@ class Proof {
     if (is.Identifier(value)) {
       const binding = module.referenceOf(value)?.binding;
       if (binding === null || binding === undefined) return value.name === 'undefined';
+      if (this.#inputs.has(binding)) return true;
       if (this.#aliases.get(binding) === 'scalar' && binding.references.every((reference) => !reference.isWrite)) {
         return is.Identifier(binding.declarations[0]!) && this.#aliases.has(binding);
       }
+      if (this.#tracked(binding)) return true;
       const declarator = module.parentOf(binding.declarations[0]!);
       return is.VariableDeclarator(declarator) && declarator.init !== null && is.Literal(unwrap(declarator.init))
         && binding.references.every((reference) => !reference.isWrite);
     }
-    if (is.MemberExpression(value)) return this.#kindOf(module, value) === 'scalar';
+    if (is.MemberExpression(value)) {
+      if (this.#kindOf(module, value) === 'scalar') return true;
+      // A field of state outside the list: an edit of it reports, as the state's other writes do.
+      const object = unwrap(value.object);
+      const binding = is.Identifier(object) ? module.referenceOf(object)?.binding : null;
+      return binding != null && this.#tracked(binding)
+        && (!value.computed || this.#deterministic(module, value.property, routed));
+    }
     if (is.CallExpression(value)) {
       const callee = unwrap(value.callee);
       if (!value.arguments.every((argument) => this.#deterministic(module, argument, routed))) return false;
+      if (is.Identifier(callee) && this.#returnsFromInputs(module, callee, routed)) return true;
       if (is.Identifier(callee)) return DETERMINISTIC_GLOBALS.has(callee.name) && module.referenceOf(callee)?.binding == null;
       if (!is.MemberExpression(callee)) return false;
       const name = fieldName(callee);
@@ -1089,6 +1114,71 @@ class Proof {
     }
     return false;
   }
+
+  /**
+   * State outside the list whose reads the compiled row records (`State`, `Derived`): never the
+   * list itself or an alias of it, whose changes of which items it holds no item edit reports.
+   */
+  #tracked(binding: Binding): boolean {
+    // Inside a called function, a read of component state is not always compiled as a tracked
+    // read (`#returnsFromInputs`).
+    if (this.#checking.size > 0 || this.#aliases.has(binding)) return false;
+    const node = this.graph.bindings.get(binding);
+    if (node === undefined || (node.kind !== 'State' && node.kind !== 'Derived')) return false;
+    this.#outside = true;
+    return true;
+  }
+
+  /**
+   * A call of the program's own function whose result is made from its arguments and constants
+   * alone (`format(price) { return price.toFixed(2) + ' €'; }`): it has no effect, so a skipped
+   * row loses nothing (`optimize.md`, "Row reuse"), and reads nothing that can change, which a
+   * row that is not evaluated again would miss.
+   */
+  #returnsFromInputs(module: Module, callee: Node, routed: ReadonlySet<Node>): boolean {
+    // Its own module only: `functionValue` also follows an import to its definition.
+    const binding = module.referenceOf(callee)?.binding;
+    if (binding == null || binding.module !== module) return false;
+    const definition = binding.definition()?.binding;
+    if (definition != null && definition !== binding) return false;
+    const fn = functionValue(module, callee);
+    if (fn === null || fn.async || fn.generator || this.#checking.has(fn)) return false;
+    if (!pureOwnFunction(module, this.graph, fn)) return false;
+    const params: Binding[] = [];
+    for (const param of fn.params) {
+      if (!is.Identifier(param)) return false;
+      const parameter = bindingOfParameter(module, param);
+      if (parameter === null || parameter.references.some((reference) => reference.isWrite)) return false;
+      params.push(parameter);
+    }
+    this.#checking.add(fn);
+    for (const parameter of params) this.#inputs.add(parameter);
+    try {
+      if (is.ArrowFunctionExpression(fn) && fn.expression === true) return this.#deterministic(module, fn.body as Node, routed);
+      const returns = findReturns(fn);
+      return returns.every((statement) => statement.argument === null || this.#deterministic(module, statement.argument, routed));
+    } finally {
+      this.#checking.delete(fn);
+      for (const parameter of params) this.#inputs.delete(parameter);
+    }
+  }
+}
+
+/** The `return` statements of `fn` itself, not of the functions inside it. */
+function findReturns(fn: FunctionNode): Extract<Node, { type: 'ReturnStatement' }>[] {
+  const found: Extract<Node, { type: 'ReturnStatement' }>[] = [];
+  const visit = (node: Node): void => {
+    if (is.ReturnStatement(node)) found.push(node);
+    for (const value of Object.values(node)) {
+      for (const child of Array.isArray(value) ? value : [value]) {
+        if (child === null || typeof child !== 'object' || typeof (child as Node).type !== 'string') continue;
+        if (is.Function(child as Node)) continue;
+        visit(child as Node);
+      }
+    }
+  };
+  visit(fn.body as Node);
+  return found;
 }
 
 function eachRowList(sites: readonly Site[], visit: (site: Site, rows: RowListPlan) => void): void {
@@ -1135,6 +1225,32 @@ function readsNothingChanging(module: Module, graph: SemanticGraph, node: Bindin
     if (edge.reference === null || edge.target.writes.length > 0) return false;
     const fn = functionValue(module, edge.reference.node);
     return fn !== null && functionReadsNothingChanging(module, graph, fn, seen);
+  });
+}
+
+/**
+ * The program's own function, called in a row that may not be evaluated again: it has no
+ * effect (`effects.ts`), and nothing it reads from outside itself can change. Row reuse accepts
+ * the same functions (`row-reuse.ts`).
+ */
+export function pureOwnFunction(module: Module, graph: SemanticGraph, fn: FunctionNode): boolean {
+  return !fn.async && !fn.generator && effectFree(module, fn) && readsOnlyStableGlobals(module, fn)
+    && functionReadsNothingChanging(module, graph, fn, new Set());
+}
+
+/**
+ * Globals that give the same value every time (`STABLE_GLOBALS`), and not `Math.random`:
+ * `Date.now()` edits nothing, yet a row not evaluated again would keep the old time.
+ */
+function readsOnlyStableGlobals(module: Module, fn: FunctionNode): boolean {
+  return module.references.every((reference) => {
+    if (reference.binding !== null || reference.inTypePosition) return true;
+    const node = reference.node;
+    if (node.start < fn.start || node.end > fn.end) return true;
+    if (!is.Identifier(node) || !STABLE_GLOBALS.has(node.name)) return false;
+    const parent = module.parentOf(node);
+    return !(node.name === 'Math' && is.MemberExpression(parent) && parent.object === node
+      && (parent.computed || !is.Identifier(parent.property) || parent.property.name === 'random'));
   });
 }
 
@@ -1206,7 +1322,7 @@ export const closedLists: Optimization = {
     }
 
     const closed = new Map<Node, MutationPlan['closed']>();
-    const moved = new Map<Node, BindingNode>();
+    const moved = new Map<Node, { readonly binding: BindingNode; readonly outside: boolean }>();
     const direct = new Map<Node, Site>();
     const scalarText = new Map<Node, ReadonlySet<Node>>();
     const rootNodes = new Set<BindingNode>();
@@ -1217,7 +1333,7 @@ export const closedLists: Optimization = {
       const node = graph.bindings.get(binding);
       if (node === undefined || !candidate(general, graph, node, rowLists)) continue;
 
-      const proof = new Proof(binding, general, rowLists, planned);
+      const proof = new Proof(graph, binding, general, rowLists, planned);
       if (!proof.prove()) continue;
 
       rootNodes.add(node);
@@ -1228,8 +1344,9 @@ export const closedLists: Optimization = {
 
       for (const rows of lists) {
         const sites = rowSites(general, rows);
-        if (!proof.rowIsStable(module, rows, sites)) continue;
-        moved.set(rows.call, node);
+        const stable = proof.rowIsStable(module, rows, sites);
+        if (stable === null) continue;
+        moved.set(rows.call, { binding: node, outside: stable.outside });
         const scalars = sites.filter((site): site is Extract<Site, { kind: 'text' }> => {
           return site.kind === 'text' && !site.primitive && proof.isScalar(module, site.expression);
         });
@@ -1250,9 +1367,10 @@ export const closedLists: Optimization = {
           return { ...mutation, closed: fact };
         }
         if (readCalls.has(mutation.operation)) return { ...mutation, method: { kind: 'read' } };
-        const binding = moved.get(mutation.operation);
-        if (binding !== undefined && mutation.method !== undefined) {
-          return { ...mutation, method: { ...mutation.method, moved: { binding, edited: editedRoots.has(binding) } } };
+        const rows = moved.get(mutation.operation);
+        if (rows !== undefined && mutation.method !== undefined) {
+          const { binding, outside } = rows;
+          return { ...mutation, method: { ...mutation.method, moved: { binding, edited: editedRoots.has(binding), outside } } };
         }
         return mutation;
       });
@@ -1265,8 +1383,9 @@ export const closedLists: Optimization = {
       if (site.kind !== 'text') return site;
       if (direct.has(site.expression)) return { ...site, primitive: true, guardDisposal: false };
       if (site.rows === undefined) return site;
-      const binding = moved.get(site.rows.call);
-      const rows = binding === undefined ? site.rows : { ...site.rows, moved: { binding, edited: editedRoots.has(binding) } };
+      const fact = moved.get(site.rows.call);
+      const rows = fact === undefined ? site.rows
+        : { ...site.rows, moved: { binding: fact.binding, edited: editedRoots.has(fact.binding), outside: fact.outside } };
       return { ...site, rows: rewriteRow(rows) };
     });
 

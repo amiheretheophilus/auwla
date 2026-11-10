@@ -540,3 +540,26 @@ behaves('closed list: a read method whose callback returns an item keeps its use
     expect(text(container)).toBe(['a', 'b', 'b'][observation]);
   },
 });
+
+// Rows that read state outside the list skip only in a pass where nothing but items changed
+// (`whenQuiet`): an item edit and a change of `suffix` in one handler update every row.
+behaves('closed list: rows reading outside state and a pure function follow both', {
+  source: `
+    function format(label) { return label.toUpperCase(); }
+    let suffix = '!';
+    export function App() {
+      let rows = [{ id: 1, label: 'a' }, { id: 2, label: 'b' }];
+      let shown = 0;
+      return <main>
+        <button id="edit" onClick={() => { rows[0].label = 'x'; }}>edit</button>
+        <button id="both" onClick={() => { rows[1].label = 'y'; suffix = '?'; }}>both</button>
+        <button id="outside" onClick={() => { suffix = '.'; shown++; }}>outside</button>
+        <button id="copy" onClick={() => { rows = rows.slice().reverse(); }}>copy</button>
+        <ul>{rows.map((row) => <li key={row.id}>{format(row.label)}{suffix}{shown}</li>)}</ul>
+      </main>;
+    }`,
+  steps: [{ click: '#edit' }, { click: '#both' }, { click: '#outside' }, { click: '#copy' }, { click: '#edit' }],
+  check(container, observation) {
+    expect(text(container)).toBe(['A!0B!0', 'X!0B!0', 'X?0Y?0', 'X.1Y.1', 'Y.1X.1', 'X.1X.1'][observation]);
+  },
+});

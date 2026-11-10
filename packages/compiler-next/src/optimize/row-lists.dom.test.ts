@@ -154,6 +154,42 @@ it('evaluates only the rows whose items were edited', async () => {
   expect([...general.host.querySelectorAll('li')].map((row) => row.textContent)).toEqual(labels());
 });
 
+// Rows that also read state outside the list, and call a function of the program that only
+// computes from its arguments (tests/module-list-targeting.test.ts): an item edit evaluates its
+// row alone; a change of the outside state evaluates every row.
+it.each(['component', 'module'])('evaluates only edited rows when rows also read outside state (%s state)', async (where) => {
+  const updated = watchRowUpdates();
+  const state = `let rows = [{ id: 1, label: 'a' }, { id: 2, label: 'b' }, { id: 3, label: 'c' }];
+      let suffix = '!';`;
+  const source = `
+    function format(label) { return label.toUpperCase(); }
+    ${where === 'module' ? state : ''}
+    export function App() {
+      ${where === 'component' ? state : ''}
+      return <main><ul>{rows.map((row) => <li key={row.id}>{format(row.label)}{suffix}</li>)}</ul>
+        <button id="first" onClick={() => { rows[0].label = 'x'; }}>first</button>
+        <button id="both" onClick={() => { rows[2].label = 'y'; suffix = '?'; }}>both</button>
+        <button id="suffix" onClick={() => { suffix = '.'; }}>suffix</button></main>;
+    }`;
+  const { host, click } = await mount(source, true);
+  const labels = () => [...host.querySelectorAll('li')].map((row) => row.textContent);
+  click('first');
+  expect(updated).toEqual([1]);
+  expect(labels()).toEqual(['X!', 'B!', 'C!']);
+  updated.length = 0;
+  click('both');
+  expect(updated).toEqual([1, 2, 3]);
+  expect(labels()).toEqual(['X?', 'B?', 'Y?']);
+  updated.length = 0;
+  click('suffix');
+  expect(updated).toEqual([1, 2, 3]);
+  expect(labels()).toEqual(['X.', 'B.', 'Y.']);
+  updated.length = 0;
+  click('first');
+  expect(updated).toEqual([1]);
+  expect(labels()).toEqual(['X.', 'B.', 'Y.']);
+});
+
 it('merges multiple selection routes and updates their union once in row order', async () => {
   const updated = watchRowUpdates();
   const { host, click } = await mount(`

@@ -104,6 +104,12 @@ export interface RowListPlan {
     readonly binding: BindingNode;
     /** Whether anything edits its items; otherwise no pass can see an edit. */
     readonly edited: boolean;
+    /**
+     * Whether a row also reads state outside the list. The site then keeps what it read
+     * across passes, and skips rows only in a pass where nothing but items changed
+     * (`whenQuiet` in `runtime/src/row-list.ts`).
+     */
+    readonly outside: boolean;
   };
   readonly row:
     /** An element, planned as stored JSX. */

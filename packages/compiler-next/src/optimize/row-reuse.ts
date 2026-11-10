@@ -28,6 +28,8 @@ import { isReactive, type SemanticGraph } from '../core/graph';
 import type { ModulePlan } from '../core/plan/model';
 import { importedDefinition } from '../core/resolve';
 import { effectFree, STABLE_GLOBALS } from './effects';
+import { functionValue } from '../core/resolve/functions';
+import { pureOwnFunction } from './closed-lists';
 
 export interface RowReuse {
   readonly usesIndex: boolean;
@@ -68,9 +70,35 @@ export function rowReuse(general: ModulePlan, graph: SemanticGraph, callback: No
   if (!is.ArrowFunctionExpression(callback) || callback.async || callback.params.length > 2) return null;
   if (callback.params.some((param) => is.RestElement(param))) return null;
   const module = general.module.module;
-  if (!effectFree(module, callback) || !returnsJsx(callback)) return null;
+  if (!effectFree(module, callback, { ownFunctions: true }) || !ownCallsPure(module, graph, callback) || !returnsJsx(callback)) return null;
   if (!freeReadsTracked(general, graph, module, callback)) return null;
   return { usesIndex: callback.params.length === 2 };
+}
+
+/**
+ * Each of the program's own functions the callback calls has no effect and reads nothing that
+ * can change (`pureOwnFunction`): its reads are not the callback's, so a reused row would miss
+ * a change they see.
+ */
+function ownCallsPure(module: Module, graph: SemanticGraph, callback: Node): boolean {
+  let pure = true;
+  walk(callback, {
+    enter: (node, ctx) => {
+      if (node !== callback && is.Function(node)) {
+        ctx.skip();
+        return;
+      }
+      if (!is.CallExpression(node)) return;
+      const callee = unwrap(node.callee);
+      if (!is.Identifier(callee) || module.referenceOf(callee)?.binding == null) return;
+      const fn = functionValue(module, callee);
+      if (fn !== null && !pureOwnFunction(module, graph, fn)) {
+        pure = false;
+        ctx.stop();
+      }
+    },
+  });
+  return pure;
 }
 
 function freeReadsTracked(general: ModulePlan, graph: SemanticGraph, module: Module, callback: Node): boolean {
