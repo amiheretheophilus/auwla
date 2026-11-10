@@ -974,6 +974,29 @@ behaves('a module $read whose promise reads a module input later keeps its first
   },
 });
 
+// The alias passes the promise to `$read`, which could edit it, so the call is observed. The replay
+// went to that observation's `finish(…)` instead of `$read`, and `refresh()` threw "This read source
+// has no replay operation" (tests/data-forms-read-compile.test.ts, "retries an outer const promise").
+// A promise from another function refreshes as itself, as in the reference.
+behaves('a $read of a module promise through an alias refreshes', {
+  source: `
+    import { $read, $track, Group } from '@memoized-dom/data';
+    let made = 0;
+    const promise = Promise.resolve().then(() => ({ attempt: ++made }));
+    const alias = promise;
+    export function App() {
+      const value = $read(alias);
+      const request = $track(value);
+      return <Group pending={() => <i>loading</i>}><main>
+        <button onClick={() => request.refresh()}>retry</button><output>{value.attempt}:{request.status}</output>
+      </main></Group>;
+    }`,
+  steps: [{ click: 'button' }],
+  check(container, observation) {
+    expect(container.querySelector('output')?.textContent).toBe(['1:success', '1:success'][observation]);
+  },
+});
+
 behaves('a GET server-function client facade behaves as a source', {
   modules: {
     './users.ts': `

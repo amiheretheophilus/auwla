@@ -1,9 +1,9 @@
 /** Compose readiness, handle reads and lexical presentation on fresh syntax. */
-import { b, is } from 'yuku-ast';
+import { b, findAll, is } from 'yuku-ast';
 import type { Expression, Node, Statement } from 'yuku-parser';
 import type { ModulePlan, SourceInputPlan } from '../../core/plan/model';
 import type { Names } from '../../core/emit/names';
-import { copy, finishCopy } from '../../core/emit/copy';
+import { copy, finishCopy, originOf } from '../../core/emit/copy';
 import { expression, identifier, numberLiteral, statement, stringLiteral } from '../../core/emit/quote';
 import { cleanJsxText } from '../../core/plan/jsx';
 import type { BindingNode } from '../../core/graph';
@@ -120,9 +120,13 @@ export function emitSourceFlow(
 
   for (const { call, read } of flow.calls) {
     const created = copy(call, replacements);
+    // Another feature may have wrapped the call (`observeMutation(…).finish($read(alias))`, the
+    // argument passed to code that could edit it). The replay belongs to the call itself, the
+    // innermost copy of it, not to the wrapper's `finish`.
+    const own = [created, ...findAll(created, 'CallExpression')].filter((node) => originOf(node) === call).at(-1) ?? created;
 
-    if (read && created.arguments.length === 1) {
-      created.arguments.push(expression('() => $$promise', {
+    if (read && is.CallExpression(own) && own.arguments.length === 1) {
+      own.arguments.push(expression('() => $$promise', {
         promise: copy(call.arguments[0]!, replacements),
       }));
     }

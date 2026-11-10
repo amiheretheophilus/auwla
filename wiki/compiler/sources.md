@@ -60,6 +60,10 @@ Source snapshots notify the existing component batch in its captured application
 request inputs use `rebindResolvedValueFromFactory`, preserving loaded data and
 ignoring obsolete requests through the existing data engine. `$read` receives a
 replay thunk for retry. No second request engine or ownership stack is added.
+The thunk goes to the `$read` call itself, the innermost copy of it (`flow-dom.ts`). When another
+feature had wrapped the call, as for `$read(alias)` of a module promise (the argument is observed,
+`observeMutation(…).finish($read(alias))`), it went to `finish` instead, and `refresh()` threw "This
+read source has no replay operation". Case: "a $read of a module promise through an alias refreshes".
 
 The shared memo engine distinguishes a source's request inputs from payload body
 builders. Source settlement wakes its group even when the source is also an
