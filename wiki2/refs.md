@@ -1,0 +1,68 @@
+# Normally declared refs
+
+State: accepted syntax direction; reuse of existing behavior to verify.
+Owns DX-19 and the ref-related part of DX-23.
+
+## Authoring contract
+
+Declare a variable and use the existing `ref` prop. Element tags do not declare
+variables; no `$` prefix or special ref declaration keyword is introduced.
+
+```tsx
+export function Editor() {
+  let input: HTMLInputElement | undefined;
+
+  return (
+    <section>
+      <input ref={input} />
+      <button onClick={() => input?.focus()}>"Focus"</button>
+    </section>
+  );
+}
+```
+
+The quoted button text belongs to the proposed new format. The variable and ref
+prop use the established model: mount assigns the node, removal assigns
+`undefined`, and readers follow mount/replacement/removal. A scalar target must
+be writable. Scope and shadowing come from the variable declaration.
+
+Member targets, callback refs and forwarding keep their existing contracts and
+limitations. Do not invent a second ref runtime or claim a currently unimplemented
+callback lifecycle is implemented by the prototype. The existing source of truth
+is [wiki/compiler/refs.md](../wiki/compiler/refs.md).
+
+## Existing code map
+
+| Path relative to repository root | Role |
+| --- | --- |
+| `packages/compiler-next/src/features/refs/classify.ts` | Binding identity and assignable targets |
+| `packages/compiler-next/src/features/refs/plan.ts` | Ref writes use existing mutation planning |
+| `packages/compiler-next/src/features/refs/dom.ts` | Assignment and forwarding adapters |
+| `packages/runtime/src/refs.ts` | Mount, forwarding and teardown |
+| `packages/runtime/src/cleanup.ts` | Owner cleanup and failed-setup disposal |
+| `packages/compiler-next/tests/cases/refs.test.ts` | Existing comparison cases |
+
+The new format's adapter tests are **planned** under the placement in
+[architecture.md](architecture.md). Update this page when real files are added.
+
+## Acceptance examples
+
+| ID | Expected behavior |
+| --- | --- |
+| REF-01 | A normally declared target receives its node and can be used in a handler |
+| REF-02 | Replacement/removal updates readers and clears the target as the existing runtime does |
+| REF-03 | Keyed rows keep their own declared refs on moves and clean them on removal |
+| REF-04 | SSR, adoption and failed setup preserve existing ownership and cleanup |
+| REF-05 | Rename updates the declaration, `ref={input}` and reads; absence is reflected in types |
+| REF-06 | Member/forwarded/callback refs match existing JSX behavior where currently supported |
+
+REF-01 and REF-05 belong in the first parser/tooling slice; the broader lifecycle
+matrix follows when control flow and delivery are integrated.
+
+## DOM measurements
+
+Declaring a ref does not make a state write synchronously update DOM layout. The
+chat-scroll example needs a verified post-update mechanism; do not add a new
+flush rule as a side effect of the syntax. Record that mechanism and its ordering
+before using it in an application example. Resize is still explicit observation,
+not a default dependency of reading a ref.

@@ -1,8 +1,13 @@
 # Auwla developer experience: JSX+ design discussion
 
-Status: proposal for discussion, not an implementation specification.
+Status: evolving prototype design. Accepted directions and open proposals are
+identified separately; the complete grammar is not settled.
 
 Created: 2026-11-05.
+Updated: 2026-11-10.
+
+Work branch: `prototype/jsx-plus`. Start at [wiki2/README.md](wiki2/README.md)
+for the code map, current slice, acceptance examples and handoff.
 
 This document collects the proposed JSX+ authoring experience, the research behind
 it, and the decisions we need to iterate on. Syntax examples are proposed unless
@@ -13,12 +18,30 @@ The user has specified that TypeScript content mappers will be part of the desig
 They are the new TypeScript API for integrating custom source formats, not data or
 content transformation libraries.
 
+Accepted direction from the 2026-11-10 discussion:
+
+- Declare refs as ordinary variables and connect them with `ref={variable}`.
+  Element tags do not declare refs, and refs need no `$` prefix.
+- In the proposed markup body, quote literal text: `<div>"text"</div>`.
+  Read ordinary expressions directly: `<div>message</div>`.
+- Support direct `if` statements and ordinary expressions such as `.map()` in
+  markup bodies without an extra expression-container pair of `{}`. JavaScript
+  block braces and object-literal braces retain their purposes.
+- Develop this through small, revisable experiments. The plan and grammar can
+  change as evidence arrives; the current rules, examples and checks change with
+  them. See [decisions](wiki2/decisions.md).
+
+Attribute syntax, separators, the final file extension and the remaining feature
+proposals are still open. Examples retain existing attribute expression braces.
+This direction is for the new authoring format; it does not change TSX text rules.
+
 ## 1. What we are designing
 
 Auwla already aims to let people write ordinary JavaScript and TypeScript and get
 efficient reactive output. JSX+ explores a richer markup surface around that code:
 lazy event expressions, modifiers, bindings, control flow, styles and element-owned
-behavior inspired partly by Imba.
+behavior inspired partly by Imba. The current prototype direction makes
+JavaScript the default in markup bodies, with quoted strings for literal text.
 
 We should evaluate the proposal against concrete programs, including complex ones.
 Few characters alone do not establish a good design. Useful questions include:
@@ -32,7 +55,8 @@ Few characters alone do not establish a good design. Useful questions include:
 - Is a convenience saving repeated work, or hiding a separate feature?
 
 There is no blanket decision here to prefer either minimal syntax or explicit
-syntax. Each choice below remains open until we settle its behavior and examples.
+syntax. Choices marked accepted above guide the prototype; the remaining choices
+stay open until we settle their behavior and examples.
 
 ## 2. Boundaries that the syntax must preserve
 
@@ -42,13 +66,15 @@ syntax. Each choice below remains open until we settle its behavior and examples
   control. Creating a callback that might write it does not perform that write.
 - Mutating an object is different from reassigning its binding. A `const` object
   can be mutated; a `const` binding cannot be reassigned.
-- Existing JavaScript expressions, functions and JSX forms remain usable. New
-  control flow must not make `.map()` or conditional expressions second-class.
+- Existing JS/TS/JSX/TSX files retain their meanings. The new authoring format
+  changes markup-body syntax; it preserves ordinary JavaScript expressions and
+  functions. Direct control flow must not make `.map()` or ternaries second-class.
 - Unknown code needs the general conservative path. Syntax conveniences must not
   silently require a compiler-recognized method name or a special object shape.
 - Updates follow synchronous stretches, including the boundary before an `await`.
   A timing modifier must not postpone unrelated writes already performed.
-- Refs remain reactive. Shorthand must share the existing ref lifecycle.
+- Refs remain reactive through normal declarations and the existing `ref` prop.
+  Preserve mount, replacement, absence and cleanup behavior.
 - Generated code must follow the existing restriction against introducing
   `try`/`catch`/`finally` wrappers.
 - Performance claims require measurement. Compact source does not by itself imply
@@ -110,7 +136,8 @@ repository's current `bun check` workflow.
 | Formatting | Mapped TypeScript regions can participate | A strategy for the complete `.auwla` grammar |
 
 Do not promise that an existing TSX formatter works merely because tags have
-closing tags. `{if ...}`, `{for ...}` and modifier attributes need grammar support.
+closing tags. Direct `if`/`for` blocks, expression children and modifier attributes
+need grammar support.
 
 ### 3.3 Mapping quality is a design requirement
 
@@ -123,15 +150,16 @@ adding generated scaffolding around them. For example:
 
 ```tsx
 // Authored JSX+
-<button @click={count++}>Add</button>
+<button @click={count++}>"Add"</button>
 
 // Simplified virtual TypeScript, not production runtime output
-<button onClick={(event) => { count++; }}>Add</button>
+<button onClick={(event) => { count++; }}>{"Add"}</button>
 ```
 
-`count++` should map to its exact authored span. The generated event parameter and
-wrapper have no authored declaration. Actual contextual event types must come
-from Auwla's own JSX declarations or checking helpers.
+`count++` and the quoted string should map to their exact authored spans. The
+virtual child's braces, generated event parameter and wrapper have no authored
+declaration. Actual contextual event types must come from Auwla's own JSX
+declarations or checking helpers.
 
 Avoid rewriting a whole component into one opaque mapping. Verify rename and
 completion insertion, not just whether errors appear near the right line.
@@ -139,7 +167,7 @@ completion insertion, not just whether errors appear near the right line.
 Particular risks to probe:
 
 - Renaming a state binding used by markup, handlers and bindings.
-- Renaming the implicit binding created by `<input$input>`.
+- Renaming a normally declared ref through its `ref={input}` use and handlers.
 - Renaming a custom event when authored and virtual spellings differ.
 - Auto-import insertion around styles and module declarations.
 - Unicode before an expression, so offset encoding mistakes become visible.
@@ -175,9 +203,9 @@ recovery and the supported TypeScript/editor version matrix.
 The core proposal is:
 
 ```tsx
-<button @click={count++}>Add</button>
-<button @click.shift={count += 10}>Add ten</button>
-<form @submit.prevent={add()}>...</form>
+<button @click={count++}>"Add"</button>
+<button @click.shift={count += 10}>"Add ten"</button>
+<form @submit.prevent={add()}><Fields /></form>
 ```
 
 `@` visibly establishes an event context. Ordinary JSX props retain their existing
@@ -209,7 +237,7 @@ An explicit arrow is the general form for complex behavior:
   const result = await save();
   report(result, event);
 }}>
-  Save
+  "Save"
 </button>
 ```
 
@@ -221,7 +249,7 @@ shadow ordinary code:
 ```tsx
 const e = selectedEntry;
 // Does this refer to the entry or the event?
-<button @click={inspect(e)}>Inspect</button>
+<button @click={inspect(e)}>"Inspect"</button>
 ```
 
 Recommendation: always support an explicit event parameter. If an implicit name
@@ -281,7 +309,7 @@ pending work. Moving an existing row preserves its timer state.
 ### 5.3 Native event operations cannot be delayed arbitrarily
 
 ```tsx
-<form @submit.prevent.debounce(300)={save()}>...</form>
+<form @submit.prevent.debounce(300)={save()}><Fields /></form>
 ```
 
 Preventing default submission must occur during dispatch. A later timer callback
@@ -369,7 +397,7 @@ the query read at event receipt from the query read when a delayed handler runs.
 The original proposal uses:
 
 ```tsx
-<button bind={filter} value="active">Active</button>
+<button bind={filter} value="active">"Active"</button>
 ```
 
 This implies assignment on click and an automatically applied `active` class.
@@ -383,7 +411,7 @@ Recommended baseline:
   .active={filter === "active"}
   @click={filter = "active"}
 >
-  Active
+  "Active"
 </button>
 ```
 
@@ -396,8 +424,8 @@ The proposed `.done={todo.done}` form is concise and visually tied to classes.
 `class:done={todo.done}` is an alternative. Neither spelling is settled.
 
 ```tsx
-<li class="todo" .done={todo.done}>...</li>
-<div style:transform={`translate(${pos.x}px, ${pos.y}px)`}>...</div>
+<li class="todo" .done={todo.done}>todo.title</li>
+<div style:transform={`translate(${pos.x}px, ${pos.y}px)`}><Content /></div>
 ```
 
 Specify merge order with ordinary `class`, `style`, spreads and imperative edits.
@@ -409,47 +437,75 @@ For styles, define CSS custom properties, property naming, removal on nullish
 values, units and priority. Do not infer a complete styling language from one
 `transform` example.
 
-## 8. Markup control flow and keyed identity
+## 8. Code in markup bodies, text and keyed identity
 
-Proposed forms:
-
-```tsx
-{if (todos.length === 0) {
-  <p>Nothing to do.</p>
-} else {
-  <TodoList todos={todos} />
-}}
-
-{for (const todo of visible) key todo.id {
-  <TodoRow todo={todo} />
-}}
-```
-
-These are markup constructs, not ordinary JavaScript statements whose result is
-implicitly the last expression. Specify their grammar and scope explicitly.
-
-Questions to settle:
-
-- Where can these blocks appear: JSX children, stored markup, fragments, returns?
-- Can a branch or row declare locals before producing markup?
-- Can it produce several sibling nodes without an explicit fragment?
-- Are `else if`, destructuring, an index and empty-list output supported?
-- What do `break`, `continue` and `return` mean, if accepted at all in these blocks?
-- Does the iterable follow all `for...of` semantics, including evaluation order?
-- Is `key` optional, and what identity is used when absent?
-- What happens on duplicate keys, key changes and object-valued keys?
-- How are row closures, refs, timers and local component state preserved on moves?
-
-Keep ordinary JavaScript rendering forms available:
+Accepted prototype direction: literal text is quoted, expressions are read
+directly, and control flow needs no outer expression container:
 
 ```tsx
-{visible.map(todo => <TodoRow key={todo.id} todo={todo} />)}
-{empty ? <Empty /> : <Content />}
+<section>
+  <h1>"Tasks"</h1>
+
+  if (todos.length === 0) {
+    <p>"Nothing to do."</p>
+  } else {
+    <ul>
+      visible.map(todo => <TodoRow key={todo.id} todo={todo} />)
+    </ul>
+  }
+</section>
 ```
 
-The original examples key messages and search results by their text. Text can
-repeat. Use stable record IDs when identity is needed; do not present text keys as
-a generally safe default.
+`<p>message</p>` reads a binding; `<p>"message"</p>` displays literal text.
+Arithmetic, calls, chains, template literals and ternaries remain expressions:
+
+```tsx
+<p>count + 1</p>
+<p>"Hello, " + user.name</p>
+<p>`Remaining: ${left}`</p>
+<section>empty ? <Empty /> : <Content /></section>
+```
+
+The quotes delimit the source string and are not displayed. Escaping, multiline
+text, whitespace and HTML-entity behavior need explicit examples.
+
+Direct loops are a candidate form under this direction:
+
+```tsx
+<ul>
+  for (const todo of visible) {
+    <TodoRow key={todo.id} todo={todo} />
+  }
+</ul>
+```
+
+Loop grammar and the exact key contract remain open. The earlier `key todo.id`
+loop suffix is not the baseline; the example uses the existing `key` prop.
+
+These are markup-body constructs. Ordinary JavaScript blocks outside markup do
+not start rendering their expression statements. How bodies collect children,
+preserve lexical scope and lower into existing regions must be specified and
+tested. No new state or scheduling system follows from the new surface syntax.
+
+Questions to settle in [wiki2/syntax.md](wiki2/syntax.md):
+
+- Where do adjacent expressions end? Newlines, semicolons and JavaScript ASI
+  must be tested with calls, indexing, comparisons and nested tags. Semicolons
+  are a candidate separator, not an accepted mandatory rule.
+- How are closing tags distinguished from operators, generics and regular
+  expressions, including while the source is incomplete?
+- Where can blocks occur: children, fragments, stored markup and returns?
+- Can bodies declare locals or produce several siblings? What owns those locals
+  on replay, and how do branch and row scopes map into TypeScript?
+- How do `else if`, destructuring, indices and empty-list output work?
+- What do `break`, `continue` and `return` mean inside a markup block?
+- Are legacy child expression containers accepted in the new format? Existing
+  TSX keeps its current behavior regardless of that choice.
+- What is the key contract for omission, duplicate keys, changes and objects?
+- How are row closures, refs, timers and local state preserved on moves?
+
+Stable record IDs remain the example keys. Direct loops and `.map()` must both
+preserve ordinary expression evaluation order and use the existing list machinery.
 
 ## 9. Hotkeys: scope, activation and conflicts
 
@@ -457,7 +513,7 @@ The proposal includes element defaults and explicit handlers:
 
 ```tsx
 <input @hotkey("/") placeholder="Search..." />
-<button @hotkey("mod+s") @click={save(text)}>Save</button>
+<button @hotkey("mod+s") @click={save(text)}>"Save"</button>
 ```
 
 Imba has real implementation precedent for focusing input-like elements and
@@ -483,9 +539,11 @@ mean both active and inactive in different examples. A structural condition is a
 clear ownership boundary:
 
 ```tsx
-{if (selected !== null) {
-  <div hidden @hotkey("esc")={selected = null} />
-}}
+<section>
+  if (selected !== null) {
+    <div hidden @hotkey("esc")={selected = null} />
+  }
+</section>
 ```
 
 Type checking must account for deferred execution. A condition that was true when
@@ -502,7 +560,7 @@ Original proposal:
   style:transform={`translate(${pos.x}px, ${pos.y}px)`}
   @touch.moved(4).sync(pos)
 >
-  {props.label}
+  props.label
 </div>
 ```
 
@@ -534,7 +592,7 @@ does not express.
 Original proposal:
 
 ```tsx
-<div class="card" @intersect.flag("visible")>{item}</div>
+<div class="card" @intersect.flag("visible")>item</div>
 ```
 
 Choose whether `.flag("visible")` means visibility state or a temporary marker
@@ -550,7 +608,7 @@ An explicit alternative for discussion is:
   .visible={visible}
   @intersect={(entry) => visible = entry.isIntersecting}
 >
-  {item}
+  item
 </div>
 ```
 
@@ -565,42 +623,39 @@ that preserves semantics; do not assume one observer per element is necessary.
 
 ## 12. Element references
 
-Proposed shorthand:
+Accepted: keep normal variable declarations and the existing `ref` prop. Do not
+introduce tag-declared bindings or a `$` naming convention for refs.
 
 ```tsx
-<ul$log class="log">...</ul$log>
-<input$input bind={draft} />
+export function Editor() {
+  let input: HTMLInputElement | undefined;
+
+  return (
+    <section>
+      <input ref={input} />
+      <button onClick={() => input?.focus()}>"Focus the input"</button>
+    </section>
+  );
+}
 ```
 
-The proposal makes `$log` and `$input` bindings available in the component.
-This can be useful, but it is a declaration feature, not only a tag abbreviation.
+The existing compiler writes the element on mount and `undefined` on removal.
+Refs stay reactive on mount, replacement and removal. Ordinary variable scope,
+shadowing, member targets and the current callback/forwarding contracts carry
+over. This decision concerns refs; existing framework APIs such as `$fetch` are
+unaffected. See [wiki2/refs.md](wiki2/refs.md) for the code map and checks.
 
-Questions:
-
-- Is the binding component-scoped or scoped to the surrounding markup block?
-- Can it be used before the tag appears textually?
-- What happens if an explicit declaration uses the same name?
-- Are duplicate declarations allowed across mutually exclusive branches?
-- Does each keyed row have a distinct ref binding?
-- What is the type before mount and after removal?
-- How do SVG, MathML and component refs differ?
-- What happens during SSR, replacement and failed mount?
-- Does rename update declaration shorthand, usages and the closing tag safely?
-
-Recommendation: implement any shorthand through the existing reactive ref model,
-with absence represented in its type. Keep the explicit `ref={target}` form.
-
-The chat example also needs a scheduling decision:
+The chat example still needs an explicit DOM-update timing contract:
 
 ```ts
 messages = [...messages, nextMessage];
-$log.scrollTop = $log.scrollHeight;
+if (log) log.scrollTop = log.scrollHeight;
 ```
 
-If DOM updates settle after this synchronous stretch, `scrollHeight` can still be
-the old height. Reactive state writes do not make every following DOM measurement
-observe the updated DOM immediately. Demonstrate the existing supported post-update
-mechanism, or design one explicitly; do not conceal the issue behind ref shorthand.
+Here `log` was normally declared and connected with `ref={log}`. If DOM updates
+settle after this synchronous stretch, `scrollHeight` can still be the old height.
+Demonstrate a supported post-update mechanism before presenting this as correct
+auto-scrolling. A ref does not imply that every DOM measurement forces an update.
 
 ## 13. Event delegation and custom events
 
@@ -611,13 +666,15 @@ a nested icon is therefore different from clicking the `li` itself.
 For a row that already has its item, prefer passing that item directly:
 
 ```tsx
-{for (const item of props.items) key item.id {
-  <li>
-    <button type="button" @click={props.onPick(item)}>
-      {item.label}
-    </button>
-  </li>
-}}
+<ul>
+  props.items.map(item => (
+    <li key={item.id}>
+      <button type="button" @click={props.onPick(item)}>
+        item.label
+      </button>
+    </li>
+  ))
+</ul>
 ```
 
 If delegation is offered, define the original target, matched element and listener
@@ -639,7 +696,7 @@ A top-level style block is proposed:
 </style>
 
 export function Card() {
-  return <article class="card">...</article>;
+  return <article class="card"><Content /></article>;
 }
 ```
 
@@ -736,37 +793,37 @@ export function Todos() {
     <main>
       <form @submit.prevent={add()}>
         <label>
-          New task
+          "New task"
           <input bind:value={draft} @keydown.esc={draft = ""} />
         </label>
-        <button type="submit">Add</button>
+        <button type="submit">"Add"</button>
       </form>
 
       <ul>
-        {for (const todo of visible) key todo.id {
-          <li .done={todo.done}>
+        visible.map(todo => (
+          <li key={todo.id} .done={todo.done}>
             <label>
               <input type="checkbox" bind:checked={todo.done} />
-              <span>{todo.title}</span>
+              <span>todo.title</span>
             </label>
-            <button type="button" @click={remove(todo)}>Remove</button>
+            <button type="button" @click={remove(todo)}>"Remove"</button>
           </li>
-        }}
+        ))
       </ul>
 
-      {if (todos.length === 0) {
-        <p>Nothing to do.</p>
+      if (todos.length === 0) {
+        <p>"Nothing to do."</p>
       } else {
         <footer>
-          <span>{left} left</span>
+          <span>left + " left"</span>
           <button type="button" .active={filter === "all"}
-            @click={filter = "all"}>All</button>
+            @click={filter = "all"}>"All"</button>
           <button type="button" .active={filter === "active"}
-            @click={filter = "active"}>Active</button>
+            @click={filter = "active"}>"Active"</button>
           <button type="button" .active={filter === "done"}
-            @click={filter = "done"}>Done</button>
+            @click={filter = "done"}>"Done"</button>
         </footer>
-      }}
+      }
     </main>
   );
 }
@@ -779,8 +836,10 @@ monotonic for this example; persistence and shared data require another ID polic
 
 ## 17. Decision register
 
-Update this table as we discuss choices. Record accepted decisions with the user's
-wording where useful. Leave recommendations marked open until actually accepted.
+This is the design index. Detailed contracts and cases live on the linked
+[wiki2 concept pages](wiki2/README.md); dated user decisions live in
+[wiki2/decisions.md](wiki2/decisions.md). Leave recommendations open until accepted,
+and mark a revised decision as superseded rather than erasing its reason.
 
 | ID | Decision | Current position | Status |
 | --- | --- | --- | --- |
@@ -797,23 +856,33 @@ wording where useful. Leave recommendations marked open until actually accepted.
 | DX-11 | Bind/event order | Binding write before authored handler | Recommended |
 | DX-12 | Selected buttons | Explicit assignment and class as baseline | Recommended |
 | DX-13 | Class/style syntax | `.class` versus `class:class`; merge and ownership rules | Open |
-| DX-14 | Markup control flow | `{if}` and `{for}` alongside existing JavaScript forms | Proposed |
+| DX-14 | Markup control flow | Direct `if` and loop exploration without an outer child-expression container; keep `.map()` | Accepted direction; grammar open |
 | DX-15 | Key contract | Identity, duplicates, omission and resource preservation | Open |
 | DX-16 | Hotkeys | Element/region ownership, explicit scope and conflict rules | Proposed |
 | DX-17 | Gesture API | `touch` versus `drag`; coordinate and cancellation rules | Open |
 | DX-18 | Observer API | Distinguish visibility state from temporary event flags | Open |
-| DX-19 | Ref shorthand | `<element$name>` using existing reactive refs | Proposed |
+| DX-19 | Refs | Normal variable declarations plus `ref={target}`; no tag declarations or `$` ref convention | Accepted; replaces shorthand proposal |
 | DX-20 | CSS scope | File/component boundaries and SSR output | Open |
 | DX-21 | Custom events | Dispatch, detail, typing and component callback distinction | Open |
 | DX-22 | Async examples | State updates and request ordering documented separately | Recommended |
 | DX-23 | Post-update DOM work | Correct chat scrolling and measurements | Open |
 | DX-24 | Formatting and CSS tooling | Explicit support plan beyond TypeScript mappings | Open |
+| DX-25 | Text and expression children | Quoted text; direct JavaScript expressions without child-container braces | Accepted direction; grammar open |
+| DX-26 | Grammar boundaries | Separators, whitespace, escapes, declarations, scope and recovery | Open; next prototype investigation |
+| DX-27 | Iteration | Small slices; revise the plan, examples and decisions as we learn | Accepted |
 
 ## 18. Suggested prototype and acceptance examples
 
-Start with a vertical slice: `.auwla`, lazy handlers, named bindings, conditional
-classes and keyed control flow, with TypeScript tooling working on the authored
-file. This is a proposed order, not authorization to begin implementation.
+The current iteration is documentation and planning. The next proposed slice
+proves quoted text, direct expression children and a normal declared ref, with
+source ranges and a small TypeScript mapping experiment. Then prove direct `if`
+and `.map()` against equivalent existing JSX. Add event/binding conveniences in
+later slices after their contracts are settled.
+
+The working order and evidence live in [wiki2/plan.md](wiki2/plan.md) and
+[wiki2/status.md](wiki2/status.md). Reorder or replace an experiment when evidence
+changes the next useful step. A completed prototype slice does not by itself
+establish production adoption or compiler performance acceptance.
 
 ### TypeScript and editor checks
 

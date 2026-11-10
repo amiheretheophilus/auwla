@@ -1,6 +1,9 @@
 # Instructions for coding agents
 
-Read this file first. Then read `wiki/README.md`, which lists the rest in order.
+Read this file first. For JSX+ prototyping on `prototype/jsx-plus`, continue at
+`wiki2/README.md` and its short reading order. For the compiler rewrite, continue
+at `wiki/README.md`. Both tracks follow `wiki/rules.md` and the user's latest
+instructions.
 
 ## Repository: push only to `amiheretheophilus/auwla`
 
@@ -24,9 +27,16 @@ Read this file first. Then read `wiki/README.md`, which lists the rest in order.
 
 - The compiler is being rewritten on branch `compiler-rewrite`. The design is in
   `wiki/compiler/`, with one page per group of related files.
+- JSX+ authoring is being explored on `prototype/jsx-plus`. `dx.md` holds the
+  design discussion; `wiki2/` maps the prototype, decisions, checks and next slice.
+  Prototype grammar and plan choices are revisable as evidence arrives. Keep
+  accepted user direction distinct from provisional experiments and implemented
+  behavior. Start with `wiki2/status.md`, not the rewrite's next unchecked phase.
 - `wiki/rules.md` holds the user's ground rules. Every change must satisfy them.
-- Everything about one concept goes on its `wiki/compiler/` page and in its feature
-  folder: rules, cases to test, known bugs. Do not start separate lists.
+- Everything about a compiler concept goes on its `wiki/compiler/` page and in
+  its feature folder: rules, cases to test, known bugs. JSX+ concepts instead use
+  their `wiki2/` page, linking to existing compiler behavior rather than copying
+  it. Update both owning pages when a change crosses that boundary.
 - Keep the current names (`memo-dom:`, `mmd_*`, `memoized-dom/*`). The rename to
   auwla happens later, across all packages at once.
 
