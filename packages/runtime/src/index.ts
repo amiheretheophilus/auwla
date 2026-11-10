@@ -83,7 +83,7 @@ export {
   mutatedSince, mutationTime,
 } from './mutation';
 export { createRowCache, mapRows } from './list-map';
-export { createRowList } from './row-list';
+export { createRowList, uneditedItems } from './row-list';
 export { createComputation, noteOwnOutput, observeNamespace, readNamespace, trackEquals, trackRead } from './computation';
 export { createSharedWrites } from './shared-writes';
 export type { BuildScope, BuildFrame } from './build-scope';

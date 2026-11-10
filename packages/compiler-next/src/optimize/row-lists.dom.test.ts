@@ -57,13 +57,17 @@ async function trace(source: string, optimize: boolean, steps: number) {
 function watchRowUpdates(): number[] {
   const updated: number[] = [];
   const create = runtime.createRowList;
-  rowSpy = spyOn(runtime, 'createRowList').mockImplementation((anchor, owner, key, factory, path) =>
-    create(anchor, owner, key, (item, index) => {
+  rowSpy = spyOn(runtime, 'createRowList').mockImplementation((anchor, owner, key, factory, path) => {
+    const watched = (item: unknown, index: number) => {
       const entry = factory(item, index);
       const update = entry.update;
       entry.update = (item, index) => { updated.push((item as { id: number }).id); update(item, index); };
       return entry;
-    }, path));
+    };
+    // The runtime asks whether rows read their index by the factory's arity.
+    Object.defineProperty(watched, 'length', { value: factory.length });
+    return create(anchor, owner, key, watched, path);
+  });
   return updated;
 }
 
@@ -107,6 +111,48 @@ it.each(['local inline', 'shared inline', 'local component', 'shared component']
     expect(first?.className).toBe('on');
   },
 );
+
+// The benchmark's "update every 10th row": a closed list's edit names its item, so the next pass
+// evaluates only edited rows, in a loop, through a row's own handler, and alongside a move.
+it('evaluates only the rows whose items were edited', async () => {
+  const updated = watchRowUpdates();
+  const source = `
+    function build(n) { const list = new Array(n); for (let i = 0; i < n; i++) list[i] = { id: i + 1, label: 'r' + (i + 1) }; return list; }
+    export function App() {
+      let rows = build(30);
+      return <main><ul>{rows.map((row) => <li key={row.id} onClick={() => { row.label += '?'; }}>{row.label}</li>)}</ul>
+        <button id="tenth" onClick={() => { for (let i = 0; i < rows.length; i += 10) rows[i].label += '!'; }}>10th</button>
+        <button id="swap" onClick={() => { rows[3].label = 'x'; const t = rows[1]; rows[1] = rows[28]; rows[28] = t; }}>swap</button>
+        <button id="all" onClick={() => { rows = rows.slice(); }}>all</button></main>;
+    }`;
+  const { host, click } = await mount(source, true);
+  const labels = () => [...host.querySelectorAll('li')].map((row) => row.textContent);
+  const nodes = [...host.querySelectorAll('li')];
+
+  click('tenth');
+  expect(updated).toEqual([1, 11, 21]);
+  expect(labels().filter((label) => label!.endsWith('!'))).toEqual(['r1!', 'r11!', 'r21!']);
+  updated.length = 0;
+  host.querySelectorAll('li')[5]!.click();
+  expect(updated).toEqual([6]);
+  expect(labels()[5]).toBe('r6?');
+  updated.length = 0;
+  click('swap');
+  expect(updated).toEqual([4]);
+  expect(labels().slice(0, 4)).toEqual(['r1!', 'r29', 'r3', 'x']);
+  expect(host.querySelectorAll('li')[1]).toBe(nodes[28]!);
+  updated.length = 0;
+  // No edit since: nothing is evaluated.
+  click('all');
+  expect(updated).toEqual([]);
+
+  // The general path shows the same rows.
+  const general = await mount(source, false);
+  general.click('tenth');
+  general.host.querySelectorAll('li')[5]!.click();
+  general.click('swap');
+  expect([...general.host.querySelectorAll('li')].map((row) => row.textContent)).toEqual(labels());
+});
 
 it('merges multiple selection routes and updates their union once in row order', async () => {
   const updated = watchRowUpdates();

@@ -64,6 +64,11 @@ it('follows the program\'s own functions', () => {
   expect(skips(compile('rows = build(3);', { top }))).toBe(true);
   // Its initializer reads `next`, so the list is derived from it, not plain state.
   expect(skips(compile('rows = build(3);', { top, init: 'build(1)' }))).toBe(false);
+  // A builder that reads nothing that changes may start the list, as apps usually do. The list is
+  // derived from that call, computed once (found by the acceptance re-run, 2026-11-10).
+  const pure = "function make(n) { const list = new Array(n); for (let i = 0; i < n; i++) list[i] = { id: i + 1, label: 'r' + i }; return list; }";
+  expect(skips(compile('rows[0].label += "!";', { top: pure, init: 'make(3)' }))).toBe(true);
+  expect(skips(compile('rows = make(2);', { top: pure, init: 'make(3)' }))).toBe(true);
   expect(skips(compile('rows = same(rows);', { top }))).toBe(true);
   expect(skips(compile('rows = without(rows, rows[0]);', { top }))).toBe(true);
 });
@@ -150,7 +155,10 @@ it('writes a closed row\'s text directly and reports stores without an alias loo
   const code = compile('rows[0].label = "x"; rows[1] = rows[0];');
   expect(code).not.toContain('mutationTarget');
   expect(code).not.toContain('fuseText');
-  expect(code).toMatch(/_edited_rows\(rows\[0\]\.label = "x"\)|_edited_rows\(rows\[0\]\.label = 'x'\)/);
+  // The edit names its item, held where the store evaluates it, so only that item's row is
+  // evaluated again (`uneditedItems`).
+  expect(code).toMatch(/_item\d* = rows\[0\], _edited_rows\(_item\d*, _item\d*\.label = ["']x["']\)/);
+  expect(code).toContain('_MD.uneditedItems(_editedAt_rows, ');
   expect(code).toContain('_moved_rows(rows[1] = rows[0])');
 });
 

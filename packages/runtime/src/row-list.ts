@@ -53,16 +53,34 @@ interface Row {
   taken: number;
 }
 
+/**
+ * Which items a closed list's edits left alone since its last pass: `true` for all of them, or
+ * whether one item was left alone (`uneditedItems`). A row keeping such an item has nothing new.
+ */
+export type Unedited = boolean | ((item: unknown) => boolean);
+
+/**
+ * The items edited since `before` edits, for a closed list (`compiler-next/src/optimize/closed-lists.ts`).
+ * `editedAt` maps an item to the count of the edit that last changed it; an edit whose item is not
+ * known sets the map itself, and then every item counts as edited.
+ */
+export function uneditedItems(editedAt: WeakMap<object, number>, before: number, now: number): Unedited {
+  if (before === now) return true;
+  if ((editedAt.get(editedAt) ?? 0) > before) return false;
+  return (item) => item === null || typeof item !== 'object' || (editedAt.get(item) ?? 0) <= before;
+}
+
 export interface RowList {
   /**
    * `receiver.map(row)`: reconcile the rows. A receiver that is not an array has
    * its own `map`, which decides the items.
    *
    * `unedited`: the compiler proved rows show only their item and index, and that
-   * no item was edited since the last call (`compiler-next/src/optimize/closed-lists.ts`).
-   * A row keeping its item, and its index if it reads one, then has nothing to evaluate.
+   * no item was edited since the last call (`true`), or which items were not (a
+   * predicate, `uneditedItems`; `compiler-next/src/optimize/closed-lists.ts`). A row
+   * keeping such an item, and its index if it reads one, then has nothing to evaluate.
    */
-  map(receiver: readonly unknown[] | { map(callback: (item: unknown) => void): unknown }, unedited?: boolean): void;
+  map(receiver: readonly unknown[] | { map(callback: (item: unknown) => void): unknown }, unedited?: Unedited): void;
   /** Register a binding compared strictly with the row key, before the first map. */
   route(peek: () => unknown, version: () => number, key?: object): void;
   /** Unsupported keys need the authored map again. */
@@ -253,11 +271,15 @@ export function createRowList(
     }
   }
 
-  function reconcile(array: readonly unknown[], unedited: boolean): void {
+  function reconcile(array: readonly unknown[], unedited: Unedited): void {
     recover();
     // Rows are current only after a pass that finished, with no routed value or
     // invalidation since: those need the rows evaluated even with the same items.
-    const trusted = unedited && settled && !invalidated && !(routes?.some(routeChanged) ?? false);
+    const current = settled && !invalidated && !(routes?.some(routeChanged) ?? false);
+    // A row keeping an item no edit touched has nothing new to show. After an edit of some items
+    // (`rows[i].label = x`), only their rows are evaluated.
+    const trusted = current && unedited !== false;
+    const kept = (item: unknown): boolean => trusted && (unedited === true || (unedited as (item: unknown) => boolean)(item));
     settled = false;
     invalidated = false;
     const previous = rows;
@@ -285,7 +307,7 @@ export function createRowList(
       let row: Row | undefined = previous[last + 1];
       // The same item in the next row or the one before: unedited, so its key is
       // the same too, and neither the key nor the row needs evaluating.
-      if (trusted && key !== null) {
+      if (trusted && key !== null && kept(item)) {
         if (row === undefined || row.item !== item || row.taken === stamp || row.duplicate) row = previous[last - 1];
         if (row !== undefined && row.item === item && row.taken !== stamp && !row.duplicate && (!indexed || row.index === index)) {
           row.taken = stamp;
@@ -347,7 +369,7 @@ export function createRowList(
         if (row.position < last) ordered = false;
         last = row.position;
         // Found by key, further away: the same reasoning holds.
-        if (!trusted || row.item !== item || (indexed && row.index !== index)) {
+        if (!kept(item) || row.item !== item || (indexed && row.index !== index)) {
           row.item = item;
           row.entry.update(item, index);
           if (superseded()) return;
@@ -481,7 +503,7 @@ export function createRowList(
         items = collected;
       }
 
-      reconcile(items, unedited === true);
+      reconcile(items, unedited);
       if (!disposed) syncRoutes();
     },
     route(peek, version, key) {

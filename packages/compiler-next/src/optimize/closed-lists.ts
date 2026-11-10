@@ -29,6 +29,7 @@ import type { Binding, Module } from 'yuku-analyzer';
 import { is } from 'yuku-ast';
 import type { Expression, Node } from 'yuku-parser';
 import type { BindingNode, SemanticGraph } from '../core/graph';
+import { isReactive } from '../core/graph/rules';
 import { unwrap } from '../core/plan/jsx';
 import type { ComponentPlan, ConditionalBranch, ModulePlan, MutationPlan, RowListPlan, Site } from '../core/plan/model';
 import { alwaysPrimitive } from '../core/plan/template';
@@ -170,6 +171,9 @@ class Proof {
   #alias(binding: Binding, kind: Kind): void {
     const known = this.#aliases.get(binding);
     if (known !== undefined) {
+      // A list a function returns reaching the root, as its initializer (`let rows = build(3)`)
+      // or a store (`rows = build(3)`), is what `prove` and `#rootWrite` already accept.
+      if (binding === this.root && isList(kind)) return;
       if (known !== kind) this.#fail();
       return;
     }
@@ -1120,12 +1124,49 @@ function isModuleState(plan: ModulePlan, node: BindingNode): boolean {
   return plan.sharedOwners.some((owner) => owner.fn === null && owner.block === null && owner.state.includes(node));
 }
 
+/**
+ * Whether `node`'s value never changes: each read is of something that cannot change, or of the
+ * program's own function, never assigned, that itself reads nothing that changes (`build` reading
+ * a module counter `next` would rebuild the list when `next` changes).
+ */
+function readsNothingChanging(module: Module, graph: SemanticGraph, node: BindingNode, seen: Set<Node>): boolean {
+  return node.reads.every((edge) => {
+    if (!isReactive(edge.target)) return true;
+    if (edge.reference === null || edge.target.writes.length > 0) return false;
+    const fn = functionValue(module, edge.reference.node);
+    return fn !== null && functionReadsNothingChanging(module, graph, fn, seen);
+  });
+}
+
+/** Every name `fn` reads from outside itself cannot change, or is such a function itself. */
+function functionReadsNothingChanging(module: Module, graph: SemanticGraph, fn: FunctionNode, seen: Set<Node>): boolean {
+  if (seen.has(fn)) return true;
+  seen.add(fn);
+  return module.references.every((reference) => {
+    if (reference.node.start < fn.start || reference.node.end > fn.end || reference.inTypePosition) return true;
+    const binding = reference.binding;
+    if (binding === null) return true;
+    const declared = binding.declarations[0];
+    if (declared !== undefined && declared.start >= fn.start && declared.end <= fn.end) return true;
+    const target = graph.bindings.get(binding);
+    if (target === undefined || !isReactive(target)) return true;
+    if (target.writes.length > 0) return false;
+    const inner = functionValue(module, reference.node);
+    return inner !== null && functionReadsNothingChanging(module, graph, inner, seen);
+  });
+}
+
 /** State this module's own code holds: one activation per component, or the module's. */
-function candidate(plan: ModulePlan, node: BindingNode, rowLists: ReadonlyMap<Node, RowListPlan>): boolean {
-  if (node.kind !== 'State' && node.kind !== 'Constant') return false;
+function candidate(plan: ModulePlan, graph: SemanticGraph, node: BindingNode, rowLists: ReadonlyMap<Node, RowListPlan>): boolean {
+  // `let rows = build(30)`, edited but never assigned, is derived from its initializer's call. When
+  // that reads nothing that can change, it is computed once, as a constant is. The program's own
+  // function counts as unchanging though an edit of the list marks it reactive, in case it handed
+  // out shared data: the proof follows it (`#kindOf`) and needs fresh records.
+  const module = plan.module.module;
+  const fixed = node.kind === 'Derived' && readsNothingChanging(module, graph, node, new Set());
+  if (node.kind !== 'State' && node.kind !== 'Constant' && !fixed) return false;
   if ((node.initial?.builders.length ?? 0) > 0) return false;
   // While rendering, the only call on the list may be what shows it, or what reads it.
-  const module = plan.module.module;
   if (node.writes.some(({ site }) => site.timing === 'body' && !rowLists.has(site.node) && !callOnlyReads(module, site.node))) return false;
   // A plain store cannot tell that it changed nothing, and an effect would re-run.
   const inEffect = (start: number, end: number) => plan.effects.calls.some(({ call }) => call.start <= start && end <= call.end);
@@ -1174,7 +1215,7 @@ export const closedLists: Optimization = {
 
     for (const [binding, lists] of roots) {
       const node = graph.bindings.get(binding);
-      if (node === undefined || !candidate(general, node, rowLists)) continue;
+      if (node === undefined || !candidate(general, graph, node, rowLists)) continue;
 
       const proof = new Proof(binding, general, rowLists, planned);
       if (!proof.prove()) continue;

@@ -71,6 +71,7 @@ interface Optimization {
 | `array-ops.ts` | `push`, `splice`, `sort` update only the rows they touch |
 | `dom-only-rows.ts` | rows with no reactive work are plain DOM |
 | `reason-routing.ts` | a write updates only the sites on its paths |
+| `row-edits.ts` | an edit of one item's field updates only that item's row also when rows read other state or call unknown functions, which `closed-lists.ts` cannot prove. A closed list already does this ("Closed lists"); any other list evaluates every row after an item edit. The old compiler kept the edited rows' keys (`ChangedKeys`). Measured by `tests/list-row-calculations.test.ts`, "same-row calculations": its rows call `trace()` and read `suffix`, so its text is right and its row-render counts are not (acceptance re-run, 2026-11-10) |
 | `static-hoist.ts` | static templates are created once |
 
 ## Called functions
@@ -255,11 +256,23 @@ list, which then takes the general path.
 
 What it buys, with nothing checked at runtime:
 
-- `RowListPlan.moved`: `list.map(rows, unedited)`. Each edit counts (`_edits_rows`), and
-  a pass with no edit since the last skips rows keeping their item, and their index
-  if they read one. A pass still evaluates everything after a routed value changed,
-  after `invalidate`, or after a pass that did not finish. A row skipped has only
-  item fields, its index, constants and routed comparisons to show.
+- `RowListPlan.moved`: `list.map(rows, unedited)`. A pass skips rows keeping their item,
+  and their index if they read one, unless an edit since the last pass changed that item.
+  Each edit counts and names its item: `rows[i].label = x` is
+  `(_item = rows[i], _edited_rows(_item, _item.label = x))`, which holds the item where
+  the store evaluates it, and records the edit's count in `_editedAt_rows`. The list
+  then gets `uneditedItems(_editedAt_rows, seen, now)`: `true` with no edit, otherwise
+  whether an item is unedited. So "update every 10th row" evaluates 10% of the rows, not
+  all of them (`row-lists.dom.test.ts`, "evaluates only the rows whose items were
+  edited"). An edit whose item is not a member store notes every item. A pass still
+  evaluates everything after a routed value changed, after `invalidate`, or after a pass
+  that did not finish. A row skipped has only item fields, its index, constants and
+  routed comparisons to show.
+- A list may start from the program's own builder (`let rows = build(30)`): the binding is
+  derived from that call, which reads nothing that changes, so it is computed once
+  (`readsNothingChanging`). A builder reading a counter that changes (`next++`) is not.
+  `Array.from(…, callback)` as the initializer is still opaque to classification, so such
+  a list is not closed.
 - `MutationPlan.closed`: `_moved_rows(rows[1] = t)`, `_edited_rows(rows[i].label = x)`.
   No other root can hold an item, so the list needs no mutation root or alias walk.
 - Row text sites write directly, since a field holds a primitive.
