@@ -129,6 +129,12 @@ test verifies neither consumer renders early and both render once on return. Tim
 promise callbacks use the queued microtask boundary. Setup writes seed values;
 `beginMount` then records render-time invalidations without scheduling unfinished
 sites. `activate` settles remembered changes after every site is ready.
+A batch marked while a commit renders another entity, such as a row component given new props by
+its parent's render, joins that commit (`committing`, `runtime/src/kernel.ts`), whose drain renders
+it in its next pass. Before, the mark waited for the microtask after the parent's task: the rows
+showed the old props for a task, a frame under a frame scheduler, and took a second commit. A mark
+from the entity's own render keeps the pending path (`tests/scheduling.test.ts`). The comparison
+cases run updates synchronously; `SCHEDULER=deferred` runs them in a microtask, as a browser does.
 Notifications retain the originating application
 and entity identity, so a delayed callback cannot update a replacement instance.
 Error recovery resets the listener depth at the next microtask without adding

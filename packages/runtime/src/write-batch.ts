@@ -1,6 +1,6 @@
 /** Compiler-owned local write commits, independent of scheduler eagerness. */
 import {
-  enqueueEntityInvalidations, getActiveApplicationRuntime, getEntity, getExtensionStore,
+  committing, enqueueEntityInvalidations, getActiveApplicationRuntime, getEntity, getExtensionStore,
   onEntityRender, runInApplicationRuntime, type Entity,
 } from './kernel';
 import { recoveryHooks } from './recovery-hooks';
@@ -180,6 +180,15 @@ class LocalWriteBatch implements WriteBatch {
       return;
     }
     this.dirty = true;
+    // A parent rendering in a commit sends props that mark a child: the child joins that commit,
+    // which drains whatever its renders mark, rather than waiting for a later task (and a frame
+    // with a scheduler that waits for one). A mark from the entity's own render keeps the
+    // pending path, as before.
+    const commit = committing(this.runtime);
+    if (commit !== undefined && commit.rendering !== null && commit.rendering !== this.entity.id && this.depth === 0) {
+      commitBatches([this], true);
+      return;
+    }
     pendingBoundaries.add(this);
     this.queueRecovery();
   }

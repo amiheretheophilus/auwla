@@ -695,6 +695,15 @@ export function undirty(id: EntityId): void {
   }
 }
 
+/**
+ * Whether a commit is draining in `runtime`, and the entity rendering now (null between renders).
+ * Undefined outside a commit. A write batch marked during a commit joins it (`write-batch.ts`).
+ */
+export function committing(runtime: ApplicationRuntime): { readonly rendering: EntityId | null } | undefined {
+  const k = runtime.state;
+  return k.inCommit ? { rendering: k.renderingEntity } : undefined;
+}
+
 /** Compiler-owned prop forwarding must not turn a poll into a state write. */
 export function isPullUpdate(): boolean {
   return getActiveApplicationRuntime().state.pullUpdate;

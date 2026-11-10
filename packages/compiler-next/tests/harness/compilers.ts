@@ -34,6 +34,15 @@ export interface Compiler {
   readonly serves?: boolean;
 }
 
+/**
+ * Updates run synchronously, so the DOM is current as soon as a step settles. `SCHEDULER=deferred`
+ * runs them in a microtask instead, as a browser's default scheduler does; each step's settle waits
+ * for them. That mode found a parent's props reaching a row component a commit late.
+ */
+function useCaseScheduler(): void {
+  setScheduler(process.env.SCHEDULER === 'deferred' ? (run) => queueMicrotask(run) : (run) => run());
+}
+
 const oldCompiler: Compiler = {
   name: 'packages/compiler',
   output: 'old',
@@ -72,8 +81,7 @@ const oldCompiler: Compiler = {
 
   mount(module, container) {
     const App = module.App as (id: string, parent: null) => Node;
-    // Updates run synchronously, so the DOM is current as soon as a step settles.
-    setScheduler((run) => run());
+    useCaseScheduler();
     container.append(App('App', null));
     return {
       unmount() {
@@ -158,7 +166,7 @@ const deliveredCompiler: Compiler = {
 
   mount(module, container, served) {
     const App = module.App as (id: string, parent: null) => Node;
-    setScheduler((run) => run());
+    useCaseScheduler();
     let html: string | null = null;
     try {
       // Requests a server makes are its own, and never answered here.
