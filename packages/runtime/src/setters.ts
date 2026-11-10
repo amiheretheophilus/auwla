@@ -20,7 +20,7 @@
 
 import { classValue } from './dom-values';
 import { isAriaAttribute, isHtmlBooleanAttribute } from './html-attributes';
-import type { WriteBatch } from './write-batch';
+import { batchlessListener, type WriteBatch } from './write-batch';
 
 export type SlotCache = Record<string, unknown>;
 
@@ -59,7 +59,7 @@ export function setListener(
 ): EventListener | undefined {
   if (previous !== undefined) node.removeEventListener(event, previous);
   if (typeof value !== 'function') return undefined;
-  const listener = batch === null ? value as EventListener : batch.listener(value as EventListener);
+  const listener = batch === null ? batchlessListener(value as EventListener) : batch.listener(value as EventListener);
   node.addEventListener(event, listener);
   return listener;
 }

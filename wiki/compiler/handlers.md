@@ -16,6 +16,7 @@ Finds every place that changes state and makes the UI update after it.
 | `mutations.ts` | Emits direct member-store targets and delete notifications; replay uses silent versions |
 | `mutations.test.ts` | Native computed-key order, receiver/logical semantics, partial patterns and member loop targets |
 | `receivers.ts` | Plans and emits this/private/super store targets with lexical class access |
+| `callbacks.ts` | A function that writes state and is handed to other code commits as it returns (below, "Callbacks") |
 | `core/emit/await.ts` | Preserves native await expressions while flushing writes after operand evaluation and scheduling resumed observation recovery |
 | `await.test.ts` | Native immediate-suspension checks, return await, operands/receivers, awaited call arguments and suspended factory ownership |
 | `packages/runtime/src/mutation.ts` | Member target preserving native key conversion, getter/setter receiver and successful-store notification |
@@ -135,6 +136,10 @@ it in its next pass. Before, the mark waited for the microtask after the parent'
 showed the old props for a task, a frame under a frame scheduler, and took a second commit. A mark
 from the entity's own render keeps the pending path (`tests/scheduling.test.ts`). The comparison
 cases run updates synchronously; `SCHEDULER=deferred` runs them in a microtask, as a browser does.
+A component with no state has no batch, and its handler is wrapped by `batchlessListener`, which
+counts as a listener: its writes to other owners (module state another component shows) commit
+as the outermost handler returns, not a microtask later (`tests/scheduling.test.ts`). A function
+handed to other code commits as it returns too (below, "Callbacks").
 Notifications retain the originating application
 and entity identity, so a delayed callback cannot update a replacement instance.
 Error recovery resets the listener depth at the next microtask without adding
@@ -304,6 +309,30 @@ unknown call that reaches one reports a change, except during a render, where
 `labels.set(token, sameValue)` re-runs an effect reading `labels` on the compilers but
 not on the reference, which counts real edits by wrapping the native methods. Cases:
 `tests/cases/state-and-derived.test.ts`, "a weak collection".
+
+### Callbacks
+
+A function that writes state and is handed to other code (a subscription, a timer, a listener
+added with `addEventListener`) commits as it returns, as an event handler does
+(`features/handlers/callbacks.ts`). Before, its writes waited for the recovery microtask, so
+`emit()` followed by a read of the page showed the old value (`tests/r20-cleanup.test.ts`). A
+function qualifies when a planned write or edit is in its own body, or it calls by name a
+function that qualifies, and it escapes (`core/resolve/escapes.ts`). Not a component, not a
+function holding its own state (`emitShared` builds its body and rewrites its returns, and its
+copies map back to the authored returns, so the final copy would take that rewrite back), not an
+element's `on*` handler (`setListener` wraps those), not async (each `await` is a boundary) and
+not a generator. A function only ever called directly belongs to its caller's stretch.
+
+The body is instrumented rather than wrapped: `enterCallback()` first, `leaveCallback(value)` at
+each return and at the end, so the function keeps its identity (`removeEventListener(receive)`
+still finds it), name, length and hoisting. The replacements are registered on the authored
+nodes before components are composed and hold the authored body, so `copy` applies the other
+features' replacements inside them. In the runtime the count is the listener count. The
+outermost return does not commit inside a component's setup, render or effect (`isBuilding()`): a
+callback run there (`items.forEach((item) => total += item)`) leaves its writes to that commit.
+A listener that belongs to no batch schedules the recovery microtask on entry, which resets the
+count if it throws (`enterListener`, `runtime/src/write-batch.ts`). Tests:
+`tests/scheduling.test.ts` (a subscription, a listener added and removed by hand).
 
 ## Rules
 

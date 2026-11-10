@@ -75,7 +75,10 @@ export type { EffectCallback, EffectCondition } from './effect';
 
 export { materializeMarkup, cloneTemplate, createTemplateCache } from './markup';
 export type { TemplateCache } from './markup';
-export { createWriteBatch, rejectConstAssignment, unchangedWrite, flushWritesBeforeAwait, resumeWritesAfterAwait } from './write-batch';
+export {
+  createWriteBatch, rejectConstAssignment, unchangedWrite, flushWritesBeforeAwait, resumeWritesAfterAwait,
+  enterCallback, leaveCallback,
+} from './write-batch';
 export type { WriteBatch } from './write-batch';
 export { createBuildScope, captureBuildScope, currentBuildFrame, isBuilding, isEffectInvocation } from './build-scope';
 export {

@@ -4,6 +4,7 @@ import {
   onEntityRender, runInApplicationRuntime, type Entity,
 } from './kernel';
 import { recoveryHooks } from './recovery-hooks';
+import { isBuilding } from './build-scope';
 import { publishGlobalsAfterHandler } from './globals';
 import type { SharedListener } from './setters';
 import { advanceWriteEpoch } from './write-epoch';
@@ -54,6 +55,8 @@ function scheduleRecovery(): void {
 
 function recoverWrites(): void {
   recoveryQueued = false;
+  // No listener is running at a microtask: a count still raised was left by one that threw.
+  listenerDepth = 0;
   while (pendingRecoveries.size > 0) {
     const first = pendingRecoveries.values().next().value!;
     pendingRecoveries.delete(first);
@@ -104,6 +107,59 @@ onEntityRender((entity) => {
   // a later sibling may still write it again and need another update.
   batchIndex().get(entity)?.beginUpdate();
 });
+
+/**
+ * Count a listener that belongs to no batch. The recovery microtask resets the count, so one
+ * that throws cannot leave it raised and stop later listeners from committing.
+ */
+function enterListener(): void {
+  scheduleRecovery();
+  listenerDepth++;
+}
+
+/**
+ * The outermost listener's return commits what it wrote. Not inside a component's setup, render
+ * or effect: a callback that runs there (`items.forEach((item) => total += item)`) leaves its
+ * writes to the commit that component is part of, or to the recovery microtask.
+ */
+function leaveListener(): void {
+  listenerDepth--;
+  if (listenerDepth === 0 && !isBuilding()) {
+    publishGlobalsAfterHandler();
+    flushPendingWrites();
+  }
+}
+
+/**
+ * A handler of a component with no write batch of its own (it holds no state). Its writes go to
+ * other owners (`phase = 1` writing module state another component shows), which commit when
+ * the outermost handler returns, as a handler of a component with state does, rather than a
+ * microtask later.
+ */
+export function batchlessListener<T extends (...args: any[]) => any>(callback: T): T {
+  return function (this: unknown, ...args: unknown[]) {
+    enterListener();
+    const result = Reflect.apply(callback, this, args);
+    leaveListener();
+    return result;
+  } as T;
+}
+
+/**
+ * The start of a function that writes state and is handed to code the compiler cannot see: a
+ * subscription, a timer, a listener added with `addEventListener`
+ * (`compiler-next/src/features/handlers/callbacks.ts`). Its body is instrumented rather than
+ * wrapped, so the function keeps its identity, name, length and hoisting.
+ */
+export function enterCallback(): void {
+  enterListener();
+}
+
+/** The end of such a function: commit what it wrote, as an event handler's return does. */
+export function leaveCallback<T>(value: T): T {
+  leaveListener();
+  return value;
+}
 
 /** A call containing an awaited argument can still throw after resumption. */
 export function resumeWritesAfterAwait<T>(value: T): T {

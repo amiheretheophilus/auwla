@@ -24,7 +24,8 @@ async function start(name: string, source: string) {
   mkdirSync(directory, { recursive: true });
   const file = join(directory, `${name}.js`);
   writeFileSync(file, compileModules({ './App.tsx': source }, {})['./App.tsx']!);
-  const { App } = await import(pathToFileURL(file).href);
+  const exports = await import(pathToFileURL(file).href);
+  const { App } = exports;
   const pending: (() => void)[] = [];
   setScheduler((run) => { pending.push(run); });
   const host = document.createElement('div');
@@ -33,8 +34,63 @@ async function start(name: string, source: string) {
   mounted = mount(host.id, App);
   const flush = () => { while (pending.length > 0) pending.shift()!(); };
   flush();
-  return { host, pending, flush };
+  return { host, pending, flush, exports };
 }
+
+// A function that writes state and is handed to other code commits as it returns, as a handler
+// does (`features/handlers/callbacks.ts`). Before, its writes waited for a microtask, so code that
+// called it and then read the page saw the old value (tests/r20-cleanup.test.ts).
+it('a subscription callback commits its writes as it returns', async () => {
+  const { host, pending, flush, exports } = await start('subscription-callback', `
+    const listeners = [];
+    function subscribe(listener) { listeners.push(listener); }
+    export function emit() { for (const listener of listeners) listener(); }
+    export function App() {
+      let count = 0;
+      subscribe(() => count++);
+      return <output>{count}</output>;
+    }`);
+  exports.emit();
+  expect(pending.length).toBe(1);
+  flush();
+  expect(host.querySelector('output')!.textContent).toBe('1');
+});
+
+it('a listener added by hand commits as it returns and can still be removed', async () => {
+  const { host, pending, flush } = await start('added-listener', `
+    export function App() {
+      let count = 0;
+      const receive = () => { count++; };
+      window.addEventListener('scheduling-ping', receive);
+      return <main><output>{count}</output>
+        <button onClick={() => window.removeEventListener('scheduling-ping', receive)}>stop</button></main>;
+    }`);
+  window.dispatchEvent(new Event('scheduling-ping'));
+  expect(pending.length).toBe(1);
+  flush();
+  expect(host.querySelector('output')!.textContent).toBe('1');
+  // The instrumented function is the one that was added, so removing it works.
+  host.querySelector('button')!.click();
+  window.dispatchEvent(new Event('scheduling-ping'));
+  flush();
+  expect(host.querySelector('output')!.textContent).toBe('1');
+});
+
+// A component with no state of its own has no write batch, so its handler was a plain listener:
+// a write to module state another component shows waited for a microtask, where a handler of a
+// component with state commits as it returns (tests/fix-empty-return-and-row-derivations.test.ts).
+it('a handler of a component without state commits its writes as it returns', async () => {
+  const { host, pending, flush } = await start('batchless-handler', `
+    let phase = 0;
+    function Controls() { return <button id="next" onClick={() => { phase = 1; }}>next</button>; }
+    function View() { return <p>{phase}</p>; }
+    export function App() { return <main><Controls /><View /></main>; }`);
+  host.querySelector<HTMLElement>('#next')!.click();
+  // Scheduled before the handler's task ends, not a microtask later.
+  expect(pending.length).toBe(1);
+  flush();
+  expect(host.querySelector('p')!.textContent).toBe('1');
+});
 
 // The parent's commit sends each row new props, which marks the row. Before, those marks waited
 // for a microtask after the parent's task, so the rows showed the old props for a task (a frame

@@ -12,6 +12,7 @@ import { expression, statement, stringLiteral } from './quote';
 import { emitNodes } from './template';
 import { emitLocalState } from '../../features/state/dom';
 import { emitConstWrites, emitWrites } from '../../features/handlers/dom';
+import { emitCallbackBoundaries, planCallbackBoundaries } from '../../features/handlers/callbacks';
 import { emitSites } from './sites';
 import { emitMemos } from '../../features/derived/dom';
 import { emitTakeovers } from '../../features/derived/takeover';
@@ -51,6 +52,19 @@ function readsImportedState(plan: ModulePlan): boolean {
       return !reference.isWrite && !reference.inTypePosition && !is.ExportSpecifier(module.parentOf(reference.node));
     });
   });
+}
+
+/** Every operation of the module that changes state: a write, an edit or a global's store. */
+function writeOperations(plan: ModulePlan): Node[] {
+  const owners = [...plan.components.values(), ...plan.sharedOwners];
+  return [
+    ...owners.flatMap((owner) => [...owner.writes, ...owner.replayWrites].map((write) => write.operation)),
+    ...[...owners.flatMap((owner) => [...owner.mutations, ...owner.replayMutations]), ...plan.importedMutations ?? []]
+      // A call known to edit nothing it was given (`items.map`) is not a write.
+      .filter((mutation) => mutation.method?.kind !== 'read')
+      .map((mutation) => mutation.operation),
+    ...plan.globals.accesses.filter((access) => access.write).map((access) => access.node),
+  ];
 }
 
 /** Preserve module syntax and exports, replacing planned functions on a fresh tree. */
@@ -93,6 +107,12 @@ export function emitDom(plan: ModulePlan, options: CompileModulesOptions): Node 
     replacements.set(access.node, expression(template, { runtime, name, value: access.node }));
   }
   if (plan.globals.codeFromText) hoisted.push(statement('$$runtime.noteCodeFromText();', { runtime }));
+  // A function that writes state and is handed to other code commits as it returns. Registered
+  // before any component is composed, so every copy of the function gets it. A component's body,
+  // and the body of a function holding its own state (`emitShared` completes its returns), are
+  // composed by their own emitters.
+  const composed = new Set<Node>([...plan.components.keys(), ...plan.sharedOwners.flatMap((owner) => owner.fn ?? [])]);
+  emitCallbackBoundaries(planCallbackBoundaries(module, writeOperations(plan), composed), runtime, replacements);
   for (const reference of module.references) {
     if (reference.isWrite || reference.inTypePosition) {
       continue;

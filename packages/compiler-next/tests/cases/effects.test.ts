@@ -126,6 +126,22 @@ behaves('$cleanup runs when the component unmounts', {
   steps: [{ click: 'button' }],
 });
 
+// tests/r20-cleanup.test.ts: a removed row's cleanup runs once, and the others' do not.
+behaves('$cleanup runs when a list removes its row', {
+  source: `
+    const rows = [{ id: 1 }, { id: 2 }];
+    let disposed = '';
+    function Row({ item }) {
+      $cleanup(() => { disposed += item.id; });
+      return <li>{item.id}</li>;
+    }
+    export function App() {
+      return <main><button onClick={() => rows.pop()}>remove</button>
+        <ul>{rows.map((item) => <Row key={item.id} item={item} />)}</ul><p>{disposed}</p></main>;
+    }`,
+  steps: [{ click: 'button' }, { click: 'button' }],
+});
+
 behaves('an effect at module scope', {
   source: `
     let theme = 'light';
