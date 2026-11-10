@@ -190,6 +190,24 @@ it.each(['component', 'module'])('evaluates only edited rows when rows also read
   expect(labels()).toEqual(['X.', 'B.', 'Y.']);
 });
 
+// A row made in a pass edits a later row's item from its element's constructor
+// (tests/owner-list-structure.test.ts): the reference renders rows in order and shows the edit, so
+// the closed list asks whether an item was edited as it reaches each row, not once before the pass.
+// One mount only: the element class is defined once, over the first mount's `items`.
+it('shows an item edit made earlier in the same pass', async () => {
+  const { host, click } = await mount(`
+    export function App() {
+      let items = [{ id: 1, label: 'one' }, { id: 2, label: 'two' }, { id: 3, label: 'three' }];
+      customElements.define('closed-pass-row', class extends HTMLElement {
+        constructor() { super(); if (items.length === 4) items[2].label = 'changed'; }
+      });
+      return <main><button id="prepend" onClick={() => { items = [{ id: 4, label: 'four' }, items[0], items[1], items[2]]; }}>prepend</button>
+        <ul>{items.map((item) => <closed-pass-row key={item.id}>{item.label}</closed-pass-row>)}</ul></main>;
+    }`, true);
+  click('prepend');
+  expect([...host.querySelectorAll('closed-pass-row')].map((row) => row.textContent)).toEqual(['four', 'one', 'changed', 'three']);
+});
+
 it('merges multiple selection routes and updates their union once in row order', async () => {
   const updated = watchRowUpdates();
   const { host, click } = await mount(`

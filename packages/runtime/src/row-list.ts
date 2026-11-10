@@ -75,9 +75,12 @@ export function whenQuiet(unedited: Unedited): Unedited {
  * known sets the map itself, and then every item counts as edited.
  */
 export function uneditedItems(editedAt: WeakMap<object, number>, before: number, now: number): Unedited {
-  if (before === now) return true;
-  if ((editedAt.get(editedAt) ?? 0) > before) return false;
-  return (item) => item === null || typeof item !== 'object' || (editedAt.get(item) ?? 0) <= before;
+  if (before !== now && (editedAt.get(editedAt) ?? 0) > before) return false;
+  // Asked as each row is reached, not once before the pass, also when nothing was edited before
+  // it: a row made earlier in this pass can edit a later row's item (a custom element's
+  // constructor), and the reference, rendering rows in order, shows that edit in the later row.
+  return (item) => item === null || typeof item !== 'object'
+    || ((editedAt.get(item) ?? 0) <= before && (editedAt.get(editedAt) ?? 0) <= before);
 }
 
 export interface RowList {

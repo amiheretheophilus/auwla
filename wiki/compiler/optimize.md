@@ -265,8 +265,11 @@ What it buys, with nothing checked at runtime:
   Each edit counts and names its item: `rows[i].label = x` is
   `(_item = rows[i], _edited_rows(_item, _item.label = x))`, which holds the item where
   the store evaluates it, and records the edit's count in `_editedAt_rows`. The list
-  then gets `uneditedItems(_editedAt_rows, seen, now)`: `true` with no edit, otherwise
-  whether an item is unedited. So "update every 10th row" evaluates 10% of the rows, not
+  then gets `uneditedItems(_editedAt_rows, seen, now)`, which says whether an item is
+  unedited as each row is reached: a row made earlier in the pass can edit a later row's
+  item (a custom element's constructor), and the reference, rendering rows in order, shows
+  that (`row-lists.dom.test.ts`, "shows an item edit made earlier in the same pass"). A
+  list nothing edits gets `true`. So "update every 10th row" evaluates 10% of the rows, not
   all of them (`row-lists.dom.test.ts`, "evaluates only the rows whose items were
   edited"). An edit whose item is not a member store notes every item. A pass still
   evaluates everything after a routed value changed, after `invalidate`, or after a pass
