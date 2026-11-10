@@ -225,6 +225,26 @@ export function rebindModuleSourceFromFactory<T>(
   );
 }
 
+/** Keys whose declaration has run: a later run is the declaration following a changed input. */
+const declaredSources = new Set<string>();
+
+/**
+ * A module source's declaration, as compiler-next emits it: `users = followModuleSource(ref)`.
+ * It runs again when an input the call reads changes (`search` in `$fetch('/api/users',
+ * { query: { search } })`); the request made from it then follows the new inputs through the
+ * registered factory, and the module keeps the same ref. An unchanged request stays as it is
+ * (`rebindFetchResourceFrom`), and an unused description is not materialized.
+ */
+export function followModuleSource(ref: ModuleSourceRef): ModuleSourceRef {
+  if (!declaredSources.has(ref.key)) {
+    declaredSources.add(ref.key);
+    return ref;
+  }
+  const described = describedSources.get(ref.key);
+  if (described !== undefined) rebindModuleSourceFromFactory(ref, described.factory as () => ResolvedValue<unknown>);
+  return ref;
+}
+
 /**
  * List-view read for module sources: committed data renders rows; an
  * unavailable source renders zero rows (§10: no Group → empty local region);

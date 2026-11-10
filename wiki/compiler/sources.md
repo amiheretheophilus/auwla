@@ -170,6 +170,13 @@ All paths below are under `packages/compiler-next/`. This is test code only.
   - a source whose request reads another source does not start until that one commits;
   - a render site shows its boundary's pending UI;
   - an early return that reads a source waits too.
+- A module-scope source (`export const users = $fetch('/api/users', { query: { search } })`)
+  is described once and made lazily per runtime (`describeSourceValue`). Its declaration
+  runs again when an input it reads changes, and `followModuleSource` then rebinds the
+  request made from it to the new inputs through the registered factory; the module keeps
+  the same ref. Before 2026-11-10 the declaration assigned the same ref again and the request
+  kept its first inputs. A read inside a callback the call runs later (`Promise.resolve().
+  then(() => ({ id }))`) is not an input, as in the reference.
 - A handler that reads a source before it has loaded gets a compile-time warning,
   not runtime magic.
 - Loading and error UI come from the nearest `Group` boundary (`Boundary` in the

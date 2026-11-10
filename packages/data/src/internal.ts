@@ -77,6 +77,7 @@ export {
   createClientSource,
   createReadSource,
   describeModuleSource,
+  followModuleSource,
   isModuleSourceRef,
   readModuleSourceList,
   rebindModuleSource,

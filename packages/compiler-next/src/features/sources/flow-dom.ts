@@ -154,7 +154,8 @@ export function emitSourceFlow(
       value: copy(call, replacements),
     }));
 
-    replacements.set(call, expression('$$reference', { reference }));
+    // The declaration runs again when an input of the call changes; the request follows it.
+    replacements.set(call, expression('$$data.followModuleSource($$reference)', { data, reference }));
   }
 
   for (const [root, inputs] of flow.guards) {

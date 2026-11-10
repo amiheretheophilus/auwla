@@ -922,6 +922,58 @@ behaves('a module derivation waits and follows later source refreshes', {
   },
 });
 
+// tests/transparent-module-data.test.ts: a module's source reads a module binding another
+// module's call writes; the request follows it.
+behaves('a module source requests again when the module input it reads changes', {
+  modules: {
+    './input.ts': `
+      import { $fetch } from '@memoized-dom/data';
+      export let search = 'Ada';
+      export const users = $fetch('/api/users', { query: { search } });
+      export function setSearch(next) { search = next; }`,
+  },
+  source: `
+    import { Group } from '@memoized-dom/data';
+    import { users, setSearch } from './input';
+    export function App() {
+      return <Group pending={() => <i>loading</i>}><main>
+        <button onClick={() => setSearch('Grace')}>change</button><output>{users.name}</output>
+      </main></Group>;
+    }`,
+  steps: [
+    { respond: '/api/users?search=Ada', value: { name: 'Ada' } },
+    { click: 'button' },
+    { respond: '/api/users?search=Grace', value: { name: 'Grace' } },
+  ],
+  check(container, observation) {
+    expect(container.querySelector('output')?.textContent).toBe(['loading', 'Ada', 'Ada', 'Grace'][observation]);
+  },
+});
+
+// The promise reads `id` in a callback, after the declaration ran: that read is not an input of the
+// declaration, as in the reference (tests/transparent-module-data.test.ts, "deferred", expects otherwise).
+behaves('a module $read whose promise reads a module input later keeps its first result', {
+  modules: {
+    './read-source.ts': `
+      import { $read } from '@memoized-dom/data';
+      export let id = 1;
+      export const user = $read(Promise.resolve().then(() => ({ id })));
+      export function advance() { id++; }`,
+  },
+  source: `
+    import { Group } from '@memoized-dom/data';
+    import { user, advance } from './read-source';
+    export function App() {
+      return <Group pending={() => <i>loading</i>}><main>
+        <button onClick={advance}>next</button><output>{user.id}</output>
+      </main></Group>;
+    }`,
+  steps: [{ click: 'button' }],
+  check(container, observation) {
+    expect(container.querySelector('output')?.textContent).toBe(['1', '1'][observation]);
+  },
+});
+
 behaves('a GET server-function client facade behaves as a source', {
   modules: {
     './users.ts': `
