@@ -169,5 +169,6 @@ export {
   defineComponent, sameProps, sameValue, type PropsCell,
 } from './components';
 export { publishVersions } from './computation';
+export { noteCodeFromText, publishGlobal, trackGlobal } from './globals';
 export { registerProps, setProps } from './props';
 export type { CondRegion, CondEntry, CondBranchFactory } from './cond';

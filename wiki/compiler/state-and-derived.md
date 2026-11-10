@@ -236,6 +236,24 @@ value every time (`features/derived/dom.ts`, `keepsValue`).
   declaration, `window.count = 1`, `document.title = 'x'`) is an input. Method
   calls on a global (`localStorage.setItem`, `Math.random()`) are not writes.
   The rule is in `core/resolve/globals.ts`.
+  - **How an input global updates** (`planGlobalAccesses`, `runtime/src/globals.ts`). Each read
+    is `trackGlobal(name, read)`, so the site or memo running it depends on that global, and each
+    write is `publishGlobal(name, write)`, so a reader in any component updates. `window.count` is
+    the global `count`; `window[key]` reads depend on every global, and writes to one wake them
+    all. `typeof x` is tracked whole, so it never throws. A called name is tracked beside the call,
+    `(trackGlobal('f'), f)(…)`, which keeps the call as it was; a called member (`window.f()`) is
+    not wrapped, to keep its receiver, and neither is a direct `eval`.
+  - **Code from text.** `eval` used at all, or `Function` called, may write any global out of the
+    compiler's sight (`GlobalWrites.fromText`). Then a global read inside JSX, where a site shows
+    it, is tracked too, and the end of each event handler publishes every global
+    (`noteCodeFromText`). Such a global is still not an input for setup or a derived value:
+    tracking `new Proxy(…)` there would rebuild a module value after every handler and lose its
+    edits, which the "strange proxy" cases in `tests/cases/handlers.test.ts` caught.
+  - Found by the acceptance re-run (`tests/list-row-calculations.test.ts`, an `eval`-installed
+    setter). Before it, a written global updated only a site in the component whose handler wrote
+    it, and a bare `{count}` site never.
+  - Cases: `tests/cases/state-and-derived.test.ts`, "globals: …". Every mode runs in one process,
+    so such a case sets its globals at the top of its module.
 - **An import is the binding it names.** Importing a module constant gives a
   constant; importing module state gives state. A package import is opaque.
 - **Opaque property reads.** A property read may run a getter or a proxy trap that

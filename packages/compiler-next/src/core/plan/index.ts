@@ -11,6 +11,7 @@ import { isReactive, type BindingNode, type SemanticGraph } from '../graph';
 import { variableDeclaration, type InputQueries } from '../graph/inputs';
 import { isWrittenGlobal, runnerOf, type ResolvedModule } from '../resolve';
 import { functionValue, type FunctionNode } from '../resolve/functions';
+import { isTrackedGlobal, planGlobalAccesses } from '../resolve/globals';
 import type {
   ComponentPlan, MemoGroupPlan, ModulePlan, RenderValuePlan, SharedOwnerPlan,
   SharedReadPlan, Site, Template,
@@ -275,6 +276,7 @@ function planModule(
     effects,
     refs,
     module: entry,
+    globals: planGlobalAccesses(module, graph.resolved.globals),
     components: plans,
     sharedOwners,
     sharedReads,
@@ -339,6 +341,12 @@ function planSiteInputs(
       }
       for (const read of facts.reads) {
         const binding = read.binding ?? read.reference.binding;
+        // A global the program writes is tracked where it is read (`trackGlobal`), so the site
+        // collects its reads, as for a binding stored elsewhere.
+        if (binding === null && isTrackedGlobal(graph.resolved.globals, read.reference.name)) {
+          dynamicSites.add(site.expression);
+          continue;
+        }
         const node = binding === null ? undefined : graph.bindings.get(binding);
         if (node === undefined) {
           continue;

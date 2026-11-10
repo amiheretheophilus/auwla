@@ -5,6 +5,7 @@
 import type { Expression, Node, Statement, VariableDeclaration, VariableDeclarator } from 'yuku-parser';
 import type { ResolvedModule } from '../resolve';
 import type { FunctionNode } from '../resolve/functions';
+import type { GlobalAccess } from '../resolve/globals';
 import type { BindingNode } from '../graph';
 import type { Binding, Export, Module } from 'yuku-analyzer';
 
@@ -397,6 +398,12 @@ export interface ModulePlan {
   };
   readonly refs: readonly RefPlan[];
   readonly module: ResolvedModule;
+  /**
+   * Where this module touches a global the program writes, and whether it runs code from text
+   * (`core/resolve/globals.ts`): each read is tracked and each write announced, so a reader in any
+   * component updates.
+   */
+  readonly globals: { readonly accesses: readonly GlobalAccess[]; readonly codeFromText: boolean };
   readonly components: ReadonlyMap<Node, ComponentPlan>;
   readonly sharedOwners: readonly SharedOwnerPlan[];
   readonly sharedReads: ReadonlyMap<BindingNode, SharedReadPlan>;

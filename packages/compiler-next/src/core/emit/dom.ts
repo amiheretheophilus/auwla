@@ -61,7 +61,8 @@ export function emitDom(plan: ModulePlan, options: CompileModulesOptions): Node 
     || plan.sourceFlow !== undefined || (plan.capturedImports?.size ?? 0) > 0
     || (plan.importedMutations?.length ?? 0) > 0
     || module.bindings.some((binding) => namespaceModule(binding) !== null);
-  const usesRuntime = hasRenderWork || findAll(module.ast, ['TryStatement', 'AwaitExpression']).length > 0;
+  const usesRuntime = hasRenderWork || findAll(module.ast, ['TryStatement', 'AwaitExpression']).length > 0
+    || plan.globals.accesses.length > 0 || plan.globals.codeFromText;
   if (!usesRuntime && !readsImportedState(plan)) {
     return copy(module.ast);
   }
@@ -83,6 +84,15 @@ export function emitDom(plan: ModulePlan, options: CompileModulesOptions): Node 
   const sourceFlow = emitSourceFlow(plan, names, runtime, data, shared.replacements);
   hoisted.push(...sourceFlow.declarations);
   const replacements = sourceFlow.replacements;
+  // A global the program writes is an input wherever it is read (`runtime/src/globals.ts`).
+  for (const access of plan.globals.accesses) {
+    const name = access.name === null ? b.Literal({ value: null, raw: 'null' }) : stringLiteral(access.name);
+    const template = access.write ? '$$runtime.publishGlobal($$name, $$value)'
+      : access.callee === true ? '($$runtime.trackGlobal($$name, void 0), $$value)'
+        : '$$runtime.trackGlobal($$name, $$value)';
+    replacements.set(access.node, expression(template, { runtime, name, value: access.node }));
+  }
+  if (plan.globals.codeFromText) hoisted.push(statement('$$runtime.noteCodeFromText();', { runtime }));
   for (const reference of module.references) {
     if (reference.isWrite || reference.inTypePosition) {
       continue;

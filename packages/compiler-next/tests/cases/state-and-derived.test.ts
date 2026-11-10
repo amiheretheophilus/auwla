@@ -1127,6 +1127,61 @@ behaves('state: views of Map, Set, WeakMap, WeakSet, object and class state foll
   },
 });
 
+// A global the program writes is an input (`state-and-derived.md`). Each module sets its globals
+// first, since every mode runs in one process. Before `runtime/src/globals.ts`, a reader in
+// another component, or a bare `{shown}` site, never updated.
+behaves('globals: a written global updates its readers in every component', {
+  source: `
+    globalThis.shown = 'a';
+    window.count = 0;
+    globalThis.config = { mode: 'light' };
+    delete globalThis.unset;
+    const keys = ['count'];
+    function Aside() {
+      return <aside>{shown}|{window.count}|{window[keys[0]]}|{config.mode}|{typeof unset}</aside>;
+    }
+    export function App() {
+      return <main>
+        <Aside />
+        <p>{shown}:{globalThis.count}</p>
+        <button id="name" onClick={() => { shown = shown + 'b'; }}>name</button>
+        <button id="member" onClick={() => { window.count++; }}>member</button>
+        <button id="computed" onClick={() => { window[keys[0]] = 10; }}>computed</button>
+        <button id="deep" onClick={() => { config.mode = 'dark'; }}>deep</button>
+        <button id="define" onClick={() => { globalThis.unset = 1; }}>define</button>
+      </main>;
+    }`,
+  steps: [{ click: '#name' }, { click: '#member' }, { click: '#computed' }, { click: '#deep' }, { click: '#define' }],
+  check(container, observation) {
+    expect(container.querySelector('aside')!.textContent).toBe([
+      'a|0|0|light|undefined', 'ab|0|0|light|undefined', 'ab|1|1|light|undefined',
+      'ab|10|10|light|undefined', 'ab|10|10|dark|undefined', 'ab|10|10|dark|number',
+    ][observation]!);
+  },
+});
+
+// A called global keeps its receiver: `tracker.add(…)` is not `trackGlobal(…)(…)`.
+behaves('globals: calling a method of a written global keeps its receiver', {
+  source: `
+    globalThis.tracker = { items: [], add(item) { this.items = [...this.items, item]; } };
+    export function App() {
+      return <main><p>{tracker.items.join()}</p>
+        <button onClick={() => { tracker.add('x'); tracker = tracker; }}>add</button></main>;
+    }`,
+  steps: [{ click: 'button' }, { click: 'button' }],
+  check(container, observation) { expect(container.querySelector('p')!.textContent).toBe(['', 'x', 'x,x'][observation]!); },
+});
+
+behaves('globals: a global function the program replaces is called anew', {
+  source: `
+    globalThis.label = () => 'first';
+    export function App() {
+      return <main><p>{label()}</p><button onClick={() => { label = () => 'second'; }}>swap</button></main>;
+    }`,
+  steps: [{ click: 'button' }],
+  check(container, observation) { expect(container.querySelector('p')!.textContent).toBe(['first', 'second'][observation]!); },
+});
+
 behaves('derived: a var declared in a loop header derives with its loop, as let does', {
   source: `export function App() {
     let n = 2;

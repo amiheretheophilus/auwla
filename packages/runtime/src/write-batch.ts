@@ -4,6 +4,7 @@ import {
   onEntityRender, runInApplicationRuntime, type Entity,
 } from './kernel';
 import { recoveryHooks } from './recovery-hooks';
+import { publishGlobalsAfterHandler } from './globals';
 import type { SharedListener } from './setters';
 import { advanceWriteEpoch } from './write-epoch';
 
@@ -197,6 +198,7 @@ class LocalWriteBatch implements WriteBatch {
       batch.depth--;
       listenerDepth--;
       if (listenerDepth === 0) {
+        publishGlobalsAfterHandler();
         flushPendingWrites();
       }
       batch.releaseRecovery();
