@@ -112,7 +112,7 @@ export function emitDom(plan: ModulePlan, options: CompileModulesOptions): Node 
   // and the body of a function holding its own state (`emitShared` completes its returns), are
   // composed by their own emitters.
   const composed = new Set<Node>([...plan.components.keys(), ...plan.sharedOwners.flatMap((owner) => owner.fn ?? [])]);
-  emitCallbackBoundaries(planCallbackBoundaries(module, writeOperations(plan), composed), runtime, replacements);
+  emitCallbackBoundaries(planCallbackBoundaries(module, writeOperations(plan), composed), names, runtime, replacements);
   for (const reference of module.references) {
     if (reference.isWrite || reference.inTypePosition) {
       continue;

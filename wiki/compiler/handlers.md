@@ -320,8 +320,17 @@ function qualifies when a planned write or edit is in its own body, or it calls 
 function that qualifies, and it escapes (`core/resolve/escapes.ts`). Not a component, not a
 function holding its own state (`emitShared` builds its body and rewrites its returns, and its
 copies map back to the authored returns, so the final copy would take that rewrite back), not an
-element's `on*` handler (`setListener` wraps those), not async (each `await` is a boundary) and
-not a generator. A function only ever called directly belongs to its caller's stretch.
+element's `on*` handler (`setListener` wraps those) and not a generator. A function only ever
+called directly belongs to its caller's stretch.
+
+It leaves where it ends. A `return` inside a `try` or `catch` with a `finally` ends after that
+`finally`, which may still write (`try { count = 1; return; } finally { count = 2; }` showed `1`):
+the `return` sets `_returning`, and the outermost such `finally` leaves at its end. A `return` in a
+`finally` replaces the first and leaves itself. An async function ends its synchronous stretch at
+its first `await` (or `for await`), or at its return when it has none (`async () => { count = 1; }`
+waited for the microtask); after an `await` it runs from a microtask, which the recovery microtask
+commits. Such a function leaves through one flag (`leaveCallback(value, _open && !(_open = false))`),
+so it leaves exactly once however it ends. Found by a review on 2026-11-10.
 
 The body is instrumented rather than wrapped: `enterCallback()` first, `leaveCallback(value)` at
 each return and at the end, so the function keeps its identity (`removeEventListener(receive)`
@@ -332,7 +341,9 @@ outermost return does not commit inside a component's setup, render or effect (`
 callback run there (`items.forEach((item) => total += item)`) leaves its writes to that commit.
 A listener that belongs to no batch schedules the recovery microtask on entry, which resets the
 count if it throws (`enterListener`, `runtime/src/write-batch.ts`). Tests:
-`tests/scheduling.test.ts` (a subscription, a listener added and removed by hand).
+`tests/scheduling.test.ts` (a subscription, a listener added and removed by hand, `finally` blocks
+nested, returning again or completing normally, a `return` in `catch`, async callbacks with and
+without `await`, an async expression body, `for await`, and a callback that throws).
 
 ## Rules
 

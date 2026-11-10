@@ -155,9 +155,13 @@ export function enterCallback(): void {
   enterListener();
 }
 
-/** The end of such a function: commit what it wrote, as an event handler's return does. */
-export function leaveCallback<T>(value: T): T {
-  leaveListener();
+/**
+ * The end of such a function: commit what it wrote, as an event handler's return does. `leave` is
+ * false where the function already left, so it leaves once however it ends (a `finally` that
+ * returns again, an async function past its first `await`).
+ */
+export function leaveCallback<T>(value: T, leave = true): T {
+  if (leave) leaveListener();
   return value;
 }
 

@@ -56,6 +56,64 @@ it('a subscription callback commits its writes as it returns', async () => {
   expect(host.querySelector('output')!.textContent).toBe('1');
 });
 
+// The callback ends after its `finally`: committing at the `return` showed `1`, and the `finally`'s
+// write waited for a microtask. A `return` in a `finally` replaces the first and must leave once,
+// or the listener count stays off and the next handler does not commit as it returns.
+for (const [name, body, shown] of [
+  ['a return inside try … finally', 'try { count = 1; return; } finally { count = 2; }', '2'],
+  ['a finally that returns again', 'try { count = 1; return 1; } finally { count = 2; return 2; }', '2'],
+  ['nested finally blocks', 'try { try { count = 1; return; } finally { count = 2; } } finally { count = 3; }', '3'],
+  ['a try that completes normally', 'try { count = 1; } finally { count = 2; } count = 3;', '3'],
+  ['an async callback with no await', 'await0; count = 1;', '1'],
+  ['an async callback up to its first await', 'count = 1; await null; count = 5;', '1'],
+  ['a return inside catch', 'try { throw 1; } catch { count = 1; return; } finally { count = 2; }', '2'],
+  ['an async expression body', '=> (count = 4)', '4'],
+  ['a for await loop', 'count = 6; for await (const step of [1]) count = step;', '6'],
+] as const) {
+  it(`a callback commits once, when it ends: ${name}`, async () => {
+    const isAsync = body.includes('await') || body.startsWith('=>');
+    const callback = body.startsWith('=>') ? `() ${body}` : `() => { ${body.replace('await0; ', '')} }`;
+    const { host, exports } = await start(`callback-end-${name.replaceAll(/[^a-z]+/g, '-')}`, `
+      const listeners = [];
+      function subscribe(listener) { listeners.push(listener); }
+      export function emit() { for (const listener of listeners) listener(); }
+      export function App() {
+        let count = 0;
+        let clicks = 0;
+        subscribe(${isAsync ? 'async ' : ''}${callback});
+        return <main><output>{count}</output><button onClick={() => { clicks++; }}>{clicks}</button></main>;
+      }`);
+    setScheduler((run) => run());
+    exports.emit();
+    // Right as the callback returns, with no microtask in between.
+    expect(host.querySelector('output')!.textContent).toBe(shown);
+    // The listener count is back to zero: a handler still commits as it returns.
+    host.querySelector('button')!.click();
+    expect(host.querySelector('button')!.textContent).toBe('1');
+  });
+}
+
+// No `try` is added around authored code: a callback that throws leaves the listener count raised
+// until the recovery microtask, which commits its write and resets the count.
+it('a callback that throws commits at the next microtask, and later handlers still commit', async () => {
+  const { host, exports } = await start('callback-throws', `
+    const listeners = [];
+    function subscribe(listener) { listeners.push(listener); }
+    export function emit() { for (const listener of listeners) listener(); }
+    export function App() {
+      let count = 0;
+      let clicks = 0;
+      subscribe(() => { count = 1; throw new Error('stop'); });
+      return <main><output>{count}</output><button onClick={() => { clicks++; }}>{clicks}</button></main>;
+    }`);
+  setScheduler((run) => run());
+  expect(() => exports.emit()).toThrow('stop');
+  await Promise.resolve();
+  expect(host.querySelector('output')!.textContent).toBe('1');
+  host.querySelector('button')!.click();
+  expect(host.querySelector('button')!.textContent).toBe('1');
+});
+
 it('a listener added by hand commits as it returns and can still be removed', async () => {
   const { host, pending, flush } = await start('added-listener', `
     export function App() {
