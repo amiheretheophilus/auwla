@@ -240,6 +240,15 @@ checks before retention checks as well as in isolation when changing this fixtur
    `bun test --preload ./test-support/compiler-next.ts <file>`. When they all pass, the old
    compiler is deleted.
 
+   The switch gives `compile` and `compileModules` to compiler-next. The old entry points that
+   compile a program and that compiler-next does not provide yet (`compileModulesDetailed`, which
+   `packages/vite` calls, `compileDetailed`, `experimentalCompilePackage`, `compileServerPage`,
+   `emitInitialHtml`) throw "… is not on compiler-next yet". Until 2026-11-10 they ran the old
+   compiler, so a Vite test passing under the preload was evidence about the old compiler (found by
+   a review). They move with `packages/vite`, once compiler-next has Vite's result contract
+   (`applicationRoot`, `maps`, `metadata`, `hydrationCapabilities`). Parsers, diagnostics and the
+   server-function transforms are not program compilers and stay the old compiler's.
+
    First run, 2026-11-06, on the 199 root files that import the public compiler, one file at a
    time: **1,060 pass, 826 fail, 57 files clean.** The switch does not reach the 103 files that
    test `packages/compiler/src/…` or no compiler at all. Sorted by each failing test's failing line:
