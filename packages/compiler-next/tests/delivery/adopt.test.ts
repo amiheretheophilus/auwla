@@ -111,6 +111,8 @@ it('reports server nodes it could not use, and nothing for a page that agrees', 
     [html, false],
     [html.replace('<h1>', '<h3>').replace('</h1>', '</h3>'), true],
     [html.replace(/<img[^>]*>/, ''), true],
+    // Changed after the server sent it (an extension, a proxy): an element no creation made.
+    [html.replace('body', 'body<b>extra</b>'), true],
   ] as const) {
     const host = document.createElement('div');
     host.id = 'root';
@@ -123,10 +125,31 @@ it('reports server nodes it could not use, and nothing for a page that agrees', 
     if (reported) expect(errors[0]).toBeInstanceOf(HydrationMismatchError);
     expect(host.querySelector('h1')!.textContent).toBe('Title');
     expect(host.querySelector('img')).not.toBeNull();
+    expect(host.querySelector('b')).toBeNull();
     mounted.unmount();
     mounted = undefined;
     document.body.replaceChildren();
   }
+});
+
+// The elements `innerHTML` wrote on the server are no creation's, and are not a mismatch.
+it('reports nothing for what an innerHTML property wrote', async () => {
+  const { App } = await load('inner-html', `
+    export function App() {
+      const markup = '<em>rich</em> text';
+      return <main><div innerHTML={markup} /></main>;
+    }`);
+  const html = renderToString(App as never, { markers: true });
+  expect(html).toContain('<em>rich</em>');
+  const host = document.createElement('div');
+  host.id = 'root';
+  host.innerHTML = html;
+  document.body.append(host);
+  const errors: unknown[] = [];
+  setScheduler((run) => run());
+  mounted = mount('root', App as never, { onHydrateError: (error) => { errors.push(error); } });
+  expect(errors).toEqual([]);
+  expect(host.querySelector('div')!.innerHTML).toBe('<em>rich</em> text');
 });
 
 it('makes new nodes where the server built something else', async () => {

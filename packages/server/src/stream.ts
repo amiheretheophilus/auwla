@@ -34,7 +34,9 @@ async function streamRegions(
   push: (part: string) => Promise<void>,
 ): Promise<void> {
   const serialize = (node: StringRenderableNode) => session.serialize(node, true, false);
-  const tracker = new RegionTracker(root, serialize);
+  // A numbered page (compiler-next output) streams its numbered elements; the old compiler's, its marker ranges.
+  const numbered = session.creations?.cloned === true;
+  const tracker = new RegionTracker(root, serialize, numbered ? (node) => session.creationIds.get(node) : undefined);
   const payload = session.payload();
   const state = payload.state === undefined ? undefined : streamedState(payload.state);
   const deltas = new SourceDeltas(state ?? { formatVersion: 1, sources: [] });

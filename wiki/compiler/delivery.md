@@ -200,11 +200,26 @@ recovery reports it to `onHydrateError` and renders on the client in place of th
 
 **Adoption reports where the server built something else**, once, to `onHydrateError` (as a
 `'region'` error): the first server node a creation took and could not use (`misfit`), or else one no
-creation asked for. The page is right either way. Numbering by region is what makes this safe to
+creation asked for. An extra element inside a template's element is reported too, though the element
+is used: every created element was pooled already, so it is content changed after the server sent it.
+Extra texts and comments are not (the parser merges texts; a slot's opening comment has no number),
+nor children of an element whose template has none, which an `innerHTML` property may have written.
+The page is right either way. Numbering by region is what makes this safe to
 report: a streamed region no longer looks like a mismatch (`tests/delivery/adopt.test.ts`).
 
 Every server serialization of a page goes through `RenderSession.serialize`, so streamed HTML is
 numbered too, and a region the server streams after its data settles is reused like the rest.
+
+**What a stream sends** (`packages/server/src/stream-regions.ts`). The old compiler's regions are
+marker ranges (`mmd:g`, `mmd:c`, `mmd:l`); compiler-next's output has none, so its regions are its
+numbered elements. After each settlement the tracker compares every numbered element's HTML with what
+it sent. One whose own HTML changed (with the numbered elements inside it left out) is sent whole, as
+`<template data-mmd-region="[N">`; one whose change is all inside its numbered elements sends those
+instead. Before the program runs, the inline script replaces the marker `<!--[N-->` and the element
+after it with the template's copy, which carries the same numbers, so adoption then reuses it. A
+change outside any numbered element is not streamed: its data arrives, and the client render shows it.
+Before this, the tracker looked only for marker ranges, and a compiler-next page streamed data but no
+HTML (`tests/ssr-region-streaming.test.ts`).
 
 ### How it is tested
 

@@ -7,6 +7,7 @@ import { compileModules } from '@memoized-dom/compiler';
 import { renderToReadableStream } from '@memoized-dom/server';
 import { mount, registerRootFactory, type MountedApplication } from '@memoized-dom/runtime';
 import '@memoized-dom/runtime/hydrate';
+import { rootFactoryStore } from '@memoized-dom/runtime/server';
 
 const output = join(dirname(fileURLToPath(import.meta.url)), 'fixtures', 'out', 'ssr-region-streaming.compiled.ts');
 mkdirSync(dirname(output), { recursive: true });
@@ -97,18 +98,27 @@ async function render(fetch: typeof globalThis.fetch, timeout?: number) {
   return { app, reader };
 }
 
+/**
+ * The root id the compiled module registered: the component's name with the old compiler, its
+ * module and name with compiler-next (`./app.tsx#App`). The server stamps it on every chunk.
+ */
+function rootIdOf(app: CompiledApp): string {
+  return rootFactoryStore().get(app.App)!.id;
+}
+
 function hostFor(app: CompiledApp): HTMLElement {
   const host = document.createElement('div');
   host.id = 'root';
   document.body.appendChild(host);
-  registerRootFactory(app.App, { id: 'App', create: () => app.App('App', null) });
+  const id = rootIdOf(app);
+  registerRootFactory(app.App, { id, create: () => app.App(id, null) });
   return host;
 }
 
 describe('out-of-order region streaming', () => {
   it('sends the shell first, then each region in completion order', async () => {
     const server = gatedFetch();
-    const { reader } = await render(server.fetch);
+    const { app, reader } = await render(server.fetch);
 
     const shell = (await nextChunk(reader))!;
     expect(shell).toContain('<header id="static">Header</header>');
@@ -121,7 +131,7 @@ describe('out-of-order region streaming', () => {
     expect(fast).toContain('fast title');
     expect(fast).not.toContain('slow title');
     expect(fast).toMatch(/^<template data-mmd-region="[^"]+">/);
-    expect(fast).toContain('data-mmd-delta="App"');
+    expect(fast).toContain(`data-mmd-delta="${rootIdOf(app)}"`);
 
     await server.open('/api/slow');
     const rest = (await remaining(reader)).join('');
@@ -244,9 +254,9 @@ describe('out-of-order region streaming', () => {
     stubGlobal('fetch', clientFetch);
     mounted = mount('root', app.App);
     const realm = (globalThis as Record<PropertyKey, unknown>)[Symbol.for('memoized-dom:stream')] as {owns(id:string):boolean};
-    expect(realm.owns('App')).toBe(true);
+    expect(realm.owns(rootIdOf(app))).toBe(true);
     mounted.unmount();
-    expect(realm.owns('App')).toBe(false);
+    expect(realm.owns(rootIdOf(app))).toBe(false);
     await server.open('/api/fast');
     appendStreamed(host, (await nextChunk(reader))!);
     document.dispatchEvent(new Event('DOMContentLoaded'));

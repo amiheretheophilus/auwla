@@ -175,7 +175,8 @@ export function adoptTemplate(
 ): Node | null {
   const fits = (node: Node | undefined, at: string, root: TemplateNode): node is Node => {
     if (node === undefined) return false;
-    if (fitTemplate(node, root, namespace)) return true;
+    // An extra element inside a node that fits is reported too, though the node is used.
+    if (fitTemplate(node, root, namespace, (extra) => creations.misfit?.(at, extra))) return true;
     creations.misfit?.(at, node);
     return false;
   };
@@ -208,8 +209,14 @@ export function noteTemplate(creations: Creations, id: string, clone: Node, root
  * Brings a server node to the template's shape: static text and attributes as the template has
  * them, a text or comment the server did not keep made again, anything extra removed. False when
  * an element differs, since then the server built something else.
+ *
+ * An extra element goes to `extra` before it is removed. Every element a program creates was
+ * pooled already, so one left inside a template's element is something else: content changed
+ * after the server sent it (an extension, a proxy). Extra texts and comments are not: the parser
+ * merges texts, and a slot's opening comment is not numbered. An element the template gives no
+ * children may hold what an `innerHTML` property wrote, so its children are not checked.
  */
-function fitTemplate(node: Node, template: TemplateNode, namespace: 'html' | 'svg'): boolean {
+function fitTemplate(node: Node, template: TemplateNode, namespace: 'html' | 'svg', extra?: (node: Node) => void): boolean {
   if (template === null) {
     if (node.nodeType !== 8) return false;
     (node as Comment).data = '';
@@ -241,12 +248,12 @@ function fitTemplate(node: Node, template: TemplateNode, namespace: 'html' | 'sv
   for (let index = 2; index < template.length; index++) {
     const expected = template[index] as TemplateNode;
     if (expected !== null && typeof expected !== 'string') {
-      if (child === null || !fitTemplate(child, expected, inner)) return false;
+      if (child === null || !fitTemplate(child, expected, inner, extra)) return false;
       child = child.nextSibling;
       continue;
     }
     if (child !== null && child.nodeType === (expected === null ? 8 : 3)) {
-      fitTemplate(child, expected, inner);
+      fitTemplate(child, expected, inner, extra);
       child = child.nextSibling;
     } else {
       element.insertBefore(expected === null ? document.createComment('') : document.createTextNode(expected), child);
@@ -254,6 +261,7 @@ function fitTemplate(node: Node, template: TemplateNode, namespace: 'html' | 'sv
   }
   while (child !== null) {
     const next = child.nextSibling;
+    if (child.nodeType === 1 && template.length > 2) extra?.(child);
     element.removeChild(child);
     child = next;
   }

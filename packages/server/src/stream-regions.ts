@@ -65,22 +65,86 @@ function rangesIn(
   return found;
 }
 
+/**
+ * Outermost numbered elements in `node`'s children, descending through other nodes. compiler-next
+ * output has no marker ranges: each node a program creates carries its number (`<!--[N-->`,
+ * `runtime/src/adoption.ts`), and an element among them is a region the browser can replace.
+ */
+function creationsIn(node: StringRenderableNode, creationOf: (node: StringRenderableNode) => string | undefined, found: StringRenderableNode[] = []): StringRenderableNode[] {
+  for (let child = node.firstChild; child !== null; child = child.nextSibling) {
+    if (child.nodeType === 1 && creationOf(child) !== undefined) found.push(child);
+    else creationsIn(child, creationOf, found);
+  }
+  return found;
+}
+
 /** Remembers each range as last sent and reports the ones that changed. */
 export class RegionTracker {
   readonly #sent = new Map<string, string>();
+  /** For numbered regions: each one's HTML with the numbered elements inside it left out. */
+  readonly #sentOwn = new Map<string, string>();
 
+  /**
+   * `creationOf` gives a node's number when the page is numbered (compiler-next output), whose
+   * regions are its numbered elements rather than marker ranges.
+   */
   constructor(
     private readonly root: StringRenderableNode,
     private readonly serialize: (node: StringRenderableNode) => string,
+    private readonly creationOf?: (node: StringRenderableNode) => string | undefined,
   ) {
-    this.#record(rangesIn(root, null));
+    if (creationOf === undefined) this.#record(rangesIn(root, null));
+    else this.#recordCreations(creationsIn(root, creationOf));
   }
 
   /** Changed ranges, outermost first; a sent range carries its descendants. */
   changes(pageChanges: readonly { before: string; after: string }[] = []): ChangedRegion[] {
     const changed: ChangedRegion[] = [];
-    this.#diff(rangesIn(this.root, null), changed, pageChanges);
+    if (this.creationOf === undefined) this.#diff(rangesIn(this.root, null), changed, pageChanges);
+    else this.#diffCreations(creationsIn(this.root, this.creationOf), changed);
     return changed;
+  }
+
+  /** A numbered element's HTML, and that HTML with each numbered element inside it held out. */
+  #creationHtml(node: StringRenderableNode): { html: string; own: string } {
+    const html = this.serialize(node);
+    let own = html;
+    // Each inner element's HTML starts with its own unique number, so it occurs once.
+    for (const inner of creationsIn(node, this.creationOf!)) {
+      own = own.replace(this.serialize(inner), `<!--${this.creationOf!(inner)}-->`);
+    }
+    return { html, own };
+  }
+
+  #recordCreations(nodes: readonly StringRenderableNode[]): void {
+    for (const node of nodes) {
+      const id = this.creationOf!(node)!;
+      const { html, own } = this.#creationHtml(node);
+      this.#sent.set(id, html);
+      this.#sentOwn.set(id, own);
+      this.#recordCreations(creationsIn(node, this.creationOf!));
+    }
+  }
+
+  /**
+   * An element whose own HTML changed is sent whole; one whose change is all inside its numbered
+   * elements sends those instead, so a settled region replaces only itself. A region the browser
+   * never received came inside a sent one.
+   */
+  #diffCreations(nodes: readonly StringRenderableNode[], changed: ChangedRegion[]): void {
+    for (const node of nodes) {
+      const id = this.creationOf!(node)!;
+      const { html, own } = this.#creationHtml(node);
+      const previous = this.#sent.get(id);
+      if (previous === html) continue;
+      if (previous !== undefined && this.#sentOwn.get(id) === own) {
+        this.#diffCreations(creationsIn(node, this.creationOf!), changed);
+        this.#sent.set(id, html);
+        continue;
+      }
+      if (previous !== undefined) changed.push({ id: `[${id}`, html });
+      this.#recordCreations([node]);
+    }
   }
 
   #html(range: MarkerRange): string {
@@ -186,6 +250,10 @@ const CLIENT_STREAM = `(function(){var K=Symbol.for("memoized-dom:stream");` +
   `function find(selector,attribute,value,use){var list=document.querySelectorAll(selector);` +
   `for(var i=0;i<list.length;i++)if(list[i].getAttribute(attribute)===value)return use(list[i])}` +
   `function swap(id,template){var walker=document.createTreeWalker(document,128),open,node,depth=0;` +
+  // A numbered region (`[N`, compiler-next) is the element after its marker: the template holds
+  // the marker and the element again.
+  `if(id.charAt(0)==="["){while(node=walker.nextNode())if(node.data===id){open=node.nextSibling;` +
+  `if(open&&open.nodeType===1){open.parentNode.removeChild(open);node.parentNode.replaceChild(template.content,node)}return}return}` +
   `while(node=walker.nextNode())if(/^mmd:[cgl]:/.test(node.data)&&node.data.slice(6)===id){open=node;break}` +
   `if(!open)return;for(node=open.nextSibling;node;node=node.nextSibling){if(node.nodeType!==8)continue;` +
   `if(/^mmd:[rcgl]:/.test(node.data))depth++;else if(node.data==="/mmd"){if(!depth)break;depth--}}` +
