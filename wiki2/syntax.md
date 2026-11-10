@@ -3,6 +3,11 @@
 State: accepted authoring direction; grammar and implementation open.
 Owns DX-14, DX-25, DX-26 and keyed identity questions DX-15.
 
+Implementation extends compiler-next's parse stage and uses its existing later
+stages. Ordinary expression rendering, `.map()`, list identity and refs already
+exist; the new work is expressing them and direct control flow in markup without
+JSX's child-expression containers. See [architecture.md](architecture.md).
+
 ## Current contract
 
 - Literal child text is quoted: `<p>"Hello"</p>`.

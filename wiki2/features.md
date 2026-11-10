@@ -1,7 +1,8 @@
 # Further authoring features
 
-State: proposals and later slices. Quoted text/direct children and normal refs
-are accepted separately in [syntax](syntax.md) and [refs](refs.md).
+State: proposals and later slices extending compiler-next. Quoted text/direct
+children are the new authoring direction in [syntax](syntax.md). Normal refs
+already exist and are preserved as mapped in [refs](refs.md).
 
 This page owns the remaining prototype backlog until a feature has enough rules,
 files and cases to deserve its own page. Extract it at that point and update the

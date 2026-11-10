@@ -7,6 +7,11 @@ discussion and feature index. This folder connects each experiment to its rules,
 files, acceptance examples and evidence. Existing compiler/runtime contracts stay
 in [wiki/compiler](../wiki/compiler/README.md).
 
+**This is an extension of compiler-next.** JSX+ adds syntax and authoring features
+beyond ordinary JSX through the same compiler pipeline. Refs, reactivity, lists
+and ownership already exist; the prototype preserves them. `wiki2` maps the
+extension work, not a replacement compiler or a second ref implementation.
+
 ## Start a session
 
 1. Read [AGENTS.md](../AGENTS.md) and [the existing ground rules](../wiki/rules.md).

@@ -5,9 +5,10 @@ are open. Owns DX-01, DX-03, DX-24 and the tooling part of DX-26.
 
 ## Proposed boundary
 
-The shared source parser feeds a checking representation and authored span maps.
-The content mapper exposes those to TypeScript. Production lowering uses the
-same source understanding but may emit different scaffolding.
+Compiler-next's extended parse support supplies source understanding for a
+checking representation and authored span maps. The content mapper exposes those
+to TypeScript. This is tooling; application compilation stays in compiler-next's
+existing pipeline. The mapper does not implement refs or emit a second runtime.
 
 Preserve identifiers, ordinary expressions and types verbatim where possible.
 Generated nodes must not acquire fabricated authored declarations. Check both
@@ -27,8 +28,8 @@ TypeScript/editor versions and permissions used by the probe.
 | `packages/compiler-next/tests/reference/typescript.ts` | Existing independent reference lowering; do not reuse the new production lowering as its oracle |
 | `packages/language-service/src/plugin.ts` | Existing TS6 plugin; the mapper needs its own integration plan |
 | `wiki/compiler/typescript.md` | Existing API notes and compatibility limits |
-| `packages/jsx-plus/src/checking/` | **Planned** virtual source and mappings; name/location provisional |
-| `packages/jsx-plus/src/mapper/` | **Planned** protocol, configuration, lifecycle and cache |
+| `packages/language-service/src/content-mapper/checking/` | **Planned** virtual source and mappings; tooling only, exact placement provisional |
+| `packages/language-service/src/content-mapper/` | **Planned** protocol, configuration, lifecycle and cache; packaging open |
 
 Prototype imports use the explicit working extension, for example
 `./Counter.auwla`; registration is not a promise of extensionless resolution.

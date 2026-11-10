@@ -2,17 +2,20 @@
 
 Updated: 2026-11-10. Working order, revisable after every slice.
 
-The goal is a small, usable authoring path with correct JavaScript behavior and
-credible tooling. The prototype may run independently of the rewrite's release
-gates; production adoption depends on integration, acceptance and measurements.
+The goal is additional authoring features inside compiler-next's existing path,
+with correct JavaScript behavior and credible tooling. Experiments use its parse,
+resolve, graph, plan, optimize and emit stages. Existing refs are already built;
+checking them under new syntax is compatibility work. Production adoption still
+depends on integration, acceptance and measurements.
 
 ## Ordered slices
 
 | ID | State | Outcome and acceptance | Owns details |
 | --- | --- | --- | --- |
 | P0-DOC | Done | Record the user directions; create the wiki and session route; validate links, paths and examples | [status](status.md), [decisions](decisions.md) |
+| P0-ALIGN | Done | Make compiler-next continuity and existing ref support explicit; remove the standalone compiler-package suggestion | [architecture](architecture.md), [refs](refs.md) |
 | P1-GRAMMAR | Next | Compare boundary/scoping candidates with concrete valid, ambiguous and incomplete fixtures; record a provisional grammar and remaining questions | [syntax](syntax.md) |
-| P2-PARSE | Planned | Parse quoted text, one direct expression and a normally declared ref with exact ranges; lower through existing compilation and show equivalent behavior | [syntax](syntax.md), [architecture](architecture.md), [refs](refs.md) |
+| P2-PARSE | Planned | Extend compiler-next's parse stage for quoted text/direct children; compile through the same later stages and verify existing refs still work | [syntax](syntax.md), [architecture](architecture.md), [refs](refs.md) |
 | P3-TOOL | Planned; pair with P2 | A minimal mapper type-checks the same source, reports a deliberate error at the authored span, and supports a safe rename edit | [tooling](tooling.md) |
 | P4-FLOW | Planned | Direct `if` and `.map()` preserve scope, evaluation order, keyed identity and ref cleanup against equivalent JSX | [syntax](syntax.md), [testing](testing.md) |
 | P5-EVENT | Candidate | Settle event-expression meaning; demonstrate one ordinary handler and one shorthand with identical timing | [features](features.md) |

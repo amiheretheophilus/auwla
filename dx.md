@@ -20,8 +20,12 @@ content transformation libraries.
 
 Accepted direction from the 2026-11-10 discussion:
 
-- Declare refs as ordinary variables and connect them with `ref={variable}`.
-  Element tags do not declare refs, and refs need no `$` prefix.
+- JSX+ extends compiler-next with authoring features that ordinary JSX cannot
+  express. It uses compiler-next's existing parse, resolve, graph, plan, optimize
+  and emit pipeline; it is not a separate production compiler or reactive system.
+- Refs are already implemented. Preserve their ordinary variable declarations
+  and `ref={variable}` connection. Element tags do not declare refs, and refs
+  need no `$` prefix. This is compatibility work, not a new ref implementation.
 - In the proposed markup body, quote literal text: `<div>"text"</div>`.
   Read ordinary expressions directly: `<div>message</div>`.
 - Support direct `if` statements and ordinary expressions such as `.map()` in
@@ -174,14 +178,20 @@ Particular risks to probe:
 - Incomplete markup during typing, including missing braces and closing tags.
 - Diagnostics inside generated helpers: unmapped does not mean suppressed.
 
-### 3.4 Recommended architecture
+### 3.4 Compiler-next extension architecture
 
-Use one source-aware parser for `.auwla`, shared by the runtime compiler and
-content mapper. Preserve source ranges and ordinary TypeScript regions.
+Extend compiler-next's existing parse stage to understand the additional markup
+syntax, preserving source ranges and ordinary TypeScript regions. The extended
+input feeds the same resolve, graph, plan, optimize and emit stages as existing
+JSX. Reuse their current binding, reactivity, ref, list and ownership behavior.
+When a new feature needs compiler/runtime support, extend the owning existing
+machinery instead of creating a parallel compilation path.
 
-The mapper emits a checking representation that retains authored types, scopes
-and expressions. The production compiler emits optimized DOM/SSR code through the
-existing analysis and planning pipeline. These outputs may differ substantially.
+The content mapper shares that source understanding and emits a checking
+representation retaining authored types, scopes and expressions. That projection
+serves TypeScript tooling; it is not a second production compiler. Compiler-next
+continues to produce the application's optimized DOM/SSR output. The checking
+projection and application output may differ substantially.
 
 Do not make TypeScript reconstruct the authored program from optimized runtime
 output. Conversely, checking-only scaffolding must not dictate production costs.
@@ -626,6 +636,10 @@ that preserves semantics; do not assume one observer per element is necessary.
 Accepted: keep normal variable declarations and the existing `ref` prop. Do not
 introduce tag-declared bindings or a `$` naming convention for refs.
 
+**Refs are already built in compiler-next.** This proposal adds no ref system.
+Only the surrounding new markup syntax needs support; the existing ref path and
+its compatibility checks carry over.
+
 ```tsx
 export function Editor() {
   let input: HTMLInputElement | undefined;
@@ -870,6 +884,7 @@ and mark a revised decision as superseded rather than erasing its reason.
 | DX-25 | Text and expression children | Quoted text; direct JavaScript expressions without child-container braces | Accepted direction; grammar open |
 | DX-26 | Grammar boundaries | Separators, whitespace, escapes, declarations, scope and recovery | Open; next prototype investigation |
 | DX-27 | Iteration | Small slices; revise the plan, examples and decisions as we learn | Accepted |
+| DX-28 | Compiler continuity | Extend compiler-next's existing pipeline; refs and other existing features are reused | Accepted |
 
 ## 18. Suggested prototype and acceptance examples
 

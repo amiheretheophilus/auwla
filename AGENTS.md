@@ -29,6 +29,8 @@ instructions.
   `wiki/compiler/`, with one page per group of related files.
 - JSX+ authoring is being explored on `prototype/jsx-plus`. `dx.md` holds the
   design discussion; `wiki2/` maps the prototype, decisions, checks and next slice.
+  This extends compiler-next's syntax and features through its existing pipeline.
+  Do not create a parallel production compiler or rebuild existing refs.
   Prototype grammar and plan choices are revisable as evidence arrives. Keep
   accepted user direction distinct from provisional experiments and implemented
   behavior. Start with `wiki2/status.md`, not the rewrite's next unchecked phase.

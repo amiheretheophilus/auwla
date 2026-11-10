@@ -1,9 +1,13 @@
 # Normally declared refs
 
-State: accepted syntax direction; reuse of existing behavior to verify.
+State: **already implemented in compiler-next**; preserve existing syntax and
+behavior when extending markup. There is no new ref implementation task.
 Owns DX-19 and the ref-related part of DX-23.
 
 ## Authoring contract
+
+This page maps an existing feature and its compatibility checks. The new work
+is the surrounding extended syntax and its TypeScript tooling.
 
 Declare a variable and use the existing `ref` prop. Element tags do not declare
 variables; no `$` prefix or special ref declaration keyword is introduced.
@@ -45,7 +49,7 @@ is [wiki/compiler/refs.md](../wiki/compiler/refs.md).
 The new format's adapter tests are **planned** under the placement in
 [architecture.md](architecture.md). Update this page when real files are added.
 
-## Acceptance examples
+## Compatibility checks for the syntax extension
 
 | ID | Expected behavior |
 | --- | --- |
@@ -56,8 +60,9 @@ The new format's adapter tests are **planned** under the placement in
 | REF-05 | Rename updates the declaration, `ref={input}` and reads; absence is reflected in types |
 | REF-06 | Member/forwarded/callback refs match existing JSX behavior where currently supported |
 
-REF-01 and REF-05 belong in the first parser/tooling slice; the broader lifecycle
-matrix follows when control flow and delivery are integrated.
+REF-01 checks that the new frontend reaches the existing ref implementation;
+REF-05 checks the new tooling projection. The broader matrix checks existing
+lifecycle behavior when new syntax for control flow and delivery is exercised.
 
 ## DOM measurements
 
