@@ -25,7 +25,22 @@ export interface CompletionItem {
   label: string;
   detail?: string;
   insertText?: string;
+  labelDetails?: { description?: string };
   textEdit?: { newText: string; insert: LspRange; replace: LspRange };
+  additionalTextEdits?: TextEdit[];
+}
+
+/** Apply LSP text edits to `source`, later edits first so earlier offsets stay valid. */
+export function applyEdits(source: string, edits: readonly TextEdit[]): string {
+  const ordered = edits.map((edit) => ({
+    start: offsetAt(source, edit.range.start), end: offsetAt(source, edit.range.end), text: edit.newText,
+  })).sort((a, b) => b.start - a.start);
+
+  let edited = source;
+  for (const edit of ordered) {
+    edited = edited.slice(0, edit.start) + edit.text + edited.slice(edit.end);
+  }
+  return edited;
 }
 
 export interface LanguageServer {
@@ -52,6 +67,11 @@ export async function withLanguageServer<T>(
 ): Promise<T> {
   const peer = rpcProcess(typescriptExecutable, ['--lsp', '--stdio'], root);
   peer.connection.onRequest('client/registerCapability', () => null);
+  // The server asks for each of `js/ts`, `typescript`, `javascript` and `editor`.
+  // Answer like a default VS Code: auto-import suggestions on.
+  peer.connection.onRequest('workspace/configuration', (params: { items: unknown[] }) => {
+    return params.items.map(() => ({ suggest: { autoImports: true } }));
+  });
   const versions = new Map<string, number>();
 
   try {
@@ -59,6 +79,7 @@ export async function withLanguageServer<T>(
       processId: process.pid,
       rootUri: pathToFileURL(root).href,
       capabilities: {
+        workspace: { configuration: true },
         general: { positionEncodings: ['utf-16'] },
         textDocument: { diagnostic: {}, ...textDocument },
       },
@@ -111,15 +132,9 @@ export function singleFileEdits(edit: WorkspaceEdit, file: string): TextEdit[] {
  * `oldName` with `newName`. Returns the renamed source.
  */
 export function applyRename(source: string, edits: readonly TextEdit[], oldName: string, newName: string): string {
-  const ordered = edits.map((edit) => ({
-    start: offsetAt(source, edit.range.start), end: offsetAt(source, edit.range.end), text: edit.newText,
-  })).sort((a, b) => b.start - a.start);
-
-  let renamed = source;
-  for (const edit of ordered) {
-    expect(source.slice(edit.start, edit.end)).toBe(oldName);
-    expect(edit.text).toBe(newName);
-    renamed = renamed.slice(0, edit.start) + edit.text + renamed.slice(edit.end);
+  for (const edit of edits) {
+    expect(source.slice(offsetAt(source, edit.range.start), offsetAt(source, edit.range.end))).toBe(oldName);
+    expect(edit.newText).toBe(newName);
   }
-  return renamed;
+  return applyEdits(source, edits);
 }

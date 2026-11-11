@@ -28,6 +28,27 @@ it('projects exact copied spans and excludes generated syntax from editable mapp
   expect(SpanMap.isExact(generated.fidelity)).toBe(false);
 });
 
+it('maps the end of an expression before generated braces back exactly', () => {
+  // Auto-import edits need the cursor after `focusTask` to have an exact authored
+  // counterpart, although the next virtual character is a generated `}`.
+  for (const source of ['<b onClick=focusTask>"x"</b>', '<p>focusTask</p>']) {
+    const result = projectForChecking(source, './App.auwla');
+    const map = new SpanMap(result.mappings.map(([virtualStart, virtualLength, originalStart, originalLength, kind]) => ({
+      virtualStart, virtualEnd: virtualStart + virtualLength,
+      originalStart, originalEnd: originalStart + originalLength, kind,
+    })));
+    const virtualEnd = result.text.indexOf('focusTask') + 'focusTask'.length;
+    expect(result.text[virtualEnd]).toBe('}');
+    const mapped = map.virtualToOriginalPosition(virtualEnd);
+    expect(SpanMap.isExact(mapped.fidelity)).toBe(true);
+    expect(mapped.position).toBe(source.indexOf('focusTask') + 'focusTask'.length);
+
+    // The generated brace itself still has no editable authored text.
+    const brace = map.virtualToOriginalSpanForFeature({ pos: virtualEnd, end: virtualEnd + 1 }, SpanMapFeature.Rename);
+    expect(SpanMap.isExact(brace.fidelity)).toBe(false);
+  }
+});
+
 it('returns an authored parse diagnostic without claiming to check an incomplete file', () => {
   const result = projectForChecking('<p>"missing', './App.auwla');
   expect(result.text).toBe('export {};\n');

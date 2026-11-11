@@ -3,6 +3,7 @@ import { JsxPlusError } from '../diagnostics';
 import { planFlow } from './flow/plan';
 import { renderFlow } from './flow/render';
 import type { CheckingSource } from './protocol';
+import { editorSpans } from './spans';
 import { recoverMarkup } from './recovery/markup';
 import type { NormalizedSource } from '../model';
 
@@ -25,9 +26,7 @@ function checkingView(normalized: NormalizedSource, filename: string): CheckingS
   return {
     text: normalized.code,
     extension: '.tsx',
-    mappings: normalized.mappings.map(({ generated, authored }) => [
-      generated[0], generated[1] - generated[0], authored[0], authored[1] - authored[0], 0,
-    ]),
+    mappings: editorSpans(normalized),
     ...(flow === null ? {} : {
       diagnosticDirectives: flow.primaryDirectives,
       supplemental: [flow.supplemental],

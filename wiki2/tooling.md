@@ -22,6 +22,21 @@ mappings without loading the production compiler facade. Protocol mappings are
 verbatim tuples; generated syntax has no editable counterpart. TypeScript's
 own `SpanMap` verifies an identifier maps exactly and a generated brace does not.
 
+`checking/spans.ts` adds one zero-length **end anchor** after each copied span
+that generated text follows. Without it, the cursor at the end of `onClick=focus`
+or `<p>focus</p>` falls on the exclusive end of a span before a generated `}`.
+TypeScript maps that virtual position back with `None` fidelity and silently
+drops completions that edit the file. Auto-imports vanish while ordinary
+suggestions remain. Investigation (2026-11-11) also ruled out the other
+candidates. Atom spans for the braces did not help. A completion-side split
+for touching boundaries was unnecessary once anchors existed, so it was removed.
+Anchors add no characters to any mapping. Generated braces stay unmapped, as
+`tests/checking.test.ts` verifies with `SpanMap`.
+
+Auto-import suggestions are a client preference. The TS7 server asks for the
+`js/ts`, `typescript`, `javascript` and `editor` configuration sections; the test
+client answers `suggest.autoImports: true`, VS Code's default.
+
 The primary TSX view keeps normal narrowing and editor identity. Compiler-owned
 facts select regions checked through a supplemental TSX view with widened state
 seeds and possible prop writes. Diagnostic directives delegate only those ranges;
@@ -123,7 +138,7 @@ declared ref. Include a deliberate wrong expression and an incomplete edit.
 | TOOL-01 | Built: CLI reports the authored error location; LSP checks the full UTF-16 range after an emoji |
 | TOOL-02 | Built for the probe: actual LSP ref rename updates four uses and changing-state rename updates five; applying edits and rechecking yields no errors |
 | TOOL-02-ID | Built: actual task-board bare submit-handler rename updates its declaration and attribute use; authored edits apply and recheck without errors |
-| TOOL-03 | Partial: real task-board member completion resolves and applies an exact authored insert/replace edit inside a parenthesized attribute, then rechecks. Auto-import and broader completion contexts remain open |
+| TOOL-03 | Partial: real task-board member completion resolves and applies an exact authored insert/replace edit inside a parenthesized attribute, then rechecks. Auto-import of `focusTaskInput` from `./actions` at the end of a bare attribute and a child expression applies both edits and reproduces the authored file (`tests/handler-import-lsp.test.ts`). Broader completion contexts remain open |
 | TOOL-04 | Partial: actual unfinished task-board quote/parenthesis edits retain unrelated diagnostics/completion; holes are unmapped, builds still fail, restoration clears errors. Multiline structural recovery remains open |
 | TOOL-05 | Hardened paired profile: 34 actual LSP targets pass, including receiving-type errors, generic helpers and deferred/immediate callbacks. Full flow acceptance remains open; see [checking flow](checking-flow.md) |
 | TOOL-06 | Partial: exact unchanged input reuses the full result; real-example reuse/eviction/isolation counts pass. Incremental edits, measured latency and heap acceptance remain open |
@@ -131,11 +146,29 @@ declared ref. Include a deliberate wrong expression and an incomplete edit.
 Start with TOOL-01 and TOOL-02 during P2/P3; expand as grammar grows. Keep failing
 edits as regression fixtures when the parser or mapping strategy changes.
 
+## Editor extension (planned, P3-EDITOR)
+
+The content mapper supplies all TypeScript language features. An editor still
+needs a thin extension for what a mapper cannot provide:
+
+- Language registration: the `auwla` language id, `.auwla` files, comments and
+  brackets, so the editor sends those files to the TS7 server.
+- Highlighting: mappers return positions, not colors. A TextMate grammar
+  derived from TSX must add quoted children and direct `if` blocks.
+- Formatting: the TSX formatter cannot parse `.auwla`; this needs its own plan.
+
+TypeScript 7.1's package exports a VS Code extension API
+(`typescript/vscode`, `dist/vscode/extensionApi.d.ts`). Its
+`registerContentMappers(contributorId, [{ extensions, inferredProjectContribution }])`
+registers a mapper, including for files outside any tsconfig.
+`registerLspMiddleware` can adjust language-feature responses. This is read from
+the type declarations only; activation in a running VS Code is **unverified**.
+
 ## Open questions
 
 Published packaging, editor extension registration, inferred projects,
 declaration output, incremental invalidation beyond exact input, multi-module editing and the editor
-version matrix remain open. Broader completion, auto-import, formatting, cross-file
+version matrix remain open. Broader completion, formatting, cross-file
 rename and broader generated-region diagnostics need their own evidence.
 
 TOOL-05 remains open beyond the 34-case profile: ref writes, complete replay

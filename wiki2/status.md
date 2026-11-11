@@ -6,11 +6,13 @@ Updated: 2026-11-11. Branch: `prototype/jsx-plus`.
 
 The user requested three steps in order: (1) incomplete-code recovery,
 (2) bare-handler completion and auto-imports, (3) direct `for...of` inside markup.
-Step 1's first profile is built ([recovery](recovery.md)). Step 2 has started: the
+Step 1's first profile is built ([recovery](recovery.md)). Step 2 is done. The
 task board imports `focusTaskInput` from `examples/task-board/actions.ts` and uses
-it as `onClick=focusTaskInput`; execution checks click it in both modes. The
-native completion/auto-import LSP check for that handler is **not written yet**.
-Step 3 has not started.
+it as `onClick=focusTaskInput`, and execution checks click it in both modes.
+Typing `onClick=focusTask` without the import and accepting TypeScript's
+completion adds the import and reproduces the authored file
+(`tests/handler-import-lsp.test.ts`). That needed end anchors in
+`checking/spans.ts`; see [tooling](tooling.md). Step 3 has not started.
 
 ## This session: review and cleanup
 
@@ -36,8 +38,9 @@ duplication and readability before new features. Done, in separate commits:
 
 ## Evidence
 
-At the latest commit: JSX+ `bun check` reports no errors across 214 files.
-JSX+ `bun test` passes **185 tests, 0 failures**, in twelve files. They include the
+At the latest commit: JSX+ `bun check` reports no errors across 216 files.
+JSX+ `bun test` passes **188 tests, 0 failures**, in thirteen files. The three
+anchor/auto-import tests fail without `checking/spans.ts`. They include the
 34 checking-flow targets, real TypeScript 7 CLI/LSP renames, completions and recovery.
 `bun run wiki2/spec/check.ts` passes 34 fixtures (8 diagnostics). The
 `preview.ts --build` task-board build succeeds. `git diff --check` passes. No
@@ -46,11 +49,11 @@ session. Not run: the full root suite, performance, browser layout and IDE activ
 
 ## Continue
 
-1. P3-HANDLER-IMPORT: add the native LSP check for `onClick=focus|`. It should
-   offer `focusTaskInput` from `./actions`, apply the auto-import edit to authored
-   text and recheck clean. Record whether TS places the import edit correctly.
-2. P4-DIRECT-FOR: draft the grammar and fixtures first, then implement and run
-   real application/ownership checks.
+1. P4-DIRECT-FOR (requested step 3): draft the grammar and fixtures first, then
+   implement and run real application/ownership checks.
+2. P3-EDITOR (candidate): a thin VS Code extension for language registration,
+   highlighting and mapper registration via TS7's `registerContentMappers`.
+   See [tooling](tooling.md#editor-extension-planned-p3-editor).
 
 Known open issues:
 - If markup damage occurs alongside an ordinary host syntax error anywhere,

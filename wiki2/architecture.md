@@ -94,6 +94,8 @@ All paths are relative to the repository root and exist now.
 | `packages/jsx-plus/src/checking/recovery/markup.ts` | Bounded current-source line quarantine, exact remaining spans and structural fallback |
 | `packages/jsx-plus/tests/recovery.test.ts` | Real malformed-source mappings and strict build rejection |
 | `packages/jsx-plus/tests/editor-recovery-lsp.test.ts` | Native diagnostics/completion beyond actual unfinished task-board edits |
+| `packages/jsx-plus/src/checking/spans.ts` | Serialize copied spans for TypeScript, adding zero-length end anchors before generated text (edit-producing completions such as auto-import) |
+| `packages/jsx-plus/tests/handler-import-lsp.test.ts` | Native completion plus auto-import edit for a half-typed handler in a bare attribute and a child, applied to authored text |
 | `packages/jsx-plus/src/checking/protocol.ts` | Primary/supplemental outputs, mapping masks and diagnostic directives |
 | `packages/jsx-plus/src/checking/flow/plan.ts` | Consume public compiler facts; select bounded state/prop insertions and dependent regions |
 | `packages/jsx-plus/src/checking/flow/syntax.ts` | Separate parent index and receiving diagnostic contexts; parser AST stays unchanged |
