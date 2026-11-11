@@ -10,11 +10,22 @@ used. Failed compiler inspection simply leaves the original native checking view
 
 Markup failures use `src/checking/recovery/markup.ts`: blank the damaged line,
 preserving UTF-16 width and all line endings, and retry the current file. At most
-three lines may be quarantined. Recovery is accepted only when the remaining
-complete module parses. Every quarantined character is excluded from copied
+three lines may be quarantined. When every quarantined character was blank or
+inside markup that read again completely (`onlyMarkupQuarantined`, checked
+against the recovered roots' authored ranges), the quarantine changed only that
+markup. Any host syntax error that remains is then the author's own, left mapped
+for native TypeScript recovery as in an undamaged file. Otherwise, for example
+when the blanked line also held `const banner =`, the remaining module must
+parse with no host error. Every quarantined character is excluded from copied
 maps, and the authored syntax diagnostic remains visible. All other mapped
 characters must equal their current authored spelling. Unrecoverable structural
 damage retains the existing empty-module fallback with the original error.
+
+Until 2026-11-11 every remaining host error rejected the recovery, so damaged
+markup plus an unrelated host typo anywhere hid every diagnostic in the file.
+`tests/recovery.test.ts` covers the host error before and after the markup, and
+the guard case. The real-server test shows JSX+ 1008 and TypeScript 1005
+together, with member completion still available.
 
 The host fragment reader now locates unterminated literals before parser recovery
 misreads later tags. The attribute reader likewise stops at a missing-parenthesis

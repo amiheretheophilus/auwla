@@ -6,10 +6,14 @@ import { offsetAt, positionAt, taskBoardRoot } from './rpc';
 
 it('keeps diagnostics and applies completion edits beyond real unfinished quote/parenthesis edits', async () => {
   const app = readFileSync(resolve(taskBoardRoot, 'App.auwla'), 'utf8');
+  const damagedLabel = (source: string) => source.replace('aria-label=("Remove " + task.title)', 'aria-label=("Remove " + task.title');
+  const brokenHost = (source: string) => source.replace("let query = '';", "let query = ('';");
   const versions = [
-    { code: 1003, source: app.replace('"Make room for the next idea."', '"Make room for the next idea.') },
-    { code: 1008, source: app.replace('aria-label=("Remove " + task.title)', 'aria-label=("Remove " + task.title') },
-    { code: 1005, source: app.replace("let query = '';", "let query = ('';") },
+    { codes: [1003], source: app.replace('"Make room for the next idea."', '"Make room for the next idea.') },
+    { codes: [1008], source: damagedLabel(app) },
+    { codes: [1005], source: brokenHost(app) },
+    // Damaged markup (JSX+ 1008) beside an ordinary host error (TypeScript 1005).
+    { codes: [1008, 1005], source: damagedLabel(brokenHost(app)) },
   ];
   const uri = documentUri(taskBoardRoot, 'App.auwla');
 
@@ -26,7 +30,7 @@ it('keeps diagnostics and applies completion edits beyond real unfinished quote/
       const token = source.indexOf('<span>task.ti') + '<span>task.'.length;
       const range = { start: positionAt(source, token), end: positionAt(source, token + 2) };
       const report = await change(source);
-      expect(report.some((item) => item.code === version.code)).toBe(true);
+      for (const code of version.codes) expect(report.some((item) => item.code === code)).toBe(true);
       expect(report.find((item) => item.code === 2339)?.range).toEqual(range);
 
       const completion = await server.request<{ items: CompletionItem[] }>('textDocument/completion', {
@@ -45,7 +49,7 @@ it('keeps diagnostics and applies completion edits beyond real unfinished quote/
       const edited = source.slice(0, start) + text + source.slice(end);
 
       const remaining = await change(edited);
-      expect(remaining.some((item) => item.code === version.code)).toBe(true);
+      for (const code of version.codes) expect(remaining.some((item) => item.code === code)).toBe(true);
       expect(remaining.some((item) => item.code === 2339)).toBe(false);
       expect(await change(app)).toEqual([]);
     }

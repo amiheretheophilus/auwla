@@ -46,9 +46,27 @@ function outsideHoles(mappings: readonly VerbatimMapping[], holes: readonly Rang
 }
 
 /**
- * Quarantine up to three damaged markup lines from this exact revision. A
- * recovery is accepted only when the remaining complete module parses; it is
- * never used for production compilation and never borrows an older projection.
+ * Whether every quarantined character was blank or inside markup that read again
+ * completely. Such a quarantine changed only that markup, which normalized to a
+ * whole JSX expression, so it cannot cause a host syntax error elsewhere.
+ */
+function onlyMarkupQuarantined(source: string, normalized: NormalizedSource, holes: readonly Range[]): boolean {
+  return holes.every(([start, end]) => {
+    for (let index = start; index < end; index++) {
+      if (source[index]!.trim() === '') continue;
+      if (!normalized.roots.some((root) => root.range[0] <= index && index < root.range[1])) return false;
+    }
+    return true;
+  });
+}
+
+/**
+ * Quarantine up to three damaged markup lines from this exact revision. A host
+ * syntax error that remains is accepted only when the quarantine could not have
+ * caused it (`onlyMarkupQuarantined`): it is then the author's own, left mapped
+ * for native TypeScript recovery as in an undamaged file. Otherwise the
+ * remaining module must parse. Recovery is never used for production
+ * compilation and never borrows an older projection.
  */
 export function recoverMarkup(source: string, filename: string, first: JsxPlusError): RecoveredMarkup | null {
   let shadow = source;
@@ -68,7 +86,7 @@ export function recoverMarkup(source: string, filename: string, first: JsxPlusEr
 
     try {
       const normalized = normalizeForChecking(shadow, filename);
-      if (hasError(parseModule(normalized.code).diagnostics)) {
+      if (!onlyMarkupQuarantined(source, normalized, holes) && hasError(parseModule(normalized.code).diagnostics)) {
         return null;
       }
       const mappings = outsideHoles(normalized.mappings, holes);

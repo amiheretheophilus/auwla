@@ -55,8 +55,7 @@ duplication and readability before new features. Done, in separate commits:
 ## Evidence
 
 At the latest commit: JSX+ `bun check` reports no errors across 217 files.
-JSX+ `bun test` passes **213 tests, 0 failures**, in fourteen files (the two
-removed `ForLoop.auwla` runs are covered by the task-board flow). They include
+JSX+ `bun test` passes **218 tests, 0 failures**, in fourteen files. They include
 the 34 checking-flow targets, real TypeScript 7 CLI/LSP renames, completions,
 auto-imports and recovery. The three anchor/auto-import tests fail without
 `checking/spans.ts`. `bun run wiki2/spec/check.ts` passes 39 fixtures
@@ -77,20 +76,21 @@ full root suite, performance, browser layout and IDE activation.
 1. P3-EDITOR (candidate): a thin VS Code extension for language registration,
    highlighting and mapper registration via TS7's `registerContentMappers`.
    See [tooling](tooling.md#editor-extension-planned-p3-editor).
-2. Recovery gap: markup damage plus an ordinary host syntax error elsewhere
-   falls back to an empty module (see open issues below).
-3. Loop follow-up in compiler-next (DX-34): extend the closed-list proof to
+2. Loop follow-up in compiler-next (DX-34): extend the closed-list proof to
    `Array.from(root, row)` so unchanged rows are skipped (`moved`). Log it in
    the table below.
 
 Done since: edits through destructured names (`entries()` loops) are shown
 (`4072c829`). Compiler-next `src` unit tests (616) and the seven
 handler/list case files (235) pass. The slow reference/generator suites
-were not run locally.
+were not run locally. Damaged markup beside an ordinary host syntax error no
+longer hides the file's diagnostics ([recovery](recovery.md)). JSX+ passes 218
+tests, including a real-server case that shows both errors with completion
+still available.
 
 Known open issues:
-- If markup damage occurs alongside an ordinary host syntax error anywhere,
-  recovery falls back to an empty module, hiding all other diagnostics.
+- A quarantined line that also holds host code (`const banner = <p>"oops`)
+  still falls back to an empty module, by design.
 - Recovery inside quarantined text and multiline structural damage are open.
 - Replay proofs, lowering maps, module loading, Vite/HMR, delivery and
   debugging maps remain open. Backend configuration stays planned.
