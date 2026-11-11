@@ -9,9 +9,10 @@ import type { NormalizedSource } from '../model';
 /** TypeScript 7.1 content-mapper protocol. All offsets use UTF-16 code units. */
 export type { CheckingSource, SpanMapping } from './protocol';
 
+/** The editor shows the position itself; keep the JSX+ code in the text to tell it from TS codes. */
 function authoredDiagnostic(error: JsxPlusError) {
   return {
-    messageText: error.message,
+    messageText: `${error.reason} [${error.code}]`,
     start: error.range[0],
     length: error.range[1] - error.range[0],
     code: /^JPX\d+$/.test(error.code) ? Number(error.code.slice(3)) : 1999,

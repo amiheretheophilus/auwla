@@ -4,7 +4,9 @@ import fixtures from '../../../wiki2/spec/cases.json';
 import flowFixtures from './fixtures/checking-flow.json';
 import * as runtime from '../../runtime/src/index';
 import { toModuleFunction } from '../../compiler-next/src/core/parse/module-function';
-import { compile } from '../src';
+import { CompileError } from '@memoized-dom/compiler-next';
+import { compile, JsxPlusError, normalize } from '../src';
+import { authoredCompileError } from '../src/compile';
 import * as taskBoardActions from '../examples/task-board/actions';
 
 const applications: runtime.MountedApplication[] = [];
@@ -75,6 +77,31 @@ for (const fixture of fixtures.cases) {
     });
   }
 }
+
+it('re-anchors positioned compiler errors on the authored source', () => {
+  const source = 'export function App() {\n  return <p>"Hi "; name</p>;\n}';
+  const normalized = normalize(source);
+  function compilerError(offset: number) {
+    const lines = normalized.code.slice(0, offset).split('\n');
+    return new CompileError('boom', './App.auwla.tsx', lines.length, lines[lines.length - 1]!.length + 1);
+  }
+
+  // A copied character maps exactly; the TSX location is not repeated.
+  const exact = authoredCompileError(compilerError(normalized.code.indexOf('name')), normalized, source, './App.auwla');
+  expect(exact).toBeInstanceOf(JsxPlusError);
+  expect((exact as JsxPlusError).range).toEqual([source.indexOf('name'), source.indexOf('name') + 1]);
+  expect(exact.message).toBe('memo-dom: boom (./App.auwla:2:20) [COMPILER]');
+
+  // A generated brace has no authored character: use the end of the copied
+  // text before it rather than leak a normalized-TSX position.
+  const brace = normalized.code.indexOf('{name');
+  const nearest = authoredCompileError(compilerError(brace), normalized, source, './App.auwla');
+  const afterGreeting = source.indexOf('"Hi "') + '"Hi "'.length;
+  expect((nearest as JsxPlusError).range).toEqual([afterGreeting, afterGreeting + 1]);
+
+  const unpositioned = new CompileError('no place', './App.auwla.tsx');
+  expect(authoredCompileError(unpositioned, normalized, source, './App.auwla')).toBe(unpositioned);
+});
 
 it('keeps standard TSX child text on the existing compiler path', () => {
   const { container } = start('export function App() { return <p>"hello"</p>; }', true, { moduleId: './App.tsx' });

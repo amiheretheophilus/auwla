@@ -32,7 +32,10 @@ it('returns an authored parse diagnostic without claiming to check an incomplete
   const result = projectForChecking('<p>"missing', './App.auwla');
   expect(result.text).toBe('export {};\n');
   expect(result.mappings).toEqual([]);
-  expect(result.diagnostics).toEqual([expect.objectContaining({ start: 3, length: 1, code: 1003 })]);
+  // Editors place the message themselves, so it carries no file:line:column.
+  expect(result.diagnostics).toEqual([{
+    messageText: 'Unterminated child string or template [JPX1003]', start: 3, length: 1, code: 1003,
+  }]);
 });
 
 it('serves independent mapper projects and rejects closed handles', async () => {
@@ -40,6 +43,7 @@ it('serves independent mapper projects and rejects closed handles', async () => 
   try {
     await expect(peer.connection.sendRequest('openProject', { projectHandle: 'early' })).rejects.toThrow('Initialize');
     await expect(peer.connection.sendRequest('initialize', { positionEncodings: ['utf-8'] })).rejects.toThrow('UTF-16');
+    await expect(peer.connection.sendRequest('initialize', {})).rejects.toThrow('UTF-16');
     expect(await peer.connection.sendRequest('initialize', { positionEncodings: ['utf-8', 'utf-16'] }))
       .toEqual({ positionEncoding: 'utf-16', diagnosticSource: 'auwla' });
     for (const projectHandle of ['one', 'two']) {

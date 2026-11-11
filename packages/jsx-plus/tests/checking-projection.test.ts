@@ -1,7 +1,23 @@
 import { expect, it } from 'bun:test';
 import { projectForChecking } from '../src/checking/project';
+import { compareInsertions, type Insertion } from '../src/checking/flow/plan';
 import { normalize } from '../src/normalize';
 import flow from './fixtures/checking-flow.json';
+
+it('keeps generated wrappers nested when insertions share an offset', () => {
+  const at = (text: string, placement: Insertion['placement'], span: number): Insertion => ({ offset: 5, text, placement, span });
+  const ordered = [
+    at('open-inner', 'open', 3),
+    at('close-outer', 'close', 8),
+    at('statement', 'statement', 0),
+    at('open-outer', 'open', 10),
+    at('close-inner', 'close', 2),
+    { offset: 1, text: 'earlier', placement: 'open', span: 1 } satisfies Insertion,
+  ].sort(compareInsertions).map((insertion) => insertion.text);
+
+  // Ranges ending at 5 close (inner first) before ranges starting at 5 open (outer first).
+  expect(ordered).toEqual(['earlier', 'close-inner', 'close-outer', 'statement', 'open-outer', 'open-inner']);
+});
 
 it('keeps the primary text and symbols while delegating flow diagnostics', () => {
   const source = flow.cases.find((fixture) => fixture.id === 'FLOW-TYPE-002')!.source;

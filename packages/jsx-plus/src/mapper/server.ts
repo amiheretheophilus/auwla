@@ -14,8 +14,9 @@ const connection = createMessageConnection(
 const projects = new Map<string, CheckingProject>();
 let initialized = false;
 
-connection.onRequest('initialize', (params: { positionEncodings: string[] }) => {
-  if (!params.positionEncodings.includes('utf-16')) {
+connection.onRequest('initialize', (params: { positionEncodings?: unknown }) => {
+  // A malformed request gets a protocol error, not a crashed handler.
+  if (!Array.isArray(params?.positionEncodings) || !params.positionEncodings.includes('utf-16')) {
     throw new ResponseError(-32602, 'The JSX+ prototype requires UTF-16 positions');
   }
   initialized = true;

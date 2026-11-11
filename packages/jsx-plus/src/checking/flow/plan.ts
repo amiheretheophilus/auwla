@@ -9,10 +9,27 @@ import type { NormalizedSource, Range } from '../../model';
 import { authoredCover } from '../../source';
 import { indexSyntax } from './syntax';
 
+/** Generated checking-only text inserted at a normalized offset. */
 export interface Insertion {
   readonly offset: number;
   readonly text: string;
-  readonly order: number;
+  /** `open`/`close` are the two halves of a wrapper around a range; `statement` stands alone. */
+  readonly placement: 'close' | 'statement' | 'open';
+  /** Length of the wrapped range (0 for a statement); orders nested wrappers. */
+  readonly span: number;
+}
+
+const PLACEMENT_RANK = { close: 0, statement: 1, open: 2 } as const;
+
+/**
+ * Order insertions that share an offset so wrappers stay properly nested:
+ * a range ending here closes before one starting here opens; closing
+ * suffixes go inner first, opening prefixes go outer first.
+ */
+export function compareInsertions(a: Insertion, b: Insertion): number {
+  if (a.offset !== b.offset) return a.offset - b.offset;
+  if (a.placement !== b.placement) return PLACEMENT_RANK[a.placement] - PLACEMENT_RANK[b.placement];
+  return a.placement === 'open' ? b.span - a.span : a.span - b.span;
 }
 
 export interface FlowRegion {
@@ -72,15 +89,18 @@ export function planFlow(normalized: NormalizedSource, filename: string): FlowPl
     // and returns its full declared type. A cast would hide incompatible inputs;
     // `satisfies` reports some failures on an unmapped generated keyword instead.
     // The authored value remains an argument in its original await/yield scope.
+    const span = range[1] - range[0];
     insertions.push({
       offset: range[0],
       text: `(<T,>(value: T): T => value)<${type}>((`,
-      order: -range[1],
+      placement: 'open',
+      span,
     });
     insertions.push({
       offset: range[1],
       text: '))',
-      order: -range[0],
+      placement: 'close',
+      span,
     });
   }
 
@@ -152,7 +172,8 @@ export function planFlow(normalized: NormalizedSource, filename: string): FlowPl
       insertions.push({
         offset: owner.body.start + 1,
         text: `\n;void (() => { ${binding.name} = ${binding.name}; });\n`,
-        order: 0,
+        placement: 'statement',
+        span: 0,
       });
       changed.add(binding.id);
     }
@@ -222,7 +243,6 @@ export function planFlow(normalized: NormalizedSource, filename: string): FlowPl
   if (regions.length === 0) {
     return null;
   }
-  // At a shared offset, outer prefixes and inner suffixes must be inserted first.
-  insertions.sort((a, b) => a.offset - b.offset || a.order - b.order);
+  insertions.sort(compareInsertions);
   return { insertions, regions };
 }
