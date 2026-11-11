@@ -5,11 +5,24 @@
  * a wrong proof shows up as a difference, whichever path the program took.
  */
 import { expect } from 'bun:test';
+import type { Case } from '../harness/case';
 import { behaves } from '../harness/run';
 
-const text = (container: Element, selector = 'ul') => container.querySelector(selector)?.textContent;
+/**
+ * The case, then the case again with each list written `{Array.from(rows, row)}`
+ * instead of `{rows.map(row)}`, as a JSX+ `for...of` loop in markup lowers
+ * (`optimize/mapping-calls.ts`). The proof treats both spellings alike, so both
+ * must behave alike. Both calls end with the same parenthesis.
+ */
+function closedCase(name: string, testCase: Case): void {
+  behaves(name, testCase);
+  const looped = testCase.source.replace(/\{(\w+)\.map\(/g, '{Array.from($1, ');
+  if (looped !== testCase.source) behaves(`${name} (Array.from)`, { ...testCase, source: looped });
+}
 
-behaves('closed list: moving rows keeps each row\'s text', {
+const text =(container: Element, selector = 'ul') => container.querySelector(selector)?.textContent;
+
+closedCase('closed list: moving rows keeps each row\'s text', {
   source: `
     function build() { return [{ id: 1, label: 'a' }, { id: 2, label: 'b' }, { id: 3, label: 'c' }]; }
     export function App() {
@@ -28,7 +41,7 @@ behaves('closed list: moving rows keeps each row\'s text', {
   },
 });
 
-behaves('closed list: an edit between moves shows, by index and through a row\'s own item', {
+closedCase('closed list: an edit between moves shows, by index and through a row\'s own item', {
   source: `
     export function App() {
       let rows = [{ id: 1, label: 'a' }, { id: 2, label: 'b' }];
@@ -45,7 +58,7 @@ behaves('closed list: an edit between moves shows, by index and through a row\'s
   },
 });
 
-behaves('closed list: a row that reads its index updates when it moves', {
+closedCase('closed list: a row that reads its index updates when it moves', {
   source: `
     export function App() {
       let rows = [{ id: 1 }, { id: 2 }, { id: 3 }];
@@ -60,7 +73,7 @@ behaves('closed list: a row that reads its index updates when it moves', {
   },
 });
 
-behaves('closed list: a key that reads the index moves with it', {
+closedCase('closed list: a key that reads the index moves with it', {
   source: `
     export function App() {
       let rows = [{ id: 1 }, { id: 2 }];
@@ -75,7 +88,7 @@ behaves('closed list: a key that reads the index moves with it', {
   },
 });
 
-behaves('closed list: another state a row reads, changed with a move', {
+closedCase('closed list: another state a row reads, changed with a move', {
   source: `
     export function App() {
       let rows = [{ id: 1 }, { id: 2 }];
@@ -91,7 +104,7 @@ behaves('closed list: another state a row reads, changed with a move', {
   },
 });
 
-behaves('closed list: a routed comparison changed with a move', {
+closedCase('closed list: a routed comparison changed with a move', {
   source: `
     export function App() {
       let rows = [{ id: 1 }, { id: 2 }];
@@ -109,7 +122,7 @@ behaves('closed list: a routed comparison changed with a move', {
   },
 });
 
-behaves('closed list: a row calling its own function is not skipped', {
+closedCase('closed list: a row calling its own function is not skipped', {
   source: `
     const box = { suffix: 'a' };
     function shown(id) { return id + box.suffix; }
@@ -126,7 +139,7 @@ behaves('closed list: a row calling its own function is not skipped', {
   },
 });
 
-behaves('closed list: an item a host call edits is seen on the next move', {
+closedCase('closed list: an item a host call edits is seen on the next move', {
   source: `
     export function App() {
       let rows = [{ id: 1, label: 'a' }];
@@ -142,7 +155,7 @@ behaves('closed list: an item a host call edits is seen on the next move', {
   },
 });
 
-behaves('closed list: an item held by a Map and edited there shows on the next move', {
+closedCase('closed list: an item held by a Map and edited there shows on the next move', {
   source: `
     const held = new Map();
     export function App() {
@@ -160,7 +173,7 @@ behaves('closed list: an item held by a Map and edited there shows on the next m
   },
 });
 
-behaves('closed list: an item saved in another state and edited there', {
+closedCase('closed list: an item saved in another state and edited there', {
   source: `
     export function App() {
       let rows = [{ id: 1, label: 'a' }];
@@ -178,7 +191,7 @@ behaves('closed list: an item saved in another state and edited there', {
   },
 });
 
-behaves('closed list: an edit through a local alias', {
+closedCase('closed list: an edit through a local alias', {
   source: `
     export function App() {
       let rows = [{ id: 1, label: 'a' }];
@@ -194,7 +207,7 @@ behaves('closed list: an edit through a local alias', {
   },
 });
 
-behaves('closed list: an edit of the list through a local alias', {
+closedCase('closed list: an edit of the list through a local alias', {
   source: `
     export function App() {
       let rows = [{ id: 1 }];
@@ -209,7 +222,7 @@ behaves('closed list: an edit of the list through a local alias', {
   },
 });
 
-behaves('closed list: a copy edited after it became the list', {
+closedCase('closed list: a copy edited after it became the list', {
   source: `
     export function App() {
       let rows = [{ id: 1 }];
@@ -224,7 +237,7 @@ behaves('closed list: a copy edited after it became the list', {
   },
 });
 
-behaves('closed list: a helper that edits an item it receives', {
+closedCase('closed list: a helper that edits an item it receives', {
   source: `
     function rename(row) { row.label = 'b'; }
     export function App() {
@@ -241,7 +254,7 @@ behaves('closed list: a helper that edits an item it receives', {
   },
 });
 
-behaves('closed list: a builder that keeps a record for later', {
+closedCase('closed list: a builder that keeps a record for later', {
   source: `
     const pool = [];
     function build() { const row = { id: 1, label: 'a' }; pool.push(row); return [row]; }
@@ -260,7 +273,7 @@ behaves('closed list: a builder that keeps a record for later', {
   },
 });
 
-behaves('closed list: a field holding an object, edited below the record', {
+closedCase('closed list: a field holding an object, edited below the record', {
   source: `
     export function App() {
       let rows = [{ id: 1, meta: { n: 1 } }];
@@ -276,7 +289,7 @@ behaves('closed list: a field holding an object, edited below the record', {
   },
 });
 
-behaves('closed list: a field storing an object later', {
+closedCase('closed list: a field storing an object later', {
   source: `
     const shared = { toString() { return 'obj'; } };
     export function App() {
@@ -292,7 +305,7 @@ behaves('closed list: a field storing an object later', {
   },
 });
 
-behaves('closed list: a record with a getter', {
+closedCase('closed list: a record with a getter', {
   source: `
     const box = { value: 'a' };
     export function App() {
@@ -308,7 +321,7 @@ behaves('closed list: a record with a getter', {
   },
 });
 
-behaves('closed list: a class instance whose method edits it', {
+closedCase('closed list: a class instance whose method edits it', {
   source: `
     class Row { constructor(id) { this.id = id; this.label = 'a'; } touch() { this.label = 'b'; } }
     export function App() {
@@ -325,7 +338,7 @@ behaves('closed list: a class instance whose method edits it', {
   },
 });
 
-behaves('closed list: the same item twice', {
+closedCase('closed list: the same item twice', {
   source: `
     export function App() {
       let rows = [{ id: 1, label: 'a' }];
@@ -341,7 +354,7 @@ behaves('closed list: the same item twice', {
   },
 });
 
-behaves('closed list: a function handed to a click receives the event, not an item', {
+closedCase('closed list: a function handed to a click receives the event, not an item', {
   source: `
     export function App() {
       let rows = [{ id: 1 }];
@@ -357,7 +370,7 @@ behaves('closed list: a function handed to a click receives the event, not an it
   },
 });
 
-behaves('closed list: a function that returns an item to whoever calls it', {
+closedCase('closed list: a function that returns an item to whoever calls it', {
   source: `
     export function App() {
       let rows = [{ id: 1, label: 'a' }];
@@ -374,7 +387,7 @@ behaves('closed list: a function that returns an item to whoever calls it', {
   },
 });
 
-behaves('closed list: an effect sees moves and edits, and only real ones', {
+closedCase('closed list: an effect sees moves and edits, and only real ones', {
   source: `
     export function App() {
       let rows = [{ id: 1, label: 'a' }];
@@ -394,7 +407,7 @@ behaves('closed list: an effect sees moves and edits, and only real ones', {
   },
 });
 
-behaves('closed list: an alias passed on to a helper that edits it', {
+closedCase('closed list: an alias passed on to a helper that edits it', {
   source: `
     function rename(row) { row.label = 'b'; }
     export function App() {
@@ -410,7 +423,7 @@ behaves('closed list: an alias passed on to a helper that edits it', {
   },
 });
 
-behaves('a row handler toggles a field of its own item', {
+closedCase('a row handler toggles a field of its own item', {
   source: `
     export function App() {
       let todos = [{ id: 1, done: false }, { id: 2, done: false }];
@@ -424,7 +437,7 @@ behaves('a row handler toggles a field of its own item', {
   },
 });
 
-behaves('closed list: a module list shown by two components, each up to date', {
+closedCase('closed list: a module list shown by two components, each up to date', {
   source: `
     let rows = [{ id: 1, label: 'a' }, { id: 2, label: 'b' }];
     function One() { return <ul id="one">{rows.map((row) => <li key={row.id}>{row.label}</li>)}</ul>; }
@@ -443,7 +456,7 @@ behaves('closed list: a module list shown by two components, each up to date', {
   },
 });
 
-behaves('closed list: two instances of a component keep separate lists and passes', {
+closedCase('closed list: two instances of a component keep separate lists and passes', {
   source: `
     function List({ name }) {
       let rows = [{ id: 1, label: 'a' }, { id: 2, label: 'b' }];
@@ -460,7 +473,7 @@ behaves('closed list: two instances of a component keep separate lists and passe
   },
 });
 
-behaves('closed list: a component row shows moves and edits', {
+closedCase('closed list: a component row shows moves and edits', {
   source: `
     function Row(props) { return <li>{props.item.id}{props.item.label}</li>; }
     export function App() {
@@ -477,7 +490,7 @@ behaves('closed list: a component row shows moves and edits', {
   },
 });
 
-behaves('closed list: a component row that passes its props on as this', {
+closedCase('closed list: a component row that passes its props on as this', {
   source: `
     function Row(props) { return <li onClick={() => { props.pick(); }}>{props.item.label}</li>; }
     export function App() {
@@ -494,7 +507,7 @@ behaves('closed list: a component row that passes its props on as this', {
   },
 });
 
-behaves('closed list: a list that shrinks through its length, then grows again', {
+closedCase('closed list: a list that shrinks through its length, then grows again', {
   source: `
     export function App() {
       let rows = [{ id: 1 }, { id: 2 }];
@@ -510,7 +523,7 @@ behaves('closed list: a list that shrinks through its length, then grows again',
   },
 });
 
-behaves('closed list: replacing a record with a new one by map', {
+closedCase('closed list: replacing a record with a new one by map', {
   source: `
     export function App() {
       let rows = [{ id: 1, label: 'a' }, { id: 2, label: 'b' }];
@@ -525,7 +538,7 @@ behaves('closed list: replacing a record with a new one by map', {
   },
 });
 
-behaves('closed list: a read method whose callback returns an item keeps its use followed', {
+closedCase('closed list: a read method whose callback returns an item keeps its use followed', {
   source: `
     export function App() {
       let rows = [{ id: 1, label: 'a' }];
@@ -543,7 +556,7 @@ behaves('closed list: a read method whose callback returns an item keeps its use
 
 // Rows that read state outside the list skip only in a pass where nothing but items changed
 // (`whenQuiet`): an item edit and a change of `suffix` in one handler update every row.
-behaves('closed list: rows reading outside state and a pure function follow both', {
+closedCase('closed list: rows reading outside state and a pure function follow both', {
   source: `
     function format(label) { return label.toUpperCase(); }
     let suffix = '!';

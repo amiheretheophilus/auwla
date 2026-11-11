@@ -515,6 +515,14 @@ class Proof {
       return;
     }
 
+    // The list a row list iterates, in either spelling: its rows are followed instead.
+    const rows = this.#rowsOver(module, node);
+    if (rows !== null) {
+      if (this.#isRoot(module, node)) this.#rowList(module, rows);
+      else this.#fail();
+      return;
+    }
+
     // Discarded, or only tested: strict comparison and truthiness run no code.
     if (is.ExpressionStatement(parent)) return;
     if (is.UnaryExpression(parent) && parent.operator === '!') return;
@@ -796,6 +804,20 @@ class Proof {
     this.#fail();
   }
 
+  /**
+   * The row list whose mapping call iterates `node`: `node.map(row)` or
+   * `Array.from(node, row)` (`mapping-calls.ts`). Both reconcile the same rows
+   * (`runtime/src/row-list.ts`), so the proof treats them alike.
+   */
+  #rowsOver(module: Module, node: Node): RowListPlan | null {
+    const parent = module.parentOf(node);
+    const call = parent !== null && is.MemberExpression(parent) ? module.parentOf(parent) : parent;
+    if (call === null || !is.CallExpression(call)) return null;
+    const rows = this.rowsByCall.get(call);
+    if (rows === undefined || mappingCall(module, call)?.items !== node) return null;
+    return rows;
+  }
+
   /** Whether `list` is the root itself, written directly. */
   #isRoot(module: Module, list: Node): boolean {
     const value = unwrap(list);
@@ -855,14 +877,6 @@ class Proof {
   #useMethod(module: Module, call: Call, callee: Member, name: string, kind: Kind): void {
     if (redefinedNames(module).has(name)) {
       this.#fail();
-      return;
-    }
-    if (name === 'map' && this.rowsByCall.has(call)) {
-      if (!this.#isRoot(module, callee.object)) {
-        this.#fail();
-        return;
-      }
-      this.#rowList(module, this.rowsByCall.get(call)!);
       return;
     }
 
@@ -1314,12 +1328,10 @@ export const closedLists: Optimization = {
 
     const roots = new Map<Binding, RowListPlan[]>();
     for (const rows of rowLists.values()) {
-      // Only `root.map(row)`: the proof does not follow a root into `Array.from(root, row)`
-      // (`#useArgument` rejects it), so such a list evaluates every row.
-      if (mappingCall(module, rows.call)?.form !== 'map') continue;
-      const callee = unwrap(rows.call.callee);
-      if (!is.MemberExpression(callee)) continue;
-      const receiver = unwrap(callee.object);
+      // `root.map(row)` or `Array.from(root, row)`: the list the rows iterate (`mapping-calls.ts`).
+      const items = mappingCall(module, rows.call)?.items;
+      if (items === undefined) continue;
+      const receiver = unwrap(items);
       const binding = is.Identifier(receiver) ? module.referenceOf(receiver)?.binding : null;
       if (binding === null || binding === undefined) continue;
       roots.set(binding, [...(roots.get(binding) ?? []), rows]);

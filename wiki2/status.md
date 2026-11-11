@@ -18,8 +18,12 @@ lowers to `Array.from(tasks, (task) => row)`; see
 [direct loops](syntax.md#direct-loops). All three requested steps are complete.
 
 P4-FOR-FAST is done (`9620fb57`, under DX-34). Compiler-next now gives
-`Array.from(items, row)` the compiled rows that `items.map(row)` gets.
-Closed-list `moved` skips still apply only to `map`.
+`Array.from(items, row)` the compiled rows that `items.map(row)` gets. The
+closed-list unchanged-row skip now goes through the same path too: the proof,
+planner and emitter ask `mappingCall` for the list a row list iterates instead
+of special-casing `.map`. A loop over a plain state list skips unchanged rows
+exactly as `.map` does. The task board's lists are derived (`visible`) or
+module data (`filters`), so neither spelling skips there.
 
 The task board `App.auwla` is the one real example. It uses direct loops in its
 template instead of `.map()`: the status buttons loop over a `filters` array,
@@ -128,11 +132,11 @@ full root suite, performance, browser layout and IDE activation.
    projects and portability beyond the local VSIX. Reuse by other extensions is documented;
    a second editor still needs its own integration evidence.
    See [tooling](tooling.md#editor-extension-planned-p3-editor).
-2. Loop follow-up in compiler-next (DX-34): extend the closed-list proof to
-   `Array.from(root, row)` so unchanged rows are skipped (`moved`). Log it in
-   the table below.
-
-Done since: edits through destructured names (`entries()` loops) are shown
+Done since: loops and `.map` share one closed-list path (see the reconcile
+table). Compiler-next `src/optimize` and `src/features/handlers` tests and the
+six case files using `Array.from` pass (644), with every closed-list case run in
+both spellings; forcing the loop skip to ignore edits failed only the eight loop
+variants that edit items. Edits through destructured names (`entries()` loops) are shown
 (`4072c829`). Compiler-next `src` unit tests (616) and the seven
 handler/list case files (235) pass. The slow reference/generator suites
 were not run locally. Damaged markup beside an ordinary host syntax error no
@@ -161,6 +165,7 @@ change below must be adopted or corrected on `compiler-rewrite` later:
 | `b05773b5` | `runtime/src/setters.ts`: uncached ARIA `false`/`true` follow the cached/spread rules, with a DOM test | Found by the task-board example; a runtime bug fix, not interop |
 | `9620fb57` | New `optimize/mapping-calls.ts` ([optimize](../wiki/compiler/optimize.md#row-lists)). Row reuse and row lists accept the intrinsic `Array.from(items, row)`, with `rowReuse.form` added to the plan model. The runtime gains `fromRows`, `RowList.from`, `iteratedItems` and a `dense` cache mode. Closed lists stay `map`-only | Direct loops lower to `Array.from`; without this they never get compiled rows |
 | `4072c829` | `features/handlers/plan.ts`: `aliasBindings` judges a destructured name by the declaration or parameter owning its pattern (`patternRoot`), with `features/handlers/aliases.test.ts` ([handlers](../wiki/compiler/handlers.md)) | `for (const [index, task] of tasks.entries())` row edits were not shown; a genuine bug, plain JSX too |
+| (closed-list unification, after `9cce9175`) | `optimize/closed-lists.ts`: the proof finds a row list's root through `mappingCall` (`#rowsOver`), replacing the `.map`-only branch in `#useMethod` and the `form` filter in `match`. `features/handlers/mutations.ts` emits `list.map`/`list.from` and `mapRows`/`fromRows` from one branch, passing `unedited` to both. `optimize/methods.ts` drops `withRowReuse`'s redundant `form` argument. Tests: both spellings in `closed-lists.test.ts` and `conditionals-and-lists.closed.test.ts` ([optimize](../wiki/compiler/optimize.md#closed-lists)) | Loops over plain state lists skip unchanged rows like `.map`, without a second copy of the list logic |
 
 Check this list with `git log compiler-rewrite..prototype/jsx-plus -- packages/compiler-next packages/runtime`.
 

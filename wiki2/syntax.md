@@ -173,10 +173,14 @@ compiled row list (`createRowList`, then `list.from(items)`). A multi-child body
 exactly what `Array.from` iterates. Both of the task board's loops compile to
 `_rowList.from(...)`.
 
+A loop over a plain state list (`let rows = [...]`, changed only by the
+component's own code) also skips rows whose item is unchanged, exactly as `.map`
+does: compiler-next's closed-list proof and emitter treat both spellings as one
+([closed lists](../wiki/compiler/optimize.md#closed-lists)). A derived list such
+as the task board's `visible` gets compiled rows but no skip, in either spelling.
+
 Known limits (compiler-next, same as plain JSX `Array.from`):
 
-- Closed-list proofs follow only `x.map(cb)`, so a loop evaluates every row
-  on each pass. It does not skip rows whose item is unchanged (`moved`).
 - Only the intrinsic global `Array.from` is recognized. A module that declares or
   assigns `Array`, or defines its own `from`, keeps the general path.
 - Fixed: writes through a destructured binding, such as

@@ -246,6 +246,16 @@ and `#use` follows where a value goes, through every reference of every alias, i
 the program's own functions and across modules. A use it does not know rejects the
 list, which then takes the general path.
 
+A row list over the root is the one use that hands the items to rows. Both spellings
+of it count (`#rowsOver`, through `mappingCall` in `mapping-calls.ts`):
+`rows.map(row)` and the intrinsic `Array.from(rows, row)`, which JSX+ writes for a
+direct `for...of` loop in markup. The emitter then gives the skip to whichever the
+author wrote: `list.map(rows, unedited)` or `list.from(rows, unedited)`. A row list
+over anything but the root itself, such as an alias, rejects the list.
+`closed-lists.test.ts` runs its accept and reject lists in both spellings, and
+`conditionals-and-lists.closed.test.ts` runs every case a second time with its
+lists written as `Array.from`.
+
 | Written | Closed? |
 | --- | --- |
 | `rows = buildData(10)`, `rows.slice()`, `rows.concat(…)`, `[...rows, { id }]` | yes |
@@ -261,7 +271,7 @@ list, which then takes the general path.
 
 What it buys, with nothing checked at runtime:
 
-- `RowListPlan.moved`: `list.map(rows, unedited)`. A pass skips rows keeping their item,
+- `RowListPlan.moved`: `list.map(rows, unedited)` (or `list.from`). A pass skips rows keeping their item,
   and their index if they read one, unless an edit since the last pass changed that item.
   Each edit counts and names its item: `rows[i].label = x` is
   `(_item = rows[i], _edited_rows(_item, _item.label = x))`, which holds the item where
@@ -470,9 +480,8 @@ each row exists once in the output. A receiver that is not an array has its own
 
 `Array.from(items, row)` with the same callback is a row list too; the call
 becomes `list.from(items)`, which reconciles the items `iteratedItems` gives, holes
-as `undefined` items. Closed-list proofs (below) follow only `root.map(row)`: a root
-passed to `Array.from` fails the proof, so such a list evaluates every row and has
-no `moved` skip yet. `optimize/mapping-calls.dom.test.ts` checks recognition (the
+as `undefined` items. A closed root gets the same `moved` skip in either spelling
+([closed lists](#closed-lists)). `optimize/mapping-calls.dom.test.ts` checks recognition (the
 intrinsic only), both-mode identity through moves, duplicates, holes, a `Set`, an
 array-like and edits, for element and fragment rows, and the iterables above.
 

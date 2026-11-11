@@ -294,10 +294,11 @@ function emitKnownCall(
   if (!is.CallExpression(call) || !is.MemberExpression(call.callee)) {
     return;
   }
-  // `Array.from(items, row)` iterates its first argument (`optimize/mapping-calls.ts`).
-  const from = method.rowReuse?.form === 'from';
-  const receiver = from ? call.arguments[0]! : call.callee.object;
-  const callback = call.arguments[from ? 1 : 0]!;
+  // `items.map(row)` or `Array.from(items, row)` (`optimize/mapping-calls.ts`). The
+  // runtime names its entries after the form: `list.map`/`list.from`, `mapRows`/`fromRows`.
+  const form = method.rowReuse?.form ?? 'map';
+  const receiver = form === 'from' ? call.arguments[0]! : call.callee.object;
+  const callback = call.arguments[form === 'from' ? 1 : 0]!;
 
   if (method.kind === 'edit') {
     replacements.set(plan.operation, expression('$$runtime.editArray($$receiver, $$name, $$arguments, $$notify)', {
@@ -314,15 +315,10 @@ function emitKnownCall(
     // The rows of the text site this call is (`core/emit/row-list.ts`).
     const moved = method.moved;
     const list = names.of(plan.operation, '_rowList');
-    if (from) {
-      // Closed-list proofs follow only `map` (`optimize/closed-lists.ts`), so nothing is skipped.
-      replacements.set(plan.operation, expression('$$list.from($$receiver)', { list, receiver }));
-      return;
-    }
     replacements.set(plan.operation, moved === undefined
-      ? expression('$$list.map($$receiver)', { list, receiver })
-      : expression('$$list.map($$receiver, $$unedited)', {
-        list: names.of(plan.operation, '_rowList'),
+      ? expression(`$$list.${form}($$receiver)`, { list, receiver })
+      : expression(`$$list.${form}($$receiver, $$unedited)`, {
+        list,
         receiver,
         unedited: whenQuiet(moved.outside, runtime, moved.edited
           ? expression('$$runtime.uneditedItems($$editedAt, $$seen, $$seen = $$edits)', {
@@ -337,7 +333,7 @@ function emitKnownCall(
   // One row cache per call site and owner instance (`runtime/src/list-map.ts`).
   const cache = names.fresh('_rows');
   declarations.push(statement(`const $$cache = $$runtime.createRowCache(${method.rowReuse!.usesIndex});`, { cache, runtime }));
-  replacements.set(plan.operation, expression(from ? '$$runtime.fromRows($$receiver, $$cache, $$callback)' : '$$runtime.mapRows($$receiver, $$cache, $$callback)', {
+  replacements.set(plan.operation, expression(`$$runtime.${form}Rows($$receiver, $$cache, $$callback)`, {
     runtime,
     receiver,
     cache,

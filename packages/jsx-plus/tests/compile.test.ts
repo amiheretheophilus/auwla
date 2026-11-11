@@ -136,6 +136,42 @@ for (const optimize of [true, false]) {
     expect(buttons().map((button) => button.textContent)).toEqual(['1open', '2open']);
   });
 
+  it(`skips unchanged rows of a loop over a plain state list with optimize=${optimize}`, () => {
+    // A loop is `Array.from(rows, row)`; compiler-next's closed-list proof treats it
+    // as it treats `rows.map(row)` (`optimize/closed-lists.ts`, `#rowsOver`). The
+    // handlers have block bodies: one returning `rows` to the event dispatcher (`() =>
+    // rows.reverse()`) is a use the proof does not follow, in either spelling.
+    const source = `export function App() {
+      let rows = [{ id: 1, label: 'a' }, { id: 2, label: 'b' }, { id: 3, label: 'c' }];
+      return <main>
+        <button id="reverse" onClick=(() => { rows.reverse(); })>"Reverse"</button>
+        <button id="edit" onClick=(() => { rows[0].label += "!"; })>"Edit"</button>
+        <ul>
+          for (const row of rows) {
+            <li key={row.id}>row.label</li>
+          }
+        </ul>
+      </main>;
+    }`;
+    const output = compile(source, { optimize });
+    expect(/_rowList\d*\.from\(rows, /.test(output)).toBe(optimize);
+
+    const { container } = start(source, optimize);
+    const items = () => [...container.querySelectorAll('li')];
+    const [a, b, c] = items();
+    (container.querySelector('#reverse') as HTMLElement).click();
+    expect(container.querySelector('ul')!.textContent).toBe('cba');
+    if (optimize) {
+      // Moved, not rebuilt.
+      expect(items()[0]).toBe(c!);
+      expect(items()[2]).toBe(a!);
+      expect(items()[1]).toBe(b!);
+    }
+    // An edited item's row is still evaluated.
+    (container.querySelector('#edit') as HTMLElement).click();
+    expect(container.querySelector('ul')!.textContent).toBe('c!ba');
+  });
+
   it(`runs the authored task board through its main editing flow with optimize=${optimize}`, () => {
     const source = readFileSync(new URL('../examples/task-board/App.auwla', import.meta.url), 'utf8');
     // The filter buttons and the task rows are direct loops in the markup; both

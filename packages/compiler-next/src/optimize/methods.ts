@@ -19,7 +19,7 @@ import type { ComponentPlan, MemoGroupPlan, ModulePlan, MutationPlan, SharedOwne
 import type { BindingNode, SemanticGraph } from '../core/graph';
 import type { Optimization } from '.';
 import { callEditsNoArgument, callOnlyStoresNames, effectFree, isReadingIntrinsic, runsDuringCall } from './effects';
-import { mappingCall, type MappingForm } from './mapping-calls';
+import { mappingCall } from './mapping-calls';
 import { methodFact, redefinedNames, type MethodFact } from './method-facts';
 import { rowReuse } from './row-reuse';
 
@@ -129,7 +129,7 @@ function lowerCall(
   if (callEditsNoArgument(general.module.module, call)
     && call.arguments.every((argument) => !is.Function(argument) || editsNoObject(general.module.module, argument) || !runsDuringCall(call))) {
     // `Array.from(items, row)` reads its items like `map` does.
-    return withRowReuse(plan, general, graph, call, 'from');
+    return withRowReuse(plan, general, graph, call);
   }
 
   if (callOnlyStoresNames(general.module.module, call)) return { ...plan, method: { kind: 'read' } };
@@ -168,7 +168,7 @@ function lowerCall(
     return { ...plan, targets: receivers, method: { kind: 'edit' } };
   }
 
-  return withRowReuse(plan, general, graph, call, 'map');
+  return withRowReuse(plan, general, graph, call);
 }
 
 /**
@@ -176,12 +176,12 @@ function lowerCall(
  * itself (`mapping-calls.ts`, `row-reuse.ts`). Not where source flow wrapped
  * the call, or an optional link can skip it.
  */
-function withRowReuse(plan: MutationPlan, general: ModulePlan, graph: SemanticGraph, call: Call, form: MappingForm): MutationPlan {
+function withRowReuse(plan: MutationPlan, general: ModulePlan, graph: SemanticGraph, call: Call): MutationPlan {
   const mapping = mappingCall(general.module.module, call);
-  const rows = mapping !== null && mapping.form === form && !wrappedBySources(general, call) && !shortCircuits(call)
+  const rows = mapping !== null && !wrappedBySources(general, call) && !shortCircuits(call)
     ? rowReuse(general, graph, mapping.callback)
     : null;
-  return { ...plan, method: { kind: 'read', ...(rows === null ? {} : { rowReuse: { ...rows, form } }) } };
+  return { ...plan, method: { kind: 'read', ...(rows === null ? {} : { rowReuse: { ...rows, form: mapping!.form } }) } };
 }
 
 function wrappedBySources(general: ModulePlan, call: Call): boolean {
