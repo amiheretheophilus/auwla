@@ -72,3 +72,15 @@ multiline damage, not every combination. Completions inside quarantined text,
 more complex missing delimiters and edits exceeding the budget remain open. No
 production execution, whole-file conformance or general IDE acceptance is inferred
 from this checking projection.
+
+Quoted interpolation (spec r7) adds missing-`}` suggestions before likely outer
+quotes and at line end, optionally closing the outer quote too. Every guess is
+reread and inserted text is excluded from authored mappings. The host lexer may
+omit an unfinished string token; the body reader revisits its recorded opener
+before reporting a generic unclosed-string error. It does not borrow a later
+component brace to close an invalid substitution across a closing tag.
+
+For checking only, empty `{}` slots normalize to empty native template slots so
+TypeScript can recover and offer scope completion there. Production still reports
+JPX1013. Real-server tests complete `count` in empty slots and in unfinished
+`{cou` with and without the outer quote, retaining the authored syntax diagnostic.

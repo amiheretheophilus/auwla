@@ -74,10 +74,10 @@ The first decoupled editor adapter is now built (DX-36):
   upstream license. Real tokenizer tests use the task board; the shared mapper
   contribution launches and transforms that same source without VS Code.
 - At the user's request, TypeScript 7 (`TypeScriptTeam.native-preview` 1.0.2)
-  and the local Auwla VSIX 0.0.1 are installed and listed by VS Code. Installed
+  and the local Auwla VSIX 0.0.2 are installed and listed by VS Code. Installed
   activation now resolves the mapper through open project folders, not the
   extension's installation directory. The VSIX keeps the mapper in the project.
-  Desktop activation after reload, inferred-project type setup, another editor
+  The quoted-interpolation desktop update after reload, inferred-project type setup, another editor
   and a standalone mapper distribution remain unverified. See
   [adapter setup](../packages/editor-vscode/README.md).
 
@@ -89,21 +89,28 @@ The counter project enables existing element types once through `./types`, with
 `jsx: "preserve"`, so it needs no per-file type import. The real server test now
 checks its clean baseline, authored error and hover after editor registration.
 
+DX-37 is built in spec revision 7: `<p>"Count: {count}"</p>` becomes a native
+template, with host-token substitution boundaries and exact authored mappings.
+The counter uses it. Native LSP tests complete, hover and rename inside the quotes,
+including completion in empty or unfinished expressions. Shared highlighting marks
+the expression as code. Auwla 0.0.2 packages those assets and is installed; reload
+VS Code to replace the old grammar and mapper process. See [syntax](syntax.md).
+
 ## Evidence
 
-At this editor checkpoint: JSX+ `bun check` reports no errors across 225 files.
-JSX+ `bun test` passes **241 tests, 0 failures**, in sixteen files. They include
+At this interpolation checkpoint: JSX+ `bun check` reports no errors across 228 files.
+JSX+ `bun test` passes **266 tests, 0 failures**, in eighteen files. They include
 the 34 checking-flow targets, real TypeScript 7 CLI/LSP renames, completions,
 auto-imports and recovery. The three anchor/auto-import tests fail without
-`checking/spans.ts`. The previous spec baseline, unchanged here, passes 42 fixtures
-(9 parse, 13 diagnostics); the JSX equivalents run in both compiler modes.
+`checking/spans.ts`. The spec baseline passes 46 fixtures
+(10 parse, 15 diagnostics); the JSX equivalents run in both compiler modes.
 `bun check -p wiki2/spec/tsconfig.json` is clean. Task-board execution in both
 compiler modes and real TS7 CLI/LSP checks pass in the package suite.
 The adapter's `bun check` (6 files), `bun run build`, `node --check
 dist/extension.cjs` and seven simulated activation tests pass, including project
 resolution from outside the checkout. VSCE packaging and CLI installation succeed.
 The counter project's TS7 CLI check also passes without a per-file type import.
-`git diff --check` passes. No sub-agents were used.
+The slice's staged whitespace check passes. No sub-agents were used.
 
 For P4-FOR-FAST: compiler-next `bun check` is clean. All 191 `src/optimize`
 tests pass, including the 7 new `mapping-calls.dom.test.ts` tests. The 398
@@ -114,14 +121,12 @@ full root suite, performance, browser layout and IDE activation.
 
 ## Continue
 
-1. User-requested DX-37: specify and implement `<p>"Count: {count}"</p>` quoted
-   markup-text interpolation, with real examples, exact mappings and LSP checks.
-2. P3-EDITOR (first adapter/assets built, DX-36): verify desktop activation with
+1. P3-EDITOR (first adapter/assets built, DX-36): verify the 0.0.2 desktop update with
    the compatible TypeScript provider and the real task board, then inferred
    projects and portability beyond the local VSIX. Reuse by other extensions is documented;
    a second editor still needs its own integration evidence.
    See [tooling](tooling.md#editor-extension-planned-p3-editor).
-3. Loop follow-up in compiler-next (DX-34): extend the closed-list proof to
+2. Loop follow-up in compiler-next (DX-34): extend the closed-list proof to
    `Array.from(root, row)` so unchanged rows are skipped (`moved`). Log it in
    the table below.
 

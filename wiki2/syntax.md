@@ -16,6 +16,7 @@ See [architecture.md](architecture.md).
 ## Current contract
 
 - Literal child text is quoted: `<p>"Hello"</p>`.
+- Spec revision 7 adds `<p>"Count: {count}"</p>` quoted interpolation (DX-37).
 - Direct child expressions need no outer `{}`: `<p>user.name</p>` and
   `<p>"Total: " + total</p>`.
 - Direct `if` and ordinary expressions such as `.map()` belong in markup bodies.
@@ -28,6 +29,28 @@ See [architecture.md](architecture.md).
   callbacks remain explicit; bare `onClick=handler(...)` is not introduced.
 - DX-33/spec revision 3 additionally accepts `prop=name` for one bare host
   identifier. `onClick=addTask` passes the function, with native event arguments.
+
+## Quoted text interpolation
+
+`src/markup/text.ts` reads child-level quoted substitutions with host tokens and
+normalizes them into native templates. Ordinary strings in calls, parentheses,
+attributes and other host contexts retain their rules. Literal opening braces
+use `\{`; backticks in text receive generated escapes. Precise rules are
+[G-INTERP](spec/grammar.md#quoted-text-interpolation-g-interp) and
+[S-INTERP](spec/semantics.md#interpolated-text-s-interp).
+
+The body reader masks complete text expressions before rescanning. A shared
+`ChildReplacement` holds either markup or an expression, so child emission adds
+JSX braces only where needed. Copied substitution identifiers keep exact authored
+spans, including Unicode/CRLF source. Missing interpolation closers have bounded
+checking-only repairs; empty slots remain in the checking view for native scope
+completion while strict production normalization rejects them.
+
+The counter is the real authoring example. Spec TEXT-004 checks reactive updates
+in both compiler modes. Parser/mapping tests cover nested quotes, regexes,
+objects, escapes, continuation and host-context boundaries. The real LSP test
+applies completion, hover and three rename edits inside the quoted counter,
+including completion while its expression or outer quote is unfinished.
 
 ## Bare identifier attributes
 

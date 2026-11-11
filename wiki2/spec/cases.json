@@ -1,7 +1,42 @@
 {
   "specVersion": "0.1-draft",
-  "revision": 6,
+  "revision": 7,
   "cases": [
+    {
+      "id": "PARSE-010",
+      "level": "parse",
+      "rules": ["G-INTERP", "A-NODES", "A-RANGE"],
+      "source": "<p>\"Count: {count}\"</p>",
+      "expected": {
+        "specVersion": "0.1-draft",
+        "root": {
+          "kind": "element", "range": [0, 23], "name": "p",
+          "children": [{ "kind": "expression", "range": [3, 19], "source": "\"Count: {count}\"" }]
+        }
+      }
+    },
+    {
+      "id": "ERROR-014",
+      "level": "diagnostics",
+      "rules": ["G-INTERP", "D-CODES"],
+      "source": "<p>\"Count: {count\"</p>",
+      "expected": { "code": "JPX1012", "severity": "error", "range": [11, 12] }
+    },
+    {
+      "id": "ERROR-015",
+      "level": "diagnostics",
+      "rules": ["G-INTERP", "D-CODES"],
+      "source": "<p>\"Count: {}\"</p>",
+      "expected": { "code": "JPX1013", "severity": "error", "range": [11, 12] }
+    },
+    {
+      "id": "TEXT-004",
+      "level": "behavior",
+      "rules": ["G-INTERP", "S-INTERP"],
+      "source": "export function App() { let count = 0; return <button onClick={() => count++}>\"Count: {count}\"</button>; }",
+      "jsxEquivalent": "export function App() { let count = 0; return <button onClick={() => count++}>{`Count: ${count}`}</button>; }",
+      "expected": { "clicks": ["button"], "text": ["Count: 0", "Count: 1"] }
+    },
     {
       "id": "ERROR-011",
       "level": "diagnostics",

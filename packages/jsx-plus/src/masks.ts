@@ -20,7 +20,7 @@ export function blankRange(source: string, start: number, end: number): string {
 }
 
 /**
- * Replace complete markup with the identifier `_` followed by blanks, so the
+ * Replace markup or a rewritten child expression with `_` followed by blanks, so the
  * host parser sees one ordinary value where the element was.
  */
 export function maskMarkup(source: string, start: number, end: number): string {

@@ -10,9 +10,12 @@ grammar. `language-configuration.json` provides comment, quote and bracket pairs
 The TSX grammar in `vendor/TypeScriptReact.tmLanguage` is unmodified from
 [microsoft/TypeScript-TmLanguage](https://github.com/microsoft/TypeScript-TmLanguage/tree/eeeb0dc4daa8793b8227bb3b34ddfc267c85fd81),
 commit `eeeb0dc4daa8793b8227bb3b34ddfc267c85fd81`. Its MIT license is retained.
-The transformation replaces the JSX child rule with the host statement rules
-and adds parenthesized and bare-identifier attribute values. String, comment,
-template and nested-tag boundaries remain owned by the TSX rules. Other
+The transformation adds quoted-child interpolation, direct child control blocks,
+parenthesized attributes and bare identifier values to the TSX rules. Embedded
+substitutions have a code scope, so string-only completion settings do not suppress
+their suggestions. Other strings, comments, templates and nested tags retain the
+TSX lexical rules. Tests check the actual tokenizer's encoded token attributes
+as well as scopes. Other
 TextMate adapters can consume the same generated grammar without VS Code or a
 separately registered TSX grammar. Other highlighting engines need their own assets.
 

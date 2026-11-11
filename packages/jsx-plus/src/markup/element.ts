@@ -14,7 +14,8 @@ import type { ElementView, FragmentView, Range } from '../model';
 import { blank, closeAttributeValue, closeChildString } from '../repairs';
 import { copied, replaceRange } from '../source';
 import { readChildren } from './children';
-import type { Children, Markup, MarkupContext } from './context';
+import { interpolatedText } from './text';
+import type { ChildReplacement, Children, Markup, MarkupContext } from './context';
 
 /** Read the element or fragment whose `<` is at authored offset `start`. */
 export function readElement(context: MarkupContext, start: number): Markup {
@@ -165,8 +166,23 @@ interface Body {
  */
 function readBody(context: MarkupContext, start: number, name: string, opener: number): Body {
   const { source } = context;
-  const nested: Markup[] = [];
+  const nested: ChildReplacement[] = [];
   let shadow = source.slice(start);
+
+  function maskQuotedText(position: number): boolean {
+    // Inspect the shadow: an authored quote remains under a completed `_` mask.
+    const spelling = shadow[position - start];
+    if (spelling !== '"' && spelling !== "'") {
+      return false;
+    }
+    const text = interpolatedText(context, position, (offset) => readElement(context, offset));
+    if (text === null) {
+      return false;
+    }
+    nested.push(text);
+    shadow = maskMarkup(shadow, text.start - start, text.end - start);
+    return true;
+  }
 
   rescan: for (;;) {
     const result = childStatements(shadow);
@@ -178,13 +194,22 @@ function readBody(context: MarkupContext, start: number, name: string, opener: n
     for (let index = 0; index < tokens.length; index++) {
       const kind = tokens.kind(index);
       const position = start + tokens.start(index);
+      const childLevel = stack.length === 0 || stack[stack.length - 1]!.childBlock;
+      if (childLevel && maskQuotedText(position)) {
+        continue rescan;
+      }
       if (literal !== undefined && tokens.start(index) >= literal.boundary) {
+        // The host lexer can omit an unfinished string token entirely. Recover
+        // its authored opener before falling back to the generic string error.
+        if (childLevel && maskQuotedText(start + literal.start)) {
+          continue rescan;
+        }
         context.error('JPX1003', 'Unterminated child string or template', start + literal.start, start + literal.start + 1,
           closeChildString(source, start + literal.start));
       }
-      const childLevel = stack.length === 0 || stack[stack.length - 1]!.childBlock;
       const previousMarkup = !childLevel || index === 0 ? undefined
-        : nested.find((entry) => entry.start === start + tokens.start(index - 1));
+        : nested.find((entry) => entry.view.kind !== 'expression'
+          && entry.start === start + tokens.start(index - 1));
 
       // G-BOUNDARY rule 4: after complete markup, another opening tag or a
       // direct `if`/`for` starts a sibling. `<A/><B/>` or `<A/> if (...)` masks
@@ -257,6 +282,10 @@ function readBody(context: MarkupContext, start: number, name: string, opener: n
     // Reached the end of input without the closing tag: report the most specific
     // cause, an open token before an unclosed block or element (D-RECOVERY).
     if (literal !== undefined) {
+      const childLevel = stack.length === 0 || stack[stack.length - 1]!.childBlock;
+      if (childLevel && maskQuotedText(start + literal.start)) {
+        continue rescan;
+      }
       context.error('JPX1003', 'Unterminated child string or template', start + literal.start, start + literal.start + 1,
         closeChildString(source, start + literal.start));
     }

@@ -10,7 +10,7 @@ import {
 } from '../host';
 import type { BlockView, ChildView, ExpressionView, ForView, IfView, Range } from '../model';
 import { assemble, generated, replaceRange, type Piece } from '../source';
-import type { Children, Markup, MarkupContext } from './context';
+import type { ChildReplacement, Children, MarkupContext } from './context';
 
 interface Child<View> {
   readonly view: View;
@@ -23,7 +23,7 @@ interface Child<View> {
  * "incomplete expression" error at the end of the body.
  */
 export function readChildren(
-  context: MarkupContext, nested: readonly Markup[], code: string, start: number, bodyEnd: Range,
+  context: MarkupContext, nested: readonly ChildReplacement[], code: string, start: number, bodyEnd: Range,
 ): Children {
   return new ChildReader(context, nested).body(code, start, bodyEnd);
 }
@@ -31,8 +31,8 @@ export function readChildren(
 class ChildReader {
   constructor(
     private readonly context: MarkupContext,
-    /** Markup already read inside this body, in source order. */
-    private readonly nested: readonly Markup[],
+    /** Markup and interpolated text already read here, in source order. */
+    private readonly nested: readonly ChildReplacement[],
   ) {}
 
   private get source(): string {
@@ -201,10 +201,13 @@ class ChildReader {
   private expressionChild(node: Node, base: number): Child<ChildView> {
     const start = base + node.start;
     const maskedEnd = base + node.end;
-    // A child that is exactly one `_` mask is nested markup: emit it as is.
-    const markup = this.nested.find((entry) => entry.start === start && maskedEnd === start + 1);
-    if (markup !== undefined) {
-      return { view: markup.view, pieces: [...markup.pieces] };
+    // A complete mask is either markup or an interpolated string expression.
+    const replacement = this.nested.find((entry) => entry.start === start && maskedEnd === start + 1);
+    if (replacement !== undefined) {
+      const pieces = replacement.view.kind === 'expression'
+        ? [generated('{'), ...replacement.pieces, generated('}')]
+        : [...replacement.pieces];
+      return { view: replacement.view, pieces };
     }
     const end = this.authoredEnd(maskedEnd);
     return {

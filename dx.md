@@ -243,7 +243,9 @@ open project and discards it on close/reopen. [Cache evidence](wiki2/mapper-cach
 uses the actual [task-board example](packages/jsx-plus/examples/task-board/App.auwla),
 not fabricated projection output. That example also has a local browser preview,
 native mapper configuration and runtime interaction checks. Its footer uses
-standard backtick `${...}` interpolation; ordinary quoted children stay strings.
+standard backtick `${...}` interpolation. Spec revision 7 adds quoted child
+interpolation such as `"Count: {count}"` (DX-37); use `\{` for a literal opening
+brace. Strings in ordinary nested host contexts retain their existing rules.
 
 Use explicit imports such as `./Counter.auwla` in the first prototype. Registration
 of a mapper must not be assumed to enable extensionless lookup; Microsoft marked
@@ -940,6 +942,8 @@ and mark a revised decision as superseded rather than erasing its reason.
 | DX-32 | Parenthesized attribute values | Allow `prop=(expression)` alongside existing braces, with ordinary JSX value/event timing | Accepted; spec 0.1 revision 2 |
 | DX-33 | Bare identifier values | Allow `prop=name`, including `onClick=addTask`, without an implicit invocation or handler wrapper | Accepted; spec 0.1 revision 3 |
 | DX-36 | Editor decoupling | Shared checking/mapper tooling and assets stay independent of editor SDKs; separate adapters let other extensions reuse them | First adapter/assets built; [integration evidence and limits](wiki2/tooling.md#editor-extension-planned-p3-editor), desktop acceptance open |
+| DX-37 | Quoted interpolation | Allow `<p>"Count: {count}"</p>`, normalized to a native template with exact expression mappings | Built; spec r7, real LSP completion/hover/rename and shared highlighting checked |
+| DX-38 | Project-level types | Enable the existing framework types once per project, without a per-file JSX type import | Built through `@memoized-dom/jsx-plus/types`; counter example checked |
 
 ## 18. Suggested prototype and acceptance examples
 

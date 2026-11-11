@@ -95,6 +95,9 @@ All paths are relative to the repository root and exist now.
 | `packages/jsx-plus/src/checking/recovery/markup.ts` | Bounded current-source repair search, inserted closers and quarantined ranges, exact authored spans and structural fallback |
 | `packages/jsx-plus/src/editor/registration.ts` | Shared metadata and local mapper launch contribution; no editor SDK |
 | `packages/jsx-plus/src/editor/types.d.ts` | Opt-in project-level `./types` export reusing existing framework element/event/ref declarations |
+| `packages/jsx-plus/src/markup/text.ts` | Host-token interpolation boundaries, native template pieces and copied authored spans |
+| `packages/jsx-plus/tests/interpolation.test.ts` | Quoted-text parsing, escaping, scope, errors and exact mappings |
+| `packages/jsx-plus/tests/interpolation-lsp.test.ts` | Real completion, hover, rename and unfinished-input checks inside the authored counter |
 | `packages/jsx-plus/src/editor/grammar.ts` | Build-time TSX grammar transformation, separate from parsing/checking |
 | `packages/jsx-plus/editor-assets/` | Shared configuration and pinned upstream grammar/license |
 | `packages/jsx-plus/tests/editor-assets.test.ts` | Real-example TextMate/Oniguruma tokenization and actual contributed mapper launch |

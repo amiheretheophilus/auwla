@@ -77,6 +77,36 @@ it('keeps quoted delimiters, nested parentheses and template interpolation in th
   expect(tokens.some((token) => token.scopes.some((scope) => scope.startsWith('invalid.')))).toBe(false);
 });
 
+it('highlights quoted substitutions in direct child blocks while keeping ordinary call strings static', () => {
+  const source = '<p>if (ready) { "Count {count}" } else { for (const item of items) { "{item.name}" } } format("{literal}")</p>';
+  const tokens = tokenize(source);
+  function scopesAt(text: string) {
+    const offset = source.indexOf(text);
+    return tokens.find((token) => token.startIndex <= offset && offset < token.endIndex)!.scopes;
+  }
+  expect(scopesAt('count}')).toContain('meta.embedded.expression.auwla');
+  expect(scopesAt('item.name}')).toContain('meta.embedded.expression.auwla');
+  expect(scopesAt('literal}')).not.toContain('meta.embedded.expression.auwla');
+  expect(tokens.at(-1)!.scopes.some((scope) => scope.startsWith('string.'))).toBe(false);
+});
+
+it('classifies an interpolated identifier as code so string completion settings do not suppress it', () => {
+  function attributesAt(source: string, text: string): number {
+    const offset = source.indexOf(text);
+    const tokens = grammar.tokenizeLine2(source, INITIAL).tokens;
+    for (let index = 0; index < tokens.length; index += 2) {
+      const end = tokens[index + 2] ?? source.length;
+      if (tokens[index]! <= offset && offset < end) {
+        return tokens[index + 1]!;
+      }
+    }
+    throw new Error('Token not found');
+  }
+  const code = attributesAt('let count = 0;', 'count');
+  expect(attributesAt('<p>"Count {count}"</p>', 'count}')).toBe(code);
+  expect(attributesAt('<p>"Count {count}"</p>', 'Count')).not.toBe(code);
+});
+
 it('launches the shared mapper from its editor contribution without any editor SDK', async () => {
   const contribution = createMapperContribution(packageRoot);
   const manifest = contribution.inferredProjectContribution.manifest;

@@ -1,6 +1,20 @@
 import type { IRawGrammar } from 'vscode-textmate';
 import { auwlaLanguage } from './registration';
 
+function quotedChild(quote: '"' | "'", name: string): IRawGrammar['patterns'][number] {
+  return {
+    name,
+    begin: quote,
+    end: quote,
+    beginCaptures: { 0: { name: 'punctuation.definition.string.begin.tsx' } },
+    endCaptures: { 0: { name: 'punctuation.definition.string.end.tsx' } },
+    patterns: [
+      { include: '#string-character-escape' },
+      { include: '#auwla-text-interpolation' },
+    ],
+  };
+}
+
 /**
  * Derive a standalone TextMate grammar from the pinned TSX grammar. Replacing
  * the child rule lets the existing lexer own strings, comments and nested tags;
@@ -36,7 +50,40 @@ export function createAuwlaGrammar(tsx: IRawGrammar): IRawGrammar {
     },
     ...(attributes.patterns ?? []),
   ];
-  repository['jsx-children'] = { patterns: [{ include: '#statements' }] };
+  repository['auwla-text-interpolation'] = {
+    name: 'meta.embedded.expression.auwla',
+    begin: '\\{',
+    end: '\\}',
+    beginCaptures: { 0: { name: 'punctuation.section.embedded.begin.tsx' } },
+    endCaptures: { 0: { name: 'punctuation.section.embedded.end.tsx' } },
+    patterns: [{ include: '#expression' }],
+  };
+  repository['auwla-child-block'] = {
+    name: 'meta.auwla.child-block',
+    begin: '\\{',
+    end: '\\}',
+    patterns: [{ include: '#auwla-children' }],
+  };
+  repository['auwla-control'] = {
+    begin: '\\b(if|for|else)\\b',
+    beginCaptures: { 1: { name: 'keyword.control.tsx' } },
+    end: '(?<=\\})',
+    patterns: [
+      { include: '#comment' },
+      { begin: '\\(', end: '\\)', patterns: [{ include: '#expression' }] },
+      { include: '#auwla-child-block' },
+      { include: '#auwla-control' },
+    ],
+  };
+  repository['auwla-children'] = {
+    patterns: [
+      quotedChild('"', 'string.quoted.double.tsx'),
+      quotedChild("'", 'string.quoted.single.tsx'),
+      { include: '#auwla-control' },
+      { include: '#statements' },
+    ],
+  };
+  repository['jsx-children'] = { patterns: [{ include: '#auwla-children' }] };
   repository['jsx-tag-attributes'] = { ...attributes, patterns: attributePatterns };
   return {
     ...grammar,

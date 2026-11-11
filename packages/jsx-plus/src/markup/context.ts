@@ -2,8 +2,13 @@ import { JsxPlusError, type Repair } from '../diagnostics';
 import type { ChildView, ElementView, FragmentView } from '../model';
 import type { Piece, Replacement } from '../source';
 
+/** A child expression that was read separately and masked before host parsing. */
+export interface ChildReplacement extends Replacement {
+  readonly view: ChildView;
+}
+
 /** One complete element or fragment: its authored extent, emitted pieces and syntax view. */
-export interface Markup extends Replacement {
+export interface Markup extends ChildReplacement {
   readonly view: ElementView | FragmentView;
 }
 
@@ -26,7 +31,7 @@ export class MarkupContext {
   /** Names of the elements being read, outermost first (`''` for a fragment). */
   readonly open: string[] = [];
 
-  constructor(readonly source: string, readonly filename: string) {}
+  constructor(readonly source: string, readonly filename: string, readonly checking = false) {}
 
   /**
    * Throw an authored diagnostic. `end` is clamped to the source length.

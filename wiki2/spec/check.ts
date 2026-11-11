@@ -20,7 +20,7 @@ const { parse } = await import(pathToFileURL(requireCompiler.resolve('yuku-parse
 const catalog = JSON.parse(readFileSync(resolve(import.meta.dirname, 'cases.json'), 'utf8'));
 const schema = JSON.parse(readFileSync(resolve(import.meta.dirname, 'ast.schema.json'), 'utf8'));
 assert.equal(catalog.specVersion, '0.1-draft');
-assert.equal(catalog.revision, 6);
+assert.equal(catalog.revision, 7);
 assert.equal(schema.properties.specVersion.const, catalog.specVersion);
 
 const documents = readdirSync(import.meta.dirname)

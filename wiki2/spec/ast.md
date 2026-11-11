@@ -1,6 +1,6 @@
 # Syntax model and conformance view
 
-0.1-draft, revision 6. Owns G-SOURCE and A-RANGE/A-NODES/A-NORMALIZE.
+0.1-draft, revision 7. Owns G-SOURCE and A-RANGE/A-NODES/A-NORMALIZE.
 
 ## Purpose (A-NODES)
 
@@ -93,6 +93,11 @@ view's raw span is not permission to avoid parsing JavaScript. Attributes also
 remain in the production JSX AST with their original expressions, order and ranges;
 this core view omits them rather than specifying a second attribute AST.
 
+Quoted interpolated text is also an `Expression` in this small view. Its source
+and range include the original quotes and substitutions; the view does not expose
+the internal expression tree. The reader MUST still parse substitution boundaries
+with host tokens and preserve every copied expression's exact mapping (G-INTERP).
+
 The JSON form is defined in [ast.schema.json](ast.schema.json). Generated names,
 resolver bindings, runtime IDs and optimization decisions do not appear in it.
 
@@ -100,8 +105,9 @@ resolver bindings, runtime IDs and optimization decisions do not appear in it.
 
 - Normalize before compiler-next resolves bindings. Every authored reference
   reaches its normal resolver scope and subsequent graph/plan stages.
-- Direct expression children become normal expression sites; a quoted child
-  stays a host string expression rather than being reinterpreted as JSX raw text.
+- Direct expression children become normal expression sites. Static quoted text
+  stays a host string; quoted interpolation becomes a native template (S-INTERP).
+  Neither is reinterpreted as JSX raw text.
 - `prop=(expression)` becomes `prop={(expression)}`. The original parentheses
   and expression keep exact copied spans; inserted JSX braces stay unmapped.
 - `prop=name` becomes `prop={name}` with the identifier's exact copied spelling

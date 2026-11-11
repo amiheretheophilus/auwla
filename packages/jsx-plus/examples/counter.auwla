@@ -3,8 +3,7 @@ export function App() {
 
   return (
     <button onClick={() => count++}>
-      "Count: ";
-      count
+      "Count: {count}"
     </button>
   );
 }

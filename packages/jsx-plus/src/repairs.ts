@@ -73,3 +73,20 @@ export function closeChildString(source: string, quote: number): Repair[] {
   repairs.push(insert(end, text));
   return unique(repairs);
 }
+
+/** A missing interpolation `}`: before a likely outer quote, or at line end. */
+export function closeTextInterpolation(source: string, open: number, quote: string): Repair[] {
+  const end = contentEnd(source, open);
+  const repairs: Repair[] = [];
+  for (let cursor = open + 1; cursor < end; cursor++) {
+    if (source[cursor] === '\\') {
+      cursor++;
+    } else if (source[cursor] === quote) {
+      repairs.push(insert(cursor, '}'));
+    }
+  }
+  repairs.push(insert(end, '}'), insert(end, '}' + quote));
+  // Different text at the same position is intentional: the second guess also
+  // closes a still-unfinished outer quote. The recovery search verifies both.
+  return repairs;
+}

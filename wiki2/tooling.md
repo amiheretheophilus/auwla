@@ -174,10 +174,11 @@ is `TypeScriptTeam.native-preview`, as in the pinned
 [TypeScript extension manifest](https://github.com/microsoft/TypeScript/blob/3e9236361fa97a9e6c685f4833ac457ae2d8c50a/packages/vscode-typescript/package.json).
 The local VS Code 1.145.3 built-in TypeScript extension does not expose this API.
 At the user's request, `TypeScriptTeam.native-preview` 1.0.2 and the local Auwla
-VSIX 0.0.0 were installed and confirmed in `code --list-extensions --show-versions`.
+VSIX 0.0.2 are installed and confirmed in `code --list-extensions --show-versions`.
 The installed provider bundle contains mapper registration. Desktop activation
-and language-feature behavior after reloading remain **unverified**; editor
-settings were not changed.
+and diagnostics were observed after choosing the workspace SDK. The 0.0.2 quoted
+interpolation update still needs a desktop reload; its language features are
+verified through the real LSP tests below.
 
 Implemented layout (other editor adapters remain planned):
 
@@ -237,6 +238,20 @@ Native TypeScript diagnostics still use the term JSX because they check the TSX
 view. No diagnostic wording is rewritten or suppressed. The real registration
 test verifies a clean counter, `count: number` hover and the authored 2339 range
 for `count.toUpperCase()`. Standalone inferred-project JSX type setup is still open.
+
+Quoted interpolation (DX-37, spec r7) is checked as a native template. The real
+counter LSP test applies completion edits in `{cou}`, asks for hover inside the
+quotes, renames the binding through all three authored uses and rechecks. It also
+completes empty `{}` and unfinished `{cou` with or without the outer quote.
+Checking-only repairs remain unmapped and production parsing stays strict.
+
+The shared TextMate grammar now adds quoted substitutions and direct child
+control blocks. Embedded expressions are marked as code and mapped to TypeScript
+in the VS Code contribution. Tests compare encoded tokenizer attributes with
+plain code and literal text: an interpolated identifier must not remain a string
+token, or normal string-completion settings would suppress suggestions. The
+adapter still provides only registration/assets; shared normalization and the
+TypeScript host own checking and completion.
 
 See [adapter setup](../packages/editor-vscode/README.md) and
 [reuse from another editor](../packages/jsx-plus/editor-assets/README.md).

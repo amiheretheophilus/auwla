@@ -1,6 +1,6 @@
 # Core semantics
 
-0.1-draft, revision 6. Compiler-next's existing rules remain authoritative for
+0.1-draft, revision 7. Compiler-next's existing rules remain authoritative for
 host execution, reactivity, readiness, ownership and delivery.
 
 ## Expression children (S-EXPR)
@@ -41,6 +41,20 @@ For example, `<p>"&amp;"</p>` has text content `&amp;`; HTML serialization must 
 its ampersand again. `<p>"a\nb"</p>` has an actual newline in its text value.
 Trivia between source child items supplies no implicit display space: write
 `" "` when a space is wanted.
+
+### Interpolated text (S-INTERP)
+
+`<p>"Count: {count}"</p>` produces the same string as the native template
+`` `Count: ${count}` `` at the same source position. Substitutions evaluate in
+source order and use native template-literal coercion, side effects, errors,
+`await`/`yield` scope and dependency tracking. No function wrapper or custom
+string evaluator is added. For example, null/boolean substitutions become the
+text `null`/`true`/`false`, unlike standalone null/boolean child values.
+
+Normalization generates the template delimiters and `$` markers, preserving
+copied expression spans. Literal backticks in quoted text are escaped in the
+generated template. A substitution's value is string content, not markup or an
+implicit HTML insertion. Existing compiler-next template reactivity is reused.
 
 ## Conditional children (S-IF)
 

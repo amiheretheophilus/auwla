@@ -9,7 +9,7 @@ it('provides clean counter diagnostics, hover and authored errors after editor r
   const exampleRoot = resolve(packageRoot, 'examples');
   const source = readFileSync(resolve(exampleRoot, 'counter.auwla'), 'utf8');
   expect(source).not.toContain('@memoized-dom/compiler/jsx');
-  const damaged = source.replace(/count(\r?\n\s*<\/button>)/, 'count.toUpperCase()$1');
+  const damaged = source.replace('{count}', '{count.toUpperCase()}');
   expect(damaged).toContain('count.toUpperCase()');
   const uri = documentUri(exampleRoot, 'counter.auwla');
   const contribution = createMapperContribution(packageRoot);

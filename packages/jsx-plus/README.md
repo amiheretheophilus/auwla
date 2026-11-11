@@ -81,6 +81,11 @@ The separate [VS Code adapter](../editor-vscode/README.md) consumes the shared
 The prototype builds locally; real desktop activation and packaged installation
 remain unverified.
 
+Quoted child text also supports `{expression}` interpolation, for example
+`<p>"Count: {count}"</p>`. It normalizes to a native template and retains exact
+expression mappings for completion, hover and rename. Use `\{` for a literal
+opening brace. The counter uses this spelling; see [the grammar rules](../../wiki2/spec/grammar.md#quoted-text-interpolation-g-interp).
+
 `bun run tests/probe-flow.ts --strict` is the separate checking-flow target gate.
 It passes all 34 current targets, including the four original narrowing gaps.
 The primary TSX view preserves editor identity and synchronous narrowing; selected

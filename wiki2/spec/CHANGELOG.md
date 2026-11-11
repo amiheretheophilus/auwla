@@ -1,5 +1,18 @@
 # Spec revisions
 
+## 0.1-draft, revision 7 — 2026-11-11
+
+- DX-37: quoted child text supports `{expression}` substitutions (G-INTERP,
+  S-INTERP), lowered to native templates. This reserves unescaped `{` at child
+  level; use `\{` for literal text. Ordinary nested host strings and attributes
+  retain their existing rules; native backticks still use `${...}`.
+- Substitution strings, comments, regexes and nested delimiters use host tokens.
+  String coercion, evaluation order and reactivity follow native templates.
+- The small syntax view retains an Expression's complete authored spelling;
+  generated template punctuation is unmapped and copied expressions stay exact.
+- New JPX1012 (missing interpolation closer) and JPX1013 (empty interpolation),
+  both at the opening `{`. Add PARSE-010, ERROR-014/015 and TEXT-004.
+
 ## 0.1-draft, revision 6 — 2026-11-11
 
 - Diagnostics only; no accepted syntax or meaning changes. Inputs that were

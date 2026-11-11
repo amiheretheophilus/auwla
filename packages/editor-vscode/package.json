@@ -2,7 +2,7 @@
   "name": "memoized-dom-auwla",
   "displayName": "Auwla (Prototype)",
   "description": "A thin VS Code adapter for the shared Auwla authoring tools.",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "publisher": "amiheretheophilus",
   "private": true,
   "engines": { "vscode": "^1.126.0" },
@@ -24,6 +24,7 @@
     "grammars": [{
       "language": "auwla",
       "scopeName": "source.auwla",
+      "embeddedLanguages": { "meta.embedded.expression.auwla": "typescript" },
       "path": "./dist/auwla.tmLanguage.json"
     }]
   },

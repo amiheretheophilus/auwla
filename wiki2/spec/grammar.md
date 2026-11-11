@@ -1,6 +1,6 @@
 # Core grammar
 
-0.1-draft, revision 6. Status: provisional executable-design target.
+0.1-draft, revision 7. Status: provisional executable-design target.
 
 ## Host language and lexical contexts (G-HOST)
 
@@ -75,6 +75,28 @@ the literal characters `&amp;`, and `"a\nb"` contains a newline.
 closing tag inside a string, comment, template text or regex token does not close
 the element. A line comment continues to its line terminator, including any tag
 spelling on that line. HTML comment syntax has no special child-body meaning.
+
+### Quoted text interpolation (G-INTERP)
+
+At a child body's own delimiter level, a single/double-quoted text literal MAY
+contain `{ HostExpression }` substitutions (DX-37). The same rule applies in
+direct conditional and loop child blocks. Unescaped `{` opens a substitution;
+the matching `}` is found with host tokens, respecting nested delimiters,
+comments, regexes, templates and strings. The expression may use the same quote
+character as the enclosing text. Empty substitutions are errors.
+
+`<p>"Count: {count}"</p>` is interpolated text. Ordinary host strings inside
+parentheses, calls, arrays, objects, conditions, functions or attribute values
+retain their host/JSX meaning. For example, `format("Count: {count}")` passes a
+literal string; use a native template argument when interpolation is wanted there.
+Interpolated child text may participate in ordinary continuation, such as
+`"Name: {name}".toUpperCase()`.
+
+Write `\{` for a literal opening brace in quoted child text. A `}` without an
+opening substitution is literal text. Existing string escapes retain their host
+values, including Unicode escapes that cook to a brace. This revision reserves
+an unescaped opening brace in child-level quoted text; earlier static text with
+that spelling must escape it. Backtick templates continue to use native `${...}`.
 
 ## Expression boundaries (G-BOUNDARY)
 

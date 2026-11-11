@@ -1,6 +1,6 @@
 # Syntax diagnostics
 
-0.1-draft, revision 6. Codes below are **proposed for the extension**; they have
+0.1-draft, revision 7. Codes below are **proposed for the extension**; they have
 not been added to compiler-next's current `CompileError` API.
 
 ## Format and locations (D-FORMAT)
@@ -41,6 +41,8 @@ retain their host diagnostics and are mapped back to authored locations.
 | JPX1009 | Undelimited attribute value is not a single host identifier, or the value is missing before `>` | The undelimited value, up to attribute whitespace or `>`/`/>`; for a missing value, the `>` |
 | JPX1010 | Child loop is not `for (const binding of iterable)`: `let`/`var`, no declaration, `for...in`, C-style or `for await` | The `for` keyword |
 | JPX1011 | A child-level `if`/`for` header `(` has no matching `)` before the body end | The opening `(` |
+| JPX1012 | Quoted text interpolation has no matching `}` | The opening `{` |
+| JPX1013 | Quoted text interpolation contains no expression (including trivia-only content) | The opening `{` |
 
 Do not infer duplicate-attribute, unknown-tag, unknown-method or key restrictions
 from this table. Existing JSX/host rules and agreed framework contracts decide
@@ -79,6 +81,11 @@ At a token boundary a complete mismatched closing tag takes JPX1001 over a gener
 host-expression error. EOF with an open token reports the unterminated token
 before an unclosed surrounding element/block. Otherwise the earliest decisive
 syntax error is primary. More recovery diagnostics may follow, in source order.
+
+Within quoted text, a missing substitution closer reports JPX1012 before a
+missing outer quote. For checking only, an empty substitution may remain in the
+TSX view for native syntax recovery and scope completion; strict builds retain
+JPX1013. Inserted checking-only closers never become authored edit spans.
 
 An editor MAY retain a partial syntax tree and incomplete ranges to offer useful
 tooling after an error. A build MUST NOT silently treat that partial tree as a

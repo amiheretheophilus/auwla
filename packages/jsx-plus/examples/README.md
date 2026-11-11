@@ -74,7 +74,12 @@ and becomes `Array.from(visible, (task) => <li ...>)`; see
 compiled keyed row lists when optimizing (`_rowList.from(...)` in the served
 `/app.js`), so a row keeps its DOM node while it stays visible. The page has
 real labels, keyboard-native buttons and live summary text. The footer uses a native backtick template with
-`${...}` interpolation; double-quoted children are ordinary static strings.
+`${...}` interpolation. Spec revision 7 also supports quoted child text such as
+`"Count: {count}"`; the counter demonstrates it without a per-file type import.
+Use `\{` for a literal opening brace. Substitutions follow native template-string
+coercion and reactivity; strings inside calls and attributes keep their own rules.
+The real LSP checks complete, hover and rename inside these quotes, including
+completion in empty or unfinished substitutions.
 CSS and `main.ts` stay ordinary files.
 
 The package checks load this file directly, rather than maintain a second version

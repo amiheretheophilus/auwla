@@ -45,7 +45,7 @@ function readRoots(context: MarkupContext): Markup[] {
 }
 
 function normalizeFile(source: string, filename: string, validateHost: boolean): NormalizedSource {
-  const context = new MarkupContext(source, filename);
+  const context = new MarkupContext(source, filename, !validateHost);
   const roots = readRoots(context);
   const output = assemble(replaceRange(source, 0, source.length, roots));
 
