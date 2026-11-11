@@ -7,7 +7,7 @@
 import { parse, TokenKind as K } from 'yuku-parser';
 import type { Node, ParseResult, IfStatement } from 'yuku-parser';
 import { JsxPlusError } from './diagnostics';
-import { childExpression, childStatements, maskMarkup, type HostTokens } from './host';
+import { childExpression, childStatements, maskMarkup, unterminatedLiteral, type HostTokens } from './host';
 import { maskAttribute, parenthesizedAttribute } from './attributes/parenthesized';
 import { identifierAttribute, maskIdentifierAssignment } from './attributes/identifier';
 import type { BlockView, ChildView, ElementView, ExpressionView, FragmentView, IfView, NormalizedSource, Range } from './model';
@@ -45,7 +45,7 @@ class Reader {
     throw new JsxPlusError(code, message, this.filename, [start, Math.min(end, this.source.length)], this.source);
   }
 
-  file(): NormalizedSource {
+  file(validateHost = true): NormalizedSource {
     const roots: Markup[] = [];
     let shadow = this.source;
 
@@ -70,12 +70,14 @@ class Reader {
     const output = assemble(replaceRange(this.source, 0, this.source.length, roots));
     // Validate ordinary host context after normalization. No custom evaluator or
     // second set of binding rules is introduced by this adapter.
-    const result = parse(output.code, { lang: 'tsx', sourceType: 'module' });
-    const problem = result.diagnostics.find((entry) => entry.severity === 'error');
-    if (problem !== undefined) {
-      const mapping = output.mappings.find((entry) => entry.generated[0] <= problem.start && problem.start < entry.generated[1]);
-      const start = mapping === undefined ? 0 : mapping.authored[0] + problem.start - mapping.generated[0];
-      this.error('HOST', problem.message, start);
+    if (validateHost) {
+      const result = parse(output.code, { lang: 'tsx', sourceType: 'module' });
+      const problem = result.diagnostics.find((entry) => entry.severity === 'error');
+      if (problem !== undefined) {
+        const mapping = output.mappings.find((entry) => entry.generated[0] <= problem.start && problem.start < entry.generated[1]);
+        const start = mapping === undefined ? 0 : mapping.authored[0] + problem.start - mapping.generated[0];
+        this.error('HOST', problem.message, start);
+      }
     }
 
     return { ...output, roots: roots.map((entry) => entry.view) };
@@ -177,6 +179,7 @@ class Reader {
     for (;;) {
       const result = childStatements(shadow);
       const tokens = result.tokens;
+      const literal = unterminatedLiteral(result, shadow);
       const stack: Delimiter[] = [];
       let expectChildBlock = false;
       let changed = false;
@@ -184,6 +187,9 @@ class Reader {
       for (let index = 0; index < tokens.length; index++) {
         const kind = tokens.kind(index);
         const position = start + tokens.start(index);
+        if (literal !== undefined && tokens.start(index) >= literal.boundary) {
+          this.error('JPX1003', 'Unterminated child string or template', start + literal.start);
+        }
         const childLevel = stack.length === 0 || stack[stack.length - 1]!.childBlock;
         const previousMarkup = index === 0 ? undefined : nested.find((entry) => entry.start === start + tokens.start(index - 1));
         const adjacent = childLevel && previousMarkup !== undefined && kind === K.LessThan
@@ -247,17 +253,8 @@ class Reader {
       }
 
       if (changed) continue;
-      const unterminated = result.diagnostics.find((entry) => /Unterminated (string|template)/.test(entry.message));
-      if (unterminated !== undefined) {
-        const template = /template/.test(unterminated.message)
-          ? stack.findLast((delimiter) => delimiter.close === K.TemplateTail) : undefined;
-        if (template !== undefined) {
-          this.error('JPX1003', 'Unterminated child template', template.start);
-        }
-        const end = tokens.length === 0 ? 0 : tokens.end(tokens.length - 1);
-        let quote = end;
-        while (/\s/.test(shadow[quote] ?? '') && quote < shadow.length) quote++;
-        this.error('JPX1003', 'Unterminated child string or template', start + quote);
+      if (literal !== undefined) {
+        this.error('JPX1003', 'Unterminated child string or template', start + literal.start);
       }
       const unclosedBlock = stack.find((delimiter) => delimiter.childBlock);
       if (unclosedBlock !== undefined) {
@@ -422,4 +419,9 @@ class Reader {
 /** Extended source in; standard TSX plus exact copied-span mappings out. */
 export function normalize(source: string, options: { readonly filename?: string } = {}): NormalizedSource {
   return new Reader(source, options.filename ?? './App.auwla').file();
+}
+
+/** Internal editor entry: native TypeScript owns recovery of ordinary host errors. */
+export function normalizeForChecking(source: string, filename: string): NormalizedSource {
+  return new Reader(source, filename).file(false);
 }

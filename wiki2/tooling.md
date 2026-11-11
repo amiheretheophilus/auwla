@@ -30,10 +30,11 @@ disable editor features, preventing duplicate rename/completion edits. Generated
 insertions stay unmapped. See [checking flow](checking-flow.md) for the bounded
 profile, coverage tests and unsupported-input fallback.
 
-On a `JsxPlusError`, the projection returns its authored diagnostic plus an empty
-unmapped module. This reports the failure rather than pretending the remaining
-file was checked. Partial syntax recovery remains future work. Unexpected
-internal failures are left to the host's mapper-failure handling.
+On a `JsxPlusError`, [bounded recovery](recovery.md) can quarantine damaged markup
+lines while retaining the error and checking unaffected mapped code. Ordinary
+host syntax errors are left to native TypeScript recovery. Structurally unsafe
+cases retain an empty unmapped module. Unexpected internal failures still reach
+the host's mapper-failure handling; old successful text is never substituted.
 
 The [research in dx.md](../dx.md#3-research-typescript-content-mappers) links the
 protocol, permissions and mapping constraints. Use its exact-verbatim edit rule
@@ -123,7 +124,7 @@ declared ref. Include a deliberate wrong expression and an incomplete edit.
 | TOOL-02 | Built for the probe: actual LSP ref rename updates four uses and changing-state rename updates five; applying edits and rechecking yields no errors |
 | TOOL-02-ID | Built: actual task-board bare submit-handler rename updates its declaration and attribute use; authored edits apply and recheck without errors |
 | TOOL-03 | Partial: real task-board member completion resolves and applies an exact authored insert/replace edit inside a parenthesized attribute, then rechecks. Auto-import and broader completion contexts remain open |
-| TOOL-04 | Partial: Unicode ranges and a missing quote/restore cycle checked; preserving the rest of an incomplete file remains open |
+| TOOL-04 | Partial: actual unfinished task-board quote/parenthesis edits retain unrelated diagnostics/completion; holes are unmapped, builds still fail, restoration clears errors. Multiline structural recovery remains open |
 | TOOL-05 | Hardened paired profile: 34 actual LSP targets pass, including receiving-type errors, generic helpers and deferred/immediate callbacks. Full flow acceptance remains open; see [checking flow](checking-flow.md) |
 | TOOL-06 | Partial: exact unchanged input reuses the full result; real-example reuse/eviction/isolation counts pass. Incremental edits, measured latency and heap acceptance remain open |
 

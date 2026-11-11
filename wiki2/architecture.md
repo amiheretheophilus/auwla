@@ -86,6 +86,9 @@ All paths are relative to the repository root and exist now.
 | `packages/jsx-plus/examples/task-board/ForLoop.auwla` | Host `for...of` builds typed rows before markup; exercised in both modes |
 | `packages/jsx-plus/AGENTS.md` | Package ownership boundary and focused checks |
 | `packages/jsx-plus/src/checking/project.ts` | Shared-normalizer TSX checking projection and authored parse diagnostics |
+| `packages/jsx-plus/src/checking/recovery/markup.ts` | Bounded current-source line quarantine, exact remaining spans and structural fallback |
+| `packages/jsx-plus/tests/recovery.test.ts` | Real malformed-source mappings and strict build rejection |
+| `packages/jsx-plus/tests/editor-recovery-lsp.test.ts` | Native diagnostics/completion beyond actual unfinished task-board edits |
 | `packages/jsx-plus/src/checking/protocol.ts` | Primary/supplemental outputs, mapping masks and diagnostic directives |
 | `packages/jsx-plus/src/checking/flow/plan.ts` | Consume public compiler facts; select bounded state/prop insertions and dependent regions |
 | `packages/jsx-plus/src/checking/flow/syntax.ts` | Separate parent index and receiving diagnostic contexts; parser AST stays unchanged |

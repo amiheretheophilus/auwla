@@ -110,6 +110,12 @@ fallback. It checks that every delegated copied character has nonignored
 supplemental coverage throughout the catalog. Actual LSP tests additionally
 apply a five-use changing-state rename and recheck without generated edits.
 
+`recovery.test.ts` and `editor-recovery-lsp.test.ts` edit the actual task board.
+They retain an unfinished quote/parenthesis diagnostic while checking/completing
+a separate current-source member, then verify restoration. Quarantined lines have
+no editable mapping; strict compilation still rejects the same malformed input.
+See [recovery](recovery.md) for the bounded line profile and structural fallback.
+
 `checking-facts.test.ts` additionally validates the new opt-in inspection adapter.
 The shared frontend extraction is checked against compiler-next's analysis,
 graph, parse, core and ref cases; exact commands/results are in [status.md](status.md).

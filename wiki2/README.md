@@ -36,6 +36,7 @@ still be `learning`; execute project commands in the `auwla` checkout explicitly
 | [refs.md](refs.md) | Normally declared refs, the existing `ref` prop, lifecycle compatibility and code map |
 | [tooling.md](tooling.md) | TypeScript content mapper, authored spans, diagnostics, editing and formatting |
 | [mapper-cache.md](mapper-cache.md) | Bounded transform reuse, configuration lifetime, eviction and real-example evidence |
+| [recovery.md](recovery.md) | Current-source incomplete-code checking, quarantined markup lines and native LSP evidence |
 | [checking-flow.md](checking-flow.md) | Paired checking profile, 34 replay/deferred-flow targets and limits of the compiler-fact boundary |
 | [features.md](features.md) | Proposed events, modifiers, bindings, classes, CSS and element behavior; extraction points for later pages |
 | [architecture.md](architecture.md) | Current integration files, proposed boundaries, source-map flow and planned code |

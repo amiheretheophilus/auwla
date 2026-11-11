@@ -2,69 +2,48 @@
 
 Updated: 2026-11-11. Branch: `prototype/jsx-plus`.
 
-## Current slice
+## Current requested sequence
 
-**P2-ATTR-ID: bare identifier attribute values built.** DX-33/spec revision 3
-accepts `prop=name`, including the user's `onClick=addTask`. It normalizes to
-ordinary JSX `prop={name}`, preserving the identifier's spelling, lexical binding
-and native event arguments. No implicit call or callback wrapper is generated.
+The user requested these three steps in order: (1) incomplete-code recovery,
+(2) bare-handler completion and auto-imports, (3) direct `for...of` inside markup.
+This checkpoint completes the first recovery profile. Steps 2 and 3 remain next;
+do not treat the sequence as finished.
 
-The new `src/attributes/identifier.ts` reader validates each delimited candidate
-with the host parser. Parser-only assignment masking keeps opening-tag scanning
-valid for one-character names and preserves UTF-16 width/newlines. Emitted values
-retain copied identifier spans between unmapped generated braces. Parenthesized
-and existing JSX values remain supported. Calls, members and other expressions
-still require parentheses or braces; event timing is unchanged.
+Ordinary host syntax stays mapped for native TypeScript recovery. Isolated damaged
+markup lines can be quarantined from the exact current revision, keeping their
+authored errors and unaffected diagnostics/completion. At most three lines are
+blanked, with original UTF-16 width/newlines; successful recovery requires a valid
+remaining module. Holes have no editable mapping. Structural cases retain the
+empty-module fallback. Production normalization/compilation remains strict.
 
-Actual examples use bare `onClick=addTask` in `ForLoop.auwla` and
-`onSubmit=addTask` in `App.auwla`. The form handler uses its native event argument.
-Both apps execute through compiler-next in both modes. A real LSP check renames
-the bare submit handler plus its declaration, applies only authored edits and
-rechecks without errors.
+`src/checking/recovery/markup.ts` owns quarantine and mapping exclusion. Shared
+host literal locations and the attribute reader now stop before error recovery
+misreads later tags. See [recovery](recovery.md) for exact boundaries and native
+client completion-default behavior. No cached previous source is substituted.
 
-Compiler-next and runtime implementation are unchanged in this slice. The prior
-ordinary-loop example and shared ARIA setter fix remain in place. Syntax/tooling
-work stays in the separate JSX+ package.
+## Evidence
 
-## Baseline and evidence
+Baseline: clean `bbee1afc`. JSX+ `bun check`: 207 files, no errors. JSX+ `bun test`:
+**172 passed, 0 failed, 1216 assertions**, twelve files. Includes all previous
+parse/runtime/CLI/flow/rename checks plus actual task-board quote, attribute-paren
+and ordinary-host-paren edits. An unrelated member error/completion remains
+available; accepting completion leaves the syntax error visible, and restoring
+the source clears it. Unit checks prove copied-span equality and build rejection.
 
-This slice started from clean baseline `b05773b5`. Evidence covers the identifier
-reader, revision 3, real authored apps, native mapper paths and documentation.
+Direct review covers current-source isolation, native host errors, validation
+before publishing partial maps, unmapped holes, bounded attempts, fallback and
+strict production behavior. No sub-agents. `git diff --check` passes.
+Compiler-next/runtime implementation and draft 0.1 revision 3 grammar are unchanged.
+Full root, performance, browser layout and IDE activation checks were not run.
 
-- JSX+ `bun check`: no errors in 204 files.
-- JSX+ `bun test`: **168 passed, 0 failed, 845 assertions**, ten files.
-  Includes all 34 flow targets, actual CLI checks for both apps/entrypoints,
-  native LSP handler/ref/state rename and applied member completion, copied spans,
-  Unicode/escaped identifiers, CRLF, tag boundaries, unsupported bare forms and
-  normal event delivery. All original spec fixtures retain their expectations.
-- `bun run examples/task-board/preview.ts --build` and the same command with
-  `--for-loop --build`: both current browser bundles build successfully.
-- Root `bun run wiki2/spec/check.ts`: 32 fixture-integrity checks, 7 host checks
-  and 22 existing-JSX baseline executions pass. This baseline checker does not
-  run extended parsing; the JSX+ package separately checks extended source.
-- Root `bun check -p wiki2/spec/tsconfig.json`: no errors in 173 files.
-- Direct review covers delimiter boundaries, host identifier validation, exact
-  masks/spans, mixed attribute forms, source-format selection, event values and
-  actual rename application. No sub-agents, following user direction.
-- Documentation audit: 28 documents, 198 local links/heading targets and 50
-  mapped package paths pass. All 30 original spec fixtures are unchanged;
-  revision 3 adds two cases. `git diff --check` passes.
-- Full root suite, timing benchmarks, browser layout, SSR/adoption acceptance and
-  IDE activation were not run. No complete editor/performance claim follows.
+## Continue
 
-Find the slice with `git log -1 -- packages/jsx-plus/src/attributes/identifier.ts`.
-The language spec is draft 0.1 revision 3; the changelog records the new spelling.
+Next: P3-HANDLER-IMPORT, using real TypeScript helper exports and actual native
+completion/import edits on the task board. Then P4-DIRECT-FOR needs its draft,
+implementation and real application/ownership checks before claiming support.
 
-## Next
-
-Continue P3-EDITING with more real completion/auto-import contexts and partial-file
-recovery. Syntax errors must remain authored errors; previous cached successful
-text must never hide the current malformed input. The current syntax-error
-projection still does not check the remainder of an incomplete file.
-
-Direct markup loops remain a separate draft task; the existing `ForLoop.auwla`
-uses normal host JavaScript before markup. Broader replay/contextual-typing
-proofs, lowering maps, multi-module loading, Vite/HMR, delivery and final-JavaScript
-maps remain open. Backend selection/configuration stays planned and nonreactive;
-isomorphic support comes later. See [plan](plan.md), [tooling](tooling.md) and
-[rewrite acceptance](../wiki/status.md).
+Recovery inside quarantined text and multiline structural damage still need
+work. Broader replay proofs, lowering maps, production module loading, Vite/HMR,
+delivery and debugging maps remain open. Backend configuration stays planned
+and nonreactive; isomorphic support is later. See [plan](plan.md),
+[tooling](tooling.md) and [rewrite acceptance](../wiki/status.md).

@@ -45,11 +45,16 @@ export function parenthesizedAttribute(reader: AttributeReader): Replacement {
   for (;;) {
     const result = childStatements(shadow);
     const tokens = result.tokens;
+    const missingParen = result.diagnostics.find((entry) => entry.severity === 'error'
+      && (/Expected '\)'/.test(entry.message) || /in parenthesized expression/.test(entry.message)));
     const closes: { readonly kind: number; readonly start: number }[] = [];
     let changed = false;
 
     for (let index = 0; index < tokens.length; index++) {
       const kind = tokens.kind(index);
+      if (missingParen !== undefined && tokens.start(index) >= missingParen.start) {
+        reader.error('JPX1008', "Attribute expression requires a matching ')'", start);
+      }
       if (kind === K.LessThan && index + 1 < tokens.length
         && (tokens.kind(index + 1) === K.JSXIdentifier || tokens.kind(index + 1) === K.GreaterThan)) {
         const markup = reader.element(start + tokens.start(index));

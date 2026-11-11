@@ -1,4 +1,4 @@
-import { parse } from 'yuku-parser';
+import { parse, TokenKind as K } from 'yuku-parser';
 import type { Diagnostic, Node, ParseResult, TokenList } from 'yuku-parser';
 
 /** Parser-only placeholder retaining original UTF-16 width and line endings. */
@@ -50,6 +50,44 @@ export interface HostFragment {
   readonly tokens: HostTokens;
   readonly diagnostics: readonly Diagnostic[];
   readonly comments: readonly { readonly start: number; readonly end: number }[];
+}
+
+/** Locate an unclosed host literal before parser recovery invents later structure. */
+export function unterminatedLiteral(fragment: HostFragment, source: string): {
+  readonly start: number;
+  readonly boundary: number;
+} | undefined {
+  const problem = fragment.diagnostics.find((entry) => /Unterminated (string|template)/.test(entry.message));
+  if (problem === undefined) {
+    return undefined;
+  }
+  const templates: number[] = [];
+  let previousEnd = 0;
+  for (let index = 0; index < fragment.tokens.length; index++) {
+    if (fragment.tokens.end(index) > problem.start) {
+      break;
+    }
+    previousEnd = fragment.tokens.end(index);
+    const kind = fragment.tokens.kind(index);
+    if (kind === K.TemplateHead) {
+      templates.push(fragment.tokens.start(index));
+    } else if (kind === K.TemplateTail && templates.length > 0) {
+      templates.pop();
+    }
+  }
+  let start = /template/.test(problem.message) ? templates[templates.length - 1] : undefined;
+  if (start === undefined) {
+    start = previousEnd;
+    for (const comment of fragment.comments) {
+      if (comment.start >= start && comment.end <= problem.start && source.slice(start, comment.start).trim() === '') {
+        start = comment.end;
+      }
+    }
+    while (start < source.length && /\s/.test(source[start]!)) {
+      start++;
+    }
+  }
+  return { start, boundary: problem.start };
 }
 
 function fragment(source: string, expression: boolean): HostFragment {
