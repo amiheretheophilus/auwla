@@ -6,7 +6,6 @@ Run commands below from `packages/jsx-plus` using the installed workspace depend
 | --- | --- |
 | [counter.auwla](counter.auwla) | The smallest state/event/direct-expression example |
 | [task-board/App.auwla](task-board/App.auwla) | A complete task board: derived lists/counts, search, status filters, form submission, existing refs, direct `if`, direct `for` loops in the markup, quoted text and row events |
-| [task-board/ForLoop.auwla](task-board/ForLoop.auwla) | A direct `for (const task of visible) { <li key=...> }` loop in the markup; independent row callbacks, filtering and add/remove |
 | [checking/App.auwla](checking/App.auwla) | Small typed-prop/ref example used by the mapper checks |
 | [checking/TypeError.auwla](checking/TypeError.auwla) | Deliberately invalid method call for inspecting authored diagnostics |
 
@@ -25,21 +24,6 @@ For a build-only check:
 ```text
 bun run examples/task-board/preview.ts --build
 ```
-
-For the ordinary loop variant:
-
-```text
-bun run examples/task-board/preview.ts --for-loop
-bun run examples/task-board/preview.ts --for-loop --build
-```
-
-`ForLoop.auwla` writes `for (const task of visible) { <li key={task.id}>...</li> }`
-directly inside `<ul>`. Each row gets its own `task` binding, so its toggle and
-remove handlers act on that row. The loop accepts any iterable and becomes
-`Array.from(visible, (task) => <li ...>)`. The preview compiles that to
-compiled keyed rows (`_rowList.from(visible)` in the served `/app.js`), so a row
-keeps its DOM node when the filter hides or shows other rows. See
-[direct loops](../../../wiki2/syntax.md#direct-loops).
 
 For authored TypeScript checking, including its entrypoint:
 
@@ -65,9 +49,9 @@ still receive ordinary values: `onClick=(handler)` passes a function, while
 `onClick=(() => removeTask(id))` supplies an explicit callback. Calls are not
 made lazy automatically. Existing JSX braces remain available.
 
-A single identifier also works without delimiters: the loop app uses
-`onClick=addTask`, and the main form uses `onSubmit=addTask`. They become ordinary
-JSX function references, so the handler receives the native event. The bare
+A single identifier also works without delimiters: the form uses
+`onSubmit=addTask`. It becomes an ordinary JSX function reference, so the handler
+receives the native event. The bare
 name can also be imported: `onClick=focusTaskInput` uses a normal exported
 function from [task-board/actions.ts](task-board/actions.ts). Bare calls such
 as `onClick=addTask()` need explicit parentheses/braces and are not made lazy.
@@ -77,9 +61,12 @@ and direct `if` switches between the empty message and the list. Two direct
 loops write repeated markup in place. `for (const option of filters) { <button ...> }`
 makes the status buttons from an ordinary array, each with its own `option` for
 its handler. Inside the `else` branch, `for (const task of visible) { <li key={task.id}> ... }`
-writes each row with its toggle/remove handlers. Both become compiled keyed row
-lists when optimizing, so a row keeps its DOM node while it stays visible. The page has real labels, keyboard-native
-buttons and live summary text. The footer uses a native backtick template with
+writes each row with its toggle/remove handlers. A loop accepts any iterable
+and becomes `Array.from(visible, (task) => <li ...>)`; see
+[direct loops](../../../wiki2/syntax.md#direct-loops). Both loops become
+compiled keyed row lists when optimizing (`_rowList.from(...)` in the served
+`/app.js`), so a row keeps its DOM node while it stays visible. The page has
+real labels, keyboard-native buttons and live summary text. The footer uses a native backtick template with
 `${...}` interpolation; double-quoted children are ordinary static strings.
 CSS and `main.ts` stay ordinary files.
 
@@ -89,6 +76,6 @@ inside a fixture. They cover search/filter changes, the looped buttons'
 empty state in both compiler modes. The mapper cache checks also transform
 this same authored source. Browser layout and production delivery need their own
 acceptance; these checks establish the exercised authoring and runtime behavior.
-The loop variant is also compiled and exercised directly from its authored file.
-Native completion checks apply an actual insert/replace edit to a partially typed
+A real LSP rename of the row loop's `task` binding edits only uses inside that
+loop. Native completion checks apply an actual insert/replace edit to a partially typed
 member in the main app's parenthesized row label.

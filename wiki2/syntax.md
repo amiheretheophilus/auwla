@@ -134,13 +134,12 @@ The main task board,
 direct loops in its template. One loops over a module-level `filters` array to
 make the status buttons. The other loops over `visible` inside the `else` branch
 of a direct `if` to make the task rows. Its execution test runs in both modes. It
-checks the looped buttons' labels and `aria-pressed`, that open rows keep their
-nodes across a filter change, and the add/toggle/remove/search flow. The LSP
-completion, auto-import and editor-recovery tests edit inside its loop body.
-[ForLoop.auwla](../packages/jsx-plus/examples/task-board/ForLoop.auwla) is a
-smaller variant with per-row toggle/remove handlers. Both run in both modes,
-build, and type-check through the TS7 CLI. A real LSP rename of a loop binding
-edits only uses inside the loop.
+checks the looped buttons' labels and `aria-pressed`, that each row's handler
+acts on its own binding, that open rows keep their nodes across a filter change,
+and the add/toggle/remove/search flow. It builds and type-checks through the TS7
+CLI. The LSP completion, auto-import and editor-recovery tests edit inside its
+loop body. A real LSP rename of the row loop's binding edits only uses inside
+that loop.
 
 **Compiled rows (P4-FOR-FAST).** With optimization on, compiler-next treats
 `Array.from(items, row)` like `items.map(row)`
@@ -148,9 +147,8 @@ edits only uses inside the loop.
 `optimize/mapping-calls.ts`). A loop whose body is one keyed element becomes a
 compiled row list (`createRowList`, then `list.from(items)`). A multi-child body
 (a fragment row) uses the per-item row cache (`fromRows`). The runtime iterates
-exactly what `Array.from` iterates. `ForLoop.auwla` compiles to
-`_rowList.from(visible)`, and its execution test checks that keyed rows keep their
-DOM nodes through filtering and adding, in both modes.
+exactly what `Array.from` iterates. Both of the task board's loops compile to
+`_rowList.from(...)`.
 
 Known limits (compiler-next, same as plain JSX `Array.from`):
 

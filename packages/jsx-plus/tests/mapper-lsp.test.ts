@@ -105,9 +105,9 @@ it('gets authored diagnostics and safe ref rename edits from the real TypeScript
 }, 25000);
 
 it('renames a direct loop binding only within its loop', async () => {
-  // ForLoop.auwla also has unrelated `task` parameters in filter callbacks.
-  const file = resolve(taskBoardRoot, 'ForLoop.auwla');
-  const uri = documentUri(taskBoardRoot, 'ForLoop.auwla');
+  // The task board also has unrelated `task` parameters in filter callbacks.
+  const file = resolve(taskBoardRoot, 'App.auwla');
+  const uri = documentUri(taskBoardRoot, 'App.auwla');
   const source = readFileSync(file, 'utf8');
   const loopStart = source.indexOf('for (const task of visible)');
   const loopEnd = source.indexOf('</ul>', loopStart);

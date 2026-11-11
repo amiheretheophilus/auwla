@@ -1,8 +1,7 @@
 import { fileURLToPath } from 'node:url';
 import { compile } from '../../src';
 
-const entry = process.argv.includes('--for-loop') ? './main-for-loop.ts' : './main.ts';
-const entrypoint = fileURLToPath(new URL(entry, import.meta.url));
+const entrypoint = fileURLToPath(new URL('./main.ts', import.meta.url));
 const runtime = fileURLToPath(new URL('../../../runtime/src/index.ts', import.meta.url));
 
 // This example-only loader compiles the single authored UI module. Production

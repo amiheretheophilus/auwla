@@ -69,9 +69,11 @@ state in both compiler modes. The footer's native template interpolation updates
 with the list. [Example commands](../packages/jsx-plus/examples/README.md) build
 or serve the current checkout's compiled UI; the preview is an example-only Bun
 loader, not production Vite/module-graph acceptance.
-The loop variant uses ordinary `for...of` outside markup and has its own live
-filter/add/toggle/remove and per-row closure checks. It exposed a runtime setter
-dropping false ARIA values; its fix and focused evidence are on
+Its filter buttons and task rows are direct `for...of` loops in the markup. The
+test checks each looped button's `aria-pressed`, that each row's handler acts on
+its own binding, and that visible rows keep their DOM nodes across filter changes.
+A since-removed loop variant exposed a runtime setter dropping false ARIA values;
+its fix and focused evidence are on
 [compiler core](../wiki/compiler/core.md#dynamic-attribute-values).
 
 The real task-board LSP probe requests `title` completion from `task.ti` inside

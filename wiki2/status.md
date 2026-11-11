@@ -14,22 +14,21 @@ completion adds the import and reproduces the authored file
 (`tests/handler-import-lsp.test.ts`). That needed end anchors in
 `checking/spans.ts`; see [tooling](tooling.md). Step 3 is done (spec r5,
 DX-35): `for (const task of tasks) { <li key={task.id}>...</li> }` in markup
-lowers to `Array.from(tasks, (task) => row)`. `ForLoop.auwla` uses it; see
+lowers to `Array.from(tasks, (task) => row)`; see
 [direct loops](syntax.md#direct-loops). All three requested steps are complete.
 
 P4-FOR-FAST is done (`9620fb57`, under DX-34). Compiler-next now gives
-`Array.from(items, row)` the compiled rows that `items.map(row)` gets. The real
-example `ForLoop.auwla` compiles to `createRowList` and `_rowList.from(visible)`,
-and so does the bundle the `--for-loop` preview serves. Its execution test checks
-the row list and keyed node preservation in both modes. Closed-list `moved` skips
-still apply only to `map`.
+`Array.from(items, row)` the compiled rows that `items.map(row)` gets.
+Closed-list `moved` skips still apply only to `map`.
 
-The main task board `App.auwla` now uses direct loops in its template instead of
-`.map()`: the status buttons loop over a `filters` array, and the task rows loop
-over `visible` inside the `else` branch. Both compile to compiled row lists
-(`_rowList.from(...)` in the served preview bundle). The task-board tsconfig
-type-checks through the TS7 CLI. All 215 jsx-plus tests pass, including the
-LSP completion, auto-import and recovery tests that now edit inside the loop body.
+The task board `App.auwla` is the one real example. It uses direct loops in its
+template instead of `.map()`: the status buttons loop over a `filters` array,
+and the task rows loop over `visible` inside the `else` branch. Both compile to
+compiled row lists (`_rowList.from(...)` in the served preview bundle). Its
+execution test checks the loops in both modes. The LSP completion, auto-import,
+recovery and loop-binding rename tests edit it. The separate `ForLoop.auwla`
+variant and the preview's `--for-loop` flag were removed at the user's request;
+the task board covers everything they did.
 
 ## This session: review and cleanup
 
@@ -56,7 +55,8 @@ duplication and readability before new features. Done, in separate commits:
 ## Evidence
 
 At the latest commit: JSX+ `bun check` reports no errors across 217 files.
-JSX+ `bun test` passes **215 tests, 0 failures**, in fourteen files. They include
+JSX+ `bun test` passes **213 tests, 0 failures**, in fourteen files (the two
+removed `ForLoop.auwla` runs are covered by the task-board flow). They include
 the 34 checking-flow targets, real TypeScript 7 CLI/LSP renames, completions,
 auto-imports and recovery. The three anchor/auto-import tests fail without
 `checking/spans.ts`. `bun run wiki2/spec/check.ts` passes 39 fixtures

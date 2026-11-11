@@ -87,8 +87,7 @@ All paths are relative to the repository root and exist now.
 | `packages/jsx-plus/tests/compile.test.ts` | Extended-source execution, existing refs and keyed nodes |
 | `packages/jsx-plus/examples/counter.auwla` | Complete counter compiled and clicked by the execution tests |
 | `packages/jsx-plus/examples/README.md` | Authoring walkthrough and commands for real examples |
-| `packages/jsx-plus/examples/task-board/` | Full authored UI, browser entry/HTML/CSS, example-only preview loader and native mapper config |
-| `packages/jsx-plus/examples/task-board/ForLoop.auwla` | Direct `for...of` loop in markup with keyed rows and per-row handlers; exercised in both modes and by an LSP binding rename |
+| `packages/jsx-plus/examples/task-board/` | Full authored UI with direct `if` and `for` in its template, browser entry/HTML/CSS, example-only preview loader and native mapper config |
 | `packages/jsx-plus/tests/loops.test.ts` | Direct-loop normalization: destructuring, nesting, multi-child rows, rejected forms, exact binding/iterable spans |
 | `packages/jsx-plus/AGENTS.md` | Package ownership boundary and focused checks |
 | `packages/jsx-plus/src/checking/project.ts` | Shared-normalizer TSX checking projection and authored parse diagnostics |
