@@ -36,7 +36,10 @@ bun run examples/task-board/preview.ts --for-loop --build
 `ForLoop.auwla` writes `for (const task of visible) { <li key={task.id}>...</li> }`
 directly inside `<ul>`. Each row gets its own `task` binding, so its toggle and
 remove handlers act on that row. The loop accepts any iterable and becomes
-`Array.from(visible, (task) => <li ...>)`; see [direct loops](../../../wiki2/syntax.md#direct-loops).
+`Array.from(visible, (task) => <li ...>)`. The preview compiles that to
+compiled keyed rows (`_rowList.from(visible)` in the served `/app.js`), so a row
+keeps its DOM node when the filter hides or shows other rows. See
+[direct loops](../../../wiki2/syntax.md#direct-loops).
 
 For authored TypeScript checking, including its entrypoint:
 

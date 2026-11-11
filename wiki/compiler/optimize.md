@@ -198,6 +198,7 @@ it for each `receiver.name(…)` that would otherwise be observed:
 | --- | --- |
 | A known read, with no callback or an inline one that edits no object | The call as written, with no observation |
 | `map` shown by a row list, or with reusable rows | `list.map(receiver)` or `mapRows(receiver, cache, callback)` |
+| `Array.from(items, row)`, likewise (`mapping-calls.ts`; lowered from the host-global path, not a method fact) | `list.from(items)` or `fromRows(items, cache, callback)` |
 | A known edit (`push`, `splice`, `sort`, …) | `editArray(receiver, "push", [args], notify)`: the native call, then the root is reported |
 | A callback that can edit, a named callback, an unknown name | The general `observeMutation` (`handlers.md`) |
 
@@ -372,6 +373,17 @@ the method name. The callback must:
 `mapRows(receiver, cache, callback)`. A receiver that is not an array has its own
 `map`, which runs as written.
 
+`Array.from(items, row)` gets the same treatment (`optimize/mapping-calls.ts`,
+`rowReuse.form: 'from'`), because JSX+ lowers a direct `for...of` loop in
+markup to it (`../../wiki2/syntax.md`, "Direct loops"). Only the intrinsic: `Array`
+neither declared nor assigned in the module, no module-defined `from`, exactly two
+arguments, no spread or optional call. The emitter writes
+`fromRows(items, cache, callback)`. `iteratedItems` reads an array whose iterator is
+the intrinsic one directly and collects anything else with `Array.from` (sets,
+generators, strings, array-likes, an array with a replaced iterator). The cache
+then runs in its `dense` mode: a hole is an `undefined` item, as `Array.from` gives
+it, not a hole in the result.
+
 `runtime/src/list-map.ts` reuses an item's previous result when all of these hold:
 
 - the occurrence is the same value as before (duplicates keep their order);
@@ -455,6 +467,14 @@ lowering replaces the call with `list.map(receiver)` (`Names.of` gives both emit
 the same name). The callback is gone, so its stored JSX emits no render program:
 each row exists once in the output. A receiver that is not an array has its own
 `map`, which supplies the items.
+
+`Array.from(items, row)` with the same callback is a row list too; the call
+becomes `list.from(items)`, which reconciles the items `iteratedItems` gives, holes
+as `undefined` items. Closed-list proofs (below) follow only `root.map(row)`: a root
+passed to `Array.from` fails the proof, so such a list evaluates every row and has
+no `moved` skip yet. `optimize/mapping-calls.dom.test.ts` checks recognition (the
+intrinsic only), both-mode identity through moves, duplicates, holes, a `Set`, an
+array-like and edits, for element and fragment rows, and the iterables above.
 
 Compiled rows share one destination-aware template and site program, just like
 stored values and leaf component rows. The template emitter selects node creation

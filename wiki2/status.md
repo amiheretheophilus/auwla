@@ -17,6 +17,13 @@ DX-35): `for (const task of tasks) { <li key={task.id}>...</li> }` in markup
 lowers to `Array.from(tasks, (task) => row)`. `ForLoop.auwla` uses it; see
 [direct loops](syntax.md#direct-loops). All three requested steps are complete.
 
+P4-FOR-FAST is done (`9620fb57`, under DX-34). Compiler-next now gives
+`Array.from(items, row)` the compiled rows that `items.map(row)` gets. The real
+example `ForLoop.auwla` compiles to `createRowList` and `_rowList.from(visible)`,
+and so does the bundle the `--for-loop` preview serves. Its execution test checks
+the row list and keyed node preservation in both modes. Closed-list `moved` skips
+still apply only to `map`.
+
 ## This session: review and cleanup
 
 The user asked for the previous agent's work to be reviewed for correctness,
@@ -49,19 +56,24 @@ auto-imports and recovery. The three anchor/auto-import tests fail without
 (9 parse, 10 diagnostics); the loops' `Array.from` JSX equivalents run in both
 compiler modes. Both `preview.ts --build` variants succeed, and the task-board
 tsconfig type-checks through the TS7 CLI with the mapper. `git diff --check` passes. No
-sub-agents were used. Compiler-next and runtime sources are unchanged in this
-session. Not run: the full root suite, performance, browser layout and IDE activation.
+sub-agents were used.
+
+For P4-FOR-FAST: compiler-next `bun check` is clean. All 191 `src/optimize`
+tests pass, including the 7 new `mapping-calls.dom.test.ts` tests. The 398
+case/unit tests in the seven files that use `Array.from` pass, and so do the
+runtime's 61 list-map/row-list tests. Deliberately breaking the runtime's hole
+handling, iterator check or cache density made the new tests fail. Not run: the
+full root suite, performance, browser layout and IDE activation.
 
 ## Continue
 
-1. P4-FOR-FAST (DX-34/35): teach compiler-next's compiled-row path
-   (`optimize/methods.ts`, `optimize/closed-lists.ts`, `optimize/row-lists.ts`)
-   to accept `Array.from(x, cb)` like `x.map(cb)`. Evidence target:
-   `createRowList` appears for a direct loop. Consider row-write tracking through
-   `entries()`/`values()` too. Log changes in the reconcile table below.
-2. P3-EDITOR (candidate): a thin VS Code extension for language registration,
+1. P3-EDITOR (candidate): a thin VS Code extension for language registration,
    highlighting and mapper registration via TS7's `registerContentMappers`.
    See [tooling](tooling.md#editor-extension-planned-p3-editor).
+2. Loop follow-ups in compiler-next (DX-34), each logged in the table below:
+   - extend the closed-list proof to `Array.from(root, row)` so unchanged rows
+     are skipped (`moved`);
+   - track row writes through `entries()`/`values()`.
 
 Known open issues:
 - If markup damage occurs alongside an ordinary host syntax error anywhere,
@@ -82,6 +94,7 @@ change below must be adopted or corrected on `compiler-rewrite` later:
 | `dbe46803` | `analysis/index.ts` re-exports `CompileError` | The planner skips modules the compiler rejects |
 | `a35db526` | `analysis/serialize.ts` also describes JSX spread arguments (`{...props}`) as expressions | Spread inputs get flow checking like expression containers |
 | `b05773b5` | `runtime/src/setters.ts`: uncached ARIA `false`/`true` follow the cached/spread rules, with a DOM test | Found by the task-board example; a runtime bug fix, not interop |
+| `9620fb57` | New `optimize/mapping-calls.ts` ([optimize](../wiki/compiler/optimize.md#row-lists)). Row reuse and row lists accept the intrinsic `Array.from(items, row)`, with `rowReuse.form` added to the plan model. The runtime gains `fromRows`, `RowList.from`, `iteratedItems` and a `dense` cache mode. Closed lists stay `map`-only | Direct loops lower to `Array.from`; without this they never get compiled rows |
 
 Check this list with `git log compiler-rewrite..prototype/jsx-plus -- packages/compiler-next packages/runtime`.
 

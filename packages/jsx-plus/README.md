@@ -34,7 +34,9 @@ build-only/type-check commands and the source walkthrough. Checks read the actua
 `--for-loop` selects [the loop variant](examples/task-board/ForLoop.auwla),
 which writes `for (const task of visible) { <li key={task.id}>...</li> }`
 directly in the markup. Direct loops accept any iterable and lower to
-`Array.from(iterable, (binding) => row)`; see [direct loops](../../wiki2/syntax.md#direct-loops).
+`Array.from(iterable, (binding) => row)`. With optimization on, compiler-next
+shows a keyed single-element loop body through compiled rows, as it does for
+`.map()`. See [direct loops](../../wiki2/syntax.md#direct-loops).
 
 Extended attributes accept `aria-label=("Remove " + task.title)` alongside
 existing `aria-label={...}`. Parentheses delimit an ordinary value; event callbacks

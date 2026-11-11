@@ -134,11 +134,22 @@ direct loop with per-row toggle/remove handlers. It runs in both modes, builds
 and type-checks through the TS7 CLI. A real LSP rename of its loop binding edits
 only uses inside the loop.
 
+**Compiled rows (P4-FOR-FAST).** With optimization on, compiler-next treats
+`Array.from(items, row)` like `items.map(row)`
+([optimize](../wiki/compiler/optimize.md#row-lists),
+`optimize/mapping-calls.ts`). A loop whose body is one keyed element becomes a
+compiled row list (`createRowList`, then `list.from(items)`). A multi-child body
+(a fragment row) uses the per-item row cache (`fromRows`). The runtime iterates
+exactly what `Array.from` iterates. `ForLoop.auwla` compiles to
+`_rowList.from(visible)`, and its execution test checks that keyed rows keep their
+DOM nodes through filtering and adding, in both modes.
+
 Known limits (compiler-next, same as plain JSX `Array.from`):
 
-- Compiled keyed rows (`createRowList`) are produced only for `x.map(cb)`, so
-  loops use the general keyed list path. Teaching compiler-next to treat
-  `Array.from(x, cb)` like `x.map(cb)` is the pending P4-FOR-FAST slice.
+- Closed-list proofs follow only `x.map(cb)`, so a loop evaluates every row
+  on each pass. It does not skip rows whose item is unchanged (`moved`).
+- Only the intrinsic global `Array.from` is recognized. A module that declares or
+  assigns `Array`, or defines its own `from`, keeps the general path.
 - Writes through a row binding (`task.done = ...`) are tracked when iterating a
   state-derived array directly, but **not** through `visible.entries()`.
   Compiler-next does not know `entries()` yields the array's own elements.
