@@ -29,7 +29,7 @@ depends on integration, acceptance and measurements.
 | P3-EXAMPLES | First app built; expand with features | Author real `.auwla` files with a runnable preview and use those files in checks; task board exercises form/search/filter/list/ref/interpolation/conditional behavior in both modes | [examples](../packages/jsx-plus/examples/README.md) |
 | P3-EDITING | First member-completion path built; continue | Native task-board attribute completion edit applies and rechecks; auto-import/broader edit fidelity and partial recovery remain next. Retain authored errors without stale successful text | [tooling](tooling.md) |
 | P3-RECOVERY | First requested step built | Native host recovery and bounded markup-line quarantine preserve unrelated current-source diagnostics/completion; builds remain strict | [recovery](recovery.md) |
-| P3-HANDLER-IMPORT | Next: requested step 2 | Verify bare handler completion and native auto-import edits on real authored files | [tooling](tooling.md) |
+| P3-HANDLER-IMPORT | Started: requested step 2 | Imported bare handler (`onClick=focusTaskInput` from `actions.ts`) runs in both modes; the native completion/auto-import edit check remains | [tooling](tooling.md) |
 | P4-DIRECT-FOR | Requested step 3 | Define and implement direct `for...of` children with ordinary scope and existing renderer behavior | [syntax](syntax.md) |
 | P4-FLOW | First fixtures built; expand later | Basic direct `if` and `.map()` fixtures execute; extend scope, owner/disposal and readiness interleavings before full flow acceptance | [syntax](syntax.md), [testing](testing.md) |
 | P5-EVENT | Candidate | Settle event-expression meaning; demonstrate one ordinary handler and one shorthand with identical timing | [features](features.md) |

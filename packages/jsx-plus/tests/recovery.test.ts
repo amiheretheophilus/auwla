@@ -8,6 +8,8 @@ const app = readFileSync(new URL('../examples/task-board/App.auwla', import.meta
 for (const [name, source, code, opener] of [
   ['quote', app.replace('"Make room for the next idea."', '"Make room for the next idea.'), 1003, '"Make room'],
   ['attribute parenthesis', app.replace('aria-label=("Remove " + task.title)', 'aria-label=("Remove " + task.title'), 1008, '("Remove "'],
+  ['bare member value', app.replace('onClick=focusTaskInput', 'onClick=actions.focus'), 1009, 'actions.focus'],
+  ['child comma', app.replace('"Add task"', '"Add", task'), 1005, ', task'],
 ] as const) {
   it(`keeps current task-board code outside a damaged ${name} line available for checking`, () => {
     const result = projectForChecking(source, './App.auwla');
