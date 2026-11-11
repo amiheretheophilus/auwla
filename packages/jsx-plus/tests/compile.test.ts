@@ -139,13 +139,13 @@ for (const optimize of [true, false]) {
   it(`skips unchanged rows of a loop over a plain state list with optimize=${optimize}`, () => {
     // A loop is `Array.from(rows, row)`; compiler-next's closed-list proof treats it
     // as it treats `rows.map(row)` (`optimize/closed-lists.ts`, `#rowsOver`). The
-    // handlers have block bodies: one returning `rows` to the event dispatcher (`() =>
-    // rows.reverse()`) is a use the proof does not follow, in either spelling.
+    // one-line handlers return the list and a label to the event dispatch, which
+    // keeps nothing (`returnsToEventDispatch`), so the list still skips.
     const source = `export function App() {
       let rows = [{ id: 1, label: 'a' }, { id: 2, label: 'b' }, { id: 3, label: 'c' }];
       return <main>
-        <button id="reverse" onClick=(() => { rows.reverse(); })>"Reverse"</button>
-        <button id="edit" onClick=(() => { rows[0].label += "!"; })>"Edit"</button>
+        <button id="reverse" onClick=(() => rows.reverse())>"Reverse"</button>
+        <button id="edit" onClick=(() => rows[0].label += "!")>"Edit"</button>
         <ul>
           for (const row of rows) {
             <li key={row.id}>row.label</li>

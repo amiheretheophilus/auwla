@@ -41,6 +41,26 @@ closedCase('closed list: moving rows keeps each row\'s text', {
   },
 });
 
+closedCase('closed list: one-line handlers that return the list or an item', {
+  // Each handler returns what it computes to the event dispatch, which keeps nothing
+  // (`returnsToEventDispatch`), so the list stays closed and its rows are skipped.
+  source: `
+    export function App() {
+      let rows = [{ id: 1, label: 'a' }, { id: 2, label: 'b' }, { id: 3, label: 'c' }];
+      return <main>
+        <button id="reverse" onClick={() => rows.reverse()}>reverse</button>
+        <button id="drop" onClick={() => rows = rows.slice(1)}>drop</button>
+        <button id="edit" onClick={() => rows[0].label += '!'}>edit</button>
+        <button id="first" onClick={() => rows[0]}>first</button>
+        <ul>{rows.map((row) => <li key={row.id}>{row.label}</li>)}</ul>
+      </main>;
+    }`,
+  steps: [{ click: '#reverse' }, { click: '#edit' }, { click: '#first' }, { click: '#drop' }, { click: '#reverse' }],
+  check(container, observation) {
+    expect(text(container)).toBe(['abc', 'cba', 'c!ba', 'c!ba', 'ba', 'ab'][observation]);
+  },
+});
+
 closedCase('closed list: an edit between moves shows, by index and through a row\'s own item', {
   source: `
     export function App() {

@@ -140,6 +140,39 @@ it('rejects a list whose items can leave proven code', () => {
   }
 });
 
+it('lets a DOM event handler return the list, since the dispatch keeps nothing', () => {
+  // `onClick=(() => rows.reverse())` is the natural one-line handler in `.auwla`.
+  for (const button of [
+    '<button onClick={() => rows.reverse()}>r</button>',
+    '<button onClick={(() => rows.slice(1))}>s</button>',
+    '<button onClick={() => rows[0]}>i</button>',
+    '<button onClick={function () { return rows; }}>f</button>',
+  ]) {
+    for (const list of ['map', 'from'] as const) {
+      expect([list, button, skips(compile('', { list, after: button }))]).toEqual([list, button, true]);
+    }
+  }
+});
+
+it('rejects a returned list that something may keep', () => {
+  const top = 'function Pick(props) { return <button onClick={() => { globalThis.kept = props.onPick(); }}>p</button>; }';
+  for (const markup of [
+    // A component can call its prop and keep the result.
+    '<Pick onPick={() => rows} />',
+    // A spread takes the ordered path, which reads `then` from the result.
+    '<button {...globalThis.attrs} onClick={() => rows}>s</button>',
+    // Not an event: the attribute holds the function.
+    '<div data-pick={() => rows} />',
+  ]) {
+    for (const list of ['map', 'from'] as const) {
+      expect([list, markup, skips(compile('', { list, top, after: markup }))]).toEqual([list, markup, false]);
+      // The same markup with a handler returning nothing skips: only the result was the problem.
+      const quiet = markup.replace('() => rows', '() => { rows.reverse(); }');
+      expect([list, quiet, skips(compile('', { list, top, after: quiet }))]).toEqual([list, quiet, true]);
+    }
+  }
+});
+
 it('rejects items that are not records of primitives the program made', () => {
   for (const init of [
     'lib.rows()',

@@ -30,12 +30,12 @@ import { is } from 'yuku-ast';
 import type { Expression, Node } from 'yuku-parser';
 import type { BindingNode, SemanticGraph } from '../core/graph';
 import { isReactive } from '../core/graph/rules';
-import { unwrap } from '../core/plan/jsx';
+import { eventName, jsxAttributeName, unwrap } from '../core/plan/jsx';
 import type { ComponentPlan, ConditionalBranch, ModulePlan, MutationPlan, RowListPlan, Site } from '../core/plan/model';
 import { alwaysPrimitive } from '../core/plan/template';
 import { valueExportNames } from '../core/resolve/exports';
 import { functionValue, type FunctionNode } from '../core/resolve/functions';
-import { destructuredProps, type DestructuredProp } from '../features/components/plan';
+import { destructuredProps, isComponentCall, type DestructuredProp } from '../features/components/plan';
 import { callOnlyReads, effectFree, STABLE_GLOBALS } from './effects';
 import { mappingCall } from './mapping-calls';
 import { methodFact, redefinedNames } from './method-facts';
@@ -89,6 +89,34 @@ function enclosingFunction(module: Module, node: Node): Node | null {
     if (ancestor !== node && is.Function(ancestor)) return ancestor;
   }
   return null;
+}
+
+/**
+ * A function literal written as an event attribute of a DOM element, whose result
+ * nothing keeps: `<button onClick={() => rows.reverse()}>`. The runtime attaches it
+ * with `addEventListener`, which ignores the result (`runtime/src/setters.ts`), or
+ * calls it from delegated dispatch, which only compares the result with `false`
+ * (`runtime/src/delegated-events.ts`). A literal has no name, so nothing else can
+ * call it.
+ *
+ * Not a component's prop: the component may call it and keep the result. Not an
+ * element with a spread or reordered attributes either (`isComponentCall`): its
+ * ordered path reads `then` from the result (`runtime/src/dom-props.ts`).
+ */
+function returnsToEventDispatch(module: Module, fn: Node): boolean {
+  let parent = module.parentOf(fn);
+  while (parent !== null && (is.ParenthesizedExpression(parent) || is.TSAsExpression(parent)
+    || is.TSSatisfiesExpression(parent) || is.TSNonNullExpression(parent))) {
+    parent = module.parentOf(parent);
+  }
+  if (parent === null || !is.JSXExpressionContainer(parent)) return false;
+
+  const attribute = module.parentOf(parent);
+  if (attribute === null || !is.JSXAttribute(attribute) || eventName(jsxAttributeName(attribute)) === null) return false;
+
+  const opening = module.parentOf(attribute);
+  const element = opening === null ? null : module.parentOf(opening);
+  return element !== null && is.JSXElement(element) && !isComponentCall(element);
 }
 
 function bindingOfParameter(module: Module, param: Node): Binding | null {
@@ -613,6 +641,8 @@ class Proof {
       return;
     }
     if (this.#callbacks.has(fn)) return;
+    // An event handler's result reaches only the event dispatch, which keeps nothing.
+    if (returnsToEventDispatch(module, fn)) return;
 
     // In another module a function holds only what a proven call passed it. In the
     // root's module it can return the root's items to anyone who calls it.
