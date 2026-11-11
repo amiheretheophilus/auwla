@@ -33,7 +33,9 @@ instructions.
   extended syntax and calls compiler-next's public API. Do not mix prototype
   implementation into compiler-next or runtime sources, create a second reactive
   compiler, or rebuild existing refs. DX-31 clarifies package placement while
-  retaining DX-28's existing-pipeline behavior.
+  retaining DX-28's existing-pipeline behavior. DX-34 lets this branch change
+  compiler-next where `.auwla` interop needs it, recorded in `wiki2/status.md`
+  for later reconciliation with `compiler-rewrite`.
   Read `wiki2/spec/README.md` before changing syntax: its grammar, syntax model,
   semantics, diagnostics and conformance fixtures define the working draft.
   Revise provisional rules explicitly with their fixtures instead of inventing

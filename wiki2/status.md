@@ -59,7 +59,19 @@ Known open issues:
 - Replay proofs, lowering maps, module loading, Vite/HMR, delivery and
   debugging maps remain open. Backend configuration stays planned.
 
-Coordination: compiler-next is unfinished (branch `compiler-rewrite`) and is
-continued separately. Its read-only analysis API (`src/analysis/`, commit
-`1d3ef3bf`) exists only on this branch so far. See [plan](plan.md),
-[tooling](tooling.md) and [rewrite acceptance](../wiki/status.md).
+## Compiler-next changes to reconcile
+
+Compiler-next is unfinished (branch `compiler-rewrite`) and is continued
+separately. Under DX-34 this branch may change it for `.auwla` interop. Each
+change below must be adopted or corrected on `compiler-rewrite` later:
+
+| Commit | Change | Why `.auwla` needs it |
+| --- | --- | --- |
+| `1d3ef3bf` | New read-only analysis API in `packages/compiler-next/src/analysis/`; `pipeline.ts` shares its frontend; `./analysis` package export ([compiler analysis](../wiki/compiler/analysis.md)) | The checking flow planner reads binding/dependency facts without DOM emission |
+| `dbe46803` | `analysis/index.ts` re-exports `CompileError` | The planner skips modules the compiler rejects |
+| `a35db526` | `analysis/serialize.ts` also describes JSX spread arguments (`{...props}`) as expressions | Spread inputs get flow checking like expression containers |
+| `b05773b5` | `runtime/src/setters.ts`: uncached ARIA `false`/`true` follow the cached/spread rules, with a DOM test | Found by the task-board example; a runtime bug fix, not interop |
+
+Check this list with `git log compiler-rewrite..prototype/jsx-plus -- packages/compiler-next packages/runtime`.
+
+See [plan](plan.md), [tooling](tooling.md) and [rewrite acceptance](../wiki/status.md).

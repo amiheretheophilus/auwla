@@ -10,8 +10,10 @@ and `wiki2/syntax.md`.
   not copy compiler-next's graph, optimizer, emitters, runtime or ref feature.
 - The separate checking export imports the normalizer directly. Mapper transport
   uses JSON-RPC streams and must not load the production compiler facade.
-- Treat compiler-next/runtime sources as dependencies; changes to them require
-  separately authorized work. Tests may use the existing runtime and loader.
+- Treat compiler-next/runtime sources as dependencies. Under DX-34 (2026-11-11),
+  this branch may change compiler-next where `.auwla` interop needs it; keep
+  syntax code here, and list each change in `wiki2/status.md` under "Compiler-next
+  changes to reconcile" so the rewrite can adopt or correct it later.
 - P3-FACTS adds a compiler-owned read-only public integration API, with all new
   files under compiler-next's `src/analysis/`. Extended syntax, checking
   transforms and authored mappings remain in this package.
