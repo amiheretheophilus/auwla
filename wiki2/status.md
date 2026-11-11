@@ -79,7 +79,7 @@ The first decoupled editor adapter is now built (DX-36):
   extension's installation directory. The VSIX keeps the mapper in the project.
   After the quoted-interpolation update, the user opened the task board
   `App.auwla` in desktop VS Code with the installed extension and reported that
-  it works (2026-11-11). Inferred-project type setup, another editor and a
+  it works, with autocompletion including the quoted `{remaining}` (2026-11-11). Inferred-project type setup, another editor and a
   standalone mapper distribution remain unverified. See
   [adapter setup](../packages/editor-vscode/README.md).
 
