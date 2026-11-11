@@ -7,11 +7,16 @@
 import { parse, TokenKind as K } from 'yuku-parser';
 import type { Node, ParseResult, IfStatement } from 'yuku-parser';
 import { JsxPlusError } from './diagnostics';
-import { childExpression, childStatements, maskMarkup, unterminatedLiteral, type HostTokens } from './host';
-import { maskAttribute, parenthesizedAttribute } from './attributes/parenthesized';
-import { identifierAttribute, maskIdentifierAssignment } from './attributes/identifier';
+import {
+  childExpression, childStatements, closingDelimiter, firstError, hasError, isMarkupOpening,
+  parseModule, unterminatedLiteral,
+} from './host';
+import { blankRange, maskMarkup } from './masks';
+import { parenthesizedAttribute } from './attributes/parenthesized';
+import { identifierAttribute } from './attributes/identifier';
+import type { AttributeValue } from './attributes/value';
 import type { BlockView, ChildView, ElementView, ExpressionView, FragmentView, IfView, NormalizedSource, Range } from './model';
-import { assemble, copied, generated, replaceRange, type Piece, type Replacement } from './source';
+import { assemble, copied, generated, nearestAuthoredOffset, replaceRange, type Piece, type Replacement } from './source';
 
 interface Markup extends Replacement {
   readonly view: ElementView | FragmentView;
@@ -30,11 +35,6 @@ interface Delimiter {
 }
 
 const lex = (source: string): ParseResult => parse(source, { lang: 'tsx', sourceType: 'module', tokens: true });
-
-function opening(tokens: HostTokens, index: number): boolean {
-  return tokens.kind(index) === K.LessThan && index + 1 < tokens.length
-    && (tokens.kind(index + 1) === K.JSXIdentifier || tokens.kind(index + 1) === K.GreaterThan);
-}
 
 class Reader {
   readonly blocks = new Map<number, Children>();
@@ -55,7 +55,7 @@ class Reader {
       let start: number | undefined;
 
       for (let index = 0; index < tokens.length; index++) {
-        if (opening(tokens, index)) {
+        if (isMarkupOpening(tokens, index)) {
           start = tokens.start(index);
           break;
         }
@@ -71,12 +71,9 @@ class Reader {
     // Validate ordinary host context after normalization. No custom evaluator or
     // second set of binding rules is introduced by this adapter.
     if (validateHost) {
-      const result = parse(output.code, { lang: 'tsx', sourceType: 'module' });
-      const problem = result.diagnostics.find((entry) => entry.severity === 'error');
+      const problem = firstError(parseModule(output.code).diagnostics);
       if (problem !== undefined) {
-        const mapping = output.mappings.find((entry) => entry.generated[0] <= problem.start && problem.start < entry.generated[1]);
-        const start = mapping === undefined ? 0 : mapping.authored[0] + problem.start - mapping.generated[0];
-        this.error('HOST', problem.message, start);
+        this.error('HOST', problem.message, nearestAuthoredOffset(output.mappings, problem.start));
       }
     }
 
@@ -84,76 +81,62 @@ class Reader {
   }
 
   element(start: number): Markup {
-    const attributes: Replacement[] = [];
+    const attributes: AttributeValue[] = [];
     let shadow = this.source.slice(start);
     let openingEnd = 0;
     let name = '';
     let selfClosing = false;
 
-    // Attribute expressions can themselves contain extended markup. Normalize
-    // those recursively before using the host tokens to locate the outer `>`.
+    // Each pass scans the opening tag until it either reaches the closing `>`
+    // or finds one value needing a rewrite (a bare identifier, a `(...)` value,
+    // or markup nested in `{...}`). That value is read, masked in the shadow,
+    // and the tag is scanned again, so the host lexer never sees extended syntax.
     for (;;) {
       const tokens = childStatements(shadow).tokens;
-      let braces = 0;
-      let nested: Replacement | undefined;
-      let parenthesized = false;
-      let bareAssignmentStart: number | undefined;
-      const first = 0;
-      if (tokens.kind(first) !== K.LessThan) this.error('HOST', 'Expected an element', start);
+      if (tokens.kind(0) !== K.LessThan) this.error('HOST', 'Expected an element', start);
 
       if (tokens.kind(1) === K.GreaterThan) {
         openingEnd = start + tokens.end(1);
         break;
       }
 
+      // Element names can be dotted (`a.b`) or namespaced (`svg:rect`).
       let nameEnd = tokens.end(1);
       for (let index = 2; index + 1 < tokens.length && (tokens.kind(index) === K.Dot || tokens.kind(index) === K.Colon); index += 2) {
         nameEnd = tokens.end(index + 1);
       }
       name = this.source.slice(start + tokens.start(1), start + nameEnd);
 
-      for (let index = 2; index < tokens.length; index++) {
+      let braces = 0;
+      let value: AttributeValue | null = null;
+      for (let index = 2; index < tokens.length && value === null; index++) {
         const kind = tokens.kind(index);
         if (braces === 0 && kind === K.Assign) {
-          const identifier = identifierAttribute(this.source, start + tokens.end(index));
-          if (identifier !== null) {
-            nested = identifier;
-            bareAssignmentStart = tokens.start(index);
-            break;
-          }
-        }
-        if (braces === 0 && kind === K.LeftParen && tokens.kind(index - 1) === K.Assign) {
-          nested = parenthesizedAttribute({
+          value = identifierAttribute(this.source, start + tokens.start(index));
+        } else if (braces === 0 && kind === K.LeftParen && tokens.kind(index - 1) === K.Assign) {
+          value = parenthesizedAttribute({
             source: this.source,
             start: start + tokens.start(index),
             element: (position) => this.element(position),
             error: (code, message, from, to) => this.error(code, message, from, to),
           });
-          parenthesized = true;
-          break;
-        }
-        if (braces > 0 && opening(tokens, index)) {
-          nested = this.element(start + tokens.start(index));
-          break;
-        }
-        if (kind === K.LeftBrace) braces++;
-        if (kind === K.RightBrace) braces--;
-        if (kind === K.GreaterThan && braces === 0) {
+        } else if (braces > 0 && isMarkupOpening(tokens, index)) {
+          const markup = this.element(start + tokens.start(index));
+          value = { ...markup, mask: (tag, origin) => maskMarkup(tag, markup.start - origin, markup.end - origin) };
+        } else if (kind === K.LeftBrace) {
+          braces++;
+        } else if (kind === K.RightBrace) {
+          braces--;
+        } else if (kind === K.GreaterThan && braces === 0) {
           openingEnd = start + tokens.end(index);
           selfClosing = tokens.kind(index - 1) === K.Slash;
           break;
         }
       }
 
-      if (nested === undefined) break;
-      attributes.push(nested);
-      if (bareAssignmentStart !== undefined) {
-        shadow = maskIdentifierAssignment(shadow, bareAssignmentStart, nested.end - start);
-      } else if (parenthesized) {
-        shadow = maskAttribute(shadow, nested.start - start, nested.end - start);
-      } else {
-        shadow = maskMarkup(shadow, nested.start - start, nested.end - start);
-      }
+      if (value === null) break;
+      attributes.push(value);
+      shadow = value.mask(shadow, start);
     }
 
     if (openingEnd === 0) this.error('HOST', 'Incomplete opening tag', start, this.source.length);
@@ -195,8 +178,10 @@ class Reader {
         const adjacent = childLevel && previousMarkup !== undefined && kind === K.LessThan
           && !this.source.startsWith('</', position);
 
-        if (opening(tokens, index) || adjacent) {
+        if (isMarkupOpening(tokens, index) || adjacent) {
           if (adjacent) {
+            // `<A/><B/>` masks to `_   _   ` on one line, which the host
+            // parser cannot split. Put a `;` in the first mask's last column.
             const separator = previousMarkup!.end - start - 1;
             shadow = shadow.slice(0, separator) + ';' + shadow.slice(separator + 1);
           }
@@ -221,11 +206,10 @@ class Reader {
           return { children, closeStart: position, end: closeEnd + 1 };
         }
 
-        if (kind === K.LeftParen || kind === K.LeftBracket || kind === K.LeftBrace || kind === K.TemplateHead) {
+        const close = closingDelimiter(kind);
+        if (close !== undefined) {
           const ifHeader = kind === K.LeftParen && childLevel && index > 0 && tokens.kind(index - 1) === K.If;
-          stack.push({ close: kind === K.LeftParen ? K.RightParen : kind === K.LeftBracket ? K.RightBracket
-            : kind === K.TemplateHead ? K.TemplateTail : K.RightBrace,
-          childBlock: kind === K.LeftBrace && expectChildBlock, ifHeader, start: position });
+          stack.push({ close, childBlock: kind === K.LeftBrace && expectChildBlock, ifHeader, start: position });
           expectChildBlock = false;
         } else if (stack.length > 0 && kind === stack[stack.length - 1]!.close) {
           const delimiter = stack.pop()!;
@@ -238,10 +222,7 @@ class Reader {
             // A conditional body uses the child grammar, not a JS statement
             // list. Parse it first, then mask its contents for the outer host
             // `if` parse. Cached syntax/pieces retain its actual child values.
-            if (to > from) {
-              const blank = shadow.slice(from, to).replace(/[^\r\n]/g, ' ');
-              shadow = shadow.slice(0, from) + blank + shadow.slice(to);
-            }
+            shadow = blankRange(shadow, from, to);
             changed = true;
             break;
           }
@@ -268,7 +249,7 @@ class Reader {
     const tokens = childStatements(code).tokens;
     const closes: number[] = [];
     const chunks: Range[] = [];
-    let from = 0;
+    let chunkStart = 0;
 
     // A top-level semicolon is an explicit child boundary in G-BOUNDARY. Parse
     // each chunk in expression context before trying host statements, so an
@@ -276,20 +257,21 @@ class Reader {
     // ASI and expression continuation within each chunk still belong to yuku.
     for (let index = 0; index < tokens.length; index++) {
       const kind = tokens.kind(index);
-      if (kind === K.LeftParen) closes.push(K.RightParen);
-      else if (kind === K.LeftBracket) closes.push(K.RightBracket);
-      else if (kind === K.LeftBrace) closes.push(K.RightBrace);
-      else if (kind === K.TemplateHead) closes.push(K.TemplateTail);
-      else if (closes.length > 0 && kind === closes[closes.length - 1]) closes.pop();
-      else if (kind === K.Semicolon && closes.length === 0) {
-        chunks.push([from, tokens.start(index)]);
-        from = tokens.end(index);
+      const close = closingDelimiter(kind);
+      if (close !== undefined) {
+        closes.push(close);
+      } else if (closes.length > 0 && kind === closes[closes.length - 1]) {
+        closes.pop();
+      } else if (kind === K.Semicolon && closes.length === 0) {
+        chunks.push([chunkStart, tokens.start(index)]);
+        chunkStart = tokens.end(index);
       }
     }
-    chunks.push([from, code.length]);
+    chunks.push([chunkStart, code.length]);
 
     const children: Children = { views: [], pieces: [] };
     for (const [from, to] of chunks) {
+      // A chunk ending at a `;` reports an incomplete expression at that `;`.
       const end: Range = to < code.length ? [start + to, start + to + 1] : bodyEnd;
       const chunk = this.childChunk(code.slice(from, to), start + from, nested, end);
       children.views.push(...chunk.views);
@@ -301,14 +283,14 @@ class Reader {
   childChunk(code: string, start: number, nested: readonly Markup[], bodyEnd: Range): Children {
     const expressionResult = childExpression(code);
     const expression = expressionResult.expression;
-    if (!expressionResult.diagnostics.some((entry) => entry.severity === 'error')
+    if (!hasError(expressionResult.diagnostics)
       && expression !== undefined && expression.type !== 'SequenceExpression') {
       const child = this.expressionChild(expression, start - expressionResult.origin, nested);
       return { views: [child.view], pieces: child.pieces };
     }
 
     const parsed = childStatements(code);
-    const problem = parsed.diagnostics.find((entry) => entry.severity === 'error');
+    const problem = firstError(parsed.diagnostics);
     if (problem !== undefined) {
       const offset = start + problem.start;
       if (problem.start >= code.length) {
@@ -323,7 +305,7 @@ class Reader {
           const from = parsed.tokens.start(candidate);
           const to = parsed.tokens.end(token);
           const tag = lex(code.slice(from, to));
-          if (!tag.diagnostics.some((entry) => entry.severity === 'error') && opening(tag.tokens!, 0)) {
+          if (!hasError(tag.diagnostics) && isMarkupOpening(tag.tokens!, 0)) {
             this.error('JPX1005', 'Separate this sibling tag from the preceding expression with a semicolon', start + from, start + to);
           }
           break;
@@ -352,7 +334,7 @@ class Reader {
         // actual declaration statements such as `const x = ...` stay deferred.
         if (node.type === 'FunctionDeclaration' || node.type === 'ClassDeclaration' || node.type === 'BlockStatement') {
           const candidate = assemble(replaceRange(this.source, base + node.start, base + node.end, nested)).code;
-          if (!childExpression(candidate).diagnostics.some((entry) => entry.severity === 'error')) {
+          if (!hasError(childExpression(candidate).diagnostics)) {
             const child = this.expressionChild(node, base, nested);
             views.push(child.view);
             pieces.push(...child.pieces);

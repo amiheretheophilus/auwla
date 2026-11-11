@@ -4,8 +4,9 @@ import type {
   AnalysisModule,
   AnalysisRange,
 } from '@memoized-dom/compiler-next/analysis';
-import { parse } from 'yuku-parser';
+import { parseModule } from '../../host';
 import type { NormalizedSource, Range } from '../../model';
+import { authoredCover } from '../../source';
 import { indexSyntax } from './syntax';
 
 export interface Insertion {
@@ -25,25 +26,8 @@ export interface FlowPlan {
 }
 
 function authoredRegion(normalized: NormalizedSource, range: AnalysisRange): FlowRegion | null {
-  let start = Infinity;
-  let end = -Infinity;
-
-  for (const mapping of normalized.mappings) {
-    const from = Math.max(range[0], mapping.generated[0]);
-    const to = Math.min(range[1], mapping.generated[1]);
-    if (from >= to) {
-      continue;
-    }
-
-    const offset = mapping.authored[0] - mapping.generated[0];
-    start = Math.min(start, from + offset);
-    end = Math.max(end, to + offset);
-  }
-
-  if (start === Infinity) {
-    return null;
-  }
-  return { normalized: range, authored: [start, end] };
+  const authored = authoredCover(normalized.mappings, range);
+  return authored === null ? null : { normalized: range, authored };
 }
 
 /**
@@ -69,7 +53,7 @@ export function planFlow(normalized: NormalizedSource, filename: string): FlowPl
     return null;
   }
 
-  const program = parse(source, { lang: 'tsx', sourceType: 'module' }).program;
+  const program = parseModule(source).program;
   const isModule = program.body.some((node) => {
     return node.type.startsWith('Import') || node.type.startsWith('Export');
   });

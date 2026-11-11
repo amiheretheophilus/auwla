@@ -1,18 +1,18 @@
+/**
+ * Host-parser access for the normalizer: parsing code fragments in a neutral
+ * context, offset-adjusted token views and small token-level questions.
+ * Parser-owned AST nodes are never modified.
+ */
 import { parse, TokenKind as K } from 'yuku-parser';
 import type { Diagnostic, Node, ParseResult, TokenList } from 'yuku-parser';
 
-/** Parser-only placeholder retaining original UTF-16 width and line endings. */
-export function maskMarkup(source: string, start: number, end: number): string {
-  return source.slice(0, start) + '_'
-    + source.slice(start + 1, end).replace(/[^\r\n]/g, ' ') + source.slice(end);
-}
-
-/** Only this token view adjusts offsets; parser-owned AST nodes stay untouched. */
+/** Token access with offsets relative to the fragment that was parsed. */
 export interface HostTokens {
   readonly length: number;
   kind(index: number): number;
   start(index: number): number;
   end(index: number): number;
+  /** Index of the token containing `offset`, or -1. */
   at(offset: number): number;
 }
 
@@ -41,6 +41,34 @@ class SliceTokens implements HostTokens {
   }
 }
 
+/** True when the token at `index` is the `<` of a JSX element or fragment opener. */
+export function isMarkupOpening(tokens: HostTokens, index: number): boolean {
+  if (tokens.kind(index) !== K.LessThan || index + 1 >= tokens.length) {
+    return false;
+  }
+  const next = tokens.kind(index + 1);
+  return next === K.JSXIdentifier || next === K.GreaterThan;
+}
+
+/**
+ * The token kind that closes an opening delimiter, or undefined when `kind`
+ * opens nothing. Template literals pair a head `` `...${ `` with a tail `` }...` ``.
+ */
+export function closingDelimiter(kind: number): number | undefined {
+  switch (kind) {
+    case K.LeftParen:
+      return K.RightParen;
+    case K.LeftBracket:
+      return K.RightBracket;
+    case K.LeftBrace:
+      return K.RightBrace;
+    case K.TemplateHead:
+      return K.TemplateTail;
+    default:
+      return undefined;
+  }
+}
+
 const PREFIX = 'async function* __jsx_plus_parse__() {\n';
 
 export interface HostFragment {
@@ -52,7 +80,26 @@ export interface HostFragment {
   readonly comments: readonly { readonly start: number; readonly end: number }[];
 }
 
-/** Locate an unclosed host literal before parser recovery invents later structure. */
+/** True when any diagnostic is an error (not a warning). */
+export function hasError(diagnostics: readonly Diagnostic[]): boolean {
+  return diagnostics.some((entry) => entry.severity === 'error');
+}
+
+/** The first error-severity diagnostic, if any. */
+export function firstError(diagnostics: readonly Diagnostic[]): Diagnostic | undefined {
+  return diagnostics.find((entry) => entry.severity === 'error');
+}
+
+/**
+ * Locate the opening quote/backtick of an unclosed host literal, before parser
+ * recovery invents later structure. `boundary` is where the parser reported
+ * the problem; tokens from there on are unreliable.
+ *
+ * Yuku reports some unclosed strings at the end of input. The last completed
+ * token before the problem, plus any trivia after it, then locates the opener.
+ * An open template has its own head token. Quote characters inside comments
+ * are never guessed at.
+ */
 export function unterminatedLiteral(fragment: HostFragment, source: string): {
   readonly start: number;
   readonly boundary: number;
@@ -61,6 +108,7 @@ export function unterminatedLiteral(fragment: HostFragment, source: string): {
   if (problem === undefined) {
     return undefined;
   }
+
   const templates: number[] = [];
   let previousEnd = 0;
   for (let index = 0; index < fragment.tokens.length; index++) {
@@ -75,6 +123,7 @@ export function unterminatedLiteral(fragment: HostFragment, source: string): {
       templates.pop();
     }
   }
+
   let start = /template/.test(problem.message) ? templates[templates.length - 1] : undefined;
   if (start === undefined) {
     start = previousEnd;
@@ -124,6 +173,7 @@ export function childStatements(source: string): HostFragment {
   return fragment(source, false);
 }
 
+/** Parse `source` as one parenthesized expression; `expression` is unset when it is not one. */
 export function childExpression(source: string): HostFragment & { readonly expression?: Node } {
   const result = fragment(source, true);
   const statement = result.statements[0];
@@ -131,4 +181,9 @@ export function childExpression(source: string): HostFragment & { readonly expre
     && statement.expression.type === 'ParenthesizedExpression'
     ? statement.expression.expression : undefined;
   return { ...result, expression };
+}
+
+/** Parse a complete module. */
+export function parseModule(source: string): ParseResult {
+  return parse(source, { lang: 'tsx', sourceType: 'module' });
 }

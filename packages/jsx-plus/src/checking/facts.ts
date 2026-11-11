@@ -5,6 +5,7 @@ import {
 } from '@memoized-dom/compiler-next/analysis';
 import { normalize } from '../normalize';
 import type { Range, VerbatimMapping } from '../model';
+import { authoredCover } from '../source';
 
 export interface FactLocation {
   readonly normalized: AnalysisRange;
@@ -37,33 +38,11 @@ function locate(
     };
   }
 
-  let authoredStart = Infinity;
-  let authoredEnd = -Infinity;
-
-  for (const mapping of mappings) {
-    const [generatedStart, generatedEnd] = mapping.generated;
-    if (generatedStart >= end || generatedEnd <= start) continue;
-
-    const intersectionStart = Math.max(start, generatedStart);
-    const intersectionEnd = Math.min(end, generatedEnd);
-    const offset = mapping.authored[0] - generatedStart;
-
-    authoredStart = Math.min(authoredStart, intersectionStart + offset);
-    authoredEnd = Math.max(authoredEnd, intersectionEnd + offset);
-  }
-
-  if (authoredStart === Infinity) {
-    return {
-      normalized: range,
-      authored: null,
-      fidelity: 'unmapped',
-    };
-  }
-
+  const cover = authoredCover(mappings, range);
   return {
     normalized: range,
-    authored: [authoredStart, authoredEnd],
-    fidelity: 'enclosing',
+    authored: cover,
+    fidelity: cover === null ? 'unmapped' : 'enclosing',
   };
 }
 

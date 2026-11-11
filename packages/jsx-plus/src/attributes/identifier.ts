@@ -1,20 +1,29 @@
-import { childExpression } from '../host';
+import { childExpression, hasError } from '../host';
+import { blankRange } from '../masks';
 import { copied, generated } from '../source';
-import type { Replacement } from '../source';
+import type { AttributeValue } from './value';
 
-/** Read a single delimited identifier; the host parser validates its spelling. */
-export function identifierAttribute(source: string, afterEquals: number): Replacement | null {
-  let start = afterEquals;
+/** Characters that start a value some other reader owns: strings, `{...}`, `(...)`, markup, `/>`. */
+const OTHER_VALUE_STARTS = ['"', "'", '{', '(', '<', '/'];
+
+/**
+ * Read a bare `name=identifier` value starting at the `=` at `equals`.
+ * Returns null when the value is not a single delimited host identifier, so
+ * calls, members and literals fall through to ordinary JSX parsing.
+ * The host parser, not this function, decides what spells an identifier.
+ */
+export function identifierAttribute(source: string, equals: number): AttributeValue | null {
+  let start = equals + 1;
   while (start < source.length && /\s/.test(source[start]!)) {
     start++;
   }
 
-  // Existing string/container values and the parenthesized form have readers
-  // of their own. Keep the common path free of another host parse.
-  if (start === source.length || ['"', "'", '{', '(', '<', '/'].includes(source[start]!)) {
+  // Keep the common path (string, braces, parentheses) free of another host parse.
+  if (start === source.length || OTHER_VALUE_STARTS.includes(source[start]!)) {
     return null;
   }
 
+  // The identifier ends at attribute whitespace or the tag's `>`/`/>`.
   let end = start;
   while (end < source.length && !/[\s/>]/.test(source[end]!)) {
     end++;
@@ -27,16 +36,15 @@ export function identifierAttribute(source: string, afterEquals: number): Replac
   }
 
   const parsed = childExpression(source.slice(start, end));
-  if (parsed.expression?.type !== 'Identifier'
-    || parsed.diagnostics.some((diagnostic) => diagnostic.severity === 'error')) {
+  if (parsed.expression?.type !== 'Identifier' || hasError(parsed.diagnostics)) {
     return null;
   }
 
-  return { start, end, pieces: [generated('{'), copied(source, start, end), generated('}')] };
-}
-
-/** Remove the assignment in the parser-only tag, leaving a boolean attribute. */
-export function maskIdentifierAssignment(source: string, start: number, end: number): string {
-  return source.slice(0, start)
-    + source.slice(start, end).replace(/[^\r\n]/g, ' ') + source.slice(end);
+  return {
+    start,
+    end,
+    pieces: [generated('{'), copied(source, start, end), generated('}')],
+    // Blanking `=identifier` leaves a boolean attribute in the parser-only tag.
+    mask: (shadow, origin) => blankRange(shadow, equals - origin, end - origin),
+  };
 }

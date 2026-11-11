@@ -1,4 +1,4 @@
-import { parse } from 'yuku-parser';
+import { hasError, parseModule } from '../../host';
 import { assemble, copied, generated } from '../../source';
 import type { Piece } from '../../source';
 import type { NormalizedSource, Range } from '../../model';
@@ -37,8 +37,7 @@ export function renderFlow(normalized: NormalizedSource, plan: FlowPlan): {
   const output = assemble(pieces);
 
   // Never delegate checking to syntactically invalid generated code.
-  const parsed = parse(output.code, { lang: 'tsx', sourceType: 'module' });
-  if (parsed.diagnostics.some((diagnostic) => diagnostic.severity === 'error')) {
+  if (hasError(parseModule(output.code).diagnostics)) {
     return null;
   }
 

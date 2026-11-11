@@ -68,12 +68,14 @@ All paths are relative to the repository root and exist now.
 | Path | Responsibility |
 | --- | --- |
 | `packages/jsx-plus/src/normalize.ts` | Host-token scanning, nested markup, expression/conditional children and TSX normalization |
-| `packages/jsx-plus/src/host.ts` | Parser-only fragment context, token slices and untouched host AST offsets |
-| `packages/jsx-plus/src/attributes/parenthesized.ts` | Balanced attribute expression reader, nested-markup normalization and opening-tag masks |
-| `packages/jsx-plus/src/attributes/identifier.ts` | Bare identifier host validation, copied expression spans and parser-only assignment masking |
+| `packages/jsx-plus/src/host.ts` | Parser-only fragment context, token slices, tag-opening/delimiter/unterminated-literal token helpers |
+| `packages/jsx-plus/src/masks.ts` | Every parser-only mask: equal-width, line-preserving blanks for markup, attribute values and quarantined lines |
+| `packages/jsx-plus/src/attributes/value.ts` | Attribute value contract: replacement pieces plus the mask that hides that form from the tag lexer |
+| `packages/jsx-plus/src/attributes/parenthesized.ts` | Balanced `=(...)` reader with nested-markup normalization |
+| `packages/jsx-plus/src/attributes/identifier.ts` | Bare `=identifier` host validation and copied identifier span |
 | `packages/jsx-plus/tests/attributes.test.ts` | Attribute host forms, copied spans, malformed literals and explicit source-format boundary |
 | `packages/jsx-plus/src/model.ts` | Syntax views, authored ranges and copied-span mapping types |
-| `packages/jsx-plus/src/source.ts` | Copied/generated pieces, assembly and exact authored-offset lookup |
+| `packages/jsx-plus/src/source.ts` | Copied/generated pieces, assembly, exact authored-offset lookup (edits) and nearest/covering lookups (diagnostics, syntax ranges) |
 | `packages/jsx-plus/src/diagnostics.ts` | Authored syntax diagnostic ranges and line/column reporting |
 | `packages/jsx-plus/src/compile.ts` | Single-UI-module public-API delegation and mapped compiler diagnostics |
 | `packages/jsx-plus/src/index.ts` | Public package exports |

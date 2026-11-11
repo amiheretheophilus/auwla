@@ -1,5 +1,6 @@
-import { parse } from 'yuku-parser';
 import { JsxPlusError } from '../../diagnostics';
+import { hasError, parseModule } from '../../host';
+import { blankRange } from '../../masks';
 import { normalizeForChecking } from '../../normalize';
 import type { NormalizedSource, Range, VerbatimMapping } from '../../model';
 
@@ -63,13 +64,11 @@ export function recoverMarkup(source: string, filename: string, first: JsxPlusEr
     errors.push(error);
     holes.push(line);
     holes.sort((a, b) => a[0] - b[0]);
-    shadow = shadow.slice(0, line[0])
-      + shadow.slice(line[0], line[1]).replace(/[^\r\n]/g, ' ') + shadow.slice(line[1]);
+    shadow = blankRange(shadow, line[0], line[1]);
 
     try {
       const normalized = normalizeForChecking(shadow, filename);
-      const host = parse(normalized.code, { lang: 'tsx', sourceType: 'module' });
-      if (host.diagnostics.some((entry) => entry.severity === 'error')) {
+      if (hasError(parseModule(normalized.code).diagnostics)) {
         return null;
       }
       const mappings = outsideHoles(normalized.mappings, holes);
