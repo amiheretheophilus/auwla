@@ -18,7 +18,7 @@ depends on integration, acceptance and measurements.
 | P1-GRAMMAR | Done: provisional candidate | Host-parser probes establish continuation behavior; record concrete boundaries and incomplete-input fixtures, now exercised by P2 | [grammar](spec/grammar.md), [syntax](syntax.md) |
 | P2-PARSE | First slice built | Separate syntax package normalizes the current parse/error/behavior fixtures with copied-span mappings; the UI facade calls compiler-next | [syntax](syntax.md), [architecture](architecture.md), [refs](refs.md) |
 | P2-HARDEN | First slice built; ongoing | Generator/async fragments, semicolon-separated object/function/class children, nested-markup tails and selected error ranges checked; broader recovery and reparse costs remain | [syntax](syntax.md) |
-| P3-TOOL | Planned; pair with P2 | A minimal mapper type-checks the same source, reports a deliberate error at the authored span, and supports a safe rename edit | [tooling](tooling.md) |
+| P3-TOOL | First CLI/LSP probe built | Typed-prop/ref example, exact authored error range, four-use ref rename and recheck pass through pinned TypeScript; broader flow/editor/caching work remains | [tooling](tooling.md) |
 | P4-FLOW | First fixtures built; expand later | Basic direct `if` and `.map()` fixtures execute; extend scope, owner/disposal and readiness interleavings before full flow acceptance | [syntax](syntax.md), [testing](testing.md) |
 | P5-EVENT | Candidate | Settle event-expression meaning; demonstrate one ordinary handler and one shorthand with identical timing | [features](features.md) |
 | P6-BIND | Candidate | Settle named text/checkbox bindings, write typing and handler order; show one form | [features](features.md) |
@@ -49,6 +49,8 @@ string rewrites. Pair hardening with source-range and mapper probes early.
 - [status.md](status.md) names what passed, what did not run and the next useful step.
 - The work is committed and pushed. A checkpoint can preserve unfinished work, but
   is labeled as such and does not mark its behavioral acceptance complete.
+- Another agent reviews code before pushing; findings are addressed and relevant
+  checks pass, following the user's standing review requirement.
 
 Documentation-only work uses link/path/example review and `git diff --check`.
 Implementation uses the focused checks in [testing.md](testing.md).

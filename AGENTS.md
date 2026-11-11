@@ -68,3 +68,5 @@ instructions.
 - Benchmarks live in `bench/`. Run them locally only to check their correctness
   gates; the user times them on another machine.
 - Commit and push after each finished step, to `origin`.
+- Before pushing code, have another agent review the changes, address findings,
+  and run the relevant checks. This is the user's standing instruction (2026-11-11).

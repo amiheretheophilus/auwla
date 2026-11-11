@@ -133,4 +133,6 @@ diagnostic precedence for an unterminated string.
 Broader host contexts, ASI ambiguities, malformed comment/regex recovery and
 composed debugging maps need further coverage. Repeated suffix parsing/masking
 needs measurement and improvement before a frontend scalability claim. Module
-graphs, mapper/editor, SSR/adoption, Vite and backend config remain future work.
+graphs, editor activation, SSR/adoption, Vite and backend config remain future
+work. An initial headless TypeScript mapper now shares this normalizer; its
+diagnostic/rename evidence and flow-typing limits are on [tooling.md](tooling.md).

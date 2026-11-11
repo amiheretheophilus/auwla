@@ -52,6 +52,15 @@ It does not establish compiler-next's full async/generator runtime acceptance.
 Compiled UI tests separately exercise object-valued branch children and ternaries
 ending in markup in both compiler modes.
 
+`tests/checking.test.ts` and `tests/mapper-lsp.test.ts` run the installed pinned
+TypeScript 7.1-beta CLI and language server with the real mapper process. They
+check exact copied-span/edit fidelity, project close/reopen/isolation, CLI mapper
+permission, authored Unicode diagnostics and ref rename edits applied back to
+source. A missing-quote edit reports its authored location and a valid replacement
+clears it. See [tooling](tooling.md) for verified launch/permission settings and
+the limitations of this first TSX projection. This explicit mapper-host probe is
+separate from ordinary package type checking with `bun check`.
+
 Acceptance IDs are owned by [syntax.md](syntax.md), [refs.md](refs.md) and
 [tooling.md](tooling.md); later features add theirs on their concept page.
 Actual and planned prototype files are mapped in [architecture.md](architecture.md).

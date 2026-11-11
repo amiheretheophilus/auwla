@@ -4,13 +4,24 @@
   "private": true,
   "description": "JSX+ source normalization for compiler-next. See wiki2/.",
   "type": "module",
-  "exports": { ".": "./src/index.ts" },
+  "exports": {
+    ".": "./src/index.ts",
+    "./checking": "./src/checking/project.ts"
+  },
+  "typescript": {
+    "contentMapper": {
+      "exec": ["bun", "run", "src/mapper/server.ts"],
+      "compilerOptions": []
+    }
+  },
   "scripts": { "test": "bun test", "check": "bun check" },
   "dependencies": {
     "@memoized-dom/compiler-next": "workspace:*",
+    "vscode-jsonrpc": "9.0.2",
     "yuku-parser": "0.19.0"
   },
   "devDependencies": {
-    "@memoized-dom/runtime": "workspace:*"
+    "@memoized-dom/runtime": "workspace:*",
+    "typescript": "7.1.0-beta"
   }
 }

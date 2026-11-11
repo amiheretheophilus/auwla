@@ -122,7 +122,7 @@ Editor integration also depends on workspace trust and mapper permissions.
 The exact supported toolchain should be pinned and verified during a prototype;
 this document is not a claim that every installed TypeScript 7 build supports it.
 
-Illustrative project configuration, with a placeholder package name:
+Prototype project configuration, using the private workspace mapper package:
 
 ```jsonc
 {
@@ -132,7 +132,7 @@ Illustrative project configuration, with a placeholder package name:
   },
   "contentMappers": [
     {
-      "package": "<mapper-package>",
+      "package": "@memoized-dom/jsx-plus",
       "extensions": [".auwla"]
     }
   ],
@@ -140,8 +140,11 @@ Illustrative project configuration, with a placeholder package name:
 }
 ```
 
-This is a future consumer configuration, not an instruction to replace the
-repository's current `bun check` workflow.
+The local example is now exercised through the actual TypeScript 7.1-beta CLI
+and language server; see [tooling](wiki2/tooling.md) for exact settings and
+limitations. This does not replace the repository's `bun check` workflow.
+The mapper's Node-compatible JSON-RPC transport is independent of the VS Code
+editor; other IDEs still need compatible TypeScript content-mapper integration.
 
 ### 3.2 What this enables, and what we still own
 
@@ -879,7 +882,7 @@ and mark a revised decision as superseded rather than erasing its reason.
 
 | ID | Decision | Current position | Status |
 | --- | --- | --- | --- |
-| DX-01 | TypeScript integration | Use the new content mapper API | User-specified direction; implementation open |
+| DX-01 | TypeScript integration | Use the new content mapper API | User-specified; initial CLI/LSP diagnostic/ref-rename probe built; broader integration open |
 | DX-02 | Source extension | `.auwla` in examples | Open |
 | DX-03 | Parser architecture | Shared source-aware parser for checking and runtime compilation | Recommended |
 | DX-04 | Lazy event expressions | `@event={expression}` runs on the event | Proposed |

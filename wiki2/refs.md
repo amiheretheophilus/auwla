@@ -49,7 +49,10 @@ is [wiki/compiler/refs.md](../wiki/compiler/refs.md).
 The separate adapter's current ref fixture runs in
 `packages/jsx-plus/tests/compile.test.ts`, using the existing implementation.
 That package owns new-syntax compatibility tests; it changes none of the existing
-ref feature/runtime source files. Broader lifecycle and mapper checks remain open.
+ref feature/runtime source files. The initial mapper probe in
+`packages/jsx-plus/tests/mapper-lsp.test.ts` renames one ref across its declaration,
+prop, handler and child read, then rechecks the edited source. Reactive/ref flow
+typing and broader lifecycle coverage remain open; see [tooling](tooling.md).
 
 ## Compatibility checks for the syntax extension
 

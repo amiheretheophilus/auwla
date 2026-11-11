@@ -21,9 +21,25 @@ compiled and clicked by the package's execution tests.
 
 `compile()` currently adapts one UI module. Existing `.tsx` input explicitly
 named through `moduleId` retains its existing JSX semantics. Multi-module `.auwla`
-resolution, Vite integration, the TypeScript content mapper, backend configuration
+resolution, Vite integration, backend configuration
 and isomorphic execution remain future work. `normalize()` itself preserves host
 code outside markup, including backend-style imports.
+
+The initial TypeScript content mapper is registered in this package's manifest.
+It shares `normalize()` through the separate `@memoized-dom/jsx-plus/checking`
+entry, returning TSX and exact copied spans without DOM compilation. The valid
+[checking example](examples/checking/App.auwla) and its
+[configuration](examples/checking/tsconfig.json) run with the pinned TypeScript:
+
+```text
+bun ../../node_modules/typescript/lib/tsc.js --project examples/checking/tsconfig.json --runExternalCode --pretty false
+```
+
+`examples/checking/tsconfig.error.json` intentionally selects a type error and
+exits two. CLI/LSP tests verify the original UTF-16 error location and a safe ref
+rename. `vscode-jsonrpc/node` provides stream transport; it does not require the
+VS Code editor. IDE activation, reactive/ref flow typing, partial-file recovery
+and mapper caching remain open. See [tooling](../../wiki2/tooling.md).
 
 Run focused checks from this package:
 

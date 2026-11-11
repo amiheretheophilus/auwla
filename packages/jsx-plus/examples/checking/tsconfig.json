@@ -1,0 +1,20 @@
+{
+  "compilerOptions": {
+    "strict": true,
+    "noEmit": true,
+    "target": "ESNext",
+    "module": "Preserve",
+    "moduleResolution": "Bundler",
+    "jsx": "preserve",
+    "types": [],
+    "lib": ["ESNext", "DOM", "DOM.Iterable"],
+    "skipLibCheck": true,
+    "paths": {
+      "@memoized-dom/compiler/jsx": ["../../../compiler/src/jsx-types.ts"]
+    }
+  },
+  "contentMappers": [
+    { "package": "@memoized-dom/jsx-plus", "extensions": [".auwla"] }
+  ],
+  "files": ["./App.auwla"]
+}

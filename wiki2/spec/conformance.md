@@ -11,7 +11,7 @@
 | Extended parse | The syntax package produces the expected view with exact ranges | Current 6 fixtures pass; broader grammar acceptance open |
 | Extended diagnostics | New syntax produces the expected primary code/severity/range | Current 5 fixtures pass; broader recovery open |
 | Extended behavior | Extended source matches explicit expectations through updates/disposal | Current 9 programs pass in optimized/general modes; lifecycle coverage remains |
-| Tooling | Real mapper diagnostics/rename/completion satisfy the authored-span checks | Not implemented; no pass claim |
+| Tooling | Real mapper diagnostics/rename/completion satisfy the authored-span checks | Initial CLI/LSP diagnostic and ref-rename probe passes; completion, flow typing and editor registration remain open |
 | Delivery | Extended source preserves existing SSR/adoption and lifecycle behavior | Not implemented; no pass claim |
 
 A fixture check is not a parser test. Passing a JSX equivalent establishes the
@@ -69,7 +69,8 @@ bun run --cwd packages/jsx-plus test
 Those commands cover the current parse/error fixtures and behavior programs plus
 lexical/mapping regressions. The baseline checker above still deliberately labels
 extended execution NOT RUN because it does not invoke that package. Actual
-editor, module-graph and delivery integration remain future work. See
+editor registration, module-graph and delivery integration remain future work. The
+package's tooling tests additionally run actual TypeScript CLI/LSP requests. See
 [status.md](../status.md) for current evidence and limitations.
 
 Rendered expectations concern observable text/node behavior, not compiler helper

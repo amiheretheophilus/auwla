@@ -6,12 +6,16 @@ and `wiki2/syntax.md`.
 
 - This separate package owns extended syntax, normalization, authored mappings
   and the compiler-next public-API adapter. Keep implementation here.
-- Production code depends on compiler-next's public exports and yuku. It does
+- Production compilation depends on compiler-next's public exports and yuku. It does
   not copy compiler-next's graph, optimizer, emitters, runtime or ref feature.
+- The separate checking export imports the normalizer directly. Mapper transport
+  uses JSON-RPC streams and must not load the production compiler facade.
 - Treat compiler-next/runtime sources as dependencies; changes to them require
   separately authorized work. Tests may use the existing runtime and loader.
 - Run `bun check` and `bun test` in this package. Root-suite execution and timing
   benchmarks are not routine checks for this isolated slice.
+- A second agent must review code before each push; address findings and verify
+  the resulting changes before pushing, as required by the user.
 - Keep conformance claims scoped to tested cases. Report missing host contexts,
   tooling, module-graph integration and delivery coverage rather than implying
   a complete language implementation.

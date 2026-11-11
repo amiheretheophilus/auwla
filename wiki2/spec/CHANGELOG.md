@@ -24,6 +24,10 @@
   expression chunks, cached conditional bodies, nested-markup tail ranges and
   additional JPX1003/1004/1007 checks. These repair implementation gaps under the
   existing rules; no normative grammar, fixture expectation or code is revised.
+- Initial TypeScript content-mapper probe shares the normalizer and verbatim
+  mappings. Real CLI/LSP diagnostics, ref rename and invalid/restore edits now
+  have focused evidence. Reactive-flow typing/editor acceptance remain open;
+  this changes no language rule or existing fixture expectation.
 
 Subsequent revisions name the affected rule/fixture IDs, observable change,
 reason, and whether an accepted user direction is being revised. Keep open
