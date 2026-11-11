@@ -1,6 +1,9 @@
 # Instructions for coding agents
 
-Read this file first. Then read `wiki/README.md`, which lists the rest in order.
+Read this file first. For JSX+ prototyping on `prototype/jsx-plus`, continue at
+`wiki2/README.md` and its short reading order. For the compiler rewrite, continue
+at `wiki/README.md`. Both tracks follow `wiki/rules.md` and the user's latest
+instructions.
 
 ## Repository: push only to `amiheretheophilus/auwla`
 
@@ -24,9 +27,27 @@ Read this file first. Then read `wiki/README.md`, which lists the rest in order.
 
 - The compiler is being rewritten on branch `compiler-rewrite`. The design is in
   `wiki/compiler/`, with one page per group of related files.
+- JSX+ authoring is being explored on `prototype/jsx-plus`. `dx.md` holds the
+  design discussion; `wiki2/` maps the prototype, decisions, checks and next slice.
+  Keep new syntax work in the separate `packages/jsx-plus` package. It normalizes
+  extended syntax and calls compiler-next's public API. Do not mix prototype
+  implementation into compiler-next or runtime sources, create a second reactive
+  compiler, or rebuild existing refs. DX-31 clarifies package placement while
+  retaining DX-28's existing-pipeline behavior. DX-34 lets this branch change
+  compiler-next where `.auwla` interop needs it, recorded in `wiki2/status.md`
+  for later reconciliation with `compiler-rewrite`.
+  Read `wiki2/spec/README.md` before changing syntax: its grammar, syntax model,
+  semantics, diagnostics and conformance fixtures define the working draft.
+  Revise provisional rules explicitly with their fixtures instead of inventing
+  language behavior during implementation.
+  Prototype grammar and plan choices are revisable as evidence arrives. Keep
+  accepted user direction distinct from provisional experiments and implemented
+  behavior. Start with `wiki2/status.md`, not the rewrite's next unchecked phase.
 - `wiki/rules.md` holds the user's ground rules. Every change must satisfy them.
-- Everything about one concept goes on its `wiki/compiler/` page and in its feature
-  folder: rules, cases to test, known bugs. Do not start separate lists.
+- Everything about a compiler concept goes on its `wiki/compiler/` page and in
+  its feature folder: rules, cases to test, known bugs. JSX+ concepts instead use
+  their `wiki2/` page, linking to existing compiler behavior rather than copying
+  it. Update both owning pages when a change crosses that boundary.
 - Keep the current names (`memo-dom:`, `mmd_*`, `memoized-dom/*`). The rename to
   auwla happens later, across all packages at once.
 
@@ -49,3 +70,8 @@ Read this file first. Then read `wiki/README.md`, which lists the rest in order.
 - Benchmarks live in `bench/`. Run them locally only to check their correctness
   gates; the user times them on another machine.
 - Commit and push after each finished step, to `origin`.
+- Review code thoroughly and run relevant checks before pushing. The user's
+  latest instruction (2026-11-11) is to stop using sub-agents to conserve tokens;
+  this supersedes their earlier request for another-agent reviews.
+- Keep new compiler-next work in a concept folder, including its tests. Use
+  readable helpers, expanded blocks and explanatory comments, as requested.

@@ -78,8 +78,10 @@ Rules for the whole pipeline:
 2. **Each stage takes the previous stage's result and returns its own.** There is
    no shared mutable context. Options (runtime paths, delivery mode, hot reload)
    are one read-only object.
-3. **`pipeline.ts` is the only file that orders stages.** Read it top to bottom to
-   see the whole compiler.
+3. **Stage order is explicit.** `analysis/frontend.ts` owns the shared
+   parse → resolve → graph sequence. `pipeline.ts` calls it and orders the
+   remaining production stages. The [read-only analysis API](analysis.md) uses
+   that same frontend and stops before planning.
 4. **Facts are keyed by yuku `Binding` and `Reference` objects**, never by name and
    never by a node that might be cloned.
 5. **A feature depends on `core/` only**, never on another feature's files.

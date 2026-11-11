@@ -1,6 +1,19 @@
 # Status
 
-Last updated: 2026-11-10.
+Last updated: 2026-11-11.
+
+Prototype branch integration: the compiler-owned [read-only analysis API](compiler/analysis.md)
+is built under `src/analysis/` and shares the existing frontend with production.
+Its focused analysis/graph/parse/core/ref checks pass (82 tests); this does not
+close the rewrite's acceptance or performance gates. JSX+'s first paired checking
+profile passes 34 flow targets. Bounded mapper reuse and a runnable authored
+task-board example are now built; their evidence, limits and next work are in
+[wiki2/status.md](../wiki2/status.md).
+
+The prototype also exposed an uncached attribute-setter mismatch: ARIA false
+was omitted and true became empty. `runtime/src/setters.ts` now follows the
+existing cached/spread rules; focused DOM and compiled loop examples cover it.
+See [dynamic attribute values](compiler/core.md#dynamic-attribute-values).
 
 ## Current: Phase 10 (2026-11-06)
 

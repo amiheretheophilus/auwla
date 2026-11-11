@@ -1,6 +1,6 @@
 /**
- * The whole compiler, in order. This is the only file that orders stages
- * (`wiki/compiler/README.md`, rule 3):
+ * Production stage order (`wiki/compiler/README.md`, rule 3). The frontend
+ * sequence is shared with read-only inspection in analysis/frontend.ts:
  *
  *   parse → resolve → graph → plan → optimize → emit
  *
@@ -12,9 +12,8 @@ import type { Node } from 'yuku-parser';
 import { CompileError } from './core/diagnostics';
 import { emitDom } from './core/emit/dom';
 import { printJavaScript } from './core/emit/print';
-import { classifyGraph } from './core/graph/classify';
-import { parseModule } from './core/parse';
-import { resolve, type Resolved } from './core/resolve';
+import type { Resolved } from './core/resolve';
+import { analyzeFrontend } from './analysis/frontend';
 import { planInitialDelivery, planInitialRender, type InitialDelivery, type InitialRender } from './features/delivery';
 import { planModules } from './core/plan';
 import type { CompileModulesOptions, CompileOptions } from './options';
@@ -63,9 +62,7 @@ function compileProgram(
   modules: Readonly<Record<string, string>>,
   options: CompileModulesOptions,
 ): { output: Record<string, string>; resolved: Resolved } {
-  const parsed = Object.entries(modules).map(([path, source]) => parseModule(path, source));
-  const resolved = resolve(parsed, options);
-  const graph = classifyGraph(resolved);
+  const { resolved, graph } = analyzeFrontend(modules, options);
   const general = planCapturedValues(planModules(graph, graph.queries, graph.components), resolved);
   const plans = optimizeModules(general, graph, options.optimize !== false);
   const opensNamespaces = markNamespaceReads(plans, resolved);

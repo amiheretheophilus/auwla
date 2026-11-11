@@ -6,6 +6,10 @@
 The core holds the stage machinery and the shared types. What a concept means
 (state, a list, a ref) lives in its feature folder, not here.
 
+The [read-only analysis folder](analysis.md) exposes existing frontend facts.
+Its shared frontend runs parse, resolve and graph in their existing order;
+production continues in `pipeline.ts`. Serialization adds no classification rules.
+
 Component integration adds ordered call expressions and callable references to
 `core/plan/model.ts`. The template planner routes component/dynamic tags and
 spread hosts through value slots. `core/emit/dom.ts` composes the component and
@@ -41,6 +45,23 @@ with the consuming namespace for inherited SVG. Namespace propagation is one
 walk of the template, with HTML boundaries at `foreignObject`.
 `core/emit/sites.ts` captures a conditional region's actual namespace before
 removing its placeholder, so later branch mounts inherit it too.
+
+## Dynamic attribute values
+
+`packages/runtime/src/setters.ts` owns both cached `setAttr` and uncached
+`setAttributeValue` writes. Both retain `aria-*` booleans as the strings `true`
+and `false`; nullish values remove attributes. Presence-only true is reserved
+for actual HTML boolean attributes, while SVG/other true values are textual.
+Non-ARIA false values remain omitted. The uncached path preserves its existing
+nonboolean `textValue` conversion.
+
+An ordinary loop building JSX row values exposed an older mismatch in the
+uncached setter: it omitted ARIA false and wrote true as an empty attribute.
+That setter now follows the existing cached/spread rules. Focused assertions
+live in `packages/runtime/tests/dom-attributes.test.ts`; the actual JSX+ loop
+example exercises independent row closures and live attribute updates in both
+compiler modes. This is a shared runtime correctness fix, not JSX+ syntax work
+inside the compiler or a new list implementation.
 
 ## parse — `core/parse/` (built, Phase 1)
 

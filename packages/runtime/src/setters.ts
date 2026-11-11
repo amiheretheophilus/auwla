@@ -100,13 +100,26 @@ export function joinText(parts: readonly unknown[]): string {
   return text;
 }
 
-/** compiler-next's attribute site: `true` is present, `null`, `undefined` and `false` absent. */
+/** Attribute sites share cached-setter boolean/ARIA rules; nullish values omit. */
 export function setAttributeValue(node: Element, name: string, value: unknown): void {
-  if (value != null && value !== false) {
-    node.setAttribute(name, value === true ? '' : textValue(value));
-  } else {
+  const omitFalse = value === false && !isAriaAttribute(name);
+  if (value == null || omitFalse) {
     node.removeAttribute(name);
+    return;
   }
+
+  // ARIA booleans are text in both render paths. Presence-only true applies
+  // only to actual HTML boolean attributes, never to SVG or arbitrary names.
+  let next: string;
+  if (value === true) {
+    const html = node.namespaceURI !== 'http://www.w3.org/2000/svg';
+    next = html && isHtmlBooleanAttribute(name) ? '' : 'true';
+  } else if (value === false) {
+    next = 'false';
+  } else {
+    next = textValue(value);
+  }
+  node.setAttribute(name, next);
 }
 
 /**

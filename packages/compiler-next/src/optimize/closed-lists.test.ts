@@ -4,8 +4,22 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { compileModules } from '../pipeline';
 
+/**
+ * The two spellings of a row list (`mapping-calls.ts`). JSX+ writes a direct
+ * `for...of` loop in markup as `Array.from`; the proof must treat both alike.
+ */
+const SPELLINGS = {
+  map: (row: string) => `rows.map((row) => ${row})`,
+  from: (row: string) => `Array.from(rows, (row) => ${row})`,
+};
+type Spelling = keyof typeof SPELLINGS;
+
 /** The app with these statements in its body and this handler on its button. */
-function compile(handler: string, options: { body?: string; top?: string; row?: string; init?: string; optimize?: boolean } = {}): string {
+function compile(handler: string, options: {
+  body?: string; top?: string; row?: string; init?: string; optimize?: boolean; list?: Spelling;
+  /** More markup after the list. */
+  after?: string;
+} = {}): string {
   const row = options.row ?? '<li key={row.id}>{row.label}</li>';
   return compileModules({
     './App.tsx': `
@@ -15,14 +29,15 @@ function compile(handler: string, options: { body?: string; top?: string; row?: 
         ${options.body ?? ''}
         return <main>
           <button onClick={() => { ${handler} }}>go</button>
-          <ul>{rows.map((row) => ${row})}</ul>
+          <ul>{${SPELLINGS[options.list ?? 'map'](row)}}</ul>
+          ${options.after ?? ''}
         </main>;
       }`,
   }, { runtimePath: '@memoized-dom/runtime/testing', optimize: options.optimize })['./App.tsx']!;
 }
 
-/** The list's rows may be skipped. */
-const skips = (code: string) => /\.map\(rows, /.test(code);
+/** The list's rows may be skipped: `list.map(rows, unedited)` or `list.from(rows, unedited)`. */
+const skips = (code: string) => /\.(?:map|from)\(rows, /.test(code);
 /** The list is closed: it has no mutation root. */
 const closed = (code: string) => !code.includes('read: () => rows');
 
@@ -45,9 +60,31 @@ it('closes a list of records that only compiled code reaches', () => {
     'if (rows.includes(rows[0])) rows = [];',
     'const copy = rows.slice(); copy.reverse(); rows = copy;',
   ]) {
-    const code = compile(handler);
-    expect([handler, skips(code)]).toEqual([handler, true]);
-    expect([handler, closed(code)]).toEqual([handler, true]);
+    for (const list of ['map', 'from'] as const) {
+      const code = compile(handler, { list });
+      expect([list, handler, skips(code)]).toEqual([list, handler, true]);
+      expect([list, handler, closed(code)]).toEqual([list, handler, true]);
+    }
+  }
+});
+
+it('emits the skip in the spelling the author wrote', () => {
+  expect(compile('rows = rows.slice();', { list: 'map' })).toContain('.map(rows, true)');
+  const from = compile('rows = rows.slice();', { list: 'from' });
+  expect(from).toContain('.from(rows, true)');
+  expect(from).not.toContain('.map(rows');
+});
+
+it('rejects a row list over an alias of the root, in either spelling', () => {
+  // The rows would read the root through another name, which the proof does not follow,
+  // so no list of the root skips, not even the one written over `rows` itself.
+  const row = '<li key={row.id}>{row.label}</li>';
+  for (const list of ['map', 'from'] as const) {
+    const overAlias = SPELLINGS[list](row).replace('rows', 'view');
+    const code = compile('rows = rows.slice();', { list, body: 'const view = rows;', after: `<ol>{${overAlias}}</ol>` });
+    expect([list, code.includes(`.${list}(view)`), skips(code)]).toEqual([list, true, false]);
+    // Without the alias, the same list skips.
+    expect([list, skips(compile('rows = rows.slice();', { list }))]).toEqual([list, true]);
   }
 });
 
@@ -97,7 +134,42 @@ it('rejects a list whose items can leave proven code', () => {
     'const copy = rows.slice(); rows = copy; copy.reverse();',
     'delete rows[0].label;',
   ]) {
-    expect([handler, skips(compile(handler))]).toEqual([handler, false]);
+    for (const list of ['map', 'from'] as const) {
+      expect([list, handler, skips(compile(handler, { list }))]).toEqual([list, handler, false]);
+    }
+  }
+});
+
+it('lets a DOM event handler return the list, since the dispatch keeps nothing', () => {
+  // `onClick=(() => rows.reverse())` is the natural one-line handler in `.auwla`.
+  for (const button of [
+    '<button onClick={() => rows.reverse()}>r</button>',
+    '<button onClick={(() => rows.slice(1))}>s</button>',
+    '<button onClick={() => rows[0]}>i</button>',
+    '<button onClick={function () { return rows; }}>f</button>',
+  ]) {
+    for (const list of ['map', 'from'] as const) {
+      expect([list, button, skips(compile('', { list, after: button }))]).toEqual([list, button, true]);
+    }
+  }
+});
+
+it('rejects a returned list that something may keep', () => {
+  const top = 'function Pick(props) { return <button onClick={() => { globalThis.kept = props.onPick(); }}>p</button>; }';
+  for (const markup of [
+    // A component can call its prop and keep the result.
+    '<Pick onPick={() => rows} />',
+    // A spread takes the ordered path, which reads `then` from the result.
+    '<button {...globalThis.attrs} onClick={() => rows}>s</button>',
+    // Not an event: the attribute holds the function.
+    '<div data-pick={() => rows} />',
+  ]) {
+    for (const list of ['map', 'from'] as const) {
+      expect([list, markup, skips(compile('', { list, top, after: markup }))]).toEqual([list, markup, false]);
+      // The same markup with a handler returning nothing skips: only the result was the problem.
+      const quiet = markup.replace('() => rows', '() => { rows.reverse(); }');
+      expect([list, quiet, skips(compile('', { list, top, after: quiet }))]).toEqual([list, quiet, true]);
+    }
   }
 });
 
@@ -112,7 +184,9 @@ it('rejects items that are not records of primitives the program made', () => {
     '[lib.row()]',
     'lib',
   ]) {
-    expect([init, skips(compile('rows = rows.slice();', { init, top: 'class Row {}' }))]).toEqual([init, false]);
+    for (const list of ['map', 'from'] as const) {
+      expect([list, init, skips(compile('rows = rows.slice();', { init, top: 'class Row {}', list }))]).toEqual([list, init, false]);
+    }
   }
 });
 

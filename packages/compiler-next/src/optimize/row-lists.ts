@@ -1,6 +1,7 @@
 /**
- * Show `items.map((item, index) => <li key={…} …>)` through compiled rows when
- * the call is a text site's whole value (`runtime/src/row-list.ts`), the old
+ * Show `items.map((item, index) => <li key={…} …>)`, or the same callback in
+ * `Array.from(items, …)` (`mapping-calls.ts`), through compiled rows when the
+ * call is a text site's whole value (`runtime/src/row-list.ts`), the old
  * compiler's list shape (`wiki/decisions.md`, 2026-10-25).
  *
  * The row list evaluates the row's sites directly for each item instead of
@@ -31,6 +32,7 @@ import { cleanJsxText, unwrap } from '../core/plan/jsx';
 import { destructuredProps, isComponentCall } from '../features/components/plan';
 import { attributeValue } from '../features/components/dom';
 import { hasDynamicScope } from './closed-lists';
+import { mappingCall } from './mapping-calls';
 import type { Optimization } from '.';
 
 type Element = Extract<Node, { type: 'JSXElement' }>;
@@ -40,7 +42,7 @@ function rowList(site: Site, general: ModulePlan, values: ReadonlyMap<Node, Rend
   if (site.kind !== 'text' || site.primitive || site.spread === true) return null;
   const call = site.expression;
   if (!is.CallExpression(call) || calls.get(call)?.method?.rowReuse === undefined) return null;
-  const callback = call.arguments[0];
+  const callback = mappingCall(general.module.module, call)?.callback;
   if (callback === undefined || !is.ArrowFunctionExpression(callback) || is.BlockStatement(callback.body)) return null;
   if (!callback.params.every((param) => is.Identifier(param))) return null;
   let body: Node = callback.body;

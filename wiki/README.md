@@ -1,5 +1,9 @@
 # Wiki
 
+For JSX+ authoring work on `prototype/jsx-plus`, start at
+[wiki2/README.md](../wiki2/README.md). This wiki continues to describe the compiler
+rewrite and its acceptance work; the prototype links back to those contracts.
+
 Notes for the compiler rewrite (branch `compiler-rewrite`). A new session reads
 `../AGENTS.md` first, then these pages in this order, then continues from
 `status.md`.

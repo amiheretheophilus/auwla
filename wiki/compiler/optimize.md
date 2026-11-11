@@ -198,6 +198,7 @@ it for each `receiver.name(…)` that would otherwise be observed:
 | --- | --- |
 | A known read, with no callback or an inline one that edits no object | The call as written, with no observation |
 | `map` shown by a row list, or with reusable rows | `list.map(receiver)` or `mapRows(receiver, cache, callback)` |
+| `Array.from(items, row)`, likewise (`mapping-calls.ts`; lowered from the host-global path, not a method fact) | `list.from(items)` or `fromRows(items, cache, callback)` |
 | A known edit (`push`, `splice`, `sort`, …) | `editArray(receiver, "push", [args], notify)`: the native call, then the root is reported |
 | A callback that can edit, a named callback, an unknown name | The general `observeMutation` (`handlers.md`) |
 
@@ -245,12 +246,32 @@ and `#use` follows where a value goes, through every reference of every alias, i
 the program's own functions and across modules. A use it does not know rejects the
 list, which then takes the general path.
 
+A row list over the root is the one use that hands the items to rows. Both spellings
+of it count (`#rowsOver`, through `mappingCall` in `mapping-calls.ts`):
+`rows.map(row)` and the intrinsic `Array.from(rows, row)`, which JSX+ writes for a
+direct `for...of` loop in markup. The emitter then gives the skip to whichever the
+author wrote: `list.map(rows, unedited)` or `list.from(rows, unedited)`. A row list
+over anything but the root itself, such as an alias, rejects the list.
+
+A value returned from a function reaches whoever calls it, so `#useReturn` follows
+the function's calls. A function literal written as an `on*` attribute of a DOM
+element has only one caller, the event dispatch (`returnsToEventDispatch`).
+`addEventListener` ignores the result, and delegated dispatch only compares it with
+`false`, so returning the list or an item there is a use that keeps nothing. This
+admits the one-line handler `onClick={() => rows.reverse()}`. A component's prop and
+a host with a spread or reordered attributes (`isComponentCall`) stay unproven.
+`closed-lists.test.ts` runs its accept and reject lists in both spellings, and
+`conditionals-and-lists.closed.test.ts` runs every case a second time with its
+lists written as `Array.from`.
+
 | Written | Closed? |
 | --- | --- |
 | `rows = buildData(10)`, `rows.slice()`, `rows.concat(…)`, `[...rows, { id }]` | yes |
 | `rows[i] = rows[j]`, `rows.reverse()`, `rows.splice(i, 1)` | yes: moves |
 | `rows[i].label = 'x'`, a row's own `item.done = true` | yes: edits |
 | `items = removeRow(items, row)`, where the helper only copies | yes, followed into it |
+| `<button onClick={() => rows.reverse()}>`, `onClick={() => rows = rows.slice(1)}` | yes: a DOM element's event handler returns into the dispatch, which keeps nothing |
+| `<Pick onPick={() => rows} />`, `<button {...attrs} onClick={() => rows}>` | no: a component may keep the result; the spread path reads `then` from it |
 | `lib.track(rows[0])`, `held.set('a', rows[0])`, `picked = rows[0]` | no: it left |
 | `{ meta: { n: 1 } }`, `new Row()`, `{ get label() {…} }` | no: not a record of primitives |
 | `const row = rows[0]; row.label = 'x'` | no: the edit needs the alias index |
@@ -260,7 +281,7 @@ list, which then takes the general path.
 
 What it buys, with nothing checked at runtime:
 
-- `RowListPlan.moved`: `list.map(rows, unedited)`. A pass skips rows keeping their item,
+- `RowListPlan.moved`: `list.map(rows, unedited)` (or `list.from`). A pass skips rows keeping their item,
   and their index if they read one, unless an edit since the last pass changed that item.
   Each edit counts and names its item: `rows[i].label = x` is
   `(_item = rows[i], _edited_rows(_item, _item.label = x))`, which holds the item where
@@ -372,6 +393,17 @@ the method name. The callback must:
 `mapRows(receiver, cache, callback)`. A receiver that is not an array has its own
 `map`, which runs as written.
 
+`Array.from(items, row)` gets the same treatment (`optimize/mapping-calls.ts`,
+`rowReuse.form: 'from'`), because JSX+ lowers a direct `for...of` loop in
+markup to it (`../../wiki2/syntax.md`, "Direct loops"). Only the intrinsic: `Array`
+neither declared nor assigned in the module, no module-defined `from`, exactly two
+arguments, no spread or optional call. The emitter writes
+`fromRows(items, cache, callback)`. `iteratedItems` reads an array whose iterator is
+the intrinsic one directly and collects anything else with `Array.from` (sets,
+generators, strings, array-likes, an array with a replaced iterator). The cache
+then runs in its `dense` mode: a hole is an `undefined` item, as `Array.from` gives
+it, not a hole in the result.
+
 `runtime/src/list-map.ts` reuses an item's previous result when all of these hold:
 
 - the occurrence is the same value as before (duplicates keep their order);
@@ -455,6 +487,13 @@ lowering replaces the call with `list.map(receiver)` (`Names.of` gives both emit
 the same name). The callback is gone, so its stored JSX emits no render program:
 each row exists once in the output. A receiver that is not an array has its own
 `map`, which supplies the items.
+
+`Array.from(items, row)` with the same callback is a row list too; the call
+becomes `list.from(items)`, which reconciles the items `iteratedItems` gives, holes
+as `undefined` items. A closed root gets the same `moved` skip in either spelling
+([closed lists](#closed-lists)). `optimize/mapping-calls.dom.test.ts` checks recognition (the
+intrinsic only), both-mode identity through moves, duplicates, holes, a `Set`, an
+array-like and edits, for element and fragment rows, and the iterables above.
 
 Compiled rows share one destination-aware template and site program, just like
 stored values and leaf component rows. The template emitter selects node creation

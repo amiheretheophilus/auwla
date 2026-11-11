@@ -20,6 +20,7 @@
 import { createComputation, publishVersions, runningReadsChanged, trackRead } from './computation';
 import { buildInScope, reserveCreationScope } from './adoption';
 import { readListLength } from './list-values';
+import { iteratedItems } from './list-map';
 import { lisPositions } from './list';
 import type { RenderOwner } from './render-value';
 
@@ -94,6 +95,11 @@ export interface RowList {
    * keeping such an item, and its index if it reads one, then has nothing to evaluate.
    */
   map(receiver: readonly unknown[] | { map(callback: (item: unknown) => void): unknown }, unedited?: Unedited): void;
+  /**
+   * `Array.from(items, row)`: reconcile the rows with the items `Array.from`
+   * iterates (`iteratedItems`), where a hole is an `undefined` item.
+   */
+  from(items: unknown, unedited?: Unedited): void;
   /** Register a binding compared strictly with the row key, before the first map. */
   route(peek: () => unknown, version: () => number, key?: object): void;
   /** Unsupported keys need the authored map again. */
@@ -284,7 +290,8 @@ export function createRowList(
     }
   }
 
-  function reconcile(array: readonly unknown[], unedited: Unedited): void {
+  /** `dense`: a hole is an `undefined` item (`from`), not skipped (`map`). */
+  function reconcile(array: readonly unknown[], unedited: Unedited, dense: boolean): void {
     recover();
     // Rows are current only after a pass that finished, with no routed value or
     // invalidation since: those need the rows evaluated even with the same items.
@@ -314,7 +321,7 @@ export function createRowList(
     // committed rows; this pass then stops without committing anything.
     const superseded = (): boolean => pending !== created || disposed;
     for (let index = 0; index < length; index++) {
-      if (!(index in array)) continue;
+      if (!dense && !(index in array)) continue;
       if (indexes === null && index !== next.length) indexes = next.map((_, position) => position);
       const item = array[index];
       let row: Row | undefined = previous[last + 1];
@@ -516,7 +523,13 @@ export function createRowList(
         items = collected;
       }
 
-      reconcile(items, unedited);
+      reconcile(items, unedited, false);
+      if (!disposed) syncRoutes();
+    },
+    from(items, unedited = false) {
+      if (disposed) return;
+      trackRead(current, null, versionKey);
+      reconcile(iteratedItems(items), unedited, true);
       if (!disposed) syncRoutes();
     },
     route(peek, version, key) {

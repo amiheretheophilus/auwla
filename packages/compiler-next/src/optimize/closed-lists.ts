@@ -30,13 +30,14 @@ import { is } from 'yuku-ast';
 import type { Expression, Node } from 'yuku-parser';
 import type { BindingNode, SemanticGraph } from '../core/graph';
 import { isReactive } from '../core/graph/rules';
-import { unwrap } from '../core/plan/jsx';
+import { eventName, jsxAttributeName, unwrap } from '../core/plan/jsx';
 import type { ComponentPlan, ConditionalBranch, ModulePlan, MutationPlan, RowListPlan, Site } from '../core/plan/model';
 import { alwaysPrimitive } from '../core/plan/template';
 import { valueExportNames } from '../core/resolve/exports';
 import { functionValue, type FunctionNode } from '../core/resolve/functions';
-import { destructuredProps, type DestructuredProp } from '../features/components/plan';
+import { destructuredProps, isComponentCall, type DestructuredProp } from '../features/components/plan';
 import { callOnlyReads, effectFree, STABLE_GLOBALS } from './effects';
+import { mappingCall } from './mapping-calls';
 import { methodFact, redefinedNames } from './method-facts';
 import type { Optimization } from '.';
 
@@ -88,6 +89,34 @@ function enclosingFunction(module: Module, node: Node): Node | null {
     if (ancestor !== node && is.Function(ancestor)) return ancestor;
   }
   return null;
+}
+
+/**
+ * A function literal written as an event attribute of a DOM element, whose result
+ * nothing keeps: `<button onClick={() => rows.reverse()}>`. The runtime attaches it
+ * with `addEventListener`, which ignores the result (`runtime/src/setters.ts`), or
+ * calls it from delegated dispatch, which only compares the result with `false`
+ * (`runtime/src/delegated-events.ts`). A literal has no name, so nothing else can
+ * call it.
+ *
+ * Not a component's prop: the component may call it and keep the result. Not an
+ * element with a spread or reordered attributes either (`isComponentCall`): its
+ * ordered path reads `then` from the result (`runtime/src/dom-props.ts`).
+ */
+function returnsToEventDispatch(module: Module, fn: Node): boolean {
+  let parent = module.parentOf(fn);
+  while (parent !== null && (is.ParenthesizedExpression(parent) || is.TSAsExpression(parent)
+    || is.TSSatisfiesExpression(parent) || is.TSNonNullExpression(parent))) {
+    parent = module.parentOf(parent);
+  }
+  if (parent === null || !is.JSXExpressionContainer(parent)) return false;
+
+  const attribute = module.parentOf(parent);
+  if (attribute === null || !is.JSXAttribute(attribute) || eventName(jsxAttributeName(attribute)) === null) return false;
+
+  const opening = module.parentOf(attribute);
+  const element = opening === null ? null : module.parentOf(opening);
+  return element !== null && is.JSXElement(element) && !isComponentCall(element);
 }
 
 function bindingOfParameter(module: Module, param: Node): Binding | null {
@@ -514,6 +543,14 @@ class Proof {
       return;
     }
 
+    // The list a row list iterates, in either spelling: its rows are followed instead.
+    const rows = this.#rowsOver(module, node);
+    if (rows !== null) {
+      if (this.#isRoot(module, node)) this.#rowList(module, rows);
+      else this.#fail();
+      return;
+    }
+
     // Discarded, or only tested: strict comparison and truthiness run no code.
     if (is.ExpressionStatement(parent)) return;
     if (is.UnaryExpression(parent) && parent.operator === '!') return;
@@ -604,6 +641,8 @@ class Proof {
       return;
     }
     if (this.#callbacks.has(fn)) return;
+    // An event handler's result reaches only the event dispatch, which keeps nothing.
+    if (returnsToEventDispatch(module, fn)) return;
 
     // In another module a function holds only what a proven call passed it. In the
     // root's module it can return the root's items to anyone who calls it.
@@ -795,6 +834,20 @@ class Proof {
     this.#fail();
   }
 
+  /**
+   * The row list whose mapping call iterates `node`: `node.map(row)` or
+   * `Array.from(node, row)` (`mapping-calls.ts`). Both reconcile the same rows
+   * (`runtime/src/row-list.ts`), so the proof treats them alike.
+   */
+  #rowsOver(module: Module, node: Node): RowListPlan | null {
+    const parent = module.parentOf(node);
+    const call = parent !== null && is.MemberExpression(parent) ? module.parentOf(parent) : parent;
+    if (call === null || !is.CallExpression(call)) return null;
+    const rows = this.rowsByCall.get(call);
+    if (rows === undefined || mappingCall(module, call)?.items !== node) return null;
+    return rows;
+  }
+
   /** Whether `list` is the root itself, written directly. */
   #isRoot(module: Module, list: Node): boolean {
     const value = unwrap(list);
@@ -854,14 +907,6 @@ class Proof {
   #useMethod(module: Module, call: Call, callee: Member, name: string, kind: Kind): void {
     if (redefinedNames(module).has(name)) {
       this.#fail();
-      return;
-    }
-    if (name === 'map' && this.rowsByCall.has(call)) {
-      if (!this.#isRoot(module, callee.object)) {
-        this.#fail();
-        return;
-      }
-      this.#rowList(module, this.rowsByCall.get(call)!);
       return;
     }
 
@@ -1313,9 +1358,10 @@ export const closedLists: Optimization = {
 
     const roots = new Map<Binding, RowListPlan[]>();
     for (const rows of rowLists.values()) {
-      const callee = unwrap(rows.call.callee);
-      if (!is.MemberExpression(callee)) continue;
-      const receiver = unwrap(callee.object);
+      // `root.map(row)` or `Array.from(root, row)`: the list the rows iterate (`mapping-calls.ts`).
+      const items = mappingCall(module, rows.call)?.items;
+      if (items === undefined) continue;
+      const receiver = unwrap(items);
       const binding = is.Identifier(receiver) ? module.referenceOf(receiver)?.binding : null;
       if (binding === null || binding === undefined) continue;
       roots.set(binding, [...(roots.get(binding) ?? []), rows]);
