@@ -1,6 +1,6 @@
 # Markup bodies and grammar
 
-State: first core syntax slice implemented in `packages/jsx-plus`.
+State: core fixtures and initial host-context hardening implemented in `packages/jsx-plus`.
 Owns DX-14, DX-25, DX-26 and keyed identity questions DX-15.
 
 Precise rules now live in [spec/grammar.md](spec/grammar.md),
@@ -109,10 +109,28 @@ Conditional normalization groups the entire authored test before the generated
 ternary, preserving assignment, comma and nested-ternary precedence. A branch
 toggle with a ternary test is exercised in both compiler modes.
 
-The package uses the host parser to find expression/statement structure. Single
-object/function/class expressions are parsed in expression context; direct child
-declarations/loops remain outside the first core profile. Broader host contexts,
-malformed-token recovery, async/generator contexts and composed debugging maps
-need further coverage. Repeated suffix parsing/masking needs measurement and
-improvement before a frontend scalability claim. Module graphs, mapper/editor,
-SSR/adoption, Vite and backend config are not implemented by this slice.
+The package parses semicolon-separated child chunks in expression context first,
+including object/function/class values following another child. Conditional child
+bodies are parsed/cached before their contents are blanked for the host `if`
+parse. Host continuation/ASI within a chunk still comes from yuku. Direct child
+declarations/loops remain outside the first core profile.
+
+Parser-only async/generator contexts preserve `yield`/`await`, including yield
+arguments in attributes and conditions. No runtime function is inserted; final
+module parsing validates the authored enclosing context. A yield outside a
+generator still fails. Native execution checks cover suspension/resumption and
+await values; these are normalization evidence, not broad reactive-generator
+acceptance. `super`, `new.target`, private reads and nested template/attribute
+markup have focused syntax/mapping checks.
+
+Expressions ending at a nested markup mask now expand their authored end through
+the complete element, including a ternary's final arm or a yielded element. This
+also applies to conditional tests. JPX1003 locates an unfinished template's
+backtick, JPX1004 locates an incomplete expression's block end, and JPX1007 locates
+an unclosed conditional's opening brace. Tests retain the token-before-block
+diagnostic precedence for an unterminated string.
+
+Broader host contexts, ASI ambiguities, malformed comment/regex recovery and
+composed debugging maps need further coverage. Repeated suffix parsing/masking
+needs measurement and improvement before a frontend scalability claim. Module
+graphs, mapper/editor, SSR/adoption, Vite and backend config remain future work.

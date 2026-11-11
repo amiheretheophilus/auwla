@@ -4,7 +4,7 @@ Updated: 2026-11-11. Branch: `prototype/jsx-plus`.
 
 ## Current slice
 
-**P2-PARSE: first implementation slice built in its own package.**
+**P2-HARDEN: first host-context and child-boundary slice built.**
 
 `packages/jsx-plus` (`@memoized-dom/jsx-plus`) owns new syntax and copied-span
 mappings. Its normalizer produces standard TSX; its single-UI-module `compile()`
@@ -25,24 +25,27 @@ included and exercised by the execution tests.
 
 ## Baseline and evidence
 
-The branch originated from `compiler-rewrite` at `595171c4`. This implementation
-started from clean documentation baseline `c7503ff8`. Results below cover this
-slice's package, workspace lockfile and documentation changes, rather than
+The branch originated from `compiler-rewrite` at `595171c4`. This hardening slice
+started from clean implementation baseline `cdb9f359`. Results below cover this
+slice's host adapter, normalizer, tests and documentation changes, rather than
 claiming the baseline already included the implementation.
 
-- In `packages/jsx-plus`, `bun check`: no type errors in 179 files.
-- In that package, `bun test`: **52 passed, 0 failed, 121 assertions**, two files.
+- In `packages/jsx-plus`, `bun check`: no type errors in 181 files.
+- In that package, `bun test`: **89 passed, 0 failed, 338 assertions**, three files.
   Includes all 6 syntax-view/range fixtures, 5 primary diagnostic fixtures and
   9 extended behavior programs in both compiler modes (18 executions).
   Existing ref assignment/clearing and keyed node preservation are checked.
-  Additional cases cover lexical boundaries, mappings, Unicode/CRLF, the counter,
-  unchanged TSX semantics and conditional-test precedence in both modes.
-- `bun run wiki2/spec/check.ts`: 27 fixture integrity checks, 7 host probes and
-  18 ordinary-JSX equivalent executions pass. This independent baseline runner
-  still labels extended syntax NOT RUN; the package suite above supplies that
-  separate evidence.
-- `bun check -p wiki2/spec/tsconfig.json`: no errors in 172 files.
-- Documentation audit: 20 documents, 127 local links/heading targets and 23
+  New cases cover async/generator syntax, yielded markup/attributes/conditions,
+  native suspension/resumption and await values, object/function/class siblings,
+  nested conditional ranges and incomplete-template/block diagnostic ranges.
+  Object-valued branch children and ternaries ending in markup also execute
+  through compiler-next in both modes.
+- The independent `wiki2/spec/check.ts` baseline and its type check passed at
+  `cdb9f359`: 27 fixture integrity checks, 7 host probes, 18 ordinary-JSX equivalent
+  executions, no type errors in 172 files. Not rerun for this slice: its code,
+  fixture catalog and compiler/runtime dependencies are unchanged. That runner
+  labels extended syntax NOT RUN; package tests supply the separate evidence.
+- Documentation audit: 20 documents, 128 local links/heading targets and 25
   existing mapped paths checked with no errors. `git diff --check` passed.
 - Full root suite and timing benchmarks were not run. This slice changes no
   shared compiler/runtime source and does not close their acceptance gates.
@@ -54,8 +57,9 @@ handoff with `git log -1 -- wiki2/status.md`.
 ## Next
 
 **P2-HARDEN**, paired early with **P3-TOOL**. Expand host-expression contexts and
-malformed-input cases, especially async/generator contexts and syntax inside
-attributes/templates. Preserve reduced failures and exact authored ranges.
+malformed-input cases beyond the checked async/generator and template/attribute
+examples, especially ASI ambiguities and malformed comment/regex recovery.
+Preserve reduced failures and exact authored ranges.
 Measure and improve repeated suffix parsing/masking before any frontend
 scalability claim. See [syntax.md](syntax.md) and [plan.md](plan.md).
 
@@ -64,6 +68,11 @@ at its authored span and one safe rename edit. Reuse the normalizer's source
 understanding, keeping generated scaffolding unmapped. Exact copied-span mappings
 already exist; a real content mapper and final-JavaScript debugging source maps
 do not. See [tooling.md](tooling.md).
+
+The host adapter's permissive parser context is never emitted/evaluated. Final
+module validation still uses the authored context. Explicit semicolon chunks
+and cached conditional bodies prevent expression children from being parsed as
+declarations/blocks. No language rule changed; see [syntax.md](syntax.md).
 
 ## Handoff cautions
 

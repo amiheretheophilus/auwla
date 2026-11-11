@@ -37,6 +37,13 @@ Equal-width masks are internal scanning aids; emitted code is built from copied
 authored spans and generated syntax. Generated braces have no editable authored
 mapping. These frontend mappings are not final-JavaScript source maps.
 
+Fragment parsing uses an async/generator context only inside the parser, then
+validates the normalized complete module in its authored context. No synthetic
+function is emitted around children. Semicolon-separated expression chunks and
+cached conditional child bodies preserve object/function/class values after
+siblings. Host-context tests check native yield/await behavior separately from
+the reactive compiler's execution tests.
+
 This is an initial implementation, not full-language acceptance. Its tests run
 the current spec fixtures and additional lexical/mapping cases. Scanner reparses
 and complete host-expression coverage need further work; no performance, editor,

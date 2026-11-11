@@ -1,6 +1,6 @@
 # Architecture and code map
 
-State: first syntax slice built in the separate `packages/jsx-plus` package.
+State: initial syntax and host-context hardening built in `packages/jsx-plus`.
 Updated: 2026-11-11. Existing compiler/runtime features, including refs, are built.
 Owns DX-28/DX-31 and the integration side of DX-03.
 
@@ -40,6 +40,17 @@ Normalizing extended syntax is this package's task. Yuku's real host tokens and
 AST delimit code; equal-width temporary masks preserve authored offsets while
 scanning nested markup. Emitted TSX is assembled from copied spans and generated
 syntax, never from those masks. Existing compiler-next parses that TSX normally.
+Host fragments use a permissive async/generator parser context to retain `yield`
+and `await` expression grammar. That context is parser input only, never emitted
+or evaluated; the completed module is validated in its actual enclosing context.
+Parser-owned AST nodes keep their offsets; a token view and explicit origin
+translate fragment positions back to authored ranges.
+
+Explicit top-level semicolons divide child chunks. Each is tried as a host
+expression before falling back to statements/ASI. Conditional bodies are parsed
+as child bodies and cached before their contents are blanked for the outer `if`
+parse, preserving line breaks and offsets. This keeps object/function/class
+expressions from being reinterpreted as declarations or blocks after a sibling.
 The current implementation reparses while discovering nested markup; it makes
 no frontend performance claim. A future checking projection shares this syntax
 understanding while producing TypeScript-specific scaffolding.
@@ -51,12 +62,14 @@ All paths are relative to the repository root and exist now.
 | Path | Responsibility |
 | --- | --- |
 | `packages/jsx-plus/src/normalize.ts` | Host-token scanning, nested markup, expression/conditional children and TSX normalization |
+| `packages/jsx-plus/src/host.ts` | Parser-only fragment context, token slices and untouched host AST offsets |
 | `packages/jsx-plus/src/model.ts` | Syntax views, authored ranges and copied-span mapping types |
 | `packages/jsx-plus/src/source.ts` | Copied/generated pieces, assembly and exact authored-offset lookup |
 | `packages/jsx-plus/src/diagnostics.ts` | Authored syntax diagnostic ranges and line/column reporting |
 | `packages/jsx-plus/src/compile.ts` | Single-UI-module public-API delegation and mapped compiler diagnostics |
 | `packages/jsx-plus/src/index.ts` | Public package exports |
 | `packages/jsx-plus/tests/parse.test.ts` | Spec views/errors, lexical boundaries and mapping checks |
+| `packages/jsx-plus/tests/host.test.ts` | Host contexts, semicolon chunks, cached child ranges, native suspension and malformed-input regressions |
 | `packages/jsx-plus/tests/compile.test.ts` | Extended-source execution, existing refs and keyed nodes |
 | `packages/jsx-plus/examples/counter.auwla` | Complete counter compiled and clicked by the execution tests |
 | `packages/jsx-plus/AGENTS.md` | Package ownership boundary and focused checks |

@@ -20,6 +20,10 @@
 - DX-31 clarifies the implementation boundary: separate `packages/jsx-plus`
   normalizes into the existing compiler-next public API. Initial package fixtures
   now execute; no existing compiler/runtime feature is copied or modified.
+- Implementation hardening adds parser-only async/generator contexts, child
+  expression chunks, cached conditional bodies, nested-markup tail ranges and
+  additional JPX1003/1004/1007 checks. These repair implementation gaps under the
+  existing rules; no normative grammar, fixture expectation or code is revised.
 
 Subsequent revisions name the affected rule/fixture IDs, observable change,
 reason, and whether an accepted user direction is being revised. Keep open

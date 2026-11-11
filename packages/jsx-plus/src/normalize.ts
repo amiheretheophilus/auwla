@@ -5,9 +5,10 @@
  * Only the emitted TSX is handed to compiler-next; masks never leave this file.
  */
 import { parse, TokenKind as K } from 'yuku-parser';
-import type { Node, TokenList, ParseResult, IfStatement } from 'yuku-parser';
+import type { Node, ParseResult, IfStatement } from 'yuku-parser';
 import { JsxPlusError } from './diagnostics';
-import type { BlockView, ChildView, ElementView, ExpressionView, FragmentView, IfView, NormalizedSource } from './model';
+import { childExpression, childStatements, type HostTokens } from './host';
+import type { BlockView, ChildView, ElementView, ExpressionView, FragmentView, IfView, NormalizedSource, Range } from './model';
 import { assemble, copied, generated, replaceRange, type Piece, type Replacement } from './source';
 
 interface Markup extends Replacement {
@@ -28,7 +29,7 @@ interface Delimiter {
 
 const lex = (source: string): ParseResult => parse(source, { lang: 'tsx', sourceType: 'module', tokens: true });
 
-function opening(tokens: TokenList, index: number): boolean {
+function opening(tokens: HostTokens, index: number): boolean {
   return tokens.kind(index) === K.LessThan && index + 1 < tokens.length
     && (tokens.kind(index + 1) === K.JSXIdentifier || tokens.kind(index + 1) === K.GreaterThan);
 }
@@ -39,6 +40,8 @@ function mask(source: string, start: number, end: number): string {
 }
 
 class Reader {
+  readonly blocks = new Map<number, Children>();
+
   constructor(readonly source: string, readonly filename: string) {}
 
   error(code: string, message: string, start: number, end = start + 1): never {
@@ -91,7 +94,7 @@ class Reader {
     // Attribute expressions can themselves contain extended markup. Normalize
     // those recursively before using the host tokens to locate the outer `>`.
     for (;;) {
-      const tokens = lex(shadow).tokens!;
+      const tokens = childStatements(shadow).tokens;
       let braces = 0;
       let nested: Markup | undefined;
       const first = 0;
@@ -149,8 +152,8 @@ class Reader {
     let shadow = this.source.slice(start);
 
     for (;;) {
-      const result = lex(shadow);
-      const tokens = result.tokens!;
+      const result = childStatements(shadow);
+      const tokens = result.tokens;
       const stack: Delimiter[] = [];
       let expectChildBlock = false;
       let changed = false;
@@ -185,46 +188,8 @@ class Reader {
           const closingName = this.source.slice(position + 2, closeEnd).trim();
           if (closingName !== name) this.error('JPX1001', 'Closing tag does not match its opening tag', position, closeEnd + 1);
           const bodyCode = shadow.slice(0, position - start);
-          // A body containing one host expression may begin with an object,
-          // function or class. Parse it in expression context first; a Program
-          // would reinterpret those as declarations/blocks. Multiple child
-          // statements and direct `if` fall through to the statement parser.
-          const expressionResult = lex(`(${bodyCode})`);
-          const expressionStatement = expressionResult.program.body[0];
-          if (!expressionResult.diagnostics.some((entry) => entry.severity === 'error')
-            && expressionStatement?.type === 'ExpressionStatement'
-            && expressionStatement.expression.type === 'ParenthesizedExpression') {
-            const expression = expressionStatement.expression.expression;
-            if (expression.type !== 'SequenceExpression') {
-              const child = this.expressionChild(expression, start - 1, nested);
-              return { children: { views: [child.view], pieces: child.pieces }, closeStart: position, end: closeEnd + 1 };
-            }
-          }
-          const parsed = lex(bodyCode);
-          const problem = parsed.diagnostics.find((entry) => entry.severity === 'error');
-          if (problem !== undefined) {
-            const offset = start + problem.start;
-            if (problem.start >= bodyCode.length) this.error('JPX1004', 'Incomplete child expression', position, closeEnd + 1);
-            const token = parsed.tokens!.at(problem.start);
-            // A self-closing sibling after a non-markup value can be read as a
-            // broken `< ... / >` comparison in host mode. Confirm the candidate
-            // with the host JSX parser, then point at the whole opening tag.
-            if (token >= 1 && parsed.tokens!.kind(token) === K.GreaterThan
-              && parsed.tokens!.kind(token - 1) === K.Slash) {
-              for (let candidate = token - 2; candidate >= 0; candidate--) {
-                if (parsed.tokens!.kind(candidate) !== K.LessThan) continue;
-                const from = parsed.tokens!.start(candidate);
-                const to = parsed.tokens!.end(token);
-                const tag = lex(bodyCode.slice(from, to));
-                if (!tag.diagnostics.some((entry) => entry.severity === 'error') && opening(tag.tokens!, 0)) {
-                  this.error('JPX1005', 'Separate this sibling tag from the preceding expression with a semicolon', start + from, start + to);
-                }
-                break;
-              }
-            }
-            this.error('JPX1005', problem.message, offset, token < 0 ? offset + 1 : start + parsed.tokens!.end(token));
-          }
-          return { children: this.children(parsed.program.body, start, nested), closeStart: position, end: closeEnd + 1 };
+          const children = this.childCode(bodyCode, start, nested, [position, closeEnd + 1]);
+          return { children, closeStart: position, end: closeEnd + 1 };
         }
 
         if (kind === K.LeftParen || kind === K.LeftBracket || kind === K.LeftBrace || kind === K.TemplateHead) {
@@ -234,7 +199,23 @@ class Reader {
           childBlock: kind === K.LeftBrace && expectChildBlock, ifHeader, start: position });
           expectChildBlock = false;
         } else if (stack.length > 0 && kind === stack[stack.length - 1]!.close) {
-          expectChildBlock = stack.pop()!.ifHeader;
+          const delimiter = stack.pop()!;
+          expectChildBlock = delimiter.ifHeader;
+          if (delimiter.childBlock && !this.blocks.has(delimiter.start)) {
+            const from = delimiter.start - start + 1;
+            const to = position - start;
+            const children = this.childCode(shadow.slice(from, to), start + from, nested, [position, position + 1]);
+            this.blocks.set(delimiter.start, children);
+            // A conditional body uses the child grammar, not a JS statement
+            // list. Parse it first, then mask its contents for the outer host
+            // `if` parse. Cached syntax/pieces retain its actual child values.
+            if (to > from) {
+              const blank = shadow.slice(from, to).replace(/[^\r\n]/g, ' ');
+              shadow = shadow.slice(0, from) + blank + shadow.slice(to);
+            }
+            changed = true;
+            break;
+          }
         } else if (kind === K.Else && childLevel) {
           expectChildBlock = true;
         } else {
@@ -245,13 +226,92 @@ class Reader {
       if (changed) continue;
       const unterminated = result.diagnostics.find((entry) => /Unterminated (string|template)/.test(entry.message));
       if (unterminated !== undefined) {
+        const template = /template/.test(unterminated.message)
+          ? stack.findLast((delimiter) => delimiter.close === K.TemplateTail) : undefined;
+        if (template !== undefined) {
+          this.error('JPX1003', 'Unterminated child template', template.start);
+        }
         const end = tokens.length === 0 ? 0 : tokens.end(tokens.length - 1);
         let quote = end;
         while (/\s/.test(shadow[quote] ?? '') && quote < shadow.length) quote++;
         this.error('JPX1003', 'Unterminated child string or template', start + quote);
       }
+      const unclosedBlock = stack.find((delimiter) => delimiter.childBlock);
+      if (unclosedBlock !== undefined) {
+        this.error('JPX1007', 'Unclosed conditional child block', unclosedBlock.start);
+      }
       this.error('JPX1002', 'Unclosed element or fragment', opener, start);
     }
+  }
+
+  childCode(code: string, start: number, nested: readonly Markup[], bodyEnd: Range): Children {
+    const tokens = childStatements(code).tokens;
+    const closes: number[] = [];
+    const chunks: Range[] = [];
+    let from = 0;
+
+    // A top-level semicolon is an explicit child boundary in G-BOUNDARY. Parse
+    // each chunk in expression context before trying host statements, so an
+    // object/function/class after another child keeps its expression grammar.
+    // ASI and expression continuation within each chunk still belong to yuku.
+    for (let index = 0; index < tokens.length; index++) {
+      const kind = tokens.kind(index);
+      if (kind === K.LeftParen) closes.push(K.RightParen);
+      else if (kind === K.LeftBracket) closes.push(K.RightBracket);
+      else if (kind === K.LeftBrace) closes.push(K.RightBrace);
+      else if (kind === K.TemplateHead) closes.push(K.TemplateTail);
+      else if (closes.length > 0 && kind === closes[closes.length - 1]) closes.pop();
+      else if (kind === K.Semicolon && closes.length === 0) {
+        chunks.push([from, tokens.start(index)]);
+        from = tokens.end(index);
+      }
+    }
+    chunks.push([from, code.length]);
+
+    const children: Children = { views: [], pieces: [] };
+    for (const [from, to] of chunks) {
+      const end: Range = to < code.length ? [start + to, start + to + 1] : bodyEnd;
+      const chunk = this.childChunk(code.slice(from, to), start + from, nested, end);
+      children.views.push(...chunk.views);
+      children.pieces.push(...chunk.pieces);
+    }
+    return children;
+  }
+
+  childChunk(code: string, start: number, nested: readonly Markup[], bodyEnd: Range): Children {
+    const expressionResult = childExpression(code);
+    const expression = expressionResult.expression;
+    if (!expressionResult.diagnostics.some((entry) => entry.severity === 'error')
+      && expression !== undefined && expression.type !== 'SequenceExpression') {
+      const child = this.expressionChild(expression, start - expressionResult.origin, nested);
+      return { views: [child.view], pieces: child.pieces };
+    }
+
+    const parsed = childStatements(code);
+    const problem = parsed.diagnostics.find((entry) => entry.severity === 'error');
+    if (problem !== undefined) {
+      const offset = start + problem.start;
+      if (problem.start >= code.length) {
+        this.error('JPX1004', 'Incomplete child expression at its body end', bodyEnd[0], bodyEnd[1]);
+      }
+      const token = parsed.tokens.at(problem.start);
+      // Host parsing may read a sibling as a broken `< ... / >` comparison.
+      // Confirm the complete tag independently before suggesting a separator.
+      if (token >= 1 && parsed.tokens.kind(token) === K.GreaterThan && parsed.tokens.kind(token - 1) === K.Slash) {
+        for (let candidate = token - 2; candidate >= 0; candidate--) {
+          if (parsed.tokens.kind(candidate) !== K.LessThan) continue;
+          const from = parsed.tokens.start(candidate);
+          const to = parsed.tokens.end(token);
+          const tag = lex(code.slice(from, to));
+          if (!tag.diagnostics.some((entry) => entry.severity === 'error') && opening(tag.tokens!, 0)) {
+            this.error('JPX1005', 'Separate this sibling tag from the preceding expression with a semicolon', start + from, start + to);
+          }
+          break;
+        }
+      }
+      this.error('JPX1005', problem.message, offset, token < 0 ? offset + 1 : start + parsed.tokens.end(token));
+    }
+    return this.children(parsed.statements, start - parsed.origin, nested);
   }
 
   children(statements: readonly Node[], base: number, nested: readonly Markup[]): Children {
@@ -272,7 +332,7 @@ class Reader {
         // actual declaration statements such as `const x = ...` stay deferred.
         if (node.type === 'FunctionDeclaration' || node.type === 'ClassDeclaration' || node.type === 'BlockStatement') {
           const candidate = assemble(replaceRange(this.source, base + node.start, base + node.end, nested)).code;
-          if (!lex(`(${candidate})`).diagnostics.some((entry) => entry.severity === 'error')) {
+          if (!childExpression(candidate).diagnostics.some((entry) => entry.severity === 'error')) {
             const child = this.expressionChild(node, base, nested);
             views.push(child.view);
             pieces.push(...child.pieces);
@@ -294,11 +354,18 @@ class Reader {
     const start = base + node.start;
     const maskedEnd = base + node.end;
     const markup = nested.find((entry) => entry.start === start && maskedEnd === start + 1);
-    const end = markup?.end ?? maskedEnd;
+    const end = this.authoredEnd(maskedEnd, nested);
     return markup === undefined
       ? { view: this.expression(start, end), pieces: [generated('{'),
         ...replaceRange(this.source, start, end, nested), generated('}')] }
       : { view: markup.view, pieces: [...markup.pieces] };
+  }
+
+  authoredEnd(maskedEnd: number, nested: readonly Markup[]): number {
+    // A host expression can end at the one-character mask for nested markup,
+    // e.g. `yield <b>...</b>` or a ternary's last arm. Its authored extent must
+    // include the entire element before replaceRange can splice it back in.
+    return nested.find((entry) => entry.start + 1 === maskedEnd)?.end ?? maskedEnd;
   }
 
   expression(start: number, end: number): ExpressionView {
@@ -307,12 +374,12 @@ class Reader {
 
   block(node: Node, base: number, nested: readonly Markup[]): { view: BlockView; pieces: Piece[] } {
     if (node.type !== 'BlockStatement') this.error('JPX1006', 'Conditional children require a block body', base + node.start, base + node.end);
-    const children = this.children(node.body, base, nested);
+    const children = this.blocks.get(base + node.start) ?? this.children(node.body, base, nested);
     return { view: { kind: 'block', range: [base + node.start, base + node.end], children: children.views }, pieces: children.pieces };
   }
 
   conditional(node: IfStatement, base: number, nested: readonly Markup[]): { view: IfView; pieces: Piece[] } {
-    const test = this.expression(base + node.test.start, base + node.test.end);
+    const test = this.expression(base + node.test.start, this.authoredEnd(base + node.test.end, nested));
     const consequent = this.block(node.consequent, base, nested);
     const alternate = node.alternate === null ? null : node.alternate.type === 'IfStatement'
       ? this.conditional(node.alternate, base, nested) : this.block(node.alternate, base, nested);

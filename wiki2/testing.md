@@ -45,6 +45,13 @@ It checks authored views/errors and compiles extended source through the package
 public-API facade into compiler-next, executing both optimization modes. Code
 stays in that package; existing compiler-next/runtime/data sources are unchanged.
 
+`tests/host.test.ts` also evaluates normalized source using Bun's ordinary TSX
+transpiler and a plain JSX value factory. This verifies native generator
+suspension/resumption and async values independently of reactive compilation.
+It does not establish compiler-next's full async/generator runtime acceptance.
+Compiled UI tests separately exercise object-valued branch children and ternaries
+ending in markup in both compiler modes.
+
 Acceptance IDs are owned by [syntax.md](syntax.md), [refs.md](refs.md) and
 [tooling.md](tooling.md); later features add theirs on their concept page.
 Actual and planned prototype files are mapped in [architecture.md](architecture.md).

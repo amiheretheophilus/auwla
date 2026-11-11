@@ -81,6 +81,34 @@ it('runs the package counter example through compiler-next', () => {
 });
 
 for (const optimize of [true, false]) {
+  it(`evaluates object children in conditional branches with optimize=${optimize}`, () => {
+    const source = `export function App() {
+      let ready = true;
+      return <button onClick={() => ready = !ready}>
+        if (ready) { "Value: "; { value: 1 }.value; "!" }
+        else { "Other: "; { value: 2 }.value; "?" }
+      </button>;
+    }`;
+    const { container } = start(source, optimize);
+    expect(container.textContent).toBe('Value: 1!');
+    container.querySelector('button')!.click();
+    expect(container.textContent).toBe('Other: 2?');
+  });
+
+  it(`updates a ternary ending in nested markup with optimize=${optimize}`, () => {
+    const source = `export function App() {
+      let ready = true;
+      return <button onClick={() => ready = !ready}>
+        ready ? <b>"Yes"</b> : <i>"No"</i>
+      </button>;
+    }`;
+    const { container } = start(source, optimize);
+    expect(container.querySelector('b')!.textContent).toBe('Yes');
+    container.querySelector('button')!.click();
+    expect(container.querySelector('b')).toBeNull();
+    expect(container.querySelector('i')!.textContent).toBe('No');
+  });
+
   it(`preserves a ternary inside an if test with optimize=${optimize}`, () => {
     const source = `export function App() {
       let ready = true;
