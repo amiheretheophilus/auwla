@@ -1,6 +1,12 @@
 import { parse } from 'yuku-parser';
 import type { Diagnostic, Node, ParseResult, TokenList } from 'yuku-parser';
 
+/** Parser-only placeholder retaining original UTF-16 width and line endings. */
+export function maskMarkup(source: string, start: number, end: number): string {
+  return source.slice(0, start) + '_'
+    + source.slice(start + 1, end).replace(/[^\r\n]/g, ' ') + source.slice(end);
+}
+
 /** Only this token view adjusts offsets; parser-owned AST nodes stay untouched. */
 export interface HostTokens {
   readonly length: number;
@@ -43,6 +49,7 @@ export interface HostFragment {
   readonly statements: readonly Node[];
   readonly tokens: HostTokens;
   readonly diagnostics: readonly Diagnostic[];
+  readonly comments: readonly { readonly start: number; readonly end: number }[];
 }
 
 function fragment(source: string, expression: boolean): HostFragment {
@@ -63,6 +70,9 @@ function fragment(source: string, expression: boolean): HostFragment {
     diagnostics: result.diagnostics.map((entry) => ({
       ...entry, start: offset(entry.start), end: offset(entry.end),
     })),
+    comments: result.comments
+      .filter((comment) => comment.start >= prefix.length && comment.end <= prefix.length + source.length)
+      .map((comment) => ({ start: offset(comment.start), end: offset(comment.end) })),
   };
 }
 

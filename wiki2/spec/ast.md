@@ -1,6 +1,6 @@
 # Syntax model and conformance view
 
-0.1-draft, revision 1. Owns G-SOURCE and A-RANGE/A-NODES/A-NORMALIZE.
+0.1-draft, revision 2. Owns G-SOURCE and A-RANGE/A-NODES/A-NORMALIZE.
 
 ## Purpose (A-NODES)
 
@@ -11,8 +11,9 @@ replace yuku's JavaScript AST. Production internal classes may differ if their
 view and normalization satisfy this contract.
 
 The new constructs are expression children without a JSX container and direct
-conditional children. Elements, attributes, host expressions and refs keep their
-existing definitions. A ref is an ordinary JSX attribute expression, never a new
+conditional children, plus parenthesized attribute values. Those values normalize
+to existing JSX attribute expressions; no additional attribute AST is defined.
+A ref is an ordinary JSX attribute expression, never a new
 kind of declaration.
 
 ## Locations (A-RANGE)
@@ -93,6 +94,8 @@ resolver bindings, runtime IDs and optimization decisions do not appear in it.
   reaches its normal resolver scope and subsequent graph/plan stages.
 - Direct expression children become normal expression sites; a quoted child
   stays a host string expression rather than being reinterpreted as JSX raw text.
+- `prop=(expression)` becomes `prop={(expression)}`. The original parentheses
+  and expression keep exact copied spans; inserted JSX braces stay unmapped.
 - Conditional bodies become existing conditional/fragment/child machinery with
   the semantics in [semantics.md](semantics.md). No new branch runtime is defined.
 - Preserve native operations and authored evaluation order. Do not implement a

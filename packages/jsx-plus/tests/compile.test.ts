@@ -82,6 +82,34 @@ it('runs the package counter example through compiler-next', () => {
 });
 
 for (const optimize of [true, false]) {
+  it(`runs the authored for-loop example with separate row closures and optimize=${optimize}`, () => {
+    const source = readFileSync(new URL('../examples/task-board/ForLoop.auwla', import.meta.url), 'utf8');
+    const { container } = start(source, optimize);
+    const rows = () => [...container.querySelectorAll('.tasks li')];
+
+    expect(rows()).toHaveLength(2);
+    rows()[0]!.querySelector<HTMLButtonElement>('.task-toggle')!.click();
+    expect(rows()[0]!.querySelector('.task-toggle')!.getAttribute('aria-pressed')).toBe('true');
+    expect(rows()[1]!.querySelector('.task-toggle')!.getAttribute('aria-pressed')).toBe('false');
+    expect(container.querySelector('.summary')!.textContent).toBe('1 task left');
+
+    container.querySelector<HTMLButtonElement>('.filter-open')!.click();
+    expect(rows()).toHaveLength(1);
+    expect(rows()[0]!.textContent).toContain('Try the loop callbacks');
+    container.querySelector<HTMLButtonElement>('.add')!.click();
+    expect(rows()).toHaveLength(2);
+    expect(rows()[1]!.textContent).toContain('Task 3');
+    rows()[1]!.querySelector<HTMLButtonElement>('.remove')!.click();
+    expect(rows()).toHaveLength(1);
+    rows()[0]!.querySelector<HTMLButtonElement>('.task-toggle')!.click();
+    expect(rows()).toHaveLength(0);
+    expect(container.querySelector('.empty')!.textContent).toBe('No open tasks.');
+
+    container.querySelector<HTMLButtonElement>('.filter-open')!.click();
+    expect(rows()).toHaveLength(2);
+    expect(container.querySelector('.empty')).toBeNull();
+  });
+
   it(`runs the authored task board through its main editing flow with optimize=${optimize}`, () => {
     const source = readFileSync(new URL('../examples/task-board/App.auwla', import.meta.url), 'utf8');
     const { container } = start(source, optimize);
@@ -110,6 +138,7 @@ for (const optimize of [true, false]) {
     form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
     expect(rows()).toHaveLength(4);
     expect(rows()[3]!.textContent).toContain('Ship the authoring example');
+    expect(rows()[3]!.querySelector('.remove')!.getAttribute('aria-label')).toBe('Remove Ship the authoring example');
     expect(draft.value).toBe('');
     expect(document.activeElement).toBe(draft);
     expect(container.querySelector('.summary')!.textContent).toBe('3 tasks left');

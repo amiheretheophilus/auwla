@@ -1,5 +1,15 @@
 # Spec revisions
 
+## 0.1-draft, revision 2 — 2026-11-11
+
+- User-directed G-ATTR/S-ATTR extension: accept `prop=(expression)` alongside
+  existing `prop={expression}`. Normalize to ordinary JSX with native evaluation
+  and event timing; no implicit callback or `@event` feature is added.
+- Preserve copied parentheses/expressions and leave generated braces unmapped.
+  Existing refs and `.tsx` attribute grammar retain their existing behavior.
+- Add PARSE-007, ERROR-006 and ATTR-001, plus JPX1008 for an unclosed outer
+  attribute parenthesis. JPX1003 also covers unterminated literals in these values.
+
 ## 0.1-draft, revision 1 — 2026-11-11
 
 - Establish a core extension spec before parser implementation, following the

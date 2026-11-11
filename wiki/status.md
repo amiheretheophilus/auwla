@@ -10,6 +10,11 @@ profile passes 34 flow targets. Bounded mapper reuse and a runnable authored
 task-board example are now built; their evidence, limits and next work are in
 [wiki2/status.md](../wiki2/status.md).
 
+The prototype also exposed an uncached attribute-setter mismatch: ARIA false
+was omitted and true became empty. `runtime/src/setters.ts` now follows the
+existing cached/spread rules; focused DOM and compiled loop examples cover it.
+See [dynamic attribute values](compiler/core.md#dynamic-attribute-values).
+
 ## Current: Phase 10 (2026-11-06)
 
 **Done: a runtime `namespace`, `import x = a.b`, `import x = require('m')` and `export =` are

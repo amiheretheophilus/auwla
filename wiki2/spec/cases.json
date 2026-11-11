@@ -1,7 +1,32 @@
 {
   "specVersion": "0.1-draft",
-  "revision": 1,
+  "revision": 2,
   "cases": [
+    {
+      "id": "PARSE-007",
+      "level": "parse",
+      "rules": ["G-ATTR", "A-RANGE"],
+      "source": "<button aria-label=(\"Remove \" + task.title) />",
+      "expected": {
+        "specVersion": "0.1-draft",
+        "root": { "kind": "element", "range": [0, 46], "name": "button", "children": [] }
+      }
+    },
+    {
+      "id": "ERROR-006",
+      "level": "diagnostics",
+      "rules": ["G-ATTR", "D-CODES"],
+      "source": "<input title=(name />",
+      "expected": { "code": "JPX1008", "severity": "error", "range": [13, 14] }
+    },
+    {
+      "id": "ATTR-001",
+      "level": "behavior",
+      "rules": ["G-ATTR", "S-ATTR"],
+      "source": "export function App() { let count = 0; return <button aria-label=(\"Count \" + count) onClick=(() => count++)>count</button>; }",
+      "jsxEquivalent": "export function App() { let count = 0; return <button aria-label={\"Count \" + count} onClick={() => count++}>{count}</button>; }",
+      "expected": { "text": ["0", "1", "2"], "clicks": ["button", "button"] }
+    },
     {
       "id": "PARSE-001",
       "level": "parse",

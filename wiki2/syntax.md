@@ -23,8 +23,34 @@ See [architecture.md](architecture.md).
 - Normal JavaScript outside markup retains its behavior. Rendering expressions
   in a markup body is part of the new format's contract, not a change to every JS
   block. Existing JSX/TSX retains its grammar.
-- Attribute expressions remain `prop={expression}` in the working examples.
-  This is provisional; a new attribute grammar has not been accepted.
+- Attribute expressions accept `prop={expression}` and `prop=(expression)`
+  (DX-32, spec revision 2). Both retain ordinary value/event timing. Event
+  callbacks remain explicit; bare `onClick=handler(...)` is not introduced.
+
+## Parenthesized attribute values
+
+`aria-label=("Remove " + task.title)` normalizes to ordinary JSX
+`aria-label={("Remove " + task.title)}`. Existing braces can be mixed with the
+new form. The actual task-board example uses it for a row label, a status prop,
+an explicit click callback and its existing ref.
+
+`src/attributes/parenthesized.ts` reads balanced values with host tokens and
+recursively normalizes nested markup. Opening-tag placeholders preserve UTF-16
+width and line endings. The original parentheses/expression remain copied
+spans; inserted JSX braces are unmapped. Generic functions, nested objects,
+templates, regexes and comparisons retain host parsing. Await/yield stay in their
+authored function context. Parser AST nodes are untouched.
+
+The reader reports JPX1008 at an unclosed outer `(` and JPX1003 at an unclosed
+literal's authored opener, skipping comments through host-provided ranges.
+Empty/malformed closed values still receive host syntax errors. The small
+conformance view continues to omit attributes; actual normalized TSX/mapping,
+native CLI/LSP and runtime checks provide additional evidence.
+
+An actual LSP test edits the task-board label to `task.ti`, verifies TS2339 at
+the authored token, resolves `title` completion, applies the server's actual
+insert/replace edit and rechecks without diagnostics. This establishes one
+member-completion path; auto-import and broader recovery remain open.
 
 ## Examples for the first slices
 

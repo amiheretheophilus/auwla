@@ -69,6 +69,15 @@ state in both compiler modes. The footer's native template interpolation updates
 with the list. [Example commands](../packages/jsx-plus/examples/README.md) build
 or serve the current checkout's compiled UI; the preview is an example-only Bun
 loader, not production Vite/module-graph acceptance.
+The loop variant uses ordinary `for...of` outside markup and has its own live
+filter/add/toggle/remove and per-row closure checks. It exposed a runtime setter
+dropping false ARIA values; its fix and focused evidence are on
+[compiler core](../wiki/compiler/core.md#dynamic-attribute-values).
+
+The real task-board LSP probe requests `title` completion from `task.ti` inside
+a parenthesized attribute, resolves it, applies TypeScript's actual insert/replace
+edit at its authored range and verifies diagnostics clear. It does not fabricate
+an editor edit or claim all completion/auto-import contexts are supported.
 
 `mapper-cache.test.ts` transforms the same authored file with the real projector,
 counting reuse rather than mocking projection output. Seven requests perform

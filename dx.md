@@ -49,8 +49,9 @@ Accepted direction from the 2026-11-10 discussion:
   change as evidence arrives; the current rules, examples and checks change with
   them. See [decisions](wiki2/decisions.md).
 
-Attribute syntax, separators, the final file extension and the remaining feature
-proposals are still open. Examples retain existing attribute expression braces.
+DX-32 adds optional `prop=(expression)` attribute values alongside existing JSX
+braces. Ordinary value/event evaluation remains unchanged; callbacks stay explicit.
+Separators, the final file extension and remaining feature proposals remain revisable.
 This direction is for the new authoring format; it does not change TSX text rules.
 Revision 1 provisionally uses host expression continuation/ASI and explicit
 separators where child expressions would otherwise join. That is a draft to
@@ -934,6 +935,7 @@ and mark a revised decision as superseded rather than erasing its reason.
 | DX-29 | Spec before implementation | Define grammar, syntax model, semantics, diagnostics and conformance fixtures before the parser; evolve the draft explicitly | Accepted |
 | DX-30 | Backend authoring | Pure, nonreactive backend code in configured `.auwla` files/folders; ordinary backend imports; isomorphic support later | Accepted direction; implementation/config syntax planned |
 | DX-31 | Package boundary | Keep syntax/normalization in `packages/jsx-plus`; delegate production compilation to compiler-next's public API | Accepted; supersedes earlier in-place placement |
+| DX-32 | Parenthesized attribute values | Allow `prop=(expression)` alongside existing braces, with ordinary JSX value/event timing | Accepted; spec 0.1 revision 2 |
 
 ## 18. Suggested prototype and acceptance examples
 

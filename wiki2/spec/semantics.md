@@ -1,6 +1,6 @@
 # Core semantics
 
-0.1-draft, revision 1. Compiler-next's existing rules remain authoritative for
+0.1-draft, revision 2. Compiler-next's existing rules remain authoritative for
 host execution, reactivity, readiness, ownership and delivery.
 
 ## Expression children (S-EXPR)
@@ -101,9 +101,20 @@ follow mount/replacement/removal. Forwarding/member/callback behavior and known
 limits stay on [the existing ref page](../../wiki/compiler/refs.md). Checks in
 this spec verify preservation when new child syntax surrounds a ref.
 
+## Parenthesized attribute expressions (S-ATTR)
+
+`prop=(expression)` normalizes to `prop={(expression)}` with the same value,
+evaluation count, ordering and host scope. Its parentheses group comma expressions
+and remain copied authored text. Only the enclosing JSX braces are generated.
+Nested markup is normalized recursively without moving the expression into a
+function or changing valid await/yield contexts.
+
 Other ordinary JSX attributes, spreads and handlers retain their current order
-and semantics. An ordinary `onClick={save()}` is not made lazy by this proposal.
-The separate `@event` proposal is outside this profile.
+and semantics. Neither `onClick={save()}` nor `onClick=(save())` becomes lazy.
+Author a callback, such as `onClick=(() => save())`, for deferred execution.
+`ref=(input)` reaches the same existing ref feature as `ref={input}`; no new ref
+runtime or target-binding rules are introduced. The separate `@event` proposal
+is outside this profile.
 
 ## Shared compiler/runtime obligations (S-PIPELINE)
 

@@ -1,6 +1,6 @@
 # JSX+ language extension specification
 
-Version: **0.1-draft**, revision **1**. Initial core profile. Created: 2026-11-11.
+Version: **0.1-draft**, revision **2**. Initial core profile. Created: 2026-11-11.
 Implementation: **first slice built** in the separate `packages/jsx-plus` package.
 It normalizes the tested subset to standard TSX and calls compiler-next's public
 API. Compiler-next continues to receive ordinary TSX; its grammar stays unchanged.
@@ -37,7 +37,8 @@ the broader design discussion. A plan or an example does not override a rule.
 ## Accepted direction and draft choices
 
 Accepted: quoted text, direct expression/control-flow children, normal declared
-refs through the existing ref prop, and the existing compiler-next pipeline.
+refs through the existing ref prop, parenthesized attribute expressions alongside
+existing JSX attribute braces, and the existing compiler-next pipeline.
 
 Revision 1 provisionally chooses JavaScript expression continuation/ASI, explicit
 separators where expressions could join, JS string escapes without JSX text
@@ -61,7 +62,7 @@ impose reactive UI semantics on configured backend code.
 
 ## Core profile
 
-Included: existing elements/fragments and ordinary JSX attributes, quoted string
+Included: existing elements/fragments and JSX attributes, optional `prop=(expression)` values, quoted string
 and template children, arbitrary host expressions (including `.map()` and
 ternaries), direct `if`/`else if`/`else` child blocks, comments and existing refs.
 

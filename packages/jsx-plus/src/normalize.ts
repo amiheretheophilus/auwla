@@ -7,7 +7,8 @@
 import { parse, TokenKind as K } from 'yuku-parser';
 import type { Node, ParseResult, IfStatement } from 'yuku-parser';
 import { JsxPlusError } from './diagnostics';
-import { childExpression, childStatements, type HostTokens } from './host';
+import { childExpression, childStatements, maskMarkup, type HostTokens } from './host';
+import { maskAttribute, parenthesizedAttribute } from './attributes/parenthesized';
 import type { BlockView, ChildView, ElementView, ExpressionView, FragmentView, IfView, NormalizedSource, Range } from './model';
 import { assemble, copied, generated, replaceRange, type Piece, type Replacement } from './source';
 
@@ -32,11 +33,6 @@ const lex = (source: string): ParseResult => parse(source, { lang: 'tsx', source
 function opening(tokens: HostTokens, index: number): boolean {
   return tokens.kind(index) === K.LessThan && index + 1 < tokens.length
     && (tokens.kind(index + 1) === K.JSXIdentifier || tokens.kind(index + 1) === K.GreaterThan);
-}
-
-function mask(source: string, start: number, end: number): string {
-  // Preserve UTF-16 width and line breaks, including CRLF and surrogate pairs.
-  return source.slice(0, start) + '_' + source.slice(start + 1, end).replace(/[^\r\n]/g, ' ') + source.slice(end);
 }
 
 class Reader {
@@ -67,7 +63,7 @@ class Reader {
       if (start === undefined) break;
       const markup = this.element(start);
       roots.push(markup);
-      shadow = mask(shadow, markup.start, markup.end);
+      shadow = maskMarkup(shadow, markup.start, markup.end);
     }
 
     const output = assemble(replaceRange(this.source, 0, this.source.length, roots));
@@ -85,7 +81,7 @@ class Reader {
   }
 
   element(start: number): Markup {
-    const attributes: Markup[] = [];
+    const attributes: Replacement[] = [];
     let shadow = this.source.slice(start);
     let openingEnd = 0;
     let name = '';
@@ -96,7 +92,8 @@ class Reader {
     for (;;) {
       const tokens = childStatements(shadow).tokens;
       let braces = 0;
-      let nested: Markup | undefined;
+      let nested: Replacement | undefined;
+      let parenthesized = false;
       const first = 0;
       if (tokens.kind(first) !== K.LessThan) this.error('HOST', 'Expected an element', start);
 
@@ -113,6 +110,16 @@ class Reader {
 
       for (let index = 2; index < tokens.length; index++) {
         const kind = tokens.kind(index);
+        if (braces === 0 && kind === K.LeftParen && tokens.kind(index - 1) === K.Assign) {
+          nested = parenthesizedAttribute({
+            source: this.source,
+            start: start + tokens.start(index),
+            element: (position) => this.element(position),
+            error: (code, message, from, to) => this.error(code, message, from, to),
+          });
+          parenthesized = true;
+          break;
+        }
         if (braces > 0 && opening(tokens, index)) {
           nested = this.element(start + tokens.start(index));
           break;
@@ -128,7 +135,9 @@ class Reader {
 
       if (nested === undefined) break;
       attributes.push(nested);
-      shadow = mask(shadow, nested.start - start, nested.end - start);
+      shadow = parenthesized
+        ? maskAttribute(shadow, nested.start - start, nested.end - start)
+        : maskMarkup(shadow, nested.start - start, nested.end - start);
     }
 
     if (openingEnd === 0) this.error('HOST', 'Incomplete opening tag', start, this.source.length);
@@ -173,7 +182,7 @@ class Reader {
           }
           const markup = this.element(position);
           nested.push(markup);
-          shadow = mask(shadow, markup.start - start, markup.end - start);
+          shadow = maskMarkup(shadow, markup.start - start, markup.end - start);
           changed = true;
           break;
         }

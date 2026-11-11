@@ -1,4 +1,4 @@
 {
   "extends": "../checking/tsconfig.json",
-  "files": ["./App.auwla", "./main.ts"]
+  "files": ["./App.auwla", "./main.ts", "./ForLoop.auwla", "./main-for-loop.ts"]
 }

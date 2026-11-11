@@ -57,7 +57,7 @@ export function App() {
       <form onSubmit={addTask}>
         <label htmlFor="new-task">"What needs doing?"</label>
         <div class="add-task">
-          <input id="new-task" ref={draft} placeholder="Write a task" />
+          <input id="new-task" ref=(draft) placeholder="Write a task" />
           <button type="submit">"Add task"</button>
         </div>
       </form>
@@ -71,7 +71,7 @@ export function App() {
           onInput={event => query = event.currentTarget.value}
         />
         <nav aria-label="Task status">
-          <button type="button" aria-pressed={filter === 'all'} onClick={() => filter = 'all'}>
+          <button type="button" aria-pressed=(filter === 'all') onClick=(() => filter = 'all')>
             "All"
           </button>
           <button type="button" aria-pressed={filter === 'open'} onClick={() => filter = 'open'}>
@@ -109,7 +109,7 @@ export function App() {
               <button
                 type="button"
                 class="remove"
-                aria-label={"Remove " + task.title}
+                aria-label=("Remove " + task.title)
                 onClick={() => removeTask(task.id)}
               >
                 "Remove"

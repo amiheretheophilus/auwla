@@ -69,6 +69,8 @@ All paths are relative to the repository root and exist now.
 | --- | --- |
 | `packages/jsx-plus/src/normalize.ts` | Host-token scanning, nested markup, expression/conditional children and TSX normalization |
 | `packages/jsx-plus/src/host.ts` | Parser-only fragment context, token slices and untouched host AST offsets |
+| `packages/jsx-plus/src/attributes/parenthesized.ts` | Balanced attribute expression reader, nested-markup normalization and opening-tag masks |
+| `packages/jsx-plus/tests/attributes.test.ts` | Attribute host forms, copied spans, malformed literals and explicit source-format boundary |
 | `packages/jsx-plus/src/model.ts` | Syntax views, authored ranges and copied-span mapping types |
 | `packages/jsx-plus/src/source.ts` | Copied/generated pieces, assembly and exact authored-offset lookup |
 | `packages/jsx-plus/src/diagnostics.ts` | Authored syntax diagnostic ranges and line/column reporting |
@@ -80,6 +82,7 @@ All paths are relative to the repository root and exist now.
 | `packages/jsx-plus/examples/counter.auwla` | Complete counter compiled and clicked by the execution tests |
 | `packages/jsx-plus/examples/README.md` | Authoring walkthrough and commands for real examples |
 | `packages/jsx-plus/examples/task-board/` | Full authored UI, browser entry/HTML/CSS, example-only preview loader and native mapper config |
+| `packages/jsx-plus/examples/task-board/ForLoop.auwla` | Host `for...of` builds typed rows before markup; exercised in both modes |
 | `packages/jsx-plus/AGENTS.md` | Package ownership boundary and focused checks |
 | `packages/jsx-plus/src/checking/project.ts` | Shared-normalizer TSX checking projection and authored parse diagnostics |
 | `packages/jsx-plus/src/checking/protocol.ts` | Primary/supplemental outputs, mapping masks and diagnostic directives |
@@ -93,7 +96,7 @@ All paths are relative to the repository root and exist now.
 | `packages/jsx-plus/src/mapper/project.ts` | One latest checking result per project, keyed by exact filename and source |
 | `packages/jsx-plus/tests/mapper-cache.test.ts` | Real authored-source reuse counts, edit/file eviction, diagnostics and isolated lifetimes |
 | `packages/jsx-plus/tests/checking.test.ts` | Exact span fidelity, mapper lifecycle and native CLI acceptance |
-| `packages/jsx-plus/tests/mapper-lsp.test.ts` | Native LSP rename, Unicode diagnostics and incomplete/restore editing |
+| `packages/jsx-plus/tests/mapper-lsp.test.ts` | Native LSP rename, Unicode diagnostics, applied task-board member completion and incomplete/restore editing |
 | `packages/jsx-plus/tests/rpc.ts` | Test-only process lifecycle and position helpers |
 | `packages/jsx-plus/tests/fixtures/checking-flow.json` | Target checking diagnostics and source spans for replay, refs, row scope and synchronous host logic |
 | `packages/jsx-plus/tests/probe-flow.ts` | Actual LSP observation/strict catalog runner; 34 targets match; accepts reduced case sets for investigation |

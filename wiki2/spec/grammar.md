@@ -1,6 +1,6 @@
 # Core grammar
 
-0.1-draft, revision 1. Status: provisional executable-design target.
+0.1-draft, revision 2. Status: provisional executable-design target.
 
 ## Host language and lexical contexts (G-HOST)
 
@@ -15,7 +15,7 @@ regular expression is insufficient.
 | Context | Recognizes |
 | --- | --- |
 | Host code | Existing JS/TS with markup expressions in existing JSX operand positions |
-| Opening/closing tags | Existing JSX names, attributes and delimiters |
+| Opening/closing tags | Existing JSX names/delimiters and attributes, including parenthesized expression values |
 | Child body | Child expressions, nested markup, direct conditional blocks and trivia; no raw text token |
 | Quoted/template/regex content | Host token rules; markup delimiters inside the token are content |
 
@@ -143,9 +143,28 @@ ordinary host bodies and statements.
 ## Attributes and existing refs (G-ATTR)
 
 Names, spreads, string attributes, boolean attributes and `prop={expression}`
-retain the current JSX grammar and ordering. In particular, `ref={input}` is an
-existing attribute expression referring to a normally declared writable target;
-it is not a declaration. No new ref node or `$`-ref syntax is introduced.
+retain the current JSX grammar and ordering. The extended format also accepts
+`prop=(expression)`, where the matching outer parentheses delimit one ordinary
+host expression. Nested parentheses, objects, templates, regexes, comparisons,
+functions and markup follow host token rules. A comma expression remains grouped
+by those parentheses. Empty expressions are invalid.
+
+```auwla
+<button aria-label=("Remove " + task.title) onClick=(() => removeTask(task.id))>
+  "Remove"
+</button>
+```
+
+This normalizes to ordinary JSX `prop={(expression)}` and preserves evaluation
+order. It does not make a value lazy: `onClick=(handler)` supplies a handler;
+`onClick=(() => run())` supplies a callback; `onClick=(run())` evaluates the call
+when the attribute value is evaluated, exactly like `onClick={run()}`. TypeScript
+checks whether the resulting value is valid for that prop.
+
+`ref={input}` and `ref=(input)` refer to the same normally declared writable
+target. Neither declares a binding. No new ref node or `$`-ref syntax is introduced.
+Spreads keep `{...props}`; bare `prop=expression` is not added. Existing `.tsx`
+retains its existing attribute grammar. Only the extended format adds `=(...)`.
 
 This profile does not define `@event`, modifier chains, `bind:property`, shorthand
 classes or special raw CSS blocks. Those remain open design work in

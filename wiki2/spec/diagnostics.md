@@ -1,6 +1,6 @@
 # Syntax diagnostics
 
-0.1-draft, revision 1. Codes below are **proposed for the extension**; they have
+0.1-draft, revision 2. Codes below are **proposed for the extension**; they have
 not been added to compiler-next's current `CompileError` API.
 
 ## Format and locations (D-FORMAT)
@@ -32,11 +32,12 @@ retain their host diagnostics and are mapped back to authored locations.
 | --- | --- | --- |
 | JPX1001 | Closing element name does not match the opener | The closing tag, including delimiters |
 | JPX1002 | Element/fragment has no closing delimiter at end of input | Its opening tag/fragment |
-| JPX1003 | String/template child is unterminated | Opening quote/backtick, one UTF-16 unit |
+| JPX1003 | String/template child or parenthesized attribute token is unterminated | Opening quote/backtick, one UTF-16 unit |
 | JPX1004 | Expression has begun but is incomplete at its body end | The body-end delimiter, or EOF |
 | JPX1005 | Missing separator between same-line non-joining expressions or before an ambiguous sibling opening tag | First token of the intended next child |
 | JPX1006 | Direct `if`/`else` body is not a block | First token where the required `{` was expected |
 | JPX1007 | Conditional child block is unclosed at EOF | The opening `{` |
+| JPX1008 | Parenthesized attribute expression has no matching outer `)` | The opening `(` |
 
 Do not infer duplicate-attribute, unknown-tag, unknown-method or key restrictions
 from this table. Existing JSX/host rules and agreed framework contracts decide

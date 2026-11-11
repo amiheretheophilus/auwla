@@ -15,12 +15,13 @@ Updated: 2026-11-11. Accepted direction is separate from implemented support.
 | DX-29 | 2026-11-11 | Define a language spec before implementing the syntax, informed by the organization of `snrraptopack/jasx`. User: "before they started they had a proper language spec". The spec remains a revisable draft under DX-27. | [spec](spec/README.md) |
 | DX-30 | 2026-11-11 | `.auwla` may contain pure nonreactive backend code and ordinary backend imports such as Express. Config will select backend files/folders; isomorphic support comes later. User: "backends are not even reactive" and "we will have a config that will point to backend files or folder". Exact config syntax and implementation remain planned. | [architecture](architecture.md#backend-authoring-planned), [spec](spec/README.md#backend-authoring-direction-planned) |
 | DX-31 | 2026-11-11 | Keep JSX+ implementation in its own package, `packages/jsx-plus`, passing normalized source into compiler-next through its public API. User: "it a different package i dont want u to mix it". Supersedes earlier plans to put the syntax implementation inside compiler-next's parse folder; existing pipeline/ref reuse under DX-28 remains. | [architecture](architecture.md) |
+| DX-32 | 2026-11-11 | Allow `prop=(expression)` alongside existing attribute braces. User: `aria-label=("Remove " + task.title)` and "reply and continue". Preserve ordinary expression/event evaluation; after discussing automatic event-call deferral, the user said "just forget it and continue". Bare/lazy event calls are not introduced. | [attributes](spec/grammar.md#attributes-and-existing-refs-g-attr), [syntax](syntax.md) |
 
 ## Provisional choices
 
 - `.auwla` is the working extension, pending the parser/tooling experiment.
-- Existing attribute expression braces stay in current examples. The user asked
-  about children; no new attribute grammar has been accepted.
+- The earlier child-only scope is superseded by DX-32: attribute braces remain
+  available alongside optional parenthesized attribute expressions.
 - Fine-grained file placement and checking projection remain revisable within
   the separate syntax package. Production compilation is delegated to compiler-next;
   a future TypeScript mapper does not produce the application's runtime program.

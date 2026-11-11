@@ -1,6 +1,6 @@
 # Conformance and fixtures
 
-0.1-draft, revision 1. Owns C-LEVELS/C-FIXTURES/C-EVIDENCE.
+0.1-draft, revision 2. Owns C-LEVELS/C-FIXTURES/C-EVIDENCE.
 
 ## Levels (C-LEVELS)
 
@@ -8,9 +8,9 @@
 | --- | --- | --- |
 | Fixture integrity | Catalog IDs/rules are valid; expected trees/ranges/source slices are internally consistent; equivalents parse | Check script provided |
 | Host baseline | Existing host parser has the specified continuation shapes; existing JSX equivalents produce explicitly expected text/update results | Check script provided |
-| Extended parse | The syntax package produces the expected view with exact ranges | Current 6 fixtures pass; broader grammar acceptance open |
-| Extended diagnostics | New syntax produces the expected primary code/severity/range | Current 5 fixtures pass; broader recovery open |
-| Extended behavior | Extended source matches explicit expectations through updates/disposal | Current 9 programs pass in optimized/general modes; lifecycle coverage remains |
+| Extended parse | The syntax package produces the expected view with exact ranges | Current 7 fixtures pass; broader grammar acceptance open |
+| Extended diagnostics | New syntax produces the expected primary code/severity/range | Current 6 fixtures pass; broader recovery open |
+| Extended behavior | Extended source matches explicit expectations through updates/disposal | Current 10 programs pass in optimized/general modes; lifecycle coverage remains |
 | Tooling | Real mapper diagnostics/rename/completion satisfy the authored-span checks | CLI/LSP diagnostics and applied ref/state renames pass; 34 flow targets match in the hardened paired profile; complete flow/completion/editor acceptance remains open |
 | Delivery | Extended source preserves existing SSR/adoption and lifecycle behavior | Not implemented; no pass claim |
 

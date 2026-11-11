@@ -31,6 +31,13 @@ bun run examples/task-board/preview.ts
 Open `http://127.0.0.1:3030`. [The examples guide](examples/README.md) includes
 build-only/type-check commands and the source walkthrough. Checks read the actual
 `.auwla` file and exercise the main authoring flow in both compiler modes.
+`--for-loop` selects [the ordinary loop variant](examples/task-board/ForLoop.auwla),
+which collects row values with host JavaScript before rendering the array.
+
+Extended attributes accept `aria-label=("Remove " + task.title)` alongside
+existing `aria-label={...}`. Parentheses delimit an ordinary value; event callbacks
+stay explicit, such as `onClick=(() => removeTask(id))`. The actual task-board
+code and native TypeScript completion/edit checks exercise this form.
 
 `compile()` currently adapts one UI module. Existing `.tsx` input explicitly
 named through `moduleId` retains its existing JSX semantics. Multi-module `.auwla`
