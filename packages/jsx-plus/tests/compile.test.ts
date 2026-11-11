@@ -5,6 +5,7 @@ import flowFixtures from './fixtures/checking-flow.json';
 import * as runtime from '../../runtime/src/index';
 import { toModuleFunction } from '../../compiler-next/src/core/parse/module-function';
 import { compile } from '../src';
+import * as taskBoardActions from '../examples/task-board/actions';
 
 const applications: runtime.MountedApplication[] = [];
 afterEach(() => {
@@ -13,14 +14,21 @@ afterEach(() => {
   document.body.replaceChildren();
 });
 
+interface StartOptions {
+  readonly moduleId?: string;
+  /** Modules the compiled source may import besides the runtime, by specifier. */
+  readonly modules?: Readonly<Record<string, unknown>>;
+}
+
 let sequence = 0;
-function start(source: string, optimize: boolean, moduleId?: string) {
-  const output = compile(source, { optimize, moduleId });
+function start(source: string, optimize: boolean, options: StartOptions = {}) {
+  const output = compile(source, { optimize, moduleId: options.moduleId });
   const module = toModuleFunction(output);
   const exports: Record<string, unknown> = {};
+  const available: Record<string, unknown> = { '@memoized-dom/runtime': runtime, ...options.modules };
   const imports = module.specifiers.map((specifier) => {
-    expect(specifier).toBe('@memoized-dom/runtime');
-    return runtime;
+    expect(Object.keys(available)).toContain(specifier);
+    return available[specifier];
   });
   new Function('_imports', '_exports', '_exportStar', ...module.globals, module.body)(
     imports, exports, () => {}, ...module.globals.map((name) => (globalThis as Record<string, unknown>)[name]),
@@ -69,7 +77,7 @@ for (const fixture of fixtures.cases) {
 }
 
 it('keeps standard TSX child text on the existing compiler path', () => {
-  const { container } = start('export function App() { return <p>"hello"</p>; }', true, './App.tsx');
+  const { container } = start('export function App() { return <p>"hello"</p>; }', true, { moduleId: './App.tsx' });
   expect(container.textContent).toBe('"hello"');
 });
 
@@ -112,12 +120,15 @@ for (const optimize of [true, false]) {
 
   it(`runs the authored task board through its main editing flow with optimize=${optimize}`, () => {
     const source = readFileSync(new URL('../examples/task-board/App.auwla', import.meta.url), 'utf8');
-    const { container } = start(source, optimize);
+    const { container } = start(source, optimize, { modules: { './actions': taskBoardActions } });
     const rows = () => [...container.querySelectorAll('.tasks li')];
     const filters = [...container.querySelectorAll('nav button')] as HTMLButtonElement[];
     const search = container.querySelector<HTMLInputElement>('#search')!;
     const draft = container.querySelector<HTMLInputElement>('#new-task')!;
     const form = container.querySelector('form')!;
+
+    container.querySelector<HTMLButtonElement>('.focus-draft')!.click();
+    expect(document.activeElement).toBe(draft);
 
     expect(rows()).toHaveLength(3);
     expect(container.querySelector('.summary')!.textContent).toBe('2 tasks left');

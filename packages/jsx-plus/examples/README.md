@@ -63,7 +63,9 @@ made lazy automatically. Existing JSX braces remain available.
 
 A single identifier also works without delimiters: the loop app uses
 `onClick=addTask`, and the main form uses `onSubmit=addTask`. They become ordinary
-JSX function references, so the handler receives the native event. Bare calls such
+JSX function references, so the handler receives the native event. The bare
+name can also be imported: `onClick=focusTaskInput` uses a normal exported
+function from [task-board/actions.ts](task-board/actions.ts). Bare calls such
 as `onClick=addTask()` need explicit parentheses/braces and are not made lazy.
 
 Then read the markup: quoted children produce text, expressions render values,
