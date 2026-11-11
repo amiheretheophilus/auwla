@@ -97,7 +97,7 @@
     },
     "packages/editor-vscode": {
       "name": "memoized-dom-auwla",
-      "version": "0.0.0",
+      "version": "0.0.1",
       "dependencies": {
         "@memoized-dom/jsx-plus": "workspace:*",
       },

@@ -27,6 +27,16 @@ code --extensionDevelopmentPath=./packages/editor-vscode ./packages/jsx-plus/exa
 Open `App.auwla`. For language features, install and enable the compatible
 **TypeScript 7** extension (`TypeScriptTeam.native-preview`) in the development
 host and select the workspace's TypeScript 7.1-beta SDK if needed. The adapter
+logs the actual selected server version and warns when it is older than 7.1;
+having the extension installed does not mean its bundled server supports mappers.
+Use **Ctrl+Shift+P** (the Command Palette, with a leading `>`), then
+**TypeScript: Select TypeScript Version... → Use Workspace Version**. The native
+command is `typescript.native-preview.selectVersion`; the warning's **Select
+Workspace SDK** action opens that picker directly. This checkout's
+`.vscode/settings.json` points to its pinned SDK, but the TypeScript extension
+still requires choosing the workspace version.
+
+The adapter
 checks its `registerContentMappers` API and registers the shared mapper. It does
 not change editor settings or install the TypeScript extension automatically.
 Without the provider, static highlighting remains available and activation
@@ -45,7 +55,9 @@ with its workspace dependencies. This local VSIX is not a self-contained mapper
 or a published cross-runtime distribution. Open this checkout or its task-board
 example as the workspace when trying the installed prototype.
 Configured projects keep their `contentMappers`/type settings; the task-board
-tsconfig is the authoring example. Registration also supplies an inferred-project
+tsconfig is the authoring example. The counter's examples config enables the
+shared `@memoized-dom/jsx-plus/types` entry once, without a per-file type import,
+and sets `jsx: "preserve"`. Registration also supplies an inferred-project
 manifest, but complete standalone JSX type setup remains unverified.
 
 Activation tests simulate only the editor API and TypeScript provider. Shared

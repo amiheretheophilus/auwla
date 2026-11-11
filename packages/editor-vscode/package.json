@@ -2,7 +2,7 @@
   "name": "memoized-dom-auwla",
   "displayName": "Auwla (Prototype)",
   "description": "A thin VS Code adapter for the shared Auwla authoring tools.",
-  "version": "0.0.0",
+  "version": "0.0.1",
   "publisher": "amiheretheophilus",
   "private": true,
   "engines": { "vscode": "^1.126.0" },

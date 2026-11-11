@@ -94,9 +94,11 @@ All paths are relative to the repository root and exist now.
 | `packages/jsx-plus/src/repairs.ts` | Checking-only closer suggestions attached to authored reader errors; builds ignore them |
 | `packages/jsx-plus/src/checking/recovery/markup.ts` | Bounded current-source repair search, inserted closers and quarantined ranges, exact authored spans and structural fallback |
 | `packages/jsx-plus/src/editor/registration.ts` | Shared metadata and local mapper launch contribution; no editor SDK |
+| `packages/jsx-plus/src/editor/types.d.ts` | Opt-in project-level `./types` export reusing existing framework element/event/ref declarations |
 | `packages/jsx-plus/src/editor/grammar.ts` | Build-time TSX grammar transformation, separate from parsing/checking |
 | `packages/jsx-plus/editor-assets/` | Shared configuration and pinned upstream grammar/license |
 | `packages/jsx-plus/tests/editor-assets.test.ts` | Real-example TextMate/Oniguruma tokenization and actual contributed mapper launch |
+| `packages/jsx-plus/tests/editor-registration-lsp.test.ts` | Real editor registration request, clean counter diagnostics, authored type error and hover without a per-file type import |
 | `packages/editor-vscode/src/extension.ts` | Separate adapter activation, compatible-provider check and registration/disposal |
 | `packages/editor-vscode/src/mapper-package.ts` | Resolve the project's shared mapper for installed adapters; development-directory fallback |
 | `packages/editor-vscode/scripts/build.ts` | Adapter bundle and shared grammar/configuration/license output |

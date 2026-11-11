@@ -68,9 +68,13 @@ export async function withLanguageServer<T>(
   const peer = rpcProcess(typescriptExecutable, ['--lsp', '--stdio'], root);
   peer.connection.onRequest('client/registerCapability', () => null);
   // The server asks for each of `js/ts`, `typescript`, `javascript` and `editor`.
-  // Answer like a default VS Code: auto-import suggestions on.
+  // Enable auto-imports and pin the fixture's single-quote style explicitly.
+  // Inferring style from a redundant JSX type import made the import-edit
+  // tests depend on that import being present in every authored file.
   peer.connection.onRequest('workspace/configuration', (params: { items: unknown[] }) => {
-    return params.items.map(() => ({ suggest: { autoImports: true } }));
+    return params.items.map(() => ({
+      suggest: { autoImports: true }, preferences: { quoteStyle: 'single' },
+    }));
   });
   const versions = new Map<string, number>();
 

@@ -10,6 +10,7 @@
     "./checking/facts": "./src/checking/facts.ts",
     "./editor": "./src/editor/registration.ts",
     "./editor/grammar": "./src/editor/grammar.ts",
+    "./types": "./src/editor/types.d.ts",
     "./package.json": "./package.json"
   },
   "typescript": {

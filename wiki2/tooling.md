@@ -221,6 +221,23 @@ regression test places the simulated extension outside the checkout and resolves
 the actual task-board workspace. Other projects need the shared package installed;
 the local VSIX is not a portable standalone mapper distribution.
 
+Live debugging exposed an SDK mismatch: the provider's bundled TypeScript 7.0.2
+rejected `custom/setContentMapperContributions`. Selecting this workspace's
+7.1.0-beta SDK enables registration. `.vscode/settings.json` points to that SDK;
+the native provider still requires the user's workspace-version selection.
+Adapter 0.0.1 logs SDK initialization/version events and warns about old servers,
+with an action invoking the native provider's own version picker. The command
+palette is Ctrl+Shift+P with a leading `>`, not the file picker.
+
+The `./types` declaration export imports the existing framework type contract.
+Projects enable it once with `compilerOptions.types: ["@memoized-dom/jsx-plus/types"]`
+and preserve markup with `jsx: "preserve"`. The counter's examples config inherits
+that setup; new top-level `.auwla` files are included without per-file type imports.
+Native TypeScript diagnostics still use the term JSX because they check the TSX
+view. No diagnostic wording is rewritten or suppressed. The real registration
+test verifies a clean counter, `count: number` hover and the authored 2339 range
+for `count.toUpperCase()`. Standalone inferred-project JSX type setup is still open.
+
 See [adapter setup](../packages/editor-vscode/README.md) and
 [reuse from another editor](../packages/jsx-plus/editor-assets/README.md).
 

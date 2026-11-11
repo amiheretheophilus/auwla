@@ -6,7 +6,7 @@
     "module": "Preserve",
     "moduleResolution": "Bundler",
     "jsx": "preserve",
-    "types": [],
+    "types": ["@memoized-dom/jsx-plus/types"],
     "lib": ["ESNext", "DOM", "DOM.Iterable"],
     "skipLibCheck": true,
     "paths": {

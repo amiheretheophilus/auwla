@@ -6,7 +6,10 @@ import { findMapperPackage } from './mapper-package';
 /** The provider matching the pinned TypeScript 7.1-beta extension API. */
 const TYPESCRIPT_EXTENSION = 'TypeScriptTeam.native-preview';
 
-function hasMapperRegistration(value: unknown): value is Pick<ExtensionAPI, 'registerContentMappers'> {
+type MapperHost = Pick<ExtensionAPI, 'registerContentMappers'>
+  & Partial<Pick<ExtensionAPI, 'onLanguageServerInitialized'>>;
+
+function hasMapperRegistration(value: unknown): value is MapperHost {
   return typeof value === 'object' && value !== null
     && 'registerContentMappers' in value && typeof value.registerContentMappers === 'function';
 }
@@ -42,7 +45,39 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     const contribution = createMapperContribution(packageDirectory);
     const registration = api.registerContentMappers(context.extension.id, [contribution]);
     context.subscriptions.push(registration);
-    output.appendLine('Registered .auwla with the TypeScript content-mapper host.');
+    output.appendLine('Registered the .auwla content-mapper contribution.');
+
+    // The extension can expose the registration API while running an older
+    // server that rejects the protocol request. Report the actual selected SDK,
+    // not just the presence of the JavaScript API, so this cannot fail silently.
+    if (typeof api.onLanguageServerInitialized === 'function') {
+      let warnedVersion: string | undefined;
+      const listener = api.onLanguageServerInitialized((sdk) => {
+        output.appendLine(`TypeScript language server SDK: ${sdk.version}`);
+        const version = /^(\d+)\.(\d+)/.exec(sdk.version);
+        if (version === null) {
+          return;
+        }
+        const major = Number(version[1]);
+        const minor = Number(version[2]);
+        const tooOld = major < 7 || (major === 7 && minor < 1);
+        if (!tooOld || warnedVersion === sdk.version) {
+          return;
+        }
+        warnedVersion = sdk.version;
+        const action = 'Select Workspace SDK';
+        void vscode.window.showWarningMessage(
+          `Auwla needs TypeScript 7.1 or later for content mappers. The selected server is ${sdk.version}. Choose the workspace TypeScript 7.1.0-beta SDK.`,
+          action,
+        ).then((selected) => {
+          if (selected === action) {
+            return vscode.commands.executeCommand('typescript.native-preview.selectVersion');
+          }
+          return undefined;
+        });
+      });
+      context.subscriptions.push(listener);
+    }
   } catch (error) {
     unavailable(`Auwla could not register its TypeScript mapper: ${error instanceof Error ? error.message : String(error)}`);
   }

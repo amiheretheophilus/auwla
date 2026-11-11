@@ -1,19 +1,25 @@
 import { beforeEach, expect, it, mock } from 'bun:test';
 import { resolve } from 'node:path';
 import type { ExtensionContext } from 'vscode';
-import type { ContentMapperContribution } from 'typescript/vscode';
+import type { ContentMapperContribution, TypeScriptSDK } from 'typescript/vscode';
 import { auwlaLanguage } from '@memoized-dom/jsx-plus/editor';
 import manifest from '../package.json';
 
 const messages: string[] = [];
 const lines: string[] = [];
+const commands: string[] = [];
+let chosenAction: string | undefined;
 let workspaceDirectories: string[] = [];
 let provider: { activate(): Promise<unknown> } | undefined;
 mock.module('vscode', () => ({
   window: {
     createOutputChannel: () => ({ appendLine: (line: string) => lines.push(line), dispose() {} }),
-    showWarningMessage: async (message: string) => { messages.push(message); },
+    showWarningMessage: async (message: string) => {
+      messages.push(message);
+      return chosenAction;
+    },
   },
+  commands: { executeCommand: async (command: string) => { commands.push(command); } },
   extensions: {
     getExtension: (id: string) => {
       expect(id).toBe('TypeScriptTeam.native-preview');
@@ -32,6 +38,8 @@ const { activate } = await import('../src/extension');
 beforeEach(() => {
   messages.length = 0;
   lines.length = 0;
+  commands.length = 0;
+  chosenAction = undefined;
   provider = undefined;
   workspaceDirectories = [];
 });
@@ -104,3 +112,31 @@ it('registers the installed shared package and gives disposal to the editor', as
   }
   expect(disposable.dispose).toHaveBeenCalledTimes(1);
 });
+
+for (const version of ['7.0.2', '7.1.0-beta']) {
+  it(`reports the actual SDK and explains unsupported server ${version}`, async () => {
+    const events = { dispose: mock(() => {}) };
+    provider = {
+      activate: async () => ({
+        registerContentMappers: () => ({ dispose() {} }),
+        onLanguageServerInitialized(listener: (sdk: TypeScriptSDK) => void) {
+          // The real API immediately notifies listeners when already running.
+          listener({ version } as TypeScriptSDK);
+          return events;
+        },
+      }),
+    };
+    chosenAction = 'Select Workspace SDK';
+    const session = context();
+    await activate(session);
+    expect(lines).toContain(`TypeScript language server SDK: ${version}`);
+    expect(session.subscriptions).toContain(events);
+    if (version === '7.0.2') {
+      expect(messages).toEqual([expect.stringContaining('selected server is 7.0.2')]);
+      expect(commands).toEqual(['typescript.native-preview.selectVersion']);
+    } else {
+      expect(messages).toEqual([]);
+      expect(commands).toEqual([]);
+    }
+  });
+}

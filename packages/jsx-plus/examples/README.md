@@ -2,6 +2,13 @@
 
 Run commands below from `packages/jsx-plus` using the installed workspace dependencies.
 
+The example configs enable `@memoized-dom/jsx-plus/types` once through
+`compilerOptions.types`, reusing the existing element/event/ref declarations.
+The counter has no per-file JSX type import. `examples/tsconfig.json` includes
+top-level `.auwla` files, so new modules there receive the same types. Configured
+projects use `jsx: "preserve"`; TypeScript checks a TSX view without selecting a
+React JSX runtime. Other projects need this one-time configuration too.
+
 | Example | What to read and try |
 | --- | --- |
 | [counter.auwla](counter.auwla) | The smallest state/event/direct-expression example |
