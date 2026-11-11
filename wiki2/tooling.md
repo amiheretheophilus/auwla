@@ -57,7 +57,9 @@ TypeScript/editor versions and permissions used by the probe.
 | `packages/jsx-plus/tests/checking-projection.test.ts` | Coverage of delegated spans, overlap merging, unmapped scaffolding and lowering fallback |
 | `packages/jsx-plus/src/checking/facts.ts` | Opt-in public compiler inspection and authored fact locations |
 | `packages/jsx-plus/tests/checking-facts.test.ts` | Identity/provenance, mapping fidelity and lowering-coordinate tests |
-| `packages/jsx-plus/src/mapper/server.ts` | JSON-RPC process, UTF-16 negotiation and project-handle lifecycle |
+| `packages/jsx-plus/src/mapper/server.ts` | JSON-RPC process, UTF-16 negotiation and independent cache lifetimes by project handle |
+| `packages/jsx-plus/src/mapper/project.ts` | One latest exact filename/content checking result per open project |
+| `packages/jsx-plus/tests/mapper-cache.test.ts` | Real task-board projections, reuse counts, edits, eviction, parse errors and project isolation |
 | `packages/jsx-plus/package.json` | Private prototype mapper manifest and checking export; launches through Bun |
 | `packages/jsx-plus/tests/checking.test.ts` | Projection/edit fidelity, lifecycle and actual TypeScript CLI checks |
 | `packages/jsx-plus/tests/mapper-lsp.test.ts` | Actual LSP rename, authored Unicode diagnostic and incomplete/restore edit cycle |
@@ -82,7 +84,10 @@ The [upstream protocol](https://github.com/microsoft/typescript-go/pull/4712)
 defines initialize/openProject/transform/closeProject over framed JSON-RPC.
 The prototype negotiates UTF-16, stores open handles independently, rejects
 closed handles and unknown options, and drops handle state on close. It adds
-no transform cache or dynamically discovered configuration.
+a [bounded transform cache](mapper-cache.md): one latest filename/content result
+per project, replaced on edit and discarded on close or every reopen. There is
+no dynamically discovered configuration. The real task-board sequence performs
+five projections for seven requests, with no AST/edit history retained.
 
 `vscode-jsonrpc/node` selects Node-compatible stream transport, supported by Bun;
 it does not require the VS Code editor. The mapper talks to TypeScript. An IDE
@@ -119,7 +124,7 @@ declared ref. Include a deliberate wrong expression and an incomplete edit.
 | TOOL-03 | Completion insertion and auto-import edits stay in safe mapped spans |
 | TOOL-04 | Partial: Unicode ranges and a missing quote/restore cycle checked; preserving the rest of an incomplete file remains open |
 | TOOL-05 | Hardened paired profile: 34 actual LSP targets pass, including receiving-type errors, generic helpers and deferred/immediate callbacks. Full flow acceptance remains open; see [checking flow](checking-flow.md) |
-| TOOL-06 | A repeat edit reuses appropriate work; record observed latency and memory on this machine without claiming a general performance result |
+| TOOL-06 | Partial: exact unchanged input reuses the full result; real-example reuse/eviction/isolation counts pass. Incremental edits, measured latency and heap acceptance remain open |
 
 Start with TOOL-01 and TOOL-02 during P2/P3; expand as grammar grows. Keep failing
 edits as regression fixtures when the parser or mapping strategy changes.
@@ -127,7 +132,7 @@ edits as regression fixtures when the parser or mapping strategy changes.
 ## Open questions
 
 Published packaging, editor extension registration, inferred projects,
-declaration output, caching/invalidation, multi-module editing and the editor
+declaration output, incremental invalidation beyond exact input, multi-module editing and the editor
 version matrix remain open. Completion, auto-import, formatting, cross-file
 rename and broader generated-region diagnostics need their own evidence.
 

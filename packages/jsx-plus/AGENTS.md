@@ -22,3 +22,6 @@ and `wiki2/syntax.md`.
 - Keep conformance claims scoped to tested cases. Report missing host contexts,
   tooling, module-graph integration and delivery coverage rather than implying
   a complete language implementation.
+- The user wants actual authoring code in `examples/`, not only small inline test
+  programs. Extend the real examples as features grow and check those same files
+  through the applicable mapper/compiler paths. See `examples/README.md`.

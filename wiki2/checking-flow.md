@@ -165,7 +165,7 @@ with an initializer. Uninitialized bindings, destructuring and nested/compound
 initialization assignments need more coverage. The added chains and generic
 helper are finite cases, not a general aliasing/contextual-typing proof.
 
-Next, add bounded per-project caching with invalidation evidence. Complete
+Bounded per-project [transform reuse](mapper-cache.md) is now built. Complete
 replay/invocation proofs, module-level state, live imports, aliases, readiness,
 row lifecycle, lowering maps, cross-file editing and partial-file recovery remain
 open. No general performance or complete editor claim follows from these cases.

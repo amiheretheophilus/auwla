@@ -62,6 +62,20 @@ clears it. See [tooling](tooling.md) for verified launch/permission settings and
 the limitations of this first TSX projection. This explicit mapper-host probe is
 separate from ordinary package type checking with `bun check`.
 
+The native CLI also checks the complete task-board `.auwla` file and `main.ts`
+under its example configuration. `compile.test.ts` loads that actual source and
+exercises filtering, search, submission, ref focus, toggle/removal and the empty
+state in both compiler modes. The footer's native template interpolation updates
+with the list. [Example commands](../packages/jsx-plus/examples/README.md) build
+or serve the current checkout's compiled UI; the preview is an example-only Bun
+loader, not production Vite/module-graph acceptance.
+
+`mapper-cache.test.ts` transforms the same authored file with the real projector,
+counting reuse rather than mocking projection output. Seven requests perform
+five projections; repeated syntax errors, restored source, filename switches and
+project isolation have separate assertions. See [mapper cache](mapper-cache.md)
+for ownership, bounds and lifecycle invalidation.
+
 The checking-flow catalog has a separate target gate, run from the package:
 
 ```text

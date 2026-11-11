@@ -20,6 +20,18 @@ const javascript = compile(source, { moduleId: './App.auwla' });
 [examples/counter.auwla](examples/counter.auwla) is a complete small example,
 compiled and clicked by the package's execution tests.
 
+For fuller authoring, open [the task board](examples/task-board/App.auwla). It
+includes search/status filters, a form, refs, derived lists/counts, direct `if`,
+`.map()` and native `${...}` template interpolation. Run its local browser preview:
+
+```text
+bun run examples/task-board/preview.ts
+```
+
+Open `http://127.0.0.1:3030`. [The examples guide](examples/README.md) includes
+build-only/type-check commands and the source walkthrough. Checks read the actual
+`.auwla` file and exercise the main authoring flow in both compiler modes.
+
 `compile()` currently adapts one UI module. Existing `.tsx` input explicitly
 named through `moduleId` retains its existing JSX semantics. Multi-module `.auwla`
 resolution, Vite integration, backend configuration
@@ -39,8 +51,10 @@ bun ../../node_modules/typescript/lib/tsc.js --project examples/checking/tsconfi
 `examples/checking/tsconfig.error.json` intentionally selects a type error and
 exits two. CLI/LSP tests verify the original UTF-16 error location and a safe ref
 rename. `vscode-jsonrpc/node` provides stream transport; it does not require the
-VS Code editor. IDE activation, complete reactive/ref flow typing, partial-file recovery
-and mapper caching remain open. See [tooling](../../wiki2/tooling.md).
+VS Code editor. IDE activation, complete reactive/ref flow typing and partial-file
+recovery remain open. The mapper retains one latest exact file/content result per open
+project; edits replace it and close/reopen discards it. See
+[tooling](../../wiki2/tooling.md) and [cache evidence](../../wiki2/mapper-cache.md).
 
 `bun run tests/probe-flow.ts --strict` is the separate checking-flow target gate.
 It passes all 34 current targets, including the four original narrowing gaps.

@@ -76,6 +76,7 @@ it('runs the real TypeScript CLI with an authored Unicode error location', async
     return { output: stdout + stderr, exitCode };
   };
   expect(await check('tsconfig.json')).toEqual({ output: '', exitCode: 0 });
+  expect(await check('../task-board/tsconfig.json')).toEqual({ output: '', exitCode: 0 });
   const source = readFileSync(resolve(exampleRoot, 'TypeError.auwla'), 'utf8');
   const position = positionAt(source, source.indexOf('toFixed'));
   const result = await check('tsconfig.error.json');

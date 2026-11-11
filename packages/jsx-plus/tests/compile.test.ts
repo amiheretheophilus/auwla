@@ -82,6 +82,50 @@ it('runs the package counter example through compiler-next', () => {
 });
 
 for (const optimize of [true, false]) {
+  it(`runs the authored task board through its main editing flow with optimize=${optimize}`, () => {
+    const source = readFileSync(new URL('../examples/task-board/App.auwla', import.meta.url), 'utf8');
+    const { container } = start(source, optimize);
+    const rows = () => [...container.querySelectorAll('.tasks li')];
+    const filters = [...container.querySelectorAll('nav button')] as HTMLButtonElement[];
+    const search = container.querySelector<HTMLInputElement>('#search')!;
+    const draft = container.querySelector<HTMLInputElement>('#new-task')!;
+    const form = container.querySelector('form')!;
+
+    expect(rows()).toHaveLength(3);
+    expect(container.querySelector('.summary')!.textContent).toBe('2 tasks left');
+    filters[1]!.click();
+    expect(rows()).toHaveLength(2);
+    filters[2]!.click();
+    expect(rows()).toHaveLength(1);
+    filters[0]!.click();
+
+    search.value = 'filtered';
+    search.dispatchEvent(new Event('input', { bubbles: true }));
+    expect(rows()).toHaveLength(1);
+    expect(rows()[0]!.textContent).toContain('Try a filtered list');
+    search.value = '';
+    search.dispatchEvent(new Event('input', { bubbles: true }));
+
+    draft.value = '  Ship the authoring example  ';
+    form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+    expect(rows()).toHaveLength(4);
+    expect(rows()[3]!.textContent).toContain('Ship the authoring example');
+    expect(draft.value).toBe('');
+    expect(document.activeElement).toBe(draft);
+    expect(container.querySelector('.summary')!.textContent).toBe('3 tasks left');
+
+    rows()[3]!.querySelector<HTMLButtonElement>('.task-toggle')!.click();
+    expect(container.querySelector('.summary')!.textContent).toBe('2 tasks left');
+    rows()[3]!.querySelector<HTMLButtonElement>('.remove')!.click();
+    expect(rows()).toHaveLength(3);
+
+    search.value = 'nothing matches this';
+    search.dispatchEvent(new Event('input', { bubbles: true }));
+    expect(rows()).toHaveLength(0);
+    expect(container.querySelector('.empty')!.textContent).toContain('Nothing here just yet.');
+    expect(container.querySelector('footer')!.textContent).toBe('Showing 0 of 3 tasks.');
+  });
+
   for (const replay of [
     { id: 'FLOW-TYPE-024', topic: 'body assignment', initial: 'START' },
     { id: 'FLOW-TYPE-028', topic: 'generic helper', initial: 'READY' },

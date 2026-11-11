@@ -6,7 +6,8 @@ Prototype branch integration: the compiler-owned [read-only analysis API](compil
 is built under `src/analysis/` and shares the existing frontend with production.
 Its focused analysis/graph/parse/core/ref checks pass (82 tests); this does not
 close the rewrite's acceptance or performance gates. JSX+'s first paired checking
-profile now passes 34 flow targets; its limits and next work are in
+profile passes 34 flow targets. Bounded mapper reuse and a runnable authored
+task-board example are now built; their evidence, limits and next work are in
 [wiki2/status.md](../wiki2/status.md).
 
 ## Current: Phase 10 (2026-11-06)

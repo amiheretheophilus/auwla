@@ -235,6 +235,13 @@ Keep the mapper lightweight: parse and generate the needed checking representati
 cache by source and relevant configuration, and avoid building the complete DOM
 runtime output after every keystroke.
 
+The first bounded cache now keeps one latest exact filename/source result per
+open project and discards it on close/reopen. [Cache evidence](wiki2/mapper-cache.md)
+uses the actual [task-board example](packages/jsx-plus/examples/task-board/App.auwla),
+not fabricated projection output. That example also has a local browser preview,
+native mapper configuration and runtime interaction checks. Its footer uses
+standard backtick `${...}` interpolation; ordinary quoted children stay strings.
+
 Use explicit imports such as `./Counter.auwla` in the first prototype. Registration
 of a mapper must not be assumed to enable extensionless lookup; Microsoft marked
 that expectation as working as intended in [this resolution issue][ts-resolution].

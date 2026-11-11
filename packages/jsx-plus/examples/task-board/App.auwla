@@ -1,0 +1,127 @@
+import type {} from '@memoized-dom/compiler/jsx';
+
+type Task = {
+  id: number;
+  title: string;
+  done: boolean;
+};
+
+type Filter = 'all' | 'open' | 'done';
+
+export function App() {
+  let tasks: Task[] = [
+    { id: 1, title: 'Read the authoring example', done: true },
+    { id: 2, title: 'Try a filtered list', done: false },
+    { id: 3, title: 'Add your own task', done: false },
+  ];
+  let nextId = 4;
+  let query = '';
+  let filter: Filter = 'all';
+  let draft: HTMLInputElement | undefined;
+
+  const remaining = tasks.filter(task => !task.done).length;
+  const visible = tasks.filter(task => {
+    const matchesQuery = task.title.toLowerCase().includes(query.toLowerCase());
+    const matchesFilter = filter === 'all'
+      || (filter === 'done' ? task.done : !task.done);
+
+    return matchesQuery && matchesFilter;
+  });
+
+  function addTask(event: SubmitEvent) {
+    event.preventDefault();
+    const title = draft?.value.trim();
+    if (!title) {
+      return;
+    }
+
+    tasks = [...tasks, { id: nextId++, title, done: false }];
+    if (draft) {
+      draft.value = '';
+      draft.focus();
+    }
+  }
+
+  function removeTask(id: number) {
+    tasks = tasks.filter(task => task.id !== id);
+  }
+
+  return (
+    <main class="task-board">
+      <header>
+        <p class="eyebrow">"Auwla authoring example"</p>
+        <h1>"Make room for the next idea."</h1>
+        <p>"A small task board written with ordinary variables and functions."</p>
+      </header>
+
+      <form onSubmit={addTask}>
+        <label htmlFor="new-task">"What needs doing?"</label>
+        <div class="add-task">
+          <input id="new-task" ref={draft} placeholder="Write a task" />
+          <button type="submit">"Add task"</button>
+        </div>
+      </form>
+
+      <section aria-label="Task filters" class="toolbar">
+        <label htmlFor="search">"Search tasks"</label>
+        <input
+          id="search"
+          type="search"
+          placeholder="Filter by title"
+          onInput={event => query = event.currentTarget.value}
+        />
+        <nav aria-label="Task status">
+          <button type="button" aria-pressed={filter === 'all'} onClick={() => filter = 'all'}>
+            "All"
+          </button>
+          <button type="button" aria-pressed={filter === 'open'} onClick={() => filter = 'open'}>
+            "Open"
+          </button>
+          <button type="button" aria-pressed={filter === 'done'} onClick={() => filter = 'done'}>
+            "Done"
+          </button>
+        </nav>
+      </section>
+
+      <p class="summary" aria-live="polite">
+        remaining;
+        remaining === 1 ? " task left" : " tasks left"
+      </p>
+
+      if (visible.length === 0) {
+        <section class="empty" role="status">
+          <h2>"Nothing here just yet."</h2>
+          <p>"Try another filter or add a task above."</p>
+        </section>
+      } else {
+        <ul class="tasks">
+          visible.map(task => (
+            <li data-task-id={task.id}>
+              <button
+                type="button"
+                class="task-toggle"
+                aria-pressed={task.done}
+                onClick={() => task.done = !task.done}
+              >
+                <span class="task-status">task.done ? "Done" : "Open"</span>
+                <span>task.title</span>
+              </button>
+              <button
+                type="button"
+                class="remove"
+                aria-label={"Remove " + task.title}
+                onClick={() => removeTask(task.id)}
+              >
+                "Remove"
+              </button>
+            </li>
+          ))
+        </ul>
+      }
+
+      <footer>
+        `Showing ${visible.length} of ${tasks.length} tasks.`
+      </footer>
+    </main>
+  );
+}

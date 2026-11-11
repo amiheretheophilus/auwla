@@ -78,6 +78,8 @@ All paths are relative to the repository root and exist now.
 | `packages/jsx-plus/tests/host.test.ts` | Host contexts, semicolon chunks, cached child ranges, native suspension and malformed-input regressions |
 | `packages/jsx-plus/tests/compile.test.ts` | Extended-source execution, existing refs and keyed nodes |
 | `packages/jsx-plus/examples/counter.auwla` | Complete counter compiled and clicked by the execution tests |
+| `packages/jsx-plus/examples/README.md` | Authoring walkthrough and commands for real examples |
+| `packages/jsx-plus/examples/task-board/` | Full authored UI, browser entry/HTML/CSS, example-only preview loader and native mapper config |
 | `packages/jsx-plus/AGENTS.md` | Package ownership boundary and focused checks |
 | `packages/jsx-plus/src/checking/project.ts` | Shared-normalizer TSX checking projection and authored parse diagnostics |
 | `packages/jsx-plus/src/checking/protocol.ts` | Primary/supplemental outputs, mapping masks and diagnostic directives |
@@ -88,6 +90,8 @@ All paths are relative to the repository root and exist now.
 | `packages/jsx-plus/src/checking/facts.ts` | Opt-in public fact adapter with explicit authored mapping fidelity |
 | `packages/jsx-plus/tests/checking-facts.test.ts` | Identities, shadowing, capture, mapping and lowered-coordinate refusal |
 | `packages/jsx-plus/src/mapper/server.ts` | Headless TypeScript JSON-RPC transport and project handles |
+| `packages/jsx-plus/src/mapper/project.ts` | One latest checking result per project, keyed by exact filename and source |
+| `packages/jsx-plus/tests/mapper-cache.test.ts` | Real authored-source reuse counts, edit/file eviction, diagnostics and isolated lifetimes |
 | `packages/jsx-plus/tests/checking.test.ts` | Exact span fidelity, mapper lifecycle and native CLI acceptance |
 | `packages/jsx-plus/tests/mapper-lsp.test.ts` | Native LSP rename, Unicode diagnostics and incomplete/restore editing |
 | `packages/jsx-plus/tests/rpc.ts` | Test-only process lifecycle and position helpers |
