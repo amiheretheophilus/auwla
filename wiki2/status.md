@@ -77,10 +77,16 @@ full root suite, performance, browser layout and IDE activation.
 1. P3-EDITOR (candidate): a thin VS Code extension for language registration,
    highlighting and mapper registration via TS7's `registerContentMappers`.
    See [tooling](tooling.md#editor-extension-planned-p3-editor).
-2. Loop follow-ups in compiler-next (DX-34), each logged in the table below:
-   - extend the closed-list proof to `Array.from(root, row)` so unchanged rows
-     are skipped (`moved`);
-   - track row writes through `entries()`/`values()`.
+2. Recovery gap: markup damage plus an ordinary host syntax error elsewhere
+   falls back to an empty module (see open issues below).
+3. Loop follow-up in compiler-next (DX-34): extend the closed-list proof to
+   `Array.from(root, row)` so unchanged rows are skipped (`moved`). Log it in
+   the table below.
+
+Done since: edits through destructured names (`entries()` loops) are shown
+(`4072c829`). Compiler-next `src` unit tests (616) and the seven
+handler/list case files (235) pass. The slow reference/generator suites
+were not run locally.
 
 Known open issues:
 - If markup damage occurs alongside an ordinary host syntax error anywhere,
@@ -102,6 +108,7 @@ change below must be adopted or corrected on `compiler-rewrite` later:
 | `a35db526` | `analysis/serialize.ts` also describes JSX spread arguments (`{...props}`) as expressions | Spread inputs get flow checking like expression containers |
 | `b05773b5` | `runtime/src/setters.ts`: uncached ARIA `false`/`true` follow the cached/spread rules, with a DOM test | Found by the task-board example; a runtime bug fix, not interop |
 | `9620fb57` | New `optimize/mapping-calls.ts` ([optimize](../wiki/compiler/optimize.md#row-lists)). Row reuse and row lists accept the intrinsic `Array.from(items, row)`, with `rowReuse.form` added to the plan model. The runtime gains `fromRows`, `RowList.from`, `iteratedItems` and a `dense` cache mode. Closed lists stay `map`-only | Direct loops lower to `Array.from`; without this they never get compiled rows |
+| `4072c829` | `features/handlers/plan.ts`: `aliasBindings` judges a destructured name by the declaration or parameter owning its pattern (`patternRoot`), with `features/handlers/aliases.test.ts` ([handlers](../wiki/compiler/handlers.md)) | `for (const [index, task] of tasks.entries())` row edits were not shown; a genuine bug, plain JSX too |
 
 Check this list with `git log compiler-rewrite..prototype/jsx-plus -- packages/compiler-next packages/runtime`.
 

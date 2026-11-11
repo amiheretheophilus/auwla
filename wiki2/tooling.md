@@ -164,6 +164,20 @@ registers a mapper, including for files outside any tsconfig.
 `registerLspMiddleware` can adjust language-feature responses. This is read from
 the type declarations only; activation in a running VS Code is **unverified**.
 
+Planned layout, so more editors can be added without touching the language:
+
+| Layer | Where | Shared by |
+| --- | --- | --- |
+| Normalizer and checking projection | `src/` (`normalize`, `checking/`) | Builds, every editor |
+| Content-mapper server | `src/mapper/server.ts`, named in `package.json` `typescript.contentMapper` | Any editor running the TS7 language server |
+| Highlighting grammar | One TSX-derived TextMate grammar, planned beside the package | VS Code, and editors that read TextMate grammars |
+| Per-editor shell | One small folder per editor (VS Code first): language id, file association, grammar reference, mapper registration | That editor only |
+
+Types, errors, completion, rename and auto-import come from the shared mapper,
+so a new editor needs only its shell. Editors that use tree-sitter for
+highlighting (Zed, Neovim) would need a tree-sitter grammar, which is separate
+work.
+
 ## Open questions
 
 Published packaging, editor extension registration, inferred projects,
