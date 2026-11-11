@@ -43,7 +43,8 @@ bun run --cwd packages/jsx-plus test
 
 It checks authored views/errors and compiles extended source through the package's
 public-API facade into compiler-next, executing both optimization modes. Code
-stays in that package; existing compiler-next/runtime/data sources are unchanged.
+stays in that package. The compiler-owned public inspection API shares the
+existing frontend; runtime/data sources remain unchanged.
 
 `tests/host.test.ts` also evaluates normalized source using Bun's ordinary TSX
 transpiler and a plain JSX value factory. This verifies native generator
@@ -75,6 +76,10 @@ complete. `compile.test.ts` independently demonstrates that guarded union childr
 and guarded derivations outside markup replay correctly in both compiler modes.
 The target contract, sources and proposed next boundary are mapped in
 [checking-flow.md](checking-flow.md).
+
+`checking-facts.test.ts` additionally validates the new opt-in inspection adapter.
+The shared frontend extraction is checked against compiler-next's analysis,
+graph, parse, core and ref cases; exact commands/results are in [status.md](status.md).
 
 Acceptance IDs are owned by [syntax.md](syntax.md), [refs.md](refs.md) and
 [tooling.md](tooling.md); later features add theirs on their concept page.

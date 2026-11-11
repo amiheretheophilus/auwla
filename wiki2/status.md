@@ -4,111 +4,83 @@ Updated: 2026-11-11. Branch: `prototype/jsx-plus`.
 
 ## Current slice
 
-**P3-FLOW: checking-flow contract and investigation built; four gaps remain.**
+**P3-FACTS: first public compiler snapshot and authored-mapping adapter built.**
 
-`packages/jsx-plus` (`@memoized-dom/jsx-plus`) owns new syntax and copied-span
-mappings. Its normalizer produces standard TSX; its single-UI-module `compile()`
-facade calls compiler-next's public API. Existing compiler-next/runtime/data
-source files are unchanged. Reactivity, refs, list identity, scheduling and
-ownership continue to use their existing implementations.
+Compiler-owned inspection is grouped under
+`packages/compiler-next/src/analysis/`: entry, types, shared frontend,
+serialization and tests. `@memoized-dom/compiler-next/analysis` runs the existing
+parse/resolve/graph sequence without planning, optimizing or emitting. Production
+compilation calls that same extracted frontend and continues normally. No new
+reactivity classifier or runtime behavior is introduced.
 
-DX-31 records the user's separate-package instruction. It supersedes earlier
-in-place syntax placement, while preserving DX-28's same-pipeline requirement.
-The [language spec](spec/README.md) remains draft 0.1, revision 1; its organization
-was informed by `snrraptopack/jasx` at `d055ed85`, without adopting Java semantics.
+`packages/jsx-plus/src/checking/facts.ts` owns the opt-in authored adapter,
+exported as `@memoized-dom/jsx-plus/checking/facts`. It preserves binding identity,
+shadowing, unresolved/global inputs, live-import links, body builders and capture
+facts. Locations explicitly distinguish `verbatim`, `enclosing` and `unmapped`.
+Shifted runtime-TypeScript lowering returns `unavailable-after-lowering`; offsets
+are not guessed. The source and normalization text identify each snapshot.
 
-Quoted text, direct expression children, nested markup, block-bodied `if`/`else`
-and ordinary `.map()` work for the current fixtures. Ordinary attribute/ref
-spellings remain unchanged. Explicit `.tsx` module input keeps existing JSX text
-semantics. A runnable [counter](../packages/jsx-plus/examples/counter.auwla) is
-included and exercised by the execution tests.
+The `.auwla` grammar, checking projection and mappings remain in the separate
+JSX+ package. The ordinary mapper does not yet use this new inspection entry.
+The [four checking-flow gaps](checking-flow.md) therefore remain unresolved.
+Classifications and lexical timing are not complete replay/invocation proofs.
+The [compiler API page](../wiki/compiler/analysis.md) records those limits.
 
-The separate checking export and mapper process reuse the same normalizer,
-without loading DOM compilation. A typed-prop/ref example now checks through
-TypeScript's CLI and language server. Actual ref rename edits cover declaration,
-prop, handler and child read; applying/rechecking succeeds. Unicode diagnostics
-and an incomplete-quote/restore editing cycle retain authored locations.
-
-The new [checking-flow catalog](checking-flow.md) identifies four real narrowing
-gaps: unchecked replay reads, a false `never` error on a guarded read, a replayed
-derivation outside markup, and a changing prop used after `await`. Seven ref,
-row/scope and ordinary-flow cases already match. The production checking
-projection is unchanged; this slice specifies and exposes the problem rather
-than applying an unsafe general wrapper or declaration-widening workaround.
+The code was expanded into readable helpers and blocks. The user now explicitly
+requests **no sub-agents**, superseding their earlier review-agent instruction;
+repository guidance records direct review and verification before pushing.
 
 ## Baseline and evidence
 
-The branch originated from `compiler-rewrite` at `595171c4`. This investigation
-started from clean implementation baseline `14dfede0`. Results below cover its
-flow fixtures, LSP probe, regression/runtime tests and documentation, rather than
-claiming the baseline already included the implementation.
+This slice started from clean baseline `4a8d430b`. Results cover the new analysis
+folder, existing pipeline/export integration, JSX+ adapter/tests and docs.
+Runtime/data/language-service implementations and dependencies are unchanged.
 
-- In `packages/jsx-plus`, `bun check`: no type errors in 188 files.
-- In that package, `bun test`: **99 passed, 0 failed, 413 assertions**, six files.
-  Includes all 6 syntax-view/range fixtures, 5 primary diagnostic fixtures and
-  9 extended behavior programs in both compiler modes (18 executions).
-  Existing ref assignment/clearing and keyed node preservation are checked.
-  The new flow test checks seven established matching cases and explicitly
-  reports four gaps. Additional runtime tests execute guarded union children
-  and guarded derivations outside markup in both modes, changing `READY` to `1`.
-  Existing actual CLI/LSP diagnostics, safe rename, Unicode ranges and invalid/
-  restore editing checks also remain covered.
-- `bun run tests/probe-flow.ts --strict`: **failed, exit one** on
-  `FLOW-TYPE-001` through `004`; seven other targets match. The package suite is
-  not full checking-flow acceptance. Default probe mode is observation only.
-- The independent `wiki2/spec/check.ts` baseline and its type check passed at
-  `cdb9f359`: 27 fixture integrity checks, 7 host probes, 18 ordinary-JSX equivalent
-  executions, no type errors in 172 files. Not rerun for this slice: its code,
-  fixture catalog and compiler/runtime dependencies are unchanged. That runner
-  labels extended syntax NOT RUN; package tests supply the separate evidence.
-- A second agent reviewed this investigation before pushing: no blocking findings.
-  It independently ran the 31 focused flow/runtime tests and the strict probe,
-  confirmed all expected ranges and the four failing targets, and verified that
-  the current bugs are not asserted as correct behavior.
-- Documentation audit: 21 documents, 144 local links/heading targets and 34
-  existing mapped paths checked with no errors. `git diff --check` passed.
-- Full root suite and timing benchmarks were not run. This slice changes no
-  shared compiler/runtime source and does not close their acceptance gates.
+- Compiler-next `bun check`: no errors in 215 files.
+- Compiler-next focused tests: **82 passed, 0 failed, 399 assertions**, five files.
+  Command: `bun test src/analysis/analysis.test.ts src/core/graph/graph.test.ts src/core/parse/parse.test.ts tests/cases/core.test.ts tests/cases/refs.test.ts`.
+  Covers the new API, existing graph/parse contracts, enum behavior and ref
+  lifecycle/reference comparisons. Inspection leaves production output intact.
+- JSX+ `bun check`: no errors in 194 files.
+- JSX+ `bun test`: **106 passed, 0 failed, 463 assertions**, seven files.
+  New tests cover authored facts, row shadowing, prop capture, lowered-coordinate
+  refusal, unresolved provenance and UTF-16/CRLF. Existing actual CLI/LSP rename,
+  diagnostics, editing and runtime cases remain covered.
+- `bun run tests/probe-flow.ts --strict` in JSX+: **failed, exit one**, exactly
+  `FLOW-TYPE-001` through `004`; seven other targets match. Package-suite success
+  does not establish complete checking-flow acceptance.
+- Direct code review completed, including coordinate provenance, missing global/
+  import dependencies, builders, no AST mutation and package boundaries.
+- Documentation audit: 26 documents, 168 local links/heading targets and 37
+  mapped package paths passed; all five compiler analysis files exist in their
+  concept folder. `git diff --check` passed.
+- Full root suite, timing benchmarks, SSR/adoption and editor acceptance were
+  not run. No general performance claim follows from these focused checks.
 
-The current catalog is a tested subset, not exhaustive language conformance.
-Find the implementation commit with `git log -1 -- packages/jsx-plus` and this
-handoff with `git log -1 -- wiki2/status.md`.
+Find this slice's commit with `git log -1 -- packages/compiler-next/src/analysis`.
+The language spec remains draft 0.1 revision 1; this integration changes no grammar.
 
 ## Next
 
-P3-FACTS: define a small source-aware fact boundary for the checking projection:
-binding identities, actual replay/derivation sites, possible updates and deferred
-continuation boundaries. The existing public compiler API does not expose those
-lightweight facts. Define how they can be shared without DOM emission, internal
-compiler imports or a second reactivity classifier before writing flow scaffolding.
-See [the next implementation slice](checking-flow.md#next-implementation-slice).
-Then implement the smallest faithful projection against all eleven targets and
-retain existing rename/edit and ordinary-scope checks. TOOL-05 remains open.
+P3-PROJECT: use the first fact snapshot to design a faithful checking-flow
+projection. Preserve guards within each evaluation, readonly/inferred values,
+ordinary host narrowing, row scope, deferred captures and `await`/`yield` contexts.
+Do not treat a binding kind, an empty named-input list or lexical write timing
+as a complete execution proof. Keep generated scaffolding unmapped.
 
-Keep parser recovery/scalability active: ASI ambiguities, malformed comment/regex
-recovery, and repeated suffix parsing/masking remain open. Partial-file checking
-after syntax failure is not implemented. See [syntax.md](syntax.md) and
-[plan.md](plan.md). Final-JavaScript debugging source maps remain separate work.
+Validate against all eleven flow targets and existing rename/edit cases before
+activating the new facts in the ordinary mapper. Full replay regions, lowering
+maps, incremental caching and multi-module editing remain additional work.
 
-## Handoff cautions
+Parser recovery/scalability also remains open: ASI ambiguities, malformed token
+recovery, repeated suffix parsing and checking the remainder of incomplete files.
+See [plan.md](plan.md), [tooling.md](tooling.md) and [syntax.md](syntax.md).
 
-- The facade currently compiles one UI module. Multi-module production `.auwla`
-  resolution, Vite integration, editor activation and SSR/adoption remain open.
-- Verified tooling: Windows, TypeScript `7.1.0-beta` (git head
-  `3e9236361fa97a9e6c685f4833ac457ae2d8c50a`), JSON-RPC 9.0.2, Bun mapper launch.
-  CLI uses `--runExternalCode`; this beta's LSP uses `--lsp --stdio` with
-  `initializationOptions.runExternalCode: true`. See the exact
-  [tooling settings](tooling.md#verified-toolchain-and-transport).
-- The transport has no VS Code editor dependency. Compatible IDE integration
-  still needs verification; no editor/version matrix acceptance is claimed.
-- Complete host-expression coverage and malformed-input recovery are unfinished.
-  Unsupported contexts are implementation gaps, not a decision to restrict JS.
-- Direct child declarations/loops, event shorthand, modifiers and CSS conveniences
-  remain outside this first profile. Attribute brace removal is undecided.
-- DX-30 records ordinary nonreactive backend `.auwla` files/folders selected by
-  future config, including Express imports. Config/loading are planned;
-  isomorphic support follows later. The UI facade does not implement that path.
-- The rewrite's routing, Vite, acceptance and performance work stays in
-  [wiki/status.md](../wiki/status.md). Prototype progress does not close it.
-- Revise provisional grammar with fixtures and the spec changelog when evidence
-  calls for it. Keep the separate package boundary and reuse existing refs.
+## Other boundaries
+
+- Existing refs, reactivity, lists and ownership remain compiler-next/runtime work.
+- Backend `.auwla` configuration/loading is planned; that code will be ordinary
+  nonreactive backend code. Isomorphic support comes later.
+- Multi-module production loading, Vite, editor registration, delivery and final
+  JavaScript debugging maps are not established by this slice.
+- The rewrite's acceptance/performance gates remain in [wiki/status.md](../wiki/status.md).

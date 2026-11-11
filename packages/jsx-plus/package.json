@@ -6,7 +6,8 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
-    "./checking": "./src/checking/project.ts"
+    "./checking": "./src/checking/project.ts",
+    "./checking/facts": "./src/checking/facts.ts"
   },
   "typescript": {
     "contentMapper": {

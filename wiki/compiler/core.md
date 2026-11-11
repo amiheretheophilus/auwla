@@ -6,6 +6,10 @@
 The core holds the stage machinery and the shared types. What a concept means
 (state, a list, a ref) lives in its feature folder, not here.
 
+The [read-only analysis folder](analysis.md) exposes existing frontend facts.
+Its shared frontend runs parse, resolve and graph in their existing order;
+production continues in `pipeline.ts`. Serialization adds no classification rules.
+
 Component integration adds ordered call expressions and callable references to
 `core/plan/model.ts`. The template planner routes component/dynamic tags and
 spread hosts through value slots. `core/emit/dom.ts` composes the component and

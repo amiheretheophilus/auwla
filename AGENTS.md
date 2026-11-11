@@ -68,5 +68,8 @@ instructions.
 - Benchmarks live in `bench/`. Run them locally only to check their correctness
   gates; the user times them on another machine.
 - Commit and push after each finished step, to `origin`.
-- Before pushing code, have another agent review the changes, address findings,
-  and run the relevant checks. This is the user's standing instruction (2026-11-11).
+- Review code thoroughly and run relevant checks before pushing. The user's
+  latest instruction (2026-11-11) is to stop using sub-agents to conserve tokens;
+  this supersedes their earlier request for another-agent reviews.
+- Keep new compiler-next work in a concept folder, including its tests. Use
+  readable helpers, expanded blocks and explanatory comments, as requested.

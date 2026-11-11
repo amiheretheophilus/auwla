@@ -20,7 +20,8 @@ depends on integration, acceptance and measurements.
 | P2-HARDEN | First slice built; ongoing | Generator/async fragments, semicolon-separated object/function/class children, nested-markup tails and selected error ranges checked; broader recovery and reparse costs remain | [syntax](syntax.md) |
 | P3-TOOL | First CLI/LSP probe built | Typed-prop/ref example, exact authored error range, four-use ref rename and recheck pass through pinned TypeScript; broader flow/editor/caching work remains | [tooling](tooling.md) |
 | P3-FLOW | Investigation built; projection open | Eleven actual LSP targets expose four narrowing gaps and preserve seven existing flow/scope cases; runtime guard examples pass in both modes | [checking flow](checking-flow.md) |
-| P3-FACTS | Next design slice | Define a small authored binding/replay fact boundary for checking without DOM emission, internal imports or a second reactivity classifier | [checking flow](checking-flow.md#next-implementation-slice) |
+| P3-FACTS | First snapshot built | Public inspection shares compiler frontend; JSX+ maps identities/facts with explicit fidelity and refuses shifted coordinates; full replay proofs remain open | [checking flow](checking-flow.md#next-implementation-slice) |
+| P3-PROJECT | Next | Use those facts in faithful flow checking; preserve scope, await/yield, guards and rename, then clear the four targets | [checking flow](checking-flow.md) |
 | P4-FLOW | First fixtures built; expand later | Basic direct `if` and `.map()` fixtures execute; extend scope, owner/disposal and readiness interleavings before full flow acceptance | [syntax](syntax.md), [testing](testing.md) |
 | P5-EVENT | Candidate | Settle event-expression meaning; demonstrate one ordinary handler and one shorthand with identical timing | [features](features.md) |
 | P6-BIND | Candidate | Settle named text/checkbox bindings, write typing and handler order; show one form | [features](features.md) |
@@ -51,8 +52,8 @@ string rewrites. Pair hardening with source-range and mapper probes early.
 - [status.md](status.md) names what passed, what did not run and the next useful step.
 - The work is committed and pushed. A checkpoint can preserve unfinished work, but
   is labeled as such and does not mark its behavioral acceptance complete.
-- Another agent reviews code before pushing; findings are addressed and relevant
-  checks pass, following the user's standing review requirement.
+- Code is reviewed directly and relevant checks pass before pushing. The user's
+  latest instruction supersedes the earlier another-agent review requirement.
 
 Documentation-only work uses link/path/example review and `git diff --check`.
 Implementation uses the focused checks in [testing.md](testing.md).

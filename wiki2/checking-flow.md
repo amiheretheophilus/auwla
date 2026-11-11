@@ -100,14 +100,14 @@ contexts. Global declaration widening also loses legitimate synchronous facts.
 These are rejected experiments, not new authored syntax or runtime transforms.
 
 The checking projection needs a description of replay sites and the bindings
-they read. The existing public compiler API does not expose those lightweight
-facts. Calling full DOM compilation on every edit would contradict the mapper
-boundary. Importing compiler internals or inventing a second reactivity classifier
-would also break the current package contract.
+they read. A first public boundary now exists in
+`@memoized-dom/compiler-next/analysis`, using the existing frontend without
+planning/emission. `@memoized-dom/jsx-plus/checking/facts` maps detached records
+to authored source. The ordinary mapper has not started using them for a fix.
 
 ## Next implementation slice
 
-Define a small source-aware fact boundary before implementing a flow projection.
+A first source-aware boundary is built; it is not a complete replay analysis.
 The required information is:
 
 | Fact | Why it is needed |
@@ -118,10 +118,16 @@ The required information is:
 | Local guard/assignment scope within each evaluation | Preserve ordinary narrowing where it remains valid |
 | Provenance from the existing compiler semantics | Keep checking aligned with reactivity without reimplementing it |
 
-The placement and public shape of these facts are a design task, not an API
-already available in this package. They must be obtainable without production
-DOM emission and mapped back to authored locations. Keep compiler-next/runtime
-implementation unchanged in this investigation slice.
+The compiler-owned implementation is entirely in `src/analysis/`. Snapshot IDs,
+unresolved inputs, live-import links, builders and lexical-timing limits are on
+[compiler analysis](../wiki/compiler/analysis.md). It serializes existing
+classification without adding semantic decisions.
+
+The JSX+ adapter distinguishes `verbatim`, `enclosing` and `unmapped` ranges.
+Enclosing ranges may cross generated syntax and never authorize edits. Runtime
+TypeScript lowering can shift offsets; without a lowering map the adapter returns
+`unavailable-after-lowering` and no authored facts. This new entry is opt-in;
+ordinary checking/rename behavior remains unchanged.
 
 Once that boundary is concrete, implement the smallest faithful checking
 projection and rerun all eleven targets, actual rename/edit checks, and the

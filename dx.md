@@ -220,7 +220,11 @@ Runtime source maps and TypeScript span mappings are separate artifacts.
 The [checking-flow probe](wiki2/checking-flow.md) now demonstrates four gaps where
 ordinary TypeScript narrowing does not describe later reactive evaluations.
 The fix needs authored binding/replay information from the existing semantics;
-the simple TSX projection remains unchanged while that boundary is defined.
+the simple TSX projection remains unchanged while the flow fix is designed.
+A first public compiler snapshot now provides identities and existing graph
+facts; the separate JSX+ adapter maps them with explicit fidelity. It is opt-in
+and is not a complete replay proof. New compiler-owned files are grouped in
+`packages/compiler-next/src/analysis/`; extended syntax remains in JSX+.
 Optional ref and row/synchronous-flow examples already check correctly.
 
 Keep the mapper lightweight: parse and generate the needed checking representation,

@@ -12,10 +12,13 @@ and `wiki2/syntax.md`.
   uses JSON-RPC streams and must not load the production compiler facade.
 - Treat compiler-next/runtime sources as dependencies; changes to them require
   separately authorized work. Tests may use the existing runtime and loader.
+- P3-FACTS adds a compiler-owned read-only public integration API, with all new
+  files under compiler-next's `src/analysis/`. Extended syntax, checking
+  transforms and authored mappings remain in this package.
 - Run `bun check` and `bun test` in this package. Root-suite execution and timing
   benchmarks are not routine checks for this isolated slice.
-- A second agent must review code before each push; address findings and verify
-  the resulting changes before pushing, as required by the user.
+- Review and verify code directly before pushing. Do not use sub-agents: the
+  user's latest instruction supersedes the earlier second-agent review request.
 - Keep conformance claims scoped to tested cases. Report missing host contexts,
   tooling, module-graph integration and delivery coverage rather than implying
   a complete language implementation.

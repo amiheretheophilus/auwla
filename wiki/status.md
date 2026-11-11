@@ -1,6 +1,12 @@
 # Status
 
-Last updated: 2026-11-10.
+Last updated: 2026-11-11.
+
+Prototype branch integration: the compiler-owned [read-only analysis API](compiler/analysis.md)
+is built under `src/analysis/` and shares the existing frontend with production.
+Its focused analysis/graph/parse/core/ref checks pass (82 tests); this does not
+close the rewrite's acceptance or performance gates. JSX+ details and the four
+remaining checking-flow gaps are in [wiki2/status.md](../wiki2/status.md).
 
 ## Current: Phase 10 (2026-11-06)
 

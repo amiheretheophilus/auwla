@@ -47,6 +47,11 @@ preserve the seven existing ref/scope cases without claiming those gaps are fixe
 The [flow investigation](../../wiki2/checking-flow.md) records sources, expected
 results, runtime evidence and the fact boundary needed by a projection fix.
 
+The opt-in `@memoized-dom/jsx-plus/checking/facts` entry now obtains snapshots
+through compiler-next's public `./analysis` entry. It maps identities and ranges
+without DOM emission, distinguishes exact/enclosing/unmapped locations and refuses
+shifted lowering offsets. Ordinary checking is not yet changed by those facts.
+
 Run focused checks from this package:
 
 ```text

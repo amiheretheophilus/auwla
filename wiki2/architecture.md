@@ -9,8 +9,10 @@ Owns DX-28/DX-31 and the integration side of DX-03.
 JSX+ adds authoring features in a separate syntax package. Its normalizer returns
 standard TSX, syntax views and authored mappings; its UI `compile()` facade calls
 compiler-next's public API. Compiler-next owns every existing production stage
-and runtime decision. Prototype source stays in `packages/jsx-plus`; no existing
-compiler-next/runtime/data source files have been modified for this slice.
+and runtime decision. Extended syntax and checking source stay in
+`packages/jsx-plus`. Compiler-next's new `src/analysis/` folder exposes a read-only
+public snapshot using the existing frontend. The production pipeline shares that
+frontend function; runtime/data implementation is unchanged.
 
 ```text
 JSX+ source -> packages/jsx-plus -> normalized standard TSX
@@ -76,6 +78,8 @@ All paths are relative to the repository root and exist now.
 | `packages/jsx-plus/examples/counter.auwla` | Complete counter compiled and clicked by the execution tests |
 | `packages/jsx-plus/AGENTS.md` | Package ownership boundary and focused checks |
 | `packages/jsx-plus/src/checking/project.ts` | Shared-normalizer TSX checking projection and authored parse diagnostics |
+| `packages/jsx-plus/src/checking/facts.ts` | Opt-in public fact adapter with explicit authored mapping fidelity |
+| `packages/jsx-plus/tests/checking-facts.test.ts` | Identities, shadowing, capture, mapping and lowered-coordinate refusal |
 | `packages/jsx-plus/src/mapper/server.ts` | Headless TypeScript JSON-RPC transport and project handles |
 | `packages/jsx-plus/tests/checking.test.ts` | Exact span fidelity, mapper lifecycle and native CLI acceptance |
 | `packages/jsx-plus/tests/mapper-lsp.test.ts` | Native LSP rename, Unicode diagnostics and incomplete/restore editing |
@@ -93,7 +97,8 @@ All paths below are relative to the repository root and currently exist.
 | --- | --- |
 | `packages/compiler-next/src/core/parse/index.ts` | Unchanged parse entry receiving standard TSX from the syntax package |
 | `packages/compiler-next/src/core/parse/lower-typescript.ts` | Existing runtime TypeScript lowering; do not invent a second TS semantics implementation |
-| `packages/compiler-next/src/pipeline.ts` | Unchanged production pipeline, reached through its public exports |
+| `packages/compiler-next/src/pipeline.ts` | Existing production pipeline, now sharing the frontend with inspection |
+| `packages/compiler-next/src/analysis/` | Public inspection and serialized facts; owned by [compiler analysis](../wiki/compiler/analysis.md) |
 | `packages/compiler-next/src/options.ts` | Existing compile options forwarded by the UI facade |
 | `packages/compiler-next/src/features/refs/` | Current ref classification, planning and emission; see [refs](refs.md) |
 | `packages/compiler-next/src/features/conditionals/` | Existing reactive branch machinery |

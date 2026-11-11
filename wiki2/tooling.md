@@ -41,6 +41,8 @@ TypeScript/editor versions and permissions used by the probe.
 | `wiki/compiler/typescript.md` | Existing API notes and compatibility limits |
 | `packages/jsx-plus/src/source.ts` | Existing exact copied-span mappings for normalized TSX; generated syntax has no authored edit span |
 | `packages/jsx-plus/src/checking/project.ts` | TSX projection, protocol tuples and authored parse diagnostics |
+| `packages/jsx-plus/src/checking/facts.ts` | Opt-in public compiler inspection and authored fact locations |
+| `packages/jsx-plus/tests/checking-facts.test.ts` | Identity/provenance, mapping fidelity and lowering-coordinate tests |
 | `packages/jsx-plus/src/mapper/server.ts` | JSON-RPC process, UTF-16 negotiation and project-handle lifecycle |
 | `packages/jsx-plus/package.json` | Private prototype mapper manifest and checking export; launches through Bun |
 | `packages/jsx-plus/tests/checking.test.ts` | Projection/edit fidelity, lifecycle and actual TypeScript CLI checks |
@@ -125,5 +127,6 @@ a TSX formatter or CSS tooling.
 The [checking-flow investigation](checking-flow.md) now supplies eleven target
 fixtures and an actual LSP probe. Its strict mode fails on four confirmed gaps,
 including a false error on a guarded child that compiler-next executes correctly.
-The source-aware fact boundary needed by a fix is proposed there; no flow fix
-or public semantic-fact API has been implemented by this investigation.
+The first public fact boundary is now built and mapped to authored source.
+It is opt-in and stops before compiler planning/emission; the ordinary mapper
+has not activated it for a flow fix. Complete replay proofs remain open.
