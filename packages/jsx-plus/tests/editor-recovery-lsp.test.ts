@@ -2,7 +2,7 @@ import { expect, it } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { exampleRoot, offsetAt, positionAt, rpcProcess, typescriptExecutable, type LspRange } from './rpc';
+import { taskBoardRoot, offsetAt, positionAt, rpcProcess, typescriptExecutable, type LspRange } from './rpc';
 
 interface Diagnostic { code: number; range: LspRange }
 interface Completion { label: string; insertText?: string; textEdit?: { newText: string; insert: LspRange; replace: LspRange } }
@@ -14,14 +14,14 @@ it('keeps diagnostics and applies completion edits beyond real unfinished quote/
     { code: 1008, source: app.replace('aria-label=("Remove " + task.title)', 'aria-label=("Remove " + task.title') },
     { code: 1005, source: app.replace("let query = '';", "let query = ('';") },
   ];
-  const uri = pathToFileURL(resolve(exampleRoot, 'App.auwla')).href;
-  const peer = rpcProcess(typescriptExecutable, ['--lsp', '--stdio'], exampleRoot);
+  const uri = pathToFileURL(resolve(taskBoardRoot, 'App.auwla')).href;
+  const peer = rpcProcess(typescriptExecutable, ['--lsp', '--stdio'], taskBoardRoot);
   peer.connection.onRequest('client/registerCapability', () => null);
   let revision = 1;
 
   try {
     await peer.connection.sendRequest('initialize', {
-      processId: process.pid, rootUri: pathToFileURL(exampleRoot).href,
+      processId: process.pid, rootUri: pathToFileURL(taskBoardRoot).href,
       capabilities: { textDocument: { completion: { completionItem: { insertReplaceSupport: true } }, diagnostic: {} } },
       initializationOptions: { runExternalCode: true },
     });

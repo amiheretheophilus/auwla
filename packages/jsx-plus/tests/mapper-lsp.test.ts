@@ -4,7 +4,7 @@ import { resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { normalize } from '../src/normalize';
 import flow from './fixtures/checking-flow.json';
-import { exampleRoot, offsetAt, positionAt, rpcProcess, typescriptExecutable, type LspRange, type TextEdit } from './rpc';
+import { exampleRoot, taskBoardRoot, offsetAt, positionAt, rpcProcess, typescriptExecutable, type LspRange, type TextEdit } from './rpc';
 
 interface Diagnostic { code: number; message: string; range: LspRange }
 interface Edit {
@@ -20,15 +20,15 @@ interface CompletionItem {
 
 it('renames a real bare event handler through every authored use and rechecks', async () => {
   const source = readFileSync(new URL('../examples/task-board/App.auwla', import.meta.url), 'utf8');
-  const file = resolve(exampleRoot, 'App.auwla');
+  const file = resolve(taskBoardRoot, 'App.auwla');
   const uri = pathToFileURL(file).href;
-  const peer = rpcProcess(typescriptExecutable, ['--lsp', '--stdio'], exampleRoot);
+  const peer = rpcProcess(typescriptExecutable, ['--lsp', '--stdio'], taskBoardRoot);
   peer.connection.onRequest('client/registerCapability', () => null);
 
   try {
     await peer.connection.sendRequest('initialize', {
       processId: process.pid,
-      rootUri: pathToFileURL(exampleRoot).href,
+      rootUri: pathToFileURL(taskBoardRoot).href,
       capabilities: { general: { positionEncodings: ['utf-16'] }, textDocument: { diagnostic: {} } },
       initializationOptions: { runExternalCode: true },
     });
@@ -75,14 +75,14 @@ it('applies a native member-completion edit inside the real task-board parenthes
   const source = original.replace('"Remove " + task.title', '"Remove " + task.ti');
   const token = source.indexOf('"Remove " + task.ti') + '"Remove " + task.'.length;
   const expectedRange = { start: positionAt(source, token), end: positionAt(source, token + 2) };
-  const uri = pathToFileURL(resolve(exampleRoot, 'App.auwla')).href;
-  const peer = rpcProcess(typescriptExecutable, ['--lsp', '--stdio'], exampleRoot);
+  const uri = pathToFileURL(resolve(taskBoardRoot, 'App.auwla')).href;
+  const peer = rpcProcess(typescriptExecutable, ['--lsp', '--stdio'], taskBoardRoot);
   peer.connection.onRequest('client/registerCapability', () => null);
 
   try {
     await peer.connection.sendRequest('initialize', {
       processId: process.pid,
-      rootUri: pathToFileURL(exampleRoot).href,
+      rootUri: pathToFileURL(taskBoardRoot).href,
       capabilities: {
         general: { positionEncodings: ['utf-16'] },
         textDocument: { completion: { completionItem: { insertReplaceSupport: true } }, diagnostic: {} },

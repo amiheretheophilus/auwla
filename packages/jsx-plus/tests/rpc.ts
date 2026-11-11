@@ -5,6 +5,7 @@ import { createMessageConnection, StreamMessageReader, StreamMessageWriter } fro
 
 export const packageRoot = fileURLToPath(new URL('..', import.meta.url));
 export const exampleRoot = resolve(packageRoot, 'examples/checking');
+export const taskBoardRoot = resolve(packageRoot, 'examples/task-board');
 
 // The integration probe deliberately runs the installed, pinned TS7 executable,
 // independently of Bun's routine package type check and any editor installation.
