@@ -1,6 +1,6 @@
 # JSX+ prototype wiki
 
-Branch: `prototype/jsx-plus`. Updated: 2026-11-10.
+Branch: `prototype/jsx-plus`. Updated: 2026-11-11.
 
 The working map for Auwla's authoring prototype. [dx.md](../dx.md) holds the design
 discussion and feature index. This folder connects each experiment to its rules,
@@ -17,7 +17,9 @@ extension work, not a replacement compiler or a second ref implementation.
 1. Read [AGENTS.md](../AGENTS.md) and [the existing ground rules](../wiki/rules.md).
 2. Read [status.md](status.md): current state, next slice and what is unverified.
 3. Read [plan.md](plan.md): the ordered backlog and the next slice's outcome.
-4. Read the owning concept page below. Use [decisions.md](decisions.md) when a
+4. Read [spec/README.md](spec/README.md) and the relevant grammar/semantics before
+   changing syntax. The draft precedes parser implementation and is revisable.
+5. Read the owning concept page below. Use [decisions.md](decisions.md) when a
    choice's status or reason matters; use [architecture.md](architecture.md) when
    choosing where code belongs.
 
@@ -28,6 +30,7 @@ still be `learning`; execute project commands in the `auwla` checkout explicitly
 
 | Page | Owns |
 | --- | --- |
+| [spec/](spec/README.md) | Precise language rules: grammar, syntax model, semantics, diagnostics and conformance fixtures |
 | [syntax.md](syntax.md) | Quoted text, direct expressions, control flow, separators, scopes and grammar recovery |
 | [refs.md](refs.md) | Normally declared refs, the existing `ref` prop, lifecycle compatibility and code map |
 | [tooling.md](tooling.md) | TypeScript content mapper, authored spans, diagnostics, editing and formatting |
@@ -52,8 +55,9 @@ still be `learning`; execute project commands in the `auwla` checkout explicitly
   change to accepted user-facing semantics and record why; the user's latest
   direction takes precedence. Being agile does not silently change JavaScript
   evaluation, reactivity or ref ownership.
-- Each concept page owns its contract, open questions, cases and file map. Use
-  links from the plan and status instead of duplicating bug lists or test counts.
+- The spec owns precise language rules. Concept pages own implementation maps,
+  open investigations and compatibility cases, linking the applicable spec rules.
+  Plan and status link those owners instead of duplicating rules, bugs or counts.
 - Change the owning page in the same commit as its code. Mark future paths
   **planned**, and replace them with actual paths when implemented.
 - Keep status short. Record the latest verified commit and exact commands/results;

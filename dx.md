@@ -4,10 +4,15 @@ Status: evolving prototype design. Accepted directions and open proposals are
 identified separately; the complete grammar is not settled.
 
 Created: 2026-11-05.
-Updated: 2026-11-10.
+Updated: 2026-11-11.
 
 Work branch: `prototype/jsx-plus`. Start at [wiki2/README.md](wiki2/README.md)
 for the code map, current slice, acceptance examples and handoff.
+
+The initial [language extension spec](wiki2/spec/README.md), version 0.1-draft,
+defines the first core profile's grammar, syntax model, semantics, diagnostics
+and conformance fixtures. The broader features below remain discussion material
+where they are outside that profile. A working draft can evolve as we prototype.
 
 This document collects the proposed JSX+ authoring experience, the research behind
 it, and the decisions we need to iterate on. Syntax examples are proposed unless
@@ -38,6 +43,9 @@ Accepted direction from the 2026-11-10 discussion:
 Attribute syntax, separators, the final file extension and the remaining feature
 proposals are still open. Examples retain existing attribute expression braces.
 This direction is for the new authoring format; it does not change TSX text rules.
+Revision 1 provisionally uses host expression continuation/ASI and explicit
+separators where child expressions would otherwise join. That is a draft to
+test, not a blanket user decision to require semicolons after every child.
 
 ## 1. What we are designing
 
@@ -499,6 +507,11 @@ tested. No new state or scheduling system follows from the new surface syntax.
 
 Questions to settle in [wiki2/syntax.md](wiki2/syntax.md):
 
+The [core grammar draft](wiki2/spec/grammar.md) now supplies a first concrete
+answer for expression boundaries and block-bodied conditionals. Remaining
+questions below cover later profiles and revisions; they do not make the current
+draft implicit or exempt its implementation from conformance checks.
+
 - Where do adjacent expressions end? Newlines, semicolons and JavaScript ASI
   must be tested with calls, indexing, comparisons and nested tags. Semicolons
   are a candidate separator, not an accepted mandatory rule.
@@ -807,7 +820,7 @@ export function Todos() {
     <main>
       <form @submit.prevent={add()}>
         <label>
-          "New task"
+          "New task";
           <input bind:value={draft} @keydown.esc={draft = ""} />
         </label>
         <button type="submit">"Add"</button>
@@ -882,17 +895,18 @@ and mark a revised decision as superseded rather than erasing its reason.
 | DX-23 | Post-update DOM work | Correct chat scrolling and measurements | Open |
 | DX-24 | Formatting and CSS tooling | Explicit support plan beyond TypeScript mappings | Open |
 | DX-25 | Text and expression children | Quoted text; direct JavaScript expressions without child-container braces | Accepted direction; grammar open |
-| DX-26 | Grammar boundaries | Separators, whitespace, escapes, declarations, scope and recovery | Open; next prototype investigation |
+| DX-26 | Grammar boundaries | Core spec revision 1 supplies provisional rules; extended behavior and later profiles remain open | Draft to test and revise |
 | DX-27 | Iteration | Small slices; revise the plan, examples and decisions as we learn | Accepted |
 | DX-28 | Compiler continuity | Extend compiler-next's existing pipeline; refs and other existing features are reused | Accepted |
+| DX-29 | Spec before implementation | Define grammar, syntax model, semantics, diagnostics and conformance fixtures before the parser; evolve the draft explicitly | Accepted |
 
 ## 18. Suggested prototype and acceptance examples
 
-The current iteration is documentation and planning. The next proposed slice
-proves quoted text, direct expression children and a normal declared ref, with
-source ranges and a small TypeScript mapping experiment. Then prove direct `if`
-and `.map()` against equivalent existing JSX. Add event/binding conveniences in
-later slices after their contracts are settled.
+The initial core specification and fixtures are now written. The next slice
+extends compiler-next's parse stage for quoted text and direct expressions,
+preserving existing refs, with source ranges and a small TypeScript mapping
+experiment. Then prove direct `if` and `.map()` against equivalent existing JSX.
+Add event/binding conveniences in later slices after their contracts are settled.
 
 The working order and evidence live in [wiki2/plan.md](wiki2/plan.md) and
 [wiki2/status.md](wiki2/status.md). Reorder or replace an experiment when evidence

@@ -1,6 +1,7 @@
 # Verification and evidence
 
-State: prototype checks planned; documentation checks available now.
+State: spec-integrity/current-JSX baseline checks available; extended syntax and
+tooling conformance await their implementation.
 
 ## What a check establishes
 
@@ -18,6 +19,20 @@ Assert specific text, node identity, scope, side-effect counts and cleanup where
 those are the contract. Inspect a mismatch before deciding which path is wrong.
 
 ## Cases and files
+
+The language draft and fixtures live in [spec/](spec/README.md).
+[Conformance levels](spec/conformance.md) distinguish fixture integrity, the host
+baseline, extended parsing/diagnostics/behavior, tooling and delivery. Run the
+checks currently available from the repository root:
+
+```text
+bun run wiki2/spec/check.ts
+bun check -p wiki2/spec/tsconfig.json
+```
+
+These commands do not establish extended-source conformance. In particular,
+passing a separately authored JSX equivalent is baseline evidence, not evidence
+that the new markup parser accepts its source.
 
 Acceptance IDs are owned by [syntax.md](syntax.md), [refs.md](refs.md) and
 [tooling.md](tooling.md); later features add theirs on their concept page.

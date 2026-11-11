@@ -1,0 +1,244 @@
+{
+  "specVersion": "0.1-draft",
+  "revision": 1,
+  "cases": [
+    {
+      "id": "PARSE-001",
+      "level": "parse",
+      "rules": ["G-TEXT", "A-RANGE"],
+      "source": "<p>\"Hello\"</p>",
+      "expected": {
+        "specVersion": "0.1-draft",
+        "root": { "kind": "element", "range": [0, 14], "name": "p", "children": [
+          { "kind": "expression", "range": [3, 10], "source": "\"Hello\"" }
+        ] }
+      }
+    },
+    {
+      "id": "PARSE-002",
+      "level": "parse",
+      "rules": ["G-TEXT", "S-EXPR"],
+      "source": "<p>message</p>",
+      "expected": {
+        "specVersion": "0.1-draft",
+        "root": { "kind": "element", "range": [0, 14], "name": "p", "children": [
+          { "kind": "expression", "range": [3, 10], "source": "message" }
+        ] }
+      }
+    },
+    {
+      "id": "PARSE-003",
+      "level": "parse",
+      "rules": ["G-BOUNDARY", "A-NODES"],
+      "source": "<div><A /><B /></div>",
+      "expected": {
+        "specVersion": "0.1-draft",
+        "root": { "kind": "element", "range": [0, 21], "name": "div", "children": [
+          { "kind": "element", "range": [5, 10], "name": "A", "children": [] },
+          { "kind": "element", "range": [10, 15], "name": "B", "children": [] }
+        ] }
+      }
+    },
+    {
+      "id": "PARSE-004",
+      "level": "parse",
+      "rules": ["G-SOURCE", "A-RANGE"],
+      "source": "<p>\"😀\"</p>",
+      "expected": {
+        "specVersion": "0.1-draft",
+        "root": { "kind": "element", "range": [0, 11], "name": "p", "children": [
+          { "kind": "expression", "range": [3, 7], "source": "\"😀\"" }
+        ] }
+      }
+    },
+    {
+      "id": "PARSE-005",
+      "level": "parse",
+      "rules": ["G-IF", "A-NODES"],
+      "source": "<p>if (ok) { \"yes\" } else { \"no\" }</p>",
+      "expected": {
+        "specVersion": "0.1-draft",
+        "root": { "kind": "element", "range": [0, 38], "name": "p", "children": [
+          {
+            "kind": "if", "range": [3, 34],
+            "test": { "kind": "expression", "range": [7, 9], "source": "ok" },
+            "consequent": { "kind": "block", "range": [11, 20], "children": [
+              { "kind": "expression", "range": [13, 18], "source": "\"yes\"" }
+            ] },
+            "alternate": { "kind": "block", "range": [26, 34], "children": [
+              { "kind": "expression", "range": [28, 32], "source": "\"no\"" }
+            ] }
+          }
+        ] }
+      }
+    },
+    {
+      "id": "PARSE-006",
+      "level": "parse",
+      "rules": ["G-CORE", "S-EXPR"],
+      "source": "<p>count + 1</p>",
+      "expected": {
+        "specVersion": "0.1-draft",
+        "root": { "kind": "element", "range": [0, 16], "name": "p", "children": [
+          { "kind": "expression", "range": [3, 12], "source": "count + 1" }
+        ] }
+      }
+    },
+    {
+      "id": "ERROR-001",
+      "level": "diagnostics",
+      "rules": ["G-ERROR", "D-CODES"],
+      "source": "<p>\"ok\"</div>",
+      "expected": { "code": "JPX1001", "severity": "error", "range": [7, 13] }
+    },
+    {
+      "id": "ERROR-002",
+      "level": "diagnostics",
+      "rules": ["G-ERROR", "D-CODES"],
+      "source": "<p>\"ok\"",
+      "expected": { "code": "JPX1002", "severity": "error", "range": [0, 3] }
+    },
+    {
+      "id": "ERROR-003",
+      "level": "diagnostics",
+      "rules": ["G-ERROR", "D-RECOVERY"],
+      "source": "<p>\"oops",
+      "expected": { "code": "JPX1003", "severity": "error", "range": [3, 4] }
+    },
+    {
+      "id": "ERROR-004",
+      "level": "diagnostics",
+      "rules": ["G-IF", "D-CODES"],
+      "source": "<p>if (ok) \"yes\"</p>",
+      "expected": { "code": "JPX1006", "severity": "error", "range": [11, 16] }
+    },
+    {
+      "id": "ERROR-005",
+      "level": "diagnostics",
+      "rules": ["G-BOUNDARY", "D-CODES"],
+      "source": "<p>first second</p>",
+      "expected": { "code": "JPX1005", "severity": "error", "range": [9, 15] }
+    },
+    {
+      "id": "HOST-001",
+      "level": "host",
+      "rules": ["G-HOST", "G-BOUNDARY"],
+      "source": "first\nsecond",
+      "expected": { "expressionKinds": ["Identifier", "Identifier"] }
+    },
+    {
+      "id": "HOST-002",
+      "level": "host",
+      "rules": ["G-HOST", "G-BOUNDARY"],
+      "source": "getValue()\n[index]",
+      "expected": { "expressionKinds": ["MemberExpression"] }
+    },
+    {
+      "id": "HOST-003",
+      "level": "host",
+      "rules": ["G-HOST", "G-BOUNDARY"],
+      "source": "value\n+offset",
+      "expected": { "expressionKinds": ["BinaryExpression"] }
+    },
+    {
+      "id": "HOST-004",
+      "level": "host",
+      "rules": ["G-HOST", "G-BOUNDARY"],
+      "source": "getValue();\n[index]",
+      "expected": { "expressionKinds": ["CallExpression", "ArrayExpression"] }
+    },
+    {
+      "id": "HOST-005",
+      "level": "host",
+      "rules": ["G-HOST", "G-BOUNDARY"],
+      "source": "<A />.value;",
+      "expected": { "expressionKinds": ["MemberExpression"] }
+    },
+    {
+      "id": "HOST-006",
+      "level": "host",
+      "rules": ["G-HOST", "G-BOUNDARY"],
+      "source": "value < limit ? 'small' : 'large'",
+      "expected": { "expressionKinds": ["ConditionalExpression"] }
+    },
+    {
+      "id": "HOST-007",
+      "level": "host",
+      "rules": ["G-HOST", "G-BOUNDARY"],
+      "source": "value < /p>/.test(text)",
+      "expected": { "expressionKinds": ["BinaryExpression"] }
+    },
+    {
+      "id": "TEXT-001",
+      "level": "behavior",
+      "rules": ["G-TEXT", "S-TEXT"],
+      "source": "export function App() { return <p>\"Hello\"</p>; }",
+      "jsxEquivalent": "export function App() { return <p>{\"Hello\"}</p>; }",
+      "expected": { "text": ["Hello"] }
+    },
+    {
+      "id": "TEXT-002",
+      "level": "behavior",
+      "rules": ["G-TEXT", "S-TEXT"],
+      "source": "export function App() { return <p>\"&amp;\"; \" \"; \"<b>\"; \" \"; \"a\\nb\"</p>; }",
+      "jsxEquivalent": "export function App() { return <p>{\"&amp;\"}{\" \"}{\"<b>\"}{\" \"}{\"a\\nb\"}</p>; }",
+      "expected": { "text": ["&amp; <b> a\nb"] }
+    },
+    {
+      "id": "TEXT-003",
+      "level": "behavior",
+      "rules": ["S-TEXT", "S-PIPELINE"],
+      "source": "export function App() { return <p>null; false; true; 0</p>; }",
+      "jsxEquivalent": "export function App() { return <p>{null}{false}{true}{0}</p>; }",
+      "expected": { "text": ["0"] }
+    },
+    {
+      "id": "EXPR-001",
+      "level": "behavior",
+      "rules": ["S-EXPR", "S-PIPELINE"],
+      "source": "export function App() { let count = 1; return <main><output>count + 1</output><button onClick={() => count++}>\"add\"</button></main>; }",
+      "jsxEquivalent": "export function App() { let count = 1; return <main><output>{count + 1}</output><button onClick={() => count++}>add</button></main>; }",
+      "expected": { "clicks": ["button", "button"], "text": ["2add", "3add", "4add"] }
+    },
+    {
+      "id": "EXPR-002",
+      "level": "behavior",
+      "rules": ["S-EXPR", "A-NORMALIZE"],
+      "source": "const model = { value: 7, read() { return this.value; } }; export function App() { return <p>model.read()</p>; }",
+      "jsxEquivalent": "const model = { value: 7, read() { return this.value; } }; export function App() { return <p>{model.read()}</p>; }",
+      "expected": { "text": ["7"] }
+    },
+    {
+      "id": "FLOW-001",
+      "level": "behavior",
+      "rules": ["G-IF", "S-IF"],
+      "source": "export function App() { let ready = true; return <section>if (ready) { <p>\"Ready\"</p> } else { <p>\"Waiting\"</p> }<button onClick={() => ready = !ready}>\"toggle\"</button></section>; }",
+      "jsxEquivalent": "export function App() { let ready = true; return <section>{ready ? <p>Ready</p> : <p>Waiting</p>}<button onClick={() => ready = !ready}>toggle</button></section>; }",
+      "expected": { "clicks": ["button", "button"], "text": ["Readytoggle", "Waitingtoggle", "Readytoggle"] }
+    },
+    {
+      "id": "FLOW-002",
+      "level": "behavior",
+      "rules": ["G-IF", "S-IF"],
+      "source": "function fail() { throw new Error('unselected branch'); } export function App() { return <p>if (true) { \"chosen\" } else { fail() }</p>; }",
+      "jsxEquivalent": "function fail() { throw new Error('unselected branch'); } export function App() { return <p>{true ? \"chosen\" : fail()}</p>; }",
+      "expected": { "text": ["chosen"] }
+    },
+    {
+      "id": "LIST-001",
+      "level": "behavior",
+      "rules": ["S-LIST", "S-PIPELINE"],
+      "source": "export function App() { const items = [{ id: 1, label: 'A' }, { id: 2, label: 'B' }]; return <main><button onClick={() => items.reverse()}>\"reverse\"</button><ul>items.map(item => <li key={item.id} data-id={item.id}>item.label</li>)</ul></main>; }",
+      "jsxEquivalent": "export function App() { const items = [{ id: 1, label: 'A' }, { id: 2, label: 'B' }]; return <main><button onClick={() => items.reverse()}>reverse</button><ul>{items.map(item => <li key={item.id} data-id={item.id}>{item.label}</li>)}</ul></main>; }",
+      "expected": { "clicks": ["button"], "text": ["reverseAB", "reverseBA"], "preserveNodes": { "selector": "li", "keyAttribute": "data-id" } }
+    },
+    {
+      "id": "REF-001",
+      "level": "behavior",
+      "rules": ["G-ATTR", "S-REF"],
+      "source": "export let input; export function App() { return <main><input ref={input} /><p>\"ref\"</p></main>; }",
+      "jsxEquivalent": "export let input; export function App() { return <main><input ref={input} /><p>ref</p></main>; }",
+      "expected": { "text": ["ref"], "ref": { "export": "input", "selector": "input" } }
+    }
+  ]
+}

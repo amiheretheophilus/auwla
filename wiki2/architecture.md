@@ -1,7 +1,7 @@
 # Architecture and code map
 
 State: compiler-next extension; new syntax implementation not started.
-Updated: 2026-11-10. Existing compiler/runtime features, including refs, are built.
+Updated: 2026-11-11. Existing compiler/runtime features, including refs, are built.
 Owns DX-28 and the integration side of DX-03.
 
 ## One production compilation path
@@ -63,6 +63,11 @@ All paths below are relative to the repository root and currently exist.
 
 Existing implementation contracts stay on their [compiler pages](../wiki/compiler/README.md).
 If shared machinery changes, update that page as well as the owning prototype page.
+
+The extension contract now exists under [spec/](spec/README.md): grammar, syntax
+view/schema, semantics, diagnostics, fixtures and [check.ts](spec/check.ts).
+The checker validates fixtures and current-JSX equivalents; it does not parse
+extended source or introduce a production compilation path.
 
 ## Proposed placement
 

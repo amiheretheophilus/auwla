@@ -1,6 +1,6 @@
 # Prototype backlog
 
-Updated: 2026-11-10. Working order, revisable after every slice.
+Updated: 2026-11-11. Working order, revisable after every slice.
 
 The goal is additional authoring features inside compiler-next's existing path,
 with correct JavaScript behavior and credible tooling. Experiments use its parse,
@@ -14,8 +14,9 @@ depends on integration, acceptance and measurements.
 | --- | --- | --- | --- |
 | P0-DOC | Done | Record the user directions; create the wiki and session route; validate links, paths and examples | [status](status.md), [decisions](decisions.md) |
 | P0-ALIGN | Done | Make compiler-next continuity and existing ref support explicit; remove the standalone compiler-package suggestion | [architecture](architecture.md), [refs](refs.md) |
-| P1-GRAMMAR | Next | Compare boundary/scoping candidates with concrete valid, ambiguous and incomplete fixtures; record a provisional grammar and remaining questions | [syntax](syntax.md) |
-| P2-PARSE | Planned | Extend compiler-next's parse stage for quoted text/direct children; compile through the same later stages and verify existing refs still work | [syntax](syntax.md), [architecture](architecture.md), [refs](refs.md) |
+| P1-SPEC | Done: draft 0.1 r1 | Study JASX's spec organization; define core grammar, syntax model, semantics, diagnostics and conformance fixtures before parser work | [spec](spec/README.md) |
+| P1-GRAMMAR | Done: provisional candidate | Host-parser probes establish continuation behavior; record concrete boundaries and incomplete-input fixtures; extended parsing still awaits P2 | [grammar](spec/grammar.md), [syntax](syntax.md) |
+| P2-PARSE | Next | Extend compiler-next's parse stage for the first core fixtures; compile through the same later stages and verify existing refs still work | [syntax](syntax.md), [architecture](architecture.md), [refs](refs.md) |
 | P3-TOOL | Planned; pair with P2 | A minimal mapper type-checks the same source, reports a deliberate error at the authored span, and supports a safe rename edit | [tooling](tooling.md) |
 | P4-FLOW | Planned | Direct `if` and `.map()` preserve scope, evaluation order, keyed identity and ref cleanup against equivalent JSX | [syntax](syntax.md), [testing](testing.md) |
 | P5-EVENT | Candidate | Settle event-expression meaning; demonstrate one ordinary handler and one shorthand with identical timing | [features](features.md) |
@@ -32,9 +33,11 @@ For the active slice, write: the question it answers, a few input examples,
 observable expected results, owning files (planned or real), dependencies and the
 checks that could disprove it. Resolve only the decisions that slice needs.
 
-The next grammar experiment needs no event modifiers, CSS system or production
-Vite migration. A source-to-source experiment is an option to test, not a decision
-to turn the whole language into string rewrites.
+The next parser slice implements the smallest declared part of the core spec and
+reports exactly which conformance levels/fixtures it covers. It needs no event
+modifiers, CSS system or production Vite migration. Normalization within the parse
+stage is an option to test, not a decision to replace host parsing with string
+rewrites. Pair it with source-range and mapper probes early.
 
 ## Finished means
 
@@ -55,7 +58,8 @@ Keep stable IDs for discussion. Add, split, reorder, defer or replace slices as
 we learn; record a short reason beside the affected slice or in its owning page.
 When a user-facing decision changes, link the new [decision](decisions.md) and
 update examples and checks together. No fixed sprint duration or full language
-specification is required before a small experiment can begin.
+specification for every future feature is required. The current slice does need
+explicit draft rules and fixtures before its parser behavior is implemented.
 
 Later candidates include conditional classes, styling, scoped CSS, gestures,
 hotkeys, observers and ref-based DOM measurements. Their open contracts stay in

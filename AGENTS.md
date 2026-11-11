@@ -31,6 +31,10 @@ instructions.
   design discussion; `wiki2/` maps the prototype, decisions, checks and next slice.
   This extends compiler-next's syntax and features through its existing pipeline.
   Do not create a parallel production compiler or rebuild existing refs.
+  Read `wiki2/spec/README.md` before changing syntax: its grammar, syntax model,
+  semantics, diagnostics and conformance fixtures define the working draft.
+  Revise provisional rules explicitly with their fixtures instead of inventing
+  language behavior during implementation.
   Prototype grammar and plan choices are revisable as evidence arrives. Keep
   accepted user direction distinct from provisional experiments and implemented
   behavior. Start with `wiki2/status.md`, not the rewrite's next unchecked phase.

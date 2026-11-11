@@ -1,7 +1,11 @@
 # Markup bodies and grammar
 
-State: accepted authoring direction; grammar and implementation open.
+State: core grammar specified in 0.1-draft revision 1; implementation not started.
 Owns DX-14, DX-25, DX-26 and keyed identity questions DX-15.
+
+Precise rules now live in [spec/grammar.md](spec/grammar.md),
+[spec/ast.md](spec/ast.md) and [spec/semantics.md](spec/semantics.md). This page
+maps the work and remaining investigations; it does not define a competing grammar.
 
 Implementation extends compiler-next's parse stage and uses its existing later
 stages. Ordinary expression rendering, `.map()`, list identity and refs already
@@ -45,7 +49,15 @@ whole `if`. Chained calls, ternaries, functions and computed reads must remain
 ordinary expressions. A direct `for...of` is a later candidate with the same list
 identity requirements; exact loop grammar is open.
 
-## Questions P1 must make concrete
+## Initial answers and remaining investigations
+
+P1 selected host continuation/ASI plus explicit separators at ambiguous boundaries
+as its first provisional candidate. The current parser confirms seven baseline
+shapes in [the catalog](spec/cases.json), including call/index continuation and
+comparisons. String children use JS escaping without JSX entity decoding; direct
+conditional bodies are blocks. These draft choices can change with counterexamples.
+
+The full questions remain useful for later profiles and parser feedback:
 
 | Question | Probe before choosing a rule |
 | --- | --- |
@@ -60,9 +72,9 @@ identity requirements; exact loop grammar is open.
 | Recovery | Missing quote, tag, brace or expression; retain useful ranges and tooling for later complete code |
 | Compatibility | Whether legacy child containers are accepted in the new format; old `.tsx` is unchanged either way |
 
-Mandatory semicolons, newline-only separation and the old `key value` loop suffix
-are not accepted rules. Record a provisional choice and counterexamples after
-the experiment, then revise it if the next slice disproves it.
+Mandatory semicolons after every child, newline-only separation and the old
+`key value` loop suffix are not accepted rules. Implement the documented draft,
+then revise it explicitly with counterexamples if the next slice disproves it.
 
 ## Acceptance examples
 
@@ -86,6 +98,8 @@ authorize rejecting valid JavaScript expressions to simplify compilation.
 
 ## Files and limits
 
-Prototype parser, lowering and tests: **planned**, mapped in
-[architecture.md](architecture.md). Existing branch/list files remain owned by
-their [compiler pages](../wiki/compiler/README.md). No new grammar case has run.
+Production syntax support and its extended-source tests: **planned**, mapped in
+[architecture.md](architecture.md). The spec, syntax-view schema, 27-fixture catalog
+and checker exist under [spec/](spec/README.md). Fixture integrity and current-JSX
+baselines have run; extended parse/diagnostics/execution have not. Existing
+branch/list files remain owned by their [compiler pages](../wiki/compiler/README.md).

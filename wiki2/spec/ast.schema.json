@@ -1,0 +1,88 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "JSX+ 0.1-draft core syntax conformance view",
+  "type": "object",
+  "required": ["specVersion", "root"],
+  "additionalProperties": false,
+  "properties": {
+    "specVersion": { "const": "0.1-draft" },
+    "root": { "$ref": "#/$defs/child" }
+  },
+  "$defs": {
+    "range": {
+      "type": "array",
+      "prefixItems": [{ "type": "integer", "minimum": 0 }, { "type": "integer", "minimum": 0 }],
+      "items": false,
+      "minItems": 2,
+      "maxItems": 2
+    },
+    "child": {
+      "oneOf": [
+        { "$ref": "#/$defs/element" },
+        { "$ref": "#/$defs/fragment" },
+        { "$ref": "#/$defs/expression" },
+        { "$ref": "#/$defs/conditional" }
+      ]
+    },
+    "children": { "type": "array", "items": { "$ref": "#/$defs/child" } },
+    "element": {
+      "type": "object",
+      "required": ["kind", "range", "name", "children"],
+      "additionalProperties": false,
+      "properties": {
+        "kind": { "const": "element" },
+        "range": { "$ref": "#/$defs/range" },
+        "name": { "type": "string", "minLength": 1 },
+        "children": { "$ref": "#/$defs/children" }
+      }
+    },
+    "fragment": {
+      "type": "object",
+      "required": ["kind", "range", "children"],
+      "additionalProperties": false,
+      "properties": {
+        "kind": { "const": "fragment" },
+        "range": { "$ref": "#/$defs/range" },
+        "children": { "$ref": "#/$defs/children" }
+      }
+    },
+    "expression": {
+      "type": "object",
+      "required": ["kind", "range", "source"],
+      "additionalProperties": false,
+      "properties": {
+        "kind": { "const": "expression" },
+        "range": { "$ref": "#/$defs/range" },
+        "source": { "type": "string", "minLength": 1 }
+      }
+    },
+    "block": {
+      "type": "object",
+      "required": ["kind", "range", "children"],
+      "additionalProperties": false,
+      "properties": {
+        "kind": { "const": "block" },
+        "range": { "$ref": "#/$defs/range" },
+        "children": { "$ref": "#/$defs/children" }
+      }
+    },
+    "conditional": {
+      "type": "object",
+      "required": ["kind", "range", "test", "consequent", "alternate"],
+      "additionalProperties": false,
+      "properties": {
+        "kind": { "const": "if" },
+        "range": { "$ref": "#/$defs/range" },
+        "test": { "$ref": "#/$defs/expression" },
+        "consequent": { "$ref": "#/$defs/block" },
+        "alternate": {
+          "oneOf": [
+            { "$ref": "#/$defs/block" },
+            { "$ref": "#/$defs/conditional" },
+            { "type": "null" }
+          ]
+        }
+      }
+    }
+  }
+}
