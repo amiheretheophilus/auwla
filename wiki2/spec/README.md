@@ -1,8 +1,9 @@
 # JSX+ language extension specification
 
 Version: **0.1-draft**, revision **1**. Initial core profile. Created: 2026-11-11.
-Implementation: **not started**. This draft specifies new syntax in compiler-next;
-it is not a claim that compiler-next currently parses these examples.
+Implementation: **first slice built** in the separate `packages/jsx-plus` package.
+It normalizes the tested subset to standard TSX and calls compiler-next's public
+API. Compiler-next itself does not learn the extended grammar or change its files.
 
 JSX+ extends Auwla's markup authoring while retaining JavaScript/TypeScript and
 compiler-next's existing semantics. It adds quoted text, direct expression
@@ -78,8 +79,9 @@ working; an ordinary expression is not rejected for calling unknown code.
 ## Compiler continuity
 
 ```text
-existing syntax or extended syntax
-  -> compiler-next parse (new syntax support here)
+extended syntax -> separate packages/jsx-plus normalizer -> standard TSX
+standard TSX / existing syntax
+  -> compiler-next public API and existing parse stage
   -> resolve -> graph -> plan -> optimize -> emit
   -> existing runtime / DOM / SSR
 ```
@@ -88,6 +90,8 @@ The mapper derives a checking projection from the same syntax understanding.
 That is TypeScript tooling, not another production compiler. Normalization MUST
 preserve binding scopes, evaluation order, native operations and authored ranges.
 It MUST NOT create a new state model or rebuild the ref implementation.
+DX-31 places that normalization in its own package rather than inside existing
+compiler-next source folders.
 
 ## How the draft evolves
 

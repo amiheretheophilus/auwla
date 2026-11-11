@@ -17,6 +17,9 @@
 - Record DX-30 as planned authoring direction: configured backend `.auwla` files
   are ordinary nonreactive code and may import Express/backend packages;
   isomorphic support is later work. Core markup grammar and fixtures are unchanged.
+- DX-31 clarifies the implementation boundary: separate `packages/jsx-plus`
+  normalizes into the existing compiler-next public API. Initial package fixtures
+  now execute; no existing compiler/runtime feature is copied or modified.
 
 Subsequent revisions name the affected rule/fixture IDs, observable change,
 reason, and whether an accepted user direction is being revised. Keep open

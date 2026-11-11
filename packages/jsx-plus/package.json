@@ -1,0 +1,16 @@
+{
+  "name": "@memoized-dom/jsx-plus",
+  "version": "0.0.0",
+  "private": true,
+  "description": "JSX+ source normalization for compiler-next. See wiki2/.",
+  "type": "module",
+  "exports": { ".": "./src/index.ts" },
+  "scripts": { "test": "bun test", "check": "bun check" },
+  "dependencies": {
+    "@memoized-dom/compiler-next": "workspace:*",
+    "yuku-parser": "0.19.0"
+  },
+  "devDependencies": {
+    "@memoized-dom/runtime": "workspace:*"
+  }
+}

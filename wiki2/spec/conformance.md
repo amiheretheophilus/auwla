@@ -8,9 +8,9 @@
 | --- | --- | --- |
 | Fixture integrity | Catalog IDs/rules are valid; expected trees/ranges/source slices are internally consistent; equivalents parse | Check script provided |
 | Host baseline | Existing host parser has the specified continuation shapes; existing JSX equivalents produce explicitly expected text/update results | Check script provided |
-| Extended parse | The new parse stage produces the expected syntax view with exact ranges | Not implemented; no pass claim |
-| Extended diagnostics | New syntax produces the expected primary code/severity/range | Not implemented; no pass claim |
-| Extended behavior | Extended source matches the explicit expectations and separately authored equivalent through updates/disposal | Not implemented; no pass claim |
+| Extended parse | The syntax package produces the expected view with exact ranges | Current 6 fixtures pass; broader grammar acceptance open |
+| Extended diagnostics | New syntax produces the expected primary code/severity/range | Current 5 fixtures pass; broader recovery open |
+| Extended behavior | Extended source matches explicit expectations through updates/disposal | Current 9 programs pass in optimized/general modes; lifecycle coverage remains |
 | Tooling | Real mapper diagnostics/rename/completion satisfy the authored-span checks | Not implemented; no pass claim |
 | Delivery | Extended source preserves existing SSR/adoption and lifecycle behavior | Not implemented; no pass claim |
 
@@ -59,10 +59,18 @@ JSX equivalents through compiler-next and the runtime in memory. It writes no
 compiled fixture files and adds no production parser. It checks the limited view
 shape directly; it is not a general-purpose JSON Schema validator.
 
-Actual editor checks and extended-source parse/diagnostic/execution checks follow
-when P2/P3 supply those integrations. Add their commands/results here and in
-[status.md](../status.md) when they exist; do not describe a planned command as a
-working gate.
+The separate package now runs extended-source checks:
+
+```text
+bun check -p packages/jsx-plus/tsconfig.json
+bun run --cwd packages/jsx-plus test
+```
+
+Those commands cover the current parse/error fixtures and behavior programs plus
+lexical/mapping regressions. The baseline checker above still deliberately labels
+extended execution NOT RUN because it does not invoke that package. Actual
+editor, module-graph and delivery integration remain future work. See
+[status.md](../status.md) for current evidence and limitations.
 
 Rendered expectations concern observable text/node behavior, not compiler helper
 names, anchor comments or a particular generated string. A changing behavior

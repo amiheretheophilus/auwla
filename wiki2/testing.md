@@ -1,7 +1,7 @@
 # Verification and evidence
 
-State: spec-integrity/current-JSX baseline checks available; extended syntax and
-tooling conformance await their implementation.
+State: baseline and separate-package extended-source checks available. Full
+grammar, tooling, module-graph and delivery acceptance remain open.
 
 ## What a check establishes
 
@@ -34,9 +34,20 @@ These commands do not establish extended-source conformance. In particular,
 passing a separately authored JSX equivalent is baseline evidence, not evidence
 that the new markup parser accepts its source.
 
+The actual extended-source suite is separate:
+
+```text
+bun check -p packages/jsx-plus/tsconfig.json
+bun run --cwd packages/jsx-plus test
+```
+
+It checks authored views/errors and compiles extended source through the package's
+public-API facade into compiler-next, executing both optimization modes. Code
+stays in that package; existing compiler-next/runtime/data sources are unchanged.
+
 Acceptance IDs are owned by [syntax.md](syntax.md), [refs.md](refs.md) and
 [tooling.md](tooling.md); later features add theirs on their concept page.
-Planned prototype test placement is mapped in [architecture.md](architecture.md).
+Actual and planned prototype files are mapped in [architecture.md](architecture.md).
 No nonexistent test command is presented here as a working gate.
 
 Existing compiler compatibility cases are under

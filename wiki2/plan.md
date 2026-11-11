@@ -2,9 +2,9 @@
 
 Updated: 2026-11-11. Working order, revisable after every slice.
 
-The goal is additional authoring features inside compiler-next's existing path,
-with correct JavaScript behavior and credible tooling. Experiments use its parse,
-resolve, graph, plan, optimize and emit stages. Existing refs are already built;
+The goal is additional authoring features in the separate `packages/jsx-plus`
+package, with correct JavaScript behavior and credible tooling. Normalized TSX
+uses compiler-next's public API and existing production stages. Existing refs are already built;
 checking them under new syntax is compatibility work. Production adoption still
 depends on integration, acceptance and measurements.
 
@@ -13,12 +13,13 @@ depends on integration, acceptance and measurements.
 | ID | State | Outcome and acceptance | Owns details |
 | --- | --- | --- | --- |
 | P0-DOC | Done | Record the user directions; create the wiki and session route; validate links, paths and examples | [status](status.md), [decisions](decisions.md) |
-| P0-ALIGN | Done | Make compiler-next continuity and existing ref support explicit; remove the standalone compiler-package suggestion | [architecture](architecture.md), [refs](refs.md) |
+| P0-ALIGN | Done | Make compiler-next continuity and existing ref support explicit; DX-31 subsequently places syntax in a separate package using the same compiler | [architecture](architecture.md), [refs](refs.md) |
 | P1-SPEC | Done: draft 0.1 r1 | Study JASX's spec organization; define core grammar, syntax model, semantics, diagnostics and conformance fixtures before parser work | [spec](spec/README.md) |
-| P1-GRAMMAR | Done: provisional candidate | Host-parser probes establish continuation behavior; record concrete boundaries and incomplete-input fixtures; extended parsing still awaits P2 | [grammar](spec/grammar.md), [syntax](syntax.md) |
-| P2-PARSE | Next | Extend compiler-next's parse stage for the first core fixtures; compile through the same later stages and verify existing refs still work | [syntax](syntax.md), [architecture](architecture.md), [refs](refs.md) |
+| P1-GRAMMAR | Done: provisional candidate | Host-parser probes establish continuation behavior; record concrete boundaries and incomplete-input fixtures, now exercised by P2 | [grammar](spec/grammar.md), [syntax](syntax.md) |
+| P2-PARSE | First slice built | Separate syntax package normalizes the current parse/error/behavior fixtures with copied-span mappings; the UI facade calls compiler-next | [syntax](syntax.md), [architecture](architecture.md), [refs](refs.md) |
+| P2-HARDEN | Next | Expand host-context, malformed-input and mapping cases; address scanner reparse costs and document measured limits before broader integration | [syntax](syntax.md) |
 | P3-TOOL | Planned; pair with P2 | A minimal mapper type-checks the same source, reports a deliberate error at the authored span, and supports a safe rename edit | [tooling](tooling.md) |
-| P4-FLOW | Planned | Direct `if` and `.map()` preserve scope, evaluation order, keyed identity and ref cleanup against equivalent JSX | [syntax](syntax.md), [testing](testing.md) |
+| P4-FLOW | First fixtures built; expand later | Basic direct `if` and `.map()` fixtures execute; extend scope, owner/disposal and readiness interleavings before full flow acceptance | [syntax](syntax.md), [testing](testing.md) |
 | P5-EVENT | Candidate | Settle event-expression meaning; demonstrate one ordinary handler and one shorthand with identical timing | [features](features.md) |
 | P6-BIND | Candidate | Settle named text/checkbox bindings, write typing and handler order; show one form | [features](features.md) |
 | P7-APP | Candidate | Run a small real app through editing, build, SSR/adoption and disposal; compare output and work with equivalent existing source | [architecture](architecture.md), [testing](testing.md) |
@@ -33,11 +34,11 @@ For the active slice, write: the question it answers, a few input examples,
 observable expected results, owning files (planned or real), dependencies and the
 checks that could disprove it. Resolve only the decisions that slice needs.
 
-The next parser slice implements the smallest declared part of the core spec and
+The next parser slice hardens the declared core subset in the separate package and
 reports exactly which conformance levels/fixtures it covers. It needs no event
-modifiers, CSS system or production Vite migration. Normalization within the parse
-stage is an option to test, not a decision to replace host parsing with string
-rewrites. Pair it with source-range and mapper probes early.
+modifiers, CSS system or production Vite migration. Normalization in the syntax
+package uses the host tokenizer/parser; it does not replace host parsing with
+string rewrites. Pair hardening with source-range and mapper probes early.
 
 ## Finished means
 

@@ -1,22 +1,26 @@
 # Architecture and code map
 
-State: compiler-next extension; new syntax implementation not started.
+State: first syntax slice built in the separate `packages/jsx-plus` package.
 Updated: 2026-11-11. Existing compiler/runtime features, including refs, are built.
-Owns DX-28 and the integration side of DX-03.
+Owns DX-28/DX-31 and the integration side of DX-03.
 
 ## One production compilation path
 
-JSX+ adds authoring features beyond ordinary JSX to compiler-next. Extend the
-existing parse stage so the new syntax reaches the same compiler representation
-and later stages. There is no standalone JSX+ production compiler, second
-reactivity model, or separate DOM/SSR emitter. Existing refs are reused as built.
+JSX+ adds authoring features in a separate syntax package. Its normalizer returns
+standard TSX, syntax views and authored mappings; its UI `compile()` facade calls
+compiler-next's public API. Compiler-next owns every existing production stage
+and runtime decision. Prototype source stays in `packages/jsx-plus`; no existing
+compiler-next/runtime/data source files have been modified for this slice.
 
 ```text
-existing JS/TS/JSX/TSX input   additional JSX+ syntax
-             \                 /
-         compiler-next parse stage
-         (extend syntax support here)
-                     |
+JSX+ source -> packages/jsx-plus -> normalized standard TSX
+                                          |
+existing JS/TS/JSX/TSX --------------------+
+                                          |
+                             compiler-next public API
+                                          |
+                                      parse
+                                          |
          resolve -> graph -> plan -> optimize -> emit
                existing compiler-next pipeline
                      |
@@ -32,14 +36,30 @@ markup needs a defined grammar and recoverable syntax tree. Avoid one parser for
 checking and an unrelated parser for production. Do not use regular-expression
 replacement as the general parser for nested code and markup.
 
-Normalizing extended syntax into compiler-next's existing input representation
-is the frontend task. Lowering to valid TSX within that parse stage is a candidate
-for the first experiment. It must preserve scope, evaluation count, receiver
-identity and ordering, and compose diagnostics
-back to the original file. The shared representation can evolve if this strategy
-cannot express a construct faithfully. The compiler continues from that point
-through its existing analysis and emission. The TypeScript checking projection
-serves editor/type-checking needs and need not have application-output scaffolding.
+Normalizing extended syntax is this package's task. Yuku's real host tokens and
+AST delimit code; equal-width temporary masks preserve authored offsets while
+scanning nested markup. Emitted TSX is assembled from copied spans and generated
+syntax, never from those masks. Existing compiler-next parses that TSX normally.
+The current implementation reparses while discovering nested markup; it makes
+no frontend performance claim. A future checking projection shares this syntax
+understanding while producing TypeScript-specific scaffolding.
+
+## Owned implementation files
+
+All paths are relative to the repository root and exist now.
+
+| Path | Responsibility |
+| --- | --- |
+| `packages/jsx-plus/src/normalize.ts` | Host-token scanning, nested markup, expression/conditional children and TSX normalization |
+| `packages/jsx-plus/src/model.ts` | Syntax views, authored ranges and copied-span mapping types |
+| `packages/jsx-plus/src/source.ts` | Copied/generated pieces, assembly and exact authored-offset lookup |
+| `packages/jsx-plus/src/diagnostics.ts` | Authored syntax diagnostic ranges and line/column reporting |
+| `packages/jsx-plus/src/compile.ts` | Single-UI-module public-API delegation and mapped compiler diagnostics |
+| `packages/jsx-plus/src/index.ts` | Public package exports |
+| `packages/jsx-plus/tests/parse.test.ts` | Spec views/errors, lexical boundaries and mapping checks |
+| `packages/jsx-plus/tests/compile.test.ts` | Extended-source execution, existing refs and keyed nodes |
+| `packages/jsx-plus/examples/counter.auwla` | Complete counter compiled and clicked by the execution tests |
+| `packages/jsx-plus/AGENTS.md` | Package ownership boundary and focused checks |
 
 ## Existing files to reuse
 
@@ -47,10 +67,10 @@ All paths below are relative to the repository root and currently exist.
 
 | Path | Role and boundary |
 | --- | --- |
-| `packages/compiler-next/src/core/parse/index.ts` | Existing parse entry to extend for additional syntax; retain authored diagnostics and the normal compiler pipeline |
+| `packages/compiler-next/src/core/parse/index.ts` | Unchanged parse entry receiving standard TSX from the syntax package |
 | `packages/compiler-next/src/core/parse/lower-typescript.ts` | Existing runtime TypeScript lowering; do not invent a second TS semantics implementation |
-| `packages/compiler-next/src/pipeline.ts` | The production pipeline for both existing syntax and JSX+; no alternative stage sequence |
-| `packages/compiler-next/src/options.ts` | Current public option surface; adding authoring selection here is a later integration choice |
+| `packages/compiler-next/src/pipeline.ts` | Unchanged production pipeline, reached through its public exports |
+| `packages/compiler-next/src/options.ts` | Existing compile options forwarded by the UI facade |
 | `packages/compiler-next/src/features/refs/` | Current ref classification, planning and emission; see [refs](refs.md) |
 | `packages/compiler-next/src/features/conditionals/` | Existing reactive branch machinery |
 | `packages/compiler-next/src/core/emit/row-list.ts` | Emits compiled keyed row factories |
@@ -66,8 +86,8 @@ If shared machinery changes, update that page as well as the owning prototype pa
 
 The extension contract now exists under [spec/](spec/README.md): grammar, syntax
 view/schema, semantics, diagnostics, fixtures and [check.ts](spec/check.ts).
-The checker validates fixtures and current-JSX equivalents; it does not parse
-extended source or introduce a production compilation path.
+The spec checker validates fixtures and current-JSX equivalents; package tests
+separately parse/compile extended source. Neither adds a second reactive compiler.
 
 ## Backend authoring (planned)
 
@@ -82,16 +102,13 @@ adding that work to the current markup-parser slice.
 
 ## Proposed placement
 
-These paths are **planned**, not existing files. Syntax support belongs inside
-compiler-next; mapper transport/checking code is tooling. Exact filenames can
-change during the experiment without changing this production-path decision.
+These paths are **planned**, not existing files. Keep additional syntax/tooling
+work in the separate package; exact filenames can change during the experiment.
 
 | Planned path | Responsibility | Owns details |
 | --- | --- | --- |
-| `packages/compiler-next/src/core/parse/jsx-plus/` | Extended syntax, authored spans, recovery and normalization into the existing compiler input | [syntax](syntax.md) |
-| `packages/compiler-next/tests/authoring/` | New-syntax fixtures and comparisons using the same compiler-next entry/pipeline | [testing](testing.md) |
-| `packages/language-service/src/content-mapper/checking/` | Virtual TypeScript and authored spans; tooling projection only | [tooling](tooling.md) |
-| `packages/language-service/src/content-mapper/` | Mapper transport/configuration/cache; packaging remains open | [tooling](tooling.md) |
+| `packages/jsx-plus/src/checking/` | Virtual TypeScript and authored spans; tooling projection only | [tooling](tooling.md) |
+| `packages/jsx-plus/src/mapper/` | Mapper transport/configuration/cache; transport packaging remains open | [tooling](tooling.md) |
 
 Confirm or revise exact placement during P1/P2 before adding directories. Update this
 table with actual files in the same commit that introduces them. One concept
@@ -101,6 +118,8 @@ one of its feature groups starts needing its own files and cases.
 ## Boundaries
 
 - New syntax reuses existing writes, reactivity, readiness, refs and ownership.
+- Prototype production code uses compiler-next's public exports. Keep implementation
+  out of its source folders; changes there are separate work, not package setup.
 - Ref compatibility checks confirm those features survive the new syntax; they
   are not tasks to implement refs again.
 - Existing `.tsx` keeps its normal text and expression-container grammar.
@@ -114,8 +133,8 @@ one of its feature groups starts needing its own files and cases.
 
 ## Open questions
 
-How should the existing parse entry reuse ordinary TypeScript without losing
-exact authored spans? Can the smallest normalization preserve scope and child production
-without wrapping arbitrary statements into functions? How should maps compose
-through existing TypeScript lowering and compiler emission? P2 must answer these
-with small examples before broad integration.
+Broader host contexts, malformed-input recovery and scanner reparse costs need
+hardening beyond the first fixtures. Multi-module `.auwla` resolution, Vite,
+actual TypeScript mapper integration, final-JavaScript source maps and delivery
+are not built. Backend config remains planned. The facade currently adapts one
+UI module; none of these future capabilities is inferred from that first slice.

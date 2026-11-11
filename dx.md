@@ -33,8 +33,10 @@ isomorphic support will be added later. See [the architecture note](wiki2/archit
 Accepted direction from the 2026-11-10 discussion:
 
 - JSX+ extends compiler-next with authoring features that ordinary JSX cannot
-  express. It uses compiler-next's existing parse, resolve, graph, plan, optimize
-  and emit pipeline; it is not a separate production compiler or reactive system.
+  express. Its syntax implementation lives in the separate `packages/jsx-plus`
+  package, which passes normalized TSX to compiler-next's public API and existing
+  parse, resolve, graph, plan, optimize and emit pipeline. This does not create
+  a second reactive compiler or move prototype code into compiler-next.
 - Refs are already implemented. Preserve their ordinary variable declarations
   and `ref={variable}` connection. Element tags do not declare refs, and refs
   need no `$` prefix. This is compatibility work, not a new ref implementation.
@@ -195,12 +197,12 @@ Particular risks to probe:
 
 ### 3.4 Compiler-next extension architecture
 
-Extend compiler-next's existing parse stage to understand the additional markup
-syntax, preserving source ranges and ordinary TypeScript regions. The extended
-input feeds the same resolve, graph, plan, optimize and emit stages as existing
-JSX. Reuse their current binding, reactivity, ref, list and ownership behavior.
-When a new feature needs compiler/runtime support, extend the owning existing
-machinery instead of creating a parallel compilation path.
+Implement additional syntax in `packages/jsx-plus`, preserving source ranges and
+ordinary TypeScript regions. That package normalizes into standard TSX and calls
+compiler-next through its public API. Compiler-next's existing parse, resolve,
+graph, plan, optimize and emit stages own subsequent compilation. Reuse current
+binding, reactivity, ref, list and ownership behavior. Keep prototype implementation
+separate from those existing package sources; DX-31 clarifies this placement.
 
 The content mapper shares that source understanding and emits a checking
 representation retaining authored types, scopes and expressions. That projection
@@ -907,14 +909,16 @@ and mark a revised decision as superseded rather than erasing its reason.
 | DX-28 | Compiler continuity | Extend compiler-next's existing pipeline; refs and other existing features are reused | Accepted |
 | DX-29 | Spec before implementation | Define grammar, syntax model, semantics, diagnostics and conformance fixtures before the parser; evolve the draft explicitly | Accepted |
 | DX-30 | Backend authoring | Pure, nonreactive backend code in configured `.auwla` files/folders; ordinary backend imports; isomorphic support later | Accepted direction; implementation/config syntax planned |
+| DX-31 | Package boundary | Keep syntax/normalization in `packages/jsx-plus`; delegate production compilation to compiler-next's public API | Accepted; supersedes earlier in-place placement |
 
 ## 18. Suggested prototype and acceptance examples
 
-The initial core specification and fixtures are now written. The next slice
-extends compiler-next's parse stage for quoted text and direct expressions,
-preserving existing refs, with source ranges and a small TypeScript mapping
-experiment. Then prove direct `if` and `.map()` against equivalent existing JSX.
-Add event/binding conveniences in later slices after their contracts are settled.
+The initial specification and syntax package now exist. The first package slice
+normalizes quoted text, expressions, basic direct `if` and `.map()` into TSX,
+with authored mappings and compilation through compiler-next. Current fixtures
+verify existing refs and keyed nodes. Further grammar hardening and the TypeScript
+mapper follow; module-graph/Vite, delivery and backend config integration are later
+work. Add event/binding conveniences after their contracts are settled.
 
 The working order and evidence live in [wiki2/plan.md](wiki2/plan.md) and
 [wiki2/status.md](wiki2/status.md). Reorder or replace an experiment when evidence

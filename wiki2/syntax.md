@@ -1,16 +1,17 @@
 # Markup bodies and grammar
 
-State: core grammar specified in 0.1-draft revision 1; implementation not started.
+State: first core syntax slice implemented in `packages/jsx-plus`.
 Owns DX-14, DX-25, DX-26 and keyed identity questions DX-15.
 
 Precise rules now live in [spec/grammar.md](spec/grammar.md),
 [spec/ast.md](spec/ast.md) and [spec/semantics.md](spec/semantics.md). This page
 maps the work and remaining investigations; it does not define a competing grammar.
 
-Implementation extends compiler-next's parse stage and uses its existing later
-stages. Ordinary expression rendering, `.map()`, list identity and refs already
-exist; the new work is expressing them and direct control flow in markup without
-JSX's child-expression containers. See [architecture.md](architecture.md).
+Implementation lives in its own package and passes normalized standard TSX to
+compiler-next's public API. Ordinary expression rendering, `.map()`, list identity
+and refs already exist. New code changes their source spelling and direct child
+control flow without mixing implementation into those existing package sources.
+See [architecture.md](architecture.md).
 
 ## Current contract
 
@@ -27,7 +28,8 @@ JSX's child-expression containers. See [architecture.md](architecture.md).
 
 ## Examples for the first slices
 
-These are design inputs, not currently supported TSX.
+These are extended-source inputs. The separate package normalizes the current
+quoted/expression/conditional fixtures into supported standard TSX.
 
 ```tsx
 <section>
@@ -78,7 +80,7 @@ then revise it explicitly with counterexamples if the next slice disproves it.
 
 ## Acceptance examples
 
-Keep the concrete fixture and expected result beside the future tests. These IDs
+Keep concrete fixtures and expected results beside their tests. These IDs
 make the backlog traceable without copying cases into status.
 
 | ID | Check | Stage |
@@ -98,8 +100,19 @@ authorize rejecting valid JavaScript expressions to simplify compilation.
 
 ## Files and limits
 
-Production syntax support and its extended-source tests: **planned**, mapped in
-[architecture.md](architecture.md). The spec, syntax-view schema, 27-fixture catalog
-and checker exist under [spec/](spec/README.md). Fixture integrity and current-JSX
-baselines have run; extended parse/diagnostics/execution have not. Existing
-branch/list files remain owned by their [compiler pages](../wiki/compiler/README.md).
+Actual files are mapped in [architecture.md](architecture.md). Package tests now
+cover all 6 parse views, 5 diagnostic fixtures and 9 extended behavior programs
+in both compiler modes, plus lexical/mapping checks. Existing branch/list files
+stay in their [compiler pages](../wiki/compiler/README.md) and are unchanged.
+
+Conditional normalization groups the entire authored test before the generated
+ternary, preserving assignment, comma and nested-ternary precedence. A branch
+toggle with a ternary test is exercised in both compiler modes.
+
+The package uses the host parser to find expression/statement structure. Single
+object/function/class expressions are parsed in expression context; direct child
+declarations/loops remain outside the first core profile. Broader host contexts,
+malformed-token recovery, async/generator contexts and composed debugging maps
+need further coverage. Repeated suffix parsing/masking needs measurement and
+improvement before a frontend scalability claim. Module graphs, mapper/editor,
+SSR/adoption, Vite and backend config are not implemented by this slice.

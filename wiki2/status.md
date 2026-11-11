@@ -4,80 +4,79 @@ Updated: 2026-11-11. Branch: `prototype/jsx-plus`.
 
 ## Current slice
 
-**P1-SPEC/P1-GRAMMAR complete as draft 0.1, revision 1.**
+**P2-PARSE: first implementation slice built in its own package.**
 
-The [language spec](spec/README.md) now defines a first core profile: quoted text,
-direct expression children, block-bodied conditional children, source ranges,
-syntax-view/schema, evaluation rules, diagnostics and conformance fixtures.
-Precise rules live in the spec; concept pages map implementation and open work.
+`packages/jsx-plus` (`@memoized-dom/jsx-plus`) owns new syntax and copied-span
+mappings. Its normalizer produces standard TSX; its single-UI-module `compile()`
+facade calls compiler-next's public API. Existing compiler-next/runtime/data
+source files are unchanged. Reactivity, refs, list identity, scheduling and
+ownership continue to use their existing implementations.
 
-JSX+ adds authoring features to compiler-next's existing parse stage and feeds its
-same resolve, graph, plan, optimize and emit stages. Refs, reactivity, list
-identity and ownership already exist. Ref checks in this plan verify compatibility
-with new syntax; they do not represent work to build refs again.
+DX-31 records the user's separate-package instruction. It supersedes earlier
+in-place syntax placement, while preserving DX-28's same-pipeline requirement.
+The [language spec](spec/README.md) remains draft 0.1, revision 1; its organization
+was informed by `snrraptopack/jasx` at `d055ed85`, without adopting Java semantics.
 
-The spec follows the organization of `snrraptopack/jasx` at commit `d055ed85`,
-without adopting its Java/target semantics. New syntax is not implemented yet.
-Only specification/fixtures/checking utilities and the documentation map changed;
-no production compiler or runtime code changed.
+Quoted text, direct expression children, nested markup, block-bodied `if`/`else`
+and ordinary `.map()` work for the current fixtures. Ordinary attribute/ref
+spellings remain unchanged. Explicit `.tsx` module input keeps existing JSX text
+semantics. A runnable [counter](../packages/jsx-plus/examples/counter.auwla) is
+included and exercised by the execution tests.
 
 ## Baseline and evidence
 
-- Branch created from `compiler-rewrite` at `595171c4`.
-- That commit checkpoints unnamed-source readiness work; compiler-next and data
-  type checks passed for the checkpoint. Its behavior suites were not rerun.
-  Do not count that work as newly verified by this documentation slice.
-- Additional JSX+ syntax and mapper implementation: **not built**. Existing
-  compiler-next features, including refs, are built and keep their current contracts.
-- Last clean documentation baseline: `31e9549b`. Results below are for this
-  spec change's working tree, not a claim that baseline contained these fixtures.
+The branch originated from `compiler-rewrite` at `595171c4`. This implementation
+started from clean documentation baseline `c7503ff8`. Results below cover this
+slice's package, workspace lockfile and documentation changes, rather than
+claiming the baseline already included the implementation.
+
+- In `packages/jsx-plus`, `bun check`: no type errors in 179 files.
+- In that package, `bun test`: **52 passed, 0 failed, 121 assertions**, two files.
+  Includes all 6 syntax-view/range fixtures, 5 primary diagnostic fixtures and
+  9 extended behavior programs in both compiler modes (18 executions).
+  Existing ref assignment/clearing and keyed node preservation are checked.
+  Additional cases cover lexical boundaries, mappings, Unicode/CRLF, the counter,
+  unchanged TSX semantics and conditional-test precedence in both modes.
+- `bun run wiki2/spec/check.ts`: 27 fixture integrity checks, 7 host probes and
+  18 ordinary-JSX equivalent executions pass. This independent baseline runner
+  still labels extended syntax NOT RUN; the package suite above supplies that
+  separate evidence.
+- `bun check -p wiki2/spec/tsconfig.json`: no errors in 172 files.
+- Documentation audit: 20 documents, 127 local links/heading targets and 23
+  existing mapped paths checked with no errors. `git diff --check` passed.
+- Full root suite and timing benchmarks were not run. This slice changes no
+  shared compiler/runtime source and does not close their acceptance gates.
+
+The current catalog is a tested subset, not exhaustive language conformance.
+Find the implementation commit with `git log -1 -- packages/jsx-plus` and this
+handoff with `git log -1 -- wiki2/status.md`.
 
 ## Next
 
-**P2-PARSE**, paired early with P3 tooling: implement the first quoted/direct-child
-fixtures in compiler-next's existing parse stage, preserving authored ranges and
-existing refs. Start with PARSE-001/002/004/006 and TEXT-001/002, then extend the
-subset. List supported IDs and remaining cases; do not claim whole-level parser
-conformance from a partial implementation. See [plan.md](plan.md).
+**P2-HARDEN**, paired early with **P3-TOOL**. Expand host-expression contexts and
+malformed-input cases, especially async/generator contexts and syntax inside
+attributes/templates. Preserve reduced failures and exact authored ranges.
+Measure and improve repeated suffix parsing/masking before any frontend
+scalability claim. See [syntax.md](syntax.md) and [plan.md](plan.md).
 
-The draft boundary rule preserves host continuation/ASI and uses explicit
-separators at ambiguity. It is provisional and can be revised with fixtures and
-the spec changelog. Direct `if` execution follows in P4; other features remain
-later profiles. Resolve new syntax questions in the spec before encoding them.
+Then prove a minimal TypeScript checking projection: one intentional diagnostic
+at its authored span and one safe rename edit. Reuse the normalizer's source
+understanding, keeping generated scaffolding unmapped. Exact copied-span mappings
+already exist; a real content mapper and final-JavaScript debugging source maps
+do not. See [tooling.md](tooling.md).
 
 ## Handoff cautions
 
-- `.auwla` is the working extension in examples, not a finalized packaging choice.
-- Attribute braces remain in examples; removing them has not been decided.
-- The core draft does not settle every feature in `dx.md`; event shorthand,
-  modifiers, direct child loops/declarations and CSS conveniences remain open.
-- DX-30 records nonreactive backend `.auwla` authoring through configured backend
-  files/folders, including Express imports. Config/loading are planned; isomorphic
-  support follows later. This is a note, not an implemented backend feature.
-- The compiler rewrite's routing, Vite, acceptance and performance work stays in
-  [wiki/status.md](../wiki/status.md). Prototype progress does not close those gates.
-- Source ranges and TypeScript edit mappings need an early proof; successful
-  rendering alone does not establish a usable authoring format.
-
-## Latest finished slice
-
-P1-SPEC/P1-GRAMMAR: initial specification and baseline evidence, 2026-11-11.
-
-- `bun run wiki2/spec/check.ts`: 27 fixtures checked for integrity; 6 syntax-view
-  expectations and 5 diagnostic expectations have valid authored ranges, 7 host
-  parser probes pass, and 9 existing-JSX equivalents pass in optimized/general
-  modes (18 executions). Includes keyed node preservation and existing ref
-  identity/clearing. Extended parse/diagnostics/execution explicitly report NOT RUN.
-- `bun check -p wiki2/spec/tsconfig.json`: no errors in 172 files.
-- Documentation audit: 20 documents, 127 local links including heading targets,
-  23 existing mapped paths; no problems. `git diff --check` passed.
-- Mapper/editor, extended-source runtime/SSR/adoption and performance gates:
-  not run; their implementation is not claimed.
-
-Find this slice's commit with `git log -1 -- wiki2/status.md`; subsequent sessions
-replace this evidence with the latest slice rather than appending a long run log.
-
-Latest clarification: DX-30, 2026-11-11, records backend authoring as above. Only
-documentation changed; the core grammar, fixture catalog and checker are unchanged.
-Documentation audit: 20 documents and 131 local links passed; `git diff --check`
-passed. Runtime/compiler checks were not rerun for this note.
+- The facade currently compiles one UI module. Multi-module `.auwla` resolution,
+  Vite integration, editor/mapper integration and SSR/adoption remain open.
+- Complete host-expression coverage and malformed-input recovery are unfinished.
+  Unsupported contexts are implementation gaps, not a decision to restrict JS.
+- Direct child declarations/loops, event shorthand, modifiers and CSS conveniences
+  remain outside this first profile. Attribute brace removal is undecided.
+- DX-30 records ordinary nonreactive backend `.auwla` files/folders selected by
+  future config, including Express imports. Config/loading are planned;
+  isomorphic support follows later. The UI facade does not implement that path.
+- The rewrite's routing, Vite, acceptance and performance work stays in
+  [wiki/status.md](../wiki/status.md). Prototype progress does not close it.
+- Revise provisional grammar with fixtures and the spec changelog when evidence
+  calls for it. Keep the separate package boundary and reuse existing refs.

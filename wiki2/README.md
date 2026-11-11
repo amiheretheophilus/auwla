@@ -8,9 +8,10 @@ files, acceptance examples and evidence. Existing compiler/runtime contracts sta
 in [wiki/compiler](../wiki/compiler/README.md).
 
 **This is an extension of compiler-next.** JSX+ adds syntax and authoring features
-beyond ordinary JSX through the same compiler pipeline. Refs, reactivity, lists
-and ownership already exist; the prototype preserves them. `wiki2` maps the
-extension work, not a replacement compiler or a second ref implementation.
+beyond ordinary JSX in the **separate `packages/jsx-plus` package**. It normalizes
+source and calls compiler-next's public API, retaining the existing production
+pipeline. Refs, reactivity, lists and ownership already exist. Prototype code stays
+outside compiler-next/runtime sources; the package boundary is DX-31.
 
 ## Start a session
 

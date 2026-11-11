@@ -1,7 +1,7 @@
 /**
- * Spec evidence before JSX+ parsing exists. Check fixture integrity and run only
- * independently authored current-JSX equivalents. Never claim that this parses
- * the extended fixture source. This tool belongs to spec/conformance.md.
+ * Independent baseline evidence: fixture integrity and current-JSX equivalents.
+ * Extended-source checks run separately in packages/jsx-plus. Never claim that
+ * this baseline checker parses extended source. Owned by spec/conformance.md.
  */
 import assert from 'node:assert/strict';
 import { readFileSync, readdirSync } from 'node:fs';

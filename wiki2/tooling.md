@@ -5,7 +5,7 @@ are open. Owns DX-01, DX-03, DX-24 and the tooling part of DX-26.
 
 ## Proposed boundary
 
-Compiler-next's extended parse support supplies source understanding for a
+The separate syntax package supplies source understanding for a
 checking representation and authored span maps. The content mapper exposes those
 to TypeScript. This is tooling; application compilation stays in compiler-next's
 existing pipeline. The mapper does not implement refs or emit a second runtime.
@@ -28,8 +28,9 @@ TypeScript/editor versions and permissions used by the probe.
 | `packages/compiler-next/tests/reference/typescript.ts` | Existing independent reference lowering; do not reuse the new production lowering as its oracle |
 | `packages/language-service/src/plugin.ts` | Existing TS6 plugin; the mapper needs its own integration plan |
 | `wiki/compiler/typescript.md` | Existing API notes and compatibility limits |
-| `packages/language-service/src/content-mapper/checking/` | **Planned** virtual source and mappings; tooling only, exact placement provisional |
-| `packages/language-service/src/content-mapper/` | **Planned** protocol, configuration, lifecycle and cache; packaging open |
+| `packages/jsx-plus/src/source.ts` | Existing exact copied-span mappings for normalized TSX; generated syntax has no authored edit span |
+| `packages/jsx-plus/src/checking/` | **Planned** virtual TypeScript checking representation |
+| `packages/jsx-plus/src/mapper/` | **Planned** protocol, configuration, lifecycle and cache; transport packaging open |
 
 Prototype imports use the explicit working extension, for example
 `./Counter.auwla`; registration is not a promise of extensionless resolution.

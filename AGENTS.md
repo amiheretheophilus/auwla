@@ -29,8 +29,11 @@ instructions.
   `wiki/compiler/`, with one page per group of related files.
 - JSX+ authoring is being explored on `prototype/jsx-plus`. `dx.md` holds the
   design discussion; `wiki2/` maps the prototype, decisions, checks and next slice.
-  This extends compiler-next's syntax and features through its existing pipeline.
-  Do not create a parallel production compiler or rebuild existing refs.
+  Keep new syntax work in the separate `packages/jsx-plus` package. It normalizes
+  extended syntax and calls compiler-next's public API. Do not mix prototype
+  implementation into compiler-next or runtime sources, create a second reactive
+  compiler, or rebuild existing refs. DX-31 clarifies package placement while
+  retaining DX-28's existing-pipeline behavior.
   Read `wiki2/spec/README.md` before changing syntax: its grammar, syntax model,
   semantics, diagnostics and conformance fixtures define the working draft.
   Revise provisional rules explicitly with their fixtures instead of inventing

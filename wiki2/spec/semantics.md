@@ -109,7 +109,8 @@ The separate `@event` proposal is outside this profile.
 
 For UI/markup compilation, both source formats MUST use compiler-next's existing
 resolution, semantic graph, planning, optimization and emission. The syntax
-extension may introduce fresh normalized nodes and mappings at parse time.
+package normalizes source and supplies authored mappings before compiler-next's
+existing parse stage, using its public API without mixing source files.
 It MUST NOT add an alternative
 dependency engine, interpreter, state container, scheduler or ownership model.
 

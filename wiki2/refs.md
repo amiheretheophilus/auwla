@@ -46,8 +46,10 @@ is [wiki/compiler/refs.md](../wiki/compiler/refs.md).
 | `packages/runtime/src/cleanup.ts` | Owner cleanup and failed-setup disposal |
 | `packages/compiler-next/tests/cases/refs.test.ts` | Existing comparison cases |
 
-The new format's adapter tests are **planned** under the placement in
-[architecture.md](architecture.md). Update this page when real files are added.
+The separate adapter's current ref fixture runs in
+`packages/jsx-plus/tests/compile.test.ts`, using the existing implementation.
+That package owns new-syntax compatibility tests; it changes none of the existing
+ref feature/runtime source files. Broader lifecycle and mapper checks remain open.
 
 ## Compatibility checks for the syntax extension
 
