@@ -1,6 +1,6 @@
 # Core grammar
 
-0.1-draft, revision 3. Status: provisional executable-design target.
+0.1-draft, revision 4. Status: provisional executable-design target.
 
 ## Host language and lexical contexts (G-HOST)
 
@@ -53,6 +53,8 @@ ChildEnd        ::= ";" | HostASI | BodyEnd | AdjacentMarkupBoundary
 functions, assignments, templates, ternaries and existing markup primaries. A
 comma operator used as one child is parenthesized, as in `<p>(first(), last())</p>`;
 commas inside arrays, calls and other nested host constructs are ordinary tokens.
+An unparenthesized top-level comma in a child is JPX1005 (see
+[diagnostics](diagnostics.md#core-draft-codes-d-codes)).
 
 An element/fragment in expression position is still a host primary: it can be
 returned, stored, passed, or used inside a function/ternary. Adjacent top-level
@@ -177,7 +179,8 @@ The identifier ends at attribute whitespace or the tag's `>`/`/>` boundary.
 Its spelling must parse as one host identifier, including valid Unicode/escapes.
 Bare calls, members, operators and literals are not part of this small form;
 use parentheses or existing braces for them. Thus `onClick=addTask()` is not
-accepted or made lazy. Spreads keep `{...props}`. Existing `.tsx` retains its
+accepted or made lazy. Any undelimited value that is not one identifier is
+JPX1009, ranged over that value. Spreads keep `{...props}`. Existing `.tsx` retains its
 existing attribute grammar; these forms belong to the extended format.
 
 This profile does not define `@event`, modifier chains, `bind:property`, shorthand

@@ -44,6 +44,22 @@ for (const [name, source, expected] of [
   });
 }
 
+for (const [name, source, comma] of [
+  ['one expression', '<p>a, b</p>', 4],
+  ['an ASI-separated statement', '<p>"x"\nb, c</p>', 8],
+  ['a comma inside a comment first', '<p>a /* , */ , b</p>', 13],
+  ['nested markup', '<p><A/>, <B/></p>', 7],
+] as const) {
+  it(`reports JPX1005 at a top-level child comma after ${name}`, () => {
+    expect(source[comma]).toBe(',');
+    expect(() => normalize(source)).toThrow(expect.objectContaining({ code: 'JPX1005', range: [comma, comma + 1] }));
+  });
+}
+
+it('keeps parenthesized comma expressions and nested commas as ordinary host code', () => {
+  expect(normalize('<p>(a, b); [a, b]; call(a, b)</p>').code).toBe('<p>{(a, b)}{[a, b]}{call(a, b)}</p>');
+});
+
 it('retains host code and TS generic arrows without detecting them as markup', () => {
   const source = 'const identity = <T,>(value: T) => value; const text = "<p>literal</p>"; export { identity, text };';
   const result = normalize(source);

@@ -1,6 +1,6 @@
 # JSX+ language extension specification
 
-Version: **0.1-draft**, revision **3**. Initial core profile. Created: 2026-11-11.
+Version: **0.1-draft**, revision **4**. Initial core profile. Created: 2026-11-11.
 Implementation: **first slice built** in the separate `packages/jsx-plus` package.
 It normalizes the tested subset to standard TSX and calls compiler-next's public
 API. Compiler-next continues to receive ordinary TSX; its grammar stays unchanged.

@@ -74,7 +74,8 @@ function readOpeningTag(context: MarkupContext, start: number): OpeningTag {
     for (let index = 2; index < tokens.length && value === null; index++) {
       const kind = tokens.kind(index);
       if (braces === 0 && kind === K.Assign) {
-        value = identifierAttribute(context.source, start + tokens.start(index));
+        value = identifierAttribute(context.source, start + tokens.start(index),
+          (code, message, from, to) => context.error(code, message, from, to));
       } else if (braces === 0 && kind === K.LeftParen && tokens.kind(index - 1) === K.Assign) {
         value = parenthesizedAttribute({
           source: context.source,

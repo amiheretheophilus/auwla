@@ -4,8 +4,10 @@
  * scanner (element.ts); here each `_` mask is spliced back from `nested`.
  */
 import { parse, TokenKind as K } from 'yuku-parser';
-import type { IfStatement, Node } from 'yuku-parser';
-import { childExpression, childStatements, closingDelimiter, firstError, hasError, isMarkupOpening } from '../host';
+import type { IfStatement, Node, SequenceExpression } from 'yuku-parser';
+import {
+  childExpression, childStatements, closingDelimiter, firstError, hasError, isMarkupOpening, type HostFragment,
+} from '../host';
 import type { BlockView, ChildView, ExpressionView, IfView, Range } from '../model';
 import { assemble, generated, replaceRange, type Piece } from '../source';
 import type { Children, Markup, MarkupContext } from './context';
@@ -74,11 +76,12 @@ class ChildReader {
 
   /** One `;`-delimited chunk: a single expression, or ASI-separated statements. */
   private chunk(code: string, start: number, chunkEnd: Range): Children {
-    // A top-level comma is not one child (G-CHILD requires parentheses); the
-    // statement path below passes it through for the host check to reject.
     const asExpression = childExpression(code);
     const expression = asExpression.expression;
-    if (!hasError(asExpression.diagnostics) && expression !== undefined && expression.type !== 'SequenceExpression') {
+    if (!hasError(asExpression.diagnostics) && expression !== undefined) {
+      if (expression.type === 'SequenceExpression') {
+        this.rejectComma(expression, asExpression, start);
+      }
       const child = this.expressionChild(expression, start - asExpression.origin);
       return { views: [child.view], pieces: child.pieces };
     }
@@ -88,7 +91,27 @@ class ChildReader {
     if (problem !== undefined) {
       this.reportChunkError(code, start, chunkEnd, parsed, problem);
     }
-    return this.statements(parsed.statements, start - parsed.origin);
+    return this.statements(parsed, start);
+  }
+
+  /**
+   * G-CORE: a comma operator used as one child must be parenthesized. The
+   * author may have meant a `;`, quoted text or a grouped comma expression.
+   */
+  private rejectComma(sequence: SequenceExpression, fragment: HostFragment, start: number): never {
+    const afterFirst = sequence.expressions[0]!.end - fragment.origin;
+    let comma = afterFirst;
+    for (let index = 0; index < fragment.tokens.length; index++) {
+      if (fragment.tokens.start(index) >= afterFirst && fragment.tokens.kind(index) === K.Comma) {
+        comma = fragment.tokens.start(index);
+        break;
+      }
+    }
+    this.context.error(
+      'JPX1005',
+      'A comma does not separate children: use ";" between children, quote text, or parenthesize a comma expression',
+      start + comma,
+    );
   }
 
   private reportChunkError(
@@ -119,12 +142,14 @@ class ChildReader {
     this.context.error('JPX1005', problem.message, offset, token < 0 ? offset + 1 : start + tokens.end(token));
   }
 
-  /** `base` converts parser node offsets to authored offsets. */
-  private statements(statements: readonly Node[], base: number): Children {
+  /** ASI-separated children of one chunk, parsed as `fragment`, starting at authored offset `start`. */
+  private statements(fragment: HostFragment, start: number): Children {
+    // Converts parser node offsets to authored offsets.
+    const base = start - fragment.origin;
     const views: ChildView[] = [];
     const pieces: Piece[] = [];
 
-    for (const node of statements) {
+    for (const node of fragment.statements) {
       if (node.type === 'EmptyStatement') continue;
 
       if (node.type === 'IfStatement') {
@@ -136,6 +161,9 @@ class ChildReader {
 
       let child: Child<ChildView>;
       if (node.type === 'ExpressionStatement') {
+        if (node.expression.type === 'SequenceExpression') {
+          this.rejectComma(node.expression, fragment, start);
+        }
         child = this.expressionChild(node.expression, base);
       } else if (this.isExpressionSpelling(node, base)) {
         child = this.expressionChild(node, base);

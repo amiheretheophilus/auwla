@@ -6,13 +6,20 @@ import type { AttributeValue } from './value';
 /** Characters that start a value some other reader owns: strings, `{...}`, `(...)`, markup, `/>`. */
 const OTHER_VALUE_STARTS = ['"', "'", '{', '(', '<', '/'];
 
+type ReportError = (code: string, message: string, start: number, end: number) => never;
+
 /**
- * Read a bare `name=identifier` value starting at the `=` at `equals`.
- * Returns null when the value is not a single delimited host identifier, so
- * calls, members and literals fall through to ordinary JSX parsing.
+ * Read an undelimited `name=value` starting at the `=` at `equals`.
+ *
+ * - Returns null when another reader owns the value (it starts with a quote,
+ *   `{`, `(`, `<` or `/`) or the tag ends before the value does.
+ * - Returns the value when it is one host identifier: `onClick=addTask`.
+ * - Reports JPX1009 otherwise (`a.b`, `true`, `run()`): plain JSX has no
+ *   valid undelimited value, so the only repair is explicit delimiters.
+ *
  * The host parser, not this function, decides what spells an identifier.
  */
-export function identifierAttribute(source: string, equals: number): AttributeValue | null {
+export function identifierAttribute(source: string, equals: number, error: ReportError): AttributeValue | null {
   let start = equals + 1;
   while (start < source.length && /\s/.test(source[start]!)) {
     start++;
@@ -23,21 +30,18 @@ export function identifierAttribute(source: string, equals: number): AttributeVa
     return null;
   }
 
-  // The identifier ends at attribute whitespace or the tag's `>`/`/>`.
+  // The value ends at attribute whitespace or the tag's `>`/`/>`.
   let end = start;
-  while (end < source.length && !/[\s/>]/.test(source[end]!)) {
+  while (end < source.length && !/[\s>]/.test(source[end]!) && !source.startsWith('/>', end)) {
     end++;
   }
-  const boundary = source[end];
-  const delimited = boundary !== undefined
-    && (/\s/.test(boundary) || boundary === '>' || source.startsWith('/>', end));
-  if (!delimited || start === end) {
+  if (end === source.length || start === end) {
     return null;
   }
 
   const parsed = childExpression(source.slice(start, end));
   if (parsed.expression?.type !== 'Identifier' || hasError(parsed.diagnostics)) {
-    return null;
+    error('JPX1009', 'An undelimited attribute value must be one identifier; wrap other expressions in (...) or {...}', start, end);
   }
 
   return {

@@ -35,7 +35,11 @@ See [architecture.md](architecture.md).
 then requires the host parser to return one identifier without errors. It does
 not parse general expressions by string replacement. Unicode/escaped identifiers
 keep their exact source spelling; unknown names retain normal TypeScript errors.
-Non-identifiers need parentheses or existing JSX braces.
+Non-identifiers need parentheses or existing JSX braces. Since spec revision 4,
+an undelimited non-identifier (`onClick=handlers.add`, `value=true`, `a/b`)
+reports JPX1009 over the value instead of a raw host parse message. The value
+runs to whitespace, `>` or `/>`, so `onClick=addTask ()` still accepts `addTask`
+and fails on the stray `()`. A top-level child comma reports JPX1005 at the comma.
 
 In the parser-only opening-tag placeholder, the equals sign and identifier are
 blanked while preserving UTF-16 width and newlines. This leaves a boolean

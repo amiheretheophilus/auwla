@@ -20,19 +20,26 @@ for (const [source, expected] of [
   });
 }
 
-for (const source of [
-  '<button onClick=addTask() />',
-  '<button onClick=addTask () />',
-  '<button onClick=handlers.add />',
-  '<Box value=first+second />',
-  '<Box value=foo-bar />',
-  '<Box value=true />',
-  '<Box value=123 />',
-]) {
-  it(`requires delimiters for the non-identifier value in ${source}`, () => {
-    expect(() => normalize(source)).toThrow(JsxPlusError);
+for (const [source, value] of [
+  ['<button onClick=addTask() />', 'addTask()'],
+  ['<button onClick=handlers.add />', 'handlers.add'],
+  ['<Box value=first+second />', 'first+second'],
+  ['<Box value=foo-bar />', 'foo-bar'],
+  ['<Box value=true />', 'true'],
+  ['<Box value=123 />', '123'],
+  ['<Box value=a/b />', 'a/b'],
+  ['<Box value=first+second>"x"</Box>', 'first+second'],
+] as const) {
+  it(`reports JPX1009 over the undelimited value in ${source}`, () => {
+    const start = source.indexOf(value);
+    expect(() => normalize(source)).toThrow(expect.objectContaining({ code: 'JPX1009', range: [start, start + value.length] }));
   });
 }
+
+it('treats a space after a bare identifier as the end of the value', () => {
+  // `addTask` is a complete value; the following `()` is not an attribute.
+  expect(() => normalize('<button onClick=addTask () />')).toThrow(JsxPlusError);
+});
 
 it('leaves generated braces unmapped around a copied bare handler name', () => {
   const source = '<button onClick=addTask />';

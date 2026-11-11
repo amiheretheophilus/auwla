@@ -1,6 +1,6 @@
 # Core semantics
 
-0.1-draft, revision 3. Compiler-next's existing rules remain authoritative for
+0.1-draft, revision 4. Compiler-next's existing rules remain authoritative for
 host execution, reactivity, readiness, ownership and delivery.
 
 ## Expression children (S-EXPR)

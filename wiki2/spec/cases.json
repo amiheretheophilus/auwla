@@ -1,7 +1,21 @@
 {
   "specVersion": "0.1-draft",
-  "revision": 3,
+  "revision": 4,
   "cases": [
+    {
+      "id": "ERROR-007",
+      "level": "diagnostics",
+      "rules": ["G-ATTR", "D-CODES"],
+      "source": "<button onClick=handlers.add />",
+      "expected": { "code": "JPX1009", "severity": "error", "range": [16, 28] }
+    },
+    {
+      "id": "ERROR-008",
+      "level": "diagnostics",
+      "rules": ["G-CORE", "D-CODES"],
+      "source": "<p>first, second</p>",
+      "expected": { "code": "JPX1005", "severity": "error", "range": [8, 9] }
+    },
     {
       "id": "PARSE-008",
       "level": "parse",

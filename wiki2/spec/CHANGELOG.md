@@ -1,5 +1,16 @@
 # Spec revisions
 
+## 0.1-draft, revision 4 — 2026-11-11
+
+- Diagnostics only; no accepted syntax or meaning changes. Inputs that were
+  already rejected now get a JSX+ code and a repair instead of a raw host message.
+- New JPX1009 (G-ATTR): an undelimited attribute value that is not one host
+  identifier, such as `onClick=handlers.add`, `value=true` or `onClick=addTask()`.
+  It is ranged over the value. Plain JSX has no valid undelimited value.
+- JPX1005 (G-CORE) also covers a top-level comma operator used as a child,
+  ranged over the first comma. The grammar already required its parentheses.
+- Add ERROR-007 and ERROR-008. Existing fixtures and codes are unchanged.
+
 ## 0.1-draft, revision 3 — 2026-11-11
 
 - User-directed G-ATTR/S-ATTR addition: `prop=name` accepts one host identifier
