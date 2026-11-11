@@ -151,7 +151,8 @@ edits as regression fixtures when the parser or mapping strategy changes.
 Accepted direction (DX-36): editor integrations must be decoupled so other editor
 extensions can reuse the language tooling without installing or importing the
 VS Code extension. The existing projection and mapper remain the shared core;
-the VS Code adapter is planned, not implemented.
+the first VS Code adapter is built in `packages/editor-vscode`. Desktop activation
+and packaged installation remain unverified.
 
 The content mapper supplies checking text and mappings to TypeScript, whose
 language server provides diagnostics, completion, rename and auto-imports. An
@@ -167,18 +168,24 @@ TypeScript 7.1's package exports a VS Code extension API
 (`typescript/vscode`, `dist/vscode/extensionApi.d.ts`). Its
 `registerContentMappers(contributorId, [{ extensions, inferredProjectContribution }])`
 registers a mapper, including for files outside any tsconfig.
-`registerLspMiddleware` can adjust language-feature responses. This is read from
-the type declarations only; activation in a running VS Code is **unverified**.
+`registerLspMiddleware` can adjust language-feature responses. The adapter uses
+only mapper registration, typed against the installed declarations. Its provider
+is `TypeScriptTeam.native-preview`, as in the pinned
+[TypeScript extension manifest](https://github.com/microsoft/TypeScript/blob/3e9236361fa97a9e6c685f4833ac457ae2d8c50a/packages/vscode-typescript/package.json).
+The local VS Code 1.145.3 built-in TypeScript extension does not expose this API;
+the separate provider is not installed here. Activation in a running VS Code is
+**unverified**, and no editor settings or installed extensions were changed.
 
-Planned layout (new paths are proposals, not existing packages):
+Implemented layout (other editor adapters remain planned):
 
 | Layer | Where | Shared by |
 | --- | --- | --- |
 | Normalizer and checking projection | Existing `packages/jsx-plus/src/`; checking export `@memoized-dom/jsx-plus/checking` | Builds and editor integrations; no editor SDK imports |
 | Content-mapper server | Existing `packages/jsx-plus/src/mapper/server.ts`, registered in the package manifest | Compatible TypeScript hosts; no VS Code activation dependency |
-| Highlighting assets | Planned `packages/jsx-plus/editor-assets/`; TSX-derived TextMate grammar | Adapters whose editors support that grammar format |
-| VS Code adapter | Planned separate `packages/editor-vscode/`; activation, language registration, settings and mapper registration | VS Code only; consumes shared tooling and assets |
-| Other editor adapters | Separate integration packages, including third-party extensions | Consume the same tooling without depending on `editor-vscode` |
+| Editor metadata | `packages/jsx-plus/src/editor/registration.ts`, export `./editor` | Language id, extensions and local mapper contribution for any compatible host |
+| Highlighting assets | `packages/jsx-plus/editor-assets/`, transformation `src/editor/grammar.ts` (`./editor/grammar`) | Standalone TSX-derived TextMate grammar and comment/bracket configuration |
+| VS Code adapter | Separate `packages/editor-vscode/`; activation and declarative language/grammar registration | VS Code only; consumes shared tooling and assets |
+| Other editor adapters | Planned separate integration packages, including third-party extensions | Consume the same tooling without depending on `editor-vscode` |
 
 Dependencies go from an editor adapter to the shared tooling. The normalizer,
 checking projection, recovery and mapper must never import `vscode`, an editor
@@ -186,6 +193,26 @@ adapter, or require editor activation. Shared assets also remain outside the
 VS Code package. Editor-specific settings and permission prompts belong to the
 adapter, not the language implementation. New language behavior is implemented
 and tested in the shared core rather than repeated in extension callbacks.
+
+The shared grammar builder clones an unmodified, pinned Microsoft TSX grammar,
+replaces its child rule with host statements and adds the two attribute forms.
+It emits a standalone grammar with no external `source.tsx` registration needed.
+The vendor license is retained and copied into the adapter output. Tests use the
+actual TextMate/Oniguruma engines: the real task board has no invalid tokens or
+leaked lexical states, and quotes containing closing tags, nested parentheses
+and template interpolation retain their contexts. This is highlighting evidence,
+not parser conformance.
+
+The registration export reads the existing mapper manifest, adds an absolute
+file-directory URI and returns plain protocol data. A headless test launches that
+exact command and transforms the real task board. Adapter tests simulate the
+editor/provider API to check registration, missing/incompatible providers, errors
+and disposal. They are not a real activation check. `scripts/build.ts` bundles
+only the adapter and emits shared assets into `dist/`; it does not bundle the
+compiler, mapper process or Bun into a self-contained VSIX.
+
+See [adapter setup](../packages/editor-vscode/README.md) and
+[reuse from another editor](../packages/jsx-plus/editor-assets/README.md).
 
 The mapper transport is not a standalone language server. An editor needs a
 TypeScript host with content-mapper support and registration, or an additional

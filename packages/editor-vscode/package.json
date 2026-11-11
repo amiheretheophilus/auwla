@@ -1,0 +1,37 @@
+{
+  "name": "memoized-dom-auwla",
+  "displayName": "Auwla (Prototype)",
+  "description": "A thin VS Code adapter for the shared Auwla authoring tools.",
+  "version": "0.0.0",
+  "publisher": "amiheretheophilus",
+  "private": true,
+  "engines": { "vscode": "^1.126.0" },
+  "categories": ["Programming Languages"],
+  "extensionKind": ["workspace"],
+  "capabilities": {
+    "untrustedWorkspaces": { "supported": false },
+    "virtualWorkspaces": false
+  },
+  "activationEvents": ["onLanguage:auwla"],
+  "main": "./dist/extension.cjs",
+  "contributes": {
+    "languages": [{
+      "id": "auwla",
+      "aliases": ["Auwla", "auwla"],
+      "extensions": [".auwla"],
+      "configuration": "./dist/language-configuration.json"
+    }],
+    "grammars": [{
+      "language": "auwla",
+      "scopeName": "source.auwla",
+      "path": "./dist/auwla.tmLanguage.json"
+    }]
+  },
+  "scripts": {
+    "build": "bun run scripts/build.ts",
+    "check": "bun check",
+    "test": "bun test"
+  },
+  "dependencies": { "@memoized-dom/jsx-plus": "workspace:*" },
+  "devDependencies": { "@types/vscode": "1.100.0", "typescript": "7.1.0-beta", "vscode-textmate": "9.3.2" }
+}

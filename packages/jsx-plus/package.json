@@ -7,7 +7,10 @@
   "exports": {
     ".": "./src/index.ts",
     "./checking": "./src/checking/project.ts",
-    "./checking/facts": "./src/checking/facts.ts"
+    "./checking/facts": "./src/checking/facts.ts",
+    "./editor": "./src/editor/registration.ts",
+    "./editor/grammar": "./src/editor/grammar.ts",
+    "./package.json": "./package.json"
   },
   "typescript": {
     "contentMapper": {
@@ -23,6 +26,8 @@
   },
   "devDependencies": {
     "@memoized-dom/runtime": "workspace:*",
-    "typescript": "7.1.0-beta"
+    "typescript": "7.1.0-beta",
+    "vscode-textmate": "9.3.2",
+    "vscode-oniguruma": "2.0.1"
   }
 }

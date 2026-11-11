@@ -75,6 +75,12 @@ structural damage has a conservative fallback. Builds remain strict. See
 project; edits replace it and close/reopen discards it. See
 [tooling](../../wiki2/tooling.md) and [cache evidence](../../wiki2/mapper-cache.md).
 
+The separate [VS Code adapter](../editor-vscode/README.md) consumes the shared
+`./editor` metadata/mapper contribution and `./editor/grammar` build helper.
+[Editor assets](editor-assets/README.md) remain reusable without that adapter.
+The prototype builds locally; real desktop activation and packaged installation
+remain unverified.
+
 `bun run tests/probe-flow.ts --strict` is the separate checking-flow target gate.
 It passes all 34 current targets, including the four original narrowing gaps.
 The primary TSX view preserves editor identity and synchronous narrowing; selected

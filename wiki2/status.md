@@ -65,17 +65,31 @@ Continued from the uncommitted recovery work after that review:
 - Spec revision 6 documents diagnostic locations for these already invalid
   inputs. No accepted syntax or event evaluation changes.
 
+The first decoupled editor adapter is now built (DX-36):
+
+- `packages/editor-vscode` handles activation and language/grammar registration.
+  It depends on shared `./editor` metadata/mapper contribution and `./editor/grammar`
+  assets in `jsx-plus`; the shared code has no editor SDK dependency.
+- Its build emits a standalone TextMate grammar, language configuration and
+  upstream license. Real tokenizer tests use the task board; the shared mapper
+  contribution launches and transforms that same source without VS Code.
+- The provider is `TypeScriptTeam.native-preview`, which is not installed here.
+  Desktop activation, inferred-project type setup, another editor and standalone
+  VSIX packaging remain unverified. See [adapter setup](../packages/editor-vscode/README.md).
+
 ## Evidence
 
-At this recovery checkpoint: JSX+ `bun check` reports no errors across 219 files.
-JSX+ `bun test` passes **237 tests, 0 failures**, in fourteen files. They include
+At this editor checkpoint: JSX+ `bun check` reports no errors across 222 files.
+JSX+ `bun test` passes **240 tests, 0 failures**, in fifteen files. They include
 the 34 checking-flow targets, real TypeScript 7 CLI/LSP renames, completions,
 auto-imports and recovery. The three anchor/auto-import tests fail without
-`checking/spans.ts`. `bun run wiki2/spec/check.ts` passes 42 fixtures
+`checking/spans.ts`. The previous spec baseline, unchanged here, passes 42 fixtures
 (9 parse, 13 diagnostics); the JSX equivalents run in both compiler modes.
 `bun check -p wiki2/spec/tsconfig.json` is clean. Task-board execution in both
 compiler modes and real TS7 CLI/LSP checks pass in the package suite.
-`git diff --check` passes. No sub-agents were used.
+The adapter's `bun check` (5 files), `bun run build`, `node --check
+dist/extension.cjs` and five simulated activation tests pass. `git diff --check`
+passes. No sub-agents were used.
 
 For P4-FOR-FAST: compiler-next `bun check` is clean. All 191 `src/optimize`
 tests pass, including the 7 new `mapping-calls.dom.test.ts` tests. The 398
@@ -86,9 +100,10 @@ full root suite, performance, browser layout and IDE activation.
 
 ## Continue
 
-1. P3-EDITOR (candidate, DX-36): a separate thin VS Code adapter consuming shared
-   tooling and highlighting assets. Other extensions must reuse the tooling
-   without depending on the VS Code adapter; document compatible host requirements.
+1. P3-EDITOR (first adapter/assets built, DX-36): verify desktop activation with
+   the compatible TypeScript provider and the real task board, then inferred
+   projects and packaged installation. Reuse by other extensions is documented;
+   a second editor still needs its own integration evidence.
    See [tooling](tooling.md#editor-extension-planned-p3-editor).
 2. Loop follow-up in compiler-next (DX-34): extend the closed-list proof to
    `Array.from(root, row)` so unchanged rows are skipped (`moved`). Log it in

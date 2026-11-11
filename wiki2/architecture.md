@@ -93,6 +93,13 @@ All paths are relative to the repository root and exist now.
 | `packages/jsx-plus/src/checking/project.ts` | Shared-normalizer TSX checking projection and authored parse diagnostics |
 | `packages/jsx-plus/src/repairs.ts` | Checking-only closer suggestions attached to authored reader errors; builds ignore them |
 | `packages/jsx-plus/src/checking/recovery/markup.ts` | Bounded current-source repair search, inserted closers and quarantined ranges, exact authored spans and structural fallback |
+| `packages/jsx-plus/src/editor/registration.ts` | Shared metadata and local mapper launch contribution; no editor SDK |
+| `packages/jsx-plus/src/editor/grammar.ts` | Build-time TSX grammar transformation, separate from parsing/checking |
+| `packages/jsx-plus/editor-assets/` | Shared configuration and pinned upstream grammar/license |
+| `packages/jsx-plus/tests/editor-assets.test.ts` | Real-example TextMate/Oniguruma tokenization and actual contributed mapper launch |
+| `packages/editor-vscode/src/extension.ts` | Separate adapter activation, compatible-provider check and registration/disposal |
+| `packages/editor-vscode/scripts/build.ts` | Adapter bundle and shared grammar/configuration/license output |
+| `packages/editor-vscode/tests/activation.test.ts` | Simulated editor/provider API contract; desktop activation not inferred |
 | `packages/jsx-plus/tests/recovery.test.ts` | Real malformed-source mappings and strict build rejection |
 | `packages/jsx-plus/tests/editor-recovery-lsp.test.ts` | Native diagnostics/completion beyond actual unfinished task-board edits |
 | `packages/jsx-plus/src/checking/spans.ts` | Serialize copied spans for TypeScript, adding zero-length end anchors before generated text (edit-producing completions such as auto-import) |
@@ -162,7 +169,7 @@ The initial checking and mapper directories now exist and are mapped above.
 Shared checking, recovery, caching and mapper code stay in this package.
 Under DX-36, editor adapters are separate packages and depend on the shared
 tooling; the shared tooling never depends on an editor SDK or adapter. The
-planned VS Code package and reusable highlighting assets are mapped in
+first VS Code package and reusable highlighting assets are mapped in
 [tooling.md](tooling.md#editor-extension-planned-p3-editor). Map actual files in
 the commit that introduces them.
 Split [features.md](features.md) when a feature group needs its own files and cases.
