@@ -86,8 +86,9 @@ full root suite, performance, browser layout and IDE activation.
 
 ## Continue
 
-1. P3-EDITOR (candidate): a thin VS Code extension for language registration,
-   highlighting and mapper registration via TS7's `registerContentMappers`.
+1. P3-EDITOR (candidate, DX-36): a separate thin VS Code adapter consuming shared
+   tooling and highlighting assets. Other extensions must reuse the tooling
+   without depending on the VS Code adapter; document compatible host requirements.
    See [tooling](tooling.md#editor-extension-planned-p3-editor).
 2. Loop follow-up in compiler-next (DX-34): extend the closed-list proof to
    `Array.from(root, row)` so unchanged rows are skipped (`moved`). Log it in

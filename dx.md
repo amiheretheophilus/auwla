@@ -939,6 +939,7 @@ and mark a revised decision as superseded rather than erasing its reason.
 | DX-31 | Package boundary | Keep syntax/normalization in `packages/jsx-plus`; delegate production compilation to compiler-next's public API | Accepted; supersedes earlier in-place placement |
 | DX-32 | Parenthesized attribute values | Allow `prop=(expression)` alongside existing braces, with ordinary JSX value/event timing | Accepted; spec 0.1 revision 2 |
 | DX-33 | Bare identifier values | Allow `prop=name`, including `onClick=addTask`, without an implicit invocation or handler wrapper | Accepted; spec 0.1 revision 3 |
+| DX-36 | Editor decoupling | Shared checking/mapper tooling and assets stay independent of editor SDKs; separate adapters let other extensions reuse them | Accepted direction; [integration plan](wiki2/tooling.md#editor-extension-planned-p3-editor), implementation planned |
 
 ## 18. Suggested prototype and acceptance examples
 

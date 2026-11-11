@@ -148,8 +148,14 @@ edits as regression fixtures when the parser or mapping strategy changes.
 
 ## Editor extension (planned, P3-EDITOR)
 
-The content mapper supplies all TypeScript language features. An editor still
-needs a thin extension for what a mapper cannot provide:
+Accepted direction (DX-36): editor integrations must be decoupled so other editor
+extensions can reuse the language tooling without installing or importing the
+VS Code extension. The existing projection and mapper remain the shared core;
+the VS Code adapter is planned, not implemented.
+
+The content mapper supplies checking text and mappings to TypeScript, whose
+language server provides diagnostics, completion, rename and auto-imports. An
+editor still needs an adapter for:
 
 - Language registration: the `auwla` language id, `.auwla` files, comments and
   brackets, so the editor sends those files to the TS7 server.
@@ -164,19 +170,35 @@ registers a mapper, including for files outside any tsconfig.
 `registerLspMiddleware` can adjust language-feature responses. This is read from
 the type declarations only; activation in a running VS Code is **unverified**.
 
-Planned layout, so more editors can be added without touching the language:
+Planned layout (new paths are proposals, not existing packages):
 
 | Layer | Where | Shared by |
 | --- | --- | --- |
-| Normalizer and checking projection | `src/` (`normalize`, `checking/`) | Builds, every editor |
-| Content-mapper server | `src/mapper/server.ts`, named in `package.json` `typescript.contentMapper` | Any editor running the TS7 language server |
-| Highlighting grammar | One TSX-derived TextMate grammar, planned beside the package | VS Code, and editors that read TextMate grammars |
-| Per-editor shell | One small folder per editor (VS Code first): language id, file association, grammar reference, mapper registration | That editor only |
+| Normalizer and checking projection | Existing `packages/jsx-plus/src/`; checking export `@memoized-dom/jsx-plus/checking` | Builds and editor integrations; no editor SDK imports |
+| Content-mapper server | Existing `packages/jsx-plus/src/mapper/server.ts`, registered in the package manifest | Compatible TypeScript hosts; no VS Code activation dependency |
+| Highlighting assets | Planned `packages/jsx-plus/editor-assets/`; TSX-derived TextMate grammar | Adapters whose editors support that grammar format |
+| VS Code adapter | Planned separate `packages/editor-vscode/`; activation, language registration, settings and mapper registration | VS Code only; consumes shared tooling and assets |
+| Other editor adapters | Separate integration packages, including third-party extensions | Consume the same tooling without depending on `editor-vscode` |
 
-Types, errors, completion, rename and auto-import come from the shared mapper,
-so a new editor needs only its shell. Editors that use tree-sitter for
-highlighting (Zed, Neovim) would need a tree-sitter grammar, which is separate
-work.
+Dependencies go from an editor adapter to the shared tooling. The normalizer,
+checking projection, recovery and mapper must never import `vscode`, an editor
+adapter, or require editor activation. Shared assets also remain outside the
+VS Code package. Editor-specific settings and permission prompts belong to the
+adapter, not the language implementation. New language behavior is implemented
+and tested in the shared core rather than repeated in extension callbacks.
+
+The mapper transport is not a standalone language server. An editor needs a
+TypeScript host with content-mapper support and registration, or an additional
+bridge; ordinary LSP support alone does not establish compatibility. A second
+adapter must document and verify that host integration. Editors using a different
+highlighting format need separate assets; a TextMate grammar does not imply
+tree-sitter support.
+
+P3-EDITOR acceptance: keep existing headless CLI/LSP tests passing without the
+VS Code package, check the dependency direction, document how another extension
+launches/registers the shared mapper, and verify VS Code activation separately.
+Until a second editor is exercised, cross-editor support remains a design boundary
+with headless evidence, not a verified compatibility claim.
 
 ## Open questions
 

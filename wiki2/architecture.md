@@ -159,9 +159,12 @@ adding that work to the current markup-parser slice.
 ## Proposed placement
 
 The initial checking and mapper directories now exist and are mapped above.
-Future flow-aware projections, recovery, caching and editor adapters stay in this
-package; exact filenames are not yet chosen. Their owning page is
-[tooling.md](tooling.md). Map actual files in the commit that introduces them.
+Shared checking, recovery, caching and mapper code stay in this package.
+Under DX-36, editor adapters are separate packages and depend on the shared
+tooling; the shared tooling never depends on an editor SDK or adapter. The
+planned VS Code package and reusable highlighting assets are mapped in
+[tooling.md](tooling.md#editor-extension-planned-p3-editor). Map actual files in
+the commit that introduces them.
 Split [features.md](features.md) when a feature group needs its own files and cases.
 
 ## Boundaries
