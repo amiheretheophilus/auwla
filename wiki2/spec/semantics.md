@@ -107,9 +107,10 @@ The separate `@event` proposal is outside this profile.
 
 ## Shared compiler/runtime obligations (S-PIPELINE)
 
-Both source formats MUST use compiler-next's existing resolution, semantic graph,
-planning, optimization and emission. The syntax extension may introduce fresh
-normalized nodes and mappings at parse time. It MUST NOT add an alternative
+For UI/markup compilation, both source formats MUST use compiler-next's existing
+resolution, semantic graph, planning, optimization and emission. The syntax
+extension may introduce fresh normalized nodes and mappings at parse time.
+It MUST NOT add an alternative
 dependency engine, interpreter, state container, scheduler or ownership model.
 
 Readiness and update boundaries keep their established rules, including before
@@ -121,3 +122,12 @@ Observable authored side effects must be preserved, while existing compiler
 replay rules still determine reactive re-evaluation. When a faithful normalization
 has not been found, record that implementation gap rather than silently changing
 the semantics or restricting ordinary host expressions.
+
+## Backend authoring direction (planned)
+
+Configured backend `.auwla` files contain ordinary, nonreactive backend code,
+including imports of Express and other backend packages. Backend files and/or
+folders will be selected through project configuration; the extension alone
+does not enable UI derivation, replay or ownership behavior. The reactive rules
+above concern UI compilation. Backend configuration/loading remains planned,
+and isomorphic support will follow later.

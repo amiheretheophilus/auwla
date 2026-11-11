@@ -23,6 +23,13 @@ The user has specified that TypeScript content mappers will be part of the desig
 They are the new TypeScript API for integrating custom source formats, not data or
 content transformation libraries.
 
+Backend authoring direction (2026-11-11): `.auwla` may also contain pure backend
+JavaScript/TypeScript, including imports of Express and other backend packages.
+Configuration will identify backend files and/or folders. That code is ordinary,
+nonreactive backend code; the extension does not activate UI reactivity.
+Configuration/loading support is planned, its exact syntax is open, and
+isomorphic support will be added later. See [the architecture note](wiki2/architecture.md#backend-authoring-planned).
+
 Accepted direction from the 2026-11-10 discussion:
 
 - JSX+ extends compiler-next with authoring features that ordinary JSX cannot
@@ -899,6 +906,7 @@ and mark a revised decision as superseded rather than erasing its reason.
 | DX-27 | Iteration | Small slices; revise the plan, examples and decisions as we learn | Accepted |
 | DX-28 | Compiler continuity | Extend compiler-next's existing pipeline; refs and other existing features are reused | Accepted |
 | DX-29 | Spec before implementation | Define grammar, syntax model, semantics, diagnostics and conformance fixtures before the parser; evolve the draft explicitly | Accepted |
+| DX-30 | Backend authoring | Pure, nonreactive backend code in configured `.auwla` files/folders; ordinary backend imports; isomorphic support later | Accepted direction; implementation/config syntax planned |
 
 ## 18. Suggested prototype and acceptance examples
 

@@ -46,6 +46,18 @@ test and revise, not settled decisions about every future language construct.
 `.auwla` is the working extension used to label fixtures. File extension and
 packaging remain open. Existing `.js`, `.ts`, `.jsx` and `.tsx` retain their syntax.
 
+## Backend authoring direction (planned)
+
+`.auwla` may also author pure backend JavaScript/TypeScript, importing Express,
+database clients and other ordinary backend packages. Project configuration will
+identify the backend files and/or folders. Such code is nonreactive and preserves
+ordinary backend execution; the file extension does not make it UI code.
+
+This extends authoring within the same compiler-next toolchain. The config
+surface and `.auwla` backend loading are not implemented or specified in detail
+yet. Isomorphic support is future work. The core markup profile below does not
+impose reactive UI semantics on configured backend code.
+
 ## Core profile
 
 Included: existing elements/fragments and ordinary JSX attributes, quoted string

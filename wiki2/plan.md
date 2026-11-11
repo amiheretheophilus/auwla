@@ -64,3 +64,9 @@ explicit draft rules and fixtures before its parser behavior is implemented.
 Later candidates include conditional classes, styling, scoped CSS, gestures,
 hotkeys, observers and ref-based DOM measurements. Their open contracts stay in
 [features.md](features.md), not in an additional global bug list.
+
+Backend roadmap note (DX-30): configuration will identify backend `.auwla` files
+and/or folders, where ordinary nonreactive backend code may import Express and
+other backend packages. Config syntax/loading work is planned; isomorphic support
+comes later. This does not change the current P2 markup-parser priority. See
+[architecture.md](architecture.md#backend-authoring-planned).

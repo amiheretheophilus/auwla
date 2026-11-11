@@ -51,6 +51,9 @@ later profiles. Resolve new syntax questions in the spec before encoding them.
 - Attribute braces remain in examples; removing them has not been decided.
 - The core draft does not settle every feature in `dx.md`; event shorthand,
   modifiers, direct child loops/declarations and CSS conveniences remain open.
+- DX-30 records nonreactive backend `.auwla` authoring through configured backend
+  files/folders, including Express imports. Config/loading are planned; isomorphic
+  support follows later. This is a note, not an implemented backend feature.
 - The compiler rewrite's routing, Vite, acceptance and performance work stays in
   [wiki/status.md](../wiki/status.md). Prototype progress does not close those gates.
 - Source ranges and TypeScript edit mappings need an early proof; successful
@@ -73,3 +76,8 @@ P1-SPEC/P1-GRAMMAR: initial specification and baseline evidence, 2026-11-11.
 
 Find this slice's commit with `git log -1 -- wiki2/status.md`; subsequent sessions
 replace this evidence with the latest slice rather than appending a long run log.
+
+Latest clarification: DX-30, 2026-11-11, records backend authoring as above. Only
+documentation changed; the core grammar, fixture catalog and checker are unchanged.
+Documentation audit: 20 documents and 131 local links passed; `git diff --check`
+passed. Runtime/compiler checks were not rerun for this note.

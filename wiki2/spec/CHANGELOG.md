@@ -14,6 +14,9 @@
   from future extended-syntax conformance.
 - Leave direct loops/declarations/abrupt child statements, shorthand events,
   bindings, class/style conveniences and packaging for later decisions.
+- Record DX-30 as planned authoring direction: configured backend `.auwla` files
+  are ordinary nonreactive code and may import Express/backend packages;
+  isomorphic support is later work. Core markup grammar and fixtures are unchanged.
 
 Subsequent revisions name the affected rule/fixture IDs, observable change,
 reason, and whether an accepted user direction is being revised. Keep open

@@ -13,6 +13,7 @@ Updated: 2026-11-11. Accepted direction is separate from implemented support.
 | DX-27 | 2026-11-10 | Create `wiki2` for the map and plan, and iterate as evidence arrives. User: "since it agile approach we are using we can make changes we go". | [plan](plan.md) |
 | DX-28 | 2026-11-10 | Extend compiler-next through its existing pipeline with features ordinary JSX cannot express. Existing refs are reused. User: "this doesnt take a different path from the compiler next" and "the ref exists already". Supersedes the suggestion of a standalone prototype compiler package. | [architecture](architecture.md), [refs](refs.md) |
 | DX-29 | 2026-11-11 | Define a language spec before implementing the syntax, informed by the organization of `snrraptopack/jasx`. User: "before they started they had a proper language spec". The spec remains a revisable draft under DX-27. | [spec](spec/README.md) |
+| DX-30 | 2026-11-11 | `.auwla` may contain pure nonreactive backend code and ordinary backend imports such as Express. Config will select backend files/folders; isomorphic support comes later. User: "backends are not even reactive" and "we will have a config that will point to backend files or folder". Exact config syntax and implementation remain planned. | [architecture](architecture.md#backend-authoring-planned), [spec](spec/README.md#backend-authoring-direction-planned) |
 
 ## Provisional choices
 

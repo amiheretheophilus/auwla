@@ -69,6 +69,17 @@ view/schema, semantics, diagnostics, fixtures and [check.ts](spec/check.ts).
 The checker validates fixtures and current-JSX equivalents; it does not parse
 extended source or introduce a production compilation path.
 
+## Backend authoring (planned)
+
+`.auwla` can also be used for pure backend JavaScript/TypeScript, with ordinary
+imports such as Express and database packages. Project configuration will point
+to backend files and/or folders. Those files use ordinary nonreactive backend
+execution within the same compiler-next toolchain; the extension does not opt
+them into UI reactivity. Exact config keys and loading integration remain open.
+
+Isomorphic support will be added later. This note records the direction without
+adding that work to the current markup-parser slice.
+
 ## Proposed placement
 
 These paths are **planned**, not existing files. Syntax support belongs inside
