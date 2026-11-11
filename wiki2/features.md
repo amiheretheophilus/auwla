@@ -24,6 +24,10 @@ index; do not leave duplicated contracts here and on the new page.
 
 Detailed original examples and research remain in [dx.md](../dx.md). Its unaccepted
 spellings are discussion material; copying one into a fixture does not accept it.
+The [CSS design companion](../dxcss.md) details local style blocks, mixed CSS and
+utility aliases, compact conditions on both aliases (`p:4 @md:6 @lg:8`) and
+ordinary properties (`padding:4px @md: 30px`), editor support and proposed
+implementation slices. It does not change the current spec or implement styling.
 
 ## Acceptance pattern
 

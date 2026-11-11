@@ -9,6 +9,10 @@ Updated: 2026-11-11.
 Work branch: `prototype/jsx-plus`. Start at [wiki2/README.md](wiki2/README.md)
 for the code map, current slice, acceptance examples and handoff.
 
+The [CSS design companion](dxcss.md) expands local style blocks, optional Tailwind
+utility aliases, compact/grouped conditions and CSS tooling. These are proposals,
+not implemented additions to the current language profile.
+
 The initial [language extension spec](wiki2/spec/README.md), version 0.1-draft,
 defines the first core profile's grammar, syntax model, semantics, diagnostics
 and conformance fixtures. The broader features below remain discussion material
