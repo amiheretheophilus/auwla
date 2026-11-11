@@ -1,7 +1,25 @@
 {
   "specVersion": "0.1-draft",
-  "revision": 2,
+  "revision": 3,
   "cases": [
+    {
+      "id": "PARSE-008",
+      "level": "parse",
+      "rules": ["G-ATTR", "A-RANGE"],
+      "source": "<button onClick=addTask />",
+      "expected": {
+        "specVersion": "0.1-draft",
+        "root": { "kind": "element", "range": [0, 26], "name": "button", "children": [] }
+      }
+    },
+    {
+      "id": "ATTR-002",
+      "level": "behavior",
+      "rules": ["G-ATTR", "S-ATTR"],
+      "source": "export function App() { let count = 0; function add(event: MouseEvent) { if (event.type === 'click') count++; } return <button onClick=add>count</button>; }",
+      "jsxEquivalent": "export function App() { let count = 0; function add(event: MouseEvent) { if (event.type === 'click') count++; } return <button onClick={add}>{count}</button>; }",
+      "expected": { "text": ["0", "1", "2"], "clicks": ["button", "button"] }
+    },
     {
       "id": "PARSE-007",
       "level": "parse",

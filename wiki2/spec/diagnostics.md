@@ -1,6 +1,6 @@
 # Syntax diagnostics
 
-0.1-draft, revision 2. Codes below are **proposed for the extension**; they have
+0.1-draft, revision 3. Codes below are **proposed for the extension**; they have
 not been added to compiler-next's current `CompileError` API.
 
 ## Format and locations (D-FORMAT)

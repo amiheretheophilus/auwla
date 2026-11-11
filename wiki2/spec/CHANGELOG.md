@@ -1,5 +1,14 @@
 # Spec revisions
 
+## 0.1-draft, revision 3 — 2026-11-11
+
+- User-directed G-ATTR/S-ATTR addition: `prop=name` accepts one host identifier
+  and normalizes to `prop={name}`. `onClick=addTask` passes the function unchanged;
+  native dispatch supplies its event. Existing expression/event timing is intact.
+- Preserve exact identifier spans and generate only unmapped braces. Bare calls,
+  members, operators and literals still need parentheses or existing JSX braces.
+- Add PARSE-008 and ATTR-002. No existing fixture meaning or diagnostic code changes.
+
 ## 0.1-draft, revision 2 — 2026-11-11
 
 - User-directed G-ATTR/S-ATTR extension: accept `prop=(expression)` alongside

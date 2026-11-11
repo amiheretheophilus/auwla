@@ -1,6 +1,47 @@
 import { expect, it } from 'bun:test';
 import { compile, normalize, authoredOffset, JsxPlusError } from '../src';
 
+for (const [source, expected] of [
+  ['<button onClick=addTask />', '<button onClick={addTask} />'],
+  ['<button onClick=addTask/>', '<button onClick={addTask}/>'],
+  ['<p title=x>"hi"</p>', '<p title={x}>{"hi"}</p>'],
+  ['<Box ref=input value=x title=(label) other={value} />', '<Box ref={input} value={x} title={(label)} other={value} />'],
+  ['<button onClick =\r\n addTask disabled />', '<button onClick =\r\n {addTask} disabled />'],
+  ['<button onClick=$add />', '<button onClick={$add} />'],
+  ['<Box value=caf\u00e9 />', '<Box value={caf\u00e9} />'],
+  [String.raw`<button onClick=\u0061ddTask />`, String.raw`<button onClick={\u0061ddTask} />`],
+] as const) {
+  it(`normalizes the bare identifier in ${source}`, () => {
+    const result = normalize(source);
+    expect(result.code).toBe(expected);
+    for (const mapping of result.mappings) {
+      expect(result.code.slice(...mapping.generated)).toBe(source.slice(...mapping.authored));
+    }
+  });
+}
+
+for (const source of [
+  '<button onClick=addTask() />',
+  '<button onClick=addTask () />',
+  '<button onClick=handlers.add />',
+  '<Box value=first+second />',
+  '<Box value=foo-bar />',
+  '<Box value=true />',
+  '<Box value=123 />',
+]) {
+  it(`requires delimiters for the non-identifier value in ${source}`, () => {
+    expect(() => normalize(source)).toThrow(JsxPlusError);
+  });
+}
+
+it('leaves generated braces unmapped around a copied bare handler name', () => {
+  const source = '<button onClick=addTask />';
+  const result = normalize(source);
+  expect(authoredOffset(result.mappings, result.code.indexOf('{'))).toBeUndefined();
+  expect(authoredOffset(result.mappings, result.code.indexOf('addTask'))).toBe(source.indexOf('addTask'));
+  expect(() => compile(`export function App() { return ${source}; }`, { moduleId: './App.tsx' })).toThrow();
+});
+
 for (const [name, source, expected] of [
   ['named value', '<button aria-label=("Remove " + task.title) />', '<button aria-label={("Remove " + task.title)} />'],
   ['comparison and callback', '<button disabled=(value > 1) onClick=(() => value++) />', '<button disabled={(value > 1)} onClick={(() => value++)} />'],

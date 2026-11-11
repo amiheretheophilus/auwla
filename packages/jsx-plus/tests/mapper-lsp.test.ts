@@ -18,6 +18,58 @@ interface CompletionItem {
   textEdit?: { newText: string; insert: LspRange; replace: LspRange };
 }
 
+it('renames a real bare event handler through every authored use and rechecks', async () => {
+  const source = readFileSync(new URL('../examples/task-board/App.auwla', import.meta.url), 'utf8');
+  const file = resolve(exampleRoot, 'App.auwla');
+  const uri = pathToFileURL(file).href;
+  const peer = rpcProcess(typescriptExecutable, ['--lsp', '--stdio'], exampleRoot);
+  peer.connection.onRequest('client/registerCapability', () => null);
+
+  try {
+    await peer.connection.sendRequest('initialize', {
+      processId: process.pid,
+      rootUri: pathToFileURL(exampleRoot).href,
+      capabilities: { general: { positionEncodings: ['utf-16'] }, textDocument: { diagnostic: {} } },
+      initializationOptions: { runExternalCode: true },
+    });
+    await peer.connection.sendNotification('initialized', {});
+    await peer.connection.sendNotification('textDocument/didOpen', {
+      textDocument: { uri, languageId: 'auwla', version: 1, text: source },
+    });
+    const rename = await peer.connection.sendRequest<Edit>('textDocument/rename', {
+      textDocument: { uri }, position: positionAt(source, source.indexOf('onSubmit=addTask') + 'onSubmit='.length),
+      newName: 'submitTask',
+    });
+    const entries = rename.documentChanges?.map((change) => [change.textDocument.uri, change.edits] as const)
+      ?? Object.entries(rename.changes ?? {});
+    expect(entries).toHaveLength(1);
+    const returnedFile = fileURLToPath(entries[0]![0]);
+    expect(process.platform === 'win32' ? returnedFile.toLowerCase() : returnedFile)
+      .toBe(process.platform === 'win32' ? file.toLowerCase() : file);
+    const edits = entries[0]![1];
+    expect(edits).toHaveLength(2);
+    const ordered = edits.map((edit) => ({
+      start: offsetAt(source, edit.range.start), end: offsetAt(source, edit.range.end), text: edit.newText,
+    })).sort((a, b) => b.start - a.start);
+    let edited = source;
+    for (const edit of ordered) {
+      expect(source.slice(edit.start, edit.end)).toBe('addTask');
+      expect(edit.text).toBe('submitTask');
+      edited = edited.slice(0, edit.start) + edit.text + edited.slice(edit.end);
+    }
+    expect(edited).toContain('onSubmit=submitTask');
+    await peer.connection.sendNotification('textDocument/didChange', {
+      textDocument: { uri, version: 2 }, contentChanges: [{ text: edited }],
+    });
+    const checked = await peer.connection.sendRequest<{ items: Diagnostic[] }>('textDocument/diagnostic', {
+      textDocument: { uri },
+    });
+    expect(checked.items).toEqual([]);
+  } finally {
+    await peer.close(true);
+  }
+}, 25000);
+
 it('applies a native member-completion edit inside the real task-board parenthesized attribute', async () => {
   const original = readFileSync(new URL('../examples/task-board/App.auwla', import.meta.url), 'utf8');
   const source = original.replace('"Remove " + task.title', '"Remove " + task.ti');

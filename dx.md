@@ -51,6 +51,8 @@ Accepted direction from the 2026-11-10 discussion:
 
 DX-32 adds optional `prop=(expression)` attribute values alongside existing JSX
 braces. Ordinary value/event evaluation remains unchanged; callbacks stay explicit.
+DX-33 adds a single bare identifier value, such as `onClick=addTask`, with the
+same meaning as `onClick={addTask}` and ordinary native event arguments.
 Separators, the final file extension and remaining feature proposals remain revisable.
 This direction is for the new authoring format; it does not change TSX text rules.
 Revision 1 provisionally uses host expression continuation/ASI and explicit
@@ -936,6 +938,7 @@ and mark a revised decision as superseded rather than erasing its reason.
 | DX-30 | Backend authoring | Pure, nonreactive backend code in configured `.auwla` files/folders; ordinary backend imports; isomorphic support later | Accepted direction; implementation/config syntax planned |
 | DX-31 | Package boundary | Keep syntax/normalization in `packages/jsx-plus`; delegate production compilation to compiler-next's public API | Accepted; supersedes earlier in-place placement |
 | DX-32 | Parenthesized attribute values | Allow `prop=(expression)` alongside existing braces, with ordinary JSX value/event timing | Accepted; spec 0.1 revision 2 |
+| DX-33 | Bare identifier values | Allow `prop=name`, including `onClick=addTask`, without an implicit invocation or handler wrapper | Accepted; spec 0.1 revision 3 |
 
 ## 18. Suggested prototype and acceptance examples
 

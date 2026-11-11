@@ -1,6 +1,6 @@
 # Core semantics
 
-0.1-draft, revision 2. Compiler-next's existing rules remain authoritative for
+0.1-draft, revision 3. Compiler-next's existing rules remain authoritative for
 host execution, reactivity, readiness, ownership and delivery.
 
 ## Expression children (S-EXPR)
@@ -101,7 +101,11 @@ follow mount/replacement/removal. Forwarding/member/callback behavior and known
 limits stay on [the existing ref page](../../wiki/compiler/refs.md). Checks in
 this spec verify preservation when new child syntax surrounds a ref.
 
-## Parenthesized attribute expressions (S-ATTR)
+## Attribute expression values (S-ATTR)
+
+Bare `prop=name` becomes `prop={name}`. It evaluates the ordinary identifier and
+retains its lexical binding, native handler arguments/receiver and normal ref
+target rules. No wrapper function or implicit invocation is generated.
 
 `prop=(expression)` normalizes to `prop={(expression)}` with the same value,
 evaluation count, ordering and host scope. Its parentheses group comma expressions

@@ -1,6 +1,6 @@
 # Core grammar
 
-0.1-draft, revision 2. Status: provisional executable-design target.
+0.1-draft, revision 3. Status: provisional executable-design target.
 
 ## Host language and lexical contexts (G-HOST)
 
@@ -142,6 +142,10 @@ ordinary host bodies and statements.
 
 ## Attributes and existing refs (G-ATTR)
 
+```ebnf
+ExtendedAttributeValue ::= JSXAttributeValue | "(" HostExpression ")" | HostIdentifier
+```
+
 Names, spreads, string attributes, boolean attributes and `prop={expression}`
 retain the current JSX grammar and ordering. The extended format also accepts
 `prop=(expression)`, where the matching outer parentheses delimit one ordinary
@@ -163,8 +167,18 @@ checks whether the resulting value is valid for that prop.
 
 `ref={input}` and `ref=(input)` refer to the same normally declared writable
 target. Neither declares a binding. No new ref node or `$`-ref syntax is introduced.
-Spreads keep `{...props}`; bare `prop=expression` is not added. Existing `.tsx`
-retains its existing attribute grammar. Only the extended format adds `=(...)`.
+The extended format also accepts a single bare host identifier: `prop=name`.
+It becomes `prop={name}`, reading the binding with ordinary JSX semantics.
+For example, `onClick=addTask` passes that function directly and native dispatch
+supplies the event argument. This rule applies to any prop, including `ref=input`;
+it neither turns unknown names into strings nor introduces event-specific timing.
+
+The identifier ends at attribute whitespace or the tag's `>`/`/>` boundary.
+Its spelling must parse as one host identifier, including valid Unicode/escapes.
+Bare calls, members, operators and literals are not part of this small form;
+use parentheses or existing braces for them. Thus `onClick=addTask()` is not
+accepted or made lazy. Spreads keep `{...props}`. Existing `.tsx` retains its
+existing attribute grammar; these forms belong to the extended format.
 
 This profile does not define `@event`, modifier chains, `bind:property`, shorthand
 classes or special raw CSS blocks. Those remain open design work in

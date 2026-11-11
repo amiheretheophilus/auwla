@@ -26,6 +26,25 @@ See [architecture.md](architecture.md).
 - Attribute expressions accept `prop={expression}` and `prop=(expression)`
   (DX-32, spec revision 2). Both retain ordinary value/event timing. Event
   callbacks remain explicit; bare `onClick=handler(...)` is not introduced.
+- DX-33/spec revision 3 additionally accepts `prop=name` for one bare host
+  identifier. `onClick=addTask` passes the function, with native event arguments.
+
+## Bare identifier attributes
+
+`src/attributes/identifier.ts` reads a candidate up to an attribute/tag boundary,
+then requires the host parser to return one identifier without errors. It does
+not parse general expressions by string replacement. Unicode/escaped identifiers
+keep their exact source spelling; unknown names retain normal TypeScript errors.
+Non-identifiers need parentheses or existing JSX braces.
+
+In the parser-only opening-tag placeholder, the equals sign and identifier are
+blanked while preserving UTF-16 width and newlines. This leaves a boolean
+attribute for scanning, including one-character names. Emission instead retains
+the real assignment and copies the identifier between unmapped generated braces.
+
+The actual apps use `onClick=addTask` and `onSubmit=addTask`. Their runtime checks
+exercise native event delivery. A real LSP test renames the bare submit handler
+and its declaration with exact authored edits, then rechecks successfully.
 
 ## Parenthesized attribute values
 

@@ -9,6 +9,7 @@ import type { Node, ParseResult, IfStatement } from 'yuku-parser';
 import { JsxPlusError } from './diagnostics';
 import { childExpression, childStatements, maskMarkup, type HostTokens } from './host';
 import { maskAttribute, parenthesizedAttribute } from './attributes/parenthesized';
+import { identifierAttribute, maskIdentifierAssignment } from './attributes/identifier';
 import type { BlockView, ChildView, ElementView, ExpressionView, FragmentView, IfView, NormalizedSource, Range } from './model';
 import { assemble, copied, generated, replaceRange, type Piece, type Replacement } from './source';
 
@@ -94,6 +95,7 @@ class Reader {
       let braces = 0;
       let nested: Replacement | undefined;
       let parenthesized = false;
+      let bareAssignmentStart: number | undefined;
       const first = 0;
       if (tokens.kind(first) !== K.LessThan) this.error('HOST', 'Expected an element', start);
 
@@ -110,6 +112,14 @@ class Reader {
 
       for (let index = 2; index < tokens.length; index++) {
         const kind = tokens.kind(index);
+        if (braces === 0 && kind === K.Assign) {
+          const identifier = identifierAttribute(this.source, start + tokens.end(index));
+          if (identifier !== null) {
+            nested = identifier;
+            bareAssignmentStart = tokens.start(index);
+            break;
+          }
+        }
         if (braces === 0 && kind === K.LeftParen && tokens.kind(index - 1) === K.Assign) {
           nested = parenthesizedAttribute({
             source: this.source,
@@ -135,9 +145,13 @@ class Reader {
 
       if (nested === undefined) break;
       attributes.push(nested);
-      shadow = parenthesized
-        ? maskAttribute(shadow, nested.start - start, nested.end - start)
-        : maskMarkup(shadow, nested.start - start, nested.end - start);
+      if (bareAssignmentStart !== undefined) {
+        shadow = maskIdentifierAssignment(shadow, bareAssignmentStart, nested.end - start);
+      } else if (parenthesized) {
+        shadow = maskAttribute(shadow, nested.start - start, nested.end - start);
+      } else {
+        shadow = maskMarkup(shadow, nested.start - start, nested.end - start);
+      }
     }
 
     if (openingEnd === 0) this.error('HOST', 'Incomplete opening tag', start, this.source.length);

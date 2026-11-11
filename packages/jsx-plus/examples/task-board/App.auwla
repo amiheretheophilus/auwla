@@ -54,7 +54,7 @@ export function App() {
         <p>"A small task board written with ordinary variables and functions."</p>
       </header>
 
-      <form onSubmit={addTask}>
+      <form onSubmit=addTask>
         <label htmlFor="new-task">"What needs doing?"</label>
         <div class="add-task">
           <input id="new-task" ref=(draft) placeholder="Write a task" />

@@ -38,6 +38,10 @@ Extended attributes accept `aria-label=("Remove " + task.title)` alongside
 existing `aria-label={...}`. Parentheses delimit an ordinary value; event callbacks
 stay explicit, such as `onClick=(() => removeTask(id))`. The actual task-board
 code and native TypeScript completion/edit checks exercise this form.
+Single identifiers can omit delimiters entirely: `onClick=addTask` becomes
+`onClick={addTask}`, retaining native event arguments. Actual app checks and an
+applied LSP handler rename cover this spelling. Calls/members/other expressions
+still use parentheses or braces.
 
 `compile()` currently adapts one UI module. Existing `.tsx` input explicitly
 named through `moduleId` retains its existing JSX semantics. Multi-module `.auwla`

@@ -52,7 +52,7 @@ module; production Vite loading, HMR and general multi-module support remain pla
 Start with the types and ordinary local variables in `App.auwla`. `remaining` and
 `visible` derive from the tasks, search query and selected filter. The event
 functions change those values with normal JavaScript. `draft` is a normally
-declared ref connected through `ref={draft}`; submission reads, clears and focuses
+declared ref connected through `ref=(draft)`; submission reads, clears and focuses
 the actual input.
 
 Attribute values accept `name={expression}` and `name=(expression)`. The main
@@ -60,6 +60,11 @@ example uses `aria-label=("Remove " + task.title)` and `ref=(draft)`. Events
 still receive ordinary values: `onClick=(handler)` passes a function, while
 `onClick=(() => removeTask(id))` supplies an explicit callback. Calls are not
 made lazy automatically. Existing JSX braces remain available.
+
+A single identifier also works without delimiters: the loop app uses
+`onClick=addTask`, and the main form uses `onSubmit=addTask`. They become ordinary
+JSX function references, so the handler receives the native event. Bare calls such
+as `onClick=addTask()` need explicit parentheses/braces and are not made lazy.
 
 Then read the markup: quoted children produce text, expressions render values,
 and direct `if` switches between the empty message and the list. `.map()` authors

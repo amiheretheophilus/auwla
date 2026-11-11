@@ -121,6 +121,7 @@ declared ref. Include a deliberate wrong expression and an incomplete edit.
 | --- | --- |
 | TOOL-01 | Built: CLI reports the authored error location; LSP checks the full UTF-16 range after an emoji |
 | TOOL-02 | Built for the probe: actual LSP ref rename updates four uses and changing-state rename updates five; applying edits and rechecking yields no errors |
+| TOOL-02-ID | Built: actual task-board bare submit-handler rename updates its declaration and attribute use; authored edits apply and recheck without errors |
 | TOOL-03 | Partial: real task-board member completion resolves and applies an exact authored insert/replace edit inside a parenthesized attribute, then rechecks. Auto-import and broader completion contexts remain open |
 | TOOL-04 | Partial: Unicode ranges and a missing quote/restore cycle checked; preserving the rest of an incomplete file remains open |
 | TOOL-05 | Hardened paired profile: 34 actual LSP targets pass, including receiving-type errors, generic helpers and deferred/immediate callbacks. Full flow acceptance remains open; see [checking flow](checking-flow.md) |

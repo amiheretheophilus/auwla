@@ -70,6 +70,7 @@ All paths are relative to the repository root and exist now.
 | `packages/jsx-plus/src/normalize.ts` | Host-token scanning, nested markup, expression/conditional children and TSX normalization |
 | `packages/jsx-plus/src/host.ts` | Parser-only fragment context, token slices and untouched host AST offsets |
 | `packages/jsx-plus/src/attributes/parenthesized.ts` | Balanced attribute expression reader, nested-markup normalization and opening-tag masks |
+| `packages/jsx-plus/src/attributes/identifier.ts` | Bare identifier host validation, copied expression spans and parser-only assignment masking |
 | `packages/jsx-plus/tests/attributes.test.ts` | Attribute host forms, copied spans, malformed literals and explicit source-format boundary |
 | `packages/jsx-plus/src/model.ts` | Syntax views, authored ranges and copied-span mapping types |
 | `packages/jsx-plus/src/source.ts` | Copied/generated pieces, assembly and exact authored-offset lookup |

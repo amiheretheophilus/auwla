@@ -1,6 +1,6 @@
 # Syntax model and conformance view
 
-0.1-draft, revision 2. Owns G-SOURCE and A-RANGE/A-NODES/A-NORMALIZE.
+0.1-draft, revision 3. Owns G-SOURCE and A-RANGE/A-NODES/A-NORMALIZE.
 
 ## Purpose (A-NODES)
 
@@ -96,6 +96,8 @@ resolver bindings, runtime IDs and optimization decisions do not appear in it.
   stays a host string expression rather than being reinterpreted as JSX raw text.
 - `prop=(expression)` becomes `prop={(expression)}`. The original parentheses
   and expression keep exact copied spans; inserted JSX braces stay unmapped.
+- `prop=name` becomes `prop={name}` with the identifier's exact copied spelling
+  and range. Inserted braces stay unmapped; no handler wrapper is introduced.
 - Conditional bodies become existing conditional/fragment/child machinery with
   the semantics in [semantics.md](semantics.md). No new branch runtime is defined.
 - Preserve native operations and authored evaluation order. Do not implement a

@@ -61,7 +61,7 @@ export function App() {
         <p>"Build the rows in JavaScript, then render the array below."</p>
       </header>
       <div class="add-task">
-        <button type="button" class="add" onClick=(addTask)>"Add task"</button>
+        <button type="button" class="add" onClick=addTask>"Add task"</button>
         <button type="button" class="filter-open" onClick=(() => showOpen = !showOpen)>
           showOpen ? "Show all" : "Show open"
         </button>
