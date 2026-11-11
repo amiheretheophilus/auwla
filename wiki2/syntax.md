@@ -178,6 +178,9 @@ component's own code) also skips rows whose item is unchanged, exactly as `.map`
 does: compiler-next's closed-list proof and emitter treat both spellings as one
 ([closed lists](../wiki/compiler/optimize.md#closed-lists)). A derived list such
 as the task board's `visible` gets compiled rows but no skip, in either spelling.
+One-line handlers that return the list, such as `onClick=(() => rows.reverse())`,
+keep the skip: an element's event dispatch keeps nothing it returns. A function
+passed to a component as a prop does not, since the component may keep its result.
 
 Known limits (compiler-next, same as plain JSX `Array.from`):
 

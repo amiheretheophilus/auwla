@@ -252,6 +252,14 @@ of it count (`#rowsOver`, through `mappingCall` in `mapping-calls.ts`):
 direct `for...of` loop in markup. The emitter then gives the skip to whichever the
 author wrote: `list.map(rows, unedited)` or `list.from(rows, unedited)`. A row list
 over anything but the root itself, such as an alias, rejects the list.
+
+A value returned from a function reaches whoever calls it, so `#useReturn` follows
+the function's calls. A function literal written as an `on*` attribute of a DOM
+element has only one caller, the event dispatch (`returnsToEventDispatch`).
+`addEventListener` ignores the result, and delegated dispatch only compares it with
+`false`, so returning the list or an item there is a use that keeps nothing. This
+admits the one-line handler `onClick={() => rows.reverse()}`. A component's prop and
+a host with a spread or reordered attributes (`isComponentCall`) stay unproven.
 `closed-lists.test.ts` runs its accept and reject lists in both spellings, and
 `conditionals-and-lists.closed.test.ts` runs every case a second time with its
 lists written as `Array.from`.
@@ -262,6 +270,8 @@ lists written as `Array.from`.
 | `rows[i] = rows[j]`, `rows.reverse()`, `rows.splice(i, 1)` | yes: moves |
 | `rows[i].label = 'x'`, a row's own `item.done = true` | yes: edits |
 | `items = removeRow(items, row)`, where the helper only copies | yes, followed into it |
+| `<button onClick={() => rows.reverse()}>`, `onClick={() => rows = rows.slice(1)}` | yes: a DOM element's event handler returns into the dispatch, which keeps nothing |
+| `<Pick onPick={() => rows} />`, `<button {...attrs} onClick={() => rows}>` | no: a component may keep the result; the spread path reads `then` from it |
 | `lib.track(rows[0])`, `held.set('a', rows[0])`, `picked = rows[0]` | no: it left |
 | `{ meta: { n: 1 } }`, `new Row()`, `{ get label() {…} }` | no: not a record of primitives |
 | `const row = rows[0]; row.label = 'x'` | no: the edit needs the alias index |
