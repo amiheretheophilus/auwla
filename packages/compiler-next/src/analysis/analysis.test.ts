@@ -1,5 +1,5 @@
 import { expect, it } from 'bun:test';
-import { inspectModules } from './index';
+import { CompileError, inspectModules } from './index';
 import { compile } from '../index';
 
 it('describes actual classified state/derived inputs without emitting a program', () => {
@@ -91,4 +91,8 @@ it('retains source-ordered body builders for a derived computation', () => {
   const module = inspectModules({ './App.tsx': source }).modules[0]!;
   const values = module.bindings.find((binding) => binding.name === 'values')!;
   expect(values.computation!.builders.some((builder) => source.slice(...builder.range).includes('values.push(count)'))).toBe(true);
+});
+
+it('exposes frontend errors through the dedicated analysis entry', () => {
+  expect(() => inspectModules({ './App.tsx': 'export const value = ;' })).toThrow(CompileError);
 });

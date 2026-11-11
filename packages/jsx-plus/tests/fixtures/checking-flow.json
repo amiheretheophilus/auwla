@@ -4,28 +4,28 @@
     {
       "id": "FLOW-TYPE-001",
       "topic": "unguarded replayed child",
-      "coverage": "gap-probe",
+      "coverage": "baseline",
       "source": "import type {} from '@memoized-dom/compiler/jsx';\nexport function App() {\n  let value: string | number = 'ready';\n  return <button onClick={() => value = 1}>value.toUpperCase()</button>;\n}\n",
       "expected": [{ "code": 2339, "text": "toUpperCase" }]
     },
     {
       "id": "FLOW-TYPE-002",
       "topic": "guarded replayed child",
-      "coverage": "gap-probe",
+      "coverage": "baseline",
       "source": "import type {} from '@memoized-dom/compiler/jsx';\nexport function App() {\n  let value: string | number = 'ready';\n  return <button onClick={() => value = 1}>typeof value === 'string' ? value.toUpperCase() : value.toFixed()</button>;\n}\n",
       "expected": []
     },
     {
       "id": "FLOW-TYPE-003",
       "topic": "replayed derivation outside markup",
-      "coverage": "gap-probe",
+      "coverage": "baseline",
       "source": "import type {} from '@memoized-dom/compiler/jsx';\nexport function App() {\n  let value: string | number = 'ready';\n  const label = value.toUpperCase();\n  return <button onClick={() => value = 1}>label</button>;\n}\n",
       "expected": [{ "code": 2339, "text": "toUpperCase" }]
     },
     {
       "id": "FLOW-TYPE-004",
       "topic": "prop guard does not cover a deferred continuation",
-      "coverage": "gap-probe",
+      "coverage": "baseline",
       "source": "import type {} from '@memoized-dom/compiler/jsx';\nexport function App({ value }: { value: string | undefined }) {\n  return <section>if (value !== undefined) {\n    <button onClick={async () => { await Promise.resolve(); console.log(value.toUpperCase()); }}>\n      value.toUpperCase()\n    </button>\n  }</section>;\n}\n",
       "expected": [{ "code": 18048, "text": "value", "occurrence": 3 }]
     },
@@ -77,6 +77,69 @@
       "coverage": "baseline",
       "source": "import type {} from '@memoized-dom/compiler/jsx';\nexport function App() {\n  let value: string | number = 'ready';\n  return <button onClick={() => { value = 1; console.log(value.toUpperCase()); }}>\"Run\"</button>;\n}\n",
       "expected": [{ "code": 2339, "text": "toUpperCase" }]
+    },
+    {
+      "id": "FLOW-TYPE-012",
+      "topic": "synchronous statements keep initial narrowing before replay sites",
+      "coverage": "baseline",
+      "source": "import type {} from '@memoized-dom/compiler/jsx';\nexport function App() {\n  let value: string | number = 'ready';\n  console.log(value.toUpperCase());\n  return <button onClick={() => value = 1}>typeof value === 'string' ? value.toUpperCase() : value.toFixed()</button>;\n}\n",
+      "expected": []
+    },
+    {
+      "id": "FLOW-TYPE-013",
+      "topic": "synchronous narrowing survives after a replayed derivation",
+      "coverage": "baseline",
+      "source": "import type {} from '@memoized-dom/compiler/jsx';\nexport function App() {\n  let value: string | number = 'ready';\n  const label = typeof value === 'string' ? value.toUpperCase() : value.toFixed();\n  console.log(value.toUpperCase());\n  return <button onClick={() => value = 1}>label</button>;\n}\n",
+      "expected": []
+    },
+    {
+      "id": "FLOW-TYPE-014",
+      "topic": "invalid state initialization remains an authored error",
+      "coverage": "baseline",
+      "source": "import type {} from '@memoized-dom/compiler/jsx';\nexport function App() {\n  let value: string | number = true;\n  return <button onClick={() => value = 1}>typeof value === 'string' ? value.toUpperCase() : value.toFixed()</button>;\n}\n",
+      "expected": [{ "code": 2322, "text": "value" }]
+    },
+    {
+      "id": "FLOW-TYPE-015",
+      "topic": "a real member error inside the selected replay region is retained",
+      "coverage": "baseline",
+      "source": "import type {} from '@memoized-dom/compiler/jsx';\nexport function App() {\n  let value: string | number = 'ready';\n  return <button onClick={() => value = 1}>typeof value === 'string' ? value.toUpperCase() : value.missing()</button>;\n}\n",
+      "expected": [{ "code": 2339, "text": "missing" }]
+    },
+    {
+      "id": "FLOW-TYPE-016",
+      "topic": "inferred readonly derivation follows the widened input",
+      "coverage": "baseline",
+      "source": "import type {} from '@memoized-dom/compiler/jsx';\nexport function App() {\n  let value: string | number = 'ready';\n  const current = value;\n  return <button onClick={() => value = 1}>typeof current === 'string' ? current.toUpperCase() : current.toFixed()</button>;\n}\n",
+      "expected": []
+    },
+    {
+      "id": "FLOW-TYPE-017",
+      "topic": "const object state retains its discriminated union on replay",
+      "coverage": "baseline",
+      "source": "import type {} from '@memoized-dom/compiler/jsx';\nexport function App() {\n  const value: { kind: 'a'; a: string } | { kind: 'b'; b: number } = { kind: 'a', a: 'ready' };\n  return <button onClick={() => Object.assign(value, { kind: 'b', b: 1 })}>value.kind === 'a' ? value.a : value.b</button>;\n}\n",
+      "expected": []
+    },
+    {
+      "id": "FLOW-TYPE-018",
+      "topic": "await remains in its authored async function",
+      "coverage": "baseline",
+      "source": "import type {} from '@memoized-dom/compiler/jsx';\nexport async function App() {\n  let value: string | number = await Promise.resolve('ready');\n  return <button onClick={() => value = 1}>typeof value === 'string' ? value.toUpperCase() : value.toFixed()</button>;\n}\n",
+      "expected": []
+    },
+    {
+      "id": "FLOW-TYPE-019",
+      "topic": "a fresh prop guard inside the async continuation is respected",
+      "coverage": "baseline",
+      "source": "import type {} from '@memoized-dom/compiler/jsx';\nexport function App({ value }: { value: string | undefined }) {\n  return <section>if (value !== undefined) {\n    <button onClick={async () => { await Promise.resolve(); if (value !== undefined) console.log(value.toUpperCase()); }}>value.toUpperCase()</button>\n  }</section>;\n}\n",
+      "expected": []
+    },
+    {
+      "id": "FLOW-TYPE-020",
+      "topic": "yield remains in its authored generator with the original receive type",
+      "coverage": "baseline",
+      "source": "import type {} from '@memoized-dom/compiler/jsx';\nexport function* App(): Generator<string, JSX.Element, string> {\n  let value: string | number = yield 'ready';\n  return <button onClick={() => value = 1}>typeof value === 'string' ? value.toUpperCase() : value.toFixed()</button>;\n}\n",
+      "expected": []
     }
   ]
 }

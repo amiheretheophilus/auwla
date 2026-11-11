@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { normalize } from '../src/normalize';
+import flow from './fixtures/checking-flow.json';
 import { exampleRoot, offsetAt, positionAt, rpcProcess, typescriptExecutable, type LspRange, type TextEdit } from './rpc';
 
 interface Diagnostic { code: number; message: string; range: LspRange }
@@ -86,6 +87,67 @@ it('gets authored diagnostics and safe ref rename edits from the real TypeScript
     });
     const restored = await peer.connection.sendRequest<{ items: Diagnostic[] }>('textDocument/diagnostic', { textDocument: { uri } });
     expect(restored.items).toEqual([]);
+  } finally {
+    await peer.close(true);
+  }
+}, 25000);
+
+it('renames changing state through the primary view without supplemental edits', async () => {
+  const source = flow.cases.find((fixture) => fixture.id === 'FLOW-TYPE-002')!.source;
+  const file = resolve(exampleRoot, 'App.auwla');
+  const uri = pathToFileURL(file).href;
+  const peer = rpcProcess(typescriptExecutable, ['--lsp', '--stdio'], exampleRoot);
+  peer.connection.onRequest('client/registerCapability', () => null);
+
+  try {
+    await peer.connection.sendRequest('initialize', {
+      processId: process.pid,
+      rootUri: pathToFileURL(exampleRoot).href,
+      capabilities: { textDocument: { diagnostic: {} } },
+      initializationOptions: { runExternalCode: true },
+    });
+    await peer.connection.sendNotification('initialized', {});
+    await peer.connection.sendNotification('textDocument/didOpen', {
+      textDocument: { uri, languageId: 'auwla', version: 1, text: source },
+    });
+
+    const rename = await peer.connection.sendRequest<Edit>('textDocument/rename', {
+      textDocument: { uri },
+      position: positionAt(source, source.indexOf('value:')),
+      newName: 'current',
+    });
+    const entries = rename.documentChanges?.map((change) => [change.textDocument.uri, change.edits] as const)
+      ?? Object.entries(rename.changes ?? {});
+
+    expect(entries).toHaveLength(1);
+    const returnedFile = fileURLToPath(entries[0]![0]);
+    expect(process.platform === 'win32' ? returnedFile.toLowerCase() : returnedFile)
+      .toBe(process.platform === 'win32' ? file.toLowerCase() : file);
+    const edits = entries[0]![1];
+    expect(edits).toHaveLength(5);
+
+    let renamed = source;
+    const positions = edits.map((edit) => ({
+      start: offsetAt(source, edit.range.start),
+      end: offsetAt(source, edit.range.end),
+      text: edit.newText,
+    })).sort((a, b) => b.start - a.start);
+
+    for (const edit of positions) {
+      expect(source.slice(edit.start, edit.end)).toBe('value');
+      expect(edit.text).toBe('current');
+      renamed = renamed.slice(0, edit.start) + edit.text + renamed.slice(edit.end);
+    }
+
+    await peer.connection.sendNotification('textDocument/didChange', {
+      textDocument: { uri, version: 2 },
+      contentChanges: [{ text: renamed }],
+    });
+    const report = await peer.connection.sendRequest<{ items: Diagnostic[] }>('textDocument/diagnostic', {
+      textDocument: { uri },
+    });
+    expect(report.items).toEqual([]);
+    expect(renamed).not.toContain('void (() =>');
   } finally {
     await peer.close(true);
   }

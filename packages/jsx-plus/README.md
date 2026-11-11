@@ -6,7 +6,8 @@ in [wiki2](../../wiki2/README.md).
 This package owns the additional authoring syntax. `normalize()` returns standard
 TSX, syntax views and exact copied-span mappings. `compile()` passes that TSX to
 the existing `@memoized-dom/compiler-next` API, which owns reactivity, refs, lists,
-optimization and runtime output. Existing compiler-next files are not modified.
+optimization and runtime output. Checking also uses its public read-only analysis
+entry; extended syntax and checking transformations stay in this package.
 
 ```ts
 import { compile, normalize } from '@memoized-dom/jsx-plus';
@@ -38,19 +39,22 @@ bun ../../node_modules/typescript/lib/tsc.js --project examples/checking/tsconfi
 `examples/checking/tsconfig.error.json` intentionally selects a type error and
 exits two. CLI/LSP tests verify the original UTF-16 error location and a safe ref
 rename. `vscode-jsonrpc/node` provides stream transport; it does not require the
-VS Code editor. IDE activation, reactive/ref flow typing, partial-file recovery
+VS Code editor. IDE activation, complete reactive/ref flow typing, partial-file recovery
 and mapper caching remain open. See [tooling](../../wiki2/tooling.md).
 
 `bun run tests/probe-flow.ts --strict` is the separate checking-flow target gate.
-It currently exits one with four confirmed narrowing gaps; ordinary package tests
-preserve the seven existing ref/scope cases without claiming those gaps are fixed.
-The [flow investigation](../../wiki2/checking-flow.md) records sources, expected
-results, runtime evidence and the fact boundary needed by a projection fix.
+It passes all twenty current targets, including the four original narrowing gaps.
+The primary TSX view preserves editor identity and synchronous narrowing; selected
+reactive regions use native diagnostics from a supplemental checking view.
+Supplemental mappings disable editor edits, and generated scaffolding is unmapped.
+The [flow profile](../../wiki2/checking-flow.md) records sources, routing, runtime
+evidence and the limits that keep full TOOL-05 acceptance open.
 
 The opt-in `@memoized-dom/jsx-plus/checking/facts` entry now obtains snapshots
 through compiler-next's public `./analysis` entry. It maps identities and ranges
 without DOM emission, distinguishes exact/enclosing/unmapped locations and refuses
-shifted lowering offsets. Ordinary checking is not yet changed by those facts.
+shifted lowering offsets. The active flow planner consumes the same public
+compiler facts directly in normalized coordinates.
 
 Run focused checks from this package:
 

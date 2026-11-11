@@ -68,14 +68,20 @@ The checking-flow catalog has a separate target gate, run from the package:
 bun run tests/probe-flow.ts --strict
 ```
 
-This command currently **fails with exit one on four targets**. Its default
-observation mode prints the same mismatches but is not an acceptance check.
-`checking-flow.test.ts` asserts the seven matching ref/scope/ordinary-flow cases
-and reports the remaining gaps; a passing package suite does not mean TOOL-05 is
-complete. `compile.test.ts` independently demonstrates that guarded union children
+This command currently **passes all twenty targets, exit zero**. Its default
+observation mode prints results without enforcing acceptance.
+`checking-flow.test.ts` asserts every catalog case, including the original four
+gaps and nine added regression cases. This finite catalog does not mean TOOL-05
+is complete. `compile.test.ts` independently demonstrates that guarded union children
 and guarded derivations outside markup replay correctly in both compiler modes.
-The target contract, sources and proposed next boundary are mapped in
+The target contract, sources, paired projection and remaining limits are mapped in
 [checking-flow.md](checking-flow.md).
+
+`checking-projection.test.ts` verifies unchanged primary text, supplemental edit
+masks, merged diagnostic ranges, unmapped generated scaffolding and lowering
+fallback. It checks that every delegated copied character has nonignored
+supplemental coverage throughout the catalog. Actual LSP tests additionally
+apply a five-use changing-state rename and recheck without generated edits.
 
 `checking-facts.test.ts` additionally validates the new opt-in inspection adapter.
 The shared frontend extraction is checked against compiler-next's analysis,

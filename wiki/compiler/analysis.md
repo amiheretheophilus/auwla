@@ -10,7 +10,7 @@ editor mapping remain in the separate JSX+ package.
 
 | File | Responsibility |
 | --- | --- |
-| `index.ts` | Public inspection function and type exports |
+| `index.ts` | Public inspection function, type exports and existing CompileError export |
 | `model.ts` | Readonly serialized snapshot contract |
 | `frontend.ts` | Shared parse → resolve → graph ordering |
 | `serialize.ts` | Copy existing graph facts into detached records |
@@ -20,6 +20,10 @@ The production pipeline calls `analysis/frontend.ts` for its unchanged frontend
 sequence, then continues with the existing remaining stages. Inspection imports
 the frontend directly. Frontend utilities may share helpers with optimization;
 inspection never runs an optimizer or DOM emitter. There is no persistent cache.
+
+The dedicated entry also exports the existing `CompileError` class, allowing
+checking consumers to distinguish expected frontend failures without importing
+the production facade. Unexpected internal failures must not be swallowed.
 
 ## Snapshot contract
 
@@ -53,6 +57,7 @@ The JSX+ adapter distinguishes exact, enclosing and unmapped ranges, and refuses
 shifted lowering coordinates. See [the prototype map](../../wiki2/architecture.md).
 
 Tests cover classifications, row shadowing, enums, globals, live imports, builders
-and unchanged output around inspection. This first boundary does not fix the four
-checking-flow gaps or provide complete replay proofs, incremental invalidation or
-cross-file editing. Those remain on [checking flow](../../wiki2/checking-flow.md).
+and unchanged output around inspection. JSX+ now consumes these facts for its
+first paired checking profile, clearing the four original flow targets. Complete
+replay proofs, incremental invalidation and cross-file editing remain open on
+[checking flow](../../wiki2/checking-flow.md).

@@ -28,6 +28,11 @@
   mappings. Real CLI/LSP diagnostics, ref rename and invalid/restore edits now
   have focused evidence. Reactive-flow typing/editor acceptance remain open;
   this changes no language rule or existing fixture expectation.
+- The first paired TypeScript checking profile uses existing compiler analysis
+  facts and complementary diagnostic regions. All twenty flow targets pass,
+  including the original four gaps; applied ref/state rename tests pass. Broader
+  flow/editor acceptance remains open. No normative grammar or original target
+  expectation changes; checking-only scaffolding never reaches runtime output.
 
 Subsequent revisions name the affected rule/fixture IDs, observable change,
 reason, and whether an accepted user direction is being revised. Keep open

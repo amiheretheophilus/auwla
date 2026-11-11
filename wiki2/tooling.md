@@ -1,7 +1,8 @@
 # TypeScript and editor tooling
 
-State: first TypeScript 7.1-beta mapper/CLI/LSP probe built. Broader editor and
-flow-typing acceptance remain open. Owns DX-01, DX-03, DX-24 and tooling DX-26.
+State: TypeScript 7.1-beta mapper/CLI/LSP probe and first paired flow-checking
+profile built. Broader editor/flow acceptance remains open. Owns DX-01, DX-03,
+DX-24 and tooling DX-26.
 
 ## Implemented boundary
 
@@ -20,6 +21,14 @@ It imports `normalize()` directly, retaining standard TSX and exact copied-span
 mappings without loading the production compiler facade. Protocol mappings are
 verbatim tuples; generated syntax has no editable counterpart. TypeScript's
 own `SpanMap` verifies an identifier maps exactly and a generated brace does not.
+
+The primary TSX view keeps normal narrowing and editor identity. Compiler-owned
+facts select regions checked through a supplemental TSX view with widened state
+seeds and possible prop writes. Diagnostic directives delegate only those ranges;
+the supplemental view checks them and ignores the complement. Its copied mappings
+disable editor features, preventing duplicate rename/completion edits. Generated
+insertions stay unmapped. See [checking flow](checking-flow.md) for the bounded
+profile, coverage tests and unsupported-input fallback.
 
 On a `JsxPlusError`, the projection returns its authored diagnostic plus an empty
 unmapped module. This reports the failure rather than pretending the remaining
@@ -40,7 +49,11 @@ TypeScript/editor versions and permissions used by the probe.
 | `packages/language-service/src/plugin.ts` | Existing TS6 plugin; the mapper needs its own integration plan |
 | `wiki/compiler/typescript.md` | Existing API notes and compatibility limits |
 | `packages/jsx-plus/src/source.ts` | Existing exact copied-span mappings for normalized TSX; generated syntax has no authored edit span |
-| `packages/jsx-plus/src/checking/project.ts` | TSX projection, protocol tuples and authored parse diagnostics |
+| `packages/jsx-plus/src/checking/project.ts` | Paired TSX projection and authored parse diagnostics |
+| `packages/jsx-plus/src/checking/protocol.ts` | Checking outputs, feature masks and diagnostic-directive tuples |
+| `packages/jsx-plus/src/checking/flow/plan.ts` | Compiler-fact selection of state/prop insertions and dependent checking regions |
+| `packages/jsx-plus/src/checking/flow/render.ts` | Supplemental assembly, composed maps and complementary diagnostic routing |
+| `packages/jsx-plus/tests/checking-projection.test.ts` | Coverage of delegated spans, overlap merging, unmapped scaffolding and lowering fallback |
 | `packages/jsx-plus/src/checking/facts.ts` | Opt-in public compiler inspection and authored fact locations |
 | `packages/jsx-plus/tests/checking-facts.test.ts` | Identity/provenance, mapping fidelity and lowering-coordinate tests |
 | `packages/jsx-plus/src/mapper/server.ts` | JSON-RPC process, UTF-16 negotiation and project-handle lifecycle |
@@ -101,10 +114,10 @@ declared ref. Include a deliberate wrong expression and an incomplete edit.
 | ID | Evidence required |
 | --- | --- |
 | TOOL-01 | Built: CLI reports the authored error location; LSP checks the full UTF-16 range after an emoji |
-| TOOL-02 | Built for the probe: actual LSP ref rename updates all four uses; applying edits and rechecking yields no errors |
+| TOOL-02 | Built for the probe: actual LSP ref rename updates four uses and changing-state rename updates five; applying edits and rechecking yields no errors |
 | TOOL-03 | Completion insertion and auto-import edits stay in safe mapped spans |
 | TOOL-04 | Partial: Unicode ranges and a missing quote/restore cycle checked; preserving the rest of an incomplete file remains open |
-| TOOL-05 | Investigated: four replay/deferred-flow gaps; seven ref/scope/ordinary-flow cases match. Full flow projection remains open; see [checking flow](checking-flow.md) |
+| TOOL-05 | First paired profile: twenty actual LSP targets pass, including the four original gaps. Full flow acceptance remains open; see [checking flow](checking-flow.md) |
 | TOOL-06 | A repeat edit reuses appropriate work; record observed latency and memory on this machine without claiming a general performance result |
 
 Start with TOOL-01 and TOOL-02 during P2/P3; expand as grammar grows. Keep failing
@@ -117,16 +130,13 @@ declaration output, caching/invalidation, multi-module editing and the editor
 version matrix remain open. Completion, auto-import, formatting, cross-file
 rename and broader generated-region diagnostics need their own evidence.
 
-The current projection does not model compiler-owned ref writes or reactive
-replay for TypeScript control-flow analysis. TOOL-05 remains open: this probe's
-ordinary ref condition and callback do not prove safe narrowing for every
-mount-time ref/derived read. Do not silence such errors with blanket `any` or
-diagnostic suppression. A custom extension also does not automatically inherit
-a TSX formatter or CSS tooling.
+TOOL-05 remains open beyond the twenty-case profile: ref writes, complete replay
+proofs, contextual typing, aliases, live imports and lowering maps need more
+evidence. Selected ranges receive native supplemental checking rather than blanket
+error suppression. The primary view still supplies editor features, so flow-aware
+hover/completion behavior requires separate work. A custom extension also does
+not automatically inherit a TSX formatter or CSS tooling.
 
-The [checking-flow investigation](checking-flow.md) now supplies eleven target
-fixtures and an actual LSP probe. Its strict mode fails on four confirmed gaps,
-including a false error on a guarded child that compiler-next executes correctly.
-The first public fact boundary is now built and mapped to authored source.
-It is opt-in and stops before compiler planning/emission; the ordinary mapper
-has not activated it for a flow fix. Complete replay proofs remain open.
+The [checking-flow catalog](checking-flow.md) and strict LSP gate now pass all
+twenty targets. The ordinary mapper uses the compiler's read-only public facts;
+it stops before compiler planning/emission and does not emit application code.

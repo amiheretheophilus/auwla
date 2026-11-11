@@ -35,7 +35,7 @@ still be `learning`; execute project commands in the `auwla` checkout explicitly
 | [syntax.md](syntax.md) | Quoted text, direct expressions, control flow, separators, scopes and grammar recovery |
 | [refs.md](refs.md) | Normally declared refs, the existing `ref` prop, lifecycle compatibility and code map |
 | [tooling.md](tooling.md) | TypeScript content mapper, authored spans, diagnostics, editing and formatting |
-| [checking-flow.md](checking-flow.md) | Replay/deferred checking targets, confirmed narrowing gaps and the semantic-fact boundary needed by a fix |
+| [checking-flow.md](checking-flow.md) | Paired checking profile, twenty replay/deferred-flow targets and limits of the compiler-fact boundary |
 | [features.md](features.md) | Proposed events, modifiers, bindings, classes, CSS and element behavior; extraction points for later pages |
 | [architecture.md](architecture.md) | Current integration files, proposed boundaries, source-map flow and planned code |
 | [testing.md](testing.md) | Verification strategy, evidence format and the limits of each check |

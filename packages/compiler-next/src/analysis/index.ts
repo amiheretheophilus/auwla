@@ -4,6 +4,8 @@ import { serializeAnalysis } from './serialize';
 import type { CompileModulesOptions } from '../options';
 import type { CompilerAnalysis } from './model';
 
+export { CompileError } from '../core/diagnostics';
+
 export type {
   AnalysisBinding,
   AnalysisBindingKind,

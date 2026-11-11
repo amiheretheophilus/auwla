@@ -217,15 +217,16 @@ Do not make TypeScript reconstruct the authored program from optimized runtime
 output. Conversely, checking-only scaffolding must not dictate production costs.
 Runtime source maps and TypeScript span mappings are separate artifacts.
 
-The [checking-flow probe](wiki2/checking-flow.md) now demonstrates four gaps where
-ordinary TypeScript narrowing does not describe later reactive evaluations.
-The fix needs authored binding/replay information from the existing semantics;
-the simple TSX projection remains unchanged while the flow fix is designed.
-A first public compiler snapshot now provides identities and existing graph
-facts; the separate JSX+ adapter maps them with explicit fidelity. It is opt-in
-and is not a complete replay proof. New compiler-owned files are grouped in
-`packages/compiler-next/src/analysis/`; extended syntax remains in JSX+.
-Optional ref and row/synchronous-flow examples already check correctly.
+The [checking-flow profile](wiki2/checking-flow.md) now clears the four original
+gaps where ordinary TypeScript narrowing misdescribed reactive evaluations.
+All twenty current LSP targets pass. A primary TSX view retains editor identity
+and ordinary narrowing; compiler facts select regions checked in a supplemental
+view. Its generated scaffolding has no authored edit span, and its mappings
+disable editor edits. Native TypeScript still checks the delegated regions.
+The public snapshot supplies existing graph facts, not complete replay proofs.
+Compiler-owned files are grouped in `packages/compiler-next/src/analysis/`;
+extended syntax and checking transformations remain in JSX+. Broader flow,
+lowering, editor and module coverage remain open.
 
 Keep the mapper lightweight: parse and generate the needed checking representation,
 cache by source and relevant configuration, and avoid building the complete DOM

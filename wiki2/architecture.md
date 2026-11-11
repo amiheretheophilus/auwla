@@ -57,7 +57,9 @@ The current implementation reparses while discovering nested markup; it makes
 no frontend performance claim. The checking projection now reuses this normalizer
 directly and serializes its copied spans for TypeScript. Its separate checking
 entry avoids loading the compiler facade. Specialized reactive-flow scaffolding
-remains future work.
+now lives in `checking/flow/`: a primary view retains editor identity and ordinary
+narrowing while selected dependent regions use supplemental TypeScript checking.
+Read-only compiler facts select the profile; no DOM planning/emission runs.
 
 ## Owned implementation files
 
@@ -78,6 +80,10 @@ All paths are relative to the repository root and exist now.
 | `packages/jsx-plus/examples/counter.auwla` | Complete counter compiled and clicked by the execution tests |
 | `packages/jsx-plus/AGENTS.md` | Package ownership boundary and focused checks |
 | `packages/jsx-plus/src/checking/project.ts` | Shared-normalizer TSX checking projection and authored parse diagnostics |
+| `packages/jsx-plus/src/checking/protocol.ts` | Primary/supplemental outputs, mapping masks and diagnostic directives |
+| `packages/jsx-plus/src/checking/flow/plan.ts` | Consume public compiler facts; select bounded state/prop insertions and dependent regions |
+| `packages/jsx-plus/src/checking/flow/render.ts` | Assemble supplemental TSX, compose exact spans and route diagnostics by region |
+| `packages/jsx-plus/tests/checking-projection.test.ts` | Delegated coverage, generated spans, merged ranges and lowering fallback |
 | `packages/jsx-plus/src/checking/facts.ts` | Opt-in public fact adapter with explicit authored mapping fidelity |
 | `packages/jsx-plus/tests/checking-facts.test.ts` | Identities, shadowing, capture, mapping and lowered-coordinate refusal |
 | `packages/jsx-plus/src/mapper/server.ts` | Headless TypeScript JSON-RPC transport and project handles |
@@ -85,8 +91,8 @@ All paths are relative to the repository root and exist now.
 | `packages/jsx-plus/tests/mapper-lsp.test.ts` | Native LSP rename, Unicode diagnostics and incomplete/restore editing |
 | `packages/jsx-plus/tests/rpc.ts` | Test-only process lifecycle and position helpers |
 | `packages/jsx-plus/tests/fixtures/checking-flow.json` | Target checking diagnostics and source spans for replay, refs, row scope and synchronous host logic |
-| `packages/jsx-plus/tests/probe-flow.ts` | Actual LSP observation/strict catalog runner; currently reports four unmet targets |
-| `packages/jsx-plus/tests/checking-flow.test.ts` | Seven existing flow/scope regression cases; full flow acceptance explicitly unclaimed |
+| `packages/jsx-plus/tests/probe-flow.ts` | Actual LSP observation/strict catalog runner; twenty targets match |
+| `packages/jsx-plus/tests/checking-flow.test.ts` | Assert all twenty flow/scope targets; full TOOL-05 acceptance explicitly unclaimed |
 | `packages/jsx-plus/examples/checking/` | Valid/intentional-error authored files and local mapper configs |
 
 ## Existing files to reuse
@@ -157,7 +163,7 @@ Split [features.md](features.md) when a feature group needs its own files and ca
 
 Broader host contexts, malformed-input recovery and scanner reparse costs need
 hardening beyond the first fixtures. Multi-module `.auwla` resolution, Vite,
-editor activation/registration, flow-aware checking, final-JavaScript source maps
-and delivery are not built. The initial mapper has headless CLI/LSP evidence,
+editor activation/registration, complete flow-aware tooling, final-JavaScript
+source maps and delivery remain open. The mapper has headless CLI/LSP evidence,
 not an editor acceptance claim. Backend config remains planned. The facade
 currently adapts one UI module; broader capabilities are not inferred from it.
