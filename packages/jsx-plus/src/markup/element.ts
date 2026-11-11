@@ -7,9 +7,11 @@ import { TokenKind as K } from 'yuku-parser';
 import { parenthesizedAttribute } from '../attributes/parenthesized';
 import { identifierAttribute } from '../attributes/identifier';
 import type { AttributeValue } from '../attributes/value';
-import { childStatements, closingDelimiter, isMarkupOpening, unterminatedLiteral, type HostTokens } from '../host';
+import { childExpression, childStatements, closingDelimiter, hasError, isMarkupOpening, unterminatedLiteral, type HostTokens } from '../host';
 import { blankRange, maskMarkup } from '../masks';
-import type { ElementView, FragmentView } from '../model';
+import type { Repair } from '../diagnostics';
+import type { ElementView, FragmentView, Range } from '../model';
+import { blank, closeAttributeValue, closeChildString } from '../repairs';
 import { copied, replaceRange } from '../source';
 import { readChildren } from './children';
 import type { Children, Markup, MarkupContext } from './context';
@@ -25,7 +27,13 @@ export function readElement(context: MarkupContext, start: number): Markup {
     };
   }
 
-  const body = readBody(context, tag.end, tag.name, start);
+  context.open.push(tag.name);
+  let body: Body;
+  try {
+    body = readBody(context, tag.end, tag.name, start);
+  } finally {
+    context.open.pop();
+  }
   const pieces = [...opener, ...body.children.pieces, copied(context.source, body.closeStart, body.end)];
   const range = [start, body.end] as const;
   const view: ElementView | FragmentView = tag.name === ''
@@ -69,33 +77,54 @@ function readOpeningTag(context: MarkupContext, start: number): OpeningTag {
     }
     const name = elementName(context, tokens, start);
 
-    let braces = 0;
+    // Authored offsets of the `{` still open in this scan, and the outermost
+    // `{...}` value containers it closed.
+    const braces: number[] = [];
+    const containers: Range[] = [];
     let value: AttributeValue | null = null;
     for (let index = 2; index < tokens.length && value === null; index++) {
       const kind = tokens.kind(index);
-      if (braces === 0 && kind === K.Assign) {
+      if (braces.length === 0 && kind === K.Arrow) {
+        // `class=>`: the lexer reads `=>` as one token, so the tag would run on
+        // to a later `>`. The value is missing (JPX1009, an empty value).
+        const greater = start + tokens.start(index) + 1;
+        context.error('JPX1009', 'Attribute value is missing after `=`; write a value such as `name={value}`', greater, greater + 1);
+      }
+      if (braces.length === 0 && kind === K.Assign) {
         value = identifierAttribute(context.source, start + tokens.start(index),
           (code, message, from, to) => context.error(code, message, from, to));
-      } else if (braces === 0 && kind === K.LeftParen && tokens.kind(index - 1) === K.Assign) {
+      } else if (braces.length === 0 && kind === K.LeftParen && tokens.kind(index - 1) === K.Assign) {
         value = parenthesizedAttribute({
           source: context.source,
           start: start + tokens.start(index),
           element: (position) => readElement(context, position),
-          error: (code, message, from, to) => context.error(code, message, from, to),
+          error: (code, message, from, to, repairs) => context.error(code, message, from, to, repairs),
         });
-      } else if (braces > 0 && isMarkupOpening(tokens, index)) {
+      } else if (braces.length > 0 && isMarkupOpening(tokens, index)) {
         const markup = readElement(context, start + tokens.start(index));
         value = { ...markup, mask: (tag, origin) => maskMarkup(tag, markup.start - origin, markup.end - origin) };
       } else if (kind === K.LeftBrace) {
-        braces++;
+        braces.push(start + tokens.start(index));
       } else if (kind === K.RightBrace) {
-        braces--;
-      } else if (kind === K.GreaterThan && braces === 0) {
+        const open = braces.pop();
+        if (open !== undefined && braces.length === 0) {
+          containers.push([open, start + tokens.start(index)]);
+        }
+      } else if (kind === K.GreaterThan && braces.length === 0) {
         return { name, attributes, end: start + tokens.end(index), selfClosing: tokens.kind(index - 1) === K.Slash };
       }
     }
 
     if (value === null) {
+      // The tag never ended. An attribute `{` that never closed, or that a later
+      // unrelated `}` closed, swallowed the rest of the file: report that `{`.
+      // Such a container holds no single expression.
+      const unclosed = braces[0] ?? containers.find(([open, close]) =>
+        hasError(childExpression(shadow.slice(open - start + 1, close - start)).diagnostics))?.[0];
+      if (unclosed !== undefined) {
+        context.error('HOST', 'Unclosed `{` in an attribute value', unclosed, unclosed + 1,
+          closeAttributeValue(context.source, unclosed, '}'));
+      }
       context.error('HOST', 'Incomplete opening tag', start, context.source.length);
     }
     attributes.push(value);
@@ -150,7 +179,8 @@ function readBody(context: MarkupContext, start: number, name: string, opener: n
       const kind = tokens.kind(index);
       const position = start + tokens.start(index);
       if (literal !== undefined && tokens.start(index) >= literal.boundary) {
-        context.error('JPX1003', 'Unterminated child string or template', start + literal.start);
+        context.error('JPX1003', 'Unterminated child string or template', start + literal.start, start + literal.start + 1,
+          closeChildString(source, start + literal.start));
       }
       const childLevel = stack.length === 0 || stack[stack.length - 1]!.childBlock;
       const previousMarkup = !childLevel || index === 0 ? undefined
@@ -181,10 +211,18 @@ function readBody(context: MarkupContext, start: number, name: string, opener: n
       // depth (G-BOUNDARY); strings/comments/regex content have no separate `<`.
       if (kind === K.LessThan && source.startsWith('</', position) && childLevel) {
         if (stack.length > 0) context.error('JPX1007', 'Unclosed conditional child block', stack[stack.length - 1]!.start);
-        const closeEnd = source.indexOf('>', position + 2);
-        if (closeEnd < 0) context.error('JPX1002', 'Unclosed element', opener, start);
-        const closingName = source.slice(position + 2, closeEnd).trim();
-        if (closingName !== name) context.error('JPX1001', 'Closing tag does not match its opening tag', position, closeEnd + 1);
+        const closing = closingTag(source, position);
+        if (closing.end === null) {
+          // `</fo` while typing: no `>` follows the name. Never search past it,
+          // which would take a later tag's `>` and name.
+          context.error('JPX1001', 'Incomplete closing tag', position, closing.nameEnd,
+            mismatchRepairs(context, closing.name, [opener, start], [position, closing.nameEnd]));
+        }
+        const closeEnd = closing.end - 1;
+        if (closing.name !== name) {
+          context.error('JPX1001', 'Closing tag does not match its opening tag', position, closeEnd + 1,
+            mismatchRepairs(context, closing.name, [opener, start], [position, closeEnd + 1]));
+        }
         const children = readChildren(context, nested, shadow.slice(0, position - start), start, [position, closeEnd + 1]);
         return { children, closeStart: position, end: closeEnd + 1 };
       }
@@ -216,14 +254,97 @@ function readBody(context: MarkupContext, start: number, name: string, opener: n
       }
     }
 
-    // Reached the end of input without the closing tag: report the most specific cause.
+    // Reached the end of input without the closing tag: report the most specific
+    // cause, an open token before an unclosed block or element (D-RECOVERY).
     if (literal !== undefined) {
-      context.error('JPX1003', 'Unterminated child string or template', start + literal.start);
+      context.error('JPX1003', 'Unterminated child string or template', start + literal.start, start + literal.start + 1,
+        closeChildString(source, start + literal.start));
+    }
+    // While a header `(` is open, the closing tag is not at child level, so the
+    // scan runs to the end of input.
+    const header = stack.find((delimiter) => delimiter.header);
+    if (header !== undefined) {
+      context.error('JPX1011', 'The `if`/`for` header has no closing `)`', header.start, header.start + 1,
+        headerRepairs(tokens, start, header.start));
     }
     const unclosedBlock = stack.find((delimiter) => delimiter.childBlock);
     if (unclosedBlock !== undefined) {
       context.error('JPX1007', 'Unclosed conditional child block', unclosedBlock.start);
     }
-    context.error('JPX1002', 'Unclosed element or fragment', opener, start);
+    // A nested opener can be set aside so its children belong to the parent.
+    // Dropping the outermost opener would instead turn its children into host
+    // statements and claim that a wholly unfinished template was checked.
+    const repairs = context.open.length > 1 ? [blank([opener, start])] : [];
+    context.error('JPX1002', 'Unclosed element or fragment', opener, start, repairs);
   }
+}
+
+/**
+ * For an unclosed child `if (`/`for (` header, best first: insert the missing
+ * `)` before the first `{` after the header, which keeps the loop checked; or set
+ * aside the whole statement, keyword through that block's `}`, so the body never
+ * reads a binding the broken header no longer declares.
+ */
+function headerRepairs(tokens: HostTokens, base: number, headerStart: number): Repair[] {
+  let index = 0;
+  while (index < tokens.length && base + tokens.start(index) !== headerStart) {
+    index++;
+  }
+  if (index === 0 || index >= tokens.length) {
+    return [];
+  }
+  const keyword = base + tokens.start(index - 1);
+
+  const repairs: Repair[] = [];
+  let depth = 0;
+  for (let cursor = index + 1; cursor < tokens.length; cursor++) {
+    const kind = tokens.kind(cursor);
+    if (kind === K.LeftBrace && depth++ === 0 && cursor > index + 1) {
+      repairs.push({ kind: 'insert', at: base + tokens.end(cursor - 1), text: ')' });
+    }
+    if (kind === K.RightBrace && depth > 0 && --depth === 0) {
+      repairs.push(blank([keyword, base + tokens.end(cursor)]));
+      break;
+    }
+  }
+  return repairs;
+}
+
+/**
+ * The closing tag whose `</` is at `position`: its name (dotted or namespaced,
+ * possibly empty for `</>`), and the offset just after its `>`, or null when
+ * something other than whitespace follows the name first.
+ */
+function closingTag(source: string, position: number): { name: string; nameEnd: number; end: number | null } {
+  let cursor = position + 2;
+  while (cursor < source.length && /\s/.test(source[cursor]!)) {
+    cursor++;
+  }
+  const nameStart = cursor;
+  while (cursor < source.length) {
+    // Names use Unicode identifier characters, including combining marks and
+    // astral letters. Indexing a single UTF-16 unit would split astral names.
+    const character = String.fromCodePoint(source.codePointAt(cursor)!);
+    if (!/[\p{ID_Continue}$:.\-\u200c\u200d]/u.test(character)) {
+      break;
+    }
+    cursor += character.length;
+  }
+  const name = source.slice(nameStart, cursor);
+  const nameEnd = cursor;
+  while (cursor < source.length && /\s/.test(source[cursor]!)) {
+    cursor++;
+  }
+  return { name, nameEnd, end: source[cursor] === '>' ? cursor + 1 : null };
+}
+
+/**
+ * Where a mismatched closing tag's damage likely is. When an enclosing element
+ * has its name, this element was left unclosed: set aside its opening tag, so
+ * its children belong to the parent. Otherwise the closing tag is stray.
+ */
+function mismatchRepairs(context: MarkupContext, closingName: string, opening: Range, closing: Range): Repair[] {
+  const enclosing = context.open.slice(0, -1);
+  const order = enclosing.includes(closingName) ? [opening, closing] : [closing, opening];
+  return order.map(blank);
 }

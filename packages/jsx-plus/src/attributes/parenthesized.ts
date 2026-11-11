@@ -1,5 +1,7 @@
+import type { Repair } from '../diagnostics';
 import { childStatements, closingDelimiter, isMarkupOpening, unterminatedLiteral } from '../host';
 import { maskAttributeValue, maskMarkup } from '../masks';
+import { closeAttributeValue, closeChildString } from '../repairs';
 import { generated, replaceRange } from '../source';
 import type { Replacement } from '../source';
 import type { AttributeValue } from './value';
@@ -10,11 +12,12 @@ interface AttributeReader {
   readonly start: number;
   /** Read nested markup that starts at an authored offset. */
   element(start: number): Replacement;
-  error(code: string, message: string, start: number, end?: number): never;
+  error(code: string, message: string, start: number, end?: number, repairs?: readonly Repair[]): never;
 }
 
 function unmatchedParenthesis(reader: AttributeReader): never {
-  return reader.error('JPX1008', "Attribute expression requires a matching ')'", reader.start);
+  return reader.error('JPX1008', "Attribute expression requires a matching ')'", reader.start, reader.start + 1,
+    closeAttributeValue(reader.source, reader.start, ')'));
 }
 
 /**
@@ -67,7 +70,9 @@ export function parenthesizedAttribute(reader: AttributeReader): AttributeValue 
 
     const literal = unterminatedLiteral(result, shadow);
     if (literal !== undefined) {
-      reader.error('JPX1003', 'Unterminated string or template in attribute expression', start + literal.start);
+      const quote = start + literal.start;
+      reader.error('JPX1003', 'Unterminated string or template in attribute expression', quote, quote + 1,
+        closeChildString(source, quote));
     }
     unmatchedParenthesis(reader);
   }

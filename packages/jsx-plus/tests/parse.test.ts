@@ -23,6 +23,8 @@ for (const fixture of fixtures.cases) {
 }
 
 for (const [name, source, expected] of [
+  ['combining-mark element name', '<e\u0301>"x"</e\u0301>', '<e\u0301>{"x"}</e\u0301>'],
+  ['astral element name', '<\u{10400}>"x"</\u{10400}>', '<\u{10400}>{"x"}</\u{10400}>'],
   ['quoted delimiters', '<p>"</p> <b>"</p>', '<p>{"</p> <b>"}</p>'],
   ['templates', '<p>`hello ${user.name}`</p>', '<p>{`hello ${user.name}`}</p>'],
   ['continued indexing', '<p>getValue()\n[index]</p>', '<p>{getValue()\n[index]}</p>'],

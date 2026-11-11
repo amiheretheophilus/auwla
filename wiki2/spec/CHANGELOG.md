@@ -1,5 +1,21 @@
 # Spec revisions
 
+## 0.1-draft, revision 6 — 2026-11-11
+
+- Diagnostics only; no accepted syntax or meaning changes. Inputs that were
+  already rejected now get an error at their actual cause, found while making
+  editor recovery handle half-finished edits.
+- New JPX1011 (G-FOR, D-RECOVERY): a child `if`/`for` header `(` with no `)`,
+  at the `(`. Previously the scan ran to the end of input and reported the
+  surrounding element as unclosed (JPX1002).
+- JPX1001 also covers an incomplete closing tag (`</p` with no `>`), ranged from
+  `</` through its name. Previously the reader took a later tag's `>` and name.
+- JPX1009 also covers an empty value before `>` (`<input value=>`), at the `>`.
+  Previously `=>` lexed as one token and the tag ran on to a later `>`.
+- A host error from an unclosed attribute `{` is reported at that `{`, not over
+  the rest of the file.
+- Add ERROR-011, ERROR-012 and ERROR-013. Existing fixtures and codes are unchanged.
+
 ## 0.1-draft, revision 5 — 2026-11-11
 
 - User-requested direct loops (step 3; DX-35). New G-FOR/S-FOR: a child-level

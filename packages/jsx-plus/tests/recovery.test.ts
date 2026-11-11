@@ -17,7 +17,10 @@ for (const [name, source, code, opener] of [
     expect(result.diagnostics?.[0]).toMatchObject({ code, start: damaged });
     expect(result.text).toContain('function removeTask');
     expect(result.text).toContain('task.title');
-    expect(result.mappings.some(([, , start, length]) => start <= damaged && damaged < start + length)).toBe(false);
+    // Quotes and parentheses are now repaired with an unmapped closer, keeping
+    // the authored expression checkable. Other damage still needs quarantine.
+    const preserved = code === 1003 || code === 1008;
+    expect(result.mappings.some(([, , start, length]) => start <= damaged && damaged < start + length)).toBe(preserved);
     for (const [start, length, original, size] of result.mappings) {
       expect(length).toBe(size);
       expect(result.text.slice(start, start + length)).toBe(source.slice(original, original + size));
@@ -40,18 +43,95 @@ for (const [where, source, hostError] of [
     expect(result.diagnostics).toEqual([expect.objectContaining({ code: 1008, start: damaged })]);
     expect(result.text).toContain(hostError);
     expect(result.text).toContain('function removeTask');
-    expect(result.mappings.some(([, , start, length]) => start <= damaged && damaged < start + length)).toBe(false);
+    expect(result.mappings.some(([, , start, length]) => start <= damaged && damaged < start + length)).toBe(true);
     expect(result.mappings.some(([, , start, length]) => start <= host && host < start + length)).toBe(true);
   });
 }
 
-it('keeps the empty fallback when the quarantined line also held host code', () => {
-  // Blanking this line removes `const banner =` too, leaving `</p>;` as a host
-  // statement: that error would be the quarantine's, not the author's.
+/** Every mapped character, including text after inserted closers, is authored verbatim. */
+function expectExactMappings(source: string, result: ReturnType<typeof projectForChecking>) {
+  for (const [start, length, original, size] of result.mappings) {
+    expect(length).toBe(size);
+    expect(result.text.slice(start, start + length)).toBe(source.slice(original, original + size));
+  }
+}
+
+// Half-finished edits, each with its diagnostic code and the text the diagnostic
+// starts at (searched from the edit). Recovery inserts a closer or sets aside
+// an unclosed element's opening tag or a stray closing tag (recovery/markup.ts).
+for (const [name, from, to, code, anchor] of [
+  ['missing </ul>', '        </ul>\n', '', 1001, '</main>'],
+  ['missing </button>', '              "Remove"\n              </button>', '              "Remove"\n', 1001, '</li>'],
+  ['half-typed element', '<span>task.title</span>', '<sp\n<span>task.title</span>', 1001, '</span>'],
+  ['lone <', '<span>task.title</span>', '<\n<span>task.title</span>', 1001, '</span>'],
+  ['half-typed closing tag', '      </footer>', '      </fo', 1001, '</fo'],
+  ['unclosed attribute brace', 'onInput={event => query = event.currentTarget.value}', 'onInput={event => query = event.currentTarget.value', 1999, '{event'],
+  ['unclosed for header', 'for (const task of visible) {', 'for (const task of visible {', 1011, '(const task'],
+  ['missing attribute value', '<button type="submit">', '<button type="submit" class=>', 1009, '>"Add task"'],
+] as const) {
+  it(`recovers the rest of the task board around a ${name}`, () => {
+    expect(app).toContain(from);
+    const source = app.replace(from, to);
+    const damaged = source.indexOf(anchor, app.indexOf(from));
+    const result = projectForChecking(source, './App.auwla');
+    expect(result.text).not.toBe('export {};\n');
+    expect(result.diagnostics?.[0]).toMatchObject({ code, start: damaged });
+    expect(result.text).toContain('function removeTask');
+    expectExactMappings(source, result);
+    expect(() => compile(source)).toThrow();
+  });
+}
+
+it('reports a half-typed closing tag once, not the good tag after it', () => {
+  const source = app.replace('      </footer>', '      </fo');
+  expect(projectForChecking(source, './App.auwla').diagnostics).toHaveLength(1);
+});
+
+it('keeps an unfinished child string and its host declaration checked on the same line', () => {
+  // A checking-only closing quote preserves both the declaration and the string.
   const source = app.replace('  function removeTask', '  const banner = <p>"oops\n  </p>;\n\n  function removeTask');
   const result = projectForChecking(source, './App.auwla');
-  expect(result.text).toBe('export {};\n');
   expect(result.diagnostics).toEqual([expect.objectContaining({ code: 1003, start: source.indexOf('"oops') })]);
+  expect(result.text).toContain('const banner =');
+  expect(result.text).toContain('<p>{"oops"}');
+  expect(result.mappings.some(([, , start, length]) => start <= source.indexOf('oops') && source.indexOf('oops') < start + length)).toBe(true);
+  expectExactMappings(source, result);
+});
+
+it('inserts a missing closing quote, so the line being typed stays checked', () => {
+  // The `"` goes before `</p>` as unmapped text; everything authored on the line stays mapped.
+  const source = app.replace('  function removeTask', '  const banner = <p>"oops</p>; const other = (\n    1);\n\n  function removeTask');
+  const result = projectForChecking(source, './App.auwla');
+  expect(result.diagnostics).toEqual([expect.objectContaining({ code: 1003, start: source.indexOf('"oops') })]);
+  expect(result.text).toContain('<p>{"oops"}</p>; const other = (');
+  const mapped = (offset: number) => result.mappings.some(([, , start, length]) => start <= offset && offset < start + length);
+  expect(mapped(source.indexOf('oops'))).toBe(true);
+  expect(mapped(source.indexOf('const other'))).toBe(true);
+  expectExactMappings(source, result);
+});
+
+it('maps multiple repairs and their diagnostics back through UTF-16 and CRLF text', () => {
+  const source = ('// \u{1f600}\n' + damagedLabel(app)
+    .replace('"Make room for the next idea."', '"Make room for the next idea.'))
+    .replace(/\r?\n/g, '\r\n');
+  const result = projectForChecking(source, './App.auwla');
+  expect(result.diagnostics).toEqual([
+    expect.objectContaining({ code: 1003, start: source.indexOf('"Make room') }),
+    expect.objectContaining({ code: 1008, start: source.indexOf('("Remove "') }),
+  ]);
+  expect(result.text).toContain('Make room for the next idea.');
+  expect(result.text).toContain('("Remove " + task.title)');
+  expectExactMappings(source, result);
+  expect(() => compile(source)).toThrow();
+});
+
+it('keeps the empty fallback when every repair would remove host code the next line needs', () => {
+  // No closer fixes a child comma, and setting aside `const other = (` leaves
+  // `1);` as a host error the quarantine caused, not the author's.
+  const source = app.replace('  function removeTask', '  const banner = <p>tasks, nextId</p>; const other = (\n    1);\n\n  function removeTask');
+  const result = projectForChecking(source, './App.auwla');
+  expect(result.text).toBe('export {};\n');
+  expect(result.diagnostics).toEqual([expect.objectContaining({ code: 1005, start: source.indexOf(', nextId') })]);
 });
 
 it('leaves ordinary incomplete host syntax mapped for native TypeScript recovery', () => {

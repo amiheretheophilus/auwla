@@ -103,3 +103,15 @@ for (const source of [
     expect(caught).toMatchObject({ code: 'JPX1003', range: [quote, quote + 1] });
   });
 }
+
+// An attribute `{` that never closes, or that a later unrelated `}` closes, would
+// swallow the rest of the file; the error names that `{` (diagnostics.md, r6).
+for (const source of [
+  '<main><input onInput={event => go(event)\n  /><p>"after"</p></main>',
+  'function App() {\n  return <main><input onInput={event => go(event)\n  /><nav>if (open) { <p>"x"</p> }</nav></main>;\n}',
+]) {
+  it(`reports an unclosed attribute brace at its \`{\`: ${JSON.stringify(source.slice(0, 40))}`, () => {
+    const brace = source.indexOf('{event');
+    expect(() => normalize(source)).toThrow(expect.objectContaining({ code: 'HOST', range: [brace, brace + 1] }));
+  });
+}

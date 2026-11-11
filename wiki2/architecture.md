@@ -91,7 +91,8 @@ All paths are relative to the repository root and exist now.
 | `packages/jsx-plus/tests/loops.test.ts` | Direct-loop normalization: destructuring, nesting, multi-child rows, rejected forms, exact binding/iterable spans |
 | `packages/jsx-plus/AGENTS.md` | Package ownership boundary and focused checks |
 | `packages/jsx-plus/src/checking/project.ts` | Shared-normalizer TSX checking projection and authored parse diagnostics |
-| `packages/jsx-plus/src/checking/recovery/markup.ts` | Bounded current-source line quarantine, exact remaining spans and structural fallback |
+| `packages/jsx-plus/src/repairs.ts` | Checking-only closer suggestions attached to authored reader errors; builds ignore them |
+| `packages/jsx-plus/src/checking/recovery/markup.ts` | Bounded current-source repair search, inserted closers and quarantined ranges, exact authored spans and structural fallback |
 | `packages/jsx-plus/tests/recovery.test.ts` | Real malformed-source mappings and strict build rejection |
 | `packages/jsx-plus/tests/editor-recovery-lsp.test.ts` | Native diagnostics/completion beyond actual unfinished task-board edits |
 | `packages/jsx-plus/src/checking/spans.ts` | Serialize copied spans for TypeScript, adding zero-length end anchors before generated text (edit-producing completions such as auto-import) |

@@ -1,7 +1,28 @@
 {
   "specVersion": "0.1-draft",
-  "revision": 5,
+  "revision": 6,
   "cases": [
+    {
+      "id": "ERROR-011",
+      "level": "diagnostics",
+      "rules": ["G-FOR", "D-CODES", "D-RECOVERY"],
+      "source": "<ul>for (const item of items { <li>item</li> }</ul>",
+      "expected": { "code": "JPX1011", "severity": "error", "range": [8, 9] }
+    },
+    {
+      "id": "ERROR-012",
+      "level": "diagnostics",
+      "rules": ["G-ATTR", "D-CODES"],
+      "source": "<input value=>",
+      "expected": { "code": "JPX1009", "severity": "error", "range": [13, 14] }
+    },
+    {
+      "id": "ERROR-013",
+      "level": "diagnostics",
+      "rules": ["G-CORE", "D-CODES"],
+      "source": "<p>\"a\"</p",
+      "expected": { "code": "JPX1001", "severity": "error", "range": [6, 9] }
+    },
     {
       "id": "PARSE-009",
       "level": "parse",

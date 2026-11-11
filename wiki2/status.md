@@ -6,7 +6,7 @@ Updated: 2026-11-11. Branch: `prototype/jsx-plus`.
 
 The user requested three steps in order: (1) incomplete-code recovery,
 (2) bare-handler completion and auto-imports, (3) direct `for...of` inside markup.
-Step 1's first profile is built ([recovery](recovery.md)). Step 2 is done. The
+Step 1 and its structural follow-up are built ([recovery](recovery.md)). Step 2 is done. The
 task board imports `focusTaskInput` from `examples/task-board/actions.ts` and uses
 it as `onClick=focusTaskInput`, and execution checks click it in both modes.
 Typing `onClick=focusTask` without the import and accepting TypeScript's
@@ -52,17 +52,30 @@ duplication and readability before new features. Done, in separate commits:
   attribute values; JPX1005 for a top-level child comma. See the
   [changelog](spec/CHANGELOG.md).
 
+Continued from the uncommitted recovery work after that review:
+
+- Checking-only repair suggestions preserve unfinished strings, attribute
+  parentheses/braces and direct-loop headers; selected missing/partial tags
+  recover too. Inserted text stays unmapped and never reaches production builds.
+- Review fixes: closing-tag scanning retains Unicode combining marks and astral
+  letters; breadth-first search tries fewer repairs first; recovery does not drop
+  an outermost unclosed opener and reinterpret its children as host statements.
+- Real-server completion works inside the unfinished attribute itself, as well as
+  around structural damage. Multiple repairs retain authored UTF-16/CRLF offsets.
+- Spec revision 6 documents diagnostic locations for these already invalid
+  inputs. No accepted syntax or event evaluation changes.
+
 ## Evidence
 
-At the latest commit: JSX+ `bun check` reports no errors across 217 files.
-JSX+ `bun test` passes **218 tests, 0 failures**, in fourteen files. They include
+At this recovery checkpoint: JSX+ `bun check` reports no errors across 219 files.
+JSX+ `bun test` passes **237 tests, 0 failures**, in fourteen files. They include
 the 34 checking-flow targets, real TypeScript 7 CLI/LSP renames, completions,
 auto-imports and recovery. The three anchor/auto-import tests fail without
-`checking/spans.ts`. `bun run wiki2/spec/check.ts` passes 39 fixtures
-(9 parse, 10 diagnostics); the loops' `Array.from` JSX equivalents run in both
-compiler modes. Both `preview.ts --build` variants succeed, and the task-board
-tsconfig type-checks through the TS7 CLI with the mapper. `git diff --check` passes. No
-sub-agents were used.
+`checking/spans.ts`. `bun run wiki2/spec/check.ts` passes 42 fixtures
+(9 parse, 13 diagnostics); the JSX equivalents run in both compiler modes.
+`bun check -p wiki2/spec/tsconfig.json` is clean. Task-board execution in both
+compiler modes and real TS7 CLI/LSP checks pass in the package suite.
+`git diff --check` passes. No sub-agents were used.
 
 For P4-FOR-FAST: compiler-next `bun check` is clean. All 191 `src/optimize`
 tests pass, including the 7 new `mapping-calls.dom.test.ts` tests. The 398
@@ -84,14 +97,14 @@ Done since: edits through destructured names (`entries()` loops) are shown
 (`4072c829`). Compiler-next `src` unit tests (616) and the seven
 handler/list case files (235) pass. The slow reference/generator suites
 were not run locally. Damaged markup beside an ordinary host syntax error no
-longer hides the file's diagnostics ([recovery](recovery.md)). JSX+ passes 218
-tests, including a real-server case that shows both errors with completion
-still available.
+longer hides the file's diagnostics ([recovery](recovery.md)); a real-server
+case shows both errors with completion still available.
 
 Known open issues:
-- A quarantined line that also holds host code (`const banner = <p>"oops`)
-  still falls back to an empty module, by design.
-- Recovery inside quarantined text and multiline structural damage are open.
+- Recovery remains heuristic and bounded to three repairs and 24 rereads.
+  Completion inside quarantined text and broader combinations of multiline
+  damage remain open. Same-line host declarations now survive when an inserted
+  closer repairs the markup; unsafe host-code removal still falls back.
 - Replay proofs, lowering maps, module loading, Vite/HMR, delivery and
   debugging maps remain open. Backend configuration stays planned.
 

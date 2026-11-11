@@ -67,9 +67,10 @@ bun ../../node_modules/typescript/lib/tsc.js --project examples/checking/tsconfi
 exits two. CLI/LSP tests verify the original UTF-16 error location and a safe ref
 rename. `vscode-jsonrpc/node` provides stream transport; it does not require the
 VS Code editor. IDE activation and complete reactive/ref flow typing remain open.
-Checking now preserves native host recovery and can quarantine isolated damaged
-markup lines while retaining their authored errors and unaffected editor spans.
-Structural damage still has a conservative fallback; builds remain strict. See
+Checking preserves native host recovery and can insert checking-only closers or
+quarantine damaged markup ranges, retaining authored errors and exact editor
+spans. Selected unfinished tags, attributes and loop headers recover; other
+structural damage has a conservative fallback. Builds remain strict. See
 [recovery](../../wiki2/recovery.md). The mapper retains one latest exact result per open
 project; edits replace it and close/reopen discards it. See
 [tooling](../../wiki2/tooling.md) and [cache evidence](../../wiki2/mapper-cache.md).

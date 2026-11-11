@@ -1,6 +1,6 @@
 # Core grammar
 
-0.1-draft, revision 5. Status: provisional executable-design target.
+0.1-draft, revision 6. Status: provisional executable-design target.
 
 ## Host language and lexical contexts (G-HOST)
 

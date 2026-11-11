@@ -1,6 +1,6 @@
 # Syntax model and conformance view
 
-0.1-draft, revision 5. Owns G-SOURCE and A-RANGE/A-NODES/A-NORMALIZE.
+0.1-draft, revision 6. Owns G-SOURCE and A-RANGE/A-NODES/A-NORMALIZE.
 
 ## Purpose (A-NODES)
 

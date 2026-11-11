@@ -1,6 +1,6 @@
 # Syntax diagnostics
 
-0.1-draft, revision 5. Codes below are **proposed for the extension**; they have
+0.1-draft, revision 6. Codes below are **proposed for the extension**; they have
 not been added to compiler-next's current `CompileError` API.
 
 ## Format and locations (D-FORMAT)
@@ -30,7 +30,7 @@ retain their host diagnostics and are mapped back to authored locations.
 
 | Code | Condition | Primary range |
 | --- | --- | --- |
-| JPX1001 | Closing element name does not match the opener | The closing tag, including delimiters |
+| JPX1001 | Closing element name does not match the opener, or the closing tag is incomplete (no `>` after its name) | The closing tag, including delimiters; for an incomplete one, `</` through its name |
 | JPX1002 | Element/fragment has no closing delimiter at end of input | Its opening tag/fragment |
 | JPX1003 | String/template child or parenthesized attribute token is unterminated | Opening quote/backtick, one UTF-16 unit |
 | JPX1004 | Expression has begun but is incomplete at its body end | The body-end delimiter, or EOF |
@@ -38,8 +38,9 @@ retain their host diagnostics and are mapped back to authored locations.
 | JPX1006 | Direct `if`/`else` or `for` body is not a block | First token where the required `{` was expected |
 | JPX1007 | Conditional child block is unclosed at EOF | The opening `{` |
 | JPX1008 | Parenthesized attribute expression has no matching outer `)` | The opening `(` |
-| JPX1009 | Undelimited attribute value is not a single host identifier | The undelimited value, up to attribute whitespace or `>`/`/>` |
+| JPX1009 | Undelimited attribute value is not a single host identifier, or the value is missing before `>` | The undelimited value, up to attribute whitespace or `>`/`/>`; for a missing value, the `>` |
 | JPX1010 | Child loop is not `for (const binding of iterable)`: `let`/`var`, no declaration, `for...in`, C-style or `for await` | The `for` keyword |
+| JPX1011 | A child-level `if`/`for` header `(` has no matching `)` before the body end | The opening `(` |
 
 Do not infer duplicate-attribute, unknown-tag, unknown-method or key restrictions
 from this table. Existing JSX/host rules and agreed framework contracts decide
@@ -59,6 +60,18 @@ JPX1009 applies only to an undelimited value: one that does not begin with a
 quote, `{`, `(` or `<`. Examples are `onClick=handlers.add`, `value=true` and
 `onClick=addTask()`. The message names `(...)` or `{...}` as the repair. Plain
 JSX has no valid undelimited value, so no existing JSX program is affected.
+An empty value directly before the tag's `>` (`<input value=>`) is JPX1009 too,
+ranged over that `>`; the host lexer would otherwise read `=>` as one token and
+run the tag on to a later `>`.
+
+JPX1011 takes precedence over the surrounding element's JPX1002. While the
+header is open the closing tag is not at child level, so the scan reaches the
+end of input, and the open token is reported first (D-RECOVERY).
+
+A host error inside an opening tag is mapped to its authored cause where one is
+known. An attribute `{` that never closes, or whose content up to a later
+unrelated `}` holds no single expression, is reported at that `{` rather than
+over the rest of the file.
 
 ## Recovery and error precedence (D-RECOVERY)
 

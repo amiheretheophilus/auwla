@@ -4,16 +4,21 @@ import { resolve } from 'node:path';
 import { documentUri, withLanguageServer, type CompletionItem } from './lsp';
 import { offsetAt, positionAt, taskBoardRoot } from './rpc';
 
-it('keeps diagnostics and applies completion edits beyond real unfinished quote/parenthesis edits', async () => {
+it('keeps diagnostics and applies completions around unfinished task-board edits', async () => {
   const app = readFileSync(resolve(taskBoardRoot, 'App.auwla'), 'utf8');
   const damagedLabel = (source: string) => source.replace('aria-label=("Remove " + task.title)', 'aria-label=("Remove " + task.title');
   const brokenHost = (source: string) => source.replace("let query = '';", "let query = ('';");
-  const versions = [
+  const versions: { codes: number[]; source: string; target?: 'attribute' }[] = [
     { codes: [1003], source: app.replace('"Make room for the next idea."', '"Make room for the next idea.') },
     { codes: [1008], source: damagedLabel(app) },
     { codes: [1005], source: brokenHost(app) },
     // Damaged markup (JSX+ 1008) beside an ordinary host error (TypeScript 1005).
     { codes: [1008, 1005], source: damagedLabel(brokenHost(app)) },
+    { codes: [1001], source: app.replace('        </ul>\n', '') },
+    { codes: [1001], source: app.replace('      </footer>', '      </fo') },
+    { codes: [1999], source: app.replace('onInput={event => query = event.currentTarget.value}', 'onInput={event => query = event.currentTarget.value') },
+    { codes: [1011], source: app.replace('for (const task of visible) {', 'for (const task of visible {') },
+    { codes: [1008], source: damagedLabel(app), target: 'attribute' },
   ];
   const uri = documentUri(taskBoardRoot, 'App.auwla');
 
@@ -25,9 +30,11 @@ it('keeps diagnostics and applies completion edits beyond real unfinished quote/
     await server.show(uri, app);
 
     for (const version of versions) {
-      // Damage one line, and leave an unrelated member half-typed elsewhere.
-      const source = version.source.replace('<span>task.title</span>', '<span>task.ti</span>');
-      const token = source.indexOf('<span>task.ti') + '<span>task.'.length;
+      // Most cases complete a member elsewhere. The attribute case completes
+      // the very expression whose closing parenthesis is missing.
+      const marker = version.target === 'attribute' ? 'aria-label=("Remove " + task.' : '<span>task.';
+      const source = version.source.replace(`${marker}title`, `${marker}ti`);
+      const token = source.indexOf(`${marker}ti`) + marker.length;
       const range = { start: positionAt(source, token), end: positionAt(source, token + 2) };
       const report = await change(source);
       for (const code of version.codes) expect(report.some((item) => item.code === code)).toBe(true);

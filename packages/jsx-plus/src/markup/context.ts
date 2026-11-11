@@ -1,4 +1,4 @@
-import { JsxPlusError } from '../diagnostics';
+import { JsxPlusError, type Repair } from '../diagnostics';
 import type { ChildView, ElementView, FragmentView } from '../model';
 import type { Piece, Replacement } from '../source';
 
@@ -23,10 +23,16 @@ export class MarkupContext {
    */
   readonly blocks = new Map<number, Children>();
 
+  /** Names of the elements being read, outermost first (`''` for a fragment). */
+  readonly open: string[] = [];
+
   constructor(readonly source: string, readonly filename: string) {}
 
-  /** Throw an authored diagnostic. `end` is clamped to the source length. */
-  error(code: string, message: string, start: number, end = start + 1): never {
-    throw new JsxPlusError(code, message, this.filename, [start, Math.min(end, this.source.length)], this.source);
+  /**
+   * Throw an authored diagnostic. `end` is clamped to the source length.
+   * `repairs` are editor-recovery guesses, best first (`Repair`).
+   */
+  error(code: string, message: string, start: number, end = start + 1, repairs: readonly Repair[] = []): never {
+    throw new JsxPlusError(code, message, this.filename, [start, Math.min(end, this.source.length)], this.source, repairs);
   }
 }
