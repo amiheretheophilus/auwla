@@ -1,8 +1,8 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { pathToFileURL } from 'node:url';
 import catalog from './fixtures/checking-flow.json';
-import { exampleRoot, offsetAt, rpcProcess, typescriptExecutable, type LspRange } from './rpc';
+import { documentUri, withLanguageServer } from './lsp';
+import { exampleRoot, offsetAt } from './rpc';
 
 interface Expectation { code: number; text: string; occurrence?: number }
 interface FlowCase {
@@ -12,7 +12,6 @@ interface FlowCase {
   source: string;
   expected: Expectation[];
 }
-interface Diagnostic { code: number | string; message: string; range: LspRange; severity: number }
 interface DiagnosticSpan { code: number | string; start: number; end: number }
 
 function expectedSpan(source: string, expected: Expectation): DiagnosticSpan {
@@ -26,34 +25,16 @@ function expectedSpan(source: string, expected: Expectation): DiagnosticSpan {
 
 /** A probe reports unmet contracts; it never turns current bugs into expectations. */
 export async function probeCheckingFlow(cases: readonly FlowCase[] = catalog.cases) {
-  const uri = pathToFileURL(resolve(exampleRoot, 'App.auwla')).href;
-  const peer = rpcProcess(typescriptExecutable, ['--lsp', '--stdio'], exampleRoot);
-  peer.connection.onRequest('client/registerCapability', () => null);
+  const uri = documentUri(exampleRoot, 'App.auwla');
   const results: {
     id: string; topic: string; coverage: string; matches: boolean;
     expected: DiagnosticSpan[]; observed: DiagnosticSpan[]; messages: string[];
   }[] = [];
 
-  try {
-    const initialization = await peer.connection.sendRequest<{ serverInfo: { version: string } }>('initialize', {
-      processId: process.pid, rootUri: pathToFileURL(exampleRoot).href,
-      capabilities: { general: { positionEncodings: ['utf-16'] }, textDocument: { diagnostic: {} } },
-      initializationOptions: { runExternalCode: true },
-    });
-    await peer.connection.sendNotification('initialized', {});
-
-    for (const [index, fixture] of cases.entries()) {
-      if (index === 0) {
-        await peer.connection.sendNotification('textDocument/didOpen', {
-          textDocument: { uri, languageId: 'auwla', version: 1, text: fixture.source },
-        });
-      } else {
-        await peer.connection.sendNotification('textDocument/didChange', {
-          textDocument: { uri, version: index + 1 }, contentChanges: [{ text: fixture.source }],
-        });
-      }
-      const report = await peer.connection.sendRequest<{ items: Diagnostic[] }>('textDocument/diagnostic', { textDocument: { uri } });
-      const errors = report.items.filter((entry) => entry.severity === 1);
+  return withLanguageServer(exampleRoot, {}, async (server) => {
+    for (const fixture of cases) {
+      await server.show(uri, fixture.source);
+      const errors = (await server.diagnostics(uri)).filter((entry) => entry.severity === 1);
       const observed = errors.map((entry) => ({
         code: entry.code,
         start: offsetAt(fixture.source, entry.range.start), end: offsetAt(fixture.source, entry.range.end),
@@ -66,10 +47,8 @@ export async function probeCheckingFlow(cases: readonly FlowCase[] = catalog.cas
       });
     }
 
-    return { typescriptVersion: initialization.serverInfo.version, results };
-  } finally {
-    await peer.close(true);
-  }
+    return { typescriptVersion: server.initialization.serverInfo.version, results };
+  });
 }
 
 if (import.meta.main) {

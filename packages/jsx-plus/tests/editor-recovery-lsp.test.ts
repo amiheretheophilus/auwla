@@ -1,50 +1,35 @@
 import { expect, it } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { pathToFileURL } from 'node:url';
-import { taskBoardRoot, offsetAt, positionAt, rpcProcess, typescriptExecutable, type LspRange } from './rpc';
-
-interface Diagnostic { code: number; range: LspRange }
-interface Completion { label: string; insertText?: string; textEdit?: { newText: string; insert: LspRange; replace: LspRange } }
+import { documentUri, withLanguageServer, type CompletionItem } from './lsp';
+import { offsetAt, positionAt, taskBoardRoot } from './rpc';
 
 it('keeps diagnostics and applies completion edits beyond real unfinished quote/parenthesis edits', async () => {
-  const app = readFileSync(new URL('../examples/task-board/App.auwla', import.meta.url), 'utf8');
+  const app = readFileSync(resolve(taskBoardRoot, 'App.auwla'), 'utf8');
   const versions = [
     { code: 1003, source: app.replace('"Make room for the next idea."', '"Make room for the next idea.') },
     { code: 1008, source: app.replace('aria-label=("Remove " + task.title)', 'aria-label=("Remove " + task.title') },
     { code: 1005, source: app.replace("let query = '';", "let query = ('';") },
   ];
-  const uri = pathToFileURL(resolve(taskBoardRoot, 'App.auwla')).href;
-  const peer = rpcProcess(typescriptExecutable, ['--lsp', '--stdio'], taskBoardRoot);
-  peer.connection.onRequest('client/registerCapability', () => null);
-  let revision = 1;
+  const uri = documentUri(taskBoardRoot, 'App.auwla');
 
-  try {
-    await peer.connection.sendRequest('initialize', {
-      processId: process.pid, rootUri: pathToFileURL(taskBoardRoot).href,
-      capabilities: { textDocument: { completion: { completionItem: { insertReplaceSupport: true } }, diagnostic: {} } },
-      initializationOptions: { runExternalCode: true },
-    });
-    await peer.connection.sendNotification('initialized', {});
-    await peer.connection.sendNotification('textDocument/didOpen', {
-      textDocument: { uri, languageId: 'auwla', version: revision, text: app },
-    });
-
+  await withLanguageServer(taskBoardRoot, { completion: { completionItem: { insertReplaceSupport: true } } }, async (server) => {
     async function change(source: string) {
-      await peer.connection.sendNotification('textDocument/didChange', {
-        textDocument: { uri, version: ++revision }, contentChanges: [{ text: source }],
-      });
-      return peer.connection.sendRequest<{ items: Diagnostic[] }>('textDocument/diagnostic', { textDocument: { uri } });
+      await server.show(uri, source);
+      return server.diagnostics(uri);
     }
+    await server.show(uri, app);
 
     for (const version of versions) {
+      // Damage one line, and leave an unrelated member half-typed elsewhere.
       const source = version.source.replace('<span>task.title</span>', '<span>task.ti</span>');
       const token = source.indexOf('<span>task.ti') + '<span>task.'.length;
       const range = { start: positionAt(source, token), end: positionAt(source, token + 2) };
       const report = await change(source);
-      expect(report.items.some((item) => item.code === version.code)).toBe(true);
-      expect(report.items.find((item) => item.code === 2339)?.range).toEqual(range);
-      const completion = await peer.connection.sendRequest<{ items: Completion[] }>('textDocument/completion', {
+      expect(report.some((item) => item.code === version.code)).toBe(true);
+      expect(report.find((item) => item.code === 2339)?.range).toEqual(range);
+
+      const completion = await server.request<{ items: CompletionItem[] }>('textDocument/completion', {
         textDocument: { uri }, position: range.end,
       });
       const title = completion.items.find((item) => item.label === 'title');
@@ -58,12 +43,11 @@ it('keeps diagnostics and applies completion edits beyond real unfinished quote/
       const end = offsetAt(source, replacement.end);
       const text = title!.textEdit?.newText ?? title!.insertText ?? title!.label;
       const edited = source.slice(0, start) + text + source.slice(end);
+
       const remaining = await change(edited);
-      expect(remaining.items.some((item) => item.code === version.code)).toBe(true);
-      expect(remaining.items.some((item) => item.code === 2339)).toBe(false);
-      expect((await change(app)).items).toEqual([]);
+      expect(remaining.some((item) => item.code === version.code)).toBe(true);
+      expect(remaining.some((item) => item.code === 2339)).toBe(false);
+      expect(await change(app)).toEqual([]);
     }
-  } finally {
-    await peer.close(true);
-  }
+  });
 }, 30000);

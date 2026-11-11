@@ -106,7 +106,8 @@ All paths are relative to the repository root and exist now.
 | `packages/jsx-plus/tests/mapper-cache.test.ts` | Real authored-source reuse counts, edit/file eviction, diagnostics and isolated lifetimes |
 | `packages/jsx-plus/tests/checking.test.ts` | Exact span fidelity, mapper lifecycle and native CLI acceptance |
 | `packages/jsx-plus/tests/mapper-lsp.test.ts` | Native LSP rename, Unicode diagnostics, applied task-board member completion and incomplete/restore editing |
-| `packages/jsx-plus/tests/rpc.ts` | Test-only process lifecycle and position helpers |
+| `packages/jsx-plus/tests/rpc.ts` | Test-only process lifecycle, example roots and position helpers |
+| `packages/jsx-plus/tests/lsp.ts` | Test-only TypeScript LSP session (`withLanguageServer`), single-file edit and rename application helpers |
 | `packages/jsx-plus/tests/fixtures/checking-flow.json` | Target checking diagnostics and source spans for replay, refs, row scope and synchronous host logic |
 | `packages/jsx-plus/tests/probe-flow.ts` | Actual LSP observation/strict catalog runner; 34 targets match; accepts reduced case sets for investigation |
 | `packages/jsx-plus/tests/checking-flow.test.ts` | Assert all 34 flow/scope targets; full TOOL-05 acceptance explicitly unclaimed |
