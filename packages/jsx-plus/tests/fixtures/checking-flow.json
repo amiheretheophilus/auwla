@@ -140,6 +140,104 @@
       "coverage": "baseline",
       "source": "import type {} from '@memoized-dom/compiler/jsx';\nexport function* App(): Generator<string, JSX.Element, string> {\n  let value: string | number = yield 'ready';\n  return <button onClick={() => value = 1}>typeof value === 'string' ? value.toUpperCase() : value.toFixed()</button>;\n}\n",
       "expected": []
+    },
+    {
+      "id": "FLOW-TYPE-021",
+      "topic": "an unsafe read through two derived aliases is checked",
+      "coverage": "baseline",
+      "source": "import type {} from '@memoized-dom/compiler/jsx';\nexport function App() {\n  let value: string | number = 'ready';\n  const first = value;\n  const second = first;\n  return <button onClick={() => value = 1}>second.toUpperCase()</button>;\n}\n",
+      "expected": [{ "code": 2339, "text": "toUpperCase" }]
+    },
+    {
+      "id": "FLOW-TYPE-022",
+      "topic": "a typed derivation reports the error on its receiving declaration",
+      "coverage": "baseline",
+      "source": "import type {} from '@memoized-dom/compiler/jsx';\nexport function App() {\n  let value: string | number = 'ready';\n  const label: string = value;\n  return <button onClick={() => value = 1}>label</button>;\n}\n",
+      "expected": [{ "code": 2322, "text": "label" }]
+    },
+    {
+      "id": "FLOW-TYPE-023",
+      "topic": "a component prop rejects the widened inferred derivation",
+      "coverage": "baseline",
+      "source": "import type {} from '@memoized-dom/compiler/jsx';\nfunction StringOnly({ text }: { text: string }) { return <p>text</p>; }\nexport function App() {\n  let value: string | number = 'ready';\n  const current = value;\n  return <><button onClick={() => value = 1}>\"Change\"</button><StringOnly text={current} /></>;\n}\n",
+      "expected": [{ "code": 2322, "text": "text", "occurrence": 3 }]
+    },
+    {
+      "id": "FLOW-TYPE-024",
+      "topic": "a body assignment does not restore mount-time narrowing at a replay site",
+      "coverage": "baseline",
+      "source": "import type {} from '@memoized-dom/compiler/jsx';\nexport function App() {\n  let value: string | number = 'ready';\n  value = 'start';\n  return <button onClick={() => value = 1}>typeof value === 'string' ? value.toUpperCase() : value.toFixed()</button>;\n}\n",
+      "expected": []
+    },
+    {
+      "id": "FLOW-TYPE-025",
+      "topic": "a named deferred callback cannot retain a changing prop guard",
+      "coverage": "baseline",
+      "source": "import type {} from '@memoized-dom/compiler/jsx';\nexport function App({ maybe }: { maybe: string | undefined }) {\n  if (maybe !== undefined) {\n    const read = () => maybe.toUpperCase();\n    return <button onClick={read}>\"Read\"</button>;\n  }\n  return <p>\"Empty\"</p>;\n}\n",
+      "expected": [{ "code": 18048, "text": "maybe", "occurrence": 3 }]
+    },
+    {
+      "id": "FLOW-TYPE-026",
+      "topic": "an immediately invoked callback retains the same-evaluation prop guard",
+      "coverage": "baseline",
+      "source": "import type {} from '@memoized-dom/compiler/jsx';\nexport function App({ maybe }: { maybe: string | undefined }) {\n  if (maybe !== undefined) {\n    const text = (() => maybe.toUpperCase())();\n    return <p>text</p>;\n  }\n  return <p>\"Empty\"</p>;\n}\n",
+      "expected": []
+    },
+    {
+      "id": "FLOW-TYPE-027",
+      "topic": "checking a function-valued seed preserves contextual parameter typing",
+      "coverage": "baseline",
+      "source": "import type {} from '@memoized-dom/compiler/jsx';\nexport function App() {\n  let fn: (value: string) => string = value => value.toUpperCase();\n  return <button onClick={() => fn = value => value.toLowerCase()}>fn('Hi')</button>;\n}\n",
+      "expected": []
+    },
+    {
+      "id": "FLOW-TYPE-028",
+      "topic": "a generic helper does not disqualify a captured reassigned seed",
+      "coverage": "baseline",
+      "source": "import type {} from '@memoized-dom/compiler/jsx';\nfunction keep<T>(value: T): T { return value; }\nexport function App() {\n  let value: string | number = 'ready';\n  const current = keep(value);\n  return <button onClick={() => value = 1}>typeof current === 'string' ? current.toUpperCase() : current.toFixed()</button>;\n}\n",
+      "expected": []
+    },
+    {
+      "id": "FLOW-TYPE-029",
+      "topic": "a spread prop mismatch is reported on the receiving component name",
+      "coverage": "baseline",
+      "source": "import type {} from '@memoized-dom/compiler/jsx';\nfunction StringOnly({ text }: { text: string }) { return <p>text</p>; }\nexport function App() {\n  let value: string | number = 'ready';\n  const current = value;\n  return <><button onClick={() => value = 1}>\"Change\"</button><StringOnly {...{ text: current }} /></>;\n}\n",
+      "expected": [{ "code": 2322, "text": "StringOnly", "occurrence": 1 }]
+    },
+    {
+      "id": "FLOW-TYPE-030",
+      "topic": "ordinary synchronous reads retain narrowing after the body assignment",
+      "coverage": "baseline",
+      "source": "import type {} from '@memoized-dom/compiler/jsx';\nexport function App() {\n  let value: string | number = 'ready';\n  value = 'start';\n  console.log(value.toUpperCase());\n  return <button onClick={() => value = 1}>typeof value === 'string' ? value.toUpperCase() : value.toFixed()</button>;\n}\n",
+      "expected": []
+    },
+    {
+      "id": "FLOW-TYPE-031",
+      "topic": "an invalid body assignment remains an authored initialization error",
+      "coverage": "baseline",
+      "source": "import type {} from '@memoized-dom/compiler/jsx';\nexport function App() {\n  let value: string | number = 'ready';\n  value = true;\n  return <button onClick={() => value = 1}>typeof value === 'string' ? value.toUpperCase() : value.toFixed()</button>;\n}\n",
+      "expected": [{ "code": 2322, "text": "value", "occurrence": 1 }]
+    },
+    {
+      "id": "FLOW-TYPE-032",
+      "topic": "an unrelated invalid prop remains checked in a delegated opening element",
+      "coverage": "baseline",
+      "source": "import type {} from '@memoized-dom/compiler/jsx';\nfunction Receiver(props: { text: string | number; count: number }) { return <p>props.text</p>; }\nexport function App() {\n  let value: string | number = 'ready';\n  const current = value;\n  return <><button onClick={() => value = 1}>\"Change\"</button><Receiver text={current} count={\"wrong\"} /></>;\n}\n",
+      "expected": [{ "code": 2322, "text": "count", "occurrence": 1 }]
+    },
+    {
+      "id": "FLOW-TYPE-033",
+      "topic": "widening a reassigned derivation still validates its dependent seed",
+      "coverage": "baseline",
+      "source": "import type {} from '@memoized-dom/compiler/jsx';\nexport function App() {\n  let input: string | number = 'ready';\n  let selected: string = input;\n  return <button onClick={() => { input = 1; selected = 'manual'; }}>selected</button>;\n}\n",
+      "expected": [{ "code": 2345, "text": "input", "occurrence": 1 }]
+    },
+    {
+      "id": "FLOW-TYPE-034",
+      "topic": "the generated identity helper does not shadow an authored type argument",
+      "coverage": "baseline",
+      "source": "import type {} from '@memoized-dom/compiler/jsx';\ntype T = string | number;\nexport function App() {\n  let value: T = 'ready';\n  return <button onClick={() => value = 1}>typeof value === 'string' ? value.toUpperCase() : value.toFixed()</button>;\n}\n",
+      "expected": []
     }
   ]
 }

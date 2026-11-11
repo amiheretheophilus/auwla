@@ -52,6 +52,7 @@ TypeScript/editor versions and permissions used by the probe.
 | `packages/jsx-plus/src/checking/project.ts` | Paired TSX projection and authored parse diagnostics |
 | `packages/jsx-plus/src/checking/protocol.ts` | Checking outputs, feature masks and diagnostic-directive tuples |
 | `packages/jsx-plus/src/checking/flow/plan.ts` | Compiler-fact selection of state/prop insertions and dependent checking regions |
+| `packages/jsx-plus/src/checking/flow/syntax.ts` | Index parents and include receiving declarations/opening elements in diagnostic routing |
 | `packages/jsx-plus/src/checking/flow/render.ts` | Supplemental assembly, composed maps and complementary diagnostic routing |
 | `packages/jsx-plus/tests/checking-projection.test.ts` | Coverage of delegated spans, overlap merging, unmapped scaffolding and lowering fallback |
 | `packages/jsx-plus/src/checking/facts.ts` | Opt-in public compiler inspection and authored fact locations |
@@ -117,7 +118,7 @@ declared ref. Include a deliberate wrong expression and an incomplete edit.
 | TOOL-02 | Built for the probe: actual LSP ref rename updates four uses and changing-state rename updates five; applying edits and rechecking yields no errors |
 | TOOL-03 | Completion insertion and auto-import edits stay in safe mapped spans |
 | TOOL-04 | Partial: Unicode ranges and a missing quote/restore cycle checked; preserving the rest of an incomplete file remains open |
-| TOOL-05 | First paired profile: twenty actual LSP targets pass, including the four original gaps. Full flow acceptance remains open; see [checking flow](checking-flow.md) |
+| TOOL-05 | Hardened paired profile: 34 actual LSP targets pass, including receiving-type errors, generic helpers and deferred/immediate callbacks. Full flow acceptance remains open; see [checking flow](checking-flow.md) |
 | TOOL-06 | A repeat edit reuses appropriate work; record observed latency and memory on this machine without claiming a general performance result |
 
 Start with TOOL-01 and TOOL-02 during P2/P3; expand as grammar grows. Keep failing
@@ -130,7 +131,7 @@ declaration output, caching/invalidation, multi-module editing and the editor
 version matrix remain open. Completion, auto-import, formatting, cross-file
 rename and broader generated-region diagnostics need their own evidence.
 
-TOOL-05 remains open beyond the twenty-case profile: ref writes, complete replay
+TOOL-05 remains open beyond the 34-case profile: ref writes, complete replay
 proofs, contextual typing, aliases, live imports and lowering maps need more
 evidence. Selected ranges receive native supplemental checking rather than blanket
 error suppression. The primary view still supplies editor features, so flow-aware
@@ -138,5 +139,8 @@ hover/completion behavior requires separate work. A custom extension also does
 not automatically inherit a TSX formatter or CSS tooling.
 
 The [checking-flow catalog](checking-flow.md) and strict LSP gate now pass all
-twenty targets. The ordinary mapper uses the compiler's read-only public facts;
+34 targets. Receiving declarations/opening elements are included because native
+assignability errors can begin outside the selected expression. Typed identity
+calls validate copied seeds before widening; generated helpers have no editable
+mapping. The ordinary mapper uses the compiler's read-only public facts;
 it stops before compiler planning/emission and does not emit application code.

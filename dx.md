@@ -219,14 +219,17 @@ Runtime source maps and TypeScript span mappings are separate artifacts.
 
 The [checking-flow profile](wiki2/checking-flow.md) now clears the four original
 gaps where ordinary TypeScript narrowing misdescribed reactive evaluations.
-All twenty current LSP targets pass. A primary TSX view retains editor identity
+All 34 current LSP targets pass. A primary TSX view retains editor identity
 and ordinary narrowing; compiler facts select regions checked in a supplemental
 view. Its generated scaffolding has no authored edit span, and its mappings
 disable editor edits. Native TypeScript still checks the delegated regions.
 The public snapshot supplies existing graph facts, not complete replay proofs.
 Compiler-owned files are grouped in `packages/compiler-next/src/analysis/`;
 extended syntax and checking transformations remain in JSX+. Broader flow,
-lowering, editor and module coverage remain open.
+lowering, editor and module coverage remain open. Receiving declarations and JSX
+opening elements participate in diagnostic routing, retaining native assignment
+errors. Typed identity calls validate copied seeds before widening, including
+captured derivations and direct body assignments; they never become runtime code.
 
 Keep the mapper lightweight: parse and generate the needed checking representation,
 cache by source and relevant configuration, and avoid building the complete DOM

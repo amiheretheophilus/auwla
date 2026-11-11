@@ -3,7 +3,7 @@
 Version: **0.1-draft**, revision **1**. Initial core profile. Created: 2026-11-11.
 Implementation: **first slice built** in the separate `packages/jsx-plus` package.
 It normalizes the tested subset to standard TSX and calls compiler-next's public
-API. Compiler-next itself does not learn the extended grammar or change its files.
+API. Compiler-next continues to receive ordinary TSX; its grammar stays unchanged.
 
 JSX+ extends Auwla's markup authoring while retaining JavaScript/TypeScript and
 compiler-next's existing semantics. It adds quoted text, direct expression

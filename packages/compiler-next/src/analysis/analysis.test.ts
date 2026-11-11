@@ -96,3 +96,17 @@ it('retains source-ordered body builders for a derived computation', () => {
 it('exposes frontend errors through the dedicated analysis entry', () => {
   expect(() => inspectModules({ './App.tsx': 'export const value = ;' })).toThrow(CompileError);
 });
+
+it('describes dependencies of JSX spread attribute arguments', () => {
+  const source = `export function App({ text }) {
+    return <Card {...{ text }} />;
+  }`;
+  const module = inspectModules({ './App.tsx': source }).modules[0]!;
+  const text = module.bindings.find((binding) => binding.name === 'text')!;
+  const spread = module.expressions.find((expression) => {
+    return source.slice(...expression.range) === '{ text }';
+  });
+
+  expect(spread).toBeDefined();
+  expect(spread!.dependencies).toContain(text.id);
+});

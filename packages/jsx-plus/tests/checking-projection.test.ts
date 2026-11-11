@@ -12,7 +12,7 @@ it('keeps the primary text and symbols while delegating flow diagnostics', () =>
   expect(result.supplemental).toHaveLength(1);
 
   const secondary = result.supplemental![0]!;
-  expect(secondary.text).toContain("(('ready') as string | number)");
+  expect(secondary.text).toContain("<string | number>(('ready'))");
   expect(secondary.mappings.every((mapping) => mapping[5] === 0)).toBe(true);
 
   for (const output of [result, secondary]) {

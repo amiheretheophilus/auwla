@@ -34,7 +34,9 @@ imports to definitions. Do not reuse them after an edit without a new snapshot.
 Bindings retain existing kinds, declaration extents, owners, references, writes,
 input links and initial computations. Builders retain source order, certainty,
 invocation and readiness flags. JSX expressions and escaping functions carry
-existing input facts; receiver use is explicit. No analyzer object or AST escapes.
+existing input facts; receiver use is explicit. Expression facts include both
+ordinary expression-container values and JSX spread-attribute arguments, queried
+through the same existing input analysis. No analyzer object or AST escapes.
 
 Unresolved/global inputs retain module, range and compiler reactivity. An empty
 named-dependency list does not establish an input-free computation. Likewise,
@@ -57,7 +59,8 @@ The JSX+ adapter distinguishes exact, enclosing and unmapped ranges, and refuses
 shifted lowering coordinates. See [the prototype map](../../wiki2/architecture.md).
 
 Tests cover classifications, row shadowing, enums, globals, live imports, builders
-and unchanged output around inspection. JSX+ now consumes these facts for its
-first paired checking profile, clearing the four original flow targets. Complete
+and unchanged output around inspection. Spread tests pin the argument's range and
+binding identity. JSX+ consumes these facts for its hardened paired checking
+profile, clearing 34 targets including receiving-component errors. Complete
 replay proofs, incremental invalidation and cross-file editing remain open on
 [checking flow](../../wiki2/checking-flow.md).

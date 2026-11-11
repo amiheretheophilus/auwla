@@ -109,10 +109,8 @@ export function serializeAnalysis(
   function describeExpressions(entry: ResolvedModule): AnalysisExpression[] {
     const expressions: AnalysisExpression[] = [];
 
-    for (const container of entry.module.findAll('JSXExpressionContainer')) {
-      if (container.expression.type === 'JSXEmptyExpression') continue;
-
-      const inputs = graph.queries.inputsOf(entry.module, container.expression);
+    function describeExpression(expression: Node) {
+      const inputs = graph.queries.inputsOf(entry.module, expression);
       const dependencies: (Binding | null)[] = [];
       const unresolvedReferences: Reference[] = [];
 
@@ -126,11 +124,23 @@ export function serializeAnalysis(
       }
 
       expressions.push({
-        range: nodeRange(container.expression),
+        range: nodeRange(expression),
         dependencies: bindingIds(dependencies),
         unresolved: unresolvedInputs(unresolvedReferences),
         opaque: inputs.opaque,
       });
+    }
+
+    for (const container of entry.module.findAll('JSXExpressionContainer')) {
+      if (container.expression.type !== 'JSXEmptyExpression') {
+        describeExpression(container.expression);
+      }
+    }
+
+    // A spread is a runtime JSX input too, but has no expression container.
+    // Expose the existing query's facts rather than making consumers infer them.
+    for (const spread of entry.module.findAll('JSXSpreadAttribute')) {
+      describeExpression(spread.argument);
     }
 
     return expressions;

@@ -43,12 +43,16 @@ VS Code editor. IDE activation, complete reactive/ref flow typing, partial-file 
 and mapper caching remain open. See [tooling](../../wiki2/tooling.md).
 
 `bun run tests/probe-flow.ts --strict` is the separate checking-flow target gate.
-It passes all twenty current targets, including the four original narrowing gaps.
+It passes all 34 current targets, including the four original narrowing gaps.
 The primary TSX view preserves editor identity and synchronous narrowing; selected
 reactive regions use native diagnostics from a supplemental checking view.
 Supplemental mappings disable editor edits, and generated scaffolding is unmapped.
 The [flow profile](../../wiki2/checking-flow.md) records sources, routing, runtime
-evidence and the limits that keep full TOOL-05 acceptance open.
+evidence and the limits that keep full TOOL-05 acceptance open. Receiving variable
+and JSX contexts retain assignability errors. Checking-only typed identity calls
+validate seeds before widening them, preserving contextual parameter types and
+authored argument diagnostics. Body-assignment and generic-helper examples also
+execute correctly in both compiler modes.
 
 The opt-in `@memoized-dom/jsx-plus/checking/facts` entry now obtains snapshots
 through compiler-next's public `./analysis` entry. It maps identities and ranges

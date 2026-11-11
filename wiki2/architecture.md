@@ -82,6 +82,7 @@ All paths are relative to the repository root and exist now.
 | `packages/jsx-plus/src/checking/project.ts` | Shared-normalizer TSX checking projection and authored parse diagnostics |
 | `packages/jsx-plus/src/checking/protocol.ts` | Primary/supplemental outputs, mapping masks and diagnostic directives |
 | `packages/jsx-plus/src/checking/flow/plan.ts` | Consume public compiler facts; select bounded state/prop insertions and dependent regions |
+| `packages/jsx-plus/src/checking/flow/syntax.ts` | Separate parent index and receiving diagnostic contexts; parser AST stays unchanged |
 | `packages/jsx-plus/src/checking/flow/render.ts` | Assemble supplemental TSX, compose exact spans and route diagnostics by region |
 | `packages/jsx-plus/tests/checking-projection.test.ts` | Delegated coverage, generated spans, merged ranges and lowering fallback |
 | `packages/jsx-plus/src/checking/facts.ts` | Opt-in public fact adapter with explicit authored mapping fidelity |
@@ -91,8 +92,8 @@ All paths are relative to the repository root and exist now.
 | `packages/jsx-plus/tests/mapper-lsp.test.ts` | Native LSP rename, Unicode diagnostics and incomplete/restore editing |
 | `packages/jsx-plus/tests/rpc.ts` | Test-only process lifecycle and position helpers |
 | `packages/jsx-plus/tests/fixtures/checking-flow.json` | Target checking diagnostics and source spans for replay, refs, row scope and synchronous host logic |
-| `packages/jsx-plus/tests/probe-flow.ts` | Actual LSP observation/strict catalog runner; twenty targets match |
-| `packages/jsx-plus/tests/checking-flow.test.ts` | Assert all twenty flow/scope targets; full TOOL-05 acceptance explicitly unclaimed |
+| `packages/jsx-plus/tests/probe-flow.ts` | Actual LSP observation/strict catalog runner; 34 targets match; accepts reduced case sets for investigation |
+| `packages/jsx-plus/tests/checking-flow.test.ts` | Assert all 34 flow/scope targets; full TOOL-05 acceptance explicitly unclaimed |
 | `packages/jsx-plus/examples/checking/` | Valid/intentional-error authored files and local mapper configs |
 
 ## Existing files to reuse

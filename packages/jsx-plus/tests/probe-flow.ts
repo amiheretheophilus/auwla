@@ -25,7 +25,7 @@ function expectedSpan(source: string, expected: Expectation): DiagnosticSpan {
 }
 
 /** A probe reports unmet contracts; it never turns current bugs into expectations. */
-export async function probeCheckingFlow() {
+export async function probeCheckingFlow(cases: readonly FlowCase[] = catalog.cases) {
   const uri = pathToFileURL(resolve(exampleRoot, 'App.auwla')).href;
   const peer = rpcProcess(typescriptExecutable, ['--lsp', '--stdio'], exampleRoot);
   peer.connection.onRequest('client/registerCapability', () => null);
@@ -42,7 +42,7 @@ export async function probeCheckingFlow() {
     });
     await peer.connection.sendNotification('initialized', {});
 
-    for (const [index, fixture] of (catalog.cases as FlowCase[]).entries()) {
+    for (const [index, fixture] of cases.entries()) {
       if (index === 0) {
         await peer.connection.sendNotification('textDocument/didOpen', {
           textDocument: { uri, languageId: 'auwla', version: 1, text: fixture.source },

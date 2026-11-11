@@ -5,8 +5,8 @@ import type {
   AnalysisRange,
 } from '@memoized-dom/compiler-next/analysis';
 import { parse } from 'yuku-parser';
-import type { Node } from 'yuku-parser';
 import type { NormalizedSource, Range } from '../../model';
+import { indexSyntax } from './syntax';
 
 export interface Insertion {
   readonly offset: number;
@@ -22,31 +22,6 @@ export interface FlowRegion {
 export interface FlowPlan {
   readonly insertions: Insertion[];
   readonly regions: FlowRegion[];
-}
-
-/** Syntax lookup only; compiler-owned identities decide which bindings matter. */
-function indexNodes(root: Node): Map<number, Node[]> {
-  const index = new Map<number, Node[]>();
-  const pending: Node[] = [root];
-
-  while (pending.length > 0) {
-    const node = pending.pop()!;
-    const nodes = index.get(node.start) ?? [];
-    nodes.push(node);
-    index.set(node.start, nodes);
-
-    for (const value of Object.values(node)) {
-      const children = Array.isArray(value) ? value : [value];
-      for (const child of children) {
-        if (child !== null && typeof child === 'object'
-          && 'type' in child && 'start' in child && 'end' in child) {
-          pending.push(child as Node);
-        }
-      }
-    }
-  }
-
-  return index;
 }
 
 function authoredRegion(normalized: NormalizedSource, range: AnalysisRange): FlowRegion | null {
@@ -103,9 +78,27 @@ export function planFlow(normalized: NormalizedSource, filename: string): FlowPl
     return null;
   }
 
-  const nodes = indexNodes(program);
+  const syntax = indexSyntax(program);
+  const nodes = syntax.byStart;
   const insertions: Insertion[] = [];
   const changed = new Set<string>();
+
+  function widenValue(range: Range, type: string) {
+    // An explicitly instantiated identity call validates the copied argument
+    // and returns its full declared type. A cast would hide incompatible inputs;
+    // `satisfies` reports some failures on an unmapped generated keyword instead.
+    // The authored value remains an argument in its original await/yield scope.
+    insertions.push({
+      offset: range[0],
+      text: `(<T,>(value: T): T => value)<${type}>((`,
+      order: -range[1],
+    });
+    insertions.push({
+      offset: range[1],
+      text: '))',
+      order: -range[0],
+    });
+  }
 
   for (const binding of module.bindings) {
     if (!binding.componentOwned || binding.owner === null) {
@@ -115,10 +108,11 @@ export function planFlow(normalized: NormalizedSource, filename: string): FlowPl
     const hasCapturedAssignment = binding.writes.some((write) => {
       return write.timing === 'later' && (write.kind === 'assign' || write.kind === 'update');
     });
-    // Captured writes make an opaque seed eligible for widening; this does not
-    // prove when the callback runs. Dependent regions are selected separately.
+    // A call can make a subsequently reassigned binding Derived or Opaque.
+    // Keep the captured-write evidence regardless of that classification; it
+    // does not prove when the callback runs. Select dependent regions separately.
     const canWidenSeed = binding.kind === 'State'
-      || (binding.kind === 'Opaque' && hasCapturedAssignment);
+      || (binding.kind !== 'Prop' && hasCapturedAssignment);
 
     if (canWidenSeed && binding.declarations.length === 1) {
       const declaration = nodes.get(binding.declarations[0]![0])?.find((node) => {
@@ -135,10 +129,28 @@ export function planFlow(normalized: NormalizedSource, filename: string): FlowPl
       const type = source.slice(annotation.start, annotation.end);
       const initializer = declaration.init;
 
-      // Group the original initializer before asserting its declared type so
+      // Group the original initializer before checking its declared type so
       // yield/await/conditional precedence keeps its original host meaning.
-      insertions.push({ offset: initializer.start, text: '((', order: -initializer.end });
-      insertions.push({ offset: initializer.end, text: `) as ${type})`, order: -initializer.start });
+      widenValue([initializer.start, initializer.end], type);
+
+      // A later initialization statement can narrow the seed again. Widen plain
+      // assignments directly in the same body, where the annotation's lexical
+      // type scope is unchanged. The original view still checks their validity.
+      for (const write of binding.writes) {
+        if (write.kind !== 'assign' || write.timing !== 'body') {
+          continue;
+        }
+        const assignment = syntax.at(write.range);
+        if (assignment?.type !== 'AssignmentExpression' || assignment.operator !== '=') {
+          continue;
+        }
+        if (!syntax.isDirectBodyStatement(assignment, binding.owner)) {
+          continue;
+        }
+
+        const value = assignment.right;
+        widenValue([value.start, value.end], type);
+      }
       changed.add(binding.id);
     }
 
@@ -192,7 +204,7 @@ export function planFlow(normalized: NormalizedSource, filename: string): FlowPl
     if (!dependsOnChanged(dependencies)) {
       return;
     }
-    const region = authoredRegion(normalized, range);
+    const region = authoredRegion(normalized, syntax.diagnosticRange(range));
     if (region !== null) {
       regions.push(region);
     }

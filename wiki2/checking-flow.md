@@ -1,6 +1,6 @@
 # Checking flow and replay
 
-State: first paired checking profile built, 2026-11-11. All twenty catalog
+State: paired checking profile hardened, 2026-11-11. All 34 catalog
 targets pass through the actual TypeScript LSP. Complete TOOL-05 acceptance
 remains open. This page owns flow checking; [tooling](tooling.md) owns transport
 and editor integration.
@@ -45,8 +45,12 @@ widening this view would lose valid initial narrowing in synchronous statements.
 dependencies, computations and escaping-function ranges. Its bounded profile:
 
 - Widens explicitly typed component state initializers to their declared type
-  in the supplemental view. Opaque bindings with a captured assignment/update
-  are also eligible, covering the catalog's awaited initializer.
+  in the supplemental view. Other non-prop bindings with a captured assignment/
+  update are eligible too. A helper call can classify such a binding as Derived;
+  classification alone must not discard the captured-write evidence.
+- Also widens plain assignments directly in the owning function body. Otherwise
+  an initialization statement can restore the transient narrowing. Nested and
+  compound assignments are outside this additional profile.
 - Adds an uninvoked generated writer for block-bodied component props so
   TypeScript does not preserve a changing prop's guard into deferred code.
 - Selects dependency-linked JSX expressions, derived initializers/body builders
@@ -55,8 +59,23 @@ dependencies, computations and escaping-function ranges. Its bounded profile:
 
 `checking/flow/render.ts` creates a complete supplemental TSX module by inserting
 checking-only scaffolding. Original expressions stay in their authored function;
-there is no new function around `await` or `yield`. State initializers are grouped
-before their checking assertion, preserving host operator precedence.
+there is no new function around `await` or `yield`. A checking-only generic identity
+call accepts the grouped original expression as its argument and explicitly
+returns its declared type. For example:
+
+```tsx
+(<T,>(value: T): T => value)<string | number>(('ready'))
+```
+
+This validates the argument before widening it and retains contextual parameter
+typing. Its type argument is outside the helper's scope, so an authored type named
+`T` remains usable. No generated module-level binding is introduced. The call is
+checking code only and never executes as application output.
+
+A cast alone can hide an incompatible dependent initializer. An intermediate
+`satisfies` experiment caught it but reported on an unmapped generated keyword,
+producing TS18080. The identity call instead produces native TS2345 on the copied
+argument, pinned by FLOW-TYPE-033. Neither experiment is the active projection.
 
 The mapper protocol routes semantic diagnostics by region: the primary view
 delegates selected ranges, and the supplemental view ignores their complement.
@@ -65,6 +84,15 @@ there is no diagnostic-code filter, blanket `any` or blanket error suppression.
 A regression test verifies that every delegated copied character remains covered
 by a nonignored supplemental mapping across the catalog. Real initialization and
 member errors also have explicit LSP expectations.
+
+`checking/flow/syntax.ts` expands a selected initializer to its receiving
+declarator and a selected JSX prop/spread argument to its opening element.
+TypeScript may report assignability errors on the variable, prop or component
+name rather than the input expression. Both views route that complete diagnostic
+context, preserving those errors and unrelated invalid props. Parent links stay
+in a separate index; parser-owned AST nodes are unchanged. The compiler's public
+expression facts now include ordinary JSX spread arguments through its existing
+input query, without introducing another dependency classifier.
 
 Supplemental copied spans compose back to authored UTF-16 offsets. Their protocol
 feature mask is `None`, so they map diagnostics without contributing duplicate
@@ -96,6 +124,14 @@ Sources and expected authored diagnostic spans live in
 | FLOW-TYPE-017 | Mutated const discriminated-union object | Match |
 | FLOW-TYPE-018/020 | Awaited and yielded state initializers | Match |
 | FLOW-TYPE-019 | Fresh prop guard after await | Match |
+| FLOW-TYPE-021 | Unsafe read through a two-step derived chain | Match |
+| FLOW-TYPE-022/023/029 | Typed derivation, named prop and spread receiving errors | Match |
+| FLOW-TYPE-024/030/031 | Body assignment, ordinary narrowing and genuine assignment error | Match |
+| FLOW-TYPE-025/026 | Named deferred callback versus immediate invocation | Match |
+| FLOW-TYPE-027/028 | Function-valued seed contextual typing and generic helper | Match |
+| FLOW-TYPE-032 | Unrelated invalid prop inside delegated opening element | Match |
+| FLOW-TYPE-033 | Reassigned derivation validates its changing input | Match |
+| FLOW-TYPE-034 | Authored type argument survives helper-local shadowing | Match |
 
 Run from `packages/jsx-plus`:
 
@@ -103,10 +139,12 @@ Run from `packages/jsx-plus`:
 bun run tests/probe-flow.ts --strict
 ```
 
-All twenty targets match, exit zero. Default observation mode prints the same
+All 34 targets match, exit zero. Default observation mode prints the same
 results without enforcing acceptance. `checking-flow.test.ts` asserts every
 catalog target as part of the package suite; none is excluded as a known gap.
 The runner always distinguishes this finite catalog from full TOOL-05 acceptance.
+Body-assignment and generic-helper guarded programs also execute correctly in
+both compiler modes, separately from TypeScript checking.
 
 ## Boundaries and next work
 
@@ -122,9 +160,12 @@ selected regions retain the original checking view with no delegation. Invalid
 generated supplemental syntax also falls back. That preserves ordinary checks
 but does not promise corrected reactive flow for those unsupported inputs.
 
-Next, expand cross-binding/deferred-call counterexamples and contextual typing
-before widening the profile. Complete replay/invocation proofs, module-level
-state and live imports, aliases, readiness, row lifecycle, lowering maps and
-cross-file editing remain open. Add cache/invalidation evidence and incomplete-
-file recovery separately. No general performance or complete editor claim follows
-from these twenty cases.
+The seed transform still requires one explicitly typed identifier declaration
+with an initializer. Uninitialized bindings, destructuring and nested/compound
+initialization assignments need more coverage. The added chains and generic
+helper are finite cases, not a general aliasing/contextual-typing proof.
+
+Next, add bounded per-project caching with invalidation evidence. Complete
+replay/invocation proofs, module-level state, live imports, aliases, readiness,
+row lifecycle, lowering maps, cross-file editing and partial-file recovery remain
+open. No general performance or complete editor claim follows from these cases.

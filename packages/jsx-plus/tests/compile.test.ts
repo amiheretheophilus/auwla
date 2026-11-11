@@ -82,6 +82,20 @@ it('runs the package counter example through compiler-next', () => {
 });
 
 for (const optimize of [true, false]) {
+  for (const replay of [
+    { id: 'FLOW-TYPE-024', topic: 'body assignment', initial: 'START' },
+    { id: 'FLOW-TYPE-028', topic: 'generic helper', initial: 'READY' },
+  ]) {
+    it(`replays a guarded ${replay.topic} result with optimize=${optimize}`, () => {
+      const source = flowFixtures.cases.find((entry) => entry.id === replay.id)!.source;
+      const { container } = start(source, optimize);
+
+      expect(container.textContent).toBe(replay.initial);
+      container.querySelector('button')!.click();
+      expect(container.textContent).toBe('1');
+    });
+  }
+
   it(`replays a guarded union child with optimize=${optimize}`, () => {
     const source = flowFixtures.cases.find((entry) => entry.id === 'FLOW-TYPE-002')!.source;
     const { container } = start(source, optimize);

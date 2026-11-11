@@ -29,8 +29,11 @@
   have focused evidence. Reactive-flow typing/editor acceptance remain open;
   this changes no language rule or existing fixture expectation.
 - The first paired TypeScript checking profile uses existing compiler analysis
-  facts and complementary diagnostic regions. All twenty flow targets pass,
-  including the original four gaps; applied ref/state rename tests pass. Broader
+  facts and complementary diagnostic regions, clearing the original four gaps;
+  applied ref/state rename tests pass. Follow-up hardening includes receiving
+  declarations/JSX names, validated seeds/body assignments, spread facts and
+  deferred/immediate callbacks. All 34 flow targets pass, and body-assignment/
+  generic-helper programs execute in both compiler modes. Broader
   flow/editor acceptance remains open. No normative grammar or original target
   expectation changes; checking-only scaffolding never reaches runtime output.
 
