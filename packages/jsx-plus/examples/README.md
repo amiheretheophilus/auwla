@@ -5,7 +5,7 @@ Run commands below from `packages/jsx-plus` using the installed workspace depend
 | Example | What to read and try |
 | --- | --- |
 | [counter.auwla](counter.auwla) | The smallest state/event/direct-expression example |
-| [task-board/App.auwla](task-board/App.auwla) | A complete task board: derived lists/counts, search, status filters, form submission, existing refs, direct `if`, `.map()`, quoted text and row events |
+| [task-board/App.auwla](task-board/App.auwla) | A complete task board: derived lists/counts, search, status filters, form submission, existing refs, direct `if`, direct `for` loops in the markup, quoted text and row events |
 | [task-board/ForLoop.auwla](task-board/ForLoop.auwla) | A direct `for (const task of visible) { <li key=...> }` loop in the markup; independent row callbacks, filtering and add/remove |
 | [checking/App.auwla](checking/App.auwla) | Small typed-prop/ref example used by the mapper checks |
 | [checking/TypeError.auwla](checking/TypeError.auwla) | Deliberately invalid method call for inspecting authored diagnostics |
@@ -73,15 +73,20 @@ function from [task-board/actions.ts](task-board/actions.ts). Bare calls such
 as `onClick=addTask()` need explicit parentheses/braces and are not made lazy.
 
 Then read the markup: quoted children produce text, expressions render values,
-and direct `if` switches between the empty message and the list. `.map()` authors
-each row with its toggle/remove handlers. The page has real labels, keyboard-native
+and direct `if` switches between the empty message and the list. Two direct
+loops write repeated markup in place. `for (const option of filters) { <button ...> }`
+makes the status buttons from an ordinary array, each with its own `option` for
+its handler. Inside the `else` branch, `for (const task of visible) { <li key={task.id}> ... }`
+writes each row with its toggle/remove handlers. Both become compiled keyed row
+lists when optimizing, so a row keeps its DOM node while it stays visible. The page has real labels, keyboard-native
 buttons and live summary text. The footer uses a native backtick template with
 `${...}` interpolation; double-quoted children are ordinary static strings.
 CSS and `main.ts` stay ordinary files.
 
 The package checks load this file directly, rather than maintain a second version
-inside a fixture. They cover search/filter changes, add/toggle/remove, ref focus
-and the empty state in both compiler modes. The mapper cache checks also transform
+inside a fixture. They cover search/filter changes, the looped buttons'
+`aria-pressed` state, row node preservation, add/toggle/remove, ref focus and the
+empty state in both compiler modes. The mapper cache checks also transform
 this same authored source. Browser layout and production delivery need their own
 acceptance; these checks establish the exercised authoring and runtime behavior.
 The loop variant is also compiled and exercised directly from its authored file.

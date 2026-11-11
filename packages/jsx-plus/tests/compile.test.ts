@@ -154,9 +154,13 @@ for (const optimize of [true, false]) {
 
   it(`runs the authored task board through its main editing flow with optimize=${optimize}`, () => {
     const source = readFileSync(new URL('../examples/task-board/App.auwla', import.meta.url), 'utf8');
+    // The filter buttons and the task rows are direct loops in the markup; both
+    // become compiled row lists when optimizing (P4-FOR-FAST).
+    if (optimize) expect(compile(source, { optimize }).match(/_rowList\d*\.from\(/g)?.length).toBeGreaterThanOrEqual(2);
     const { container } = start(source, optimize, { modules: { './actions': taskBoardActions } });
     const rows = () => [...container.querySelectorAll('.tasks li')];
     const filters = [...container.querySelectorAll('nav button')] as HTMLButtonElement[];
+    const pressed = () => filters.map((button) => button.getAttribute('aria-pressed'));
     const search = container.querySelector<HTMLInputElement>('#search')!;
     const draft = container.querySelector<HTMLInputElement>('#new-task')!;
     const form = container.querySelector('form')!;
@@ -164,13 +168,27 @@ for (const optimize of [true, false]) {
     container.querySelector<HTMLButtonElement>('.focus-draft')!.click();
     expect(document.activeElement).toBe(draft);
 
+    expect(filters.map((button) => button.textContent)).toEqual(['All', 'Open', 'Done']);
+    expect(pressed()).toEqual(['true', 'false', 'false']);
     expect(rows()).toHaveLength(3);
+    const [, second, third] = rows();
     expect(container.querySelector('.summary')!.textContent).toBe('2 tasks left');
+    // Each looped button's handler sets its own option; open rows keep their nodes.
+    const same = (actual: Element[], expected: (Element | undefined)[]) => {
+      expect(actual).toHaveLength(expected.length);
+      actual.forEach((row, index) => expect(row).toBe(expected[index]!));
+    };
     filters[1]!.click();
-    expect(rows()).toHaveLength(2);
+    expect(pressed()).toEqual(['false', 'true', 'false']);
+    same(rows(), [second, third]);
     filters[2]!.click();
+    expect(pressed()).toEqual(['false', 'false', 'true']);
     expect(rows()).toHaveLength(1);
+    // The done row stays; the open rows were removed, so they come back new.
+    const doneRow = rows()[0];
     filters[0]!.click();
+    expect(rows()).toHaveLength(3);
+    same(rows().slice(0, 1), [doneRow]);
 
     search.value = 'filtered';
     search.dispatchEvent(new Event('input', { bubbles: true }));

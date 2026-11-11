@@ -22,7 +22,8 @@ compiled and clicked by the package's execution tests.
 
 For fuller authoring, open [the task board](examples/task-board/App.auwla). It
 includes search/status filters, a form, refs, derived lists/counts, direct `if`,
-`.map()` and native `${...}` template interpolation. Run its local browser preview:
+direct `for` loops in the markup (the filter buttons and the task rows) and
+native `${...}` template interpolation. Run its local browser preview:
 
 ```text
 bun run examples/task-board/preview.ts
@@ -31,8 +32,8 @@ bun run examples/task-board/preview.ts
 Open `http://127.0.0.1:3030`. [The examples guide](examples/README.md) includes
 build-only/type-check commands and the source walkthrough. Checks read the actual
 `.auwla` file and exercise the main authoring flow in both compiler modes.
-`--for-loop` selects [the loop variant](examples/task-board/ForLoop.auwla),
-which writes `for (const task of visible) { <li key={task.id}>...</li> }`
+`--for-loop` selects [a smaller loop variant](examples/task-board/ForLoop.auwla),
+which also writes `for (const task of visible) { <li key={task.id}>...</li> }`
 directly in the markup. Direct loops accept any iterable and lower to
 `Array.from(iterable, (binding) => row)`. With optimization on, compiler-next
 shows a keyed single-element loop body through compiled rows, as it does for

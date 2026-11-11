@@ -129,10 +129,18 @@ Evidence: spec fixtures PARSE-009, ERROR-009/010, FOR-001 (keyed reorder keeps
 nodes) and FOR-002 (a `Set` with per-row closures), in both compiler modes.
 `tests/loops.test.ts` covers destructuring, nesting, multi-child rows, all
 rejected forms and exact binding/iterable mappings via TypeScript's `SpanMap`.
-[ForLoop.auwla](../packages/jsx-plus/examples/task-board/ForLoop.auwla) uses a
-direct loop with per-row toggle/remove handlers. It runs in both modes, builds
-and type-checks through the TS7 CLI. A real LSP rename of its loop binding edits
-only uses inside the loop.
+The main task board,
+[App.auwla](../packages/jsx-plus/examples/task-board/App.auwla), writes two
+direct loops in its template. One loops over a module-level `filters` array to
+make the status buttons. The other loops over `visible` inside the `else` branch
+of a direct `if` to make the task rows. Its execution test runs in both modes. It
+checks the looped buttons' labels and `aria-pressed`, that open rows keep their
+nodes across a filter change, and the add/toggle/remove/search flow. The LSP
+completion, auto-import and editor-recovery tests edit inside its loop body.
+[ForLoop.auwla](../packages/jsx-plus/examples/task-board/ForLoop.auwla) is a
+smaller variant with per-row toggle/remove handlers. Both run in both modes,
+build, and type-check through the TS7 CLI. A real LSP rename of a loop binding
+edits only uses inside the loop.
 
 **Compiled rows (P4-FOR-FAST).** With optimization on, compiler-next treats
 `Array.from(items, row)` like `items.map(row)`

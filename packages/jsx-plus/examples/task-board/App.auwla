@@ -9,6 +9,12 @@ type Task = {
 
 type Filter = 'all' | 'open' | 'done';
 
+const filters: { value: Filter; label: string }[] = [
+  { value: 'all', label: 'All' },
+  { value: 'open', label: 'Open' },
+  { value: 'done', label: 'Done' },
+];
+
 export function App() {
   let tasks: Task[] = [
     { id: 1, title: 'Read the authoring example', done: true },
@@ -73,15 +79,17 @@ export function App() {
           onInput={event => query = event.currentTarget.value}
         />
         <nav aria-label="Task status">
-          <button type="button" aria-pressed=(filter === 'all') onClick=(() => filter = 'all')>
-            "All"
-          </button>
-          <button type="button" aria-pressed={filter === 'open'} onClick={() => filter = 'open'}>
-            "Open"
-          </button>
-          <button type="button" aria-pressed={filter === 'done'} onClick={() => filter = 'done'}>
-            "Done"
-          </button>
+          // One button per status, looped over ordinary data.
+          for (const option of filters) {
+            <button
+              key={option.value}
+              type="button"
+              aria-pressed=(filter === option.value)
+              onClick=(() => filter = option.value)
+            >
+              option.label
+            </button>
+          }
         </nav>
       </section>
 
@@ -97,8 +105,9 @@ export function App() {
         </section>
       } else {
         <ul class="tasks">
-          visible.map(task => (
-            <li data-task-id={task.id}>
+          // One keyed row per visible task; each row's handlers see its own `task`.
+          for (const task of visible) {
+            <li key={task.id} data-task-id={task.id}>
               <button
                 type="button"
                 class="task-toggle"
@@ -117,7 +126,7 @@ export function App() {
                 "Remove"
               </button>
             </li>
-          ))
+          }
         </ul>
       }
 

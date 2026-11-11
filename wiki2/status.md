@@ -24,6 +24,13 @@ and so does the bundle the `--for-loop` preview serves. Its execution test check
 the row list and keyed node preservation in both modes. Closed-list `moved` skips
 still apply only to `map`.
 
+The main task board `App.auwla` now uses direct loops in its template instead of
+`.map()`: the status buttons loop over a `filters` array, and the task rows loop
+over `visible` inside the `else` branch. Both compile to compiled row lists
+(`_rowList.from(...)` in the served preview bundle). The task-board tsconfig
+type-checks through the TS7 CLI. All 215 jsx-plus tests pass, including the
+LSP completion, auto-import and recovery tests that now edit inside the loop body.
+
 ## This session: review and cleanup
 
 The user asked for the previous agent's work to be reviewed for correctness,
