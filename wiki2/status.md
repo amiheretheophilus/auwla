@@ -77,8 +77,10 @@ The first decoupled editor adapter is now built (DX-36):
   and the local Auwla VSIX 0.0.2 are installed and listed by VS Code. Installed
   activation now resolves the mapper through open project folders, not the
   extension's installation directory. The VSIX keeps the mapper in the project.
-  The quoted-interpolation desktop update after reload, inferred-project type setup, another editor
-  and a standalone mapper distribution remain unverified. See
+  After the quoted-interpolation update, the user opened the task board
+  `App.auwla` in desktop VS Code with the installed extension and reported that
+  it works (2026-11-11). Inferred-project type setup, another editor and a
+  standalone mapper distribution remain unverified. See
   [adapter setup](../packages/editor-vscode/README.md).
 
 Live editor follow-up: the provider initially ran bundled TypeScript 7.0.2, which

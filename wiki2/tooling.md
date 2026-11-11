@@ -151,8 +151,10 @@ edits as regression fixtures when the parser or mapping strategy changes.
 Accepted direction (DX-36): editor integrations must be decoupled so other editor
 extensions can reuse the language tooling without installing or importing the
 VS Code extension. The existing projection and mapper remain the shared core;
-the first VS Code adapter is built in `packages/editor-vscode`. Desktop activation
-and packaged installation remain unverified.
+the first VS Code adapter is built in `packages/editor-vscode`. The user opened
+the task board in desktop VS Code with the locally installed VSIX and reported
+that it works (2026-11-11). Marketplace packaging and other editors remain
+unverified.
 
 The content mapper supplies checking text and mappings to TypeScript, whose
 language server provides diagnostics, completion, rename and auto-imports. An

@@ -66,7 +66,7 @@ bun ../../node_modules/typescript/lib/tsc.js --project examples/checking/tsconfi
 `examples/checking/tsconfig.error.json` intentionally selects a type error and
 exits two. CLI/LSP tests verify the original UTF-16 error location and a safe ref
 rename. `vscode-jsonrpc/node` provides stream transport; it does not require the
-VS Code editor. IDE activation and complete reactive/ref flow typing remain open.
+VS Code editor. Complete reactive/ref flow typing remains open.
 Checking preserves native host recovery and can insert checking-only closers or
 quarantine damaged markup ranges, retaining authored errors and exact editor
 spans. Selected unfinished tags, attributes and loop headers recover; other
@@ -78,8 +78,8 @@ project; edits replace it and close/reopen discards it. See
 The separate [VS Code adapter](../editor-vscode/README.md) consumes the shared
 `./editor` metadata/mapper contribution and `./editor/grammar` build helper.
 [Editor assets](editor-assets/README.md) remain reusable without that adapter.
-The prototype builds locally; real desktop activation and packaged installation
-remain unverified.
+The user reported the task board working in desktop VS Code with the locally
+installed VSIX (2026-11-11); marketplace packaging remains unverified.
 
 Quoted child text also supports `{expression}` interpolation, for example
 `<p>"Count: {count}"</p>`. It normalizes to a native template and retains exact
