@@ -34,7 +34,16 @@ export interface IfView {
   readonly alternate: BlockView | IfView | null;
 }
 
-export type ChildView = ExpressionView | ElementView | FragmentView | IfView;
+/** `for (const binding of iterable) { body }`; `binding` is the pattern's source. */
+export interface ForView {
+  readonly kind: 'for';
+  readonly range: Range;
+  readonly binding: ExpressionView;
+  readonly iterable: ExpressionView;
+  readonly body: BlockView;
+}
+
+export type ChildView = ExpressionView | ElementView | FragmentView | IfView | ForView;
 
 export interface VerbatimMapping {
   readonly kind: 'verbatim';

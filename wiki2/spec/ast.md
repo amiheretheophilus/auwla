@@ -1,6 +1,6 @@
 # Syntax model and conformance view
 
-0.1-draft, revision 4. Owns G-SOURCE and A-RANGE/A-NODES/A-NORMALIZE.
+0.1-draft, revision 5. Owns G-SOURCE and A-RANGE/A-NODES/A-NORMALIZE.
 
 ## Purpose (A-NODES)
 
@@ -43,7 +43,7 @@ type SyntaxView = {
   root: Child;
 };
 
-type Child = Element | Fragment | Expression | Conditional;
+type Child = Element | Fragment | Expression | Conditional | Loop;
 
 type Element = {
   kind: "element";
@@ -77,6 +77,14 @@ type Conditional = {
   consequent: ChildBlock;
   alternate: ChildBlock | Conditional | null;
 };
+
+type Loop = {
+  kind: "for";
+  range: Range;
+  binding: Expression; // the binding pattern's source, e.g. "task" or "[index, task]"
+  iterable: Expression;
+  body: ChildBlock;
+};
 ```
 
 An expression containing nested markup remains an expression in this small view;
@@ -98,6 +106,10 @@ resolver bindings, runtime IDs and optimization decisions do not appear in it.
   and expression keep exact copied spans; inserted JSX braces stay unmapped.
 - `prop=name` becomes `prop={name}` with the identifier's exact copied spelling
   and range. Inserted braces stay unmapped; no handler wrapper is introduced.
+- `for (const binding of iterable) { ... }` becomes
+  `{Array.from(iterable, (binding) => row)}` (S-FOR). The iterable and the
+  binding keep exact copied spans even though the generated order differs;
+  `Array.from`, the arrow and any per-iteration fragment stay unmapped.
 - Conditional bodies become existing conditional/fragment/child machinery with
   the semantics in [semantics.md](semantics.md). No new branch runtime is defined.
 - Preserve native operations and authored evaluation order. Do not implement a

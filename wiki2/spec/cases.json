@@ -1,7 +1,44 @@
 {
   "specVersion": "0.1-draft",
-  "revision": 4,
+  "revision": 5,
   "cases": [
+    {
+      "id": "PARSE-009",
+      "level": "parse",
+      "rules": ["G-FOR", "A-RANGE"],
+      "source": "<ul>for (const item of items) { <li>item</li> }</ul>",
+      "expected": {"specVersion":"0.1-draft","root":{"kind":"element","range":[0,52],"name":"ul","children":[{"kind":"for","range":[4,47],"binding":{"kind":"expression","range":[15,19],"source":"item"},"iterable":{"kind":"expression","range":[23,28],"source":"items"},"body":{"kind":"block","range":[30,47],"children":[{"kind":"element","range":[32,45],"name":"li","children":[{"kind":"expression","range":[36,40],"source":"item"}]}]}}]}}
+    },
+    {
+      "id": "ERROR-009",
+      "level": "diagnostics",
+      "rules": ["G-FOR", "D-CODES"],
+      "source": "<ul>for (let item of items) { item }</ul>",
+      "expected": { "code": "JPX1010", "severity": "error", "range": [4, 7] }
+    },
+    {
+      "id": "ERROR-010",
+      "level": "diagnostics",
+      "rules": ["G-FOR", "D-CODES"],
+      "source": "<ul>for (const item of items) item</ul>",
+      "expected": { "code": "JPX1006", "severity": "error", "range": [30, 34] }
+    },
+    {
+      "id": "FOR-001",
+      "level": "behavior",
+      "rules": ["S-FOR", "S-LIST"],
+      "source": "export function App() { const items = [{ id: 1, label: 'A' }, { id: 2, label: 'B' }]; return <main><button onClick={() => items.reverse()}>\"reverse\"</button><ul>for (const item of items) { <li key={item.id} data-id={item.id}>item.label</li> }</ul></main>; }",
+      "jsxEquivalent": "export function App() { const items = [{ id: 1, label: 'A' }, { id: 2, label: 'B' }]; return <main><button onClick={() => items.reverse()}>reverse</button><ul>{Array.from(items, (item) => <li key={item.id} data-id={item.id}>{item.label}</li>)}</ul></main>; }",
+      "expected": { "clicks": ["button"], "text": ["reverseAB", "reverseBA"], "preserveNodes": { "selector": "li", "keyAttribute": "data-id" } }
+    },
+    {
+      "id": "FOR-002",
+      "level": "behavior",
+      "rules": ["S-FOR"],
+      "source": "export function App() { let picked = 0; const ids = new Set([1, 2, 1]); return <main>for (const id of ids) { <button key={id} data-id={id} onClick={() => picked = id}>id</button> }\"picked:\"; picked</main>; }",
+      "jsxEquivalent": "export function App() { let picked = 0; const ids = new Set([1, 2, 1]); return <main>{Array.from(ids, (id) => <button key={id} data-id={id} onClick={() => picked = id}>{id}</button>)}picked:{picked}</main>; }",
+      "expected": { "clicks": ["button[data-id=\"2\"]"], "text": ["12picked:0", "12picked:2"] }
+    },
     {
       "id": "ERROR-007",
       "level": "diagnostics",

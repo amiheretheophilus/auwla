@@ -70,7 +70,7 @@ All paths are relative to the repository root and exist now.
 | `packages/jsx-plus/src/normalize.ts` | Public `normalize`/`normalizeForChecking`: find root markup in host code, assemble TSX, validate the host module |
 | `packages/jsx-plus/src/markup/context.ts` | Per-file reader state: source, filename, cached conditional blocks and authored error reporting |
 | `packages/jsx-plus/src/markup/element.ts` | Opening tags and attribute values, then the body scan: nested markup, child-level `if`/`else` blocks and the closing tag |
-| `packages/jsx-plus/src/markup/children.ts` | Child grammar: `;` chunks, expression-first parsing, ASI statements, direct `if` lowering and chunk diagnostics |
+| `packages/jsx-plus/src/markup/children.ts` | Child grammar: `;` chunks, expression-first parsing, ASI statements, direct `if` and `for` lowering and chunk diagnostics |
 | `packages/jsx-plus/src/host.ts` | Parser-only fragment context, token slices, tag-opening/delimiter/unterminated-literal token helpers |
 | `packages/jsx-plus/src/masks.ts` | Every parser-only mask: equal-width, line-preserving blanks for markup, attribute values and quarantined lines |
 | `packages/jsx-plus/src/attributes/value.ts` | Attribute value contract: replacement pieces plus the mask that hides that form from the tag lexer |
@@ -88,7 +88,8 @@ All paths are relative to the repository root and exist now.
 | `packages/jsx-plus/examples/counter.auwla` | Complete counter compiled and clicked by the execution tests |
 | `packages/jsx-plus/examples/README.md` | Authoring walkthrough and commands for real examples |
 | `packages/jsx-plus/examples/task-board/` | Full authored UI, browser entry/HTML/CSS, example-only preview loader and native mapper config |
-| `packages/jsx-plus/examples/task-board/ForLoop.auwla` | Host `for...of` builds typed rows before markup; exercised in both modes |
+| `packages/jsx-plus/examples/task-board/ForLoop.auwla` | Direct `for...of` loop in markup with keyed rows and per-row handlers; exercised in both modes and by an LSP binding rename |
+| `packages/jsx-plus/tests/loops.test.ts` | Direct-loop normalization: destructuring, nesting, multi-child rows, rejected forms, exact binding/iterable spans |
 | `packages/jsx-plus/AGENTS.md` | Package ownership boundary and focused checks |
 | `packages/jsx-plus/src/checking/project.ts` | Shared-normalizer TSX checking projection and authored parse diagnostics |
 | `packages/jsx-plus/src/checking/recovery/markup.ts` | Bounded current-source line quarantine, exact remaining spans and structural fallback |

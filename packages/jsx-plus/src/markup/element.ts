@@ -107,10 +107,10 @@ function readOpeningTag(context: MarkupContext, start: number): OpeningTag {
 interface Delimiter {
   /** Token kind that closes it. */
   readonly close: number;
-  /** A `{` that opens a direct `if`/`else` child block. */
+  /** A `{` that opens a direct `if`/`else` or `for` child block. */
   readonly childBlock: boolean;
-  /** The `(` of a child-level `if (...)`; a `{` after its `)` is a child block. */
-  readonly ifHeader: boolean;
+  /** The `(` of a child-level `if (...)` or `for (...)`; a `{` after its `)` is a child block. */
+  readonly header: boolean;
   /** Authored offset of the delimiter. */
   readonly start: number;
 }
@@ -128,7 +128,7 @@ interface Body {
  * `name`. Each pass walks host tokens and stops at the first of:
  *
  * - nested markup: read it, mask it, rescan;
- * - a closed `if`/`else` child block: read its children, cache them in
+ * - a closed `if`/`else`/`for` child block: read its children, cache them in
  *   `context.blocks`, blank the block, rescan;
  * - the closing tag at child level: read this body's children and return.
  *
@@ -153,17 +153,23 @@ function readBody(context: MarkupContext, start: number, name: string, opener: n
         context.error('JPX1003', 'Unterminated child string or template', start + literal.start);
       }
       const childLevel = stack.length === 0 || stack[stack.length - 1]!.childBlock;
-      const previousMarkup = index === 0 ? undefined : nested.find((entry) => entry.start === start + tokens.start(index - 1));
-      const adjacent = childLevel && previousMarkup !== undefined && kind === K.LessThan
-        && !source.startsWith('</', position);
+      const previousMarkup = !childLevel || index === 0 ? undefined
+        : nested.find((entry) => entry.start === start + tokens.start(index - 1));
 
-      if (isMarkupOpening(tokens, index) || adjacent) {
-        if (adjacent) {
-          // `<A/><B/>` masks to `_   _   ` on one line, which the host
-          // parser cannot split. Put a `;` in the first mask's last column.
-          const separator = previousMarkup!.end - start - 1;
-          shadow = shadow.slice(0, separator) + ';' + shadow.slice(separator + 1);
-        }
+      // G-BOUNDARY rule 4: after complete markup, another opening tag or a
+      // direct `if`/`for` starts a sibling. `<A/><B/>` or `<A/> if (...)` masks
+      // to `_   _` or `_    if` on one line, which the host parser cannot
+      // split. Put a `;` in the mask's last column and rescan.
+      const afterMarkup = previousMarkup === undefined ? undefined
+        : kind === K.LessThan && !source.startsWith('</', position) ? 'tag'
+          : kind === K.If || kind === K.For ? 'statement' : undefined;
+      if (afterMarkup !== undefined) {
+        const separator = previousMarkup!.end - start - 1;
+        shadow = shadow.slice(0, separator) + ';' + shadow.slice(separator + 1);
+        if (afterMarkup === 'statement') continue rescan;
+      }
+
+      if (isMarkupOpening(tokens, index) || afterMarkup === 'tag') {
         const markup = readElement(context, position);
         nested.push(markup);
         shadow = maskMarkup(shadow, markup.start - start, markup.end - start);
@@ -185,12 +191,13 @@ function readBody(context: MarkupContext, start: number, name: string, opener: n
 
       const close = closingDelimiter(kind);
       if (close !== undefined) {
-        const ifHeader = kind === K.LeftParen && childLevel && index > 0 && tokens.kind(index - 1) === K.If;
-        stack.push({ close, childBlock: kind === K.LeftBrace && expectChildBlock, ifHeader, start: position });
+        const previous = index > 0 ? tokens.kind(index - 1) : undefined;
+        const header = kind === K.LeftParen && childLevel && (previous === K.If || previous === K.For);
+        stack.push({ close, childBlock: kind === K.LeftBrace && expectChildBlock, header, start: position });
         expectChildBlock = false;
       } else if (stack.length > 0 && kind === stack[stack.length - 1]!.close) {
         const delimiter = stack.pop()!;
-        expectChildBlock = delimiter.ifHeader;
+        expectChildBlock = delimiter.header;
         if (delimiter.childBlock && !context.blocks.has(delimiter.start)) {
           // A conditional body uses the child grammar, not a JS statement
           // list. Read it now, then blank it for the outer host `if` parse.

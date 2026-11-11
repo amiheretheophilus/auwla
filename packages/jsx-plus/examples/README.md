@@ -6,7 +6,7 @@ Run commands below from `packages/jsx-plus` using the installed workspace depend
 | --- | --- |
 | [counter.auwla](counter.auwla) | The smallest state/event/direct-expression example |
 | [task-board/App.auwla](task-board/App.auwla) | A complete task board: derived lists/counts, search, status filters, form submission, existing refs, direct `if`, `.map()`, quoted text and row events |
-| [task-board/ForLoop.auwla](task-board/ForLoop.auwla) | Ordinary `for...of` builds row markup before the UI; independent row callbacks, filtering and add/remove |
+| [task-board/ForLoop.auwla](task-board/ForLoop.auwla) | A direct `for (const task of visible) { <li key=...> }` loop in the markup; independent row callbacks, filtering and add/remove |
 | [checking/App.auwla](checking/App.auwla) | Small typed-prop/ref example used by the mapper checks |
 | [checking/TypeError.auwla](checking/TypeError.auwla) | Deliberately invalid method call for inspecting authored diagnostics |
 
@@ -33,9 +33,10 @@ bun run examples/task-board/preview.ts --for-loop
 bun run examples/task-board/preview.ts --for-loop --build
 ```
 
-`ForLoop.auwla` uses `for (const task of visible)` outside markup, pushes each
-row into `rows`, then renders `<ul>rows</ul>`. This is existing host JavaScript;
-direct `for` statements inside markup are still planned.
+`ForLoop.auwla` writes `for (const task of visible) { <li key={task.id}>...</li> }`
+directly inside `<ul>`. Each row gets its own `task` binding, so its toggle and
+remove handlers act on that row. The loop accepts any iterable and becomes
+`Array.from(visible, (task) => <li ...>)`; see [direct loops](../../../wiki2/syntax.md#direct-loops).
 
 For authored TypeScript checking, including its entrypoint:
 

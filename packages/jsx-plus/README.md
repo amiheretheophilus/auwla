@@ -31,8 +31,10 @@ bun run examples/task-board/preview.ts
 Open `http://127.0.0.1:3030`. [The examples guide](examples/README.md) includes
 build-only/type-check commands and the source walkthrough. Checks read the actual
 `.auwla` file and exercise the main authoring flow in both compiler modes.
-`--for-loop` selects [the ordinary loop variant](examples/task-board/ForLoop.auwla),
-which collects row values with host JavaScript before rendering the array.
+`--for-loop` selects [the loop variant](examples/task-board/ForLoop.auwla),
+which writes `for (const task of visible) { <li key={task.id}>...</li> }`
+directly in the markup. Direct loops accept any iterable and lower to
+`Array.from(iterable, (binding) => row)`; see [direct loops](../../wiki2/syntax.md#direct-loops).
 
 Extended attributes accept `aria-label=("Remove " + task.title)` alongside
 existing `aria-label={...}`. Parentheses delimit an ordinary value; event callbacks

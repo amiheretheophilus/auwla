@@ -21,7 +21,8 @@
         { "$ref": "#/$defs/element" },
         { "$ref": "#/$defs/fragment" },
         { "$ref": "#/$defs/expression" },
-        { "$ref": "#/$defs/conditional" }
+        { "$ref": "#/$defs/conditional" },
+        { "$ref": "#/$defs/loop" }
       ]
     },
     "children": { "type": "array", "items": { "$ref": "#/$defs/child" } },
@@ -82,6 +83,18 @@
             { "type": "null" }
           ]
         }
+      }
+    },
+    "loop": {
+      "type": "object",
+      "required": ["kind", "range", "binding", "iterable", "body"],
+      "additionalProperties": false,
+      "properties": {
+        "kind": { "const": "for" },
+        "range": { "$ref": "#/$defs/range" },
+        "binding": { "$ref": "#/$defs/expression" },
+        "iterable": { "$ref": "#/$defs/expression" },
+        "body": { "$ref": "#/$defs/block" }
       }
     }
   }

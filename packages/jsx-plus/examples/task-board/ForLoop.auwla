@@ -26,39 +26,12 @@ export function App() {
     tasks = tasks.filter(task => task.id !== id);
   }
 
-  // This is an ordinary host-language loop before the surrounding markup.
-  // Its JSX values are collected explicitly, then rendered as an array child.
-  const rows: JSX.Element[] = [];
-  for (const task of visible) {
-    rows.push(
-      <li data-task-id=(task.id)>
-        <button
-          type="button"
-          class="task-toggle"
-          aria-pressed=(task.done)
-          onClick=(() => task.done = !task.done)
-        >
-          <span class="task-status">task.done ? "Done" : "Open"</span>
-          <span>task.title</span>
-        </button>
-        <button
-          type="button"
-          class="remove"
-          aria-label=("Remove " + task.title)
-          onClick=(() => removeTask(task.id))
-        >
-          "Remove"
-        </button>
-      </li>
-    );
-  }
-
   return (
     <main class="task-board">
       <header>
         <p class="eyebrow">"Auwla authoring example"</p>
         <h1>"Task rows with a for loop."</h1>
-        <p>"Build the rows in JavaScript, then render the array below."</p>
+        <p>"The rows come from a for...of loop written directly in the markup."</p>
       </header>
       <div class="add-task">
         <button type="button" class="add" onClick=addTask>"Add task"</button>
@@ -67,7 +40,31 @@ export function App() {
         </button>
       </div>
       <p class="summary">`${remaining} ${remaining === 1 ? 'task' : 'tasks'} left`</p>
-      <ul class="tasks">rows</ul>
+      <ul class="tasks">
+        // A direct loop: one keyed <li> per task, each with its own `task`
+        // binding for the row's handlers. Any iterable works, as in for...of.
+        for (const task of visible) {
+          <li key={task.id} data-task-id=(task.id)>
+            <button
+              type="button"
+              class="task-toggle"
+              aria-pressed=(task.done)
+              onClick=(() => task.done = !task.done)
+            >
+              <span class="task-status">task.done ? "Done" : "Open"</span>
+              <span>task.title</span>
+            </button>
+            <button
+              type="button"
+              class="remove"
+              aria-label=("Remove " + task.title)
+              onClick=(() => removeTask(task.id))
+            >
+              "Remove"
+            </button>
+          </li>
+        }
+      </ul>
       if (visible.length === 0) {
         <p class="empty" role="status">"No open tasks."</p>
       }

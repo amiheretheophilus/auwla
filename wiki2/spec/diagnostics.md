@@ -1,6 +1,6 @@
 # Syntax diagnostics
 
-0.1-draft, revision 4. Codes below are **proposed for the extension**; they have
+0.1-draft, revision 5. Codes below are **proposed for the extension**; they have
 not been added to compiler-next's current `CompileError` API.
 
 ## Format and locations (D-FORMAT)
@@ -35,10 +35,11 @@ retain their host diagnostics and are mapped back to authored locations.
 | JPX1003 | String/template child or parenthesized attribute token is unterminated | Opening quote/backtick, one UTF-16 unit |
 | JPX1004 | Expression has begun but is incomplete at its body end | The body-end delimiter, or EOF |
 | JPX1005 | Missing separator between same-line non-joining expressions or before an ambiguous sibling opening tag | First token of the intended next child |
-| JPX1006 | Direct `if`/`else` body is not a block | First token where the required `{` was expected |
+| JPX1006 | Direct `if`/`else` or `for` body is not a block | First token where the required `{` was expected |
 | JPX1007 | Conditional child block is unclosed at EOF | The opening `{` |
 | JPX1008 | Parenthesized attribute expression has no matching outer `)` | The opening `(` |
 | JPX1009 | Undelimited attribute value is not a single host identifier | The undelimited value, up to attribute whitespace or `>`/`/>` |
+| JPX1010 | Child loop is not `for (const binding of iterable)`: `let`/`var`, no declaration, `for...in`, C-style or `for await` | The `for` keyword |
 
 Do not infer duplicate-attribute, unknown-tag, unknown-method or key restrictions
 from this table. Existing JSX/host rules and agreed framework contracts decide

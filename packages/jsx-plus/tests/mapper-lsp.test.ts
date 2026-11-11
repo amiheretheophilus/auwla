@@ -104,6 +104,38 @@ it('gets authored diagnostics and safe ref rename edits from the real TypeScript
   });
 }, 25000);
 
+it('renames a direct loop binding only within its loop', async () => {
+  // ForLoop.auwla also has unrelated `task` parameters in filter callbacks.
+  const file = resolve(taskBoardRoot, 'ForLoop.auwla');
+  const uri = documentUri(taskBoardRoot, 'ForLoop.auwla');
+  const source = readFileSync(file, 'utf8');
+  const loopStart = source.indexOf('for (const task of visible)');
+  const loopEnd = source.indexOf('</ul>', loopStart);
+  const binding = loopStart + 'for (const '.length;
+
+  await withLanguageServer(taskBoardRoot, {}, async (server) => {
+    await server.show(uri, source);
+    expect(await server.diagnostics(uri)).toEqual([]);
+    const rename = await server.request<WorkspaceEdit>('textDocument/rename', {
+      textDocument: { uri }, position: positionAt(source, binding), newName: 'row',
+    });
+
+    const edits = singleFileEdits(rename, file);
+    const starts = edits.map((edit) => offsetAt(source, edit.range.start));
+    expect(starts).toContain(binding);
+    // Every use in the row, and nothing outside the loop. Uses are the binding
+    // (`task of`) and member reads (`task.id`); this skips the comment's
+    // backticked word and class names such as `task-toggle`.
+    const usesInLoop = [...source.slice(loopStart, loopEnd).matchAll(/\btask(?=[.\s])/g)].length;
+    expect(edits).toHaveLength(usesInLoop);
+    expect(starts.every((start) => start >= loopStart && start < loopEnd)).toBe(true);
+
+    const renamed = applyRename(source, edits, 'task', 'row');
+    await server.show(uri, renamed);
+    expect(await server.diagnostics(uri)).toEqual([]);
+  });
+}, 25000);
+
 it('renames changing state through the primary view without supplemental edits', async () => {
   const source = flow.cases.find((fixture) => fixture.id === 'FLOW-TYPE-002')!.source;
   const file = resolve(exampleRoot, 'App.auwla');

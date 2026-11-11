@@ -1,6 +1,6 @@
 # Core semantics
 
-0.1-draft, revision 4. Compiler-next's existing rules remain authoritative for
+0.1-draft, revision 5. Compiler-next's existing rules remain authoritative for
 host execution, reactivity, readiness, ownership and delivery.
 
 ## Expression children (S-EXPR)
@@ -77,6 +77,53 @@ names in their ordinary enclosing scope, and normal functions introduce their
 normal scopes. Direct declarations/abrupt statements within child blocks are
 deferred. Do not settle those future semantics by wrapping the block in an IIFE.
 
+## Loop children (S-FOR)
+
+At a loop's position, evaluate the iterable expression once for that evaluation
+and iterate it. For each value, bind a fresh `const` binding (destructuring as
+in host code) and evaluate the body's child items in order. Children of all
+iterations appear in iteration order; an empty iterable produces none. Nested
+conditions and loops follow their own rules inside each iteration.
+
+```tsx
+<ul>
+  for (const task of visible) {
+    <li key={task.id}>task.title</li>
+  }
+</ul>
+```
+
+is equivalent in child production to existing JSX:
+
+```tsx
+<ul>{Array.from(visible, (task) => <li key={task.id}>{task.title}</li>)}</ul>
+```
+
+When the body is exactly one element or fragment, that markup is the row. Its
+`key` is the row key, under the existing list identity rules (S-LIST). A body
+with several children produces one fragment row per iteration, as
+`Array.from(visible, (task) => <>...</>)` would. Prefer one keyed element per
+iteration when rows can move.
+
+Scope: each iteration has its own binding, so closures created in the body
+capture that iteration's value, as with `for (const ...)` in host code. `this`,
+`arguments` and `new.target` keep their enclosing meaning.
+
+Stated deviations from a host statement loop:
+
+- The body is a callback in the normalized program. `await` and `yield` in a
+  loop body are therefore errors, reported by host validation at their authored
+  location. This is explicit, unlike a hidden wrapper inventing control flow.
+- A non-iterable array-like value (an object with `length`) is read by index
+  rather than throwing, because `Array.from` accepts array-likes.
+- The generated code reads the global `Array`; a local binding named `Array` in
+  scope is not supported.
+
+A loop is a list region in the existing pipeline. When its inputs change, it
+re-evaluates as the equivalent `Array.from(...)` expression would. Existing row
+optimizations may apply; the compiler treats `Array.from(x, callback)` like
+`x.map(callback)` for that purpose.
+
 ## Lists and ordinary host forms (S-LIST)
 
 `items.map(item => <li key={item.id}>item.title</li>)` is a normal expression
@@ -86,8 +133,8 @@ unknown call is not rejected because its spelling is unfamiliar.
 
 Existing `key={...}` placement, evaluation order and list identity apply. A moved
 row keeps exactly the state/refs/resources that the same existing-JSX program
-keeps. New direct-loop syntax is a separate future construct; `.map()` does not
-wait for it and is not implemented again.
+keeps. Direct loops (S-FOR) are a separate construct with the same identity
+rules; `.map()` stays an ordinary expression and is not implemented again.
 
 ## Existing refs and attributes (S-REF)
 

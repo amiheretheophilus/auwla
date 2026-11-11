@@ -1,6 +1,6 @@
 # Core grammar
 
-0.1-draft, revision 4. Status: provisional executable-design target.
+0.1-draft, revision 5. Status: provisional executable-design target.
 
 ## Host language and lexical contexts (G-HOST)
 
@@ -40,10 +40,11 @@ ExtendedMarkup  ::= Element | Fragment
 Element         ::= JSXSelfClosingElement
                   | JSXOpeningElement ChildBody JSXClosingElement
 Fragment        ::= "<>" ChildBody "</>"
-ChildBody       ::= (Trivia | EmptyChild | ConditionalChild | ExpressionChild)*
+ChildBody       ::= (Trivia | EmptyChild | ConditionalChild | LoopChild | ExpressionChild)*
 EmptyChild      ::= ";"
 ConditionalChild ::= "if" "(" HostExpression ")" ChildBlock
                      ("else" (ConditionalChild | ChildBlock))?
+LoopChild       ::= "for" "(" "const" HostBindingPattern "of" HostAssignmentExpression ")" ChildBlock
 ChildBlock      ::= "{" ChildBody "}"
 ExpressionChild ::= HostAssignmentExpression ChildEnd
 ChildEnd        ::= ";" | HostASI | BodyEnd | AdjacentMarkupBoundary
@@ -89,8 +90,10 @@ spelling on that line. HTML comment syntax has no special child-body meaning.
    end after a complete expression. Thus `<p>count + 1</p>` needs no semicolon.
    Body-end recognition applies only at the current nesting level and outside
    host tokens. Nested function/object/template delimiters are not body ends.
-4. After a complete bare element/fragment child, another opening tag at the same
-   child level starts a sibling: `<div><A /><B /></div>`. An ordinary postfix
+4. After a complete bare element/fragment child, another opening tag or a direct
+   `if`/`for` at the same child level starts a sibling: `<div><A /><B /></div>`,
+   `<ul><li>"first"</li> if (more) { ... }</ul>`. A statement keyword can never
+   continue an expression, so this is unambiguous. An ordinary postfix
    continuation belongs to its expression: `<A />.value` is one member expression.
    If an expression starting with markup could be confused with sibling tags,
    parentheses explicitly select the host expression, e.g. `(<A /> < limit)`.
@@ -137,10 +140,32 @@ with that conditional exactly as in host control flow.
 ```
 
 The core child blocks contain child items, not arbitrary statement lists.
-Declarations, direct loops and outward `return`/`break`/`continue` inside those
-blocks await a later profile. Their behavior MUST NOT be invented through a hidden
-function wrapper. Ordinary function expressions inside an expression child have
-ordinary host bodies and statements.
+Declarations and outward `return`/`break`/`continue` inside those blocks await a
+later profile. Their behavior MUST NOT be invented through a hidden function
+wrapper. Ordinary function expressions inside an expression child have ordinary
+host bodies and statements. Direct loops are defined by G-FOR.
+
+## Loop children (G-FOR)
+
+`for` begins a loop child only at a child-item boundary, including inside a
+conditional or loop block. The only loop form is `for (const binding of iterable)`
+with a block body. The binding is any host binding pattern: an identifier or a
+destructuring pattern such as `[index, task]`. The iterable is an ordinary host
+expression.
+
+```auwla
+<ul>
+  for (const task of visible) {
+    <li key={task.id}>task.title</li>
+  }
+</ul>
+```
+
+The body is a ChildBlock: it holds child items (text, expressions, markup,
+nested `if` and `for`), not statements. These are JPX1010: `let`/`var`
+bindings, a missing declaration, `for...in`, C-style `for (;;)` and
+`for await`. A non-block body is JPX1006. `break`, `continue`, `return` and
+declarations in the body are outside this profile.
 
 ## Attributes and existing refs (G-ATTR)
 

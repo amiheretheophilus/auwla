@@ -8,7 +8,7 @@ import type { IfStatement, Node, SequenceExpression } from 'yuku-parser';
 import {
   childExpression, childStatements, closingDelimiter, firstError, hasError, isMarkupOpening, type HostFragment,
 } from '../host';
-import type { BlockView, ChildView, ExpressionView, IfView, Range } from '../model';
+import type { BlockView, ChildView, ExpressionView, ForView, IfView, Range } from '../model';
 import { assemble, generated, replaceRange, type Piece } from '../source';
 import type { Children, Markup, MarkupContext } from './context';
 
@@ -152,6 +152,13 @@ class ChildReader {
     for (const node of fragment.statements) {
       if (node.type === 'EmptyStatement') continue;
 
+      if (node.type === 'ForOfStatement' || node.type === 'ForInStatement' || node.type === 'ForStatement') {
+        const loop = this.loop(node, base);
+        views.push(loop.view);
+        pieces.push(generated('{'), ...loop.pieces, generated('}'));
+        continue;
+      }
+
       if (node.type === 'IfStatement') {
         const condition = this.conditional(node, base);
         views.push(condition.view);
@@ -219,29 +226,64 @@ class ChildReader {
     return { kind: 'expression', range: [start, end], source: this.source.slice(start, end) };
   }
 
-  private block(node: Node, base: number): Child<BlockView> {
+  /** The child block of an `if`/`else` or `for`; `owner` names that construct in errors. */
+  private block(node: Node, base: number, owner: 'Conditional' | 'Loop'): Child<BlockView> {
     const start = base + node.start;
     const end = base + node.end;
     if (node.type !== 'BlockStatement') {
-      this.context.error('JPX1006', 'Conditional children require a block body', start, end);
+      this.context.error('JPX1006', `${owner} children require a block body`, start, end);
     }
-    // The body scanner reads every child-level `if`/`else` block with the
-    // child grammar before the surrounding statement is parsed. Reading it
+    // The body scanner reads every child-level `if`/`else`/`for` block with
+    // the child grammar before the surrounding statement is parsed. Reading it
     // here instead would apply statement grammar to children, so refuse.
     const children = this.context.blocks.get(start);
     if (children === undefined) {
-      this.context.error('INTERNAL', 'Conditional block was not read by the body scanner', start, end);
+      this.context.error('INTERNAL', `${owner} block was not read by the body scanner`, start, end);
     }
     return { view: { kind: 'block', range: [start, end], children: children.views }, pieces: children.pieces };
+  }
+
+  /**
+   * `for (const binding of iterable) { ... }` becomes
+   * `Array.from(iterable, (binding) => row)` (S-FOR). A body that is exactly one
+   * element or fragment is the row, so its `key` is the row key; any other
+   * body becomes a fragment per iteration.
+   */
+  private loop(node: Node, base: number): Child<ForView> {
+    const start = base + node.start;
+    if (node.type !== 'ForOfStatement' || node.await || node.left.type !== 'VariableDeclaration'
+      || node.left.kind !== 'const' || node.left.declarations.length !== 1) {
+      this.context.error('JPX1010', 'A child loop must be written `for (const item of items) { ... }`', start, start + 'for'.length);
+    }
+
+    const pattern = node.left.declarations[0]!.id;
+    const binding = this.expressionView(base + pattern.start, this.authoredEnd(base + pattern.end));
+    const iterable = this.expressionView(base + node.right.start, this.authoredEnd(base + node.right.end));
+    const body = this.block(node.body, base, 'Loop');
+
+    const only = body.view.children.length === 1 ? body.view.children[0]! : undefined;
+    const row = only?.kind === 'element' || only?.kind === 'fragment'
+      ? body.pieces
+      : [generated('<>'), ...body.pieces, generated('</>')];
+    const pieces = [
+      generated('Array.from('), ...replaceRange(this.source, iterable.range[0], iterable.range[1], this.nested),
+      generated(', ('), ...replaceRange(this.source, binding.range[0], binding.range[1], this.nested),
+      generated(') => '), ...row, generated(')'),
+    ];
+
+    return {
+      view: { kind: 'for', range: [start, base + node.end], binding, iterable, body: body.view },
+      pieces,
+    };
   }
 
   /** `if (test) {...} else ...` becomes `(test)?<>...</>:...` with `null` for a missing else. */
   private conditional(node: IfStatement, base: number): Child<IfView> {
     const test = this.expressionView(base + node.test.start, this.authoredEnd(base + node.test.end));
-    const consequent = this.block(node.consequent, base);
+    const consequent = this.block(node.consequent, base, 'Conditional');
     const alternate = node.alternate === null ? null
       : node.alternate.type === 'IfStatement' ? this.conditional(node.alternate, base)
-        : this.block(node.alternate, base);
+        : this.block(node.alternate, base, 'Conditional');
 
     // The authored `if (...)` groups the entire test. Keep that grouping when
     // lowering to a ternary, including assignment, comma and nested ternaries.

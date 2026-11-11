@@ -97,8 +97,52 @@ quoted/expression/conditional fixtures into supported standard TSX.
 
 The `if` block's braces express its block; there is no extra pair around the
 whole `if`. Chained calls, ternaries, functions and computed reads must remain
-ordinary expressions. A direct `for...of` is a later candidate with the same list
-identity requirements; exact loop grammar is open.
+ordinary expressions. Direct loops are below.
+
+## Direct loops
+
+Spec: [G-FOR](spec/grammar.md#loop-children-g-for) and
+[S-FOR](spec/semantics.md#loop-children-s-for); decision DX-35.
+
+```auwla
+<ul>
+  for (const task of visible) {
+    <li key={task.id}>task.title</li>
+  }
+</ul>
+```
+
+normalizes to `<ul>{Array.from(visible, (task) => <li key={task.id}>{task.title}</li>)}</ul>`.
+
+- **Body scan** (`markup/element.ts`): a `(` after child-level `for` is a
+  header, exactly like `if`. The `{` after its `)` is a child block that is
+  read with the child grammar and cached.
+- **Lowering** (`markup/children.ts`, `loop()`): the iterable and binding are
+  copied exactly, in generated order iterable-first; `Array.from(`, `, (`,
+  `) => ` and `)` are generated and unmapped. A single element/fragment body is
+  the row (its `key` is the row key); anything else is wrapped in `<>...</>`.
+- **Rejected forms**: JPX1010 for anything but `for (const ... of ...)`; JPX1006
+  for a non-block body; statements in the body are outside the profile; `await`
+  in a body fails host validation at its authored location.
+
+Evidence: spec fixtures PARSE-009, ERROR-009/010, FOR-001 (keyed reorder keeps
+nodes) and FOR-002 (a `Set` with per-row closures), in both compiler modes.
+`tests/loops.test.ts` covers destructuring, nesting, multi-child rows, all
+rejected forms and exact binding/iterable mappings via TypeScript's `SpanMap`.
+[ForLoop.auwla](../packages/jsx-plus/examples/task-board/ForLoop.auwla) uses a
+direct loop with per-row toggle/remove handlers. It runs in both modes, builds
+and type-checks through the TS7 CLI. A real LSP rename of its loop binding edits
+only uses inside the loop.
+
+Known limits (compiler-next, same as plain JSX `Array.from`):
+
+- Compiled keyed rows (`createRowList`) are produced only for `x.map(cb)`, so
+  loops use the general keyed list path. Teaching compiler-next to treat
+  `Array.from(x, cb)` like `x.map(cb)` is the pending P4-FOR-FAST slice.
+- Writes through a row binding (`task.done = ...`) are tracked when iterating a
+  state-derived array directly, but **not** through `visible.entries()`.
+  Compiler-next does not know `entries()` yields the array's own elements.
+  Plain JSX `Array.from(visible.entries(), ...)` behaves the same.
 
 ## Initial answers and remaining investigations
 
@@ -162,7 +206,7 @@ The package parses semicolon-separated child chunks in expression context first,
 including object/function/class values following another child. Conditional child
 bodies are parsed/cached before their contents are blanked for the host `if`
 parse. Host continuation/ASI within a chunk still comes from yuku. Direct child
-declarations/loops remain outside the first core profile.
+declarations remain outside the core profile; direct loops are covered above.
 
 Parser-only async/generator contexts preserve `yield`/`await`, including yield
 arguments in attributes and conditions. No runtime function is inserted; final

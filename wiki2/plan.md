@@ -31,7 +31,8 @@ depends on integration, acceptance and measurements.
 | P3-RECOVERY | First requested step built | Native host recovery and bounded markup-line quarantine preserve unrelated current-source diagnostics/completion; builds remain strict | [recovery](recovery.md) |
 | P3-HANDLER-IMPORT | Done: requested step 2 | Imported bare handler runs in both modes. Native completion plus auto-import at the end of a bare attribute or child reproduces the authored file and rechecks; required end anchors in `checking/spans.ts` | [tooling](tooling.md) |
 | P3-EDITOR | Candidate | Thin VS Code extension: `auwla` language registration, TSX-derived TextMate grammar, mapper registration via TS7's `registerContentMappers`; verify real activation | [tooling](tooling.md#editor-extension-planned-p3-editor) |
-| P4-DIRECT-FOR | Requested step 3 | Define and implement direct `for...of` children with ordinary scope and existing renderer behavior | [syntax](syntax.md) |
+| P4-DIRECT-FOR | Done: requested step 3, spec r5 | `for (const b of iterable) { children }` lowers to `Array.from`; fixtures, example, rename and both-mode execution checked | [syntax](syntax.md#direct-loops) |
+| P4-FOR-FAST | Next candidate (DX-34/35) | Teach compiler-next's compiled-row path to accept `Array.from(x, cb)` like `x.map(cb)`, and consider tracking row writes through `entries()`/`values()`. Log each change for reconciliation | [syntax](syntax.md#direct-loops) |
 | P4-FLOW | First fixtures built; expand later | Basic direct `if` and `.map()` fixtures execute; extend scope, owner/disposal and readiness interleavings before full flow acceptance | [syntax](syntax.md), [testing](testing.md) |
 | P5-EVENT | Candidate | Settle event-expression meaning; demonstrate one ordinary handler and one shorthand with identical timing | [features](features.md) |
 | P6-BIND | Candidate | Settle named text/checkbox bindings, write typing and handler order; show one form | [features](features.md) |

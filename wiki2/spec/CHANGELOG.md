@@ -1,5 +1,26 @@
 # Spec revisions
 
+## 0.1-draft, revision 5 — 2026-11-11
+
+- User-requested direct loops (step 3; DX-35). New G-FOR/S-FOR: a child-level
+  `for (const binding of iterable) { children }` with any binding pattern. The
+  body holds child items only, like `if` blocks.
+- Lowering is `{Array.from(iterable, (binding) => row)}`. A body that is one
+  element or fragment is the row, so its `key` is the row key; otherwise it is
+  one fragment per iteration. Any iterable works.
+- Stated deviations: `await`/`yield` in a loop body are errors (it is a callback
+  in the normalized program); a non-iterable array-like is read by index; a local
+  `Array` binding is unsupported. The earlier "no hidden function wrapper" rule
+  still holds: this callback is specified, not hidden.
+- New JPX1010 for other loop forms (`let`/`var`, no declaration, `for...in`,
+  C-style, `for await`). JPX1006 now also covers a non-block loop body.
+- G-BOUNDARY rule 4 extended: after complete markup, a direct `if`/`for` on the
+  same line starts a sibling. Previously `<li/> if (x) {...}` on one line reported
+  a misleading JPX1007.
+- New `Loop` syntax-view node in ast.md and ast.schema.json. Add PARSE-009,
+  ERROR-009, ERROR-010, FOR-001 (keyed reorder keeps nodes) and FOR-002 (a `Set`
+  iterable with per-iteration closures).
+
 ## 0.1-draft, revision 4 — 2026-11-11
 
 - Diagnostics only; no accepted syntax or meaning changes. Inputs that were

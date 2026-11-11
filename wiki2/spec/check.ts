@@ -20,7 +20,7 @@ const { parse } = await import(pathToFileURL(requireCompiler.resolve('yuku-parse
 const catalog = JSON.parse(readFileSync(resolve(import.meta.dirname, 'cases.json'), 'utf8'));
 const schema = JSON.parse(readFileSync(resolve(import.meta.dirname, 'ast.schema.json'), 'utf8'));
 assert.equal(catalog.specVersion, '0.1-draft');
-assert.equal(catalog.revision, 4);
+assert.equal(catalog.revision, 5);
 assert.equal(schema.properties.specVersion.const, catalog.specVersion);
 
 const documents = readdirSync(import.meta.dirname)
@@ -40,7 +40,7 @@ function range(source: string, span: number[], parent = [0, source.length]): voi
 
 function view(source: string, node: any, parent?: number[]): void {
   range(source, node.range, parent);
-  assert(['element', 'fragment', 'expression', 'if', 'block'].includes(node.kind));
+  assert(['element', 'fragment', 'expression', 'if', 'for', 'block'].includes(node.kind));
 
   if (node.kind === 'expression') {
     assert.equal(source.slice(node.range[0], node.range[1]), node.source);
@@ -62,6 +62,17 @@ function view(source: string, node: any, parent?: number[]): void {
       assert(['block', 'if'].includes(node.alternate.kind));
       view(source, node.alternate, node.range);
     }
+    return;
+  }
+
+  if (node.kind === 'for') {
+    assert.equal(node.binding.kind, 'expression');
+    assert.equal(node.iterable.kind, 'expression');
+    assert.equal(node.body.kind, 'block');
+    assert(source.slice(node.range[0]).startsWith('for'));
+    view(source, node.binding, node.range);
+    view(source, node.iterable, node.range);
+    view(source, node.body, node.range);
     return;
   }
 

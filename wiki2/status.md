@@ -12,7 +12,10 @@ it as `onClick=focusTaskInput`, and execution checks click it in both modes.
 Typing `onClick=focusTask` without the import and accepting TypeScript's
 completion adds the import and reproduces the authored file
 (`tests/handler-import-lsp.test.ts`). That needed end anchors in
-`checking/spans.ts`; see [tooling](tooling.md). Step 3 has not started.
+`checking/spans.ts`; see [tooling](tooling.md). Step 3 is done (spec r5,
+DX-35): `for (const task of tasks) { <li key={task.id}>...</li> }` in markup
+lowers to `Array.from(tasks, (task) => row)`. `ForLoop.auwla` uses it; see
+[direct loops](syntax.md#direct-loops). All three requested steps are complete.
 
 ## This session: review and cleanup
 
@@ -38,19 +41,24 @@ duplication and readability before new features. Done, in separate commits:
 
 ## Evidence
 
-At the latest commit: JSX+ `bun check` reports no errors across 216 files.
-JSX+ `bun test` passes **188 tests, 0 failures**, in thirteen files. The three
-anchor/auto-import tests fail without `checking/spans.ts`. They include the
-34 checking-flow targets, real TypeScript 7 CLI/LSP renames, completions and recovery.
-`bun run wiki2/spec/check.ts` passes 34 fixtures (8 diagnostics). The
-`preview.ts --build` task-board build succeeds. `git diff --check` passes. No
+At the latest commit: JSX+ `bun check` reports no errors across 217 files.
+JSX+ `bun test` passes **215 tests, 0 failures**, in fourteen files. They include
+the 34 checking-flow targets, real TypeScript 7 CLI/LSP renames, completions,
+auto-imports and recovery. The three anchor/auto-import tests fail without
+`checking/spans.ts`. `bun run wiki2/spec/check.ts` passes 39 fixtures
+(9 parse, 10 diagnostics); the loops' `Array.from` JSX equivalents run in both
+compiler modes. Both `preview.ts --build` variants succeed, and the task-board
+tsconfig type-checks through the TS7 CLI with the mapper. `git diff --check` passes. No
 sub-agents were used. Compiler-next and runtime sources are unchanged in this
 session. Not run: the full root suite, performance, browser layout and IDE activation.
 
 ## Continue
 
-1. P4-DIRECT-FOR (requested step 3): draft the grammar and fixtures first, then
-   implement and run real application/ownership checks.
+1. P4-FOR-FAST (DX-34/35): teach compiler-next's compiled-row path
+   (`optimize/methods.ts`, `optimize/closed-lists.ts`, `optimize/row-lists.ts`)
+   to accept `Array.from(x, cb)` like `x.map(cb)`. Evidence target:
+   `createRowList` appears for a direct loop. Consider row-write tracking through
+   `entries()`/`values()` too. Log changes in the reconcile table below.
 2. P3-EDITOR (candidate): a thin VS Code extension for language registration,
    highlighting and mapper registration via TS7's `registerContentMappers`.
    See [tooling](tooling.md#editor-extension-planned-p3-editor).
