@@ -480,6 +480,21 @@ nor collect waiting from what it runs. Retained declarations
 (`retainSourceValue`) keep every input: that list is the request's identity.
 `eval` or `with` anywhere in the graph keeps everything.
 
+### Reads the compiler cannot name
+
+Some reads reach a source by a path no input names: a computed key (`queries[tab].name`), a class
+field (`store.user.name`), a `Map` (`map.get('user').name`), a call (`sources[0]().name`, where the
+helper returns a waiting marker). The guard's inputs cannot list that source, so the read reaches
+the transparent handle and throws `UnresolvedDataReadError` (or the source's failure, or
+`readSourceValue` meets the marker). The guard runs the computation through `computeOrWait`
+(`packages/data/src/source-readiness.ts`), the one runtime `catch` (`../decisions.md`,
+2026-11-11): such an error carries its sources, the computation waits for them as for a named input,
+and what the code left open is restored as after an authored `try` (`captureBuildScope`). Any other
+error is rethrown. Before, these crashed while the source loaded. The reference's `$when` catches
+its own not-ready error the same way, and reads through a call's result with `$value`. Cases:
+`tests/cases/sources.unnamed.test.ts`; the rethrow, which the harness cannot expect, in
+`features/sources/unnamed.dom.test.ts`.
+
 ## Cases to test
 
 `tests/cases/sources.test.ts`: 88 cases, all passing on the reference. Ten component
@@ -592,7 +607,9 @@ behaviour. Each gets a case when a compiler slice touches it:
 
 - More interleavings of shared owners and source generations under `suspend`.
 - Computed paths (`props[key].name`) and sources inside class instances or
-  Maps: `$path` follows static names (and constant keys, `box[0]`) through plain data only.
+  Maps: `$path` follows static names (and constant keys, `box[0]`) through plain data only. Such a
+  read now waits through `$when`'s catch ("Reads the compiler cannot name"), but `$path` still does
+  not name the source as an input.
 - `const promise = Promise.resolve({ id }); const user = $read(promise)`, then
   `id++; $track(user).refresh()`. compiler-next shows the new `id`, as the old compiler's test
   asserts (`data-forms-read-compile.test.ts`). The reference refreshes the first promise and keeps

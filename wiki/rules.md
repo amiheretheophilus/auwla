@@ -20,7 +20,9 @@ Stated by the user on 2026-10-18. They apply to every design and every fix.
 4. **Opaque fallback.** What the compiler cannot prove is handled conservatively
    (opaque), not rejected with an error.
 5. **No try/catch/finally.** Never wrap generated or authored code in them.
-   The user: "not acceptable".
+   The user: "not acceptable". One exception, in the data runtime: the guard around a source read
+   catches only "this source has not loaded" or that source's failure, and waits
+   (`decisions.md`, 2026-11-11). Generated code still has none.
 6. **Keep list performance.** Lists sometimes beat Solid. Do not regress them;
    check `bench/` when touching list code.
 7. **Do not edit failing test cases to make them pass.** Fix the compiler or

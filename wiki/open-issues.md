@@ -37,14 +37,6 @@ Compiler bugs and cases live on their `compiler/` page, under "Cases to test".
   component with an endless loop would hang the build, as it would hang the browser. Recommended:
   run it. Work is proceeding this way, and can be replaced by a model later if you prefer.
 
-- **A source reached in a way the compiler cannot name crashes while it loads.**
-  `queries[tab].name`, `store.user.name` on a class instance and `map.get('user').name` throw
-  `UnresolvedDataReadError` instead of waiting, against rule 8. Every such site already runs inside
-  `whenSourceInputs`, so a catch there that treats only this error as "waiting" and rethrows anything
-  else would fix them all, including `getUser().name`. But that wraps authored code in a runtime
-  `try`, which rule 5 forbids, so it was not done. The alternative is static: naming computed keys,
-  class fields and `Map.get` in the read path, which is more code in the compiler, the data runtime
-  and the reference, and still leaves calls crashing. Recommended: allow the one catch.
 - **Uncompiled code editing data outside any call the compiler sees.** A package keeps a reference to
   `list`, and a later unrelated call pushes to it: the reference shows it and compiled code does not
   until that state updates (`handlers.md`). Seeing it means snapshotting every root that ever reached

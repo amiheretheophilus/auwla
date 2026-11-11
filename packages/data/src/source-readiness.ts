@@ -18,6 +18,7 @@ import {
   resolvedValuesError,
   retryResolvedValues,
   sourcesNotReady,
+  UnresolvedDataReadError,
 } from './transparent';
 import type { ResolvedValue } from './types';
 import { claimCreatedSource, isSourceComputation } from './source-scope';
@@ -326,7 +327,7 @@ export function whenSourceInputs<T>(readInputs: () => readonly unknown[], comput
 }
 
 /**
- * The one runtime `catch` around authored code (`wiki/decisions.md`, 2026-11-10). A read the
+ * The one runtime `catch` around authored code (`wiki/decisions.md`, 2026-11-11). A read the
  * compiler could not name (`queries[tab].name`, a class field, `map.get(key).name`, a call) reaches
  * a source with no payload yet, or a failed one, and throws. That computation waits for the source,
  * as it would for a named input (rule 8). Any other error is the program's own and is rethrown.
@@ -431,9 +432,14 @@ export function sourceSwitchInputs(
   return inputs;
 }
 
-/** Only guarded computations unwrap handles; ordinary JavaScript values pass through. */
+/**
+ * Only guarded computations unwrap handles; ordinary JavaScript values pass through. A helper that
+ * waits returns a marker, which reaches here when the call was one the compiler could not name
+ * (`sources[0]().name`): the read waits for the marker's sources (`computeOrWait`).
+ */
 export function readSourceValue<T>(value: T): T {
   if (value instanceof WaitingSourceInputs) {
+    if (value.sources.length > 0) throw new UnresolvedDataReadError(undefined, undefined, value.sources);
     throw new Error('[memo-dom] a compiler readiness guard missed a pending computation');
   }
 
