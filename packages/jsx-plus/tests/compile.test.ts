@@ -117,6 +117,25 @@ it('runs the package counter example through compiler-next', () => {
 });
 
 for (const optimize of [true, false]) {
+  it(`shows a row edit made through an entries() loop binding with optimize=${optimize}`, () => {
+    // `[index, task]` is destructured from each pair; compiler-next reports an edit
+    // through a destructured name (`features/handlers/plan.ts`, `patternRoot`).
+    const { container } = start(`export function App() {
+      let tasks = [{ id: 1, done: false }, { id: 2, done: false }];
+      return <ol>
+        for (const [index, task] of tasks.entries()) {
+          <li key={task.id}><button onClick=(() => task.done = !task.done)>index + 1; task.done ? "done" : "open"</button></li>
+        }
+      </ol>;
+    }`, optimize);
+    const buttons = () => [...container.querySelectorAll('button')];
+    expect(buttons().map((button) => button.textContent)).toEqual(['1open', '2open']);
+    buttons()[1]!.click();
+    expect(buttons().map((button) => button.textContent)).toEqual(['1open', '2done']);
+    buttons()[1]!.click();
+    expect(buttons().map((button) => button.textContent)).toEqual(['1open', '2open']);
+  });
+
   it(`runs the authored task board through its main editing flow with optimize=${optimize}`, () => {
     const source = readFileSync(new URL('../examples/task-board/App.auwla', import.meta.url), 'utf8');
     // The filter buttons and the task rows are direct loops in the markup; both

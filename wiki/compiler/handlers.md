@@ -160,9 +160,15 @@ A name that is not state can still hold state's objects: `const row = rows[0];
 row.label = 'b'`, a row's `item.done = true`, `first().label = 'b'`. Those edits go
 through the same runtime helpers with no version of their own, as an imported
 value's do (`features/handlers/plan.ts`, `aliasBindings`, `planCallRootedEdits`), and
-the alias index finds the state holding the object. Not included: a value the
-function just allocated and has not passed on (`isFreshLocal`), a plain function's
-parameter, whose caller observes the call, and a handler's own event parameter.
+the alias index finds the state holding the object. A destructured name counts
+the same as a plain one, judged by the declaration or parameter that owns its
+pattern (`patternRoot`). Examples: `task` in an `entries()` row
+`([index, task]) => <li/>`, `{ task }` taken from a row object, and
+`const [first] = rows`. Before 2026-11-11 such edits changed the object and
+nothing showed it (`features/handlers/aliases.test.ts`, both modes). Not
+included: a value the function just allocated and has not passed on
+(`isFreshLocal`), a plain function's parameter (plain or destructured), whose
+caller observes the call, and a handler's own event parameter.
 
 Component roots are watched by object identity through data fields; changed
 objects notify aliases and shallow copies that actually share them. Disposal

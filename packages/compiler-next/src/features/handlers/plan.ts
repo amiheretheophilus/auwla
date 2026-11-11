@@ -126,10 +126,28 @@ function aliasBindings(graph: SemanticGraph, entry: ResolvedModule, tracked: Rea
     if (isValueImport(binding) || isFreshLocal(binding)) continue;
 
     const name = binding.declarations[0];
-    const parent = name === undefined ? null : module.parentOf(name);
+    const parent = name === undefined ? null : module.parentOf(patternRoot(module, name));
     if (is.VariableDeclarator(parent) || (is.Function(parent) && containsJsx(parent))) aliases.push(node);
   }
   return aliases;
+}
+
+/**
+ * The declared pattern a name sits in: `[index, task]` for `task` in
+ * `([index, task]) => <li/>` (an `entries()` row), or in `const { item } = row`. Its
+ * owner decides as a plain name's would: what a destructured name holds can be
+ * state too.
+ */
+function patternRoot(module: ResolvedModule['module'], name: Node): Node {
+  let node = name;
+  for (;;) {
+    const parent = module.parentOf(node);
+    const inPattern = is.ArrayPattern(parent) || is.ObjectPattern(parent) || is.RestElement(parent)
+      || (is.AssignmentPattern(parent) && parent.left === node)
+      || (is.Property(parent) && parent.value === node && is.ObjectPattern(module.parentOf(parent)));
+    if (parent === null || !inPattern) return node;
+    node = parent;
+  }
 }
 
 /** The name a chain through a call starts from: `held` in `held.get('a').label`. Null without a call. */

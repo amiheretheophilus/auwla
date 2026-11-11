@@ -156,10 +156,11 @@ Known limits (compiler-next, same as plain JSX `Array.from`):
   on each pass. It does not skip rows whose item is unchanged (`moved`).
 - Only the intrinsic global `Array.from` is recognized. A module that declares or
   assigns `Array`, or defines its own `from`, keeps the general path.
-- Writes through a row binding (`task.done = ...`) are tracked when iterating a
-  state-derived array directly, but **not** through `visible.entries()`.
-  Compiler-next does not know `entries()` yields the array's own elements.
-  Plain JSX `Array.from(visible.entries(), ...)` behaves the same.
+- Fixed: writes through a destructured binding, such as
+  `for (const [index, task] of tasks.entries())`, were not shown, in plain JSX
+  too. Compiler-next now reports an edit through a destructured name
+  ([handlers](../wiki/compiler/handlers.md)). `tests/compile.test.ts` runs such a
+  loop in both modes.
 
 ## Initial answers and remaining investigations
 
