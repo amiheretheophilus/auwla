@@ -154,6 +154,9 @@ function applyDomProp(
   safeEvents: Set<string>,
 ): void {
   if (name === 'key' || name === 'children' || name === 'ref') return;
+  // A named slot's content (`slot:header`, compiler-next `features/slots/`), like `children`, is
+  // never an attribute, even when a slot component spreads its props onto an element.
+  if (name.startsWith('slot:')) return;
   if (/^on[A-Z]/.test(name)) {
     setEvent(
       element,

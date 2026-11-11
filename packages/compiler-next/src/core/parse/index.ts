@@ -11,6 +11,7 @@ import { langFromPath, parse } from 'yuku-parser';
 import type { SourceLang } from 'yuku-parser';
 import { CompileError } from '../diagnostics';
 import { lowerTypeScript, type LoweredRequireImport } from './lower-typescript';
+import { lowerSlots } from '../../features/slots/lower';
 
 export type { LoweredRequireImport } from './lower-typescript';
 
@@ -39,7 +40,10 @@ export function parseModule(path: string, authored: string): ParsedModule {
 
   const hasJsx = findAll(program, ['JSXElement', 'JSXFragment']).length > 0;
   if (lang !== 'ts' && lang !== 'tsx') {
-    return { path, lang, source: authored, hasJsx, requireImports: [], hasExportAssignment: false };
+    const source = hasJsx ? lowerSlots(path, authored) : authored;
+    return { path, lang, source, hasJsx, requireImports: [], hasExportAssignment: false };
   }
-  return { path, lang, hasJsx, ...lowerTypeScript(program, authored, lang, path) };
+  const lowered = lowerTypeScript(program, authored, lang, path);
+  // Slots become props (`features/slots/lower.ts`), on the text the TypeScript lowering left.
+  return { path, lang, hasJsx, ...lowered, source: hasJsx ? lowerSlots(path, lowered.source) : lowered.source };
 }

@@ -37,6 +37,7 @@ import type { BlockStatement, Expression, Node, Statement, VariableDeclarator } 
 import { installedResolver, sourcesOfOutput } from '../harness/installed';
 import { lowerWithTypeScript } from './typescript';
 import { callOnlyReads, literalFields } from './syntax-rules';
+import { lowerReferenceSlots } from './slots';
 import { blockThunk, constDeclaration, identifier, member, numberLiteral, runtimeCall, thunk } from './ast';
 import { ClosureCells } from './closures';
 import { enclosingFunction, Reads } from './reads';
@@ -178,7 +179,8 @@ export function toReferenceModules(sources: Readonly<Record<string, string>>, ru
 }
 
 function prepareReferenceModule(source: string, path: string): Module {
-  let module = analyze(withAmbientDataImports(prepareJsx(source), path), { path });
+  // Slots become plain props first, so every later pass sees ordinary JSX and bindings.
+  let module = analyze(withAmbientDataImports(prepareJsx(lowerReferenceSlots(source)), path), { path });
   if (module.diagnostics.length > 0) {
     const messages = module.diagnostics.map((diagnostic) => diagnostic.message).join('; ');
     throw new Error(`reference: ${path} does not parse: ${messages}`);

@@ -1624,6 +1624,8 @@ function updateProps(record: HostRecord, props: Record<string, unknown>): void {
 
   for (const [name, value] of Object.entries(props)) {
     if (name === 'key' || name === 'ref' || name === 'children' || name === 'suspend') continue;
+    // A named slot's content (`slot:header`, `slots.ts`), like `children`, is never an attribute.
+    if (name.startsWith('slot:')) continue;
 
     if (name.startsWith('on')) {
       if (typeof value === 'function') handlers.set(name.slice(2).toLowerCase(), value as EventListener);

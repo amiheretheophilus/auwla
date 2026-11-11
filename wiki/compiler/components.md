@@ -21,6 +21,9 @@ Finds components, and compiles calls to them: props, children and slots.
 | `packages/runtime/tests/components.test.ts` | Adapter identity/metadata, native argument lists, shared program caches, consumer isolation and setup disposal |
 | `packages/runtime/tests/component-bundle.test.ts` | Production tree shaking excludes opaque value/list mounting from root-only adapters and retains it for dynamic tags |
 | `tests/generator/components.test.ts` | Named/member/factory components, symbol/rest props, key order, retained state, and markup consumed in independent HTML/SVG destinations |
+| `features/slots/lower.ts` | Lowers `<slot>` placeholders and `slot="x"` markers to props before analysis (below, "Slots") |
+| `features/slots/lower.test.ts` | The props a slot component reads from, and the slot mistakes that are compile errors |
+| `tests/cases/components.slots.test.ts` | Slots compared with the reference's own lowering (`tests/reference/slots.ts`) |
 
 ## General path
 
@@ -138,9 +141,46 @@ before dependency queries. This is test-only and uses no production helpers.
 - Each prop is a `Prop` node in the child (`state-and-derived.md`). It is reactive
   when the parent's expression is.
 - Children and named slots are plans passed to the child. Render callbacks
-  (`render={item => <Row/>}`) are functions that return a plan.
+  (`render={item => <Row/>}`) are functions that return a plan. Slots are lowered to props
+  ("Slots", below); until 2026-11-11 compiler-next had none, and `<slot>` was emitted as an
+  element while the caller's content went unread.
 - A component that returns different JSX on different paths gets a `Conditional`
   at its root (`conditionals-and-lists.md`).
+
+## Slots
+
+Lowercase `<slot>` is compiler syntax, never an element (the user, 2026-11-11: "just slot not
+web component"). `features/slots/lower.ts` lowers it to props in the parse stage, so every later
+stage sees ordinary JSX and props, and slot content gets the same tracking, rows and delivery:
+
+- `<slot />` shows the caller's unmarked content, the `children` prop. `<slot name="x" />` shows the
+  content marked `slot="x"`, the prop `slot:x`. The key is added to the component's props pattern
+  (or a pattern is given to a component with no props), so it is a prop like any other and stays
+  out of `...rest`. No authored prop can be named `slot:x`, and an element never takes one as an
+  attribute (`runtime/src/dom-props.ts`), even when a slot component spreads its props.
+- A placeholder's own children are its fallback, shown while the slot's value is `undefined`, as a
+  default parameter is. `{false}` is content that shows nothing; `{undefined}` shows the fallback.
+- A direct child of a component call marked `slot="x"` goes to `slot:x` in authored order and loses
+  the marker, a component child included. So does a direct expression child whose elements, through
+  `?:`, `&&`, `||`, `??` and a `.map` callback, are all marked `x`.
+- A placeholder written as a direct child of a component call forwards: its `name` reads the
+  enclosing component's slot and its `slot` picks the inner component's. Alone in its group it
+  passes `undefined` on, so the inner component's fallback shows.
+- A slot may appear more than once, and beside `children`: the same content shows each time.
+- Errors: a dynamic or empty name or marker, a marker not on a direct child of a component call, an
+  expression child whose elements target different slots, `<slot>` outside a component, props taken
+  as anything but a name or an object pattern, and content for a slot that a component of the same
+  module does not show, unless its props can pass content on (a name, or `...rest`).
+
+Decided against the old compiler (`docs/slot.md`), which rejected `<slot>` beside `children`, a slot
+declared twice and a slot name equal to a prop. Each was a limit of its model: here the default slot
+is `children`, rendering content twice works in both compilers and the reference, and a `slot:` key
+cannot collide. Its rule that a supplied conditional always counts as content is replaced by
+`undefined` meaning absent, which also gives forwarding its meaning. The reference lowers slots with
+its own code (`tests/reference/slots.ts`) on its AST, so a shared mistake cannot hide. Cases:
+`tests/cases/components.slots.test.ts`, 12 programs in all three modes; errors and the props rewrite
+in `features/slots/lower.test.ts`. The old `tests/r50-component-slots.test.ts` behaviour test
+passes through the acceptance switch.
 
 ## Inputs and outputs
 
