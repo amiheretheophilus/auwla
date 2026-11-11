@@ -98,6 +98,7 @@ All paths are relative to the repository root and exist now.
 | `packages/jsx-plus/editor-assets/` | Shared configuration and pinned upstream grammar/license |
 | `packages/jsx-plus/tests/editor-assets.test.ts` | Real-example TextMate/Oniguruma tokenization and actual contributed mapper launch |
 | `packages/editor-vscode/src/extension.ts` | Separate adapter activation, compatible-provider check and registration/disposal |
+| `packages/editor-vscode/src/mapper-package.ts` | Resolve the project's shared mapper for installed adapters; development-directory fallback |
 | `packages/editor-vscode/scripts/build.ts` | Adapter bundle and shared grammar/configuration/license output |
 | `packages/editor-vscode/tests/activation.test.ts` | Simulated editor/provider API contract; desktop activation not inferred |
 | `packages/jsx-plus/tests/recovery.test.ts` | Real malformed-source mappings and strict build rejection |

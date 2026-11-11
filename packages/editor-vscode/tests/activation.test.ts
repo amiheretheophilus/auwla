@@ -7,6 +7,7 @@ import manifest from '../package.json';
 
 const messages: string[] = [];
 const lines: string[] = [];
+let workspaceDirectories: string[] = [];
 let provider: { activate(): Promise<unknown> } | undefined;
 mock.module('vscode', () => ({
   window: {
@@ -19,6 +20,11 @@ mock.module('vscode', () => ({
       return provider;
     },
   },
+  workspace: {
+    get workspaceFolders() {
+      return workspaceDirectories.map((fsPath) => ({ uri: { scheme: 'file', fsPath } }));
+    },
+  },
 }));
 
 const { activate } = await import('../src/extension');
@@ -27,6 +33,7 @@ beforeEach(() => {
   messages.length = 0;
   lines.length = 0;
   provider = undefined;
+  workspaceDirectories = [];
 });
 
 function context() {
@@ -79,6 +86,10 @@ it('registers the installed shared package and gives disposal to the editor', as
     }),
   };
   const session = context();
+  // Simulate an installed extension outside the checkout. A mapper can only be
+  // found through the open task-board project, not through the extension path.
+  Object.assign(session, { extensionPath: resolve(process.env.TEMP ?? '/', 'auwla-installed-adapter') });
+  workspaceDirectories = [resolve(import.meta.dirname, '../../jsx-plus/examples/task-board')];
   await activate(session);
   expect(messages).toEqual([]);
   expect(registrations).toHaveLength(1);

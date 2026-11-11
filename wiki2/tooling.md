@@ -172,9 +172,12 @@ registers a mapper, including for files outside any tsconfig.
 only mapper registration, typed against the installed declarations. Its provider
 is `TypeScriptTeam.native-preview`, as in the pinned
 [TypeScript extension manifest](https://github.com/microsoft/TypeScript/blob/3e9236361fa97a9e6c685f4833ac457ae2d8c50a/packages/vscode-typescript/package.json).
-The local VS Code 1.145.3 built-in TypeScript extension does not expose this API;
-the separate provider is not installed here. Activation in a running VS Code is
-**unverified**, and no editor settings or installed extensions were changed.
+The local VS Code 1.145.3 built-in TypeScript extension does not expose this API.
+At the user's request, `TypeScriptTeam.native-preview` 1.0.2 and the local Auwla
+VSIX 0.0.0 were installed and confirmed in `code --list-extensions --show-versions`.
+The installed provider bundle contains mapper registration. Desktop activation
+and language-feature behavior after reloading remain **unverified**; editor
+settings were not changed.
 
 Implemented layout (other editor adapters remain planned):
 
@@ -210,6 +213,13 @@ editor/provider API to check registration, missing/incompatible providers, error
 and disposal. They are not a real activation check. `scripts/build.ts` bundles
 only the adapter and emits shared assets into `dist/`; it does not bundle the
 compiler, mapper process or Bun into a self-contained VSIX.
+
+The local VSIX excludes workspace dependencies. Installed activation resolves
+`@memoized-dom/jsx-plus` from open file-based workspace folders, with an
+adapter-directory fallback for development hosts (`src/mapper-package.ts`). Its
+regression test places the simulated extension outside the checkout and resolves
+the actual task-board workspace. Other projects need the shared package installed;
+the local VSIX is not a portable standalone mapper distribution.
 
 See [adapter setup](../packages/editor-vscode/README.md) and
 [reuse from another editor](../packages/jsx-plus/editor-assets/README.md).

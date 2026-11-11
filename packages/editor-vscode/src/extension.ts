@@ -1,8 +1,7 @@
-import { createRequire } from 'node:module';
-import { dirname, join } from 'node:path';
 import * as vscode from 'vscode';
 import type { ExtensionAPI } from 'typescript/vscode';
 import { createMapperContribution } from '@memoized-dom/jsx-plus/editor';
+import { findMapperPackage } from './mapper-package';
 
 /** The provider matching the pinned TypeScript 7.1-beta extension API. */
 const TYPESCRIPT_EXTENSION = 'TypeScriptTeam.native-preview';
@@ -34,10 +33,12 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       return;
     }
 
-    // Resolve the installed shared package, not a path relative to the build
-    // output. The prototype mapper still needs its workspace dependencies/Bun.
-    const require = createRequire(join(context.extensionPath, 'package.json'));
-    const packageDirectory = dirname(require.resolve('@memoized-dom/jsx-plus/package.json'));
+    // An installed extension lives outside the project. Resolve the shared
+    // package from workspace folders before trying the development-host path.
+    const workspaceDirectories = (vscode.workspace.workspaceFolders ?? [])
+      .filter((folder) => folder.uri.scheme === 'file')
+      .map((folder) => folder.uri.fsPath);
+    const packageDirectory = findMapperPackage(workspaceDirectories, context.extensionPath);
     const contribution = createMapperContribution(packageDirectory);
     const registration = api.registerContentMappers(context.extension.id, [contribution]);
     context.subscriptions.push(registration);

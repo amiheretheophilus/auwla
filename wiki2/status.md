@@ -73,9 +73,13 @@ The first decoupled editor adapter is now built (DX-36):
 - Its build emits a standalone TextMate grammar, language configuration and
   upstream license. Real tokenizer tests use the task board; the shared mapper
   contribution launches and transforms that same source without VS Code.
-- The provider is `TypeScriptTeam.native-preview`, which is not installed here.
-  Desktop activation, inferred-project type setup, another editor and standalone
-  VSIX packaging remain unverified. See [adapter setup](../packages/editor-vscode/README.md).
+- At the user's request, TypeScript 7 (`TypeScriptTeam.native-preview` 1.0.2)
+  and the local Auwla VSIX 0.0.0 are installed and listed by VS Code. Installed
+  activation now resolves the mapper through open project folders, not the
+  extension's installation directory. The VSIX keeps the mapper in the project.
+  Desktop activation after reload, inferred-project type setup, another editor
+  and a standalone mapper distribution remain unverified. See
+  [adapter setup](../packages/editor-vscode/README.md).
 
 ## Evidence
 
@@ -87,9 +91,10 @@ auto-imports and recovery. The three anchor/auto-import tests fail without
 (9 parse, 13 diagnostics); the JSX equivalents run in both compiler modes.
 `bun check -p wiki2/spec/tsconfig.json` is clean. Task-board execution in both
 compiler modes and real TS7 CLI/LSP checks pass in the package suite.
-The adapter's `bun check` (5 files), `bun run build`, `node --check
-dist/extension.cjs` and five simulated activation tests pass. `git diff --check`
-passes. No sub-agents were used.
+The adapter's `bun check` (6 files), `bun run build`, `node --check
+dist/extension.cjs` and five simulated activation tests pass, including project
+resolution from outside the checkout. VSCE packaging and CLI installation succeed.
+`git diff --check` passes. No sub-agents were used.
 
 For P4-FOR-FAST: compiler-next `bun check` is clean. All 191 `src/optimize`
 tests pass, including the 7 new `mapping-calls.dom.test.ts` tests. The 398
@@ -102,7 +107,7 @@ full root suite, performance, browser layout and IDE activation.
 
 1. P3-EDITOR (first adapter/assets built, DX-36): verify desktop activation with
    the compatible TypeScript provider and the real task board, then inferred
-   projects and packaged installation. Reuse by other extensions is documented;
+   projects and portability beyond the local VSIX. Reuse by other extensions is documented;
    a second editor still needs its own integration evidence.
    See [tooling](tooling.md#editor-extension-planned-p3-editor).
 2. Loop follow-up in compiler-next (DX-34): extend the closed-list proof to
