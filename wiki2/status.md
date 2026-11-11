@@ -4,7 +4,7 @@ Updated: 2026-11-11. Branch: `prototype/jsx-plus`.
 
 ## Current slice
 
-**P3-TOOL: first real TypeScript CLI/LSP content-mapper probe built.**
+**P3-FLOW: checking-flow contract and investigation built; four gaps remain.**
 
 `packages/jsx-plus` (`@memoized-dom/jsx-plus`) owns new syntax and copied-span
 mappings. Its normalizer produces standard TSX; its single-UI-module `compile()`
@@ -29,31 +29,43 @@ TypeScript's CLI and language server. Actual ref rename edits cover declaration,
 prop, handler and child read; applying/rechecking succeeds. Unicode diagnostics
 and an incomplete-quote/restore editing cycle retain authored locations.
 
+The new [checking-flow catalog](checking-flow.md) identifies four real narrowing
+gaps: unchecked replay reads, a false `never` error on a guarded read, a replayed
+derivation outside markup, and a changing prop used after `await`. Seven ref,
+row/scope and ordinary-flow cases already match. The production checking
+projection is unchanged; this slice specifies and exposes the problem rather
+than applying an unsafe general wrapper or declaration-widening workaround.
+
 ## Baseline and evidence
 
-The branch originated from `compiler-rewrite` at `595171c4`. This tooling slice
-started from clean implementation baseline `946e56e7`. Results below cover its
-checking projection, transport, examples, tests, package/lockfile and docs, rather than
+The branch originated from `compiler-rewrite` at `595171c4`. This investigation
+started from clean implementation baseline `14dfede0`. Results below cover its
+flow fixtures, LSP probe, regression/runtime tests and documentation, rather than
 claiming the baseline already included the implementation.
 
-- In `packages/jsx-plus`, `bun check`: no type errors in 186 files.
-- In that package, `bun test`: **94 passed, 0 failed, 394 assertions**, five files.
+- In `packages/jsx-plus`, `bun check`: no type errors in 188 files.
+- In that package, `bun test`: **99 passed, 0 failed, 413 assertions**, six files.
   Includes all 6 syntax-view/range fixtures, 5 primary diagnostic fixtures and
   9 extended behavior programs in both compiler modes (18 executions).
   Existing ref assignment/clearing and keyed node preservation are checked.
-  New tooling cases run the real mapper and TypeScript 7.1-beta CLI/LSP, including
-  exact copied-span/edit fidelity, project close/reopen/isolation, CLI permission,
-  all four ref rename uses and edited-source rechecking, a UTF-16 diagnostic after
-  an emoji, and an incomplete-quote diagnostic followed by valid-source restoration.
+  The new flow test checks seven established matching cases and explicitly
+  reports four gaps. Additional runtime tests execute guarded union children
+  and guarded derivations outside markup in both modes, changing `READY` to `1`.
+  Existing actual CLI/LSP diagnostics, safe rename, Unicode ranges and invalid/
+  restore editing checks also remain covered.
+- `bun run tests/probe-flow.ts --strict`: **failed, exit one** on
+  `FLOW-TYPE-001` through `004`; seven other targets match. The package suite is
+  not full checking-flow acceptance. Default probe mode is observation only.
 - The independent `wiki2/spec/check.ts` baseline and its type check passed at
   `cdb9f359`: 27 fixture integrity checks, 7 host probes, 18 ordinary-JSX equivalent
   executions, no type errors in 172 files. Not rerun for this slice: its code,
   fixture catalog and compiler/runtime dependencies are unchanged. That runner
   labels extended syntax NOT RUN; package tests supply the separate evidence.
-- A second agent reviewed all code and tests before pushing: no blocking findings.
-  It independently ran the two tooling files (5 passing tests) and the final LSP
-  edit-cycle test, and checked mapper shutdown on input-stream closure.
-- Documentation audit: 20 documents, 134 local links/heading targets and 31
+- A second agent reviewed this investigation before pushing: no blocking findings.
+  It independently ran the 31 focused flow/runtime tests and the strict probe,
+  confirmed all expected ranges and the four failing targets, and verified that
+  the current bugs are not asserted as correct behavior.
+- Documentation audit: 21 documents, 144 local links/heading targets and 34
   existing mapped paths checked with no errors. `git diff --check` passed.
 - Full root suite and timing benchmarks were not run. This slice changes no
   shared compiler/runtime source and does not close their acceptance gates.
@@ -64,12 +76,14 @@ handoff with `git log -1 -- wiki2/status.md`.
 
 ## Next
 
-Continue P2/P3 together. First probe TypeScript's control-flow view of ref reads
-and reactive values (TOOL-05); the basic TSX projection does not model compiler-owned
-ref writes or replay. Preserve failing examples and specify any checking-only
-scaffolding before implementing it. Do not replace errors with blanket `any`.
-Completion, auto-import and cross-file edits also need explicit acceptance cases.
-See [tooling.md](tooling.md).
+P3-FACTS: define a small source-aware fact boundary for the checking projection:
+binding identities, actual replay/derivation sites, possible updates and deferred
+continuation boundaries. The existing public compiler API does not expose those
+lightweight facts. Define how they can be shared without DOM emission, internal
+compiler imports or a second reactivity classifier before writing flow scaffolding.
+See [the next implementation slice](checking-flow.md#next-implementation-slice).
+Then implement the smallest faithful projection against all eleven targets and
+retain existing rename/edit and ordinary-scope checks. TOOL-05 remains open.
 
 Keep parser recovery/scalability active: ASI ambiguities, malformed comment/regex
 recovery, and repeated suffix parsing/masking remain open. Partial-file checking

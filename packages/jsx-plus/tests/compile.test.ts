@@ -1,6 +1,7 @@
 import { afterEach, expect, it } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import fixtures from '../../../wiki2/spec/cases.json';
+import flowFixtures from './fixtures/checking-flow.json';
 import * as runtime from '../../runtime/src/index';
 import { toModuleFunction } from '../../compiler-next/src/core/parse/module-function';
 import { compile } from '../src';
@@ -81,6 +82,26 @@ it('runs the package counter example through compiler-next', () => {
 });
 
 for (const optimize of [true, false]) {
+  it(`replays a guarded union child with optimize=${optimize}`, () => {
+    const source = flowFixtures.cases.find((entry) => entry.id === 'FLOW-TYPE-002')!.source;
+    const { container } = start(source, optimize);
+    expect(container.textContent).toBe('READY');
+    container.querySelector('button')!.click();
+    expect(container.textContent).toBe('1');
+  });
+
+  it(`replays a guarded derivation outside markup with optimize=${optimize}`, () => {
+    const source = `export function App() {
+      let value: string | number = 'ready';
+      const label = typeof value === 'string' ? value.toUpperCase() : value.toFixed();
+      return <button onClick={() => value = 1}>label</button>;
+    }`;
+    const { container } = start(source, optimize);
+    expect(container.textContent).toBe('READY');
+    container.querySelector('button')!.click();
+    expect(container.textContent).toBe('1');
+  });
+
   it(`evaluates object children in conditional branches with optimize=${optimize}`, () => {
     const source = `export function App() {
       let ready = true;

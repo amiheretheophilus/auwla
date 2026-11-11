@@ -41,6 +41,12 @@ rename. `vscode-jsonrpc/node` provides stream transport; it does not require the
 VS Code editor. IDE activation, reactive/ref flow typing, partial-file recovery
 and mapper caching remain open. See [tooling](../../wiki2/tooling.md).
 
+`bun run tests/probe-flow.ts --strict` is the separate checking-flow target gate.
+It currently exits one with four confirmed narrowing gaps; ordinary package tests
+preserve the seven existing ref/scope cases without claiming those gaps are fixed.
+The [flow investigation](../../wiki2/checking-flow.md) records sources, expected
+results, runtime evidence and the fact boundary needed by a projection fix.
+
 Run focused checks from this package:
 
 ```text

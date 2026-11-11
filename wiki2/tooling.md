@@ -102,7 +102,7 @@ declared ref. Include a deliberate wrong expression and an incomplete edit.
 | TOOL-02 | Built for the probe: actual LSP ref rename updates all four uses; applying edits and rechecking yields no errors |
 | TOOL-03 | Completion insertion and auto-import edits stay in safe mapped spans |
 | TOOL-04 | Partial: Unicode ranges and a missing quote/restore cycle checked; preserving the rest of an incomplete file remains open |
-| TOOL-05 | Branch/row locals preserve scope; deferred callbacks receive correct types rather than unsafe mount-time narrowing |
+| TOOL-05 | Investigated: four replay/deferred-flow gaps; seven ref/scope/ordinary-flow cases match. Full flow projection remains open; see [checking flow](checking-flow.md) |
 | TOOL-06 | A repeat edit reuses appropriate work; record observed latency and memory on this machine without claiming a general performance result |
 
 Start with TOOL-01 and TOOL-02 during P2/P3; expand as grammar grows. Keep failing
@@ -121,3 +121,9 @@ ordinary ref condition and callback do not prove safe narrowing for every
 mount-time ref/derived read. Do not silence such errors with blanket `any` or
 diagnostic suppression. A custom extension also does not automatically inherit
 a TSX formatter or CSS tooling.
+
+The [checking-flow investigation](checking-flow.md) now supplies eleven target
+fixtures and an actual LSP probe. Its strict mode fails on four confirmed gaps,
+including a false error on a guarded child that compiler-next executes correctly.
+The source-aware fact boundary needed by a fix is proposed there; no flow fix
+or public semantic-fact API has been implemented by this investigation.

@@ -217,6 +217,12 @@ Do not make TypeScript reconstruct the authored program from optimized runtime
 output. Conversely, checking-only scaffolding must not dictate production costs.
 Runtime source maps and TypeScript span mappings are separate artifacts.
 
+The [checking-flow probe](wiki2/checking-flow.md) now demonstrates four gaps where
+ordinary TypeScript narrowing does not describe later reactive evaluations.
+The fix needs authored binding/replay information from the existing semantics;
+the simple TSX projection remains unchanged while that boundary is defined.
+Optional ref and row/synchronous-flow examples already check correctly.
+
 Keep the mapper lightweight: parse and generate the needed checking representation,
 cache by source and relevant configuration, and avoid building the complete DOM
 runtime output after every keystroke.

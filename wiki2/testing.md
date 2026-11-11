@@ -61,6 +61,21 @@ clears it. See [tooling](tooling.md) for verified launch/permission settings and
 the limitations of this first TSX projection. This explicit mapper-host probe is
 separate from ordinary package type checking with `bun check`.
 
+The checking-flow catalog has a separate target gate, run from the package:
+
+```text
+bun run tests/probe-flow.ts --strict
+```
+
+This command currently **fails with exit one on four targets**. Its default
+observation mode prints the same mismatches but is not an acceptance check.
+`checking-flow.test.ts` asserts the seven matching ref/scope/ordinary-flow cases
+and reports the remaining gaps; a passing package suite does not mean TOOL-05 is
+complete. `compile.test.ts` independently demonstrates that guarded union children
+and guarded derivations outside markup replay correctly in both compiler modes.
+The target contract, sources and proposed next boundary are mapped in
+[checking-flow.md](checking-flow.md).
+
 Acceptance IDs are owned by [syntax.md](syntax.md), [refs.md](refs.md) and
 [tooling.md](tooling.md); later features add theirs on their concept page.
 Actual and planned prototype files are mapped in [architecture.md](architecture.md).

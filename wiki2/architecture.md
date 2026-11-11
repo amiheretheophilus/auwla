@@ -80,6 +80,9 @@ All paths are relative to the repository root and exist now.
 | `packages/jsx-plus/tests/checking.test.ts` | Exact span fidelity, mapper lifecycle and native CLI acceptance |
 | `packages/jsx-plus/tests/mapper-lsp.test.ts` | Native LSP rename, Unicode diagnostics and incomplete/restore editing |
 | `packages/jsx-plus/tests/rpc.ts` | Test-only process lifecycle and position helpers |
+| `packages/jsx-plus/tests/fixtures/checking-flow.json` | Target checking diagnostics and source spans for replay, refs, row scope and synchronous host logic |
+| `packages/jsx-plus/tests/probe-flow.ts` | Actual LSP observation/strict catalog runner; currently reports four unmet targets |
+| `packages/jsx-plus/tests/checking-flow.test.ts` | Seven existing flow/scope regression cases; full flow acceptance explicitly unclaimed |
 | `packages/jsx-plus/examples/checking/` | Valid/intentional-error authored files and local mapper configs |
 
 ## Existing files to reuse
