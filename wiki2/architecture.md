@@ -67,7 +67,10 @@ All paths are relative to the repository root and exist now.
 
 | Path | Responsibility |
 | --- | --- |
-| `packages/jsx-plus/src/normalize.ts` | Host-token scanning, nested markup, expression/conditional children and TSX normalization |
+| `packages/jsx-plus/src/normalize.ts` | Public `normalize`/`normalizeForChecking`: find root markup in host code, assemble TSX, validate the host module |
+| `packages/jsx-plus/src/markup/context.ts` | Per-file reader state: source, filename, cached conditional blocks and authored error reporting |
+| `packages/jsx-plus/src/markup/element.ts` | Opening tags and attribute values, then the body scan: nested markup, child-level `if`/`else` blocks and the closing tag |
+| `packages/jsx-plus/src/markup/children.ts` | Child grammar: `;` chunks, expression-first parsing, ASI statements, direct `if` lowering and chunk diagnostics |
 | `packages/jsx-plus/src/host.ts` | Parser-only fragment context, token slices, tag-opening/delimiter/unterminated-literal token helpers |
 | `packages/jsx-plus/src/masks.ts` | Every parser-only mask: equal-width, line-preserving blanks for markup, attribute values and quarantined lines |
 | `packages/jsx-plus/src/attributes/value.ts` | Attribute value contract: replacement pieces plus the mask that hides that form from the tag lexer |
