@@ -119,20 +119,27 @@ it('runs the package counter example through compiler-next', () => {
 for (const optimize of [true, false]) {
   it(`runs the authored for-loop example with separate row closures and optimize=${optimize}`, () => {
     const source = readFileSync(new URL('../examples/task-board/ForLoop.auwla', import.meta.url), 'utf8');
+    // The loop lowers to `Array.from`, which compiler-next shows through compiled
+    // rows when optimizing (`optimize/mapping-calls.ts`, P4-FOR-FAST).
+    if (optimize) expect(compile(source, { optimize })).toMatch(/_rowList\d*\.from\(/);
     const { container } = start(source, optimize);
     const rows = () => [...container.querySelectorAll('.tasks li')];
 
     expect(rows()).toHaveLength(2);
+    const second = rows()[1];
     rows()[0]!.querySelector<HTMLButtonElement>('.task-toggle')!.click();
     expect(rows()[0]!.querySelector('.task-toggle')!.getAttribute('aria-pressed')).toBe('true');
     expect(rows()[1]!.querySelector('.task-toggle')!.getAttribute('aria-pressed')).toBe('false');
     expect(container.querySelector('.summary')!.textContent).toBe('1 task left');
 
+    // Keyed rows keep their DOM node as the list filters and grows.
     container.querySelector<HTMLButtonElement>('.filter-open')!.click();
     expect(rows()).toHaveLength(1);
     expect(rows()[0]!.textContent).toContain('Try the loop callbacks');
+    expect(rows()[0]).toBe(second);
     container.querySelector<HTMLButtonElement>('.add')!.click();
     expect(rows()).toHaveLength(2);
+    expect(rows()[0]).toBe(second);
     expect(rows()[1]!.textContent).toContain('Task 3');
     rows()[1]!.querySelector<HTMLButtonElement>('.remove')!.click();
     expect(rows()).toHaveLength(1);

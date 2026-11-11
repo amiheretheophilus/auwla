@@ -37,6 +37,7 @@ import { valueExportNames } from '../core/resolve/exports';
 import { functionValue, type FunctionNode } from '../core/resolve/functions';
 import { destructuredProps, type DestructuredProp } from '../features/components/plan';
 import { callOnlyReads, effectFree, STABLE_GLOBALS } from './effects';
+import { mappingCall } from './mapping-calls';
 import { methodFact, redefinedNames } from './method-facts';
 import type { Optimization } from '.';
 
@@ -1313,6 +1314,9 @@ export const closedLists: Optimization = {
 
     const roots = new Map<Binding, RowListPlan[]>();
     for (const rows of rowLists.values()) {
+      // Only `root.map(row)`: the proof does not follow a root into `Array.from(root, row)`
+      // (`#useArgument` rejects it), so such a list evaluates every row.
+      if (mappingCall(module, rows.call)?.form !== 'map') continue;
       const callee = unwrap(rows.call.callee);
       if (!is.MemberExpression(callee)) continue;
       const receiver = unwrap(callee.object);

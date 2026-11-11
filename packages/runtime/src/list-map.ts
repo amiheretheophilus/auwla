@@ -46,12 +46,39 @@ export function takeVerified(value: object): boolean {
 }
 
 export interface RowCache {
-  map(array: readonly unknown[], callback: Function): unknown[];
+  /**
+   * `dense`: a hole is an `undefined` item, as `Array.from` gives one, instead of
+   * a hole in the result, as native `map` leaves one.
+   */
+  map(array: readonly unknown[], callback: Function, dense?: boolean): unknown[];
 }
 
 /** `receiver.map(callback)`, through the cache when the receiver is an array. */
 export function mapRows(receiver: any, cache: RowCache, callback: Function): unknown {
   return Array.isArray(receiver) ? cache.map(receiver, callback) : receiver.map(callback);
+}
+
+const arrayValues = Array.prototype[Symbol.iterator];
+
+/**
+ * The items `Array.from(items)` would iterate. An array that iterates with the
+ * intrinsic iterator gives its own elements in order, holes as `undefined`, so
+ * it is read directly (`dense`). Anything else is collected the way `Array.from`
+ * collects it: through its iterator, or as an array-like.
+ */
+export function iteratedItems(items: unknown): readonly unknown[] {
+  if (Array.isArray(items) && items[Symbol.iterator] === arrayValues) return items;
+  return Array.from(items as Iterable<unknown> | ArrayLike<unknown>);
+}
+
+/**
+ * `Array.from(items, callback)`, through the cache. The compiler emits it only
+ * for the intrinsic `Array.from` (`compiler-next/src/optimize/mapping-calls.ts`),
+ * and only with a callback of at most `(item, index)`, so passing the array as
+ * the third argument shows nothing.
+ */
+export function fromRows(items: unknown, cache: RowCache, callback: Function): unknown[] {
+  return cache.map(iteratedItems(items), callback, true);
 }
 
 /**
@@ -125,7 +152,7 @@ class RowMatcher {
 export function createRowCache(usesIndex: boolean): RowCache {
   let rows: readonly Row[] | null = null;
   return {
-    map(array, callback) {
+    map(array, callback, dense = false) {
       const cached = rows;
       // Reading an array element can run a getter, reenter or throw. Detach
       // before that work: reentry gets its own lookup, and a failed pass never
@@ -142,7 +169,7 @@ export function createRowCache(usesIndex: boolean): RowCache {
       const previous = new RowMatcher(cached);
       const next: Row[] = [];
       for (let index = 0; index < length; index++) {
-        if (!(index in array)) continue;
+        if (!dense && !(index in array)) continue;
         const item = array[index];
         let row = previous.take(item);
         if (row !== undefined) {

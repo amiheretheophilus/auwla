@@ -366,8 +366,11 @@ export interface MutationPlan {
    */
   readonly method?: {
     readonly kind: 'read' | 'edit';
-    /** The callback's result can be reused per item (`optimize/row-reuse.ts`). */
-    readonly rowReuse?: { readonly usesIndex: boolean };
+    /**
+     * The callback's result can be reused per item (`optimize/row-reuse.ts`), for
+     * `items.map(row)` or `Array.from(items, row)` (`optimize/mapping-calls.ts`).
+     */
+    readonly rowReuse?: { readonly usesIndex: boolean; readonly form: 'map' | 'from' };
     /** The call is a text site's whole value, shown by a row list (`optimize/row-lists.ts`). */
     readonly rowList?: boolean;
     /** The row list may skip rows whose item is the same (`RowListPlan.moved`). */

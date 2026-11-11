@@ -85,7 +85,7 @@ export {
   mutationTarget, mergeFields, deleteMutation, receiverMutationTarget, observeMutation, editArray, watchMutationRoots, checkMutationRoots,
   mutatedSince, mutationTime,
 } from './mutation';
-export { createRowCache, mapRows } from './list-map';
+export { createRowCache, fromRows, mapRows } from './list-map';
 export { createRowList, uneditedItems, whenQuiet } from './row-list';
 export { createComputation, noteOwnOutput, observeNamespace, readNamespace, trackEquals, trackRead } from './computation';
 export { createSharedWrites } from './shared-writes';
