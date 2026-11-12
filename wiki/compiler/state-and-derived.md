@@ -395,6 +395,25 @@ its locals their value then (`core/plan/plain-functions.ts`). So in a plain func
 A statement that returns, suspends or jumps out of itself is never replayed
 (`cannotReplay` in `computations.ts`), and neither is a declaration that suspends.
 
+### Constant primitives
+
+A module binding keeps a reader because code the compiler cannot see might edit the object
+it holds. A primitive cannot be edited, only replaced, and only its own module can replace it,
+since an import is read-only. So a binding that is never reassigned, whose initializer is never
+computed again (kind `Constant`) and always gives a primitive, holds one value forever
+(`features/state/primitive-constants.ts`): a literal, a template, a unary or binary operation,
+`undefined`, or another constant primitive, also through an import. It gets **no reader**, and
+markup that reads it, in any module, is **static**: no collector, no update.
+
+Found while testing projects (2026-11-12): `export const page = 1` emitted a version, a reader
+and a shared write batch, and `<p>{page}</p>` a computation that ran on every update. A
+`let count = 1` nothing writes is the same. A primitive derived from state
+(`` const label = `n${count}` `` with `count++` somewhere) is `Derived`, and keeps following.
+
+Generated reader names also avoid every name the module exports, including names
+`export * from` forwards; a local export would hide the forwarded one
+(`tests/cases/linking.test.ts`, "star-forwarded public names").
+
 ## Inputs and outputs
 
 - In: `Resolved` (initializer references, write sites and where they run,
@@ -418,6 +437,8 @@ The graph classification is built (`core/graph/classify.ts`, described in
 | `features/derived/takeover.ts` | local takeover flags and native store targets, checked against runtime execution ownership |
 | `core/plan/plain-functions.ts` | what can change in a plain function: which values are computed again, and which need no reader |
 | `features/state/shared-plan.ts` | native module/factory storage owners and live reader exports |
+| `features/state/primitive-constants.ts` | bindings that hold one primitive forever: no reader, static markup |
+| `features/state/primitive-constants.test.ts` | which constants lose their reader, and which keep it |
 | `features/state/shared-dom.ts` | per-owner versions, readers, source-ordered setup completion and shared refresh |
 | `features/state/shared-dom.test.ts` | shared module consumers in separate applications, identity reuse and disposal |
 | `core/emit/shared.ts` | composes shared state, memo, mutation and takeover emission |

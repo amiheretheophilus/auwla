@@ -46,6 +46,7 @@ const modes = [
 it('keys only a plain left read compared strictly with an effect-free operand', () => {
   const output = compile(`
     let selected = 1;
+    export function select(next) { selected = next; }
     const id = () => 1;
     function Row({ row }) {
       return <p class={selected === row.id ? 'a' : ''} title={selected !== row.id ? 'n' : ''}

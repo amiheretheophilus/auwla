@@ -101,9 +101,14 @@ changed, and names the outputs that changed. Any tool can now compile an app wit
 modules itself (the user asked, so the compiler works without Vite). Size so far: compiler-next's
 source is 21.8k lines in 117 files (16.6k without comments and blank lines); the old compiler's is
 50.9k in 259 (45.6k), though it still also holds package builds, server-function and server-page
-analysis, source maps and `$snapshot`. Next: the shared-state size bug found while testing (a
-constant primitive export gets shared tracking), then source maps, a command line and a Bun plugin,
-then `packages/vite` with HMR.
+analysis, source maps and `$snapshot`.
+
+**Done: constant primitives** (`compiler/state-and-derived.md`, "Constant primitives"). A binding
+that holds one primitive forever (`export const page = 1`, a `let` nothing writes, a template of
+constants) has no reader, and markup reading it is static; before, it got a version, a reader and a
+shared write batch, and each reading site a computation. Generated reader names now also avoid names
+a module forwards with `export *`. Next: source maps, a command line and a Bun plugin, then
+`packages/vite` with HMR.
 
 ## Closing documented issues before Phase 10 (2026-11-06)
 

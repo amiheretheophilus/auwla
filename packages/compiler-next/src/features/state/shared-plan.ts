@@ -7,6 +7,7 @@ import { importedDefinition, isParameter, namespaceModule, openNamespaces, runne
 import type { SharedReadPlan } from '../../core/plan/model';
 import { storageOwner } from '../../core/plan/storage';
 import type { PlainFunctionValues } from '../../core/plan/plain-functions';
+import { primitiveConstants } from './primitive-constants';
 
 export function planSharedReads(
   graph: SemanticGraph,
@@ -16,6 +17,7 @@ export function planSharedReads(
   const reads = new Map<BindingNode, SharedReadPlan>();
   const namespaceBindings = new Set<BindingNode['binding']>();
   const namespaces = new Set(openNamespaces(graph.resolved));
+  const holdsPrimitive = primitiveConstants(graph);
 
   for (const entry of graph.resolved.modules) {
     for (const binding of entry.module.bindings) {
@@ -34,10 +36,18 @@ export function planSharedReads(
   }
 
   for (const entry of graph.resolved.modules) {
-    const taken = new Set([...entry.module.bindings.map((binding) => binding.name), ...entry.module.references.map((reference) => reference.name)]);
+    // A reader is exported, so its name also avoids every name the module exports, including
+    // those `export * from` forwards: a local export would hide the forwarded one.
+    const taken = new Set([
+      ...entry.module.bindings.map((binding) => binding.name),
+      ...entry.module.references.map((reference) => reference.name),
+      ...entry.module.exportedNames(),
+    ]);
     for (const binding of graph.bindings.values()) {
       if (binding.binding.module !== entry.module || importedDefinition(binding.binding) !== null) continue;
       if (plain.settled(binding)) continue;
+      // A primitive nothing replaces cannot change, so nothing needs to follow it.
+      if (holdsPrimitive(binding)) continue;
       const owner = storageOwner(binding);
       if (owner !== null && (components.has(owner) || (!is.BlockStatement(owner) && (!is.Function(owner) || !is.BlockStatement(owner.body))))) continue;
       const declarator = variableDeclaration(binding.binding);

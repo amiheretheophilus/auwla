@@ -24,6 +24,7 @@ import { mergeMutations, planImportedMutations, planMutations, planReadonlyBindi
 import { plainFunctionValues } from './plain-functions';
 import { groupsOfModule, planMemos } from '../../features/derived/plan';
 import { planSharedReads, sharedSetup } from '../../features/state/shared-plan';
+import { primitiveConstants } from '../../features/state/primitive-constants';
 import { planReceiverTargets } from '../../features/handlers/receivers';
 import { storageOwner } from './storage';
 import { planReturns } from '../../features/conditionals/returns';
@@ -355,7 +356,9 @@ function planSiteInputs(
           continue;
         }
         inputs.add(node);
-        if (storageOwner(node) !== owner) {
+        // Stored elsewhere, it may change where this component cannot see; a constant
+        // primitive cannot change at all (`features/state/primitive-constants.ts`).
+        if (storageOwner(node) !== owner && !primitiveConstants(graph)(node)) {
           dynamicSites.add(site.expression);
         }
       }
