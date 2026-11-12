@@ -120,8 +120,8 @@ describe('updating', () => {
 
     files['./page.ts'] = 'export const page = 1;';
     const update = await project.update(['./page.ts']);
-    // App changes too: its import now names a compiled module, which it reads through.
-    expect([...update.changed].sort()).toEqual(['./App.tsx', './page.ts']);
+    // App reads `page` only at its top level, so it needs no reader from the new module.
+    expect([...update.changed].sort()).toEqual(['./page.ts']);
     expect([...update.build.modules].sort()).toEqual(['./App.tsx', './page.ts']);
   });
 

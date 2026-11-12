@@ -419,6 +419,25 @@ opaque (`core/resolve/members.ts`); what an export holds is still checked (`conf
 Before, `const heading = config.title + '!'` and two sites reading `config.*` emitted 3.8 KB with
 a companion module; now 1.3 KB (`tests/cases/linking.test.ts`, "namespace reads").
 
+### Module state nothing reactive reads
+
+A module binding's reader and version exist so a component, an effect or a shared derivation can
+follow it. A module's top level runs once, when it loads, so a read there follows nothing
+(`features/state/reactive-reads.ts`). A binding keeps its reader only when something may read it
+later: a reference inside a function or class body in any module (through imports), a read by the
+derivation of a binding that keeps its reader, an `export default` expression another compiled
+module imports, or a namespace's export.
+
+Found while building applications (2026-11-12, `server.md`): `export const database = { users:
+new Map() }` emitted 1,639 bytes and a server entry (`serve()`, `app.ssr(App)`, `export default
+app`) 2,757; now 45 and 280. Any module-level object nothing reactive reads was affected, in client
+builds too.
+
+"Inside a function" is conservative: the compiler does not know which functions run during a
+render. Narrowing it to functions a component reaches would miss a function stored in an object and
+called through it (`api.load()`), so it is not done. A generated `serve()` wrapper therefore keeps
+readers for its integration object and, through its derivation, the server function routes.
+
 Generated reader names also avoid every name the module exports, including names
 `export * from` forwards; a local export would hide the forwarded one
 (`tests/cases/linking.test.ts`, "star-forwarded public names").
@@ -448,6 +467,8 @@ The graph classification is built (`core/graph/classify.ts`, described in
 | `features/state/shared-plan.ts` | native module/factory storage owners and live reader exports |
 | `features/state/primitive-constants.ts` | bindings that hold one primitive forever: no reader, static markup |
 | `features/state/primitive-constants.test.ts` | which constants lose their reader, and which keep it |
+| `features/state/reactive-reads.ts` | module bindings something reactive may read; the rest need no reader |
+| `features/state/reactive-reads.test.ts` | top-level-only reads, component reads, derivation chains, imported defaults |
 | `features/state/shared-dom.ts` | per-owner versions, readers, source-ordered setup completion and shared refresh |
 | `features/state/shared-dom.test.ts` | shared module consumers in separate applications, identity reuse and disposal |
 | `core/emit/shared.ts` | composes shared state, memo, mutation and takeover emission |

@@ -8,6 +8,7 @@ import type { SharedReadPlan } from '../../core/plan/model';
 import { storageOwner } from '../../core/plan/storage';
 import type { PlainFunctionValues } from '../../core/plan/plain-functions';
 import { primitiveConstants } from './primitive-constants';
+import { reactivelyRead } from './reactive-reads';
 
 export function planSharedReads(
   graph: SemanticGraph,
@@ -35,6 +36,9 @@ export function planSharedReads(
     }
   }
 
+  // Read only at modules' top levels, which run once, a binding needs no one to follow it.
+  const followed = reactivelyRead(graph, namespaceBindings);
+
   for (const entry of graph.resolved.modules) {
     // A reader is exported, so its name also avoids every name the module exports, including
     // those `export * from` forwards: a local export would hide the forwarded one.
@@ -48,6 +52,7 @@ export function planSharedReads(
       if (plain.settled(binding)) continue;
       // A primitive nothing replaces cannot change, so nothing needs to follow it.
       if (holdsPrimitive(binding)) continue;
+      if (!followed(binding)) continue;
       const owner = storageOwner(binding);
       if (owner !== null && (components.has(owner) || (!is.BlockStatement(owner) && (!is.Function(owner) || !is.BlockStatement(owner.body))))) continue;
       const declarator = variableDeclaration(binding.binding);
