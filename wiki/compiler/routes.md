@@ -3,8 +3,9 @@
 **Folders:** `features/routes/`; the router side is `packages/router/src/route-reads.ts`.
 
 Status (2026-11-12): `route="…"` regions, `route-to` links, the route table and reads of `route`
-are built. `$routed` preparations, splitting route-only imports into their own chunks, and
-`suspend` on a route element's readiness (when the router scrolls) are still to do.
+are built, and a `suspend` route page whose param changes waits behind its pending policy (the
+router scrolls once it commits). `$routed` preparations and splitting route-only imports into their
+own chunks are still to do.
 
 ## What it does
 
@@ -105,5 +106,3 @@ element rather than as a prop.
 
 - `$routed` preparations, their client/server split and `prepareInitialRoute`.
 - Route-only imports as lazy chunks (`docs/07-routing.md`, nesting).
-- A `suspend` route element whose param changes: show its loading UI and have the router scroll
-  only after the new page commits (`tests/route-destination-identity.test.ts`).

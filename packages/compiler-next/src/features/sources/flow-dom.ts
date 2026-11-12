@@ -48,12 +48,26 @@ export function emitSourceFlow(
       return value;
     }
 
-    return expression('$$data.createSuspendedSourceValue($$site, () => $$value, $$policy, () => $$inputs)', {
+    // A keyed element's key is the region's identity too: a new key prepares a new instance
+    // behind the pending policy (`data/src/source-presentation.ts`).
+    const key = node.openingElement.attributes.find((attribute) => {
+      return is.JSXAttribute(attribute) && is.JSXIdentifier(attribute.name) && attribute.name.name === 'key';
+    });
+    const keyValue = key !== undefined && is.JSXAttribute(key) && is.JSXExpressionContainer(key.value)
+      && !is.JSXEmptyExpression(key.value.expression) ? key.value.expression as Expression
+      : key !== undefined && is.JSXAttribute(key) && key.value !== null && is.Literal(key.value) ? key.value as Expression
+      : null;
+
+    const template = keyValue === null
+      ? '$$data.createSuspendedSourceValue($$site, () => $$value, $$policy, () => $$inputs)'
+      : '$$data.createSuspendedSourceValue($$site, () => $$value, $$policy, () => $$inputs, $$key)';
+    return expression(template, {
       data,
       site: stringLiteral(`${plan.module.path}:${node.start}`),
       value,
       policy: policyOf(node),
       inputs: b.ArrayExpression({ elements: inputs.map((input) => finishCopy(copy(input as Expression, initial))) }),
+      ...(keyValue === null ? {} : { key: finishCopy(copy(keyValue, initial)) }),
     });
   };
 

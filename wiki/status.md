@@ -85,8 +85,10 @@ conditional on `routeRegion(id)`, which the router reports to compiled computati
 (`router/src/route-reads.ts`); reads of `route` follow each field. The reference lowers routes on
 its own. Of the old router root tests, the remaining failures assert synchronous route updates with
 the default scheduler, generated text, old options (`routedEnvironment`), `$routed`, the old
-compiler's `if`/`else` attribute directives (not in compiler-next), and `suspend` on a route
-element with a changed param (to do). Next: `$routed`, that `suspend` case, then `packages/vite`.
+compiler's `if`/`else` attribute directives (not in compiler-next). A `suspend` element given a new
+key now prepares again behind its pending policy (it showed its static part at once), which fixed
+`tests/route-destination-identity.test.ts` (5 of 5, scrolling included). Next: `$routed`, then
+`packages/vite` with HMR.
 
 ## Closing documented issues before Phase 10 (2026-11-06)
 

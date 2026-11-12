@@ -192,6 +192,12 @@ All paths below are under `packages/compiler-next/`. This is test code only.
   what an inline policy reads, such as `pending={() => <i>{label}</i>}`, is that site's
   input: writing `label` shows the policy again. The slot used to call it later, outside
   any computation, and the shown policy never changed.
+- A `suspend` element's `key` is part of its region's identity: a new key is a new instance,
+  prepared off-screen behind the pending policy as a first mount is (`createSuspendedSourceValue`
+  takes the key). Before 2026-11-12 the new instance was swapped into the published region, so its
+  static part showed at once with only its data pending (case "a suspended element given a new key
+  is prepared again behind the pending policy"). A route region keys its content this way, so a new
+  param prepares a suspended page again.
 - A `suspend` region prepares its active subtree off-screen and publishes together on initial mount.
   Its refs/effects run only on publication. Inactive branches and unused sources
   do not block publication. Child-owned sources and sources consumed by active

@@ -284,3 +284,36 @@ behaves('routes: a value derived from the route at setup follows a query change'
     expect(text(container, '#t')).toBe(['one:board', 'one:activity', 'two:'][observation]!);
   },
 });
+
+behaves('routes: a suspended page with a new param waits behind its loading policy', {
+  url: '/reports/one',
+  source: `
+    import { route } from '@memoized-dom/router';
+    import { $fetch, Group } from '@memoized-dom/data';
+    function Detail() {
+      const data = $fetch('/destination/' + route.params.id);
+      let clicks = 0;
+      return <article id="detail"><button id="count" onClick={() => clicks++}>{clicks}</button><span>{data.name}</span></article>;
+    }
+    export function App() {
+      let visits = 0;
+      return <main id="layout">
+        <button id="visits" onClick={() => visits++}>{visits}</button>
+        <a id="two" route-to={{ path: '/reports/:id', params: { id: 'two' } }}>two</a>
+        <a id="tab" route-to={{ path: '/reports/:id', params: { id: 'one' }, query: { tab: 'notes' } }}>tab</a>
+        <Group pending={() => <i class="loading">Loading</i>}><Detail route="/reports/:id" suspend /></Group>
+      </main>;
+    }`,
+  steps: [
+    { respond: '/destination/one', value: { name: 'One' } },
+    { click: '#count' }, { click: '#visits' }, { click: '#tab' },
+    { click: '#two' },
+    { respond: '/destination/two', value: { name: 'Two' } },
+  ],
+  check(container, observation) {
+    // A query change keeps the page and its count; a new param prepares a new one.
+    expect(text(container, '#detail span')).toBe([null, 'One', 'One', 'One', 'One', null, 'Two'][observation]!);
+    expect(text(container, '#count')).toBe([null, '0', '1', '1', '1', null, '0'][observation]!);
+    expect(text(container, '#visits')).toBe(observation < 3 ? '0' : '1');
+  },
+});

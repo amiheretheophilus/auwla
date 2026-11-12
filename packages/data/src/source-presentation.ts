@@ -77,12 +77,17 @@ export function createSourceComponentValue(
   return createComponentValue(tag, attributes, identity, policy);
 }
 
-/** Each authored boundary has stable render identity, independently of its captures. */
+/**
+ * Each authored boundary has stable render identity, independently of its captures. The element's
+ * `key` is part of that identity: a new key is a new instance, prepared off-screen behind the
+ * pending policy as a first mount is, rather than swapped into the published region.
+ */
 export function createSuspendedSourceValue(
   site: string,
   read: () => unknown,
   policy: SourcePresentation = {},
   inputs: () => readonly unknown[] = () => [],
+  key?: unknown,
 ): object {
   let program = programs.get(site);
 
@@ -91,7 +96,7 @@ export function createSuspendedSourceValue(
     programs.set(site, program);
   }
 
-  return createRenderValue(program, [read, policy, inputs]);
+  return createRenderValue(program, [read, policy, inputs], key);
 }
 
 function suspendedProgram(site: string): RenderProgram {
