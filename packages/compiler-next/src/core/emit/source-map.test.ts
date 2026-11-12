@@ -97,9 +97,17 @@ export function App() {
       './App.ts': `import values = require('./values');\nexport const total: number = values.first + values.second;\n`,
       './values.ts': 'export const first = 1;\nexport const second = 2;\n',
     };
-    // Module state moves to a companion module; its map still points at `./App.ts`. The lowered
-    // `import * as values` is the compiler's text, written where the declaration was.
-    expectNamesMapped(modules, './App.ts', ['total', 'first', 'second'], './App.mmd.ts');
+    // The lowered `import * as values` is the compiler's text, written where the declaration was.
+    expectNamesMapped(modules, './App.ts', ['total', 'first', 'second']);
+  });
+
+  it('give a companion module its own map, back to the authored module', () => {
+    const modules = {
+      './App.ts': `import values = require('./values');\nexport let total: number = values.first + 1;\nexport function add() { total++; }\n`,
+      './values.ts': 'export let first = 1;\nexport function bump() { first++; }\n',
+    };
+    // Module state moves to `./App.mmd.ts`; its map's source is still `./App.ts`.
+    expectNamesMapped(modules, './App.ts', ['total', 'first'], './App.mmd.ts');
   });
 
   it('leave code the compiler wrote unmapped rather than on the first line', () => {

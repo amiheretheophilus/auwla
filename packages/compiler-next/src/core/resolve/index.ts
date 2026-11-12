@@ -25,7 +25,7 @@ export { isWrittenGlobal } from './globals';
 export type { PathKey, WriteKind, WriteSite } from './writes';
 export type { Binding, Module, Reference } from 'yuku-analyzer';
 export { declaringRunner, runnerOf } from './writes';
-export { namespaceModule } from './exports';
+export { namespaceExport, namespaceModule } from './exports';
 
 export interface ResolvedModule {
   readonly path: string;

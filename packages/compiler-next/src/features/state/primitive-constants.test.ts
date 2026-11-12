@@ -24,6 +24,19 @@ describe('constant primitives', () => {
     expect(output['./App.tsx']).not.toContain('createComputation');
   });
 
+  it('read through a namespace are constants too', () => {
+    const output = compile(
+      `import * as config from './values';
+       const heading = config.title + '!';
+       export function App() { return <h1 title={config.title}>{heading}{config.count}</h1>; }`,
+      `export const title = 'Site'; export const count = 2;`,
+    );
+    // No companion module for module state, no readers, no collectors.
+    expect(Object.keys(output).sort()).toEqual(['./App.tsx', './values.ts']);
+    expect(output['./App.tsx']).not.toContain('_read_');
+    expect(output['./App.tsx']).not.toContain('createComputation');
+  });
+
   it('keep a reader for an object, which code the compiler cannot see may edit', () => {
     const output = compile(`const items = ['a']; export function App() { return <p>{items.length}</p>; }`);
     expect(output['./App.tsx']).toContain('_read_items');

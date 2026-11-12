@@ -16,6 +16,26 @@ function paragraph(values: readonly string[]) {
   };
 }
 
+// A namespace's constant exports are constants (`state-and-derived.md`, "Constant primitives");
+// its changing ones are still followed, in module values and in components.
+behaves('linking: namespace reads follow changing exports and leave constant ones static', {
+  modules: {
+    './store.ts': `${counter} export const label = 'count'; export const step = -1;`,
+  },
+  source: `
+    import * as store from './store';
+    const heading = store.label + ':';
+    const later = store.count * 10;
+    export function App() {
+      const local = store.count + store.step;
+      return <main><p title={store.label}>{heading}{store.count}:{later}:{local}:{store.twice}</p>
+        <button onClick={store.increment}>increment</button></main>;
+    }
+  `,
+  steps: [{ click: 'button' }, { click: 'button' }],
+  check: paragraph(['count:1:10:0:2', 'count:2:20:1:4', 'count:3:30:2:6']),
+});
+
 behaves('linking: star and renamed re-exports share live state and derivations', {
   modules: {
     './store.ts': counter,

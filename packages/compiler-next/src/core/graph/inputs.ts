@@ -9,7 +9,7 @@
 import { is, walk } from 'yuku-ast';
 import type { Node } from 'yuku-parser';
 import type { Binding, Module, Reference, WriteSite } from '../resolve';
-import { declaringRunner, isParameter } from '../resolve';
+import { declaringRunner, isParameter, namespaceExport, namespaceModule } from '../resolve';
 import { functionValue } from '../resolve/functions';
 import type { CallNode, FunctionNode, FunctionSummary } from '../resolve/functions';
 import type { PropertyReads } from '../resolve/members';
@@ -103,11 +103,11 @@ export class InputQueries {
       });
     }
 
-    const reads = [...references].map((reference): ReadFact => ({
-      reference,
-      path: readPath(reference, reference.module === module
-        && reference.node.start >= root.start && reference.node.end <= root.end ? root : undefined),
-    }));
+    const reads = [...references].map((reference): ReadFact => {
+      const path = readPath(reference, reference.module === module
+        && reference.node.start >= root.start && reference.node.end <= root.end ? root : undefined);
+      return literalExportRead(reference, path) ?? { reference, path };
+    });
     const facts: InputFacts = { reads, writes: [...writes], opaque };
     this.#roots.set(root, facts);
     return facts;
@@ -175,6 +175,36 @@ export class InputQueries {
     this.#closures.set(start, facts);
     return facts;
   }
+}
+
+/**
+ * `config.title`, where `config` is `import * as config` and `title` a `const` holding a literal,
+ * reads that constant, not the namespace (`wiki/compiler/state-and-derived.md`, "Constant
+ * primitives"). A namespace is a live input, since any export behind it may change; this one
+ * cannot, so a value or site that reads only such exports stays constant. Decided from the
+ * declaration alone, as classification has not run yet.
+ */
+function literalExportRead(reference: Reference, path: readonly (string | null)[]): ReadFact | null {
+  const key = path[0];
+  if (reference.binding == null || typeof key !== 'string') return null;
+  const namespace = namespaceModule(reference.binding);
+  const definition = namespace === null ? null : namespaceExport(namespace, key);
+  if (definition === null || !holdsLiteral(definition)) return null;
+  return { reference, binding: definition, path: path.slice(1) };
+}
+
+/** `const name = 'text'`, `= 2`, `= -1`, `= true`, `= null`, or a template without holes. */
+function holdsLiteral(binding: Binding): boolean {
+  const declarator = variableDeclaration(binding);
+  if (declarator === null || !is.Identifier(declarator.id) || declarator.init == null) return false;
+  const declaration = binding.module.parentOf(declarator);
+  if (!is.VariableDeclaration(declaration) || declaration.kind !== 'const') return false;
+  let value: Node = declarator.init;
+  if (is.UnaryExpression(value) && (value.operator === '-' || value.operator === '+' || value.operator === '!')) {
+    value = value.argument;
+  }
+  if (is.TemplateLiteral(value)) return value.expressions.length === 0;
+  return is.Literal(value) && !('regex' in value && value.regex != null);
 }
 
 function isValueRead(reference: Reference): boolean {

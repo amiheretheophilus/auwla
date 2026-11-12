@@ -410,6 +410,15 @@ and a shared write batch, and `<p>{page}</p>` a computation that ran on every up
 `let count = 1` nothing writes is the same. A primitive derived from state
 (`` const label = `n${count}` `` with `count++` somewhere) is `Derived`, and keeps following.
 
+Through a namespace too: with `import * as config`, `config.title` reads the export `title`
+when it is a `const` holding a literal (`literalExportRead`, `core/graph/inputs.ts`; decided from
+the declaration, since classification has not run yet). Any other read of a namespace still reads
+the namespace, a live input. Reading a namespace's own property runs no code (its properties are
+the exports' live bindings, with no getters), so `config.count` no longer makes the reading value
+opaque (`core/resolve/members.ts`); what an export holds is still checked (`config.user.name`).
+Before, `const heading = config.title + '!'` and two sites reading `config.*` emitted 3.8 KB with
+a companion module; now 1.3 KB (`tests/cases/linking.test.ts`, "namespace reads").
+
 Generated reader names also avoid every name the module exports, including names
 `export * from` forwards; a local export would hide the forwarded one
 (`tests/cases/linking.test.ts`, "star-forwarded public names").
