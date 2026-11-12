@@ -65,23 +65,31 @@ export function importResolver(paths: readonly string[], options: CompileModules
   return (specifier: string, importer: string): string | false | null => {
     const custom = options.resolveImport?.(specifier, importer);
     if (custom !== undefined) return custom;
-    if (!specifier.startsWith('.')) return false;
 
-    const base = joinPath(directoryOf(importer), specifier);
-    for (const extension of EXTENSIONS) {
-      const candidate = base + extension;
-      if (known.has(candidate)) return candidate;
-    }
-
-    const dot = base.lastIndexOf('.');
-    const output = base.slice(dot);
-    for (const source of SOURCES_OF_OUTPUT[output] ?? []) {
-      const candidate = base.slice(0, dot) + source;
-      if (known.has(candidate)) return candidate;
-    }
-
-    return null;
+    const candidates = importCandidates(specifier, importer);
+    if (candidates === null) return false;
+    return candidates.find((candidate) => known.has(candidate)) ?? null;
   };
+}
+
+/**
+ * The paths a specifier may name, in the order they are tried: as written, with each source
+ * extension, as a folder's index, and the TypeScript source of a written `.js`. Null for a bare
+ * specifier, which names a package. A project collecting its modules from disk tries the same
+ * paths (`project/collect.ts`), so it finds exactly the modules this rule later picks.
+ */
+export function importCandidates(specifier: string, importer: string): readonly string[] | null {
+  if (!specifier.startsWith('.')) return null;
+
+  const base = joinPath(directoryOf(importer), specifier);
+  const candidates = EXTENSIONS.map((extension) => base + extension);
+
+  const dot = base.lastIndexOf('.');
+  for (const source of SOURCES_OF_OUTPUT[base.slice(dot)] ?? []) {
+    candidates.push(base.slice(0, dot) + source);
+  }
+
+  return candidates;
 }
 
 function directoryOf(path: string): string {

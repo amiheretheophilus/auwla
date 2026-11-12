@@ -32,9 +32,9 @@ export interface CompileModulesOptions {
   /**
    * Maps an import specifier to the path of one of the compiled modules, when the
    * default rule (relative paths, probing extensions and index files) does not.
-   * Return `undefined` to use the default.
+   * Return `false` for a module outside the compiled set, or `undefined` to use the default.
    */
-  readonly resolveImport?: (specifier: string, importer: string) => string | undefined;
+  readonly resolveImport?: (specifier: string, importer: string) => string | false | undefined;
 }
 
 /** Options of `compile`, which takes one module. */

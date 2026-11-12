@@ -3,3 +3,4 @@ export { compile, compileModules, compileModulesDetailed, type CompiledModules }
 export type { CompileModulesOptions, CompileOptions } from './options';
 export type { InitialDelivery, InitialRender } from './features/delivery';
 export { CompileError } from './core/diagnostics';
+export * from './project';

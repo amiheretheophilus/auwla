@@ -367,6 +367,9 @@ array child). Remove each check when its phase is built.
 - [x] Lower a runtime TypeScript `namespace` and `export =` (`core.md`, parse).
 - [x] Routes, `route-to` and `$routed` (`routes.md`). Lazy route chunks and server-backed
   preparations end to end come with `packages/vite`.
+- [ ] One way to compile an app for any tool (`project.md`), asked for by the user (2026-11-12)
+  so the compiler works without Vite: [x] building from entries and rebuilding after edits;
+  [ ] source maps; [ ] a command line and a Bun plugin. `packages/vite` then moves onto it.
 - [ ] HMR in the Vite dev server, which the user asked for explicitly (2026-11-12): an edited
   module replaces its components in place, keeping the state that can be kept, as the old
   compiler does through `runtime/src/hot.ts` and `packages/vite`. compiler-next emits no

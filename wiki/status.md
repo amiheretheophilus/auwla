@@ -94,7 +94,16 @@ routes list the preparations of the component they show, and a client build prep
 before it mounts. Through the switch, `route-navigation-readiness` passes 8 of 8 and the reused-callsite
 `$routed` test passes; the rest check the old compiler's metadata API or generated text. Writing it
 found a callback-boundary bug (a handed-out function lost its source readiness declarations), fixed.
-Next: `packages/vite` with HMR.
+
+**Done: projects** (`compiler/project.md`). `createProject({ entries, host })` collects the modules
+an app's entries reach and compiles them; `update(paths)` rebuilds after edits, reading only what
+changed, and names the outputs that changed. Any tool can now compile an app without collecting
+modules itself (the user asked, so the compiler works without Vite). Size so far: compiler-next's
+source is 21.8k lines in 117 files (16.6k without comments and blank lines); the old compiler's is
+50.9k in 259 (45.6k), though it still also holds package builds, server-function and server-page
+analysis, source maps and `$snapshot`. Next: the shared-state size bug found while testing (a
+constant primitive export gets shared tracking), then source maps, a command line and a Bun plugin,
+then `packages/vite` with HMR.
 
 ## Closing documented issues before Phase 10 (2026-11-06)
 
