@@ -7,3 +7,5 @@ export type { CompiledProject, FailedProject, Project, ProjectBuild, ProjectOpti
 export { fileSystemHost, normalizeProjectPath, projectPath } from './host';
 export type { ProjectHost } from './host';
 export { isSourcePath } from './collect';
+/** The paths a relative import may name, as the compiler probes them: a bundler plugin finds generated modules with it. */
+export { importCandidates } from '../core/resolve/imports';

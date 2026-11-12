@@ -3,8 +3,9 @@
 **Folders:** `project/`
 
 Status (2026-11-12): building from entries, rebuilding after edits, source maps, path aliases through the
-host, the file-system host, a Bun plugin and a command line are built. `packages/vite` moves onto it
-next (`plan.md`, Phase 10).
+host, the file-system host, a Bun plugin, a command line, hot replacement, and a Vite plugin over
+applications (`compiler: 'next'`, "Vite") are built. The Vite plugin lacks some of the old one's
+features, listed there (`plan.md`, Phase 10).
 
 ## What it does
 
@@ -107,6 +108,46 @@ gives it to the client build only), compiler-next's output works with any dev se
 The old compiler's mechanism (`registerHotComponent` inside every factory) stays in
 `runtime/src/hot.ts` until that compiler is deleted.
 
+## Vite
+
+`memoizedDom({ clientEntry, serverEntry?, server?, compiler: 'next' })` (or `MMD_COMPILER=next`) is
+the Vite plugin over an application (`packages/vite/src/next/plugin.ts`), until the old compiler is
+deleted and it becomes the only one. `server` is the server-only folder, and must be given: no folder
+is server-only by its name (the old plugin assumed `server`).
+
+- **Loading:** every module the program compiled is loaded from its output with its source map:
+  the client program for the `client` environment, the server's for `ssr`. A relative import from a
+  compiled module is probed as the compiler probes it, which finds modules that exist only in the
+  build (`./.memoized/…`, companion outputs).
+- **Aliases** (`@/label`) are resolved by Vite (`next/host.ts`): a resolved file under the root that
+  is source is compiled; a package or a virtual module is left to Vite.
+- **The dependency scan** reads authored files, so the plugin leaves its resolutions alone
+  (`scan: true`). Waiting there for the build deadlocked: the build resolves packages, which waits
+  for the scan.
+- **Edits:** `hotUpdate` gives the edited file to `application.update()`, once for both
+  environments (keyed by the change's timestamp), and invalidates the outputs that changed in each.
+  A dev build is compiled with `hot` ("Hot replacement"), so Vite finds the boundaries itself: an
+  edited component module accepts itself, a helper's edit is accepted by the component importing
+  it, and an edit reaching the entry reloads the page. Only files the program reads, files in the
+  server folder, and new or deleted files are compiled again.
+- **Errors** go to Vite's overlay with file, line and column; the fix sends an update even when its
+  output is the one before the error.
+- **Delivery and the server:** the server's delivery module is `virtual:memoized-dom/integration`,
+  the old plugin's (`fullstack.ts`): Vite's transformed `index.html` in development, the built
+  client after a build. The production server entry (`dist/server.js`), `buildApp`, and the native
+  dev launcher (`dev.ts`, which re-imports the server after an edit) are shared with the old plugin
+  through the same `api`.
+- `.memoized/server-functions.d.ts` is written after each build and update that has server
+  functions.
+- `packages/vite`'s `dist` bundles compiler-next, which ships TypeScript source that Node cannot load
+  from a package.
+
+Not yet in the new plugin, each the old plugin's: `compilePackages` (rejected with an error), native
+packages, the devtools inspector, the build-time page (`initialDelivery`) written into
+`index.html`, extracted styles and route CSS, lazy route chunks, Cloudflare (untested), library
+builds and server pages. An edit that moves code without changing output (a comment) leaves that
+module's source map stale until its next real change.
+
 ## Bun
 
 `memoizedDom({ client, server?, target?, delivery?, root?, ...options })` (`project/bun.ts`) is a
@@ -163,6 +204,9 @@ bun packages/compiler-next/src/project/cli.ts build src/main.ts --out dist [--mi
 | `project/bun.test.ts` | Client: a companion output, a stylesheet, a compile error. Server: a built server rendering its page, a route reading `#server/` code, and a server function |
 | `project/cli.ts` | The command line: `check` and `build`, with or without a server |
 | `project/cli.test.ts` | Arguments, checking, a client build, and a server build serving its page, its script (which hydrates) and a server function |
+| `packages/vite/src/next/plugin.ts` | The Vite plugin over an application: loading, resolving generated modules, hot updates, errors, delivery |
+| `packages/vite/src/next/host.ts` | The project host Vite gives: files from disk, aliases resolved by Vite |
+| `packages/vite/tests/next-plugin.test.ts` | A client build with an alias; dev: component, helper and entry edits; a compile error and its fix; dev SSR re-rendering an edit; a full-stack build serving its page, its script and a server function |
 | `features/hot/index.ts` | The hot feature's API: `hotModule`, `addHotRuntime` |
 | `features/hot/boundary.ts` | Which modules accept their own hot update |
 | `features/hot/emit.ts` | The hot runtime's import, `moduleEvaluating` and the boundary in a module's tree |
@@ -170,7 +214,8 @@ bun packages/compiler-next/src/project/cli.ts build src/main.ts --out dist [--mi
 
 ## Still to do
 
-- `packages/vite` on applications, using `hot` and `update()` (`plan.md`, Phase 10).
-- Hot replacement in a real browser through Vite, and then Bun's dev server: `update()` already
-  names the outputs that changed.
+- The old plugin's features the new one lacks ("Vite"), then the Vite suite through the switch
+  (`plan.md`, Phase 10, acceptance).
+- Hot replacement in a real browser (this machine has no Chrome; the tests check what Vite sends),
+  and then Bun's dev server: `update()` already names the outputs that changed.
 - The command line serves no pages (no dev server, no SSR); Vite does that.

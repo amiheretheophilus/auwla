@@ -137,7 +137,21 @@ asked. With `hot: true`, a module exporting only components accepts its own upda
 (`@memoized-dom/runtime/hot`) remembers each component instance and mounts each live instance of an
 edited component again in place, with its props, while other modules keep their state. Component
 keys are names now, not offsets (`compiler/components.md`, "Keys"). Tested end to end on compiled
-output. Next: `packages/vite` on applications, using it in a browser.
+output.
+
+**Vite on applications** (`compiler/project.md`, "Vite"): `memoizedDom({ compiler: 'next' })` (or
+`MMD_COMPILER=next`) compiles with compiler-next. Tested: a client build resolving an alias; dev
+modules with hot boundaries, where a component edit is accepted by itself, a helper edit by its
+component, and an entry edit reloads; a compile error in the overlay and its fix; SSR in development
+(the native launcher) showing an edit on the next request; a full-stack build serving its page, its
+script and a server function. Found while building it: the dependency scan deadlocked waiting for the
+build, fixed by leaving scan resolutions alone. Next: the old plugin's remaining features there
+(styles, the build-time page, lazy route chunks, packages, devtools), then the Vite suite through the
+switch.
+
+Seen while checking, not caused by this (the same at the previous commit, checked in a worktree):
+`packages/vite/tests/vite-adapter.test.ts` has 7 failures, each loading `/src/main.ts` from its temp
+copy of the fixture ("Does the file exist?").
 
 Seen while checking the server change, not caused by it (the same with and without it): in a whole
 `packages/server` run, 8 tests fail (`initial-request`, `pages`, `serve`: in-memory `$fetch` reaches
