@@ -2,76 +2,148 @@
 /**
  * The command line (`wiki/compiler/project.md`, "Command line"), on Bun:
  *
- *   bun packages/compiler-next/src/project/cli.ts check src/main.tsx
- *   bun packages/compiler-next/src/project/cli.ts build src/main.tsx --out dist [--minify]
+ *   bun packages/compiler-next/src/project/cli.ts check src/main.ts [--server server.ts --server-folder server]
+ *   bun packages/compiler-next/src/project/cli.ts build src/main.ts --out dist [--minify] [--server … --server-folder …]
  *
- * `check` compiles the program and reports the first error. `build` bundles it with `Bun.build`
- * and the plugin (`bun.ts`), with source maps beside each file.
+ * `check` compiles the application and reports the first error. `build` bundles it with `Bun.build`
+ * and the plugin (`bun.ts`), with source maps beside each file. With a server, the client goes to
+ * `<out>/client` and the server to `<out>/server.js`, which serves the built page and its files:
+ * `bun dist/server.js` with a server entry that default-exports its application.
  */
-import { resolve } from 'node:path';
+import { existsSync } from 'node:fs';
+import { basename, relative, resolve } from 'node:path';
+import type { BuildOutput } from 'bun';
+import { createApplication, type ServerOptions } from '../server/application';
 import { memoizedDom } from './bun';
 import { fileSystemHost, normalizeProjectPath } from './host';
-import { createProject } from './project';
 
 interface Command {
   readonly name: 'check' | 'build';
-  readonly entry: string;
+  readonly client: string;
+  readonly server?: ServerOptions;
   readonly root: string;
   readonly out: string;
   readonly minify: boolean;
 }
 
 const USAGE = `usage:
-  cli.ts check <entry> [--root <folder>]
-  cli.ts build <entry> [--root <folder>] [--out <folder>] [--minify]`;
+  cli.ts check <client entry> [--root <folder>] [--server <entry> [--server-folder <folder>]]
+  cli.ts build <client entry> [--root <folder>] [--out <folder>] [--minify] [--server <entry> [--server-folder <folder>]]`;
 
 /** The command the arguments describe, or a message saying what is wrong with them. */
 export function parseArguments(args: readonly string[], cwd: string): Command | string {
-  const [name, entry, ...rest] = args;
-  if ((name !== 'check' && name !== 'build') || entry === undefined || entry.startsWith('--')) return USAGE;
+  const [name, client, ...rest] = args;
+  if ((name !== 'check' && name !== 'build') || client === undefined || client.startsWith('--')) return USAGE;
 
   let root = cwd;
   let out = 'dist';
   let minify = false;
+  let serverEntry: string | undefined;
+  let serverFolder: string | undefined;
   for (let index = 0; index < rest.length; index++) {
     const flag = rest[index];
+    const value = rest[index + 1];
     if (flag === '--minify') {
       minify = true;
-    } else if ((flag === '--root' || flag === '--out') && rest[index + 1] !== undefined) {
-      if (flag === '--root') root = resolve(cwd, rest[++index]!);
-      else out = rest[++index]!;
+    } else if (value !== undefined && (flag === '--root' || flag === '--out' || flag === '--server' || flag === '--server-folder')) {
+      index++;
+      if (flag === '--root') root = resolve(cwd, value);
+      else if (flag === '--out') out = value;
+      else if (flag === '--server') serverEntry = value;
+      else serverFolder = value;
     } else {
       return `unknown or incomplete option: ${flag}\n${USAGE}`;
     }
   }
-  return { name, entry: normalizeProjectPath(entry), root, out: resolve(root, out), minify };
+  if (serverFolder !== undefined && serverEntry === undefined) return `--server-folder needs --server\n${USAGE}`;
+  const server = serverEntry === undefined ? undefined : {
+    entry: normalizeProjectPath(serverEntry),
+    ...(serverFolder === undefined ? {} : { folder: normalizeProjectPath(serverFolder) }),
+  };
+  return { name, client: normalizeProjectPath(client), ...(server === undefined ? {} : { server }), root, out: resolve(root, out), minify };
 }
 
 /** Runs a command; the exit code. */
 export async function run(command: Command, log: (line: string) => void): Promise<number> {
-  if (command.name === 'check') {
-    const build = await createProject({ entries: [command.entry], host: fileSystemHost(command.root) }).build();
-    if (!build.ok) {
-      log(build.error.message);
+  return command.name === 'check' ? check(command, log) : build(command, log);
+}
+
+async function check(command: Command, log: (line: string) => void): Promise<number> {
+  const application = createApplication({
+    client: command.client,
+    ...(command.server === undefined ? {} : { server: command.server }),
+    host: fileSystemHost(command.root),
+  });
+  const result = await application.build();
+  for (const [side, program] of [['client', result.client], ['server', result.server]] as const) {
+    if (program === undefined) continue;
+    if (!program.ok) {
+      log(program.error.message);
       return 1;
     }
-    log(`ok: ${build.modules.length} modules compiled`);
-    return 0;
+    log(`ok: ${side}, ${program.modules.length} modules compiled`);
   }
+  return 0;
+}
 
-  const result = await Bun.build({
-    entrypoints: [resolve(command.root, command.entry)],
-    outdir: command.out,
+async function build(command: Command, log: (line: string) => void): Promise<number> {
+  const { root, server } = command;
+  const clientOut = server === undefined ? command.out : resolve(command.out, 'client');
+  const page = resolve(root, 'index.html');
+  // The page, when there is one, so Bun writes it with the bundled script and styles in it.
+  const entry = existsSync(page) ? page : resolve(root, command.client);
+  const shared = { client: command.client, ...(server === undefined ? {} : { server }), root };
+
+  const client = await Bun.build({
+    entrypoints: [entry],
+    outdir: clientOut,
     target: 'browser',
     sourcemap: 'linked',
     minify: command.minify,
-    plugins: [memoizedDom({ entries: [command.entry], root: command.root })],
+    plugins: [memoizedDom({ ...shared, target: 'client' })],
     throw: false,
   });
+  if (!report(client, log)) return 1;
+  if (server === undefined) return 0;
+
+  const document = await documentOf(client, clientOut);
+  const files = client.outputs.map((output) => relative(clientOut, output.path).replaceAll('\\', '/'));
+  const delivery = `import { createAssetHandler } from '@memoized-dom/adapters/bun';
+const page = ${JSON.stringify(document)};
+export default {
+  document: () => page,
+  assets: createAssetHandler(new URL('./client/', import.meta.url), { files: ${JSON.stringify(files)} }),
+};
+`;
+  const backend = await Bun.build({
+    entrypoints: [resolve(root, server.entry)],
+    outdir: command.out,
+    target: 'bun',
+    sourcemap: 'linked',
+    minify: command.minify,
+    plugins: [memoizedDom({ ...shared, target: 'server', delivery })],
+    throw: false,
+  });
+  return report(backend, log) ? 0 : 1;
+}
+
+/**
+ * The document the server renders into: the built page, or one that loads the client's script.
+ * Either way it needs the `<!--ssr-outlet-->` marker where the app goes (`docs/09-ssr.md`).
+ */
+async function documentOf(client: BuildOutput, clientOut: string): Promise<string> {
+  const html = client.outputs.find((output) => output.path.endsWith('.html'));
+  if (html !== undefined) return html.text();
+  const script = client.outputs.find((output) => output.kind === 'entry-point')!;
+  const src = `/${relative(clientOut, script.path).replaceAll('\\', '/')}`;
+  return `<!doctype html><html><head><meta charset="utf-8"><title>${basename(src)}</title></head><body><div id="root"><!--ssr-outlet--></div><script type="module" src="${src}"></script></body></html>`;
+}
+
+function report(result: BuildOutput, log: (line: string) => void): boolean {
   for (const message of result.logs) log(String(message.message));
-  if (!result.success) return 1;
+  if (!result.success) return false;
   for (const output of result.outputs) log(`wrote ${output.path}`);
-  return 0;
+  return true;
 }
 
 if (import.meta.main) {

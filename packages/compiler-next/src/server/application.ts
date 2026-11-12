@@ -18,6 +18,9 @@
  *   server function routes (`./.memoized/server-functions.server.ts`) and the tool's delivery
  *   module (the page's document and its assets, which depend on where the app runs).
  */
+import { is } from 'yuku-ast';
+import { langFromPath, parse } from 'yuku-parser';
+import type { Node } from 'yuku-parser';
 import { CompileError } from '../core/diagnostics';
 import { importCandidates, relativeModule } from '../core/resolve/imports';
 import type { CompileModulesOptions } from '../options';
@@ -163,7 +166,9 @@ export function createApplication(options: ApplicationOptions): Application {
         }
         if (side === 'server') {
           if (specifier === 'virtual:memoized-dom/server-functions') return GENERATED.registry;
-          if (specifier === '@memoized-dom/server' && importer !== GENERATED.server) return GENERATED.server;
+          if (specifier === '@memoized-dom/server' && importer !== GENERATED.server && await importsServe(host, importer)) {
+            return GENERATED.server;
+          }
         }
         return host.resolve?.(specifier, importer);
       },
@@ -305,6 +310,31 @@ function checkServerOnly(build: ProjectBuild, side: 'client' | 'server'): Projec
     return { ok: false, error: new CompileError(message, path), modules: build.modules };
   }
   return build;
+}
+
+/**
+ * Whether a module takes `serve` from `@memoized-dom/server` (by name, as a namespace, or by
+ * re-exporting it). Only those get the generated `serve()`: a module taking `createDefine` from
+ * the package, such as the app's `define.ts`, keeps the package itself, since the generated module
+ * imports every server function, and server functions import `define`; sending `define.ts` there
+ * would make a cycle in which a function reads `define` before it is set. The old Vite plugin
+ * decided the same way (`packages/vite/src/fullstack.ts`, `integratedServerImports`).
+ */
+async function importsServe(host: ProjectHost, importer: string): Promise<boolean> {
+  const text = await host.readFile(importer);
+  if (text === undefined) return false;
+  const { program } = parse(text, { lang: langFromPath(importer), sourceType: 'module' });
+  for (const statement of program.body as Node[]) {
+    if (is.ExportAllDeclaration(statement) && statement.source.value === '@memoized-dom/server') return true;
+    if ((is.ImportDeclaration(statement) || is.ExportNamedDeclaration(statement)) && statement.source?.value === '@memoized-dom/server') {
+      for (const specifier of statement.specifiers) {
+        if (is.ImportNamespaceSpecifier(specifier)) return true;
+        const name = is.ImportSpecifier(specifier) ? specifier.imported : is.ExportSpecifier(specifier) ? specifier.local : null;
+        if (name !== null && (is.Identifier(name) ? name.name : String(name.value)) === 'serve') return true;
+      }
+    }
+  }
+  return false;
 }
 
 /** A folder as a project path, without a trailing slash. */

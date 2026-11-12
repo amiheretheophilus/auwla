@@ -169,7 +169,7 @@ export {
 } from './render-value';
 export {
   componentValue, componentSetup, createCompiledValue, createComponentValue, createPropsCell,
-  defineComponent, sameProps, sameValue, type PropsCell,
+  defineComponent, sameProps, sameValue, valueComponent, type PropsCell,
 } from './components';
 export { publishVersions } from './computation';
 export { noteCodeFromText, publishGlobal, trackGlobal } from './globals';

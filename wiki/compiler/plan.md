@@ -373,7 +373,8 @@ array child). Remove each check when its phase is built.
 - [ ] SSR from the project too (`server.md`), asked for by the user (2026-11-12), so Vite and the
   Bun plugin share it: [x] server function analysis and facades; [ ] the application (client and
   server builds), the registry and the server entry's integration; [ ] the Bun plugin and command
-  line building both. [x] The application, the registry and the integration.
+  line building both. [x] The application, the registry and the integration. [x] The Bun plugin
+  and command line building both, a built server answering requests in tests.
 - [ ] HMR in the Vite dev server, which the user asked for explicitly (2026-11-12): an edited
   module replaces its components in place, keeping the state that can be kept, as the old
   compiler does through `runtime/src/hot.ts` and `packages/vite`. compiler-next emits no

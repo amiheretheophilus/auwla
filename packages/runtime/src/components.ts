@@ -209,6 +209,14 @@ export function componentValue(component: Function): (...args: unknown[]) => obj
   return adapter;
 }
 
+/**
+ * The component behind a `componentValue` adapter, or the value itself. A server rendering a root
+ * it was handed as a value (`app.ssr(App)`) renders the component, not the adapter's render value.
+ */
+export function valueComponent(value: Function): Function {
+  return valueComponents.get(value) ?? value;
+}
+
 /** A discarded native call runs setup without mounting its returned markup. */
 export function componentSetup(component: Component): (...args: unknown[]) => void {
   const callable = (valueComponents.get(component) ?? component) as Component;

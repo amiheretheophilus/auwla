@@ -4,9 +4,23 @@
 
 Status (2026-11-12): server function analysis, client facades and declarations (matching the old
 compiler's exactly), the application (a client and a server build of one project), the registry and
-the server entry's integration are built. The Bun plugin and the command line building both, and a
-server actually answering a request in a test, are next. The user asked (2026-11-12) that the project
-compile SSR without Vite, so that Vite and the Bun plugin are thin adapters with the same features.
+the server entry's integration are built, and the Bun plugin and command line build both programs: a
+server built that way renders its page, serves the client's files and answers its server functions
+(`project/bun.test.ts`, `project/cli.test.ts`). The user asked (2026-11-12) that the project compile
+SSR without Vite, so that Vite and the Bun plugin are thin adapters with the same features.
+
+Running it found two things, both fixed:
+
+- `serve()` was redirected for every `@memoized-dom/server` import, including the app's
+  `define.ts` (`createDefine`). The generated module imports every server function and server
+  functions import `define`, so that made a cycle, and a function read `define` before it was set.
+  Only a module that takes `serve` (by name, as a namespace, or re-exported) gets it now, as the old
+  Vite plugin decided.
+- `app.ssr(Page)` passes compiler-next's component adapter (a component used as a value,
+  `componentValue`), and the server's render session called it, getting a render value and
+  printing `[object Object]`. The session now renders the component behind it
+  (`valueComponent`, `packages/runtime/src/components.ts`; `packages/server/src/session.ts`); for
+  an old compiled root it is the root itself.
 
 ## What it does
 

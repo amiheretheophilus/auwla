@@ -72,18 +72,27 @@ output has a map back to the text the caller gave, with that text as its `source
 
 ## Bun
 
-`memoizedDom({ entries, root?, ...options })` (`project/bun.ts`) is a Bun plugin, for `Bun.build`
-and for Bun's runtime (`Bun.plugin`):
+`memoizedDom({ client, server?, target?, delivery?, root?, ...options })` (`project/bun.ts`) is a
+Bun plugin over an application (`server.md`), for `Bun.build` and for Bun's runtime (`Bun.plugin`):
 
 ```ts
-await Bun.build({ entrypoints: ['./src/main.tsx'], plugins: [memoizedDom({ entries: ['./src/main.tsx'] })] });
+await Bun.build({ entrypoints: ['./src/main.ts'], plugins: [memoizedDom({ client: './src/main.ts' })] });
+await Bun.build({
+  entrypoints: ['./server.ts'], target: 'bun',
+  plugins: [memoizedDom({ client: './src/main.ts', server: { entry: './server.ts', folder: './server' }, target: 'server', delivery })],
+});
 ```
 
-- The first module Bun loads builds the whole program; every other module comes from that build.
+- `target` picks the program: the client's or the server's.
+- The first module Bun loads builds the application; every other module comes from that build.
   Each `Bun.build` starts a new one (`onStart`).
 - A compiled module's code goes to Bun as JavaScript with its source map inline.
-- Companion outputs (`./App.mmd.tsx`, `linking.md`) exist only in the build, so the plugin resolves
-  them itself. A module the program does not reach (a package, a stylesheet) is left to Bun.
+- Modules that exist only in the build (companion outputs such as `./App.mmd.tsx`, the generated
+  `.memoized/` modules) are resolved by the plugin, probing a relative import as the compiler does,
+  since generated imports leave out the extension. A module the program does not reach (a
+  package, a stylesheet) is left to Bun.
+- `delivery` is the source of the server's delivery module (the page's document and its assets),
+  served as `./.memoized/delivery.ts`, so its own imports resolve from the app's folder.
 - A compile error fails the build, with its module in Bun's log.
 
 ## Command line
@@ -91,12 +100,18 @@ await Bun.build({ entrypoints: ['./src/main.tsx'], plugins: [memoizedDom({ entri
 `project/cli.ts`, run with Bun:
 
 ```
-bun packages/compiler-next/src/project/cli.ts check src/main.tsx
-bun packages/compiler-next/src/project/cli.ts build src/main.tsx --out dist [--minify] [--root .]
+bun packages/compiler-next/src/project/cli.ts check src/main.ts [--server server.ts --server-folder server]
+bun packages/compiler-next/src/project/cli.ts build src/main.ts --out dist [--minify] [--root .] [--server … --server-folder …]
 ```
 
-`check` compiles the program and reports the first error (exit 1). `build` bundles it for the
-browser with `Bun.build` and the plugin, a linked source map beside each file.
+`check` compiles the application (both programs with a server) and reports the first error
+(exit 1). `build` bundles it with `Bun.build` and the plugin, a linked source map beside each file:
+
+- **Client only:** the bundle in `--out`, starting from `index.html` when there is one.
+- **With a server:** the client in `<out>/client`, then the server in `<out>/server.js`, whose
+  delivery module serves the built page as the document (or a generated page with the
+  `<!--ssr-outlet-->` marker when there is no `index.html`) and the client's files through
+  `@memoized-dom/adapters/bun`. `bun dist/server.js` runs it, as in `docs/09-ssr.md`.
 
 ## Files
 
@@ -108,9 +123,9 @@ browser with `Bun.build` and the plugin, a linked source map beside each file.
 | `project/index.ts` | The public API, re-exported from the package root |
 | `project/project.test.ts` | Collecting, aliases, errors, edits, new and deleted files, disk, maps |
 | `project/bun.ts` | The Bun plugin |
-| `project/bun.test.ts` | `Bun.build` of an app with a companion output and a stylesheet; a compile error |
-| `project/cli.ts` | The command line: `check` and `build` |
-| `project/cli.test.ts` | Arguments, checking, and a build with the runtime bundled and maps written |
+| `project/bun.test.ts` | Client: a companion output, a stylesheet, a compile error. Server: a built server rendering its page, a route reading `#server/` code, and a server function |
+| `project/cli.ts` | The command line: `check` and `build`, with or without a server |
+| `project/cli.test.ts` | Arguments, checking, a client build, and a server build serving its page, its script (which hydrates) and a server function |
 
 ## Still to do
 

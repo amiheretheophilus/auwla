@@ -127,9 +127,16 @@ it. Done: server function analysis and facades (matching the old compiler exactl
 a client and a server build over one host with generated barrel, facades, registry and `serve()`
 integration; resolved specifiers printed as relative paths. The server folder is declared
 (`server: { entry, folder }`), never assumed from a name. Module state nothing reactive reads needs no
-reader (a server entry went from 2,757 bytes to 280; client builds benefit too). Next: the Bun plugin
-and command line building both, with a server answering a request in a test, then `packages/vite`
-with HMR.
+reader (a server entry went from 2,757 bytes to 280; client builds benefit too). The Bun plugin and
+command line build both programs: `cli.ts build src/main.ts --server server.ts --server-folder server`
+writes `dist/client` and `dist/server.js`, which renders the page, serves the client's files and
+answers server functions (tested). Next: `packages/vite` on applications, with HMR.
+
+Seen while checking the server change, not caused by it (the same with and without it): in a whole
+`packages/server` run, 8 tests fail (`initial-request`, `pages`, `serve`: in-memory `$fetch` reaches
+the network), and they pass when their files run alone, so an earlier test leaves state behind. In
+`packages/runtime`, `effect-scope.test.ts` "clears an assigned ref owned before later setup fails"
+fails on `document is not defined`.
 
 ## Closing documented issues before Phase 10 (2026-11-06)
 
