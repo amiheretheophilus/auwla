@@ -23,6 +23,7 @@ import type { SourceMap } from '../core/emit/source-map';
 import { createApplication, type ApplicationBuild, type ServerOptions } from '../server/application';
 import { fileSystemHost, projectPath, type ProjectHost } from './host';
 import type { ProjectBuild } from './project';
+import { initialPage } from './page';
 
 export interface BunPluginOptions extends CompileModulesOptions {
   /** The browser's entry, relative to `root`. */
@@ -80,6 +81,17 @@ export function memoizedDom(options: BunPluginOptions): BunPlugin {
         const candidates = importCandidates(args.path, projectPath(root, args.importer)) ?? [];
         const found = candidates.find((candidate) => program.output[candidate] !== undefined);
         return found === undefined ? undefined : { path: resolve(root, found) };
+      });
+
+      // A page that cannot change ships as its HTML, with no script (`page.ts`). With a server,
+      // the server renders the page.
+      build.onLoad({ filter: /\.html$/ }, async (args) => {
+        if (target !== 'client' || server !== undefined || args.path.includes('node_modules')) return undefined;
+        const program = await compiled();
+        if (!program.ok) return undefined;
+        const shell = await Bun.file(args.path).text();
+        const page = initialPage(shell, projectPath(root, args.path), program);
+        return page === null ? undefined : { contents: page, loader: 'html' };
       });
 
       build.onLoad({ filter: SOURCE }, async (args) => {

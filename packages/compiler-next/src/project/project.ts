@@ -13,6 +13,7 @@ import type { CompileModulesOptions } from '../options';
 import { compileModulesDetailed } from '../pipeline';
 import { collectModules, type CollectedModule } from './collect';
 import { normalizeProjectPath, type ProjectHost } from './host';
+import { stylesheetsOf } from './stylesheets';
 
 export interface ProjectOptions extends CompileModulesOptions {
   /** The modules the app starts from, as project paths (`./src/main.tsx`). */
@@ -33,6 +34,8 @@ export interface CompiledProject {
   /** Present when the page needs no browser program (`wiki/compiler/delivery.md`). */
   readonly initialDelivery?: InitialDelivery;
   readonly modules: readonly string[];
+  /** The stylesheets the program imports, in the order a browser applies them (`stylesheets.ts`). */
+  readonly stylesheets: readonly string[];
 }
 
 export interface FailedProject {
@@ -87,7 +90,7 @@ export function createProject(options: ProjectOptions): Project {
     }
 
     previous = compiled.output;
-    return { ok: true, ...compiled, modules };
+    return { ok: true, ...compiled, modules, stylesheets: stylesheetsOf(entries, known) };
   }
 
   async function update(paths: readonly string[]): Promise<ProjectUpdate> {

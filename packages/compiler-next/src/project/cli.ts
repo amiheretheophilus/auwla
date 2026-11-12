@@ -10,7 +10,7 @@
  * `<out>/client` and the server to `<out>/server.js`, which serves the built page and its files:
  * `bun dist/server.js` with a server entry that default-exports its application.
  */
-import { existsSync } from 'node:fs';
+import { existsSync, rmSync } from 'node:fs';
 import { basename, relative, resolve } from 'node:path';
 import type { BuildOutput } from 'bun';
 import { createApplication, type ServerOptions } from '../server/application';
@@ -104,6 +104,7 @@ async function build(command: Command, log: (line: string) => void): Promise<num
     throw: false,
   });
   if (!report(client, log)) return 1;
+  await dropEmptyScripts(client);
   if (server === undefined) return 0;
 
   const document = await documentOf(client, clientOut);
@@ -137,6 +138,32 @@ async function documentOf(client: BuildOutput, clientOut: string): Promise<strin
   const script = client.outputs.find((output) => output.kind === 'entry-point')!;
   const src = `/${relative(clientOut, script.path).replaceAll('\\', '/')}`;
   return `<!doctype html><html><head><meta charset="utf-8"><title>${basename(src)}</title></head><body><div id="root"><!--ssr-outlet--></div><script type="module" src="${src}"></script></body></html>`;
+}
+
+/**
+ * Bun gives an HTML page a script even when it has none, as an empty file. A page that ships as
+ * HTML (`page.ts`) must load no script at all, so the empty file and its tag are removed.
+ */
+async function dropEmptyScripts(client: BuildOutput): Promise<void> {
+  const empty = new Set<string>();
+  for (const output of client.outputs) {
+    // Empty but for Bun's comments (`//# debugId=…`, `//# sourceMappingURL=…`).
+    const code = (await output.text()).replace(/^\/\/#.*$/gm, '').trim();
+    if (output.path.endsWith('.js') && code === '') empty.add(output.path);
+  }
+  if (empty.size === 0) return;
+  for (const page of client.outputs.filter((output) => output.path.endsWith('.html'))) {
+    let html = await page.text();
+    for (const file of empty) {
+      const name = basename(file).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      html = html.replace(new RegExp(`<script[^>]*\\ssrc="(?:\\./)?${name}"[^>]*></script>`, 'g'), '');
+    }
+    await Bun.write(page.path, html);
+  }
+  for (const file of empty) {
+    rmSync(file, { force: true });
+    rmSync(`${file}.map`, { force: true });
+  }
 }
 
 function report(result: BuildOutput, log: (line: string) => void): boolean {

@@ -108,6 +108,33 @@ gives it to the client build only), compiler-next's output works with any dev se
 The old compiler's mechanism (`registerHotComponent` inside every factory) stays in
 `runtime/src/hot.ts` until that compiler is deleted.
 
+## Build-time page
+
+A page that cannot change ships as HTML, with no script (`delivery.md`). The compiler decides and
+runs the app while building (`initialRender`); `initialPage(shell, shellPath, build)` (`page.ts`)
+writes the result into the page's HTML, for every tool: Vite's `transformIndexHtml`, the Bun
+plugin's loading of `.html`, and so the command line. Builds only (a dev server keeps the program
+for hot updates), and client builds only (with a server, the server renders the page).
+
+- Only an unambiguous shell is rewritten, else it is left to the browser program (null): one module
+  script, loading the app's mount module (`src` relative to the page or from the root, no query),
+  an empty `<div>` with the mount's id directly in `<body>`, no `<base>`, `<template>` or
+  `<noscript>`. The rest of the file is kept byte for byte (the old plugin's rule,
+  `packages/vite/src/initial-html.ts`).
+- The script took the program's stylesheets with it, so its place gets a `<link>` for each, in the
+  order a browser applies them: modules after what they import, each module's imports in the order
+  written (`stylesheets.ts`; a build's `stylesheets`). The links are relative to the page, which
+  Vite, Bun and the browser read alike; Bun reads `/src/…` from its working directory.
+- A plain stylesheet import runs no code, so it no longer sends a page to the browser: the mount
+  module may import one, and the build-time run gives it no exports (`features/delivery`). A CSS
+  module (`./x.module.css`) still does: its class names are the bundler's.
+- Bun gives an HTML page an empty script even when it has none; the command line removes it and
+  its tag after building. A `Bun.build` call of one's own keeps that empty request.
+
+Only the first level of `delivery.md` exists in compiler-next: a page is wholly HTML or wholly the
+browser's. The old compiler's middle levels (a static shell with interactive parts, adopting
+pre-rendered nodes) will write their pages through the same function.
+
 ## Vite
 
 `memoizedDom({ clientEntry, serverEntry?, server?, compiler: 'next' })` (or `MMD_COMPILER=next`) is
@@ -146,8 +173,7 @@ is server-only by its name (the old plugin assumed `server`).
   from a package.
 
 Not yet in the new plugin, each the old plugin's: `compilePackages` (rejected with an error), native
-packages, the devtools inspector, the build-time page (`initialDelivery`) written into
-`index.html`, extracted styles and route CSS, lazy route chunks, Cloudflare (untested), library
+packages, the devtools inspector, route CSS, lazy route chunks, Cloudflare (untested), library
 builds and server pages. An edit that moves code without changing output (a comment) leaves that
 module's source map stale until its next real change.
 
@@ -157,8 +183,8 @@ the same way and none drifts. A plugin keeps only what is its tool's:
 
 | Feature | The project's part | The tool's part |
 | --- | --- | --- |
-| Styles | Extracting each component's CSS; which styles the first page needs and which each lazy route adds | Giving the CSS to its bundler; the `<link>` tags it serves |
-| Build-time page | `initialRender` / `initialDelivery` (built), and writing them into the page's HTML | Which HTML file, and when (`transformIndexHtml`, the command line's copy) |
+| Styles | Which stylesheets the first page needs (built: a build's `stylesheets`) and which each lazy route adds. No extraction: compiler-next compiles no TSRX, the only source of scoped `<style>` (`toolchain.md`) | Giving the CSS to its bundler; the `<link>` tags it serves |
+| Build-time page | Built: `initialRender`, and `initialPage` writing it into the page's HTML ("Build-time page") | Built: which HTML file, and when (`transformIndexHtml`, the Bun plugin's HTML loader) |
 | Lazy route chunks | `import()` for a lazy route, and the route's styles | Nothing: bundlers split at `import()` |
 | Installed packages | Which ship source, compiling them into the program, their artifacts | Its resolver (the host), cache folder, watching `node_modules` |
 | Devtools | The diagnostics compiled code reports | Serving the inspector |
@@ -215,6 +241,9 @@ bun packages/compiler-next/src/project/cli.ts build src/main.ts --out dist [--mi
 | `project/host.ts` | `ProjectHost`, `fileSystemHost` and project paths |
 | `project/index.ts` | The public API, re-exported from the package root |
 | `project/project.test.ts` | Collecting, aliases, errors, edits, new and deleted files, disk, maps |
+| `project/page.ts` | `initialPage`: the build-time page written into the page's HTML |
+| `project/stylesheets.ts` | The stylesheets a program imports, in the order a browser applies them |
+| `project/page.test.ts` | Stylesheet order, a static page written with its links, relative `src`, an interactive page and a CSS module left alone, shells it refuses |
 | `project/bun.ts` | The Bun plugin |
 | `project/bun.test.ts` | Client: a companion output, a stylesheet, a compile error. Server: a built server rendering its page, a route reading `#server/` code, and a server function |
 | `project/cli.ts` | The command line: `check` and `build`, with or without a server |

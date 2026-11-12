@@ -75,6 +75,22 @@ describe("compiler: 'next'", () => {
     expect(bundle).not.toContain('acceptComponents');
   });
 
+  it('builds a page that cannot change as HTML, with its stylesheets and no script', async () => {
+    write('static/index.html', '<!doctype html><html><head><title>static</title></head><body><div id="root"></div><script type="module" src="/src/main.ts"></script></body></html>');
+    write('static/src/main.ts', `import './base.css';\nimport { mount } from '@memoized-dom/runtime';\nimport { Page } from './Page';\nmount('root', Page);\n`);
+    write('static/src/base.css', 'body { margin: 0; }\n');
+    write('static/src/Page.tsx', `export function Page() { return <main><h1>Static</h1></main>; }\n`);
+    const app = join(root, 'static');
+    await build(viteConfig(app));
+
+    const page = readFileSync(join(app, 'dist', 'index.html'), 'utf8');
+    expect(page).toContain('<div id="root"><main><h1>Static</h1></main></div>');
+    expect(page).not.toContain('<script');
+    // Vite processed the linked stylesheet into a built file.
+    expect(page).toMatch(/<link rel="stylesheet"[^>]*href="\/assets\/[^"]+\.css"/);
+    expect(readdirSync(join(app, 'dist', 'assets')).filter((name) => name.endsWith('.js'))).toEqual([]);
+  });
+
   it.skipIf(shortName(root) === null)('compiles an app whose entry is given by its Windows short name', async () => {
     const app = clientApp('short');
     const short = shortName(app)!;

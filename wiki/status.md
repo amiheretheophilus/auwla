@@ -162,6 +162,15 @@ internal functions, mixing spellings no Vite build produces (Vite resolves roots
 names); the tests' preload (`test-support/setup.ts`) gives the temp folder its real name, as Vite
 would.
 
+**The build-time page, in the project** (`compiler/project.md`, "Build-time page"), following the
+user's direction that build features live in the compiler project: `initialPage` writes a page that
+cannot change into its HTML, with no script and a `<link>` for each stylesheet the program imports,
+in the order a browser applies them. Vite (`transformIndexHtml`), the Bun plugin (loading `.html`)
+and the command line all use it; tested in each. Found on the way: a plain `import './app.css'` sent
+any page to the browser (it was taken for code), and Bun gives a script-less page an empty script,
+which the command line now removes. Styles need no extraction: compiler-next compiles no TSRX, so
+the styles still to do are lazy routes' (after lazy route chunks).
+
 The Vite package's dependencies now list what its bundle imports (`yuku-*`, `@memoized-dom/server`),
 with compiler-next, which is bundled, as a dev dependency; `bun.lock` is updated to match, as CI
 installs with `--frozen-lockfile`.

@@ -50,6 +50,23 @@ describe('the command line', () => {
     expect(bundle).toContain('runtime/dist/markup.js');
   });
 
+  it('builds a page that cannot change as HTML, with its stylesheet and no script', async () => {
+    write('static/index.html', '<!doctype html><html><head><title>static</title></head><body><div id="root"></div><script type="module" src="./src/main.ts"></script></body></html>');
+    write('static/src/main.ts', `import './base.css';\nimport { mount } from '@memoized-dom/runtime';\nimport { Page } from './Page';\nmount('root', Page);\n`);
+    write('static/src/base.css', 'body { margin: 0; }\n');
+    write('static/src/Page.tsx', 'export function Page() { return <main><h1>Static</h1></main>; }\n');
+    const app = join(root, 'static');
+    const command = parseArguments(['build', 'src/main.ts', '--out', 'dist'], app);
+    if (typeof command === 'string') throw new Error(command);
+    expect(await run(command, () => {})).toBe(0);
+
+    const page = await Bun.file(join(app, 'dist', 'index.html')).text();
+    expect(page).toContain('<div id="root"><main><h1>Static</h1></main></div>');
+    expect(page).not.toContain('<script');
+    expect(page).toMatch(/<link rel="stylesheet"[^>]*href="[^"]+\.css"/);
+    expect(readdirSync(join(app, 'dist')).filter((name) => name.endsWith('.js'))).toEqual([]);
+  });
+
   it('builds a server that serves its page, its files and its server functions', async () => {
     write('full/index.html', '<!doctype html><html><head><title>full</title></head><body><div id="root"><!--ssr-outlet--></div><script type="module" src="./src/main.ts"></script></body></html>');
     write('full/src/main.ts', `import { mount } from '@memoized-dom/runtime';\nimport { Page } from './Page';\nmount('root', Page);\n`);

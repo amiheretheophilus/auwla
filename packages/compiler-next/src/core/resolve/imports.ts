@@ -73,6 +73,22 @@ export function importResolver(paths: readonly string[], options: CompileModules
   };
 }
 
+const STYLESHEET = /\.(?:css|less|sass|scss|styl|stylus|pcss|postcss|sss)$/i;
+
+/** Whether a path or specifier names a stylesheet, which a bundler loads, never the compiler. */
+export function isStylesheet(specifier: string): boolean {
+  return STYLESHEET.test(specifier);
+}
+
+/**
+ * A stylesheet imported for its effect on the page (`./app.css`): it runs no code and exports
+ * nothing a page reads. Not a CSS module (`./app.module.css`), whose exports are class names the
+ * bundler makes.
+ */
+export function isPlainStylesheet(specifier: string): boolean {
+  return isStylesheet(specifier) && !/\.module\.[a-z]+$/i.test(specifier);
+}
+
 /**
  * The paths a specifier may name, in the order they are tried: as written, with each source
  * extension, as a folder's index, and the TypeScript source of a written `.js`. Null for a bare

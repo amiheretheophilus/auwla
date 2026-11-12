@@ -13,7 +13,11 @@ import { renderToString } from '@memoized-dom/server';
 import type { ServerComponent } from '@memoized-dom/server';
 import { noteEventListeners } from '@memoized-dom/server/internal';
 import { toModuleFunction } from '../../core/parse/module-function';
+import { isPlainStylesheet } from '../../core/resolve/imports';
 import { STABLE_GLOBALS } from '../../optimize/effects';
+
+/** What a plain stylesheet's import gives the build: nothing. */
+const NO_EXPORTS: object = Object.freeze(Object.create(null));
 
 /** Globals with the same result on every machine and at every time. */
 const ALLOWED_GLOBALS: Readonly<Record<string, unknown>> = Object.fromEntries(
@@ -85,6 +89,8 @@ export function runAtBuild(
     const module = toModuleFunction(output[path]!);
     const imports = module.specifiers.map((specifier) => {
       if (specifier === runtimePath) return watchedRuntime;
+      // A plain stylesheet runs no code and exports nothing; the page links it instead.
+      if (isPlainStylesheet(specifier)) return NO_EXPORTS;
       const target = resolve(specifier, path);
       // A package may do anything when it loads, so only the browser can load it.
       if (typeof target !== 'string' || output[target] === undefined) {

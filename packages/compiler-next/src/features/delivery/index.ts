@@ -7,7 +7,7 @@ import { is } from 'yuku-ast';
 import type { Module, Resolved } from '../../core/resolve';
 import { importedDefinition } from '../../core/resolve';
 import { frameworkPackage, importOf, isFrameworkMount } from '../../core/resolve/exports';
-import { importResolver } from '../../core/resolve/imports';
+import { importResolver, isPlainStylesheet } from '../../core/resolve/imports';
 import { DEFAULT_RUNTIME_PATH, type CompileModulesOptions } from '../../options';
 import { htmlKeepsItsShape } from './html-shape';
 import { runAtBuild } from './run';
@@ -83,12 +83,16 @@ function findApplicationRoot(resolved: Resolved): ApplicationRoot | null {
       return null;
     }
     // The build runs the root's module only. Any other import, `import './initialize'` too, runs
-    // code before the page that the build would not, so such an entry is the browser's.
+    // code before the page that the build would not, so such an entry is the browser's. A plain
+    // stylesheet (`import './app.css'`) runs no code; the page links it (`project/page.ts`).
     const rootBinding = module.referenceOf(component)?.binding ?? null;
     const onlyMounts = module.ast.body.every((statement) => {
       if (is.ExpressionStatement(statement)) return statement.expression === call;
       if (!is.ImportDeclaration(statement)) return false;
-      if (statement.specifiers.length === 0) return String(statement.source.value).startsWith('@memoized-dom/');
+      if (statement.specifiers.length === 0) {
+        const source = String(statement.source.value);
+        return source.startsWith('@memoized-dom/') || isPlainStylesheet(source);
+      }
       return statement.specifiers.every((specifier) => {
         const binding = module.bindings.find((candidate) => candidate.declarations[0] === specifier.local);
         return binding !== undefined && (binding === rootBinding || frameworkPackage(binding) !== null);

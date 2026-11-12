@@ -25,7 +25,7 @@ import { dirname, join, relative, resolve } from 'node:path';
 import { normalizePath } from 'vite';
 import type { DevEnvironment, EnvironmentModuleNode, Plugin, ResolvedConfig, ViteDevServer } from 'vite';
 import {
-  createApplication, GENERATED, importCandidates, isSourcePath, normalizeProjectPath, projectPath,
+  createApplication, GENERATED, importCandidates, initialPage, isSourcePath, normalizeProjectPath, projectPath,
   type Application, type ApplicationBuild, type ApplicationUpdate, type CompileError, type ProjectBuild,
 } from '@memoized-dom/compiler-next';
 import type { MemoizedDomViteOptions } from '../options';
@@ -282,6 +282,19 @@ export function memoizedDomNext(options: MemoizedDomViteOptions): Plugin {
       const map = program.maps?.[path];
       // Vite's map type has mutable arrays.
       return { code, map: map === undefined ? null : { ...map, sources: [...map.sources], names: [...map.names], sourcesContent: [...(map.sourcesContent ?? [])] } };
+    },
+
+    transformIndexHtml: {
+      order: 'pre',
+      async handler(html, context) {
+        // A page that cannot change ships as its HTML, with no script (`project/page.ts`). Only
+        // in a build: a dev server keeps the program, for hot updates. With a server, the server
+        // renders the page.
+        if (config?.command !== 'build' || serverEntry !== undefined) return html;
+        const build = await built();
+        if (!build.client.ok) return html;
+        return initialPage(html, pathOf(context.filename), build.client) ?? html;
+      },
     },
 
     renderChunk(code, chunk) {
