@@ -122,14 +122,43 @@ const compiledComponents = new WeakSet<Function>();
 const hostPrograms = new Map<string, RenderProgram>();
 let nextChild = 0;
 
+/** What a compiled component is called with: enough to call a new definition the same way. */
+export interface ComponentMount {
+  readonly id: string;
+  readonly parent: string | null;
+  readonly cell: PropsCell;
+  readonly namespace: 'html' | 'svg' | undefined;
+}
+
+/**
+ * What hot replacement (`hot.ts`) watches. Only a dev server's modules import it, so a production
+ * page pays one null check per component mount and nothing else.
+ */
+export interface ComponentHooks {
+  /** A module defined `component` under `key` (`./App.tsx#App`), again after an edit. */
+  defined(component: Function, key: string): void;
+  /** Calls `component`, or its newest definition, remembers the instance, and returns its output. */
+  mount(component: Function, instance: ComponentMount): unknown;
+}
+let hooks: ComponentHooks | null = null;
+
+export function installComponentHooks(installed: ComponentHooks): void {
+  hooks = installed;
+}
+
 /** Keep calling-convention metadata outside authored functions and objects. */
 export function defineComponent<T extends Function>(component: T, rootId?: string): T {
   compiledComponents.add(component);
   if (rootId !== undefined) {
+    hooks?.defined(component, rootId);
     registerRootFactory(component, {
       id: rootId,
       create() {
-        return (component as unknown as Component)(rootId, null, createPropsCell({})) as Node;
+        const cell = createPropsCell({});
+        if (hooks !== null) {
+          return hooks.mount(component, { id: rootId, parent: null, cell, namespace: undefined }) as Node;
+        }
+        return (component as unknown as Component)(rootId, null, cell) as Node;
       },
     });
   }
@@ -261,7 +290,10 @@ function componentProgram(
     mount(values: readonly unknown[], owner: RenderOwner): RenderEntry {
       const id = `${owner.id}/c${nextChild++}`;
       const cell = createPropsCell(values[0], values[1] as readonly unknown[] | undefined, values[2]);
-      const nodes = nodesOf(component(id, owner.entity?.id ?? null, cell, owner.namespace));
+      const parent = owner.entity?.id ?? null;
+      const nodes = nodesOf(hooks === null
+        ? component(id, parent, cell, owner.namespace)
+        : hooks.mount(component, { id, parent, cell, namespace: owner.namespace }));
       return {
         nodes,
         update(next) {

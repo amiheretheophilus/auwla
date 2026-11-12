@@ -70,6 +70,43 @@ output has a map back to the text the caller gave, with that text as its `source
 - Module state that moves to a companion output (`./App.mmd.ts`) has its own map, whose source is
   still the authored module.
 
+## Hot replacement
+
+The user asked (2026-11-12) for HMR in the Vite dev server: an edited module replaces its components
+in place, keeping the state that can be kept. With `hot: true` (a compiler option; an application
+gives it to the client build only), compiler-next's output works with any dev server that has
+`import.meta.hot` (Vite, and Bun's):
+
+- **The runtime watches instances.** Importing `@memoized-dom/runtime/hot` installs hooks
+  (`installComponentHooks`, `runtime/src/components.ts`) at the two places a compiled component is
+  called: a value slot mounting it, and `mount()` creating the root. Each instance's id, parent,
+  props cell and nodes are remembered. A production page never imports it and pays one null check
+  per component mount.
+- **Keys match definitions across edits** (`components.md`, "Keys"). A module evaluated again
+  defines new functions under the same keys. `acceptComponents()` then mounts each live instance
+  of a changed key again with the new function: same id and props cell, nodes swapped in place.
+  Outer instances go first, so children their new render mounted are not replaced twice. A module
+  that was not evaluated again still holds the old function; mounting it gives the newest.
+- **What is kept:** module state in every module not evaluated again (a companion output that did
+  not change keeps the state moved into it), and every instance of an unchanged component. The
+  replaced instance's own state starts again, as with the old compiler.
+- **Boundaries** (`features/hot/boundary.ts`): a module accepts its own update when it defines
+  components under keys and exports nothing else (type exports are erased). Any other module lets
+  the update reach its importers, as a dev server does, until one accepts it. The entry, which
+  calls `mount()`, never does, so an edit reaching it reloads the page.
+- **Module effects:** a dev server calls `dispose` only on the accepting module, so a module evaluated
+  again on the way would start its module-scope effects twice. Before the top-level statement that
+  makes its effect scope, the module calls `moduleEvaluating(path)`, which stops the previous
+  evaluation's effects. It goes there, not first: a companion output can make the scope of the
+  module importing it, and evaluates before it.
+- **A failing edit** keeps the last good DOM and rethrows, so the dev server shows its error; the
+  next edit that compiles replaces it.
+- The added code (`features/hot/emit.ts`) is added to the tree after linking, with no place in the
+  authored text, so source maps leave it unmapped.
+
+The old compiler's mechanism (`registerHotComponent` inside every factory) stays in
+`runtime/src/hot.ts` until that compiler is deleted.
+
 ## Bun
 
 `memoizedDom({ client, server?, target?, delivery?, root?, ...options })` (`project/bun.ts`) is a
@@ -126,11 +163,14 @@ bun packages/compiler-next/src/project/cli.ts build src/main.ts --out dist [--mi
 | `project/bun.test.ts` | Client: a companion output, a stylesheet, a compile error. Server: a built server rendering its page, a route reading `#server/` code, and a server function |
 | `project/cli.ts` | The command line: `check` and `build`, with or without a server |
 | `project/cli.test.ts` | Arguments, checking, a client build, and a server build serving its page, its script (which hydrates) and a server function |
+| `features/hot/index.ts` | The hot feature's API: `hotModule`, `addHotRuntime` |
+| `features/hot/boundary.ts` | Which modules accept their own hot update |
+| `features/hot/emit.ts` | The hot runtime's import, `moduleEvaluating` and the boundary in a module's tree |
+| `features/hot/hot.test.ts` | Boundaries, module effects, no change without the option, and an edit replacing a component while its parent keeps its state |
 
 ## Still to do
 
-- `packages/vite` on it, with HMR (`plan.md`, Phase 10).
-- Applications with a server build on projects (`server.md`).
-- Hot replacement for Bun's dev server, once HMR exists for Vite: `update()` already names the
-  outputs that changed.
+- `packages/vite` on applications, using `hot` and `update()` (`plan.md`, Phase 10).
+- Hot replacement in a real browser through Vite, and then Bun's dev server: `update()` already
+  names the outputs that changed.
 - The command line serves no pages (no dev server, no SSR); Vite does that.

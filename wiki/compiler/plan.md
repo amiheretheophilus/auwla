@@ -377,8 +377,9 @@ array child). Remove each check when its phase is built.
   and command line building both, a built server answering requests in tests.
 - [ ] HMR in the Vite dev server, which the user asked for explicitly (2026-11-12): an edited
   module replaces its components in place, keeping the state that can be kept, as the old
-  compiler does through `runtime/src/hot.ts` and `packages/vite`. compiler-next emits no
-  hot-update registration yet; design it with the Vite move, with cases.
+  compiler does through `runtime/src/hot.ts` and `packages/vite`. [x] The `hot` option, component
+  keys, boundaries and the runtime's instance hooks (`project.md`, "Hot replacement"), tested end
+  to end on compiled output; [ ] through Vite in a browser.
 - [ ] Acceptance (`testing.md`, layer 7): the root `tests/`, package tests, the
   Vite suite and the Conduit flows run against compiler-next through a switch.
 - [ ] The user runs the full benchmark on the VM; every number at least matches

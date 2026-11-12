@@ -314,6 +314,7 @@ Features build their own pieces. Optimizations replace pieces (`optimize.md`).
 | File | What it does |
 | --- | --- |
 | `dom.ts` | Copies module syntax, hoists markup, composes state/write feature emission, registers the component update and initializes sites |
+| `component-key.ts` | The key a module-level component is defined under, which hot replacement matches (`components.md`, "Keys") |
 | `shared.ts` | Composes native shared-owner versions, memo/takeover emission and cross-module readers before replacing component functions |
 | `await.ts` | Adds write boundaries around native await operands and resumption, preserving suspension and rejection |
 | `sites.ts` | Emits mount values and per-site version checks; skips unchanged DOM values, retains optimized text disposal guards, and updates native listeners when their value changes |

@@ -147,6 +147,19 @@ before dependency queries. This is test-only and uses no production helpers.
 - A component that returns different JSX on different paths gets a `Conditional`
   at its root (`conditionals-and-lists.md`).
 
+## Keys
+
+A module-level component is defined with a key, `defineComponent(App, "./App.tsx#App")`
+(`core/emit/component-key.ts`, in core because the emitter and the hot feature both use it). The key is the root id `mount()` gives it, and what hot
+replacement matches a new definition by after an edit (`project.md`, "Hot replacement"). So it is
+a name, never an offset:
+
+- `function Card() {}` and `const Card = () => …` (through parentheses) are `#Card`;
+- `export default () => …` is `#default`;
+- only a component with no name at all (`{ Card: () => … }`) falls back to its offset.
+
+Until 2026-11-12 a function expression was keyed by its offset, which any edit above it moved.
+
 ## Slots
 
 Lowercase `<slot>` is compiler syntax, never an element (the user, 2026-11-11: "just slot not

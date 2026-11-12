@@ -25,6 +25,9 @@ import { emitNamespaceReads, markNamespaceReads } from './link/open-namespaces';
 import { emitCapturedValues } from './link/captured-dom';
 import { lowerFetchImport, markExplicitFetches } from './features/sources/delivery';
 import { resolveSpecifiers } from './link/specifiers';
+import { addHotRuntime, hotModule, type HotModule } from './features/hot';
+
+const NO_COMPONENTS: HotModule = { definesComponents: false, accepts: false };
 
 export interface CompiledModules {
   readonly output: Record<string, string>;
@@ -98,11 +101,16 @@ function compileProgram(
   const output: Record<string, string> = {};
   const maps: Record<string, SourceMap> | undefined = options.sourceMaps === true ? {} : undefined;
   const known = new Set(plans.map((plan) => plan.module.path));
+  const hot = options.hot === true ? new Map(plans.map((plan) => [plan.module.path, hotModule(plan)])) : null;
   for (const [path, emitted] of linked) {
     lowerFetchImport(emitted.tree, emitted.module.module, options);
     markExplicitFetches(emitted.tree);
     const module = emitted.module;
     resolveSpecifiers(emitted.tree, module.path, known, options);
+    if (hot !== null) {
+      // A companion output (`./App.mmd.tsx`) has no plan: it defines no components.
+      addHotRuntime(emitted.tree, hot.get(path) ?? NO_COMPONENTS, options.hotRuntimePath);
+    }
     if (maps === undefined) {
       output[path] = printJavaScript(emitted.tree, module.path, module.module.source);
       continue;

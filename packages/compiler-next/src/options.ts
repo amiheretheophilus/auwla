@@ -40,6 +40,14 @@ export interface CompileModulesOptions {
    * (`compileModulesDetailed`, `createProject`). Default false: printing a map costs time.
    */
   readonly sourceMaps?: boolean;
+  /**
+   * A dev server's browser build: each module whose exports are all components replaces its live
+   * instances when it is edited, and modules tell the hot runtime when they evaluate again
+   * (`wiki/compiler/project.md`, "Hot replacement"). Default false.
+   */
+  readonly hot?: boolean;
+  /** The hot runtime that code built with `hot` imports. Default `@memoized-dom/runtime/hot`. */
+  readonly hotRuntimePath?: string;
 }
 
 /** Options of `compile`, which takes one module. */

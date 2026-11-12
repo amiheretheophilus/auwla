@@ -130,7 +130,14 @@ integration; resolved specifiers printed as relative paths. The server folder is
 reader (a server entry went from 2,757 bytes to 280; client builds benefit too). The Bun plugin and
 command line build both programs: `cli.ts build src/main.ts --server server.ts --server-folder server`
 writes `dist/client` and `dist/server.js`, which renders the page, serves the client's files and
-answers server functions (tested). Next: `packages/vite` on applications, with HMR.
+answers server functions (tested).
+
+**HMR, the compiler and runtime half** (`compiler/project.md`, "Hot replacement"), as the user
+asked. With `hot: true`, a module exporting only components accepts its own update: the runtime
+(`@memoized-dom/runtime/hot`) remembers each component instance and mounts each live instance of an
+edited component again in place, with its props, while other modules keep their state. Component
+keys are names now, not offsets (`compiler/components.md`, "Keys"). Tested end to end on compiled
+output. Next: `packages/vite` on applications, using it in a browser.
 
 Seen while checking the server change, not caused by it (the same with and without it): in a whole
 `packages/server` run, 8 tests fail (`initial-request`, `pages`, `serve`: in-memory `$fetch` reaches

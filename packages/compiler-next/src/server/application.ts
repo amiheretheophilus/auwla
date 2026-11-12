@@ -189,6 +189,8 @@ export function createApplication(options: ApplicationOptions): Application {
     host: view('server'),
     routedEnvironment: 'server',
     dataDelivery: 'universal',
+    // Hot replacement is the browser's: a server loads each module again for the next request.
+    hot: false,
   });
 
   async function build(): Promise<ApplicationBuild> {
