@@ -38,6 +38,7 @@ import { installedResolver, sourcesOfOutput } from '../harness/installed';
 import { lowerWithTypeScript } from './typescript';
 import { callOnlyReads, literalFields } from './syntax-rules';
 import { lowerReferenceSlots } from './slots';
+import { lowerReferenceRoutes } from './routes';
 import { blockThunk, constDeclaration, identifier, member, numberLiteral, runtimeCall, thunk } from './ast';
 import { ClosureCells } from './closures';
 import { enclosingFunction, Reads } from './reads';
@@ -108,6 +109,7 @@ const RUNTIME_EXPORTS = [
   '$when', '$value', '$chain', '$waiting', '$sourceState', '$branch', '$switch', '$path', '$ready',
   '$captureRead', '$closureCell', '$closureRead', '$traced', '$moduleBuilder', '$reassigned', '$ownedCleanup',
   '$privateTarget', '$setup',
+  '$installRoutes', '$routeContext', '$routeJoin', '$routeCall', '$routeIdentity', '$routeHref', '$followedRoute',
 ];
 
 // ---------------------------------------------------------------------------
@@ -163,7 +165,8 @@ export function toReferenceModules(sources: Readonly<Record<string, string>>, ru
   const analyzer = new Analyzer({ resolve });
   // A namespace, an enum and `export =` have no JavaScript form. TypeScript itself lowers them
   // here (`typescript.ts`), so a mistake in compiler-next's own lowering shows as a difference.
-  const lowered = lowerWithTypeScript(sources, resolve);
+  // Routes join across modules, so they are lowered for the whole program at once (`routes.ts`).
+  const lowered = lowerReferenceRoutes(lowerWithTypeScript(sources, resolve), resolve);
   const modules = Object.entries(lowered).map(([path, source]) => {
     const prepared = prepareReferenceModule(source, path);
     return analyzer.setFile(path, prepared.source, { lang: 'tsx', sourceType: 'module' });

@@ -1,0 +1,100 @@
+/**
+ * Route lowering on its own (`features/routes/`): the code it gives a module, and the mistakes it
+ * reports. Behaviour is compared with the reference in `tests/cases/routes.test.ts`.
+ */
+import { describe, expect, it } from 'bun:test';
+import { compileModules } from '../../pipeline';
+
+const compile = (source: string, modules: Record<string, string> = {}) => compileModules({ ...modules, './App.tsx': source }, {});
+
+describe('what a program with routes compiles to', () => {
+  it('installs one route table, in the module of the component nothing calls', () => {
+    const output = compile(
+      `import { Docs } from './docs'; export function App() { return <main route="/"><Docs /></main>; }`,
+      { './docs.tsx': `export function Docs() { return <p route="/intro">Intro</p>; }` },
+    );
+    expect(output['./App.tsx']!.match(/installRouteTable\(/g)).toHaveLength(1);
+    expect(output['./docs.tsx']).not.toContain('installRouteTable(');
+    // The nested route is an instance under the outer one.
+    expect(output['./App.tsx']).toContain('fullPattern: "/intro"');
+  });
+
+  it('knows a component\'s only route context, so it passes none', () => {
+    const output = compile(`
+      function Docs() { return <p route="/intro">Intro</p>; }
+      export function App() { return <main><section route="/docs"><Docs /></section></main>; }`)['./App.tsx']!;
+    expect(output).not.toContain('route:context');
+    expect(output).toContain('fullPattern: "/docs/intro"');
+  });
+
+  it('passes the context to a component rendered in several', () => {
+    const output = compile(`
+      function Tabs() { return <b route="/x">X</b>; }
+      export function App() { return <main><i route="/a"><Tabs /></i><i route="/b"><Tabs /></i></main>; }`)['./App.tsx']!;
+    expect(output).toContain('route:context');
+    expect(output).toContain('fullPattern: "/a/x"');
+    expect(output).toContain('fullPattern: "/b/x"');
+  });
+
+  it('turns route-to into an href, and leaves no route attributes', () => {
+    const output = compile(`export function App() { return <main><p route="/about">A</p><a route-to="/about">About</a></main>; }`)['./App.tsx']!;
+    expect(output).toContain('"/about"');
+    expect(output).not.toMatch(/route-to|"route"/);
+  });
+});
+
+describe('route mistakes are compile errors', () => {
+  it.each([
+    ['a dynamic pattern', 'export function App() { let p = "/"; return <main route={p} />; }', /static string beginning with \//],
+    ['a pattern without a leading slash', 'export function App() { return <main route="about" />; }', /must begin with '\/'/],
+    ['a query in a pattern', 'export function App() { return <main route="/a?b" />; }', /query or hash/],
+    ['a wildcard that is not last', 'export function App() { return <main route="/*/a" />; }', /wildcard must be terminal/],
+    ['a parameter twice', 'export function App() { return <main route="/:id/:id" />; }', /duplicate route parameter 'id'/],
+    ['a route outside a component', 'const view = <main route="/" />;', /inside a component/],
+    ['a keyed route element', 'export function App() { return <main route="/" key="k" />; }', /keyed by its route/],
+    ['two siblings with one pattern', 'export function App() { return <main><p route="/" /><p route="/" /></main>; }', /ambiguous routes/],
+    ['patterns that differ only by a parameter name', 'export function App() { return <main><p route="/a/:x" /><p route="/a/:y" /></main>; }', /ambiguous routes/],
+    ['a child of a catch-all', 'export function App() { return <main route="/*"><p route="/a" /></main>; }', /catch-all route '\/\*' cannot have child routes/],
+    ['a child reusing a parameter', 'export function App() { return <main route="/:id"><p route="/:id" /></main>; }', /duplicate route parameter 'id'/],
+    ['a link to no route', 'export function App() { return <main route="/"><a route-to="/missing" /></main>; }', /undeclared route '\/missing'/],
+    ['a string link to a route with params', 'export function App() { return <main route="/:id"><a route-to="/:id" /></main>; }', /requires params \{ id \}; use the object form/],
+    ['a link without its params', 'export function App() { return <main route="/:id"><a route-to={{ path: "/:id" }} /></main>; }', /requires params \{ id \}/],
+    ['a link with the wrong params', 'export function App() { return <main route="/:id"><a route-to={{ path: "/:id", params: { wrong: 1 } }} /></main>; }', /missing id; unknown wrong/],
+    ['a link with a parameter twice', 'export function App() { return <main route="/:id"><a route-to={{ path: "/:id", params: { id: 1, id: 2 } }} /></main>; }', /duplicate 'id'/],
+    ['a catch-all link without its rest', 'export function App() { return <main route="/*"><a route-to={{ path: "/*", params: {} }} /></main>; }', /missing \*/],
+    ['a link with an unknown field', 'export function App() { return <main route="/"><a route-to={{ path: "/", replace: true }} /></main>; }', /does not support 'replace'/],
+    ['a link with a dynamic path', 'export function App() { let p = "/"; return <main route="/"><a route-to={{ path: p }} /></main>; }', /static string 'path'/],
+    ['a link on a button', 'export function App() { return <main route="/"><button route-to="/" /></main>; }', /route-to requires an anchor/],
+    ['a link on a component', 'function Link() { return <a />; } export function App() { return <main route="/"><Link route-to="/" /></main>; }', /intrinsic elements/],
+    ['a link with an href', 'export function App() { return <main route="/"><a href="/" route-to="/" /></main>; }', /must not also declare href/],
+    ['a link with a spread', 'export function App() { const p = {}; return <main route="/"><a {...p} route-to="/" /></main>; }', /JSX prop spreads/],
+  ])('%s', (_name, source, message) => {
+    expect(() => compile(source)).toThrow(message);
+  });
+
+  it('a parameter a component\'s route context already declares', () => {
+    expect(() => compile(
+      `import { Detail } from './Detail'; export function App() { return <Detail route="/:id" />; }`,
+      { './Detail.tsx': `export function Detail() { return <p route="/:id">Detail</p>; }` },
+    )).toThrow("duplicate route parameter 'id'");
+  });
+
+  it('a route below a component called at a catch-all', () => {
+    expect(() => compile(
+      `import { Detail } from './Detail'; export function App() { return <Detail route="/*" />; }`,
+      { './Detail.tsx': `export function Detail() { return <p route="/">Detail</p>; }` },
+    )).toThrow(/catch-all route .* cannot have child routes/);
+  });
+
+  it('a component that renders routes and itself', () => {
+    expect(() => compile(`
+      function Tree() { return <ul><li route="/leaf">leaf</li><Tree /></ul>; }
+      export function App() { return <Tree />; }`)).toThrow(/cannot render itself/);
+  });
+
+  it('a component in several contexts whose props are an array pattern', () => {
+    expect(() => compile(`
+      function Tabs([first]) { return <b route="/x">{first}</b>; }
+      export function App() { return <main><i route="/a"><Tabs /></i><i route="/b"><Tabs /></i></main>; }`)).toThrow(/name or an object pattern/);
+  });
+});

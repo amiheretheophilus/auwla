@@ -26,6 +26,7 @@ import { enableHistoryControls } from './history-controls';
 import { enableGeneralNavigation } from './general-navigation';
 import { enableRouteSnapshots } from './snapshot-controls';
 import { enableMatchValidation } from './match-controls';
+import { trackRouteRead } from './route-reads';
 import type {
   ApplicationRoutePath,
   NavigateArguments,
@@ -105,40 +106,50 @@ export function notePreparedManifestResolver(resolver: RouteResolver): () => voi
   return recordManifestResolver(resolver);
 }
 
+/**
+ * One field of the active runtime's route, reported as read when compiled code is following it
+ * (`route-reads.ts`), so `route.pathname` in a component updates on navigation.
+ */
+function followed<Field extends keyof RouteState>(field: Field): RouteState[Field] {
+  const runtime = getActiveRouteRuntime();
+  trackRouteRead(runtime, field);
+  return runtime.route[field];
+}
+
 /** Getter-backed facade over whichever runtime is currently active. */
 export const activeRoute: RouteState = Object.freeze({
   get href() {
-    return getActiveRouteRuntime().route.href;
+    return followed('href');
   },
   get pathname() {
-    return getActiveRouteRuntime().route.pathname;
+    return followed('pathname');
   },
   get search() {
-    return getActiveRouteRuntime().route.search;
+    return followed('search');
   },
   get query() {
-    return getActiveRouteRuntime().route.query;
+    return followed('query');
   },
   get hash() {
-    return getActiveRouteRuntime().route.hash;
+    return followed('hash');
   },
   get state() {
-    return getActiveRouteRuntime().route.state;
+    return followed('state');
   },
   get navigationType() {
-    return getActiveRouteRuntime().route.navigationType;
+    return followed('navigationType');
   },
   get params() {
-    return getActiveRouteRuntime().route.params;
+    return followed('params');
   },
   get matches() {
-    return getActiveRouteRuntime().route.matches;
+    return followed('matches');
   },
   get matched() {
-    return getActiveRouteRuntime().route.matched;
+    return followed('matched');
   },
   get signal() {
-    return getActiveRouteRuntime().route.signal;
+    return followed('signal');
   },
 });
 

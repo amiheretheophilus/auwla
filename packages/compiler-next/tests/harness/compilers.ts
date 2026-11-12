@@ -28,8 +28,11 @@ export interface Compiler {
   prepare(): () => void;
   /** Compile `App.tsx`. Returns the output files by name. */
   compile(source: string, modules?: Record<string, string>, timeoutMs?: number): Record<string, string>;
-  /** Mount the compiled `App` into `container`; `served` is a second copy a server renders from. */
-  mount(module: Record<string, unknown>, container: HTMLElement, served?: Record<string, unknown>): CompiledApp;
+  /**
+   * Mount the compiled `App` into `container`; `served` is a second copy a server renders from,
+   * for a request to `url`.
+   */
+  mount(module: Record<string, unknown>, container: HTMLElement, served?: Record<string, unknown>, url?: string): CompiledApp;
   /** Whether `mount` takes a server render, which needs its own copy of the modules. */
   readonly serves?: boolean;
 }
@@ -164,13 +167,14 @@ const deliveredCompiler: Compiler = {
   output: 'next-delivered',
   serves: true,
 
-  mount(module, container, served) {
+  mount(module, container, served, url) {
     const App = module.App as (id: string, parent: null) => Node;
     useCaseScheduler();
     let html: string | null = null;
     try {
       // Requests a server makes are its own, and never answered here.
-      html = asServer(() => renderToString(served!.App as never, { markers: true, fetch: neverAnswers }));
+      const request = url === undefined ? {} : { url: new URL(url, window.location.origin).href };
+      html = asServer(() => renderToString(served!.App as never, { markers: true, fetch: neverAnswers, ...request }));
     } catch {
       html = null;
     }

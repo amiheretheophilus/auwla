@@ -2,6 +2,7 @@ import type { CoreRouteRuntime } from './runtime';
 import { enableNavigationBlockers } from './navigation-blockers';
 import { enableResolverInstallation } from './resolver-installation';
 import { enableGeneralNavigation } from './general-navigation';
+import { readRouteRegion } from './route-reads';
 import type {
   RouteNavigationBlocker as Blocker,
   RouteResolver,
@@ -45,6 +46,14 @@ export type {
 
 export const route = activeRoute;
 export { routeRegionIdentity } from './region-identity';
+
+/**
+ * The identity of compiled route region `id` in the active route, or null while it does not
+ * match, read so the running computation follows it (`route-reads.ts`).
+ */
+export function routeRegion(id: string): string | null {
+  return readRouteRegion(getActiveRouteRuntime(), id);
+}
 export const navigateRoute = activeNavigate;
 
 export { createRouteRuntime } from './runtime-full';
@@ -52,6 +61,7 @@ export { supportsNavigationAPI } from './runtime';
 export { redirectRoute } from './types';
 export { createRouteManifest } from './manifest';
 export { createPreparedRouteMatcher } from './prepared-matcher';
+import { createPreparedRouteMatcher, type PreparedRouteEntry } from './prepared-matcher';
 export type {
   NavigationController,
   NavigationDestinationLike,
@@ -79,6 +89,16 @@ const connections = new WeakMap<CoreRouteRuntime, () => void>();
 export function ensureRouterConnected(): void {
   const runtime = getActiveRouteRuntime();
   if (!connections.has(runtime)) connections.set(runtime, runtime.connect());
+}
+/**
+ * Install a compiled route table (compiler-next, `wiki/compiler/routes.md`): match locations with
+ * it, on this runtime and every one activated later, and make clicks on route links navigate.
+ * One call keeps the table out of the module's own bindings.
+ */
+export function installRouteTable(entries: readonly PreparedRouteEntry[]): void {
+  const match = createPreparedRouteMatcher(entries);
+  notePreparedManifestResolver((location) => match(location.pathname));
+  ensureRouterConnected();
 }
 export function installRouteResolver(resolver: RouteResolver): () => void {
   return enableResolverInstallation(getActiveRouteRuntime()).installResolver(resolver);

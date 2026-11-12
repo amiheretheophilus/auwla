@@ -87,7 +87,7 @@ export {
 } from './mutation';
 export { createRowCache, fromRows, mapRows } from './list-map';
 export { createRowList, uneditedItems, whenQuiet } from './row-list';
-export { createComputation, noteOwnOutput, observeNamespace, readNamespace, trackEquals, trackRead } from './computation';
+export { createComputation, noteOwnOutput, observeNamespace, readNamespace, trackEquals, trackRead, tracking } from './computation';
 export { createSharedWrites } from './shared-writes';
 export type { BuildScope, BuildFrame } from './build-scope';
 export { adoptInitialRoot } from './initial-root';
