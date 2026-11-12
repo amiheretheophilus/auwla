@@ -173,7 +173,7 @@ is server-only by its name (the old plugin assumed `server`).
   from a package.
 
 Not yet in the new plugin, each the old plugin's: `compilePackages` (rejected with an error), native
-packages, the devtools inspector, route CSS, lazy route chunks, Cloudflare (untested), library
+packages, the devtools inspector, route CSS, Cloudflare (untested), library
 builds and server pages. An edit that moves code without changing output (a comment) leaves that
 module's source map stale until its next real change.
 
@@ -185,7 +185,7 @@ the same way and none drifts. A plugin keeps only what is its tool's:
 | --- | --- | --- |
 | Styles | Which stylesheets the first page needs (built: a build's `stylesheets`) and which each lazy route adds. No extraction: compiler-next compiles no TSRX, the only source of scoped `<style>` (`toolchain.md`) | Giving the CSS to its bundler; the `<link>` tags it serves |
 | Build-time page | Built: `initialRender`, and `initialPage` writing it into the page's HTML ("Build-time page") | Built: which HTML file, and when (`transformIndexHtml`, the Bun plugin's HTML loader) |
-| Lazy route chunks | `import()` for a lazy route, and the route's styles | Nothing: bundlers split at `import()` |
+| Lazy route chunks | Built: a client build loads a component imported only for its routes by `import()` in the route table (`routes.md`, "Lazy route chunks"). Still to do: the route's styles on a page the server renders | Splitting at `import()`: Vite does by default; the command line turns on Bun's `splitting` (tested in `cli.test.ts`) |
 | Installed packages | Which ship source, compiling them into the program, their artifacts | Its resolver (the host), cache folder, watching `node_modules` |
 | Devtools | The diagnostics compiled code reports | Serving the inspector |
 

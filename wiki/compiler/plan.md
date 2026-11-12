@@ -365,8 +365,8 @@ array child). Remove each check when its phase is built.
 - [ ] SSR and HTML backends from the same plan; hydration; routing (`$routed`,
   `page()`).
 - [x] Lower a runtime TypeScript `namespace` and `export =` (`core.md`, parse).
-- [x] Routes, `route-to` and `$routed` (`routes.md`). Lazy route chunks and server-backed
-  preparations end to end come with `packages/vite`.
+- [x] Routes, `route-to` and `$routed` (`routes.md`). [x] Lazy route chunks (2026-11-12).
+  Server-backed preparations end to end come with `packages/vite`.
 - [ ] One way to compile an app for any tool (`project.md`), asked for by the user (2026-11-12)
   so the compiler works without Vite: [x] building from entries and rebuilding after edits;
   [x] source maps; [x] a command line and a Bun plugin. [x] `packages/vite` on applications

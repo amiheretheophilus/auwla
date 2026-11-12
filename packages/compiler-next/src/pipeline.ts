@@ -26,6 +26,7 @@ import { emitCapturedValues } from './link/captured-dom';
 import { lowerFetchImport, markExplicitFetches } from './features/sources/delivery';
 import { resolveSpecifiers } from './link/specifiers';
 import { addHotRuntime, hotModule, type HotModule } from './features/hot';
+import { splitRouteImports } from './features/routes';
 
 const NO_COMPONENTS: HotModule = { definesComponents: false, accepts: false };
 
@@ -74,7 +75,7 @@ function compileProgram(
   modules: Readonly<Record<string, string>>,
   options: CompileModulesOptions,
 ): { output: Record<string, string>; maps?: Record<string, SourceMap>; resolved: Resolved } {
-  const { resolved, graph } = analyzeFrontend(modules, options);
+  const { resolved, graph, routeSplits } = analyzeFrontend(modules, options);
   const general = planCapturedValues(planModules(graph, graph.queries, graph.components), resolved);
   const plans = optimizeModules(general, graph, options.optimize !== false);
   const opensNamespaces = markNamespaceReads(plans, resolved);
@@ -107,6 +108,10 @@ function compileProgram(
     markExplicitFetches(emitted.tree);
     const module = emitted.module;
     resolveSpecifiers(emitted.tree, module.path, known, options);
+    const splits = routeSplits.get(path);
+    if (splits !== undefined) {
+      splitRouteImports(emitted.tree, splits);
+    }
     if (hot !== null) {
       // A companion output (`./App.mmd.tsx`) has no plan: it defines no components.
       addHotRuntime(emitted.tree, hot.get(path) ?? NO_COMPONENTS, options.hotRuntimePath);

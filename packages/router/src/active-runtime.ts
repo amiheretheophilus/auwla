@@ -13,7 +13,8 @@
  * Compiled modules install their route manifest once at module evaluation
  * (`replacePreparedRouteResolver` at top level). That resolver is recorded here and
  * replayed onto every newly activated runtime, so each request resolves its
- * own URL against the application graph.
+ * own URL against the application graph. A runtime created with routes of its
+ * own keeps them (`own-routes.ts`).
  */
 
 import { createStorage } from '@memoized-dom/runtime';
@@ -27,6 +28,7 @@ import { enableGeneralNavigation } from './general-navigation';
 import { enableRouteSnapshots } from './snapshot-controls';
 import { enableMatchValidation } from './match-controls';
 import { trackRouteRead } from './route-reads';
+import { hasOwnRoutes } from './own-routes';
 import type {
   ApplicationRoutePath,
   NavigateArguments,
@@ -51,12 +53,21 @@ export function getActiveRouteRuntime(): RouteRuntime {
   return asyncLocalStorage.getStore() ?? activeOverride ?? defaultRouteRuntime;
 }
 
+/**
+ * Replay the recorded compiled table onto `runtime`, once. Compiled route manifests evaluate once
+ * per module record, so this is how a request's runtime resolves its own location. A runtime
+ * given routes of its own keeps them (`own-routes.ts`). Marked first, so a listener that activates
+ * the runtime again while the resolver is replaced does not replay it twice.
+ */
+function replayManifest(runtime: RouteRuntime): void {
+  if (manifestResolver === null || manifestApplied.has(runtime) || hasOwnRoutes(runtime)) return;
+  manifestApplied.add(runtime);
+  if (manifestRequiresValidation) enableMatchValidation(runtime);
+  runtime.replaceResolver(manifestResolver);
+}
+
 export function runWithRouteRuntime<T>(runtime: RouteRuntime, fn: () => T): T {
-  if (manifestResolver !== null && !manifestApplied.has(runtime)) {
-    manifestApplied.add(runtime);
-    if (manifestRequiresValidation) enableMatchValidation(runtime);
-    runtime.replaceResolver(manifestResolver);
-  }
+  replayManifest(runtime);
   return asyncLocalStorage.run(runtime, fn);
 }
 
@@ -70,17 +81,7 @@ export function setActiveRouteRuntime(
 ): RouteRuntime {
   const previous = getActiveRouteRuntime();
   activeOverride = runtime;
-  if (
-    runtime !== null &&
-    manifestResolver !== null &&
-    !manifestApplied.has(runtime)
-  ) {
-    // Compiled route manifests evaluate once per module record; replay the
-    // recorded resolver so this request resolves its own location.
-    if (manifestRequiresValidation) enableMatchValidation(runtime);
-    runtime.replaceResolver(manifestResolver);
-    manifestApplied.add(runtime);
-  }
+  if (runtime !== null) replayManifest(runtime);
   return previous;
 }
 

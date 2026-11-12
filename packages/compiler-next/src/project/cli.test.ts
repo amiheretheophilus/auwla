@@ -67,6 +67,24 @@ describe('the command line', () => {
     expect(readdirSync(join(app, 'dist')).filter((name) => name.endsWith('.js'))).toEqual([]);
   });
 
+  it('builds a component imported only for its route as a chunk of its own', async () => {
+    write('lazy/src/main.ts', `import { mount } from '@memoized-dom/runtime';\nimport { App } from './App';\nmount('root', App);\n`);
+    write('lazy/src/App.tsx', `import { Profile } from './pages/Profile';\nexport function App() { return <main><p route="/">Home</p><Profile route="/profile" /></main>; }\n`);
+    write('lazy/src/pages/Profile.tsx', `export function Profile() { return <h1>ProfilePageMarker</h1>; }\n`);
+    const app = join(root, 'lazy');
+    const command = parseArguments(['build', 'src/main.ts', '--out', 'dist'], app);
+    if (typeof command === 'string') throw new Error(command);
+    expect(await run(command, () => {})).toBe(0);
+
+    const scripts = readdirSync(join(app, 'dist')).filter((name) => name.endsWith('.js'));
+    const texts = await Promise.all(scripts.map((name) => Bun.file(join(app, 'dist', name)).text()));
+    const entry = texts[scripts.indexOf('main.js')]!;
+    // The page's own script loads the route's chunk when the route is chosen, not with itself.
+    expect(scripts.length).toBeGreaterThan(1);
+    expect(entry).not.toContain('ProfilePageMarker');
+    expect(texts.some((text) => text.includes('ProfilePageMarker'))).toBe(true);
+  });
+
   it('builds a server that serves its page, its files and its server functions', async () => {
     write('full/index.html', '<!doctype html><html><head><title>full</title></head><body><div id="root"><!--ssr-outlet--></div><script type="module" src="./src/main.ts"></script></body></html>');
     write('full/src/main.ts', `import { mount } from '@memoized-dom/runtime';\nimport { Page } from './Page';\nmount('root', Page);\n`);

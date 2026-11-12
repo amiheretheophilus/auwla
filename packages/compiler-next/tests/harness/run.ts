@@ -15,6 +15,7 @@ import { compileModulesDetailed } from '../../src';
 import { clearCompiledApps, comparisonCompilers, importAsServer, type Compiler } from './compilers';
 import { serialize } from './serialize';
 import { createRouteRuntime, setActiveRouteRuntime } from '@memoized-dom/router';
+import { prepareInitialRoute } from '@memoized-dom/router/internal';
 
 const OUT = join(import.meta.dirname, '..', 'out');
 const RUNTIME_URL = pathToFileURL(join(import.meta.dirname, '..', 'reference', 'runtime.ts')).href;
@@ -174,8 +175,15 @@ async function runOnCompiler(name: string, testCase: Case, compiler: Compiler): 
   // A server renders from its own copy of the modules, whose state starts fresh as in another
   // process. It loads first: module sources are described per process, and a later load replaces
   // the description as a hot update would, so the browser's copy must be the last.
+  // It is the server's own build, and it prepares the request's route before rendering, as a
+  // server does (a browser build waits for that at its top instead).
   const served = compiler.serves === true
-    ? await importAsServer(() => importFiles(name, `${compiler.output}-server`, files, 'App.tsx'))
+    ? await importAsServer(async () => {
+      const serverFiles = compiler.compileServer?.(testCase.source, testCase.modules) ?? files;
+      const loaded = await importFiles(name, `${compiler.output}-server`, serverFiles, 'App.tsx');
+      await prepareInitialRoute();
+      return loaded;
+    })
     : undefined;
   const module = await importFiles(name, compiler.output, files, 'App.tsx');
 

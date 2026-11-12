@@ -1107,6 +1107,11 @@ export function createRouteRuntime(
       matches = prepared.matches;
       params = prepared.params;
       emit();
+    } else {
+      // The same routes, from another resolver: nothing a route read sees has changed, but each
+      // match's metadata (the preparations and lazy module a compiled table gives it) is the new
+      // resolver's. A table evaluated again (a hot update, a fresh app) must not run the old ones.
+      matches = prepared.matches;
     }
 
     let installed = true;

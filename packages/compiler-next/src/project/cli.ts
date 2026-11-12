@@ -98,6 +98,8 @@ async function build(command: Command, log: (line: string) => void): Promise<num
     entrypoints: [entry],
     outdir: clientOut,
     target: 'browser',
+    // A route's lazy component (`import()` in the route table) becomes its own chunk.
+    splitting: true,
     sourcemap: 'linked',
     minify: command.minify,
     plugins: [memoizedDom({ ...shared, target: 'client' })],

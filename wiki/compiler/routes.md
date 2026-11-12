@@ -4,8 +4,9 @@
 
 Status (2026-11-12): `route="…"` regions, `route-to` links, the route table, reads of `route` and
 `$routed` preparations are built, and a `suspend` route page whose param changes waits behind its
-pending policy (the router scrolls once it commits). Splitting route-only imports into their own
-chunks, and server-backed preparations end to end (they need the server and Vite), are still to do.
+pending policy (the router scrolls once it commits). A client build loads a component imported only
+for its routes with its route ("Lazy route chunks"). Server-backed preparations end to end (they
+need the server and Vite), and a lazy route's styles on a server-rendered page, are still to do.
 
 ## What it does
 
@@ -43,7 +44,10 @@ route region gets the same tracking, adoption and delivery as any conditional:
 | `features/routes/routed.ts` | `$routed` calls: their checks, server classification and the sources they make |
 | `features/routes/routes.test.ts` | Output shape and every compile error, routes and `$routed` |
 | `features/routes/routed.dom.test.ts` | Sources made inside a preparation are settled before it caches or returns them |
+| `features/routes/split.ts` | Lazy route chunks: which imports load with their routes (`planRouteSplits`), and the printed importer's swap (`splitRouteImports`) |
+| `features/routes/split.test.ts` | Which imports split and which stay, and the loader each table entry gets |
 | `tests/cases/routes.test.ts` | Behaviour compared with the reference's own lowering (`tests/reference/routes.ts`) |
+| `tests/cases/routes.lazy.test.ts` | Lazy pages loaded on navigation and before mount: props, children, params, module state, nested lazy pages, preparations |
 | `packages/router/src/route-reads.ts` | Reads of `route` fields and regions, published per key on navigation |
 | `packages/router/tests/route-reads.test.ts` | Which reads a navigation wakes |
 
@@ -112,6 +116,59 @@ Writing these found a bug in callback boundaries (`compiler/handlers.md`, "Callb
 handed to unknown code that builds a value from a source lost the readiness records declared at the
 top of its body, which it then used undeclared (`features/handlers/callbacks.test.ts`).
 
+## Lazy route chunks
+
+In a client build (`routedEnvironment: 'client'`), a component imported only to be shown by routes
+loads with its route, not with the page (`docs/07-routing.md`, `features/routes/split.ts`):
+
+```tsx
+import { Profile } from './Profile';        (gone from the printed module)
+<Profile route="/profile" />                createCompiledValue($readRouteComponent("./Profile.tsx#Profile"), …)
+
+installRouteTable([{ …, metadata: { componentKey: "./Profile.tsx#Profile",
+  moduleLoader: () => import("./Profile.tsx").then((m) => $registerRouteComponent("./Profile.tsx#Profile", m["Profile"])) } }]);
+await $prepareInitialRouteModules();
+```
+
+- The bundler splits at the `import()`. The router (`router/src/route-modules.ts`) runs a route's
+  loader before a navigation to it commits; the module holding the table waits for the first
+  route's before anything mounts (`prepareInitialRoute` when there are preparations, which loads
+  modules too). A lazy page's `$routed` preparation registers when its module evaluates, which is
+  before the router runs it.
+- The program is analyzed with the static import in place, so the component compiles exactly as an
+  eager one. Only the printed importer changes, after linking: its import goes, and each use reads
+  the component from the router when the route shows it.
+- An import is split only when every use of its name is the tag of a route element, it names one
+  export (not a namespace) of a program module, no other binding of the importer has its name, and
+  no static import reaches the target from an entry except through split imports. A module the page
+  loads anyway would only add a wait. A server build keeps every import: it renders any route at
+  once.
+- The loader's specifier is relative to the module that holds the table, with its extension, so it
+  names one module wherever the import was written.
+
+Writing the cases found two router bugs, both fixed (`packages/router`):
+
+- **A table installed again kept the old table's metadata on the current route.** A new resolver
+  whose matches had the same ids and params kept the old match objects, so a hot update or a fresh
+  app went on running the old loaders and preparations until a navigation. A new resolver's matches
+  now replace them, without notifying anyone, since no read changed (`runtime.ts`,
+  `tests/compiled-table.test.ts`).
+- **A cached lazy component was trusted for any table.** The module cache is shared across
+  runtimes, keyed by the component's key, so a second table whose key named another module (an app
+  evaluated again, two builds in one page) was shown the first one's component. A component is now
+  reused only for the loader that loaded it; another loader loads its own, and the page on screen
+  keeps reading the old one meanwhile (`route-modules.ts`, `tests/module-resource.test.ts`).
+
+And one more found by the router's own suite: a compiled table was replayed onto every runtime
+activated after it, including one created with routes of its own, so tests run after a table
+test used the table's routes. A runtime given `routes` or a `resolver` now keeps them
+(`own-routes.ts`); a server request's runtime, created without, still gets the table.
+
+The harness's delivered run now renders from a server build (`routedEnvironment: 'server'`), as an
+application's server does, and prepares the request's route before rendering
+(`tests/harness/run.ts`). It had loaded the browser's build twice, which shared one router, so its
+"server" render read the browser copy's lazy component.
+
 ## Rules
 
 - `route` is a static string beginning with `/` on an element inside a component. A route element
@@ -138,7 +195,9 @@ element rather than as a prop.
 
 ## Still to do
 
-- Route-only imports as lazy chunks (`docs/07-routing.md`, nesting).
+- A lazy route's styles on a page the server renders: the first route's chunk loads its CSS only
+  when its script runs, after the page shows (`project.md`, "Where they go"). A project's
+  `stylesheets` also still follows split imports, which matters only once it does.
 - Server-backed preparations end to end: the server endpoint and SSR delivery of prepared values,
   with `packages/vite`.
 - The reference settles no sources inside a preparation (its `$fetch` is its own), so cases with

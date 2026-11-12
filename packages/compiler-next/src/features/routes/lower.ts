@@ -37,6 +37,8 @@ import { attributeNamed, staticString, type JsxAttribute, type JsxElement, type 
 import { instanceId, type RouteGraph, type RouteInstance } from './graph';
 import { checkPattern, parameterNames } from './patterns';
 import type { RoutedPreparation } from './routed';
+import type { PrintedRouteSplit, RouteSplit } from './split';
+import { relativeModule } from '../../core/resolve/imports';
 import type { CompileModulesOptions } from '../../options';
 
 const INTERNAL = '@memoized-dom/router/internal';
@@ -45,23 +47,33 @@ const DATA_INTERNAL = '@memoized-dom/data/internal';
 /** The hidden prop that carries a route context into a component rendered in several. */
 const CONTEXT_PROP = 'route:context';
 
-/** Each module's text with its routes lowered; a module with nothing to lower is left out. */
+/** The lowered program: each module's text, and what its printed module must split (`split.ts`). */
+export interface LoweredRoutes {
+  /** A module with nothing to lower is left out. */
+  readonly texts: Map<Module, LoweredText>;
+  /** By the importer's path. */
+  readonly splits: Map<string, readonly PrintedRouteSplit[]>;
+}
+
 export function lowerRouteModules(
   graph: RouteGraph,
   links: readonly RouteLink[],
   modules: readonly Module[],
+  splits: readonly RouteSplit[],
   options: CompileModulesOptions,
-): Map<Module, LoweredText> {
+): LoweredRoutes {
   const known = new Map(graph.instances.map((instance) => [instance.fullPattern, instance]));
-  const lowered = new Map<Module, LoweredText>();
+  const texts = new Map<Module, LoweredText>();
+  const printed = new Map<string, readonly PrintedRouteSplit[]>();
 
   for (const module of modules) {
-    const lowering = new ModuleLowering(module, graph, known, options);
+    const lowering = new ModuleLowering(module, graph, known, splits, options);
     const text = lowering.run(links.filter((link) => link.module === module));
-    if (text !== null) lowered.set(module, text);
+    if (text !== null) texts.set(module, text);
+    if (lowering.splits.length > 0) printed.set(module.path, lowering.splits);
   }
 
-  return lowered;
+  return { texts, splits: printed };
 }
 
 class ModuleLowering {
@@ -70,11 +82,14 @@ class ModuleLowering {
   readonly #imports = new Map<string, { from: string; name: string; local: string }>();
   /** The local name holding each dynamic component's route context. */
   readonly #contextReads = new Map<FunctionNode, string>();
+  /** The imports of this module that load with their routes, as its printed module needs them. */
+  readonly splits: PrintedRouteSplit[] = [];
 
   constructor(
     private readonly module: Module,
     private readonly graph: RouteGraph,
     private readonly known: ReadonlyMap<string, RouteInstance>,
+    private readonly routeSplits: readonly RouteSplit[],
     private readonly options: CompileModulesOptions,
   ) {}
 
@@ -100,6 +115,11 @@ class ModuleLowering {
     for (const template of templates) this.#region(template);
     for (const call of calls) this.#passContext(call.element, call.route, call.owner);
     for (const link of links) this.#link(link);
+    // The router's reader, which the printed module calls where it used a split import.
+    for (const split of this.routeSplits) {
+      if (split.importer !== this.module) continue;
+      this.splits.push({ local: split.local, key: split.key, reader: this.#import('readRouteComponent') });
+    }
 
     // Imports are hoisted, so the end of the module keeps every authored offset in place.
     const end = this.module.source.length;
@@ -367,21 +387,45 @@ class ModuleLowering {
 
     const entries = ordered.map(({ instance, chain }) => {
       const own = parameterNames(instance.pattern);
-      const prepares = this.graph.prepares.get(instance.id);
-      // The preparations this route runs before it commits (`router/src/preparation.ts`).
-      const metadata = prepares === undefined ? '' : `, metadata: { preparations: ${JSON.stringify(prepares)} }`;
+      const metadata = this.#metadata(instance);
       return `{ id: ${JSON.stringify(instance.id)}, pattern: ${JSON.stringify(instance.pattern)}, fullPattern: ${JSON.stringify(instance.fullPattern)}, `
-        + `ownParamNames: ${JSON.stringify(own)}, chain: ${JSON.stringify(chain.map((id) => indexes.get(id)))}${metadata} }`;
+        + `ownParamNames: ${JSON.stringify(own)}, chain: ${JSON.stringify(chain.map((id) => indexes.get(id)))}`
+        + `${metadata.length === 0 ? '' : `, metadata: { ${metadata.join(', ')} }`} }`;
     });
 
     // One statement and no binding: a module-scope table would be state the compiler follows.
     let text = `${this.#import('installRouteTable')}([${entries.join(', ')}]);\n`;
-    // A client build prepares the first route before anything mounts; a server prepares each
-    // request's route itself, and a page it rendered delivers the values it prepared.
+    // A client build prepares the first route before anything mounts, loading its split
+    // components with it; a server prepares each request's route itself, and a page it rendered
+    // delivers the values it prepared.
     if (this.options.routedEnvironment === 'client' && this.graph.prepares.size > 0) {
       text += `await ${this.#import('prepareInitialRoute')}();\n`;
+    } else if (this.routeSplits.length > 0) {
+      text += `await ${this.#import('prepareInitialRouteModules')}();\n`;
     }
     this.#edits.push({ start: 0, end: 0, text });
+  }
+
+  /**
+   * What the router does for a route before it commits: the preparations it runs
+   * (`router/src/preparation.ts`), and the split component it loads (`split.ts`,
+   * `router/src/route-modules.ts`).
+   */
+  #metadata(instance: RouteInstance): string[] {
+    const fields: string[] = [];
+    const prepares = this.graph.prepares.get(instance.id);
+    if (prepares !== undefined) fields.push(`preparations: ${JSON.stringify(prepares)}`);
+
+    const split = this.routeSplits.find((candidate) => candidate.templates.includes(instance.template));
+    if (split !== undefined) {
+      const key = JSON.stringify(split.key);
+      // From this module, which holds the table, with the extension, so it names one module.
+      const specifier = JSON.stringify(relativeModule(this.module.path, split.target.path, true));
+      const register = this.#import('registerRouteComponent');
+      fields.push(`componentKey: ${key}`);
+      fields.push(`moduleLoader: () => import(${specifier}).then((m) => ${register}(${key}, m[${JSON.stringify(split.exportName)}]))`);
+    }
+    return fields;
   }
 
   /** Whether `fn` is declared in this module. */

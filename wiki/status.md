@@ -171,6 +171,22 @@ any page to the browser (it was taken for code), and Bun gives a script-less pag
 which the command line now removes. Styles need no extraction: compiler-next compiles no TSRX, so
 the styles still to do are lazy routes' (after lazy route chunks).
 
+**Lazy route chunks, in the compiler** (`compiler/routes.md`, "Lazy route chunks"): a client build
+loads a component imported only for its routes by `import()` in the route table, before the route
+commits, and before mount for the first route. The command line turns on Bun's `splitting`, and a
+test checks that the page's script leaves the route's code out. Found on the way, all fixed: the
+router kept the old table's metadata on the current route when a table was installed again, trusted
+a cached lazy component for any table with the same key, and replayed a compiled table over a
+runtime that had routes of its own (the cause of two `packages/router` tests that failed only in a
+whole-suite run). The harness's delivered run now renders from a server build, as a real server
+does. Still to do: a lazy route's styles on a server-rendered page.
+
+Seen while checking the router change, not caused by it (the same with all three router changes
+switched off): `tests/ssr-payload-transport.test.ts` fails after `tests/r47-router-runtime.test.ts`
+or `tests/hydration-route-fragment.test.ts` in one run, and
+`tests/transparent-source-mutations-and-routes.test.ts` fails in the whole router-related set; each
+passes alone.
+
 The Vite package's dependencies now list what its bundle imports (`yuku-*`, `@memoized-dom/server`),
 with compiler-next, which is bundled, as a dev dependency; `bun.lock` is updated to match, as CI
 installs with `--frozen-lockfile`.
