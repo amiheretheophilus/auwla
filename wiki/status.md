@@ -112,8 +112,15 @@ a module forwards with `export *`.
 **Done: source maps** (`compiler/project.md`, "Source maps"). With `sourceMaps: true`, each output
 has a map back to the authored file, through the TypeScript, slot, route and `require` rewrites;
 moved authored code (slot content, `$routed` callbacks) keeps its places, and code the compiler
-builds is unmapped. Next: constant exports read through `import * as` (still followed: the namespace
-is a live input), then a command line and a Bun plugin, then `packages/vite` with HMR.
+builds is unmapped.
+
+**Done: constants through namespaces.** `config.title`, with `import * as config` and `title` a
+literal `const`, reads that constant; a namespace's own property read no longer makes a value opaque.
+A page reading two such constants went from 3.8 KB with a companion module to 1.3 KB.
+
+**Done: Bun plugin and command line** (`compiler/project.md`, "Bun", "Command line"). `Bun.build`
+with `memoizedDom({ entries })` bundles an app compiled by compiler-next, companion outputs and
+source maps included; `cli.ts check|build` wraps it. Next: `packages/vite` on projects, with HMR.
 
 ## Closing documented issues before Phase 10 (2026-11-06)
 

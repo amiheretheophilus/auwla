@@ -3,8 +3,8 @@
 **Folders:** `project/`
 
 Status (2026-11-12): building from entries, rebuilding after edits, source maps, path aliases through the
-host and the file-system host are built. A command line and a Bun plugin come next,
-then `packages/vite` moves onto it (`plan.md`, Phase 10).
+host, the file-system host, a Bun plugin and a command line are built. `packages/vite` moves onto it
+next (`plan.md`, Phase 10).
 
 ## What it does
 
@@ -70,6 +70,34 @@ output has a map back to the text the caller gave, with that text as its `source
 - Module state that moves to a companion output (`./App.mmd.ts`) has its own map, whose source is
   still the authored module.
 
+## Bun
+
+`memoizedDom({ entries, root?, ...options })` (`project/bun.ts`) is a Bun plugin, for `Bun.build`
+and for Bun's runtime (`Bun.plugin`):
+
+```ts
+await Bun.build({ entrypoints: ['./src/main.tsx'], plugins: [memoizedDom({ entries: ['./src/main.tsx'] })] });
+```
+
+- The first module Bun loads builds the whole program; every other module comes from that build.
+  Each `Bun.build` starts a new one (`onStart`).
+- A compiled module's code goes to Bun as JavaScript with its source map inline.
+- Companion outputs (`./App.mmd.tsx`, `linking.md`) exist only in the build, so the plugin resolves
+  them itself. A module the program does not reach (a package, a stylesheet) is left to Bun.
+- A compile error fails the build, with its module in Bun's log.
+
+## Command line
+
+`project/cli.ts`, run with Bun:
+
+```
+bun packages/compiler-next/src/project/cli.ts check src/main.tsx
+bun packages/compiler-next/src/project/cli.ts build src/main.tsx --out dist [--minify] [--root .]
+```
+
+`check` compiles the program and reports the first error (exit 1). `build` bundles it for the
+browser with `Bun.build` and the plugin, a linked source map beside each file.
+
 ## Files
 
 | File | What it owns |
@@ -78,9 +106,15 @@ output has a map back to the text the caller gave, with that text as its `source
 | `project/collect.ts` | The modules the entries reach, and where each import points |
 | `project/host.ts` | `ProjectHost`, `fileSystemHost` and project paths |
 | `project/index.ts` | The public API, re-exported from the package root |
-| `project/project.test.ts` | Collecting, aliases, errors, edits, new and deleted files, disk |
+| `project/project.test.ts` | Collecting, aliases, errors, edits, new and deleted files, disk, maps |
+| `project/bun.ts` | The Bun plugin |
+| `project/bun.test.ts` | `Bun.build` of an app with a companion output and a stylesheet; a compile error |
+| `project/cli.ts` | The command line: `check` and `build` |
+| `project/cli.test.ts` | Arguments, checking, and a build with the runtime bundled and maps written |
 
 ## Still to do
 
-- A command line (`compile src/main.tsx --out dist`) and a Bun plugin, as the first small users.
 - `packages/vite` on it, with HMR (`plan.md`, Phase 10).
+- Hot replacement for Bun's dev server, once HMR exists for Vite: `update()` already names the
+  outputs that changed.
+- The command line serves no pages (no dev server, no SSR); Vite does that.
