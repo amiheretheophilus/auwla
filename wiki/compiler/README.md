@@ -153,6 +153,7 @@ One page per group of related files:
 | [optimize.md](optimize.md) | the fast-path contract |
 | [linking.md](linking.md) | several modules, module state, routes, server functions |
 | [project.md](project.md) | compiling an app from its entries: collecting modules, rebuilding after edits |
+| [server.md](server.md) | server functions, and the client and server builds of an application |
 | [delivery.md](delivery.md) | shipping as little JavaScript as possible: static pages, adoption, the old compiler's baseline |
 | [testing.md](testing.md) | how the compiler is tested, locally and on CI |
 
