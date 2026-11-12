@@ -4,6 +4,7 @@
  */
 import { isAbsolute, join, relative } from 'node:path';
 import { fileSystemHost, isSourcePath, projectPath, type ProjectHost } from '@memoized-dom/compiler-next';
+import { longPath } from '../paths';
 
 /** Vite's resolution of `specifier` from the file `importer`: an id, or null when it finds none. */
 export type ViteResolver = (specifier: string, importer: string) => Promise<string | null>;
@@ -29,7 +30,7 @@ export function viteHost(root: string, resolver: () => ViteResolver | null): Pro
 
 /** The project path of a resolved id the project compiles, or false for a package or a virtual module. */
 function compiledPath(root: string, id: string): string | false {
-  const file = id.replace(/[?#].*$/, '');
+  const file = longPath(id.replace(/[?#].*$/, ''));
   if (!isAbsolute(file) || file.includes('node_modules')) return false;
   const inside = relative(root, file);
   if (inside.startsWith('..') || isAbsolute(inside)) return false;

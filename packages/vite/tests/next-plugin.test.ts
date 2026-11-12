@@ -5,6 +5,7 @@
 import { afterAll, afterEach, describe, expect, it, vi } from 'bun:test';
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { spawnSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
 import { build, createBuilder, createServer, type ViteDevServer } from 'vite';
 import { waitFor } from '../../../test-support/helpers';
@@ -38,6 +39,17 @@ function clientApp(folder: string): string {
   return join(root, folder);
 }
 
+/** The folder's Windows short spelling (`C:\Users\THEOPH~1\…`), or null where there is none. */
+function shortName(folder: string): string | null {
+  if (process.platform !== 'win32') return null;
+  // Verbatim, since Node's quoting of arguments would reach `cmd` as part of the path.
+  const result = spawnSync('cmd', ['/d', '/c', `for %A in ("${folder}") do @echo %~sA`], {
+    encoding: 'utf8', windowsVerbatimArguments: true,
+  });
+  const short = result.stdout.trim();
+  return result.status === 0 && short !== '' && short !== folder ? short : null;
+}
+
 function viteConfig(app: string) {
   return {
     root: app,
@@ -61,6 +73,23 @@ describe("compiler: 'next'", () => {
     // Compiled: no JSX runtime, and no hot replacement in a build.
     expect(bundle).not.toContain('jsx');
     expect(bundle).not.toContain('acceptComponents');
+  });
+
+  it.skipIf(shortName(root) === null)('compiles an app whose entry is given by its Windows short name', async () => {
+    const app = clientApp('short');
+    const short = shortName(app)!;
+    expect(short).not.toBe(app);
+    const result = await build({
+      ...viteConfig(app),
+      build: { write: false, rolldownOptions: { input: join(short, 'src', 'main.ts') } },
+    });
+    const code = (Array.isArray(result) ? result : [result])
+      .flatMap((item) => 'output' in item ? item.output : [])
+      .flatMap((output) => output.type === 'chunk' ? [output.code] : [])
+      .join('\n');
+    // Compiled, not left to Vite's JSX transform, which would import a React runtime.
+    expect(code).toContain('Count');
+    expect(code).not.toContain('jsx');
   });
 
   it('serves compiled modules in dev, and an edit sends an update, not a reload', async () => {

@@ -121,6 +121,9 @@ is server-only by its name (the old plugin assumed `server`).
   build (`./.memoized/…`, companion outputs).
 - **Aliases** (`@/label`) are resolved by Vite (`next/host.ts`): a resolved file under the root that
   is source is compiled; a package or a virtual module is left to Vite.
+- **Paths:** a Windows short name in an id (`C:\Users\THEOPH~1\…`) is spelled out before the id is
+  compared with the root, which Vite gives by its real name (`paths.ts`, `longPath`); otherwise an
+  entry given that way left the app's modules uncompiled. Needs Vite 8.3.8 or later, the peer range.
 - **The dependency scan** reads authored files, so the plugin leaves its resolutions alone
   (`scan: true`). Waiting there for the build deadlocked: the build resolves packages, which waits
   for the scan.
@@ -206,7 +209,7 @@ bun packages/compiler-next/src/project/cli.ts build src/main.ts --out dist [--mi
 | `project/cli.test.ts` | Arguments, checking, a client build, and a server build serving its page, its script (which hydrates) and a server function |
 | `packages/vite/src/next/plugin.ts` | The Vite plugin over an application: loading, resolving generated modules, hot updates, errors, delivery |
 | `packages/vite/src/next/host.ts` | The project host Vite gives: files from disk, aliases resolved by Vite |
-| `packages/vite/tests/next-plugin.test.ts` | A client build with an alias; dev: component, helper and entry edits; a compile error and its fix; dev SSR re-rendering an edit; a full-stack build serving its page, its script and a server function |
+| `packages/vite/tests/next-plugin.test.ts` | A client build with an alias; a build from a Windows short name; dev: component, helper and entry edits; a compile error and its fix; dev SSR re-rendering an edit; a full-stack build serving its page, its script and a server function |
 | `features/hot/index.ts` | The hot feature's API: `hotModule`, `addHotRuntime` |
 | `features/hot/boundary.ts` | Which modules accept their own hot update |
 | `features/hot/emit.ts` | The hot runtime's import, `moduleEvaluating` and the boundary in a module's tree |

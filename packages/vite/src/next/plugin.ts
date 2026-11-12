@@ -36,6 +36,7 @@ import {
   type FullstackPluginApi, type ProductionDelivery,
 } from '../fullstack';
 import { serverFunctionsVirtualId } from '../server-functions';
+import { longPath } from '../paths';
 import { viteHost, type ViteResolver } from './host';
 
 /** Packages whose subpaths share state: prebundling them would give the app a second copy. */
@@ -73,6 +74,11 @@ export function memoizedDomNext(options: MemoizedDomViteOptions): Plugin {
   function rootOf(): string {
     if (config === undefined) throw new Error('memoized-dom: used before Vite resolved its config');
     return config.root;
+  }
+
+  /** The project path of a Vite id, whichever way its path was spelled. */
+  function pathOf(id: string): string {
+    return projectPath(rootOf(), longPath(cleanId(id)));
   }
 
   /** The file a project path names, as Vite writes ids. */
@@ -244,7 +250,7 @@ export function memoizedDomNext(options: MemoizedDomViteOptions): Plugin {
       resolver ??= contextResolver(this);
       const program = programOf(await built(), this.environment.name);
       if (program === undefined || !program.ok) return null;
-      const from = projectPath(rootOf(), cleanId(importer));
+      const from = pathOf(importer);
       if (program.output[from] === undefined) return null;
       const found = (importCandidates(id, from) ?? []).find((candidate) => program.output[candidate] !== undefined);
       return found === undefined ? null : fileOf(found);
@@ -266,7 +272,7 @@ export function memoizedDomNext(options: MemoizedDomViteOptions): Plugin {
       resolver ??= contextResolver(this);
       const program = programOf(await built(), this.environment.name);
       if (program === undefined) return null;
-      const path = projectPath(rootOf(), id);
+      const path = pathOf(id);
       if (!program.ok) {
         if (program.modules.includes(path)) this.error(viteError(program.error, fileOf(program.error.path)));
         return null;
@@ -287,7 +293,7 @@ export function memoizedDomNext(options: MemoizedDomViteOptions): Plugin {
       if (application === undefined || building === null) return;
       const before = await building.catch(() => null);
       if (before === null) return;
-      const path = projectPath(rootOf(), update.file);
+      const path = pathOf(update.file);
       if (!concerns(path, before, update.type)) return;
 
       // Each environment hears the same change; the application updates once for both.

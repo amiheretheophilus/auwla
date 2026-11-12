@@ -150,11 +150,17 @@ build, fixed by leaving scan resolutions alone. Next: the old plugin's remaining
 switch.
 
 Fixed: 7 `packages/vite/tests/vite-adapter.test.ts` failures, each "Failed to load /src/main.ts"
-from a temp copy of the fixture. Windows gives the temp folder by its short name (`THEOPH~1`), and
-Vite 8.2.2, even with no plugin, refuses to load a file whose real path differs from the root's
-spelling (8.3.8 accepts it). The tests' preload (`test-support/setup.ts`) now sets the temp folder to
-its real path; the suite passes, 21 of 21. An app whose folder is spelled that way hits the same Vite
-bug until Vite is upgraded.
+from a temp copy of the fixture. Windows gives the temp folder by its short name (`THEOPH~1`).
+Vite 8.2.2, even with no plugin, refused to load a file whose real path differs from the root's
+spelling; Vite is now 8.3.8 (root, `examples/octopulse`, and the plugin's peer range), which accepts
+it. That exposed the plugins' own bug: Vite 8.3 gives the root by its real name, while an entry
+given by its short name keeps that spelling in module ids, so comparing them as text put the app's
+modules outside it, and Vite compiled their JSX as React. Both plugins now spell short names out
+before comparing (`packages/vite/src/paths.ts`, `longPath`), and a test builds an app from its short
+name (`next-plugin.test.ts`). Many other Vite tests hand temp-folder paths straight to the plugin's
+internal functions, mixing spellings no Vite build produces (Vite resolves roots and ids to real
+names); the tests' preload (`test-support/setup.ts`) gives the temp folder its real name, as Vite
+would.
 
 The Vite package's dependencies now list what its bundle imports (`yuku-*`, `@memoized-dom/server`),
 with compiler-next, which is bundled, as a dev dependency; `bun.lock` is updated to match, as CI
