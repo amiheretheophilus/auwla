@@ -11,7 +11,7 @@
 import { is, walk } from 'yuku-ast';
 import type { Expression, Node, Program } from 'yuku-parser';
 import { isInstantiated, lowerDeclarations, type EnumPlacement } from './lower-namespace';
-import { applyEdits, offsetAfterEdits, type Edit } from './text-edits';
+import { applyEdits, applyEditsWithOrigin, offsetAfterEdits, type Edit, type TextOrigin } from './text-edits';
 
 /** `import x = require('m')` in the lowered text. `at` is where its `import x` begins. */
 export interface LoweredRequireImport {
@@ -22,6 +22,8 @@ export interface LoweredRequireImport {
 
 export interface LoweredTypeScript {
   readonly source: string;
+  /** Where each offset of `source` was in the authored text. */
+  readonly origin: TextOrigin;
   readonly requireImports: readonly LoweredRequireImport[];
   /** The module has `export =`, so its default export is what requiring it gives. */
   readonly hasExportAssignment: boolean;
@@ -54,8 +56,10 @@ export function lowerTypeScript(program: Program, source: string, lang: 'ts' | '
     },
   });
 
+  const lowered = applyEditsWithOrigin(source, edits);
   return {
-    source: applyEdits(source, edits),
+    source: lowered.text,
+    origin: lowered.origin,
     requireImports: declarations.requireImports.map(({ edit, local, specifier }) => {
       return { at: offsetAfterEdits(edit, edits), local, specifier };
     }),

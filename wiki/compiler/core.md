@@ -70,8 +70,9 @@ inside the compiler or a new list implementation.
 | `index.ts` | `parseModule(path, source)`: language from the path (`langFromPath`), syntax errors as `CompileError` with line and column, JSX detection |
 | `lower-typescript.ts` | lowers `enum` (numbered members, reverse mapping, member names in initializers, `const enum`; `declare enum` removed) and constructor parameter properties, as `tsc` emits them, by editing the text. A member maps back unless its value is a string, which includes `B = A`, `E.A` and `A + 'x'` over a string member. Members are kept per enum, by scope and name, so two enums `E` in different namespaces or blocks stay apart, and merged declarations of one enum share names and string members |
 | `lower-namespace.ts` | lowers a runtime `namespace`, `import x = a.b`, `import x = require('m')` and `export =` as `tsc` emits them, and decides how an enum is declared when it merges or sits in a namespace |
-| `text-edits.ts` | replacing spans of source text, and where an edit lands afterwards |
+| `text-edits.ts` | replacing spans of source text, and where an edit lands afterwards; `TracedText` and `TextOrigin`, where each part of edited text came from, for source maps (`project.md`) |
 | `parse.test.ts` | unit tests |
+| `text-edits.test.ts` | traced text gives `applyEdits`'s text, and maps kept, written and moved text |
 
 - Output: `ParsedModule` with the lowered source text. The analyzer parses that
   text again, because its model is a snapshot of the text (`toolchain.md`).
@@ -324,11 +325,13 @@ Features build their own pieces. Optimizations replace pieces (`optimize.md`).
 | `packages/runtime/src/computation.ts` | Captures executed hidden version reads for opaque memos/sites, with stable keys and nested restoration |
 | `template.ts` | Hoists one description per template and emits its clone and `firstChild`/`nextSibling` navigation (`packages/runtime/src/markup.ts` builds and caches it) |
 | `names.ts` | Allocates generated names against authored names; `of(node, base)` shares distinct roles for one authored node |
-| `quote.ts` | Parses and copies generated statement snippets, filling AST holes; syntax that cannot parse at module scope uses builders directly |
+| `quote.ts` | Parses and copies generated statement snippets, filling AST holes; syntax that cannot parse at module scope uses builders directly. A snippet's offsets are zeroed, as a built node's, so source maps leave it unmapped |
 | `copy.ts` | Copies authored syntax with identity-keyed replacements, without changing analyzer nodes |
 | `recovery.ts` | Captures dynamic ownership around existing authored try statements and restores it before catch patterns/bodies and finally; adds no exception wrappers |
 | `patterns.ts` | Binding patterns as emitted code needs them: their bound names, and the pattern as an assignment target |
-| `print.ts` | Prints JavaScript through `yuku-codegen`, erasing TypeScript |
+| `print.ts` | Prints JavaScript through `yuku-codegen`, erasing TypeScript; with `sourceMaps`, also its map |
+| `source-map.ts` | Moves the printer's map from the analyzed text to the authored text (`project.md`, "Source maps") |
+| `source-map.test.ts` | Maps read with `@jridgewell/trace-mapping` point at authored names through TypeScript, slots, routes and `require` |
 | `core/diagnostics.ts` | `CompileError`: a reported error with its place in the authored module (framework API contracts only, `sources.md`; valid JavaScript is never an error) |
 
 `copy.ts` retains authored origins in external weak maps while composing feature

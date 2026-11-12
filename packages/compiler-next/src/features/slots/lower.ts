@@ -34,7 +34,7 @@ import { findAll, is } from 'yuku-ast';
 import { parse } from 'yuku-parser';
 import type { Node } from 'yuku-parser';
 import { CompileError } from '../../core/diagnostics';
-import { applyEdits, type Edit } from '../../core/parse/text-edits';
+import { applyEditsWithOrigin, TracedText, UNEDITED, type Edit, type TextOrigin } from '../../core/parse/text-edits';
 
 type JsxElement = Extract<Node, { type: 'JSXElement' }>;
 type JsxAttribute = Extract<Node, { type: 'JSXAttribute' }>;
@@ -51,7 +51,12 @@ export function mayHaveSlots(source: string): boolean {
 
 /** The module's text with its slots lowered to props. */
 export function lowerSlots(path: string, source: string): string {
-  if (!mayHaveSlots(source)) return source;
+  return lowerSlotsWithOrigin(path, source).text;
+}
+
+/** `lowerSlots`, and where each part of the lowered text came from (`core/parse/text-edits.ts`). */
+export function lowerSlotsWithOrigin(path: string, source: string): { text: string; origin: TextOrigin } {
+  if (!mayHaveSlots(source)) return { text: source, origin: UNEDITED };
   const { program } = parse(source, { lang: 'tsx', sourceType: 'module' });
   const lowering = new Lowering(path, source, program);
   return lowering.run();
@@ -81,7 +86,7 @@ class Lowering {
     this.#parents = parentsOf(program);
   }
 
-  run(): string {
+  run(): { text: string; origin: TextOrigin } {
     const elements = findAll(this.program, 'JSXElement');
     for (const element of elements) {
       if (isPlaceholder(element)) this.#placeholder(element);
@@ -96,7 +101,7 @@ class Lowering {
         throw this.#error('a slot marker belongs on a direct child of a component', attribute);
       }
     }
-    return applyEdits(this.source, this.#edits);
+    return applyEditsWithOrigin(this.source, this.#edits);
   }
 
   /** `<slot name="x">fallback</slot>` → the slot's content, or the fallback while it is undefined. */
@@ -191,14 +196,18 @@ class Lowering {
     }
     this.#supplied.set(call, new Map([...groups].map(([name, parts]) => [name, parts[0]!])));
     for (const [name, parts] of groups) {
+      // Traced, so the moved content keeps its authored positions in source maps.
       const texts = parts.map((part) => this.#take(part));
       // A lowered placeholder is `{read}` as a child; as a prop's value it is `read`.
       const single = parts.length === 1 && (is.JSXExpressionContainer(parts[0]) || this.#forwarded.has(parts[0] as JsxElement));
-      const value = parts.length > 1 ? `<>${texts.join('')}</>` : single ? texts[0]!.slice(1, -1) : texts[0]!;
+      const value = parts.length > 1
+        ? TracedText.join(['<>', ...texts, '</>'])
+        : single ? texts[0]!.slice(1, texts[0]!.text.length - 1) : texts[0]!;
       // Before the opening tag's `>`: marked content replaces a `slot:x={…}` written on the call,
       // as nested children replace `children`, because a later attribute wins.
       const at = call.openingElement.end - 1;
-      this.#edits.push({ start: at, end: at, text: ` slot:${name}={${value}}` });
+      const traced = TracedText.join([` slot:${name}={`, value, '}']);
+      this.#edits.push({ start: at, end: at, text: traced.text, traced });
     }
   }
 
@@ -232,12 +241,10 @@ class Lowering {
   }
 
   /** A child's text with the edits inside it applied, removing it (and them) from where it was. */
-  #take(part: Node): string {
+  #take(part: Node): TracedText {
     const inside = this.#edits.filter((edit) => edit.start >= part.start && edit.end <= part.end);
     for (const edit of inside) this.#edits.splice(this.#edits.indexOf(edit), 1);
-    const text = applyEdits(this.source.slice(part.start, part.end), inside.map((edit) => ({
-      start: edit.start - part.start, end: edit.end - part.start, text: edit.text,
-    })));
+    const text = TracedText.edited(this.source, inside, part.start, part.end);
     this.#edits.push({ start: part.start, end: part.end, text: '' });
     return text;
   }

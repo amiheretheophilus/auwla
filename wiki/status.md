@@ -107,8 +107,13 @@ analysis, source maps and `$snapshot`.
 that holds one primitive forever (`export const page = 1`, a `let` nothing writes, a template of
 constants) has no reader, and markup reading it is static; before, it got a version, a reader and a
 shared write batch, and each reading site a computation. Generated reader names now also avoid names
-a module forwards with `export *`. Next: source maps, a command line and a Bun plugin, then
-`packages/vite` with HMR.
+a module forwards with `export *`.
+
+**Done: source maps** (`compiler/project.md`, "Source maps"). With `sourceMaps: true`, each output
+has a map back to the authored file, through the TypeScript, slot, route and `require` rewrites;
+moved authored code (slot content, `$routed` callbacks) keeps its places, and code the compiler
+builds is unmapped. Next: constant exports read through `import * as` (still followed: the namespace
+is a live input), then a command line and a Bun plugin, then `packages/vite` with HMR.
 
 ## Closing documented issues before Phase 10 (2026-11-06)
 

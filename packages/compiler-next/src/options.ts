@@ -35,6 +35,11 @@ export interface CompileModulesOptions {
    * Return `false` for a module outside the compiled set, or `undefined` to use the default.
    */
   readonly resolveImport?: (specifier: string, importer: string) => string | false | undefined;
+  /**
+   * Also give each module's source map, back to the text the caller gave
+   * (`compileModulesDetailed`, `createProject`). Default false: printing a map costs time.
+   */
+  readonly sourceMaps?: boolean;
 }
 
 /** Options of `compile`, which takes one module. */

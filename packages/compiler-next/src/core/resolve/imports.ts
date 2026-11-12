@@ -4,6 +4,7 @@
  */
 import type { CompileModulesOptions } from '../../options';
 import type { ParsedModule } from '../parse';
+import { applyEditsWithOrigin, type Edit, type TextOrigin } from '../parse/text-edits';
 
 /**
  * The text to analyze for a module, with `import x = require('m')` settled.
@@ -17,16 +18,15 @@ export function withRequireImports(
   input: ParsedModule,
   parsed: readonly ParsedModule[],
   resolve: ReturnType<typeof importResolver>,
-): string {
-  let source = input.source;
-  // From the end, so earlier offsets stay valid.
-  for (const { at, local, specifier } of [...input.requireImports].reverse()) {
+): { text: string; origin: TextOrigin } {
+  const edits: Edit[] = [];
+  for (const { at, local, specifier } of input.requireImports) {
     const target = parsed.find((module) => module.path === resolve(specifier, input.path));
     if (target === undefined || target.hasExportAssignment) continue;
     const written = `import ${local}`;
-    source = `${source.slice(0, at)}import * as ${local}${source.slice(at + written.length)}`;
+    edits.push({ start: at, end: at + written.length, text: `import * as ${local}` });
   }
-  return source;
+  return applyEditsWithOrigin(input.source, edits);
 }
 
 const EXTENSIONS = ['', '.ts', '.tsx', '.js', '.jsx', '/index.ts', '/index.tsx', '/index.js', '/index.jsx'];

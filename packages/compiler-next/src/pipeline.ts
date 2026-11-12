@@ -11,7 +11,8 @@ import { findAll } from 'yuku-ast';
 import type { Node } from 'yuku-parser';
 import { CompileError } from './core/diagnostics';
 import { emitDom } from './core/emit/dom';
-import { printJavaScript } from './core/emit/print';
+import { printJavaScript, printWithSourceMap } from './core/emit/print';
+import type { SourceMap } from './core/emit/source-map';
 import type { Resolved } from './core/resolve';
 import { analyzeFrontend } from './analysis/frontend';
 import { planInitialDelivery, planInitialRender, type InitialDelivery, type InitialRender } from './features/delivery';
@@ -26,6 +27,8 @@ import { lowerFetchImport, markExplicitFetches } from './features/sources/delive
 
 export interface CompiledModules {
   readonly output: Record<string, string>;
+  /** Each module's source map, when `sourceMaps` is set. */
+  readonly maps?: Record<string, SourceMap>;
   readonly initialRender: InitialRender;
   /** Present when the page needs no browser program: its HTML is the whole page. */
   readonly initialDelivery?: InitialDelivery;
@@ -52,16 +55,21 @@ export function compileModulesDetailed(
   modules: Readonly<Record<string, string>>,
   options: CompileModulesOptions = {},
 ): CompiledModules {
-  const { output, resolved } = compileProgram(modules, options);
+  const { output, maps, resolved } = compileProgram(modules, options);
   const initialRender = planInitialRender(resolved, output, options);
   const initialDelivery = planInitialDelivery(initialRender, modules);
-  return { output, initialRender, ...(initialDelivery === undefined ? {} : { initialDelivery }) };
+  return {
+    output,
+    ...(maps === undefined ? {} : { maps }),
+    initialRender,
+    ...(initialDelivery === undefined ? {} : { initialDelivery }),
+  };
 }
 
 function compileProgram(
   modules: Readonly<Record<string, string>>,
   options: CompileModulesOptions,
-): { output: Record<string, string>; resolved: Resolved } {
+): { output: Record<string, string>; maps?: Record<string, SourceMap>; resolved: Resolved } {
   const { resolved, graph } = analyzeFrontend(modules, options);
   const general = planCapturedValues(planModules(graph, graph.queries, graph.components), resolved);
   const plans = optimizeModules(general, graph, options.optimize !== false);
@@ -87,11 +95,21 @@ function compileProgram(
 
   const linked = linkModuleNamespaces(plans, emitted, options);
   const output: Record<string, string> = {};
+  const maps: Record<string, SourceMap> | undefined = options.sourceMaps === true ? {} : undefined;
   for (const [path, emitted] of linked) {
     lowerFetchImport(emitted.tree, emitted.module.module, options);
     markExplicitFetches(emitted.tree);
-    output[path] = printJavaScript(emitted.tree, emitted.module.path, emitted.module.module.source);
+    const module = emitted.module;
+    if (maps === undefined) {
+      output[path] = printJavaScript(emitted.tree, module.path, module.module.source);
+      continue;
+    }
+    const printed = printWithSourceMap(emitted.tree, {
+      path: module.path, analyzed: module.module.source, authored: module.authored, origin: module.origin,
+    });
+    output[path] = printed.code;
+    maps[path] = printed.map;
   }
 
-  return { output, resolved };
+  return { output, ...(maps === undefined ? {} : { maps }), resolved };
 }

@@ -84,6 +84,13 @@ describe('building', () => {
     expect(build.error.path).toBe('./Broken.tsx');
   });
 
+  it('gives source maps back to the authored files when asked', async () => {
+    const { host } = memoryHost({ './App.tsx': APP, './Title.tsx': TITLE, './types.ts': '' });
+    const build = await createProject({ entries: ['./App.tsx'], host, sourceMaps: true }).build();
+    expect(build.ok && Object.keys(build.maps!).sort()).toEqual(['./App.tsx', './Title.tsx']);
+    expect(build.ok && build.maps!['./Title.tsx']!.sourcesContent).toEqual([TITLE]);
+  });
+
   it('reports an entry with no file', async () => {
     const { host } = memoryHost({});
     const build = await createProject({ entries: ['./main.tsx'], host }).build();

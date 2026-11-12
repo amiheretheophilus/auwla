@@ -7,6 +7,7 @@
  * changed: what a watcher rewrites, or what hot module replacement sends to the browser.
  */
 import { CompileError } from '../core/diagnostics';
+import type { SourceMap } from '../core/emit/source-map';
 import type { InitialDelivery, InitialRender } from '../features/delivery';
 import type { CompileModulesOptions } from '../options';
 import { compileModulesDetailed } from '../pipeline';
@@ -26,6 +27,8 @@ export interface CompiledProject {
   readonly ok: true;
   /** JavaScript by project path, one entry per module reached. */
   readonly output: Readonly<Record<string, string>>;
+  /** Source maps by output path, back to the authored files, when `sourceMaps` is set. */
+  readonly maps?: Readonly<Record<string, SourceMap>>;
   readonly initialRender: InitialRender;
   /** Present when the page needs no browser program (`wiki/compiler/delivery.md`). */
   readonly initialDelivery?: InitialDelivery;

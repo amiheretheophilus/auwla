@@ -26,7 +26,13 @@ import type { Node } from 'yuku-parser';
 import { CompileError } from '../../core/diagnostics';
 import type { Module } from '../../core/resolve';
 import type { FunctionNode } from '../../core/resolve/functions';
-import { applyEdits, type Edit } from '../../core/parse/text-edits';
+import { applyEditsWithOrigin, TracedText, type Edit, type TextOrigin } from '../../core/parse/text-edits';
+
+/** A module's lowered text, and where each part of it was in the text analyzed first. */
+export interface LoweredText {
+  readonly text: string;
+  readonly origin: TextOrigin;
+}
 import { attributeNamed, staticString, type JsxAttribute, type JsxElement, type RouteLink, type RouteTemplate } from './collect';
 import { instanceId, type RouteGraph, type RouteInstance } from './graph';
 import { checkPattern, parameterNames } from './patterns';
@@ -45,9 +51,9 @@ export function lowerRouteModules(
   links: readonly RouteLink[],
   modules: readonly Module[],
   options: CompileModulesOptions,
-): Map<Module, string> {
+): Map<Module, LoweredText> {
   const known = new Map(graph.instances.map((instance) => [instance.fullPattern, instance]));
-  const lowered = new Map<Module, string>();
+  const lowered = new Map<Module, LoweredText>();
 
   for (const module of modules) {
     const lowering = new ModuleLowering(module, graph, known, options);
@@ -72,7 +78,7 @@ class ModuleLowering {
     private readonly options: CompileModulesOptions,
   ) {}
 
-  run(links: readonly RouteLink[]): string | null {
+  run(links: readonly RouteLink[]): LoweredText | null {
     const templates = this.graph.templates.filter((template) => template.module === this.module);
     const calls = this.graph.calls.filter((call) => call.module === this.module && this.graph.dynamic.has(call.callee));
     const preparations = this.graph.preparations.filter((preparation) => preparation.module === this.module);
@@ -104,7 +110,7 @@ class ModuleLowering {
     // Last, so it applies first: a dropped import can start where the registrations are
     // inserted, and must go before they are (`applyEdits` applies the latest edit at a place first).
     this.#dropServerImports(preparations);
-    return applyEdits(this.module.source, this.#edits);
+    return applyEditsWithOrigin(this.module.source, this.#edits);
   }
 
   /**
@@ -112,16 +118,19 @@ class ModuleLowering {
    * registered at the top of the module. A client build keeps only a server-backed one's id.
    */
   #preparation(preparation: RoutedPreparation): void {
-    const fields = [`id: ${JSON.stringify(preparation.id)}`, `server: ${preparation.server}`];
+    // Traced, so the moved callback keeps its authored positions in source maps.
+    const fields: (string | TracedText)[] = [`id: ${JSON.stringify(preparation.id)}, server: ${preparation.server}`];
     if (!(this.options.routedEnvironment === 'client' && preparation.server)) {
+      const callback = preparation.callback;
       if (preparation.sources.length === 0) {
-        fields.push(`prepare: ${this.#slice(preparation.callback)}`);
+        fields.push(', prepare: ', TracedText.kept(this.module.source, callback.start, callback.end));
       } else {
-        fields.push(`prepare: ${this.#import('withRoutedSources', DATA_INTERNAL)}(${this.#settlingCallback(preparation)})`);
-        fields.push(`settle: ${this.#import('settleRoutedValue', DATA_INTERNAL)}`);
+        fields.push(`, prepare: ${this.#import('withRoutedSources', DATA_INTERNAL)}(`, this.#settlingCallback(preparation), ')');
+        fields.push(`, settle: ${this.#import('settleRoutedValue', DATA_INTERNAL)}`);
       }
     }
-    this.#edits.push({ start: 0, end: 0, text: `${this.#import('registerRoutedPreparation')}({ ${fields.join(', ')} });\n` });
+    const registration = TracedText.join([`${this.#import('registerRoutedPreparation')}({ `, ...fields, ' });\n']);
+    this.#edits.push({ start: 0, end: 0, text: registration.text, traced: registration });
     this.#edits.push({
       start: preparation.call.start, end: preparation.call.end,
       text: `${this.#import('readRoutedPreparation')}(${JSON.stringify(preparation.id)})`,
@@ -132,26 +141,26 @@ class ModuleLowering {
    * The callback with each source it makes settled where it is made (`await read(source)`), so
    * what it computes, caches and returns is data: async, and given `read` after its context.
    */
-  #settlingCallback(preparation: RoutedPreparation): string {
+  #settlingCallback(preparation: RoutedPreparation): TracedText {
     const callback = preparation.callback;
     const text = this.#slice(callback);
     let read = '_routedRead';
     while (text.includes(read)) read += '_';
 
+    // Offsets in the module, so the result traces back to it.
     const edits: Edit[] = [];
-    const at = (offset: number) => offset - callback.start;
-    if (!callback.async) edits.push({ start: 0, end: 0, text: 'async ' });
+    if (!callback.async) edits.push({ start: callback.start, end: callback.start, text: 'async ' });
     if (callback.params.length === 0) {
-      const open = text.indexOf('(');
+      const open = callback.start + text.indexOf('(');
       edits.push({ start: open + 1, end: open + 1, text: `_routedContext, ${read}` });
     } else {
-      edits.push({ start: at(callback.params[0]!.end), end: at(callback.params[0]!.end), text: `, ${read}` });
+      edits.push({ start: callback.params[0]!.end, end: callback.params[0]!.end, text: `, ${read}` });
     }
     for (const call of preparation.sources) {
-      edits.push({ start: at(call.start), end: at(call.start), text: `(await ${read}(` });
-      edits.push({ start: at(call.end), end: at(call.end), text: '))' });
+      edits.push({ start: call.start, end: call.start, text: `(await ${read}(` });
+      edits.push({ start: call.end, end: call.end, text: '))' });
     }
-    return applyEdits(text, edits);
+    return TracedText.edited(this.module.source, edits, callback.start, callback.end);
   }
 
   /**
