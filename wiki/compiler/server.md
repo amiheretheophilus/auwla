@@ -31,13 +31,22 @@ the declarations with its output, and every error with its error.
 
 ## Application
 
-`createApplication({ client, server?, serverRoot = 'server', delivery?, host, ...options })`
+`createApplication({ client, server?: { entry, folder?, functions?, delivery? }, host, ...options })`
 (`server/application.ts`) makes two projects over one host, each seeing it through its own view:
 
 ```ts
-const application = createApplication({ client: './src/main.ts', server: './server.ts', host: fileSystemHost(root) });
+const application = createApplication({
+  client: './src/main.ts',
+  server: { entry: './server.ts', folder: './server' },
+  host: fileSystemHost(root),          // root: the app's folder, which project paths are relative to
+});
 const { client, server, functions, declarations } = await application.build();
 ```
+
+**No folder is server-only by its name** (the user's direction, 2026-11-12): the application is told
+which one is (`server.folder`). Without one, nothing is server-only, no server functions are looked
+for, and a `#server/` import is an error asking for the folder. Server functions are read from
+`functions` in that folder, or from `server.functions` when given (`'./api'`).
 
 - **Client build:** `routedEnvironment: 'client'` (server-backed `$routed` bodies dropped),
   `dataDelivery` `universal` with a server and `client` without. `#server/*` is never followed; a
@@ -68,10 +77,9 @@ const { client, server, functions, declarations } = await application.build();
 - `update(paths)` rebuilds both programs and names what changed in each. An edit in the server
   folder regenerates the barrel, the facades and the registry.
 
-Found while building it: every module-level object got a reader and a version, even with nothing
-reactive reading it (`export const database = { users: new Map() }` emitted 1.6 KB, and a server
-entry with `serve()` and `app.ssr(App)` 2.7 KB of shared-state and source machinery). That is the
-next fix, for client builds too (`state-and-derived.md`).
+Found while building it, and fixed: every module-level object got a reader and a version, even with
+nothing reactive reading it; a server entry with `serve()` and `app.ssr(App)` emitted 2,757 bytes of
+machinery, now 280 (`state-and-derived.md`, "Module state nothing reactive reads").
 
 ## Files
 

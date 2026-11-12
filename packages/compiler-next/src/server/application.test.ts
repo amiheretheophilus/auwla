@@ -36,9 +36,28 @@ export const saveUser = define.function({ async post({ services }, name) { retur
 `,
 };
 
+/** The server, and the folder it says is server-only. */
+const SERVER = { entry: './server.ts', folder: './server' };
+
 describe('applications', () => {
+  it('treat no folder as server-only until told which one is', async () => {
+    const build = await createApplication({ client: './src/main.ts', server: { entry: './server.ts' }, host: memoryHost(FILES) }).build();
+    // No functions are looked for, so `#server-functions` has nothing; `#server/` names nothing.
+    expect(build.functions).toEqual([]);
+    expect(!build.server?.ok && build.server?.error.message).toContain("'#server/database' needs the server folder: declare it as server.folder");
+  });
+
+  it('read server functions from another folder when told to', async () => {
+    const files = Object.fromEntries(Object.entries(FILES).map(([path, text]) => [path.replace('./server/functions/', './api/'), text]));
+    const build = await createApplication({
+      client: './src/main.ts', server: { ...SERVER, functions: './api' }, host: memoryHost(files),
+    }).build();
+    expect(build.functions.map((module) => module.moduleName)).toEqual(['users']);
+    expect(build.server?.ok && build.server.output['./.memoized/server-functions.server.ts']).toContain('"/_fn/users/getUser"');
+  });
+
   it('build the client with facades, never the server code', async () => {
-    const build = await createApplication({ client: './src/main.ts', server: './server.ts', host: memoryHost(FILES) }).build();
+    const build = await createApplication({ client: './src/main.ts', server: SERVER, host: memoryHost(FILES) }).build();
     expect(build.client.ok).toBe(true);
     if (!build.client.ok) return;
 
@@ -53,7 +72,7 @@ describe('applications', () => {
   });
 
   it('build the server with its routes, handlers and the delivery it is given', async () => {
-    const application = createApplication({ client: './src/main.ts', server: './server.ts', host: memoryHost(FILES), delivery: './delivery.ts' });
+    const application = createApplication({ client: './src/main.ts', server: { ...SERVER, delivery: './delivery.ts' }, host: memoryHost(FILES) });
     const build = await application.build();
     expect(build.server?.ok).toBe(true);
     if (build.server?.ok !== true) return;
@@ -70,6 +89,10 @@ describe('applications', () => {
     expect(build.server.output['./server.ts']).toContain('from "./.memoized/server-application.ts"');
     expect(build.server.output['./server.ts']).toContain('from "./server/database.ts"');
     expect(build.server.output[GENERATED.server]).toContain('from "../delivery.ts"');
+    // The entry's top-level code runs once and needs no reactive machinery. (The wrapper's
+    // integration object, and through it the routes, keep readers: `serve()` reads it inside a
+    // function, which a component could call as far as the compiler knows.)
+    expect(build.server.output['./server.ts']).not.toContain('_read_');
     expect(build.declarations).toContain('export declare function getUser');
   });
 
@@ -83,7 +106,7 @@ describe('applications', () => {
 
   it('report a server-only import in client code', async () => {
     const files = { ...FILES, './src/App.tsx': `import { database } from '#server/database';\nexport function App() { return <p>{database.users.size}</p>; }` };
-    const build = await createApplication({ client: './src/main.ts', server: './server.ts', host: memoryHost(files) }).build();
+    const build = await createApplication({ client: './src/main.ts', server: SERVER, host: memoryHost(files) }).build();
     expect(!build.client.ok && build.client.error.message).toContain("'#server/database' is server-only");
   });
 
@@ -99,7 +122,7 @@ function Story() {
 export function App() { return <main><Story route="/story/:id" /></main>; }
 `,
     };
-    const build = await createApplication({ client: './src/main.ts', server: './server.ts', host: memoryHost(files) }).build();
+    const build = await createApplication({ client: './src/main.ts', server: SERVER, host: memoryHost(files) }).build();
     expect(build.client.ok).toBe(true);
     expect(build.server?.ok).toBe(true);
     expect(build.client.ok && build.client.output['./src/App.tsx']).not.toContain('server/database');
@@ -109,13 +132,13 @@ export function App() { return <main><Story route="/story/:id" /></main>; }
 
   it('report a server function error with its module', async () => {
     const files = { ...FILES, './server/functions/bad.ts': 'export const helper = 1;' };
-    const build = await createApplication({ client: './src/main.ts', server: './server.ts', host: memoryHost(files) }).build();
+    const build = await createApplication({ client: './src/main.ts', server: SERVER, host: memoryHost(files) }).build();
     expect(!build.client.ok && build.client.error.path).toBe('./server/functions/bad.ts');
   });
 
   it('update both builds when a server function changes, naming what changed in each', async () => {
     const files = { ...FILES };
-    const application = createApplication({ client: './src/main.ts', server: './server.ts', host: memoryHost(files) });
+    const application = createApplication({ client: './src/main.ts', server: SERVER, host: memoryHost(files) });
     await application.build();
 
     files['./server/functions/users.ts'] = FILES['./server/functions/users.ts']!.replace("id: string", "id: string, full = false");

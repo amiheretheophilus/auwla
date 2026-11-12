@@ -12,7 +12,8 @@
  *   server-backed `$routed` body that reads one is dropped there (`features/routes/`); any other
  *   `#server/` import left in client output is an error. The entry also installs the hydration
  *   runtime, so it adopts the server's markup.
- * - In the server build, `#server/*` resolves into the server folder, and the entry's
+ * - In the server build, `#server/*` resolves into the server folder the application is given
+ *   (`server.folder`; no folder is server-only by its name), and the entry's
  *   `@memoized-dom/server` import resolves to a generated module whose `serve()` installs the
  *   server function routes (`./.memoized/server-functions.server.ts`) and the tool's delivery
  *   module (the page's document and its assets, which depend on where the app runs).
@@ -33,17 +34,31 @@ import {
 export interface ApplicationOptions extends CompileModulesOptions {
   /** The browser's entry (`./src/main.ts`). */
   readonly client: string;
-  /** The server's entry (`./server.ts`), for an application rendered on the server. */
-  readonly server?: string;
-  /** The server-only folder (`docs/12-server-functions.md`). Default `server`. */
-  readonly serverRoot?: string;
+  /** The server, for an application rendered on the server. */
+  readonly server?: ServerOptions;
+  readonly host: ProjectHost;
+}
+
+/**
+ * Where the server's code is. Nothing is server-only because of its name: the application is
+ * told which folder is (the user's direction, 2026-11-12).
+ */
+export interface ServerOptions {
+  /** The server's entry (`./server.ts`). */
+  readonly entry: string;
+  /**
+   * The server-only folder (`./server`): `#server/*` resolves into it, and client code never
+   * reaches it. Without one, nothing is server-only, and a `#server/` import is an error.
+   */
+  readonly folder?: string;
+  /** Where server functions are (`docs/12-server-functions.md`). Default: `functions` in `folder`. */
+  readonly functions?: string;
   /**
    * The module the server build imports for the page's document and its assets: a default export
    * with `document(request)` and `assets(request)` (`@memoized-dom/server`, `ServerIntegration`).
    * The tool supplies it. Default `virtual:memoized-dom/delivery`.
    */
   readonly delivery?: string;
-  readonly host: ProjectHost;
 }
 
 export interface ApplicationBuild {
@@ -77,11 +92,13 @@ export const GENERATED = {
 const HYDRATE = "\nimport '@memoized-dom/runtime/hydrate';\n";
 
 export function createApplication(options: ApplicationOptions): Application {
-  const { client, server, serverRoot = 'server', delivery = 'virtual:memoized-dom/delivery', host, ...compile } = options;
+  const { client, server, host, ...compile } = options;
   const clientEntry = normalizeProjectPath(client);
-  const serverEntry = server === undefined ? undefined : normalizeProjectPath(server);
-  const root = normalizeProjectPath(serverRoot).replace(/\/+$/, '');
-  const functionsFolder = `${root}/functions`;
+  const serverEntry = server === undefined ? undefined : normalizeProjectPath(server.entry);
+  const delivery = server?.delivery ?? 'virtual:memoized-dom/delivery';
+  /** The declared server-only folder, or null: then nothing is server-only. */
+  const root = server?.folder === undefined ? null : folderPath(server.folder);
+  const functionsFolder = server?.functions !== undefined ? folderPath(server.functions) : root === null ? null : `${root}/functions`;
 
   /** The server folder's functions and services, found again by each build. */
   let generated: Generated = { modules: [], services: [], facades: new Map() };
@@ -90,12 +107,15 @@ export function createApplication(options: ApplicationOptions): Application {
     const modules: DiscoveredFunctions[] = [];
     const services: ServerService[] = [];
     const facades = new Map<string, string>();
-    for (const path of (await host.list?.(root)) ?? []) {
+    const folders = [...new Set([root, functionsFolder].filter((folder) => folder !== null))];
+    const paths = new Set<string>();
+    for (const folder of folders) for (const path of (await host.list?.(folder)) ?? []) paths.add(path);
+    for (const path of [...paths].sort()) {
       if (!isSourcePath(path)) continue;
       const text = await host.readFile(path);
       if (text === undefined) continue;
       services.push(...serverServices(path, text));
-      if (!path.startsWith(`${functionsFolder}/`)) continue;
+      if (functionsFolder === null || !path.startsWith(`${functionsFolder}/`)) continue;
       const module = analyzeServerFunctions(path, text, functionsFolder);
       modules.push({ path, module });
       if (!isMiddlewareFile(path) && module.functions.length > 0) facades.set(facadePath(functionsFolder, path), serverFunctionClient(module));
@@ -107,7 +127,7 @@ export function createApplication(options: ApplicationOptions): Application {
   /** `#server-functions`: each module's functions, re-exported from its facade. */
   function barrel(): string {
     const facades = generated.modules
-      .map((entry) => ({ ...entry, path: facadePath(functionsFolder, entry.path) }))
+      .map((entry) => ({ ...entry, path: facadePath(functionsFolder ?? '', entry.path) }))
       .filter((entry) => generated.facades.has(entry.path));
     return serverFunctionBarrel(GENERATED.barrel, facades);
   }
@@ -120,7 +140,7 @@ export function createApplication(options: ApplicationOptions): Application {
         if (facade !== undefined) return facade;
         if (path === GENERATED.barrel) return barrel();
         if (side === 'server' && path === GENERATED.registry) {
-          return serverFunctionRegistry(GENERATED.registry, functionsFolder, generated.modules, generated.services);
+          return serverFunctionRegistry(GENERATED.registry, functionsFolder ?? '', generated.modules, generated.services);
         }
         if (side === 'server' && path === GENERATED.server) {
           // A relative delivery module is relative to the project, and the wrapper is in `.memoized/`.
@@ -137,7 +157,8 @@ export function createApplication(options: ApplicationOptions): Application {
       async resolve(specifier, importer) {
         if (specifier === '#server-functions') return GENERATED.barrel;
         if (specifier.startsWith('#server/')) {
-          if (side === 'client') return false;
+          // Left unresolved, it stays in the output, where `checkServerOnly` reports it.
+          if (side === 'client' || root === null) return false;
           return serverModule(root, specifier.slice('#server/'.length), host);
         }
         if (side === 'server') {
@@ -169,9 +190,9 @@ export function createApplication(options: ApplicationOptions): Application {
     const discovered = await discoverSafely();
     if (discovered instanceof CompileError) return failed(discovered);
     generated = discovered;
-    const clientBuild = checkClient(await clientProject.build());
+    const clientBuild = checkServerOnly(await clientProject.build(), 'client');
     const serverBuild = await serverProject?.build();
-    return finish(clientBuild, serverBuild);
+    return finish(clientBuild, serverBuild === undefined ? undefined : checkServerOnly(serverBuild, 'server'));
   }
 
   async function update(paths: readonly string[]): Promise<ApplicationUpdate> {
@@ -181,15 +202,17 @@ export function createApplication(options: ApplicationOptions): Application {
       return { build, client: { changed: [], removed: [] }, ...(serverProject === null ? {} : { server: { changed: [], removed: [] } }) };
     }
     // A generated module changes with the folder it comes from.
-    const touchesServer = paths.some((path) => normalizeProjectPath(path).startsWith(`${root}/`));
+    const folders = [root, functionsFolder].filter((folder) => folder !== null);
+    const touchesServer = paths.some((path) => folders.some((folder) => normalizeProjectPath(path).startsWith(`${folder}/`)));
     const generatedPaths = touchesServer ? [GENERATED.barrel, GENERATED.registry, ...generated.facades.keys(), ...discovered.facades.keys()] : [];
     generated = discovered;
 
     const clientUpdate = await clientProject.update([...paths, ...generatedPaths]);
-    const clientBuild = checkClient(clientUpdate.build);
+    const clientBuild = checkServerOnly(clientUpdate.build, 'client');
     const serverUpdate = await serverProject?.update([...paths, ...generatedPaths]);
+    const serverBuild = serverUpdate === undefined ? undefined : checkServerOnly(serverUpdate.build, 'server');
     return {
-      build: finish(clientBuild, serverUpdate?.build),
+      build: finish(clientBuild, serverBuild),
       client: clientBuild.ok ? { changed: clientUpdate.changed, removed: clientUpdate.removed } : { changed: [], removed: [] },
       ...(serverUpdate === undefined ? {} : { server: { changed: serverUpdate.changed, removed: serverUpdate.removed } }),
     };
@@ -250,12 +273,13 @@ function serverApplication(delivery: string): string {
 import { serve as __mmd_serve, integrateApplication as __mmd_integrate } from '@memoized-dom/server';
 import { serverFunctionRoutes as __mmd_routes } from ${JSON.stringify(`./${GENERATED.registry.slice('./.memoized/'.length)}`)};
 import __mmd_delivery from ${JSON.stringify(delivery)};
+const __mmd_integration = {
+  routes: __mmd_routes,
+  document: (request) => __mmd_delivery.document?.(request),
+  assets: (request, platform) => __mmd_delivery.assets?.(request, platform),
+};
 export function serve(options) {
-  return __mmd_integrate(__mmd_serve(options), {
-    get routes() { return __mmd_routes; },
-    document: (request) => __mmd_delivery.document?.(request),
-    assets: (request, platform) => __mmd_delivery.assets?.(request, platform),
-  });
+  return __mmd_integrate(__mmd_serve(options), __mmd_integration);
 }
 `;
 }
@@ -265,15 +289,25 @@ function implementationSpecifier(moduleId: string): string {
   return `../${moduleId.replace(/^\.\//, '').replace(/\.[cm]?[jt]sx?$/, '.js')}`;
 }
 
-/** A client build that still imports `#server/` code would ship server-only code. */
-function checkClient(build: ProjectBuild): ProjectBuild {
+/**
+ * A `#server/` import left in output: in a client build it would ship server-only code; in a
+ * server build it names a folder no one declared.
+ */
+function checkServerOnly(build: ProjectBuild, side: 'client' | 'server'): ProjectBuild {
   if (!build.ok) return build;
   for (const [path, code] of Object.entries(build.output)) {
     const match = /from\s+["'](#server\/[^"']+)["']|import\s+["'](#server\/[^"']+)["']/.exec(code);
-    if (match !== null) {
-      const error = new CompileError(`'${match[1] ?? match[2]}' is server-only: client code cannot import it outside a server-backed $routed callback`, path);
-      return { ok: false, error, modules: build.modules };
-    }
+    if (match === null) continue;
+    const specifier = match[1] ?? match[2];
+    const message = side === 'client'
+      ? `'${specifier}' is server-only: client code cannot import it outside a server-backed $routed callback`
+      : `'${specifier}' needs the server folder: declare it as server.folder`;
+    return { ok: false, error: new CompileError(message, path), modules: build.modules };
   }
   return build;
+}
+
+/** A folder as a project path, without a trailing slash. */
+function folderPath(folder: string): string {
+  return normalizeProjectPath(folder).replace(/\/+$/, '');
 }
