@@ -115,6 +115,7 @@ browser with `Bun.build` and the plugin, a linked source map beside each file.
 ## Still to do
 
 - `packages/vite` on it, with HMR (`plan.md`, Phase 10).
+- Applications with a server build on projects (`server.md`).
 - Hot replacement for Bun's dev server, once HMR exists for Vite: `update()` already names the
   outputs that changed.
 - The command line serves no pages (no dev server, no SSR); Vite does that.

@@ -52,7 +52,8 @@ export function relativeModule(importer: string, target: string, preserveExtensi
 
   const relative = [...from.map(() => '..'), ...to].join('/');
   const path = preserveExtension ? relative : relative.replace(/\.tsx?$/, '');
-  return path.startsWith('.') ? path : `./${path}`;
+  // `.memoized/x.ts` is a folder name starting with a dot, not a relative path.
+  return path.startsWith('./') || path.startsWith('../') ? path : `./${path}`;
 }
 
 /**

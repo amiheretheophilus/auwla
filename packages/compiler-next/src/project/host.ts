@@ -5,7 +5,7 @@
  * keys `compileModules` takes. The host turns those paths into text. A bundler plugin gives a
  * host backed by its own resolver and file cache; `fileSystemHost` reads a folder on disk.
  */
-import { readFileSync, statSync } from 'node:fs';
+import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, relative, sep } from 'node:path';
 
 export interface ProjectHost {
@@ -18,6 +18,11 @@ export interface ProjectHost {
    * (`~/lib/x`) come through here.
    */
   resolve?(specifier: string, importer: string): string | false | undefined | Promise<string | false | undefined>;
+  /**
+   * The project paths of the files under a folder, at any depth. An application lists its server
+   * functions this way (`wiki/compiler/server.md`); a host without it has none.
+   */
+  list?(folder: string): readonly string[] | Promise<readonly string[]>;
 }
 
 /** A host that reads the files under `root`. Works under Node and Bun. */
@@ -28,6 +33,14 @@ export function fileSystemHost(root: string): ProjectHost {
       // A missing file, or a folder, is "no such module", which the probing rule expects.
       const stats = statSync(file, { throwIfNoEntry: false });
       return stats?.isFile() === true ? readFileSync(file, 'utf8') : undefined;
+    },
+    list(folder) {
+      const directory = join(root, folder);
+      if (statSync(directory, { throwIfNoEntry: false })?.isDirectory() !== true) return [];
+      return readdirSync(directory, { recursive: true, withFileTypes: true })
+        .filter((entry) => entry.isFile())
+        .map((entry) => projectPath(root, join(entry.parentPath, entry.name)))
+        .sort();
     },
   };
 }

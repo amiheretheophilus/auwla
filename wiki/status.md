@@ -120,7 +120,14 @@ A page reading two such constants went from 3.8 KB with a companion module to 1.
 
 **Done: Bun plugin and command line** (`compiler/project.md`, "Bun", "Command line"). `Bun.build`
 with `memoizedDom({ entries })` bundles an app compiled by compiler-next, companion outputs and
-source maps included; `cli.ts check|build` wraps it. Next: `packages/vite` on projects, with HMR.
+source maps included; `cli.ts check|build` wraps it.
+
+**SSR from the project** (`compiler/server.md`), as the user asked, so Vite and the Bun plugin share
+it. Done: server function analysis and facades (matching the old compiler exactly); the application,
+a client and a server build over one host with generated barrel, facades, registry and `serve()`
+integration; resolved specifiers printed as relative paths. Next: module state nothing reactive reads
+needs no reader (found here: a server entry emitted 2.7 KB of machinery), then the Bun plugin and
+command line building both, with a server answering a request in a test, then `packages/vite` with HMR.
 
 ## Closing documented issues before Phase 10 (2026-11-06)
 

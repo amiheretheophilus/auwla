@@ -24,6 +24,7 @@ import { planCapturedValues } from './link/captured-plan';
 import { emitNamespaceReads, markNamespaceReads } from './link/open-namespaces';
 import { emitCapturedValues } from './link/captured-dom';
 import { lowerFetchImport, markExplicitFetches } from './features/sources/delivery';
+import { resolveSpecifiers } from './link/specifiers';
 
 export interface CompiledModules {
   readonly output: Record<string, string>;
@@ -96,10 +97,12 @@ function compileProgram(
   const linked = linkModuleNamespaces(plans, emitted, options);
   const output: Record<string, string> = {};
   const maps: Record<string, SourceMap> | undefined = options.sourceMaps === true ? {} : undefined;
+  const known = new Set(plans.map((plan) => plan.module.path));
   for (const [path, emitted] of linked) {
     lowerFetchImport(emitted.tree, emitted.module.module, options);
     markExplicitFetches(emitted.tree);
     const module = emitted.module;
+    resolveSpecifiers(emitted.tree, module.path, known, options);
     if (maps === undefined) {
       output[path] = printJavaScript(emitted.tree, module.path, module.module.source);
       continue;
