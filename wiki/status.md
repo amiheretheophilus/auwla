@@ -149,9 +149,16 @@ build, fixed by leaving scan resolutions alone. Next: the old plugin's remaining
 (styles, the build-time page, lazy route chunks, packages, devtools), then the Vite suite through the
 switch.
 
-Seen while checking, not caused by this (the same at the previous commit, checked in a worktree):
-`packages/vite/tests/vite-adapter.test.ts` has 7 failures, each loading `/src/main.ts` from its temp
-copy of the fixture ("Does the file exist?").
+Fixed: 7 `packages/vite/tests/vite-adapter.test.ts` failures, each "Failed to load /src/main.ts"
+from a temp copy of the fixture. Windows gives the temp folder by its short name (`THEOPH~1`), and
+Vite 8.2.2, even with no plugin, refuses to load a file whose real path differs from the root's
+spelling (8.3.8 accepts it). The tests' preload (`test-support/setup.ts`) now sets the temp folder to
+its real path; the suite passes, 21 of 21. An app whose folder is spelled that way hits the same Vite
+bug until Vite is upgraded.
+
+The Vite package's dependencies now list what its bundle imports (`yuku-*`, `@memoized-dom/server`),
+with compiler-next, which is bundled, as a dev dependency; `bun.lock` is updated to match, as CI
+installs with `--frozen-lockfile`.
 
 Seen while checking the server change, not caused by it (the same with and without it): in a whole
 `packages/server` run, 8 tests fail (`initial-request`, `pages`, `serve`: in-memory `$fetch` reaches

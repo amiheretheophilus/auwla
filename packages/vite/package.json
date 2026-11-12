@@ -37,9 +37,16 @@
     "@jridgewell/remapping": "^2.3.5",
     "@memoized-dom/adapters": "workspace:*",
     "@memoized-dom/compiler": "workspace:*",
-    "@memoized-dom/compiler-next": "workspace:*",
     "@memoized-dom/devtools": "workspace:*",
-    "magic-string": "0.30.21"
+    "@memoized-dom/server": "workspace:*",
+    "magic-string": "0.30.21",
+    "yuku-analyzer": "0.19.0",
+    "yuku-ast": "0.19.0",
+    "yuku-codegen": "0.19.0",
+    "yuku-parser": "0.19.0"
+  },
+  "devDependencies": {
+    "@memoized-dom/compiler-next": "workspace:*"
   },
   "peerDependencies": {
     "@cloudflare/vite-plugin": "^1.63.1",
