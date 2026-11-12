@@ -8,22 +8,25 @@
  */
 import type { ParsedModule } from '../../core/parse';
 import type { Resolved } from '../../core/resolve';
+import type { CompileModulesOptions } from '../../options';
 import { programComponents } from '../../core/graph/classify';
 import { collectRoutes, mayHaveRoutes } from './collect';
 import { buildRouteGraph } from './graph';
 import { lowerRouteModules } from './lower';
 
 /** The modules with their routes lowered, or null when the program has none. */
-export function lowerRoutes(parsed: readonly ParsedModule[], resolved: Resolved): ParsedModule[] | null {
-  if (!resolved.modules.some((entry) => entry.hasJsx && mayHaveRoutes(entry.module.source))) return null;
+export function lowerRoutes(parsed: readonly ParsedModule[], resolved: Resolved, options: CompileModulesOptions): ParsedModule[] | null {
+  if (!resolved.modules.some((entry) => mayHaveRoutes(entry.module.source))) return null;
 
   const components = programComponents(resolved);
-  const collected = resolved.modules.filter((entry) => entry.hasJsx).map((entry) => collectRoutes(entry, components));
-  if (collected.every((entry) => entry.templates.length === 0 && entry.links.length === 0)) return null;
+  const collected = resolved.modules.map((entry) => collectRoutes(entry, components));
+  if (collected.every((entry) => entry.templates.length === 0 && entry.links.length === 0 && entry.preparations.length === 0)) {
+    return null;
+  }
 
   const graph = buildRouteGraph(collected);
   const links = collected.flatMap((entry) => entry.links);
-  const lowered = lowerRouteModules(graph, links, resolved.modules.map((entry) => entry.module));
+  const lowered = lowerRouteModules(graph, links, resolved.modules.map((entry) => entry.module), options);
 
   return parsed.map((input) => {
     const module = resolved.modules.find((entry) => entry.path === input.path)?.module;

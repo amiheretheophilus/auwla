@@ -17,6 +17,7 @@ import { $waiting, enterSourceOwner, Group, noteReplacement, Source, Waiting } f
 import { childPosition, elementPosition, isElement, Preparation } from './preparation';
 import { types } from 'node:util';
 import { buildRoutePath, createRouteMatcher, getActiveRouteRuntime, matchRoutePattern, route } from '@memoized-dom/router';
+import { prepareInitialRoute, readRoutedPreparation, registerRoutedPreparation } from '@memoized-dom/router/internal';
 import { classValue, setStyleValue } from '../../../runtime/src/dom-values';
 export {
   $branch, $chain, $fetch, $path, $read, $switch, $track, $value, $waiting, $when, $sourceState, Group,
@@ -863,6 +864,24 @@ interface RouteEntry {
   readonly fullPattern: string;
   readonly parent: string | undefined;
   readonly depth: number;
+  /** The `$routed` preparations this route runs before it commits. */
+  readonly preparations: readonly string[];
+}
+
+/** A `$routed` callback, run by the router before its route commits. */
+export function $registerRouted(id: string, prepare: (context: never) => unknown): void {
+  registerRoutedPreparation({ id, server: false, prepare: prepare as never });
+}
+
+/** A route's prepared value, which a navigation that prepares it again changes. */
+export function $routedValue(id: string): unknown {
+  computation?.reads.add(routeDependency);
+  return readRoutedPreparation(id);
+}
+
+/** Prepare the first route, as a browser does before it mounts. */
+export function $prepareRoutes(): Promise<void> {
+  return prepareInitialRoute();
 }
 
 /**
@@ -880,6 +899,7 @@ export function $installRoutes(entries: readonly RouteEntry[]): void {
   };
   routeTable = table;
   const own = new Map(ordered.map((entry) => [entry.id, entry.pattern]));
+  const preparations = new Map(ordered.map((entry) => [entry.id, entry.preparations]));
 
   getActiveRouteRuntime().replaceResolver((location) => {
     const leaf = table.matcher.match(location.pathname);
@@ -891,7 +911,8 @@ export function $installRoutes(entries: readonly RouteEntry[]): void {
       const names = own.get(id)!.split('/').filter((segment) => segment === '*' || segment.startsWith(':'))
         .map((segment) => segment === '*' ? '*' : segment.slice(1));
       const params = Object.fromEntries(names.flatMap((name) => matched.params[name] === undefined ? [] : [[name, matched.params[name]]]));
-      return { id, pattern: own.get(id)!, pathname: matched.consumed, params };
+      const prepares = preparations.get(id)!;
+      return { id, pattern: own.get(id)!, pathname: matched.consumed, params, ...(prepares.length === 0 ? {} : { metadata: { preparations: prepares } }) };
     });
   });
 }

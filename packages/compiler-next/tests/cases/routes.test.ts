@@ -317,3 +317,69 @@ behaves('routes: a suspended page with a new param waits behind its loading poli
     expect(text(container, '#visits')).toBe(observation < 3 ? '0' : '1');
   },
 });
+
+behaves('routed: a page waits for its preparation, and the old page stays meanwhile', {
+  url: '/',
+  source: `
+    function Story() {
+      const story = $routed(async ({ params }) => ({ title: 'Story ' + params.id + ': ' + await defer('story') }));
+      return <h1 id="title">{story.title}</h1>;
+    }
+    export function App() {
+      return <main>
+        <p id="home" route="/">Home</p>
+        <Story route="/story/:id" />
+        <a id="one" route-to={{ path: '/story/:id', params: { id: 1 } }}>one</a>
+      </main>;
+    }`,
+  steps: [{ click: '#one' }, { resolve: 'story', value: 'ready' }],
+  check(container, observation) {
+    expect(text(container, '#home')).toBe(['Home', 'Home', null][observation]!);
+    expect(text(container, '#title')).toBe([null, null, 'Story 1: ready'][observation]!);
+  },
+});
+
+behaves('routed: the first route is prepared before the app mounts, and again for a new query', {
+  url: '/story/7?tab=top',
+  source: `
+    function Story() {
+      const story = $routed(({ params, query }) => ({ title: 'Story ' + params.id + ' / ' + query.get('tab') }));
+      return <h1 id="title">{story.title}</h1>;
+    }
+    export function App() {
+      return <main>
+        <Story route="/story/:id" />
+        <a id="new" route-to={{ path: '/story/:id', params: { id: 7 }, query: { tab: 'new' } }}>new</a>
+      </main>;
+    }`,
+  steps: [{ click: '#new' }],
+  check(container, observation) {
+    expect(text(container, '#title')).toBe(['Story 7 / top', 'Story 7 / new'][observation]!);
+  },
+});
+
+behaves('routed: a preparation can redirect, and keeps state across visits', {
+  url: '/',
+  source: `
+    import { redirectRoute } from '@memoized-dom/router';
+    function Story() {
+      const story = $routed(({ params, routeState }) => {
+        if (params.id === 'old') return redirectRoute('/story/new');
+        routeState.visits = Number(routeState.visits ?? 0) + 1;
+        return { title: params.id + ' #' + routeState.visits };
+      });
+      return <h1 id="title">{story.title}</h1>;
+    }
+    export function App() {
+      return <main>
+        <p id="home" route="/">Home</p>
+        <Story route="/story/:id" />
+        <a id="old" route-to={{ path: '/story/:id', params: { id: 'old' } }}>old</a>
+        <a id="home-link" route-to="/">home</a>
+      </main>;
+    }`,
+  steps: [{ click: '#old' }, { click: '#home-link' }, { click: '#old' }],
+  check(container, observation) {
+    expect(text(container, '#title')).toBe([null, 'new #1', null, 'new #2'][observation]!);
+  },
+});

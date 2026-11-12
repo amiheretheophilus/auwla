@@ -17,6 +17,13 @@ export interface CompileModulesOptions {
    */
   readonly dataDelivery?: 'universal' | 'client';
   /**
+   * Where `$routed` preparations of this build run (`wiki/compiler/routes.md`, "Preparations").
+   * `client` drops the bodies of server-backed ones and their `#server/` imports, and waits for
+   * the first route's preparations before the app mounts; `server` keeps every body. Default:
+   * both bodies kept, and no initial wait. Vite passes it (`packages/vite/src/graph/collector.ts`).
+   */
+  readonly routedEnvironment?: 'client' | 'server';
+  /**
    * The modules whose exports code outside this graph can use, such as the app's entry.
    * Everything else is called only from modules in the graph, so the compiler can follow
    * what those calls pass (`wiki/compiler/sources.md`). Default: every module.

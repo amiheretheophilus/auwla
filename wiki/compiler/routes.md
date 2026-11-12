@@ -2,10 +2,10 @@
 
 **Folders:** `features/routes/`; the router side is `packages/router/src/route-reads.ts`.
 
-Status (2026-11-12): `route="…"` regions, `route-to` links, the route table and reads of `route`
-are built, and a `suspend` route page whose param changes waits behind its pending policy (the
-router scrolls once it commits). `$routed` preparations and splitting route-only imports into their
-own chunks are still to do.
+Status (2026-11-12): `route="…"` regions, `route-to` links, the route table, reads of `route` and
+`$routed` preparations are built, and a `suspend` route page whose param changes waits behind its
+pending policy (the router scrolls once it commits). Splitting route-only imports into their own
+chunks, and server-backed preparations end to end (they need the server and Vite), are still to do.
 
 ## What it does
 
@@ -40,7 +40,9 @@ route region gets the same tracking, adoption and delivery as any conditional:
 | `features/routes/graph.ts` | Route contexts, instances, full patterns and the checks across modules |
 | `features/routes/lower.ts` | The text edits, the table and the `route:context` prop |
 | `features/routes/patterns.ts` | Pattern rules: leading `/`, no query/hash/empty segment, terminal `*`, unique params |
-| `features/routes/routes.test.ts` | Output shape and every compile error |
+| `features/routes/routed.ts` | `$routed` calls: their checks, server classification and the sources they make |
+| `features/routes/routes.test.ts` | Output shape and every compile error, routes and `$routed` |
+| `features/routes/routed.dom.test.ts` | Sources made inside a preparation are settled before it caches or returns them |
 | `tests/cases/routes.test.ts` | Behaviour compared with the reference's own lowering (`tests/reference/routes.ts`) |
 | `packages/router/src/route-reads.ts` | Reads of `route` fields and regions, published per key on navigation |
 | `packages/router/tests/route-reads.test.ts` | Which reads a navigation wakes |
@@ -78,6 +80,38 @@ scheduler runs, as for any other write. The old compiler updated route regions s
 outside the scheduler, so old tests that assert right after `navigateRoute` with the default
 scheduler differ by design.
 
+## Preparations
+
+`$routed(callback)` (`docs/16-routed.md`) is lowered in the same pass:
+
+```tsx
+export function Story() {                       $registerRoutedPreparation({ id: "./Story.tsx#routed:Story:0",
+  const story = $routed(({ params }) => …);        server: false, prepare: ({ params }) => … });
+  return <h1>{story.title}</h1>;                export function Story() {
+}                                                 const story = $readRoutedPreparation("./Story.tsx#routed:Story:0");
+```
+
+- A route runs the preparations of the component it shows: the one its element calls, or for an
+  element the component that writes it. Their ids go in the table entry's `metadata`, and the
+  router runs them before the route commits (`router/src/preparation.ts`): the old page stays
+  until the new one is prepared, and a returned `redirectRoute(…)` navigates instead.
+- The callback moves to the top of the module, so it may not capture a binding of the component
+  instance. It reads `params`, `query`, `routeState` and so on from its context.
+- Reading `request`, `state`, `services` or `platform`, or a `#server/` import, makes it
+  server-backed. With `routedEnvironment: 'client'` its body and the `#server/` imports only it
+  reads are dropped, and the router asks the server for its value; a client build also waits for
+  the first route's preparations (`await prepareInitialRoute()`) before anything mounts.
+- `$fetch`, `$read` and server function calls inside it are settled where they are made
+  (`withRoutedSources`, `await read(call)`), so it computes, caches and returns data.
+- `readRoutedPreparation` reports a read of the route's location, so a navigation that keeps the
+  page but prepares it again (a new query) shows the new value.
+- In an application (a program with routes, or one that calls `mount`), a preparation no route
+  runs is an error; a component compiled on its own may declare one.
+
+Writing these found a bug in callback boundaries (`compiler/handlers.md`, "Callbacks"): a function
+handed to unknown code that builds a value from a source lost the readiness records declared at the
+top of its body, which it then used undeclared (`features/handlers/callbacks.test.ts`).
+
 ## Rules
 
 - `route` is a static string beginning with `/` on an element inside a component. A route element
@@ -104,5 +138,8 @@ element rather than as a prop.
 
 ## Still to do
 
-- `$routed` preparations, their client/server split and `prepareInitialRoute`.
 - Route-only imports as lazy chunks (`docs/07-routing.md`, nesting).
+- Server-backed preparations end to end: the server endpoint and SSR delivery of prepared values,
+  with `packages/vite`.
+- The reference settles no sources inside a preparation (its `$fetch` is its own), so cases with
+  `$fetch` in `$routed` are compiled-only (`routed.dom.test.ts`).

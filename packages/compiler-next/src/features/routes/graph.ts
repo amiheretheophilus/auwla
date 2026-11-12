@@ -17,6 +17,7 @@ import type { Node } from 'yuku-parser';
 import type { Module } from '../../core/resolve';
 import { componentName, type ModuleRoutes, type RouteCall, type RouteTemplate } from './collect';
 import { checkPattern, isCatchAll, joinPatterns, parameterNames, signatureOf } from './patterns';
+import type { RoutedPreparation } from './routed';
 
 /** One route the router matches: a template in one route context. */
 export interface RouteInstance {
@@ -41,6 +42,9 @@ export interface RouteGraph {
   readonly dynamic: ReadonlySet<FunctionNode>;
   /** Components whose module installs the route table: those no other component calls. */
   readonly roots: ReadonlySet<FunctionNode>;
+  readonly preparations: readonly RoutedPreparation[];
+  /** The preparations each instance's route runs before it commits, by instance id. */
+  readonly prepares: ReadonlyMap<string, readonly string[]>;
 }
 
 /** The id of `templateId` inside `context`. */
@@ -100,7 +104,51 @@ export function buildRouteGraph(modules: readonly ModuleRoutes[]): RouteGraph {
   const ordered = [...instances.values()];
   checkAmbiguity(ordered, instances);
   const dynamic = new Set([...contexts].filter(([, list]) => list.length > 1).map(([fn]) => fn));
-  return { templates, calls, instances: ordered, routed, contexts, dynamic, roots };
+
+  const preparations = modules.flatMap((entry) => entry.preparations);
+  const application = templates.length > 0 || modules.some((entry) => entry.mounts);
+  const prepares = attachPreparations(ordered, calls, preparations, application);
+  return { templates, calls, instances: ordered, routed, contexts, dynamic, roots, preparations, prepares };
+}
+
+/**
+ * A route runs the preparations of the component it shows: the component a route element calls
+ * (`<Story route="…" />`), or for an element (`<main route="…">`) the component that writes it.
+ * In an application, a preparation no route runs is an error, since nothing would ever run it; a
+ * component compiled on its own, with no routes and no mount, may still declare one.
+ */
+function attachPreparations(
+  instances: readonly RouteInstance[],
+  calls: readonly RouteCall[],
+  preparations: readonly RoutedPreparation[],
+  application: boolean,
+): Map<string, readonly string[]> {
+  const byComponent = groupBy(preparations, (preparation) => preparation.component);
+  const attached = new Set<FunctionNode>();
+  const prepares = new Map<string, readonly string[]>();
+
+  for (const instance of instances) {
+    const callee = calls.find((call) => call.element === instance.template.element)?.callee;
+    const shown = callee ?? instance.template.owner;
+    const own = byComponent.get(shown);
+    if (own === undefined) continue;
+    attached.add(shown);
+    prepares.set(instance.id, own.map((preparation) => preparation.id));
+  }
+
+  if (application) {
+    for (const [component, own] of byComponent) {
+      if (attached.has(component)) continue;
+      const orphan = own[0]!;
+      const name = componentName(orphan.module, component);
+      throw CompileError.at(
+        `memo-dom: $routed in component '${name}' is never prepared because the component is not attached to a route; `
+          + `declare its route region with the route attribute (for example <${name} route="/path" />) or remove the preparation`,
+        orphan.module.path, orphan.module.source, orphan.call.start,
+      );
+    }
+  }
+  return prepares;
 }
 
 /** A template in one context: its full pattern, checked against the routes around it. */

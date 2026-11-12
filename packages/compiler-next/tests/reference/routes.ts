@@ -26,6 +26,7 @@ type Resolve = (specifier: string, importer: string) => string | false | null;
 
 interface Parsed {
   readonly path: string;
+  readonly source: string;
   readonly program: Extract<Node, { type: 'Program' }>;
   readonly parents: Map<Node, Node>;
   /** Top-level components by local name. */
@@ -54,7 +55,7 @@ interface Call {
 }
 
 export function lowerReferenceRoutes(sources: Readonly<Record<string, string>>, resolve: Resolve): Record<string, string> {
-  const usesRoutes = (source: string) => /\sroute(?:-to)?\s*=/.test(source) || source.includes('@memoized-dom/router');
+  const usesRoutes = (source: string) => /\sroute(?:-to)?\s*=|\$routed\b/.test(source) || source.includes('@memoized-dom/router');
   if (!Object.values(sources).some(usesRoutes)) return { ...sources };
 
   const modules = Object.entries(sources).map(([path, source]) => parseModule(path, source, resolve));
@@ -136,7 +137,30 @@ export function lowerReferenceRoutes(sources: Readonly<Record<string, string>>, 
   for (const fn of routed) {
     if (!called.has(fn)) visit(fn, undefined, 0);
   }
-  const table = [...instances].map(([id, instance]) => ({ id, ...instance }));
+
+  // `$routed` preparations: each becomes a registration of its callback and a read of its value,
+  // and a route runs those of the component it shows (the one its element calls, or the one that
+  // writes the element). The router runs them before the route commits.
+  const preparations = new Map<FunctionNode, string[]>();
+  const registrations = new Map<Parsed, string[]>();
+  let nextPreparation = 0;
+  for (const module of modules) {
+    for (const call of findAll(module.program, 'CallExpression')) {
+      if (!is.Identifier(call.callee) || call.callee.name !== '$routed') continue;
+      const owner = ownerOf(module, call);
+      const callback = call.arguments[0];
+      if (owner === null || callback === undefined) throw new Error('reference: $routed belongs in a component, with a callback');
+      const id = `p${nextPreparation++}`;
+      preparations.set(owner, [...preparations.get(owner) ?? [], id]);
+      registrations.set(module, [...registrations.get(module) ?? [], `$registerRouted(${JSON.stringify(id)}, ${module.source.slice(callback.start, callback.end)});`]);
+      wrap(module, call, () => expression(`$routedValue(${JSON.stringify(id)})`));
+    }
+  }
+  const shownBy = (id: string): FunctionNode => {
+    const template = templates.find((entry) => id === entry.id || id.endsWith(`>>${entry.id}`))!;
+    return calls.find((call) => call.element === template.element)?.callee ?? template.owner;
+  };
+  const table = [...instances].map(([id, instance]) => ({ id, ...instance, preparations: preparations.get(shownBy(id)) ?? [] }));
 
   // Rewrite. A template becomes a conditional first, so a routed call on it wraps its element
   // inside that conditional.
@@ -167,9 +191,11 @@ export function lowerReferenceRoutes(sources: Readonly<Record<string, string>>, 
 
   for (const module of modules) followRouteReads(module);
 
-  const installed = `\n$installRoutes(${JSON.stringify(table)});\n`;
+  // Preparations register first; a module that installs the routes then prepares the first one,
+  // as a browser does before it mounts.
+  const installed = `\n$installRoutes(${JSON.stringify(table)});\nawait $prepareRoutes();\n`;
   return Object.fromEntries(modules.map((module) => {
-    const lowered = generate(module.program).code;
+    const lowered = generate(module.program).code + `\n${(registrations.get(module) ?? []).join('\n')}`;
     const touched = templates.some((template) => template.module === module) || calls.some((call) => call.module === module);
     return [module.path, touched ? lowered + installed : lowered];
   }));
@@ -305,7 +331,7 @@ function parseModule(path: string, source: string, resolve: Resolve): Parsed {
     }
   }
 
-  return { path, program, parents: parentsOf(program), components, imports, exports };
+  return { path, source, program, parents: parentsOf(program), components, imports, exports };
 }
 
 /** The top-level component whose markup holds `node`. */

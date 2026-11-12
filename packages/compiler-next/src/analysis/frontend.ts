@@ -13,7 +13,7 @@ export function analyzeFrontend(
   let resolved = resolve(parsed, options);
 
   // Routes join across modules, so they lower on a first analysis (`features/routes/`).
-  const routed = lowerRoutes(parsed, resolved);
+  const routed = lowerRoutes(parsed, resolved, options);
   if (routed !== null) {
     parsed = routed;
     resolved = resolve(parsed, options);

@@ -342,7 +342,11 @@ The body is instrumented rather than wrapped: `enterCallback()` first, `leaveCal
 each return and at the end, so the function keeps its identity (`removeEventListener(receive)`
 still finds it), name, length and hoisting. The replacements are registered on the authored
 nodes before components are composed and hold the authored body, so `copy` applies the other
-features' replacements inside them. In the runtime the count is the listener count. The
+features' replacements inside them. The new body is built on the body's existing replacement when
+there is one: source readiness declares per-call records at the top of a body that builds a value
+from a source (`sourceReadinessStorage`), and before 2026-11-12 the instrumented body dropped them,
+so the function used them undeclared (`features/handlers/callbacks.test.ts`; found lowering `$routed`,
+`routes.md`). In the runtime the count is the listener count. The
 outermost return does not commit inside a component's setup, render or effect (`isBuilding()`): a
 callback run there (`items.forEach((item) => total += item)`) leaves its writes to that commit.
 A listener that belongs to no batch schedules the recovery microtask on entry, which resets the

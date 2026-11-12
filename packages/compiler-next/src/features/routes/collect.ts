@@ -9,6 +9,7 @@ import { CompileError } from '../../core/diagnostics';
 import type { Module, ResolvedModule } from '../../core/resolve';
 import { functionValue, type FunctionNode } from '../../core/resolve/functions';
 import { checkPattern } from './patterns';
+import { collectPreparations, type RoutedPreparation } from './routed';
 
 export type JsxElement = Extract<Node, { type: 'JSXElement' }>;
 export type JsxAttribute = Extract<Node, { type: 'JSXAttribute' }>;
@@ -50,14 +51,25 @@ export interface ModuleRoutes {
   readonly templates: readonly RouteTemplate[];
   readonly calls: readonly RouteCall[];
   readonly links: readonly RouteLink[];
+  readonly preparations: readonly RoutedPreparation[];
+  /** The module mounts an application (`mount(…)` from the runtime), so its graph is a whole app. */
+  readonly mounts: boolean;
 }
 
 /** Whether a module's text can hold route syntax at all, before looking closer. */
 export function mayHaveRoutes(source: string): boolean {
-  return /\sroute(?:-to)?\s*=/.test(source);
+  return /\sroute(?:-to)?\s*=|\$routed\b/.test(source);
 }
 
 export function collectRoutes(entry: ResolvedModule, components: ReadonlySet<FunctionNode>): ModuleRoutes {
+  const module = entry.module;
+  const mounts = module.imports.some((imported) => imported.name === 'mount' && imported.specifier.startsWith('@memoized-dom/runtime'));
+  const preparations = mayHaveRoutes(module.source) ? collectPreparations(module, components) : [];
+  if (!entry.hasJsx) return { templates: [], calls: [], links: [], preparations, mounts };
+  return { ...collectMarkup(entry, components), preparations, mounts };
+}
+
+function collectMarkup(entry: ResolvedModule, components: ReadonlySet<FunctionNode>): Pick<ModuleRoutes, 'templates' | 'calls' | 'links'> {
   const module = entry.module;
   const templates = new Map<JsxElement, RouteTemplate>();
   const occurrences = new Map<string, number>();

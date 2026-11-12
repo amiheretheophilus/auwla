@@ -110,6 +110,7 @@ const RUNTIME_EXPORTS = [
   '$captureRead', '$closureCell', '$closureRead', '$traced', '$moduleBuilder', '$reassigned', '$ownedCleanup',
   '$privateTarget', '$setup',
   '$installRoutes', '$routeContext', '$routeJoin', '$routeCall', '$routeIdentity', '$routeHref', '$followedRoute',
+  '$registerRouted', '$routedValue', '$prepareRoutes',
 ];
 
 // ---------------------------------------------------------------------------

@@ -87,8 +87,14 @@ its own. Of the old router root tests, the remaining failures assert synchronous
 the default scheduler, generated text, old options (`routedEnvironment`), `$routed`, the old
 compiler's `if`/`else` attribute directives (not in compiler-next). A `suspend` element given a new
 key now prepares again behind its pending policy (it showed its static part at once), which fixed
-`tests/route-destination-identity.test.ts` (5 of 5, scrolling included). Next: `$routed`, then
-`packages/vite` with HMR.
+`tests/route-destination-identity.test.ts` (5 of 5, scrolling included).
+
+**Done: `$routed`** (`compiler/routes.md`, "Preparations"). Callbacks register at the module's top,
+routes list the preparations of the component they show, and a client build prepares the first route
+before it mounts. Through the switch, `route-navigation-readiness` passes 8 of 8 and the reused-callsite
+`$routed` test passes; the rest check the old compiler's metadata API or generated text. Writing it
+found a callback-boundary bug (a handed-out function lost its source readiness declarations), fixed.
+Next: `packages/vite` with HMR.
 
 ## Closing documented issues before Phase 10 (2026-11-06)
 

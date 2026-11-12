@@ -107,6 +107,8 @@ function compileNext(source: string, modules: Record<string, string> | undefined
 
   return compileModulesNext(files, {
     runtimePath: '@memoized-dom/runtime/testing',
+    // The browser's build: its first route is prepared before it mounts (`$routed`).
+    routedEnvironment: 'client',
     resolveImport: installedResolver(Object.keys(files)),
     ...(optimize ? {} : { optimize: false }),
     ...delivery,

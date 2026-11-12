@@ -365,7 +365,8 @@ array child). Remove each check when its phase is built.
 - [ ] SSR and HTML backends from the same plan; hydration; routing (`$routed`,
   `page()`).
 - [x] Lower a runtime TypeScript `namespace` and `export =` (`core.md`, parse).
-- [x] Routes and `route-to` (`routes.md`). `$routed` is still to do.
+- [x] Routes, `route-to` and `$routed` (`routes.md`). Lazy route chunks and server-backed
+  preparations end to end come with `packages/vite`.
 - [ ] HMR in the Vite dev server, which the user asked for explicitly (2026-11-12): an edited
   module replaces its components in place, keeping the state that can be kept, as the old
   compiler does through `runtime/src/hot.ts` and `packages/vite`. compiler-next emits no

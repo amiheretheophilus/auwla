@@ -8,8 +8,9 @@
  * stage then resolves the call by binding identity, exactly as for an explicit
  * import. Appending keeps every authored line and column in place.
  *
- * `$routed` and `$snapshot` are declared there too; they arrive with their own
- * phases (`wiki/compiler/plan.md`).
+ * `$routed` is declared there too, and is compiler syntax with or without an import: the routes
+ * pass lowers every call (`features/routes/routed.ts`). `$snapshot` arrives with its own phase
+ * (`wiki/compiler/plan.md`).
  */
 import { is } from 'yuku-ast';
 import type { Module } from 'yuku-analyzer';

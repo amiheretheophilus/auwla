@@ -30,19 +30,27 @@ import { applyEdits, type Edit } from '../../core/parse/text-edits';
 import { attributeNamed, staticString, type JsxAttribute, type JsxElement, type RouteLink, type RouteTemplate } from './collect';
 import { instanceId, type RouteGraph, type RouteInstance } from './graph';
 import { checkPattern, parameterNames } from './patterns';
+import type { RoutedPreparation } from './routed';
+import type { CompileModulesOptions } from '../../options';
 
 const INTERNAL = '@memoized-dom/router/internal';
+const DATA_INTERNAL = '@memoized-dom/data/internal';
 
 /** The hidden prop that carries a route context into a component rendered in several. */
 const CONTEXT_PROP = 'route:context';
 
 /** Each module's text with its routes lowered; a module with nothing to lower is left out. */
-export function lowerRouteModules(graph: RouteGraph, links: readonly RouteLink[], modules: readonly Module[]): Map<Module, string> {
+export function lowerRouteModules(
+  graph: RouteGraph,
+  links: readonly RouteLink[],
+  modules: readonly Module[],
+  options: CompileModulesOptions,
+): Map<Module, string> {
   const known = new Map(graph.instances.map((instance) => [instance.fullPattern, instance]));
   const lowered = new Map<Module, string>();
 
   for (const module of modules) {
-    const lowering = new ModuleLowering(module, graph, known);
+    const lowering = new ModuleLowering(module, graph, known, options);
     const text = lowering.run(links.filter((link) => link.module === module));
     if (text !== null) lowered.set(module, text);
   }
@@ -52,8 +60,8 @@ export function lowerRouteModules(graph: RouteGraph, links: readonly RouteLink[]
 
 class ModuleLowering {
   readonly #edits: Edit[] = [];
-  /** Router imports this module needs: exported name → local name. */
-  readonly #imports = new Map<string, string>();
+  /** Imports this module needs, by `module\0name`: what to import and its local name. */
+  readonly #imports = new Map<string, { from: string; name: string; local: string }>();
   /** The local name holding each dynamic component's route context. */
   readonly #contextReads = new Map<FunctionNode, string>();
 
@@ -61,16 +69,23 @@ class ModuleLowering {
     private readonly module: Module,
     private readonly graph: RouteGraph,
     private readonly known: ReadonlyMap<string, RouteInstance>,
+    private readonly options: CompileModulesOptions,
   ) {}
 
   run(links: readonly RouteLink[]): string | null {
     const templates = this.graph.templates.filter((template) => template.module === this.module);
     const calls = this.graph.calls.filter((call) => call.module === this.module && this.graph.dynamic.has(call.callee));
+    const preparations = this.graph.preparations.filter((preparation) => preparation.module === this.module);
     const roots = [...this.graph.roots].filter((fn) => templates.some((template) => template.owner === fn)
       || this.graph.calls.some((call) => call.module === this.module && call.owner === fn));
 
-    if (templates.length === 0 && calls.length === 0 && links.length === 0 && roots.length === 0) return null;
+    if (templates.length === 0 && calls.length === 0 && links.length === 0 && roots.length === 0 && preparations.length === 0) {
+      return null;
+    }
 
+    // Registrations before the table, at the same place: the first route's preparations, which
+    // the table may wait for, must exist by then.
+    for (const preparation of preparations) this.#preparation(preparation);
     if (roots.length > 0) this.#installTable();
     for (const fn of this.graph.dynamic) {
       if (this.#ownedHere(fn)) this.#readContext(fn);
@@ -80,13 +95,88 @@ class ModuleLowering {
     for (const call of calls) this.#passContext(call.element, call.route, call.owner);
     for (const link of links) this.#link(link);
 
-    if (this.#imports.size > 0) {
-      // Imports are hoisted, so the end of the module keeps every authored offset in place.
-      const imports = [...this.#imports].map(([name, local]) => `${name} as ${local}`).join(', ');
-      const end = this.module.source.length;
-      this.#edits.push({ start: end, end, text: `\nimport { ${imports} } from '${INTERNAL}';\n` });
+    // Imports are hoisted, so the end of the module keeps every authored offset in place.
+    const end = this.module.source.length;
+    for (const from of new Set([...this.#imports.values()].map((entry) => entry.from))) {
+      const names = [...this.#imports.values()].filter((entry) => entry.from === from).map((entry) => `${entry.name} as ${entry.local}`);
+      this.#edits.push({ start: end, end, text: `\nimport { ${names.join(', ')} } from '${from}';\n` });
     }
+    // Last, so it applies first: a dropped import can start where the registrations are
+    // inserted, and must go before they are (`applyEdits` applies the latest edit at a place first).
+    this.#dropServerImports(preparations);
     return applyEdits(this.module.source, this.#edits);
+  }
+
+  /**
+   * `const page = $routed(callback)` → `const page = $readRoutedPreparation(id)`, with the callback
+   * registered at the top of the module. A client build keeps only a server-backed one's id.
+   */
+  #preparation(preparation: RoutedPreparation): void {
+    const fields = [`id: ${JSON.stringify(preparation.id)}`, `server: ${preparation.server}`];
+    if (!(this.options.routedEnvironment === 'client' && preparation.server)) {
+      if (preparation.sources.length === 0) {
+        fields.push(`prepare: ${this.#slice(preparation.callback)}`);
+      } else {
+        fields.push(`prepare: ${this.#import('withRoutedSources', DATA_INTERNAL)}(${this.#settlingCallback(preparation)})`);
+        fields.push(`settle: ${this.#import('settleRoutedValue', DATA_INTERNAL)}`);
+      }
+    }
+    this.#edits.push({ start: 0, end: 0, text: `${this.#import('registerRoutedPreparation')}({ ${fields.join(', ')} });\n` });
+    this.#edits.push({
+      start: preparation.call.start, end: preparation.call.end,
+      text: `${this.#import('readRoutedPreparation')}(${JSON.stringify(preparation.id)})`,
+    });
+  }
+
+  /**
+   * The callback with each source it makes settled where it is made (`await read(source)`), so
+   * what it computes, caches and returns is data: async, and given `read` after its context.
+   */
+  #settlingCallback(preparation: RoutedPreparation): string {
+    const callback = preparation.callback;
+    const text = this.#slice(callback);
+    let read = '_routedRead';
+    while (text.includes(read)) read += '_';
+
+    const edits: Edit[] = [];
+    const at = (offset: number) => offset - callback.start;
+    if (!callback.async) edits.push({ start: 0, end: 0, text: 'async ' });
+    if (callback.params.length === 0) {
+      const open = text.indexOf('(');
+      edits.push({ start: open + 1, end: open + 1, text: `_routedContext, ${read}` });
+    } else {
+      edits.push({ start: at(callback.params[0]!.end), end: at(callback.params[0]!.end), text: `, ${read}` });
+    }
+    for (const call of preparation.sources) {
+      edits.push({ start: at(call.start), end: at(call.start), text: `(await ${read}(` });
+      edits.push({ start: at(call.end), end: at(call.end), text: '))' });
+    }
+    return applyEdits(text, edits);
+  }
+
+  /**
+   * A client build drops the `#server/` imports that only server-backed callbacks read, since
+   * those bodies are gone. A declaration is dropped whole, when every name it imports goes.
+   */
+  #dropServerImports(preparations: readonly RoutedPreparation[]): void {
+    if (this.options.routedEnvironment !== 'client') return;
+    const dropped = preparations.filter((preparation) => preparation.server);
+    const insideDropped = (node: Node) => dropped.some((preparation) => {
+      return node.start >= preparation.callback.start && node.end <= preparation.callback.end;
+    });
+
+    for (const declaration of this.module.ast.body) {
+      if (!is.ImportDeclaration(declaration) || !String(declaration.source.value).startsWith('#server/')) continue;
+      const unused = declaration.specifiers.every((specifier) => {
+        const binding = this.module.bindingOf(specifier.local);
+        return binding !== null && binding.references.every((reference) => insideDropped(reference.node));
+      });
+      if (unused) this.#edits.push({ start: declaration.start, end: declaration.end, text: '' });
+    }
+  }
+
+  #slice(node: Node): string {
+    return this.module.source.slice(node.start, node.end);
   }
 
   /** `<X route="/p" …>` → `{$routeRegion(id) && <X key={$routeRegion(id)} …>}`. */
@@ -268,12 +358,20 @@ class ModuleLowering {
 
     const entries = ordered.map(({ instance, chain }) => {
       const own = parameterNames(instance.pattern);
+      const prepares = this.graph.prepares.get(instance.id);
+      // The preparations this route runs before it commits (`router/src/preparation.ts`).
+      const metadata = prepares === undefined ? '' : `, metadata: { preparations: ${JSON.stringify(prepares)} }`;
       return `{ id: ${JSON.stringify(instance.id)}, pattern: ${JSON.stringify(instance.pattern)}, fullPattern: ${JSON.stringify(instance.fullPattern)}, `
-        + `ownParamNames: ${JSON.stringify(own)}, chain: ${JSON.stringify(chain.map((id) => indexes.get(id)))} }`;
+        + `ownParamNames: ${JSON.stringify(own)}, chain: ${JSON.stringify(chain.map((id) => indexes.get(id)))}${metadata} }`;
     });
 
     // One statement and no binding: a module-scope table would be state the compiler follows.
-    const text = `${this.#import('installRouteTable')}([${entries.join(', ')}]);\n`;
+    let text = `${this.#import('installRouteTable')}([${entries.join(', ')}]);\n`;
+    // A client build prepares the first route before anything mounts; a server prepares each
+    // request's route itself, and a page it rendered delivers the values it prepared.
+    if (this.options.routedEnvironment === 'client' && this.graph.prepares.size > 0) {
+      text += `await ${this.#import('prepareInitialRoute')}();\n`;
+    }
     this.#edits.push({ start: 0, end: 0, text });
   }
 
@@ -283,18 +381,19 @@ class ModuleLowering {
       || this.graph.calls.some((call) => call.owner === fn && call.module === this.module);
   }
 
-  /** The local name of a router export, imported once per module. */
-  #import(name: string): string {
-    let local = this.#imports.get(name);
-    if (local === undefined) {
-      local = this.#freshName(`$${name}`);
-      this.#imports.set(name, local);
+  /** The local name of a runtime export (the router's, by default), imported once per module. */
+  #import(name: string, from = INTERNAL): string {
+    const key = `${from}\0${name}`;
+    let entry = this.#imports.get(key);
+    if (entry === undefined) {
+      entry = { from, name, local: this.#freshName(`$${name}`) };
+      this.#imports.set(key, entry);
     }
-    return local;
+    return entry.local;
   }
 
   #freshName(base: string): string {
-    const taken = new Set([...this.#imports.values(), ...this.#contextReads.values()]);
+    const taken = new Set([...[...this.#imports.values()].map((entry) => entry.local), ...this.#contextReads.values()]);
     let name = base;
     for (let suffix = 2; this.module.source.includes(name) || taken.has(name); suffix++) name = `${base}${suffix}`;
     return name;

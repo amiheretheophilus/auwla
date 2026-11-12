@@ -98,3 +98,75 @@ describe('route mistakes are compile errors', () => {
       export function App() { return <main><i route="/a"><Tabs /></i><i route="/b"><Tabs /></i></main>; }`)).toThrow(/name or an object pattern/);
   });
 });
+
+describe('$routed preparations', () => {
+  const page = (body: string) => `export function Page() { ${body} return <p>{page.title}</p>; }`;
+  const routedApp = (body: string) => `${page(body)} function App() { return <Page route="/admin/:section" />; }`;
+
+  it('registers the callback, reads the prepared value, and lists it on its route', () => {
+    const output = compile(routedApp('const page = $routed(({ params }) => ({ title: params.section }));'))['./App.tsx']!;
+    expect(output).toContain('registerRoutedPreparation');
+    expect(output).toContain('readRoutedPreparation("./App.tsx#routed:Page:0")');
+    expect(output).toContain('preparations: ["./App.tsx#routed:Page:0"]');
+  });
+
+  it('attaches through an imported route component', () => {
+    const output = compile(
+      `import { ReportPage } from './ReportPage'; export function App() { return <ReportPage route="/reports/:reportId" />; }`,
+      { './ReportPage.tsx': `export function ReportPage() { const page = $routed(({ params }) => ({ id: params.reportId })); return <p>{page.id}</p>; }` },
+    );
+    expect(output['./App.tsx']).toContain('preparations: ["./ReportPage.tsx#routed:ReportPage:0"]');
+  });
+
+  it('drops a server-backed body and its #server import from a client build, and keeps it for a server', () => {
+    const source = `import { reports } from '#server/reports';
+      ${routedApp('const page = $routed(({ params, services }) => services.admin.load(params.section, reports));')}`;
+    const client = compileModules({ './App.tsx': source }, { routedEnvironment: 'client' })['./App.tsx']!;
+    expect(client).toContain('server: true');
+    expect(client).not.toContain('services.admin.load');
+    expect(client).not.toContain('#server/reports');
+    expect(client).toMatch(/await [^;]*\$prepareInitialRoute\(\)/);
+    const server = compileModules({ './App.tsx': source }, { routedEnvironment: 'server' })['./App.tsx']!;
+    expect(server).toContain('services.admin.load');
+    expect(server).not.toContain('prepareInitialRoute');
+  });
+
+  it('settles sources made inside a callback where they are made', () => {
+    const output = compile(routedApp(`const page = $routed(({ routeState }) => {
+      const result = $fetch('/api/items');
+      routeState.items = result.map((item) => item.name);
+      return { title: routeState.items.join() };
+    });`))['./App.tsx']!;
+    // Later stages compile the callback's body like any function's, so only the lowering's
+    // shape is checked: an async callback given `read`, wrapped, with the settler.
+    expect(output).toContain('withRoutedSources(async ({ routeState }, _routedRead)');
+    expect(output).toMatch(/await [^;]*_routedRead\)\([^;]*\$fetch\('\/api\/items'\)/);
+    expect(output).toContain('settle: $settleRoutedValue');
+  });
+
+  it('compiles a preparation of a component compiled on its own', () => {
+    expect(() => compile(page('const page = $routed(({ params }) => params.id);'))).not.toThrow();
+  });
+
+  it.each([
+    ['at module scope', `const page = $routed(({ params }) => params.id); export function App() { return <p route="/">{page}</p>; }`, /declared directly in a component/],
+    ['inside a nested callback', routedApp('const run = () => $routed(() => 1); const page = { title: "" };'), /declared directly in a component/],
+    ['assigned to a let', routedApp('let page = $routed(({ params }) => params.id);'), /component-local const binding/],
+    ['with a callback by name', routedApp('const load = () => 1; const page = $routed(load);'), /inline preparation callback/],
+    ['with a context rest', routedApp('const page = $routed(({ params, ...rest }) => params.id);'), /does not support a rest binding/],
+    ['with two context objects', routedApp('const page = $routed((a, b) => 1);'), /one destructured context object/],
+    ['capturing the instance', `export function Page(props) { const page = $routed(({ params }) => props.tenant + params.id); return <p>{page}</p>; }
+      function App() { return <Page route="/:id" />; }`, /cannot capture component-instance binding 'props'/],
+    ['in a component no route shows', `export function Page() { const page = $routed(() => ({ title: 'x' })); return <p>{page.title}</p>; }
+      export function App() { return <main route="/"><Page /></main>; }`, /\$routed in component 'Page' is never prepared/],
+  ])('$routed %s is an error', (_name, source, message) => {
+    expect(() => compile(source)).toThrow(message);
+  });
+
+  it('a preparation no route runs, in an application that mounts', () => {
+    expect(() => compileModules({
+      './main.ts': `import { mount } from '@memoized-dom/runtime'; import { App } from './App'; mount('root', App);`,
+      './App.tsx': `export function App() { const page = $routed(({ services }) => services.reports.load()); return <main>{page.title}</main>; }`,
+    })).toThrow(/\$routed in component 'App' is never prepared/);
+  });
+});

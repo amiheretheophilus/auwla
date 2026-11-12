@@ -2,7 +2,7 @@ import type { CoreRouteRuntime } from './runtime';
 import { enableNavigationBlockers } from './navigation-blockers';
 import { enableResolverInstallation } from './resolver-installation';
 import { enableGeneralNavigation } from './general-navigation';
-import { readRouteRegion } from './route-reads';
+import { readRouteRegion, trackRouteRead } from './route-reads';
 import type {
   RouteNavigationBlocker as Blocker,
   RouteResolver,
@@ -163,8 +163,15 @@ export {
   RoutedPreparationRedirectError,
   serializeRoutedPreparationState,
 };
+/**
+ * A route's prepared value. Reported as a read of the route's location (`route-reads.ts`): a
+ * navigation that keeps the page but prepares it again (a new query) commits new values, which
+ * compiled code then reads again.
+ */
 export function readRoutedPreparation(id: string): unknown {
-  return readPreparedValue(getActiveRouteRuntime(), id);
+  const runtime = getActiveRouteRuntime();
+  trackRouteRead(runtime, 'href');
+  return readPreparedValue(runtime, id);
 }
 
 /** Subscribe to navigation changes without treating subscription setup as one. */

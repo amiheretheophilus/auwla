@@ -155,11 +155,16 @@ export function emitCallbackBoundaries(
       ] as Statement[] }) } as Node);
       continue;
     }
-    const directives = body.body.filter((entry) => is.ExpressionStatement(entry) && typeof entry.directive === 'string');
+    // Build on what the body already became: source readiness declares its per-call records at
+    // the top of the body (`sourceReadinessStorage`), and they must stay. Copies keep their
+    // authored origin (`core/emit/copy.ts`), so the returns replaced above are still reached.
+    const current = replacements.get(body);
+    const statements = (current !== undefined && is.BlockStatement(current) ? current.body : body.body) as Statement[];
+    const directives = statements.filter((entry) => is.ExpressionStatement(entry) && typeof entry.directive === 'string');
     replacements.set(body, b.BlockStatement({ body: [
       ...directives,
       ...start,
-      ...body.body.slice(directives.length),
+      ...statements.slice(directives.length),
       // Falling off the end is a return too. After a `return` this line never runs.
       b.ExpressionStatement({ expression: leave(null) as Expression }) as Statement,
     ] as Statement[] }) as Node);
