@@ -8,7 +8,7 @@
  */
 import type { ParsedModule } from '../../core/parse';
 import type { Resolved } from '../../core/resolve';
-import { componentFunctions } from '../props/classify';
+import { programComponents } from '../../core/graph/classify';
 import { collectRoutes, mayHaveRoutes } from './collect';
 import { buildRouteGraph } from './graph';
 import { lowerRouteModules } from './lower';
@@ -17,7 +17,7 @@ import { lowerRouteModules } from './lower';
 export function lowerRoutes(parsed: readonly ParsedModule[], resolved: Resolved): ParsedModule[] | null {
   if (!resolved.modules.some((entry) => entry.hasJsx && mayHaveRoutes(entry.module.source))) return null;
 
-  const components = componentFunctions(resolved);
+  const components = programComponents(resolved);
   const collected = resolved.modules.filter((entry) => entry.hasJsx).map((entry) => collectRoutes(entry, components));
   if (collected.every((entry) => entry.templates.length === 0 && entry.links.length === 0)) return null;
 

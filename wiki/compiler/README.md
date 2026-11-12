@@ -149,6 +149,7 @@ One page per group of related files:
 | [handlers.md](handlers.md) | event handlers, writes and mutation |
 | [conditionals-and-lists.md](conditionals-and-lists.md) | conditional regions, lists, keys |
 | [components.md](components.md) | components, props objects, children and slots |
+| [routes.md](routes.md) | `route` regions, `route-to` links, route contexts, reads of `route` |
 | [optimize.md](optimize.md) | the fast-path contract |
 | [linking.md](linking.md) | several modules, module state, routes, server functions |
 | [delivery.md](delivery.md) | shipping as little JavaScript as possible: static pages, adoption, the old compiler's baseline |

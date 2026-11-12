@@ -400,6 +400,6 @@ optimization, emission, namespace linking and printing.
 These are ported from `packages/compiler` once the core works, each with its own
 page:
 
-- routes and `$routed`;
+- `$routed` (routes and `route-to` are built: `routes.md`);
 - server functions and their client stubs;
 - server pages.

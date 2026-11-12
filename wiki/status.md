@@ -77,7 +77,16 @@ dynamic slot (HTML cannot carry an empty text); the old compiler created none. G
 runtime, 171 data, 774 cases, 10 generators at 200 programs (the component generators now allow 600 s,
 as the others do).
 
-Next: routes and `$routed`, then `packages/vite`.
+**Done: slots** (`compiler/components.md`, "Slots"), lowered to props and checked against the
+reference's own lowering.
+
+**Done: routes and `route-to`** (`compiler/routes.md`, 2026-11-12). A route region lowers to a keyed
+conditional on `routeRegion(id)`, which the router reports to compiled computations
+(`router/src/route-reads.ts`); reads of `route` follow each field. The reference lowers routes on
+its own. Of the old router root tests, the remaining failures assert synchronous route updates with
+the default scheduler, generated text, old options (`routedEnvironment`), `$routed`, the old
+compiler's `if`/`else` attribute directives (not in compiler-next), and `suspend` on a route
+element with a changed param (to do). Next: `$routed`, that `suspend` case, then `packages/vite`.
 
 ## Closing documented issues before Phase 10 (2026-11-06)
 
