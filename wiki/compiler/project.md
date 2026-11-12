@@ -151,6 +151,18 @@ packages, the devtools inspector, the build-time page (`initialDelivery`) writte
 builds and server pages. An edit that moves code without changing output (a comment) leaves that
 module's source map stale until its next real change.
 
+**Where they go** (the user's direction, `decisions.md` 2026-11-12): each is built in the project
+and application, with its tests here, so the Vite plugin, the Bun plugin and the command line get it
+the same way and none drifts. A plugin keeps only what is its tool's:
+
+| Feature | The project's part | The tool's part |
+| --- | --- | --- |
+| Styles | Extracting each component's CSS; which styles the first page needs and which each lazy route adds | Giving the CSS to its bundler; the `<link>` tags it serves |
+| Build-time page | `initialRender` / `initialDelivery` (built), and writing them into the page's HTML | Which HTML file, and when (`transformIndexHtml`, the command line's copy) |
+| Lazy route chunks | `import()` for a lazy route, and the route's styles | Nothing: bundlers split at `import()` |
+| Installed packages | Which ship source, compiling them into the program, their artifacts | Its resolver (the host), cache folder, watching `node_modules` |
+| Devtools | The diagnostics compiled code reports | Serving the inspector |
+
 ## Bun
 
 `memoizedDom({ client, server?, target?, delivery?, root?, ...options })` (`project/bun.ts`) is a
