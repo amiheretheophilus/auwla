@@ -109,6 +109,25 @@ export function resolveMount(target: MountTarget, component: MountableComponent)
   return { host, definition };
 }
 
+/** Starts work for a mounted application; what it returns stops that work when it unmounts. */
+export type ApplicationLifetime = () => (() => void) | void;
+
+// Registered by packages beside the runtime, once per copy of them, so a bundle's router lives
+// and dies with that bundle's applications.
+const lifetimes = new Set<ApplicationLifetime>();
+
+/**
+ * Run `start` whenever an application mounts, and what it returns when that application unmounts.
+ * The router keeps its window listeners this way: an unmounted application no longer takes link
+ * clicks or history events from whatever runs in the window next. Returns the unregistration.
+ */
+export function whileApplicationMounted(start: ApplicationLifetime): () => void {
+  lifetimes.add(start);
+  return () => {
+    lifetimes.delete(start);
+  };
+}
+
 export function createMountedApplication(
   host: Element,
   definition: RootFactoryDefinition,
@@ -117,6 +136,7 @@ export function createMountedApplication(
 ): MountedApplication {
   const store = mountStore();
   const runtime = getActiveApplicationRuntime();
+  const stops = [...lifetimes].flatMap((start) => start() ?? []);
   let live = true;
   const application: MountedApplication = {
     host, rootId: definition.id, nodes,
@@ -129,7 +149,11 @@ export function createMountedApplication(
       // Handles may outlive the request or component call that created them.
       runInApplicationRuntime(runtime, () => {
         try { unregisterSubtree(definition.id); }
-        finally { removeNodes(nodes); disposeMarkers?.(); }
+        finally {
+          removeNodes(nodes);
+          disposeMarkers?.();
+          for (const stop of stops) stop();
+        }
       });
     },
   };

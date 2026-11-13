@@ -1,3 +1,4 @@
+import { whileApplicationMounted } from '@memoized-dom/runtime';
 import type { CoreRouteRuntime } from './runtime';
 import { enableNavigationBlockers } from './navigation-blockers';
 import { enableResolverInstallation } from './resolver-installation';
@@ -85,8 +86,30 @@ export { buildRoutePath } from './path';
 
 /** Compiler-runtime boundary. Application code should not need these calls. */
 export const connectRouter = (): (() => void) => activeConnect();
-const connections = new WeakMap<CoreRouteRuntime, () => void>();
+const connections = new Map<CoreRouteRuntime, () => void>();
+let followsApplications = false;
+
+/**
+ * Connect the active route runtime to its window (history events, route-link clicks). It connects
+ * when the route table installs, since the first route is matched before the application mounts,
+ * and stays connected while an application is mounted: unmounting releases the listeners, so an
+ * application started later in the same window (another bundle, a test) gets its own clicks. A
+ * later mount connects again.
+ */
 export function ensureRouterConnected(): void {
+  connectActive();
+  if (followsApplications) return;
+  followsApplications = true;
+  whileApplicationMounted(() => {
+    connectActive();
+    return () => {
+      for (const disconnect of connections.values()) disconnect();
+      connections.clear();
+    };
+  });
+}
+
+function connectActive(): void {
   const runtime = getActiveRouteRuntime();
   if (!connections.has(runtime)) connections.set(runtime, runtime.connect());
 }

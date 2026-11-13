@@ -7,7 +7,6 @@
  * `fetch` is replaced by a small in-memory API; the test then clicks, types and navigates.
  */
 import { afterAll, afterEach, beforeEach, expect, it } from 'bun:test';
-import { GlobalRegistrator } from '@happy-dom/global-registrator';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -77,23 +76,11 @@ afterEach(async () => {
   unmount = undefined;
   globalThis.fetch = realFetch;
   document.title = realTitle;
-  await freshPage();
+  // The same window for every app, deliberately. Each build bundles its own router; unmounting an
+  // app releases its router's window listeners (`whileApplicationMounted`), so the next app gets
+  // its own link clicks. Before that, the old router took them first.
+  document.body.replaceChildren();
 });
-
-/**
- * A new window for the next app, as a browser gives each page load. Each build bundles its own
- * router, whose listeners stay on the window after its app unmounts; on a shared window the old
- * router would take the next app's link clicks first. Keeps Bun's network and timers, as the
- * preload does (`test-support/dom.ts`).
- */
-async function freshPage() {
-  const keep = ['fetch', 'Request', 'Response', 'Headers', 'AbortController', 'AbortSignal',
-    'setTimeout', 'clearTimeout', 'setInterval', 'clearInterval'];
-  const native = Object.fromEntries(keep.map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)!]));
-  await GlobalRegistrator.unregister();
-  GlobalRegistrator.register({ url: 'http://localhost:3000' });
-  Object.defineProperties(globalThis, native);
-}
 
 /** Builds the example into its own folder; returns the entry's path and every output's text. */
 async function build(optimize: boolean) {

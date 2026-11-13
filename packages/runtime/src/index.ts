@@ -146,7 +146,8 @@ export { rootNodes } from './jsx-dom';
 export { decodeListKey, encodeListKey } from './list-keys';
 export { HydrationMismatchError } from './hydration-error';
 export { mount } from './mount';
-export { mountInitial, registerRootFactory, rootFactoryStore } from './mount-core';
+export { mountInitial, registerRootFactory, rootFactoryStore, whileApplicationMounted } from './mount-core';
+export type { ApplicationLifetime } from './mount-core';
 export { initializePayload } from './payload';
 export type {
   MountableComponent,
