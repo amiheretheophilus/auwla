@@ -87,6 +87,22 @@ for (const [name, from, to, code, anchor] of [
   });
 }
 
+it('keeps a tag after text checked when the ";" between them is missing', () => {
+  // The team example's error component, with the separator before its button removed.
+  const people = readFileSync(new URL('../examples/team/pages/People.auwla', import.meta.url), 'utf8');
+  const source = people.replace('" ";', '" "');
+  expect(source).not.toBe(people);
+  const button = source.indexOf('<button type="button" class="retry"');
+  const result = projectForChecking(source, './People.auwla');
+  expect(result.diagnostics).toEqual([expect.objectContaining({ code: 1005, start: button })]);
+  // The inserted `;` keeps the button and the rest of the file checked.
+  const mapped = (offset: number) => result.mappings.some(([, , start, length]) => start <= offset && offset < start + length);
+  expect(mapped(source.indexOf('retry()'))).toBe(true);
+  expect(mapped(source.indexOf('$track(people)'))).toBe(true);
+  expectExactMappings(source, result);
+  expect(() => compile(source)).toThrow(expect.objectContaining({ code: 'JPX1005' }));
+});
+
 it('reports a half-typed closing tag once, not the good tag after it', () => {
   const source = app.replace('      </footer>', '      </fo');
   expect(projectForChecking(source, './App.auwla').diagnostics).toHaveLength(1);

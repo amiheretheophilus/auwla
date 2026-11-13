@@ -78,9 +78,14 @@ a browser warning "unreachable code after return statement" in `Person`'s chunk)
 Found while writing it:
 
 - A text child directly followed by a tag (`"Could not load. " <button>`) is a
-  comparison under grammar rule 5, so a `;` is required. The diagnostic says
-  "Closing tag does not match its opening tag" instead of pointing at the missing
-  separator. Not changed; a candidate diagnostics improvement.
+  comparison under grammar rule 5, so a `;` is required. The diagnostic said
+  "Closing tag does not match its opening tag". Fixed (spec revision 8): it is now
+  JPX1005 over `<button>`, "needs `;` before it", with an inserted `;` as the
+  editor repair, so the rest of the file stays checked. A fragment `<>` there gets
+  the same message. The comparison is still never rewritten into a tag; valid
+  comparisons such as `x < b > y</b>` are unchanged. Not covered: a joined tag with
+  the enclosing element's own name (`<p>"a" <p>"b"</p></p>`) is valid host code
+  up to its first `</p>`, so the later stray closer is reported.
 - The router's window listeners stay after its app unmounts (a runtime connection is
   not released), so a second bundle in the same window loses link clicks to the old
   router. Browsers load one bundle per page; the test gives each app a fresh window.
@@ -306,11 +311,9 @@ Known open issues:
   Completion inside quarantined text and broader combinations of multiline
   damage remain open. Same-line host declarations now survive when an inserted
   closer repairs the markup; unsafe host-code removal still falls back.
-- Replay proofs and lowering-map composition remain open. Compiler-next now has
-  project/application loading, Vite/HMR, delivery, source maps and declared server
-  folders; connecting the full `.auwla` authoring path to those APIs and mapping
-  normalized output back to authored files still needs its own acceptance work.
-  Do not treat compiler capabilities as proof of `.auwla` project integration.
+- Replay proofs remain open. `.auwla` client builds now go through compiler-next's
+  project, Bun plugin and Vite plugin with maps to the authored text (DX-39, above).
+  Its server folders, server-backed `$routed` and SSR are not yet proven for `.auwla`.
 
 ## Compiler-next changes to reconcile
 

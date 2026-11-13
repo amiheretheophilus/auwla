@@ -54,6 +54,16 @@ a name or method is unknown to the compiler.
 For JPX1005, a tag token means its opening-tag span, and a host token means that
 token's span. If code has more than one plausible intention, the diagnostic should
 state the candidate repair rather than change a comparison into sibling markup.
+A tag written after a text or expression child without `;` is JPX1005 over its
+opening tag, named as the repair (G-BOUNDARY rule 5). A self-closing tag
+(`"Label" <input />`) breaks the host comparison directly. A tag with a body
+(`"Retry?" <button>"Retry"</button>`) is read as `"Retry?" < button > ...`, so
+the scan meets `</button>` as if it closed the enclosing element. JPX1005 takes
+precedence over that JPX1001 only when the closer's name follows a `<` read as
+a comparison and the text from that `<` through the closer reads as one whole
+element. A fragment `<>` there is JPX1005 over `<>`. When the joined tag has the
+enclosing element's name, the comparison is valid host code and the later stray
+closer is reported instead.
 A top-level comma operator used as a child (`<p>a, b</p>`) is also JPX1005, with
 the first top-level comma as its range: the author may have meant a `;`, quoted
 text or a parenthesized comma expression, and the message names those repairs.
@@ -78,7 +88,8 @@ over the rest of the file.
 ## Recovery and error precedence (D-RECOVERY)
 
 At a token boundary a complete mismatched closing tag takes JPX1001 over a generic
-host-expression error. EOF with an open token reports the unterminated token
+host-expression error, unless it closes a tag joined to the previous child by a
+missing `;` (JPX1005, above). EOF with an open token reports the unterminated token
 before an unclosed surrounding element/block. Otherwise the earliest decisive
 syntax error is primary. More recovery diagnostics may follow, in source order.
 

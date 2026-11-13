@@ -9,11 +9,11 @@ import { identifierAttribute } from '../attributes/identifier';
 import type { AttributeValue } from '../attributes/value';
 import { childExpression, childStatements, closingDelimiter, hasError, isMarkupOpening, unterminatedLiteral, type HostTokens } from '../host';
 import { blankRange, maskMarkup } from '../masks';
-import type { Repair } from '../diagnostics';
+import { JsxPlusError, type Repair } from '../diagnostics';
 import type { ElementView, FragmentView, Range } from '../model';
 import { blank, closeAttributeValue, closeChildString } from '../repairs';
 import { copied, replaceRange } from '../source';
-import { readChildren } from './children';
+import { readChildren, SIBLING_SEPARATOR } from './children';
 import { interpolatedText } from './text';
 import type { ChildReplacement, Children, Markup, MarkupContext } from './context';
 
@@ -191,6 +191,10 @@ function readBody(context: MarkupContext, start: number, name: string, opener: n
     const literal = unterminatedLiteral(result, shadow);
     const stack: Delimiter[] = [];
     let expectChildBlock = false;
+    // Authored offsets of child-level `<` read as comparisons in this pass. A
+    // sibling tag written without a `;` after a text or expression child
+    // (G-BOUNDARY rule 5) leaves one of these; see `reportJoinedSibling`.
+    const comparisons: number[] = [];
 
     for (let index = 0; index < tokens.length; index++) {
       const kind = tokens.kind(index);
@@ -231,6 +235,9 @@ function readBody(context: MarkupContext, start: number, name: string, opener: n
         shadow = maskMarkup(shadow, markup.start - start, markup.end - start);
         continue rescan;
       }
+      if (kind === K.LessThan && childLevel && !source.startsWith('</', position)) {
+        comparisons.push(position);
+      }
 
       // In host mode a closing tag's slash can be rescanned as one whole regex
       // token if another slash occurs later. The body's delimiter wins at this
@@ -246,6 +253,7 @@ function readBody(context: MarkupContext, start: number, name: string, opener: n
         }
         const closeEnd = closing.end - 1;
         if (closing.name !== name) {
+          reportJoinedSibling(context, comparisons, closing.name, closeEnd + 1);
           context.error('JPX1001', 'Closing tag does not match its opening tag', position, closeEnd + 1,
             mismatchRepairs(context, closing.name, [opener, start], [position, closeEnd + 1]));
         }
@@ -346,7 +354,16 @@ function headerRepairs(tokens: HostTokens, base: number, headerStart: number): R
  * something other than whitespace follows the name first.
  */
 function closingTag(source: string, position: number): { name: string; nameEnd: number; end: number | null } {
-  let cursor = position + 2;
+  const { name, end: nameEnd } = tagName(source, position + 2);
+  let cursor = nameEnd;
+  while (cursor < source.length && /\s/.test(source[cursor]!)) {
+    cursor++;
+  }
+  return { name, nameEnd, end: source[cursor] === '>' ? cursor + 1 : null };
+}
+
+/** The element name at `cursor`, after any whitespace, and the offset just after it. */
+function tagName(source: string, cursor: number): { name: string; end: number } {
   while (cursor < source.length && /\s/.test(source[cursor]!)) {
     cursor++;
   }
@@ -360,12 +377,37 @@ function closingTag(source: string, position: number): { name: string; nameEnd: 
     }
     cursor += character.length;
   }
-  const name = source.slice(nameStart, cursor);
-  const nameEnd = cursor;
-  while (cursor < source.length && /\s/.test(source[cursor]!)) {
-    cursor++;
+  return { name: source.slice(nameStart, cursor), end: cursor };
+}
+
+/**
+ * G-BOUNDARY rule 5: `"Retry?" <button>"Retry"</button>` has no `;` before the
+ * tag, so the host reads `"Retry?" < button > ...` as a comparison and the
+ * scan later meets `</button>` as if it closed the enclosing element. Before
+ * reporting that, find a `<` read as a comparison whose name is the closer's
+ * and confirm it really is one whole element ending at that closer (`end`).
+ * Then report JPX1005 over its opening tag, with a `;` as the repair. The
+ * comparison is never rewritten into a tag; this only chooses the message.
+ */
+function reportJoinedSibling(context: MarkupContext, comparisons: readonly number[], closingName: string, end: number): void {
+  for (let index = comparisons.length - 1; index >= 0; index--) {
+    const position = comparisons[index]!;
+    if (tagName(context.source, position + 1).name !== closingName) {
+      continue;
+    }
+    let opening: OpeningTag;
+    let element: Markup;
+    try {
+      opening = readOpeningTag(context, position);
+      element = readElement(context, position);
+    } catch (error) {
+      if (error instanceof JsxPlusError) continue;
+      throw error;
+    }
+    if (element.end === end) {
+      context.error('JPX1005', SIBLING_SEPARATOR, position, opening.end, [{ kind: 'insert', at: position, text: ';' }]);
+    }
   }
-  return { name, nameEnd, end: source[cursor] === '>' ? cursor + 1 : null };
 }
 
 /**

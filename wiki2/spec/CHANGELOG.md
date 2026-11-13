@@ -1,5 +1,23 @@
 # Spec revisions
 
+## 0.1-draft, revision 8 — 2026-11-13
+
+- Diagnostics only; no accepted syntax or meaning changes. G-BOUNDARY rule 5
+  still never turns a `<` comparison into a tag.
+- JPX1005 (D-RECOVERY) also covers a tag with a body written after a text or
+  expression child without `;`: `"Retry?" <button>"Retry"</button>`. The host
+  reads `"Retry?" < button > ...` as a comparison, so the scan met `</button>`
+  first and reported JPX1001 there. When that closer's name follows a `<` read
+  as a comparison, and the text from that `<` to the closer reads as one whole
+  element, the error is JPX1005 over that element's opening tag. A mismatch
+  without such an element stays JPX1001.
+- A fragment `<>` in the same position is JPX1005 over `<>`, with the separator
+  message instead of the host's.
+- Not covered: when the joined tag has the enclosing element's own name
+  (`<p>"a" <p>"b"</p></p>`), the first `</p>` closes the outer element and the
+  comparison is valid host code, so the stray closer is reported later.
+- Add ERROR-016 and ERROR-017. Existing fixtures and codes are unchanged.
+
 ## 0.1-draft, revision 7 — 2026-11-11
 
 - DX-37: quoted child text supports `{expression}` substitutions (G-INTERP,

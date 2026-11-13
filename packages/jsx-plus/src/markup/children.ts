@@ -12,6 +12,10 @@ import type { BlockView, ChildView, ExpressionView, ForView, IfView, Range } fro
 import { anchored, assemble, generated, replaceRange, type Piece } from '../source';
 import type { ChildReplacement, Children, MarkupContext } from './context';
 
+/** JPX1005 for a tag written after a text or expression child without `;` (G-BOUNDARY rule 5). */
+export const SIBLING_SEPARATOR =
+  'A tag after a text or expression child needs ";" before it; without it, "<" reads as a comparison';
+
 interface Child<View> {
   readonly view: View;
   readonly pieces: Piece[];
@@ -125,6 +129,15 @@ class ChildReader {
     const tokens = parsed.tokens;
     const token = tokens.at(problem.start);
 
+    // `"a" <>"x"</>`: a fragment's `<>` is read as markup even after a text or
+    // expression child, so its mask follows the text with no `;` (G-BOUNDARY
+    // rule 5). Name the separator rather than the host's "found '_'".
+    const fragment = this.nested.find((entry) => entry.start === offset && entry.view.kind === 'fragment');
+    if (fragment !== undefined) {
+      this.context.error('JPX1005', SIBLING_SEPARATOR, offset, this.source.indexOf('>', offset) + 1,
+        [{ kind: 'insert', at: offset, text: ';' }]);
+    }
+
     // Host parsing may read a sibling as a broken `< ... / >` comparison.
     // Confirm the complete tag independently before suggesting a separator.
     if (token >= 1 && tokens.kind(token) === K.GreaterThan && tokens.kind(token - 1) === K.Slash) {
@@ -134,7 +147,8 @@ class ChildReader {
         const to = tokens.end(token);
         const tag = parse(code.slice(from, to), { lang: 'tsx', sourceType: 'module', tokens: true });
         if (!hasError(tag.diagnostics) && isMarkupOpening(tag.tokens!, 0)) {
-          this.context.error('JPX1005', 'Separate this sibling tag from the preceding expression with a semicolon', start + from, start + to);
+          this.context.error('JPX1005', SIBLING_SEPARATOR, start + from, start + to,
+            [{ kind: 'insert', at: start + from, text: ';' }]);
         }
         break;
       }

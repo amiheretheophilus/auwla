@@ -1,7 +1,21 @@
 {
   "specVersion": "0.1-draft",
-  "revision": 7,
+  "revision": 8,
   "cases": [
+    {
+      "id": "ERROR-016",
+      "level": "diagnostics",
+      "rules": ["G-BOUNDARY", "D-CODES", "D-RECOVERY"],
+      "source": "<p>\"Retry?\" <button>\"Retry\"</button></p>",
+      "expected": { "code": "JPX1005", "severity": "error", "range": [12, 20] }
+    },
+    {
+      "id": "ERROR-017",
+      "level": "diagnostics",
+      "rules": ["G-BOUNDARY", "D-CODES"],
+      "source": "<div>\"a\" <>\"x\"</></div>",
+      "expected": { "code": "JPX1005", "severity": "error", "range": [9, 11] }
+    },
     {
       "id": "PARSE-010",
       "level": "parse",

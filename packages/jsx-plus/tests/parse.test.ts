@@ -86,6 +86,44 @@ it('reports an authored Unicode/CRLF diagnostic position', () => {
   expect(() => normalize(source, { filename: 'App.auwla' })).toThrow('App.auwla:2:8');
 });
 
+// G-BOUNDARY rule 5 with a tag that has a body: the host reads `"text" < name >`
+// as a comparison, so without this the error was JPX1001 at the inner closer.
+for (const [name, source, tag] of [
+  ['text before a button', '<p>"Could not load. " <button>"Retry"</button></p>', '<button>'],
+  ['an expression before a span', '<p>count <span>"x"</span></p>', '<span>'],
+  ['text before nested markup', '<div>"a" <b><i>x</i></b></div>', '<b>'],
+  ['text before a tag with attributes', '<p>"a" <a href="/x" class={kind}>"b"</a></p>', '<a href="/x" class={kind}>'],
+  ['text before a fragment', '<div>"a" <>"x"</></div>', '<>'],
+  ['text before a self-closing tag', '<p>"Label"\n<input /></p>', '<input />'],
+] as const) {
+  it(`reports JPX1005 for a missing ";" between ${name}`, () => {
+    let caught: unknown;
+    try { normalize(source); } catch (error) { caught = error; }
+    expect(caught).toBeInstanceOf(JsxPlusError);
+    const error = caught as JsxPlusError;
+    const at = source.indexOf(tag);
+    expect({ code: error.code, range: error.range }).toEqual({ code: 'JPX1005', range: [at, at + tag.length] });
+    expect(error.reason).toContain('needs ";"');
+    expect(error.repairs).toEqual([{ kind: 'insert', at, text: ';' }]);
+    // The suggested repair is the separated spelling, which normalizes.
+    expect(() => normalize(source.slice(0, at) + ';' + source.slice(at))).not.toThrow();
+  });
+}
+
+for (const [name, source, expected] of [
+  ['a comparison', '<p>value < limit</p>', '<p>{value < limit}</p>'],
+  ['a comparison that looks like a tag', '<b>x < b > y</b>', '<b>{x < b > y}</b>'],
+  ['a comparison whose name ends at the closer', '<p>"a" <b>"x"</p>', '<p>{"a" <b>"x"}</p>'],
+] as const) {
+  it(`keeps ${name} as host code`, () => {
+    expect(normalize(source).code).toBe(expected);
+  });
+}
+
+it('still reports a plain mismatched closer as JPX1001', () => {
+  expect(() => normalize('<p>count < limit</span></p>')).toThrow(expect.objectContaining({ code: 'JPX1001' }));
+});
+
 it('points missing sibling separators at the intended opening tag', () => {
   let caught: unknown;
   try { normalize('<p>"Label"\n<input /></p>'); } catch (error) { caught = error; }

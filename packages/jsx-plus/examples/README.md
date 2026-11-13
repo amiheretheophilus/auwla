@@ -108,7 +108,8 @@ in-memory API and serves deep links such as `/people/2`. Everything is written i
   [team/lifecycle.ts](team/lifecycle.ts).
 
 A text child followed by a tag needs `;` (`"Could not load people. "; <button>`):
-without it, `"…" <button>` reads as a comparison (spec grammar rule 5).
+without it, `"…" <button>` reads as a comparison (spec grammar rule 5), and the
+error is JPX1005 at the tag, asking for that `;`.
 `tests/routes.test.ts` bundles this folder with chunk splitting and drives it in
 both compiler modes; `tests/vite.test.ts` checks Vite splits the same pages.
 
