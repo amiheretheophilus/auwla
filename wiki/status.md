@@ -181,11 +181,31 @@ runtime that had routes of its own (the cause of two `packages/router` tests tha
 whole-suite run). The harness's delivered run now renders from a server build, as a real server
 does. Still to do: a lazy route's styles on a server-rendered page.
 
-Seen while checking the router change, not caused by it (the same with all three router changes
-switched off): `tests/ssr-payload-transport.test.ts` fails after `tests/r47-router-runtime.test.ts`
-or `tests/hydration-route-fragment.test.ts` in one run, and
-`tests/transparent-source-mutations-and-routes.test.ts` fails in the whole router-related set; each
-passes alone.
+Fixed: `tests/ssr-payload-transport.test.ts` and
+`tests/transparent-source-mutations-and-routes.test.ts` failed after certain other root test files
+and passed alone, the same with the router changes above switched off. The compilers were not
+involved and no assertion changed; three test files left shared state behind, each found with a
+probe of the state the next file started from:
+
+- `r47-router-runtime` and `hydration-route-fragment` left the router's default runtime and the
+  window at the last path they visited, so the next file's app started away from `/`, where its
+  route's prepared value does not apply. Both now go back to `/` after each test.
+- `hydration-route-fragment` left an empty `<div id="root">`, which the next file's
+  `mount('root', …)` found before its own, so it mounted fresh instead of adopting the server's
+  page and its payload. It now empties the body after each test.
+- `router-capability-bundle` evaluates bundled copies of the router in the same process. The last
+  router copy evaluated takes the realm's one payload-restorer slot (`router/src/preparation.ts`), so
+  a later file's payload restored into a bundled copy's runtime. The bundled copies also navigated
+  the shared window, and the default runtime an earlier file had connected followed them there. The
+  file now puts the workspace router's restorer back, and returns the window to `/` with a
+  `popstate`, which a connected runtime follows.
+
+A whole root run in one process (`bun test ./tests`) still ends with Bun failing to allocate 32 GB,
+before and after these fixes, at the same point. Before it, besides the recorded R23
+(`open-issues.md`), these fail there and pass alone: `ssr-query-fallback`, two `ssr-region-streaming`
+tests, and two `optimistic-utils-integration` tests ("duplicate list key: undefined"; the files up
+to it alphabetically are enough, and it fails the same with the `hydration-route-fragment` cleanup
+removed). Not yet traced.
 
 The Vite package's dependencies now list what its bundle imports (`yuku-*`, `@memoized-dom/server`),
 with compiler-next, which is bundled, as a dev dependency; `bun.lock` is updated to match, as CI

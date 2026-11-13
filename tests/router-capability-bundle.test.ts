@@ -1,8 +1,33 @@
 import { resolve } from 'node:path';
 import { build } from 'esbuild';
 import { compileModules } from '@memoized-dom/compiler';
-import { describe, expect, it, vi } from 'bun:test';
+import { afterAll, describe, expect, it, vi } from 'bun:test';
 import type { RouteRuntime } from '../packages/router/src/runtime';
+
+// The bundled routers below are extra copies of the router in this process, sharing its realm:
+//
+// - Each copy hands its payload restorer to the runtime through one slot on `globalThis`
+//   (`router/src/preparation.ts`), and the last copy evaluated wins. Once the workspace router
+//   has loaded (an earlier file imported it), a bundled copy would take the slot, and a later
+//   file's server payload would restore into that copy's runtime. Put the workspace router's back.
+// - They navigate the shared window. A route runtime an earlier file connected to it (a compiled
+//   route table connects the workspace router's default runtime) follows their history moves and
+//   is left wherever they end. Put the window back at `/` and say so as a browser does, with
+//   `popstate`, so a connected runtime follows it there and an unconnected one is untouched.
+const routerBridgeKey = Symbol.for('memoized-dom:router-runtime-bridge');
+type RouterBridge = { restoreState?: (state: unknown) => void };
+const realm = globalThis as unknown as Record<symbol, RouterBridge | undefined>;
+const workspaceRestorer = realm[routerBridgeKey]?.restoreState;
+
+afterAll(() => {
+  const bridge = realm[routerBridgeKey];
+  if (bridge !== undefined) {
+    if (workspaceRestorer === undefined) delete bridge.restoreState;
+    else bridge.restoreState = workspaceRestorer;
+  }
+  window.history.replaceState(null, '', '/');
+  window.dispatchEvent(new PopStateEvent('popstate', { state: null }));
+});
 
 describe('bundled public router construction', () => {
   for (const graph of ['source', 'package'] as const) {
