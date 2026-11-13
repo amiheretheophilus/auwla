@@ -101,16 +101,30 @@ Found while building it, and fixed: every module-level object got a reader and a
 nothing reactive reading it; a server entry with `serve()` and `app.ssr(App)` emitted 2,757 bytes of
 machinery, now 280 (`state-and-derived.md`, "Module state nothing reactive reads").
 
-**Known issue, open: the server folder is compiled as reactive code.** Every module of the server
-program goes through the same reactive emission, including the declared server folder, which no
-client component can run (the browser reaches it only over HTTP or a server-backed `$routed`,
-both once per request). In the directory example, `server/people.auwla`, a 20-line in-memory
-store, becomes 3,338 characters: a version, reader and shared-write tracking for `people`
-(edited by `addPerson`), `whenSourceInputs` around each function's work, and a source builder
-step in `addPerson`. `server/define.ts` gets the same for `define`. It behaves correctly; the
-cost is size and work on every call. DX-30 (`wiki2/decisions.md`) says backend code is not
-reactive. A likely direction: modules inside `server.folder` compile without module-state
-tracking or source readiness, keeping only what markup in a page function needs.
+### Backend code
+
+Server-only code is compiled as plain code (DX-30, `wiki2/decisions.md`: backend code is not
+reactive). The application declares it to the server project through the `serverOnly` option
+(`options.ts`): the server folder, the server entry, and the generated routes registry and
+`serve()` wrapper. Not the facades: components call them, in both builds. That code runs once per
+request or once at start, never inside a render; the browser reaches it only over HTTP or through
+a server-backed `$routed`. So, in `graph.resolved.serverOnly(module)`'s modules:
+
+- module bindings get no reader or version (`features/state/reactive-reads.ts`), so a store an
+  endpoint edits stays a plain array;
+- edits are not observed (`planImportedMutations` is skipped in `core/plan/index.ts`), and with
+  no planned edit its functions get no callback boundary (`features/handlers/callbacks.ts`);
+- no source readiness is planned (`features/sources/flow-plan.ts`) unless the module calls
+  `$fetch`/`$read`/`$track` or holds markup (a page function, a component declared there);
+- a `try` or `await` adds no build recovery or write flush when the module renders nothing
+  (`core/emit/dom.ts`).
+
+Pages the server renders keep everything: they are not server-only code. Before (the `.auwla`
+directory example): `server/people.auwla`, a 20-line in-memory store, compiled to 3,338
+characters; its server function module to 4,129; the entry to 1,089; the registry to 9,377. After:
+486, 296, 273 and 2,073, the store and functions exactly their authored JavaScript.
+`server/application.test.ts` checks the output has no runtime machinery and fails when nothing is
+declared server-only; the JSX+ server and Vite tests run the result.
 
 Found by the `.auwla` directory example (`packages/jsx-plus/examples/directory`), and fixed: once a
 page reads a server function, the server graph has sources and imports a package, so `serve(...)`
@@ -118,7 +132,8 @@ may return one (`features/sources/reach.ts`) and the entry's top-level `app.ssr(
 builder step. With no module state, nothing declared that step's readiness storage, and the built
 server threw `_sourceStep is not defined` on start. `core/emit/shared.ts` now declares it at the
 top of such a module (`sourceReadinessStorage(plan, null, …)`). The Bun plugin's server test passed
-only because its page read no server function.
+only because its page read no server function. The entry is now plain backend code (above), but
+any module whose top level waits with no module state still needs it (`shared-dom.test.ts`).
 
 ## Files
 

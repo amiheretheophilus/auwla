@@ -19,6 +19,15 @@ export function hasSourceFlow(graph: SemanticGraph): boolean {
   }));
 }
 
+/** Whether the module calls `$fetch`, `$read` or `$track`. */
+function usesDataApi(module: Module): boolean {
+  return module.findAll('CallExpression').some((call) => dataApi(module, call.callee) !== null);
+}
+
+function holdsMarkup(module: Module): boolean {
+  return module.findAll(['JSXElement', 'JSXFragment']).length > 0;
+}
+
 export function planSourceFlow(
   entry: ResolvedModule,
   graph: SemanticGraph,
@@ -31,6 +40,12 @@ export function planSourceFlow(
   }
 
   const module = entry.module;
+  // Backend code (`serverOnly`) runs once per request or at start, outside any render: no value it
+  // computes waits for a source, unless it uses the data intrinsics itself or holds markup, which a
+  // render (a page function, a component declared there) may show while data loads.
+  if (graph.resolved.serverOnly(module) && !usesDataApi(module) && !holdsMarkup(module)) {
+    return undefined;
+  }
   const reach = sourceReach(graph, components);
   if (reach.freeOfSources(module)) {
     return undefined;

@@ -22,6 +22,19 @@ function unreachable(code: string): string[] {
   return found;
 }
 
+it('declares the readiness a module waits on when no module state owns it', () => {
+  // `make()` comes from outside the graph and a component uses a source, so `app` may hold one
+  // (`features/sources/reach.ts`) and `app.run(App)` is a builder step at the module's top level.
+  // Without module state, nothing else declared that step's storage (`core/emit/shared.ts`).
+  const entry = compileModules({
+    './entry.ts': `import { make } from 'some-host';\nimport { App } from './App';\nconst app = make();\napp.run(App);\nexport default app;\n`,
+    './App.tsx': `export function App() { const value = $fetch('/value'); return <p>{value}</p>; }\n`,
+  })['./entry.ts']!;
+  const used = new Set(entry.match(/\b_source(?:Step|Binding)\d*\b/g));
+  expect(used.size).toBeGreaterThan(0);
+  for (const name of used) expect(entry).toMatch(new RegExp(`\\bconst ${name} = `));
+});
+
 it.each([true, false])('completes a shared frame that ends in return only through the return (optimize %p)', (optimize) => {
   // An effect reading a source, whose local its cleanup reads again, gets a shared frame (found in
   // the JSX+ team example's Person page). Its last statement returns, so nothing may follow it:

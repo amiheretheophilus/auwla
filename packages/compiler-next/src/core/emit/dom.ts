@@ -76,8 +76,11 @@ export function emitDom(plan: ModulePlan, options: CompileModulesOptions): Node 
     || plan.sourceFlow !== undefined || (plan.capturedImports?.size ?? 0) > 0
     || (plan.importedMutations?.length ?? 0) > 0
     || module.bindings.some((binding) => namespaceModule(binding) !== null);
-  const usesRuntime = hasRenderWork || findAll(module.ast, ['TryStatement', 'AwaitExpression']).length > 0
-    || plan.globals.accesses.length > 0 || plan.globals.codeFromText;
+  // A `try` restores a build and an `await` flushes writes (`recovery.ts`, `await.ts`); server-only
+  // code that renders nothing has neither a build nor writes to keep.
+  const guardsWrites = !(plan.serverOnly === true && !hasRenderWork)
+    && findAll(module.ast, ['TryStatement', 'AwaitExpression']).length > 0;
+  const usesRuntime = hasRenderWork || guardsWrites || plan.globals.accesses.length > 0 || plan.globals.codeFromText;
   if (!usesRuntime && !readsImportedState(plan)) {
     return copy(module.ast);
   }

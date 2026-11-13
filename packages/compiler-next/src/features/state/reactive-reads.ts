@@ -14,6 +14,10 @@
  * - an `export default` expression that another compiled module imports, which a captured value
  *   reads (`link/captured-plan.ts`);
  * - a binding reachable through a namespace, which `shared-plan.ts` keeps for its observer.
+ *
+ * A binding declared in server-only code (the `serverOnly` option) is never one: that code runs
+ * once per request or at start, and no render reads it again, so following it would only cost
+ * every call.
  */
 import { is } from 'yuku-ast';
 import type { BindingNode, SemanticGraph } from '../../core/graph';
@@ -24,7 +28,7 @@ export function reactivelyRead(graph: SemanticGraph, kept: ReadonlySet<Binding>)
   const read = new Set<Binding>();
   const work: Binding[] = [];
   const mark = (binding: Binding): void => {
-    if (read.has(binding)) return;
+    if (read.has(binding) || graph.resolved.serverOnly(binding.module)) return;
     read.add(binding);
     work.push(binding);
   };

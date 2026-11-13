@@ -137,16 +137,31 @@ export function App() { return <main><Story route="/story/:id" /></main>; }
     expect(!build.client.ok && build.client.error.path).toBe('./server/functions/bad.ts');
   });
 
-  it('declare the readiness the server entry waits on when a page reads a server function', async () => {
-    // FILES' page reads `getUser` from `#server-functions`, so the server graph has sources and
-    // imports outside code: `serve(...)` may return one (`features/sources/reach.ts`), and the
-    // entry's top-level `app.ssr(App)` waits on it with no module state to own that wait.
-    const build = await createApplication({ client: './src/main.ts', server: SERVER, host: memoryHost(FILES) }).build();
+  it('compile server-only code as plain code, while pages rendered on the server keep their machinery', async () => {
+    // A store edited by a server function and read by another: in a component it would be state.
+    const files = {
+      ...FILES,
+      './server/store.ts': `const users: { name: string }[] = [];\nexport function add(name: string) { users.push({ name }); return users.length; }\nexport function all() { return users; }\n`,
+      './server/functions/users.ts': `
+import { add, all } from '../store';
+export const getUser = define.function({ async get({ services }, id: string) { return all()[Number(id)]; } });
+export const saveUser = define.function({ async post({ services }, name) { const count = add(name); try { return { count }; } finally { await Promise.resolve(); } } });
+`,
+    };
+    const build = await createApplication({ client: './src/main.ts', server: SERVER, host: memoryHost(files) }).build();
     expect(build.server?.ok).toBe(true);
-    const entry = build.server?.ok === true ? build.server.output['./server.ts']! : '';
-    const used = new Set(entry.match(/\b_source(?:Step|Binding)\d*\b/g));
-    expect(used.size).toBeGreaterThan(0);
-    for (const name of used) expect(entry).toMatch(new RegExp(`\\bconst ${name} = `));
+    if (build.server?.ok !== true) return;
+    const machinery = /_MD\.|_data\.|_read_|_mutated_|_sourceStep/;
+    // The folder, the entry, and the generated routes and `serve()` wrapper.
+    for (const path of ['./server/store.ts', './server/functions/users.ts', './server/database.ts', './server.ts', GENERATED.registry, GENERATED.server]) {
+      const code = build.server.output[path]!;
+      // The entry hands `App` to `ssr` as a component value; nothing else of the runtime remains.
+      expect([path, machinery.test(code.replaceAll('_MD.componentValue(App)', 'App'))]).toEqual([path, false]);
+    }
+    expect(build.server.output['./server/store.ts']).toContain('users.push({ name });');
+    // The page still waits for `getUser`, in the server build as in the client's.
+    expect(build.server.output['./src/App.tsx']).toContain('_data.');
+    expect(build.client.ok && build.client.output['./src/App.tsx']).toContain('_data.');
   });
 
   it('read server code a source language owns like .ts: functions, services and #server/ modules', async () => {

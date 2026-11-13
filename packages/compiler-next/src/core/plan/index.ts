@@ -51,7 +51,11 @@ export function planModules(
   const refs = planRefs(graph);
   const tracked = new Set<BindingNode>([...[...state.values()].flat(), ...sharedReads.keys()]);
   return graph.resolved.modules.map((entry) => {
-    const imported = planImportedMutations(graph, entry, owners, tracked);
+    // Edits in server-only code are not observed: no render follows what it changes, and without
+    // planned edits its functions need no callback boundary either (`handlers/callbacks.ts`).
+    const imported = graph.resolved.serverOnly(entry.module)
+      ? new Map<Node | null, readonly import('./model').MutationPlan[]>()
+      : planImportedMutations(graph, entry, owners, tracked);
     return planModule(graph, queries, components, entry, state, memos, sharedReads, refs, imported);
   });
 }
@@ -270,6 +274,7 @@ function planModule(
     });
   }
   return {
+    serverOnly: graph.resolved.serverOnly(module),
     importedMutations: sharedOwners.some((owner) => owner.fn === null && owner.block === null)
       ? []
       : imported.get(null) ?? [],

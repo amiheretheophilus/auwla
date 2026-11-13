@@ -50,6 +50,8 @@ export interface Resolved {
   writesOf(binding: Binding): readonly WriteSite[];
   /** Whether code outside this graph can reach this binding through an entry's exports. */
   usedOutside(module: Module, binding: Binding | null): boolean;
+  /** Whether the module is declared server-only code (the `serverOnly` option): backend code. */
+  serverOnly(module: Module): boolean;
 }
 
 /**
@@ -117,7 +119,26 @@ export function resolve(parsed: readonly ParsedModule[], options: CompileModules
   const byModule = new Map(modules.map((entry) => [entry.module, entry]));
   const globals = findGlobalWrites(modules.map((entry) => entry.module));
   const writesOf = (binding: Binding) => byModule.get(binding.module)?.writes.get(binding) ?? [];
-  return { analyzer, modules, globals, writesOf, usedOutside: outsideUses(modules, options.entries) };
+  return {
+    analyzer, modules, globals, writesOf,
+    usedOutside: outsideUses(modules, options.entries),
+    serverOnly: declaredServerOnly(modules, options.serverOnly ?? []),
+  };
+}
+
+/**
+ * The modules `paths` name: each is a module (`./server.ts`) or a folder holding modules
+ * (`./server`, the same as `server/`).
+ */
+function declaredServerOnly(modules: readonly ResolvedModule[], paths: readonly string[]): Resolved['serverOnly'] {
+  if (paths.length === 0) return () => false;
+  const bare = (path: string) => path.replaceAll('\\', '/').replace(/^\.\//, '').replace(/\/+$/, '');
+  const named = paths.map(bare);
+  const inside = new Set(modules.filter((entry) => {
+    const path = bare(entry.path);
+    return named.some((name) => path === name || path.startsWith(`${name}/`));
+  }).map((entry) => entry.module));
+  return (module) => inside.has(module);
 }
 
 /** `import(name)` with a specifier only known at run time, which the analyzer does not record. */

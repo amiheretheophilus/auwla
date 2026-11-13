@@ -433,6 +433,9 @@ new Map() }` emitted 1,639 bytes and a server entry (`serve()`, `app.ssr(App)`, 
 app`) 2,757; now 45 and 280. Any module-level object nothing reactive reads was affected, in client
 builds too.
 
+A binding declared in server-only code (`serverOnly`, [server](server.md#backend-code)) never
+keeps a reader: that code runs per request or at start, never during a render.
+
 "Inside a function" is conservative: the compiler does not know which functions run during a
 render. Narrowing it to functions a component reaches would miss a function stored in an object and
 called through it (`api.load()`), so it is not done. A generated `serve()` wrapper therefore keeps

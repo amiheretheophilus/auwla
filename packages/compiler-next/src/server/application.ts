@@ -195,6 +195,9 @@ export function createApplication(options: ApplicationOptions): Application {
     host: view('server'),
     routedEnvironment: 'server',
     dataDelivery: 'universal',
+    // Backend code, compiled as plain code (`options.ts`, `serverOnly`): the server folder, the
+    // entry, and the generated routes and `serve()` wrapper. Not the facades: components call them.
+    serverOnly: [...(root === null ? [] : [root]), serverEntry, GENERATED.registry, GENERATED.server],
     // Hot replacement is the browser's: a server loads each module again for the next request.
     hot: false,
   });

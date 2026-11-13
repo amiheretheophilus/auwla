@@ -26,6 +26,16 @@ export interface CompileModulesOptions {
    */
   readonly routedEnvironment?: 'client' | 'server';
   /**
+   * Server-only code, as folders (`./server`) and modules (`./server.ts`): what the application
+   * declares and generates for its server (`server/application.ts`). It runs once per request or
+   * once at start, never inside a render: the browser reaches it only over HTTP or through a
+   * server-backed `$routed`. So it is compiled as plain code (`wiki/compiler/server.md`, "Backend
+   * code"): its module bindings get no readers or versions, its edits are not observed, and its
+   * modules get no source readiness unless they use the data intrinsics or hold markup. Default:
+   * none.
+   */
+  readonly serverOnly?: readonly string[];
+  /**
    * The modules whose exports code outside this graph can use, such as the app's entry.
    * Everything else is called only from modules in the graph, so the compiler can follow
    * what those calls pass (`wiki/compiler/sources.md`). Default: every module.

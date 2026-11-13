@@ -393,6 +393,8 @@ export interface MutationPlan {
 }
 
 export interface ModulePlan {
+  /** Declared server-only code (the `serverOnly` option): plain code unless it renders something. */
+  readonly serverOnly?: boolean;
   readonly importedMutations?: readonly MutationPlan[];
   readonly capturedExports?: readonly CapturedValuePlan[];
   readonly capturedImports?: ReadonlyMap<Binding, CapturedValuePlan>;
