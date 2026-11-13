@@ -9,9 +9,10 @@
  * (`packages/compiler/src/server-functions.ts`), whose output the tests compare against.
  */
 import { is } from 'yuku-ast';
-import { langFromPath, parse } from 'yuku-parser';
+import { parse } from 'yuku-parser';
 import type { Node } from 'yuku-parser';
 import { CompileError } from '../core/diagnostics';
+import { languageExtensions, moduleText, type SourceLanguage } from '../core/parse/languages';
 
 export type ServerFunctionMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
 
@@ -50,8 +51,9 @@ const METHODS = new Set(['get', 'post', 'put', 'patch', 'delete']);
 /**
  * The endpoint name of a module: its path inside the functions folder, without the extension,
  * each segment URL-encoded. `''` for the folder itself, `_middleware` for a middleware file.
+ * `extensions` are the source languages' (`.auwla`), removed like `.ts`.
  */
-export function serverFunctionModuleName(moduleId: string, functionsRoot = 'server/functions'): string {
+export function serverFunctionModuleName(moduleId: string, functionsRoot = 'server/functions', extensions: readonly string[] = []): string {
   const clean = moduleId.replaceAll('\\', '/').split(/[?#]/, 1)[0]!;
   const root = functionsRoot.replaceAll('\\', '/').replace(/^\.\//, '').replace(/^\/+|\/+$/g, '');
   const marker = `/${root}/`;
@@ -60,21 +62,34 @@ export function serverFunctionModuleName(moduleId: string, functionsRoot = 'serv
   if (index === -1) {
     throw new CompileError(`server function module '${moduleId}' is outside '${root}/'`, moduleId);
   }
-  const relative = rooted.slice(index + marker.length).replace(/\.(?:[cm]?[jt]sx?|tsrx)$/i, '');
+  const inside = rooted.slice(index + marker.length);
+  const language = extensions.find((extension) => inside.endsWith(extension));
+  const relative = language !== undefined ? inside.slice(0, -language.length) : inside.replace(/\.(?:[cm]?[jt]sx?|tsrx)$/i, '');
   if (relative === '' || relative === '_middleware') return relative;
   return relative.split('/').map((segment) => encodeURIComponent(segment)).join('/');
 }
 
-/** What a server function module exports. Any other export is an error: it would reach the client. */
-export function analyzeServerFunctions(moduleId: string, source: string, functionsRoot = 'server/functions'): ServerFunctionModule {
-  const { program, diagnostics } = parse(source, { lang: langFromPath(moduleId), sourceType: 'module' });
+/**
+ * What a server function module exports. Any other export is an error: it would reach the client.
+ * A module a source language owns (`languages`) is read as the TSX it becomes, and its errors are
+ * located in the authored text.
+ */
+export function analyzeServerFunctions(
+  moduleId: string,
+  authored: string,
+  functionsRoot = 'server/functions',
+  languages?: readonly SourceLanguage[],
+): ServerFunctionModule {
+  const { text: source, lang, origin } = moduleText(moduleId, authored, languages);
+  const { program, diagnostics } = parse(source, { lang, sourceType: 'module' });
+  const at = (message: string, offset: number) => CompileError.at(message, moduleId, authored, origin.original(offset));
   const syntax = diagnostics.find((diagnostic) => diagnostic.severity === 'error');
-  if (syntax !== undefined) throw CompileError.at(syntax.message, moduleId, source, syntax.start);
+  if (syntax !== undefined) throw at(syntax.message, syntax.start);
 
   const fail = (message: string, node: Node): never => {
-    throw CompileError.at(message, moduleId, source, node.start);
+    throw at(message, node.start);
   };
-  const moduleName = serverFunctionModuleName(moduleId, functionsRoot);
+  const moduleName = serverFunctionModuleName(moduleId, functionsRoot, languageExtensions(languages));
   const bindings = definedFunctions(program.body as Node[], fail);
   const functions: ServerFunctionDefinition[] = [];
   let middlewareExport = false;

@@ -189,6 +189,12 @@ export function emitShared(plan: ModulePlan, names: Names, runtime: string, init
     replacements = new Map(effects.replacements);
     state.imports.push(statement('const $$scope = $$runtime.createBuildScope(true);', { scope, runtime }), ...effects.declarations);
   }
+  if (moduleOwner === undefined) {
+    // Top-level code can wait on a source with no module state to own it: a server's
+    // `app.ssr(App)`, where `app` came from a package call that may return one (`reach.ts`). Its
+    // builder steps and readiness cells are declared once, before the module's own code.
+    state.imports.push(...sourceReadinessStorage(plan, null, names));
+  }
   const owned = new Set([...plan.components.values()].flatMap((component) => component.state));
   for (const owner of state.owners) for (const binding of owner.plan.state) owned.add(binding);
   replacements = emitRefs(plan.refs.filter((ref) => !owned.has(ref.binding)), runtime, replacements, true);

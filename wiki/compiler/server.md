@@ -90,10 +90,24 @@ for, and a `#server/` import is an error asking for the folder. Server functions
   TypeScript; null without functions.
 - `update(paths)` rebuilds both programs and names what changed in each. An edit in the server
   folder regenerates the barrel, the facades and the registry.
+- **Source languages** (`languages`, [core](core.md#source-languages)) apply to server code too: a
+  language's module in the server folder is a server function module, a service module or a
+  `#server/` target like a `.ts` one. It is analyzed as its TSX, with errors at the authored line.
+  Its endpoint name and facade drop the language's extension (`functions/people.auwla` →
+  `/_fn/people/...`, `.memoized/functions/people.ts`); `#server/people` probes its extensions as a
+  relative import does. The declarations import the module by its own path (`people.auwla`).
 
 Found while building it, and fixed: every module-level object got a reader and a version, even with
 nothing reactive reading it; a server entry with `serve()` and `app.ssr(App)` emitted 2,757 bytes of
 machinery, now 280 (`state-and-derived.md`, "Module state nothing reactive reads").
+
+Found by the `.auwla` directory example (`packages/jsx-plus/examples/directory`), and fixed: once a
+page reads a server function, the server graph has sources and imports a package, so `serve(...)`
+may return one (`features/sources/reach.ts`) and the entry's top-level `app.ssr(App)` becomes a
+builder step. With no module state, nothing declared that step's readiness storage, and the built
+server threw `_sourceStep is not defined` on start. `core/emit/shared.ts` now declares it at the
+top of such a module (`sourceReadinessStorage(plan, null, …)`). The Bun plugin's server test passed
+only because its page read no server function.
 
 ## Files
 

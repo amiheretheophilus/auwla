@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'bun:test';
+import type { SourceLanguage } from '../core/parse/languages';
 import type { ProjectHost } from '../project/host';
 import { createApplication, GENERATED } from './application';
 
@@ -134,6 +135,51 @@ export function App() { return <main><Story route="/story/:id" /></main>; }
     const files = { ...FILES, './server/functions/bad.ts': 'export const helper = 1;' };
     const build = await createApplication({ client: './src/main.ts', server: SERVER, host: memoryHost(files) }).build();
     expect(!build.client.ok && build.client.error.path).toBe('./server/functions/bad.ts');
+  });
+
+  it('declare the readiness the server entry waits on when a page reads a server function', async () => {
+    // FILES' page reads `getUser` from `#server-functions`, so the server graph has sources and
+    // imports outside code: `serve(...)` may return one (`features/sources/reach.ts`), and the
+    // entry's top-level `app.ssr(App)` waits on it with no module state to own that wait.
+    const build = await createApplication({ client: './src/main.ts', server: SERVER, host: memoryHost(FILES) }).build();
+    expect(build.server?.ok).toBe(true);
+    const entry = build.server?.ok === true ? build.server.output['./server.ts']! : '';
+    const used = new Set(entry.match(/\b_source(?:Step|Binding)\d*\b/g));
+    expect(used.size).toBeGreaterThan(0);
+    for (const name of used) expect(entry).toMatch(new RegExp(`\\bconst ${name} = `));
+  });
+
+  it('read server code a source language owns like .ts: functions, services and #server/ modules', async () => {
+    // `.toy` is TSX after a `// toy` line the author did not write: the TSX's offsets are all
+    // one line below the authored ones. The compiler must know no particular language.
+    const HEADER = '// written by the toy language\n';
+    const toy: SourceLanguage = {
+      extensions: ['.toy'],
+      toTsx: (text) => ({ code: HEADER + text, origin: { original: (offset) => Math.max(0, offset - HEADER.length) } }),
+    };
+    // The same application, with its server modules (not `_middleware.ts`) written in `.toy`.
+    const asToy = new Set(['./server/database.ts', './server/services.ts', './server/functions/users.ts']);
+    const files = Object.fromEntries(Object.entries(FILES).map(([path, text]) => [asToy.has(path) ? path.replace(/\.ts$/, '.toy') : path, text]));
+
+    const build = await createApplication({ client: './src/main.ts', server: SERVER, host: memoryHost(files), languages: [toy] }).build();
+    expect(build.client.ok && build.server?.ok).toBe(true);
+    if (!build.client.ok || build.server?.ok !== true) return;
+    // The endpoint is named without the language's extension, and the facade is plain `.ts`.
+    expect(build.functions.map((module) => module.moduleName)).toEqual(['users']);
+    expect(build.client.output['./.memoized/functions/users.ts']).toContain('"/_fn/users/getUser"');
+    expect(build.client.output[GENERATED.barrel]).toContain('./functions/users.ts');
+    const registry = build.server.output[GENERATED.registry]!;
+    expect(registry).toContain('from "../server/functions/users.toy"');
+    expect(registry).toContain('import "../server/services.toy"');
+    // `#server/database` found the `.toy` module, as a relative import would.
+    expect(build.server.output['./server.ts']).toContain('from "./server/database.toy"');
+
+    // An error in a language's server function is at its authored line, not the TSX's.
+    const broken = { ...files, './server/functions/users.toy': 'export const helper = 1;' };
+    const failed = await createApplication({ client: './src/main.ts', server: SERVER, host: memoryHost(broken), languages: [toy] }).build();
+    expect(!failed.client.ok && { path: failed.client.error.path, line: failed.client.error.line }).toEqual({
+      path: './server/functions/users.toy', line: 1,
+    });
   });
 
   it('update both builds when a server function changes, naming what changed in each', async () => {

@@ -7,9 +7,10 @@
  * modules, and imports are relative to where the registry is.
  */
 import { is } from 'yuku-ast';
-import { langFromPath, parse } from 'yuku-parser';
+import { parse } from 'yuku-parser';
 import type { Node } from 'yuku-parser';
 import { CompileError } from '../core/diagnostics';
+import { moduleText, type SourceLanguage } from '../core/parse/languages';
 import { relativeModule } from '../core/resolve/imports';
 import type { ServerFunctionModule } from './functions';
 
@@ -28,10 +29,14 @@ export interface ServerService {
 
 const MIDDLEWARE_FILE = /(?:^|\/)_middleware\.[^./]+$/;
 
-/** The services a server module registers. Their modules are imported by the registry for that. */
-export function serverServices(path: string, source: string): ServerService[] {
-  if (!source.includes('.service')) return [];
-  const { program } = parse(source, { lang: langFromPath(path), sourceType: 'module' });
+/**
+ * The services a server module registers. Their modules are imported by the registry for that. A
+ * module a source language owns is read as its TSX, with errors located in the authored text.
+ */
+export function serverServices(path: string, authored: string, languages?: readonly SourceLanguage[]): ServerService[] {
+  if (!authored.includes('.service')) return [];
+  const { text: source, lang, origin } = moduleText(path, authored, languages);
+  const { program } = parse(source, { lang, sourceType: 'module' });
   const services: ServerService[] = [];
   for (const statement of program.body as Node[]) {
     if (!is.ExportNamedDeclaration(statement) || !is.VariableDeclaration(statement.declaration)) continue;
@@ -42,7 +47,7 @@ export function serverServices(path: string, source: string): ServerService[] {
       if (!is.MemberExpression(callee) || callee.computed || !is.Identifier(callee.property) || callee.property.name !== 'service') continue;
       const first = call.arguments[0];
       if (!is.Literal(first) || typeof first.value !== 'string') {
-        throw CompileError.at(`exported service '${item.id.name}' needs a literal service name`, path, source, call.start);
+        throw CompileError.at(`exported service '${item.id.name}' needs a literal service name`, path, authored, origin.original(call.start));
       }
       services.push({ path, exported: item.id.name, name: first.value });
     }

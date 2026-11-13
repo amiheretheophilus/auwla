@@ -19,9 +19,10 @@
  *   module (the page's document and its assets, which depend on where the app runs).
  */
 import { is } from 'yuku-ast';
-import { langFromPath, parse } from 'yuku-parser';
+import { parse } from 'yuku-parser';
 import type { Node } from 'yuku-parser';
 import { CompileError } from '../core/diagnostics';
+import { languageExtensions, moduleText, type SourceLanguage } from '../core/parse/languages';
 import { importCandidates, relativeModule } from '../core/resolve/imports';
 import type { CompileModulesOptions } from '../options';
 import { isSourcePath } from '../project/collect';
@@ -96,6 +97,9 @@ const HYDRATE = "\nimport '@memoized-dom/runtime/hydrate';\n";
 
 export function createApplication(options: ApplicationOptions): Application {
   const { client, server, host, ...compile } = options;
+  // Modules a source language owns (`.auwla`) are server code like `.ts` ones: functions,
+  // services, `#server/` modules (`core/parse/languages.ts`).
+  const { languages } = compile;
   const clientEntry = normalizeProjectPath(client);
   const serverEntry = server === undefined ? undefined : normalizeProjectPath(server.entry);
   const delivery = server?.delivery ?? 'virtual:memoized-dom/delivery';
@@ -114,14 +118,16 @@ export function createApplication(options: ApplicationOptions): Application {
     const paths = new Set<string>();
     for (const folder of folders) for (const path of (await host.list?.(folder)) ?? []) paths.add(path);
     for (const path of [...paths].sort()) {
-      if (!isSourcePath(path)) continue;
+      if (!isSourcePath(path, languages)) continue;
       const text = await host.readFile(path);
       if (text === undefined) continue;
-      services.push(...serverServices(path, text));
+      services.push(...serverServices(path, text, languages));
       if (functionsFolder === null || !path.startsWith(`${functionsFolder}/`)) continue;
-      const module = analyzeServerFunctions(path, text, functionsFolder);
+      const module = analyzeServerFunctions(path, text, functionsFolder, languages);
       modules.push({ path, module });
-      if (!isMiddlewareFile(path) && module.functions.length > 0) facades.set(facadePath(functionsFolder, path), serverFunctionClient(module));
+      if (!isMiddlewareFile(path) && module.functions.length > 0) {
+        facades.set(facadePath(functionsFolder, path, languages), serverFunctionClient(module));
+      }
     }
     checkServices(services);
     return { modules, services, facades };
@@ -130,7 +136,7 @@ export function createApplication(options: ApplicationOptions): Application {
   /** `#server-functions`: each module's functions, re-exported from its facade. */
   function barrel(): string {
     const facades = generated.modules
-      .map((entry) => ({ ...entry, path: facadePath(functionsFolder ?? '', entry.path) }))
+      .map((entry) => ({ ...entry, path: facadePath(functionsFolder ?? '', entry.path, languages) }))
       .filter((entry) => generated.facades.has(entry.path));
     return serverFunctionBarrel(GENERATED.barrel, facades);
   }
@@ -162,11 +168,11 @@ export function createApplication(options: ApplicationOptions): Application {
         if (specifier.startsWith('#server/')) {
           // Left unresolved, it stays in the output, where `checkServerOnly` reports it.
           if (side === 'client' || root === null) return false;
-          return serverModule(root, specifier.slice('#server/'.length), host);
+          return serverModule(root, specifier.slice('#server/'.length), host, languages);
         }
         if (side === 'server') {
           if (specifier === 'virtual:memoized-dom/server-functions') return GENERATED.registry;
-          if (specifier === '@memoized-dom/server' && importer !== GENERATED.server && await importsServe(host, importer)) {
+          if (specifier === '@memoized-dom/server' && importer !== GENERATED.server && await importsServe(host, importer, languages)) {
             return GENERATED.server;
           }
         }
@@ -258,15 +264,23 @@ interface Generated {
   readonly facades: ReadonlyMap<string, string>;
 }
 
-/** `./server/functions/users.tsx` → `./.memoized/functions/users.ts`: a facade has no markup. */
-function facadePath(functionsFolder: string, path: string): string {
-  return `${GENERATED.facades}${path.slice(functionsFolder.length + 1).replace(/\.[cm]?[jt]sx?$/, '.ts')}`;
+/**
+ * `./server/functions/users.tsx` → `./.memoized/functions/users.ts`: a facade has no markup.
+ * A language's module (`users.auwla`) gets a `.ts` facade too.
+ */
+function facadePath(functionsFolder: string, path: string, languages: readonly SourceLanguage[] | undefined): string {
+  const inside = path.slice(functionsFolder.length + 1);
+  const language = languageExtensions(languages).find((extension) => inside.endsWith(extension));
+  const base = language !== undefined ? inside.slice(0, -language.length) : inside.replace(/\.[cm]?[jt]sx?$/, '');
+  return `${GENERATED.facades}${base}.ts`;
 }
 
 /** The project path `#server/<rest>` names, probing extensions as a relative import does. */
-async function serverModule(root: string, rest: string, host: ProjectHost): Promise<string | false> {
-  for (const candidate of importCandidates(`./${rest}`, `${root}/index.ts`) ?? []) {
-    if (isSourcePath(candidate) && await host.readFile(candidate) !== undefined) return candidate;
+async function serverModule(
+  root: string, rest: string, host: ProjectHost, languages: readonly SourceLanguage[] | undefined,
+): Promise<string | false> {
+  for (const candidate of importCandidates(`./${rest}`, `${root}/index.ts`, languageExtensions(languages)) ?? []) {
+    if (isSourcePath(candidate, languages) && await host.readFile(candidate) !== undefined) return candidate;
   }
   return false;
 }
@@ -322,10 +336,11 @@ function checkServerOnly(build: ProjectBuild, side: 'client' | 'server'): Projec
  * would make a cycle in which a function reads `define` before it is set. The old Vite plugin
  * decided the same way (`packages/vite/src/fullstack.ts`, `integratedServerImports`).
  */
-async function importsServe(host: ProjectHost, importer: string): Promise<boolean> {
-  const text = await host.readFile(importer);
-  if (text === undefined) return false;
-  const { program } = parse(text, { lang: langFromPath(importer), sourceType: 'module' });
+async function importsServe(host: ProjectHost, importer: string, languages: readonly SourceLanguage[] | undefined): Promise<boolean> {
+  const authored = await host.readFile(importer);
+  if (authored === undefined) return false;
+  const { text, lang } = moduleText(importer, authored, languages);
+  const { program } = parse(text, { lang, sourceType: 'module' });
   for (const statement of program.body as Node[]) {
     if (is.ExportAllDeclaration(statement) && statement.source.value === '@memoized-dom/server') return true;
     if ((is.ImportDeclaration(statement) || is.ExportNamedDeclaration(statement)) && statement.source?.value === '@memoized-dom/server') {
