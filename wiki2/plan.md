@@ -39,7 +39,8 @@ depends on integration, acceptance and measurements.
 | P5-EVENT | Candidate | Settle event-expression meaning; demonstrate one ordinary handler and one shorthand with identical timing | [features](features.md) |
 | CSS-0 | First contract written | Explicit global native CSS profile, lexical boundaries, delivery contract and CSS-001 through CSS-006 fixtures; scope defaults remain open | [CSS spec](spec/styles.md) |
 | CSS-1 | Verified; checkpoint authorized | Extract native `<style global>` blocks through the generic language hook; existing compiler owns CSS assets/updates/delivery; shared CSS assistance and real authoring example | [styling](styling.md) |
-| CSS-2 | Planned | Settle local scope, then full-property compact/grouped conditions including `@.loading`; aliases later. No Tailwind or CSS runtime | [CSS design](../dxcss.md) |
+| CSS-2a | First class-condition profile built | Full-property `@.class:value` clauses, native selector lowering/order, authored errors, native value completion/highlighting and real class-toggle example; scope/config choices remain separate | [class-condition spec](spec/style-conditions.md), [styling](styling.md) |
+| CSS-2b | Planned | Named breakpoint configuration and compact/grouped conditions; aliases later. No Tailwind or CSS runtime | [CSS design](../dxcss.md) |
 | P6-BIND | Candidate | Settle named text/checkbox bindings, write typing and handler order; show one form | [features](features.md) |
 | P7-APP | Candidate | Run a small real app through editing, build, SSR/adoption and disposal; compare output and work with equivalent existing source | [architecture](architecture.md), [testing](testing.md) |
 

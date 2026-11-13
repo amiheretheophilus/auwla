@@ -1,0 +1,65 @@
+{
+  "profile": "CSS-2a",
+  "cases": [
+    {
+      "id": "CLASS-001",
+      "source": ".card { padding:4px @.loading:30px; }",
+      "css": ".card { padding:4px; } .card.loading { padding:30px; }"
+    },
+    {
+      "id": "CLASS-002",
+      "source": ".card > button:hover, .card::before { color:black @.loading:white @.error:red; }",
+      "css": ".card > button:hover,.card::before { color:black; } .card > button:hover.loading,.card.loading::before { color:white; } .card > button:hover.error,.card.error::before { color:red; }"
+    },
+    {
+      "id": "CLASS-003",
+      "source": ".card { color:red @.loading:blue; &.loading { color:green; } color:black; }",
+      "css": ".card { color:red; } .card.loading { color:blue; } .card { &.loading { color:green; } color:black; }"
+    },
+    {
+      "id": "CLASS-004",
+      "source": "@media (min-width:48rem) { .card { padding:4px @.loading:30px !important; } }",
+      "css": "@media (min-width:48rem) { .card { padding:4px !important; } .card.loading { padding:30px !important; } }"
+    },
+    {
+      "id": "CLASS-005",
+      "source": ".card { & > button { color:black @.loading:white; } }",
+      "css": ".card { & > button { color:black; } & > button.loading { color:white; } }"
+    },
+    {
+      "id": "CLASS-006",
+      "source": ".card { --tokens:{@.literal:x}; content:\"@.literal:hello\"; background:url(icon@.literal.svg); padding:calc(4px + var(--x, 0px)) @.is\\:loading:30px; }",
+      "css": ".card { --tokens:{@.literal:x}; content:\"@.literal:hello\"; background:url(icon@.literal.svg); padding:calc(4px + var(--x, 0px)); } .card.is\\:loading { padding:30px; }"
+    },
+    {
+      "id": "CLASS-007",
+      "source": ".card { padding:4px @.:30px; }",
+      "error": "Expected a CSS class name"
+    },
+    {
+      "id": "CLASS-008",
+      "source": ".card { padding:4px @.loading; }",
+      "error": "Expected :"
+    },
+    {
+      "id": "CLASS-009",
+      "source": ".card { padding:4px @.loading:; }",
+      "error": "requires a CSS value"
+    },
+    {
+      "id": "CLASS-010",
+      "source": "@keyframes pulse { from { opacity:1 @.loading:0.5; } }",
+      "error": "outside keyframes"
+    },
+    {
+      "id": "CLASS-011",
+      "source": "@font-face { font-family:normal @.loading:other; }",
+      "error": "qualified style rule"
+    },
+    {
+      "id": "CLASS-012",
+      "source": ".card { padding:4px@.loading:30px; }",
+      "error": "needs whitespace"
+    }
+  ]
+}

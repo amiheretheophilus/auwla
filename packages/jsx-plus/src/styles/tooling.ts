@@ -1,10 +1,11 @@
 /** Shared CSS assistance. Editor adapters only translate protocol objects. */
 import { getCSSLanguageService, type CompletionItem, type Range } from 'vscode-css-languageservice';
 import { TextDocument } from 'vscode-languageserver-textdocument';
-import { blank } from '../masks';
+import { blank, blankRange } from '../masks';
 import { readStyleBlocks, type StyleBlock } from './blocks';
 import { JsxPlusError } from '../diagnostics';
 import { recoverCss } from './recovery';
+import { readConditions } from './conditions/model';
 
 const service = getCSSLanguageService();
 
@@ -34,9 +35,16 @@ export function createCssSession(source: string, uri: string, version = 0) {
   projected += blank(source.slice(position));
 
   const document = TextDocument.create(uri, 'css', version, projected);
-  const recovered = recoverCss(service, document);
+  const conditions = readConditions(projected);
+  let checking = projected;
+  for (const header of conditions.headers) {
+    checking = blankRange(checking, header.start, header.end);
+  }
+  const checkingDocument = TextDocument.create(uri, 'css', version, checking);
+  const recovered = recoverCss(service, checkingDocument);
   const stylesheet = recovered.stylesheet;
   const contains = (offset: number) => blocks.some((block) => block.bodyStart <= offset && offset <= block.bodyEnd);
+  const inHeader = (offset: number) => conditions.headers.some((header) => header.start <= offset && offset < header.end);
 
   function editable(range: Range): boolean {
     const start = document.offsetAt(range.start);
@@ -77,17 +85,21 @@ export function createCssSession(source: string, uri: string, version = 0) {
   return {
     contains,
     complete(offset: number) {
-      if (!contains(offset)) {
+      if (!contains(offset) || inHeader(offset)) {
         return undefined;
       }
       const result = service.doComplete(document, document.positionAt(offset), stylesheet);
       return { ...result, items: result.items.filter(safeCompletion) };
     },
     hover(offset: number) {
-      return contains(offset) ? service.doHover(document, document.positionAt(offset), stylesheet) : undefined;
+      return contains(offset) && !inHeader(offset) ? service.doHover(document, document.positionAt(offset), stylesheet) : undefined;
     },
     diagnostics() {
-      return recovered.diagnostics.map((diagnostic) => ({
+      const syntax = conditions.problems.map((problem) => ({
+        code: 'CSS2001', source: 'auwla', message: problem.message, severity: 1 as const,
+        range: { start: document.positionAt(problem.start), end: document.positionAt(problem.end) },
+      }));
+      return [...syntax, ...recovered.diagnostics].map((diagnostic) => ({
         ...diagnostic,
         range: {
           start: document.positionAt(authoredPosition(document.offsetAt(diagnostic.range.start))),

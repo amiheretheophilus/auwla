@@ -20,6 +20,7 @@ import { assemble, generated, nearestAuthoredOffset, replaceRange } from './sour
 import { MarkupContext, type Markup } from './markup/context';
 import { readElement } from './markup/element';
 import { readStyleBlocks } from './styles/blocks';
+import { lowerConditions } from './styles/conditions/lower';
 
 /** Find each top-level element in host code, read it, mask it and look again. */
 function readRoots(context: MarkupContext, host: string): Markup[] {
@@ -66,7 +67,14 @@ function normalizeFile(source: string, filename: string, validateHost: boolean):
     }
   }
 
-  const stylesheet = styles.blocks.map((block) => source.slice(block.bodyStart, block.bodyEnd)).join('\n');
+  const stylesheet = styles.blocks.map((block) => {
+    const css = source.slice(block.bodyStart, block.bodyEnd);
+    if (!validateHost) {
+      return css;
+    }
+    return lowerConditions(css, (message, start, end) =>
+      context.error('CSS2001', message, block.bodyStart + start, block.bodyStart + end));
+  }).join('\n');
   return {
     ...output,
     roots: roots.map((entry) => entry.view),

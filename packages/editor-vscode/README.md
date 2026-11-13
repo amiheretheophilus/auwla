@@ -69,6 +69,11 @@ Version 0.0.4 corrects CSS diagnostic recovery while typing a property such as
 following rules no longer receive errors from that declaration. The installed
 bundle test covers the declaration's range and checks for downstream errors.
 
+Version 0.0.5 adds CSS-2a class-condition header highlighting and native property
+value completion inside clauses such as `color:black @.loading:red`. The installed
+artifact probe exercises that completion alongside ordinary CSS recovery. Class
+name discovery, grouped conditions and named breakpoints are not implemented yet.
+
 The installed adapter resolves `@memoized-dom/jsx-plus` from open workspace folders,
 then falls back to the adapter directory for development hosts. The content mapper
 still launches with Bun from that shared package, which must remain installed

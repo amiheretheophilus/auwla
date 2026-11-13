@@ -26,8 +26,11 @@ The agreed sequence is:
 Editor support accompanies each usable slice. CSS-1 extracts explicit module-level
 `<style global>` blocks and provides native CSS assistance. Compiler-next delivers
 the resulting companion stylesheets through its existing Bun/Vite integrations.
-Local scope, compact/grouped conditions and aliases remain planned. Requiring
-`global` for this first slice leaves the eventual scope default undecided.
+CSS-2a now implements compact class conditions on full properties, including
+`padding:4px @.loading:30px`, with native value assistance and header highlighting.
+Named breakpoint conditions, grouping, local scope and aliases remain planned.
+The user has now chosen local-by-default styling and named reusable blocks
+(DX-45); the current implementation still requires explicit `global`.
 
 Follow DX-39: JSX+ is a standalone template/source-language layer. It supplies
 syntax transformations through `auwla`; compiler-next owns projects, applications,
@@ -47,7 +50,8 @@ Its source implementation uses no Bun/Node APIs.
 | Element classes | Dot-style `.class` authoring on elements is planned, including conditional classes | Exact element grammar remains open |
 | CSS execution | Style conditions compile to CSS; the browser applies them | Architectural requirement; no CSS runtime |
 | Grouping | Blocks group several changes under a condition | Planned authoring form |
-| Local scope | Local-by-default `<style>`, explicit `<style global>` | Recommendation; scope/escape rules still need review |
+| Local scope | Local-by-default `<style>`, explicit `<style global>` | User-accepted direction (DX-45); ownership/selector mechanics remain to specify |
+| Named styles | `<style id="...">` names a reusable block that other styles can import | User-accepted direction; import grammar, resolution and imported scope remain to specify |
 | Separators | Optional semicolon/newline termination for compact chains | Provisional lexical contract; preserve ordinary CSS grammar |
 | Editor support | Completion, highlighting, hover and diagnostics | Native CSS-1 service/adapter built locally; compact syntax and desktop acceptance remain open |
 
@@ -271,9 +275,13 @@ server and client, independent of absolute checkout paths. Static module CSS is
 shared across repeated instances. Ordering, deduplication, lazy assets, imported
 URLs, adoption and HMR require real acceptance through existing compiler tooling.
 
-## 8. Local/global scope remains a design decision
+## 8. Accepted scope direction and named styles
 
-Recommended default, still awaiting review:
+The user has defined the ownership direction (DX-45): a style declared inside a
+component belongs to that component. Putting a style at module/file level makes
+it shareable by components there. Plain styles are local; `global` explicitly
+makes their rules global. CSS-1/2a currently implement only explicit global blocks;
+the component/module scoping machinery is the next profile, not a current feature.
 
 ```tsx
 <style>
@@ -285,13 +293,20 @@ Recommended default, still awaiting review:
 </style>
 ```
 
-This would make local styling automatic without requiring `scoped`. The compiler
-still implements scoping; the marker/selector representation is not chosen yet.
+No `scoped` keyword is required. `<style id="card-look">` names a reusable style
+block. The user confirmed that importing this block into another component makes
+its rules apply to that consumer's own elements. For example, `.card { padding:16px; }`
+can style both the defining component's `.card` and the importing component's
+`.card`, each through the applicable local scope. This remains compile-time CSS.
+Exact import spelling, ID visibility/resolution and the marker/selector
+representation are not chosen yet. Do not infer DOM IDs or JavaScript imports.
 
 Settle these before implementation:
 
-- One scope for every component in a file versus another explicit ownership rule;
-  whether multiple style blocks are allowed.
+- The exact position/grammar of component-local style declarations, and the
+  visibility/application rules of shared module blocks and named IDs.
+- Import syntax, same-file versus cross-file lookup, cycle/duplicate handling,
+  and static CSS delivery without executing a component's JavaScript for a style import.
 - Imported components, their roots/internals, projected children and portals.
 - Global/deep escapes; selector lists, descendants, siblings, `:is()`, `:not()`,
   `:has()` and pseudo-elements.

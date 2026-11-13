@@ -1,6 +1,8 @@
 import type { IRawGrammar } from 'vscode-textmate';
 import { auwlaLanguage } from './registration';
 
+const cssIdentifierPart = '(?:[-_[:alnum:]]|[^\\x00-\\x7F]|\\\\(?:[0-9a-fA-F]{1,6}\\s?|.))';
+
 function quotedChild(quote: '"' | "'", name: string): IRawGrammar['patterns'][number] {
   return {
     name,
@@ -48,6 +50,37 @@ export function createAuwlaGrammar(tsx: IRawGrammar): IRawGrammar {
     patterns: [{ include: 'source.css' }],
   };
   grammar.patterns.unshift({ include: '#auwla-style-block' });
+  repository['auwla-css-function'] = {
+    name: 'meta.function.auwla-css',
+    begin: `(${cssIdentifierPart}+)?(\\()`,
+    beginCaptures: {
+      1: { name: 'support.function.misc.css' },
+      2: { name: 'punctuation.section.function.begin.bracket.round.css' },
+    },
+    end: '\\)',
+    endCaptures: { 0: { name: 'punctuation.section.function.end.bracket.round.css' } },
+    patterns: [{ include: '#auwla-css-function' }, { include: 'source.css#property-values' }],
+  };
+  const injections = {
+    ...grammar.injections,
+    'L:meta.embedded.block.css meta.property-value.css -string -comment -meta.function': {
+      patterns: [{
+        name: 'meta.auwla.css-condition',
+        match: `(@)(\\.)(${cssIdentifierPart}*)(\\s*:)?`,
+        captures: {
+          1: { name: 'keyword.control.css' },
+          2: { name: 'punctuation.definition.entity.css' },
+          3: { name: 'entity.other.attribute-name.class.css' },
+          4: { name: 'punctuation.separator.key-value.css' },
+        },
+      }],
+    },
+    // Native functions win first. The fallback also protects future/unknown
+    // function bodies from interpreting literal @. tokens as class conditions.
+    'R:meta.embedded.block.css meta.property-value.css -string -comment -meta.function': {
+      patterns: [{ include: '#auwla-css-function' }],
+    },
+  };
   const attributePatterns = [
     {
       begin: '(=)\\s*(\\()',
@@ -106,6 +139,7 @@ export function createAuwlaGrammar(tsx: IRawGrammar): IRawGrammar {
   repository['jsx-tag-attributes'] = { ...attributes, patterns: attributePatterns };
   return {
     ...grammar,
+    injections,
     name: 'Auwla',
     scopeName: auwlaLanguage.scopeName,
     fileTypes: auwlaLanguage.extensions.map((extension) => extension.slice(1)),

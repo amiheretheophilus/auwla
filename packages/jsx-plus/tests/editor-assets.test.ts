@@ -62,6 +62,20 @@ it('embeds native CSS highlighting and resumes TypeScript after the closing bloc
   expect(scopesAt('title')).toContain('variable.other.constant.tsx');
 });
 
+it('highlights compact class-condition headers while preserving literal CSS strings', () => {
+  const source = '<style global>\n.a { color:black @.loading:red; content:"@.literal:x"; width:var(--x, @.inside:y); height:future(@.nested:y); }\n</style>';
+  const tokens = tokenize(source);
+  const scopesAt = (text: string) => {
+    const offset = source.indexOf(text);
+    return tokens.find((token) => token.startIndex <= offset && offset < token.endIndex)!.scopes;
+  };
+  expect(scopesAt('loading')).toContain('meta.auwla.css-condition');
+  expect(scopesAt('loading')).toContain('entity.other.attribute-name.class.css');
+  expect(scopesAt('literal')).not.toContain('meta.auwla.css-condition');
+  expect(scopesAt('inside')).not.toContain('meta.auwla.css-condition');
+  expect(scopesAt('nested')).not.toContain('meta.auwla.css-condition');
+});
+
 it('highlights the real task board with the shared TSX-derived grammar', () => {
   const source = readFileSync(resolve(packageRoot, 'examples/task-board/App.auwla'), 'utf8');
   const tokens = tokenize(source);

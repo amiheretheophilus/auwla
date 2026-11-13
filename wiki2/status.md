@@ -2,15 +2,50 @@
 
 Updated: 2026-11-13. Branch: `prototype/jsx-plus`.
 
-## Current focus: native CSS checkpoint, then class conditions
+## Current focus: compact class conditions (CSS-2a)
 
 The user has now authorized committing and pushing the reviewed CSS work, then
 continuing. This supersedes the earlier no-commit instruction. Exclude their
 modified `examples/counter.auwla` and untracked `examples/probe-track-tmp/`.
 
+Native CSS-1 was committed and pushed as `5af90fee`. CSS-2a now adds the next
+narrow profile: `padding:4px @.loading:30px` on full native properties. It emits
+ordinary same-element class selectors, including selector lists/pseudo-elements,
+and splits rules to retain authored cascade order. A final `!important` applies
+to all values of that declaration; this is an explicit provisional choice.
+See [the contract](spec/style-conditions.md) and [CLASS fixtures](spec/style-conditions.cases.json).
+
+`examples/class-conditions` runs loading/error/expanded toggles through normal
+class attributes and `mount('app', App)`. Its emitted stylesheet is applied in
+the existing DOM test environment in both modes. Native conditional-value
+completion, authored errors and header highlighting are implemented; class-name
+discovery is deferred. `css-tree` supplies pure CSS tokens, AST and selectors.
+Compiler-next/runtime code did not change for this slice: existing asset hooks
+and Bun/Vite delivery handle the output. Breakpoint config, named/grouped
+conditions, local scope and aliases remain later work.
+
+Latest scope direction (DX-45): declaring a style inside a component makes it
+private to that component; module/file-level styles provide sharing. Plain styles
+are local, `global` is global, and `<style id="...">` names a reusable block.
+The user confirmed imported rules apply to the consumer's own elements. This
+direction is recorded, not yet implemented; exact declaration/import grammar,
+ID visibility/resolution and cycle/duplicate handling remain to specify.
+
+CSS-2a verification: 55 focused CSS/tokenizer/build/DOM tests pass across four
+files; adapter 9 tests and both package type checks pass. The new example passes
+its authored TypeScript CLI check and HTML preview build. Adapter 0.0.5 is
+installed, and its actual installed bundle reports zero CSS diagnostics for
+`examples/class-conditions/App.auwla`; a simulated named-value edit in that same
+document completes correctly. Reload VS Code to replace the loaded 0.0.4 provider.
+The screenshot's errors were from 0.0.4 parsing class conditions as ordinary CSS.
+No full-root run was needed; the previously noted user counter edits remain
+untouched. Native class-color changes were checked in the existing DOM environment,
+not a claim of desktop browser painting or universal CSS recovery.
+
 [CSS-1](spec/styles.md) implements explicit module-level `<style global>` blocks:
 native CSS is extracted without selector/declaration rewrites. The explicit
-`global` leaves local/default scoping undecided. JSX+ returns text through the
+`global` is currently required while the accepted local-default design awaits
+its ownership/import contract. JSX+ returns text through the
 generic source-language hook; compiler-next owns the CSS companion/import,
 project updates, and Bun/Vite delivery. There is no styling runtime or Tailwind.
 [styling.md](styling.md) maps the files, evidence and limitations.
@@ -18,7 +53,7 @@ project updates, and Bun/Vite delivery. There is no styling runtime or Tailwind.
 The real `examples/styling` mounts with **`mount('app', App)`**, matching the
 runtime API. Its DOM execution is checked in both modes, including class,
 ARIA and button text updates. CSS assistance is shared and editor-independent;
-adapter 0.0.4 is now installed locally; window reload and desktop acceptance
+adapter 0.0.5 is now installed locally; window reload and desktop acceptance
 remain pending. The installed artifact passes a Node completion/hover/diagnostic
 probe, not just source-level tests.
 
@@ -54,10 +89,9 @@ Node probe verifies the primary range and absence of downstream errors. Reload
 the VS Code window to load it. The user subsequently confirmed completion works;
 the diagnostic fix has service and installed-artifact checks.
 
-Next: full-property compact class conditions (`padding:4px @.loading:40px`),
-starting with a separate narrow contract and fixtures. Breakpoint configuration
-and local scoping remain separate open choices. Grouped conditions and optional
-property aliases follow the native CSS foundation (DX-41/42).
+Next: specify the user's component/module scoping and named-style reuse model
+(DX-45) before implementation. Named breakpoint configuration must likewise be
+reviewed without assuming `md`/`lg` sizes. Grouping and aliases remain later work.
 
 ## `.auwla` across modules: JSX+ as a source language (DX-39)
 

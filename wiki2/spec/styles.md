@@ -27,9 +27,10 @@ export function Card() {
 }
 ```
 
-`global` is required in this first profile. This deliberately leaves the default
-and local-scoping contract undecided; it does not choose global as the eventual
-default. A module-level `<style>` without `global`, or with additional attributes,
+`global` is required in this implemented first profile. The user's subsequent
+direction (DX-45) chooses local-by-default `<style>` and named reusable
+`<style id="...">` blocks; those additions still need their implementation contract.
+A module-level `<style>` without `global`, or with additional attributes,
 is an authored syntax error. A `<style>` inside returned markup remains an
 ordinary DOM element and is not extracted.
 
@@ -79,7 +80,9 @@ is unchanged.
 
 ## Deferred
 
-Local scope and its selector/keyframe rules are a separate decision. Compact
-`padding:4px @md:30px @.loading:40px`, grouped conditions, breakpoint configuration,
-future element `.class` syntax and optional property aliases are not accepted by
-this profile. They remain planned, in that order, under `dxcss.md`.
+This native foundation is extended by [CSS-2a](style-conditions.md), which accepts
+compact same-element class conditions such as `padding:4px @.loading:40px`.
+Local scope and its selector/keyframe rules remain a separate decision. Named
+breakpoint conditions (`@md:30px`), grouped conditions, breakpoint configuration,
+future element `.class` syntax and optional property aliases remain planned under
+`dxcss.md`.

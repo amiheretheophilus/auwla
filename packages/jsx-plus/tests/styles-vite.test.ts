@@ -51,6 +51,21 @@ it('builds the real HTML entry with native CSS imports, URLs and stylesheet link
   expect(String(html.source)).toContain(css!.fileName);
 }, 60_000);
 
+it('builds full-property class conditions through the same compiler-owned CSS path', async () => {
+  const copy = mkdtempSync(join(import.meta.dir, '../.vite-test-class-conditions-'));
+  copies.push(copy);
+  cpSync(join(import.meta.dir, '../examples/class-conditions'), copy, { recursive: true });
+  rmSync(join(copy, 'tsconfig.json'));
+  const result = await build({ ...config, root: copy, build: { write: false } });
+  const outputs = (Array.isArray(result) ? result : [result]) as Rolldown.RolldownOutput[];
+  const css = outputs.flatMap((output) => output.output).find((asset): asset is Rolldown.OutputAsset =>
+    asset.type === 'asset' && asset.fileName.endsWith('.css'))!;
+  expect(String(css.source)).toContain('.card.loading');
+  expect(String(css.source)).toContain('.card.expanded');
+  expect(String(css.source)).toMatch(/\.card\.error::?before/);
+  expect(String(css.source)).not.toContain('@.');
+}, 60_000);
+
 it('keeps generated CSS when a fully static page ships without a script', async () => {
   const staticRoot = copyStyling();
   writeFileSync(join(staticRoot, 'App.auwla'),

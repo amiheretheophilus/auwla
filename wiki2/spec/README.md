@@ -25,6 +25,8 @@ reconciliation, state, readiness and ownership already exist and are reused.
 | [CHANGELOG.md](CHANGELOG.md) | Changes between draft revisions | History |
 | [styles.md](styles.md) | CSS-1: explicit global native CSS blocks and their separate delivery/tooling contract | First styling profile |
 | [styles.cases.json](styles.cases.json) | CSS-1 extraction, lexical boundaries and authored errors | Styling conformance fixtures |
+| [style-conditions.md](style-conditions.md) | CSS-2a: compact same-element class conditions on native properties | Provisional implemented profile |
+| [style-conditions.cases.json](style-conditions.cases.json) | Native CSS equivalents, order, selectors, lexical boundaries and errors | Class-condition conformance fixtures |
 
 The user's latest instructions and [existing ground rules](../../wiki/rules.md)
 take precedence. [Decisions](../decisions.md) distinguish accepted direction from

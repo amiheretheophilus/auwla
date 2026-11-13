@@ -65,6 +65,17 @@ entry to Bun for stylesheet delivery; the same folder also builds with Vite.
 Local scope, compact conditions and aliases are later slices. See
 [styling/README.md](styling/README.md) and the [CSS-1 spec](../../../wiki2/spec/styles.md).
 
+## Full-property class conditions
+
+Run `bun run examples/class-conditions/preview.ts` and open port 3034.
+[class-conditions/App.auwla](class-conditions/App.auwla) authors
+`padding:16px @.expanded:32px` and multiple border-color states. Buttons update
+ordinary classes; the emitted CSS decides which values apply. Tests run the real
+entry and apply its emitted stylesheet in both modes. The explicit global profile
+also covers selector lists, pseudo-elements, native grouping rules and authored
+nesting; breakpoint configuration and aliases are later work. See the
+[CSS-2a contract](../../../wiki2/spec/style-conditions.md).
+
 ## Run the notes app (several `.auwla` files)
 
 ```text

@@ -25,6 +25,17 @@ it('loads the built extension outside the workspace and runs CSS providers in No
     expect(errors).toBe('');
     expect(exitCode).toBe(0);
     expect(output).toContain('completion, hover and diagnostics passed in Node');
+
+    const example = join(root, '../jsx-plus/examples/class-conditions/App.auwla');
+    const real = Bun.spawn(['node', join(import.meta.dir, 'fixtures/bundle-host.cjs'), entry, example], {
+      cwd: installed, stdout: 'pipe', stderr: 'pipe',
+    });
+    const [realExit, realOutput, realErrors] = await Promise.all([
+      real.exited, new Response(real.stdout).text(), new Response(real.stderr).text(),
+    ]);
+    expect(realErrors).toBe('');
+    expect(realExit).toBe(0);
+    expect(realOutput).toContain('zero CSS diagnostics and conditional value completion passed');
   } finally {
     rmSync(installed, { recursive: true, force: true });
   }
