@@ -365,6 +365,24 @@ array child). Remove each check when its phase is built.
 - [ ] SSR and HTML backends from the same plan; hydration; routing (`$routed`,
   `page()`).
 - [x] Lower a runtime TypeScript `namespace` and `export =` (`core.md`, parse).
+- [x] Routes, `route-to` and `$routed` (`routes.md`). [x] Lazy route chunks (2026-11-12).
+  Server-backed preparations end to end come with `packages/vite`.
+- [ ] One way to compile an app for any tool (`project.md`), asked for by the user (2026-11-12)
+  so the compiler works without Vite: [x] building from entries and rebuilding after edits;
+  [x] source maps; [x] a command line and a Bun plugin. [x] `packages/vite` on applications
+  (`compiler: 'next'`): builds, dev, SSR in dev and build, hot updates, errors. [ ] The old plugin's
+  remaining features there (`project.md`, "Vite").
+- [ ] SSR from the project too (`server.md`), asked for by the user (2026-11-12), so Vite and the
+  Bun plugin share it: [x] server function analysis and facades; [ ] the application (client and
+  server builds), the registry and the server entry's integration; [ ] the Bun plugin and command
+  line building both. [x] The application, the registry and the integration. [x] The Bun plugin
+  and command line building both, a built server answering requests in tests.
+- [ ] HMR in the Vite dev server, which the user asked for explicitly (2026-11-12): an edited
+  module replaces its components in place, keeping the state that can be kept, as the old
+  compiler does through `runtime/src/hot.ts` and `packages/vite`. [x] The `hot` option, component
+  keys, boundaries and the runtime's instance hooks (`project.md`, "Hot replacement"), tested end
+  to end on compiled output; [x] through Vite: what it sends for component, helper and entry edits;
+  [ ] in a real browser.
 - [ ] Acceptance (`testing.md`, layer 7): the root `tests/`, package tests, the
   Vite suite and the Conduit flows run against compiler-next through a switch.
 - [ ] The user runs the full benchmark on the VM; every number at least matches

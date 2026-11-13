@@ -15,6 +15,7 @@ import { experimentalCompilePackage, experimentalFinalizePackage } from '@memoiz
 import memoizedDom from '../src';
 import { createDevServer, type NativeDevServer } from '../src/dev';
 import { clientStyleUrls } from '../src/dev-assets';
+import { normalizeFile } from '../src/paths';
 import { createServerRouter } from '../../server/src/http-router';
 
 const fixture = resolve(import.meta.dirname, 'fixtures/vite-app');
@@ -806,8 +807,9 @@ describe('Vite 8 adapter', () => {
     });
     const app = await server.environments.client.transformRequest('/src/App.tsx');
     expect(app?.code).toContain('Badge(_id + "/Badge"');
+    // Watched by its real name, however the temp folder was spelled (`paths.ts`, `longPath`).
     expect(server.environments.client.pluginContainer.watchFiles.has(
-      artifactFile.replaceAll('\\', '/'),
+      normalizeFile(artifactFile),
     )).toBe(true);
 
     const hot = server.environments.client.hot;
@@ -836,7 +838,7 @@ describe('Vite 8 adapter', () => {
     expect(send.mock.calls.some(([payload]) => payload.type === 'full-reload'))
       .toBe(false);
     if (sealed) {
-      expect(server.environments.client.pluginContainer.watchFiles.has(resolve(packageRoot, 'index.js').replaceAll('\\', '/'))).toBe(true);
+      expect(server.environments.client.pluginContainer.watchFiles.has(normalizeFile(resolve(packageRoot, 'index.js')))).toBe(true);
       send.mockClear();
       await writeFile(resolve(packageRoot, 'index.js'), packaged.output['./index.tsx']! + '\n// rebuilt JavaScript');
       await waitFor(() => expect(send.mock.calls.some(([payload]) =>

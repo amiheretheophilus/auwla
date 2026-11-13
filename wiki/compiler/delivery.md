@@ -5,7 +5,9 @@ written by hand. This holds for a client-only build as well as a server, and it 
 property of the framework. The old compiler does this ("not perfect but it was cool"). The user
 wants compiler-next to improve on it, not match it.
 
-Status: a page that cannot change is built. The rest is designed. Phase 10 (`plan.md`).
+Status: a page that cannot change is built, and written into the page's HTML by every tool
+(`project.md`, "Build-time page"); a plain stylesheet import no longer stops it. The rest is
+designed. Phase 10 (`plan.md`).
 
 ## Files
 
@@ -35,8 +37,9 @@ never runs authored code. `packages/vite/src/initial-html.ts` then writes the re
 ### Measured baseline
 
 Production Vite builds of the old compiler (`bun run bench:size:html`), on 2026-11-06. On Windows
-it needs `TMP` set to a long path, because a short `THEOPH~1` temp path makes its second build fail
-to resolve `react/jsx-runtime`.
+it then needed `TMP` set to a long path, because a short `THEOPH~1` temp path made its second build
+fail to resolve `react/jsx-runtime`: the plugin compared a short-spelled id with the root as text,
+fixed on 2026-11-12 (`project.md`, "Vite", paths).
 
 | Fixture | HTML | JS | JS gzip |
 | --- | --- | --- | --- |

@@ -22,6 +22,7 @@ objects; it does not introduce a second state model.
 | `link/modules.ts` | Native public re-export boundaries that exclude compiler-only exports; collision-free private siblings and original diagnostic provenance |
 | `link/captured-plan.ts` | One value cell per captured default expression, shared by importing bindings and namespaces |
 | `link/captured-dom.ts` | Native default evaluation and contextual naming, with existing shared mutation roots for the captured value |
+| `link/specifiers.ts` | A bare or alias specifier the caller's `resolveImport` maps to a compiled module is printed as a relative path to it, so output loads without the resolver (`project.md`, `server.md`) |
 | `link/open-namespaces.ts` | Reads through a namespace that came from `import()`: registering the module, asking the runtime before a read, and lowering an optional chain that continues past one |
 | `features/state/shared-plan.ts` | Shared binding readers and the versions a compiled namespace can observe |
 | `features/state/shared-dom.ts` | Namespace version observation and guarded mutation inputs, preserving the native receiver and avoiding uninitialized export reads |
@@ -400,6 +401,6 @@ optimization, emission, namespace linking and printing.
 These are ported from `packages/compiler` once the core works, each with its own
 page:
 
-- routes and `$routed`;
+- `$routed` (routes and `route-to` are built: `routes.md`);
 - server functions and their client stubs;
 - server pages.

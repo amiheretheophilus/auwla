@@ -31,6 +31,7 @@ import {
   normalizeFile,
 } from './paths';
 import { AdapterState } from './state';
+import { memoizedDomNext } from './next/plugin';
 import { ServerPages, isPageModule, pageHydrationId } from './server-pages';
 import { configureInspector, inspectorId, resolvedInspectorId, inspectorSource } from './inspector';
 import { hydrationBootstrap, hydrationVirtualId, resolvedHydrationVirtualId } from './hydration';
@@ -79,6 +80,8 @@ interface AdapterTransformContext extends GraphPluginContext {
 export function memoizedDom(
   input: MemoizedDomViteOptions,
 ): Plugin {
+  // compiler-next's plugin (`next/plugin.ts`), until the old compiler is deleted.
+  if ((input.compiler ?? process.env.MMD_COMPILER) === 'next') return memoizedDomNext(input);
   const options = resolveAdapterOptions(input);
   const states = new Map<object, AdapterState>();
   // Secondary graphs compiled on demand for files outside the primary entry

@@ -12,6 +12,7 @@ import { is } from 'yuku-ast';
 import type { CompileModulesOptions } from '../../options';
 import { CompileError } from '../diagnostics';
 import type { ParsedModule } from '../parse';
+import { composeOrigins, type TextOrigin } from '../parse/text-edits';
 import { withAmbientImports } from './ambient';
 import { findGlobalWrites, type GlobalWrites } from './globals';
 import { importResolver, withRequireImports } from './imports';
@@ -24,7 +25,7 @@ export { isWrittenGlobal } from './globals';
 export type { PathKey, WriteKind, WriteSite } from './writes';
 export type { Binding, Module, Reference } from 'yuku-analyzer';
 export { declaringRunner, runnerOf } from './writes';
-export { namespaceModule } from './exports';
+export { namespaceExport, namespaceModule } from './exports';
 
 export interface ResolvedModule {
   readonly path: string;
@@ -33,6 +34,10 @@ export interface ResolvedModule {
   readonly hasJsx: boolean;
   /** Every place each binding may change: reassignment and mutation. */
   readonly writes: ReadonlyMap<Binding, readonly WriteSite[]>;
+  /** The text as the caller gave it, which source maps point into. */
+  readonly authored: string;
+  /** Where each offset of the analyzed text (`module.source`) was in `authored`. */
+  readonly origin: TextOrigin;
 }
 
 export interface Resolved {
@@ -88,7 +93,8 @@ export function resolve(parsed: readonly ParsedModule[], options: CompileModules
 
   const modules = parsed.map((input): ResolvedModule => {
     const settings = { lang: input.lang, sourceType: 'module' } as const;
-    const source = withRequireImports(input, parsed, resolveImport);
+    const required = withRequireImports(input, parsed, resolveImport);
+    const source = required.text;
     let module = analyzer.setFile(input.path, source, settings);
     const ambient = withAmbientImports(module, source);
 
@@ -101,7 +107,9 @@ export function resolve(parsed: readonly ParsedModule[], options: CompileModules
       // Parse already checked the authored text, so this is lowered code.
       throw CompileError.at(`after lowering TypeScript: ${error.message}`, input.path, source, error.start);
     }
-    return { path: input.path, module, hasJsx: input.hasJsx, writes: findWrites(module) };
+    // Ambient imports are appended, so they move no offset (`ambient.ts`).
+    const origin = composeOrigins(required.origin, input.origin);
+    return { path: input.path, module, hasJsx: input.hasJsx, writes: findWrites(module), authored: input.authored, origin };
   });
 
   analyzer.link();

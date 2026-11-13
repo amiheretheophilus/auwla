@@ -14,6 +14,8 @@ import { clearRequests, fetchForCase, rejectRequest, respond } from './requests'
 import { compileModulesDetailed } from '../../src';
 import { clearCompiledApps, comparisonCompilers, importAsServer, type Compiler } from './compilers';
 import { serialize } from './serialize';
+import { createRouteRuntime, setActiveRouteRuntime } from '@memoized-dom/router';
+import { prepareInitialRoute } from '@memoized-dom/router/internal';
 
 const OUT = join(import.meta.dirname, '..', 'out');
 const RUNTIME_URL = pathToFileURL(join(import.meta.dirname, '..', 'reference', 'runtime.ts')).href;
@@ -108,6 +110,10 @@ export async function observeBoth(
 export async function runOnReference(name: string, testCase: Case): Promise<Observations> {
   
   const clock = startClock(testCase);
+  startLocation(testCase);
+  // The reference's routes install their own matches on it (`$installRoutes`), and its click
+  // handler follows links as it does for compiled code.
+  const disposeRoutes = track(useRouteRuntime(testCase.url !== undefined));
   const disposeSources = track(beginSources(fetchForCase));
   const disposeModules = track(beginReferenceScope());
   const authored = { ...testCase.modules, './App.tsx': testCase.source };
@@ -122,7 +128,7 @@ export async function runOnReference(name: string, testCase: Case): Promise<Obse
   await settle(clock);
   app.render();
   errors.check('initial render');
-  const observations = [observe('initial render', container)];
+  const observations = [observe('initial render', container, testCase)];
   testCase.check?.(container, 0);
 
   for (const step of testCase.steps ?? []) {
@@ -135,11 +141,12 @@ export async function runOnReference(name: string, testCase: Case): Promise<Obse
     app.render();
     await waitForElement(step, container, clock, () => app.render());
     errors.check(describeStep(step));
-    observations.push(observe(describeStep(step), container));
+    observations.push(observe(describeStep(step), container, testCase));
     testCase.check?.(container, observations.length - 1);
   }
 
   unmount();
+  disposeRoutes();
   disposeModules();
   disposeSources();
   container.remove();
@@ -151,6 +158,9 @@ export async function runOnReference(name: string, testCase: Case): Promise<Obse
 
 async function runOnCompiler(name: string, testCase: Case, compiler: Compiler): Promise<Observations> {
   const clock = startClock(testCase);
+  startLocation(testCase);
+  // Before the modules load: their route table installs on the active route runtime.
+  const disposeRoutes = track(useRouteRuntime());
   const disposeSources = track(compiler.prepare());
   // Folders from older runs would show stale or other-compiler output.
   rmSync(join(OUT, slug(name), 'compiled'), { recursive: true, force: true });
@@ -165,18 +175,25 @@ async function runOnCompiler(name: string, testCase: Case, compiler: Compiler): 
   // A server renders from its own copy of the modules, whose state starts fresh as in another
   // process. It loads first: module sources are described per process, and a later load replaces
   // the description as a hot update would, so the browser's copy must be the last.
+  // It is the server's own build, and it prepares the request's route before rendering, as a
+  // server does (a browser build waits for that at its top instead).
   const served = compiler.serves === true
-    ? await importAsServer(() => importFiles(name, `${compiler.output}-server`, files, 'App.tsx'))
+    ? await importAsServer(async () => {
+      const serverFiles = compiler.compileServer?.(testCase.source, testCase.modules) ?? files;
+      const loaded = await importFiles(name, `${compiler.output}-server`, serverFiles, 'App.tsx');
+      await prepareInitialRoute();
+      return loaded;
+    })
     : undefined;
   const module = await importFiles(name, compiler.output, files, 'App.tsx');
 
   const container = attachContainer();
   const errors = watchErrors();
-  const app = compiler.mount(module, container, served);
+  const app = compiler.mount(module, container, served, testCase.url);
   const unmount = track(() => app.unmount());
   await settle(clock);
   errors.check('initial render');
-  const observations = [observe('initial render', container)];
+  const observations = [observe('initial render', container, testCase)];
   testCase.check?.(container, 0);
 
   for (const step of testCase.steps ?? []) {
@@ -184,12 +201,13 @@ async function runOnCompiler(name: string, testCase: Case, compiler: Compiler): 
     await settle(clock);
     await waitForElement(step, container, clock, () => {});
     errors.check(describeStep(step));
-    observations.push(observe(describeStep(step), container));
+    observations.push(observe(describeStep(step), container, testCase));
     testCase.check?.(container, observations.length - 1);
   }
 
   unmount();
   disposeSources();
+  disposeRoutes();
   container.remove();
   clearDeferred();
   clearRequests();
@@ -233,8 +251,31 @@ function perform(step: Step, container: HTMLElement): void {
   element.dispatchEvent(new Event('input', { bubbles: true }));
 }
 
-function observe(label: string, container: HTMLElement): string {
-  return `after ${label}:\n${serialize(container)}`;
+/** What the user sees; for a case with a location, where they are too (on the first line). */
+function observe(label: string, container: HTMLElement, testCase: Case): string {
+  const at = testCase.url === undefined ? '' : ` at ${location.pathname}${location.search}${location.hash}`;
+  return `after ${label}${at}:\n${serialize(container)}`;
+}
+
+/** Start each run of a case with routes at its own location. */
+function startLocation(testCase: Case): void {
+  if (testCase.url !== undefined) history.replaceState(null, '', testCase.url);
+}
+
+/**
+ * A route runtime fresh for each run: the default one would keep the previous case's location
+ * and connection. Compiled code connects it itself (its route table does), so a compiler that
+ * forgot to would show links that do not navigate; the reference asks for it with `connect`.
+ * Disposing it removes its click and history listeners.
+ */
+function useRouteRuntime(connect = false): () => void {
+  const runtime = createRouteRuntime(window as never);
+  setActiveRouteRuntime(runtime);
+  if (connect) runtime.connect();
+  return () => {
+    runtime.dispose();
+    setActiveRouteRuntime(null);
+  };
 }
 
 /**

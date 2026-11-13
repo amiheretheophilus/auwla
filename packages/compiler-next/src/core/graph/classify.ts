@@ -14,6 +14,14 @@ import { InputQueries } from './inputs';
 import type { SemanticGraph } from './model';
 import type { FunctionNode } from '../resolve/functions';
 
+/**
+ * The program's component functions, as every stage identifies them. A feature that runs before
+ * classification (`features/routes/`) asks here rather than importing another feature.
+ */
+export function programComponents(resolved: Resolved): ReadonlySet<FunctionNode> {
+  return componentFunctions(resolved);
+}
+
 /** Planning reuses the same dependency caches and component identities. */
 export interface ClassifiedGraph extends SemanticGraph {
   readonly queries: InputQueries;

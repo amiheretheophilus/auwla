@@ -4,6 +4,7 @@ import { compile } from '../src';
 import { projectForChecking } from '../src/checking/project';
 
 const app = readFileSync(new URL('../examples/task-board/App.auwla', import.meta.url), 'utf8');
+const lineEnding = app.includes('\r\n') ? '\r\n' : '\n';
 
 for (const [name, source, code, opener] of [
   ['quote', app.replace('"Make room for the next idea."', '"Make room for the next idea.'), 1003, '"Make room'],
@@ -70,9 +71,13 @@ for (const [name, from, to, code, anchor] of [
   ['missing attribute value', '<button type="submit">', '<button type="submit" class=>', 1009, '>"Add task"'],
 ] as const) {
   it(`recovers the rest of the task board around a ${name}`, () => {
-    expect(app).toContain(from);
-    const source = app.replace(from, to);
-    const damaged = source.indexOf(anchor, app.indexOf(from));
+    // Keep the damaged edit identical on LF and CRLF checkouts. Otherwise a
+    // multiline search can miss and leave a valid, undamaged example behind.
+    const original = from.replaceAll('\n', lineEnding);
+    const replacement = to.replaceAll('\n', lineEnding);
+    expect(app).toContain(original);
+    const source = app.replace(original, replacement);
+    const damaged = source.indexOf(anchor, app.indexOf(original));
     const result = projectForChecking(source, './App.auwla');
     expect(result.text).not.toBe('export {};\n');
     expect(result.diagnostics?.[0]).toMatchObject({ code, start: damaged });

@@ -1,7 +1,9 @@
 /**
  * Normalizes Vite ids and bounds which local files enter compiler analysis.
  */
+import { existsSync, realpathSync } from 'node:fs';
 import {
+  dirname,
   extname,
   isAbsolute,
   relative,
@@ -19,7 +21,27 @@ export function cleanViteId(id: string): string {
 }
 
 export function normalizeFile(file: string): string {
-  return resolve(file).replaceAll('\\', '/');
+  return longPath(resolve(file)).replaceAll('\\', '/');
+}
+
+/**
+ * The path with Windows short names (`C:\Users\THEOPH~1\…`) spelled out. Vite gives the project
+ * root by its real name, while an id can come from a path a caller spelled short; compared as
+ * text, a module of the app would look outside it, and go uncompiled. Only a path with a short
+ * name is resolved, so a symlinked package keeps its `node_modules` path.
+ */
+export function longPath(file: string): string {
+  if (process.platform !== 'win32' || !/~\d/.test(file)) return file;
+  // The longest part of the path that exists has a real name; the rest is kept as written.
+  let existing = file;
+  let rest = '';
+  while (!existsSync(existing)) {
+    const parent = dirname(existing);
+    if (parent === existing) return file;
+    rest = `${existing.slice(parent.length)}${rest}`;
+    existing = parent;
+  }
+  return realpathSync.native(existing) + rest;
 }
 
 export function entryFiles(
@@ -34,7 +56,8 @@ export function entryFiles(
 }
 
 export function moduleId(root: string, file: string): string {
-  const projectRelative = relative(root, file).split(sep).join('/');
+  // Both spelled out, so a root or a file given by a short name still compares.
+  const projectRelative = relative(normalizeFile(root), normalizeFile(file)).split(sep).join('/');
   if (
     projectRelative !== '..' &&
     !projectRelative.startsWith('../') &&
@@ -67,7 +90,7 @@ export function acceptsSource(
   if (id.includes('/node_modules/')) return false;
   if (matches(options.include, id)) return true;
 
-  const projectRelative = relative(root, id);
+  const projectRelative = relative(normalizeFile(root), id);
   return (
     projectRelative !== '..' &&
     !projectRelative.startsWith(`..${sep}`) &&

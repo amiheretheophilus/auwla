@@ -115,6 +115,12 @@ export function namespaceModule(binding: Binding): Module | null {
   return target?.kind === 'namespace' ? target.module : null;
 }
 
+/** The binding a namespace's `name` property reads, through re-exports; null for anything else. */
+export function namespaceExport(namespace: Module, name: string): Binding | null {
+  const target = valueExport(namespace, name);
+  return target?.kind === 'binding' ? target.binding : null;
+}
+
 /** Runtime names only: erased types and ambiguous star exports are not properties. */
 export function valueExportNames(module: Module): readonly string[] {
   return module.exportedNames().filter((name) => valueExport(module, name) !== null);

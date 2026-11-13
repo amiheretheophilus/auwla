@@ -102,7 +102,7 @@
     "puppeteer-core": "^25.3.0",
     "rolldown": "^1.2.5",
     "typescript": "7.1.0-beta",
-    "vite": "^8.2.2",
+    "vite": "^8.3.8",
     "wrangler": "^4.149.0",
     "yuku-parser": "^0.9.3"
   },

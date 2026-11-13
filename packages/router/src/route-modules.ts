@@ -7,6 +7,14 @@ import {awaitRouteWork} from './route-work';
 
 const routeComponents = new Map<string, unknown>();
 const loadingComponents = new Map<string, Promise<void>>();
+/**
+ * The loader that loaded each key's component. Route tables built from the same entries share it,
+ * but another table (an app evaluated again, or a second build in the same page) has loaders of
+ * its own: the same key there can name a different module, so its loader runs.
+ */
+const loadedBy = new Map<string, () => Promise<unknown>>();
+/** How many times each key has been registered, so a load can tell it registered. */
+const registrations = new Map<string, number>();
 
 export type RouteModuleState =
   | { readonly status: 'idle' | 'loading' | 'ready'; readonly error: null }
@@ -66,6 +74,7 @@ export function registerRouteComponent(key: string, component: unknown): unknown
     throw new TypeError(`memo-dom: lazy route component '${key}' is not a function export`);
   }
   routeComponents.set(key, component);
+  registrations.set(key, (registrations.get(key) ?? 0) + 1);
   if (!loadingComponents.has(key)) {
     setRouteModuleState(key, { status: 'ready', error: null }, true);
   }
@@ -93,12 +102,16 @@ export async function prepareRouteModules(
       throw signal.reason ?? new DOMException('Route loading was superseded', 'AbortError');
     }
     let loading = loadingComponents.get(key);
-    if (loading === undefined && routeComponents.has(key)) continue;
+    if (loading === undefined && routeComponents.has(key) && loadedBy.get(key) === loader) continue;
     if (loading === undefined) {
+      // The page on screen may still read the component another loader registered, so it stays
+      // until this load registers its own; the count tells whether it did.
+      const registered = registrations.get(key) ?? 0;
       loading = Promise.resolve().then(loader).then(() => {
-        if (!routeComponents.has(key)) {
+        if (!routeComponents.has(key) || (registrations.get(key) ?? 0) === registered) {
           throw new Error(`memo-dom: lazy route component '${key}' did not register`);
         }
+        loadedBy.set(key, loader);
         setRouteModuleState(key, { status: 'ready', error: null });
       }).catch(error => {
         if (loadingComponents.get(key) === loading) loadingComponents.delete(key);

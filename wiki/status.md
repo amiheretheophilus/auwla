@@ -77,7 +77,150 @@ dynamic slot (HTML cannot carry an empty text); the old compiler created none. G
 runtime, 171 data, 774 cases, 10 generators at 200 programs (the component generators now allow 600 s,
 as the others do).
 
-Next: routes and `$routed`, then `packages/vite`.
+**Done: slots** (`compiler/components.md`, "Slots"), lowered to props and checked against the
+reference's own lowering.
+
+**Done: routes and `route-to`** (`compiler/routes.md`, 2026-11-12). A route region lowers to a keyed
+conditional on `routeRegion(id)`, which the router reports to compiled computations
+(`router/src/route-reads.ts`); reads of `route` follow each field. The reference lowers routes on
+its own. Of the old router root tests, the remaining failures assert synchronous route updates with
+the default scheduler, generated text, old options (`routedEnvironment`), `$routed`, the old
+compiler's `if`/`else` attribute directives (not in compiler-next). A `suspend` element given a new
+key now prepares again behind its pending policy (it showed its static part at once), which fixed
+`tests/route-destination-identity.test.ts` (5 of 5, scrolling included).
+
+**Done: `$routed`** (`compiler/routes.md`, "Preparations"). Callbacks register at the module's top,
+routes list the preparations of the component they show, and a client build prepares the first route
+before it mounts. Through the switch, `route-navigation-readiness` passes 8 of 8 and the reused-callsite
+`$routed` test passes; the rest check the old compiler's metadata API or generated text. Writing it
+found a callback-boundary bug (a handed-out function lost its source readiness declarations), fixed.
+
+**Done: projects** (`compiler/project.md`). `createProject({ entries, host })` collects the modules
+an app's entries reach and compiles them; `update(paths)` rebuilds after edits, reading only what
+changed, and names the outputs that changed. Any tool can now compile an app without collecting
+modules itself (the user asked, so the compiler works without Vite). Size so far: compiler-next's
+source is 21.8k lines in 117 files (16.6k without comments and blank lines); the old compiler's is
+50.9k in 259 (45.6k), though it still also holds package builds, server-function and server-page
+analysis, source maps and `$snapshot`.
+
+**Done: constant primitives** (`compiler/state-and-derived.md`, "Constant primitives"). A binding
+that holds one primitive forever (`export const page = 1`, a `let` nothing writes, a template of
+constants) has no reader, and markup reading it is static; before, it got a version, a reader and a
+shared write batch, and each reading site a computation. Generated reader names now also avoid names
+a module forwards with `export *`.
+
+**Done: source maps** (`compiler/project.md`, "Source maps"). With `sourceMaps: true`, each output
+has a map back to the authored file, through the TypeScript, slot, route and `require` rewrites;
+moved authored code (slot content, `$routed` callbacks) keeps its places, and code the compiler
+builds is unmapped.
+
+**Done: constants through namespaces.** `config.title`, with `import * as config` and `title` a
+literal `const`, reads that constant; a namespace's own property read no longer makes a value opaque.
+A page reading two such constants went from 3.8 KB with a companion module to 1.3 KB.
+
+**Done: Bun plugin and command line** (`compiler/project.md`, "Bun", "Command line"). `Bun.build`
+with `memoizedDom({ entries })` bundles an app compiled by compiler-next, companion outputs and
+source maps included; `cli.ts check|build` wraps it.
+
+**SSR from the project** (`compiler/server.md`), as the user asked, so Vite and the Bun plugin share
+it. Done: server function analysis and facades (matching the old compiler exactly); the application,
+a client and a server build over one host with generated barrel, facades, registry and `serve()`
+integration; resolved specifiers printed as relative paths. The server folder is declared
+(`server: { entry, folder }`), never assumed from a name. Module state nothing reactive reads needs no
+reader (a server entry went from 2,757 bytes to 280; client builds benefit too). The Bun plugin and
+command line build both programs: `cli.ts build src/main.ts --server server.ts --server-folder server`
+writes `dist/client` and `dist/server.js`, which renders the page, serves the client's files and
+answers server functions (tested).
+
+**HMR, the compiler and runtime half** (`compiler/project.md`, "Hot replacement"), as the user
+asked. With `hot: true`, a module exporting only components accepts its own update: the runtime
+(`@memoized-dom/runtime/hot`) remembers each component instance and mounts each live instance of an
+edited component again in place, with its props, while other modules keep their state. Component
+keys are names now, not offsets (`compiler/components.md`, "Keys"). Tested end to end on compiled
+output.
+
+**Vite on applications** (`compiler/project.md`, "Vite"): `memoizedDom({ compiler: 'next' })` (or
+`MMD_COMPILER=next`) compiles with compiler-next. Tested: a client build resolving an alias; dev
+modules with hot boundaries, where a component edit is accepted by itself, a helper edit by its
+component, and an entry edit reloads; a compile error in the overlay and its fix; SSR in development
+(the native launcher) showing an edit on the next request; a full-stack build serving its page, its
+script and a server function. Found while building it: the dependency scan deadlocked waiting for the
+build, fixed by leaving scan resolutions alone. Next: the old plugin's remaining features there
+(styles, the build-time page, lazy route chunks, packages, devtools), then the Vite suite through the
+switch.
+
+Fixed: 7 `packages/vite/tests/vite-adapter.test.ts` failures, each "Failed to load /src/main.ts"
+from a temp copy of the fixture. Windows gives the temp folder by its short name (`THEOPH~1`).
+Vite 8.2.2, even with no plugin, refused to load a file whose real path differs from the root's
+spelling; Vite is now 8.3.8 (root, `examples/octopulse`, and the plugin's peer range), which accepts
+it. That exposed the plugins' own bug: Vite 8.3 gives the root by its real name, while an entry
+given by its short name keeps that spelling in module ids, so comparing them as text put the app's
+modules outside it, and Vite compiled their JSX as React. Both plugins now spell short names out
+before comparing (`packages/vite/src/paths.ts`, `longPath`), and a test builds an app from its short
+name (`next-plugin.test.ts`). Many other Vite tests hand temp-folder paths straight to the plugin's
+internal functions, mixing spellings no Vite build produces (Vite resolves roots and ids to real
+names); the tests' preload (`test-support/setup.ts`) gives the temp folder its real name, as Vite
+would.
+
+**The build-time page, in the project** (`compiler/project.md`, "Build-time page"), following the
+user's direction that build features live in the compiler project: `initialPage` writes a page that
+cannot change into its HTML, with no script and a `<link>` for each stylesheet the program imports,
+in the order a browser applies them. Vite (`transformIndexHtml`), the Bun plugin (loading `.html`)
+and the command line all use it; tested in each. Found on the way: a plain `import './app.css'` sent
+any page to the browser (it was taken for code), and Bun gives a script-less page an empty script,
+which the command line now removes. Styles need no extraction: compiler-next compiles no TSRX, so
+the styles still to do are lazy routes' (after lazy route chunks).
+
+**Lazy route chunks, in the compiler** (`compiler/routes.md`, "Lazy route chunks"): a client build
+loads a component imported only for its routes by `import()` in the route table, before the route
+commits, and before mount for the first route. The command line turns on Bun's `splitting`, and a
+test checks that the page's script leaves the route's code out. Found on the way, all fixed: the
+router kept the old table's metadata on the current route when a table was installed again, trusted
+a cached lazy component for any table with the same key, and replayed a compiled table over a
+runtime that had routes of its own (the cause of two `packages/router` tests that failed only in a
+whole-suite run). The harness's delivered run now renders from a server build, as a real server
+does. Still to do: a lazy route's styles on a server-rendered page.
+
+Fixed: `tests/ssr-payload-transport.test.ts` and
+`tests/transparent-source-mutations-and-routes.test.ts` failed after certain other root test files
+and passed alone, the same with the router changes above switched off. The compilers were not
+involved and no assertion changed; three test files left shared state behind, each found with a
+probe of the state the next file started from:
+
+- `r47-router-runtime` and `hydration-route-fragment` left the router's default runtime and the
+  window at the last path they visited, so the next file's app started away from `/`, where its
+  route's prepared value does not apply. Both now go back to `/` after each test.
+- `hydration-route-fragment` left an empty `<div id="root">`, which the next file's
+  `mount('root', …)` found before its own, so it mounted fresh instead of adopting the server's
+  page and its payload. It now empties the body after each test.
+- `router-capability-bundle` evaluates bundled copies of the router in the same process. The last
+  router copy evaluated takes the realm's one payload-restorer slot (`router/src/preparation.ts`), so
+  a later file's payload restored into a bundled copy's runtime. The bundled copies also navigated
+  the shared window, and the default runtime an earlier file had connected followed them there. The
+  file now puts the workspace router's restorer back, and returns the window to `/` with a
+  `popstate`, which a connected runtime follows.
+
+A whole root run in one process (`bun test ./tests`) then still failed `optimistic-utils-integration`
+("duplicate list key: undefined"), `ssr-query-fallback` and two `ssr-region-streaming` tests, each
+passing alone, and ended with Bun failing to allocate 32 GB. Two more files left a data runtime
+active: `module-source-descriptions` and `snapshot-envelope` call `setActiveDataRuntime`, which is
+process-wide, and never restored it, so later files fetched through their stubs and canned
+responses. Each now restores none after every test. The whole root run now completes, with no
+crash: 2967 pass, and the one failure is the recorded R23 (`open-issues.md`), an old-compiler bug
+whose assertion is the correct result.
+
+These had not shown before because the root suite was never run whole here (the old machine's
+rule was to run files alone, where each passes).
+
+The Vite package's dependencies now list what its bundle imports (`yuku-*`, `@memoized-dom/server`),
+with compiler-next, which is bundled, as a dev dependency; `bun.lock` is updated to match, as CI
+installs with `--frozen-lockfile`.
+
+Seen while checking the server change, not caused by it (the same with and without it): in a whole
+`packages/server` run, 8 tests fail (`initial-request`, `pages`, `serve`: in-memory `$fetch` reaches
+the network), and they pass when their files run alone, so an earlier test leaves state behind. In
+`packages/runtime`, `effect-scope.test.ts` "clears an assigned ref owned before later setup fails"
+fails on `document is not defined`.
 
 ## Closing documented issues before Phase 10 (2026-11-06)
 

@@ -7,6 +7,7 @@ import { installRoutePreparationRunner, installRouteModuleLoader } from './prepa
 import { exposeRouteRuntime } from './runtime-controls';
 import type { RouteEnvironment, RouteRuntime, RouteRuntimeOptions } from './runtime';
 import { validateRouteMatches } from './match-validation';
+import { noteOwnRoutes } from './own-routes';
 
 export function createRouteRuntime(
   optionsOrEnvironment: RouteEnvironment | RouteRuntimeOptions = typeof window === 'undefined' ? {} : (window as unknown as RouteEnvironment),
@@ -22,5 +23,7 @@ export function createRouteRuntime(
   const options: RouteRuntimeOptions = isOptions
     ? (optionsOrEnvironment as RouteRuntimeOptions)
     : { environment: optionsOrEnvironment as RouteEnvironment };
-  return exposeRouteRuntime(createRuntime(options, definitions => createRouteManifest(definitions).resolve, validateRouteMatches));
+  const runtime = exposeRouteRuntime(createRuntime(options, definitions => createRouteManifest(definitions).resolve, validateRouteMatches));
+  if (options.routes !== undefined || options.resolver !== undefined) noteOwnRoutes(runtime);
+  return runtime;
 }

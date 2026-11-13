@@ -51,6 +51,11 @@ afterEach(() => {
   mounted?.unmount();
   mounted = undefined;
   resetScheduler();
+  // The document, the default route runtime and the window's location are shared by every test
+  // file. A `#root` left behind is the one the next file's `mount('root', …)` finds first, so the
+  // page goes back empty and at `/`, where the next file starts.
+  document.body.replaceChildren();
+  navigateRoute('/', { replace: true });
 });
 
 describe('hydrated component-owned route fragments', () => {

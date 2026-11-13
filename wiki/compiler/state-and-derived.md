@@ -395,6 +395,53 @@ its locals their value then (`core/plan/plain-functions.ts`). So in a plain func
 A statement that returns, suspends or jumps out of itself is never replayed
 (`cannotReplay` in `computations.ts`), and neither is a declaration that suspends.
 
+### Constant primitives
+
+A module binding keeps a reader because code the compiler cannot see might edit the object
+it holds. A primitive cannot be edited, only replaced, and only its own module can replace it,
+since an import is read-only. So a binding that is never reassigned, whose initializer is never
+computed again (kind `Constant`) and always gives a primitive, holds one value forever
+(`features/state/primitive-constants.ts`): a literal, a template, a unary or binary operation,
+`undefined`, or another constant primitive, also through an import. It gets **no reader**, and
+markup that reads it, in any module, is **static**: no collector, no update.
+
+Found while testing projects (2026-11-12): `export const page = 1` emitted a version, a reader
+and a shared write batch, and `<p>{page}</p>` a computation that ran on every update. A
+`let count = 1` nothing writes is the same. A primitive derived from state
+(`` const label = `n${count}` `` with `count++` somewhere) is `Derived`, and keeps following.
+
+Through a namespace too: with `import * as config`, `config.title` reads the export `title`
+when it is a `const` holding a literal (`literalExportRead`, `core/graph/inputs.ts`; decided from
+the declaration, since classification has not run yet). Any other read of a namespace still reads
+the namespace, a live input. Reading a namespace's own property runs no code (its properties are
+the exports' live bindings, with no getters), so `config.count` no longer makes the reading value
+opaque (`core/resolve/members.ts`); what an export holds is still checked (`config.user.name`).
+Before, `const heading = config.title + '!'` and two sites reading `config.*` emitted 3.8 KB with
+a companion module; now 1.3 KB (`tests/cases/linking.test.ts`, "namespace reads").
+
+### Module state nothing reactive reads
+
+A module binding's reader and version exist so a component, an effect or a shared derivation can
+follow it. A module's top level runs once, when it loads, so a read there follows nothing
+(`features/state/reactive-reads.ts`). A binding keeps its reader only when something may read it
+later: a reference inside a function or class body in any module (through imports), a read by the
+derivation of a binding that keeps its reader, an `export default` expression another compiled
+module imports, or a namespace's export.
+
+Found while building applications (2026-11-12, `server.md`): `export const database = { users:
+new Map() }` emitted 1,639 bytes and a server entry (`serve()`, `app.ssr(App)`, `export default
+app`) 2,757; now 45 and 280. Any module-level object nothing reactive reads was affected, in client
+builds too.
+
+"Inside a function" is conservative: the compiler does not know which functions run during a
+render. Narrowing it to functions a component reaches would miss a function stored in an object and
+called through it (`api.load()`), so it is not done. A generated `serve()` wrapper therefore keeps
+readers for its integration object and, through its derivation, the server function routes.
+
+Generated reader names also avoid every name the module exports, including names
+`export * from` forwards; a local export would hide the forwarded one
+(`tests/cases/linking.test.ts`, "star-forwarded public names").
+
 ## Inputs and outputs
 
 - In: `Resolved` (initializer references, write sites and where they run,
@@ -418,6 +465,10 @@ The graph classification is built (`core/graph/classify.ts`, described in
 | `features/derived/takeover.ts` | local takeover flags and native store targets, checked against runtime execution ownership |
 | `core/plan/plain-functions.ts` | what can change in a plain function: which values are computed again, and which need no reader |
 | `features/state/shared-plan.ts` | native module/factory storage owners and live reader exports |
+| `features/state/primitive-constants.ts` | bindings that hold one primitive forever: no reader, static markup |
+| `features/state/primitive-constants.test.ts` | which constants lose their reader, and which keep it |
+| `features/state/reactive-reads.ts` | module bindings something reactive may read; the rest need no reader |
+| `features/state/reactive-reads.test.ts` | top-level-only reads, component reads, derivation chains, imported defaults |
 | `features/state/shared-dom.ts` | per-owner versions, readers, source-ordered setup completion and shared refresh |
 | `features/state/shared-dom.test.ts` | shared module consumers in separate applications, identity reuse and disposal |
 | `core/emit/shared.ts` | composes shared state, memo, mutation and takeover emission |

@@ -13,6 +13,11 @@ export interface Case {
   /** Isolate known synchronous compiler loops; a deadline is a failure, never an expected result. */
   compileTimeoutMs?: number;
   steps?: Step[];
+  /**
+   * The page's location when it loads, for a case with routes. Each observation then also
+   * records the location, so a click on a route link must navigate to the same place.
+   */
+  url?: string;
   /** Additional assertions, on each renderer: 0 is mount, then one per step. */
   check?: (container: HTMLElement, observation: number) => void;
 }

@@ -127,6 +127,14 @@ export function publishVersions(keys: readonly object[], written?: object): void
   }
 }
 
+/**
+ * Whether a computation is running, so a read would be recorded. A library that follows its own
+ * state for compiled code (`router/src/route-reads.ts`) sets nothing up for reads nobody follows.
+ */
+export function tracking(): boolean {
+  return store().current !== null;
+}
+
 export function trackRead<T>(version: Version, value: T, key: object = version): T {
   const current = store().current;
   if (current === null) return value;

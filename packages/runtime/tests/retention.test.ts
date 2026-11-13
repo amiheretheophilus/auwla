@@ -54,6 +54,12 @@ function rowValue(item: { id: number }): object {
   return { id: item.id };
 }
 
+// The control case: its payload stays reachable, so `collectAfterTurn` never
+// returns early and always spends every attempt (128 full collections). That
+// takes about a second on an idle machine and several times longer when other
+// suites share the cores, so it gets a timeout sized for the whole loop.
+const EVERY_ATTEMPT_TIMEOUT = 30_000;
+
 it('detects a strong payload reference held by a queued callback', async () => {
   const queued: (() => void)[] = [];
   function pending() {
@@ -65,7 +71,7 @@ it('detects a strong payload reference held by a queued callback', async () => {
   await collectAfterTurn(reference);
   expect(reference.deref()).toBeDefined();
   queued.shift()!();
-});
+}, EVERY_ATTEMPT_TIMEOUT);
 
 it('releases removed items while their row lookup remains alive', async () => {
   function removed() {

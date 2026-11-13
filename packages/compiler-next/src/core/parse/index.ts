@@ -11,6 +11,8 @@ import { langFromPath, parse } from 'yuku-parser';
 import type { SourceLang } from 'yuku-parser';
 import { CompileError } from '../diagnostics';
 import { lowerTypeScript, type LoweredRequireImport } from './lower-typescript';
+import { lowerSlotsWithOrigin } from '../../features/slots/lower';
+import { composeOrigins, UNEDITED, type TextOrigin } from './text-edits';
 
 export type { LoweredRequireImport } from './lower-typescript';
 
@@ -20,6 +22,10 @@ export interface ParsedModule {
   readonly lang: SourceLang;
   /** The authored text, with the TypeScript that runs lowered to JavaScript. */
   readonly source: string;
+  /** The text as the caller gave it, which source maps point into. */
+  readonly authored: string;
+  /** Where each offset of `source` was in `authored` (`text-edits.ts`). */
+  readonly origin: TextOrigin;
   /** Whether the module contains JSX. */
   readonly hasJsx: boolean;
   /** Each `import x = require('m')`, which `core/resolve/imports.ts` settles. */
@@ -39,7 +45,20 @@ export function parseModule(path: string, authored: string): ParsedModule {
 
   const hasJsx = findAll(program, ['JSXElement', 'JSXFragment']).length > 0;
   if (lang !== 'ts' && lang !== 'tsx') {
-    return { path, lang, source: authored, hasJsx, requireImports: [], hasExportAssignment: false };
+    const slots = hasJsx ? lowerSlotsWithOrigin(path, authored) : { text: authored, origin: UNEDITED };
+    return { path, lang, authored, source: slots.text, origin: slots.origin, hasJsx, requireImports: [], hasExportAssignment: false };
   }
-  return { path, lang, hasJsx, ...lowerTypeScript(program, authored, lang, path) };
+  const lowered = lowerTypeScript(program, authored, lang, path);
+  // Slots become props (`features/slots/lower.ts`), on the text the TypeScript lowering left.
+  const slots = hasJsx ? lowerSlotsWithOrigin(path, lowered.source) : { text: lowered.source, origin: UNEDITED };
+  return {
+    path,
+    lang,
+    authored,
+    hasJsx,
+    requireImports: lowered.requireImports,
+    hasExportAssignment: lowered.hasExportAssignment,
+    source: slots.text,
+    origin: composeOrigins(slots.origin, lowered.origin),
+  };
 }

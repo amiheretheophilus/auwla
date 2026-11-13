@@ -7,7 +7,7 @@ import { waitFor, type FetchStub } from '../test-support/helpers';
  * re-issue a duplicate request for restored success, keep restored errors
  * retryable through their own handle, and sanitize error payloads.
  */
-import { describe, expect, it } from 'bun:test';
+import { afterEach, describe, expect, it } from 'bun:test';
 import {
   createDataRuntime,
   setActiveDataRuntime,
@@ -37,6 +37,13 @@ function makeRuntime(options: {
   }) as FetchStub;
   return createDataRuntime({ fetch });
 }
+
+// Each test makes a data runtime active with `setActiveDataRuntime`, which is process-wide, and
+// leaves it. The next file's sources would then fetch through this file's canned responses.
+// Every file starts with none active (the default runtime), so each test ends that way.
+afterEach(() => {
+  setActiveDataRuntime(null);
+});
 
 describe('source-state snapshot envelope (RFC §16.6)', () => {
   it('restores committed success without a duplicate request', async () => {

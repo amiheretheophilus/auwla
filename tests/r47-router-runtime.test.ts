@@ -58,6 +58,9 @@ describe('compiled router DOM integration', () => {
     unregister('SelectedRouteApp');
     resetScheduler();
     document.body.replaceChildren();
+    // The default route runtime and the window's location are shared by every test file; leave
+    // them at `/`, where the next file starts, as these tests start themselves.
+    navigateRoute('/', { replace: true });
   });
 
   it('renders a component-owned subtree at two route-bearing callsites', async () => {

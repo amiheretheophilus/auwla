@@ -13,7 +13,8 @@
  * Compiled modules install their route manifest once at module evaluation
  * (`replacePreparedRouteResolver` at top level). That resolver is recorded here and
  * replayed onto every newly activated runtime, so each request resolves its
- * own URL against the application graph.
+ * own URL against the application graph. A runtime created with routes of its
+ * own keeps them (`own-routes.ts`).
  */
 
 import { createStorage } from '@memoized-dom/runtime';
@@ -26,6 +27,8 @@ import { enableHistoryControls } from './history-controls';
 import { enableGeneralNavigation } from './general-navigation';
 import { enableRouteSnapshots } from './snapshot-controls';
 import { enableMatchValidation } from './match-controls';
+import { trackRouteRead } from './route-reads';
+import { hasOwnRoutes } from './own-routes';
 import type {
   ApplicationRoutePath,
   NavigateArguments,
@@ -50,12 +53,21 @@ export function getActiveRouteRuntime(): RouteRuntime {
   return asyncLocalStorage.getStore() ?? activeOverride ?? defaultRouteRuntime;
 }
 
+/**
+ * Replay the recorded compiled table onto `runtime`, once. Compiled route manifests evaluate once
+ * per module record, so this is how a request's runtime resolves its own location. A runtime
+ * given routes of its own keeps them (`own-routes.ts`). Marked first, so a listener that activates
+ * the runtime again while the resolver is replaced does not replay it twice.
+ */
+function replayManifest(runtime: RouteRuntime): void {
+  if (manifestResolver === null || manifestApplied.has(runtime) || hasOwnRoutes(runtime)) return;
+  manifestApplied.add(runtime);
+  if (manifestRequiresValidation) enableMatchValidation(runtime);
+  runtime.replaceResolver(manifestResolver);
+}
+
 export function runWithRouteRuntime<T>(runtime: RouteRuntime, fn: () => T): T {
-  if (manifestResolver !== null && !manifestApplied.has(runtime)) {
-    manifestApplied.add(runtime);
-    if (manifestRequiresValidation) enableMatchValidation(runtime);
-    runtime.replaceResolver(manifestResolver);
-  }
+  replayManifest(runtime);
   return asyncLocalStorage.run(runtime, fn);
 }
 
@@ -69,17 +81,7 @@ export function setActiveRouteRuntime(
 ): RouteRuntime {
   const previous = getActiveRouteRuntime();
   activeOverride = runtime;
-  if (
-    runtime !== null &&
-    manifestResolver !== null &&
-    !manifestApplied.has(runtime)
-  ) {
-    // Compiled route manifests evaluate once per module record; replay the
-    // recorded resolver so this request resolves its own location.
-    if (manifestRequiresValidation) enableMatchValidation(runtime);
-    runtime.replaceResolver(manifestResolver);
-    manifestApplied.add(runtime);
-  }
+  if (runtime !== null) replayManifest(runtime);
   return previous;
 }
 
@@ -105,40 +107,50 @@ export function notePreparedManifestResolver(resolver: RouteResolver): () => voi
   return recordManifestResolver(resolver);
 }
 
+/**
+ * One field of the active runtime's route, reported as read when compiled code is following it
+ * (`route-reads.ts`), so `route.pathname` in a component updates on navigation.
+ */
+function followed<Field extends keyof RouteState>(field: Field): RouteState[Field] {
+  const runtime = getActiveRouteRuntime();
+  trackRouteRead(runtime, field);
+  return runtime.route[field];
+}
+
 /** Getter-backed facade over whichever runtime is currently active. */
 export const activeRoute: RouteState = Object.freeze({
   get href() {
-    return getActiveRouteRuntime().route.href;
+    return followed('href');
   },
   get pathname() {
-    return getActiveRouteRuntime().route.pathname;
+    return followed('pathname');
   },
   get search() {
-    return getActiveRouteRuntime().route.search;
+    return followed('search');
   },
   get query() {
-    return getActiveRouteRuntime().route.query;
+    return followed('query');
   },
   get hash() {
-    return getActiveRouteRuntime().route.hash;
+    return followed('hash');
   },
   get state() {
-    return getActiveRouteRuntime().route.state;
+    return followed('state');
   },
   get navigationType() {
-    return getActiveRouteRuntime().route.navigationType;
+    return followed('navigationType');
   },
   get params() {
-    return getActiveRouteRuntime().route.params;
+    return followed('params');
   },
   get matches() {
-    return getActiveRouteRuntime().route.matches;
+    return followed('matches');
   },
   get matched() {
-    return getActiveRouteRuntime().route.matched;
+    return followed('matched');
   },
   get signal() {
-    return getActiveRouteRuntime().route.signal;
+    return followed('signal');
   },
 });
 

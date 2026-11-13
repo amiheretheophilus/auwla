@@ -1,6 +1,48 @@
 # Prototype status
 
-Updated: 2026-11-11. Branch: `prototype/jsx-plus`.
+Updated: 2026-11-13. Branch: `prototype/jsx-plus`.
+
+## Compiler baseline synchronization
+
+This branch integrates `compiler-rewrite` through `07e996c9` (2026-11-13).
+The local and remote compiler tips matched when fetched. The user authorized
+committing and pushing the synchronization while excluding their live
+`App.auwla` edits. `compiler-rewrite` itself is unchanged.
+
+Two merge conflicts were resolved in `analysis/frontend.ts` and `pipeline.ts`
+using the latest compiler implementation. The compiler, runtime, data, router,
+server and Vite directories match that compiler tip exactly. This retains route
+lowering/splitting, source maps, component hot replacement, project/application
+builds, server functions and the compiler-next Vite adapter. The existing JSX+
+syntax and checking package remain separate; the CSS proposal is still a design.
+
+The previously listed compiler/runtime changes from this branch were already
+adopted on `compiler-rewrite` in `bd237a29`. The reconciliation table below is now
+a historical record, not outstanding adoption work. Further interop changes must
+still be recorded there under DX-34.
+
+The branch switch exposed LF-only fixture searches against CRLF example files.
+Three JSX+ test files now match the authored line endings when removing imports
+or damaging multiline markup. Auto-import assertions still check TypeScript's
+exact generated LF edit and preserve every other authored line ending. No
+production parser or compiler behavior changed for this correction.
+
+Integration checks: compiler-next `bun check` is clean (269 files); JSX+
+`bun check` is clean (255 files); the editor adapter check is clean (6 files)
+and its 7 activation tests pass. The 83 focused compiler tests for analysis,
+source maps, routes, lazy route splits and hot replacement pass. The 46-fixture
+spec baseline also passes; extended execution is covered separately by the
+package tests, not claimed by that baseline runner.
+
+The initial JSX+ run passed 263 tests and exposed the five LF-only fixture
+failures. All 23 tests in the three corrected files then passed across focused
+runs. The final full run passed 266 tests with two failures: during verification,
+the live `examples/checking/App.auwla` acquired an unfinished `if(name.)` edit.
+Those two tests expect a clean baseline example. That user draft is preserved
+and unstaged; the run is not reported as fully green. The root suite, browser
+acceptance and performance checks were not run. The staged whitespace check
+also reports an existing extra EOF blank line in the incoming
+`features/slots/lower.ts`; the compiler tree is retained exactly as received.
 
 ## Current requested sequence
 
@@ -152,14 +194,18 @@ Known open issues:
   Completion inside quarantined text and broader combinations of multiline
   damage remain open. Same-line host declarations now survive when an inserted
   closer repairs the markup; unsafe host-code removal still falls back.
-- Replay proofs, lowering maps, module loading, Vite/HMR, delivery and
-  debugging maps remain open. Backend configuration stays planned.
+- Replay proofs and lowering-map composition remain open. Compiler-next now has
+  project/application loading, Vite/HMR, delivery, source maps and declared server
+  folders; connecting the full `.auwla` authoring path to those APIs and mapping
+  normalized output back to authored files still needs its own acceptance work.
+  Do not treat compiler capabilities as proof of `.auwla` project integration.
 
 ## Compiler-next changes to reconcile
 
 Compiler-next is unfinished (branch `compiler-rewrite`) and is continued
-separately. Under DX-34 this branch may change it for `.auwla` interop. Each
-change below must be adopted or corrected on `compiler-rewrite` later:
+separately. Under DX-34 this branch may change it for `.auwla` interop. All changes
+currently listed below were adopted by `bd237a29`; retain the record and track
+any new changes that must be adopted or corrected on `compiler-rewrite` later:
 
 | Commit | Change | Why `.auwla` needs it |
 | --- | --- | --- |
@@ -172,6 +218,9 @@ change below must be adopted or corrected on `compiler-rewrite` later:
 | `03958a19` | `optimize/closed-lists.ts`: the proof finds a row list's root through `mappingCall` (`#rowsOver`), replacing the `.map`-only branch in `#useMethod` and the `form` filter in `match`. `features/handlers/mutations.ts` emits `list.map`/`list.from` and `mapRows`/`fromRows` from one branch, passing `unedited` to both. `optimize/methods.ts` drops `withRowReuse`'s redundant `form` argument. Tests: both spellings in `closed-lists.test.ts` and `conditionals-and-lists.closed.test.ts` ([optimize](../wiki/compiler/optimize.md#closed-lists)) | Loops over plain state lists skip unchanged rows like `.map`, without a second copy of the list logic |
 | `232c8f5b` | `optimize/closed-lists.ts`: `returnsToEventDispatch` lets `#useReturn` accept a function literal written as an `on*` attribute of a DOM element that is not `isComponentCall`, since the runtime keeps nothing it returns. Tests in `closed-lists.test.ts` (with controls) and a both-spelling behaviour case ([optimize](../wiki/compiler/optimize.md#closed-lists)) | `onClick=(() => rows.reverse())`, the natural `.auwla` one-liner, turned the skip off; plain JSX benefits too |
 
-Check this list with `git log compiler-rewrite..prototype/jsx-plus -- packages/compiler-next packages/runtime`.
+These histories used different commits for the same code before synchronization,
+so commit-range output alone does not show whether a change was adopted. Compare
+the compiler/runtime trees as well as the history; at this integration they are
+identical to `07e996c9`.
 
 See [plan](plan.md), [tooling](tooling.md) and [rewrite acceptance](../wiki/status.md).

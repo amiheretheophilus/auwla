@@ -16,6 +16,8 @@
 import { $waiting, enterSourceOwner, Group, noteReplacement, Source, Waiting } from './sources';
 import { childPosition, elementPosition, isElement, Preparation } from './preparation';
 import { types } from 'node:util';
+import { buildRoutePath, createRouteMatcher, getActiveRouteRuntime, matchRoutePattern, route } from '@memoized-dom/router';
+import { prepareInitialRoute, readRoutedPreparation, registerRoutedPreparation } from '@memoized-dom/router/internal';
 import { classValue, setStyleValue } from '../../../runtime/src/dom-values';
 export {
   $branch, $chain, $fetch, $path, $read, $switch, $track, $value, $waiting, $when, $sourceState, Group,
@@ -29,6 +31,8 @@ export interface Element {
   props: Record<string, unknown>;
   children: unknown[];
   site: unknown;
+  /** The route around a call of a component that renders routes (`$routeCall`, `routes.ts`). */
+  routeContext?: string;
 }
 
 export type Component = (props: Record<string, unknown>) => unknown;
@@ -840,6 +844,131 @@ function settleTeardown(result: unknown, store: (teardown: () => void) => void):
 
 let rendering: Instance | null = null;
 
+// ---------------------------------------------------------------------------
+// Routes (`routes.ts`). Which instance matches is the router's question, asked of its public
+// matcher; which instance an element is, and what it shows, is the reference's own.
+
+/** The route context of the component instance being rendered. */
+let routeContext: string | undefined;
+
+interface RouteTable {
+  readonly parents: Map<string, string | undefined>;
+  readonly patterns: Map<string, string>;
+  readonly matcher: ReturnType<typeof createRouteMatcher>;
+}
+let routeTable: RouteTable | null = null;
+
+interface RouteEntry {
+  readonly id: string;
+  readonly pattern: string;
+  readonly fullPattern: string;
+  readonly parent: string | undefined;
+  readonly depth: number;
+  /** The `$routed` preparations this route runs before it commits. */
+  readonly preparations: readonly string[];
+}
+
+/** A `$routed` callback, run by the router before its route commits. */
+export function $registerRouted(id: string, prepare: (context: never) => unknown): void {
+  registerRoutedPreparation({ id, server: false, prepare: prepare as never });
+}
+
+/** A route's prepared value, which a navigation that prepares it again changes. */
+export function $routedValue(id: string): unknown {
+  computation?.reads.add(routeDependency);
+  return readRoutedPreparation(id);
+}
+
+/** Prepare the first route, as a browser does before it mounts. */
+export function $prepareRoutes(): Promise<void> {
+  return prepareInitialRoute();
+}
+
+/**
+ * Every route instance of the program, as `routes.ts` expanded them. The router is also told
+ * what matches, through its public runtime, so `route.params` and `route.matches` read in a
+ * component mean the same as in compiled code.
+ */
+export function $installRoutes(entries: readonly RouteEntry[]): void {
+  // Shallower first: for equal patterns, the deeper route is the one a path shows.
+  const ordered = [...entries].sort((left, right) => left.depth - right.depth);
+  const table: RouteTable = {
+    parents: new Map(ordered.map((entry) => [entry.id, entry.parent])),
+    patterns: new Map(ordered.map((entry) => [entry.id, entry.fullPattern])),
+    matcher: createRouteMatcher(ordered.map((entry) => ({ id: entry.id, pattern: entry.fullPattern }))),
+  };
+  routeTable = table;
+  const own = new Map(ordered.map((entry) => [entry.id, entry.pattern]));
+  const preparations = new Map(ordered.map((entry) => [entry.id, entry.preparations]));
+
+  getActiveRouteRuntime().replaceResolver((location) => {
+    const leaf = table.matcher.match(location.pathname);
+    if (leaf === null) return [];
+    const chain: string[] = [];
+    for (let id: string | undefined = leaf.id; id !== undefined; id = table.parents.get(id)) chain.unshift(id);
+    return chain.map((id) => {
+      const matched = matchRoutePattern(table.patterns.get(id)!, location.pathname, { end: id === leaf.id })!;
+      const names = own.get(id)!.split('/').filter((segment) => segment === '*' || segment.startsWith(':'))
+        .map((segment) => segment === '*' ? '*' : segment.slice(1));
+      const params = Object.fromEntries(names.flatMap((name) => matched.params[name] === undefined ? [] : [[name, matched.params[name]]]));
+      const prepares = preparations.get(id)!;
+      return { id, pattern: own.get(id)!, pathname: matched.consumed, params, ...(prepares.length === 0 ? {} : { metadata: { preparations: prepares } }) };
+    });
+  });
+}
+
+export function $routeContext(): string | undefined {
+  return routeContext;
+}
+
+export function $routeJoin(context: string | undefined, id: string): string {
+  return context === undefined ? id : `${context}>>${id}`;
+}
+
+/** Mark a call of a component that renders routes with the route around it. */
+export function $routeCall(context: string | undefined, element: Element): Element {
+  element.routeContext = context;
+  return element;
+}
+
+/** What instance `id` shows as at the current location (the path it matched), or null. */
+export function $routeIdentity(id: string): string | null {
+  if (routeTable === null) return null;
+  const pathname = window.location.pathname;
+  const leaf = routeTable.matcher.match(pathname);
+  if (leaf === null) return null;
+
+  let onChain = false;
+  for (let current: string | undefined = leaf.id; current !== undefined; current = routeTable.parents.get(current)) {
+    if (current === id) onChain = true;
+  }
+  if (!onChain) return null;
+  const matched = matchRoutePattern(routeTable.patterns.get(id)!, pathname, { end: id === leaf.id });
+  return `${id} ${matched?.consumed}`;
+}
+
+/**
+ * The router's `route`, read as an input of whatever is computing: the router reports these
+ * reads to compiled code (`router/src/route-reads.ts`), so a value derived from the route is
+ * derived again after a navigation. Here the whole route is one input, compared by its location
+ * and matches.
+ */
+const routeDependency: ReadValue = {
+  peek: () => {
+    const current = getActiveRouteRuntime().route;
+    return `${current.href} ${JSON.stringify(current.matches.map((match) => [match.id, match.pathname]))}`;
+  },
+};
+
+export function $followedRoute(): typeof route {
+  computation?.reads.add(routeDependency);
+  return route;
+}
+
+export function $routeHref(path: string, params?: never, query?: never, hash?: string): string {
+  return buildRoutePath(path, params, query, hash);
+}
+
 /** Helpers register with the instance that invokes them, independently of their module. */
 export function $ownedEffect(site: string, inputs: () => unknown[], callback: () => unknown): void {
   if (rendering !== null) rendering.effect(site, inputs, callback);
@@ -968,6 +1097,8 @@ export function beginReferenceScope(): () => void {
   computation = undefined;
   runningModuleEffects = undefined;
   rendering = null;
+  routeContext = undefined;
+  routeTable = null;
   externalReads.clear();
   const previousImporting = importingModules;
   const previousSnapshots = namespaceSnapshots;
@@ -1547,13 +1678,16 @@ class Renderer {
     if (node.children.length > 1) props.children = node.children;
 
     const outer = rendering;
+    const outerRoute = routeContext;
     rendering = instance;
+    routeContext = node.routeContext;
     const leaveSourceOwner = enterSourceOwner(instance.sources);
     instance.beginRender();
     const output = component(props);
     instance.finishSetup();
     leaveSourceOwner();
     rendering = outer;
+    routeContext = outerRoute;
     instance.first = false;
 
     return { id, output, instance };
@@ -1624,6 +1758,8 @@ function updateProps(record: HostRecord, props: Record<string, unknown>): void {
 
   for (const [name, value] of Object.entries(props)) {
     if (name === 'key' || name === 'ref' || name === 'children' || name === 'suspend') continue;
+    // A named slot's content (`slot:header`, `slots.ts`), like `children`, is never an attribute.
+    if (name.startsWith('slot:')) continue;
 
     if (name.startsWith('on')) {
       if (typeof value === 'function') handlers.set(name.slice(2).toLowerCase(), value as EventListener);

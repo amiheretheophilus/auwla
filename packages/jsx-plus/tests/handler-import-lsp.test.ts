@@ -5,7 +5,15 @@ import { applyEdits, documentUri, withLanguageServer, type CompletionItem, type 
 import { positionAt, taskBoardRoot } from './rpc';
 
 const taskBoard = readFileSync(resolve(taskBoardRoot, 'App.auwla'), 'utf8');
-const importLine = "import { focusTaskInput } from './actions';\n";
+// A branch checkout may use CRLF. Match the authored import, including its
+// newline, so the test actually removes it before requesting an auto-import.
+const lineEnding = taskBoard.includes('\r\n') ? '\r\n' : '\n';
+const importStatement = "import { focusTaskInput } from './actions';";
+const importLine = importStatement + lineEnding;
+// This LSP client uses TypeScript's default LF for newly generated imports.
+// Existing authored lines must retain their checkout line endings unchanged.
+const generatedImport = importStatement + '\n';
+const completedTaskBoard = taskBoard.replace(importLine, generatedImport);
 
 /**
  * P3-HANDLER-IMPORT: start from the real task board without the handler's
@@ -22,8 +30,8 @@ for (const [name, typed, complete] of [
     // The child case keeps the original attribute so only one name is unresolved.
     const target = name === 'bare attribute' ? withoutImport.replace('onClick=focusTaskInput', typed)
       : withoutImport.replace('onClick=focusTaskInput', 'onClick=(() => {})').replace('<span>task.title</span>', typed);
-    const expected = name === 'bare attribute' ? taskBoard
-      : taskBoard.replace('onClick=focusTaskInput', 'onClick=(() => {})').replace('<span>task.title</span>', complete);
+    const expected = name === 'bare attribute' ? completedTaskBoard
+      : completedTaskBoard.replace('onClick=focusTaskInput', 'onClick=(() => {})').replace('<span>task.title</span>', complete);
     const uri = documentUri(taskBoardRoot, 'App.auwla');
     const cursor = target.indexOf(typed) + typed.indexOf('focusTask') + 'focusTask'.length;
 
@@ -42,7 +50,7 @@ for (const [name, typed, complete] of [
 
       const resolved = await server.request<CompletionItem>('completionItem/resolve', item);
       expect(resolved.additionalTextEdits).toHaveLength(1);
-      expect(resolved.additionalTextEdits![0]!.newText).toBe(importLine);
+      expect(resolved.additionalTextEdits![0]!.newText).toBe(generatedImport);
 
       // Apply the identifier edit and the import edit together, as a client does.
       const edit = resolved.textEdit!;

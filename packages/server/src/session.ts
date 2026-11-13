@@ -24,6 +24,7 @@ import {
   type Creations,
   numberedDocument,
   serverCreations,
+  valueComponent,
 } from '@memoized-dom/runtime/server';
 import {
   createMemoryRouteHistory,
@@ -191,7 +192,10 @@ export class RenderSession {
       const html = this.initialDelivery.html;
       return writer.create(() => html);
     }
-    return this.component(this.rootId, null);
+    // A component handed to the server as a value (`app.ssr(App)` compiled by compiler-next) is a
+    // callable adapter returning a render value; the root is the component behind it.
+    const component = valueComponent(this.component) as ServerComponent;
+    return component(this.rootId, null);
   }
 
   /**

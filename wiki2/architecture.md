@@ -1,7 +1,7 @@
 # Architecture and code map
 
 State: syntax, host-context hardening and an initial TypeScript mapper built in `packages/jsx-plus`.
-Updated: 2026-11-11. Existing compiler/runtime features, including refs, are built.
+Updated: 2026-11-13. Existing compiler/runtime features, including refs, are built.
 Owns DX-28/DX-31 and the integration side of DX-03.
 
 ## One production compilation path
@@ -13,6 +13,16 @@ and runtime decision. Extended syntax and checking source stay in
 `packages/jsx-plus`. Compiler-next's new `src/analysis/` folder exposes a read-only
 public snapshot using the existing frontend. The production pipeline shares that
 frontend function; runtime/data implementation is unchanged.
+
+The synchronized compiler baseline is `compiler-rewrite` at `07e996c9`. Its
+shared frontend also lowers routes and records route splits before planning;
+the pipeline retains source-map and hot-replacement support. Project/application
+builds, server functions and the next-compiler Vite adapter belong to that
+compiler's [project](../wiki/compiler/project.md),
+[server](../wiki/compiler/server.md) and [routes](../wiki/compiler/routes.md)
+features. Their availability does not yet establish `.auwla` module collection,
+checking-map composition, server-folder configuration or HMR integration. Extend
+the existing project APIs rather than building a second application pipeline.
 
 ```text
 JSX+ source -> packages/jsx-plus -> normalized standard TSX

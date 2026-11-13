@@ -1227,6 +1227,32 @@ behaves('suspend publishes static content immediately and emits no directive att
   },
 });
 
+behaves('a suspended element given a new key is prepared again behind the pending policy', {
+  source: `
+    import { $fetch, Group } from '@memoized-dom/data';
+    function Detail(props) {
+      const data = $fetch('/destination/' + props.id);
+      return <article><b>static</b><span>{data.name}</span></article>;
+    }
+    export function App() {
+      let id = 'one';
+      return <main>
+        <button id="two" onClick={() => id = 'two'}>two</button>
+        <Group pending={() => <i class="loading">Loading</i>}><Detail key={id} id={id} suspend /></Group>
+      </main>;
+    }`,
+  steps: [
+    { respond: '/destination/one', value: { name: 'One' } },
+    { click: '#two' },
+    { respond: '/destination/two', value: { name: 'Two' } },
+  ],
+  check(container, observation) {
+    // The new instance's static part waits with its data; it was shown at once before 2026-11-12.
+    expect(container.querySelector('article')?.textContent ?? null).toBe([null, 'staticOne', null, 'staticTwo'][observation]!);
+    expect(container.querySelector('.loading') === null).toBe(observation % 2 === 1);
+  },
+});
+
 behaves('suspend discovers child-owned sources and publishes all siblings together', {
   source: `
     import { $fetch, Group } from '@memoized-dom/data';

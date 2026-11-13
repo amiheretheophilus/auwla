@@ -9,6 +9,8 @@ import {
 } from './kernel';
 import { uninstallAccessTable } from './access';
 import { rootNodes } from './jsx-dom';
+import { installComponentHooks, type ComponentMount } from './components';
+import { mountStore } from './mount-core';
 
 export type HotComponentFactory = (
   id: string,
@@ -57,6 +59,7 @@ function ensureDisposeHook(): void {
   onEntityDispose((id) => {
     const record = recordsById.get(id);
     if (record !== undefined) forget(record);
+    componentsById.delete(id);
   });
 }
 
@@ -152,6 +155,122 @@ export function applyHotUpdate(
     if (next !== undefined) replacements += replaceFactory(previous, next);
   }
   if (replacements === 0) markDirtySubtree(rootId);
+}
+
+/*
+ * compiler-next's components (`wiki/compiler/project.md`, "Hot replacement").
+ *
+ * Each module-level component is defined under a key that stays the same across edits
+ * (`./App.tsx#App`). Importing this module installs hooks that remember every instance a value
+ * slot or a mount creates. A module evaluated again after an edit defines new functions under the
+ * same keys; `acceptComponents()`, called by the module's hot boundary, then mounts each live
+ * instance of a changed key again with the new function, in place, with the same props. State in
+ * modules that were not evaluated again, and every other instance, is kept.
+ */
+
+interface ComponentRecord {
+  readonly key: string;
+  /** The definition this instance was mounted with. */
+  readonly definition: Function;
+  readonly mount: ComponentMount;
+  readonly nodes: Node[];
+}
+
+type CompiledComponent = (
+  id: string, parent: string | null, props: ComponentMount['cell'], namespace?: 'html' | 'svg',
+) => unknown;
+
+/** Each key's newest definition, and the key of every definition seen. */
+const newestDefinitions = new Map<string, Function>();
+const definitionKeys = new WeakMap<Function, string>();
+/** Keys defined again since the last `acceptComponents()`. */
+const redefinedKeys = new Set<string>();
+const componentsById = new Map<EntityId, ComponentRecord>();
+
+function outputNodes(output: unknown): Node[] {
+  return output === null || output === undefined ? [] : rootNodes(output as Node);
+}
+
+function rememberComponent(record: ComponentRecord): void {
+  ensureDisposeHook();
+  componentsById.set(record.mount.id, record);
+}
+
+installComponentHooks({
+  defined(component, key) {
+    const previous = newestDefinitions.get(key);
+    definitionKeys.set(component, key);
+    newestDefinitions.set(key, component);
+    if (previous !== undefined && previous !== component) redefinedKeys.add(key);
+  },
+  mount(component, mount) {
+    const key = definitionKeys.get(component);
+    // A module that was not evaluated again still holds the old function: it gets the new one.
+    const definition = key === undefined ? component : newestDefinitions.get(key)!;
+    const output = (definition as CompiledComponent)(mount.id, mount.parent, mount.cell, mount.namespace);
+    if (key !== undefined) rememberComponent({ key, definition, mount, nodes: outputNodes(output) });
+    return output;
+  },
+});
+
+/**
+ * Mount every live instance of each component defined again, with its new definition. Outer
+ * instances go first: their new render mounts their children with the newest definitions, so a
+ * child replaced that way is not replaced twice.
+ */
+export function acceptComponents(): void {
+  const keys = new Set(redefinedKeys);
+  redefinedKeys.clear();
+  const stale = [...componentsById.values()]
+    .filter((record) => keys.has(record.key))
+    .sort((left, right) => left.mount.id.length - right.mount.id.length);
+  for (const record of stale) {
+    const definition = newestDefinitions.get(record.key)!;
+    if (componentsById.get(record.mount.id) !== record || record.definition === definition) continue;
+    replaceComponent(record, definition);
+  }
+}
+
+function replaceComponent(record: ComponentRecord, definition: Function): void {
+  const { id, parent, cell, namespace } = record.mount;
+  const first = record.nodes.find((node) => node.parentNode !== null);
+  const host = first?.parentNode;
+  // Not in the document: its next mount uses the new definition anyway.
+  if (first === undefined || host === null || host === undefined) return;
+  const anchor = first.ownerDocument!.createComment('mmd:hot');
+  host.insertBefore(anchor, first);
+
+  unregisterSubtree(id);
+  cell.receive = null;
+  let nodes: Node[];
+  try {
+    nodes = outputNodes((definition as CompiledComponent)(id, parent, cell, namespace));
+  } catch (error) {
+    // Keep the last good DOM and record, so the next edit that compiles can replace it.
+    unregisterSubtree(id);
+    anchor.remove();
+    rememberComponent(record);
+    throw error;
+  }
+  for (const node of record.nodes) node.parentNode?.removeChild(node);
+  for (const node of nodes) host.insertBefore(node, anchor);
+  anchor.remove();
+  rememberComponent({ key: record.key, definition, mount: record.mount, nodes });
+
+  // An application root: unmounting it removes its nodes, which are now these.
+  const application = parent === null ? mountStore().mountedRoots.get(id) : undefined;
+  if (application !== undefined) {
+    const owned = application.nodes as Node[];
+    owned.splice(0, owned.length, ...nodes);
+  }
+}
+
+/**
+ * A compiled module starts evaluating, which in a dev server happens again after an edit: the
+ * effects its previous evaluation started at module scope stop, before the new ones start.
+ */
+export function moduleEvaluating(path: string): void {
+  unregisterSubtree(`mmd:effects:${path}`);
 }
 
 /** Remove stale module-owned singleton entities and analysis before reevaluation. */

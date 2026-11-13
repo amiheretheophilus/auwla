@@ -92,6 +92,35 @@ describe('route module resource', () => {
     }
   });
 
+  it('loads again for another table whose loader names the same key', async () => {
+    // Two builds of one app in the same page, or an app evaluated again: the key is the same
+    // module path, but each table's loader imports its own module.
+    const key = './ModuleResourceRebuilt.tsx#Page';
+    const first = () => 'first';
+    const second = () => 'second';
+    const table = (component: () => string) => [{ id: 'page', pattern: '/page', metadata: {
+      componentKey: key,
+      moduleLoader: async () => { registerRouteComponent(key, component); },
+    } }];
+    const firstRuntime = createRouteRuntime({ environment: {}, routes: table(first) });
+    const secondRuntime = createRouteRuntime({ environment: {}, routes: table(second) });
+    try {
+      const opened = firstRuntime.navigate('/page');
+      if (opened.status === 'preparing') await opened.finished;
+      expect(readRouteComponent(key)).toBe(first);
+
+      const reopened = secondRuntime.navigate('/page');
+      if (reopened.status !== 'preparing') throw new Error('Expected the second table to load its module');
+      // The page on screen keeps reading its component while the other loads.
+      expect(readRouteComponent(key)).toBe(first);
+      await reopened.finished;
+      expect(readRouteComponent(key)).toBe(second);
+    } finally {
+      firstRuntime.dispose();
+      secondRuntime.dispose();
+    }
+  });
+
   it('stores a chunk error and retries on the next navigation', async () => {
     const key = './ModuleResourceRetry.tsx#Retry';
     const failure = new Error('chunk unavailable');

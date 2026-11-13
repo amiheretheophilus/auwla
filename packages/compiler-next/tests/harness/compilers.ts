@@ -28,10 +28,18 @@ export interface Compiler {
   prepare(): () => void;
   /** Compile `App.tsx`. Returns the output files by name. */
   compile(source: string, modules?: Record<string, string>, timeoutMs?: number): Record<string, string>;
-  /** Mount the compiled `App` into `container`; `served` is a second copy a server renders from. */
-  mount(module: Record<string, unknown>, container: HTMLElement, served?: Record<string, unknown>): CompiledApp;
+  /**
+   * Mount the compiled `App` into `container`; `served` is a second copy a server renders from,
+   * for a request to `url`.
+   */
+  mount(module: Record<string, unknown>, container: HTMLElement, served?: Record<string, unknown>, url?: string): CompiledApp;
   /** Whether `mount` takes a server render, which needs its own copy of the modules. */
   readonly serves?: boolean;
+  /**
+   * The server's own build of `App.tsx`, as an application compiles its server
+   * (`routedEnvironment: 'server'`): every import static, since a server renders any route at once.
+   */
+  compileServer?(source: string, modules?: Record<string, string>): Record<string, string>;
 }
 
 /**
@@ -98,12 +106,22 @@ const delivery = process.env.DATA_DELIVERY === 'client' ? { dataDelivery: 'clien
 /** Only the app's entry is used from outside, as in a real build. `ENTRIES=all` assumes every export is. */
 const entries = process.env.ENTRIES === 'all' ? {} : { entries: ['./App.tsx'] };
 
-/** Compile a case with compiler-next, seeing into any package the case installs. */
-function compileNext(source: string, modules: Record<string, string> | undefined, optimize: boolean): Record<string, string> {
+/**
+ * Compile a case with compiler-next, seeing into any package the case installs. By default the
+ * browser's build: its first route is prepared before it mounts (`$routed`), and a component
+ * imported only for its routes loads with them.
+ */
+function compileNext(
+  source: string,
+  modules: Record<string, string> | undefined,
+  optimize: boolean,
+  routedEnvironment: 'client' | 'server' = 'client',
+): Record<string, string> {
   const files = { ...modules, './App.tsx': source };
 
   return compileModulesNext(files, {
     runtimePath: '@memoized-dom/runtime/testing',
+    routedEnvironment,
     resolveImport: installedResolver(Object.keys(files)),
     ...(optimize ? {} : { optimize: false }),
     ...delivery,
@@ -164,13 +182,18 @@ const deliveredCompiler: Compiler = {
   output: 'next-delivered',
   serves: true,
 
-  mount(module, container, served) {
+  compileServer(source, modules) {
+    return compileNext(source, modules, true, 'server');
+  },
+
+  mount(module, container, served, url) {
     const App = module.App as (id: string, parent: null) => Node;
     useCaseScheduler();
     let html: string | null = null;
     try {
       // Requests a server makes are its own, and never answered here.
-      html = asServer(() => renderToString(served!.App as never, { markers: true, fetch: neverAnswers }));
+      const request = url === undefined ? {} : { url: new URL(url, window.location.origin).href };
+      html = asServer(() => renderToString(served!.App as never, { markers: true, fetch: neverAnswers, ...request }));
     } catch {
       html = null;
     }

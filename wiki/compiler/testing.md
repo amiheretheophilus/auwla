@@ -68,6 +68,9 @@ and DOM identity independently of the comparison, so two wrong renderers cannot
 agree unnoticed. On PowerShell, set `$env:REFERENCE_ONLY = '1'` before the command;
 remove it with `Remove-Item Env:REFERENCE_ONLY` to restore comparisons.
 
+A case with routes sets `url`, the page's starting location; each observation then records the
+location too, and each run gets a fresh route runtime (`routes.md`, "Testing").
+
 Cases may provide extra `modules` for imports. Steps include `respond` (JSON body
 and optional HTTP status), `rejectRequest`, and `reject` for a named `defer`.
 `{ advance: ms }` lets time pass: a case with this step runs on Bun's fake timers

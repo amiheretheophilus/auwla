@@ -14,7 +14,7 @@ it('keeps diagnostics and applies completions around unfinished task-board edits
     { codes: [1005], source: brokenHost(app) },
     // Damaged markup (JSX+ 1008) beside an ordinary host error (TypeScript 1005).
     { codes: [1008, 1005], source: damagedLabel(brokenHost(app)) },
-    { codes: [1001], source: app.replace('        </ul>\n', '') },
+    { codes: [1001], source: app.replace(/        <\/ul>\r?\n/, '') },
     { codes: [1001], source: app.replace('      </footer>', '      </fo') },
     { codes: [1999], source: app.replace('onInput={event => query = event.currentTarget.value}', 'onInput={event => query = event.currentTarget.value') },
     { codes: [1011], source: app.replace('for (const task of visible) {', 'for (const task of visible {') },

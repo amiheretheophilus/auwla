@@ -17,6 +17,13 @@ export interface CompileModulesOptions {
    */
   readonly dataDelivery?: 'universal' | 'client';
   /**
+   * Where `$routed` preparations of this build run (`wiki/compiler/routes.md`, "Preparations").
+   * `client` drops the bodies of server-backed ones and their `#server/` imports, and waits for
+   * the first route's preparations before the app mounts; `server` keeps every body. Default:
+   * both bodies kept, and no initial wait. Vite passes it (`packages/vite/src/graph/collector.ts`).
+   */
+  readonly routedEnvironment?: 'client' | 'server';
+  /**
    * The modules whose exports code outside this graph can use, such as the app's entry.
    * Everything else is called only from modules in the graph, so the compiler can follow
    * what those calls pass (`wiki/compiler/sources.md`). Default: every module.
@@ -25,9 +32,22 @@ export interface CompileModulesOptions {
   /**
    * Maps an import specifier to the path of one of the compiled modules, when the
    * default rule (relative paths, probing extensions and index files) does not.
-   * Return `undefined` to use the default.
+   * Return `false` for a module outside the compiled set, or `undefined` to use the default.
    */
-  readonly resolveImport?: (specifier: string, importer: string) => string | undefined;
+  readonly resolveImport?: (specifier: string, importer: string) => string | false | undefined;
+  /**
+   * Also give each module's source map, back to the text the caller gave
+   * (`compileModulesDetailed`, `createProject`). Default false: printing a map costs time.
+   */
+  readonly sourceMaps?: boolean;
+  /**
+   * A dev server's browser build: each module whose exports are all components replaces its live
+   * instances when it is edited, and modules tell the hot runtime when they evaluate again
+   * (`wiki/compiler/project.md`, "Hot replacement"). Default false.
+   */
+  readonly hot?: boolean;
+  /** The hot runtime that code built with `hot` imports. Default `@memoized-dom/runtime/hot`. */
+  readonly hotRuntimePath?: string;
 }
 
 /** Options of `compile`, which takes one module. */

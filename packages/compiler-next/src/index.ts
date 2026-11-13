@@ -3,3 +3,6 @@ export { compile, compileModules, compileModulesDetailed, type CompiledModules }
 export type { CompileModulesOptions, CompileOptions } from './options';
 export type { InitialDelivery, InitialRender } from './features/delivery';
 export { CompileError } from './core/diagnostics';
+export type { SourceMap } from './core/emit/source-map';
+export * from './project';
+export * from './server';

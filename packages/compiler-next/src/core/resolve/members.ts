@@ -18,7 +18,7 @@ import type { Binding, Module } from 'yuku-analyzer';
 import type { Node } from 'yuku-parser';
 import { isWrittenGlobal } from './globals';
 import type { Resolved } from '.';
-import { importedBinding } from './exports';
+import { importedBinding, namespaceModule } from './exports';
 
 export interface PropertyReads {
   /** True when reading `member` may run code that reads other values. */
@@ -51,6 +51,11 @@ export function propertyReads(resolved: Resolved): PropertyReads {
     if (reference.binding === null) {
       // Not a global: what a function was called with, which is different each call.
       return reference.name === 'arguments' || isWrittenGlobal(resolved.globals, reference.name);
+    }
+    // A module namespace's properties are its exports' live bindings, with no getters: reading
+    // `config.title` runs no code. What the export holds is another question (`config.user.name`).
+    if (namespaceModule(reference.binding) !== null) {
+      return !(is.MemberExpression(member) && unwrapped(member.object) === root);
     }
     return !isPlainData(definitionOf(reference.binding));
   }
@@ -91,6 +96,16 @@ function memberRoot(member: Node): Node {
       return current;
     }
   }
+}
+
+/** `node` past `(…)`, `!` and `as T`. */
+function unwrapped(node: Node): Node {
+  let current = node;
+  while (is.ParenthesizedExpression(current) || is.TSNonNullExpression(current)
+    || is.TSAsExpression(current) || is.TSSatisfiesExpression(current)) {
+    current = current.expression;
+  }
+  return current;
 }
 
 /**

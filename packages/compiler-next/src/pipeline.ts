@@ -11,7 +11,8 @@ import { findAll } from 'yuku-ast';
 import type { Node } from 'yuku-parser';
 import { CompileError } from './core/diagnostics';
 import { emitDom } from './core/emit/dom';
-import { printJavaScript } from './core/emit/print';
+import { printJavaScript, printWithSourceMap } from './core/emit/print';
+import type { SourceMap } from './core/emit/source-map';
 import type { Resolved } from './core/resolve';
 import { analyzeFrontend } from './analysis/frontend';
 import { planInitialDelivery, planInitialRender, type InitialDelivery, type InitialRender } from './features/delivery';
@@ -23,9 +24,16 @@ import { planCapturedValues } from './link/captured-plan';
 import { emitNamespaceReads, markNamespaceReads } from './link/open-namespaces';
 import { emitCapturedValues } from './link/captured-dom';
 import { lowerFetchImport, markExplicitFetches } from './features/sources/delivery';
+import { resolveSpecifiers } from './link/specifiers';
+import { addHotRuntime, hotModule, type HotModule } from './features/hot';
+import { splitRouteImports } from './features/routes';
+
+const NO_COMPONENTS: HotModule = { definesComponents: false, accepts: false };
 
 export interface CompiledModules {
   readonly output: Record<string, string>;
+  /** Each module's source map, when `sourceMaps` is set. */
+  readonly maps?: Record<string, SourceMap>;
   readonly initialRender: InitialRender;
   /** Present when the page needs no browser program: its HTML is the whole page. */
   readonly initialDelivery?: InitialDelivery;
@@ -52,17 +60,22 @@ export function compileModulesDetailed(
   modules: Readonly<Record<string, string>>,
   options: CompileModulesOptions = {},
 ): CompiledModules {
-  const { output, resolved } = compileProgram(modules, options);
+  const { output, maps, resolved } = compileProgram(modules, options);
   const initialRender = planInitialRender(resolved, output, options);
   const initialDelivery = planInitialDelivery(initialRender, modules);
-  return { output, initialRender, ...(initialDelivery === undefined ? {} : { initialDelivery }) };
+  return {
+    output,
+    ...(maps === undefined ? {} : { maps }),
+    initialRender,
+    ...(initialDelivery === undefined ? {} : { initialDelivery }),
+  };
 }
 
 function compileProgram(
   modules: Readonly<Record<string, string>>,
   options: CompileModulesOptions,
-): { output: Record<string, string>; resolved: Resolved } {
-  const { resolved, graph } = analyzeFrontend(modules, options);
+): { output: Record<string, string>; maps?: Record<string, SourceMap>; resolved: Resolved } {
+  const { resolved, graph, routeSplits } = analyzeFrontend(modules, options);
   const general = planCapturedValues(planModules(graph, graph.queries, graph.components), resolved);
   const plans = optimizeModules(general, graph, options.optimize !== false);
   const opensNamespaces = markNamespaceReads(plans, resolved);
@@ -87,11 +100,32 @@ function compileProgram(
 
   const linked = linkModuleNamespaces(plans, emitted, options);
   const output: Record<string, string> = {};
+  const maps: Record<string, SourceMap> | undefined = options.sourceMaps === true ? {} : undefined;
+  const known = new Set(plans.map((plan) => plan.module.path));
+  const hot = options.hot === true ? new Map(plans.map((plan) => [plan.module.path, hotModule(plan)])) : null;
   for (const [path, emitted] of linked) {
     lowerFetchImport(emitted.tree, emitted.module.module, options);
     markExplicitFetches(emitted.tree);
-    output[path] = printJavaScript(emitted.tree, emitted.module.path, emitted.module.module.source);
+    const module = emitted.module;
+    resolveSpecifiers(emitted.tree, module.path, known, options);
+    const splits = routeSplits.get(path);
+    if (splits !== undefined) {
+      splitRouteImports(emitted.tree, splits);
+    }
+    if (hot !== null) {
+      // A companion output (`./App.mmd.tsx`) has no plan: it defines no components.
+      addHotRuntime(emitted.tree, hot.get(path) ?? NO_COMPONENTS, options.hotRuntimePath);
+    }
+    if (maps === undefined) {
+      output[path] = printJavaScript(emitted.tree, module.path, module.module.source);
+      continue;
+    }
+    const printed = printWithSourceMap(emitted.tree, {
+      path: module.path, analyzed: module.module.source, authored: module.authored, origin: module.origin,
+    });
+    output[path] = printed.code;
+    maps[path] = printed.map;
   }
 
-  return { output, resolved };
+  return { output, ...(maps === undefined ? {} : { maps }), resolved };
 }

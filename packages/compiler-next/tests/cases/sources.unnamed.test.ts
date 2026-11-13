@@ -2,7 +2,7 @@
  * A source reached in a way the compiler cannot name: a computed key, a class instance, a `Map`, a
  * call. Each read waits while the source loads, as a named one does (rule 8), where it threw
  * `UnresolvedDataReadError` before. The runtime treats only that error, or the failure of a source
- * it read, as waiting (`wiki/decisions.md`, 2026-11-10, "one runtime catch"; `compiler/sources.md`,
+ * it read, as waiting (`wiki/decisions.md`, 2026-11-11, "one runtime catch"; `compiler/sources.md`,
  * "Reads the compiler cannot name").
  */
 import { expect } from 'bun:test';

@@ -23,6 +23,7 @@ import { emitAwaitBoundaries } from './await';
 import { emitRenderValue } from './render-value';
 import { RowComponents } from './row-list';
 import { emitComponentCall } from '../../features/components/dom';
+import { componentKey } from './component-key';
 import { emitProps } from '../../features/props/dom';
 import { declaredWithFunction, functionValue } from '../resolve/functions';
 import { importedDefinition, namespaceModule } from '../resolve';
@@ -185,7 +186,7 @@ export function emitDom(plan: ModulePlan, options: CompileModulesOptions): Node 
     const enclosingFunction = [...module.ancestors(component.fn)].find((ancestor) => {
       return ancestor !== component.fn && is.Function(ancestor);
     });
-    const rootId = `${plan.module.path}#${component.fn.id?.name ?? component.fn.start}`;
+    const rootId = componentKey(module, plan.module.path, component.fn);
     if (!is.FunctionDeclaration(component.fn)) {
       emitted = enclosingFunction === undefined
         ? expression('$$runtime.defineComponent($$component, $$root)', {

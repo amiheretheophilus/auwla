@@ -7,6 +7,11 @@ export interface MemoizedDomViteOptions
   extends Omit<CompileModulesOptions, 'aliases' | 'resolveImport' | 'hot'> {
   /** Browser bootstrap and connected compiler-graph entry. */
   clientEntry: string;
+  /**
+   * `next` compiles with compiler-next (`src/next/plugin.ts`), as `MMD_COMPILER=next` does. With
+   * it, `server` is the server-only folder and must be given: no folder is server-only by its name.
+   */
+  compiler?: 'old' | 'next';
   /** Server composition root. Omit for browser-only applications. */
   serverEntry?: string;
   /** Production host and CLI dev target. Direct createDevServer() calls use their launching runtime. */

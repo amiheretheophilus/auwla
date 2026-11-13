@@ -283,7 +283,7 @@ class NotReady extends Error {
  * Evaluate authored code only when all of its inputs have values. A source the inputs could not
  * name (`queries[tab].name`, a class field, `map.get(key)`, a call) makes the computation wait as a
  * named one does: only that error is caught, anything else is the program's own and still throws
- * (`wiki/decisions.md`, 2026-11-10).
+ * (`wiki/decisions.md`, 2026-11-11).
  */
 export function $when(readInputs: () => unknown[], compute: () => unknown): unknown {
   const waiting = $waiting(readInputs());

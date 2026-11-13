@@ -4,6 +4,7 @@
  */
 import type { CompileModulesOptions } from '../../options';
 import type { ParsedModule } from '../parse';
+import { applyEditsWithOrigin, type Edit, type TextOrigin } from '../parse/text-edits';
 
 /**
  * The text to analyze for a module, with `import x = require('m')` settled.
@@ -17,16 +18,15 @@ export function withRequireImports(
   input: ParsedModule,
   parsed: readonly ParsedModule[],
   resolve: ReturnType<typeof importResolver>,
-): string {
-  let source = input.source;
-  // From the end, so earlier offsets stay valid.
-  for (const { at, local, specifier } of [...input.requireImports].reverse()) {
+): { text: string; origin: TextOrigin } {
+  const edits: Edit[] = [];
+  for (const { at, local, specifier } of input.requireImports) {
     const target = parsed.find((module) => module.path === resolve(specifier, input.path));
     if (target === undefined || target.hasExportAssignment) continue;
     const written = `import ${local}`;
-    source = `${source.slice(0, at)}import * as ${local}${source.slice(at + written.length)}`;
+    edits.push({ start: at, end: at + written.length, text: `import * as ${local}` });
   }
-  return source;
+  return applyEditsWithOrigin(input.source, edits);
 }
 
 const EXTENSIONS = ['', '.ts', '.tsx', '.js', '.jsx', '/index.ts', '/index.tsx', '/index.js', '/index.jsx'];
@@ -52,7 +52,8 @@ export function relativeModule(importer: string, target: string, preserveExtensi
 
   const relative = [...from.map(() => '..'), ...to].join('/');
   const path = preserveExtension ? relative : relative.replace(/\.tsx?$/, '');
-  return path.startsWith('.') ? path : `./${path}`;
+  // `.memoized/x.ts` is a folder name starting with a dot, not a relative path.
+  return path.startsWith('./') || path.startsWith('../') ? path : `./${path}`;
 }
 
 /**
@@ -65,23 +66,47 @@ export function importResolver(paths: readonly string[], options: CompileModules
   return (specifier: string, importer: string): string | false | null => {
     const custom = options.resolveImport?.(specifier, importer);
     if (custom !== undefined) return custom;
-    if (!specifier.startsWith('.')) return false;
 
-    const base = joinPath(directoryOf(importer), specifier);
-    for (const extension of EXTENSIONS) {
-      const candidate = base + extension;
-      if (known.has(candidate)) return candidate;
-    }
-
-    const dot = base.lastIndexOf('.');
-    const output = base.slice(dot);
-    for (const source of SOURCES_OF_OUTPUT[output] ?? []) {
-      const candidate = base.slice(0, dot) + source;
-      if (known.has(candidate)) return candidate;
-    }
-
-    return null;
+    const candidates = importCandidates(specifier, importer);
+    if (candidates === null) return false;
+    return candidates.find((candidate) => known.has(candidate)) ?? null;
   };
+}
+
+const STYLESHEET = /\.(?:css|less|sass|scss|styl|stylus|pcss|postcss|sss)$/i;
+
+/** Whether a path or specifier names a stylesheet, which a bundler loads, never the compiler. */
+export function isStylesheet(specifier: string): boolean {
+  return STYLESHEET.test(specifier);
+}
+
+/**
+ * A stylesheet imported for its effect on the page (`./app.css`): it runs no code and exports
+ * nothing a page reads. Not a CSS module (`./app.module.css`), whose exports are class names the
+ * bundler makes.
+ */
+export function isPlainStylesheet(specifier: string): boolean {
+  return isStylesheet(specifier) && !/\.module\.[a-z]+$/i.test(specifier);
+}
+
+/**
+ * The paths a specifier may name, in the order they are tried: as written, with each source
+ * extension, as a folder's index, and the TypeScript source of a written `.js`. Null for a bare
+ * specifier, which names a package. A project collecting its modules from disk tries the same
+ * paths (`project/collect.ts`), so it finds exactly the modules this rule later picks.
+ */
+export function importCandidates(specifier: string, importer: string): readonly string[] | null {
+  if (!specifier.startsWith('.')) return null;
+
+  const base = joinPath(directoryOf(importer), specifier);
+  const candidates = EXTENSIONS.map((extension) => base + extension);
+
+  const dot = base.lastIndexOf('.');
+  for (const source of SOURCES_OF_OUTPUT[base.slice(dot)] ?? []) {
+    candidates.push(base.slice(0, dot) + source);
+  }
+
+  return candidates;
 }
 
 function directoryOf(path: string): string {

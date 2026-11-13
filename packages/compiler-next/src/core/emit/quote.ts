@@ -21,6 +21,9 @@ export function statements(code: string, holes: Readonly<Record<string, Hole>> =
       throw new Error(`memo-dom: emitter snippet does not parse: ${result.diagnostics[0]!.message}\n${code}`);
     }
     template = result.program.body as Statement[];
+    // Offsets into the snippet are no place in any module. Zero, as for a node built with `b`,
+    // they mark the code as the compiler's, which a source map leaves unmapped (`source-map.ts`).
+    for (const statement of template) clearOffsets(statement);
     parsed.set(code, template);
   }
   const copy = structuredClone(template) as Statement[];
@@ -52,6 +55,23 @@ export function stringLiteral(value: string): Extract<Node, { type: 'Literal'; v
 
 export function numberLiteral(value: number): Expression {
   return b.Literal({ value, raw: String(value) });
+}
+
+/** Sets `start` and `end` to 0 on a snippet's every node. */
+function clearOffsets(value: unknown): void {
+  if (Array.isArray(value)) {
+    for (const item of value) clearOffsets(item);
+    return;
+  }
+  if (value === null || typeof value !== 'object') return;
+  const node = value as Record<string, unknown>;
+  if (typeof node.type === 'string' && typeof node.start === 'number') {
+    node.start = 0;
+    node.end = 0;
+  }
+  for (const key of Object.keys(node)) {
+    if (key !== 'start' && key !== 'end') clearOffsets(node[key]);
+  }
 }
 
 function fill(nodes: Statement[], holes: Readonly<Record<string, Hole>>): void {
