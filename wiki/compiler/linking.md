@@ -25,7 +25,7 @@ objects; it does not introduce a second state model.
 | `link/specifiers.ts` | A bare or alias specifier the caller's `resolveImport` maps to a compiled module is printed as a relative path to it, so output loads without the resolver (`project.md`, `server.md`) |
 | `link/open-namespaces.ts` | Reads through a namespace that came from `import()`: registering the module, asking the runtime before a read, and lowering an optional chain that continues past one |
 | `features/state/shared-plan.ts` | Shared binding readers and the versions a compiled namespace can observe |
-| `features/state/shared-dom.ts` | Namespace version observation and guarded mutation inputs, preserving the native receiver and avoiding uninitialized export reads |
+| `features/state/shared-dom.ts` | Namespace version observation and guarded mutation inputs, preserving the native receiver and avoiding uninitialized export reads. A shared frame completes through each `return`, and also at the end unless the setup ends in `return` or `throw`, where a call would be unreachable code that browsers warn about (`shared-dom.test.ts`) |
 | `tests/cases/linking.test.ts` | Reference and optimized/general comparisons for live/default exports, namespaces, cycles, collisions, components and readiness |
 | `tests/cases/linking.graphs.test.ts` | Dynamic imports (lazy state, components, sources, effects, computed specifiers, top-level `await`), star exports meeting code outside the graph, and cycles of state, components, sources and re-exports |
 | `tests/cases/linking.packages.test.ts` | Source-graph oracle for separate package compilation: forwarded status/payload use, returned sources, shared package state and retained component state |

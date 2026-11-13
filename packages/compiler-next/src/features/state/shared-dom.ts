@@ -392,7 +392,13 @@ export function finishSharedOwner(
   for (const node of setup) {
     body.push(copy(node, returns), ...watchBindingsDeclaredBy(owner, node));
   }
-  body.push(statement('$$complete(void 0);', { complete }));
+  // Falling off the end completes the frame. A setup ending in `return` (rewritten above to
+  // complete it) or `throw` never gets there, and a call after it is unreachable code, which
+  // browsers warn about ("unreachable code after return statement").
+  const last = setup.at(-1) as Node | undefined;
+  if (last === undefined || !(is.ReturnStatement(last) || is.ThrowStatement(last))) {
+    body.push(statement('$$complete(void 0);', { complete }));
+  }
   return body;
 }
 

@@ -7,6 +7,39 @@ import {
   createApplicationRuntime, getActiveEnvironment, runWithApplicationRuntime, setScheduler,
 } from '@memoized-dom/runtime/testing';
 import { compileModules } from '../../pipeline';
+import { findAll, is } from 'yuku-ast';
+import { parse } from 'yuku-parser';
+
+/** Statements that follow a `return` or `throw` in the same block, which can never run. */
+function unreachable(code: string): string[] {
+  const { program } = parse(code, { lang: 'js', sourceType: 'module' });
+  const found: string[] = [];
+  for (const block of findAll(program, ['BlockStatement', 'Program'])) {
+    const body = (block as { body: { type: string; start: number; end: number }[] }).body;
+    const end = body.findIndex((statement) => is.ReturnStatement(statement as never) || is.ThrowStatement(statement as never));
+    if (end >= 0 && end < body.length - 1) found.push(code.slice(body[end + 1]!.start, body[end + 1]!.end));
+  }
+  return found;
+}
+
+it.each([true, false])('completes a shared frame that ends in return only through the return (optimize %p)', (optimize) => {
+  // An effect reading a source, whose local its cleanup reads again, gets a shared frame (found in
+  // the JSX+ team example's Person page). Its last statement returns, so nothing may follow it:
+  // browsers warn "unreachable code after return statement".
+  const code = compileModules({ './App.tsx': `
+    export function App() {
+      const member = $fetch('/api/member');
+      $effect(() => {
+        const previous = document.title;
+        document.title = member.name;
+        return () => { document.title = previous; };
+      });
+      return <p>{member.name}</p>;
+    }
+  ` }, { runtimePath: '@memoized-dom/runtime/testing', optimize })['./App.tsx']!;
+  expect(code).toContain('_completeShared');
+  expect(unreachable(code)).toEqual([]);
+});
 
 it.each([
   { mode: 'optimized', optimize: true },
