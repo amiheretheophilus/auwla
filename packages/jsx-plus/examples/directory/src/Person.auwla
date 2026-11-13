@@ -1,0 +1,19 @@
+import { findPerson } from '#server/people.auwla';
+
+export function Person() {
+  // A server-backed preparation: it reads server-only code, so it runs on the server. On a page
+  // the server renders, it runs there; after a link click, the browser asks the server for it.
+  const person = $routed(({ params }) => findPerson(params.id));
+
+  return (
+    <article class="person">
+      if (person === null) {
+        <p class="missing">"No one with that id."</p>
+      } else {
+        <h2>person.name</h2>
+        <p class="role">person.role</p>
+      }
+      <a route-to="/">"Back to everyone"</a>
+    </article>
+  );
+}

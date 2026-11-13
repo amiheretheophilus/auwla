@@ -15,6 +15,7 @@ React JSX runtime. Other projects need this one-time configuration too.
 | [greeting.auwla](greeting.auwla) | Editable greeting, conditional branches, native event input and looped names; real completion and runtime checks use this file |
 | [task-board/App.auwla](task-board/App.auwla) | A complete task board: derived lists/counts, search, status filters, form submission, existing refs, direct `if`, direct `for` loops in the markup, quoted text and row events |
 | [team/](team/) | Routes (nested, parameters, catch-all), lazy route chunks, `Group` pending/error policies, `<slot>` layouts, `$fetch`/`$track` with a reactive helper, `$routed`, `$effect` and `$cleanup` |
+| [directory/](directory/) | Rendered on the server: `.auwla` server functions and a `.auwla` server-only module, a server-backed `$routed`, hydration, and a form posting to a server function |
 | [notes/](notes/) | Several `.auwla` components importing each other (with and without the extension, through a `.ts` re-export), built by compiler-next's project, Bun plugin and Vite plugin |
 | [checking/App.auwla](checking/App.auwla) | Small typed-prop/ref example used by the mapper checks |
 | [checking/TypeError.auwla](checking/TypeError.auwla) | Deliberately invalid method call for inspecting authored diagnostics |
@@ -112,6 +113,37 @@ without it, `"…" <button>` reads as a comparison (spec grammar rule 5), and th
 error is JPX1005 at the tag, asking for that `;`.
 `tests/routes.test.ts` bundles this folder with chunk splitting and drives it in
 both compiler modes; `tests/vite.test.ts` checks Vite splits the same pages.
+
+## Run the directory (rendered on the server)
+
+```text
+bun run examples/directory/preview.ts
+```
+
+Open `http://127.0.0.1:3033`. Compiler-next's Bun plugin builds the browser bundle and the
+server; the built server renders every page, answers the server functions and prepares
+server-backed `$routed` pages. `--build` builds and exits.
+
+- [directory/server/functions/people.auwla](directory/server/functions/people.auwla) holds server
+  functions written in `.auwla`; [directory/src/App.auwla](directory/src/App.auwla) imports the same
+  names from `#server-functions`, where they call the endpoints. `listPeople()` is rendered on the
+  server and its result travels with the page, so the browser adopts the list without asking again.
+- [directory/src/Person.auwla](directory/src/Person.auwla) reads `#server/people.auwla`, a
+  server-only module in the server folder, inside `$routed`, so the preparation runs on the server:
+  during the render for a page the server serves, and through `POST /_memoized/routed` after a
+  link click. The client bundle never contains it.
+- `server.ts` and `server/define.ts` stay TypeScript.
+
+The preview also writes `.memoized/server-functions.d.ts` (ignored by git), which types
+`#server-functions` for the editor, as the Vite plugin does. Run it once before checking:
+
+```text
+bun ../../node_modules/typescript/lib/tsc.js --project examples/directory/tsconfig.json --runExternalCode --pretty false
+```
+
+Write the `.auwla` extension in imports of `.auwla` files (`'../people.auwla'`). The build
+also finds `'../people'`, but TypeScript in the editor does not yet: it reports
+"Cannot find module". `tests/server.test.ts` builds this folder and drives it in both modes.
 
 ## Walk through the authoring
 

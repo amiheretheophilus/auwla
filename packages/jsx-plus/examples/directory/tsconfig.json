@@ -1,0 +1,14 @@
+{
+  "extends": "../checking/tsconfig.json",
+  "compilerOptions": {
+    "paths": {
+      "@memoized-dom/compiler/jsx": ["../../../compiler/src/jsx-types.ts"],
+      "#server/*": ["./server/*"],
+      "#server-functions": ["./.memoized/server-functions.d.ts"]
+    }
+  },
+  "files": [
+    "./src/App.auwla", "./src/Person.auwla", "./src/main.ts",
+    "./server/people.auwla", "./server/functions/people.auwla", "./server/define.ts", "./server.ts"
+  ]
+}

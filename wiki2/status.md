@@ -91,10 +91,41 @@ Found while writing it:
   router. Browsers load one bundle per page; the test gives each app a fresh window.
   Not changed; reported for the router owner.
 
-Not yet: `.auwla` server functions (compiler-next's `server/` accepts only JS/TS),
-server-backed `$routed` and SSR of `.auwla` apps; cross-file editor checks
-(rename/completion across `.auwla` imports). A collected `.auwla` module is
-normalized twice per change.
+### Server side: SSR, server functions and server-backed `$routed` in `.auwla`
+
+`examples/directory` is rendered on the server and written in `.auwla` down to its server
+function module (`server/functions/people.auwla`) and server-only module
+(`server/people.auwla`, read as `#server/people.auwla`); `server.ts` and `define.ts` stay
+TypeScript. As the user expected, compiler-next already did nearly all of it: the application
+passes `languages` to both projects, so `.auwla` components render on the server and hydrate.
+Two changes were needed (reconcile table):
+
+- The server folder scan, analysis, endpoint names, facades and `#server/` probing only knew
+  JS/TS. They now use the language (`moduleText`), with errors at the authored line.
+- A genuine compiler-next bug, plain `.tsx` too: once a page reads a server function, the
+  server entry's `app.ssr(App)` became a source builder step whose storage was never declared,
+  and the built server threw `_sourceStep is not defined` on start. Fixed in
+  `core/emit/shared.ts`; its test fails without the fix.
+
+`tests/server.test.ts` builds the server with compiler-next's Bun plugin and asks it for pages
+with no browser window (the preload's happy-dom window made the render act as a browser): the
+list from `listPeople()` with its transferred data, `/people/2` prepared by the server-backed
+`$routed`, the not-found branch, and the `.auwla` endpoint. Then, in both compiler modes, the
+client starts on the server's page with `fetch` sent to that server: it adopts the server's nodes
+with no request, a link asks `POST /_memoized/routed` for the person, and the form posts
+`createPerson` then reads the list again. 3 pass. `examples/directory/preview.ts` serves it
+(port 3033) and writes `.memoized/server-functions.d.ts`; with it, `tsc` over the example's
+`tsconfig.json` reports no errors, `#server-functions` typed from the `.auwla` module.
+
+Editor finding (the user hit it): TypeScript 7.1 with `contentMappers` loads a `.auwla` module only
+when the import names it. `'../people'` builds (compiler-next probes extensions) but is TS2307 in
+the editor; the notes example's `./NoteList` re-export has the same error. The example writes
+`.auwla` out; resolving extensionless imports belongs to cross-file editor checks.
+
+Not yet: cross-file editor checks (extensionless resolution, rename/completion across `.auwla`
+imports); Vite's full-stack path with `.auwla` (the Vite plugin forwards `languages` to the same
+application, not separately exercised); streaming/live server functions in `.auwla`. A collected
+`.auwla` module is normalized twice per change.
 
 ## Current editor fix and next integration slice
 
@@ -285,9 +316,10 @@ full root suite, performance, browser layout and IDE activation.
 
 ## Continue
 
-1. Server side of `.auwla` (DX-39 follow-up): server functions in compiler-next's
-   `server/` through the same `languages` hook, server-backed `$routed` and SSR;
-   then cross-file editor checks. Keep every build concern in compiler-next.
+1. Cross-file editor checks: extensionless `.auwla` imports in TypeScript (TS2307 today, see
+   the server section above), then rename/completion across `.auwla` imports. The server side
+   (SSR, `.auwla` server functions, server-backed `$routed`) is done. Keep every build concern in
+   compiler-next.
 2. P3-EDITOR (first adapter/assets built, DX-36): verify the 0.0.2 desktop update with
    the compatible TypeScript provider and the real task board, then inferred
    projects and portability beyond the local VSIX. Reuse by other extensions is documented;
@@ -311,9 +343,9 @@ Known open issues:
   Completion inside quarantined text and broader combinations of multiline
   damage remain open. Same-line host declarations now survive when an inserted
   closer repairs the markup; unsafe host-code removal still falls back.
-- Replay proofs remain open. `.auwla` client builds now go through compiler-next's
-  project, Bun plugin and Vite plugin with maps to the authored text (DX-39, above).
-  Its server folders, server-backed `$routed` and SSR are not yet proven for `.auwla`.
+- Replay proofs remain open. `.auwla` builds go through compiler-next's project, Bun
+  plugin and Vite plugin with maps to the authored text (DX-39, above), and its server
+  build renders, prepares `$routed` and answers server functions (directory example).
 
 ## Compiler-next changes to reconcile
 
@@ -333,6 +365,7 @@ any new changes that must be adopted or corrected on `compiler-rewrite` later:
 | `03958a19` | `optimize/closed-lists.ts`: the proof finds a row list's root through `mappingCall` (`#rowsOver`), replacing the `.map`-only branch in `#useMethod` and the `form` filter in `match`. `features/handlers/mutations.ts` emits `list.map`/`list.from` and `mapRows`/`fromRows` from one branch, passing `unedited` to both. `optimize/methods.ts` drops `withRowReuse`'s redundant `form` argument. Tests: both spellings in `closed-lists.test.ts` and `conditionals-and-lists.closed.test.ts` ([optimize](../wiki/compiler/optimize.md#closed-lists)) | Loops over plain state lists skip unchanged rows like `.map`, without a second copy of the list logic |
 | `232c8f5b` | `optimize/closed-lists.ts`: `returnsToEventDispatch` lets `#useReturn` accept a function literal written as an `on*` attribute of a DOM element that is not `isComponentCall`, since the runtime keeps nothing it returns. Tests in `closed-lists.test.ts` (with controls) and a both-spelling behaviour case ([optimize](../wiki/compiler/optimize.md#closed-lists)) | `onClick=(() => rows.reverse())`, the natural `.auwla` one-liner, turned the skip off; plain JSX benefits too |
 | `0cf5a8ae` | New `core/parse/languages.ts` (`SourceLanguage`, `languageOf`, `languageExtensions`, `moduleText`, `authoredError`) with a toy-language `languages.test.ts` ([core](../wiki/compiler/core.md#source-languages)). `languages` option in `options.ts`; `parseModule` reads a language module's TSX and composes its origin; `analysis/frontend.ts` and `pipeline.ts` move post-parse errors back for language modules; `CompileError.reason`; `importCandidates(…, extensions)`; `isSourcePath(path, languages)`, `collect.ts` and `project.ts` collect language modules; `compile()` accepts a language `moduleId`; the Bun plugin loads and probes language extensions; exports `SourceLanguage`, `TextOrigin`, `languageExtensions`. `packages/vite`: `languages` option, forwarded to the application, host, load, resolve and hot-update checks | DX-39: `.auwla` builds through compiler-next's own project, Bun and Vite paths instead of a JSX+ copy of them |
+| `9b5428e0` | `server/application.ts`, `server/functions.ts`, `server/registry.ts`: the application's `languages` reach server code. Language modules in the server folder are found, analyzed as TSX with authored error lines (`analyzeServerFunctions(…, languages)`, `serverServices(…, languages)`), named and given `.ts` facades without the language's extension (`serverFunctionModuleName(…, extensions)`, `facadePath`), and `#server/` probes language extensions; `importsServe` reads TSX. `core/emit/shared.ts`: module-level readiness storage is declared when no module owner exists. Tests in `server/application.test.ts` (a toy language; undeclared-storage check that fails without the fix) ([server](../wiki/compiler/server.md#application)) | `.auwla` server functions, services and `#server/` modules; the storage fix is a genuine bug (any `.tsx` server whose page reads a server function crashed on start) |
 | `bd2b1eac` | `features/state/shared-dom.ts`: no trailing `$$complete(void 0)` when the shared setup's last statement is `return` or `throw`; `shared-dom.test.ts` checks compiled output has no unreachable statement ([linking](../wiki/compiler/linking.md)) | Found as a browser warning in the `.auwla` team example's `Person` chunk; a genuine emission bug, plain JSX too |
 
 These histories used different commits for the same code before synchronization,

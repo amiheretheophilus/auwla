@@ -1,0 +1,17 @@
+// Server functions, written in `.auwla`. Client code imports the same names from
+// `#server-functions`; there they call these endpoints (`/_fn/people/...`) instead.
+import { define } from '../define';
+// The build finds `../people` too; TypeScript in the editor needs the `.auwla` written out.
+import { addPerson, allPeople } from '../people.auwla';
+
+export const listPeople = define.function({
+  async get() {
+    return allPeople();
+  },
+});
+
+export const createPerson = define.function({
+  async post(_context, name: string, role: string) {
+    return addPerson(name, role);
+  },
+});
