@@ -17,6 +17,7 @@
  */
 import type { BunPlugin } from 'bun';
 import { resolve } from 'node:path';
+import { languageExtensions } from '../core/parse/languages';
 import { importCandidates } from '../core/resolve/imports';
 import type { CompileModulesOptions } from '../options';
 import type { SourceMap } from '../core/emit/source-map';
@@ -47,6 +48,9 @@ const SOURCE = /\.[cm]?[jt]sx?$/;
 
 export function memoizedDom(options: BunPluginOptions): BunPlugin {
   const { client, server, target = 'client', delivery, root = process.cwd(), ...compile } = options;
+  // Modules a source language owns (`.auwla`) load from the build like `.tsx` ones (`core/parse/languages.ts`).
+  const extensions = languageExtensions(compile.languages);
+  const source = extensions.length === 0 ? SOURCE : new RegExp(`${SOURCE.source}|(?:${extensions.map(escapeRegExp).join('|')})$`);
 
   return {
     name: 'memoized-dom',
@@ -78,7 +82,7 @@ export function memoizedDom(options: BunPluginOptions): BunPlugin {
         if (args.importer === '') return undefined;
         const program = await compiled();
         if (!program.ok) return undefined;
-        const candidates = importCandidates(args.path, projectPath(root, args.importer)) ?? [];
+        const candidates = importCandidates(args.path, projectPath(root, args.importer), extensions) ?? [];
         const found = candidates.find((candidate) => program.output[candidate] !== undefined);
         return found === undefined ? undefined : { path: resolve(root, found) };
       });
@@ -94,7 +98,7 @@ export function memoizedDom(options: BunPluginOptions): BunPlugin {
         return page === null ? undefined : { contents: page, loader: 'html' };
       });
 
-      build.onLoad({ filter: SOURCE }, async (args) => {
+      build.onLoad({ filter: source }, async (args) => {
         if (args.path.includes('node_modules')) return undefined;
         const program = await compiled();
         if (!program.ok) throw program.error;
@@ -107,6 +111,10 @@ export function memoizedDom(options: BunPluginOptions): BunPlugin {
       });
     },
   };
+}
+
+function escapeRegExp(text: string): string {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 /** The host, with the delivery module's source as a file when one is given. */

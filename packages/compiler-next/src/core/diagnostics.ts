@@ -1,6 +1,9 @@
 /** Errors the compiler reports, with the place in the authored module. */
 
 export class CompileError extends Error {
+  /** The message without its prefix and place, to report the same error elsewhere. */
+  readonly reason: string;
+
   constructor(
     message: string,
     readonly path: string,
@@ -10,6 +13,7 @@ export class CompileError extends Error {
     const place = line === undefined ? path : `${path}:${line}:${column}`;
     super(`memo-dom: ${message} (${place})`);
     this.name = 'CompileError';
+    this.reason = message;
   }
 
   /** An error at a UTF-16 offset in `source`, as yuku reports positions. */

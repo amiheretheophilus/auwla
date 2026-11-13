@@ -4,6 +4,7 @@
  */
 import type { CompileModulesOptions } from '../../options';
 import type { ParsedModule } from '../parse';
+import { languageExtensions } from '../parse/languages';
 import { applyEditsWithOrigin, type Edit, type TextOrigin } from '../parse/text-edits';
 
 /**
@@ -62,12 +63,13 @@ export function relativeModule(importer: string, target: string, preserveExtensi
  */
 export function importResolver(paths: readonly string[], options: CompileModulesOptions) {
   const known = new Set(paths);
+  const extensions = languageExtensions(options.languages);
 
   return (specifier: string, importer: string): string | false | null => {
     const custom = options.resolveImport?.(specifier, importer);
     if (custom !== undefined) return custom;
 
-    const candidates = importCandidates(specifier, importer);
+    const candidates = importCandidates(specifier, importer, extensions);
     if (candidates === null) return false;
     return candidates.find((candidate) => known.has(candidate)) ?? null;
   };
@@ -94,12 +96,16 @@ export function isPlainStylesheet(specifier: string): boolean {
  * extension, as a folder's index, and the TypeScript source of a written `.js`. Null for a bare
  * specifier, which names a package. A project collecting its modules from disk tries the same
  * paths (`project/collect.ts`), so it finds exactly the modules this rule later picks.
+ *
+ * `extensions`: those a source language owns (`core/parse/languages.ts`), tried after the
+ * JavaScript and TypeScript ones, as a file and as a folder's index: `./Row` may name `./Row.auwla`.
  */
-export function importCandidates(specifier: string, importer: string): readonly string[] | null {
+export function importCandidates(specifier: string, importer: string, extensions: readonly string[] = []): readonly string[] | null {
   if (!specifier.startsWith('.')) return null;
 
   const base = joinPath(directoryOf(importer), specifier);
   const candidates = EXTENSIONS.map((extension) => base + extension);
+  for (const extension of extensions) candidates.push(base + extension, `${base}/index${extension}`);
 
   const dot = base.lastIndexOf('.');
   for (const source of SOURCES_OF_OUTPUT[base.slice(dot)] ?? []) {

@@ -2,6 +2,7 @@
  * Public configuration for the Vite connected-graph adapter.
  */
 import type { CompileModulesOptions } from '@memoized-dom/compiler';
+import type { SourceLanguage } from '@memoized-dom/compiler-next';
 
 export interface MemoizedDomViteOptions
   extends Omit<CompileModulesOptions, 'aliases' | 'resolveImport' | 'hot'> {
@@ -12,6 +13,12 @@ export interface MemoizedDomViteOptions
    * it, `server` is the server-only folder and must be given: no folder is server-only by its name.
    */
   compiler?: 'old' | 'next';
+  /**
+   * With `compiler: 'next'`: authoring syntaxes that become TSX before compiling, such as `.auwla`
+   * from `@memoized-dom/jsx-plus` (`compiler-next/src/core/parse/languages.ts`). Their files are
+   * compiled, imported, hot-updated and mapped like `.tsx` files.
+   */
+  languages?: readonly SourceLanguage[];
   /** Server composition root. Omit for browser-only applications. */
   serverEntry?: string;
   /** Production host and CLI dev target. Direct createDevServer() calls use their launching runtime. */

@@ -3,7 +3,7 @@
  * and imports the compiler's own rule does not settle (path aliases, `@/lib/x`) resolved by Vite.
  */
 import { isAbsolute, join, relative } from 'node:path';
-import { fileSystemHost, isSourcePath, projectPath, type ProjectHost } from '@memoized-dom/compiler-next';
+import { fileSystemHost, isSourcePath, projectPath, type ProjectHost, type SourceLanguage } from '@memoized-dom/compiler-next';
 import { longPath } from '../paths';
 
 /** Vite's resolution of `specifier` from the file `importer`: an id, or null when it finds none. */
@@ -13,7 +13,7 @@ export type ViteResolver = (specifier: string, importer: string) => Promise<stri
  * `resolver` is read at each resolution: the hook that started a build or an update supplies
  * one, since Vite resolves through a plugin context or an environment.
  */
-export function viteHost(root: string, resolver: () => ViteResolver | null): ProjectHost {
+export function viteHost(root: string, resolver: () => ViteResolver | null, languages?: readonly SourceLanguage[]): ProjectHost {
   const files = fileSystemHost(root);
   return {
     ...files,
@@ -23,17 +23,17 @@ export function viteHost(root: string, resolver: () => ViteResolver | null): Pro
       const resolve = resolver();
       if (resolve === null) return undefined;
       const id = await resolve(specifier, join(root, importer));
-      return id === null ? false : compiledPath(root, id);
+      return id === null ? false : compiledPath(root, id, languages);
     },
   };
 }
 
 /** The project path of a resolved id the project compiles, or false for a package or a virtual module. */
-function compiledPath(root: string, id: string): string | false {
+function compiledPath(root: string, id: string, languages: readonly SourceLanguage[] | undefined): string | false {
   const file = longPath(id.replace(/[?#].*$/, ''));
   if (!isAbsolute(file) || file.includes('node_modules')) return false;
   const inside = relative(root, file);
   if (inside.startsWith('..') || isAbsolute(inside)) return false;
   const path = projectPath(root, file);
-  return isSourcePath(path) ? path : false;
+  return isSourcePath(path, languages) ? path : false;
 }

@@ -68,10 +68,10 @@ export function createProject(options: ProjectOptions): Project {
   let previous: Readonly<Record<string, string>> = {};
 
   async function build(): Promise<ProjectBuild> {
-    known = await collectModules(entries, host, known);
+    known = await collectModules(entries, host, known, options.languages);
     if (pointsAtMissing(known)) {
       // A module was deleted, and an import that found it may now find another file.
-      known = await collectModules(entries, host, new Map());
+      known = await collectModules(entries, host, new Map(), options.languages);
     }
     const modules = [...known.keys()];
     const missing = entries.find((entry) => !known.has(entry));

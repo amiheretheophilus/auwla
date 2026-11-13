@@ -10,6 +10,7 @@
 import { findAll } from 'yuku-ast';
 import type { Node } from 'yuku-parser';
 import { CompileError } from './core/diagnostics';
+import { authoredError, languageOf } from './core/parse/languages';
 import { emitDom } from './core/emit/dom';
 import { printJavaScript, printWithSourceMap } from './core/emit/print';
 import type { SourceMap } from './core/emit/source-map';
@@ -43,7 +44,7 @@ export interface CompiledModules {
 export function compile(source: string, options: CompileOptions = {}): string {
   const id = options.moduleId ?? './App.tsx';
   // The extension chooses the language, and a bare id has none.
-  const path = /\.[cm]?[jt]sx?$/.test(id) ? id : `${id}.tsx`;
+  const path = /\.[cm]?[jt]sx?$/.test(id) || languageOf(id, options.languages) !== undefined ? id : `${id}.tsx`;
   return compileModules({ [path]: source }, options)[path]!;
 }
 
@@ -75,7 +76,22 @@ function compileProgram(
   modules: Readonly<Record<string, string>>,
   options: CompileModulesOptions,
 ): { output: Record<string, string>; maps?: Record<string, SourceMap>; resolved: Resolved } {
-  const { resolved, graph, routeSplits } = analyzeFrontend(modules, options);
+  const frontend = analyzeFrontend(modules, options);
+  try {
+    return compileAnalyzed(frontend, options);
+  } catch (error) {
+    // Planning and emission locate errors in the analyzed text; a language module's author wrote other text.
+    const texts = frontend.resolved.modules.map((module) => ({
+      path: module.path, analyzed: module.module.source, authored: module.authored, origin: module.origin,
+    }));
+    throw authoredError(error, texts, options.languages);
+  }
+}
+
+function compileAnalyzed(
+  { resolved, graph, routeSplits }: ReturnType<typeof analyzeFrontend>,
+  options: CompileModulesOptions,
+): { output: Record<string, string>; maps?: Record<string, SourceMap>; resolved: Resolved } {
   const general = planCapturedValues(planModules(graph, graph.queries, graph.components), resolved);
   const plans = optimizeModules(general, graph, options.optimize !== false);
   const opensNamespaces = markNamespaceReads(plans, resolved);

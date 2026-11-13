@@ -25,8 +25,9 @@ import { dirname, join, relative, resolve } from 'node:path';
 import { normalizePath } from 'vite';
 import type { DevEnvironment, EnvironmentModuleNode, Plugin, ResolvedConfig, ViteDevServer } from 'vite';
 import {
-  createApplication, GENERATED, importCandidates, initialPage, isSourcePath, normalizeProjectPath, projectPath,
+  createApplication, GENERATED, importCandidates, initialPage, isSourcePath, languageExtensions, normalizeProjectPath, projectPath,
   type Application, type ApplicationBuild, type ApplicationUpdate, type CompileError, type ProjectBuild,
+  type SourceLanguage,
 } from '@memoized-dom/compiler-next';
 import type { MemoizedDomViteOptions } from '../options';
 import {
@@ -49,7 +50,9 @@ export function memoizedDomNext(options: MemoizedDomViteOptions): Plugin {
   if (options.compilePackages?.length) {
     throw new Error("memoized-dom: compilePackages is not supported with compiler: 'next' yet");
   }
-  const { clientEntry, serverEntry, server: serverFolder, runtime = 'bun' } = options;
+  const { clientEntry, serverEntry, server: serverFolder, runtime = 'bun', languages } = options;
+  // Files a source language owns (`.auwla`) are compiled, resolved and hot-updated like `.tsx` ones.
+  const extensions = languageExtensions(languages);
 
   let config: ResolvedConfig | undefined;
   let devServer: ViteDevServer | undefined;
@@ -140,7 +143,7 @@ export function memoizedDomNext(options: MemoizedDomViteOptions): Plugin {
 
   /** Whether an edit to this project path can change the application. */
   function concerns(path: string, build: ApplicationBuild, type: 'create' | 'update' | 'delete'): boolean {
-    if (!isSourcePath(path) || path.includes('/node_modules/')) return false;
+    if (!isSourcePath(path, languages) || path.includes('/node_modules/')) return false;
     // A new or deleted file can change where any import points.
     if (type !== 'update') return true;
     if (build.client.modules.includes(path) || build.server?.modules.includes(path) === true) return true;
@@ -199,7 +202,7 @@ export function memoizedDomNext(options: MemoizedDomViteOptions): Plugin {
             delivery: integrationVirtualId,
           },
         }),
-        host: viteHost(resolved.root, () => resolver),
+        host: viteHost(resolved.root, () => resolver, languages),
       });
     },
 
@@ -252,7 +255,7 @@ export function memoizedDomNext(options: MemoizedDomViteOptions): Plugin {
       if (program === undefined || !program.ok) return null;
       const from = pathOf(importer);
       if (program.output[from] === undefined) return null;
-      const found = (importCandidates(id, from) ?? []).find((candidate) => program.output[candidate] !== undefined);
+      const found = (importCandidates(id, from, extensions) ?? []).find((candidate) => program.output[candidate] !== undefined);
       return found === undefined ? null : fileOf(found);
     },
 
@@ -267,7 +270,7 @@ export function memoizedDomNext(options: MemoizedDomViteOptions): Plugin {
         const entry = api.serverEntry!;
         return { code: runtime === 'node' ? nodeProductionEntry(entry) : bunProductionEntry(entry), map: { mappings: '' } };
       }
-      if (id.startsWith('\0') || id.includes('?') || !isSourcePath(id)) return null;
+      if (id.startsWith('\0') || id.includes('?') || !isSourcePath(id, languages)) return null;
 
       resolver ??= contextResolver(this);
       const program = programOf(await built(), this.environment.name);
@@ -342,8 +345,11 @@ function sideOf(environment: string): Side {
 }
 
 /** The compiler options the Vite options carry; compiler-next ignores the old compiler's others. */
-function compileOptions(options: MemoizedDomViteOptions): { runtimePath?: string } {
-  return options.runtimePath === undefined ? {} : { runtimePath: options.runtimePath };
+function compileOptions(options: MemoizedDomViteOptions): { runtimePath?: string; languages?: readonly SourceLanguage[] } {
+  return {
+    ...(options.runtimePath === undefined ? {} : { runtimePath: options.runtimePath }),
+    ...(options.languages === undefined ? {} : { languages: options.languages }),
+  };
 }
 
 function cleanId(id: string): string {

@@ -1,5 +1,6 @@
 /** Shared frontend order for production compilation and read-only inspection. */
 import { parseModule } from '../core/parse';
+import { authoredError } from '../core/parse/languages';
 import { resolve } from '../core/resolve';
 import { classifyGraph } from '../core/graph/classify';
 import { lowerRoutes, type PrintedRouteSplit } from '../features/routes';
@@ -11,19 +12,25 @@ export function analyzeFrontend(
   modules: Readonly<Record<string, string>>,
   options: CompileModulesOptions,
 ) {
-  let parsed = Object.entries(modules).map(([path, source]) => parseModule(path, source));
-  let resolved = resolve(parsed, options);
+  let parsed = Object.entries(modules).map(([path, source]) => parseModule(path, source, options.languages));
+  try {
+    let resolved = resolve(parsed, options);
 
-  // Routes join across modules, so they lower on a first analysis (`features/routes/`).
-  const routed = lowerRoutes(parsed, resolved, options);
-  if (routed !== null) {
-    parsed = routed.parsed;
-    resolved = resolve(parsed, options);
+    // Routes join across modules, so they lower on a first analysis (`features/routes/`).
+    const routed = lowerRoutes(parsed, resolved, options);
+    if (routed !== null) {
+      parsed = routed.parsed;
+      resolved = resolve(parsed, options);
+    }
+
+    const graph = classifyGraph(resolved);
+
+    // The imports that load with their routes, which printing removes (`features/routes/split.ts`).
+    const routeSplits = routed?.splits ?? NO_SPLITS;
+    return { resolved, graph, routeSplits };
+  } catch (error) {
+    // A module a source language wrote reports its errors where the author wrote them.
+    const texts = parsed.map((module) => ({ path: module.path, analyzed: module.source, authored: module.authored, origin: module.origin }));
+    throw authoredError(error, texts, options.languages);
   }
-
-  const graph = classifyGraph(resolved);
-
-  // The imports that load with their routes, which printing removes (`features/routes/split.ts`).
-  const routeSplits = routed?.splits ?? NO_SPLITS;
-  return { resolved, graph, routeSplits };
 }

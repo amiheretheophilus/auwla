@@ -35,6 +35,9 @@ const update = await project.update(['./src/Title.tsx']);   // { build, changed,
   the caller gave.
 - A compile error comes back as `{ ok: false, error }` with its module, so a watcher keeps
   running. Any other exception is a compiler bug and is thrown.
+- `languages` (a compile option) adds authoring syntaxes such as `.auwla`: the project collects
+  their files as source and their imports from the TSX they become, and the Bun and Vite
+  plugins load them like `.tsx` files ([source languages](core.md#source-languages)).
 
 ## Updates
 

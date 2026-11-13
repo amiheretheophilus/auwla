@@ -67,7 +67,9 @@ inside the compiler or a new list implementation.
 
 | File | What it does |
 | --- | --- |
-| `index.ts` | `parseModule(path, source)`: language from the path (`langFromPath`), syntax errors as `CompileError` with line and column, JSX detection |
+| `index.ts` | `parseModule(path, source, languages)`: language from the path (`langFromPath`), or the TSX a source language gives; syntax errors as `CompileError` with line and column in the authored text, JSX detection |
+| `languages.ts` | source languages: authoring syntaxes that become TSX first (below) |
+| `languages.test.ts` | a toy language through compiling, imports, errors, source maps and a project |
 | `lower-typescript.ts` | lowers `enum` (numbered members, reverse mapping, member names in initializers, `const enum`; `declare enum` removed) and constructor parameter properties, as `tsc` emits them, by editing the text. A member maps back unless its value is a string, which includes `B = A`, `E.A` and `A + 'x'` over a string member. Members are kept per enum, by scope and name, so two enums `E` in different namespaces or blocks stay apart, and merged declarations of one enum share names and string members |
 | `lower-namespace.ts` | lowers a runtime `namespace`, `import x = a.b`, `import x = require('m')` and `export =` as `tsc` emits them, and decides how an enum is declared when it merges or sits in a namespace |
 | `text-edits.ts` | replacing spans of source text, and where an edit lands afterwards; `TracedText` and `TextOrigin`, where each part of edited text came from, for source maps (`project.md`) |
@@ -80,6 +82,31 @@ inside the compiler or a new list implementation.
   string indexes, so text edits slice by them directly. Tested with non-ASCII text.
 - Case to test: `enum Mode { A, B }`, which the old compiler rejects
   (`packages/compiler-next/tests/cases/core.test.ts`).
+
+### Source languages
+
+The `languages` option names authoring syntaxes that become TSX before the compiler reads
+them. `packages/jsx-plus` gives `.auwla` this way; the compiler knows no particular language.
+A `SourceLanguage` owns extensions and has `toTsx(text, path)`, which returns the TSX and a
+`TextOrigin` back to the authored text, and throws a located `CompileError` for an authored
+error. It reads no files and needs no particular runtime.
+
+After that, such a module is an ordinary `.tsx` module that keeps its own path (`./App.auwla`):
+
+- `parseModule` parses the TSX as `tsx`, keeps the authored text as `authored`, and composes the
+  language's origin under the TypeScript and slot lowerings, so source maps reach the `.auwla`.
+- An extensionless import also tries the language's extensions, after the JavaScript and
+  TypeScript ones, as a file and as a folder's index (`importCandidates`).
+- A project collects such files as source (`isSourcePath`, `collect.ts`), reading their imports
+  from the TSX. A module the language rejects reports no imports; compiling it reports the error.
+- The Bun plugin loads them like `.tsx` modules; the Vite plugin does the same (`packages/vite`).
+- Stages after parsing locate errors in the text they read. For a language module,
+  `authoredError` moves such an error back to the authored text, at the frontend and pipeline
+  boundaries and around lowering. Other modules keep their errors as they were.
+
+Not yet: `.auwla` server functions (`server/`) still recognize only JavaScript and TypeScript
+files. A collected language module is translated twice, once to read its imports and once to
+compile it.
 
 ### A namespace and `export =`
 

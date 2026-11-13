@@ -7,7 +7,9 @@
  * images) are left to whatever bundles the output.
  */
 import { findAll, is } from 'yuku-ast';
-import { langFromPath, parse } from 'yuku-parser';
+import { parse } from 'yuku-parser';
+import { CompileError } from '../core/diagnostics';
+import { languageExtensions, languageOf, moduleText, type SourceLanguage } from '../core/parse/languages';
 import { importCandidates } from '../core/resolve/imports';
 import type { ProjectHost } from './host';
 
@@ -19,8 +21,12 @@ export interface CollectedModule {
   readonly imports: ReadonlyMap<string, string | false>;
 }
 
-/** Files the compiler reads. Declaration files describe types only. */
-export function isSourcePath(path: string): boolean {
+/**
+ * Files the compiler reads. Declaration files describe types only. With `languages`, also the
+ * files a source language owns (`core/parse/languages.ts`).
+ */
+export function isSourcePath(path: string, languages?: readonly SourceLanguage[]): boolean {
+  if (languageOf(path, languages) !== undefined) return true;
   return /\.[cm]?[jt]sx?$/.test(path) && !/\.d\.[cm]?ts$/.test(path);
 }
 
@@ -32,6 +38,7 @@ export async function collectModules(
   entries: readonly string[],
   host: ProjectHost,
   known: ReadonlyMap<string, CollectedModule>,
+  languages?: readonly SourceLanguage[],
 ): Promise<Map<string, CollectedModule>> {
   host = readingOnce(host);
   const reached = new Map<string, CollectedModule>();
@@ -41,7 +48,7 @@ export async function collectModules(
     const path = pending.pop()!;
     if (reached.has(path)) continue;
 
-    const module = known.get(path) ?? await readModule(path, host);
+    const module = known.get(path) ?? await readModule(path, host, languages);
     if (module === undefined) continue;
     reached.set(path, module);
 
@@ -73,14 +80,14 @@ function readingOnce(host: ProjectHost): ProjectHost {
 }
 
 /** Reads one module and settles its imports, or undefined when the host has no such file. */
-async function readModule(path: string, host: ProjectHost): Promise<CollectedModule | undefined> {
+async function readModule(path: string, host: ProjectHost, languages: readonly SourceLanguage[] | undefined): Promise<CollectedModule | undefined> {
   const text = await host.readFile(path);
   if (text === undefined) return undefined;
 
   const imports = new Map<string, string | false>();
-  for (const specifier of importSpecifiers(path, text)) {
+  for (const specifier of importSpecifiers(path, text, languages)) {
     if (!imports.has(specifier)) {
-      imports.set(specifier, await resolveSpecifier(specifier, path, host));
+      imports.set(specifier, await resolveSpecifier(specifier, path, host, languages));
     }
   }
 
@@ -88,18 +95,23 @@ async function readModule(path: string, host: ProjectHost): Promise<CollectedMod
 }
 
 /** Where `specifier` in `importer` points: the host's answer first, then the compiler's rule. */
-async function resolveSpecifier(specifier: string, importer: string, host: ProjectHost): Promise<string | false> {
+async function resolveSpecifier(
+  specifier: string,
+  importer: string,
+  host: ProjectHost,
+  languages: readonly SourceLanguage[] | undefined,
+): Promise<string | false> {
   const custom = await host.resolve?.(specifier, importer);
   if (custom !== undefined) {
-    return custom !== false && isSourcePath(custom) ? custom : false;
+    return custom !== false && isSourcePath(custom, languages) ? custom : false;
   }
 
-  const candidates = importCandidates(specifier, importer);
+  const candidates = importCandidates(specifier, importer, languageExtensions(languages));
   if (candidates === null) return false;
 
   // Only source candidates: `./styles.css` and the like are the bundler's.
   for (const candidate of candidates) {
-    if (isSourcePath(candidate) && await host.readFile(candidate) !== undefined) return candidate;
+    if (isSourcePath(candidate, languages) && await host.readFile(candidate) !== undefined) return candidate;
   }
 
   // Not a source module. A relative import of nothing is reported by the bundler that loads the output.
@@ -109,10 +121,18 @@ async function resolveSpecifier(specifier: string, importer: string, host: Proje
 /**
  * The specifiers a module imports values from: static imports and re-exports, `import()` of a
  * literal and `import x = require('m')`. Type-only imports are erased, so they bring no module.
- * A module that does not parse still reports what it can; compiling it reports the error.
+ * A module that does not parse still reports what it can; compiling it reports the error. So
+ * does a module whose source language rejects it, which reports nothing.
  */
-export function importSpecifiers(path: string, text: string): string[] {
-  const { program } = parse(text, { lang: langFromPath(path), sourceType: 'module' });
+export function importSpecifiers(path: string, text: string, languages?: readonly SourceLanguage[]): string[] {
+  let read;
+  try {
+    read = moduleText(path, text, languages);
+  } catch (error) {
+    if (error instanceof CompileError) return [];
+    throw error;
+  }
+  const { program } = parse(read.text, { lang: read.lang, sourceType: 'module' });
   const specifiers: string[] = [];
 
   for (const node of findAll(program, ['ImportDeclaration', 'ExportNamedDeclaration', 'ExportAllDeclaration'])) {

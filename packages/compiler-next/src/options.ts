@@ -1,3 +1,5 @@
+import type { SourceLanguage } from './core/parse/languages';
+
 /**
  * Options of `compileModules`. One read-only object, passed to every stage that
  * needs it (`wiki/compiler/README.md`, rule 2).
@@ -48,6 +50,12 @@ export interface CompileModulesOptions {
   readonly hot?: boolean;
   /** The hot runtime that code built with `hot` imports. Default `@memoized-dom/runtime/hot`. */
   readonly hotRuntimePath?: string;
+  /**
+   * Authoring syntaxes that become TSX before the compiler reads them, by extension
+   * (`core/parse/languages.ts`): `.auwla` from `packages/jsx-plus`. Such a module keeps its
+   * path, and is compiled, imported and mapped like a `.tsx` module. Default: none.
+   */
+  readonly languages?: readonly SourceLanguage[];
 }
 
 /** Options of `compile`, which takes one module. */
