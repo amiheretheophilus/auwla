@@ -139,8 +139,9 @@ getUser(userId);
 
 GET calls return the same transparent data source as `$fetch`; reactive
 arguments rerun the read, and `$track` exposes pending state, errors, and
-refresh. Mutations must run from event handlers, effects, or deferred
-callbacks. Calling them during render or module evaluation is a compile error.
+refresh. Mutations return a `Promise` of their result (see
+[Pending and errors for a mutation](#pending-and-errors-for-a-mutation)), and
+must run from event handlers, effects, or deferred callbacks. Calling them during render or module evaluation is a compile error.
 
 Without a schema, mutation arguments form a JSON object keyed by parameter
 name. With a schema, the client's one input argument is the complete
@@ -229,7 +230,8 @@ lastPost = saveNote(text);
 `optimistic()` applies the temporary change immediately and owns the rollback
 and reconciliation for each operation. Its unique operation ID keeps
 overlapping submissions distinct. It returns the original server-function
-result, so `$track(lastPost)` can still display submission state.
+result, a `Promise`: await it, or pass the action to `$forms` (below) for
+submission state.
 
 For forms, pass the returned action to `$forms`:
 
@@ -273,67 +275,80 @@ all pending calls with that ID, then applies the most recently started
 successful call's result once. Different story IDs settle independently, and
 each failure keeps its own rollback. The grouping ID is optional; omit it for
 independent operations such as inserting separate notes. Each request retains
-its own operation ID, and `$track(lastVote)` still observes that request.
+its own operation ID, and `lastVote` is still that request's `Promise`.
 
 Refetching after every mutation would waste a round trip for data you
 already have. `refresh()` is for the rarer case — a write that changes
 state owned by a *different* source (a count, an aggregate) whose inputs
 you can't reconcile locally.
 
-## Tracking a call
+## Pending and errors for a mutation
 
-Because a server-function call returns the same kind of value `$fetch`
-returns, it can be `$track`ed exactly the same way — every lifecycle
-field (`id`, `pending`, `refreshing`, `error`, `refresh`, `abort`,
-`onSuccess`, `onError`) is available. For a mutation, call the function
-in the handler and track the **returned value**:
+A read and an action come back differently. A GET call returns a data
+source, which you render and `$track` (`pending`, `error`, `refresh()`). A
+mutation (`post`, `put`, `patch`, `delete`) runs once, when your handler calls
+it, and returns a **`Promise` of its result**, as the generated
+`#server-functions` types say. `$track` takes data sources and forms, not
+promises: `$track(postVote(id))` is a type error and would observe nothing,
+since the request is released once it settles.
+
+In a form, `$forms` owns the submission state:
+
+```tsx
+import { createNote } from '#server-functions';
+
+const form = $forms((fields: FormData) => createNote(String(fields.get('text') ?? '')));
+
+return <form onSubmit={(event) => form.submit(event)}>
+  <input name="text" />
+  <button type="submit" disabled={form.pending}>Save note</button>
+  {form.errors.length > 0 ? <p>{form.errors[0]!.message}</p> : null}
+</form>;
+```
+
+`form.pending`, `form.errors` and `form.result` follow the latest submission,
+and `$track(form)` adds `onSuccess`/`onError`.
+
+Anywhere else, await the call. Pending and failure are ordinary variables,
+which the compiler makes reactive like any other:
 
 ```tsx
 import { getStories, postVote } from '#server-functions';
 
 export function App() {
   const stories = getStories();
-  const storiesRequest = $track(stories);         // track the read
-  let lastVote = null as ReturnType<typeof postVote> | null;
+  let voting = false;
+  let failed = '';
 
-  function vote(id: number) {
-    lastVote = postVote(id);                      // mutation fires here
-    const tracker = $track(lastVote);             // track that call
-
-    tracker.onSuccess((result) => {
-      const story = stories.find(story => story.id === result.id);
-      if (story !== undefined) story.votes = result.votes;
-    });
+  async function vote(id: number) {
+    voting = true;
+    failed = '';
+    try {
+      const saved = await postVote(id);          // the POST, once
+      const story = stories.find((story) => story.id === saved.id);
+      if (story !== undefined) story.votes = saved.votes;
+    } catch (error) {
+      failed = String(error);
+    } finally {
+      voting = false;
+    }
   }
 
   return (
     <div>
-      {storiesRequest.pending ? <p>Loading…</p> : null}
       <ul>
-        {stories.map(s => (
+        {stories.map((s) => (
           <li key={s.id}>
             {s.title}
-            <button onClick={() => vote(s.id)}>Vote</button>
+            <button disabled={voting} onClick={() => vote(s.id)}>Vote</button>
           </li>
         ))}
       </ul>
-      {lastVote !== null ? (
-        <p>
-          {$track(lastVote).pending
-            ? 'Recording vote…'
-            : $track(lastVote).error !== null
-              ? `Vote failed: ${$track(lastVote).error?.message}`
-              : 'Vote recorded'}
-        </p>
-      ) : null}
+      {failed !== '' ? <p>Vote failed: {failed}</p> : null}
     </div>
   );
 }
 ```
-
-Each `postVote(id)` call is its own request — `$track` exposes a `request
-id`, so `onSuccess`/`onError` callbacks know which invocation settled.
-Same tracker shape as [05 — Data](./05-data.md), no new API.
 
 The POST response supplies the updated vote data. Applying it to the existing
 story updates the UI without issuing another GET request. For immediate
