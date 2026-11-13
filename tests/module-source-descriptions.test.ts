@@ -11,7 +11,7 @@ import { waitFor, type FetchStub } from '../test-support/helpers';
  *    stale instances in every runtime instead of silently reusing them.
  * 4. Descriptions never fire requests at module evaluation.
  */
-import { describe, expect, it } from 'bun:test';
+import { afterEach, describe, expect, it } from 'bun:test';
 import {
   createApplicationRuntime,
   runWithApplicationRuntime,
@@ -61,6 +61,13 @@ function withRequest(
     }
   });
 }
+
+// Several tests make a data runtime active with `setActiveDataRuntime`, which is process-wide, and
+// leave it. The next file's `$fetch` would then go through this file's fetch stub. Every file
+// starts with none active (the default runtime), so each test ends that way.
+afterEach(() => {
+  setActiveDataRuntime(null);
+});
 
 describe('runtime-owned module source descriptions (RFC §16.4)', () => {
   it('materializes independent instances for two roots over one shared record', async () => {

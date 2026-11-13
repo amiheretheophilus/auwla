@@ -200,12 +200,17 @@ probe of the state the next file started from:
   file now puts the workspace router's restorer back, and returns the window to `/` with a
   `popstate`, which a connected runtime follows.
 
-A whole root run in one process (`bun test ./tests`) still ends with Bun failing to allocate 32 GB,
-before and after these fixes, at the same point. Before it, besides the recorded R23
-(`open-issues.md`), these fail there and pass alone: `ssr-query-fallback`, two `ssr-region-streaming`
-tests, and two `optimistic-utils-integration` tests ("duplicate list key: undefined"; the files up
-to it alphabetically are enough, and it fails the same with the `hydration-route-fragment` cleanup
-removed). Not yet traced.
+A whole root run in one process (`bun test ./tests`) then still failed `optimistic-utils-integration`
+("duplicate list key: undefined"), `ssr-query-fallback` and two `ssr-region-streaming` tests, each
+passing alone, and ended with Bun failing to allocate 32 GB. Two more files left a data runtime
+active: `module-source-descriptions` and `snapshot-envelope` call `setActiveDataRuntime`, which is
+process-wide, and never restored it, so later files fetched through their stubs and canned
+responses. Each now restores none after every test. The whole root run now completes, with no
+crash: 2967 pass, and the one failure is the recorded R23 (`open-issues.md`), an old-compiler bug
+whose assertion is the correct result.
+
+These had not shown before because the root suite was never run whole here (the old machine's
+rule was to run files alone, where each passes).
 
 The Vite package's dependencies now list what its bundle imports (`yuku-*`, `@memoized-dom/server`),
 with compiler-next, which is bundled, as a dev dependency; `bun.lock` is updated to match, as CI
