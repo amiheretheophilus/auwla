@@ -1,3 +1,5 @@
+// The analysis entry, which the editor's checking already loads; the same class as the root entry's.
+import { CompileError } from '@memoized-dom/compiler-next/analysis';
 import type { Range } from './model';
 
 /**
@@ -18,19 +20,23 @@ export type Repair =
  * `repairs`: the reporter's guesses, best first, such as an unclosed element's
  * opening tag or a missing `)`. Builds ignore them.
  */
-export class JsxPlusError extends SyntaxError {
-  readonly line: number;
-  readonly column: number;
+export class JsxPlusError extends CompileError {
+  declare readonly line: number;
+  declare readonly column: number;
 
-  constructor(readonly code: string, readonly reason: string, readonly filename: string,
+  // `reason` is kept by `CompileError`, which is given it alone.
+  constructor(readonly code: string, reason: string, readonly filename: string,
     readonly range: Range, source: string, readonly repairs: readonly Repair[] = []) {
-    const prefix = source.slice(0, range[0]);
-    const lines = prefix.split(/\r\n|\r|\n/);
-    const line = lines.length;
-    const column = lines[lines.length - 1]!.length + 1;
-    super(`${reason} (${filename}:${line}:${column}) [${code}]`);
+    // A compiler error, so compiler-next reports it as the author's wherever it compiles `.auwla`
+    // (`language.ts`), at the same path, line and column.
+    super(reason, filename, ...positionOf(source, range[0]));
+    this.message = `${reason} (${filename}:${this.line}:${this.column}) [${code}]`;
     this.name = 'JsxPlusError';
-    this.line = line;
-    this.column = column;
   }
+}
+
+/** One-based line and UTF-16 column of an offset, counting `\r\n`, `\r` and `\n` as line ends. */
+function positionOf(source: string, offset: number): [line: number, column: number] {
+  const lines = source.slice(0, offset).split(/\r\n|\r|\n/);
+  return [lines.length, lines[lines.length - 1]!.length + 1];
 }

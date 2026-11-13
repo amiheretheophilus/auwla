@@ -6,7 +6,6 @@ import * as runtime from '../../runtime/src/index';
 import { toModuleFunction } from '../../compiler-next/src/core/parse/module-function';
 import { CompileError } from '@memoized-dom/compiler-next';
 import { compile, JsxPlusError, normalize } from '../src';
-import { authoredCompileError } from '../src/compile';
 import * as taskBoardActions from '../examples/task-board/actions';
 
 const applications: runtime.MountedApplication[] = [];
@@ -78,29 +77,51 @@ for (const fixture of fixtures.cases) {
   }
 }
 
-it('re-anchors positioned compiler errors on the authored source', () => {
-  const source = 'export function App() {\n  return <p>"Hi "; name</p>;\n}';
-  const normalized = normalize(source);
-  function compilerError(offset: number) {
-    const lines = normalized.code.slice(0, offset).split('\n');
-    return new CompileError('boom', './App.auwla.tsx', lines.length, lines[lines.length - 1]!.length + 1);
+it('reports a compiler error found after parsing at its authored .auwla position', () => {
+  // Compiler-next rejects a POST `$fetch` during setup while planning, long after parsing. On the
+  // same line, the quoted text and bare child before it gain braces in the TSX, so its column there
+  // differs; only a mapped position lands on `$fetch` in the authored line.
+  const line = "export function Badge() { return <b>\"New\"; \" badge\"</b>; } export function App() { const saved = $fetch('/save', { method: 'POST' }); return <p>saved</p>; }";
+  const source = `import { $fetch } from '@memoized-dom/data';\n${line}`;
+  let caught: unknown;
+  try {
+    compile(source, { moduleId: './App.auwla' });
+  } catch (error) {
+    caught = error;
   }
+  expect(caught).toBeInstanceOf(CompileError);
+  const error = caught as CompileError;
+  expect(error.path).toBe('./App.auwla');
+  expect(error.message).toContain('POST action');
+  expect(error.message).not.toContain('.tsx');
 
-  // A copied character maps exactly; the TSX location is not repeated.
-  const exact = authoredCompileError(compilerError(normalized.code.indexOf('name')), normalized, source, './App.auwla');
-  expect(exact).toBeInstanceOf(JsxPlusError);
-  expect((exact as JsxPlusError).range).toEqual([source.indexOf('name'), source.indexOf('name') + 1]);
-  expect(exact.message).toBe('memo-dom: boom (./App.auwla:2:20) [COMPILER]');
+  // The same program as its normalized TSX: compiler-next reports the error at `$fetch` there.
+  const normalized = normalize(source).code;
+  let tsx: CompileError | undefined;
+  try {
+    compile(normalized, { moduleId: './App.tsx' });
+  } catch (error) {
+    tsx = error as CompileError;
+  }
+  const tsxLine = normalized.split('\n')[1]!;
+  expect(tsx!.column).toBe(tsxLine.indexOf('$fetch') + 1);
+  // In the authored file the error is at `$fetch` too, a different column.
+  expect([error.line, error.column]).toEqual([2, line.indexOf('$fetch') + 1]);
+  expect(error.column).not.toBe(tsx!.column);
+});
 
-  // A generated brace has no authored character: use the end of the copied
-  // text before it rather than leak a normalized-TSX position.
-  const brace = normalized.code.indexOf('{name');
-  const nearest = authoredCompileError(compilerError(brace), normalized, source, './App.auwla');
-  const afterGreeting = source.indexOf('"Hi "') + '"Hi "'.length;
-  expect((nearest as JsxPlusError).range).toEqual([afterGreeting, afterGreeting + 1]);
-
-  const unpositioned = new CompileError('no place', './App.auwla.tsx');
-  expect(authoredCompileError(unpositioned, normalized, source, './App.auwla')).toBe(unpositioned);
+it('reports a JSX+ syntax error from compile as a located compiler error', () => {
+  let caught: unknown;
+  try {
+    compile('export function App() {\n  return <p>"unfinished</p>;\n}');
+  } catch (error) {
+    caught = error;
+  }
+  // Still a JsxPlusError for editors, and a CompileError for compiler-next's projects and plugins.
+  expect(caught).toBeInstanceOf(JsxPlusError);
+  expect(caught).toBeInstanceOf(CompileError);
+  expect((caught as JsxPlusError).path).toBe('./App.auwla');
+  expect((caught as JsxPlusError).line).toBe(2);
 });
 
 it('keeps standard TSX child text on the existing compiler path', () => {

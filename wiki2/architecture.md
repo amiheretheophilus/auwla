@@ -6,37 +6,41 @@ Owns DX-28/DX-31 and the integration side of DX-03.
 
 ## One production compilation path
 
-JSX+ adds authoring features in a separate syntax package. Its normalizer returns
-standard TSX, syntax views and authored mappings; its UI `compile()` facade calls
-compiler-next's public API. Compiler-next owns every existing production stage
-and runtime decision. Extended syntax and checking source stay in
-`packages/jsx-plus`. Compiler-next's new `src/analysis/` folder exposes a read-only
-public snapshot using the existing frontend. The production pipeline shares that
-frontend function; runtime/data implementation is unchanged.
+JSX+ is a standalone template layer (DX-39). For builds it is one pure value,
+`auwla` (`src/language.ts`): a compiler-next **source language** that owns `.auwla`
+and turns a module's text into TSX with an origin back to the authored text.
+Compiler-next does everything else, as for any `.tsx` module: collecting imports
+across files, routes, planning, emission, source maps, error positions,
+projects and applications, the CLI, the Bun plugin and the Vite plugin with hot
+updates. JSX+ has no project wrapper, build graph, bundler plugin or source-map
+composer, and no Bun or Node API in `src/`, so it runs wherever compiler-next runs.
 
-The synchronized compiler baseline is `compiler-rewrite` at `07e996c9`. Its
-shared frontend also lowers routes and records route splits before planning;
-the pipeline retains source-map and hot-replacement support. Project/application
-builds, server functions and the next-compiler Vite adapter belong to that
-compiler's [project](../wiki/compiler/project.md),
-[server](../wiki/compiler/server.md) and [routes](../wiki/compiler/routes.md)
-features. Their availability does not yet establish `.auwla` module collection,
-checking-map composition, server-folder configuration or HMR integration. Extend
-the existing project APIs rather than building a second application pipeline.
+Pass it to any compiler-next entry: `compileModules(files, { languages: [auwla] })`,
+`createProject({ ..., languages: [auwla] })`, compiler-next's Bun plugin, or the
+Vite plugin (`memoizedDom({ compiler: 'next', languages: [auwla] })`). `compile()`
+is a one-module convenience over compiler-next's `compile` with that option. The
+hook is compiler-next's ([source languages](../wiki/compiler/core.md#source-languages));
+it names no particular language. Extended syntax and checking stay in
+`packages/jsx-plus`. Compiler-next's `src/analysis/` folder exposes a read-only
+snapshot of the same frontend for checking.
+
+The synchronized compiler baseline is `compiler-rewrite` at `07e996c9`. `.auwla`
+server functions are not yet recognized (compiler-next's `server/` still accepts
+only JS/TS files); everything a client `.tsx` module can do, a `.auwla` module can.
 
 ```text
-JSX+ source -> packages/jsx-plus -> normalized standard TSX
+.auwla text --(SourceLanguage `auwla`, packages/jsx-plus)--> TSX + origin
                                           |
 existing JS/TS/JSX/TSX --------------------+
                                           |
-                             compiler-next public API
+      compiler-next: project/collect, compile, Bun plugin, Vite plugin
                                           |
                                       parse
                                           |
          resolve -> graph -> plan -> optimize -> emit
                existing compiler-next pipeline
                      |
-              application DOM/SSR output
+       application DOM/SSR output, source maps to .auwla
 
 the same source understanding
   -> checking projection + TypeScript span mappings
@@ -90,15 +94,20 @@ All paths are relative to the repository root and exist now.
 | `packages/jsx-plus/tests/attributes.test.ts` | Attribute host forms, copied spans, malformed literals and explicit source-format boundary |
 | `packages/jsx-plus/src/model.ts` | Syntax views, authored ranges and copied-span mapping types |
 | `packages/jsx-plus/src/source.ts` | Copied/generated pieces, assembly, exact authored-offset lookup (edits) and nearest/covering lookups (diagnostics, syntax ranges) |
-| `packages/jsx-plus/src/diagnostics.ts` | Authored syntax diagnostic ranges and line/column reporting |
-| `packages/jsx-plus/src/compile.ts` | Single-UI-module public-API delegation and mapped compiler diagnostics |
+| `packages/jsx-plus/src/diagnostics.ts` | Authored syntax diagnostic ranges and line/column reporting; `JsxPlusError` is a compiler-next `CompileError` |
+| `packages/jsx-plus/src/language.ts` | `auwla`, the compiler-next source language: `normalize` plus a binary-search origin over copied spans. JSX+'s whole build integration |
+| `packages/jsx-plus/src/compile.ts` | One-module convenience: compiler-next's `compile` with `languages: [auwla]` |
+| `packages/jsx-plus/tests/modules.test.ts` | The notes example through compiler-next's project and Bun plugin: both modes executed, source maps, authored errors |
+| `packages/jsx-plus/tests/vite.test.ts` | The notes example through compiler-next's Vite plugin: build, dev transform and map, hot update, authored dev error |
+| `packages/jsx-plus/examples/notes/` | Multi-file app: three `.auwla` components, explicit and extensionless imports, a `.ts` re-export and helper |
+| `packages/jsx-plus/examples/preview.ts` | Example preview: compiler-next's Bun plugin with `auwla`, serving the folder |
 | `packages/jsx-plus/src/index.ts` | Public package exports |
 | `packages/jsx-plus/tests/parse.test.ts` | Spec views/errors, lexical boundaries and mapping checks |
 | `packages/jsx-plus/tests/host.test.ts` | Host contexts, semicolon chunks, cached child ranges, native suspension and malformed-input regressions |
 | `packages/jsx-plus/tests/compile.test.ts` | Extended-source execution, existing refs and keyed nodes |
 | `packages/jsx-plus/examples/counter.auwla` | Complete counter compiled and clicked by the execution tests |
 | `packages/jsx-plus/examples/README.md` | Authoring walkthrough and commands for real examples |
-| `packages/jsx-plus/examples/task-board/` | Full authored UI with direct `if` and `for` in its template, browser entry/HTML/CSS, example-only preview loader and native mapper config |
+| `packages/jsx-plus/examples/task-board/` | Full authored UI with direct `if` and `for` in its template, browser entry/HTML/CSS, preview (shared helper) and native mapper config |
 | `packages/jsx-plus/tests/loops.test.ts` | Direct-loop normalization: destructuring, nesting, multi-child rows, rejected forms, exact binding/iterable spans |
 | `packages/jsx-plus/AGENTS.md` | Package ownership boundary and focused checks |
 | `packages/jsx-plus/src/checking/project.ts` | Shared-normalizer TSX checking projection and authored parse diagnostics |
@@ -148,7 +157,8 @@ All paths below are relative to the repository root and currently exist.
 
 | Path | Role and boundary |
 | --- | --- |
-| `packages/compiler-next/src/core/parse/index.ts` | Unchanged parse entry receiving standard TSX from the syntax package |
+| `packages/compiler-next/src/core/parse/index.ts` | Parse entry; reads a language module as the TSX `auwla` gives (DX-34 change, `languages.ts`) |
+| `packages/compiler-next/src/core/parse/languages.ts` | The source-language hook, its error relocation and probing extensions |
 | `packages/compiler-next/src/core/parse/lower-typescript.ts` | Existing runtime TypeScript lowering; do not invent a second TS semantics implementation |
 | `packages/compiler-next/src/pipeline.ts` | Existing production pipeline, now sharing the frontend with inspection |
 | `packages/compiler-next/src/analysis/` | Public inspection and serialized facts; owned by [compiler analysis](../wiki/compiler/analysis.md) |

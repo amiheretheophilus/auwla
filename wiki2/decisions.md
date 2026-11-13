@@ -1,11 +1,12 @@
 # Prototype decisions
 
-Updated: 2026-11-11. Accepted direction is separate from implemented support.
+Updated: 2026-11-13. Accepted direction is separate from implemented support.
 
 ## Accepted directions
 
 | ID | Date | Decision and evidence | Contract |
 | --- | --- | --- | --- |
+| DX-39 | 2026-11-13 | JSX+ is a standalone template layer: for builds it is only a compiler-next source language (`auwla`), and compiler-next owns projects, imports across files, applications, the CLI, the Bun and Vite plugins, source maps and hot updates. JSX+ has no build path of its own and no Bun/Node API in `src/`. User, on another agent's JSX+ project wrapper and Bun plugin: "it has started duplicating the project the compiler next is meant to handle and be doing bun stuff in the jsx plus as if the jsx plus is meant to run on bun only", and "eventually jsx plus will become a standalone template layer ... delete that project". That uncommitted work was discarded. Built: compiler-next's generic `languages` option (DX-34, logged in [status](status.md)), `auwla`, and the multi-file notes example through the project, Bun and Vite plugins. Refines DX-28/DX-31. | [architecture](architecture.md), [compiler source languages](../wiki/compiler/core.md#source-languages) |
 | DX-37 | 2026-11-11 | Add interpolation inside quoted markup text. User selected `Inside quoted text: <p>"Count: {count}"</p>`. Built in spec r7 with native template coercion, `\{` escaping, exact mappings and real editor-protocol checks. Existing native template `${...}` support remains. | [syntax](syntax.md), [spec](spec/README.md) |
 | DX-38 | 2026-11-11 | Enable framework types once per project so `.auwla` files do not need a per-file JSX type import. User: "cant we create .auwla file without this???". The `./types` export reuses existing contracts; the counter config demonstrates it. Standalone inferred-project type setup is still open. | [tooling](tooling.md), [examples](../packages/jsx-plus/examples/README.md) |
 | DX-36 | 2026-11-11 | Keep editor integrations decoupled so other extensions can reuse the language tooling. User: "the editor extension should be decoupled so that other extension". Shared projection, recovery, mapper and reusable assets stay independent of editor SDKs; per-editor adapters depend on them. First adapter/assets built; the user reported the task board working in desktop VS Code with the local VSIX (2026-11-11). Second-editor compatibility remains unverified. | [tooling](tooling.md#editor-extension-planned-p3-editor), [architecture](architecture.md#proposed-placement) |

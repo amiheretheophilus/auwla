@@ -14,6 +14,7 @@ React JSX runtime. Other projects need this one-time configuration too.
 | [counter.auwla](counter.auwla) | The smallest state/event/direct-expression example |
 | [greeting.auwla](greeting.auwla) | Editable greeting, conditional branches, native event input and looped names; real completion and runtime checks use this file |
 | [task-board/App.auwla](task-board/App.auwla) | A complete task board: derived lists/counts, search, status filters, form submission, existing refs, direct `if`, direct `for` loops in the markup, quoted text and row events |
+| [notes/](notes/) | Several `.auwla` components importing each other (with and without the extension, through a `.ts` re-export), built by compiler-next's project, Bun plugin and Vite plugin |
 | [checking/App.auwla](checking/App.auwla) | Small typed-prop/ref example used by the mapper checks |
 | [checking/TypeError.auwla](checking/TypeError.auwla) | Deliberately invalid method call for inspecting authored diagnostics |
 
@@ -47,9 +48,25 @@ For authored TypeScript checking, including its entrypoint:
 bun ../../node_modules/typescript/lib/tsc.js --project examples/task-board/tsconfig.json --runExternalCode --pretty false
 ```
 
-The preview's small Bun loader normalizes `.auwla` and calls compiler-next, then
-bundles the current checkout's browser runtime. It demonstrates this single UI
-module; production Vite loading, HMR and general multi-module support remain planned.
+The preview ([preview.ts](preview.ts)) builds with compiler-next's own Bun plugin,
+passing `auwla` as a source language, and bundles the current checkout's browser
+runtime. It compiles nothing itself. The same option works with the Vite plugin.
+
+## Run the notes app (several `.auwla` files)
+
+```text
+bun run examples/notes/preview.ts
+```
+
+Open `http://127.0.0.1:3031`. [notes/App.auwla](notes/App.auwla) imports
+`./NoteForm.auwla` by its full name and `NoteList` through
+[notes/components/index.ts](notes/components/index.ts), a plain TypeScript
+re-export of `./NoteList` with no extension. The form reports through an `onAdd`
+prop; the list removes through `onRemove`, with a direct `if` for the empty state
+and a direct `for` for the rows. [notes/notes.ts](notes/notes.ts) is a TypeScript
+helper with module state. Its `index.html` loads `/main.ts`, so the folder also
+runs under Vite with `memoizedDom({ clientEntry: 'main.ts', compiler: 'next', languages: [auwla] })`.
+`tests/modules.test.ts` and `tests/vite.test.ts` build and run this folder.
 
 ## Walk through the authoring
 
@@ -81,7 +98,7 @@ writes each row with its toggle/remove handlers. A loop accepts any iterable
 and becomes `Array.from(visible, (task) => <li ...>)`; see
 [direct loops](../../../wiki2/syntax.md#direct-loops). Both loops become
 compiled keyed row lists when optimizing (`_rowList.from(...)` in the served
-`/app.js`), so a row keeps its DOM node while it stays visible. The page has
+bundle), so a row keeps its DOM node while it stays visible. The page has
 real labels, keyboard-native buttons and live summary text. The footer uses a native backtick template with
 `${...}` interpolation. Spec revision 7 also supports quoted child text such as
 `"Count: {count}"`; the counter demonstrates it without a per-file type import.

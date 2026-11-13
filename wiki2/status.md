@@ -2,6 +2,43 @@
 
 Updated: 2026-11-13. Branch: `prototype/jsx-plus`.
 
+## `.auwla` across modules: JSX+ as a source language (DX-39)
+
+The user rejected another agent's uncommitted `src/project/` in JSX+ (a wrapper over
+compiler-next's project, its own source-map composer and its own Bun plugin using
+`Bun.write`): it duplicated compiler-next and tied JSX+ to Bun. At their request it
+was discarded, with its routing example, test and `wiki2/modules.md`.
+
+Rebuilt the other way round. Compiler-next gains a generic `languages` option
+([source languages](../wiki/compiler/core.md#source-languages)); JSX+ gives one
+value, `auwla` (`src/language.ts`), and nothing else for builds. A `.auwla` module
+keeps its path and goes wherever a `.tsx` module goes: `compileModules`,
+`createProject`/applications, the Bun plugin and the Vite plugin (dev, hot updates,
+builds). Source maps reach the `.auwla` text; syntax errors are `JsxPlusError`s,
+now compiler-next `CompileError`s; compiler errors found after parsing are moved
+back to the authored position by compiler-next. `compile()` is a one-module
+convenience over compiler-next's. Both previews now build with compiler-next's Bun
+plugin through `examples/preview.ts`, replacing the task board's per-file loader.
+
+Evidence: `examples/notes` (three `.auwla` components, an explicit and an
+extensionless import through a `.ts` re-export, a `.ts` helper with module state).
+`tests/modules.test.ts` collects it through compiler-next's project, bundles it with
+compiler-next's Bun plugin and runs it in both modes (add, remove, empty state),
+checks bundle source maps name the `.auwla` files and reports a broken module at
+its line. `tests/vite.test.ts` builds it with Vite, compiles and maps a `.auwla`
+module in dev, hot-updates it on an edit without a reload, and reports a dev syntax
+error at line 20. Compiler-next's `languages.test.ts` uses a toy language, so the
+compiler stays language-neutral; deliberately disabling error relocation failed
+only its relocation test. Totals: compiler-next `src` 795 pass; JSX+ 306 pass
+(22 files); Vite `next-plugin.test.ts` 7 pass; editor adapter 7 pass; compiler-next,
+JSX+, Vite (build config) and spec `bun check` clean. Both previews build and serve.
+Not run: the full root suite and compiler-next case files.
+
+Not yet: routes and lazy route chunks written in `.auwla` (compiler-next's route
+lowering runs on the TSX, unproven here); `.auwla` server functions (compiler-next's
+`server/` accepts only JS/TS); cross-file editor checks (rename/completion across
+`.auwla` imports). A collected `.auwla` module is normalized twice per change.
+
 ## Current editor fix and next integration slice
 
 Unfinished host expressions in template conditions now stay mapped for native
@@ -18,12 +55,9 @@ unfinished, LF/CRLF mappings and both-mode execution of the new greeting example
 No compiler-next/runtime files changed for this fix. The live checking
 `App.auwla` draft remains excluded from commits.
 
-The user's next priority is imports and routing across `.auwla` modules using the
+The user's next priority was imports and routing across `.auwla` modules using the
 latest compiler project/application APIs, before CSS or event conveniences.
-Ordinary helper imports already work in the task board; completion can expose
-framework declarations without proving multi-module build integration. Establish
-an actual routed multi-file example, build/runtime checks and honest editor/build
-limits before treating the compiler's capabilities as `.auwla` integration.
+Imports are built (section above); routing in `.auwla` is the next proof.
 
 ## Compiler baseline synchronization
 
@@ -194,7 +228,11 @@ full root suite, performance, browser layout and IDE activation.
 
 ## Continue
 
-1. P3-EDITOR (first adapter/assets built, DX-36): verify the 0.0.2 desktop update with
+1. Routes in `.auwla` (DX-39 follow-up): a routed multi-file example through
+   compiler-next's application, with lazy route chunks, in both plugins; then
+   `.auwla` server functions in compiler-next's `server/` and cross-file editor
+   checks. Keep every build concern in compiler-next.
+2. P3-EDITOR (first adapter/assets built, DX-36): verify the 0.0.2 desktop update with
    the compatible TypeScript provider and the real task board, then inferred
    projects and portability beyond the local VSIX. Reuse by other extensions is documented;
    a second editor still needs its own integration evidence.
@@ -240,6 +278,7 @@ any new changes that must be adopted or corrected on `compiler-rewrite` later:
 | `4072c829` | `features/handlers/plan.ts`: `aliasBindings` judges a destructured name by the declaration or parameter owning its pattern (`patternRoot`), with `features/handlers/aliases.test.ts` ([handlers](../wiki/compiler/handlers.md)) | `for (const [index, task] of tasks.entries())` row edits were not shown; a genuine bug, plain JSX too |
 | `03958a19` | `optimize/closed-lists.ts`: the proof finds a row list's root through `mappingCall` (`#rowsOver`), replacing the `.map`-only branch in `#useMethod` and the `form` filter in `match`. `features/handlers/mutations.ts` emits `list.map`/`list.from` and `mapRows`/`fromRows` from one branch, passing `unedited` to both. `optimize/methods.ts` drops `withRowReuse`'s redundant `form` argument. Tests: both spellings in `closed-lists.test.ts` and `conditionals-and-lists.closed.test.ts` ([optimize](../wiki/compiler/optimize.md#closed-lists)) | Loops over plain state lists skip unchanged rows like `.map`, without a second copy of the list logic |
 | `232c8f5b` | `optimize/closed-lists.ts`: `returnsToEventDispatch` lets `#useReturn` accept a function literal written as an `on*` attribute of a DOM element that is not `isComponentCall`, since the runtime keeps nothing it returns. Tests in `closed-lists.test.ts` (with controls) and a both-spelling behaviour case ([optimize](../wiki/compiler/optimize.md#closed-lists)) | `onClick=(() => rows.reverse())`, the natural `.auwla` one-liner, turned the skip off; plain JSX benefits too |
+| `0cf5a8ae` | New `core/parse/languages.ts` (`SourceLanguage`, `languageOf`, `languageExtensions`, `moduleText`, `authoredError`) with a toy-language `languages.test.ts` ([core](../wiki/compiler/core.md#source-languages)). `languages` option in `options.ts`; `parseModule` reads a language module's TSX and composes its origin; `analysis/frontend.ts` and `pipeline.ts` move post-parse errors back for language modules; `CompileError.reason`; `importCandidates(…, extensions)`; `isSourcePath(path, languages)`, `collect.ts` and `project.ts` collect language modules; `compile()` accepts a language `moduleId`; the Bun plugin loads and probes language extensions; exports `SourceLanguage`, `TextOrigin`, `languageExtensions`. `packages/vite`: `languages` option, forwarded to the application, host, load, resolve and hot-update checks | DX-39: `.auwla` builds through compiler-next's own project, Bun and Vite paths instead of a JSX+ copy of them |
 
 These histories used different commits for the same code before synchronization,
 so commit-range output alone does not show whether a change was adopted. Compare

@@ -47,11 +47,27 @@ Single identifiers can omit delimiters entirely: `onClick=addTask` becomes
 applied LSP handler rename cover this spelling. Calls/members/other expressions
 still use parentheses or braces.
 
-`compile()` currently adapts one UI module. Existing `.tsx` input explicitly
-named through `moduleId` retains its existing JSX semantics. Multi-module `.auwla`
-resolution, Vite integration, backend configuration
-and isomorphic execution remain future work. `normalize()` itself preserves host
-code outside markup, including backend-style imports.
+For whole apps, JSX+ is a compiler-next **source language**, not a build tool:
+pass `auwla` to compiler-next and it compiles, imports, maps and hot-updates
+`.auwla` files exactly as it does `.tsx` files. JSX+ reads no files and uses no
+Bun or Node API ([architecture](../../wiki2/architecture.md), DX-39).
+
+```ts
+import { auwla } from '@memoized-dom/jsx-plus';
+
+compileModules(files, { languages: [auwla] });                        // compiler-next
+createProject({ entries: ['./main.ts'], host, languages: [auwla] });  // projects and apps
+memoizedDom({ client: './main.ts', languages: [auwla] });             // compiler-next's Bun plugin
+memoizedDom({ clientEntry: 'main.ts', compiler: 'next', languages: [auwla] }); // @memoized-dom/vite
+```
+
+[The notes example](examples/notes/) has three `.auwla` components importing each
+other, with and without the extension. Tests run it through compiler-next's project
+and Bun plugin in both modes, and through the Vite plugin's build, dev server and
+hot updates. `compile()` is the one-module convenience; a `.tsx` `moduleId` keeps
+its existing JSX semantics. Routes and server functions written in `.auwla`,
+backend configuration and isomorphic execution remain future work. `normalize()`
+itself preserves host code outside markup, including backend-style imports.
 
 The initial TypeScript content mapper is registered in this package's manifest.
 It shares `normalize()` through the separate `@memoized-dom/jsx-plus/checking`

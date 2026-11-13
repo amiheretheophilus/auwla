@@ -8,6 +8,14 @@ and `wiki2/syntax.md`.
   and the compiler-next public-API adapter. Keep implementation here.
 - Production compilation depends on compiler-next's public exports and yuku. It does
   not copy compiler-next's graph, optimizer, emitters, runtime or ref feature.
+- DX-39 (2026-11-13): JSX+ is a standalone template layer. For builds it gives only
+  `auwla`, a compiler-next source language (`src/language.ts`). Projects, imports
+  across files, applications, the CLI, the Bun and Vite plugins, source maps and hot
+  updates are compiler-next's: pass `languages: [auwla]` to them. Never add a project
+  wrapper, build graph, bundler plugin or map composer here, and never use Bun or
+  Node APIs in `src/` (examples and tests may). A missing build capability belongs in
+  compiler-next's generic hook, recorded under DX-34. The user rejected and discarded
+  an agent's JSX+ project wrapper and Bun plugin for exactly this reason.
 - The separate checking export imports the normalizer directly. Mapper transport
   uses JSON-RPC streams and must not load the production compiler facade.
 - Treat compiler-next/runtime sources as dependencies. Under DX-34 (2026-11-11),
