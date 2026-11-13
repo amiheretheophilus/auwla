@@ -28,19 +28,32 @@ const MEMBERS: Member[] = [
   { id: 3, name: 'Alan Turing', role: 'Researcher' },
 ];
 
-/** The in-memory API: requests made, and failures to answer with. */
+/** The in-memory API: requests made, failures to answer with, and responses held back. */
 let requests: string[] = [];
 let failNext = 0;
+let held: Promise<void> | null = null;
 const realFetch = globalThis.fetch;
 const realTitle = document.title;
+
+/** Holds every response until the returned function is called, to see what shows meanwhile. */
+function hold(): () => void {
+  let release!: () => void;
+  held = new Promise((resolve) => { release = resolve; });
+  return () => {
+    held = null;
+    release();
+  };
+}
 
 beforeEach(() => {
   requests = [];
   failNext = 0;
+  held = null;
   document.title = 'Team';
   globalThis.fetch = (async (input: RequestInfo | URL) => {
     const url = new URL(typeof input === 'string' ? input : input instanceof URL ? input.href : input.url, location.href);
     requests.push(url.pathname + url.search);
+    if (held !== null) await held;
     if (failNext > 0) {
       failNext--;
       return new Response('unavailable', { status: 503 });
@@ -118,6 +131,8 @@ const click = (container: Element, selector: string, text?: string) => {
   found.click();
 };
 const names = (container: Element) => [...container.querySelectorAll('.people-list a')].map((link) => link.textContent);
+/** The text of the shown card's header slot (`components/Card.auwla`). */
+const header = (container: Element) => container.querySelector('main .card-header')?.textContent?.trim();
 
 it('splits each page into its own chunk, and keeps the local one in the entry', async () => {
   const { files } = await build(true);
@@ -127,10 +142,19 @@ it('splits each page into its own chunk, and keeps the local one in the entry', 
   // The home section and the locally declared not-found page ship with the entry.
   expect(entry).toContain('Team directory');
   expect(entry).toContain('No page here.');
-  // Each imported page is only in a chunk, loaded with its route.
+  // The entry's static and lazy imports, by file name.
+  const statics = [...entry.matchAll(/from\s*"\.\/([^"]+)"|import\s*"\.\/([^"]+)"/g)].map((match) => match[1] ?? match[2]!);
+  const lazy = [...entry.matchAll(/import\("\.\/([^"]+)"\)/g)].map((match) => match[1]!);
+  const fileWith = (text: string) => [...files].find(([name, code]) => name !== 'main.js' && code.includes(text))?.[0];
+
+  // `Card` is used outside routes too, so it loads with the entry: Bun shares it in a chunk the
+  // entry imports statically, since the lazy pages use it as well.
+  expect(statics).toContain(fileWith('card-header')!);
+  // Each imported page is only in a chunk the entry loads with `import()`, with its route.
   for (const text of ['Search people', 'Back to everyone', 'all written in .auwla']) {
     expect([text, entry.includes(text)]).toEqual([text, false]);
-    expect([text, chunks.some((chunk) => chunk.includes(text))]).toEqual([text, true]);
+    const file = fileWith(text);
+    expect([text, file !== undefined && lazy.includes(file) && !statics.includes(file)]).toEqual([text, true]);
   }
   expect(chunks.length).toBeGreaterThanOrEqual(3);
 });
@@ -139,61 +163,86 @@ for (const optimize of [true, false]) {
   it(`navigates, loads data and runs effects in .auwla with optimize=${optimize}`, async () => {
     const { entry } = await build(optimize);
     const { container, lifecycle } = await start(entry, '/');
-    expect(container.querySelector('.home h1')?.textContent).toBe('Team directory');
+    // The home card fills the header slot; no `<slot>` element reaches the DOM.
+    expect(header(container)).toBe('Team directory');
+    expect(container.querySelector('.home .card-body')?.textContent).toBe('Pick a page above.');
+    expect(container.querySelector('slot')).toBeNull();
     expect(container.querySelector('.not-found')).toBeNull();
     expect(requests).toEqual([]);
 
-    // The first request fails: `$track` shows the error, and Retry asks again.
+    // While the list loads, the app's Group shows its placeholder where the list is read.
+    let release = hold();
     failNext = 1;
     click(container, 'nav a', 'People');
-    await waitFor(() => expect(container.querySelector('.error')?.textContent).toContain('Could not load people.'));
+    await waitFor(() => expect(container.querySelector('.people .loading')?.textContent).toBe('Loading…'));
     expect(location.pathname).toBe('/people');
     expect(container.querySelector('.directory h1')?.textContent).toBe('People');
     expect(container.querySelector('.home')).toBeNull();
+    expect(names(container)).toEqual([]);
     expect(lifecycle).toContain('people:shown');
+
+    // It fails: the page's error-only Group shows its Failure component, whose retry asks again.
+    release();
+    await waitFor(() => expect(container.querySelector('.error')?.textContent).toContain('Could not load people:'));
+    expect(container.querySelector('.people .loading')).toBeNull();
     click(container, '.retry');
     await waitFor(() => expect(names(container)).toEqual(['Ada Lovelace', 'Grace Hopper', 'Alan Turing']));
     expect(container.querySelector('.error')).toBeNull();
     expect(requests).toEqual(['/api/people?search=', '/api/people?search=']);
 
-    // Typing changes the helper's argument, so the same binding requests again.
+    // Typing changes the helper's argument, so the same binding requests again. The old list
+    // stays while `$track` reports the refresh.
+    release = hold();
     const input = container.querySelector<HTMLInputElement>('input[type="search"]')!;
     input.value = 'al';
     input.dispatchEvent(new Event('input', { bubbles: true }));
+    await waitFor(() => expect(container.querySelector('.refreshing')?.textContent).toBe('Updating…'));
+    expect(names(container)).toEqual(['Ada Lovelace', 'Grace Hopper', 'Alan Turing']);
+    expect(container.querySelector('.people .loading')).toBeNull();
+    release();
     await waitFor(() => expect(names(container)).toEqual(['Alan Turing']));
+    await waitFor(() => expect(container.querySelector('.refreshing')).toBeNull());
     expect(requests.at(-1)).toBe('/api/people?search=al');
 
-    // A parameter link: the person is prepared (`$routed`) before the page shows, its effect sets
-    // the title, and the list page's effect cleans up as it leaves.
+    // A parameter link: `$routed` prepares the person first, so the list stays until it arrives.
+    release = hold();
     click(container, '.people-list a', 'Alan Turing');
-    await waitFor(() => expect(container.querySelector('.person h2')?.textContent).toBe('Alan Turing'));
+    await waitFor(() => expect(requests).toContain('/api/people/3'));
+    await Bun.sleep(50);
+    expect(names(container)).toEqual(['Alan Turing']);
+    expect(container.querySelector('.card-header h2')).toBeNull();
+    release();
+    // Then the card fills its slots, the title effect runs, and the list page's effect cleans up.
+    await waitFor(() => expect(container.querySelector('.card-header h2')?.textContent).toBe('Alan Turing'));
     expect(location.pathname).toBe('/people/3');
-    expect(container.querySelector('.person .role')?.textContent).toBe('Researcher');
+    expect(container.querySelector('.card-body .role')?.textContent).toBe('Researcher');
+    expect(container.querySelector('.card-actions a')?.textContent).toBe('Back to everyone');
     expect(container.querySelector('.directory h1')?.textContent).toBe('People');
-    expect(requests).toContain('/api/people/3');
     await waitFor(() => expect(document.title).toBe('Alan Turing · Team'));
     expect(lifecycle).toContain('people:left');
     expect(lifecycle).toContain('person:3');
 
-    // Back to the list: the person's cleanup restores the title.
-    click(container, '.person a', 'Back to everyone');
+    // Back to the list through the link in the actions slot: the cleanup restores the title.
+    click(container, '.card-actions a', 'Back to everyone');
     await waitFor(() => expect(names(container).length).toBeGreaterThan(0));
     await waitFor(() => expect(document.title).toBe('Team'));
     expect(lifecycle).toContain('person:3:left');
 
     // A lazy page with setup and `$cleanup`; leaving it runs the cleanup.
     click(container, 'nav a', 'About');
-    await waitFor(() => expect(container.querySelector('.about h1')?.textContent).toBe('About'));
+    await waitFor(() => expect(header(container)).toBe('About'));
     expect(lifecycle).toContain('about:setup');
     expect(lifecycle).not.toContain('about:cleanup');
     click(container, 'nav a', 'Home');
     await waitFor(() => expect(container.querySelector('.home')).not.toBeNull());
     expect(lifecycle).toContain('about:cleanup');
 
-    // An address no route declares shows the catch-all page.
+    // An address no route declares shows the catch-all page, whose card falls back to the
+    // header slot's own content.
     history.pushState(null, '', '/nowhere');
     window.dispatchEvent(new PopStateEvent('popstate'));
     await waitFor(() => expect(container.querySelector('.not-found')?.textContent).toBe('No page here.'));
+    expect(header(container)).toBe('Team');
     expect(container.querySelector('.home')).toBeNull();
   }, 30_000);
 }
@@ -202,7 +251,7 @@ it('opens a deep link: the lazy page and its preparation load before the app mou
   const { entry } = await build(true);
   const { container, lifecycle } = await start(entry, '/people/2');
   // Already there when `import()` returns: the entry waited for the chunk and the `$routed` data.
-  expect(container.querySelector('.person h2')?.textContent).toBe('Grace Hopper');
+  expect(container.querySelector('.card-header h2')?.textContent).toBe('Grace Hopper');
   expect(requests).toEqual(['/api/people/2']);
   await waitFor(() => expect(document.title).toBe('Grace Hopper · Team'));
   expect(lifecycle).toEqual(['person:2']);

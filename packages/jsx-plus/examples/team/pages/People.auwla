@@ -1,10 +1,22 @@
+import { Group } from '@memoized-dom/data';
 import { getPeople } from '../api';
 import { note } from '../lifecycle';
+
+/** A Group's error component: `retry` asks for the failed request again. */
+function Failure({ error, retry }: { error: { message: string }; retry: () => void }) {
+  return (
+    <p class="error">
+      "Could not load people: "; error.message; " ";
+      <button type="button" class="retry" onClick=(() => retry())>"Retry"</button>
+    </p>
+  );
+}
 
 export function People() {
   let search = '';
   // Requests again whenever `search` changes; the list stays while the new one loads.
   const people = getPeople(search);
+  // The request behind the value: only to show that a newer list is on its way.
   const request = $track(people);
 
   $effect(() => {
@@ -19,24 +31,20 @@ export function People() {
         placeholder="Search people"
         onInput={event => search = event.currentTarget.value}
       />
-      if (request.pending) {
-        <p class="loading">"Loading people…"</p>
+      if (request.refreshing) {
+        <p class="refreshing">"Updating…"</p>
       }
-      if (request.error !== null) {
-        <p class="error">
-          // Text then a tag needs `;`: `"…" <button>` would read as a comparison.
-          "Could not load people. ";
-          <button type="button" class="retry" onClick=(() => request.refresh())>"Retry"</button>
-        </p>
-      }
-      <ul class="people-list">
-        for (const member of people) {
-          <li key={member.id}>
-            <a route-to={{ path: '/people/:id', params: { id: String(member.id) } }}>member.name</a>
-            " · "; member.role
-          </li>
-        }
-      </ul>
+      // Error UI only. The pending placeholder is inherited from the app's Group, across files.
+      <Group error=Failure>
+        <ul class="people-list">
+          for (const member of people) {
+            <li key={member.id}>
+              <a route-to={{ path: '/people/:id', params: { id: String(member.id) } }}>member.name</a>
+              " · "; member.role
+            </li>
+          }
+        </ul>
+      </Group>
     </div>
   );
 }

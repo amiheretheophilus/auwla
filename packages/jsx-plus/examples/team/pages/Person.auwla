@@ -1,4 +1,5 @@
 import type { Member } from '../api';
+import { Card } from '../components/Card.auwla';
 import { note } from '../lifecycle';
 
 export function Person() {
@@ -16,10 +17,10 @@ export function Person() {
   });
 
   return (
-    <article class="person">
-      <h2>member.name</h2>
+    <Card>
+      <h2 slot="header">member.name</h2>
       <p class="role">member.role</p>
-      <a route-to="/people">"Back to everyone"</a>
-    </article>
+      <a slot="actions" route-to="/people">"Back to everyone"</a>
+    </Card>
   );
 }

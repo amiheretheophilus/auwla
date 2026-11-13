@@ -57,6 +57,24 @@ link to `/people/2` shows the person as soon as `import()` returns, with one req
 build splits the same pages into chunks the entry imports dynamically. Three runs
 of the routes file passed; JSX+ suite 311 pass (23 files).
 
+Follow-up at the user's request (they noted `Group` and `<slot>` were unused, and
+a browser warning "unreachable code after return statement" in `Person`'s chunk):
+
+- `App.auwla` wraps the pages in `<Group pending=PageLoading>`; `People.auwla` adds
+  an error-only `<Group error=Failure>` that inherits that pending policy across
+  files, with `retry`; `$track` now only shows "Updating…" during a refresh.
+- `components/Card.auwla` has named `header` (with fallback) and `actions` slots and
+  a default slot; Home, Person, About and the catch-all fill or omit them.
+- The fake API can hold responses, so the test now sees the Group placeholder at the
+  list, the error component and its retry, the old list kept while "Updating…"
+  shows, and `$routed` keeping the list until the person arrives. It checks no
+  `<slot>` element reaches the DOM and the header fallback on the catch-all page.
+- The warning was compiler-next's: a shared frame always appended
+  `_completeShared(void 0)` after the setup, even when the setup ended in `return`.
+  Fixed in `features/state/shared-dom.ts` (reconcile table), with a test that fails
+  on the old line; a rebuilt team preview has no statement after a `return`/`throw`
+  in any of its 8 files.
+
 Found while writing it:
 
 - A text child directly followed by a tag (`"Could not load. " <button>`) is a
@@ -312,6 +330,7 @@ any new changes that must be adopted or corrected on `compiler-rewrite` later:
 | `03958a19` | `optimize/closed-lists.ts`: the proof finds a row list's root through `mappingCall` (`#rowsOver`), replacing the `.map`-only branch in `#useMethod` and the `form` filter in `match`. `features/handlers/mutations.ts` emits `list.map`/`list.from` and `mapRows`/`fromRows` from one branch, passing `unedited` to both. `optimize/methods.ts` drops `withRowReuse`'s redundant `form` argument. Tests: both spellings in `closed-lists.test.ts` and `conditionals-and-lists.closed.test.ts` ([optimize](../wiki/compiler/optimize.md#closed-lists)) | Loops over plain state lists skip unchanged rows like `.map`, without a second copy of the list logic |
 | `232c8f5b` | `optimize/closed-lists.ts`: `returnsToEventDispatch` lets `#useReturn` accept a function literal written as an `on*` attribute of a DOM element that is not `isComponentCall`, since the runtime keeps nothing it returns. Tests in `closed-lists.test.ts` (with controls) and a both-spelling behaviour case ([optimize](../wiki/compiler/optimize.md#closed-lists)) | `onClick=(() => rows.reverse())`, the natural `.auwla` one-liner, turned the skip off; plain JSX benefits too |
 | `0cf5a8ae` | New `core/parse/languages.ts` (`SourceLanguage`, `languageOf`, `languageExtensions`, `moduleText`, `authoredError`) with a toy-language `languages.test.ts` ([core](../wiki/compiler/core.md#source-languages)). `languages` option in `options.ts`; `parseModule` reads a language module's TSX and composes its origin; `analysis/frontend.ts` and `pipeline.ts` move post-parse errors back for language modules; `CompileError.reason`; `importCandidates(…, extensions)`; `isSourcePath(path, languages)`, `collect.ts` and `project.ts` collect language modules; `compile()` accepts a language `moduleId`; the Bun plugin loads and probes language extensions; exports `SourceLanguage`, `TextOrigin`, `languageExtensions`. `packages/vite`: `languages` option, forwarded to the application, host, load, resolve and hot-update checks | DX-39: `.auwla` builds through compiler-next's own project, Bun and Vite paths instead of a JSX+ copy of them |
+| `bd2b1eac` | `features/state/shared-dom.ts`: no trailing `$$complete(void 0)` when the shared setup's last statement is `return` or `throw`; `shared-dom.test.ts` checks compiled output has no unreachable statement ([linking](../wiki/compiler/linking.md)) | Found as a browser warning in the `.auwla` team example's `Person` chunk; a genuine emission bug, plain JSX too |
 
 These histories used different commits for the same code before synchronization,
 so commit-range output alone does not show whether a change was adopted. Compare

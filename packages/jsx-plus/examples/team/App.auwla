@@ -1,11 +1,21 @@
+import { Group } from '@memoized-dom/data';
+import { Card } from './components/Card.auwla';
 // Imported only to be shown by routes: each page loads as its own chunk, with its route.
 import { People } from './pages/People.auwla';
 import { Person } from './pages/Person.auwla';
 import { About } from './pages/About.auwla';
 
-// Declared here, so it stays in the main bundle.
+// Declared here, so it stays in the main bundle. Its card has no header: the slot's fallback shows.
 function NotFound() {
-  return <p class="not-found">"No page here."</p>;
+  return (
+    <Card>
+      <p class="not-found">"No page here."</p>
+    </Card>
+  );
+}
+
+function PageLoading() {
+  return <p class="loading">"Loading…"</p>;
 }
 
 export function App() {
@@ -16,20 +26,26 @@ export function App() {
         <a route-to="/people">"People"</a>
         <a route-to="/about">"About"</a>
       </nav>
-      <main>
-        <section route="/" class="home">
-          <h1>"Team directory"</h1>
-          <p>"Pick a page above."</p>
-        </section>
-        // Shared chrome for every /people URL; the child routes swap beneath it.
-        <section route="/people" class="directory">
-          <h1>"People"</h1>
-          <People route="/" />
-          <Person route="/:id" />
-        </section>
-        <About route="/about" />
-        <NotFound route="/*" />
-      </main>
+      // Wherever a page reads data that has not arrived, this shows in its place, unless a closer
+      // Group sets its own pending policy. No wrapper element is added.
+      <Group pending=PageLoading>
+        <main>
+          <section route="/" class="home">
+            <Card>
+              <h1 slot="header">"Team directory"</h1>
+              <p>"Pick a page above."</p>
+            </Card>
+          </section>
+          // Shared chrome for every /people URL; the child routes swap beneath it.
+          <section route="/people" class="directory">
+            <h1>"People"</h1>
+            <People route="/" />
+            <Person route="/:id" />
+          </section>
+          <About route="/about" />
+          <NotFound route="/*" />
+        </main>
+      </Group>
     </div>
   );
 }

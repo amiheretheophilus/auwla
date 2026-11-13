@@ -1,3 +1,4 @@
+import { Card } from '../components/Card.auwla';
 import { note } from '../lifecycle';
 
 export function About() {
@@ -6,9 +7,9 @@ export function About() {
   $cleanup(() => note('about:cleanup'));
 
   return (
-    <section class="about">
-      <h1>"About"</h1>
+    <Card>
+      <h1 slot="header">"About"</h1>
       <p>"Routes, lazy pages, data and effects, all written in .auwla."</p>
-    </section>
+    </Card>
   );
 }

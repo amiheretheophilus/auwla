@@ -14,7 +14,7 @@ React JSX runtime. Other projects need this one-time configuration too.
 | [counter.auwla](counter.auwla) | The smallest state/event/direct-expression example |
 | [greeting.auwla](greeting.auwla) | Editable greeting, conditional branches, native event input and looped names; real completion and runtime checks use this file |
 | [task-board/App.auwla](task-board/App.auwla) | A complete task board: derived lists/counts, search, status filters, form submission, existing refs, direct `if`, direct `for` loops in the markup, quoted text and row events |
-| [team/](team/) | Routes (nested, parameters, catch-all), lazy route chunks, `$fetch`/`$track` with a reactive helper, `$routed`, `$effect` and `$cleanup` |
+| [team/](team/) | Routes (nested, parameters, catch-all), lazy route chunks, `Group` pending/error policies, `<slot>` layouts, `$fetch`/`$track` with a reactive helper, `$routed`, `$effect` and `$cleanup` |
 | [notes/](notes/) | Several `.auwla` components importing each other (with and without the extension, through a `.ts` re-export), built by compiler-next's project, Bun plugin and Vite plugin |
 | [checking/App.auwla](checking/App.auwla) | Small typed-prop/ref example used by the mapper checks |
 | [checking/TypeError.auwla](checking/TypeError.auwla) | Deliberately invalid method call for inspecting authored diagnostics |
@@ -86,13 +86,23 @@ in-memory API and serves deep links such as `/people/2`. Everything is written i
 - The three pages are imported only for their routes, so each loads as its own
   chunk when its route is first shown. `NotFound` is declared in `App.auwla` and
   stays in the main bundle.
+- `<Group pending=PageLoading>` in `App.auwla` wraps every page: wherever a page
+  reads data that has not arrived, `PageLoading` shows in its place, with no
+  wrapper element.
+- [team/components/Card.auwla](team/components/Card.auwla) is a layout with
+  `<slot name="header">` (falling back to `"Team"`), a default `<slot />` and
+  `<slot name="actions" />`. Pages fill them with `slot="header"`/`slot="actions"`
+  children; `<slot>` is compiler syntax and never reaches the DOM. The not-found
+  page passes no header, so the fallback shows.
 - [team/pages/People.auwla](team/pages/People.auwla) loads people through
   [team/api.ts](team/api.ts), a helper returning `$fetch`. Typing in the search
-  box changes its argument, so the same binding requests again. `$track` shows
-  loading and errors, and `request.refresh()` retries.
+  box changes its argument, so the same binding requests again while the old list
+  stays. An error-only `<Group error=Failure>` keeps the app's pending policy and
+  shows a `Failure` component whose `retry` asks again; `$track(people).refreshing`
+  shows "Updating…" during a search.
 - [team/pages/Person.auwla](team/pages/Person.auwla) loads its person with
-  `$routed`, before the route commits, and an `$effect` sets `document.title`;
-  its cleanup puts the old title back.
+  `$routed`, so the list stays until the person arrives, and an `$effect` sets
+  `document.title`; its cleanup puts the old title back.
 - [team/pages/About.auwla](team/pages/About.auwla) runs setup once per visit and
   a `$cleanup` when the route leaves. Both pages record into
   [team/lifecycle.ts](team/lifecycle.ts).
