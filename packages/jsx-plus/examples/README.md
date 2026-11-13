@@ -132,6 +132,9 @@ server-backed `$routed` pages. `--build` builds and exits.
   (`server/people.auwla`), a server-only module in the server folder, inside `$routed`, so the preparation runs on the server:
   during the render for a page the server serves, and through `POST /_memoized/routed` after a
   link click. The client bundle never contains it.
+- [directory/server/status.auwla](directory/server/status.auwla) is ordinary backend code in
+  `.auwla`: a Hono app using `node:crypto`, mounted by `server.ts` at `GET /api/status`. Code in
+  the server folder compiles as plain code, exactly as written.
 - `server.ts` and `server/define.ts` stay TypeScript.
 
 The preview also writes `.memoized/server-functions.d.ts` (ignored by git), which types

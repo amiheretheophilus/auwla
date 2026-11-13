@@ -16,6 +16,8 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { waitFor } from '../../../test-support/helpers';
 // Compiler-next's Bun plugin has no package export yet; the tests read it as the CLI does.
 import { memoizedDom } from '../../compiler-next/src/project/bun';
+import { fileSystemHost } from '../../compiler-next/src/project';
+import { createApplication } from '../../compiler-next/src/server/application';
 import { checkoutPackagesFor } from '../examples/checkout';
 import { auwla } from '../src';
 
@@ -96,6 +98,21 @@ it('renders each route on the server, reading .auwla server functions and server
   // The endpoints the browser calls, named after the `.auwla` module without its extension.
   const listed = await server.fetch(new Request('http://localhost/_fn/people/listPeople'));
   expect((await listed.json() as { name: string }[]).map((entry) => entry.name)).toEqual(['Ada', 'Lin']);
+});
+
+it('runs ordinary backend code written in .auwla (Hono, a Node built-in), compiled as plain code', async () => {
+  const status = await withoutWindow(() => server.fetch(new Request('http://localhost/api/status')));
+  expect(status.status).toBe(200);
+  const body = await status.json() as { people: number; started: string; instance: string };
+  expect(body.people).toBeGreaterThanOrEqual(2);
+  expect(body.instance).toMatch(/^[0-9a-f-]{36}$/);
+
+  // What compiler-next made of it: the authored code, with nothing of the runtime.
+  const build = await createApplication({ client: './src/main.ts', server: SERVER, host: fileSystemHost(root), languages: [auwla] }).build();
+  const code = build.server?.ok === true ? build.server.output['./server/status.auwla']! : '';
+  expect(code).toContain("import { Hono } from 'hono';");
+  expect(code).toContain("api.get('/status', (c) => c.json({ people: allPeople().length, started, instance }));");
+  expect(code).not.toMatch(/_MD\.|_data\.|_read_|_mutated_/);
 });
 
 /** Requests the client sent to the server, by method and path. */

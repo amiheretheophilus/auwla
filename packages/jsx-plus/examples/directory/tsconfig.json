@@ -1,6 +1,7 @@
 {
   "extends": "../checking/tsconfig.json",
   "compilerOptions": {
+    "types": ["@memoized-dom/jsx-plus/types", "node"],
     "paths": {
       "@memoized-dom/compiler/jsx": ["../../../compiler/src/jsx-types.ts"],
       "#server/*": ["./server/*", "./server/*.auwla"],
@@ -9,6 +10,6 @@
   },
   "files": [
     "./src/App.auwla", "./src/Person.auwla", "./src/main.ts",
-    "./server/people.auwla", "./server/functions/people.auwla", "./server/define.ts", "./server.ts"
+    "./server/people.auwla", "./server/functions/people.auwla", "./server/status.auwla", "./server/define.ts", "./server.ts"
   ]
 }

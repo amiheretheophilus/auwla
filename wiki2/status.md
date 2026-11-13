@@ -149,8 +149,14 @@ characters ([server](../wiki/compiler/server.md#backend-code)). Pages rendered o
 their machinery. The JSX+ server (both modes), Vite and routes tests run the result.
 
 Not yet: cross-file editor checks (rename/completion across `.auwla` imports);
-streaming/live server functions in `.auwla`; ordinary backend packages (Express) imported from
-`.auwla` server code, which should now compile as plain imports but are untested. A collected
+streaming/live server functions in `.auwla`.
+
+Ordinary backend packages, checked next: Express is not installed in the workspace (adding it
+would change dependencies), so `server/status.auwla` uses Hono, already a root dependency, and
+`node:crypto`; `server.ts` mounts it at `GET /api/status`. `tests/server.test.ts` gets its JSON
+from the built server and checks its compiled output is the authored code with no runtime
+machinery; the Vite tests build and serve the same copy. The example's tsconfig adds `node` to
+`types` so `tsc` accepts `node:crypto`; it reports no errors. A collected
 `.auwla` module is normalized twice per change.
 
 ## Current editor fix and next integration slice
