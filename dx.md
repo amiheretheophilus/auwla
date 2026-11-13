@@ -4,14 +4,16 @@ Status: evolving prototype design. Accepted directions and open proposals are
 identified separately; the complete grammar is not settled.
 
 Created: 2026-11-05.
-Updated: 2026-11-11.
+Updated: 2026-11-13.
 
 Work branch: `prototype/jsx-plus`. Start at [wiki2/README.md](wiki2/README.md)
 for the code map, current slice, acceptance examples and handoff.
 
-The [CSS design companion](dxcss.md) expands local style blocks, optional Tailwind
-utility aliases, compact/grouped conditions and CSS tooling. These are proposals,
-not implemented additions to the current language profile.
+The [CSS design companion](dxcss.md) records native CSS first, then compact/grouped
+conditions on ordinary properties, including same-element `@.loading` classes.
+Property aliases are deferred; Tailwind is removed from this layer's plan.
+Compilation produces CSS without a CSS runtime, through compiler-next's existing
+build ownership. This is planning only, not implemented syntax (DX-41/42).
 
 The initial [language extension spec](wiki2/spec/README.md), version 0.1-draft,
 defines the first core profile's grammar, syntax model, semantics, diagnostics

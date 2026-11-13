@@ -37,6 +37,7 @@ depends on integration, acceptance and measurements.
 | P4-MODULES | Client app built (DX-39); server side next | `auwla` is a compiler-next source language. The notes example builds and runs through compiler-next's project, Bun plugin and Vite plugin (dev, hot update, build) with authored maps and errors. The team example checks routes, lazy route chunks (Bun and Vite), `$fetch`/`$track`, `$routed` and effects in both modes. Next: server functions, server-backed `$routed`/SSR, cross-file editor checks | [architecture](architecture.md), [status](status.md) |
 | P4-FLOW | First fixtures built; expand later | Basic direct `if` and `.map()` fixtures execute; extend scope, owner/disposal and readiness interleavings before full flow acceptance | [syntax](syntax.md), [testing](testing.md) |
 | P5-EVENT | Candidate | Settle event-expression meaning; demonstrate one ordinary handler and one shorthand with identical timing | [features](features.md) |
+| CSS-0 | Current focus: planning/documentation only (DX-41/42) | Review native CSS style blocks, then full-property compact/grouped conditions including `@.loading`; aliases later, Tailwind removed, no CSS runtime. Existing compiler owns delivery. No implementation until requested | [CSS design](../dxcss.md) |
 | P6-BIND | Candidate | Settle named text/checkbox bindings, write typing and handler order; show one form | [features](features.md) |
 | P7-APP | Candidate | Run a small real app through editing, build, SSR/adoption and disposal; compare output and work with equivalent existing source | [architecture](architecture.md), [testing](testing.md) |
 
@@ -50,11 +51,11 @@ For the active slice, write: the question it answers, a few input examples,
 observable expected results, owning files (planned or real), dependencies and the
 checks that could disprove it. Resolve only the decisions that slice needs.
 
-The next parser slice hardens the declared core subset in the separate package and
-reports exactly which conformance levels/fixtures it covers. It needs no event
-modifiers, CSS system or production Vite migration. Normalization in the syntax
-package uses the host tokenizer/parser; it does not replace host parsing with
-string rewrites. Pair hardening with source-range and mapper probes early.
+The current user focus is CSS design, not implementation. Review the selected
+contract and expected CSS before choosing dependencies or writing code; the full
+sequence and open questions are in [dxcss.md](../dxcss.md). Parser hardening stays
+available as a separate slice, using the host tokenizer/parser and source-range
+checks. A backlog entry or design discussion is not authorization to implement it.
 
 ## Finished means
 

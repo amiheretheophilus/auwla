@@ -1,139 +1,76 @@
 # Auwla CSS developer experience: styling design discussion
 
-Status: design discussion and proposed implementation plan. **The style-block
-compiler, utility aliases, conditions and CSS editor service described here are
-not implemented.** Existing ordinary CSS imports and configured Tailwind classes
-remain the starting point.
+Status: **planning only**. The CSS authoring layer described here is not
+implemented. Discussing or documenting CSS does not authorize implementation.
 
-Created: 2026-11-11. Updated: 2026-11-11.
+Created: 2026-11-11. Updated: 2026-11-13.
 
-This is the styling companion to [dx.md](dx.md), especially its class/style and
-file-scoped CSS proposals. [wiki2](wiki2/README.md) maps the prototype and
-[the language spec](wiki2/spec/README.md) owns implemented syntax contracts.
-This document does not revise that spec or claim a new conformance level.
+This is the styling companion to [dx.md](dx.md). [wiki2](wiki2/README.md) maps the
+prototype; [the language spec](wiki2/spec/README.md) owns implemented grammar and
+conformance. This document records direction and questions without changing that spec.
 
-The purpose is to describe a useful authoring experience in enough detail to
-challenge it, prototype it and revise it in small slices. User requests,
-recommendations and unresolved choices are distinguished below.
+## 1. Current direction and sequence
 
-## 1. What we want to improve
+Start with **native CSS property names and native CSS values**. Tailwind is
+removed from the target design. Optional property aliases such as `p`, `px`
+and `bg` come later.
 
-Writing Tailwind classes already works when a project has Tailwind configured:
+The agreed sequence is:
 
-```tsx
-<button class="rounded-lg bg-blue-600 px-4 py-2 text-white">
-  "Save"
-</button>
-```
+1. Ordinary CSS in style blocks.
+2. Compact and grouped conditions on ordinary CSS properties.
+3. Optional property aliases after the native CSS foundation.
 
-That is existing compatibility, not the proposed abstraction. The opportunity is
-to make related styling easier to read, reuse and edit while preserving ordinary
-CSS and the project's existing design tokens.
+Editor support accompanies each usable slice. Ordinary CSS imports already work;
+style-block extraction, local scoping and the condition syntax below remain planned.
 
-The proposed experience combines:
+Follow DX-39: JSX+ is a standalone template/source-language layer. It supplies
+syntax transformations through `auwla`; compiler-next owns projects, applications,
+imports, build delivery, source maps, HMR and bundler integrations. JSX+ must not
+grow another project wrapper, build graph, Bun/Vite plugin or build-map composer.
+Its source implementation uses no Bun/Node APIs.
 
-- Local styles in a top-level `<style>` block beside the component code.
-- Ordinary CSS declarations, selectors, nesting and at-rules.
-- Utility shorthands such as `p:4`, with optional Tailwind integration.
-- Compact conditional values: `p:4 @md:6 @lg:8`.
-- The same conditional syntax on ordinary CSS properties:
-  `padding:4px @md: 30px`, with values interpreted as CSS rather than utility tokens.
-- Grouped conditions when several properties change together.
-- Completion, highlighting, hover and diagnostics that understand the same rules
-  as the compiler.
+## 2. User directions and open choices
 
-Styling extends the separate JSX+ authoring package and continues to use
-compiler-next for the component program. It introduces no new reactive state,
-ref API or independent component compiler. Existing naming remains in place
-until the planned project-wide rename.
-
-## 2. Discussion record and decision status
-
-| Topic | Direction discussed | Status |
+| Topic | Direction | Status |
 | --- | --- | --- |
-| Detailed styling document | User requested an MD beside `dx.md` | Requested; this document |
-| Utility spelling | User suggested `p:4` rather than `p-4` inside styles | User-proposed candidate |
-| Compact conditions | User clarified `p:4 @md:6 @lg:8`; quotation marks were message-entry workarounds | Preserve this exact candidate spelling |
-| Conditions on ordinary CSS | User: "i can have padding:4px @md: 30px and it will work or has to work" | Required design direction; applies to ordinary properties as well as aliases |
-| Grouped conditions | Offer blocks for several related changes | Discussed candidate |
-| Ordinary CSS | Mix normal declarations with the shorthand | Discussed direction; exact grammar still needs fixtures |
-| Semicolons | Optional after shorthand entries; newline separates entries | Recommendation; lexical rules below are provisional |
-| Local scope by default | `<style>` is local; `<style global>` is explicit | Recommendation, not yet an implemented or accepted spec rule |
-| Tailwind | Optional integration for utilities and theme values | Recommendation; API/version probe required |
-| CSS tooling | Completion and highlighting are part of a usable feature | User requested capability; implementation planned |
-| Other conditions | Hover, focus, disabled and dark mode | Later candidates with different semantics to specify |
+| Native CSS first | User: "we will start wit the normal css then later we add the short hands like p and co" | Required sequence |
+| Tailwind | User plans to drop Tailwind and use native CSS | Removed from this layer; supersedes the earlier provider proposal |
+| Full-property conditions | `padding:4px @md: 30px` must work, not only `p:4 @md:6` | Required design direction |
+| Compact spelling | `@condition:value` follows its property, without quotes | Required candidate spelling |
+| Class conditions | User proposed `p:4 @.loading:30`; the element carries the class | Required direction; first examples use full CSS properties |
+| Element classes | Dot-style `.class` authoring on elements is planned, including conditional classes | Exact element grammar remains open |
+| CSS execution | Style conditions compile to CSS; the browser applies them | Architectural requirement; no CSS runtime |
+| Grouping | Blocks group several changes under a condition | Planned authoring form |
+| Local scope | Local-by-default `<style>`, explicit `<style global>` | Recommendation; scope/escape rules still need review |
+| Separators | Optional semicolon/newline termination for compact chains | Provisional lexical contract; preserve ordinary CSS grammar |
+| Editor support | Completion, highlighting, hover and diagnostics | Required usability goal; not implemented |
 
-There is no quoted-condition syntax. Write `p:4 @md:6`, not
-`p:4 "@md:6"`. Do not introduce `$` variables or implicit JavaScript identifiers
-through the styling design.
+These directions do not choose breakpoint defaults, cascade precedence, alias
+values or a selector-rewriting algorithm. In particular, future `p:4` has no
+agreed unit/scale meaning. Dropping Tailwind does not silently turn it into `4px`.
 
-## 3. A complete authoring example
+## 3. First foundation: ordinary CSS
 
-The following is a design target, not an example accepted by today's parser:
+The initial authoring target uses ordinary declarations:
 
 ```tsx
 <style>
-  .task-board {
-    p:4 @md:6 @lg:8
-    bg:white
-    rounded:lg
-
+  .card {
+    padding: 1rem;
+    color: var(--card-text);
+    background-color: white;
     display: grid;
     gap: 1rem;
-    max-width: 80rem;
-    margin-inline: auto;
 
-    @md {
-      grid-template-columns: 16rem 1fr;
+    &:hover {
+      border-color: rebeccapurple;
+    }
+
+    @media (width >= 48rem) {
+      grid-template-columns: 1fr 1fr;
     }
   }
-
-  .add-button {
-    px:4
-    py:2
-    bg:blue-600 @hover:blue-700 @active:blue-800
-
-    color: white;
-    border: 0;
-
-    &:focus-visible {
-      outline: 2px solid currentColor;
-      outline-offset: 3px;
-    }
-  }
-</style>
-
-export function TaskBoard() {
-  let count = 0;
-
-  function addTask() {
-    count++;
-  }
-
-  return (
-    <section class="task-board">
-      <p>"Tasks added: {count}"</p>
-      <button type="button" class="add-button" onClick=addTask>
-        "Add task"
-      </button>
-    </section>
-  );
-}
-```
-
-The JavaScript, handler and quoted interpolation keep their existing meanings.
-The new work is extracting and interpreting the module's styles, producing CSS
-and associating its local selectors with the appropriate authored elements.
-
-## 4. Where style blocks belong
-
-Proposed first boundary: recognize style blocks only at module top level.
-Imports, exports and ordinary declarations can appear around them. Several
-blocks, if allowed, retain authored order and share the same file scope.
-
-```tsx
-<style>
-  .card { padding: 1rem; }
 </style>
 
 export function Card() {
@@ -141,25 +78,197 @@ export function Card() {
 }
 ```
 
-A `<style>` returned inside a component remains an ordinary markup element.
-Special module syntax must not silently capture every element with that name.
-The parser must also leave strings, comments and unrelated JavaScript containing
-`<style>` alone. Define how an apparent `</style>` inside a CSS comment or string
-is handled before choosing the block scanner; substring replacement is inadequate.
+This is a design target, not accepted syntax in today's normalizer. Native CSS
+properties, units, functions, variables, selectors and at-rules remain available.
+There is no utility scale for ordinary properties such as `padding` or `gap`.
 
-Initial recommendation: static style blocks. They do not implicitly capture
-component locals or evaluate expressions. Dynamic styling continues through the
-existing inline-style facilities, including CSS custom properties where supported.
-Possible future CSS interpolation needs a separate typing, ownership and SSR
-contract. Quoted markup interpolation does not automatically apply inside CSS.
+Recommend special style blocks only at module top level. A `<style>` returned
+inside markup remains an ordinary DOM element. Style-like text in JavaScript
+strings/comments remains host content. Define apparent `</style>` delimiters
+inside CSS strings/comments before choosing the scanner.
 
-Configured backend `.auwla` files retain ordinary backend execution. Whether a
-backend entry can import a styled UI module is a module-loading/isomorphic design
-question; merely supporting this file extension must not load browser styles.
+Initial recommendation: static blocks. They do not implicitly capture component
+locals or inherit quoted-markup interpolation. Dynamic values continue through
+existing inline styles/CSS variables. Future CSS interpolation needs its own
+typing, evaluation, ownership and SSR contract.
 
-## 5. Local styling and global styling
+## 4. Compact conditions on ordinary properties
 
-Recommended authoring default:
+The next step adds conditions to those native declarations:
+
+```css
+.button {
+  padding:4px @md:30px @.loading:40px
+  color:var(--button-color);
+}
+```
+
+Each continuation inherits the property on that entry. Spaces after either
+colon are allowed: `padding:4px @md:30px` and `padding: 4px @md: 30px` mean
+the same thing. Values remain CSS, including functions and lists:
+
+```css
+.card {
+  margin-inline:auto @lg:2rem
+  grid-template-columns:1fr @md:repeat(2, minmax(0, 1fr));
+}
+```
+
+Full-property conditions are required in the condition slice. They do not wait
+for aliases. An `@` inside strings, comments, URLs or balanced functions is not
+automatically a condition. Custom properties can contain arbitrary tokens and
+need explicit fixtures so their values are not accidentally split.
+
+## 5. Responsive and grouped conditions
+
+Compact form:
+
+```css
+.card {
+  padding:4px @md:30px @lg:40px
+}
+```
+
+Grouped equivalent, preserving rule order:
+
+```css
+.card {
+  padding: 4px;
+
+  @md {
+    padding: 30px;
+  }
+
+  @lg {
+    padding: 40px;
+  }
+}
+```
+
+Groups may contain several declarations and nested selectors. Both forms should
+share one condition representation and emit equivalent CSS when order and
+declarations are equivalent.
+
+| Form | Intended meaning | Status |
+| --- | --- | --- |
+| Base declaration | All viewport widths | Planned |
+| `@md` | Configured medium threshold and above | Planned; configuration open |
+| `@max-md` | Strictly below the same threshold | Candidate |
+| Nested `@md`/`@max-lg` | Medium-inclusive to large-exclusive range | Candidate composition |
+| `@media (...)` | Native media query | Preserve native CSS |
+| `@container (...)` | Native container query | Preserve native CSS; distinct from viewport conditions |
+
+Breakpoints need an explicit Auwla configuration shared by build and tooling.
+Tailwind does not supply them. `48rem` here is illustrative, not an accepted
+default. Names describe thresholds, not device categories.
+
+Native `@media`, `@supports`, `@container`, `@layer` and other at-rules remain
+distinct from named conditions. Unknown condition names need authored diagnostics.
+Module-level placement and combined-condition spelling still need review.
+
+## 6. Author-controlled class conditions
+
+The user's `p:4 @.loading:30` idea also applies to full property names:
+
+```css
+.button {
+  padding:4px @.loading:30px
+}
+```
+
+Conceptual output before any local-scope transformation:
+
+```css
+.button {
+  padding: 4px;
+}
+
+.button.loading {
+  padding: 30px;
+}
+```
+
+`@.loading` matches the same element targeted by this rule when it also has
+the `loading` class. It is not an implicit ancestor or descendant condition.
+Complex selector lists need their own transformation examples.
+
+Grouped class condition:
+
+```css
+.button {
+  @.loading {
+    padding: 30px;
+    opacity: 0.5;
+  }
+}
+```
+
+Classes can be static or controlled using existing authoring:
+
+```tsx
+<button class=(loading ? "button loading" : "button")>
+  loading ? "Saving…" : "Save"
+</button>
+```
+
+Later dot-style class syntax on elements must produce the same ordinary DOM
+classes. This document does not choose its exact static/conditional grammar.
+The element side controls class membership; the stylesheet selects that class.
+Ancestor, descendant, attribute and arbitrary-selector conveniences would need
+separate rules.
+
+Hover/focus/disabled and dark-mode conditions remain further candidates. Specify
+whether `@hover` means raw `:hover` or also a hover-capability media guard, and
+whether dark mode follows a media query or a project selector.
+
+## 7. Compile-time CSS and existing compiler ownership
+
+The CSS layer produces CSS assets at build time. For example, with `md` explicitly
+configured as `48rem`, `padding:4px @md:30px @.loading:40px` becomes:
+
+```css
+.button {
+  padding: 4px;
+}
+
+@media (width >= 48rem) {
+  .button {
+    padding: 30px;
+  }
+}
+
+.button.loading {
+  padding: 40px;
+}
+```
+
+The browser evaluates the query and selector. There is no CSS runtime, JavaScript
+condition evaluator, resize listener or component replay for these rules.
+Application JavaScript may update a class or inline CSS variable through existing
+reactivity; that is separate from CSS matching.
+
+Responsibilities:
+
+1. JSX+ parses style syntax and emits CSS text plus syntax-origin information.
+   It handles the selected local selector/element-marker transformation.
+2. Compiler-next receives static assets through a generic language contract and
+   owns their project integration, composition, ordering and delivery.
+3. Existing Bun/Vite integrations consume compiler output for extraction, HMR and
+   production assets.
+
+The current source-language hook returns TSX and an origin. Any missing CSS
+asset capability must be designed in compiler-next's generic hook under DX-34.
+Do not work around it with JSX+ project wrappers, filesystem writes, bundler
+plugins, full-build map composers or per-component runtime style injectors.
+
+SSR must deliver CSS without `document`. Scope identifiers must match between
+server and client, independent of absolute checkout paths. Static module CSS is
+shared across repeated instances. Ordering, deduplication, lazy assets, imported
+URLs, adoption and HMR require real acceptance through existing compiler tooling.
+
+## 8. Local/global scope remains a design decision
+
+Recommended default, still awaiting review:
 
 ```tsx
 <style>
@@ -171,114 +280,34 @@ Recommended authoring default:
 </style>
 ```
 
-Under this proposal, `scoped` is unnecessary on the common local block. The
-implementation still performs scoping. `global` changes selector ownership, not
-whether the style block uses normal CSS or optional utility syntax.
+This would make local styling automatic without requiring `scoped`. The compiler
+still implements scoping; the marker/selector representation is not chosen yet.
 
-Proposed scope boundaries to test:
+Settle these before implementation:
 
-- A local block belongs to the source module and covers DOM authored by every
-  component in that module. It is not a fresh scope per mounted instance.
-- Imported child components retain their own authored-element scope. A parent
-  does not automatically stamp its scope onto child internals or forward it
-  through a component prop spread.
-- Two components in the same file intentionally share local class names. If
-  independent component scope is later needed, give it an explicit design.
-- Portalled DOM authored in the module should retain its scope association;
-  selector matching still follows its actual DOM position.
-- Global styles, inheritance, custom properties and the normal cascade can
-  cross component boundaries. Local selector rewriting is not Shadow DOM.
+- One scope for every component in a file versus another explicit ownership rule;
+  whether multiple style blocks are allowed.
+- Imported components, their roots/internals, projected children and portals.
+- Global/deep escapes; selector lists, descendants, siblings, `:is()`, `:not()`,
+  `:has()` and pseudo-elements.
+- Marker specificity, keyframe naming and global constructs such as font faces.
 
-For illustration only, a selector could become
-`.card:where([data-mmd-scope="s1"])`, with a matching marker on authored DOM.
-Using `:where(...)` for a generated marker is a candidate for avoiding additional
-specificity; the exact selector transformation is unresolved.
+Local selectors do not provide Shadow DOM isolation. Inheritance, custom
+properties, global rules and the normal cascade still apply. Class conditions
+must match the names produced by element authoring.
 
-Before implementation, cover descendant/sibling selectors, selector lists,
-`:is()`, `:not()`, `:has()`, pseudo-elements, nested rules and foreign DOM.
-Rewriting only the start of each selector is insufficient. Decide an explicit
-global/deep escape rather than letting local rules accidentally penetrate child
-internals. Global at-rules such as `@font-face` and local keyframes also need
-separate rules; a scope attribute alone does not isolate their names.
+## 9. Separators, full values and the cascade
 
-## 6. Utility aliases and ordinary CSS
-
-Candidate aliases map explicitly to utility candidates:
-
-| Authored entry | Utility candidate | Intended category |
-| --- | --- | --- |
-| `p:4` | `p-4` | Padding on all sides |
-| `px:6` | `px-6` | Horizontal padding |
-| `py:2` | `py-2` | Vertical padding |
-| `m:4` | `m-4` | Margin |
-| `w:full` | `w-full` | Width |
-| `h:12` | `h-12` | Height |
-| `bg:blue-600` | `bg-blue-600` | Background utility |
-| `rounded:lg` | `rounded-lg` | Border-radius utility |
-
-This is an initial discussion list, not a complete utility grammar. For example,
-`bg` covers several Tailwind utility families; completion must consult the
-provider instead of assuming every value is a color. Negative values, fractions,
-arbitrary values, important utilities and custom utilities need explicit cases.
-
-Ordinary properties retain ordinary CSS meanings:
+Provisional rule: a top-level newline, semicolon or closing rule brace ends a
+compact chain. Track strings, escapes, comments, parentheses and brackets so
+nested content is not split. Semicolons permit multiple entries on one line:
 
 ```css
-.card {
-  p:4
-  bg:blue-600
-
-  padding-inline: 1.25rem;
-  gap: 1rem;
-  flex: 1;
-}
+.card { padding:4px @md:30px; margin-inline:auto @lg:2rem; }
 ```
 
-Recommended collision rule: aliases occupy an explicit reserved table; standard
-CSS property names are not repurposed as Tailwind scale names. `gap:4` must not
-silently switch between raw CSS and a spacing token based on whether a value
-happens to parse. Existing `flex`, `color`, `opacity` and `display` remain CSS.
-Custom properties beginning `--` also remain CSS.
-
-Possible aliases that later collide with platform additions require versioned
-handling. Unknown normal properties should follow the CSS toolchain's extensible
-validation behavior, not a hardcoded list that rejects future browser features.
-Unknown reserved-alias values should receive provider-aware diagnostics.
-
-Raw Tailwind class strings are unchanged. Named local rules, utility classes,
-inline styles and imported styles continue to participate in the normal cascade.
-There is no promise that the last class token wins or that utilities are merged
-at runtime. Any conflict-merging helper is a separate feature.
-
-## 7. Newlines, semicolons and lexical boundaries
-
-Proposed extension rule: a top-level newline, semicolon or closing rule brace
-ends a utility entry or a declaration's compact condition chain. This applies
-to ordinary CSS properties carrying a chain as well as utility aliases.
-
-```css
-.card {
-  p:4 @md:6 @lg:8
-  bg:white @hover:blue-50;
-  padding:4px @md: 30px
-}
-```
-
-All entries are complete. The background declaration does not inherit padding
-or its conditions. With semicolons, several entries can occupy one line:
-
-```css
-.card { p:4 @md:6; bg:white @hover:blue-50; }
-```
-
-First-slice recommendation: require a newline or semicolon between shorthand
-entries. Do not also guess boundaries in `p:4 bg:white` on the same line.
-
-Ordinary CSS declarations without a compact chain retain normal declaration
-termination. The authoring convention uses semicolons for those declarations;
-standard CSS's optional final semicolon before a closing brace remains valid.
-Newlines do not generally terminate CSS values, and the extension must preserve
-multiline CSS:
+Ordinary declarations without compact conditions retain CSS termination rules.
+Do not treat every newline as a semicolon or break multiline values:
 
 ```css
 .card {
@@ -288,413 +317,101 @@ multiline CSS:
 }
 ```
 
-The lexer must track strings, escapes, comments, parentheses and brackets. An
-`@` in a quoted string, URL, comment or function argument is not automatically
-a condition. A newline inside a balanced value is not an entry boundary.
-How CSS comments interact with shorthand line endings belongs in the fixtures.
+Comment behavior, continuation, custom-property tokens, `!important` and value/
+condition boundaries require formal fixtures.
 
-## 8. Compact conditions
+Preserve authored declaration/rule order. Native specificity, importance, layers
+and source order decide overlapping matches. `.button.loading` has different
+specificity from `.button`; putting a breakpoint later does not guarantee it
+wins. Review overlap examples instead of inventing runtime precedence.
 
-The user's candidate syntax is:
+Check repeated/reversed conditions, native shorthand/longhand interactions and
+nested conditions. Any restriction or warning needs a documented reason.
 
-```css
-.card {
-  p:4 @md:6 @lg:8
-  bg:white @md:blue-50
-}
-```
+## 10. Property aliases later; Tailwind removed
 
-Each `@condition:value` continues the property or alias on that entry. It supplies a value
-under a condition; it is not a string, JavaScript expression or new property.
-The base value applies normally and each matching override contributes another
-CSS rule subject to the cascade.
+Aliases come after ordinary CSS, conditions and tooling have a stable contract.
+Illustrative future mappings include `p` to `padding`, `px` to explicitly chosen
+horizontal properties, and `bg` to an explicitly chosen background property.
+The table, collisions and value grammar remain open.
 
-Compact conditions are required on ordinary CSS properties as well as aliases:
+`bg` must not silently alternate between `background` and `background-color`.
+Unitless `p:4` has no agreed interpretation. Alias units/scales must be reviewed
+later; native custom properties can already name project values.
 
-```css
-.card {
-  padding:4px @md: 30px
-  margin-inline: auto @lg: 2rem
-  grid-template-columns: 1fr @md: repeat(2, minmax(0, 1fr));
-}
-```
+The earlier Tailwind provider, utility candidate expansion, `@apply`/`@reference`
+integration, Tailwind theme resolution and source-scanning plans are superseded.
+No Tailwind dependency or provider layer is planned. Applications may choose
+third-party CSS independently, but this CSS contract stands on native CSS.
 
-Whitespace after the base or override colon is allowed. `padding:4px @md:30px`
-and `padding: 4px @md: 30px` have the same meaning. Ordinary properties retain
-CSS values: `4px` and `30px` are literal lengths, not Tailwind spacing entries.
-An alias such as `p:4 @md:6` instead resolves both values through its utility
-provider. Each override inherits the property and its value interpretation.
+## 11. Completion, highlighting, hover and diagnostics
 
-For example, with `md` configured as `48rem`, this input:
+Coloring and language assistance are separate deliverables. A CSS-colored region
+does not automatically provide completion, and the TypeScript mapper is not a
+CSS engine. Compilation and tooling should share the style syntax model.
 
-```css
-.card {
-  padding:4px @md: 30px
-}
-```
-
-has this conceptual output before selector scoping:
-
-```css
-.card {
-  padding: 4px;
-}
-
-@media (width >= 48rem) {
-  .card {
-    padding: 30px;
-  }
-}
-```
-
-This ordinary-property form must work without a utility provider once its named
-condition is configured. Tailwind is optional for this capability. The parser
-must preserve full CSS values, including functions, strings and lists; `@` only
-starts an override at a valid top-level extension boundary. Custom properties
-also require fixtures because their values can contain arbitrary tokens that
-must not be accidentally split as conditions.
-
-Proposed first semantics, using an illustrative theme whose medium breakpoint
-is `48rem` and whose spacing unit is `0.25rem`:
-
-```css
-.card {
-  padding: 1rem;
-}
-
-@media (width >= 48rem) {
-  .card {
-    padding: 1.5rem;
-  }
-}
-```
-
-This explains `p:4 @md:6`; it does not prescribe hardcoded Tailwind values or
-the final scoping representation. Actual output follows the project's theme
-and utility provider.
-
-Potential later forms include `bg:blue-600 @hover:blue-700` and values under
-`@focus-visible`, `@active`, `@disabled` or `@checked`. These are candidates to
-validate independently. A hover condition must state whether it matches raw
-`:hover` or the utility provider's hover variant, including any media guard.
-Dark mode must follow an explicitly selected media/selector configuration.
-
-The initial compact-condition profile includes both ordinary properties and
-utility aliases. The user's clarification supersedes the earlier recommendation
-to defer ordinary properties. Condition availability is a separate question:
-responsive conditions can ship first while state forms such as
-`opacity: 1 @disabled:0.5;` await their own condition semantics. Full CSS value
-parsing is an implementation requirement, not a reason to restrict the design
-to aliases.
-
-## 9. Grouped conditions and responsiveness
-
-Groups collect several declarations under a shared condition:
-
-```css
-.card {
-  p:4
-  display: grid;
-  grid-template-columns: 1fr;
-
-  @md {
-    p:6
-    grid-template-columns: 1fr 1fr;
-  }
-
-  @lg {
-    p:8
-    gap: 2rem;
-  }
-}
-```
-
-The compact and grouped forms should share one condition representation and
-produce equivalent rules when their declarations and source order are equivalent.
-Grouping does not establish a new component scope or introduce runtime listeners.
-
-Proposed condition vocabulary:
-
-| Form | Intended meaning | Status |
-| --- | --- | --- |
-| Base declaration | All viewport widths | Proposed initial profile |
-| `@md` | Configured medium width and above | Proposed initial profile |
-| `@max-md` | Strictly below that same width | Proposed initial profile |
-| `@md { @max-lg { ... } }` | Medium-inclusive to large-exclusive range | Candidate composition |
-| `@media (width >= 53rem)` | Native CSS condition | Preserve normal CSS |
-| `&:hover { ... }` | Native selector state | Preserve normal CSS |
-| `@hover { ... }` | Named hover condition | Later candidate |
-| `@dark { ... }` | Project-defined dark-mode condition | Later candidate |
-
-Names denote thresholds, not device types: `@sm` must not mean "phones only".
-Use one breakpoint source for build and tooling. In a Tailwind-enabled project,
-read the configured theme rather than maintaining an unrelated Auwla copy.
-Without Tailwind, plain media queries still work; a future named-breakpoint
-configuration needs its own documented surface.
-
-Unknown named conditions should produce an authored diagnostic. Native at-rules
-such as `@media`, `@supports`, `@container` and `@layer` stay distinct from named
-conditions. Define valid placement before accepting module-level `@md` blocks.
-Do not accept arbitrary Tailwind variant chains accidentally through punctuation.
-
-Viewport and container size are different inputs. Preserve native container
-queries initially. Any later named-container shorthand must specify the queried
-container and its setup; it must not reuse `@md` with an implicit change of meaning.
-
-## 10. Cascade, order and condition overlap
-
-Recommended default: preserve authored declaration/rule order through expansion.
-Do not silently sort breakpoint overrides or group distant rules if that changes
-their cascade behavior. Provider-required layers and priorities must be explicit.
-
-```css
-.card {
-  p:4
-  padding: 2rem;
-}
-```
-
-If both expansions produce declarations at the same cascade priority, the later
-padding declaration wins. A shorthand can expand into several properties, so the
-full declaration sequence matters; do not merge it using string replacement.
-
-```css
-.button {
-  bg:blue-600 @hover:blue-700 @disabled:gray-300
-}
-```
-
-This raises a real acceptance question: when hover and disabled both match,
-which generated rule wins? Test selector specificity, layers, importance and
-authored order. For equal-priority rules, later matching overrides should win.
-Otherwise the normal CSS cascade decides; source order alone cannot promise
-disabled always wins.
-
-Within compact syntax, repeated or reversed conditions need a documented result.
-Prefer preserving source order with a useful warning where appropriate to
-silently reordering `@lg` and `@md`. Do not invent special runtime precedence.
-
-## 11. Tailwind integration and optionality
-
-Tailwind remains an optional styling provider. Plain CSS style blocks must not
-require it. The utility slice may initially require the Tailwind provider; a
-missing provider should yield a clear configuration diagnostic, not silently
-discard aliases or introduce a mandatory default theme.
-
-Useful existing mechanisms include utility expansion through `@apply`, theme
-variables and `@reference` for stylesheet context. These are possible integration
-points, not a decision to call private Tailwind APIs. Validate a supported version
-and a real project before choosing the adapter. See Tailwind's
-[directives](https://tailwindcss.com/docs/functions-and-directives) and
-[theme documentation](https://tailwindcss.com/docs/theme).
-
-The provider boundary should supply theme-aware candidate resolution,
-declarations/conditions, completion information and configuration invalidation.
-Avoid reimplementing Tailwind's token scales, plugins, arbitrary values or
-variant semantics inside the Auwla parser.
-
-Tailwind scans source as text; it does not parse our shorthand into utility
-candidates. `p:4` therefore needs an explicit expansion/integration step. Choose
-either provider expansion into the local stylesheet or a supported way to feed
-complete candidates to the utility build. Do not rely on accidental scanning of
-generated temporary files. The same constraint applies to dynamic class
-fragments. See [Tailwind source detection](https://tailwindcss.com/docs/detecting-classes-in-source-files).
-
-Global Tailwind setup, theme definitions and resets belong to the application's
-stylesheet context. Do not inject or scope a fresh copy of the entire Tailwind
-stylesheet for every component. Cache provider state by project/configuration,
-invalidate it when referenced themes or plugins change, and preserve custom
-utilities instead of assuming only built-in names exist.
-
-## 12. Compilation, delivery and existing compiler continuity
-
-Proposed flow:
-
-```text
-Authored .auwla module
-  -> module/style boundary parser with authored ranges
-     -> component source + mappings -> existing JSX+ -> compiler-next
-     -> style syntax tree -> optional utility provider -> local selector transform
-        -> CSS artifact + mappings + imported-theme dependencies
-```
-
-Use a proper CSS-aware parser and explicit extension nodes. Do not implement
-utility expansion, selector rewriting or block extraction as chained regular
-expression substitutions. Preserve authored positions for properties, values,
-conditions, selectors and block boundaries.
-
-The module integration must retain correct JavaScript source ranges after style
-extraction. The TypeScript checking view excludes module CSS while preserving or
-mapping subsequent code positions; the production path records style output.
-Do not send the style block to TypeScript as malformed JSX.
-
-The build adapter can expose CSS through a virtual stylesheet module. Development
-HMR should replace the affected stylesheet without accumulating stale rules.
-Production builds should extract and deduplicate styles with explicit ordering,
-asset URLs and source maps. URL/import resolution must use the authored file's
-location, not the temporary generated module directory.
-
-SSR must collect styles without accessing `document`. Scope identifiers must be
-deterministic for the same module across server and client, including normalized
-module identity; absolute checkout paths must not make outputs disagree.
-Distinguish stable module scope identity from cache/content hashes. Streaming,
-lazy chunks, repeated component instances and adoption must not duplicate or
-reorder styles unpredictably. Details remain acceptance work, not current claims.
-
-Static responsive/state conditions compile to CSS. They do not require resize
-listeners, component replay or new reactive scheduling. Resource ownership and
-JavaScript semantics continue to belong to the existing compiler/runtime.
-
-## 13. Highlighting, completion, hover and diagnostics
-
-Highlighting and language features are separate deliverables. Registering an
-embedded CSS scope does not automatically teach an editor our utility syntax or
-provide completion. VS Code documents separate approaches for
-[embedded language support](https://code.visualstudio.com/api/language-extensions/embedded-languages).
-
-### Highlighting
-
-Extend the shared grammar with a style-block region and scopes for selectors,
-ordinary declarations, aliases, values, conditions, strings, comments and braces.
-Highlight `p:4 @md:6` as style syntax, not quoted markup interpolation or
-TypeScript decorators. Lexical recovery must work before the closing `</style>`
-is typed and must not color all later JavaScript as CSS after a recoverable edit.
-
-### Completion and hover
-
-Reuse a CSS language service for normal CSS; Microsoft's
-[CSS language service](https://github.com/microsoft/vscode-css-languageservice)
-provides reusable functionality. Add Auwla-aware alias/condition completion and
-optional provider-backed utility values. The external library does not already
-understand our proposed syntax.
-
-| Authored cursor | Expected assistance |
+| Cursor context | Planned assistance |
 | --- | --- |
-| `dis` | Ordinary CSS property completion |
-| `display: ` | CSS values such as `grid` and `flex` |
-| `p:` | Provider spacing candidates |
-| `bg:blue-` | Theme-aware utility values |
-| `p:4 @` | Valid breakpoint/state conditions in this context |
-| `p:4 @md:` | Padding values, not arbitrary property names |
-| `padding:4px @md:` | CSS padding values, lengths and functions, not utility scale tokens |
-| `@md { ... }` | Ordinary properties and aliases within a rule |
-| `class="ca"` | Local selector candidates such as `card` |
+| `padd…` | Native properties such as `padding` |
+| `padding:…` | CSS values, units and functions |
+| `var(--…)` | Discoverable custom properties |
+| `padding:4px @…` | Configured conditions and supported class/state forms |
+| `padding:4px @md:…` | CSS padding values, not utility tokens |
+| `@.load…` | Discoverable author classes; arbitrary class names remain usable |
+| `class="ca…"` | Local class candidates where safely identifiable |
 
-Hover targets should explain the alias, show resolved CSS and show the actual
-configured breakpoint. Completion data and compiler output must use the same
-theme snapshot. Class completion initially handles simple authored class names;
-cross-file class rename and fully dynamic selectors need separate fidelity rules.
+A reusable CSS language service can handle native CSS; our extension must
+explicitly handle compact conditions. Hover can explain a property's value,
+the configured condition and emitted CSS. There is no Tailwind completion provider.
 
-Maintain a CSS checking projection that preserves normal CSS ranges and records
-generated spans for extensions. Route compact-chain requests through the extension
-model for both ordinary properties and aliases; for an ordinary property's
-override, ask the CSS service for that property's value context and map the edit
-back to the override. Use the normal CSS service where its input is valid. A projection that
-masks extension spans must not turn generated text into bogus authored warnings.
+Keep current-source checking useful for `padding:4px @`, `padding:4px @md:` and
+unfinished blocks. Do not reuse stale successful text. Map completion edits,
+diagnostics and hover ranges back to the author, rejecting unsafe edits across
+generated-only spans. Nearby TypeScript assistance must survive CSS errors.
 
-Map returned completion edits, diagnostics and hover ranges to the source. Reject
-unsafe edits crossing generated-only spans; do not apply a broad generated-file
-replacement to the author's style block. Formatting must likewise understand
-extensions instead of giving the entire file to an ordinary CSS formatter.
+Formatting must preserve the extension and ordinary CSS strings, comments,
+functions and multiline values. Shared syntax-origin data and CSS assistance
+remain independent of editor SDKs; thin per-editor adapters route requests.
+Test real editor behavior alongside service checks. Diagnostic codes and recovery
+limits belong in the formal spec when a slice is selected.
 
-### Incomplete source and errors
+## 12. Slices after design review
 
-Editor assistance must remain useful for `p:`, `p:4 @`, `p:4 @md:`,
-`padding:4px @md:` and an open condition block. Checking recovery must use the current text, not a stale last
-successful stylesheet. Production compilation remains strict about unfinished
-extension syntax.
-
-Diagnostic categories should cover unknown aliases/conditions, unsupported
-provider values, missing provider configuration, malformed condition values,
-unclosed blocks, invalid extension placement and provider build failures. Assign
-codes only when the formal spec adds the feature. Avoid duplicate native-CSS and
-extension errors for the same span; preserve unrelated JavaScript diagnostics.
-
-### Decoupled editor architecture
-
-Keep parsing, mappings, theme data and CSS language-service integration independent
-of the VS Code SDK. The thin editor adapter chooses the appropriate service for
-the cursor and registers features. A language-server interface can let other
-editors reuse that core. The existing TypeScript content mapper remains responsible
-for JavaScript/TypeScript; it does not become a CSS engine.
-
-## 14. Proposed file ownership
-
-These are planned concept locations, not files that exist today:
-
-| Planned location | Responsibility |
-| --- | --- |
-| `packages/jsx-plus/src/styles/` | Style boundaries, extension nodes, alias/condition parsing, expansion, scoping and CSS mappings, with focused tests |
-| `packages/jsx-plus/src/styles/providers/` | Optional provider adapters and theme/configuration access; extract to a separate package if dependencies warrant it |
-| `packages/jsx-plus/src/styles/tooling/` | Shared CSS checking projection, completion, hover, diagnostics and recovery |
-| `packages/jsx-plus/src/editor/grammar.ts` | Extend the existing shared grammar with styling scopes |
-| `packages/editor-vscode/src/` | Thin editor registration/routing and service lifecycle |
-| `packages/jsx-plus/examples/` | Real styled authoring examples, including an expanded task board |
-| `wiki2/spec/` | Formal grammar, semantics, diagnostic and conformance additions before implementation |
-| `wiki2/styling.md` | Future implementation map once a styling slice is selected |
-
-Build delivery work must follow the existing Vite integration boundaries after
-the prototype proves its CSS artifact contract. Do not scatter experimental style
-parsing through compiler-next. Any genuinely necessary compiler-next interop
-change follows DX-34 and is recorded for reconciliation on the compiler branch.
-Do not add packages or dependencies merely because this table proposes them.
-
-## 15. Small implementation slices and acceptance
-
-| Slice | Observable result | Evidence needed |
+| Slice | Outcome | Evidence |
 | --- | --- | --- |
-| CSS-0: formal draft | Agreed first profile, grammar examples and error boundaries | Spec fixtures; distinguish user decisions from recommendations |
-| CSS-1: ordinary local CSS | One real `.auwla` component with a static module style block | Build CSS, local/global isolation, mapping and baseline editor assistance |
-| CSS-2: utility aliases | `p:4`, `bg:blue-600` mixed with ordinary declarations | Provider probe, custom theme, applied completion edits and cascade checks |
-| CSS-3: responsive conditions | Compact and grouped breakpoint forms agree for ordinary CSS properties and utility aliases | Raw CSS lengths/functions and provider tokens, resize tests at exact thresholds, source order, incomplete-input completion |
-| CSS-4: state conditions | Small explicit set such as hover/focus | Native selector equivalence, overlap and configured variant behavior |
-| CSS-5: app integration | Task board uses the feature through development and production | HMR, URLs/imports, SSR/adoption, deduplication, style maps and desktop acceptance |
+| CSS-0: design/spec | Reviewed scope, grammar, examples, errors and ownership | Formal fixtures and explicit implementation scope; current task is documentation only |
+| CSS-1: ordinary CSS | Full native declarations in style blocks | Real example, CSS output, reviewed scope/global behavior, authored ranges and baseline editor support |
+| CSS-2: conditions | Compact/grouped conditions on native properties, including author classes | `padding:4px @md:30px`, `padding:4px @.loading:30px`, equivalent output, thresholds, overlap and applied completion edits |
+| CSS-3: integration | Static CSS through compiler-next delivery | Builds/HMR, URLs, lazy assets, SSR/adoption, deduplication, maps and desktop checks as applicable |
+| CSS-LATER: aliases | Optional `p`, `px`, `bg` conveniences | Separately reviewed mappings, units, collisions and completion; no Tailwind dependency |
 
-Editor support accompanies each syntax slice. Do not postpone every real editor
-check until CSS-5 or claim CSS-1 is production-ready before delivery acceptance.
-The staged approach may change when an example exposes a better boundary.
+Split condition categories when their contracts need separate review. Aliases
+are not a prerequisite for full-property conditions. Editor work accompanies
+each usable syntax slice; production readiness also needs delivery acceptance.
 
-Useful acceptance cases include:
+Planned syntax ownership is `packages/jsx-plus/src/styles/`, with shared editor
+assistance and real examples. This plan does not create that folder. Missing
+build capabilities belong in compiler-next's generic feature folders, recorded
+for reconciliation. Do not add dependencies or code as part of documentation.
 
-- Mixed aliases and ordinary multiline CSS; optional shorthand semicolons;
-  strings/comments/functions containing `@`, braces and apparent closing tags.
-- Two files with `.card`, two components in one file, imported children, portals,
-  global styles, pseudo-elements, keyframes and nested native conditions.
-- `p:4 @md:6 @lg:8` compared with its grouped equivalent; custom breakpoints;
-  exact inclusive/exclusive edges; reversed and repeated conditions.
-- `padding:4px @md: 30px` compared with grouped ordinary CSS, with and without
-  spaces after colons; raw units/functions/lists preserved; completion at
-  `padding:4px @md:`; ordinary-property conditions without Tailwind.
-- Shorthand/longhand ordering, importance, layers and overlapping state rules.
-- Missing Tailwind, customized theme and utilities, changed theme during editing,
-  and ordinary class strings that already work today.
-- Actual completion edits applied to authored files, hover ranges, CSS errors
-  alongside JavaScript errors, emoji/CRLF mappings and incomplete-input recovery.
-- Computed browser styles after resizing and interacting; stylesheet teardown,
-  hot updates, repeated mounts and matching server/client scope identifiers.
+## 13. Before coding
 
-Use real authoring files as acceptance inputs. Parser snapshots and provider mocks
-alone do not prove browser behavior or editor installation. Run checks appropriate
-to the selected slice; this design document itself needs link and content review,
-not an application test suite.
+Review the selected slice's input examples and exact expected CSS, including:
 
-## 16. Decisions to resolve before coding
+- Local/global ownership, selector specificity, component boundaries and markers.
+- Breakpoint configuration, condition names/placement and same-element classes.
+- Multiline values, strings/comments/functions/URLs, custom properties, separators
+  and missing-token recovery.
+- Overlap, authored order, layers and importance.
+- The generic CSS-asset contract and authored error/origin handling.
+- Actual applied completion edits with LF/CRLF and emoji; neighboring TypeScript
+  remains usable.
+- Browser styles while resizing/changing classes; static SSR CSS, repeated mounts,
+  hot updates and lazy delivery.
 
-1. Confirm local-by-default `<style>` and explicit `<style global>`, including
-   whether more than one block is allowed and the escape for global selectors.
-2. Select the initial alias table and resolve CSS-name collisions explicitly.
-3. Specify declaration/chain termination, comment behavior, multiline values and
-   override boundaries for both ordinary CSS properties and utility aliases.
-   Support for ordinary properties is required, not an unresolved scope choice.
-4. Choose the initial named conditions, theme/breakpoint source and overlap rules.
-5. Probe the Tailwind integration API, optional dependency packaging and custom
-   utility/configuration behavior before promising broad compatibility.
-6. Specify selector transformation, keyframe ownership, specificity and stable
-   server/client scope identity with actual examples.
-7. Define the CSS artifact/build contract and the smallest useful editor-service
-   surface; add corresponding formal fixtures and real authoring examples.
+Use real authoring and browser/editor evidence. Mocks or snapshots alone do not
+establish the user experience. Keep assumptions separate from reviewed rules and
+review readable code directly when implementation is authorized.
 
-No code, runtime behavior or accepted syntax changes merely because these
-questions are documented. The next concrete step is CSS-0: promote a small,
-reviewable profile into the spec, then implement and verify that profile through
-the existing compiler and decoupled editor boundaries.
+Implementation begins only after the user asks for it. This document does not
+authorize starting a CSS compiler, adding dependencies or changing runtime behavior.

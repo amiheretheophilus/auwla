@@ -2,6 +2,19 @@
 
 Updated: 2026-11-13. Branch: `prototype/jsx-plus`.
 
+## Current focus: CSS design and documentation
+
+The user requested planning first and explicitly said CSS implementation had not
+been requested. [dxcss.md](../dxcss.md) records the current sequence: ordinary
+native CSS, then compact/grouped conditions on full properties, then optional
+aliases (`p`, `bg`, etc.). Tailwind is removed from this layer's design (DX-41).
+Class conditions such as `@.loading` select the same element's ordinary class and
+connect to future dot-style element authoring (DX-42). Conditions compile to CSS;
+there is no CSS runtime. Compiler-next retains build/delivery ownership under
+DX-39. Scope, exact element-class grammar and lexical/cascade details remain open.
+This update changes documentation only; no CSS code, dependencies or spec fixtures
+were added. Review links, examples and whitespace; runtime tests are not needed.
+
 ## `.auwla` across modules: JSX+ as a source language (DX-39)
 
 The user rejected another agent's uncommitted `src/project/` in JSX+ (a wrapper over
