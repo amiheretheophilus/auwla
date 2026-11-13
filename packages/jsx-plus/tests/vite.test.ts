@@ -14,12 +14,22 @@ import { waitFor } from '../../../test-support/helpers';
 import memoizedDom from '../../vite/src';
 import { auwla } from '../src';
 
-const example = fileURLToPath(new URL('../examples/notes/', import.meta.url));
-const root = mkdtempSync(join(import.meta.dir, '../.vite-test-'));
-cpSync(example, root, { recursive: true });
-// Its editor config extends a sibling folder the copy does not have; Vite would read it.
-rmSync(join(root, 'tsconfig.json'));
-afterAll(() => rmSync(root, { recursive: true, force: true }));
+const copies: string[] = [];
+afterAll(() => {
+  for (const copy of copies) rmSync(copy, { recursive: true, force: true });
+});
+
+/** A copy of `examples/<name>` in a temporary folder of this package. */
+function copyExample(name: string): string {
+  const copy = mkdtempSync(join(import.meta.dir, `../.vite-test-${name}-`));
+  copies.push(copy);
+  cpSync(fileURLToPath(new URL(`../examples/${name}/`, import.meta.url)), copy, { recursive: true });
+  // Its editor config extends a sibling folder the copy does not have; Vite would read it.
+  rmSync(join(copy, 'tsconfig.json'));
+  return copy;
+}
+
+const root = copyExample('notes');
 
 let server: ViteDevServer | undefined;
 afterEach(async () => {
@@ -45,6 +55,25 @@ it('builds the app with Vite, every .auwla module compiled', async () => {
   expect(code).toContain('Notes');
   expect(code).not.toContain('<form');
   expect(code).not.toContain('jsx(');
+}, 60_000);
+
+it('splits each routed .auwla page into its own chunk in a Vite build', async () => {
+  const team = copyExample('team');
+  const result = await build({ ...config, root: team, build: { write: false } });
+  const outputs = (Array.isArray(result) ? result : [result]) as Rolldown.RolldownOutput[];
+  const chunks = outputs.flatMap((output) => output.output).filter((item): item is Rolldown.OutputChunk => item.type === 'chunk');
+  const entry = chunks.find((chunk) => chunk.isEntry)!;
+
+  // The home section and the locally declared not-found page ship with the entry.
+  expect(entry.code).toContain('Team directory');
+  expect(entry.code).toContain('No page here.');
+  // Each page imported only for its route is in a chunk of its own, which the entry imports lazily.
+  for (const text of ['Search people', 'Back to everyone', 'all written in .auwla']) {
+    expect([text, entry.code.includes(text)]).toEqual([text, false]);
+    const page = chunks.find((chunk) => !chunk.isEntry && chunk.code.includes(text));
+    expect([text, page !== undefined]).toEqual([text, true]);
+    expect(entry.dynamicImports).toContain(page!.fileName);
+  }
 }, 60_000);
 
 it('compiles a .auwla module in dev, maps it, and hot-updates it on an edit', async () => {

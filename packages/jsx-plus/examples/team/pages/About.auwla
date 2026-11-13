@@ -1,0 +1,14 @@
+import { note } from '../lifecycle';
+
+export function About() {
+  // Setup runs once per visit; the cleanup runs when the route leaves.
+  note('about:setup');
+  $cleanup(() => note('about:cleanup'));
+
+  return (
+    <section class="about">
+      <h1>"About"</h1>
+      <p>"Routes, lazy pages, data and effects, all written in .auwla."</p>
+    </section>
+  );
+}

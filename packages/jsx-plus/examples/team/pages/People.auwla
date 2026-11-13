@@ -1,0 +1,42 @@
+import { getPeople } from '../api';
+import { note } from '../lifecycle';
+
+export function People() {
+  let search = '';
+  // Requests again whenever `search` changes; the list stays while the new one loads.
+  const people = getPeople(search);
+  const request = $track(people);
+
+  $effect(() => {
+    note('people:shown');
+    return () => note('people:left');
+  });
+
+  return (
+    <div class="people">
+      <input
+        type="search"
+        placeholder="Search people"
+        onInput={event => search = event.currentTarget.value}
+      />
+      if (request.pending) {
+        <p class="loading">"Loading people…"</p>
+      }
+      if (request.error !== null) {
+        <p class="error">
+          // Text then a tag needs `;`: `"…" <button>` would read as a comparison.
+          "Could not load people. ";
+          <button type="button" class="retry" onClick=(() => request.refresh())>"Retry"</button>
+        </p>
+      }
+      <ul class="people-list">
+        for (const member of people) {
+          <li key={member.id}>
+            <a route-to={{ path: '/people/:id', params: { id: String(member.id) } }}>member.name</a>
+            " · "; member.role
+          </li>
+        }
+      </ul>
+    </div>
+  );
+}

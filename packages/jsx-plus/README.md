@@ -64,9 +64,11 @@ memoizedDom({ clientEntry: 'main.ts', compiler: 'next', languages: [auwla] }); /
 [The notes example](examples/notes/) has three `.auwla` components importing each
 other, with and without the extension. Tests run it through compiler-next's project
 and Bun plugin in both modes, and through the Vite plugin's build, dev server and
-hot updates. `compile()` is the one-module convenience; a `.tsx` `moduleId` keeps
-its existing JSX semantics. Routes and server functions written in `.auwla`,
-backend configuration and isomorphic execution remain future work. `normalize()`
+hot updates. [The team example](examples/team/) writes routes, lazy route pages,
+`$fetch`/`$track`, `$routed` and effects in `.auwla`, checked in both modes and
+split into chunks by both Bun and Vite. `compile()` is the one-module convenience;
+a `.tsx` `moduleId` keeps its existing JSX semantics. Server functions written in
+`.auwla`, SSR, backend configuration and isomorphic execution remain future work. `normalize()`
 itself preserves host code outside markup, including backend-style imports.
 
 The initial TypeScript content mapper is registered in this package's manifest.

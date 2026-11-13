@@ -1,0 +1,25 @@
+import type { Member } from '../api';
+import { note } from '../lifecycle';
+
+export function Person() {
+  // Prepared before the route commits: the previous page stays until this person has loaded.
+  const member = $routed(({ params }) => $fetch<Member>(`/api/people/${params.id}`));
+
+  $effect(() => {
+    const previous = document.title;
+    document.title = `${member.name} · Team`;
+    note(`person:${member.id}`);
+    return () => {
+      document.title = previous;
+      note(`person:${member.id}:left`);
+    };
+  });
+
+  return (
+    <article class="person">
+      <h2>member.name</h2>
+      <p class="role">member.role</p>
+      <a route-to="/people">"Back to everyone"</a>
+    </article>
+  );
+}

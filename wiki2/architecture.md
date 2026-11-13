@@ -26,7 +26,8 @@ snapshot of the same frontend for checking.
 
 The synchronized compiler baseline is `compiler-rewrite` at `07e996c9`. `.auwla`
 server functions are not yet recognized (compiler-next's `server/` still accepts
-only JS/TS files); everything a client `.tsx` module can do, a `.auwla` module can.
+only JS/TS files). Client features are checked in `.auwla`: routes, lazy route
+chunks, the data layer, `$routed` and effects (`examples/team`).
 
 ```text
 .auwla text --(SourceLanguage `auwla`, packages/jsx-plus)--> TSX + origin
@@ -100,7 +101,10 @@ All paths are relative to the repository root and exist now.
 | `packages/jsx-plus/tests/modules.test.ts` | The notes example through compiler-next's project and Bun plugin: both modes executed, source maps, authored errors |
 | `packages/jsx-plus/tests/vite.test.ts` | The notes example through compiler-next's Vite plugin: build, dev transform and map, hot update, authored dev error |
 | `packages/jsx-plus/examples/notes/` | Multi-file app: three `.auwla` components, explicit and extensionless imports, a `.ts` re-export and helper |
-| `packages/jsx-plus/examples/preview.ts` | Example preview: compiler-next's Bun plugin with `auwla`, serving the folder |
+| `packages/jsx-plus/examples/preview.ts` | Example preview: compiler-next's Bun plugin with `auwla` and chunk splitting, serving the folder, an optional API and deep links |
+| `packages/jsx-plus/examples/checkout.ts` | Example/test-only Bun resolver: this checkout's runtime, data and router sources instead of their `dist` |
+| `packages/jsx-plus/examples/team/` | Routes, lazy route pages, `$fetch`/`$track` through a helper, `$routed`, `$effect`, `$cleanup` |
+| `packages/jsx-plus/tests/routes.test.ts` | The team example bundled with splitting and loaded with `import()`: chunks, both-mode navigation/data/effects, deep link; a fresh window per app |
 | `packages/jsx-plus/src/index.ts` | Public package exports |
 | `packages/jsx-plus/tests/parse.test.ts` | Spec views/errors, lexical boundaries and mapping checks |
 | `packages/jsx-plus/tests/host.test.ts` | Host contexts, semicolon chunks, cached child ranges, native suspension and malformed-input regressions |

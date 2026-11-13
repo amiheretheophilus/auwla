@@ -6,36 +6,47 @@
  * the bundle, and serves the folder's other files as they are. `--build` builds and exits.
  */
 import { existsSync } from 'node:fs';
+import { relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 // Compiler-next's Bun plugin has no package export yet.
 import { memoizedDom } from '../../compiler-next/src/project/bun';
 import { auwla } from '../src';
+import { checkoutPackages } from './checkout';
 
-export async function preview(folder: URL, name: string, defaultPort: number): Promise<void> {
+export interface PreviewOptions {
+  /** Answers the app's API requests (`/api/...`); others fall through to the folder's files. */
+  readonly api?: (request: Request) => Response | undefined;
+  /**
+   * Routes a page URL to `index.html` when no file matches, so a deep link (`/people/2`) loads
+   * the app, which then shows that route.
+   */
+  readonly routes?: boolean;
+}
+
+export async function preview(folder: URL, name: string, defaultPort: number, options: PreviewOptions = {}): Promise<void> {
   const root = fileURLToPath(folder);
-  const runtime = fileURLToPath(new URL('../../runtime/src/index.ts', import.meta.url));
+  const outdir = fileURLToPath(new URL(`../../../.cache/${name.toLowerCase().replaceAll(' ', '-')}-preview/`, import.meta.url));
   const build = await Bun.build({
     entrypoints: [fileURLToPath(new URL('./main.ts', folder))],
     target: 'browser',
-    plugins: [
-      memoizedDom({ client: './main.ts', root, languages: [auwla] }),
-      {
-        // This checkout's browser runtime, independent of stale dist output or the package's
-        // server-side default export condition. Example-only.
-        name: 'example-runtime',
-        setup(builder) {
-          builder.onResolve({ filter: /^@memoized-dom\/runtime$/ }, () => ({ path: runtime }));
-        },
-      },
-    ],
+    outdir,
+    // A page imported only for its route loads as its own chunk (`wiki/compiler/routes.md`).
+    splitting: true,
+    naming: { entry: 'main.js', chunk: 'chunks/[name]-[hash].js' },
+    plugins: [memoizedDom({ client: './main.ts', root, languages: [auwla] }), checkoutPackages],
   });
   if (!build.success) {
     throw new AggregateError(build.logs, `The ${name} example did not build`);
   }
 
-  const javascript = await build.outputs[0]!.text();
+  // Built files by the URL the page asks for: the entry answers `/main.ts`, as Vite serves it.
+  const assets = new Map(build.outputs.map((output) => {
+    const path = `/${relative(outdir, output.path).replaceAll('\\', '/')}`;
+    return [path === '/main.js' ? '/main.ts' : path, output];
+  }));
   if (process.argv.includes('--build')) {
-    console.log(`${name} built: ${javascript.length} JavaScript characters`);
+    const size = (await Promise.all(build.outputs.map((output) => output.text()))).reduce((total, text) => total + text.length, 0);
+    console.log(`${name} built: ${build.outputs.length} JavaScript files, ${size} characters`);
     return;
   }
 
@@ -44,13 +55,19 @@ export async function preview(folder: URL, name: string, defaultPort: number): P
     port: Number(process.env.AUWLA_EXAMPLE_PORT ?? defaultPort),
     fetch(request) {
       const path = new URL(request.url).pathname;
-      if (path === '/main.ts') {
-        return new Response(javascript, { headers: { 'Content-Type': 'text/javascript' } });
+      const asset = assets.get(path);
+      if (asset !== undefined) {
+        return new Response(asset, { headers: { 'Content-Type': 'text/javascript' } });
       }
+      const answered = path.startsWith('/api/') ? options.api?.(request) : undefined;
+      if (answered !== undefined) return answered;
       const file = new URL(`.${path === '/' ? '/index.html' : path}`, folder);
       // Only files inside the example folder.
       if (file.href.startsWith(folder.href) && existsSync(file)) {
         return new Response(Bun.file(file));
+      }
+      if (options.routes === true && !path.includes('.')) {
+        return new Response(Bun.file(new URL('./index.html', folder)));
       }
       return new Response('Not found', { status: 404 });
     },

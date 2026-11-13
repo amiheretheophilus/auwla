@@ -1,0 +1,35 @@
+// Imported only to be shown by routes: each page loads as its own chunk, with its route.
+import { People } from './pages/People.auwla';
+import { Person } from './pages/Person.auwla';
+import { About } from './pages/About.auwla';
+
+// Declared here, so it stays in the main bundle.
+function NotFound() {
+  return <p class="not-found">"No page here."</p>;
+}
+
+export function App() {
+  return (
+    <div class="team">
+      <nav>
+        <a route-to="/">"Home"</a>
+        <a route-to="/people">"People"</a>
+        <a route-to="/about">"About"</a>
+      </nav>
+      <main>
+        <section route="/" class="home">
+          <h1>"Team directory"</h1>
+          <p>"Pick a page above."</p>
+        </section>
+        // Shared chrome for every /people URL; the child routes swap beneath it.
+        <section route="/people" class="directory">
+          <h1>"People"</h1>
+          <People route="/" />
+          <Person route="/:id" />
+        </section>
+        <About route="/about" />
+        <NotFound route="/*" />
+      </main>
+    </div>
+  );
+}

@@ -34,10 +34,44 @@ only its relocation test. Totals: compiler-next `src` 795 pass; JSX+ 306 pass
 JSX+, Vite (build config) and spec `bun check` clean. Both previews build and serve.
 Not run: the full root suite and compiler-next case files.
 
-Not yet: routes and lazy route chunks written in `.auwla` (compiler-next's route
-lowering runs on the TSX, unproven here); `.auwla` server functions (compiler-next's
-`server/` accepts only JS/TS); cross-file editor checks (rename/completion across
-`.auwla` imports). A collected `.auwla` module is normalized twice per change.
+### Routes, lazy chunks, data and effects in `.auwla`
+
+The user asked for these to be tested well, with examples. `examples/team` writes
+them all in `.auwla`: nested routes (`/people` chrome over `/` and `/:id`),
+`route-to` links with params, a catch-all `/*`, three pages imported only for their
+routes, a locally declared `NotFound`, `$fetch` through a `.ts` helper whose argument
+follows a search box, `$track` loading/error/`refresh()`, a `$routed` preparation,
+an `$effect` setting `document.title` with cleanup, and `$cleanup` on unmount.
+No compiler change was needed: compiler-next's route lowering, splitting and
+sources run on the TSX the language gives.
+
+`tests/routes.test.ts` bundles it with compiler-next's Bun plugin and chunk
+splitting into a temporary folder, then loads it with `import()`, so pages are real
+lazily loaded modules. It checks the three pages are only in chunks and the local
+page in the entry. In both compiler modes it drives the app with clicks, typing and
+`popstate` against an in-memory `fetch`: a failed first request and its Retry, a
+search refetch (`?search=al`), a parameter link prepared by `$routed`, the title
+effect and its cleanup, `$cleanup` on leaving About, and the catch-all page. A deep
+link to `/people/2` shows the person as soon as `import()` returns, with one request
+(the entry waits for the chunk and preparation). `tests/vite.test.ts` checks a Vite
+build splits the same pages into chunks the entry imports dynamically. Three runs
+of the routes file passed; JSX+ suite 311 pass (23 files).
+
+Found while writing it:
+
+- A text child directly followed by a tag (`"Could not load. " <button>`) is a
+  comparison under grammar rule 5, so a `;` is required. The diagnostic says
+  "Closing tag does not match its opening tag" instead of pointing at the missing
+  separator. Not changed; a candidate diagnostics improvement.
+- The router's window listeners stay after its app unmounts (a runtime connection is
+  not released), so a second bundle in the same window loses link clicks to the old
+  router. Browsers load one bundle per page; the test gives each app a fresh window.
+  Not changed; reported for the router owner.
+
+Not yet: `.auwla` server functions (compiler-next's `server/` accepts only JS/TS),
+server-backed `$routed` and SSR of `.auwla` apps; cross-file editor checks
+(rename/completion across `.auwla` imports). A collected `.auwla` module is
+normalized twice per change.
 
 ## Current editor fix and next integration slice
 
@@ -228,10 +262,9 @@ full root suite, performance, browser layout and IDE activation.
 
 ## Continue
 
-1. Routes in `.auwla` (DX-39 follow-up): a routed multi-file example through
-   compiler-next's application, with lazy route chunks, in both plugins; then
-   `.auwla` server functions in compiler-next's `server/` and cross-file editor
-   checks. Keep every build concern in compiler-next.
+1. Server side of `.auwla` (DX-39 follow-up): server functions in compiler-next's
+   `server/` through the same `languages` hook, server-backed `$routed` and SSR;
+   then cross-file editor checks. Keep every build concern in compiler-next.
 2. P3-EDITOR (first adapter/assets built, DX-36): verify the 0.0.2 desktop update with
    the compatible TypeScript provider and the real task board, then inferred
    projects and portability beyond the local VSIX. Reuse by other extensions is documented;
