@@ -1,11 +1,13 @@
 import { copyFile, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
+import { createRequire } from 'node:module';
 import { parseRawGrammar } from 'vscode-textmate';
 import { createAuwlaGrammar } from '@memoized-dom/jsx-plus/editor/grammar';
 
 const packageRoot = resolve(import.meta.dirname, '..');
 const outputDirectory = resolve(packageRoot, 'dist');
 const sharedAssets = resolve(packageRoot, '../jsx-plus/editor-assets');
+const require = createRequire(import.meta.url);
 
 await mkdir(outputDirectory, { recursive: true });
 const build = await Bun.build({
@@ -15,6 +17,16 @@ const build = await Bun.build({
   target: 'node',
   format: 'cjs',
   external: ['vscode'],
+  plugins: [{
+    name: 'css-service-esm',
+    setup(builder) {
+      // The package's CommonJS entry is UMD: its wrapper hides child requires
+      // from the bundler. Resolve the supplied ESM entry for a complete bundle.
+      builder.onResolve({ filter: /^vscode-css-languageservice$/ }, () => ({
+        path: require.resolve('vscode-css-languageservice/lib/esm/cssLanguageService.js'),
+      }));
+    },
+  }],
   minify: false,
 });
 if (!build.success) {

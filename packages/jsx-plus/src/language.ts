@@ -23,7 +23,11 @@ export const auwla: SourceLanguage = {
   toTsx(text, path) {
     // A syntax error throws a `JsxPlusError`, which is a located `CompileError`.
     const normalized = normalize(text, { filename: path });
-    return { code: normalized.code, origin: copiedSpanOrigin(normalized.mappings) };
+    return {
+      code: normalized.code,
+      origin: copiedSpanOrigin(normalized.mappings),
+      ...(normalized.stylesheet === undefined ? {} : { stylesheet: normalized.stylesheet }),
+    };
   },
 };
 

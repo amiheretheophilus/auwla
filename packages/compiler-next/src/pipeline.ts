@@ -33,6 +33,8 @@ const NO_COMPONENTS: HotModule = { definesComponents: false, accepts: false };
 
 export interface CompiledModules {
   readonly output: Record<string, string>;
+  /** Generated native CSS companions, separate from JavaScript output. */
+  readonly css?: Readonly<Record<string, string>>;
   /** Each module's source map, when `sourceMaps` is set. */
   readonly maps?: Record<string, SourceMap>;
   readonly initialRender: InitialRender;
@@ -64,8 +66,15 @@ export function compileModulesDetailed(
   const { output, maps, resolved } = compileProgram(modules, options);
   const initialRender = planInitialRender(resolved, output, options);
   const initialDelivery = planInitialDelivery(initialRender, modules);
+  const css: Record<string, string> = {};
+  for (const module of resolved.modules) {
+    if (module.stylesheet !== undefined) {
+      css[module.stylesheet.path] = module.stylesheet.code;
+    }
+  }
   return {
     output,
+    ...(Object.keys(css).length === 0 ? {} : { css }),
     ...(maps === undefined ? {} : { maps }),
     initialRender,
     ...(initialDelivery === undefined ? {} : { initialDelivery }),

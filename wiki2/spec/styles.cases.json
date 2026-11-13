@@ -1,0 +1,35 @@
+{
+  "profile": "CSS-1",
+  "cases": [
+    {
+      "id": "CSS-001",
+      "source": "<style global>.a { padding: 4px; }</style>\nexport const title = 'hello';\n<style global>@media (min-width: 48rem) { .a { padding: 30px; } }</style>",
+      "stylesheet": ".a { padding: 4px; }\n@media (min-width: 48rem) { .a { padding: 30px; } }"
+    },
+    {
+      "id": "CSS-002",
+      "source": "<style global>/* </style> */ .a::after { content: '</style>'; }</style>",
+      "stylesheet": "/* </style> */ .a::after { content: '</style>'; }"
+    },
+    {
+      "id": "CSS-003",
+      "source": "const text = '<style global>literal</style>'; export function App() { return <style>text</style>; }",
+      "stylesheet": null
+    },
+    {
+      "id": "CSS-004",
+      "source": "\n<style>.a { color: red; }</style>",
+      "error": { "code": "CSS1001", "range": [1, 7] }
+    },
+    {
+      "id": "CSS-005",
+      "source": "\n<style global>.a { color: red; }",
+      "error": { "code": "CSS1002", "range": [1, 15] }
+    },
+    {
+      "id": "CSS-006",
+      "source": "<style global>.a { --future: custom(1); future-property: example; }</style>",
+      "stylesheet": ".a { --future: custom(1); future-property: example; }"
+    }
+  ]
+}

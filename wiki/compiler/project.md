@@ -186,7 +186,7 @@ the same way and none drifts. A plugin keeps only what is its tool's:
 
 | Feature | The project's part | The tool's part |
 | --- | --- | --- |
-| Styles | Which stylesheets the first page needs (built: a build's `stylesheets`) and which each lazy route adds. No extraction: compiler-next compiles no TSRX, the only source of scoped `<style>` (`toolchain.md`) | Giving the CSS to its bundler; the `<link>` tags it serves |
+| Styles | Imported stylesheets and optional static CSS companions returned by source languages; generated assets/imports and project updates. Syntax extraction belongs to the source language. Scoped TSRX parsing and route-specific SSR CSS discovery remain separate work | Native CSS processing, asset URLs and stylesheet links |
 | Build-time page | Built: `initialRender`, and `initialPage` writing it into the page's HTML ("Build-time page") | Built: which HTML file, and when (`transformIndexHtml`, the Bun plugin's HTML loader) |
 | Lazy route chunks | Built: a client build loads a component imported only for its routes by `import()` in the route table (`routes.md`, "Lazy route chunks"). Still to do: the route's styles on a page the server renders | Splitting at `import()`: Vite does by default; the command line turns on Bun's `splitting` (tested in `cli.test.ts`) |
 | Installed packages | Which ship source, compiling them into the program, their artifacts | Its resolver (the host), cache folder, watching `node_modules` |
@@ -212,12 +212,22 @@ await Bun.build({
 - Modules that exist only in the build (companion outputs such as `./App.mmd.tsx`, the generated
   `.memoized/` modules) are resolved by the plugin, probing a relative import as the compiler does,
   since generated imports leave out the extension. A module the program does not reach (a
-  package, a stylesheet) is left to Bun.
+  package, a file-backed stylesheet) is left to Bun. A source language's generated
+  CSS companion comes from the program's `css` map and uses Bun's CSS loader;
+  its relative imports and URLs stay relative to the owning module's directory.
 - `delivery` is the source of the server's delivery module (the page's document and its assets),
   served as `./.memoized/delivery.ts`, so its own imports resolve from the app's folder.
 - A compile error fails the build, with its module in Bun's log.
 
 ## Command line
+
+Source-language CSS companions are also served by the existing Vite adapter,
+before Vite's native CSS processing. Generated CSS can resolve from a compiled
+module or directly from static HTML after its script was removed. Project updates
+compare CSS assets as well as JavaScript, so a CSS-only edit invalidates its CSS
+module; removing the import lets Vite prune it. The JSX+ styling tests exercise
+builds, CSS dependencies/URLs, static pages, updates and pruning through these
+same adapters. There is no language-specific build wrapper.
 
 `project/cli.ts`, run with Bun:
 

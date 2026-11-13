@@ -254,8 +254,12 @@ export function memoizedDomNext(options: MemoizedDomViteOptions): Plugin {
       const program = programOf(await built(), this.environment.name);
       if (program === undefined || !program.ok) return null;
       const from = pathOf(importer);
-      if (program.output[from] === undefined) return null;
-      const found = (importCandidates(id, from, extensions) ?? []).find((candidate) => program.output[candidate] !== undefined);
+      // A static page links its CSS directly from HTML after its script is removed.
+      // That importer is not a compiled module, but its generated CSS still is ours.
+      const found = (importCandidates(id, from, extensions) ?? []).find((candidate) => {
+        if (program.css?.[candidate] !== undefined) return true;
+        return program.output[from] !== undefined && program.output[candidate] !== undefined;
+      });
       return found === undefined ? null : fileOf(found);
     },
 
@@ -270,7 +274,8 @@ export function memoizedDomNext(options: MemoizedDomViteOptions): Plugin {
         const entry = api.serverEntry!;
         return { code: runtime === 'node' ? nodeProductionEntry(entry) : bunProductionEntry(entry), map: { mappings: '' } };
       }
-      if (id.startsWith('\0') || id.includes('?') || !isSourcePath(id, languages)) return null;
+      const cssAsset = cleanId(id).endsWith('.css');
+      if (id.startsWith('\0') || (!cssAsset && (id.includes('?') || !isSourcePath(id, languages)))) return null;
 
       resolver ??= contextResolver(this);
       const program = programOf(await built(), this.environment.name);
@@ -279,6 +284,10 @@ export function memoizedDomNext(options: MemoizedDomViteOptions): Plugin {
       if (!program.ok) {
         if (program.modules.includes(path)) this.error(viteError(program.error, fileOf(program.error.path)));
         return null;
+      }
+      if (cssAsset) {
+        const css = program.css?.[path];
+        return css === undefined ? null : { code: css, map: { mappings: '' } };
       }
       const code = program.output[path];
       if (code === undefined) return null;

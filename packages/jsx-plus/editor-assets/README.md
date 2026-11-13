@@ -19,6 +19,19 @@ as well as scopes. Other
 TextMate adapters can consume the same generated grammar without VS Code or a
 separately registered TSX grammar. Other highlighting engines need their own assets.
 
+CSS blocks embed `source.css`. VS Code supplies that grammar natively; other
+TextMate hosts must register it too. `vendor/css.tmLanguage.json` is the unchanged
+CSS grammar distributed with Microsoft VS Code 1.126.0, identifying upstream
+`microsoft/vscode-css` commit `9a07d76cb0e7a56f9bfc76328a57227751e4adb4`.
+`vendor/CSS-LICENSE.txt` retains its MIT and upstream TextMate notices. The real
+tokenizer tests load this copy, including delimiter-like text in CSS strings and
+comments, and verify return to TypeScript after the block.
+
+`@memoized-dom/jsx-plus/styles` exports `createCssSession` for completion, hover
+and validation over an equal-width authored CSS projection. This service has no
+editor SDK or production build dependency. Adapters translate its protocol
+objects and manage document lifetime. It is independent of TypeScript's mapper.
+
 For another editor adapter:
 
 1. Register `.auwla`, language id `auwla` and grammar scope `source.auwla`.

@@ -10,7 +10,7 @@ import { findAll } from 'yuku-ast';
 import { parse } from 'yuku-parser';
 import type { SourceLang } from 'yuku-parser';
 import { CompileError } from '../diagnostics';
-import { authoredError, moduleText, type SourceLanguage } from './languages';
+import { authoredError, moduleText, type SourceLanguage, type SourceStylesheet } from './languages';
 import { lowerTypeScript, type LoweredRequireImport } from './lower-typescript';
 import { lowerSlotsWithOrigin } from '../../features/slots/lower';
 import { composeOrigins, UNEDITED, type TextOrigin } from './text-edits';
@@ -18,6 +18,7 @@ import { composeOrigins, UNEDITED, type TextOrigin } from './text-edits';
 export type { LoweredRequireImport } from './lower-typescript';
 
 export interface ParsedModule {
+  readonly stylesheet?: SourceStylesheet;
   /** The module's path, as the caller gave it. */
   readonly path: string;
   readonly lang: SourceLang;
@@ -70,6 +71,7 @@ function lowerModule(
   if (lang !== 'ts' && lang !== 'tsx') {
     const slots = hasJsx ? lowerSlotsWithOrigin(path, text) : { text, origin: UNEDITED };
     return {
+      ...(written.stylesheet === undefined ? {} : { stylesheet: written.stylesheet }),
       path, lang, authored, source: slots.text, origin: composeOrigins(slots.origin, written.origin),
       hasJsx, requireImports: [], hasExportAssignment: false,
     };
@@ -78,6 +80,7 @@ function lowerModule(
   // Slots become props (`features/slots/lower.ts`), on the text the TypeScript lowering left.
   const slots = hasJsx ? lowerSlotsWithOrigin(path, lowered.source) : { text: lowered.source, origin: UNEDITED };
   return {
+    ...(written.stylesheet === undefined ? {} : { stylesheet: written.stylesheet }),
     path,
     lang,
     authored,

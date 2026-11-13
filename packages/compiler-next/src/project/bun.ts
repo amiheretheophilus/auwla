@@ -83,7 +83,7 @@ export function memoizedDom(options: BunPluginOptions): BunPlugin {
         const program = await compiled();
         if (!program.ok) return undefined;
         const candidates = importCandidates(args.path, projectPath(root, args.importer), extensions) ?? [];
-        const found = candidates.find((candidate) => program.output[candidate] !== undefined);
+        const found = candidates.find((candidate) => program.output[candidate] !== undefined || program.css?.[candidate] !== undefined);
         return found === undefined ? undefined : { path: resolve(root, found) };
       });
 
@@ -108,6 +108,14 @@ export function memoizedDom(options: BunPluginOptions): BunPlugin {
         if (code === undefined) return undefined;
         const map = program.maps?.[path];
         return { contents: map === undefined ? code : withInlineMap(code, map), loader: 'js' };
+      });
+
+      build.onLoad({ filter: /\.css$/ }, async (args) => {
+        if (args.path.includes('node_modules')) return undefined;
+        const program = await compiled();
+        if (!program.ok) throw program.error;
+        const css = program.css?.[projectPath(root, args.path)];
+        return css === undefined ? undefined : { contents: css, loader: 'css' };
       });
     },
   };

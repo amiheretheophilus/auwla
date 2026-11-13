@@ -39,6 +39,7 @@ still be `learning`; execute project commands in the `auwla` checkout explicitly
 | [recovery.md](recovery.md) | Current-source incomplete-code checking, temporary closers, quarantined markup and native LSP evidence |
 | [checking-flow.md](checking-flow.md) | Paired checking profile, 34 replay/deferred-flow targets and limits of the compiler-fact boundary |
 | [features.md](features.md) | Proposed events, modifiers, bindings, classes, CSS and element behavior; extraction points for later pages |
+| [styling.md](styling.md) | Native CSS-1 blocks, compiler-owned asset delivery, shared editor assistance and remaining styling work |
 | [architecture.md](architecture.md) | Current integration files, proposed boundaries, source-map flow and planned code |
 | [testing.md](testing.md) | Verification strategy, evidence format and the limits of each check |
 | [plan.md](plan.md) | Small work slices, dependencies and outcomes |

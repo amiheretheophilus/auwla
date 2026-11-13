@@ -48,6 +48,27 @@ packager using `--no-dependencies`, then install the resulting file with
 workspace dependencies out of the archive. The activation bundle includes its
 small registration helper; the mapper process remains in the project.
 
+Version 0.0.3 adds CSS completion, hover and live diagnostics for module-level
+`<style global>` blocks. `src/css.ts` only adapts the shared CSS service; it
+registers even when the TypeScript provider is unavailable. The grammar embeds
+VS Code's native CSS grammar. Build and reinstall the updated adapter, then
+reload the window to use these changes. The source build alone does not update
+an installed extension. CSS diagnostics and edits are checked through simulated
+adapter calls; desktop acceptance of this version is still separate.
+
+The build resolves the CSS service's supplied ESM entry. Its UMD entry hides
+dynamic child imports from Bun's bundler and produced an incomplete activation
+bundle. `tests/bundle.test.ts` now builds, copies the artifact outside the
+workspace and loads it in Node with only the VS Code API supplied, checking CSS
+completion, hover and diagnostics. The same probe passes against the installed
+0.0.3 VSIX. Native parser bindings still come from this build checkout; portable
+parser packaging remains open. VS Code must reload its window after installation.
+
+Version 0.0.4 corrects CSS diagnostic recovery while typing a property such as
+`cur` immediately before `}`. The missing-colon error points to `cur`; valid
+following rules no longer receive errors from that declaration. The installed
+bundle test covers the declaration's range and checks for downstream errors.
+
 The installed adapter resolves `@memoized-dom/jsx-plus` from open workspace folders,
 then falls back to the adapter directory for development hosts. The content mapper
 still launches with Bun from that shared package, which must remain installed

@@ -16,14 +16,15 @@ import { parse } from 'yuku-parser';
 import { firstError, isMarkupOpening, parseModule } from './host';
 import { maskMarkup } from './masks';
 import type { NormalizedSource } from './model';
-import { assemble, nearestAuthoredOffset, replaceRange } from './source';
+import { assemble, generated, nearestAuthoredOffset, replaceRange } from './source';
 import { MarkupContext, type Markup } from './markup/context';
 import { readElement } from './markup/element';
+import { readStyleBlocks } from './styles/blocks';
 
 /** Find each top-level element in host code, read it, mask it and look again. */
-function readRoots(context: MarkupContext): Markup[] {
+function readRoots(context: MarkupContext, host: string): Markup[] {
   const roots: Markup[] = [];
-  let shadow = context.source;
+  let shadow = host;
 
   for (;;) {
     const tokens = parse(shadow, { lang: 'tsx', sourceType: 'module', tokens: true }).tokens!;
@@ -46,8 +47,15 @@ function readRoots(context: MarkupContext): Markup[] {
 
 function normalizeFile(source: string, filename: string, validateHost: boolean): NormalizedSource {
   const context = new MarkupContext(source, filename, !validateHost);
-  const roots = readRoots(context);
-  const output = assemble(replaceRange(source, 0, source.length, roots));
+  const styles = readStyleBlocks(source, filename, !validateHost);
+  const roots = readRoots(context, styles.host);
+  const removedStyles = styles.blocks.map((block) => ({
+    start: block.start,
+    end: block.end,
+    pieces: [generated(styles.host.slice(block.start, block.end))],
+  }));
+  const replacements = [...roots, ...removedStyles].sort((left, right) => left.start - right.start);
+  const output = assemble(replaceRange(source, 0, source.length, replacements));
 
   // Validate ordinary host context after normalization. No custom evaluator or
   // second set of binding rules is introduced by this adapter.
@@ -58,7 +66,12 @@ function normalizeFile(source: string, filename: string, validateHost: boolean):
     }
   }
 
-  return { ...output, roots: roots.map((entry) => entry.view) };
+  const stylesheet = styles.blocks.map((block) => source.slice(block.bodyStart, block.bodyEnd)).join('\n');
+  return {
+    ...output,
+    roots: roots.map((entry) => entry.view),
+    ...(styles.blocks.length === 0 ? {} : { stylesheet }),
+  };
 }
 
 /** Extended source in; standard TSX plus exact copied-span mappings out. */

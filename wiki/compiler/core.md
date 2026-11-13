@@ -91,6 +91,14 @@ A `SourceLanguage` owns extensions and has `toTsx(text, path)`, which returns th
 `TextOrigin` back to the authored text, and throws a located `CompileError` for an authored
 error. It reads no files and needs no particular runtime.
 
+A language may also return optional `stylesheet` text: ordinary static CSS, not
+language-specific rules. `moduleText` creates `<module-path>.css` and appends its
+relative side-effect import, keeping directives and existing host offsets intact.
+Parse and resolve retain that companion; `compileModulesDetailed` exposes the
+`css` map separately from JavaScript `output`. Projects and the existing adapters
+deliver it ([project](project.md)). `core/parse/styles.test.ts` checks this with a
+toy language, not Auwla syntax. CSS source maps are not yet provided.
+
 After that, such a module is an ordinary `.tsx` module that keeps its own path (`./App.auwla`):
 
 - `parseModule` parses the TSX as `tsx`, keeps the authored text as `authored`, and composes the

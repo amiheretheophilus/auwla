@@ -23,6 +23,8 @@ reconciliation, state, readiness and ownership already exist and are reused.
 | [cases.json](cases.json) | Concrete parse, error, boundary and behavior examples | Draft fixtures |
 | [check.ts](check.ts) | Fixture-integrity checks, host-parser probes and existing-JSX behavior checks | Verification tool; not a JSX+ parser |
 | [CHANGELOG.md](CHANGELOG.md) | Changes between draft revisions | History |
+| [styles.md](styles.md) | CSS-1: explicit global native CSS blocks and their separate delivery/tooling contract | First styling profile |
+| [styles.cases.json](styles.cases.json) | CSS-1 extraction, lexical boundaries and authored errors | Styling conformance fixtures |
 
 The user's latest instructions and [existing ground rules](../../wiki/rules.md)
 take precedence. [Decisions](../decisions.md) distinguish accepted direction from

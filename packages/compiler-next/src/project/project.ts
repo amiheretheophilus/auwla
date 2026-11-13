@@ -28,6 +28,8 @@ export interface CompiledProject {
   readonly ok: true;
   /** JavaScript by project path, one entry per module reached. */
   readonly output: Readonly<Record<string, string>>;
+  /** Generated CSS assets by project path; normal file CSS imports stay on disk. */
+  readonly css?: Readonly<Record<string, string>>;
   /** Source maps by output path, back to the authored files, when `sourceMaps` is set. */
   readonly maps?: Readonly<Record<string, SourceMap>>;
   readonly initialRender: InitialRender;
@@ -46,9 +48,9 @@ export interface FailedProject {
 
 export interface ProjectUpdate {
   readonly build: ProjectBuild;
-  /** Modules whose output is new or differs from the last successful build. */
+  /** JavaScript modules and generated CSS assets new or different since the last successful build. */
   readonly changed: readonly string[];
-  /** Modules the last successful build had and this one no longer reaches. */
+  /** JavaScript modules and generated CSS assets the last build had and this one no longer reaches. */
   readonly removed: readonly string[];
 }
 
@@ -89,7 +91,7 @@ export function createProject(options: ProjectOptions): Project {
       throw error;
     }
 
-    previous = compiled.output;
+    previous = { ...compiled.output, ...compiled.css };
     return { ok: true, ...compiled, modules, stylesheets: stylesheetsOf(entries, known) };
   }
 
@@ -99,8 +101,9 @@ export function createProject(options: ProjectOptions): Project {
     const result = await build();
     if (!result.ok) return { build: result, changed: [], removed: [] };
 
-    const changed = Object.keys(result.output).filter((path) => before[path] !== result.output[path]);
-    const removed = Object.keys(before).filter((path) => !(path in result.output));
+    const after = { ...result.output, ...result.css };
+    const changed = Object.keys(after).filter((path) => before[path] !== after[path]);
+    const removed = Object.keys(before).filter((path) => !(path in after));
     return { build: result, changed, removed };
   }
 

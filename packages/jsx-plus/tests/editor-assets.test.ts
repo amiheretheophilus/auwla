@@ -15,6 +15,10 @@ await loadWASM(readFileSync(require.resolve('vscode-oniguruma/release/onig.wasm'
 const registry = new Registry({
   onigLib: Promise.resolve({ createOnigScanner, createOnigString }),
   async loadGrammar(scopeName) {
+    if (scopeName === 'source.css') {
+      const filename = resolve(packageRoot, 'editor-assets/vendor/css.tmLanguage.json');
+      return parseRawGrammar(readFileSync(filename, 'utf8'), filename);
+    }
     if (scopeName !== auwlaLanguage.scopeName) {
       return null;
     }
@@ -43,6 +47,20 @@ function tokenize(source: string) {
   }
   return tokens;
 }
+
+it('embeds native CSS highlighting and resumes TypeScript after the closing block', () => {
+  const source = '<style global>\n.card { padding: 4px; content: "</style>"; }\n/* </style> */\n</style>\nexport const title = "ready";';
+  const tokens = tokenize(source);
+  function scopesAt(text: string) {
+    const offset = source.indexOf(text);
+    return tokens.find((token) => token.startIndex <= offset && offset < token.endIndex)!.scopes;
+  }
+  expect(scopesAt('padding')).toContain('meta.embedded.block.css');
+  expect(scopesAt('padding').some((scope) => scope.startsWith('support.type.property-name'))).toBe(true);
+  expect(scopesAt('4px').some((scope) => scope.startsWith('constant.numeric'))).toBe(true);
+  expect(scopesAt('title')).not.toContain('meta.embedded.block.css');
+  expect(scopesAt('title')).toContain('variable.other.constant.tsx');
+});
 
 it('highlights the real task board with the shared TSX-derived grammar', () => {
   const source = readFileSync(resolve(packageRoot, 'examples/task-board/App.auwla'), 'utf8');

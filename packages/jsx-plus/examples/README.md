@@ -54,6 +54,17 @@ The preview ([preview.ts](preview.ts)) builds with compiler-next's own Bun plugi
 passing `auwla` as a source language, and bundles the current checkout's browser
 runtime. It compiles nothing itself. The same option works with the Vite plugin.
 
+## Native CSS authoring
+
+Run `bun run examples/styling/preview.ts` and open `http://127.0.0.1:3033`.
+[styling/App.auwla](styling/App.auwla) authors explicit global native CSS blocks,
+custom properties, media queries, hover, relative CSS/SVG imports and an ordinary
+conditional `loading` class. Its real entry mounts with `mount('app', App)` and
+is executed in both compiler modes in the CSS tests. The preview gives the HTML
+entry to Bun for stylesheet delivery; the same folder also builds with Vite.
+Local scope, compact conditions and aliases are later slices. See
+[styling/README.md](styling/README.md) and the [CSS-1 spec](../../../wiki2/spec/styles.md).
+
 ## Run the notes app (several `.auwla` files)
 
 ```text

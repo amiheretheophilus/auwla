@@ -1,13 +1,15 @@
 # Auwla CSS developer experience: styling design discussion
 
-Status: **planning only**. The CSS authoring layer described here is not
-implemented. Discussing or documenting CSS does not authorize implementation.
+Status: **first native CSS slice implemented and verified**. The user has now
+authorized committing/pushing it and continuing, superseding the temporary
+no-commit instruction. The wider design below remains planned.
 
 Created: 2026-11-11. Updated: 2026-11-13.
 
 This is the styling companion to [dx.md](dx.md). [wiki2](wiki2/README.md) maps the
 prototype; [the language spec](wiki2/spec/README.md) owns implemented grammar and
-conformance. This document records direction and questions without changing that spec.
+conformance. [CSS-1](wiki2/spec/styles.md) defines the narrow implemented profile;
+this document retains the wider direction and unresolved questions.
 
 ## 1. Current direction and sequence
 
@@ -21,8 +23,11 @@ The agreed sequence is:
 2. Compact and grouped conditions on ordinary CSS properties.
 3. Optional property aliases after the native CSS foundation.
 
-Editor support accompanies each usable slice. Ordinary CSS imports already work;
-style-block extraction, local scoping and the condition syntax below remain planned.
+Editor support accompanies each usable slice. CSS-1 extracts explicit module-level
+`<style global>` blocks and provides native CSS assistance. Compiler-next delivers
+the resulting companion stylesheets through its existing Bun/Vite integrations.
+Local scope, compact/grouped conditions and aliases remain planned. Requiring
+`global` for this first slice leaves the eventual scope default undecided.
 
 Follow DX-39: JSX+ is a standalone template/source-language layer. It supplies
 syntax transformations through `auwla`; compiler-next owns projects, applications,
@@ -44,7 +49,7 @@ Its source implementation uses no Bun/Node APIs.
 | Grouping | Blocks group several changes under a condition | Planned authoring form |
 | Local scope | Local-by-default `<style>`, explicit `<style global>` | Recommendation; scope/escape rules still need review |
 | Separators | Optional semicolon/newline termination for compact chains | Provisional lexical contract; preserve ordinary CSS grammar |
-| Editor support | Completion, highlighting, hover and diagnostics | Required usability goal; not implemented |
+| Editor support | Completion, highlighting, hover and diagnostics | Native CSS-1 service/adapter built locally; compact syntax and desktop acceptance remain open |
 
 These directions do not choose breakpoint defaults, cascade precedence, alias
 values or a selector-rewriting algorithm. In particular, future `p:4` has no
@@ -379,8 +384,8 @@ limits belong in the formal spec when a slice is selected.
 
 | Slice | Outcome | Evidence |
 | --- | --- | --- |
-| CSS-0: design/spec | Reviewed scope, grammar, examples, errors and ownership | Formal fixtures and explicit implementation scope; current task is documentation only |
-| CSS-1: ordinary CSS | Full native declarations in style blocks | Real example, CSS output, reviewed scope/global behavior, authored ranges and baseline editor support |
+| CSS-0: design/spec | Reviewed scope, grammar, examples, errors and ownership | CSS-1 profile and CSS-001 through CSS-006 fixtures written; wider syntax remains a design discussion |
+| CSS-1: ordinary CSS | Full native declarations in explicit global style blocks | Implemented and verified: real example, CSS output, authored ranges and baseline editor support; local scope deferred |
 | CSS-2: conditions | Compact/grouped conditions on native properties, including author classes | `padding:4px @md:30px`, `padding:4px @.loading:30px`, equivalent output, thresholds, overlap and applied completion edits |
 | CSS-3: integration | Static CSS through compiler-next delivery | Builds/HMR, URLs, lazy assets, SSR/adoption, deduplication, maps and desktop checks as applicable |
 | CSS-LATER: aliases | Optional `p`, `px`, `bg` conveniences | Separately reviewed mappings, units, collisions and completion; no Tailwind dependency |
@@ -389,10 +394,10 @@ Split condition categories when their contracts need separate review. Aliases
 are not a prerequisite for full-property conditions. Editor work accompanies
 each usable syntax slice; production readiness also needs delivery acceptance.
 
-Planned syntax ownership is `packages/jsx-plus/src/styles/`, with shared editor
-assistance and real examples. This plan does not create that folder. Missing
-build capabilities belong in compiler-next's generic feature folders, recorded
-for reconciliation. Do not add dependencies or code as part of documentation.
+Syntax ownership is `packages/jsx-plus/src/styles/`, with shared editor assistance
+and `examples/styling/`. The authorized first implementation extends the compiler's
+generic source-language hook for native CSS companions, recorded for reconciliation.
+The wider shortcuts remain planned; documenting a later slice does not authorize it.
 
 ## 13. Before coding
 

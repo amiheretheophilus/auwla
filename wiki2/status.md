@@ -2,18 +2,62 @@
 
 Updated: 2026-11-13. Branch: `prototype/jsx-plus`.
 
-## Current focus: CSS design and documentation
+## Current focus: native CSS checkpoint, then class conditions
 
-The user requested planning first and explicitly said CSS implementation had not
-been requested. [dxcss.md](../dxcss.md) records the current sequence: ordinary
-native CSS, then compact/grouped conditions on full properties, then optional
-aliases (`p`, `bg`, etc.). Tailwind is removed from this layer's design (DX-41).
-Class conditions such as `@.loading` select the same element's ordinary class and
-connect to future dot-style element authoring (DX-42). Conditions compile to CSS;
-there is no CSS runtime. Compiler-next retains build/delivery ownership under
-DX-39. Scope, exact element-class grammar and lexical/cascade details remain open.
-This update changes documentation only; no CSS code, dependencies or spec fixtures
-were added. Review links, examples and whitespace; runtime tests are not needed.
+The user has now authorized committing and pushing the reviewed CSS work, then
+continuing. This supersedes the earlier no-commit instruction. Exclude their
+modified `examples/counter.auwla` and untracked `examples/probe-track-tmp/`.
+
+[CSS-1](spec/styles.md) implements explicit module-level `<style global>` blocks:
+native CSS is extracted without selector/declaration rewrites. The explicit
+`global` leaves local/default scoping undecided. JSX+ returns text through the
+generic source-language hook; compiler-next owns the CSS companion/import,
+project updates, and Bun/Vite delivery. There is no styling runtime or Tailwind.
+[styling.md](styling.md) maps the files, evidence and limitations.
+
+The real `examples/styling` mounts with **`mount('app', App)`**, matching the
+runtime API. Its DOM execution is checked in both modes, including class,
+ARIA and button text updates. CSS assistance is shared and editor-independent;
+adapter 0.0.4 is now installed locally; window reload and desktop acceptance
+remain pending. The installed artifact passes a Node completion/hover/diagnostic
+probe, not just source-level tests.
+
+Evidence: earlier full JSX+ suite 342 pass; latest full run 349 pass / 1 fail
+across 350 tests. The failing interpolation LSP check reads the concurrently
+edited `examples/counter.auwla`, which now has an unfinished `for(i)` and an unused
+`data` declaration. A focused rerun confirms those diagnostics; that user file is
+untouched. Final CSS/tokenizer/build/update checks: 30 pass across three files. Compiler
+language/project/page/Bun checks 30 pass; Vite adapter baseline 7 pass; editor
+adapter 9 pass and build clean. JSX+, compiler-next, adapter and Vite build config
+`bun check` clean. The actual styling entry's TypeScript check and HTML preview
+build pass. Full root suite not run.
+Review found and fixed generated CSS resolution from static HTML after the
+compiler removes its script; Vite now retains that page's CSS. Trailing blocks
+after complex templates and CSS EOF diagnostics are also covered. Desktop assistance,
+CSS source maps and route-specific SSR CSS discovery remain unverified/deferred.
+
+Installation follow-up: VS Code still had 0.0.2, so the user could not see CSS
+assistance. Packaging also exposed the CSS service's UMD wrapper leaving child
+requires unresolved. The build now resolves its ESM entry; a Node artifact test
+covers that failure. Packaged `.cache/auwla-css-0.0.3.vsix`, verified its grammar
+and CSS language metadata, installed it with the VS Code CLI, and confirmed
+`amiheretheophilus.memoized-dom-auwla@0.0.3`. Nothing was committed or pushed.
+
+Diagnostic follow-up (0.0.4): the user's `cur` before a rule's `}` let the native
+CSS service consume the `:` in a later `button:hover`, creating unrelated errors.
+`styles/recovery.ts` now reports the missing colon on the unfinished property and
+rechecks a bounded equal-width view, preserving completion prefixes and genuine
+later diagnostics. LF/CRLF, comments, escaped names, nesting, empty-rule warning
+fidelity and unchanged production CSS are checked. Adapter checks pass 9 tests;
+both package type checks pass. Installed `.cache/auwla-css-0.0.4.vsix`; the installed
+Node probe verifies the primary range and absence of downstream errors. Reload
+the VS Code window to load it. The user subsequently confirmed completion works;
+the diagnostic fix has service and installed-artifact checks.
+
+Next: full-property compact class conditions (`padding:4px @.loading:40px`),
+starting with a separate narrow contract and fixtures. Breakpoint configuration
+and local scoping remain separate open choices. Grouped conditions and optional
+property aliases follow the native CSS foundation (DX-41/42).
 
 ## `.auwla` across modules: JSX+ as a source language (DX-39)
 
@@ -403,6 +447,7 @@ any new changes that must be adopted or corrected on `compiler-rewrite` later:
 
 | Commit | Change | Why `.auwla` needs it |
 | --- | --- | --- |
+| CSS-1 checkpoint | `core/parse/languages.ts` accepts optional static stylesheet text and creates a companion import; parse/resolve retain the asset; detailed results/project updates expose `css`; existing Bun/Vite adapters resolve/load it, including static HTML links | Native style extraction needs compiler-owned CSS delivery; JSX+ supplies text only. Adopt/review this generic extension on compiler-rewrite under DX-34 |
 | `1d3ef3bf` | New read-only analysis API in `packages/compiler-next/src/analysis/`; `pipeline.ts` shares its frontend; `./analysis` package export ([compiler analysis](../wiki/compiler/analysis.md)) | The checking flow planner reads binding/dependency facts without DOM emission |
 | `dbe46803` | `analysis/index.ts` re-exports `CompileError` | The planner skips modules the compiler rejects |
 | `a35db526` | `analysis/serialize.ts` also describes JSX spread arguments (`{...props}`) as expressions | Spread inputs get flow checking like expression containers |

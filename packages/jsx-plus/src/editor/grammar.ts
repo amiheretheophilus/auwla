@@ -29,6 +29,25 @@ export function createAuwlaGrammar(tsx: IRawGrammar): IRawGrammar {
   }
 
   const attributes = repository['jsx-tag-attributes'];
+  // Use the editor's native CSS grammar. CSS braces never enter the TSX child grammar.
+  repository['auwla-style-block'] = {
+    begin: '(<)(style)(\\s+global\\s*)(>)',
+    beginCaptures: {
+      1: { name: 'punctuation.definition.tag.begin.tsx' },
+      2: { name: 'entity.name.tag.tsx' },
+      3: { name: 'entity.other.attribute-name.tsx' },
+      4: { name: 'punctuation.definition.tag.end.tsx' },
+    },
+    end: '(</)(style)(\\s*>)',
+    endCaptures: {
+      1: { name: 'punctuation.definition.tag.begin.tsx' },
+      2: { name: 'entity.name.tag.tsx' },
+      3: { name: 'punctuation.definition.tag.end.tsx' },
+    },
+    contentName: 'meta.embedded.block.css',
+    patterns: [{ include: 'source.css' }],
+  };
+  grammar.patterns.unshift({ include: '#auwla-style-block' });
   const attributePatterns = [
     {
       begin: '(=)\\s*(\\()',

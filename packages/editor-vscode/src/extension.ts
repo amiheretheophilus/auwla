@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import type { ExtensionAPI } from 'typescript/vscode';
 import { createMapperContribution } from '@memoized-dom/jsx-plus/editor';
 import { findMapperPackage } from './mapper-package';
+import { registerCss } from './css';
 
 /** The provider matching the pinned TypeScript 7.1-beta extension API. */
 const TYPESCRIPT_EXTENSION = 'TypeScriptTeam.native-preview';
@@ -17,6 +18,7 @@ function hasMapperRegistration(value: unknown): value is MapperHost {
 export async function activate(context: vscode.ExtensionContext): Promise<void> {
   const output = vscode.window.createOutputChannel('Auwla');
   context.subscriptions.push(output);
+  registerCss(context);
 
   function unavailable(message: string) {
     output.appendLine(message);

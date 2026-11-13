@@ -14,6 +14,8 @@ import { auwla } from '../src';
 import { checkoutPackages } from './checkout';
 
 export interface PreviewOptions {
+  /** Let Bun build the HTML entry and write its CSS/script links itself. */
+  readonly html?: boolean;
   /** Answers the app's API requests (`/api/...`); others fall through to the folder's files. */
   readonly api?: (request: Request) => Response | undefined;
   /**
@@ -27,12 +29,12 @@ export async function preview(folder: URL, name: string, defaultPort: number, op
   const root = fileURLToPath(folder);
   const outdir = fileURLToPath(new URL(`../../../.cache/${name.toLowerCase().replaceAll(' ', '-')}-preview/`, import.meta.url));
   const build = await Bun.build({
-    entrypoints: [fileURLToPath(new URL('./main.ts', folder))],
+    entrypoints: [fileURLToPath(new URL(options.html === true ? './index.html' : './main.ts', folder))],
     target: 'browser',
     outdir,
     // A page imported only for its route loads as its own chunk (`wiki/compiler/routes.md`).
     splitting: true,
-    naming: { entry: 'main.js', chunk: 'chunks/[name]-[hash].js' },
+    naming: { entry: options.html === true ? '[name].[ext]' : 'main.js', chunk: 'chunks/[name]-[hash].[ext]' },
     plugins: [memoizedDom({ client: './main.ts', root, languages: [auwla] }), checkoutPackages],
   });
   if (!build.success) {
@@ -42,11 +44,11 @@ export async function preview(folder: URL, name: string, defaultPort: number, op
   // Built files by the URL the page asks for: the entry answers `/main.ts`, as Vite serves it.
   const assets = new Map(build.outputs.map((output) => {
     const path = `/${relative(outdir, output.path).replaceAll('\\', '/')}`;
-    return [path === '/main.js' ? '/main.ts' : path, output];
+    return [options.html !== true && path === '/main.js' ? '/main.ts' : path, output];
   }));
   if (process.argv.includes('--build')) {
     const size = (await Promise.all(build.outputs.map((output) => output.text()))).reduce((total, text) => total + text.length, 0);
-    console.log(`${name} built: ${build.outputs.length} JavaScript files, ${size} characters`);
+    console.log(`${name} built: ${build.outputs.length} assets, ${size} characters`);
     return;
   }
 
@@ -55,9 +57,9 @@ export async function preview(folder: URL, name: string, defaultPort: number, op
     port: Number(process.env.AUWLA_EXAMPLE_PORT ?? defaultPort),
     fetch(request) {
       const path = new URL(request.url).pathname;
-      const asset = assets.get(path);
+      const asset = assets.get(options.html === true && path === '/' ? '/index.html' : path);
       if (asset !== undefined) {
-        return new Response(asset, { headers: { 'Content-Type': 'text/javascript' } });
+        return new Response(asset, { headers: { 'Content-Type': asset.type } });
       }
       const answered = path.startsWith('/api/') ? options.api?.(request) : undefined;
       if (answered !== undefined) return answered;

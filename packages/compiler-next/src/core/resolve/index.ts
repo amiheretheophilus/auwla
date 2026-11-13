@@ -12,6 +12,7 @@ import { is } from 'yuku-ast';
 import type { CompileModulesOptions } from '../../options';
 import { CompileError } from '../diagnostics';
 import type { ParsedModule } from '../parse';
+import type { SourceStylesheet } from '../parse/languages';
 import { composeOrigins, type TextOrigin } from '../parse/text-edits';
 import { withAmbientImports } from './ambient';
 import { findGlobalWrites, type GlobalWrites } from './globals';
@@ -28,6 +29,7 @@ export { declaringRunner, runnerOf } from './writes';
 export { namespaceExport, namespaceModule } from './exports';
 
 export interface ResolvedModule {
+  readonly stylesheet?: SourceStylesheet;
   readonly path: string;
   /** yuku's model: bindings, references, imports, exports, scopes, the AST. */
   readonly module: Module;
@@ -111,7 +113,10 @@ export function resolve(parsed: readonly ParsedModule[], options: CompileModules
     }
     // Ambient imports are appended, so they move no offset (`ambient.ts`).
     const origin = composeOrigins(required.origin, input.origin);
-    return { path: input.path, module, hasJsx: input.hasJsx, writes: findWrites(module), authored: input.authored, origin };
+    return {
+      path: input.path, module, hasJsx: input.hasJsx, writes: findWrites(module), authored: input.authored, origin,
+      ...(input.stylesheet === undefined ? {} : { stylesheet: input.stylesheet }),
+    };
   });
 
   analyzer.link();

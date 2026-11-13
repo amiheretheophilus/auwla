@@ -23,7 +23,17 @@ export interface SourceLanguage {
    * The module as TSX, and where each offset of that TSX was in `text`. An authored error is
    * thrown as a `CompileError` located in `text`.
    */
-  toTsx(text: string, path: string): { readonly code: string; readonly origin: TextOrigin };
+  toTsx(text: string, path: string): {
+    readonly code: string;
+    readonly origin: TextOrigin;
+    /** Optional static CSS. The compiler owns its asset name, import and delivery. */
+    readonly stylesheet?: string;
+  };
+}
+
+export interface SourceStylesheet {
+  readonly path: string;
+  readonly code: string;
 }
 
 /** The language owning `path`, if one does. */
@@ -41,11 +51,20 @@ export function moduleText(
   path: string,
   authored: string,
   languages: readonly SourceLanguage[] | undefined,
-): { readonly text: string; readonly lang: SourceLang; readonly origin: TextOrigin } {
+): { readonly text: string; readonly lang: SourceLang; readonly origin: TextOrigin; readonly stylesheet?: SourceStylesheet } {
   const language = languageOf(path, languages);
   if (language === undefined) return { text: authored, lang: langFromPath(path), origin: UNEDITED };
-  const { code, origin } = language.toTsx(authored, path);
-  return { text: code, lang: 'tsx', origin };
+  const { code, origin, stylesheet } = language.toTsx(authored, path);
+  if (stylesheet === undefined) {
+    return { text: code, lang: 'tsx', origin };
+  }
+
+  // A companion in the same directory keeps authored CSS URLs relative to their module.
+  // Append the import: this preserves shebangs, directives and every existing code offset.
+  const asset = `${path}.css`;
+  const basename = asset.slice(asset.lastIndexOf('/') + 1);
+  const text = `${code}\nimport ${JSON.stringify(`./${basename}`)};\n`;
+  return { text, lang: 'tsx', origin, stylesheet: { path: asset, code: stylesheet } };
 }
 
 /** What `authoredError` needs of a module: the text the analyzer read, and the way back. */
