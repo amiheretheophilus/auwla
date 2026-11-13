@@ -4,9 +4,14 @@ import type { NormalizedSource, Range, VerbatimMapping } from './model';
 export interface Piece {
   readonly text: string;
   readonly authored: number | null;
+  /** An explicit empty editor slot; ordinary empty copied slices are omitted. */
+  readonly anchor?: boolean;
 }
 
 export const generated = (text: string): Piece => ({ text, authored: null });
+
+/** Map a cursor without inventing a character in an unfinished expression. */
+export const anchored = (offset: number): Piece => ({ text: '', authored: offset, anchor: true });
 
 export function copied(source: string, start: number, end: number): Piece {
   return { text: source.slice(start, end), authored: start };
@@ -37,7 +42,7 @@ export function assemble(pieces: readonly Piece[]): Pick<NormalizedSource, 'code
   let position = 0;
 
   for (const piece of pieces) {
-    if (piece.text.length > 0 && piece.authored !== null) {
+    if ((piece.text.length > 0 || piece.anchor === true) && piece.authored !== null) {
       mappings.push({ kind: 'verbatim', generated: [position, position + piece.text.length],
         authored: [piece.authored, piece.authored + piece.text.length] });
     }

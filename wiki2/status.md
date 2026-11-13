@@ -2,6 +2,29 @@
 
 Updated: 2026-11-13. Branch: `prototype/jsx-plus`.
 
+## Current editor fix and next integration slice
+
+Unfinished host expressions in template conditions now stay mapped for native
+TypeScript completion: `if (name.) {}`, optional members, `else if`, loop
+iterables and rows, attributes, ternaries and quoted interpolation. Empty
+conditions/iterables have exact cursor anchors. Recovery is checking-only;
+production still rejects incomplete programs. The user reloaded VS Code and
+confirmed completion works (2026-11-13). See [recovery](recovery.md).
+
+JSX+ `bun check` is clean across 258 files. The complete package suite passes
+**297 tests, 0 failures**, across twenty files. This includes actual applied
+completion edits, empty-slot scope checks, hover/rename while a condition is
+unfinished, LF/CRLF mappings and both-mode execution of the new greeting example.
+No compiler-next/runtime files changed for this fix. The live checking
+`App.auwla` draft remains excluded from commits.
+
+The user's next priority is imports and routing across `.auwla` modules using the
+latest compiler project/application APIs, before CSS or event conveniences.
+Ordinary helper imports already work in the task board; completion can expose
+framework declarations without proving multi-module build integration. Establish
+an actual routed multi-file example, build/runtime checks and honest editor/build
+limits before treating the compiler's capabilities as `.auwla` integration.
+
 ## Compiler baseline synchronization
 
 This branch integrates `compiler-rewrite` through `07e996c9` (2026-11-13).

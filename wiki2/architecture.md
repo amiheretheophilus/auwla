@@ -82,6 +82,7 @@ All paths are relative to the repository root and exist now.
 | `packages/jsx-plus/src/markup/element.ts` | Opening tags and attribute values, then the body scan: nested markup, child-level `if`/`else` blocks and the closing tag |
 | `packages/jsx-plus/src/markup/children.ts` | Child grammar: `;` chunks, expression-first parsing, ASI statements, direct `if` and `for` lowering and chunk diagnostics |
 | `packages/jsx-plus/src/host.ts` | Parser-only fragment context, token slices, tag-opening/delimiter/unterminated-literal token helpers |
+| `packages/jsx-plus/src/checking/host-recovery.ts` | Bounded parser-only expression slots and original-coordinate restoration; emitted checking text keeps the authored incomplete expression |
 | `packages/jsx-plus/src/masks.ts` | Every parser-only mask: equal-width, line-preserving blanks for markup, attribute values and quarantined lines |
 | `packages/jsx-plus/src/attributes/value.ts` | Attribute value contract: replacement pieces plus the mask that hides that form from the tag lexer |
 | `packages/jsx-plus/src/attributes/parenthesized.ts` | Balanced `=(...)` reader with nested-markup normalization |
@@ -118,6 +119,8 @@ All paths are relative to the repository root and exist now.
 | `packages/editor-vscode/tests/activation.test.ts` | Simulated editor/provider API contract; desktop activation not inferred |
 | `packages/jsx-plus/tests/recovery.test.ts` | Real malformed-source mappings and strict build rejection |
 | `packages/jsx-plus/tests/editor-recovery-lsp.test.ts` | Native diagnostics/completion beyond actual unfinished task-board edits |
+| `packages/jsx-plus/tests/host-recovery.test.ts` | Incomplete conditions/iterables/member expressions, exact LF/CRLF spans, cursor anchors and strict build rejection |
+| `packages/jsx-plus/tests/host-recovery-lsp.test.ts` | Native completion edits inside unfinished conditions, loops, attributes, handlers and interpolation using the greeting example |
 | `packages/jsx-plus/src/checking/spans.ts` | Serialize copied spans for TypeScript, adding zero-length end anchors before generated text (edit-producing completions such as auto-import) |
 | `packages/jsx-plus/tests/handler-import-lsp.test.ts` | Native completion plus auto-import edit for a half-typed handler in a bare attribute and a child, applied to authored text |
 | `packages/jsx-plus/src/checking/protocol.ts` | Primary/supplemental outputs, mapping masks and diagnostic directives |

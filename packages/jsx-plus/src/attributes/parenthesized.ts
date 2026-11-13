@@ -8,6 +8,7 @@ import type { AttributeValue } from './value';
 
 interface AttributeReader {
   readonly source: string;
+  readonly checking: boolean;
   /** Authored offset of the value's opening `(`. */
   readonly start: number;
   /** Read nested markup that starts at an authored offset. */
@@ -31,7 +32,7 @@ export function parenthesizedAttribute(reader: AttributeReader): AttributeValue 
   let shadow = source.slice(start);
 
   rescan: for (;;) {
-    const result = childStatements(shadow);
+    const result = childStatements(shadow, reader.checking);
     const tokens = result.tokens;
     // Once yuku reports the missing `)`, every later token is recovery guesswork.
     const missingParen = result.diagnostics.find((entry) => entry.severity === 'error'

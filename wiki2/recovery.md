@@ -9,6 +9,52 @@ handler imports and direct markup loops) are built; this extends the first step.
 recover ordinary incomplete JavaScript/TypeScript. No older source revision is
 used. Failed compiler inspection simply leaves the original native checking view.
 
+## Incomplete host expressions inside templates
+
+Checking now retains unfinished expressions such as `if (name.) { ... }`,
+`else if (name?.) { ... }`, `for (const row of model.) { ... }` and standalone
+member expressions. Previously the host parser discarded the incomplete
+statement before the child reader could lower it. JPX1005 or a structural
+fallback then removed the very range needing completion. Quoted interpolation
+could work because it already copied its substitution without requiring a
+complete child statement.
+
+`src/checking/host-recovery.ts` fills selected missing expression/property slots
+with a parser-only identifier, rereading at most eight times per host fragment.
+`host.ts` restores token, syntax-node, comment and diagnostic offsets to the
+original fragment. The child reader uses that recovered structure, but emits
+the original authored slices: TypeScript receives `name.`, not the placeholder.
+It owns the remaining syntax diagnostic and completion. There is no placeholder
+declaration, synthetic user binding or edit to the authored file.
+
+The same path is used for body scanning, child expressions, quoted substitutions
+and attribute scanning. It preserves nested branch/row scopes and optional
+member access. Production readers do not enable it and still reject incomplete
+programs. This is editor recovery under the existing spec, not new valid syntax.
+
+Empty conditions such as `if ()` have no copied expression character. An explicit
+zero-width piece in `source.ts` maps that cursor through the generated ternary;
+`checking/spans.ts` retains that exact anchor without duplicating an end anchor.
+The iterable slot uses the same mechanism. Generated scaffolding remains
+uneditable, and ordinary empty copied slices do not acquire anchors.
+
+The real [greeting example](../packages/jsx-plus/examples/greeting.auwla) covers
+conditional text, input updates, attributes, interpolation and direct loops.
+`tests/host-recovery.test.ts` checks strict rejection, exact copied spans and
+cursor preservation with LF/CRLF and emoji. `tests/host-recovery-lsp.test.ts`
+uses native completion in conditions, loop iterables/rows, ternaries, attributes,
+handler members and interpolation, applies the returned edits and rechecks.
+Empty conditions and missing binary operands also receive scope completion.
+The actual example executes in both compiler modes in `tests/compile.test.ts`.
+
+Recovery remains bounded and selective. Structural damage continues through the
+closer/quarantine path below; ambiguous parser recovery and arbitrary combinations
+of missing tokens are not claimed complete. Restart the TypeScript server or
+reload the editor after changing mapper code so an existing mapper process does
+not keep an older module or cached projection.
+
+## Structural recovery
+
 Reader errors carry checking-only repair suggestions (`Repair` in
 `src/diagnostics.ts`, helpers in `src/repairs.ts`). They identify a missing
 closer, an unclosed element's opening tag or a stray closing tag. Recovery in

@@ -12,9 +12,18 @@ React JSX runtime. Other projects need this one-time configuration too.
 | Example | What to read and try |
 | --- | --- |
 | [counter.auwla](counter.auwla) | The smallest state/event/direct-expression example |
+| [greeting.auwla](greeting.auwla) | Editable greeting, conditional branches, native event input and looped names; real completion and runtime checks use this file |
 | [task-board/App.auwla](task-board/App.auwla) | A complete task board: derived lists/counts, search, status filters, form submission, existing refs, direct `if`, direct `for` loops in the markup, quoted text and row events |
 | [checking/App.auwla](checking/App.auwla) | Small typed-prop/ref example used by the mapper checks |
 | [checking/TypeError.auwla](checking/TypeError.auwla) | Deliberately invalid method call for inspecting authored diagnostics |
+
+For member completion, open `greeting.auwla` and temporarily change
+`if (name.length > 0)` to `if (name.)`. Completion at the dot should offer
+string members such as `length`. Try `model.` in the loop iterable or `row.`
+inside its body too. An unfinished expression still has a native syntax error;
+the checking view keeps it mapped so that completing it can clear that error.
+The real-server tests apply these edits and recheck the completed file. Keep the
+saved example valid when running the whole package suite.
 
 ## Run the task board
 

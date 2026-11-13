@@ -70,7 +70,7 @@ function readOpeningTag(context: MarkupContext, start: number): OpeningTag {
   // or markup nested in `{...}`). That value is read, masked in the shadow,
   // and the tag is scanned again, so the host lexer never sees extended syntax.
   for (;;) {
-    const tokens = childStatements(shadow).tokens;
+    const tokens = childStatements(shadow, context.checking).tokens;
     if (tokens.kind(0) !== K.LessThan) context.error('HOST', 'Expected an element', start);
 
     if (tokens.kind(1) === K.GreaterThan) {
@@ -97,6 +97,7 @@ function readOpeningTag(context: MarkupContext, start: number): OpeningTag {
       } else if (braces.length === 0 && kind === K.LeftParen && tokens.kind(index - 1) === K.Assign) {
         value = parenthesizedAttribute({
           source: context.source,
+          checking: context.checking,
           start: start + tokens.start(index),
           element: (position) => readElement(context, position),
           error: (code, message, from, to, repairs) => context.error(code, message, from, to, repairs),
@@ -121,7 +122,7 @@ function readOpeningTag(context: MarkupContext, start: number): OpeningTag {
       // unrelated `}` closed, swallowed the rest of the file: report that `{`.
       // Such a container holds no single expression.
       const unclosed = braces[0] ?? containers.find(([open, close]) =>
-        hasError(childExpression(shadow.slice(open - start + 1, close - start)).diagnostics))?.[0];
+        hasError(childExpression(shadow.slice(open - start + 1, close - start), context.checking).diagnostics))?.[0];
       if (unclosed !== undefined) {
         context.error('HOST', 'Unclosed `{` in an attribute value', unclosed, unclosed + 1,
           closeAttributeValue(context.source, unclosed, '}'));
@@ -185,7 +186,7 @@ function readBody(context: MarkupContext, start: number, name: string, opener: n
   }
 
   rescan: for (;;) {
-    const result = childStatements(shadow);
+    const result = childStatements(shadow, context.checking);
     const tokens = result.tokens;
     const literal = unterminatedLiteral(result, shadow);
     const stack: Delimiter[] = [];

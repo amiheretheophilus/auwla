@@ -20,7 +20,7 @@ function readSubstitution(
   let shadow = context.source.slice(start);
 
   rescan: for (;;) {
-    const parsed = childStatements(shadow);
+    const parsed = childStatements(shadow, context.checking);
     const tokens = parsed.tokens;
     const literal = unterminatedLiteral(parsed, shadow);
     const closes: number[] = [];

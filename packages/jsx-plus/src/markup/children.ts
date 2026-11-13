@@ -9,7 +9,7 @@ import {
   childExpression, childStatements, closingDelimiter, firstError, hasError, isMarkupOpening, type HostFragment,
 } from '../host';
 import type { BlockView, ChildView, ExpressionView, ForView, IfView, Range } from '../model';
-import { assemble, generated, replaceRange, type Piece } from '../source';
+import { anchored, assemble, generated, replaceRange, type Piece } from '../source';
 import type { ChildReplacement, Children, MarkupContext } from './context';
 
 interface Child<View> {
@@ -44,7 +44,7 @@ class ChildReader {
     // each chunk in expression context before trying host statements, so an
     // object/function/class after another child keeps its expression grammar.
     // ASI and expression continuation within each chunk still belong to yuku.
-    const tokens = childStatements(code).tokens;
+    const tokens = childStatements(code, this.context.checking).tokens;
     const closes: number[] = [];
     const chunks: Range[] = [];
     let chunkStart = 0;
@@ -76,7 +76,7 @@ class ChildReader {
 
   /** One `;`-delimited chunk: a single expression, or ASI-separated statements. */
   private chunk(code: string, start: number, chunkEnd: Range): Children {
-    const asExpression = childExpression(code);
+    const asExpression = childExpression(code, this.context.checking);
     const expression = asExpression.expression;
     if (!hasError(asExpression.diagnostics) && expression !== undefined) {
       if (expression.type === 'SequenceExpression') {
@@ -86,7 +86,7 @@ class ChildReader {
       return { views: [child.view], pieces: child.pieces };
     }
 
-    const parsed = childStatements(code);
+    const parsed = childStatements(code, this.context.checking);
     const problem = firstError(parsed.diagnostics);
     if (problem !== undefined) {
       this.reportChunkError(code, start, chunkEnd, parsed, problem);
@@ -195,7 +195,7 @@ class ChildReader {
       return false;
     }
     const candidate = assemble(replaceRange(this.source, base + node.start, base + node.end, this.nested)).code;
-    return !hasError(childExpression(candidate).diagnostics);
+    return !hasError(childExpression(candidate, this.context.checking).diagnostics);
   }
 
   private expressionChild(node: Node, base: number): Child<ChildView> {
@@ -227,6 +227,15 @@ class ChildReader {
 
   private expressionView(start: number, end: number): ExpressionView {
     return { kind: 'expression', range: [start, end], source: this.source.slice(start, end) };
+  }
+
+  /** Empty header expressions still need an exact position for scope completion. */
+  private expressionPieces(expression: ExpressionView): Piece[] {
+    const [start, end] = expression.range;
+    if (this.context.checking && start === end) {
+      return [anchored(start)];
+    }
+    return replaceRange(this.source, start, end, this.nested);
   }
 
   /** The child block of an `if`/`else` or `for`; `owner` names that construct in errors. */
@@ -269,7 +278,7 @@ class ChildReader {
       ? body.pieces
       : [generated('<>'), ...body.pieces, generated('</>')];
     const pieces = [
-      generated('Array.from('), ...replaceRange(this.source, iterable.range[0], iterable.range[1], this.nested),
+      generated('Array.from('), ...this.expressionPieces(iterable),
       generated(', ('), ...replaceRange(this.source, binding.range[0], binding.range[1], this.nested),
       generated(') => '), ...row, generated(')'),
     ];
@@ -291,7 +300,7 @@ class ChildReader {
     // The authored `if (...)` groups the entire test. Keep that grouping when
     // lowering to a ternary, including assignment, comma and nested ternaries.
     const pieces = [
-      generated('('), ...replaceRange(this.source, test.range[0], test.range[1], this.nested), generated(')?<>'),
+      generated('('), ...this.expressionPieces(test), generated(')?<>'),
       ...consequent.pieces, generated('</>:'),
     ];
     if (alternate === null) {

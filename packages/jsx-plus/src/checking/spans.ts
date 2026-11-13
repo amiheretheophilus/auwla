@@ -22,7 +22,7 @@ export function editorSpans(normalized: Pick<NormalizedSource, 'code' | 'mapping
     result.push([virtual, end - virtual, authored, authoredEnd - authored, 0]);
 
     const next = mappings[index + 1];
-    const followedByGenerated = end < code.length && (next === undefined || next.generated[0] > end);
+    const followedByGenerated = end > virtual && end < code.length && (next === undefined || next.generated[0] > end);
     if (followedByGenerated) {
       result.push([end, 0, authoredEnd, 0, 0]);
     }

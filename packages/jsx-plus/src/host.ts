@@ -5,6 +5,7 @@
  */
 import { parse, TokenKind as K } from 'yuku-parser';
 import type { Diagnostic, Node, ParseResult, TokenList } from 'yuku-parser';
+import { recoverHostExpressions, restoreHostOffsets } from './checking/host-recovery';
 
 /** Token access with offsets relative to the fragment that was parsed. */
 export interface HostTokens {
@@ -20,22 +21,45 @@ class SliceTokens implements HostTokens {
   readonly first: number;
   readonly length: number;
 
-  constructor(readonly tokens: TokenList, readonly origin: number, end: number) {
+  constructor(
+    readonly tokens: TokenList, readonly origin: number, end: number,
+    readonly original?: (offset: number) => number,
+  ) {
     let first = 0;
-    while (first < tokens.length && tokens.start(first) < origin) first++;
+    while (first < tokens.length && this.position(tokens.start(first)) < origin) first++;
 
     let last = first;
-    while (last < tokens.length && tokens.start(last) < end) last++;
+    while (last < tokens.length && this.position(tokens.start(last)) < end) last++;
 
     this.first = first;
     this.length = last - first;
   }
 
   kind(index: number): number { return this.tokens.kind(this.first + index); }
-  start(index: number): number { return this.tokens.start(this.first + index) - this.origin; }
-  end(index: number): number { return this.tokens.end(this.first + index) - this.origin; }
+  start(index: number): number { return this.position(this.tokens.start(this.first + index)) - this.origin; }
+  end(index: number): number { return this.position(this.tokens.end(this.first + index)) - this.origin; }
+
+  private position(offset: number): number {
+    return this.original === undefined ? offset : this.original(offset);
+  }
 
   at(offset: number): number {
+    if (this.original !== undefined) {
+      // Inserted identifiers have zero authored width. Prefer the last token
+      // starting here, so an authored closer wins over a parser placeholder.
+      let low = 0;
+      let high = this.length;
+      while (low < high) {
+        const middle = (low + high) >>> 1;
+        if (this.start(middle) <= offset) {
+          low = middle + 1;
+        } else {
+          high = middle;
+        }
+      }
+      const index = low - 1;
+      return index >= 0 && offset < this.end(index) ? index : -1;
+    }
     const index = this.tokens.at(offset + this.origin) - this.first;
     return index >= 0 && index < this.length ? index : -1;
   }
@@ -139,26 +163,37 @@ export function unterminatedLiteral(fragment: HostFragment, source: string): {
   return { start, boundary: problem.start };
 }
 
-function fragment(source: string, expression: boolean): HostFragment {
+function fragment(source: string, expression: boolean, checking: boolean): HostFragment {
   const prefix = PREFIX + (expression ? '(' : '');
   const suffix = expression ? '\n);\n}' : '\n}';
-  const result: ParseResult = parse(prefix + source + suffix, {
+  const input = prefix + source + suffix;
+  const initial: ParseResult = parse(input, {
     lang: 'tsx', sourceType: 'module', tokens: true,
   });
+  const recovered = checking ? recoverHostExpressions(input, initial, prefix.length, prefix.length + source.length) : null;
+  const result = recovered?.parsed ?? initial;
   const declaration = result.program.body[0];
-  const statements = declaration?.type === 'FunctionDeclaration' && declaration.body !== null
+  const parsedStatements = declaration?.type === 'FunctionDeclaration' && declaration.body !== null
     ? declaration.body.body : [];
-  const offset = (position: number) => Math.max(0, Math.min(source.length, position - prefix.length));
+  const statements = recovered === null ? parsedStatements : restoreHostOffsets(parsedStatements, recovered.original);
+  const offset = (position: number) => {
+    const original = recovered === null ? position : recovered.original(position);
+    return Math.max(0, Math.min(source.length, original - prefix.length));
+  };
 
   return {
     origin: prefix.length,
     statements,
-    tokens: new SliceTokens(result.tokens!, prefix.length, prefix.length + source.length),
+    tokens: new SliceTokens(result.tokens!, prefix.length, prefix.length + source.length, recovered?.original),
     diagnostics: result.diagnostics.map((entry) => ({
       ...entry, start: offset(entry.start), end: offset(entry.end),
     })),
     comments: result.comments
-      .filter((comment) => comment.start >= prefix.length && comment.end <= prefix.length + source.length)
+      .filter((comment) => {
+        const start = recovered?.original(comment.start) ?? comment.start;
+        const end = recovered?.original(comment.end) ?? comment.end;
+        return start >= prefix.length && end <= prefix.length + source.length;
+      })
       .map((comment) => ({ start: offset(comment.start), end: offset(comment.end) })),
   };
 }
@@ -169,13 +204,13 @@ function fragment(source: string, expression: boolean): HostFragment {
  * never emitted, never evaluated and introduces no authored scope. The final
  * normalized module is parsed in its actual context to check legality there.
  */
-export function childStatements(source: string): HostFragment {
-  return fragment(source, false);
+export function childStatements(source: string, checking = false): HostFragment {
+  return fragment(source, false, checking);
 }
 
 /** Parse `source` as one parenthesized expression; `expression` is unset when it is not one. */
-export function childExpression(source: string): HostFragment & { readonly expression?: Node } {
-  const result = fragment(source, true);
+export function childExpression(source: string, checking = false): HostFragment & { readonly expression?: Node } {
+  const result = fragment(source, true, checking);
   const statement = result.statements[0];
   const expression = statement?.type === 'ExpressionStatement'
     && statement.expression.type === 'ParenthesizedExpression'

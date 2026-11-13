@@ -117,6 +117,24 @@ it('runs the package counter example through compiler-next', () => {
 });
 
 for (const optimize of [true, false]) {
+  it(`runs the greeting authoring example through conditional and loop updates with optimize=${optimize}`, () => {
+    const source = readFileSync(new URL('../examples/greeting.auwla', import.meta.url), 'utf8');
+    const { container } = start(source, optimize);
+    const input = container.querySelector('input')!;
+    expect(container.querySelector('h1')!.textContent).toBe('Hello AUWLA');
+    expect([...container.querySelectorAll('li')].map((row) => row.textContent)).toEqual(['ADA', 'GRACE']);
+
+    input.value = '';
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    expect(container.querySelector('h1')).toBeNull();
+    expect(container.textContent).toContain('Enter a name.');
+
+    input.value = 'Grace';
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    expect(container.querySelector('h1')!.textContent).toBe('Hello GRACE');
+    expect(container.querySelector('.preview')!.textContent).toBe('GRACE');
+  });
+
   it(`shows a row edit made through an entries() loop binding with optimize=${optimize}`, () => {
     // `[index, task]` is destructured from each pair; compiler-next reports an edit
     // through a destructured name (`features/handlers/plan.ts`, `patternRoot`).

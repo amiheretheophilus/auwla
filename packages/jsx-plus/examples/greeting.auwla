@@ -1,0 +1,27 @@
+export function App() {
+  let name = 'Auwla';
+  const model = { rows: ['Ada', 'Grace'] };
+
+  return (
+    <main>
+      <label>
+        "Name";
+        <input value={name} onInput={event => name = event.currentTarget.value} />
+      </label>
+
+      if (name.length > 0) {
+        <h1 title=(name.toUpperCase())>"Hello {name.toUpperCase()}"</h1>
+      } else if (name.trim().length === 0) {
+        <p>"Enter a name."</p>
+      }
+
+      <p class="preview"> name.length > 3 ? name.toUpperCase() : name.toLowerCase()</p>
+
+      <ul>
+        for (const row of model.rows) {
+          <li title={row.toUpperCase()}>row.toUpperCase()</li>
+        }
+      </ul>
+    </main>
+  );
+}
