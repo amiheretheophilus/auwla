@@ -119,8 +119,12 @@ with no request, a link asks `POST /_memoized/routed` for the person, and the fo
 
 Editor finding (the user hit it): TypeScript 7.1 with `contentMappers` loads a `.auwla` module only
 when the import names it. `'../people'` builds (compiler-next probes extensions) but is TS2307 in
-the editor; the notes example's `./NoteList` re-export has the same error. The example writes
-`.auwla` out; resolving extensionless imports belongs to cross-file editor checks.
+the editor; the notes example's `./NoteList` re-export has the same error. Probed further: the
+mapper protocol only transforms text, so resolution is TypeScript's. An alias works with a
+`paths` fallback (`"#server/*": ["./server/*", "./server/*.auwla"]`), which the example now
+uses for `#server/people`; a relative import cannot, since `paths` never applies to one. The
+example writes `.auwla` in its relative import ([tooling](tooling.md) already says imports
+use the explicit extension).
 
 Not yet: cross-file editor checks (extensionless resolution, rename/completion across `.auwla`
 imports); Vite's full-stack path with `.auwla` (the Vite plugin forwards `languages` to the same
@@ -316,8 +320,10 @@ full root suite, performance, browser layout and IDE activation.
 
 ## Continue
 
-1. Cross-file editor checks: extensionless `.auwla` imports in TypeScript (TS2307 today, see
-   the server section above), then rename/completion across `.auwla` imports. The server side
+1. Cross-file editor checks: rename/completion across `.auwla` imports. Extensionless relative
+   imports are TypeScript's resolution (TS2307; aliases work through `paths`, see the server
+   section above); choosing between the explicit-extension rule, a checking-view rewrite and an
+   upstream request is the user's decision. The server side
    (SSR, `.auwla` server functions, server-backed `$routed`) is done. Keep every build concern in
    compiler-next.
 2. P3-EDITOR (first adapter/assets built, DX-36): verify the 0.0.2 desktop update with

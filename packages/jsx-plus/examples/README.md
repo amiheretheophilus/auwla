@@ -128,8 +128,8 @@ server-backed `$routed` pages. `--build` builds and exits.
   functions written in `.auwla`; [directory/src/App.auwla](directory/src/App.auwla) imports the same
   names from `#server-functions`, where they call the endpoints. `listPeople()` is rendered on the
   server and its result travels with the page, so the browser adopts the list without asking again.
-- [directory/src/Person.auwla](directory/src/Person.auwla) reads `#server/people.auwla`, a
-  server-only module in the server folder, inside `$routed`, so the preparation runs on the server:
+- [directory/src/Person.auwla](directory/src/Person.auwla) reads `#server/people`
+  (`server/people.auwla`), a server-only module in the server folder, inside `$routed`, so the preparation runs on the server:
   during the render for a page the server serves, and through `POST /_memoized/routed` after a
   link click. The client bundle never contains it.
 - `server.ts` and `server/define.ts` stay TypeScript.
@@ -141,9 +141,12 @@ The preview also writes `.memoized/server-functions.d.ts` (ignored by git), whic
 bun ../../node_modules/typescript/lib/tsc.js --project examples/directory/tsconfig.json --runExternalCode --pretty false
 ```
 
-Write the `.auwla` extension in imports of `.auwla` files (`'../people.auwla'`). The build
-also finds `'../people'`, but TypeScript in the editor does not yet: it reports
-"Cannot find module". `tests/server.test.ts` builds this folder and drives it in both modes.
+Write the `.auwla` extension in relative imports of `.auwla` files (`'../people.auwla'`). The
+build also finds `'../people'`, but TypeScript in the editor does not: it reports "Cannot find
+module", because it loads a mapped file only when the import names its extension, and `paths`
+never applies to a relative import. An alias can leave it out: the tsconfig maps `#server/*` to
+`./server/*` and then `./server/*.auwla`, so `#server/people` type-checks.
+`tests/server.test.ts` builds this folder and drives it in both modes.
 
 ## Walk through the authoring
 

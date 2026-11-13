@@ -3,7 +3,7 @@
   "compilerOptions": {
     "paths": {
       "@memoized-dom/compiler/jsx": ["../../../compiler/src/jsx-types.ts"],
-      "#server/*": ["./server/*"],
+      "#server/*": ["./server/*", "./server/*.auwla"],
       "#server-functions": ["./.memoized/server-functions.d.ts"]
     }
   },

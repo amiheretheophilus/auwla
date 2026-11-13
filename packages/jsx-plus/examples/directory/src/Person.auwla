@@ -1,4 +1,5 @@
-import { findPerson } from '#server/people.auwla';
+// Found as `server/people.auwla` by the build, and by TypeScript through the tsconfig's `paths`.
+import { findPerson } from '#server/people';
 
 export function Person() {
   // A server-backed preparation: it reads server-only code, so it runs on the server. On a page
