@@ -134,8 +134,23 @@ server and the `.auwla` endpoint; the `.memoized/server-functions.d.ts` it write
 edit to `Person.auwla` on the next request. No change was needed. The example gained an
 `index.html` with the SSR outlet for Vite.
 
+### Backend code is plain (DX-30)
+
+The user asked whether pointing compiler-next at the backend folder already gives DX-30's
+non-reactive backend. It gave isolation (server-only, never in the client) but compiled that
+code reactively, `.ts` and `.auwla` alike: the directory's 20-line store became 3,338
+characters of versions, readers, source guards and callback boundaries. Fixed in compiler-next
+(reconcile table): the application declares its server-only code (the server folder, the server
+entry, the generated registry and `serve()` wrapper) through a new `serverOnly` option, and that
+code gets no readers, no observed edits, no source readiness (unless it uses the data
+intrinsics or holds markup) and no write flushing around `await`. The store and server
+functions now compile to their authored JavaScript; the registry went from 9,377 to 2,073
+characters ([server](../wiki/compiler/server.md#backend-code)). Pages rendered on the server keep
+their machinery. The JSX+ server (both modes), Vite and routes tests run the result.
+
 Not yet: cross-file editor checks (rename/completion across `.auwla` imports);
-streaming/live server functions in `.auwla`. A collected
+streaming/live server functions in `.auwla`; ordinary backend packages (Express) imported from
+`.auwla` server code, which should now compile as plain imports but are untested. A collected
 `.auwla` module is normalized twice per change.
 
 ## Current editor fix and next integration slice
@@ -378,6 +393,7 @@ any new changes that must be adopted or corrected on `compiler-rewrite` later:
 | `03958a19` | `optimize/closed-lists.ts`: the proof finds a row list's root through `mappingCall` (`#rowsOver`), replacing the `.map`-only branch in `#useMethod` and the `form` filter in `match`. `features/handlers/mutations.ts` emits `list.map`/`list.from` and `mapRows`/`fromRows` from one branch, passing `unedited` to both. `optimize/methods.ts` drops `withRowReuse`'s redundant `form` argument. Tests: both spellings in `closed-lists.test.ts` and `conditionals-and-lists.closed.test.ts` ([optimize](../wiki/compiler/optimize.md#closed-lists)) | Loops over plain state lists skip unchanged rows like `.map`, without a second copy of the list logic |
 | `232c8f5b` | `optimize/closed-lists.ts`: `returnsToEventDispatch` lets `#useReturn` accept a function literal written as an `on*` attribute of a DOM element that is not `isComponentCall`, since the runtime keeps nothing it returns. Tests in `closed-lists.test.ts` (with controls) and a both-spelling behaviour case ([optimize](../wiki/compiler/optimize.md#closed-lists)) | `onClick=(() => rows.reverse())`, the natural `.auwla` one-liner, turned the skip off; plain JSX benefits too |
 | `0cf5a8ae` | New `core/parse/languages.ts` (`SourceLanguage`, `languageOf`, `languageExtensions`, `moduleText`, `authoredError`) with a toy-language `languages.test.ts` ([core](../wiki/compiler/core.md#source-languages)). `languages` option in `options.ts`; `parseModule` reads a language module's TSX and composes its origin; `analysis/frontend.ts` and `pipeline.ts` move post-parse errors back for language modules; `CompileError.reason`; `importCandidates(…, extensions)`; `isSourcePath(path, languages)`, `collect.ts` and `project.ts` collect language modules; `compile()` accepts a language `moduleId`; the Bun plugin loads and probes language extensions; exports `SourceLanguage`, `TextOrigin`, `languageExtensions`. `packages/vite`: `languages` option, forwarded to the application, host, load, resolve and hot-update checks | DX-39: `.auwla` builds through compiler-next's own project, Bun and Vite paths instead of a JSX+ copy of them |
+| `56fbe0d5` | New `serverOnly` option (`options.ts`) and `Resolved.serverOnly(module)` (`core/resolve/index.ts`); `features/state/reactive-reads.ts` never marks a server-only binding; `core/plan/index.ts` skips `planImportedMutations` there and sets `ModulePlan.serverOnly`; `features/sources/flow-plan.ts` plans no readiness there unless the module uses the data intrinsics or holds markup; `core/emit/dom.ts` adds no `try`/`await` guards to server-only code that renders nothing. `server/application.ts` declares the server folder, entry, registry and `serve()` wrapper. Tests: `server/application.test.ts` (no machinery in server-only output; fails with nothing declared), the readiness-storage test moved to `features/state/shared-dom.test.ts` ([server](../wiki/compiler/server.md#backend-code)) | DX-30: `.auwla` backend code is not reactive; plain `.ts` server code benefits the same |
 | `9b5428e0` | `server/application.ts`, `server/functions.ts`, `server/registry.ts`: the application's `languages` reach server code. Language modules in the server folder are found, analyzed as TSX with authored error lines (`analyzeServerFunctions(…, languages)`, `serverServices(…, languages)`), named and given `.ts` facades without the language's extension (`serverFunctionModuleName(…, extensions)`, `facadePath`), and `#server/` probes language extensions; `importsServe` reads TSX. `core/emit/shared.ts`: module-level readiness storage is declared when no module owner exists. Tests in `server/application.test.ts` (a toy language; undeclared-storage check that fails without the fix) ([server](../wiki/compiler/server.md#application)) | `.auwla` server functions, services and `#server/` modules; the storage fix is a genuine bug (any `.tsx` server whose page reads a server function crashed on start) |
 | `bd2b1eac` | `features/state/shared-dom.ts`: no trailing `$$complete(void 0)` when the shared setup's last statement is `return` or `throw`; `shared-dom.test.ts` checks compiled output has no unreachable statement ([linking](../wiki/compiler/linking.md)) | Found as a browser warning in the `.auwla` team example's `Person` chunk; a genuine emission bug, plain JSX too |
 
