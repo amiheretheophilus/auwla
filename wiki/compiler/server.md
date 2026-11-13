@@ -101,6 +101,17 @@ Found while building it, and fixed: every module-level object got a reader and a
 nothing reactive reading it; a server entry with `serve()` and `app.ssr(App)` emitted 2,757 bytes of
 machinery, now 280 (`state-and-derived.md`, "Module state nothing reactive reads").
 
+**Known issue, open: the server folder is compiled as reactive code.** Every module of the server
+program goes through the same reactive emission, including the declared server folder, which no
+client component can run (the browser reaches it only over HTTP or a server-backed `$routed`,
+both once per request). In the directory example, `server/people.auwla`, a 20-line in-memory
+store, becomes 3,338 characters: a version, reader and shared-write tracking for `people`
+(edited by `addPerson`), `whenSourceInputs` around each function's work, and a source builder
+step in `addPerson`. `server/define.ts` gets the same for `define`. It behaves correctly; the
+cost is size and work on every call. DX-30 (`wiki2/decisions.md`) says backend code is not
+reactive. A likely direction: modules inside `server.folder` compile without module-state
+tracking or source readiness, keeping only what markup in a page function needs.
+
 Found by the `.auwla` directory example (`packages/jsx-plus/examples/directory`), and fixed: once a
 page reads a server function, the server graph has sources and imports a package, so `serve(...)`
 may return one (`features/sources/reach.ts`) and the entry's top-level `app.ssr(App)` becomes a
