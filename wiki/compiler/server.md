@@ -101,6 +101,23 @@ Found while building it, and fixed: every module-level object got a reader and a
 nothing reactive reading it; a server entry with `serve()` and `app.ssr(App)` emitted 2,757 bytes of
 machinery, now 280 (`state-and-derived.md`, "Module state nothing reactive reads").
 
+### Request isolation (open)
+
+One server process renders every request with the same module instances. Module state that a
+render writes (`export let visits = 0` raised by a helper the page calls, an object store pushed
+to) is then what the next request reads: with real users, one user's data on another user's page.
+Confirmed (2026-11-13): three requests to a compiler-next server build showed `visits 1`,
+`visits 2`, `visits 3`, and a module-level derived value followed the leaked state.
+`server/request-state.test.ts` records it as an expected failure (`it.failing`), to flip when
+fixed.
+
+The old compiler lowered such state into per-request cells (`docs/09-ssr.md`, `moduleStateCells`;
+`packages/compiler/src/cells.ts`) on the runtime's `defineStateCell`/`readCell`/`setCell`
+(`runtime/src/state-cells.ts`), which compiler-next can reuse. Storage alone is not enough here:
+compiler-next keeps versions, cached module derivations, refresh flags and change batches per
+module (`features/state/shared-dom.ts`), so a fix must make the whole module owner's state
+request-owned in server builds, not only the values.
+
 ### Backend code
 
 Server-only code is compiled as plain code (DX-30, `wiki2/decisions.md`: backend code is not
