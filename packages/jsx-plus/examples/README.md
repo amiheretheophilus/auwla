@@ -146,7 +146,10 @@ build also finds `'../people'`, but TypeScript in the editor does not: it report
 module", because it loads a mapped file only when the import names its extension, and `paths`
 never applies to a relative import. An alias can leave it out: the tsconfig maps `#server/*` to
 `./server/*` and then `./server/*.auwla`, so `#server/people` type-checks.
-`tests/server.test.ts` builds this folder and drives it in both modes.
+`tests/server.test.ts` builds this folder and drives it in both modes. Its `index.html` is
+the page for Vite: `memoizedDom({ clientEntry: 'src/main.ts', serverEntry: 'server.ts',
+server: 'server', compiler: 'next', languages: [auwla] })` builds and serves it full-stack, as
+`tests/vite.test.ts` checks.
 
 ## Walk through the authoring
 

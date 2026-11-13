@@ -5,13 +5,15 @@
  * this package, so edits never touch it and the build finds the workspace's packages.
  */
 import { afterAll, afterEach, expect, it, vi } from 'bun:test';
+import { GlobalRegistrator } from '@happy-dom/global-registrator';
 import { cpSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { fileURLToPath } from 'node:url';
-import { build, createServer, type Rolldown, type ViteDevServer } from 'vite';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+import { build, createBuilder, createServer, type Rolldown, type ViteDevServer } from 'vite';
 import { waitFor } from '../../../test-support/helpers';
 // The package export is the built `dist`; Vite's own tests read the source the same way.
 import memoizedDom from '../../vite/src';
+import { createDevServer, type NativeDevServer } from '../../vite/src/dev';
 import { auwla } from '../src';
 
 const copies: string[] = [];
@@ -32,9 +34,12 @@ function copyExample(name: string): string {
 const root = copyExample('notes');
 
 let server: ViteDevServer | undefined;
+let nativeServer: NativeDevServer | undefined;
 afterEach(async () => {
   await server?.close();
   server = undefined;
+  await nativeServer?.close();
+  nativeServer = undefined;
 });
 
 const config = {
@@ -99,6 +104,73 @@ it('compiles a .auwla module in dev, maps it, and hot-updates it on an edit', as
   await waitFor(() => expect(accepted()).toContain('/components/NoteList.auwla'), { timeout: 15_000 });
   expect(payloads().some((payload) => payload.type === 'full-reload')).toBe(false);
 }, 60_000);
+
+/**
+ * Runs server code with no browser window, as a server runs (see `server.test.ts`): the preload's
+ * window would make a server render act as the browser and request data over the network.
+ */
+async function withoutWindow<T>(run: () => Promise<T>): Promise<T> {
+  const keep = ['fetch', 'Request', 'Response', 'Headers', 'AbortController', 'AbortSignal',
+    'setTimeout', 'clearTimeout', 'setInterval', 'clearInterval'];
+  await GlobalRegistrator.unregister();
+  try {
+    return await run();
+  } finally {
+    const native = Object.fromEntries(keep.map((key) => [key, Object.getOwnPropertyDescriptor(globalThis, key)!]));
+    GlobalRegistrator.register({ url: 'http://localhost:3000' });
+    Object.defineProperties(globalThis, native);
+  }
+}
+
+const directoryPlugins = () => [memoizedDom({
+  clientEntry: 'src/main.ts', serverEntry: 'server.ts', server: 'server', compiler: 'next', languages: [auwla],
+})];
+
+it('builds the .auwla directory as a full-stack Vite app: rendered pages, prepared routes, server functions', async () => {
+  const directory = copyExample('directory');
+  await withoutWindow(async () => {
+    const builder = await createBuilder({ root: directory, configFile: false, logLevel: 'silent', plugins: directoryPlugins() });
+    await builder.buildApp();
+    // TypeScript's types for `#server-functions`, from the `.auwla` server functions.
+    expect(readFileSync(join(directory, '.memoized', 'server-functions.d.ts'), 'utf8')).toContain('people.auwla');
+
+    const { default: host } = await import(pathToFileURL(join(directory, 'dist', 'server.js')).href) as {
+      default: { fetch(request: Request): Promise<Response> };
+    };
+    const get = async (path: string) => (await host.fetch(new Request(`http://localhost${path}`))).text();
+    const home = await get('/');
+    expect(home).toMatch(/<a href="\/people\/2">(?:<!--[^>]*-->)*Lin<\/a>/);
+    // The browser's bundle, from the built client, adopts the server's markup.
+    const script = /<script[^>]+src="([^"]+)"/.exec(home)?.[1];
+    expect(script).toBeDefined();
+    const asset = await host.fetch(new Request(new URL(script!, 'http://localhost/')));
+    expect(asset.status).toBe(200);
+    expect(await asset.text()).toContain('hydrat');
+    // `$routed` reads `#server/people` (a `.auwla` server module) on the server.
+    expect((await get('/people/2')).replace(/<!--[\s\S]*?-->/g, '')).toContain('<h2>Lin</h2><p class="role">Designer</p>');
+    expect(JSON.parse(await get('/_fn/people/listPeople'))).toHaveLength(2);
+  });
+}, 120_000);
+
+it('renders the .auwla directory in the Vite dev server, and renders an edit on the next request', async () => {
+  const directory = copyExample('directory');
+  await withoutWindow(async () => {
+    nativeServer = await createDevServer({
+      root: directory, configFile: false, logLevel: 'silent', plugins: directoryPlugins(),
+      server: { host: '127.0.0.1', port: 0 },
+    });
+    const origin = nativeServer.origin;
+    const shown = async (path: string) => (await (await fetch(`${origin}${path}`)).text()).replace(/<!--[\s\S]*?-->/g, '');
+    expect(await shown('/')).toContain('<a href="/people/1">Ada</a>');
+    expect(await shown('/people/2')).toContain('<h2>Lin</h2>');
+    expect(await (await fetch(`${origin}/_fn/people/listPeople`)).json()).toHaveLength(2);
+
+    // An edit to a `.auwla` page shows on the next request, as a `.tsx` edit does.
+    const person = join(directory, 'src/Person.auwla');
+    writeFileSync(person, readFileSync(person, 'utf8').replace('"Back to everyone"', '"Back to the directory"'));
+    await waitFor(async () => expect(await shown('/people/2')).toContain('Back to the directory'), { timeout: 15_000 });
+  });
+}, 120_000);
 
 it('reports a .auwla syntax error with its authored place in dev', async () => {
   server = await createServer({ ...config, server: { middlewareMode: true } });

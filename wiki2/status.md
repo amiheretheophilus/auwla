@@ -126,9 +126,16 @@ uses for `#server/people`; a relative import cannot, since `paths` never applies
 example writes `.auwla` in its relative import ([tooling](tooling.md) already says imports
 use the explicit extension).
 
-Not yet: cross-file editor checks (extensionless resolution, rename/completion across `.auwla`
-imports); Vite's full-stack path with `.auwla` (the Vite plugin forwards `languages` to the same
-application, not separately exercised); streaming/live server functions in `.auwla`. A collected
+Vite full-stack, checked after the user asked: `tests/vite.test.ts` builds a copy of the
+directory with `createBuilder` (`serverEntry`, `server`, `languages`) and asks the built
+`dist/server.js` for the home page, its hydrating client asset, `/people/2` prepared on the
+server and the `.auwla` endpoint; the `.memoized/server-functions.d.ts` it writes names
+`people.auwla`. Vite's SSR dev server (`createDevServer`) renders the same pages and shows an
+edit to `Person.auwla` on the next request. No change was needed. The example gained an
+`index.html` with the SSR outlet for Vite.
+
+Not yet: cross-file editor checks (rename/completion across `.auwla` imports);
+streaming/live server functions in `.auwla`. A collected
 `.auwla` module is normalized twice per change.
 
 ## Current editor fix and next integration slice
