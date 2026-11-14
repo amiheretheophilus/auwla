@@ -52,6 +52,30 @@ export function assemble(pieces: readonly Piece[]): Pick<NormalizedSource, 'code
   return { code: pieces.map((piece) => piece.text).join(''), mappings };
 }
 
+/** Insert generated syntax into normalized text while retaining every copied span. */
+export function insertGenerated(pieces: readonly Piece[], insertions: readonly { at: number; text: string }[]): Piece[] {
+  const result: Piece[] = [];
+  let position = 0;
+  let next = 0;
+
+  for (const piece of pieces) {
+    let consumed = 0;
+    while (next < insertions.length && insertions[next]!.at <= position + piece.text.length) {
+      const insertion = insertions[next++]!;
+      const split = insertion.at - position;
+      result.push({ ...piece, text: piece.text.slice(consumed, split),
+        authored: piece.authored === null ? null : piece.authored + consumed });
+      result.push(generated(insertion.text));
+      consumed = split;
+    }
+    result.push({ ...piece, text: piece.text.slice(consumed),
+      authored: piece.authored === null ? null : piece.authored + consumed });
+    position += piece.text.length;
+  }
+
+  return result;
+}
+
 /*
  * Position lookups. `mappings` are ordered, non-overlapping copied spans.
  * Only `authoredOffset` and exact spans may drive editor edits; the other

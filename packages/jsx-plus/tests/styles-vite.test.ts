@@ -10,14 +10,14 @@ import { auwla } from '../src';
 import { readStyleBlocks } from '../src/styles/blocks';
 
 const copies: string[] = [];
-function copyStyling(): string {
-  const copy = mkdtempSync(join(import.meta.dir, '../.vite-test-styling-'));
-  cpSync(join(import.meta.dir, '../examples/styling'), copy, { recursive: true });
+function copyExample(name = 'styling'): string {
+  const copy = mkdtempSync(join(import.meta.dir, `../.vite-test-${name}-`));
+  cpSync(join(import.meta.dir, '../examples', name), copy, { recursive: true });
   rmSync(join(copy, 'tsconfig.json'));
   copies.push(copy);
   return copy;
 }
-const root = copyStyling();
+const root = copyExample();
 afterAll(() => {
   for (const copy of copies) {
     rmSync(copy, { recursive: true, force: true });
@@ -67,7 +67,7 @@ it('builds full-property class conditions through the same compiler-owned CSS pa
 }, 60_000);
 
 it('keeps generated CSS when a fully static page ships without a script', async () => {
-  const staticRoot = copyStyling();
+  const staticRoot = copyExample();
   writeFileSync(join(staticRoot, 'App.auwla'),
     '<style global>.static-card { padding: 4px; }</style>\nexport function App() { return <main class="static-card">"Static page"</main>; }');
   // A static mount entry does only mount(); exporting its result requires browser code.
@@ -91,6 +91,45 @@ it('keeps generated CSS when a fully static page ships without a script', async 
   const bunCss = bun.outputs.find((output) => output.path.endsWith('.css'))!;
   expect(await bunCss.text()).toContain('.static-card');
   expect(await bun.outputs.find((output) => output.path.endsWith('.html'))!.text()).toContain('.css');
+}, 60_000);
+
+it('builds the real scope gallery through native Vite CSS delivery', async () => {
+  const result = await build({ ...config, root: copyExample('scoping'), build: { write: false } });
+  const outputs = (Array.isArray(result) ? result : [result]) as Rolldown.RolldownOutput[];
+  const assets = outputs.flatMap((output) => output.output);
+  const css = assets.find((asset): asset is Rolldown.OutputAsset => asset.type === 'asset' && asset.fileName.endsWith('.css'))!;
+  const html = assets.find((asset): asset is Rolldown.OutputAsset => asset.type === 'asset' && asset.fileName.endsWith('.html'))!;
+  expect(String(css.source)).toContain(':where([data-mmd-s-');
+  expect(String(css.source)).not.toContain('@use');
+  expect(String(css.source)).not.toContain('@.');
+  expect(String(html.source)).toContain(css.fileName);
+}, 60_000);
+
+it('hot-updates reused local CSS without replacing component JavaScript or scope identities', async () => {
+  const scopedRoot = copyExample('scoping');
+  server = await createServer({ ...config, root: scopedRoot, server: { middlewareMode: true } });
+  const client = server.environments.client;
+  for (const path of ['/main.ts', '/App.auwla', '/Cards.auwla', '/Cards.auwla.css']) {
+    await client.transformRequest(path);
+  }
+  const original = (await client.transformRequest('/Cards.auwla'))!.code;
+  const send = vi.spyOn(client.hot, 'send').mockImplementation(() => {});
+  const file = join(scopedRoot, 'Cards.auwla');
+  // Change the source width as well as the CSS value: neither scope identities
+  // nor the component program should depend on the removed block's byte offsets.
+  writeFileSync(file, readFileSync(file, 'utf8').replace('@.expanded:32px', '@.expanded:400px'));
+  type Payload = { type: string; updates?: { acceptedPath: string }[] };
+  const payloads = () => send.mock.calls.map(([payload]) => payload as unknown as Payload);
+  await waitFor(() => expect(payloads().flatMap((payload) => payload.updates ?? [])
+    .some((update) => update.acceptedPath.includes('Cards.auwla.css'))).toBe(true), { timeout: 15_000 });
+  expect(payloads().some((payload) => payload.type === 'full-reload')).toBe(false);
+  expect(payloads().flatMap((payload) => payload.updates ?? [])
+    .some((update) => update.acceptedPath === '/Cards.auwla')).toBe(false);
+  // Vite updates only the CSS dependency's timestamp in its served module.
+  // Compare the component program after removing precisely that native cache key.
+  const updated = (await client.transformRequest('/Cards.auwla'))!.code;
+  expect(updated.replace(/(import "\/Cards\.auwla\.css)\?t=\d+(")/, '$1$2')).toBe(original);
+  expect((await client.transformRequest('/Cards.auwla.css'))!.code).toContain('400px');
 }, 60_000);
 
 it('serves CSS in dev and hot-updates a CSS-only edit', async () => {

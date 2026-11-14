@@ -1,0 +1,35 @@
+import { GoldCard, TealCard } from './Cards.auwla';
+import { IndependentCard } from './IndependentCard.auwla';
+
+<style global>
+  body { margin: 0; font-family: system-ui, sans-serif; }
+  .page-note { font-size: 14px; }
+</style>
+
+export function App() {
+  <style>
+    main { max-width: 44rem; margin: 0 auto; padding: 24px; }
+    .title { color: maroon; }
+    .file-note { font-style: italic; }
+  </style>
+
+  function PlainChild() {
+    return (
+      <aside data-card="nested">
+        <h2 class="title">"Nested component"</h2>
+        <p>"The parent's private .title rule stops at this component."</p>
+      </aside>
+    );
+  }
+
+  return (
+    <main>
+      <h1 class="title">"Static component styles"</h1>
+      <p class="file-note page-note">"Each component owns its own native elements."</p>
+      <TealCard />
+      <GoldCard />
+      <IndependentCard />
+      <PlainChild />
+    </main>
+  );
+}

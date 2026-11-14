@@ -63,8 +63,8 @@ export function App() { return <style>css</style>; }`;
   expect(result.code).toContain('<style>{css}</style>');
 });
 
-it('reports unsupported scope and missing closing tags at authored positions', () => {
-  expect(() => normalize('\n<style>.a { color: red; }</style>')).toThrow('CSS1001');
+it('reports unsupported attributes and missing closing tags at authored positions', () => {
+  expect(() => normalize('\n<style scoped>.a { color: red; }</style>')).toThrow('CSS1001');
   expect(() => normalize('\n<style global>.a { color: red; }')).toThrow('CSS1002');
   expect(() => normalize('<style global scoped>.a {}</style>')).toThrow('CSS1001');
 });

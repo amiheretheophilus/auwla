@@ -55,6 +55,6 @@ export interface NormalizedSource {
   readonly code: string;
   readonly roots: readonly (ElementView | FragmentView)[];
   readonly mappings: readonly VerbatimMapping[];
-  /** Static native CSS, when module-level style blocks were authored. */
+  /** Static CSS, with local selectors scoped when static styles were authored. */
   readonly stylesheet?: string;
 }

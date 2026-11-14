@@ -1,10 +1,10 @@
 # Auwla CSS developer experience: styling design discussion
 
-Status: **first native CSS slice implemented and verified**. The user has now
-authorized committing/pushing it and continuing, superseding the temporary
-no-commit instruction. The wider design below remains planned.
+Status: native CSS, full-property class conditions and the first local-scope /
+same-file named-reuse slice are implemented. Cross-file named reuse is next;
+the wider design below distinguishes implemented profiles from later work.
 
-Created: 2026-11-11. Updated: 2026-11-13.
+Created: 2026-11-11. Updated: 2026-11-14.
 
 This is the styling companion to [dx.md](dx.md). [wiki2](wiki2/README.md) maps the
 prototype; [the language spec](wiki2/spec/README.md) owns implemented grammar and
@@ -28,9 +28,9 @@ Editor support accompanies each usable slice. CSS-1 extracts explicit module-lev
 the resulting companion stylesheets through its existing Bun/Vite integrations.
 CSS-2a now implements compact class conditions on full properties, including
 `padding:4px @.loading:30px`, with native value assistance and header highlighting.
-Named breakpoint conditions, grouping, local scope and aliases remain planned.
-The user has now chosen local-by-default styling and named reusable blocks
-(DX-45); the current implementation still requires explicit `global`.
+[CSS-3a](wiki2/spec/style-scopes.md) adds local-by-default file/component styles
+and same-file named reuse with `@use(path, id)`. Named breakpoint conditions,
+grouping and aliases remain planned; breakpoint sizes have not been chosen.
 
 Follow DX-39: JSX+ is a standalone template/source-language layer. It supplies
 syntax transformations through `auwla`; compiler-next owns projects, applications,
@@ -50,8 +50,8 @@ Its source implementation uses no Bun/Node APIs.
 | Element classes | Dot-style `.class` authoring on elements is planned, including conditional classes | Exact element grammar remains open |
 | CSS execution | Style conditions compile to CSS; the browser applies them | Architectural requirement; no CSS runtime |
 | Grouping | Blocks group several changes under a condition | Planned authoring form |
-| Local scope | Local-by-default `<style>`, explicit `<style global>` | User-accepted direction (DX-45); ownership/selector mechanics remain to specify |
-| Named styles | `<style id="...">` names a reusable block that other styles can import | User-accepted direction; import grammar, resolution and imported scope remain to specify |
+| Local scope | Local-by-default `<style>`, explicit `<style global>` | CSS-3a implements file/component scopes with static subject markers |
+| Named styles | `<style id="...">`, consumed through `@use(path, id)` | Same-file reuse implemented; cross-file compiler resolution is next |
 | Separators | Optional semicolon/newline termination for compact chains | Provisional lexical contract; preserve ordinary CSS grammar |
 | Editor support | Completion, highlighting, hover and diagnostics | Native CSS-1 service/adapter built locally; compact syntax and desktop acceptance remain open |
 
@@ -280,8 +280,9 @@ URLs, adoption and HMR require real acceptance through existing compiler tooling
 The user has defined the ownership direction (DX-45): a style declared inside a
 component belongs to that component. Putting a style at module/file level makes
 it shareable by components there. Plain styles are local; `global` explicitly
-makes their rules global. CSS-1/2a currently implement only explicit global blocks;
-the component/module scoping machinery is the next profile, not a current feature.
+makes their rules global. [CSS-3a](wiki2/spec/style-scopes.md) now implements
+component/module scopes and same-file named reuse. Its explicit draft separates
+the accepted direction from provisional declaration/selector choices.
 
 ```tsx
 <style>
@@ -296,21 +297,26 @@ the component/module scoping machinery is the next profile, not a current featur
 No `scoped` keyword is required. `<style id="card-look">` names a reusable style
 block. The user confirmed that importing this block into another component makes
 its rules apply to that consumer's own elements. For example, `.card { padding:16px; }`
-can style both the defining component's `.card` and the importing component's
-`.card`, each through the applicable local scope. This remains compile-time CSS.
-Exact import spelling, ID visibility/resolution and the marker/selector
-representation are not chosen yet. Do not infer DOM IDs or JavaScript imports.
+can be explicitly used by two components and style each one's `.card` in its own
+scope. The user chose `@use("./Cards.auwla", "card-look");`, without `#` fragments,
+keeping native CSS `@import` separate. Named blocks are provisionally definitions
+that apply only through a use. IDs are module-local style names, not DOM IDs or
+JavaScript exports. Cross-file resolution must use compiler-next's project and
+watching, with relative asset URLs rebased from the definition's directory.
 
-Settle these before implementation:
+The first slice settles direct function-body declarations, module sharing,
+missing/duplicate/cyclic same-file uses, zero-specificity subject markers,
+nested/imported boundaries and authored slot content. Named CSS resources such
+as keyframes/font faces provisionally require an explicit global consumer.
+The gallery is [examples/scoping](packages/jsx-plus/examples/scoping/README.md).
+The pinned parser currently requires local nested selectors to start with `&`;
+implicit nesting is rejected explicitly. Global blocks keep native nesting.
+Remaining design/integration work:
 
-- The exact position/grammar of component-local style declarations, and the
-  visibility/application rules of shared module blocks and named IDs.
-- Import syntax, same-file versus cross-file lookup, cycle/duplicate handling,
-  and static CSS delivery without executing a component's JavaScript for a style import.
-- Imported components, their roots/internals, projected children and portals.
-- Global/deep escapes; selector lists, descendants, siblings, `:is()`, `:not()`,
-  `:has()` and pseudo-elements.
-- Marker specificity, keyframe naming and global constructs such as font faces.
+- Cross-file lookup and transitive cycles, CSS-only watching and URL rebasing,
+  without executing a component's JavaScript for a style use.
+- Named resources local to a scope, global/deep escapes and explicit portal cases.
+- CSS source maps and native browser acceptance beyond the existing DOM tests.
 
 Local selectors do not provide Shadow DOM isolation. Inheritance, custom
 properties, global rules and the normal cascade still apply. Class conditions

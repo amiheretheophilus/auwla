@@ -48,6 +48,27 @@ function tokenize(source: string) {
   return tokens;
 }
 
+it('embeds CSS in module, named and component style declarations while leaving returned styles as JSX', () => {
+  const source = `<style>\n.shared { padding: 4px; }\n</style>
+<style id="look">\n.card { border-color: teal; }\n</style>
+export function Card() {
+  <style>\n@use("./Card.auwla", "look");\n.title { color: navy; }\n</style>
+  let count = 0;
+  return <style>count</style>;
+}`;
+  const tokens = tokenize(source);
+  for (const property of ['padding', 'border-color', 'color: navy']) {
+    const offset = source.indexOf(property);
+    expect(tokens.find((token) => token.startIndex <= offset && offset < token.endIndex)!.scopes)
+      .toContain('meta.embedded.block.css');
+  }
+  for (const text of ['count = 0', 'count</style>']) {
+    const offset = source.indexOf(text);
+    expect(tokens.find((token) => token.startIndex <= offset && offset < token.endIndex)!.scopes)
+      .not.toContain('meta.embedded.block.css');
+  }
+});
+
 it('embeds native CSS highlighting and resumes TypeScript after the closing block', () => {
   const source = '<style global>\n.card { padding: 4px; content: "</style>"; }\n/* </style> */\n</style>\nexport const title = "ready";';
   const tokens = tokenize(source);

@@ -1,0 +1,61 @@
+{
+  "profile": "CSS-3a",
+  "cases": [
+    {
+      "id": "SCOPE-001",
+      "source": "<style>.title{color:teal}</style>\nexport function App(){return <h1 class=\"title\">\"Title\"</h1>;}",
+      "stylesheet": ".title:where([SCOPE]){color:teal}",
+      "elements": 1
+    },
+    {
+      "id": "SCOPE-002",
+      "source": "export function App(){<style>.title{color:teal}</style>return <h1 class=\"title\">\"Title\"</h1>;}",
+      "stylesheet": ".title:where([SCOPE]){color:teal}",
+      "elements": 1
+    },
+    {
+      "id": "SCOPE-003",
+      "source": "<style>.title{color:teal}</style>export function A(){return <h1/>;}export function B(){return <h2/>;}",
+      "stylesheet": ".title:where([SCOPE]){color:teal}",
+      "elements": 2
+    },
+    {
+      "id": "SCOPE-004",
+      "source": "<style id=\"base\">.title{color:teal}</style>export function App(){<style>@use(\"./App.auwla\", \"base\");</style>return <h1/>;}",
+      "stylesheet": ".title:where([SCOPE]){color:teal}",
+      "elements": 1
+    },
+    {
+      "id": "SCOPE-005",
+      "source": "<style id=\"unused\">.title{color:teal}</style>export function App(){return <h1/>;}",
+      "stylesheet": "",
+      "elements": 0
+    },
+    {
+      "id": "SCOPE-006",
+      "source": "export function App(){<style global>body{color:teal}</style>return <h1/>;}",
+      "stylesheet": "body{color:teal}",
+      "elements": 0
+    },
+    {
+      "id": "SCOPE-007",
+      "source": "function App(){if(true){<style>.title{color:teal}</style>}return <h1/>;}",
+      "error": "CSS1003"
+    },
+    {
+      "id": "SCOPE-008",
+      "source": "<style>@use(\"./App.auwla#base\");</style>",
+      "error": "CSS3001"
+    },
+    {
+      "id": "SCOPE-009",
+      "source": "<style>.card { h2:hover {color:red} }</style>",
+      "error": "CSS3002"
+    },
+    {
+      "id": "SCOPE-010",
+      "source": "<style>.card { & .title {color:red}</style>",
+      "error": "CSS3002"
+    }
+  ]
+}

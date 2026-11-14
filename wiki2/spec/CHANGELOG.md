@@ -1,5 +1,22 @@
 # Spec revisions
 
+## CSS-3a — 2026-11-14
+
+- Extend CSS-1 with local-by-default module styles, direct component-body
+  declarations, explicit globals and named definitions. CSS-004 now checks the
+  unsupported `scoped` attribute; plain `<style>` is intentionally accepted.
+- Record the user's `@use(path, id)` syntax, without fragments. First slice
+  resolves same-file definitions and applies them in the consumer's scope;
+  cross-file resolution remains the next compiler-owned integration slice.
+- Add `style-scopes.md` and SCOPE-001 through SCOPE-010. Definition-only named
+  blocks, static declaration placement, zero-specificity subject markers and
+  explicit globals for named CSS resources are provisional profile choices.
+- The pinned CSS Tree block grammar supports nested rules starting with `&`.
+  Local implicit nesting and incomplete structural braces are rejected before
+  rewriting, including type/pseudo selectors that otherwise look like declaration
+  fallbacks. Globals preserve native implicit nesting. Explicit native nesting
+  retains external ancestor qualifiers and declaration order.
+
 ## 0.1-draft, revision 9 — 2026-11-14
 
 - Diagnostics only; no accepted syntax or meaning changes. A `<` comparison is

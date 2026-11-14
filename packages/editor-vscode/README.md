@@ -65,6 +65,12 @@ mapper is registered (`typescript.inlayHints.variableTypes.enabled`). TypeScript
 7.1-beta repeats a function's return-type hint once per mapped segment of the
 file, so prefer variable-type hints until that is fixed upstream.
 
+Version 0.0.9 adds CSS-3a assistance/highlighting for local module, component and
+named style blocks, including same-file `@use(path, id)` syntax/ID diagnostics.
+The bundled artifact is tested on `examples/scoping/Cards.auwla` outside the
+workspace under Node. After reinstalling, reload the VS Code window to use it.
+Cross-file named style resolution and desktop acceptance remain separate.
+
 For a local VSIX installation, package the build with the standard VS Code
 packager using `--no-dependencies`, then install the resulting file with
 `code --install-extension <file.vsix>`. `.vscodeignore` keeps source, tests and

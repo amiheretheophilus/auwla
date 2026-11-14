@@ -36,7 +36,18 @@ it('loads the built extension outside the workspace and runs CSS providers in No
     ]);
     expect(realErrors).toBe('');
     expect(realExit).toBe(0);
-    expect(realOutput).toContain('zero CSS diagnostics and conditional value completion passed');
+    expect(realOutput).toContain('zero CSS diagnostics and native value completion passed');
+
+    const cards = join(root, '../jsx-plus/examples/scoping/Cards.auwla');
+    const scoped = Bun.spawn(['node', join(import.meta.dir, 'fixtures/bundle-host.cjs'), entry, cards], {
+      cwd: installed, stdout: 'pipe', stderr: 'pipe',
+    });
+    const [scopeExit, scopeOutput, scopeErrors] = await Promise.all([
+      scoped.exited, new Response(scoped.stdout).text(), new Response(scoped.stderr).text(),
+    ]);
+    expect(scopeErrors).toBe('');
+    expect(scopeExit).toBe(0);
+    expect(scopeOutput).toContain('zero CSS diagnostics and native value completion passed');
   } finally {
     rmSync(installed, { recursive: true, force: true });
   }

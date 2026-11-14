@@ -1,0 +1,13 @@
+export function IndependentCard() {
+  <style>
+    .card { padding: 10px; border: 2px dashed rebeccapurple; }
+    .title { color: rebeccapurple; }
+  </style>
+
+  return (
+    <article class="card" data-card="independent">
+      <h2 class="title">"Independent file"</h2>
+      <p class="file-note">"The Cards file does not own this note."</p>
+    </article>
+  );
+}

@@ -23,6 +23,9 @@ import { SIBLING_SEPARATOR } from './markup/children';
 import { readElement } from './markup/element';
 import { readStyleBlocks } from './styles/blocks';
 import { lowerConditions } from './styles/conditions/lower';
+import { styleChunks } from './styles/uses';
+import { markStyles } from './styles/scopes/markers';
+import { scopeSelectors } from './styles/scopes/selectors';
 
 /** Find each top-level element in host code, read it, mask it and look again. */
 function readRoots(context: MarkupContext, host: string): Markup[] {
@@ -106,7 +109,8 @@ function normalizeIn(context: MarkupContext, validateHost: boolean): NormalizedS
     pieces: [generated(styles.host.slice(block.start, block.end))],
   }));
   const replacements = [...roots, ...removedStyles].sort((left, right) => left.start - right.start);
-  const output = assemble(replaceRange(source, 0, source.length, replacements));
+  const pieces = replaceRange(source, 0, source.length, replacements);
+  let output = assemble(pieces);
 
   // Validate ordinary host context after normalization. No custom evaluator or
   // second set of binding rules is introduced by this adapter.
@@ -117,14 +121,31 @@ function normalizeIn(context: MarkupContext, validateHost: boolean): NormalizedS
     }
   }
 
-  const stylesheet = styles.blocks.map((block) => {
-    const css = source.slice(block.bodyStart, block.bodyEnd);
-    if (!validateHost) {
-      return css;
-    }
-    return lowerConditions(css, (message, start, end) =>
-      context.error('CSS2001', message, block.bodyStart + start, block.bodyStart + end));
-  }).join('\n');
+  let stylesheet: string;
+  if (!validateHost) {
+    stylesheet = styles.blocks.map((block) => source.slice(block.bodyStart, block.bodyEnd)).join('\n');
+  } else {
+    const chunks = styleChunks(source, filename, styles.blocks, (message, start, end) =>
+      context.error('CSS3001', message, start, end));
+    const marked = markStyles(pieces, styles.blocks, filename, (message, offset) => context.error('HOST', message, offset));
+    output = assemble(marked.pieces);
+    stylesheet = styles.blocks.filter((block) => block.id === undefined).map((block) => {
+      return chunks.get(block)!.map((chunk) => {
+        // Validate conditions in the authored text before selectors change width.
+        // Expanded definitions retain their own authored offsets for errors.
+        const lowered = lowerConditions(chunk.text, (message, start, end) =>
+          context.error('CSS2001', message, chunk.start + start, chunk.start + end));
+        if (block.global) {
+          return lowered;
+        }
+        const scoped = scopeSelectors(chunk.text, marked.attributes.get(block)!, (message, start, end) =>
+          context.error('CSS3002', message, chunk.start + start, chunk.start + end));
+        return lowerConditions(scoped, () => {
+          throw new Error('Selector scoping changed a previously validated class condition');
+        });
+      }).join('\n');
+    }).join('\n');
+  }
   return {
     ...output,
     roots: roots.map((entry) => entry.view),

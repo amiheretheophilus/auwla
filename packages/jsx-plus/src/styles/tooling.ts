@@ -6,6 +6,7 @@ import { readStyleBlocks, type StyleBlock } from './blocks';
 import { JsxPlusError } from '../diagnostics';
 import { recoverCss } from './recovery';
 import { readConditions } from './conditions/model';
+import { readStyleUses, styleChunks } from './uses';
 
 const service = getCSSLanguageService();
 
@@ -36,15 +37,22 @@ export function createCssSession(source: string, uri: string, version = 0) {
 
   const document = TextDocument.create(uri, 'css', version, projected);
   const conditions = readConditions(projected);
+  const uses = readStyleUses(projected);
+  const useProblems: { message: string; start: number; end: number }[] = [];
+  styleChunks(source, uri, blocks, (message, start, end) => useProblems.push({ message, start, end }));
   let checking = projected;
   for (const header of conditions.headers) {
     checking = blankRange(checking, header.start, header.end);
+  }
+  for (const use of [...uses.uses, ...uses.problems]) {
+    checking = blankRange(checking, use.start, use.end);
   }
   const checkingDocument = TextDocument.create(uri, 'css', version, checking);
   const recovered = recoverCss(service, checkingDocument);
   const stylesheet = recovered.stylesheet;
   const contains = (offset: number) => blocks.some((block) => block.bodyStart <= offset && offset <= block.bodyEnd);
   const inHeader = (offset: number) => conditions.headers.some((header) => header.start <= offset && offset < header.end);
+  const inUse = (offset: number) => [...uses.uses, ...uses.problems].some((use) => use.start <= offset && offset < use.end);
 
   function editable(range: Range): boolean {
     const start = document.offsetAt(range.start);
@@ -85,18 +93,22 @@ export function createCssSession(source: string, uri: string, version = 0) {
   return {
     contains,
     complete(offset: number) {
-      if (!contains(offset) || inHeader(offset)) {
+      if (!contains(offset) || inHeader(offset) || inUse(offset)) {
         return undefined;
       }
       const result = service.doComplete(document, document.positionAt(offset), stylesheet);
       return { ...result, items: result.items.filter(safeCompletion) };
     },
     hover(offset: number) {
-      return contains(offset) && !inHeader(offset) ? service.doHover(document, document.positionAt(offset), stylesheet) : undefined;
+      return contains(offset) && !inHeader(offset) && !inUse(offset)
+        ? service.doHover(document, document.positionAt(offset), stylesheet) : undefined;
     },
     diagnostics() {
-      const syntax = conditions.problems.map((problem) => ({
-        code: 'CSS2001', source: 'auwla', message: problem.message, severity: 1 as const,
+      const syntax = [
+        ...conditions.problems.map((problem) => ({ ...problem, code: 'CSS2001' })),
+        ...useProblems.map((problem) => ({ ...problem, code: 'CSS3001' })),
+      ].map((problem) => ({
+        code: problem.code, source: 'auwla', message: problem.message, severity: 1 as const,
         range: { start: document.positionAt(problem.start), end: document.positionAt(problem.end) },
       }));
       return [...syntax, ...recovered.diagnostics].map((diagnostic) => ({

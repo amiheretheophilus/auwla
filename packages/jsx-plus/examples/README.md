@@ -62,7 +62,7 @@ custom properties, media queries, hover, relative CSS/SVG imports and an ordinar
 conditional `loading` class. Its real entry mounts with `mount('app', App)` and
 is executed in both compiler modes in the CSS tests. The preview gives the HTML
 entry to Bun for stylesheet delivery; the same folder also builds with Vite.
-Local scope, compact conditions and aliases are later slices. See
+Local scope and class conditions have their own examples below; aliases remain later. See
 [styling/README.md](styling/README.md) and the [CSS-1 spec](../../../wiki2/spec/styles.md).
 
 ## Full-property class conditions
@@ -75,6 +75,16 @@ entry and apply its emitted stylesheet in both modes. The explicit global profil
 also covers selector lists, pseudo-elements, native grouping rules and authored
 nesting; breakpoint configuration and aliases are later work. See the
 [CSS-2a contract](../../../wiki2/spec/style-conditions.md).
+
+## Component and file scopes
+
+Run `bun run examples/scoping/preview.ts` and open port 3035. The
+[scoping gallery](scoping/README.md) gives teal and gold cards private styles,
+shared file rules, named/transitive same-file `@use(path, id)`, direct loop rows
+and independent class toggles. A separate imported component and an unstyled
+nested component exercise ownership boundaries with the same class names.
+The emitted selectors use zero-specificity static markers; CSS-3a adds no
+styling runtime. See [the contract](../../../wiki2/spec/style-scopes.md).
 
 ## Run the notes app (several `.auwla` files)
 
