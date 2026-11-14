@@ -2,57 +2,53 @@
 
 Updated: 2026-11-14. Branch: `prototype/jsx-plus`.
 
-## Current focus: numeric responsiveness and document subjects
+## Current focus: synced compiler and grouped numeric CSS (CSS-2c)
 
-[CSS-2b](spec/style-responsive.md), accepted in DX-47, implements compact numeric
-viewport thresholds: `@700` equals `@700px`. Both emit inclusive minimum-width
-media queries without named-breakpoint configuration. Finite nonnegative numbers
-also accept explicit `em`/`rem` (provisional), decimals and zero. Clauses keep
-authored order and existing class specificity. No property aliases or CSS runtime.
+Switched back to `prototype/jsx-plus` and fast-forwarded the seven newer
+`compiler-rewrite` commits through `f7e33a90`; the sync is pushed. This includes
+per-render module state, lazy route stylesheet links, native package discovery/
+packaging and the application-owned Cloudflare Workers target. The compiler,
+runtime, data, server and Vite trees remain identical to that compiler checkpoint.
+No JSX+ project wrapper or separate reactive implementation is introduced.
 
-DX-48 corrects a scoping bug exposed by the user's stress-test page: intentional
-`:root`, `html` and `body` subjects stay reachable inside a local block.
-Ordinary descendants/list alternatives remain scoped. Mixed `:is`/`:where`
-and inherited `&` preserve document targets without unscoping local components.
-The user's file is unchanged; its theme variables/body typography now compile
-correctly. The shared preview builds once at startup and must be restarted.
+[CSS-2c](spec/style-groups.md) adds `@700 { ... }` / `@700px { ... }`: native
+minimum-width media queries with multiple declarations, nested selectors/groups
+and compact class/numeric clauses in inherited declarations. Threshold units and
+order follow CSS-2b. Explicit `&` rules preserve declarations written after
+groups when a CSS bundler would otherwise move bare declarations before them.
+Existing scope boundaries and intentional document targets remain intact.
 
-`examples/responsive` (port 3036) is a real multi-file gallery with a responsive
-grid, implicit nested heading queries, source-only named styles, independent
-expand buttons and intentionally descending thresholds. Root variables and body
-typography live beside local rules in one ordinary style block. Run
-`bun run examples/responsive/preview.ts`, or append `--build`.
+Shared syntax retains original UTF-16 error positions. The CSS checking view
+uses equal-width neutral selectors for group headers, retains native completion/
+hover/diagnostics in their bodies, and filters only artificial empty-group lint.
+TextMate highlights headers, properties, values and nested groups.
 
-Verification: **481 JSX+ tests pass across 33 files**, with **8 filtered out**
-because they depend on the original styling example that the user replaced.
-Tests and user source are not rewritten to restore that fixture. This includes
-both-mode computed CSS at 299/300/699/700/1000px, scope/SSR/slot isolation,
-authored diagnostics, TextMate highlighting, native completion and mapper checks.
-Vite builds the gallery and hot-updates source-only numeric CSS without replacing
-components; static delivery, fan-out and error recovery pass too.
+Rule 16 and the user's fixture migration are preserved. Tests use their own
+`tests/fixtures/apps/style-groups` app; the adapter has its own grouped-style
+fixture too. No test reads an example. `examples/style-groups` is an independent
+editable gallery: run `bun run examples/style-groups/preview.ts` from the JSX+
+package, then open port 3037 (or append `--build`).
 
-JSX+ type checking (347 files), editor checking (181 files) and all **10 adapter
-tests** pass. The built CJS artifact runs under Node outside the workspace and
-checks native completion in the real responsive named-style source. The gallery's
-authored TypeScript check and HTML preview build pass. The user's actual
-stress-test preview builds too. Adapter **0.0.11** is installed; its installed
-bundle also passes the responsive native-completion probe under Node. Reload
-the window to load it. Full-root tests and actual browser/desktop acceptance
-were not run.
+Verification: the full JSX+ suite passes **516 tests across 34 files, unfiltered**.
+All **10 editor adapter tests** pass, including the built CJS artifact under Node
+outside the checkout. JSX+ (359 files) and editor (190 files) type checks pass.
+The gallery's authored TypeScript check and HTML preview build pass. DOM tests
+cover 299/300/699/700/899/900/1000px in both compiler modes, scoped named reuse,
+independent class toggles, nested groups and descending/later-declaration order.
+Vite build/CSS-only hot updates pass for the fixture's shared numeric group.
+Adapter **0.0.12** is installed; its installed bundle also passes the grouped CSS
+completion probe. Reload the editor window to load it.
 
-Preserve the user's modified `examples/styling/App.auwla` and new
-`examples/styling/state.auwla`; neither belongs to this checkpoint.
-Previous checkpoint `811cdcd9` delivered CSS-3b cross-file `@use(path, id)`,
-relative resource rebasing, source-only watching and implicit nesting through
-the existing compiler pipeline; its complete package suite passed 457 tests.
-The compiler's generic recipe API is unchanged by this slice. Details and owning
-files remain in [styling.md](styling.md).
+The sync's focused module/server checks pass 12 tests; the full JSX+ run includes
+them too. Full-root tests, another editor and actual desktop/browser acceptance
+were not run. GROUP-001 through GROUP-016, the implementation map and remaining
+limits are in [styling.md](styling.md) and the group spec.
 
-Next: specify grouped numeric conditions, then implement them with editor and
-real authoring checks. Named thresholds are optional later design, not a required
-configuration step. Cross-file editor ID/path lookup still needs an injected
-source host. Property aliases, event shorthand and local named-resource scoping
-remain separate work.
+Next: review CSS authoring/tooling gaps before aliases. Cross-file `@use` ID/path
+discovery still needs an injected editor source host. Numeric-header suggestions,
+grouped class/state forms, range shortcuts, local named CSS resources and event
+composition remain separate decisions. Plain CSS and native media queries remain
+available alongside the implemented forms.
 
 ## `.auwla` across modules: JSX+ as a source language (DX-39)
 
@@ -533,6 +529,7 @@ ways). Retain the record and track new changes here:
 These histories used different commits for the same code before synchronization,
 so commit-range output alone does not show whether a change was adopted. Compare
 the compiler/runtime trees as well as the history; at this integration they are
-identical to `07e996c9`.
+identical to `f7e33a90`, the compiler-rewrite checkpoint fast-forwarded into
+JSX+ on 2026-11-14. CSS-2c changes only JSX+ and the thin editor adapter.
 
 See [plan](plan.md), [tooling](tooling.md) and [rewrite acceptance](../wiki/status.md).

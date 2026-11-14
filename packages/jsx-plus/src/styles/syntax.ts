@@ -3,6 +3,27 @@ import {
   fork, ident, tokenTypes as T,
   type Atrule, type Block, type CssLocation, type CssNode, type Declaration, type List, type Rule,
 } from 'css-tree';
+import { viewportWidth } from './conditions/values';
+
+export interface ViewportGroup {
+  readonly start: number;
+  readonly thresholdEnd: number;
+  readonly headerEnd: number;
+  readonly minWidth: string | undefined;
+  readonly problem: string | undefined;
+}
+
+// Metadata lives as long as its AST, without adding a competing CSS node schema.
+const viewportGroups = new WeakMap<CssNode, ViewportGroup>();
+const unclosedBlocks = new WeakSet<Block>();
+
+export function viewportGroup(node: CssNode): ViewportGroup | undefined {
+  return viewportGroups.get(node);
+}
+
+export function isUnclosedBlock(node: Block): boolean {
+  return unclosedBlocks.has(node);
+}
 
 // CSS Tree exposes a supported syntax-fork API, but its grammar parser context
 // is not typed by @types/css-tree. Keep this narrow contract beside the adapter.
@@ -19,7 +40,9 @@ interface BlockParser {
   eat(type: number): void;
   createList(): List<CssNode>;
   getLocation(start: number, end: number): CssLocation | null;
-  Rule(): Rule;
+  Rule(): Rule | Atrule;
+  Block(style: boolean): Block;
+  skipSC(): void;
   Declaration(): Declaration;
   Atrule(nested: boolean): Atrule;
   Raw(stop: ((this: BlockParser) => void) | null, trim: boolean): CssNode;
@@ -93,11 +116,73 @@ function block(this: BlockParser, style = false): Block {
       }
     }
   }
-  if (!this.eof) {
+  const closed = !this.eof;
+  if (closed) {
     this.eat(T.RightCurlyBracket);
   }
-  return { type: 'Block', loc: this.getLocation(start, this.tokenStart) ?? undefined, children };
+  const result: Block = { type: 'Block', loc: this.getLocation(start, this.tokenStart) ?? undefined, children };
+  if (!closed) {
+    unclosedBlocks.add(result);
+  }
+  return result;
 }
 
-/** Shared by uses, class conditions and local scope: no competing CSS parsers. */
-export const { parse: parseStylesheet } = fork({ node: { Block: { parse: block } } });
+/** Called only at a rule boundary; declarations and literal token blocks stay native. */
+function numericGroup(parser: BlockParser): Atrule | undefined {
+  if (parser.substring(parser.tokenStart, parser.getTokenEnd(parser.tokenIndex)) !== '@') {
+    return undefined;
+  }
+  const type = parser.lookupType(1);
+  if (type !== T.Number && type !== T.Dimension && type !== T.Percentage) {
+    return undefined;
+  }
+  const start = parser.tokenStart;
+  const atEnd = parser.getTokenEnd(parser.tokenIndex);
+  parser.next();
+  if (parser.tokenStart !== atEnd) {
+    throw new Error('Numeric group dispatch crossed a token boundary');
+  }
+  const thresholdEnd = parser.getTokenEnd(parser.tokenIndex);
+  const minWidth = viewportWidth(parser.substring(parser.tokenStart, thresholdEnd));
+  parser.next();
+  parser.skipSC();
+
+  let problem: string | undefined;
+  if (minWidth === undefined) {
+    problem = 'A viewport threshold must be a finite nonnegative number with no unit, px, em or rem';
+  }
+  if (parser.tokenType !== T.LeftCurlyBracket) {
+    problem ??= 'Expected { after the viewport group threshold';
+    while (!parser.eof && parser.tokenType !== T.LeftCurlyBracket
+      && parser.tokenType !== T.RightCurlyBracket && parser.tokenType !== T.Semicolon) {
+      parser.next();
+    }
+  }
+  const headerEnd = parser.tokenStart;
+  const body = parser.tokenType === T.LeftCurlyBracket ? parser.Block(true) : null;
+  const node: Atrule = {
+    type: 'Atrule', name: 'media', block: body,
+    prelude: { type: 'Raw', value: `(min-width:${minWidth ?? '0px'})` },
+    loc: parser.getLocation(start, parser.tokenStart) ?? undefined,
+  };
+  viewportGroups.set(node, { start, thresholdEnd, headerEnd, minWidth, problem });
+  return node;
+}
+
+/** Shared by uses, conditions and local scope; native rules still use CSS Tree. */
+export const { parse: parseStylesheet } = fork((config) => {
+  const nativeRule = config.node!.Rule as { parse(this: BlockParser): Rule };
+  return {
+    ...config,
+    node: {
+      ...config.node,
+      Block: { ...config.node!.Block as object, parse: block },
+      Rule: {
+        ...nativeRule,
+        parse(this: BlockParser) {
+          return numericGroup(this) ?? nativeRule.parse.call(this);
+        },
+      },
+    },
+  };
+});

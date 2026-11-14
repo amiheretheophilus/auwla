@@ -109,7 +109,7 @@ export function conditionClauses(source: string, report: Report, skipBraces = tr
 }
 
 /** Normalize threshold units only; ordinary CSS property values keep their units. */
-function viewportWidth(source: string): string | undefined {
+export function viewportWidth(source: string): string | undefined {
   const match = /^([+-]?(?:\d*\.\d+|\d+)(?:e[+-]?\d+)?)(px|em|rem)?$/i.exec(source);
   if (match === null) {
     return undefined;

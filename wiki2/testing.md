@@ -67,6 +67,12 @@ that needs a real app uses its own copy under `packages/jsx-plus/tests/fixtures/
 (the editor extension's under `packages/editor-vscode/tests/fixtures/apps/`), so the
 examples can change freely. The copies were taken from the examples on that date.
 
+CSS-2c follows the same rule: group conformance is in `spec/style-groups.cases.json`,
+and `tests/style-groups.test.ts` runs its own `fixtures/apps/style-groups` app at
+viewport boundaries in both modes. CSS-only HMR, native diagnostics/completion
+and the built editor bundle use test-owned inputs too. Authoring gallery checks
+are manual build/check commands; they are not dependencies of the test suite.
+
 The native CLI also checks the complete task-board `.auwla` file and `main.ts`
 under its configuration (the test's copy). `compile.test.ts` loads that source and
 exercises filtering, search, submission, ref focus, toggle/removal and the empty

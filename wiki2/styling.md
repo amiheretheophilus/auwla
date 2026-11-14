@@ -6,6 +6,7 @@ wider design; [spec/styles.md](spec/styles.md), [class conditions](spec/style-co
 and [scope rules](spec/style-scopes.md) own the implementation contracts.
 [style-reuse.md](spec/style-reuse.md) extends source linking and nesting.
 [style-responsive.md](spec/style-responsive.md) defines numeric viewport clauses.
+[style-groups.md](spec/style-groups.md) extends them with numeric groups.
 
 ## Authoring
 
@@ -36,7 +37,7 @@ passes HTML to Bun so the bundler creates CSS/script links itself.
 | Compiler assets | Compiler-next's `core/parse/languages.ts` appends the side-effect CSS import after authored host code, preserving directives/shebang positions. Parsed/resolved modules retain the companion. `pipeline.ts` exposes `css` separately in detailed results; `project/project.ts` compares JS and CSS in updates. |
 | Existing delivery adapters | Compiler-next's `project/bun.ts` resolves and loads the virtual CSS companion with Bun's CSS loader. Vite's existing `next/plugin.ts` loads it before native CSS processing, including from static HTML whose script was removed. No JSX+ project wrapper/plugin is introduced. |
 | Shared assistance | `src/styles/tooling.ts` uses `vscode-css-languageservice` over an equal-width CSS projection. `styles/recovery.ts` keeps missing-colon errors on unfinished property names and reparses to avoid errors cascading into later selectors; its narrow scanner declarations describe the pinned dependency. Completion edits, hover and diagnostics use authored positions. `src/editor/grammar.ts` embeds the editor's `source.css` grammar. |
-| VS Code adapter | `packages/editor-vscode/src/css.ts` translates protocol objects, caches the current document version and clears sessions/diagnostics on close. It registers independently of TypeScript. Adapter 0.0.11 includes numeric conditions and the shared implicit-nesting reader; window reload and desktop acceptance remain separate. |
+| VS Code adapter | `packages/editor-vscode/src/css.ts` translates protocol objects, caches the current document version and clears sessions/diagnostics on close. It registers independently of TypeScript. Adapter 0.0.12 includes numeric clauses/groups and the shared implicit-nesting reader; window reload and desktop acceptance remain separate. |
 
 The compiler knows no Auwla syntax. Its hook accepts optional static CSS from any
 source language, creates `<module-path>.css`, and retains ordinary CSS imports
@@ -108,9 +109,34 @@ gets fresh stylesheet ownership. The test uses its native media evaluator.
 Shared tooling masks numeric headers at equal width for native value completion,
 hover and precise diagnostics; TextMate colors numeric headers/units. Vite
 builds the gallery and updates an edited source-only numeric rule through CSS
-without replacing its component. Adapter 0.0.11 bundles these changes. Numeric
-groups, named thresholds, range shorthands and header/condition discovery remain
-later work; native media queries cover other query shapes today.
+without replacing its component. Numeric groups are implemented by CSS-2c below;
+named thresholds, range shorthands and header/condition discovery remain later
+work. Native media queries cover other query shapes today.
+
+## Grouped numeric conditions (CSS-2c)
+
+`styles/syntax.ts` extends CSS Tree's rule dispatch at numeric group boundaries;
+native selectors/declarations still use the library parser. Groups are ordinary
+media AST nodes with weakly held authored header metadata. No text expansion
+shifts error locations. `conditions/model.ts` validates groups and inherited
+declarations; `lower.ts` emits native queries and inherited `&` selectors.
+Declarations after groups retain their order through explicit `&` rules where
+a CSS bundler would otherwise collect bare declarations before nested rules.
+
+The equal-width checking view replaces group headers with neutral selectors,
+preserving braces and property/value edit positions. It suppresses only the
+artificial empty-rule warning at those headers, keeping genuine empty-rule
+warnings. Shared TextMate rules color numeric groups and delegate their bodies
+to the native CSS grammar. Adapter 0.0.12 carries these shared changes.
+
+GROUP-001 through GROUP-016 and `tests/style-groups.test.ts` cover equivalence,
+nested thresholds, inherited compact clauses, cascade, literal contexts, invalid
+headers/braces/contexts, exact CSS assistance and prefix recovery. Its own
+`tests/fixtures/apps/style-groups` app runs in both modes at
+299/300/699/700/899/900/1000px, including independent class toggles and scope
+isolation. Vite builds and hot-updates the fixture's source-only shared group
+without replacing component JS. `examples/style-groups` is a separate gallery,
+checked manually through its authoring config and preview; tests never read it.
 
 ## Local scope and named reuse (CSS-3a)
 
@@ -164,8 +190,8 @@ errors, while native completion/highlighting and same-file ID checks work.
 Local-default selectors are defined by [CSS-3a](spec/style-scopes.md), with
 [CSS-3b](spec/style-reuse.md) source/nesting extensions. Keyframe/resource renaming
 and global/deep escapes remain open; resources currently require globals.
-Named and grouped conditions on full properties remain later design
-work; named breakpoints such as `@md:30px` still have no extension meaning.
+Named conditions and grouped class/state forms remain later design work;
+numeric groups are implemented, while `@md:30px` has no extension meaning.
 Aliases and future element dot-class syntax remain later. There is no Tailwind
 dependency, breakpoint JavaScript, style injection runtime or new reactivity.
 

@@ -37,12 +37,19 @@ export function createCssSession(source: string, uri: string, version = 0) {
 
   const document = TextDocument.create(uri, 'css', version, projected);
   const conditions = readConditions(projected);
+  const groups = [...conditions.groups.values()];
   const uses = readStyleUses(projected);
   const useProblems: { message: string; start: number; end: number }[] = [];
   styleChunks(source, uri, blocks, (message, start, end) => useProblems.push({ message, start, end }), { deferExternal: true });
   let checking = projected;
   for (const header of conditions.headers) {
     checking = blankRange(checking, header.start, header.end);
+  }
+  for (const group of groups) {
+    checking = blankRange(checking, group.start, group.headerEnd);
+    // A neutral qualified rule gives the native service a declaration/nesting
+    // context even when @700 is too short for an equal-width @media spelling.
+    checking = checking.slice(0, group.start) + '*' + checking.slice(group.start + 1);
   }
   for (const use of [...uses.uses, ...uses.problems]) {
     checking = blankRange(checking, use.start, use.end);
@@ -51,7 +58,8 @@ export function createCssSession(source: string, uri: string, version = 0) {
   const recovered = recoverCss(service, checkingDocument);
   const stylesheet = recovered.stylesheet;
   const contains = (offset: number) => blocks.some((block) => block.bodyStart <= offset && offset <= block.bodyEnd);
-  const inHeader = (offset: number) => conditions.headers.some((header) => header.start <= offset && offset < header.end);
+  const inHeader = (offset: number) => conditions.headers.some((header) => header.start <= offset && offset < header.end)
+    || groups.some((group) => group.start <= offset && offset < group.headerEnd);
   const inUse = (offset: number) => [...uses.uses, ...uses.problems].some((use) => use.start <= offset && offset < use.end);
 
   function editable(range: Range): boolean {
@@ -111,7 +119,14 @@ export function createCssSession(source: string, uri: string, version = 0) {
         code: problem.code, source: 'auwla', message: problem.message, severity: 1 as const,
         range: { start: document.positionAt(problem.start), end: document.positionAt(problem.end) },
       }));
-      return [...syntax, ...recovered.diagnostics].map((diagnostic) => ({
+      // Empty media groups are valid. Only the neutral checking selector makes
+      // them look like empty qualified rules; keep genuine empty-rule warnings.
+      const native = recovered.diagnostics.filter((diagnostic) => {
+        const offset = document.offsetAt(diagnostic.range.start);
+        return diagnostic.code !== 'emptyRules'
+          || !groups.some((group) => group.start <= offset && offset < group.headerEnd);
+      });
+      return [...syntax, ...native].map((diagnostic) => ({
         ...diagnostic,
         range: {
           start: document.positionAt(authoredPosition(document.offsetAt(diagnostic.range.start))),

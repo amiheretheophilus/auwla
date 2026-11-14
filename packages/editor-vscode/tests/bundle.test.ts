@@ -60,6 +60,17 @@ it('loads the built extension outside the workspace and runs CSS providers in No
     expect(numericErrors).toBe('');
     expect(numericExit).toBe(0);
     expect(numericOutput).toContain('zero CSS diagnostics and native value completion passed');
+
+    const grouped = join(import.meta.dir, 'fixtures/apps/style-groups/Card.auwla');
+    const group = Bun.spawn(['node', join(import.meta.dir, 'fixtures/bundle-host.cjs'), entry, grouped, 'color: '], {
+      cwd: installed, stdout: 'pipe', stderr: 'pipe',
+    });
+    const [groupExit, groupOutput, groupErrors] = await Promise.all([
+      group.exited, new Response(group.stdout).text(), new Response(group.stderr).text(),
+    ]);
+    expect(groupErrors).toBe('');
+    expect(groupExit).toBe(0);
+    expect(groupOutput).toContain('zero CSS diagnostics and native value completion passed');
   } finally {
     rmSync(installed, { recursive: true, force: true });
   }

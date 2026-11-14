@@ -2,8 +2,8 @@
 
 Draft contract, 2026-11-14. User direction: `@700` and `@700px` are equivalent.
 This extends [class conditions](style-conditions.md), without breakpoint config,
-property aliases or a CSS runtime. This slice is compact declarations; grouped
-numeric blocks need a separate grammar and are not implemented by this draft.
+property aliases or a CSS runtime. This slice defines compact declarations;
+[CSS-2c](style-groups.md) extends it with grouped numeric blocks.
 
 ```css
 .card {
@@ -31,7 +31,7 @@ Each clause means an inclusive **minimum viewport width**, emitted as native
 `@media (min-width: threshold)`. It is distinct from container width. `@700`
 and `@700px` both emit `(min-width:700px)`. Native media queries remain available
 for maximums, ranges, other units and compound conditions. Named `@md` conditions
-and grouped `@700 { ... }` forms are outside this slice.
+are outside this slice; grouped `@700 { ... }` forms are defined by CSS-2c.
 
 ## Cascade, scope and context
 
@@ -57,8 +57,9 @@ The generated equivalent, before the existing local-scope transformation, is:
 
 Clauses belong to a qualified style rule, including native nested selectors and
 rules inside grouping at-rules. Existing surrounding media/container/supports
-conditions continue to apply. Keyframes, descriptors and declarations directly
-in a nested at-rule retain CSS-2a's contextual errors. File/component scopes,
+conditions continue to apply. Declarations directly in a nested grouping at-rule
+now inherit a qualified rule through CSS-2c; keyframe/descriptor errors remain.
+File/component scopes,
 cross-file named reuse, resource URLs and compiler-owned CSS delivery are unchanged.
 
 ## Lexical and tooling obligations
@@ -77,4 +78,5 @@ mixed classes, scope isolation, both compiler modes and native CSS build deliver
 
 [RESP-001 through RESP-018](style-responsive.cases.json) define CSS equivalents
 and errors. `packages/jsx-plus/tests/style-responsive.test.ts` consumes the cases
-and executes `examples/responsive` at viewport boundaries in both compiler modes.
+and executes its own `tests/fixtures/apps/responsive` app at viewport boundaries
+in both compiler modes. Examples are independent editable authoring galleries.

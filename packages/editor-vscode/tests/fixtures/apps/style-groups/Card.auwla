@@ -1,0 +1,13 @@
+<style>
+  .card {
+    @700px {
+      color: navy;
+      padding: 4px @.expanded:8px;
+      @900 { border-color: teal; }
+    }
+  }
+</style>
+
+export function Card() {
+  return <article class="card">"Grouped CSS fixture"</article>;
+}

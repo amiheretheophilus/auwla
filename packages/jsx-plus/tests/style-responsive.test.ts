@@ -63,8 +63,6 @@ it('reports malformed thresholds and context at the original source positions', 
     '.a {padding:4px @700:8px !wrong;}',
     '.a {padding:4px @700:8px !important @900:12px;}',
     '.a {padding:4px @700:8px;',
-    '.a {@media (min-width:1px) {padding:4px @700:8px;}}',
-    '.a {@700 {padding:8px;}}',
   ]) {
     expect(() => normalize(`<style global>${css}</style>`)).toThrow();
   }

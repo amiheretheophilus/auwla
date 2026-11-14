@@ -92,6 +92,11 @@ styling runtime. See [the contract](../../../wiki2/spec/style-scopes.md).
 
 ## Numeric responsive CSS
 
+Grouped form: run `bun run examples/style-groups/preview.ts` on port 3037.
+[Grouped cards](style-groups/README.md) demonstrate `@700 { ... }`, nested groups,
+shared named styles, compact class clauses inside groups and cascade order.
+Tests use independent fixture apps; the galleries remain free to edit.
+
 Run `bun run examples/responsive/preview.ts` and open port 3036. The
 [responsive cards](responsive/README.md) use `@300`, `@700px` and `@1000` on
 native properties, relative `@40rem`, nested headings and shared named styles.

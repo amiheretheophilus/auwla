@@ -47,8 +47,9 @@ native value edits, real authoring and application of the emitted stylesheet.
 
 Conditions belong directly to a qualified style rule, including such rules under
 native grouping at-rules and authored nested selectors. They are not defined in
-keyframes, font-face, page descriptors or declarations inherited directly through
-a nested at-rule; those uses report a contextual error. Native CSS without the
+keyframes, font-face or page descriptors. CSS-2c extends the initial direct-parent
+restriction: declarations in native/numeric groups can inherit their nearest
+qualified rule, using nested `&` for clauses. Native CSS without the
 extension is copied unchanged. Unknown or future native CSS is not rejected just
 because it is unknown to this layer.
 

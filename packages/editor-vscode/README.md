@@ -8,10 +8,11 @@ extensions can reuse them without installing this adapter. See
 
 From this package:
 
-Version 0.0.11 includes numeric viewport-condition highlighting and native value
-assistance (`@700` equals `@700px`). The built artifact is probed with the real
-responsive named-style source under Node outside the checkout. Reload VS Code
-after installing the updated VSIX.
+Version 0.0.12 adds grouped numeric rules (`@700 { ... }`) to numeric clauses
+(`@700:...`). Shared highlighting, native value completion, hover and original
+diagnostic ranges work inside groups. The built artifact is probed with its own
+grouped-style fixture under Node outside the checkout. Reload VS Code after
+installing the updated VSIX.
 
 ```text
 bun run build

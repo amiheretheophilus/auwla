@@ -1,6 +1,7 @@
-import { clone, generate, ident, type CssNode, type ListItem, type Rule, type SelectorList } from 'css-tree';
+import { clone, generate, ident, parse, type CssNode, type ListItem, type Rule, type SelectorList } from 'css-tree';
 import { readConditions, type ConditionalDeclaration } from './model';
 import type { Report } from './values';
+import { isUnclosedBlock } from '../syntax';
 
 /** Add the class to the selected element, before a pseudo-element, never to an ancestor. */
 function classSelector(prelude: SelectorList, name: string): string {
@@ -33,23 +34,27 @@ export function lowerConditions(source: string, report: Report): string {
   for (const problem of model.problems) {
     report(problem.message, problem.start, problem.end);
   }
-  if (model.tree === undefined || model.declarations.size === 0 || model.problems.length > 0) {
+  if (model.tree === undefined || (model.declarations.size === 0 && model.groups.size === 0) || model.problems.length > 0) {
     return source;
   }
   for (const node of model.affected) {
-    if (node.type === 'Block' && source[node.loc!.end.offset - 1] !== '}') {
+    if (node.type === 'Block' && (isUnclosedBlock(node) || source[node.loc!.end.offset - 1] !== '}')) {
       report('A style block containing CSS conditions requires a closing }', node.loc!.start.offset, node.loc!.start.offset + 1);
       return source;
     }
   }
 
-  function conditional(rule: Rule, entry: ConditionalDeclaration): string {
+  const inherited = parse('&', { context: 'selectorList' }) as SelectorList;
+  const preserveNestingOrder = model.groups.size > 0;
+
+  function conditional(rule: Rule | undefined, entry: ConditionalDeclaration): string {
     const value = source.slice(entry.declaration.value.loc!.start.offset, entry.declaration.value.loc!.end.offset);
     const important = entry.declaration.important ? ' !important' : '';
+    const prelude = rule === undefined ? inherited : rule.prelude as SelectorList;
+    const authoredSelector = rule === undefined ? '&'
+      : source.slice(rule.prelude.loc!.start.offset, rule.prelude.loc!.end.offset);
     return entry.clauses.map((clause) => {
-      const selector = clause.kind === 'class'
-        ? classSelector(rule.prelude as SelectorList, clause.name)
-        : source.slice(rule.prelude.loc!.start.offset, rule.prelude.loc!.end.offset);
+      const selector = clause.kind === 'class' ? classSelector(prelude, clause.name) : authoredSelector;
       const declaration = `${entry.declaration.property}:${value.slice(clause.valueStart, clause.valueEnd).trim()}${important};`;
       const qualified = `${selector}{${declaration}}`;
       if (clause.kind === 'viewport') {
@@ -67,6 +72,7 @@ export function lowerConditions(source: string, report: Report): string {
     const output: string[] = [];
     let body = '';
     let position = bodyStart;
+    let afterNested = false;
 
     for (const node of rule.block.children) {
       const nodeStart = node.loc!.start.offset;
@@ -74,12 +80,20 @@ export function lowerConditions(source: string, report: Report): string {
       body += source.slice(position, nodeStart);
       const entry = node.type === 'Declaration' ? model.declarations.get(node) : undefined;
       if (entry === undefined) {
-        body += render(node);
+        const text = render(node);
+        // Older CSS bundlers collect bare declarations before nested rules.
+        // An explicit & rule preserves a declaration authored after a group.
+        body += afterNested && node.type === 'Declaration' ? `&{${text}}` : text;
+        if (preserveNestingOrder && (node.type === 'Rule' || node.type === 'Atrule')) {
+          afterNested = true;
+        }
       } else {
         const important = entry.declaration.important ? ' !important' : '';
-        body += `${entry.declaration.property}:${entry.base}${important};`;
+        const base = `${entry.declaration.property}:${entry.base}${important};`;
+        body += afterNested ? `&{${base}}` : base;
         output.push(opening + body + '}', conditional(rule, entry));
         body = '';
+        afterNested = false;
         if (source[nodeEnd] === ';') {
           nodeEnd++;
         }
@@ -100,19 +114,39 @@ export function lowerConditions(source: string, report: Report): string {
     if (node.type === 'Rule') {
       return renderRule(node);
     }
+    if (node.type === 'Declaration') {
+      const entry = model.declarations.get(node)!;
+      const important = entry.declaration.important ? ' !important' : '';
+      return `${entry.declaration.property}:${entry.base}${important};\n${conditional(undefined, entry)}`;
+    }
     if (node.type === 'StyleSheet' || node.type === 'Block') {
       const start = node.loc!.start.offset + (node.type === 'Block' ? 1 : 0);
       const end = node.loc!.end.offset - (node.type === 'Block' ? 1 : 0);
       let result = '';
       let position = start;
+      let afterNested = false;
       for (const child of node.children) {
-        result += source.slice(position, child.loc!.start.offset) + render(child);
+        const text = render(child);
+        const wrapped = node.type === 'Block' && afterNested && child.type === 'Declaration';
+        result += source.slice(position, child.loc!.start.offset) + (wrapped ? `&{${text}}` : text);
         position = child.loc!.end.offset;
+        if (child.type === 'Declaration' && model.declarations.has(child) && source[position] === ';') {
+          position++;
+        }
+        if (preserveNestingOrder && (child.type === 'Rule' || child.type === 'Atrule'
+          || (child.type === 'Declaration' && model.declarations.has(child)))) {
+          afterNested = true;
+        }
       }
       result += source.slice(position, end);
       return node.type === 'Block' ? '{' + result + '}' : result;
     }
     if (node.type === 'Atrule' && node.block !== null) {
+      const group = model.groups.get(node);
+      if (group !== undefined) {
+        const trivia = source.slice(group.thresholdEnd, group.headerEnd);
+        return `@media (min-width:${group.minWidth})${trivia}${render(node.block)}`;
+      }
       return source.slice(node.loc!.start.offset, node.block.loc!.start.offset) + render(node.block);
     }
     return source.slice(node.loc!.start.offset, node.loc!.end.offset);

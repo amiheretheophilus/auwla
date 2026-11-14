@@ -1,5 +1,5 @@
-import { ident, walk, type CssNode, type Declaration } from 'css-tree';
-import { parseStylesheet } from '../syntax';
+import { ident, walk, type Atrule, type CssNode, type Declaration } from 'css-tree';
+import { parseStylesheet, viewportGroup, type ViewportGroup } from '../syntax';
 import { conditionClauses, hasValue, type ConditionClause } from './values';
 
 export interface ConditionProblem {
@@ -15,16 +15,24 @@ export interface ConditionalDeclaration {
   readonly valueStart: number;
 }
 
+const grouping = new Set(['media', 'supports', 'container', 'layer', 'starting-style', 'scope']);
+
+function descriptorContext(parents: readonly CssNode[]): boolean {
+  return parents.some((parent) => parent.type === 'Atrule'
+    && !grouping.has(ident.decode(parent.name).toLowerCase()));
+}
+
 /** A shared syntax model for production lowering and the equal-width editor view. */
 export function readConditions(source: string) {
   const problems: ConditionProblem[] = [];
   const report = (message: string, start: number, end: number) => problems.push({ message, start, end });
   const markers = source.includes('@') ? conditionClauses(source, () => {}, false) : [];
   const declarations = new Map<Declaration, ConditionalDeclaration>();
+  const groups = new Map<Atrule, ViewportGroup>();
   const affected = new Set<CssNode>();
   const headers: { start: number; end: number }[] = [];
   if (markers.length === 0) {
-    return { tree: undefined, declarations, affected, headers, problems };
+    return { tree: undefined, declarations, groups, affected, headers, problems };
   }
 
   const tree = parseStylesheet(source, { positions: true, parseValue: false, parseCustomProperty: false });
@@ -32,7 +40,28 @@ export function readConditions(source: string) {
   const accounted = new Set<number>();
   walk(tree, {
     enter(node: CssNode) {
+      const group = viewportGroup(node);
+      if (node.type === 'Atrule' && group !== undefined) {
+        groups.set(node, group);
+        accounted.add(group.start);
+        affected.add(node);
+        for (const parent of parents) {
+          affected.add(parent);
+        }
+        if (group.problem !== undefined) {
+          report(group.problem, group.start, group.headerEnd);
+        }
+        if (descriptorContext(parents)) {
+          report('Viewport groups require style rules or grouping contexts, outside keyframes and descriptors', group.start, group.headerEnd);
+        }
+      }
       if (node.type === 'Declaration' && node.value.loc !== null && node.value.loc !== undefined) {
+        const owner = parents.findLast((parent) => parent.type === 'Rule');
+        const qualified = owner?.type === 'Rule' && owner.prelude.type === 'SelectorList'
+          && !descriptorContext(parents);
+        if (parents.some((parent) => viewportGroup(parent) !== undefined) && !qualified) {
+          report('A declaration in a viewport group requires an enclosing qualified style rule', node.loc!.start.offset, node.loc!.end.offset);
+        }
         const valueStart = node.value.loc.start.offset;
         const valueEnd = node.value.loc.end.offset;
         const value = source.slice(valueStart, valueEnd);
@@ -61,14 +90,12 @@ export function readConditions(source: string) {
           if (!hasValue(base)) {
             localReport('A conditional declaration requires a base CSS value', 0, clauses[0]!.headerEnd);
           }
-          // The direct parent is a Block; its owner must be a selector rule.
-          const owner = parents.at(-2);
-          const keyframes = parents.some((parent) => parent.type === 'Atrule'
-            && /^(?:-\w+-)?keyframes$/i.test(ident.decode(parent.name)));
-          if (owner?.type !== 'Rule' || keyframes || owner.prelude.type !== 'SelectorList') {
+          // Native and numeric grouping blocks inherit their nearest selector.
+          if (!qualified) {
             localReport('CSS conditions require a qualified style rule, outside keyframes and descriptors', clauses[0]!.start, clauses[0]!.headerEnd);
           }
           declarations.set(node, { declaration: node, base: base.trim(), clauses, valueStart });
+          affected.add(node);
           for (const parent of parents) {
             affected.add(parent);
           }
@@ -87,5 +114,5 @@ export function readConditions(source: string) {
       headers.push({ start: marker.start, end: marker.headerEnd });
     }
   }
-  return { tree, declarations, affected, headers, problems };
+  return { tree, declarations, groups, affected, headers, problems };
 }

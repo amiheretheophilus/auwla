@@ -1,5 +1,18 @@
 # Spec revisions
 
+## CSS-2c grouped numeric conditions — 2026-11-14
+
+- Add `@700 { ... }` / `@700px { ... }` in place as native minimum-width media
+  queries, with nested selectors, nested groups and shared named styles.
+- Extend compact clauses to inherited declarations in numeric/native grouping
+  blocks. Emit `&` for inherited subjects, retaining class specificity and order.
+- Preserve later declarations with explicit `&` rules where a native CSS bundler
+  otherwise collects bare declarations ahead of nested groups. GROUP-006 and
+  both-mode DOM fixtures check the actual cascade, not only output strings.
+- Add GROUP-001 through GROUP-016, original UTF-16 diagnostics, shared checking
+  projection and TextMate rules. Tests use their own fixture apps under rule 16;
+  `examples/style-groups` is a separate editable gallery.
+
 ## Document subjects in local styles — 2026-11-14
 
 - Fix unreachable explicit `html`, `body` and `:root` subjects inside local

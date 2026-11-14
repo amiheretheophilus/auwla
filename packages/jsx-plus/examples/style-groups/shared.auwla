@@ -1,0 +1,20 @@
+<style id="grouped-panel">
+  .card {
+    padding: 8px @300:12px;
+    border: 2px solid #64748b;
+    border-radius: 12px;
+    background: white;
+    h2 { font-size: 16px; margin: 0 0 8px; }
+    button { padding: 8px 12px; color: white; background: var(--group-accent); }
+
+    @700px {
+      padding: 24px @.expanded:36px;
+      border-color: #2563eb;
+      h2 { font-size: 24px; }
+
+      @900 {
+        padding: 28px @.expanded:36px;
+      }
+    }
+  }
+</style>

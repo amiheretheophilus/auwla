@@ -71,6 +71,22 @@ export function createAuwlaGrammar(tsx: IRawGrammar): IRawGrammar {
   };
   const injections = {
     ...grammar.injections,
+    'L:meta.embedded.block.css -string -comment -meta.function -meta.property-value': {
+      patterns: [{
+        name: 'meta.auwla.css-group',
+        begin: '(@)([+-]?(?:[0-9]*\\.[0-9]+|[0-9]+)(?:[eE][+-]?[0-9]+)?)(?i:(px|em|rem))?(?:\\s|/\\*(?:[^*]|\\*(?!/))*\\*/)*(\\{)',
+        beginCaptures: {
+          1: { name: 'keyword.control.css' },
+          2: { name: 'constant.numeric.css' },
+          3: { name: 'keyword.other.unit.css' },
+          4: { name: 'punctuation.section.property-list.begin.bracket.curly.css' },
+        },
+        end: '\\}',
+        endCaptures: { 0: { name: 'punctuation.section.property-list.end.bracket.curly.css' } },
+        contentName: 'meta.property-list.css',
+        patterns: [{ include: 'source.css#rule-list-innards' }],
+      }],
+    },
     'L:meta.embedded.block.css meta.property-value.css -string -comment -meta.function': {
       patterns: [{
         name: 'meta.auwla.css-condition',

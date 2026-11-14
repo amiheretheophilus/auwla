@@ -1,0 +1,17 @@
+export function Card({ title }: { title: string }) {
+  <style>
+    @use("./shared.auwla", "grouped-panel");
+  </style>
+
+  let expanded = false;
+
+  return (
+    <article class=(expanded ? "card expanded" : "card")>
+      <h2>title</h2>
+      <p>"Above 700px the group changes padding, border color and heading size."</p>
+      <button type="button" aria-pressed=expanded onClick=(() => expanded = !expanded)>
+        expanded ? "Use responsive padding" : "Expand at 700px"
+      </button>
+    </article>
+  );
+}

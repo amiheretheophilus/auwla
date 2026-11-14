@@ -1,8 +1,8 @@
 # Auwla CSS developer experience: styling design discussion
 
-Status: native CSS, full-property class/numeric viewport conditions, local scopes,
-cross-file named reuse and implicit native nesting are implemented. The wider
-design below distinguishes those profiles from later grouping work.
+Status: native CSS, full-property class/numeric viewport conditions, grouped
+numeric rules, local scopes, cross-file named reuse and implicit native nesting
+are implemented. Optional aliases and further condition conveniences remain later.
 
 Created: 2026-11-11. Updated: 2026-11-14.
 
@@ -32,8 +32,9 @@ CSS-2a now implements compact class conditions on full properties, including
 and named reuse with `@use(path, id)`. [CSS-3b](wiki2/spec/style-reuse.md) adds
 cross-file dependencies, resource rebasing and implicit nesting. CSS-2b now
 uses numeric viewport thresholds: `@700` equals `@700px`, without named-breakpoint
-configuration. See [CSS-2b](wiki2/spec/style-responsive.md). Grouping and aliases
-remain later work; named breakpoints are optional future design.
+configuration. [CSS-2c](wiki2/spec/style-groups.md) adds numeric groups, including
+nested selectors/groups and compact clauses in inherited declarations. Aliases,
+grouped classes and named breakpoints remain later design.
 
 Follow DX-39: JSX+ is a standalone template/source-language layer. It supplies
 syntax transformations through `auwla`; compiler-next owns projects, applications,
@@ -53,7 +54,7 @@ Its source implementation uses no Bun/Node APIs.
 | Class conditions | User proposed `p:4 @.loading:30`; the element carries the class | Required direction; first examples use full CSS properties |
 | Element classes | Dot-style `.class` authoring on elements is planned, including conditional classes | Exact element grammar remains open |
 | CSS execution | Style conditions compile to CSS; the browser applies them | Architectural requirement; no CSS runtime |
-| Grouping | Blocks group several changes under a condition | Planned authoring form |
+| Grouping | Blocks group several changes under a condition | Numeric groups implemented in CSS-2c; other condition categories remain later |
 | Local scope | Local-by-default `<style>`, explicit `<style global>` | CSS-3a implements file/component scopes with static subject markers |
 | Named styles | `<style id="...">`, consumed through `@use(path, id)` | Same-file/cross-file reuse, transitive IDs, resource rebasing and compiler-owned source watching implemented |
 | Separators | Native CSS declaration termination for compact chains | Semicolons, except the final declaration before `}`; newline-only convenience remains unimplemented |
@@ -142,7 +143,7 @@ Compact form:
 }
 ```
 
-Future grouped equivalent, preserving rule order (not part of the compact slice):
+Implemented grouped equivalent, preserving rule order (CSS-2c):
 
 ```css
 .card {
@@ -158,14 +159,16 @@ Future grouped equivalent, preserving rule order (not part of the compact slice)
 }
 ```
 
-Groups may contain several declarations and nested selectors. Both forms should
-share one condition representation and emit equivalent CSS when order and
-declarations are equivalent.
+Groups contain several declarations and nested selectors, and may nest. Both
+forms share threshold parsing and the CSS Tree syntax model. Numeric groups emit
+native media queries in place; inherited compact clauses use `&`. Later
+declarations are wrapped in explicit `&` rules where necessary to preserve order
+through CSS bundlers. Tests pin the computed result, including reversed thresholds.
 
 | Form | Intended meaning | Status |
 | --- | --- | --- |
 | Base declaration | All viewport widths | Implemented |
-| `@700` / `@700px` | Inclusive minimum viewport width of 700px | Accepted compact slice; equivalent spellings |
+| `@700` / `@700px` | Inclusive minimum viewport width of 700px | Implemented compact and grouped forms; equivalent spellings |
 | `@40rem` / `@40em` | Minimum viewport width in native relative units | Provisional unit profile |
 | Named thresholds / maximums / ranges | Additional convenience forms | Later design; native media queries already available |
 | `@media (...)` | Native media query | Preserve native CSS |
@@ -178,9 +181,11 @@ viewport width, not container width. Preserve authored order rather than sorting
 thresholds, so overlapping clauses follow the native CSS cascade.
 
 Native `@media`, `@supports`, `@container`, `@layer` and other at-rules remain
-distinct from compact numeric conditions. Group grammar, module-level placement
-and combined-condition spelling still need review. Compact clauses remain
-independent alternatives when mixed with class clauses, not an implicit AND.
+distinct from numeric condition syntax. Numeric groups work at stylesheet level
+around rules, or inside a qualified rule with inherited declarations. Nested
+groups intersect as native media conditions. Compact clauses remain independent
+alternatives when mixed with class clauses; an enclosing group's condition also
+must match. Other combined-condition spellings remain later design.
 
 ## 6. Author-controlled class conditions
 
@@ -424,7 +429,7 @@ limits belong in the formal spec when a slice is selected.
 | --- | --- | --- |
 | CSS-0: design/spec | Reviewed scope, grammar, examples, errors and ownership | CSS-1 profile and CSS-001 through CSS-006 fixtures written; wider syntax remains a design discussion |
 | CSS-1: ordinary CSS | Full native declarations in explicit global style blocks | Implemented and verified: real example, CSS output, authored ranges and baseline editor support; local scope deferred |
-| CSS-2: conditions | Compact conditions on native properties, including author classes | `padding:4px @700:30px` equals `@700px:30px`; class clauses, equivalent output, thresholds, overlap and applied completion edits. Grouped numeric blocks remain next |
+| CSS-2: conditions | Compact class/numeric clauses and grouped numeric rules on native properties | `@700` equals `@700px`; nested groups, inherited compact clauses, cascade order, scoped named reuse and native assistance. Automated inputs live in their own fixtures; editable galleries are independent |
 | CSS-3: integration | Static CSS through compiler-next delivery | Builds/HMR, URLs, lazy assets, SSR/adoption, deduplication, maps and desktop checks as applicable |
 | CSS-LATER: aliases | Optional `p`, `px`, `bg` conveniences | Separately reviewed mappings, units, collisions and completion; no Tailwind dependency |
 

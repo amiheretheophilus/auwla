@@ -1,0 +1,49 @@
+import { Card } from './Card.auwla';
+
+<style>
+  :root { --group-accent: #2563eb; }
+  body { margin: 0; font-family: system-ui, sans-serif; background: #f1f5f9; }
+  main { max-width: 1100px; margin: 0 auto; padding: 16px; }
+  .grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 8px;
+
+    @700 {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 16px;
+    }
+  }
+  @1000px {
+    .grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  }
+  .reverse {
+    padding: 4px;
+    @700 { padding: 24px; }
+    @300px { padding: 12px; }
+  }
+  .order {
+    padding: 4px;
+    @700 { padding: 24px; }
+    padding: 16px;
+  }
+  .card { border: 20px solid red; }
+</style>
+
+export function App() {
+  const titles = ["Grouped declarations", "Nested selectors", "Independent classes"];
+
+  return (
+    <main>
+      <h1>"Grouped responsive styles"</h1>
+      <p>"Resize across 300px, 700px, 900px and 1000px."</p>
+      <section class="grid">
+        for (const title of titles) {
+          <Card title=title />
+        }
+      </section>
+      <p class="reverse">"The later 300px group wins above both thresholds."</p>
+      <p class="order">"The final declaration keeps this padding at 16px."</p>
+    </main>
+  );
+}

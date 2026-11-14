@@ -77,6 +77,22 @@ it('highlights numeric viewport thresholds and keeps numeric literals inside fun
   expect(tokenize(real).some((token) => token.text === '700' && token.scopes.includes('meta.auwla.css-condition'))).toBe(true);
 });
 
+it('highlights grouped numeric headers, inherited properties and nested selectors without capturing literals', () => {
+  const source = '<style>\n.card {\n @700px {\n padding:24px;\n @900 {\n .title { color:navy; }\n }\n content:"@300 {literal}";\n }\n}\n</style>\nconst after = 1;';
+  const tokens = tokenize(source);
+  const scopesAt = (text: string) => {
+    const offset = source.indexOf(text);
+    return tokens.find((token) => token.startIndex <= offset && offset < token.endIndex)!.scopes;
+  };
+  expect(scopesAt('700px')).toContain('constant.numeric.css');
+  expect(scopesAt('700px')).toContain('meta.auwla.css-group');
+  expect(scopesAt('900 {')).toContain('meta.auwla.css-group');
+  expect(scopesAt('padding:')).toContain('support.type.property-name.css');
+  expect(scopesAt('navy')).toContain('meta.property-value.css');
+  expect(scopesAt('300 {literal')).toContain('string.quoted.double.css');
+  expect(scopesAt('after =')).not.toContain('meta.embedded.block.css');
+});
+
 it('embeds CSS in module, named and component style declarations while leaving returned styles as JSX', () => {
   const source = `<style>\n.shared { padding: 4px; }\n</style>
 <style id="look">\n.card { border-color: teal; }\n</style>

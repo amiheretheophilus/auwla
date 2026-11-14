@@ -1,0 +1,21 @@
+{
+  "profile": "CSS-2c",
+  "cases": [
+    { "id": "GROUP-001", "source": ".a {padding:12px; @700 {padding:24px;display:grid;}}", "css": ".a {padding:12px; @media (min-width:700px) {padding:24px;display:grid;}}" },
+    { "id": "GROUP-002", "source": ".a {@700px /* keep */ {padding:24px;}}", "css": ".a {@media (min-width:700px) /* keep */ {padding:24px;}}" },
+    { "id": "GROUP-003", "source": "@40REM {.a {color:red;} .b {color:navy;}}", "css": "@media (min-width:40rem) {.a {color:red;} .b {color:navy;}}" },
+    { "id": "GROUP-004", "source": ".a {@700 {padding:24px; @900 {padding:28px;} .title {color:navy;}}}", "css": ".a {@media (min-width:700px) {padding:24px; @media (min-width:900px) {padding:28px;} .title {color:navy;}}}" },
+    { "id": "GROUP-005", "source": ".a {@700 {padding:4px @.expanded:8px @900:12px !important;}}", "css": ".a {@media (min-width:700px) {padding:4px !important; &.expanded {padding:8px !important;} @media (min-width:900px) {& {padding:12px !important;}}}}" },
+    { "id": "GROUP-006", "source": ".a {@700 {padding:24px;} @300 {padding:12px;} padding:16px;}", "css": ".a {@media (min-width:700px) {padding:24px;} @media (min-width:300px) {padding:12px;} & {padding:16px;} }" },
+    { "id": "GROUP-007", "source": ".a {@supports (display:grid) {color:black @.loading:red; @700 {display:grid;}}}", "css": ".a {@supports (display:grid) {color:black; &.loading {color:red;} @media (min-width:700px) {display:grid;}}}" },
+    { "id": "GROUP-008", "source": "@0 {} @.5em {.a {color:red;}}", "css": "@media (min-width:0px) {} @media (min-width:.5em) {.a {color:red;}}" },
+    { "id": "GROUP-009", "source": ".a {@-700px {padding:8px;}}", "error": "finite nonnegative" },
+    { "id": "GROUP-010", "source": "@700% {.a {padding:8px;}}", "error": "finite nonnegative" },
+    { "id": "GROUP-011", "source": ".a {@700: {padding:8px;}}", "error": "Expected {" },
+    { "id": "GROUP-012", "source": ".a {@700 {padding:8px;}", "error": "closing }" },
+    { "id": "GROUP-013", "source": "@700 {padding:8px;}", "error": "enclosing qualified style rule" },
+    { "id": "GROUP-014", "source": "@keyframes pulse {from {@700 {opacity:1;}}}", "error": "outside keyframes" },
+    { "id": "GROUP-015", "source": "@font-face {@700 {font-family:example;}}", "error": "outside keyframes" },
+    { "id": "GROUP-016", "source": ".a {@700 {@use(\"./App.auwla\", \"theme\");}}", "error": "stylesheet level" }
+  ]
+}
