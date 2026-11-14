@@ -24,6 +24,7 @@ import { linkModuleNamespaces, type EmittedModule } from './link/modules';
 import { planCapturedValues } from './link/captured-plan';
 import { emitNamespaceReads, markNamespaceReads } from './link/open-namespaces';
 import { emitCapturedValues } from './link/captured-dom';
+import { withRequestOwnedState } from './features/state/request-dom';
 import { lowerFetchImport, markExplicitFetches } from './features/sources/delivery';
 import { resolveSpecifiers } from './link/specifiers';
 import { addHotRuntime, hotModule, type HotModule } from './features/hot';
@@ -119,7 +120,8 @@ function compileAnalyzed(
       throw CompileError.at('compiler-next left JSX in its output (a compiler bug)', module.path, module.module.source, leftover.start);
     }
     const output = { module, tree: tree as Extract<Node, { type: 'Program' }> };
-    emitted.set(module.path, emitCapturedValues(plan, output, options));
+    // Last of the module's own code: a server render's state includes a captured default's.
+    emitted.set(module.path, withRequestOwnedState(plan, emitCapturedValues(plan, output, options), options));
   }
 
   if (opensNamespaces) {

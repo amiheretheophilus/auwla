@@ -84,7 +84,7 @@ export function classifyState(
  * test always produce a new primitive or choose a branch, so they cannot hand
  * an object to the computed value. Everything else is kept, conservatively.
  */
-function mayFlowIntoValue(module: Binding['module'], node: Node): boolean {
+export function mayFlowIntoValue(module: Binding['module'], node: Node): boolean {
   let child: Node = node;
   
   for (const parent of module.ancestors(node)) {

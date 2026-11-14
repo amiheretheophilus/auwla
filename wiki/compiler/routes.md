@@ -5,8 +5,9 @@
 Status (2026-11-12): `route="…"` regions, `route-to` links, the route table, reads of `route` and
 `$routed` preparations are built, and a `suspend` route page whose param changes waits behind its
 pending policy (the router scrolls once it commits). A client build loads a component imported only
-for its routes with its route ("Lazy route chunks"). Server-backed preparations end to end (they
-need the server and Vite), and a lazy route's styles on a server-rendered page, are still to do.
+for its routes with its route ("Lazy route chunks"). Server-backed preparations work end to end
+(2026-11-14, "Server-backed preparations end to end"). A lazy route's styles on a server-rendered
+page are still to do.
 
 ## What it does
 
@@ -116,6 +117,20 @@ Writing these found a bug in callback boundaries (`compiler/handlers.md`, "Callb
 handed to unknown code that builds a value from a source lost the readiness records declared at the
 top of its body, which it then used undeclared (`features/handlers/callbacks.test.ts`).
 
+## Server-backed preparations end to end
+
+Checked on 2026-11-14 with real builds and the real server, no new code needed:
+
+- **compiler-next's Bun plugin** (`packages/jsx-plus/tests/server.test.ts`, the directory app):
+  the server renders `/people/2` with the value its preparation read from `#server/people`. A
+  link click in the client sends `POST /_memoized/routed`. A client that starts on a
+  server-rendered `/people/1` adopts the page with the value the server prepared: no request,
+  and its nodes stay. Coming back to it later is a navigation, which asks again. Both optimization
+  modes.
+- **`packages/vite` with `compiler: 'next'`** (`tests/next-plugin.test.ts`): the built server
+  renders the page with its prepared value and answers `/_memoized/routed`. The client's chunks
+  hold the endpoint and not the server-only module's data.
+
 ## Lazy route chunks
 
 In a client build (`routedEnvironment: 'client'`), a component imported only to be shown by routes
@@ -198,7 +213,5 @@ element rather than as a prop.
 - A lazy route's styles on a page the server renders: the first route's chunk loads its CSS only
   when its script runs, after the page shows (`project.md`, "Where they go"). A project's
   `stylesheets` also still follows split imports, which matters only once it does.
-- Server-backed preparations end to end: the server endpoint and SSR delivery of prepared values,
-  with `packages/vite`.
 - The reference settles no sources inside a preparation (its `$fetch` is its own), so cases with
   `$fetch` in `$routed` are compiled-only (`routed.dom.test.ts`).

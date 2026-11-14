@@ -474,6 +474,11 @@ The graph classification is built (`core/graph/classify.ts`, described in
 | `features/state/reactive-reads.test.ts` | top-level-only reads, component reads, derivation chains, imported defaults |
 | `features/state/shared-dom.ts` | per-owner versions, readers, source-ordered setup completion and shared refresh |
 | `features/state/shared-dom.test.ts` | shared module consumers in separate applications, identity reuse and disposal |
+| `features/state/request-owned.ts` | module bindings a server render owns: written by a function, outside server-only code (`server.md`, "Request isolation") |
+| `features/state/request-dom.ts` | a server build's module keeps that state, with its machinery, in a record per render |
+| `features/state/request-scope.ts` | which identifiers of emitted code name a module variable, past shadowing parameters and locals |
+| `features/state/request-dom.test.ts` | renders isolated through imports, namespaces, aliases and defaults; what stays shared |
+| `packages/runtime/src/module-state.ts` | a server render's records, built outside any build frame on first use |
 | `core/emit/shared.ts` | composes shared state, memo, mutation and takeover emission |
 | `features/handlers/receivers.ts` | native receiver/private/super store targets |
 | `packages/runtime/src/shared-writes.ts` | publishes shared version changes and watches shared mutation roots |

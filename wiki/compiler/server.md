@@ -113,52 +113,77 @@ omitted base fell back to `location.href`, and under a global `location` serve()
 the network. Checked by `server/tests/initial-request.test.ts`, "server rendering ignores a
 process-wide location".
 
-### Request isolation (open)
+### Request isolation
 
 One server process renders every request with the same module instances. Module state that a
 render writes (`export let visits = 0` raised by a helper the page calls, an object store pushed
-to) is then what the next request reads: with real users, one user's data on another user's page.
-Confirmed (2026-11-13): three requests to a compiler-next server build showed `visits 1`,
-`visits 2`, `visits 3`, and a module-level derived value followed the leaked state.
-`server/request-state.test.ts` records it as an expected failure (`it.failing`), to flip when
-fixed.
+to) would then be what the next request reads: with real users, one user's data on another
+user's page. Seen on 2026-11-13: three requests to a compiler-next server build showed
+`visits 1`, `visits 2`, `visits 3`, and a module-level derived value followed the leaked state.
 
-The old compiler lowered such state into per-request cells (`docs/09-ssr.md`, `moduleStateCells`;
-`packages/compiler/src/cells.ts`) on the runtime's `defineStateCell`/`readCell`/`setCell`
-(`runtime/src/state-cells.ts`), which compiler-next can reuse. Storage alone is not enough here:
-compiler-next keeps versions, cached module derivations, refresh flags and change batches per
-module (`features/state/shared-dom.ts`), so a fix must make the whole module owner's state
-request-owned in server builds, not only the values.
+Decided (2026-11-14, `decisions.md`): server rendering behaves like the browser, and the backend
+stays traditional. Built the same day. In a server build (`routedEnvironment: 'server'`):
 
-#### Shared or per request (open, to discuss)
+- **Which state.** `features/state/request-owned.ts` names the top-level bindings that a function
+  outside server-only code writes: by assignment, update, member write or `delete`; by a listed
+  edit method (`push`, `optimize/method-facts.ts`) or a `Map`/`Set` edit (`set`, `add`,
+  `delete`, `clear`); or by passing it to a function declared in the program. Writes through an
+  import, a namespace (`session.cart.push(x)`) or a local alias (`const list = cart.items;
+  list.push(x)`) count. Not counted: a method that is not listed (`db.query(…)`), an argument to a
+  global or a package's function, a write only at the module's top level (it runs once, at load,
+  so every request starts from the same value), and writes from server-only code. So a client a
+  page only calls stays one per process.
+- **The record.** `features/state/request-dom.ts` runs after every pass that adds module code
+  (`pipeline.ts`, after `link/captured-dom.ts`, whose captured default is state too). The module
+  keeps its own top-level variables, which serve code outside any render: the module's top level,
+  and a backend reading it. They are reached through an accessor object, the process record.
+  `_initModuleState(record)` repeats the module's state setup against a fresh record. Each
+  declaration of owned state (the authored bindings, the module's derived values, and every
+  variable the generated machinery declares) becomes an assignment to the record. The generated
+  statements of the setup, and authored ones that use the state or a module function that does,
+  run again. Statements that use no state run once: imports, templates, component registration,
+  a top-level `console.log`. `core/emit/dom.ts` marks what it hoists as process-wide (on its final
+  tree, since `await.ts` clones the tree whole), and a later copy is recognised by its origin.
+  Module source descriptions are among them: a source is described once per process
+  (`describeSourceValue`) and each render follows it (`followModuleSource`) with its own
+  record's inputs. Found by the delivered cases: describing it again for every render replaced
+  the browser copy's description in the same process, as a hot update does, and the browser's
+  source stopped requesting again when its input changed.
+- **Finding it.** Functions keep one identity per process. One that uses the state starts with
+  `const _state = _moduleState()` and reads `_state.visits`; closures it creates keep that record,
+  since they belong to the render that created them. A use outside any function that runs later
+  (a class field initializer, a default parameter) asks `_moduleState()` right there. Which uses
+  mean the module's variable, past a parameter or local of the same name, is decided by
+  `request-scope.ts`, since the analyzer never saw the generated code.
+- **Namespaces.** A namespace object holds the module's native exports, the process copy. In a
+  server build a member that names owned state (`store.cart`) reads through that binding's
+  reader instead (`requestOwnedMember`, `shared-dom.ts`).
+- **The runtime.** `requestModuleState(process, initialize)` (`runtime/src/module-state.ts`)
+  answers with the process record outside a server render (the environment mode is not
+  `server-*`). Inside one, it returns that render's record, building it the first time with no
+  build frame and no running computation, as a module's top level runs (`outsideBuild`,
+  `build-scope.ts`). The record lives on the render's application runtime, which follows `await`
+  on a server, and goes with it. A setup that throws leaves no record, so the next use tries again.
+  Until the module's top level finishes, `_moduleState()` answers with the process record: the
+  module is still evaluating.
 
-Not decided. The user leans toward module state staying shared across requests during server
-rendering (2026-11-14), which is what compiler-next does today, and wants to discuss it before
-anything changes. The points so far:
+The old compiler did this with per-request cells for literal initializers only (`docs/09-ssr.md`,
+`moduleStateCells`); here any initializer re-runs per render.
 
-- **For sharing.** It is how a JavaScript module behaves anywhere else: one value per process.
-  Caches, configuration and genuinely global counters keep working. A request pays nothing to
-  set up module state. The server stays simple.
-- **Against sharing.**
-  - A value written while serving one user is what the next user's page shows: a cart, a
-    signed-in user, a draft, a filter. Two requests that interleave across an `await` can also
-    see each other's writes in the middle of a render.
-  - The client starts from the authored value, but the server rendered the changed one. Unless
-    the value is sent with the page, hydration disagrees with the server's HTML.
-  - The usual mistake, keeping per-user state at module level, gives no error in development.
-    It only shows up with real concurrent users.
-- **Possible rules:**
-  1. Shared, as today. The docs warn about it, and request data goes through `$routed` or
-     server functions.
-  2. Shared, but writing module state during a server render (or from code a render calls) is
-     a compile error or a development warning. Reads stay free.
-  3. Per request, like the old compiler's cells: each request starts from the authored values,
-     with versions, cached derivations and batches owned by the request. Initializers that are
-     not plain values need a rule of their own: re-run them per request, or reject them.
-  4. Shared by default, and per request for state the author marks.
-- **Test impact.** `request-state.test.ts` encodes rule 3 and is an expected failure. Under rules
-  1, 2 or 4 it changes to match the decision: a diagnostic, a documented shared value, or the
-  marked case.
+Remaining limits:
+- A module whose state setup itself waits (`let n = await load()`) keeps shared state: a record
+  is built synchronously.
+- State inside a third-party library stays process-wide; the decision says the docs must say so.
+- A record belongs to one render's application runtime. A request that renders more than once
+  (a page and then a server-backed `$routed` preparation) gives each render its own record.
+
+Checked by `server/request-state.test.ts` (three requests to a built server each show exactly
+their own visit; it was an expected failure until this change) and
+`features/state/request-dom.test.ts`, which runs compiled modules in two server renders and outside
+any render. It covers imports, namespaces, aliases, a captured default, derived values,
+shadowing, arrows, methods, class fields, default parameters and destructuring, plus what stays
+shared: unwritten bindings, top-level-only writes, server-only modules, the browser's build, and
+a setup that waits.
 
 ### Backend code
 

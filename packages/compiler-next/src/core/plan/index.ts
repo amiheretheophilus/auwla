@@ -24,6 +24,7 @@ import { mergeMutations, planImportedMutations, planMutations, planReadonlyBindi
 import { plainFunctionValues } from './plain-functions';
 import { groupsOfModule, planMemos } from '../../features/derived/plan';
 import { planSharedReads, sharedSetup } from '../../features/state/shared-plan';
+import { planRequestOwned } from '../../features/state/request-owned';
 import { primitiveConstants } from '../../features/state/primitive-constants';
 import { planReceiverTargets } from '../../features/handlers/receivers';
 import { storageOwner } from './storage';
@@ -50,13 +51,18 @@ export function planModules(
   const memos = planMemos(graph, queries, owners, plain);
   const refs = planRefs(graph);
   const tracked = new Set<BindingNode>([...[...state.values()].flat(), ...sharedReads.keys()]);
+  const requestOwned = planRequestOwned(graph);
   return graph.resolved.modules.map((entry) => {
     // Edits in server-only code are not observed: no render follows what it changes, and without
     // planned edits its functions need no callback boundary either (`handlers/callbacks.ts`).
     const imported = graph.resolved.serverOnly(entry.module)
       ? new Map<Node | null, readonly import('./model').MutationPlan[]>()
       : planImportedMutations(graph, entry, owners, tracked);
-    return planModule(graph, queries, components, entry, state, memos, sharedReads, refs, imported);
+    const plan = planModule(graph, queries, components, entry, state, memos, sharedReads, refs, imported);
+
+    // Only a server build uses these (`features/state/request-dom.ts`); the browser has one user.
+    // The whole program's set: an importer reaching one through a namespace reads it differently.
+    return requestOwned.size === 0 ? plan : { ...plan, requestOwned };
   });
 }
 

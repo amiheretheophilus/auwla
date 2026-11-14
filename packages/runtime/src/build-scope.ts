@@ -51,6 +51,23 @@ export function currentBuildFrame(): BuildFrame | null {
   return buildStore().current;
 }
 
+/**
+ * Run `run` with no build frame, as a module's top level runs. A server render
+ * builds a module's request-owned state the first time it is touched, which can
+ * be in the middle of a component's setup; that state must not join the
+ * component's frame (`module-state.ts`).
+ */
+export function outsideBuild<T>(run: () => T): T {
+  const store = buildStore();
+  const current = store.current;
+  store.current = null;
+  try {
+    return run();
+  } finally {
+    store.current = current;
+  }
+}
+
 /** Effect-owned locals are native invocation values, not independent memos. */
 export function isEffectInvocation(): boolean {
   return buildStore().current?.invocation ?? false;

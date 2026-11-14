@@ -35,7 +35,10 @@ export interface SharedOwnerEmit {
   readonly notifiers: ReadonlyMap<BindingNode, string>;
 }
 
-export function emitSharedState(plan: ModulePlan, names: Names, runtime: string, initial: ReadonlyMap<Node, Node>, data?: string) {
+export function emitSharedState(
+  plan: ModulePlan, names: Names, runtime: string, initial: ReadonlyMap<Node, Node>, data?: string,
+  requestOwned?: ReadonlySet<Binding>,
+) {
   const replacements = new Map(initial);
   const imports: Statement[] = [];
   const owners: SharedOwnerEmit[] = [];
@@ -225,10 +228,22 @@ export function emitSharedState(plan: ModulePlan, names: Names, runtime: string,
       // newly allocated array would look replaced after every unchanged call.
       importedValues.set(binding, [...observers].map((observer) => expression('$$observer(true)', { observer })));
 
+      for (const reference of binding.references) {
+        const parent = plan.module.module.parentOf(reference.node);
+        const owned = requestOwned === undefined ? undefined : requestOwnedMember(namespace, reference.node, parent, requestOwned);
+        const read = owned === undefined ? undefined : readsByBinding.get(owned);
+        if (read === undefined || reference.isWrite || reference.inTypePosition) {
+          continue;
+        }
+        // A namespace holds the module's native exports, which in a server build are the
+        // process's copy (`request-dom.ts`). `store.cart` reads this render's copy instead.
+        replacements.set(parent!, expression('$$reader()', { reader: importShared(read, read.name, '_importedRead') }));
+      }
+
       if (observers.size > 0) {
         for (const reference of binding.references) {
           const parent = plan.module.module.parentOf(reference.node);
-          if (reference.isWrite || reference.inTypePosition || is.ExportSpecifier(parent)) {
+          if (reference.isWrite || reference.inTypePosition || is.ExportSpecifier(parent) || replacements.has(parent!)) {
             continue;
           }
 
@@ -265,6 +280,19 @@ export function emitSharedState(plan: ModulePlan, names: Names, runtime: string,
     }
   }
   return { replacements, imports, owners, importedValues };
+}
+
+/** The request-owned binding `namespace.name` names at `reference`, if it is one. */
+function requestOwnedMember(
+  namespace: NonNullable<ReturnType<typeof namespaceModule>>,
+  reference: Node,
+  parent: Node | null,
+  requestOwned: ReadonlySet<Binding>,
+): Binding | undefined {
+  if (parent === null || !is.MemberExpression(parent) || parent.object !== reference) return undefined;
+  if (parent.computed || !is.Identifier(parent.property)) return undefined;
+  const definition = namespace.resolveExport(parent.property.name)?.binding;
+  return definition != null && requestOwned.has(definition) ? definition : undefined;
 }
 
 /** Finalize snapshots before any authored return without moving its evaluation. */

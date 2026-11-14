@@ -32,6 +32,7 @@ import { emitRefs } from '../../features/refs/dom';
 import { emitEffectGroups, emitLifecycleCalls } from '../../features/effects/dom';
 import { emitSources } from '../../features/sources/dom';
 import { emitSourceFlow, sourceReadinessStorage } from '../../features/sources/flow-dom';
+import { markProcessWide } from '../../features/state/request-dom';
 
 /**
  * Whether code here reads state another module owns. A file of plain helpers can have
@@ -80,6 +81,8 @@ export function emitDom(plan: ModulePlan, options: CompileModulesOptions): Node 
   // code that renders nothing has neither a build nor writes to keep.
   const guardsWrites = !(plan.serverOnly === true && !hasRenderWork)
     && findAll(module.ast, ['TryStatement', 'AwaitExpression']).length > 0;
+  // A server build gives each render its own copy of state a render writes (`request-dom.ts`).
+  const serverState = options.routedEnvironment === 'server' ? plan.requestOwned : undefined;
   const usesRuntime = hasRenderWork || guardsWrites || plan.globals.accesses.length > 0 || plan.globals.codeFromText;
   if (!usesRuntime && !readsImportedState(plan)) {
     return copy(module.ast);
@@ -98,7 +101,7 @@ export function emitDom(plan: ModulePlan, options: CompileModulesOptions): Node 
   if (plan.sourceFlow !== undefined) {
     hoisted.push(statement('import * as $$data from "@memoized-dom/data/internal";', { data }));
   }
-  const shared = emitShared(plan, names, runtime, emitLifecycleCalls(plan, names, runtime, data), plan.sourceFlow === undefined ? undefined : data);
+  const shared = emitShared(plan, names, runtime, emitLifecycleCalls(plan, names, runtime, data), plan.sourceFlow === undefined ? undefined : data, serverState);
   const sourceFlow = emitSourceFlow(plan, names, runtime, data, shared.replacements);
   hoisted.push(...sourceFlow.declarations);
   const replacements = sourceFlow.replacements;
@@ -226,7 +229,14 @@ export function emitDom(plan: ModulePlan, options: CompileModulesOptions): Node 
     insertion++;
   }
   output.body.splice(insertion, 0, ...hoisted);
-  return emitAwaitBoundaries(emitRecovery(output, names, runtime), runtime);
+  const emitted = emitAwaitBoundaries(emitRecovery(output, names, runtime), runtime) as Extract<Node, { type: 'Program' }>;
+  // Imports, templates, registrations and module source descriptions belong to the process,
+  // never to one render's state. Marked on the final tree: `await.ts` clones it whole, which
+  // keeps no origins, but both passes keep its top-level statements in place.
+  if (serverState !== undefined) {
+    markProcessWide(emitted.body.slice(insertion, insertion + hoisted.length) as Statement[]);
+  }
+  return emitted;
 }
 
 function emitComponent(

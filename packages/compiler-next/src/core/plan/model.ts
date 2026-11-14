@@ -395,6 +395,12 @@ export interface MutationPlan {
 export interface ModulePlan {
   /** Declared server-only code (the `serverOnly` option): plain code unless it renders something. */
   readonly serverOnly?: boolean;
+  /**
+   * The module bindings, across the whole program, a server render owns
+   * (`features/state/request-owned.ts`): each render of a server build gets its own copy. Absent
+   * when there are none.
+   */
+  readonly requestOwned?: ReadonlySet<Binding>;
   readonly importedMutations?: readonly MutationPlan[];
   readonly capturedExports?: readonly CapturedValuePlan[];
   readonly capturedImports?: ReadonlyMap<Binding, CapturedValuePlan>;

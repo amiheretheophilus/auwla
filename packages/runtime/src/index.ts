@@ -89,6 +89,7 @@ export { createRowCache, fromRows, mapRows } from './list-map';
 export { createRowList, uneditedItems, whenQuiet } from './row-list';
 export { createComputation, noteOwnOutput, observeNamespace, readNamespace, trackEquals, trackRead, tracking, untracked } from './computation';
 export { createSharedWrites } from './shared-writes';
+export { requestModuleState } from './module-state';
 export type { BuildScope, BuildFrame } from './build-scope';
 export { adoptInitialRoot } from './initial-root';
 export { bindInitialNodes } from './initial-bindings';

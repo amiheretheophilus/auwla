@@ -2,6 +2,7 @@
 import { b, is } from 'yuku-ast';
 import type { Expression, Node, Statement } from 'yuku-parser';
 import type { BindingNode } from '../graph';
+import type { Binding } from '../resolve';
 import type { ModulePlan } from '../plan';
 import { unwrap } from '../plan/jsx';
 import type { Names } from './names';
@@ -113,9 +114,13 @@ function emitSharedWrites(
   }
 }
 
-export function emitShared(plan: ModulePlan, names: Names, runtime: string, initial: ReadonlyMap<Node, Node> = new Map(), data?: string) {
+/** `requestOwned`: in a server build, the bindings each render owns (`features/state/request-owned.ts`). */
+export function emitShared(
+  plan: ModulePlan, names: Names, runtime: string, initial: ReadonlyMap<Node, Node> = new Map(), data?: string,
+  requestOwned?: ReadonlySet<Binding>,
+) {
   const receivers = emitReceiverTargets(plan.receiverTargets, plan.module.module, names, runtime);
-  const state = emitSharedState(plan, names, runtime, new Map([...initial, ...receivers]), data);
+  const state = emitSharedState(plan, names, runtime, new Map([...initial, ...receivers]), data, requestOwned);
   const imported = emitMutations(plan.importedMutations ?? [], new Map(), names, runtime, null, state.replacements, {
     importedValues: state.importedValues,
   });

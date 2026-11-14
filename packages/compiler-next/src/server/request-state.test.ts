@@ -2,8 +2,8 @@
  * Module state in server renders (`wiki/compiler/server.md`, "Request isolation"). One server
  * process renders every request with the same module instances, so module state written while
  * rendering one request must not be what the next request reads: with real users, that is one
- * user's data on another user's page. The old compiler lowered such state into per-request cells
- * (`docs/09-ssr.md`, `moduleStateCells`); compiler-next does not yet.
+ * user's data on another user's page. Each server render gets its own copy of the state it writes
+ * (`features/state/request-dom.ts`; `wiki/decisions.md`, 2026-11-14).
  */
 import { afterAll, expect, it } from 'bun:test';
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
@@ -36,8 +36,7 @@ write('server/define.ts', `import { createDefine } from '@memoized-dom/server';\
 
 const DELIVERY = `export default { document: () => '<div id="root"><!--ssr-outlet--></div>', assets: () => undefined };`;
 
-// Known open issue (expected to fail until module state is request-owned in server builds).
-it.failing('gives each server request its own module state', async () => {
+it('gives each server request its own module state', async () => {
   const result = await Bun.build({
     entrypoints: [join(root, 'server.ts')],
     outdir: join(root, 'dist'),

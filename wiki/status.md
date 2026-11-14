@@ -17,6 +17,22 @@ See [dynamic attribute values](compiler/core.md#dynamic-attribute-values).
 
 ## Current: Phase 10 (2026-11-06)
 
+**Done (2026-11-14): each server render owns the module state it writes** (`compiler/server.md`,
+"Request isolation"; `decisions.md`, 2026-11-14). In a server build, a module whose state a
+function outside server-only code writes keeps that state, with its versions, keys and batches, in
+a record per render. The record is built from the module's own setup the first time the render
+touches it, on the render's application runtime (`runtime/src/module-state.ts`). Bindings nothing
+writes, server-only modules and the browser's build are unchanged. `server/request-state.test.ts` is
+no longer an expected failure: three requests to a built server each show `visits 1, items 1,
+total 2`. The delivered cases found one mistake on the way, a module source described again for
+every render, which replaced the browser copy's description in the same process; descriptions now
+stay process-wide like templates. **Server-backed `$routed` end to end** was checked through the
+Bun plugin and `packages/vite`, and needed no code (`compiler/routes.md`): a client starting on a
+server-rendered page reuses the prepared value without a request.
+
+Gate: types, 825 unit, 191 runtime, 171 data, 851 cases, 10 generators. Also jsx-plus 490 of 491;
+the one failure, an editor LSP test, passes alone. Vite `compiler: 'next'` 8, editor extension 10.
+
 **Done: a runtime `namespace`, `import x = a.b`, `import x = require('m')` and `export =` are
 lowered** (`compiler/core.md`, "A namespace and export ="), so `tests/cases/core.namespaces.test.ts`
 has state and components inside namespaces updating as the reference does. The old compiler rejects
@@ -190,8 +206,8 @@ unknown code; the router releasing window listeners on unmount; no unreachable c
 shared setup's `return`; native CSS delivery; and an expected-failure test for module state leaking
 between server requests. It also brings `packages/jsx-plus`, `packages/editor-vscode` and `wiki2`.
 Checked on this branch: the full gate (806 unit, 851 cases, generators) and the router suite (134).
-Open, for the user: shared or per-request module state in server renders (`compiler/server.md`), and
-the bundle size measurements in `wiki2/status.md`.
+Open, for the user: shared or per-request module state in server renders (decided and built the
+same day, above), and the bundle size measurements in `wiki2/status.md`.
 
 Fixed: `tests/ssr-payload-transport.test.ts` and
 `tests/transparent-source-mutations-and-routes.test.ts` failed after certain other root test files

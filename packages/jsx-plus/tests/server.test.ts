@@ -217,4 +217,24 @@ for (const optimize of [true, false]) {
     expect(names(container)).toHaveLength(before.length + 1);
     expect(input.value).toBe('');
   });
+
+  it(`starts on a server-backed $routed page with the value the server prepared in ${mode} mode`, async () => {
+    const entry = await buildClient(optimize);
+    const container = await startOn(entry, '/people/1');
+    const heading = container.querySelector('.person h2');
+    expect(heading?.textContent).toBe('Ada');
+
+    // The page came with its prepared value: the client neither asks the server to prepare it
+    // again nor renders it again.
+    await waitFor(() => expect(container.querySelector('.person h2')).toBe(heading));
+    expect(requests).toEqual([]);
+
+    // Leaving it and coming back is a client navigation, which does ask.
+    (container.querySelector('.person a') as HTMLElement).click();
+    await waitFor(() => expect(names(container).length).toBeGreaterThan(0));
+    requests = [];
+    (container.querySelector('a[href="/people/1"]') as HTMLElement).click();
+    await waitFor(() => expect(container.querySelector('.person h2')?.textContent).toBe('Ada'));
+    expect(requests).toEqual(['POST /_memoized/routed']);
+  });
 }

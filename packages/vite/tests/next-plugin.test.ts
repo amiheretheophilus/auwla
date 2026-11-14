@@ -224,4 +224,55 @@ describe("compiler: 'next'", () => {
     const answer = await host.fetch(new Request('http://localhost/_fn/time/getAnswer'));
     expect(await answer.json()).toBe(42);
   }, 60_000);
+
+  it('builds a server-backed $routed page: rendered with its value, prepared on request, kept out of the client', async () => {
+    write('routed/index.html', '<!doctype html><html><head></head><body><div id="root"><!--ssr-outlet--></div><script type="module" src="/src/main.ts"></script></body></html>');
+    write('routed/src/main.ts', `import { mount } from '@memoized-dom/runtime';\nimport { App } from './App';\nmount('root', App);\n`);
+    write('routed/src/App.tsx', `import { Person } from './Person';
+export function App() {
+  return <main><a class="home" route-to="/">Home</a><p route="/">Everyone</p><Person route="/people/:id" /></main>;
+}
+`);
+    // Reading server-only code makes the preparation server-backed (\`wiki/compiler/routes.md\`).
+    write('routed/src/Person.tsx', `import { findPerson } from '#server/people';
+export function Person() {
+  const person = $routed(({ params }) => findPerson(params.id));
+  return <article>{person === null ? <p>Nobody</p> : <h2>{person.name}, {person.role}</h2>}</article>;
+}
+`);
+    write('routed/server/people.ts', `const people = [{ id: '1', name: 'Ada', role: 'Engineer-only-on-the-server' }];
+export function findPerson(id: string) { return people.find((person) => person.id === id) ?? null; }
+`);
+    write('routed/server.ts', `import { serve } from '@memoized-dom/server';\nimport { App } from './src/App';\nimport { define } from '#server/define';\nconst app = serve({ define });\napp.ssr(App);\nexport default app;\n`);
+    write('routed/server/define.ts', `import { createDefine } from '@memoized-dom/server';\nexport const define = createDefine();\n`);
+    const app = join(root, 'routed');
+
+    const builder = await createBuilder({
+      root: app,
+      configFile: false,
+      logLevel: 'silent',
+      plugins: [memoizedDom({ clientEntry: 'src/main.ts', serverEntry: 'server.ts', server: 'server', compiler: 'next' })],
+    });
+    await builder.buildApp();
+    const { default: host } = await import(pathToFileURL(join(app, 'dist', 'server.js')).href);
+
+    // Rendered on the server with the prepared value, which travels with the page.
+    const html = await (await host.fetch(new Request('http://localhost/people/1'))).text();
+    expect(html).toContain('<h2>Ada, Engineer-only-on-the-server</h2>');
+
+    // The endpoint a client navigation asks.
+    const prepared = await host.fetch(new Request('http://localhost/_memoized/routed', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ id: './src/Person.tsx#routed:Person:0', href: '/people/1', params: { id: '1' }, state: {} }),
+    }));
+    expect(prepared.status).toBe(200);
+    expect(JSON.stringify(await prepared.json())).toContain('Ada');
+
+    // The client asks for it instead: the server-only module never ships.
+    const assets = join(app, 'dist', 'client', 'assets');
+    const client = readdirSync(assets).filter((file) => file.endsWith('.js')).map((file) => readFileSync(join(assets, file), 'utf8')).join('\n');
+    expect(client).toContain('/_memoized/routed');
+    expect(client).not.toContain('Engineer-only-on-the-server');
+  }, 60_000);
 });
