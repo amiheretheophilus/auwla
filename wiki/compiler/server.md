@@ -118,6 +118,36 @@ compiler-next keeps versions, cached module derivations, refresh flags and chang
 module (`features/state/shared-dom.ts`), so a fix must make the whole module owner's state
 request-owned in server builds, not only the values.
 
+#### Shared or per request (open, to discuss)
+
+Not decided. The user leans toward module state staying shared across requests during server
+rendering (2026-11-14), which is what compiler-next does today, and wants to discuss it before
+anything changes. The points so far:
+
+- **For sharing.** It is how a JavaScript module behaves anywhere else: one value per process.
+  Caches, configuration and genuinely global counters keep working. A request pays nothing to
+  set up module state. The server stays simple.
+- **Against sharing.**
+  - A value written while serving one user is what the next user's page shows: a cart, a
+    signed-in user, a draft, a filter. Two requests that interleave across an `await` can also
+    see each other's writes in the middle of a render.
+  - The client starts from the authored value, but the server rendered the changed one. Unless
+    the value is sent with the page, hydration disagrees with the server's HTML.
+  - The usual mistake, keeping per-user state at module level, gives no error in development.
+    It only shows up with real concurrent users.
+- **Possible rules:**
+  1. Shared, as today. The docs warn about it, and request data goes through `$routed` or
+     server functions.
+  2. Shared, but writing module state during a server render (or from code a render calls) is
+     a compile error or a development warning. Reads stay free.
+  3. Per request, like the old compiler's cells: each request starts from the authored values,
+     with versions, cached derivations and batches owned by the request. Initializers that are
+     not plain values need a rule of their own: re-run them per request, or reject them.
+  4. Shared by default, and per request for state the author marks.
+- **Test impact.** `request-state.test.ts` encodes rule 3 and is an expected failure. Under rules
+  1, 2 or 4 it changes to match the decision: a diagnostic, a documented shared value, or the
+  marked case.
+
 ### Backend code
 
 Server-only code is compiled as plain code (DX-30, `wiki2/decisions.md`: backend code is not

@@ -250,6 +250,45 @@ machinery; the Vite tests build and serve the same copy. The example's tsconfig 
 `types` so `tsc` accepts `node:crypto`; it reports no errors. A collected
 `.auwla` module is normalized twice per change.
 
+### Open, to discuss: module state during server rendering
+
+Not decided, not changed. The user leans toward module state being shared across requests
+during SSR (2026-11-14) and wants to talk it through first. The leak and the trade-offs are on
+[server](../wiki/compiler/server.md#request-isolation-open), under "Shared or per request". Until
+that is settled, `request-state.test.ts` stays an expected failure that assumes per-request state;
+if the answer is "shared", that test changes with the decision.
+
+### Bundle size (measured 2026-11-14)
+
+The user found the team example's 165 kB (57 kB gzipped) far too large. Measured with the
+preview's settings (Bun, minified, split chunks), sizes attributed to source files through the
+linked source maps:
+
+| Build | Minified | Gzipped |
+| --- | --- | --- |
+| Counter (`.tsx`, state and a click) | 22,047 | 8,392 |
+| One `$fetch` (`.tsx`) | 60,380 | 20,083 |
+| Two routes (`.tsx`) | 71,666 | 24,380 |
+| Team example as `.auwla` | 165,174 | 56,652 |
+| Team example as the TSX jsx-plus emits, compiled as plain `.tsx` | 165,088 | 56,655 |
+
+- `.auwla` costs nothing: the same app as plain TSX is the same size (the 86 bytes are chunk
+  names). The weight is in the packages the app reaches.
+- Team by package: runtime 57 kB, data 42 kB, router 41 kB, the app's own code 22 kB.
+- The largest single files are `router/src/runtime.ts` (17 kB) and `data/src/resource.ts`
+  (12.5 kB). Neither is split, so any route or any fetch brings all of it.
+- Code an app ships without using:
+  - hydration adoption (`runtime/src/adoption.ts` and the hydration markers) in client-only apps;
+  - the live-source protocol and its diagnostics (4 kB) with one plain `$fetch`;
+  - scroll restoration (4 kB) with any route;
+  - restoration (5.8 kB) once `$routed` is used. `data/src/index.ts` also installs restoration
+    when it loads.
+- For scale: `bench/package-size` budgeted the old compiler's todo app at 30,000 B raw and
+  11,000 B gzipped.
+
+No reduction has been made: runtime, data and router are shared with `compiler-rewrite`, so
+cutting them belongs to that track, or needs the user's go-ahead here.
+
 ## Current editor fix and next integration slice
 
 Unfinished host expressions in template conditions now stay mapped for native
