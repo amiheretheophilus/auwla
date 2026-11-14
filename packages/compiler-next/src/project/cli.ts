@@ -4,7 +4,9 @@
  *
  *   bun packages/compiler-next/src/project/cli.ts check src/main.ts [--server server.ts --server-folder server]
  *   bun packages/compiler-next/src/project/cli.ts build src/main.ts --out dist [--minify] [--server … --server-folder …]
+ *   bun packages/compiler-next/src/project/cli.ts package [--root packages/kit]
  *
+ * `package` publishes a native package's source from its `.lib.config.ts` (`packages/package.ts`).
  * `check` compiles the application and reports the first error. `build` bundles it with `Bun.build`
  * and the plugin (`bun.ts`), with source maps beside each file. With a server, the client goes to
  * `<out>/client` and the server to `<out>/server.js`, which serves the built page and its files:
@@ -16,8 +18,11 @@ import type { BuildOutput } from 'bun';
 import { createApplication, type ServerOptions } from '../server/application';
 import { memoizedDom } from './bun';
 import { fileSystemHost, normalizeProjectPath } from './host';
+import { packageLibrary } from './packages/package';
 
-interface Command {
+type Command = ApplicationCommand | PackageCommand;
+
+interface ApplicationCommand {
   readonly name: 'check' | 'build';
   readonly client: string;
   readonly server?: ServerOptions;
@@ -26,12 +31,21 @@ interface Command {
   readonly minify: boolean;
 }
 
+/** `package`: a native package's source, published from its `.lib.config.ts` (`packages/package.ts`). */
+interface PackageCommand {
+  readonly name: 'package';
+  readonly root: string;
+  readonly config?: string;
+}
+
 const USAGE = `usage:
   cli.ts check <client entry> [--root <folder>] [--server <entry> [--server-folder <folder>]]
-  cli.ts build <client entry> [--root <folder>] [--out <folder>] [--minify] [--server <entry> [--server-folder <folder>]]`;
+  cli.ts build <client entry> [--root <folder>] [--out <folder>] [--minify] [--server <entry> [--server-folder <folder>]]
+  cli.ts package [--root <folder>] [--config <file>]`;
 
 /** The command the arguments describe, or a message saying what is wrong with them. */
 export function parseArguments(args: readonly string[], cwd: string): Command | string {
+  if (args[0] === 'package') return parsePackage(args.slice(1), cwd);
   const [name, client, ...rest] = args;
   if ((name !== 'check' && name !== 'build') || client === undefined || client.startsWith('--')) return USAGE;
 
@@ -63,12 +77,29 @@ export function parseArguments(args: readonly string[], cwd: string): Command | 
   return { name, client: normalizeProjectPath(client), ...(server === undefined ? {} : { server }), root, out: resolve(root, out), minify };
 }
 
+function parsePackage(rest: readonly string[], cwd: string): PackageCommand | string {
+  let root = cwd;
+  let config: string | undefined;
+  for (let index = 0; index < rest.length; index += 2) {
+    const flag = rest[index];
+    const value = rest[index + 1];
+    if (value === undefined || (flag !== '--root' && flag !== '--config')) return `unknown or incomplete option: ${flag}\n${USAGE}`;
+    if (flag === '--root') root = resolve(cwd, value);
+    else config = value;
+  }
+  return { name: 'package', root, ...(config === undefined ? {} : { config }) };
+}
+
 /** Runs a command; the exit code. */
 export async function run(command: Command, log: (line: string) => void): Promise<number> {
+  if (command.name === 'package') {
+    await packageLibrary({ root: command.root, ...(command.config === undefined ? {} : { config: command.config }), log });
+    return 0;
+  }
   return command.name === 'check' ? check(command, log) : build(command, log);
 }
 
-async function check(command: Command, log: (line: string) => void): Promise<number> {
+async function check(command: ApplicationCommand, log: (line: string) => void): Promise<number> {
   const application = createApplication({
     client: command.client,
     ...(command.server === undefined ? {} : { server: command.server }),
@@ -86,7 +117,7 @@ async function check(command: Command, log: (line: string) => void): Promise<num
   return 0;
 }
 
-async function build(command: Command, log: (line: string) => void): Promise<number> {
+async function build(command: ApplicationCommand, log: (line: string) => void): Promise<number> {
   const { root, server } = command;
   const clientOut = server === undefined ? command.out : resolve(command.out, 'client');
   const page = resolve(root, 'index.html');

@@ -23,8 +23,10 @@ package, installed or linked from the workspace, to its source file, with Node's
 importing file, so Vite, Bun and the command line compile the same files. `.lib.config.ts` is read
 as a literal object and never run. The new Vite plugin only configures Vite around it; the old
 plugin's native package suites (26 tests: built apps run, a linked workspace, live edits, a real
-type check) pass through `MMD_COMPILER=next`. Next in the same direction: packaging, server pages,
-and Cloudflare as a build target.
+type check) pass through `MMD_COMPILER=next`. Packaging one is the project's too
+(`packageLibrary`, `cli.ts package`), with no bundler, since the package is its source; the old
+plugin's `memoized-dom package` hands `source: true` configs to it, and both native package suites
+pass on either compiler. Next in the same direction: server pages, and Cloudflare as a build target.
 
 **Done (2026-11-14): each server render owns the module state it writes** (`compiler/server.md`,
 "Request isolation"; `decisions.md`, 2026-11-14). In a server build, a module whose state a

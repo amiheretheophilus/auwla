@@ -200,8 +200,8 @@ is server-only by its name (the old plugin assumed `server`).
 - `compilePackages` is rejected with an error saying what replaced it: compiling arbitrary
   installed packages was dropped (`../decisions.md`, 2026-11-05).
 
-Not yet compiler-first, each the old plugin's: `memoized-dom package` (packaging a native package),
-server pages, Cloudflare, and the devtools inspector (on hold). Each goes in the project or
+Not yet compiler-first, each the old plugin's: server pages, Cloudflare, and the devtools
+inspector (on hold). Each goes in the project or
 application layer, with the tools only connecting it (`../decisions.md`, 2026-11-14). (Route CSS is
 built: `routeStyles`, `routes.md`, "A lazy route's styles".) An edit that moves code without
 changing output (a comment) leaves that module's source map stale until its next real change.
@@ -230,6 +230,18 @@ literal object, optionally through `satisfies`, `as` or a `const`, and anything 
 saying so. The old plugin ran a linked package's config through Vite; reading it needs no
 TypeScript loader, works the same under every tool, and cannot run a dependency's code.
 `nativePackages(root)` lists the native packages before a build, for a bundler's configuration.
+
+Packaging one is the project's too (`packageLibrary`, `project/packages/package.ts`): a native
+package ships source, so no bundler is involved. It copies the files the public entries reach,
+exactly as written, checks each import (a dependency not listed, a missing file, a file outside
+the package, a project-only `#x`), compiles the package once with compiler-next so one that cannot
+compile is never published, adds the framework packages the compiled output imports as peers, and
+generates the `package.json` with `exports` pointing at the source and the marker. Declarations
+come from the package's own `tsc` (`project/packages/declarations.ts`). The result is written to a
+staging folder under `.memoized/` and moved into `outDir` once complete. It publishes source only:
+a config without `source: true`, or with an option describing compiled output, is refused.
+`cli.ts package` runs it, and the old plugin's `memoized-dom package` hands every `source: true`
+config to it; compiled output stays the old compiler's.
 
 **Where they go** (the user's direction, `decisions.md` 2026-11-12): each is built in the project
 and application, with its tests here, so the Vite plugin, the Bun plugin and the command line get it
@@ -285,7 +297,10 @@ same adapters. There is no language-specific build wrapper.
 ```
 bun packages/compiler-next/src/project/cli.ts check src/main.ts [--server server.ts --server-folder server]
 bun packages/compiler-next/src/project/cli.ts build src/main.ts --out dist [--minify] [--root .] [--server … --server-folder …]
+bun packages/compiler-next/src/project/cli.ts package [--root packages/kit] [--config .lib.config.ts]
 ```
+
+`package` publishes a native package's source (`project/packages/package.ts`, "Native packages").
 
 `check` compiles the application (both programs with a server) and reports the first error
 (exit 1). `build` bundles it with `Bun.build` and the plugin, a linked source map beside each file:
@@ -306,6 +321,9 @@ bun packages/compiler-next/src/project/cli.ts build src/main.ts --out dist [--mi
 | `project/packages/native.ts` | Native packages: resolving a public import to its source file, and `nativePackages` for a bundler's configuration |
 | `project/packages/library-config.ts` | `.lib.config.ts`, read as a literal object, never run; a package's public entries |
 | `project/packages/linked-types.ts` | Type files for a linked package's public imports |
+| `project/packages/package.ts` | `packageLibrary`: publishing a native package's source, its checks and its manifest |
+| `project/packages/declarations.ts` | A packaged native package's declarations, written by its own `tsc` |
+| `project/packages/package.test.ts` | Packaging then installing into an app the project compiles, the checks that stop it, and `cli.ts package` |
 | `project/packages/native.test.ts` | Installed, linked through a junction, an ordinary package, a config inside `node_modules` never read, two copies kept apart, config forms, and a Bun build |
 | `project/index.ts` | The public API, re-exported from the package root |
 | `project/project.test.ts` | Collecting, aliases, errors, edits, new and deleted files, disk, maps |
@@ -314,7 +332,7 @@ bun packages/compiler-next/src/project/cli.ts build src/main.ts --out dist [--mi
 | `project/page.test.ts` | Stylesheet order, a static page written with its links, relative `src`, an interactive page and a CSS module left alone, shells it refuses |
 | `project/bun.ts` | The Bun plugin |
 | `project/bun.test.ts` | Client: a companion output, a stylesheet, a compile error. Server: a built server rendering its page, a route reading `#server/` code, and a server function |
-| `project/cli.ts` | The command line: `check` and `build`, with or without a server |
+| `project/cli.ts` | The command line: `check` and `build`, with or without a server, and `package` |
 | `project/cli.test.ts` | Arguments, checking, a client build, and a server build serving its page, its script (which hydrates) and a server function |
 | `packages/vite/src/next/plugin.ts` | The Vite plugin over an application: loading, resolving generated modules, hot updates, errors, delivery |
 | `packages/vite/src/next/host.ts` | The project host Vite gives: files from disk, native packages by the project's rule, aliases resolved by Vite |

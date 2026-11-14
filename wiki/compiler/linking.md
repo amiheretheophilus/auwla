@@ -239,7 +239,8 @@ With compiler-next, finding and resolving native packages is the project's job, 
 (`project.md`, "Native packages"): `fileSystemHost` resolves an import of one to its source file,
 for Vite, Bun and the command line alike, and reads `.lib.config.ts` as a literal object without
 running it. The paragraphs above describe the old plugin, which still does it itself. Packaging
-(`memoized-dom package`) still runs in `packages/vite` and moves to the project next.
+is the project's as well (`packageLibrary`, `cli.ts package`); `memoized-dom package` hands every
+`source: true` config to it.
 `packages/vite/tests/native-package.test.ts` and `native-package-workspace.test.ts` cover the
 whole path, including built apps run in happy-dom, and a real type check. Not covered: a dev
 server in a real browser, since this machine has no Chrome, so live edits are checked by

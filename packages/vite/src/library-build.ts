@@ -4,10 +4,10 @@ import { isBuiltin } from 'node:module';
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { build, type Plugin } from 'vite';
 import { experimentalFinalizePackage, type ExperimentalCompiledPackage } from '@memoized-dom/compiler';
+import { packageLibrary } from '@memoized-dom/compiler-next';
 import { inside, libraryError, libraryLayout, loadLibraryConfig, publishingManifest, sourceFile } from './library-layout';
 import { compileLibraryGraph, isLocalLibraryImport } from './library-graph';
 import { emitLibraryDeclarations, rebaseLibraryMap } from './library-declarations';
-import { writeSourcePackage } from './library-source';
 import { resolvableFile } from './graph/package-artifacts';
 
 export async function buildLibrary(options: { root?: string; config?: string } = {}): Promise<string> {
@@ -15,6 +15,9 @@ export async function buildLibrary(options: { root?: string; config?: string } =
   const file = resolve(root, options.config ?? '.lib.config.ts');
   if (!existsSync(file)) libraryError(`missing '${file}'; create .lib.config.ts with export default { entry: './src/index.ts' }`);
   const config = await loadLibraryConfig(root, file);
+  // A native package publishes source, which needs no bundler: compiler-next's project layer
+  // packages it, for every tool (`wiki/decisions.md`, 2026-11-14). Compiled output stays here.
+  if (config.source === true) return packageLibrary({ root, config: relative(root, file) });
   const { entries, outDir } = await libraryLayout(root, config);
   if (inside(outDir, file) || inside(outDir, join(root, 'package.json'))) libraryError('outDir cannot contain the library configuration or source manifest');
   const manifest = await publishingManifest(root, config, entries);
@@ -108,15 +111,6 @@ export async function buildLibrary(options: { root?: string; config?: string } =
     }
   };
   try {
-    if (config.source === true) {
-      await mkdir(output, { recursive: true });
-      await writeSourcePackage(root, config, entries, manifest, outDir, output);
-      await emitLibraryDeclarations(root, output, config, entries);
-      await writeFile(join(output, 'package.json'), JSON.stringify(manifest, null, 2) + '\n');
-      await copyPublishingFiles();
-      await replaceOutput();
-      return outDir;
-    }
     await build({ root, configFile: false, publicDir: false, plugins: [plugin],
       resolve: { alias: config.aliases && Object.fromEntries(Object.entries(config.aliases).map(([name, path]) => [name, path.startsWith('.') ? resolve(root, path) : path])), tsconfigPaths: true },
       build: {

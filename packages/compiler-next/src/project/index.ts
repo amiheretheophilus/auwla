@@ -13,6 +13,8 @@ export { isStylesheetPath } from './stylesheets';
 export { nativePackageResolver, nativePackages } from './packages/native';
 export type { LinkedImport, NativePackageResolver, NativePackages } from './packages/native';
 export { writeLinkedTypes } from './packages/linked-types';
+export { packageLibrary } from './packages/package';
+export type { PackageOptions } from './packages/package';
 export { publicEntries, readLibraryConfig } from './packages/library-config';
 export type { LibraryConfig, PublicEntry } from './packages/library-config';
 /** The paths a relative import may name, as the compiler probes them: a bundler plugin finds generated modules with it. */
