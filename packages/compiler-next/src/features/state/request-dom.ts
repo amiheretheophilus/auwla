@@ -21,8 +21,9 @@
  * Statements that use no state run once, as written: imports, templates, component registration,
  * a `console.log` at the top level. Bindings nothing writes stay shared (`request-owned.ts`).
  *
- * A module whose state setup waits (`await` at its top level) keeps today's shared state: a
- * record cannot be built synchronously from it. `wiki/compiler/server.md` records the limit.
+ * A module whose state setup waits (`let n = await load()` at its top level) gets an `async`
+ * setup, registered when the module loads: a component cannot stop to wait, so a server render
+ * builds those records before it mounts (`runtime/src/module-state.ts`).
  */
 import { b, findAll, is } from 'yuku-ast';
 import type { Expression, Node, Program, Statement } from 'yuku-parser';
@@ -30,7 +31,7 @@ import type { ModulePlan } from '../../core/plan/model';
 import type { Binding } from '../../core/resolve';
 import { Names } from '../../core/emit/names';
 import { copy, originOf } from '../../core/emit/copy';
-import { expression, statement } from '../../core/emit/quote';
+import { expression, statement, stringLiteral } from '../../core/emit/quote';
 import type { EmittedModule } from '../../link/modules';
 import { DEFAULT_RUNTIME_PATH, type CompileModulesOptions } from '../../options';
 import { boundNames, freeUses, type FunctionNode } from './request-scope';
@@ -88,9 +89,9 @@ function emitRequestOwnedState(
   }
 
   const setup = setupStatements(body, owned);
-  if ([...setup].some(waitsAtTopLevel)) {
-    return null;
-  }
+  // A setup that waits is built before a render mounts anything, since a component cannot stop
+  // to wait for it (`runtime/src/module-state.ts`, `prepareRequestModuleStates`).
+  const waits = [...setup].some(waitsAtTopLevel);
 
   const record = names.fresh('_state');
   const lookup = names.fresh('_moduleState');
@@ -107,7 +108,7 @@ function emitRequestOwnedState(
     id: b.Identifier({ name: initialize }),
     params: [b.Identifier({ name: record })],
     body: b.BlockStatement({ body: [...setup].flatMap((entry) => againstRecord(entry, owned, record)) }),
-    async: false, generator: false, expression: false,
+    async: waits, generator: false, expression: false,
   });
 
   const preamble = [
@@ -124,6 +125,11 @@ function emitRequestOwnedState(
   const start = output.findIndex((entry) => !isPrologue(entry) && !is.ImportDeclaration(entry as Node));
   output.splice(start === -1 ? output.length : start, 0, ...preamble);
   // Until here the module's own variables are the only state: its top level is evaluating.
+  if (waits) {
+    output.push(statement('$$runtime.registerWaitingModuleState($$module, $$initialize);', {
+      runtime, module: stringLiteral(plan.module.path), initialize,
+    }));
+  }
   output.push(statement('$$loaded = true;', { loaded }));
   return output;
 }

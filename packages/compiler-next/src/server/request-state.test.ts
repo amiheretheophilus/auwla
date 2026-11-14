@@ -28,8 +28,13 @@ export const cart = { items: [] as string[] };
 export const total = cart.items.length + visits;
 export function visit(item: string) { visits++; cart.items.push(item); }
 `);
+// State whose setup waits: each request builds it before the page renders.
+write('src/greeting.ts', `let greeting = await Promise.resolve('Hello');
+export function greet() { greeting += '!'; return greeting; }
+`);
 write('src/Page.tsx', `import { cart, total, visit, visits } from './session';
-export function Page() { visit('apple'); return <p>visits {visits}, items {cart.items.length}, total {total}</p>; }
+import { greet } from './greeting';
+export function Page() { visit('apple'); return <main><p>visits {visits}, items {cart.items.length}, total {total}</p><p>{greet()}</p></main>; }
 `);
 write('server.ts', `import { serve } from '@memoized-dom/server';\nimport { Page } from './src/Page';\nimport { define } from '#server/define';\nconst app = serve({ define });\napp.ssr(Page);\nexport default app;\n`);
 write('server/define.ts', `import { createDefine } from '@memoized-dom/server';\nexport const define = createDefine();\n`);
@@ -54,6 +59,8 @@ it('gives each server request its own module state', async () => {
     .replace(/<!--[\s\S]*?-->/g, '').replace(/<script[\s\S]*$/, '');
   // Each request starts from the authored values, so each one shows exactly its own visit.
   for (let request = 0; request < 3; request++) {
-    expect(await shown()).toContain('<p>visits 1, items 1, total 2</p>');
+    const page = await shown();
+    expect(page).toContain('<p>visits 1, items 1, total 2</p>');
+    expect(page).toContain('<p>Hello!</p>');
   }
 });

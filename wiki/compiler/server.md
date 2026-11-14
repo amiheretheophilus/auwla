@@ -170,20 +170,27 @@ stays traditional. Built the same day. In a server build (`routedEnvironment: 's
 The old compiler did this with per-request cells for literal initializers only (`docs/09-ssr.md`,
 `moduleStateCells`); here any initializer re-runs per render.
 
+- **A setup that waits** (`let n = await load()`). A component cannot stop to wait, so such a
+  module's setup is emitted `async` and registered when the module loads
+  (`registerWaitingModuleState`, by module path, so a dev server's re-evaluation replaces it). A
+  server render builds those records before it mounts: `RenderSession.prepare()` awaits
+  `prepareRequestModuleStates()` with the render's runtimes active, in evaluation order. Each
+  render therefore runs the module's top-level `await` again, as a browser loading the page
+  would. A render that did not prepare (`renderToString`, which cannot wait) and touches such a
+  module gets an error, never the process's copy. Built 2026-11-14, at the user's request.
+
 Remaining limits:
-- A module whose state setup itself waits (`let n = await load()`) keeps shared state: a record
-  is built synchronously.
 - State inside a third-party library stays process-wide; the decision says the docs must say so.
 - A record belongs to one render's application runtime. A request that renders more than once
   (a page and then a server-backed `$routed` preparation) gives each render its own record.
 
 Checked by `server/request-state.test.ts` (three requests to a built server each show exactly
-their own visit; it was an expected failure until this change) and
-`features/state/request-dom.test.ts`, which runs compiled modules in two server renders and outside
-any render. It covers imports, namespaces, aliases, a captured default, derived values,
-shadowing, arrows, methods, class fields, default parameters and destructuring, plus what stays
-shared: unwritten bindings, top-level-only writes, server-only modules, the browser's build, and
-a setup that waits.
+their own visit, and their own copy of state whose setup waits; it was an expected failure until
+this change) and `features/state/request-dom.test.ts`, which runs compiled modules in two server
+renders and outside any render. It covers imports, namespaces, aliases, a captured default,
+derived values, shadowing, arrows, methods, class fields, default parameters, destructuring and
+a setup that waits (built per render, an error when not prepared), plus what stays shared:
+unwritten bindings, top-level-only writes, server-only modules and the browser's build.
 
 ### Backend code
 

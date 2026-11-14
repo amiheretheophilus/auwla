@@ -22,7 +22,9 @@ See [dynamic attribute values](compiler/core.md#dynamic-attribute-values).
 function outside server-only code writes keeps that state, with its versions, keys and batches, in
 a record per render. The record is built from the module's own setup the first time the render
 touches it, on the render's application runtime (`runtime/src/module-state.ts`). Bindings nothing
-writes, server-only modules and the browser's build are unchanged. `server/request-state.test.ts` is
+writes, server-only modules and the browser's build are unchanged. A module whose setup waits
+(`let n = await load()`) is built per render too, before the render mounts (the user asked for it
+the same day). `server/request-state.test.ts` is
 no longer an expected failure: three requests to a built server each show `visits 1, items 1,
 total 2`. The delivered cases found one mistake on the way, a module source described again for
 every render, which replaced the browser copy's description in the same process; descriptions now

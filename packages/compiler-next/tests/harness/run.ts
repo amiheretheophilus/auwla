@@ -9,7 +9,7 @@ import { pathToFileURL } from 'node:url';
 import { beginReferenceScope, renderApp, type Component } from '../reference/runtime';
 import { toReferenceModules } from '../reference/transform';
 import { beginSources, finishSourceDeclarations } from '../reference/sources';
-import { clearDeferred, describeStep, rejectDeferred, resolveDeferred, usesClock, type Case, type Step } from './case';
+import { clearDeferred, describeStep, isDeferredWaiting, rejectDeferred, resolveDeferred, usesClock, type Case, type Step } from './case';
 import { clearRequests, fetchForCase, rejectRequest, respond } from './requests';
 import { compileModulesDetailed } from '../../src';
 import { clearCompiledApps, comparisonCompilers, importAsServer, type Compiler } from './compilers';
@@ -132,6 +132,7 @@ export async function runOnReference(name: string, testCase: Case): Promise<Obse
   testCase.check?.(container, 0);
 
   for (const step of testCase.steps ?? []) {
+    await waitForDeferred(step, clock, () => app.render());
     perform(step, container);
     await settle(clock);
     app.render();
@@ -197,6 +198,7 @@ async function runOnCompiler(name: string, testCase: Case, compiler: Compiler): 
   testCase.check?.(container, 0);
 
   for (const step of testCase.steps ?? []) {
+    await waitForDeferred(step, clock, () => {});
     perform(step, container);
     await settle(clock);
     await waitForElement(step, container, clock, () => {});
@@ -325,6 +327,23 @@ async function settle(clock: Clock): Promise<void> {
     } else {
       await new Promise((resolve) => setTimeout(resolve, 0));
     }
+  }
+}
+
+/**
+ * Before a step settles a `defer(name)`, wait until something waits on it. The code that calls
+ * `defer` may run only after a module loads (a lazy route's chunk and then its preparation), which
+ * takes longer than a few settle rounds when other suites share the machine. Past the deadline the
+ * step runs anyway and reports that nothing is waiting, as before.
+ */
+async function waitForDeferred(step: Step, clock: Clock, refresh: () => void): Promise<void> {
+  const name = 'resolve' in step ? step.resolve : 'reject' in step ? step.reject : undefined;
+  if (name === undefined) return;
+
+  const deadline = performance.now() + 4000;
+  while (!isDeferredWaiting(name) && performance.now() <= deadline) {
+    await settle(clock);
+    refresh();
   }
 }
 

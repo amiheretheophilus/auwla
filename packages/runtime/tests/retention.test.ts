@@ -10,14 +10,14 @@ import { createWriteBatch } from '../src/write-batch';
 import { createSharedWrites } from '../src/shared-writes';
 import { createRowCache } from '../src/list-map';
 
-async function collectAfterTurn(reference?: WeakRef<object>): Promise<void> {
+async function collectAfterTurn(reference?: WeakRef<object>, attempts = 64): Promise<void> {
   // WeakRef targets stay alive for the job in which they were created. Cross
   // that boundary before forcing collection; never use heap-size thresholds.
   // Collection can defer weak processing or see conservative stack roots.
   // Bound the retry count; a real queued strong reference cannot pass this. A full
   // suite leaves a larger heap, where one conservative root can outlive many
   // collections, so this bound only decides how long such a root gets to clear.
-  for (let attempt = 0; attempt < 64; attempt++) {
+  for (let attempt = 0; attempt < attempts; attempt++) {
     // Collect from a fresh native task, rather than the suspended test's
     // continuation. Warm JSC frames can conservatively retain retired locals.
     await produceInTask(() => Bun.gc(true));
@@ -55,9 +55,12 @@ function rowValue(item: { id: number }): object {
 }
 
 // The control case: its payload stays reachable, so `collectAfterTurn` never
-// returns early and always spends every attempt (128 full collections). That
-// takes about a second on an idle machine and several times longer when other
-// suites share the cores, so it gets a timeout sized for the whole loop.
+// returns early and spends every attempt it is given. A strong reference
+// survives any number of collections, so a few attempts show it as well as 64:
+// 64 (128 full collections) took about a second on an idle machine and over
+// 30 s in the parallel gate, beside the other suites. The timeout stays
+// generous for the loop it does run.
+const CONTROL_ATTEMPTS = 8;
 const EVERY_ATTEMPT_TIMEOUT = 30_000;
 
 it('detects a strong payload reference held by a queued callback', async () => {
@@ -68,7 +71,7 @@ it('detects a strong payload reference held by a queued callback', async () => {
     return new WeakRef(payload);
   }
   const reference = await produceInTask(pending);
-  await collectAfterTurn(reference);
+  await collectAfterTurn(reference, CONTROL_ATTEMPTS);
   expect(reference.deref()).toBeDefined();
   queued.shift()!();
 }, EVERY_ATTEMPT_TIMEOUT);

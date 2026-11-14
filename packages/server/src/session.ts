@@ -23,6 +23,7 @@ import {
   type DocumentLike,
   type Creations,
   numberedDocument,
+  prepareRequestModuleStates,
   serverCreations,
   valueComponent,
 } from '@memoized-dom/runtime/server';
@@ -177,6 +178,10 @@ export class RenderSession {
 
   /** Run matched route preparations; redirects surface as a typed error. */
   async prepare(): Promise<void> {
+    this.signal.throwIfAborted();
+    // Module state whose setup waits is built for this render before anything reads it
+    // (`runtime/src/module-state.ts`): a component cannot stop to wait for it.
+    await prepareRequestModuleStates();
     this.signal.throwIfAborted();
     const outcome = await prepareInitialRoutedRuntime(this.routeRuntime, {
       ...(this.options.routedContext === undefined

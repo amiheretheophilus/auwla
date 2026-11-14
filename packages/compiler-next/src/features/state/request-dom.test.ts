@@ -9,7 +9,8 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import {
-  createApplicationRuntime, getActiveEnvironment, runWithApplicationRuntime, type ApplicationRuntime,
+  createApplicationRuntime, getActiveEnvironment, prepareRequestModuleStates, runWithApplicationRuntime,
+  type ApplicationRuntime,
 } from '@memoized-dom/runtime/testing';
 import { compileModules } from '../../pipeline';
 
@@ -232,11 +233,42 @@ describe('module state that stays shared', () => {
     expect(owns(output['./session.ts']!)).toBe(false);
   });
 
-  it('keeps shared state when the state setup itself waits', () => {
-    // A record is built synchronously the first time a render touches the module.
-    const output = compileServer({
+});
+
+describe('module state whose setup waits', () => {
+  it('is built for each render before it mounts, from the awaited value', async () => {
+    const module = await load('waiting', {
+      './state.ts': `let loads = 0;
+        async function load() { loads++; return 10; }
+        let n = await load();
+        export function inc() { return ++n; }
+        export function loaded() { return loads; }`,
+    }, './state.ts');
+
+    // As `packages/server` does before mounting: the render's own records, with its runtimes active.
+    const first = serverRender('waiting-first');
+    const second = serverRender('waiting-second');
+    await inRender(first, () => prepareRequestModuleStates());
+    await inRender(second, () => prepareRequestModuleStates());
+    expect(inRender(first, () => module.inc!())).toBe(11);
+    expect(inRender(first, () => module.inc!())).toBe(12);
+    expect(inRender(second, () => module.inc!())).toBe(11);
+    // Each render ran the setup's `load()` once, as a browser loading the page would; `loads` is
+    // written, so it is per render too, and the module's own load is the process's.
+    expect(inRender(first, () => module.loaded!())).toBe(1);
+    expect(inRender(second, () => module.loaded!())).toBe(1);
+    expect(module.loaded!()).toBe(1);
+    first.dispose();
+    second.dispose();
+  });
+
+  it('is an error in a render that did not build it, rather than another user\'s copy', async () => {
+    const module = await load('waiting-unprepared', {
       './state.ts': 'let n = await Promise.resolve(0); export function inc() { return ++n; }',
-    });
-    expect(owns(output['./state.ts']!)).toBe(false);
+    }, './state.ts');
+
+    const render = serverRender('waiting-unprepared');
+    expect(() => inRender(render, () => module.inc!())).toThrow('did not');
+    render.dispose();
   });
 });

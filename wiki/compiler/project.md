@@ -194,8 +194,8 @@ is server-only by its name (the old plugin assumed `server`).
   from a package.
 
 Not yet in the new plugin, each the old plugin's: `compilePackages` (rejected with an error), native
-packages, the devtools inspector, route CSS, Cloudflare (untested), library
-builds and server pages. An edit that moves code without changing output (a comment) leaves that
+packages, the devtools inspector, Cloudflare (untested), library builds and server pages. (Route
+CSS is built: `routeStyles`, `routes.md`, "A lazy route's styles".) An edit that moves code without changing output (a comment) leaves that
 module's source map stale until its next real change.
 
 **Where they go** (the user's direction, `decisions.md` 2026-11-12): each is built in the project

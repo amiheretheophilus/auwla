@@ -110,6 +110,11 @@ function takeDeferred(name: string): Deferred {
   return deferred;
 }
 
+/** Whether something waits on `defer(name)` now. */
+export function isDeferredWaiting(name: string): boolean {
+  return (pending.get(name)?.length ?? 0) > 0;
+}
+
 export function resolveDeferred(name: string, value: unknown): void {
   takeDeferred(name).resolve(value);
 }
