@@ -190,6 +190,31 @@ describe('readiness reach', () => {
     expect(output).toMatch(/readSourceValue\(item\)/);
   });
 
+  it("brings in nothing unknown through a route's lazy page, unlike an authored import()", () => {
+    // In a browser build a page imported only for its route loads with `import()`, whose namespace
+    // goes straight to the router. Before, any `import()` made every value from unknown code a
+    // possible source, so the handler's `event.preventDefault()` was wrapped in readiness.
+    const files = (extra: string) => ({
+      './main.ts': `import { mount } from '@memoized-dom/runtime';\nimport { App } from './App';\nmount('root', App);\n`,
+      './Page.tsx': 'export function Page() { return <p>page</p>; }',
+      './App.tsx': `import { Page } from './Page';
+        export function App() {
+          const items = $fetch('/items');
+          function add(event) { event.preventDefault(); }
+          ${extra}
+          return <main><form onSubmit={add}><p>{items.length}</p></form><Page route="/page" /></main>;
+        }`,
+    });
+    const options = { entries: ['./main.ts'], routedEnvironment: 'client' as const };
+
+    const lazy = compileModules(files(''), options)['./App.tsx']!;
+    expect(lazy).toContain('import("./Page.tsx")');
+    expect(lazy).not.toMatch(/sourceBindingInput\(event/);
+
+    const authored = compileModules(files("import('./Page').then((module) => record(module));"), options)['./App.tsx']!;
+    expect(authored).toMatch(/sourceBindingInput\(event/);
+  });
+
   it('keeps every guard when eval is present', () => {
     const output = compile(`
       import { $fetch } from '@memoized-dom/data';

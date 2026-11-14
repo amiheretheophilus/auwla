@@ -451,7 +451,13 @@ may wait, and two flags for unknown code. A binding may hold one when:
 
 The unknown-code flag is set by a dynamic import, an import from outside the
 graph other than `@memoized-dom/*`, or a raw handle or marker reaching unknown
-code. An identifier read in an ordinary position is unwrapped to its payload, so
+code. A route's lazy page loader (`routes/split.ts`,
+`import("./Page.tsx").then((m) => $registerRouteComponent(key, m["Page"]))`) does not set it:
+its namespace is read only for named exports handed straight to a framework call
+(`isRouteModuleLoad`). Before, every browser build with a lazy route set the flag, and
+readiness wrapped host calls such as a form handler's `event.preventDefault()` in the
+directory example; `reach.test.ts` checks the loader leaves it unset and an authored
+`import()` still sets it. An identifier read in an ordinary position is unwrapped to its payload, so
 passing it hands unknown code the payload. Raw values escape through: a
 non-identifier argument of an unknown call, an array or object element, a member
 assignment, `throw`, `yield`, a tagged template, an unknown component's

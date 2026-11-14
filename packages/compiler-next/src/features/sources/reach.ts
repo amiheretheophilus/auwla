@@ -119,10 +119,14 @@ export class SourceReach {
 
       // Code outside the graph may create its own sources, and a dynamically
       // imported namespace is read without this proof's member resolution.
-      const readsUnknown = hasComputedImport(module) || module.imports.some((imported) => {
-        return !imported.typeOnly
-          && (imported.kind === 'dynamic' || (imported.resolvedModule === null && !isFramework(imported.specifier)));
-      });
+      // A route's lazy page (`routes/split.ts`) is the exception: its namespace goes straight to the
+      // router, never to authored code, so it brings in nothing unknown.
+      const readsUnknown = hasComputedImport(module)
+        || module.findAll('ImportExpression').some((load) => !isRouteModuleLoad(module, load))
+        || module.imports.some((imported) => {
+          return !imported.typeOnly && imported.kind !== 'dynamic'
+            && imported.resolvedModule === null && !isFramework(imported.specifier);
+        });
 
       if (readsUnknown) {
         this.#unknown = true;
@@ -1129,6 +1133,36 @@ function propertyKey(pattern: Extract<Node, { type: 'ObjectPattern' }>, declarat
 /** Framework packages: their exports are known and create sources only through `@memoized-dom/data`. */
 function isFramework(specifier: string): boolean {
   return specifier.startsWith('@memoized-dom/');
+}
+
+/**
+ * A route's lazy page loader, as `routes/lower.ts` writes it:
+ * `import("./Page.tsx").then((m) => $registerRouteComponent(key, m["Page"]))`. The namespace is
+ * read only for named exports handed straight to a framework call, so no value from it reaches
+ * authored code. Without this, every app with a lazy route treated all values from unknown code
+ * as possible sources, and readiness wrapped code like an event handler's
+ * `event.preventDefault()`, shipping it to the browser for nothing.
+ */
+function isRouteModuleLoad(module: Module, load: Node): boolean {
+  if (!is.ImportExpression(load) || !is.Literal(load.source) || typeof load.source.value !== 'string') return false;
+  const then = module.parentOf(load);
+  if (!is.MemberExpression(then) || then.object !== load || then.computed || !is.Identifier(then.property) || then.property.name !== 'then') {
+    return false;
+  }
+  const call = module.parentOf(then);
+  const callback = is.CallExpression(call) && call.callee === then && call.arguments.length === 1 ? call.arguments[0]! : null;
+  if (!is.ArrowFunctionExpression(callback) || callback.params.length !== 1 || !is.Identifier(callback.params[0])) return false;
+  const body = callback.body;
+  if (!is.CallExpression(body) || !is.Identifier(body.callee)) return false;
+  const callee = module.referenceOf(body.callee)?.binding ?? null;
+  if (callee === null || frameworkPackage(callee) === null) return false;
+  const namespace = module.bindingOf(callback.params[0]);
+  return namespace !== null && namespace.references.every((reference) => {
+    const member = module.parentOf(reference.node);
+    return is.MemberExpression(member) && member.object === reference.node && member.computed
+      && is.Literal(member.property) && typeof member.property.value === 'string'
+      && module.parentOf(member) === body && body.arguments.includes(member as never);
+  });
 }
 
 function isDataPackage(specifier: string): boolean {
