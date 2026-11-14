@@ -29,6 +29,7 @@ reconciliation, state, readiness and ownership already exist and are reused.
 | [style-conditions.cases.json](style-conditions.cases.json) | Native CSS equivalents, order, selectors, lexical boundaries and errors | Class-condition conformance fixtures |
 | [style-scopes.md](style-scopes.md) | CSS-3a: component/file ownership, local selectors and named `@use(path, id)` rules | First scope/reuse profile |
 | [style-scopes.cases.json](style-scopes.cases.json) | Local declarations, file sharing, named definitions, explicit uses and early errors | Scope conformance fixtures |
+| [style-reuse.md](style-reuse.md) | CSS-3b: cross-file source dependencies, resource rebasing and implicit native nesting | Cross-file/nesting profile |
 
 The user's latest instructions and [existing ground rules](../../wiki/rules.md)
 take precedence. [Decisions](../decisions.md) distinguish accepted direction from

@@ -16,7 +16,7 @@
  */
 import type { SourceLanguage, TextOrigin } from '@memoized-dom/compiler-next';
 import type { VerbatimMapping } from './model';
-import { normalize } from './normalize';
+import { normalizeForLanguage } from './normalize';
 
 type Tsx = ReturnType<SourceLanguage['toTsx']>;
 
@@ -49,11 +49,12 @@ export const auwla: SourceLanguage = {
 
 function toTsx(text: string, path: string): Tsx {
   // A syntax error throws a `JsxPlusError`, which is a located `CompileError`.
-  const normalized = normalize(text, { filename: path });
+  const normalized = normalizeForLanguage(text, path);
   return {
     code: normalized.code,
     origin: copiedSpanOrigin(normalized.mappings),
-    ...(normalized.stylesheet === undefined ? {} : { stylesheet: normalized.stylesheet }),
+    ...(normalized.styleRecipe !== undefined ? { stylesheet: normalized.styleRecipe }
+      : normalized.stylesheet === undefined ? {} : { stylesheet: normalized.stylesheet }),
   };
 }
 

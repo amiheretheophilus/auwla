@@ -9,7 +9,7 @@
 import { findAll, is } from 'yuku-ast';
 import { parse } from 'yuku-parser';
 import { CompileError } from '../core/diagnostics';
-import { languageExtensions, languageOf, moduleText, type SourceLanguage } from '../core/parse/languages';
+import { languageExtensions, languageOf, moduleText, type SourceLanguage, type SourceStylesheet } from '../core/parse/languages';
 import { importCandidates } from '../core/resolve/imports';
 import type { ProjectHost } from './host';
 
@@ -19,6 +19,8 @@ export interface CollectedModule {
   readonly text: string;
   /** Specifier → project path, or `false` for a module the project does not compile. */
   readonly imports: ReadonlyMap<string, string | false>;
+  /** Reuse language metadata obtained while reading imports, without another normalization. */
+  readonly stylesheet?: SourceStylesheet;
 }
 
 /**
@@ -85,17 +87,18 @@ async function readModule(path: string, host: ProjectHost, languages: readonly S
   if (text === undefined) return undefined;
 
   const imports = new Map<string, string | false>();
-  for (const specifier of importSpecifiers(path, text, languages)) {
+  const read = readImports(path, text, languages);
+  for (const specifier of read.specifiers) {
     if (!imports.has(specifier)) {
       imports.set(specifier, await resolveSpecifier(specifier, path, host, languages));
     }
   }
 
-  return { path, text, imports };
+  return { path, text, imports, ...(read.stylesheet === undefined ? {} : { stylesheet: read.stylesheet }) };
 }
 
 /** Where `specifier` in `importer` points: the host's answer first, then the compiler's rule. */
-async function resolveSpecifier(
+export async function resolveSpecifier(
   specifier: string,
   importer: string,
   host: ProjectHost,
@@ -125,11 +128,18 @@ async function resolveSpecifier(
  * does a module whose source language rejects it, which reports nothing.
  */
 export function importSpecifiers(path: string, text: string, languages?: readonly SourceLanguage[]): string[] {
+  return readImports(path, text, languages).specifiers;
+}
+
+function readImports(path: string, text: string, languages?: readonly SourceLanguage[]): {
+  readonly specifiers: string[];
+  readonly stylesheet?: SourceStylesheet;
+} {
   let read;
   try {
     read = moduleText(path, text, languages);
   } catch (error) {
-    if (error instanceof CompileError) return [];
+    if (error instanceof CompileError) return { specifiers: [] };
     throw error;
   }
   const { program } = parse(read.text, { lang: read.lang, sourceType: 'module' });
@@ -155,5 +165,5 @@ export function importSpecifiers(path: string, text: string, languages?: readonl
     }
   }
 
-  return specifiers;
+  return { specifiers, ...(read.stylesheet === undefined ? {} : { stylesheet: read.stylesheet }) };
 }

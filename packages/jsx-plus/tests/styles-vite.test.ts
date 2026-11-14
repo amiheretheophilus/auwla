@@ -117,7 +117,7 @@ it('hot-updates reused local CSS without replacing component JavaScript or scope
   const file = join(scopedRoot, 'Cards.auwla');
   // Change the source width as well as the CSS value: neither scope identities
   // nor the component program should depend on the removed block's byte offsets.
-  writeFileSync(file, readFileSync(file, 'utf8').replace('@.expanded:32px', '@.expanded:400px'));
+  writeFileSync(file, readFileSync(file, 'utf8').replace('border-color: teal', 'border-color: rebeccapurple'));
   type Payload = { type: string; updates?: { acceptedPath: string }[] };
   const payloads = () => send.mock.calls.map(([payload]) => payload as unknown as Payload);
   await waitFor(() => expect(payloads().flatMap((payload) => payload.updates ?? [])
@@ -129,7 +129,7 @@ it('hot-updates reused local CSS without replacing component JavaScript or scope
   // Compare the component program after removing precisely that native cache key.
   const updated = (await client.transformRequest('/Cards.auwla'))!.code;
   expect(updated.replace(/(import "\/Cards\.auwla\.css)\?t=\d+(")/, '$1$2')).toBe(original);
-  expect((await client.transformRequest('/Cards.auwla.css'))!.code).toContain('400px');
+  expect((await client.transformRequest('/Cards.auwla.css'))!.code).toContain('rebeccapurple');
 }, 60_000);
 
 it('serves CSS in dev and hot-updates a CSS-only edit', async () => {
@@ -153,6 +153,65 @@ it('serves CSS in dev and hot-updates a CSS-only edit', async () => {
   expect(payloads().flatMap((payload) => payload.updates ?? [])
     .some((update) => update.acceptedPath === '/App.auwla')).toBe(false);
   expect((await client.transformRequest('/App.auwla.css'))!.code).toContain('#dc2626');
+}, 60_000);
+
+it('watches a source-only definition and hot-updates every consuming CSS asset', async () => {
+  const scopedRoot = copyExample('scoping');
+  server = await createServer({ ...config, root: scopedRoot, server: { middlewareMode: true } });
+  const client = server.environments.client;
+  for (const path of ['/main.ts', '/App.auwla', '/Cards.auwla', '/Cards.auwla.css', '/IndependentCard.auwla', '/IndependentCard.auwla.css']) {
+    await client.transformRequest(path);
+  }
+  const send = vi.spyOn(client.hot, 'send').mockImplementation(() => {});
+  const file = join(scopedRoot, 'styles/Frames.auwla');
+  writeFileSync(file, readFileSync(file, 'utf8').replace('@.expanded:32px', '@.expanded:400px'));
+  type Payload = { type: string; updates?: { acceptedPath: string }[] };
+  const payloads = () => send.mock.calls.map(([payload]) => payload as unknown as Payload);
+  const updated = () => payloads().flatMap((payload) => payload.updates ?? []).map((update) => update.acceptedPath);
+  await waitFor(() => {
+    expect(updated()).toContain('/Cards.auwla.css');
+    expect(updated()).toContain('/IndependentCard.auwla.css');
+  }, { timeout: 15_000 });
+  expect(payloads().some((payload) => payload.type === 'full-reload')).toBe(false);
+  expect(updated().some((path) => path.endsWith('.auwla'))).toBe(false);
+  expect((await client.transformRequest('/Cards.auwla.css'))!.code).toContain('400px');
+  expect((await client.transformRequest('/IndependentCard.auwla.css'))!.code).toContain('400px');
+}, 60_000);
+
+it('recovers a broken style-only dependency through CSS updates without replacing components', async () => {
+  const scopedRoot = copyExample('scoping');
+  // The native watcher suppresses repeated same-file changes inside 50 ms.
+  // This test restores immediately after an error: use write-finish events so
+  // each save is delivered, without sleeps or weakening the recovery assertions.
+  server = await createServer({ ...config, root: scopedRoot, server: {
+    middlewareMode: true,
+    watch: { awaitWriteFinish: { stabilityThreshold: 100, pollInterval: 10 } },
+  } });
+  const client = server.environments.client;
+  const fileEvents: { file: string; at: number }[] = [];
+  server.watcher.on('change', (file) => fileEvents.push({ file, at: Date.now() }));
+  for (const path of ['/main.ts', '/App.auwla', '/Cards.auwla', '/Cards.auwla.css', '/IndependentCard.auwla', '/IndependentCard.auwla.css']) {
+    await client.transformRequest(path);
+  }
+  const send = vi.spyOn(client.hot, 'send').mockImplementation(() => {});
+  const file = join(scopedRoot, 'styles/Frames.auwla');
+  const original = readFileSync(file, 'utf8');
+  type Payload = { type: string; updates?: { acceptedPath: string }[] };
+  const payloads = () => send.mock.calls.map(([payload]) => payload as unknown as Payload);
+  for (let cycle = 0; cycle < 3; cycle++) {
+    send.mockClear();
+    writeFileSync(file, original.replace('id="card-frame"', 'id="renamed"'));
+    await waitFor(() => expect(payloads().some((payload) => payload.type === 'error')).toBe(true), { timeout: 15_000 });
+    send.mockClear();
+    writeFileSync(file, original);
+    await waitFor(() => expect(payloads().flatMap((payload) => payload.updates ?? [])
+      .some((update) => update.acceptedPath.endsWith('.auwla.css'))).toBe(true), { timeout: 15_000 })
+      .catch((cause) => { throw new Error(JSON.stringify({ cycle, fileEvents, payloads: payloads() }), { cause }); });
+    expect(payloads().some((payload) => payload.type === 'full-reload')).toBe(false);
+    expect(payloads().flatMap((payload) => payload.updates ?? [])
+      .some((update) => update.acceptedPath.endsWith('.auwla'))).toBe(false);
+    expect((await client.transformRequest('/Cards.auwla.css'))!.code).toContain('32px');
+  }
 }, 60_000);
 
 it('prunes the CSS module when its author removes all style blocks', async () => {

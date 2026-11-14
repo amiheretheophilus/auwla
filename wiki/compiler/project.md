@@ -54,6 +54,24 @@ rewrites, or what hot replacement sends.
   value, so a module's output can change when only another module did (an import that now names a
   compiled module is read through it).
 
+## Source-only stylesheets
+
+Source languages may declare source-only stylesheet dependencies through a
+`SourceStylesheetRecipe` ([source languages](core.md#source-languages)).
+`project/style-sources.ts` follows those specifiers with the existing source
+resolver and host, including async aliases and supplied `assetSources`. It
+caches their text separately from JS modules and never follows their JS imports
+or emits their JS output. `modules` includes both kinds of source for watching;
+`output` contains JS modules only. `update()` invalidates either cache and
+compares the re-rendered CSS alongside JS, pruning unreachable style sources.
+Source-only code is not executed by a style use.
+
+Vite registers source-only dependencies with `addWatchFile` when loading generated
+CSS. Its ordinary hot-update path receives project CSS changes for every consumer;
+recovery from a style-only source error also refreshes CSS rather than replacing
+components. Native CSS processing owns URL resources/imports, as before. Bun
+builds consume the same CSS results; no new Bun watcher is introduced here.
+
 ## Source maps
 
 With `sourceMaps: true` (a compiler option, so `compileModulesDetailed` and projects take it), each

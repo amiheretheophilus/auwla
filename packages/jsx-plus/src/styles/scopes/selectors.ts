@@ -3,31 +3,9 @@ import {
   type Block, type CssNode, type List, type ListItem, type Rule, type SelectorList,
 } from 'css-tree';
 import type { Report } from '../conditions/values';
+import { parseStylesheet } from '../syntax';
 
 const grouping = new Set(['media', 'supports', 'container', 'layer', 'starting-style', 'scope']);
-
-/**
- * CSS Tree 3.2 reads `h2:hover {...}` as a declaration in a style block.
- * Detect that fallback before it can escape scoping. Strings, URLs, functions
- * and custom-property token blocks keep their ordinary CSS meaning.
- */
-function hasRuleBlock(value: string): boolean {
-  const closes: number[] = [];
-  let found = false;
-  tokenize(value, (type) => {
-    if (type === T.LeftCurlyBracket && closes.length === 0) {
-      found = true;
-    }
-    if (type === T.Function || type === T.LeftParenthesis) {
-      closes.push(T.RightParenthesis);
-    } else if (type === T.LeftSquareBracket) {
-      closes.push(T.RightSquareBracket);
-    } else if (type === closes.at(-1)) {
-      closes.pop();
-    }
-  });
-  return found;
-}
 
 /** Scope declaration subjects while preserving native nesting and ancestor qualifiers. */
 export function scopeSelectors(source: string, attribute: string, report: Report): string {
@@ -48,7 +26,7 @@ export function scopeSelectors(source: string, attribute: string, report: Report
     report('A local style requires a closing }', start, start + 1);
   }
 
-  const tree = parse(source, { positions: true, parseValue: false, parseCustomProperty: false });
+  const tree = parseStylesheet(source, { positions: true, parseValue: false, parseCustomProperty: false });
   const selectors = new Map<Rule, string>();
   const withNestedRules = new Set<Rule>();
   const parents: CssNode[] = [];
@@ -58,13 +36,7 @@ export function scopeSelectors(source: string, attribute: string, report: Report
       const parent = parents.at(-1);
       parents.push(node);
       if (node.type === 'Raw' && (parent?.type === 'StyleSheet' || parent?.type === 'Block')) {
-        report(parent.type === 'Block'
-          ? 'Local nested selectors must start with & in this CSS profile; check this rule syntax'
-          : 'A local style requires a complete native rule', node.loc!.start.offset, node.loc!.end.offset);
-      }
-      if (node.type === 'Declaration' && !ident.decode(node.property).startsWith('--')
-        && hasRuleBlock(original(node.value))) {
-        report('Local nested selectors must start with & in this CSS profile', node.loc!.start.offset, node.loc!.end.offset);
+        report('A local style requires a complete native rule', node.loc!.start.offset, node.loc!.end.offset);
       }
       if (node.type === 'Atrule' && !grouping.has(ident.decode(node.name).toLowerCase())) {
         report(`@${node.name} requires an explicit <style global> consumer in this CSS profile`,

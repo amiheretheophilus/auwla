@@ -66,6 +66,8 @@ export interface CompileModulesOptions {
    * path, and is compiled, imported and mapped like a `.tsx` module. Default: none.
    */
   readonly languages?: readonly SourceLanguage[];
+  /** Source-only stylesheet dependencies. These are resolved/read, never emitted as JS. */
+  readonly assetSources?: Readonly<Record<string, string>>;
 }
 
 /** Options of `compile`, which takes one module. */

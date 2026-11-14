@@ -2,15 +2,15 @@
 
 Updated: 2026-11-14. Branch: `prototype/jsx-plus`.
 
-## Current focus: local scope and named reuse (CSS-3a)
+## Current focus: cross-file reuse and implicit nesting (CSS-3b)
 
 User direction DX-45 is specified in [style-scopes.md](spec/style-scopes.md):
 plain module styles share rules within their file; declarations directly in a
 component are private; `global` is explicit. Named blocks are provisionally
 definitions, consumed with the user's **`@use(path, id)`**, without `#` syntax.
-First slice implements same-file/transitive uses with authored missing-ID,
-duplicate, cycle and syntax diagnostics. Cross-file uses report an explicit
-unsupported dependency error until compiler-owned resolution is added.
+Same-file and cross-file/transitive uses now work, with authored missing-source,
+missing-ID, duplicate and cycle diagnostics. [CSS-3b](spec/style-reuse.md) specifies
+source-only dependencies and implicit nesting; CSS-3a ownership stays unchanged.
 
 Static `:where([data-mmd-s-…])` subject selectors add no specificity. JSX+
 inserts literal native-element attributes using the compiler's read-only
@@ -18,13 +18,23 @@ inserts literal native-element attributes using the compiler's read-only
 tags reuse production helpers. There is no CSS runtime or new reactive path.
 Named CSS resources/native imports require an explicit global consumer for now.
 
+Compiler-next accepts source-only stylesheet recipes and `assetSources`; projects
+collect/cache dependencies with the existing host/resolver. `collect.ts` retains
+stylesheet metadata from its import pass, avoiding a third normalization request.
+Source-only files' JS imports/code are not emitted or executed. Vite watches
+them, updates every consuming CSS asset and recovers errors without replacing
+components. CSS Tree's shared block reader now supports implicit nesting.
+
 `examples/scoping` is a real multi-file gallery: private teal/gold cards reuse
 named rules, share module styles, render direct-loop rows and toggle padding
-independently. Parent, nested and imported components reuse the same class names
+independently. `styles/Frames.auwla` reuses `Palette.auwla`; two different consumer
+modules share that frame under their own scopes. Its SVG and native reset import
+retain their source directories. Parent, nested and imported components reuse the same class names
 to exercise scope boundaries. Run `bun run examples/scoping/preview.ts` on port
 3035, or append `--build`. Existing compiler projects and Bun/Vite own delivery.
 
-Verification: the complete JSX+ package suite passes **443 tests in 30 files**.
+Verification: the complete JSX+ package suite passes **457 tests in 32 files**.
+The unchanged normalization-count test passes; root stylesheet metadata is reused.
 This includes both-mode DOM/CSS, slot fallback/projected content, ordinary cascade
 specificity, matching SSR/client SVG markers, authored mappings/errors and CSS
 assistance. Real TextMate tests cover function-body declarations. Vite builds
@@ -33,21 +43,24 @@ the component module again. The gallery's authored TypeScript check and HTML
 preview build pass. The editor bundle is probed in Node outside the workspace
 with the actual `Cards.auwla` source. Desktop acceptance remains separate.
 
-Compiler analysis checks pass 11 tests; editor adapter checks pass 10 tests.
-All three package type checks pass. Adapter **0.0.9** is installed; reload the
-window for updated component/named CSS highlighting. Local native nesting
-currently requires explicit `&`; the pinned parser's implicit-rule fallbacks are
-rejected rather than allowed to emit unscoped rules. Explicit nesting preserves
-external ancestor qualifiers and declaration order. Full-root tests were not run.
+Focused compiler language/project/Bun/CSS checks pass 33 tests. The actual gallery
+passes authored TypeScript and HTML preview builds. Implicit nesting now works
+for class/type/pseudo selectors, grouping contexts and custom-property blocks;
+CSS assistance retains recovery during incomplete editing. Source-only build
+tests inject a JS throw and unresolved JS import to prove neither enters the
+bundle. Editor adapter checks pass 10 tests, including the built artifact running
+outside the workspace under Node. JSX+, compiler-next, editor and Vite build
+type checks pass. Adapter **0.0.10** is installed; its installed bundle passes
+the Node probes too. Reload the window to load it. Full-root tests were not run.
 
 Preserve the user's modified `examples/styling/App.auwla`; it is not part of
 this checkpoint. Earlier native CSS/class-condition checkpoints are `5af90fee`
 and `a3dbf295`; their file/evidence map remains [styling.md](styling.md).
 
-Next: CSS-3b, cross-file named style source dependencies through compiler-next,
-with URL rebasing, transitive cycles and CSS-only watching, without executing a
-definition module's JS. Breakpoint configuration still needs its own contract;
-no `md`/`lg` defaults, property aliases or event shorthand are added here.
+Next: settle breakpoint configuration and grouped responsive conditions on full
+native properties. No `md`/`lg` defaults, property aliases or event shorthand are
+added here. Cross-file editor ID/path discovery and dependency diagnostics still
+need an injected source host; native assistance defers that lookup without false errors.
 
 ## `.auwla` across modules: JSX+ as a source language (DX-39)
 
@@ -504,6 +517,7 @@ awaits adoption. Retain the record and track new changes here:
 
 | Commit | Change | Why `.auwla` needs it |
 | --- | --- | --- |
+| CSS-3b checkpoint (pending adoption) | `SourceStylesheetRecipe`/`SourceAssetResolver` and `assetSources` extend the generic language contract. `core/assets/stylesheets.ts` resolves recipe inputs; `project/style-sources.ts` collects/caches source-only dependencies using the existing resolver/host. `collect.ts` retains metadata from its existing import pass; `project.ts` watches/prunes source-only inputs and compares CSS. Vite adds source watch files and recovers style-only failures through CSS. Tests: generic toy-language asset sources plus the real JSX+ transitive gallery ([core](../wiki/compiler/core.md#source-languages), [project](../wiki/compiler/project.md#source-only-stylesheets)) | Cross-file named rules need compiler-owned source resolution/delivery, without JS imports, duplicate normalization or a second JSX+ project |
 | CSS-3a checkpoint (pending adoption) | `analysis/markup.ts`, its tests and public export: `inspectMarkup(normalizedTsx)` returns native attribute insertion positions, enclosing function ranges/indices and production component flags, mapped through type/slot lowering. No reactive graph, DOM emission or runtime changes ([analysis](../wiki/compiler/analysis.md)) | Local CSS must stop at real component boundaries without reimplementing component classification in JSX+ |
 | CSS-1 checkpoint | `core/parse/languages.ts` accepts optional static stylesheet text and creates a companion import; parse/resolve retain the asset; detailed results/project updates expose `css`; existing Bun/Vite adapters resolve/load it, including static HTML links | Native style extraction needs compiler-owned CSS delivery; JSX+ supplies text only. Adopt/review this generic extension on compiler-rewrite under DX-34 |
 | `1d3ef3bf` | New read-only analysis API in `packages/compiler-next/src/analysis/`; `pipeline.ts` shares its frontend; `./analysis` package export ([compiler analysis](../wiki/compiler/analysis.md)) | The checking flow planner reads binding/dependency facts without DOM emission |

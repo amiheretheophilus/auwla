@@ -48,6 +48,16 @@ function tokenize(source: string) {
   return tokens;
 }
 
+it('highlights the real cross-file definition with implicit class and type/pseudo nesting', () => {
+  const source = readFileSync(resolve(packageRoot, 'examples/scoping/styles/Frames.auwla'), 'utf8');
+  const tokens = tokenize(source);
+  for (const text of ['padding:', '.title', 'h2:hover']) {
+    const offset = source.indexOf(text);
+    expect(tokens.find((token) => token.startIndex <= offset && offset < token.endIndex)!.scopes)
+      .toContain('meta.embedded.block.css');
+  }
+});
+
 it('embeds CSS in module, named and component style declarations while leaving returned styles as JSX', () => {
   const source = `<style>\n.shared { padding: 4px; }\n</style>
 <style id="look">\n.card { border-color: teal; }\n</style>

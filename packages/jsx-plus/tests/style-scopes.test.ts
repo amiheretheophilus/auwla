@@ -11,6 +11,7 @@ import { authoredOffset } from '../src/source';
 import { createCssSession } from '../src/styles/tooling';
 import { projectForChecking } from '../src/checking/project';
 import cases from '../../../wiki2/spec/style-scopes.cases.json';
+import { normalizeForLanguage } from '../src/normalize';
 
 const root = fileURLToPath(new URL('../examples/scoping/', import.meta.url));
 const applications: runtime.MountedApplication[] = [];
@@ -147,12 +148,12 @@ for (const optimize of [true, false]) {
 
 it('preserves authored mappings, checking scopes and markers across CSS-only edits', () => {
   const source = readFileSync(`${root}/Cards.auwla`, 'utf8');
-  const normalized = normalize(source, { filename: './Cards.auwla' });
+  const normalized = normalizeForLanguage(source, './Cards.auwla');
   for (const text of ['expanded = false', 'expanded = !expanded']) {
     const offset = normalized.code.indexOf(text);
     expect(authoredOffset(normalized.mappings, offset)).toBe(source.indexOf(text));
   }
-  const changed = normalize(source.replace('color: teal;', 'color: rebeccapurple;'), { filename: './Cards.auwla' });
+  const changed = normalizeForLanguage(source.replace('color: teal;', 'color: rebeccapurple;'), './Cards.auwla');
   const markers = (code: string) => [...new Set(code.match(/data-mmd-s-[\w-]+/g))].sort();
   expect(markers(normalized.code)).toEqual(markers(changed.code));
   const checking = projectForChecking(source, './Cards.auwla');
@@ -221,12 +222,15 @@ it('keeps external ancestor qualifiers equivalent under native nesting and scope
   expect(css.indexOf('color:teal')).toBeLessThan(css.indexOf('color: green'));
   expect(css.indexOf('color: green')).toBeLessThan(css.indexOf('color:navy'));
   expect(createCssSession(`<style global>${css}</style>`, 'file:///App.auwla')!.diagnostics()).toEqual([]);
+  const implicit = normalize(source.replaceAll('& .title', '.title').replaceAll('& .note', '.note')).stylesheet!
+    .replace(/data-mmd-s-[\w-]+/g, 'SCOPE');
+  expect(implicit).toBe(css.replaceAll('& .title', '.title').replaceAll('& .note', '.note'));
   expect(() => normalize('<style>.a { & .b {color:red}</style>')).toThrow('A local style requires a closing }');
 });
 
-it('rejects implicit local nesting instead of leaking rules through CSS Tree declaration/raw fallbacks', () => {
+it('accepts implicit local nesting without misreading type/pseudo selectors as declarations', () => {
   for (const css of ['.a { .b {color:red} }', '.a { h2:hover {color:red} color:green; }']) {
-    expect(() => normalize(`<style>${css}</style>`)).toThrow('Local nested selectors must start with &');
+    expect(normalize(`<style>${css}</style>`).stylesheet).toContain(':where([data-mmd-s-');
     expect(normalize(`<style global>${css}</style>`).stylesheet).toBe(css);
   }
   const css = '.a { --future:{nested:tokens}; content:"{literal}"; background:url("{icon}.svg"); }';

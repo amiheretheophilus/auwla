@@ -39,7 +39,7 @@ export function createCssSession(source: string, uri: string, version = 0) {
   const conditions = readConditions(projected);
   const uses = readStyleUses(projected);
   const useProblems: { message: string; start: number; end: number }[] = [];
-  styleChunks(source, uri, blocks, (message, start, end) => useProblems.push({ message, start, end }));
+  styleChunks(source, uri, blocks, (message, start, end) => useProblems.push({ message, start, end }), { deferExternal: true });
   let checking = projected;
   for (const header of conditions.headers) {
     checking = blankRange(checking, header.start, header.end);

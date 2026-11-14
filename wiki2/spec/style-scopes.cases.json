@@ -50,12 +50,19 @@
     {
       "id": "SCOPE-009",
       "source": "<style>.card { h2:hover {color:red} }</style>",
-      "error": "CSS3002"
+      "stylesheet": ".card { h2:hover:where([SCOPE]) {color:red} }",
+      "elements": 0
     },
     {
       "id": "SCOPE-010",
       "source": "<style>.card { & .title {color:red}</style>",
       "error": "CSS3002"
+    },
+    {
+      "id": "SCOPE-011",
+      "source": "<style>.card{.title{color:teal}}</style>",
+      "stylesheet": ".card{.title:where([SCOPE]){color:teal}}",
+      "elements": 0
     }
   ]
 }

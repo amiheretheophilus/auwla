@@ -1,9 +1,10 @@
 # Native CSS implementation
 
-Updated: 2026-11-14. Native CSS-1, class conditions (CSS-2a) and local scopes with
-same-file named reuse (CSS-3a) are implemented. [dxcss.md](../dxcss.md) holds the
+Updated: 2026-11-14. Native CSS-1, class conditions (CSS-2a), local scopes (CSS-3a)
+and cross-file reuse/implicit nesting (CSS-3b) are implemented. [dxcss.md](../dxcss.md) holds the
 wider design; [spec/styles.md](spec/styles.md), [class conditions](spec/style-conditions.md)
 and [scope rules](spec/style-scopes.md) own the implementation contracts.
+[style-reuse.md](spec/style-reuse.md) extends source linking and nesting.
 
 ## Authoring
 
@@ -28,11 +29,12 @@ passes HTML to Bun so the bundler creates CSS/script links itself.
 | Owner | Files and contract |
 | --- | --- |
 | JSX+ syntax | `src/styles/blocks.ts` and `placement.ts` use host tokens and a neutral statement probe to distinguish module/function declarations from ordinary markup. The CSS delimiter scanner respects comments, strings and escapes. `src/normalize.ts` blanks declarations and preserves host mappings. `src/language.ts` passes static stylesheet text to the compiler hook. |
-| Local scope/reuse | `src/styles/uses.ts` parses `@use`, checks same-file IDs/cycles and retains authored offsets while expanding definitions. `scopes/markers.ts` consumes compiler-owned `inspectMarkup()` facts and inserts static attributes with `source.ts`; `scopes/selectors.ts` adds zero-specificity subject selectors. Syntax/selector rules remain here; compiler/runtime reactivity does not change. |
+| Local scope/reuse | `src/styles/uses.ts` parses `@use`, checks module-local IDs and cross-file cycles, and retains authored offsets while expanding definitions. `scopes/markers.ts` consumes compiler-owned `inspectMarkup()` facts and inserts static attributes with `source.ts`; `scopes/selectors.ts` adds zero-specificity subject selectors. Syntax/selector rules remain here; compiler/runtime reactivity does not change. |
+| Cross-file linking/nesting | `styles/stylesheet.ts` supplies pure compiler-owned recipes; `uses.ts` expands selected IDs from resolver-provided text and retains foreign authored spans; `urls.ts` rebases resource tokens. `styles/syntax.ts` extends CSS Tree block dispatch for implicit nesting and is shared by uses, conditions and scope. It reuses CSS Tree's selectors, declarations, at-rules and tokens. |
 | Compiler assets | Compiler-next's `core/parse/languages.ts` appends the side-effect CSS import after authored host code, preserving directives/shebang positions. Parsed/resolved modules retain the companion. `pipeline.ts` exposes `css` separately in detailed results; `project/project.ts` compares JS and CSS in updates. |
 | Existing delivery adapters | Compiler-next's `project/bun.ts` resolves and loads the virtual CSS companion with Bun's CSS loader. Vite's existing `next/plugin.ts` loads it before native CSS processing, including from static HTML whose script was removed. No JSX+ project wrapper/plugin is introduced. |
 | Shared assistance | `src/styles/tooling.ts` uses `vscode-css-languageservice` over an equal-width CSS projection. `styles/recovery.ts` keeps missing-colon errors on unfinished property names and reparses to avoid errors cascading into later selectors; its narrow scanner declarations describe the pinned dependency. Completion edits, hover and diagnostics use authored positions. `src/editor/grammar.ts` embeds the editor's `source.css` grammar. |
-| VS Code adapter | `packages/editor-vscode/src/css.ts` translates protocol objects, caches the current document version and clears sessions/diagnostics on close. It registers independently of TypeScript. Adapter 0.0.9 is built and installed locally; window reload and desktop acceptance remain pending. |
+| VS Code adapter | `packages/editor-vscode/src/css.ts` translates protocol objects, caches the current document version and clears sessions/diagnostics on close. It registers independently of TypeScript. Adapter 0.0.10 includes the shared implicit-nesting reader; window reload and desktop acceptance remain separate. |
 
 The compiler knows no Auwla syntax. Its hook accepts optional static CSS from any
 source language, creates `<module-path>.css`, and retains ordinary CSS imports
@@ -96,9 +98,9 @@ cascade behavior, source mappings and authored errors are checked separately.
 
 Scope selectors mark declaration subjects. Explicit native nesting retains the
 original ancestor context and wraps only its own declarations, so external
-qualifiers keep working. CSS Tree's block grammar requires local nested selectors
-to begin with `&`; implicit forms are explicitly rejected, including type/pseudo
-selectors it would otherwise misread as declarations. Global CSS stays native.
+qualifiers keep working. Implicit class and type/pseudo nesting now works through
+the shared block reader; declaration-versus-rule dispatch distinguishes braces
+inside functions/attributes and custom-property values. Global CSS stays native.
 
 The Vite checks build the gallery and edit a reused definition through native CSS
 hot updates. The source-language compiler delivery contract is unchanged. CSS
@@ -106,11 +108,28 @@ assistance now reads component/named blocks, masks `@use` for the native CSS
 service and reports same-file ID/use errors at authored spans. The real TextMate
 engine checks component blocks without capturing returned DOM `<style>` tags.
 
+## Cross-file reuse (CSS-3b)
+
+`styles/Frames.auwla` reuses `styles/Palette.auwla`; both Cards and IndependentCard
+consume the shared frame in their private scopes. Palette's SVG and global native
+CSS reset import keep their source directories. Compiler-next's generic recipe
+hook owns dependency collection, cached source text, aliases and asset updates.
+Style-only source JS is not traversed/emitted/executed; the gallery build test
+adds an unresolved JS import and throw to prove they never enter the bundle.
+
+Vite watches these source-only files, updates all consuming CSS outputs, and
+recovers missing-ID errors through CSS updates without replacing components.
+Detailed callers can provide `assetSources`; ordinary projects collect them.
+The collector reuses root stylesheet metadata from the existing import pass,
+retaining the established two language requests/one normalization per change.
+
 ## Remaining work
 
-Cross-file named reuse is next: compiler-owned source dependencies, URL rebasing,
-watching and transitive cycle diagnostics. Same-file reuse and local-default
-selectors are defined by [CSS-3a](spec/style-scopes.md). Keyframe/resource renaming
+Cross-file editor ID/path discovery and dependency diagnostics need a host for
+external source text. Shared CSS assistance defers that lookup without false
+errors, while native completion/highlighting and same-file ID checks work.
+Local-default selectors are defined by [CSS-3a](spec/style-scopes.md), with
+[CSS-3b](spec/style-reuse.md) source/nesting extensions. Keyframe/resource renaming
 and global/deep escapes remain open; resources currently require globals.
 Named and grouped conditions on full properties remain later design
 work; named breakpoints such as `@md:30px` still have no extension meaning.
@@ -122,9 +141,8 @@ CSS auto-imports and CSS formatting are not delivered here. The editor service's
 knowledge of new CSS may lag browsers; its warnings do not reject production CSS.
 Desktop behavior still needs acceptance after reloading the installed adapter.
 
-The complete JSX+ package suite passes 443 tests in 30 files; compiler analysis
-checks pass 11 and editor adapter checks pass 10. All three package type checks
-pass, as do the gallery's authored TypeScript check and HTML preview build. The
+Final checkpoint results are recorded in [status](status.md). The gallery's
+authored TypeScript check and HTML preview build pass. The
 editor artifact runs in Node outside the checkout and checks the actual
 class-condition and scoped `Cards.auwla` files with zero CSS diagnostics and
 native value completion. Native completion inside existing hex tokens retains

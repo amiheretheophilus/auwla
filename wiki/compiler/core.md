@@ -91,13 +91,21 @@ A `SourceLanguage` owns extensions and has `toTsx(text, path)`, which returns th
 `TextOrigin` back to the authored text, and throws a located `CompileError` for an authored
 error. It reads no files and needs no particular runtime.
 
-A language may also return optional `stylesheet` text: ordinary static CSS, not
-language-specific rules. `moduleText` creates `<module-path>.css` and appends its
+A language may also return optional `stylesheet` text, or a pure
+`SourceStylesheetRecipe` with dependency specifiers and `render(resolve)`.
+Recipes declare the source dependencies they need; the callback receives their
+resolved compiler paths and source text, never executed modules. CSS syntax and
+recipe semantics belong to the source language. `moduleText` creates `<module-path>.css` and appends its
 relative side-effect import, keeping directives and existing host offsets intact.
 Parse and resolve retain that companion; `compileModulesDetailed` exposes the
 `css` map separately from JavaScript `output`. Projects and the existing adapters
 deliver it ([project](project.md)). `core/parse/styles.test.ts` checks this with a
-toy language, not Auwla syntax. CSS source maps are not yet provided.
+toy language, not Auwla syntax. `core/assets/stylesheets.ts` resolves source-only
+inputs using the ordinary compiler resolver; its tests cover detailed builds,
+aliases, project caching/updates and class-host method binding with an unrelated
+language. `assetSources` supplies source-only text to detailed builds; those
+files are never parsed/emitted as JavaScript by the compiler. Their source text
+participates in the static delivery key. CSS source maps are not yet provided.
 
 After that, such a module is an ordinary `.tsx` module that keeps its own path (`./App.auwla`):
 

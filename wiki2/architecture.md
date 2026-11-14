@@ -24,6 +24,13 @@ it names no particular language. Extended syntax and checking stay in
 `packages/jsx-plus`. Compiler-next's `src/analysis/` folder exposes a read-only
 snapshot of the same frontend for checking.
 
+CSS uses this same language hook: a module returns stylesheet text or a pure
+recipe. Compiler-next's project reads/caches source-only dependencies and passes
+resolved text to that recipe; those sources never enter the JS import graph.
+JSX+ owns CSS syntax, named-ID expansion, scoping and resource rebasing. The
+existing compiler/Bun/Vite delivery owns CSS assets and updates. The extra
+metadata does not introduce a JSX+ project or any filesystem APIs in `src/`.
+
 The synchronized compiler baseline is `compiler-rewrite` at `07e996c9`. `.auwla`
 server functions are not yet recognized (compiler-next's `server/` still accepts
 only JS/TS files). Client features are checked in `.auwla`: routes, lazy route

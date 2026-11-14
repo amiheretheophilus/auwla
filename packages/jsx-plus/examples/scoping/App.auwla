@@ -2,6 +2,7 @@ import { GoldCard, TealCard } from './Cards.auwla';
 import { IndependentCard } from './IndependentCard.auwla';
 
 <style global>
+  @use("./styles/Palette.auwla", "page-reset");
   body { margin: 0; font-family: system-ui, sans-serif; }
   .page-note { font-size: 14px; }
 </style>

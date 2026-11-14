@@ -14,6 +14,7 @@ import { compileModulesDetailed } from '../pipeline';
 import { collectModules, type CollectedModule } from './collect';
 import { normalizeProjectPath, type ProjectHost } from './host';
 import { stylesheetsOf } from './stylesheets';
+import { collectStyleSources } from './style-sources';
 
 export interface ProjectOptions extends CompileModulesOptions {
   /** The modules the app starts from, as project paths (`./src/main.tsx`). */
@@ -35,6 +36,7 @@ export interface CompiledProject {
   readonly initialRender: InitialRender;
   /** Present when the page needs no browser program (`wiki/compiler/delivery.md`). */
   readonly initialDelivery?: InitialDelivery;
+  /** Reached JS modules and source-only stylesheet dependencies (for watching). */
   readonly modules: readonly string[];
   /** The stylesheets the program imports, in the order a browser applies them (`stylesheets.ts`). */
   readonly stylesheets: readonly string[];
@@ -66,6 +68,7 @@ export function createProject(options: ProjectOptions): Project {
 
   /** Modules read so far, by path. A changed file leaves it; the next build reads it again. */
   let known = new Map<string, CollectedModule>();
+  let styleSources = new Map<string, string>();
   /** The output of the last build that compiled, which an update compares against. */
   let previous: Readonly<Record<string, string>> = {};
 
@@ -75,24 +78,33 @@ export function createProject(options: ProjectOptions): Project {
       // A module was deleted, and an import that found it may now find another file.
       known = await collectModules(entries, host, new Map(), options.languages);
     }
-    const modules = [...known.keys()];
+    const modules = new Set(known.keys());
     const missing = entries.find((entry) => !known.has(entry));
     if (missing !== undefined) {
-      return { ok: false, error: new CompileError('the project has no file at this entry', missing), modules };
+      return { ok: false, error: new CompileError('the project has no file at this entry', missing), modules: [...modules] };
     }
     const sources = Object.fromEntries([...known].map(([path, module]) => [path, module.text]));
 
     // Only an error the compiler reports is the author's; anything else is a compiler bug.
     let compiled;
     try {
-      compiled = compileModulesDetailed(sources, { ...compileOptions, entries, resolveImport: importsOf(known, options) });
+      const styles = await collectStyleSources(known, host, styleSources, options.languages, modules, options.assetSources);
+      styleSources = new Map(styles.sources);
+      const resolveJavaScript = importsOf(known, options);
+      compiled = compileModulesDetailed(sources, {
+        ...compileOptions,
+        entries,
+        assetSources: { ...options.assetSources, ...Object.fromEntries(styles.sources) },
+        resolveImport: (specifier, importer) => styles.imports.get(importer)?.get(specifier)
+          ?? resolveJavaScript(specifier, importer),
+      });
     } catch (error) {
-      if (error instanceof CompileError) return { ok: false, error, modules };
+      if (error instanceof CompileError) return { ok: false, error, modules: [...modules] };
       throw error;
     }
 
     previous = { ...compiled.output, ...compiled.css };
-    return { ok: true, ...compiled, modules, stylesheets: stylesheetsOf(entries, known) };
+    return { ok: true, ...compiled, modules: [...modules], stylesheets: stylesheetsOf(entries, known) };
   }
 
   async function update(paths: readonly string[]): Promise<ProjectUpdate> {
@@ -114,11 +126,15 @@ export function createProject(options: ProjectOptions): Project {
    * collecting (`pointsAtMissing`).
    */
   function forget(paths: readonly string[]): void {
-    if (!paths.every((path) => known.has(path))) {
+    if (!paths.every((path) => known.has(path) || styleSources.has(path))) {
       known = new Map();
+      styleSources = new Map();
       return;
     }
-    for (const path of paths) known.delete(path);
+    for (const path of paths) {
+      known.delete(path);
+      styleSources.delete(path);
+    }
   }
 
   return { build, update };

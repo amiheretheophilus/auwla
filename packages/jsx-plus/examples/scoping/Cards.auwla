@@ -3,30 +3,19 @@
   .title { letter-spacing: 1px; }
 </style>
 
-<style id="card-frame">
-  .card {
-    padding: 16px @.expanded:32px;
-    border: 2px solid;
-    border-radius: 12px;
-    margin: 12px 0;
-  }
-
-  .title { margin: 0 0 8px; }
-  .tags { display: flex; gap: 8px; padding: 0; list-style: none; }
-  button { padding: 6px 12px; font: inherit; cursor: pointer; }
-</style>
-
 <style id="card-look">
-  @use("./Cards.auwla", "card-frame");
+  @use("./styles/Frames.auwla", "card-frame");
   .status { font-size: 14px; }
 </style>
 
 export function TealCard() {
   <style>
     @use("./Cards.auwla", "card-look");
-    .card { border-color: teal; }
-    .title { color: teal; }
-    .tag { color: teal; }
+    .card {
+      border-color: teal;
+      .title { color: teal; }
+      .tag { color: teal; }
+    }
   </style>
 
   let expanded = false;

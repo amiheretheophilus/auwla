@@ -28,6 +28,7 @@ import { lowerFetchImport, markExplicitFetches } from './features/sources/delive
 import { resolveSpecifiers } from './link/specifiers';
 import { addHotRuntime, hotModule, type HotModule } from './features/hot';
 import { splitRouteImports } from './features/routes';
+import { stylesheetResolver } from './core/assets/stylesheets';
 
 const NO_COMPONENTS: HotModule = { definesComponents: false, accepts: false };
 
@@ -65,11 +66,13 @@ export function compileModulesDetailed(
 ): CompiledModules {
   const { output, maps, resolved } = compileProgram(modules, options);
   const initialRender = planInitialRender(resolved, output, options);
-  const initialDelivery = planInitialDelivery(initialRender, modules);
+  const initialDelivery = planInitialDelivery(initialRender, { ...options.assetSources, ...modules });
   const css: Record<string, string> = {};
+  const resolveStyleSource = stylesheetResolver(modules, options);
   for (const module of resolved.modules) {
     if (module.stylesheet !== undefined) {
-      css[module.stylesheet.path] = module.stylesheet.code;
+      const stylesheet = module.stylesheet.code;
+      css[module.stylesheet.path] = typeof stylesheet === 'string' ? stylesheet : stylesheet.render(resolveStyleSource);
     }
   }
   return {

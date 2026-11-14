@@ -4,6 +4,8 @@ Profile CSS-3a, draft dated 2026-11-14. DX-45 supplies the accepted ownership
 direction. The user chose **`@use(path, id)`**, with no `#` fragment. The rules
 below make a first implementation slice reviewable; choices labelled provisional
 can change as we exercise real examples.
+CSS-3b ([cross-file reuse and native nesting](style-reuse.md)) extends this
+contract; its source linking and implicit nesting support supersede the initial limits.
 
 ## Authoring and ownership
 
@@ -70,12 +72,11 @@ IDs, missing IDs and cycles are authored errors. Repeated noncyclic uses are
 allowed and preserve cascade order. `@use` is a top-level stylesheet directive,
 not a conditional/nested rule or runtime expression.
 
-First slice: same-file uses with a relative path that resolves to the current
-file. Cross-file reuse needs compiler-owned source-dependency resolution and
-watching; it must not be implemented as a JSX+ project wrapper or a JavaScript
-import that executes the definition module. Until that slice lands, a cross-file
-use reports an explicit unsupported dependency error. Relative asset URLs keep
-their source directory; rebasing is an acceptance requirement for that slice.
+Same-file and cross-file uses resolve through the existing compiler/project.
+Source-only dependencies are read and watched independently from JS imports;
+their JS code is not executed. Rules acquire the consumer's scope and relative
+asset URLs are rebased from the defining file. No JSX+ project wrapper is involved.
+Detailed builds can supply `assetSources`; projects collect those files themselves.
 
 ## Static CSS transformation
 
@@ -92,12 +93,11 @@ component cannot accidentally match a descendant rule. Local selectors and
 structural braces must be complete for safe rewriting; globals keep native
 CSS recovery. Editor assistance still accepts unfinished local CSS while typing.
 
-CSS Tree 3.2's block grammar recognizes nested rules beginning with `&` but
-falls back to raw text or declarations for implicit forms such as `.child {...}`
-and `h2:hover {...}`. **Local nesting therefore requires explicit `&` in this
-first slice.** Both fallbacks are rejected, preventing accidental unscoped rules.
-Global blocks still pass native implicit nesting through unchanged. Full native
-implicit nesting needs a parser capability upgrade, not silent scope leakage.
+Implicit nesting such as `.child {...}` and `h2:hover {...}` is now accepted.
+The shared CSS Tree syntax fork extends block dispatch while retaining its
+selector/declaration/at-rule parsers and source positions. Custom-property token
+blocks and quoted/function/bracket contents keep their CSS meaning. Explicit
+`&` remains valid. CSS-3a's temporary explicit-`&` restriction is superseded.
 
 The module path and function ordinal determine the attribute, not CSS contents
 or source byte offsets. A CSS-only edit keeps existing DOM valid. Server and
@@ -128,8 +128,8 @@ Diagnostics use authored UTF-16 spans, including errors in reused definitions:
 | CSS1002 | Missing authoring `</style>` (existing CSS-1 rule) |
 | CSS1003 | Static declaration in a conditional/loop/nested statement block |
 | CSS2001 | Invalid class condition (existing CSS-2a rule) |
-| CSS3001 | Malformed `@use`, duplicate/missing ID, cycle or unresolved cross-file dependency |
-| CSS3002 | Unsupported local resource, implicit nesting or incomplete structure/selector |
+| CSS3001 | Malformed `@use`, duplicate/missing ID, cycle or unresolved source dependency |
+| CSS3002 | Unsupported local resource or incomplete structure/selector |
 
 The shared CSS editor service reports same-file use syntax/ID errors alongside
 native CSS assistance. Scope transformation restrictions (CSS3002) are currently
@@ -144,7 +144,7 @@ on CSS edits, SSR parity, source mappings and authored errors. CSS completion,
 hover and highlighting must work inside component and named blocks as well as
 global blocks. Cross-file delivery and editor resolution are separate claims.
 
-[SCOPE-001 through SCOPE-010](style-scopes.cases.json) fix the declaration,
+[SCOPE-001 through SCOPE-011](style-scopes.cases.json) fix the declaration,
 sharing, explicit-use, unused-definition and early-error examples. Runtime,
 selector, slot, SSR and editor evidence lives in `tests/style-scopes.test.ts`;
 real TextMate tokenization is checked in `tests/editor-assets.test.ts`.

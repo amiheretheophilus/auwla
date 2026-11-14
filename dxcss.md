@@ -1,8 +1,8 @@
 # Auwla CSS developer experience: styling design discussion
 
-Status: native CSS, full-property class conditions and the first local-scope /
-same-file named-reuse slice are implemented. Cross-file named reuse is next;
-the wider design below distinguishes implemented profiles from later work.
+Status: native CSS, full-property class conditions, local scopes, cross-file
+named reuse and implicit native nesting are implemented. The wider design
+below distinguishes those profiles from later responsive/grouping work.
 
 Created: 2026-11-11. Updated: 2026-11-14.
 
@@ -29,7 +29,8 @@ the resulting companion stylesheets through its existing Bun/Vite integrations.
 CSS-2a now implements compact class conditions on full properties, including
 `padding:4px @.loading:30px`, with native value assistance and header highlighting.
 [CSS-3a](wiki2/spec/style-scopes.md) adds local-by-default file/component styles
-and same-file named reuse with `@use(path, id)`. Named breakpoint conditions,
+and named reuse with `@use(path, id)`. [CSS-3b](wiki2/spec/style-reuse.md) adds
+cross-file dependencies, resource rebasing and implicit nesting. Named breakpoint conditions,
 grouping and aliases remain planned; breakpoint sizes have not been chosen.
 
 Follow DX-39: JSX+ is a standalone template/source-language layer. It supplies
@@ -51,7 +52,7 @@ Its source implementation uses no Bun/Node APIs.
 | CSS execution | Style conditions compile to CSS; the browser applies them | Architectural requirement; no CSS runtime |
 | Grouping | Blocks group several changes under a condition | Planned authoring form |
 | Local scope | Local-by-default `<style>`, explicit `<style global>` | CSS-3a implements file/component scopes with static subject markers |
-| Named styles | `<style id="...">`, consumed through `@use(path, id)` | Same-file reuse implemented; cross-file compiler resolution is next |
+| Named styles | `<style id="...">`, consumed through `@use(path, id)` | Same-file/cross-file reuse, transitive IDs, resource rebasing and compiler-owned source watching implemented |
 | Separators | Optional semicolon/newline termination for compact chains | Provisional lexical contract; preserve ordinary CSS grammar |
 | Editor support | Completion, highlighting, hover and diagnostics | Native CSS-1 service/adapter built locally; compact syntax and desktop acceptance remain open |
 
@@ -281,7 +282,7 @@ The user has defined the ownership direction (DX-45): a style declared inside a
 component belongs to that component. Putting a style at module/file level makes
 it shareable by components there. Plain styles are local; `global` explicitly
 makes their rules global. [CSS-3a](wiki2/spec/style-scopes.md) now implements
-component/module scopes and same-file named reuse. Its explicit draft separates
+component/module scopes; CSS-3b adds cross-file reuse and implicit nesting. The draft separates
 the accepted direction from provisional declaration/selector choices.
 
 ```tsx
@@ -301,7 +302,7 @@ can be explicitly used by two components and style each one's `.card` in its own
 scope. The user chose `@use("./Cards.auwla", "card-look");`, without `#` fragments,
 keeping native CSS `@import` separate. Named blocks are provisionally definitions
 that apply only through a use. IDs are module-local style names, not DOM IDs or
-JavaScript exports. Cross-file resolution must use compiler-next's project and
+JavaScript exports. Cross-file resolution uses compiler-next's project and
 watching, with relative asset URLs rebased from the definition's directory.
 
 The first slice settles direct function-body declarations, module sharing,
@@ -309,12 +310,13 @@ missing/duplicate/cyclic same-file uses, zero-specificity subject markers,
 nested/imported boundaries and authored slot content. Named CSS resources such
 as keyframes/font faces provisionally require an explicit global consumer.
 The gallery is [examples/scoping](packages/jsx-plus/examples/scoping/README.md).
-The pinned parser currently requires local nested selectors to start with `&`;
-implicit nesting is rejected explicitly. Global blocks keep native nesting.
+The shared CSS Tree block reader now recognizes implicit class/type/pseudo
+nesting as well as explicit `&`. It preserves custom-property blocks, functions,
+comments and declaration order; there is no separate selector/value parser.
 Remaining design/integration work:
 
-- Cross-file lookup and transitive cycles, CSS-only watching and URL rebasing,
-  without executing a component's JavaScript for a style use.
+- Cross-file editor source/ID discovery and diagnostics through an injected host;
+  shared native CSS assistance currently defers external lookup without false errors.
 - Named resources local to a scope, global/deep escapes and explicit portal cases.
 - CSS source maps and native browser acceptance beyond the existing DOM tests.
 

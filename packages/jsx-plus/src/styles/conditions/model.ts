@@ -1,4 +1,5 @@
-import { ident, parse, walk, type CssNode, type Declaration } from 'css-tree';
+import { ident, walk, type CssNode, type Declaration } from 'css-tree';
+import { parseStylesheet } from '../syntax';
 import { classClauses, hasValue, type ClassClause } from './values';
 
 export interface ConditionProblem {
@@ -26,7 +27,7 @@ export function readConditions(source: string) {
     return { tree: undefined, declarations, affected, headers, problems };
   }
 
-  const tree = parse(source, { positions: true, parseValue: false, parseCustomProperty: false });
+  const tree = parseStylesheet(source, { positions: true, parseValue: false, parseCustomProperty: false });
   const parents: CssNode[] = [];
   const accounted = new Set<number>();
   walk(tree, {

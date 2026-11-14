@@ -80,7 +80,7 @@ nesting; breakpoint configuration and aliases are later work. See the
 
 Run `bun run examples/scoping/preview.ts` and open port 3035. The
 [scoping gallery](scoping/README.md) gives teal and gold cards private styles,
-shared file rules, named/transitive same-file `@use(path, id)`, direct loop rows
+shared file rules, named/transitive cross-file `@use(path, id)`, direct loop rows
 and independent class toggles. A separate imported component and an unstyled
 nested component exercise ownership boundaries with the same class names.
 The emitted selectors use zero-specificity static markers; CSS-3a adds no

@@ -1,5 +1,18 @@
 # Spec revisions
 
+## CSS-3b — 2026-11-14
+
+- Cross-file `@use(path, id)` uses compiler-owned source resolution, caching and
+  watching. Style-only modules introduce no JS import or output. Definitions
+  retain authored error positions, and relative URL/native import targets are
+  rebased into the consuming stylesheet. Detailed builds accept `assetSources`.
+- Accept implicit native nesting through a shared CSS Tree block-dispatch fork.
+  The explicit-`&` limit is superseded. SCOPE-009 now accepts type/pseudo nesting;
+  SCOPE-011 adds class nesting. Structural completeness remains required locally.
+- Expand the actual gallery with source-only `styles/Frames.auwla` and
+  `Palette.auwla`, nested selectors, an SVG and native CSS reset import. Add
+  cross-file/cycle/URL/project/side-effect and Vite fan-out/recovery evidence.
+
 ## CSS-3a — 2026-11-14
 
 - Extend CSS-1 with local-by-default module styles, direct component-body
