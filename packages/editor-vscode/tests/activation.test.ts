@@ -171,7 +171,8 @@ it('shows reactivity hints beside declarations, without the TypeScript host, and
     [{ line: 1, character: 6 }, { line: 1, character: 11 }, ': state'],
     [{ line: 2, character: 8 }, { line: 2, character: 15 }, ': derived ← count'],
   ]);
-  expect((painted![1]!.hoverMessage as VSCode.MarkdownString).value).toBe('**Derived** from `count`. Recomputed when it changes.');
+  expect((painted![1]!.hoverMessage as VSCode.MarkdownString).value)
+    .toBe('**Derived** from `count`\n\n`doubled` is recomputed when `count` changes: `count * 2` runs again.');
 
   // Its own colors, contributed with theme defaults, not the inlay-hint color shared with comments.
   const after = decorationStyle!.after!;

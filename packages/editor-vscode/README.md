@@ -105,6 +105,11 @@ Version 0.0.7 shows them as `: label` in their own colors (decorations), after t
 user found the inlay-hint color unreadable beside comments. The setting is now
 `auwla.reactivityHints`.
 
+Version 0.0.8 explains each hint with the file's own code: where the value is
+written, what runs again and what reads it. A value the component body assigns
+(`if (count > 10) message = "yeah"`) is derived from what those statements read,
+and a local nothing changes gets no hint.
+
 The installed adapter resolves `@memoized-dom/jsx-plus` from open workspace folders,
 then falls back to the adapter directory for development hosts. The content mapper
 still launches with Bun from that shared package, which must remain installed

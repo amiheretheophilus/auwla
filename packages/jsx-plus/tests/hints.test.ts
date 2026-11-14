@@ -1,5 +1,5 @@
 /** Reactivity hints (`src/editor/hints.ts`): what the compiler decided, beside each declaration. */
-import { expect, it } from 'bun:test';
+import { describe, expect, it } from 'bun:test';
 import { reactivityHints } from '../src/editor/hints';
 
 const counter = `import { $fetch } from '@memoized-dom/data';
@@ -48,13 +48,65 @@ it('gives props, constants and the component itself no hint', () => {
   expect(labelled).not.toContain('Counter');
 });
 
-it('explains each hint on hover', () => {
+it('explains each hint with the code itself: where it is written, what runs again, what reads it', () => {
   const hints = reactivityHints(counter, './Counter.auwla');
   const tooltip = (label: string) => hints.find((hint) => hint.label === label)!.tooltip;
-  expect(tooltip('state')).toBe('**State.** What reads `visits` (markup, derived values, effects) updates when it is written.');
-  expect(tooltip('derived ← doubled, visits')).toBe('**Derived** from `doubled`, `visits`. Recomputed when one of them changes.');
-  expect(tooltip('state ← start')).toBe('**State derived** from `start`. Writing `count` overrides it until `start` changes; then it is recomputed.');
-  expect(tooltip('source')).toBe('**Source.** Its value arrives later; what reads `user` waits for it.');
+  expect(tooltip('state')).toBe([
+    '**State** · `visits`',
+    'Writing `visits` updates everything that reads it: the markup, values derived from it and effects.',
+    'Written at line 9: `visits++`',
+    'Read by `label`.',
+  ].join('\n\n'));
+  expect(tooltip('derived ← count')).toBe([
+    '**Derived** from `count`',
+    '`doubled` is recomputed when `count` changes: `count * 2` runs again.',
+    'Read by `label`.',
+  ].join('\n\n'));
+  expect(tooltip('derived ← doubled, visits')).toBe([
+    '**Derived** from `doubled` and `visits`',
+    '`label` is recomputed when `doubled` or `visits` changes: `` `${doubled} items, ${visits}` `` runs again.',
+  ].join('\n\n'));
+  expect(tooltip('state ← start')).toBe([
+    '**State derived** from `start`',
+    '`count` starts from `start` and is recomputed when `start` changes. '
+      + 'Writing it keeps the written value until `start` changes again.',
+    'Written at line 9: `count++`',
+    'Read by `doubled`.',
+  ].join('\n\n'));
+  expect(tooltip('source')).toBe([
+    '**Source** · loads data',
+    "`user` arrives later, from `$fetch('/user')`. Until it does, markup that reads it waits.",
+  ].join('\n\n'));
+});
+
+describe('a value the body assigns', () => {
+  // `message` has no handler of its own: the body's `if`/`else` computes it from `count`.
+  const component = (handler: string) => `export function A() {
+  let count = 0
+  let message = ""
+  if(count > 10)  message = "yeah"
+  else message = "one"
+  return <button onClick={() => { ${handler} }}>message</button>;
+}`;
+
+  it('is derived from what its statements read, when that changes', () => {
+    const source = component('count++;');
+    expect(shown(source)).toEqual([['count', 'state'], ['message', 'derived ← count']]);
+    expect(reactivityHints(source).at(-1)!.tooltip).toBe([
+      '**Derived** from `count`',
+      '`message` is recomputed when `count` changes: the code that assigns it runs again.',
+      'Assigned at line 4: `message = "yeah"`',
+      'Assigned at line 5: `message = "one"`',
+    ].join('\n\n'));
+  });
+
+  it('gets no hint when nothing can change it after the body ran', () => {
+    expect(shown(component(''))).toEqual([]);
+  });
+
+  it('is state following its inputs when a handler writes it too', () => {
+    expect(shown(component('count++; message = "clicked";'))).toEqual([['count', 'state'], ['message', 'state ← count']]);
+  });
 });
 
 it('calls a source with inputs derived: it re-runs when they change', () => {
@@ -66,8 +118,11 @@ export function People() {
 }
 `;
   expect(shown(source)).toEqual([['search', 'state'], ['people', 'derived ← search']]);
-  expect(reactivityHints(source).at(-1)!.tooltip).toBe('**Derived** from `search`. Recomputed when it changes. '
-    + 'It loads data: when `search` changes the request runs again, and the new value replaces the old one when it arrives.');
+  expect(reactivityHints(source).at(-1)!.tooltip).toBe([
+    '**Derived** from `search`',
+    "`people` is recomputed when `search` changes: `$fetch('/api/people', { query: { search } })` runs again.",
+    'It loads data, so the request runs again too, and the new value replaces the old one when it arrives.',
+  ].join('\n\n'));
 });
 
 const board = `export function Board() {
