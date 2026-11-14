@@ -1,0 +1,55 @@
+{
+  "profile": "CSS-2b-compact",
+  "cases": [
+    {
+      "id": "RESP-001",
+      "source": ".card { padding:4px @700:24px; }",
+      "css": ".card { padding:4px; } @media (min-width:700px) { .card { padding:24px; } }"
+    },
+    {
+      "id": "RESP-002",
+      "source": ".card { padding:4px @700px:24px; }",
+      "css": ".card { padding:4px; } @media (min-width:700px) { .card { padding:24px; } }"
+    },
+    {
+      "id": "RESP-003",
+      "source": ".card { padding:4px @300:12px @700:24px; color:black; }",
+      "css": ".card { padding:4px; } @media (min-width:300px) { .card { padding:12px; } } @media (min-width:700px) { .card { padding:24px; } } .card { color:black; }"
+    },
+    {
+      "id": "RESP-004",
+      "source": ".card { padding:4px @700:24px @300:12px @300px:14px; }",
+      "css": ".card { padding:4px; } @media (min-width:700px) { .card { padding:24px; } } @media (min-width:300px) { .card { padding:12px; } } @media (min-width:300px) { .card { padding:14px; } }"
+    },
+    {
+      "id": "RESP-005",
+      "source": ".card > button:hover, .card::before { color:black @700px:red @.loading:blue; }",
+      "css": ".card > button:hover, .card::before { color:black; } @media (min-width:700px) { .card > button:hover, .card::before { color:red; } } .card > button:hover.loading, .card.loading::before { color:blue; }"
+    },
+    {
+      "id": "RESP-006",
+      "source": ".card { padding:4px/**/@40REM /* threshold */ :8px @.expanded:32px !important; }",
+      "css": ".card { padding:4px !important; } @media (min-width:40rem) { .card { padding:8px !important; } } .card.expanded { padding:32px !important; }"
+    },
+    {
+      "id": "RESP-007",
+      "source": "@supports (display:grid) { .card { .title { font-size:1rem @700:2rem; } color:navy; } }",
+      "css": "@supports (display:grid) { .card { .title { font-size:1rem; } @media (min-width:700px) { .title { font-size:2rem; } } color:navy; } }"
+    },
+    {
+      "id": "RESP-008",
+      "source": "@media (max-width:900px) { .card { --space:4px @.5em:8px @1e2px:12px; } }",
+      "css": "@media (max-width:900px) { .card { --space:4px; } @media (min-width:.5em) { .card { --space:8px; } } @media (min-width:1e2px) { .card { --space:12px; } } }"
+    },
+    { "id": "RESP-009", "source": ".a { padding:4px @-1:8px; }", "error": "finite nonnegative" },
+    { "id": "RESP-010", "source": ".a { padding:4px @700%:8px; }", "error": "finite nonnegative" },
+    { "id": "RESP-011", "source": ".a { padding:4px @700foo:8px; }", "error": "finite nonnegative" },
+    { "id": "RESP-012", "source": ".a { padding:4px @700px; }", "error": "Expected :" },
+    { "id": "RESP-013", "source": ".a { padding:4px @700:; }", "error": "requires a CSS value" },
+    { "id": "RESP-014", "source": ".a { padding: @700:8px; }", "error": "requires a base CSS value" },
+    { "id": "RESP-015", "source": "@keyframes fade { from { opacity:0 @700:1; } }", "error": "outside keyframes" },
+    { "id": "RESP-016", "source": "@font-face { font-family:normal @700:other; }", "error": "qualified style rule" },
+    { "id": "RESP-017", "source": ".a { padding:4px@700:8px; }", "error": "needs whitespace" },
+    { "id": "RESP-018", "source": ".a { padding:4px @1e999px:8px; }", "error": "finite nonnegative" }
+  ]
+}

@@ -58,6 +58,25 @@ it('highlights the real cross-file definition with implicit class and type/pseud
   }
 });
 
+it('highlights numeric viewport thresholds and keeps numeric literals inside functions and strings native', () => {
+  const source = '<style>\n.card { padding:4px @700:8px @700px:12px @40rem:16px; content:"@300:literal"; --x:future(@900:literal); }\n</style>';
+  const tokens = tokenize(source);
+  const scopesAt = (text: string) => {
+    const offset = source.indexOf(text);
+    return tokens.find((token) => token.startIndex <= offset && offset < token.endIndex)!.scopes;
+  };
+  for (const threshold of ['700:', '700px:', '40rem:']) {
+    expect(scopesAt(threshold)).toContain('meta.auwla.css-condition');
+    expect(scopesAt(threshold)).toContain('constant.numeric.css');
+  }
+  expect(scopesAt('px:12')).toContain('keyword.other.unit.css');
+  expect(scopesAt('300:literal')).not.toContain('meta.auwla.css-condition');
+  expect(scopesAt('900:literal')).not.toContain('meta.auwla.css-condition');
+
+  const real = readFileSync(resolve(packageRoot, 'examples/responsive/App.auwla'), 'utf8');
+  expect(tokenize(real).some((token) => token.text === '700' && token.scopes.includes('meta.auwla.css-condition'))).toBe(true);
+});
+
 it('embeds CSS in module, named and component style declarations while leaving returned styles as JSX', () => {
   const source = `<style>\n.shared { padding: 4px; }\n</style>
 <style id="look">\n.card { border-color: teal; }\n</style>

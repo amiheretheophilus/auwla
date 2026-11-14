@@ -29,7 +29,7 @@ export function stylesheetRecipe(
           const scoped = scopeSelectors(chunk.text, attributes.get(block)!, (message, start, end) =>
             report('CSS3002', message, start, end));
           const css = lowerConditions(scoped, () => {
-            throw new Error('Selector scoping changed a previously validated class condition');
+            throw new Error('Selector scoping changed a previously validated CSS condition');
           });
           return rebaseStyleUrls(css, chunk.filename, filename);
         }).join('\n');

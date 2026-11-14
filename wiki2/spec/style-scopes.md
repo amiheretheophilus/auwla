@@ -93,6 +93,24 @@ component cannot accidentally match a descendant rule. Local selectors and
 structural braces must be complete for safe rewriting; globals keep native
 CSS recovery. Editor assistance still accepts unfinished local CSS while typing.
 
+Document selectors are intentional targets, not component subjects. An explicit
+`html`, `body` or `:root` in the subject compound keeps its document meaning
+inside a local block: do not require a component marker on the document shell.
+This also applies to qualified document targets (`body.dark`, `html[lang]`),
+their pseudo-elements and document alternatives of `:is`/`:where`. Other
+alternatives remain scoped. Negative/relational pseudos (`:not`/`:has`) alone do
+not establish a document target. `body .card` still scopes `.card`.
+
+Nested `&` keeps a proven document subject, while descendants remain scoped.
+For mixed document/local parent lists, inherited declaration groups allow only
+the explicitly selected document subjects or marked component elements. This
+preserves authored conditions, order and specificity. These document rules have
+native document-wide effects; ordinary inherited properties/custom properties
+then flow through CSS normally. `<style global>` still makes all selectors global.
+
+This corrects the initial blanket subject-marker rule after the user's root/body
+example exposed unreachable theme variables, body typography and button colors.
+
 Implicit nesting such as `.child {...}` and `h2:hover {...}` is now accepted.
 The shared CSS Tree syntax fork extends block dispatch while retaining its
 selector/declaration/at-rule parsers and source positions. Custom-property token
@@ -127,7 +145,7 @@ Diagnostics use authored UTF-16 spans, including errors in reused definitions:
 | CSS1001 | Unsupported style attributes, empty ID or component-private named definition |
 | CSS1002 | Missing authoring `</style>` (existing CSS-1 rule) |
 | CSS1003 | Static declaration in a conditional/loop/nested statement block |
-| CSS2001 | Invalid class condition (existing CSS-2a rule) |
+| CSS2001 | Invalid class or numeric viewport condition (CSS-2a/CSS-2b) |
 | CSS3001 | Malformed `@use`, duplicate/missing ID, cycle or unresolved source dependency |
 | CSS3002 | Unsupported local resource or incomplete structure/selector |
 

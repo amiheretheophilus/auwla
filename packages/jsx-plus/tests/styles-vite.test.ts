@@ -66,6 +66,41 @@ it('builds full-property class conditions through the same compiler-owned CSS pa
   expect(String(css.source)).not.toContain('@.');
 }, 60_000);
 
+it('builds and hot-updates numeric responsive rules through native CSS delivery', async () => {
+  const responsiveRoot = copyExample('responsive');
+  const result = await build({ ...config, root: responsiveRoot, build: { write: false } });
+  const outputs = (Array.isArray(result) ? result : [result]) as Rolldown.RolldownOutput[];
+  const assets = outputs.flatMap((output) => output.output);
+  const css = assets.find((asset): asset is Rolldown.OutputAsset => asset.type === 'asset' && asset.fileName.endsWith('.css'))!;
+  expect(String(css.source)).toContain('@media');
+  expect(String(css.source)).toContain('700px');
+  expect(String(css.source)).not.toMatch(/@(?:300|700|1000|\.)/);
+  const html = assets.find((asset): asset is Rolldown.OutputAsset => asset.type === 'asset' && asset.fileName.endsWith('.html'))!;
+  expect(String(html.source)).toContain(css.fileName);
+
+  server = await createServer({ ...config, root: responsiveRoot, server: { middlewareMode: true } });
+  const client = server.environments.client;
+  for (const path of ['/main.ts', '/App.auwla', '/Card.auwla', '/Card.auwla.css']) {
+    await client.transformRequest(path);
+  }
+  const original = (await client.transformRequest('/Card.auwla'))!.code;
+  const send = vi.spyOn(client.hot, 'send').mockImplementation(() => {});
+  const file = join(responsiveRoot, 'shared.auwla');
+  writeFileSync(file, readFileSync(file, 'utf8').replace('@700px:24px', '@800px:28px'));
+  type Payload = { type: string; updates?: { acceptedPath: string }[] };
+  const payloads = () => send.mock.calls.map(([payload]) => payload as unknown as Payload);
+  await waitFor(() => expect(payloads().flatMap((payload) => payload.updates ?? [])
+    .some((update) => update.acceptedPath === '/Card.auwla.css')).toBe(true), { timeout: 15_000 });
+  expect(payloads().some((payload) => payload.type === 'full-reload')).toBe(false);
+  expect(payloads().flatMap((payload) => payload.updates ?? [])
+    .some((update) => update.acceptedPath.endsWith('.auwla'))).toBe(false);
+  const updated = (await client.transformRequest('/Card.auwla'))!.code;
+  expect(updated.replace(/(import "\/Card\.auwla\.css)\?t=\d+(")/, '$1$2')).toBe(original);
+  const updatedCss = (await client.transformRequest('/Card.auwla.css'))!.code;
+  expect(updatedCss).toMatch(/min-width:\s*800px/);
+  expect(updatedCss).toContain('28px');
+}, 60_000);
+
 it('keeps generated CSS when a fully static page ships without a script', async () => {
   const staticRoot = copyExample();
   writeFileSync(join(staticRoot, 'App.auwla'),

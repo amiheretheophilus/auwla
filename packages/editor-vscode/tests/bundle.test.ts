@@ -48,6 +48,17 @@ it('loads the built extension outside the workspace and runs CSS providers in No
     expect(scopeErrors).toBe('');
     expect(scopeExit).toBe(0);
     expect(scopeOutput).toContain('zero CSS diagnostics and native value completion passed');
+
+    const responsive = join(root, '../jsx-plus/examples/responsive/shared.auwla');
+    const numeric = Bun.spawn(['node', join(import.meta.dir, 'fixtures/bundle-host.cjs'), entry, responsive, '@700:'], {
+      cwd: installed, stdout: 'pipe', stderr: 'pipe',
+    });
+    const [numericExit, numericOutput, numericErrors] = await Promise.all([
+      numeric.exited, new Response(numeric.stdout).text(), new Response(numeric.stderr).text(),
+    ]);
+    expect(numericErrors).toBe('');
+    expect(numericExit).toBe(0);
+    expect(numericOutput).toContain('zero CSS diagnostics and native value completion passed');
   } finally {
     rmSync(installed, { recursive: true, force: true });
   }

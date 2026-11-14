@@ -8,6 +8,11 @@ extensions can reuse them without installing this adapter. See
 
 From this package:
 
+Version 0.0.11 includes numeric viewport-condition highlighting and native value
+assistance (`@700` equals `@700px`). The built artifact is probed with the real
+responsive named-style source under Node outside the checkout. Reload VS Code
+after installing the updated VSIX.
+
 ```text
 bun run build
 bun check

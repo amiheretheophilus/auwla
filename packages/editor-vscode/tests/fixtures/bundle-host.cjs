@@ -95,7 +95,7 @@ async function run() {
   await require(entry).activate(context);
   if (process.argv[3] !== undefined) {
     assert.deepEqual(problems, [], 'the real CSS example must have no CSS diagnostics');
-    const marker = source.includes('@.loading:') ? '@.loading:' : 'border-color: ';
+    const marker = process.argv[4] ?? (source.includes('@.loading:') ? '@.loading:' : 'border-color: ');
     const offset = source.indexOf(marker) + marker.length;
     assert.ok(offset >= marker.length);
     // Native CSS completion does not offer keywords inside an existing hex

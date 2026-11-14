@@ -1,0 +1,9 @@
+<style id="panel">
+  .card {
+    padding: 8px @300:12px @700px:24px @.expanded:36px;
+    border: 2px solid;
+    border-color: #64748b @700:#2563eb;
+    border-radius: 12px;
+    background: var(--card-background);
+  }
+</style>

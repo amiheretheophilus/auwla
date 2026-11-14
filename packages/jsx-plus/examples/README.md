@@ -73,7 +73,7 @@ Run `bun run examples/class-conditions/preview.ts` and open port 3034.
 ordinary classes; the emitted CSS decides which values apply. Tests run the real
 entry and apply its emitted stylesheet in both modes. The explicit global profile
 also covers selector lists, pseudo-elements, native grouping rules and authored
-nesting; breakpoint configuration and aliases are later work. See the
+nesting; numeric responsive thresholds have a separate example below, and aliases are later work. See the
 [CSS-2a contract](../../../wiki2/spec/style-conditions.md).
 
 ## Component and file scopes
@@ -85,6 +85,15 @@ and independent class toggles. A separate imported component and an unstyled
 nested component exercise ownership boundaries with the same class names.
 The emitted selectors use zero-specificity static markers; CSS-3a adds no
 styling runtime. See [the contract](../../../wiki2/spec/style-scopes.md).
+
+## Numeric responsive CSS
+
+Run `bun run examples/responsive/preview.ts` and open port 3036. The
+[responsive cards](responsive/README.md) use `@300`, `@700px` and `@1000` on
+native properties, relative `@40rem`, nested headings and shared named styles.
+Each card has an independent expansion toggle. Resize across the thresholds;
+the browser evaluates the generated media queries. `@700` equals `@700px`.
+The order-check paragraph demonstrates descending thresholds without sorting.
 
 ## Run the notes app (several `.auwla` files)
 

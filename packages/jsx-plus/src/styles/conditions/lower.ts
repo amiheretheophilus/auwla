@@ -38,7 +38,7 @@ export function lowerConditions(source: string, report: Report): string {
   }
   for (const node of model.affected) {
     if (node.type === 'Block' && source[node.loc!.end.offset - 1] !== '}') {
-      report('A style block containing class conditions requires a closing }', node.loc!.start.offset, node.loc!.start.offset + 1);
+      report('A style block containing CSS conditions requires a closing }', node.loc!.start.offset, node.loc!.start.offset + 1);
       return source;
     }
   }
@@ -47,8 +47,15 @@ export function lowerConditions(source: string, report: Report): string {
     const value = source.slice(entry.declaration.value.loc!.start.offset, entry.declaration.value.loc!.end.offset);
     const important = entry.declaration.important ? ' !important' : '';
     return entry.clauses.map((clause) => {
-      const selector = classSelector(rule.prelude as SelectorList, clause.name);
-      return `${selector}{${entry.declaration.property}:${value.slice(clause.valueStart, clause.valueEnd).trim()}${important};}`;
+      const selector = clause.kind === 'class'
+        ? classSelector(rule.prelude as SelectorList, clause.name)
+        : source.slice(rule.prelude.loc!.start.offset, rule.prelude.loc!.end.offset);
+      const declaration = `${entry.declaration.property}:${value.slice(clause.valueStart, clause.valueEnd).trim()}${important};`;
+      const qualified = `${selector}{${declaration}}`;
+      if (clause.kind === 'viewport') {
+        return `@media (min-width:${clause.minWidth}){${qualified}}`;
+      }
+      return qualified;
     }).join('\n');
   }
 

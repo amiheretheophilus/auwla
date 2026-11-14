@@ -1,9 +1,10 @@
 import {
-  clone, generate, ident, parse, tokenize, tokenTypes as T, walk,
-  type Block, type CssNode, type List, type ListItem, type Rule, type SelectorList,
+  clone, generate, ident, tokenize, tokenTypes as T, walk,
+  type Block, type CssNode, type List, type Rule, type SelectorList,
 } from 'css-tree';
 import type { Report } from '../conditions/values';
 import { parseStylesheet } from '../syntax';
+import { scopeSubjects, subjectGate } from './subjects';
 
 const grouping = new Set(['media', 'supports', 'container', 'layer', 'starting-style', 'scope']);
 
@@ -28,6 +29,7 @@ export function scopeSelectors(source: string, attribute: string, report: Report
 
   const tree = parseStylesheet(source, { positions: true, parseValue: false, parseCustomProperty: false });
   const selectors = new Map<Rule, string>();
+  const documentSubjects = new Map<Rule, readonly string[]>();
   const withNestedRules = new Set<Rule>();
   const parents: CssNode[] = [];
 
@@ -56,35 +58,9 @@ export function scopeSelectors(source: string, attribute: string, report: Report
       }
 
       const prelude = clone(node.prelude) as SelectorList;
-      for (const selector of prelude.children) {
-        if (selector.type !== 'Selector') {
-          continue;
-        }
-
-        // A marker on the subject allows external ancestor qualifiers. It goes
-        // before a pseudo-element, since no selector may follow ::before/::after.
-        let before: ListItem<CssNode> | undefined;
-        selector.children.forEach((child, item) => {
-          if (child.type === 'Combinator') {
-            before = undefined;
-          } else if (before === undefined && (child.type === 'PseudoElementSelector'
-            || (child.type === 'PseudoClassSelector'
-              && /^(?:before|after|first-line|first-letter)$/i.test(ident.decode(child.name))))) {
-            before = item;
-          }
-        });
-
-        const marker = parse(`:where([${attribute}])`, { context: 'selector' });
-        if (marker.type === 'Selector') {
-          for (const child of marker.children) {
-            if (before === undefined) {
-              selector.children.appendData(child);
-            } else {
-              selector.children.insertData(child, before);
-            }
-          }
-        }
-      }
+      const ancestor = parents.slice(0, -1).findLast((parent) => parent.type === 'Rule');
+      const inherited = ancestor?.type === 'Rule' ? documentSubjects.get(ancestor) ?? [] : [];
+      documentSubjects.set(node, scopeSubjects(prelude, attribute, inherited));
       selectors.set(node, generate(prelude));
     },
     leave() {
@@ -99,17 +75,17 @@ export function scopeSelectors(source: string, attribute: string, report: Report
   /**
    * A nested rule must inherit the original ancestor selector. Scoping the
    * ancestor itself would turn `body.dark { .title {...} }` into a selector that
-   * requires our marker on body. Instead scope the ancestor's own declarations
-   * inside `&:where(...)`, leaving its nested selector context unchanged.
+   * requires our marker on body. Keep its nested context, scoping declaration
+   * groups while allowing explicitly selected document subjects to match too.
    */
-  function inherited(block: Block): string {
+  function inherited(block: Block, gate: string): string {
     let result = '';
     let pending = '';
     let hasDeclaration = false;
     let position = block.loc!.start.offset + 1;
 
     function flush(): void {
-      result += hasDeclaration ? `&:where([${attribute}]){${pending}}` : pending;
+      result += hasDeclaration ? `&${gate}{${pending}}` : pending;
       pending = '';
       hasDeclaration = false;
     }
@@ -121,7 +97,7 @@ export function scopeSelectors(source: string, attribute: string, report: Report
         result += render(child);
       } else if (child.type === 'Atrule' && child.block !== null) {
         flush();
-        result += source.slice(child.loc!.start.offset, child.block.loc!.start.offset) + inherited(child.block);
+        result += source.slice(child.loc!.start.offset, child.block.loc!.start.offset) + inherited(child.block, gate);
       } else {
         pending += original(child);
         hasDeclaration ||= child.type === 'Declaration';
@@ -146,7 +122,8 @@ export function scopeSelectors(source: string, attribute: string, report: Report
   function render(node: CssNode): string {
     if (node.type === 'Rule') {
       if (withNestedRules.has(node)) {
-        return source.slice(node.loc!.start.offset, node.block.loc!.start.offset) + inherited(node.block);
+        const gate = subjectGate(attribute, documentSubjects.get(node) ?? []);
+        return source.slice(node.loc!.start.offset, node.block.loc!.start.offset) + inherited(node.block, gate);
       }
       return source.slice(node.loc!.start.offset, node.prelude.loc!.start.offset)
         + selectors.get(node) + source.slice(node.prelude.loc!.end.offset, node.loc!.end.offset);

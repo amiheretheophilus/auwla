@@ -56,6 +56,7 @@ Editor assistance recognizes the clause as belonging to its native property.
 Native value completion and hover remain usable; condition punctuation is not
 fed to the CSS service as malformed declarations. Builds remain strict for
 malformed clauses, while the checking view retains useful current-source ranges.
-Class-name discovery, breakpoint/grouped conditions, aliases and local scope are
-later work. Before claiming support, fixtures must cover output, ordering,
+Class-name discovery, grouped conditions and aliases are later work. Local scope
+is defined by [CSS-3a](style-scopes.md); numeric viewport clauses extend this
+model in [CSS-2b](style-responsive.md). Before claiming support, fixtures must cover output, ordering,
 selectors, lexical boundaries, errors, real authoring and editor edits.

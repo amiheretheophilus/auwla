@@ -216,7 +216,8 @@ it('keeps external ancestor qualifiers equivalent under native nesting and scope
   expect(css).not.toContain('body.dark:where');
   expect(css).toContain('& .title:where([SCOPE]) {color:teal}');
   expect(css).toContain('& .note:where([SCOPE]) {color:navy}');
-  expect(css.match(/&:where\(\[SCOPE\]\)/g)).toHaveLength(3);
+  // Explicit body declarations must reach body; descendants still need markers.
+  expect(css.match(/&:where\(\[SCOPE\],body.dark\)/g)).toHaveLength(3);
   expect(css.indexOf('color: red')).toBeLessThan(css.indexOf('color: blue'));
   expect(css.indexOf('color: blue')).toBeLessThan(css.indexOf('color:teal'));
   expect(css.indexOf('color:teal')).toBeLessThan(css.indexOf('color: green'));
@@ -240,6 +241,72 @@ it('accepts implicit local nesting without misreading type/pseudo selectors as d
   expect(conditional).toMatch(/&:where\(\[data-mmd-s-[\w-]+\]\)\.loading/);
   expect(createCssSession(`<style global>${conditional}</style>`, 'file:///App.auwla')!.diagnostics()).toEqual([]);
 });
+
+it('keeps intentional document targets reachable while scoping mixed and descendant subjects', () => {
+  const source = `<style>
+    :root {--accent:navy;}
+    html[lang], body.dark, .card {color:var(--accent);}
+    body .title {color:teal;}
+    body::before {content:"Document";}
+    :is(body, .shared):not(.hidden) {padding:8px;}
+    :where(:root, .frame) {margin:0;}
+    :not(body), :has(body) {border:0;}
+  </style>
+  export function App(){ return <section class="card"><h1 class="title">"Title"</h1></section>; }`;
+  const css = normalize(source).stylesheet!.replace(/data-mmd-s-[\w-]+/g, 'SCOPE');
+  expect(css).toContain(':root {--accent:navy;}');
+  expect(css).toContain('html[lang],body.dark,.card:where([SCOPE])');
+  expect(css).toContain('body .title:where([SCOPE])');
+  expect(css).toContain('body::before {content:"Document";}');
+  expect(css).toContain(':is(body,.shared:where([SCOPE])):not(.hidden)');
+  expect(css).toContain(':where(:root,.frame:where([SCOPE]))');
+  expect(css).toContain(':not(body):where([SCOPE]),:has(body):where([SCOPE])');
+});
+
+it('propagates explicit document subjects through nested & without unscoping descendant cards', () => {
+  const source = `<style>
+    body.dark, .frame {
+      padding:8px;
+      &.ready {color:navy;}
+      .title {color:teal;}
+      @media (min-width:1px) {margin:0;}
+    }
+  </style>`;
+  const css = normalize(source).stylesheet!.replace(/data-mmd-s-[\w-]+/g, 'SCOPE');
+  expect(css).toContain('&:where([SCOPE],body.dark){');
+  expect(css).toContain('&.ready:where([SCOPE],body.dark)');
+  expect(css).toContain('.title:where([SCOPE])');
+  expect(css).not.toContain('.title:where([SCOPE],body.dark)');
+});
+
+for (const optimize of [true, false]) {
+  it(`applies root variables and body typography without leaking local selectors, optimize=${optimize}`, () => {
+    const source = `<style>
+      :root {--scope-accent:navy;}
+      body {font-family:system-ui,sans-serif;}
+      .card {color:var(--scope-accent);background:var(--scope-accent);}
+      :is(body, .card) {padding:11px;}
+    </style>
+    export function App(){return <button class="card">"Visible button"</button>;}`;
+    const result = compileModulesDetailed({ './App.auwla': source }, { languages: [auwla], optimize });
+    applyCss(result.css!['./App.auwla.css']!);
+    const { App } = execute(result.output['./App.auwla']!);
+    const container = document.createElement('div');
+    const outside = document.createElement('button');
+    outside.className = 'card';
+    document.body.append(container, outside);
+    applications.push(runtime.mount(container, App as () => unknown));
+    const button = container.querySelector('button')!;
+    expect(getComputedStyle(document.documentElement).getPropertyValue('--scope-accent')).toBe('navy');
+    expect(getComputedStyle(document.body).fontFamily).toContain('system-ui');
+    expect(getComputedStyle(document.body).paddingTop).toBe('11px');
+    expect(getComputedStyle(button).color).toBe('navy');
+    expect(getComputedStyle(button).backgroundColor).toBe('navy');
+    expect(getComputedStyle(button).paddingTop).toBe('11px');
+    expect(getComputedStyle(outside).backgroundColor).not.toBe('navy');
+    expect(getComputedStyle(outside).paddingTop).not.toBe('11px');
+  });
+}
 
 it('uses the same static scope markers in server markup and client rendering, including SVG', () => {
   const source = `export function App() {

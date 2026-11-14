@@ -2,65 +2,57 @@
 
 Updated: 2026-11-14. Branch: `prototype/jsx-plus`.
 
-## Current focus: cross-file reuse and implicit nesting (CSS-3b)
+## Current focus: numeric responsiveness and document subjects
 
-User direction DX-45 is specified in [style-scopes.md](spec/style-scopes.md):
-plain module styles share rules within their file; declarations directly in a
-component are private; `global` is explicit. Named blocks are provisionally
-definitions, consumed with the user's **`@use(path, id)`**, without `#` syntax.
-Same-file and cross-file/transitive uses now work, with authored missing-source,
-missing-ID, duplicate and cycle diagnostics. [CSS-3b](spec/style-reuse.md) specifies
-source-only dependencies and implicit nesting; CSS-3a ownership stays unchanged.
+[CSS-2b](spec/style-responsive.md), accepted in DX-47, implements compact numeric
+viewport thresholds: `@700` equals `@700px`. Both emit inclusive minimum-width
+media queries without named-breakpoint configuration. Finite nonnegative numbers
+also accept explicit `em`/`rem` (provisional), decimals and zero. Clauses keep
+authored order and existing class specificity. No property aliases or CSS runtime.
 
-Static `:where([data-mmd-s-…])` subject selectors add no specificity. JSX+
-inserts literal native-element attributes using the compiler's read-only
-`inspectMarkup()` facts; component boundaries, type/slot lowering and intrinsic
-tags reuse production helpers. There is no CSS runtime or new reactive path.
-Named CSS resources/native imports require an explicit global consumer for now.
+DX-48 corrects a scoping bug exposed by the user's stress-test page: intentional
+`:root`, `html` and `body` subjects stay reachable inside a local block.
+Ordinary descendants/list alternatives remain scoped. Mixed `:is`/`:where`
+and inherited `&` preserve document targets without unscoping local components.
+The user's file is unchanged; its theme variables/body typography now compile
+correctly. The shared preview builds once at startup and must be restarted.
 
-Compiler-next accepts source-only stylesheet recipes and `assetSources`; projects
-collect/cache dependencies with the existing host/resolver. `collect.ts` retains
-stylesheet metadata from its import pass, avoiding a third normalization request.
-Source-only files' JS imports/code are not emitted or executed. Vite watches
-them, updates every consuming CSS asset and recovers errors without replacing
-components. CSS Tree's shared block reader now supports implicit nesting.
+`examples/responsive` (port 3036) is a real multi-file gallery with a responsive
+grid, implicit nested heading queries, source-only named styles, independent
+expand buttons and intentionally descending thresholds. Root variables and body
+typography live beside local rules in one ordinary style block. Run
+`bun run examples/responsive/preview.ts`, or append `--build`.
 
-`examples/scoping` is a real multi-file gallery: private teal/gold cards reuse
-named rules, share module styles, render direct-loop rows and toggle padding
-independently. `styles/Frames.auwla` reuses `Palette.auwla`; two different consumer
-modules share that frame under their own scopes. Its SVG and native reset import
-retain their source directories. Parent, nested and imported components reuse the same class names
-to exercise scope boundaries. Run `bun run examples/scoping/preview.ts` on port
-3035, or append `--build`. Existing compiler projects and Bun/Vite own delivery.
+Verification: **481 JSX+ tests pass across 33 files**, with **8 filtered out**
+because they depend on the original styling example that the user replaced.
+Tests and user source are not rewritten to restore that fixture. This includes
+both-mode computed CSS at 299/300/699/700/1000px, scope/SSR/slot isolation,
+authored diagnostics, TextMate highlighting, native completion and mapper checks.
+Vite builds the gallery and hot-updates source-only numeric CSS without replacing
+components; static delivery, fan-out and error recovery pass too.
 
-Verification: the complete JSX+ package suite passes **457 tests in 32 files**.
-The unchanged normalization-count test passes; root stylesheet metadata is reused.
-This includes both-mode DOM/CSS, slot fallback/projected content, ordinary cascade
-specificity, matching SSR/client SVG markers, authored mappings/errors and CSS
-assistance. Real TextMate tests cover function-body declarations. Vite builds
-the gallery and hot-updates a reused named rule through CSS without accepting
-the component module again. The gallery's authored TypeScript check and HTML
-preview build pass. The editor bundle is probed in Node outside the workspace
-with the actual `Cards.auwla` source. Desktop acceptance remains separate.
+JSX+ type checking (347 files), editor checking (181 files) and all **10 adapter
+tests** pass. The built CJS artifact runs under Node outside the workspace and
+checks native completion in the real responsive named-style source. The gallery's
+authored TypeScript check and HTML preview build pass. The user's actual
+stress-test preview builds too. Adapter **0.0.11** is installed; its installed
+bundle also passes the responsive native-completion probe under Node. Reload
+the window to load it. Full-root tests and actual browser/desktop acceptance
+were not run.
 
-Focused compiler language/project/Bun/CSS checks pass 33 tests. The actual gallery
-passes authored TypeScript and HTML preview builds. Implicit nesting now works
-for class/type/pseudo selectors, grouping contexts and custom-property blocks;
-CSS assistance retains recovery during incomplete editing. Source-only build
-tests inject a JS throw and unresolved JS import to prove neither enters the
-bundle. Editor adapter checks pass 10 tests, including the built artifact running
-outside the workspace under Node. JSX+, compiler-next, editor and Vite build
-type checks pass. Adapter **0.0.10** is installed; its installed bundle passes
-the Node probes too. Reload the window to load it. Full-root tests were not run.
+Preserve the user's modified `examples/styling/App.auwla` and new
+`examples/styling/state.auwla`; neither belongs to this checkpoint.
+Previous checkpoint `811cdcd9` delivered CSS-3b cross-file `@use(path, id)`,
+relative resource rebasing, source-only watching and implicit nesting through
+the existing compiler pipeline; its complete package suite passed 457 tests.
+The compiler's generic recipe API is unchanged by this slice. Details and owning
+files remain in [styling.md](styling.md).
 
-Preserve the user's modified `examples/styling/App.auwla`; it is not part of
-this checkpoint. Earlier native CSS/class-condition checkpoints are `5af90fee`
-and `a3dbf295`; their file/evidence map remains [styling.md](styling.md).
-
-Next: settle breakpoint configuration and grouped responsive conditions on full
-native properties. No `md`/`lg` defaults, property aliases or event shorthand are
-added here. Cross-file editor ID/path discovery and dependency diagnostics still
-need an injected source host; native assistance defers that lookup without false errors.
+Next: specify grouped numeric conditions, then implement them with editor and
+real authoring checks. Named thresholds are optional later design, not a required
+configuration step. Cross-file editor ID/path lookup still needs an injected
+source host. Property aliases, event shorthand and local named-resource scoping
+remain separate work.
 
 ## `.auwla` across modules: JSX+ as a source language (DX-39)
 

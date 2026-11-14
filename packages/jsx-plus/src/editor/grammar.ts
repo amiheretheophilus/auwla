@@ -74,6 +74,15 @@ export function createAuwlaGrammar(tsx: IRawGrammar): IRawGrammar {
     'L:meta.embedded.block.css meta.property-value.css -string -comment -meta.function': {
       patterns: [{
         name: 'meta.auwla.css-condition',
+        match: '(@)([+-]?(?:[0-9]*\\.[0-9]+|[0-9]+)(?:[eE][+-]?[0-9]+)?)(?i:(px|em|rem))?(\\s*:)?',
+        captures: {
+          1: { name: 'keyword.control.css' },
+          2: { name: 'constant.numeric.css' },
+          3: { name: 'keyword.other.unit.css' },
+          4: { name: 'punctuation.separator.key-value.css' },
+        },
+      }, {
+        name: 'meta.auwla.css-condition',
         match: `(@)(\\.)(${cssIdentifierPart}*)(\\s*:)?`,
         captures: {
           1: { name: 'keyword.control.css' },

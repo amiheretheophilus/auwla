@@ -1,5 +1,25 @@
 # Spec revisions
 
+## Document subjects in local styles — 2026-11-14
+
+- Fix unreachable explicit `html`, `body` and `:root` subjects inside local
+  blocks. They retain native document meaning; ordinary descendant/list/pseudo
+  alternatives remain scoped. Carry proven document targets through nested `&`.
+- The user's stress-test theme exposed the bug. Preserve their file and fix
+  compilation. The existing nested-body output assertion changes intentionally
+  because it previously pinned unreachable document declarations; DOM tests now
+  verify root variables, body typography, visible button backgrounds and isolation.
+
+## CSS-2b compact numeric conditions — 2026-11-14
+
+- Record the user's `@700` / `@700px` equivalence. Both emit inclusive minimum
+  viewport-width media queries, without breakpoint names or configuration.
+- Accept finite nonnegative CSS numbers, with implicit pixels or explicit
+  `px`, `em`, `rem` (relative-unit support is provisional). Preserve authored
+  order, specificity and existing class clauses; a chain does not imply AND.
+- Add RESP-001 through RESP-018, native value assistance, shared highlighting
+  and a real scoped multi-file responsive example. Grouped blocks remain later.
+
 ## CSS-3b — 2026-11-14
 
 - Cross-file `@use(path, id)` uses compiler-owned source resolution, caching and

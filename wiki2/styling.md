@@ -5,6 +5,7 @@ and cross-file reuse/implicit nesting (CSS-3b) are implemented. [dxcss.md](../dx
 wider design; [spec/styles.md](spec/styles.md), [class conditions](spec/style-conditions.md)
 and [scope rules](spec/style-scopes.md) own the implementation contracts.
 [style-reuse.md](spec/style-reuse.md) extends source linking and nesting.
+[style-responsive.md](spec/style-responsive.md) defines numeric viewport clauses.
 
 ## Authoring
 
@@ -30,11 +31,12 @@ passes HTML to Bun so the bundler creates CSS/script links itself.
 | --- | --- |
 | JSX+ syntax | `src/styles/blocks.ts` and `placement.ts` use host tokens and a neutral statement probe to distinguish module/function declarations from ordinary markup. The CSS delimiter scanner respects comments, strings and escapes. `src/normalize.ts` blanks declarations and preserves host mappings. `src/language.ts` passes static stylesheet text to the compiler hook. |
 | Local scope/reuse | `src/styles/uses.ts` parses `@use`, checks module-local IDs and cross-file cycles, and retains authored offsets while expanding definitions. `scopes/markers.ts` consumes compiler-owned `inspectMarkup()` facts and inserts static attributes with `source.ts`; `scopes/selectors.ts` adds zero-specificity subject selectors. Syntax/selector rules remain here; compiler/runtime reactivity does not change. |
+| Document subjects | `scopes/subjects.ts` keeps explicitly selected `html`, `body` and `:root` reachable, scopes ordinary alternatives/descendants, and carries proven document targets through nested `&`. `selectors.ts` preserves order around nested declaration groups. |
 | Cross-file linking/nesting | `styles/stylesheet.ts` supplies pure compiler-owned recipes; `uses.ts` expands selected IDs from resolver-provided text and retains foreign authored spans; `urls.ts` rebases resource tokens. `styles/syntax.ts` extends CSS Tree block dispatch for implicit nesting and is shared by uses, conditions and scope. It reuses CSS Tree's selectors, declarations, at-rules and tokens. |
 | Compiler assets | Compiler-next's `core/parse/languages.ts` appends the side-effect CSS import after authored host code, preserving directives/shebang positions. Parsed/resolved modules retain the companion. `pipeline.ts` exposes `css` separately in detailed results; `project/project.ts` compares JS and CSS in updates. |
 | Existing delivery adapters | Compiler-next's `project/bun.ts` resolves and loads the virtual CSS companion with Bun's CSS loader. Vite's existing `next/plugin.ts` loads it before native CSS processing, including from static HTML whose script was removed. No JSX+ project wrapper/plugin is introduced. |
 | Shared assistance | `src/styles/tooling.ts` uses `vscode-css-languageservice` over an equal-width CSS projection. `styles/recovery.ts` keeps missing-colon errors on unfinished property names and reparses to avoid errors cascading into later selectors; its narrow scanner declarations describe the pinned dependency. Completion edits, hover and diagnostics use authored positions. `src/editor/grammar.ts` embeds the editor's `source.css` grammar. |
-| VS Code adapter | `packages/editor-vscode/src/css.ts` translates protocol objects, caches the current document version and clears sessions/diagnostics on close. It registers independently of TypeScript. Adapter 0.0.10 includes the shared implicit-nesting reader; window reload and desktop acceptance remain separate. |
+| VS Code adapter | `packages/editor-vscode/src/css.ts` translates protocol objects, caches the current document version and clears sessions/diagnostics on close. It registers independently of TypeScript. Adapter 0.0.11 includes numeric conditions and the shared implicit-nesting reader; window reload and desktop acceptance remain separate. |
 
 The compiler knows no Auwla syntax. Its hook accepts optional static CSS from any
 source language, creates `<module-path>.css`, and retains ordinary CSS imports
@@ -87,7 +89,38 @@ pseudo-element. Its actual entry mounts with the normal API, and tests apply the
 emitted CSS and verify class/painted-value changes in the existing DOM environment
 in both modes. Bun and Vite build the same example through existing adapters.
 
+## Compact numeric viewport conditions (CSS-2b)
+
+`conditions/values.ts` uses CSS tokens to distinguish class and numeric clauses;
+the shared model retains authored diagnostics/header ranges. `lower.ts` wraps
+each numeric clause in a native minimum-width media query, preserving its exact
+place in the cascade. `@700` equals `@700px`; `em`/`rem`, decimals and zero are
+supported without named-breakpoint configuration. Properties/values stay native.
+
+RESP-001 through RESP-018 specify output and invalid cases. The real multi-file
+`examples/responsive` gallery (port 3036) reuses scoped named rules, mixes class
+clauses, uses nested heading queries and intentionally reverses thresholds. Its
+DOM tests evaluate actual CSS at 299/300/699/700/1000px in both compiler modes,
+including root variables, body typography and independent expand buttons.
+Happy DOM caches computed styles across viewport changes, so each tested width
+gets fresh stylesheet ownership. The test uses its native media evaluator.
+
+Shared tooling masks numeric headers at equal width for native value completion,
+hover and precise diagnostics; TextMate colors numeric headers/units. Vite
+builds the gallery and updates an edited source-only numeric rule through CSS
+without replacing its component. Adapter 0.0.11 bundles these changes. Numeric
+groups, named thresholds, range shorthands and header/condition discovery remain
+later work; native media queries cover other query shapes today.
+
 ## Local scope and named reuse (CSS-3a)
+
+Explicit document targets work inside a local block. `:root` variables and
+`body` typography reach the document; `body .card` still scopes the card.
+Mixed lists/`:is`/`:where` retain scoped local alternatives. Native declaration
+inheritance and nested `&` preserve proven document subjects. This corrects the
+blanket marker rule that made the user's stress-test theme unreachable. The
+new both-mode DOM checks verify visible button backgrounds and scoped isolation;
+the old nested-body output assertion now expects a reachable document gate.
 
 `examples/scoping` authors private component styles, file-level sharing and
 same-file/transitive `@use("./Cards.auwla", "card-look")`. Named blocks are
@@ -144,7 +177,7 @@ Desktop behavior still needs acceptance after reloading the installed adapter.
 Final checkpoint results are recorded in [status](status.md). The gallery's
 authored TypeScript check and HTML preview build pass. The
 editor artifact runs in Node outside the checkout and checks the actual
-class-condition and scoped `Cards.auwla` files with zero CSS diagnostics and
+class-condition, scoped `Cards.auwla` and responsive named-style files with zero CSS diagnostics and
 native value completion. Native completion inside existing hex tokens retains
 the CSS service's behavior. The CSS service's ESM entry remains selected for a
 complete bundle. Full-root tests were not run; actual desktop/browser acceptance

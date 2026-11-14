@@ -1,8 +1,8 @@
 # Auwla CSS developer experience: styling design discussion
 
-Status: native CSS, full-property class conditions, local scopes, cross-file
-named reuse and implicit native nesting are implemented. The wider design
-below distinguishes those profiles from later responsive/grouping work.
+Status: native CSS, full-property class/numeric viewport conditions, local scopes,
+cross-file named reuse and implicit native nesting are implemented. The wider
+design below distinguishes those profiles from later grouping work.
 
 Created: 2026-11-11. Updated: 2026-11-14.
 
@@ -30,8 +30,10 @@ CSS-2a now implements compact class conditions on full properties, including
 `padding:4px @.loading:30px`, with native value assistance and header highlighting.
 [CSS-3a](wiki2/spec/style-scopes.md) adds local-by-default file/component styles
 and named reuse with `@use(path, id)`. [CSS-3b](wiki2/spec/style-reuse.md) adds
-cross-file dependencies, resource rebasing and implicit nesting. Named breakpoint conditions,
-grouping and aliases remain planned; breakpoint sizes have not been chosen.
+cross-file dependencies, resource rebasing and implicit nesting. CSS-2b now
+uses numeric viewport thresholds: `@700` equals `@700px`, without named-breakpoint
+configuration. See [CSS-2b](wiki2/spec/style-responsive.md). Grouping and aliases
+remain later work; named breakpoints are optional future design.
 
 Follow DX-39: JSX+ is a standalone template/source-language layer. It supplies
 syntax transformations through `auwla`; compiler-next owns projects, applications,
@@ -45,7 +47,8 @@ Its source implementation uses no Bun/Node APIs.
 | --- | --- | --- |
 | Native CSS first | User: "we will start wit the normal css then later we add the short hands like p and co" | Required sequence |
 | Tailwind | User plans to drop Tailwind and use native CSS | Removed from this layer; supersedes the earlier provider proposal |
-| Full-property conditions | `padding:4px @md: 30px` must work, not only `p:4 @md:6` | Required design direction |
+| Full-property conditions | Conditions apply to `padding` and other native properties, not only future aliases | Required design direction |
+| Numeric responsiveness | `@700` and `@700px` mean the same viewport threshold | Accepted 2026-11-14; inclusive minimum width; no breakpoint configuration |
 | Compact spelling | `@condition:value` follows its property, without quotes | Required candidate spelling |
 | Class conditions | User proposed `p:4 @.loading:30`; the element carries the class | Required direction; first examples use full CSS properties |
 | Element classes | Dot-style `.class` authoring on elements is planned, including conditional classes | Exact element grammar remains open |
@@ -53,10 +56,10 @@ Its source implementation uses no Bun/Node APIs.
 | Grouping | Blocks group several changes under a condition | Planned authoring form |
 | Local scope | Local-by-default `<style>`, explicit `<style global>` | CSS-3a implements file/component scopes with static subject markers |
 | Named styles | `<style id="...">`, consumed through `@use(path, id)` | Same-file/cross-file reuse, transitive IDs, resource rebasing and compiler-owned source watching implemented |
-| Separators | Optional semicolon/newline termination for compact chains | Provisional lexical contract; preserve ordinary CSS grammar |
-| Editor support | Completion, highlighting, hover and diagnostics | Native CSS-1 service/adapter built locally; compact syntax and desktop acceptance remain open |
+| Separators | Native CSS declaration termination for compact chains | Semicolons, except the final declaration before `}`; newline-only convenience remains unimplemented |
+| Editor support | Completion, highlighting, hover and diagnostics | Native value assistance and class/numeric header highlighting built; desktop acceptance remains separate |
 
-These directions do not choose breakpoint defaults, cascade precedence, alias
+These directions do not choose named breakpoint defaults, alias
 values or a selector-rewriting algorithm. In particular, future `p:4` has no
 agreed unit/scale meaning. Dropping Tailwind does not silently turn it into `4px`.
 
@@ -88,14 +91,14 @@ export function Card() {
 }
 ```
 
-This is a design target, not accepted syntax in today's normalizer. Native CSS
+This foundation is implemented, including local file/component scopes. Native CSS
 properties, units, functions, variables, selectors and at-rules remain available.
 There is no utility scale for ordinary properties such as `padding` or `gap`.
 
-Recommend special style blocks only at module top level. A `<style>` returned
-inside markup remains an ordinary DOM element. Style-like text in JavaScript
-strings/comments remains host content. Define apparent `</style>` delimiters
-inside CSS strings/comments before choosing the scanner.
+Static blocks can be declared at module level or directly in a component body.
+A `<style>` returned inside markup remains an ordinary DOM element. Style-like
+text in JavaScript strings/comments remains host content; the delimiter scanner
+preserves quoted/commented CSS closers.
 
 Initial recommendation: static blocks. They do not implicitly capture component
 locals or inherit quoted-markup interpolation. Dynamic values continue through
@@ -108,19 +111,19 @@ The next step adds conditions to those native declarations:
 
 ```css
 .button {
-  padding:4px @md:30px @.loading:40px
+  padding:4px @700:30px @.loading:40px;
   color:var(--button-color);
 }
 ```
 
 Each continuation inherits the property on that entry. Spaces after either
-colon are allowed: `padding:4px @md:30px` and `padding: 4px @md: 30px` mean
+colon are allowed: `padding:4px @700:30px` and `padding: 4px @700px: 30px` mean
 the same thing. Values remain CSS, including functions and lists:
 
 ```css
 .card {
-  margin-inline:auto @lg:2rem
-  grid-template-columns:1fr @md:repeat(2, minmax(0, 1fr));
+  margin-inline:auto @1000:2rem;
+  grid-template-columns:1fr @700:repeat(2, minmax(0, 1fr));
 }
 ```
 
@@ -135,21 +138,21 @@ Compact form:
 
 ```css
 .card {
-  padding:4px @md:30px @lg:40px
+  padding:4px @700:30px @1000px:40px;
 }
 ```
 
-Grouped equivalent, preserving rule order:
+Future grouped equivalent, preserving rule order (not part of the compact slice):
 
 ```css
 .card {
   padding: 4px;
 
-  @md {
+  @700 {
     padding: 30px;
   }
 
-  @lg {
+  @1000px {
     padding: 40px;
   }
 }
@@ -161,20 +164,23 @@ declarations are equivalent.
 
 | Form | Intended meaning | Status |
 | --- | --- | --- |
-| Base declaration | All viewport widths | Planned |
-| `@md` | Configured medium threshold and above | Planned; configuration open |
-| `@max-md` | Strictly below the same threshold | Candidate |
-| Nested `@md`/`@max-lg` | Medium-inclusive to large-exclusive range | Candidate composition |
+| Base declaration | All viewport widths | Implemented |
+| `@700` / `@700px` | Inclusive minimum viewport width of 700px | Accepted compact slice; equivalent spellings |
+| `@40rem` / `@40em` | Minimum viewport width in native relative units | Provisional unit profile |
+| Named thresholds / maximums / ranges | Additional convenience forms | Later design; native media queries already available |
 | `@media (...)` | Native media query | Preserve native CSS |
 | `@container (...)` | Native container query | Preserve native CSS; distinct from viewport conditions |
 
-Breakpoints need an explicit Auwla configuration shared by build and tooling.
-Tailwind does not supply them. `48rem` here is illustrative, not an accepted
-default. Names describe thresholds, not device categories.
+Numeric thresholds require no configuration. A missing unit means pixels;
+explicit `px` means exactly the same thing. Thresholds are nonnegative finite
+CSS numbers; this compact profile also accepts `em` and `rem`. They apply to
+viewport width, not container width. Preserve authored order rather than sorting
+thresholds, so overlapping clauses follow the native CSS cascade.
 
 Native `@media`, `@supports`, `@container`, `@layer` and other at-rules remain
-distinct from named conditions. Unknown condition names need authored diagnostics.
-Module-level placement and combined-condition spelling still need review.
+distinct from compact numeric conditions. Group grammar, module-level placement
+and combined-condition spelling still need review. Compact clauses remain
+independent alternatives when mixed with class clauses, not an implicit AND.
 
 ## 6. Author-controlled class conditions
 
@@ -233,15 +239,15 @@ whether dark mode follows a media query or a project selector.
 
 ## 7. Compile-time CSS and existing compiler ownership
 
-The CSS layer produces CSS assets at build time. For example, with `md` explicitly
-configured as `48rem`, `padding:4px @md:30px @.loading:40px` becomes:
+The CSS layer produces CSS assets at build time. For example,
+`padding:4px @700:30px @.loading:40px` becomes:
 
 ```css
 .button {
   padding: 4px;
 }
 
-@media (width >= 48rem) {
+@media (min-width: 700px) {
   .button {
     padding: 30px;
   }
@@ -326,12 +332,20 @@ must match the names produced by element authoring.
 
 ## 9. Separators, full values and the cascade
 
-Provisional rule: a top-level newline, semicolon or closing rule brace ends a
-compact chain. Track strings, escapes, comments, parentheses and brackets so
-nested content is not split. Semicolons permit multiple entries on one line:
+Explicit document subjects (`:root`, `html`, `body`, including qualified and
+mixed selector forms) keep their document meaning inside a local block. Do not
+require component markers on the document shell. `:root` variables and `body`
+typography therefore work beside scoped component rules. Descendant subjects
+such as `body .card` still scope `.card`; explicit document targets do not make
+the whole block global. This fixes the user's stress-test page without rewriting
+their authored CSS. See [scope semantics](wiki2/spec/style-scopes.md).
+
+Implemented rule: native CSS semicolon/closing-rule termination ends a compact
+chain. A newline alone does not. Track strings, escapes, comments, parentheses
+and brackets so nested content is not split. Semicolons permit multiple entries on one line:
 
 ```css
-.card { padding:4px @md:30px; margin-inline:auto @lg:2rem; }
+.card { padding:4px @700:30px; margin-inline:auto @1000:2rem; }
 ```
 
 Ordinary declarations without compact conditions retain CSS termination rules.
@@ -383,16 +397,17 @@ CSS engine. Compilation and tooling should share the style syntax model.
 | `padd…` | Native properties such as `padding` |
 | `padding:…` | CSS values, units and functions |
 | `var(--…)` | Discoverable custom properties |
-| `padding:4px @…` | Configured conditions and supported class/state forms |
-| `padding:4px @md:…` | CSS padding values, not utility tokens |
+| `padding:4px @…` | Numeric thresholds and class forms; header suggestion discovery remains later |
+| `padding:4px @700:…` | Native CSS padding values; implemented with original completion-edit ranges |
 | `@.load…` | Discoverable author classes; arbitrary class names remain usable |
 | `class="ca…"` | Local class candidates where safely identifiable |
 
 A reusable CSS language service can handle native CSS; our extension must
 explicitly handle compact conditions. Hover can explain a property's value,
-the configured condition and emitted CSS. There is no Tailwind completion provider.
+the numeric condition and emitted CSS (condition-specific hover remains later).
+There is no Tailwind completion provider.
 
-Keep current-source checking useful for `padding:4px @`, `padding:4px @md:` and
+Keep current-source checking useful for `padding:4px @`, `padding:4px @700:` and
 unfinished blocks. Do not reuse stale successful text. Map completion edits,
 diagnostics and hover ranges back to the author, rejecting unsafe edits across
 generated-only spans. Nearby TypeScript assistance must survive CSS errors.
@@ -409,7 +424,7 @@ limits belong in the formal spec when a slice is selected.
 | --- | --- | --- |
 | CSS-0: design/spec | Reviewed scope, grammar, examples, errors and ownership | CSS-1 profile and CSS-001 through CSS-006 fixtures written; wider syntax remains a design discussion |
 | CSS-1: ordinary CSS | Full native declarations in explicit global style blocks | Implemented and verified: real example, CSS output, authored ranges and baseline editor support; local scope deferred |
-| CSS-2: conditions | Compact/grouped conditions on native properties, including author classes | `padding:4px @md:30px`, `padding:4px @.loading:30px`, equivalent output, thresholds, overlap and applied completion edits |
+| CSS-2: conditions | Compact conditions on native properties, including author classes | `padding:4px @700:30px` equals `@700px:30px`; class clauses, equivalent output, thresholds, overlap and applied completion edits. Grouped numeric blocks remain next |
 | CSS-3: integration | Static CSS through compiler-next delivery | Builds/HMR, URLs, lazy assets, SSR/adoption, deduplication, maps and desktop checks as applicable |
 | CSS-LATER: aliases | Optional `p`, `px`, `bg` conveniences | Separately reviewed mappings, units, collisions and completion; no Tailwind dependency |
 
