@@ -248,8 +248,13 @@ would change dependencies), so `server/status.auwla` uses Hono, already a root d
 `node:crypto`; `server.ts` mounts it at `GET /api/status`. `tests/server.test.ts` gets its JSON
 from the built server and checks its compiled output is the authored code with no runtime
 machinery; the Vite tests build and serve the same copy. The example's tsconfig adds `node` to
-`types` so `tsc` accepts `node:crypto`; it reports no errors. A collected
-`.auwla` module is normalized twice per change.
+`types` so `tsc` accepts `node:crypto`; it reports no errors.
+
+A project build asks for each `.auwla` module's TSX twice per change: once for its imports
+(`project/collect.ts`) and once to compile it. The team build normalized every file twice.
+`src/language.ts` now keeps the last result (or syntax error) per path with its text, so the
+second ask reuses it and an edit is normalized once. Compiler-next is unchanged.
+`tests/modules.test.ts` checks it and fails without the cache.
 
 ### Open, to discuss: module state during server rendering
 

@@ -6,7 +6,7 @@
  */
 import { afterEach, expect, it } from 'bun:test';
 import { fileURLToPath } from 'node:url';
-import { createProject, fileSystemHost, type ProjectHost } from '@memoized-dom/compiler-next';
+import { createProject, fileSystemHost, type ProjectHost, type SourceLanguage } from '@memoized-dom/compiler-next';
 // Compiler-next's Bun plugin has no package export yet; the test reads it as the CLI does.
 import { memoizedDom } from '../../compiler-next/src/project/bun';
 import { toModuleFunction } from '../../compiler-next/src/core/parse/module-function';
@@ -67,6 +67,48 @@ it('collects the app through compiler-next\'s project, .auwla modules under thei
   // Without the language, compiler-next does not read `.auwla` at all: JSX+ adds nothing else.
   const plain = await createProject({ entries: ['./main.ts'], host: fileSystemHost(root) }).build();
   expect(plain.modules).toEqual(['./main.ts']);
+});
+
+it('normalizes each .auwla module once per change, though the project asks twice', async () => {
+  // The project asks once for a module's imports and once to compile it. A fresh normalization
+  // returns a new object, so the same object twice means the second ask did no work.
+  const answers = new Map<string, Set<unknown>>();
+  const calls = new Map<string, number>();
+  const watched: SourceLanguage = {
+    extensions: auwla.extensions,
+    toTsx(text, path) {
+      const result = auwla.toTsx(text, path);
+      calls.set(path, (calls.get(path) ?? 0) + 1);
+      answers.set(path, (answers.get(path) ?? new Set()).add(result));
+      return result;
+    },
+  };
+  const files = fileSystemHost(root);
+  const build = await createProject({ entries: ['./main.ts'], host: files, languages: [watched] }).build();
+  expect(build.ok).toBe(true);
+  expect(calls.get('./App.auwla')).toBe(2);
+  expect([...answers.values()].map((results) => results.size)).toEqual([1, 1, 1]);
+
+  // An edit is normalized again; the edited text's two asks share that one result.
+  answers.clear();
+  const edited: ProjectHost = {
+    ...files,
+    readFile: async (path) => {
+      const text = await files.readFile(path);
+      return path.endsWith('App.auwla') ? `${text}\n// edited\n` : text;
+    },
+  };
+  await createProject({ entries: ['./main.ts'], host: edited, languages: [watched] }).build();
+  const app = [...answers.get('./App.auwla')!];
+  expect(app).toHaveLength(1);
+  expect((app[0] as { code: string }).code).toContain('// edited');
+
+  // A syntax error is reported again, the same error, without normalizing again.
+  const broken = '<p>"a" <b>"x"</b></p>;\n';
+  const first = (() => { try { auwla.toTsx(broken, './Broken.auwla'); } catch (error) { return error; } })();
+  const second = (() => { try { auwla.toTsx(broken, './Broken.auwla'); } catch (error) { return error; } })();
+  expect(first).toBeInstanceOf(Error);
+  expect(second).toBe(first);
 });
 
 for (const optimize of [true, false]) {

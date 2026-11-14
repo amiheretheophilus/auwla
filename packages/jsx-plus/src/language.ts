@@ -18,18 +18,44 @@ import type { SourceLanguage, TextOrigin } from '@memoized-dom/compiler-next';
 import type { VerbatimMapping } from './model';
 import { normalize } from './normalize';
 
+type Tsx = ReturnType<SourceLanguage['toTsx']>;
+
+/**
+ * The last result for each path, with the text it came from. A project build asks twice per
+ * change: once for the module's imports (`project/collect.ts`) and once to compile it. Only the
+ * latest text per path is kept, so an edited file replaces its entry.
+ */
+const latest = new Map<string, { readonly text: string; readonly result: Tsx } | { readonly text: string; readonly error: unknown }>();
+
 export const auwla: SourceLanguage = {
   extensions: ['.auwla'],
   toTsx(text, path) {
-    // A syntax error throws a `JsxPlusError`, which is a located `CompileError`.
-    const normalized = normalize(text, { filename: path });
-    return {
-      code: normalized.code,
-      origin: copiedSpanOrigin(normalized.mappings),
-      ...(normalized.stylesheet === undefined ? {} : { stylesheet: normalized.stylesheet }),
-    };
+    const known = latest.get(path);
+    if (known?.text === text) {
+      if ('error' in known) throw known.error;
+      return known.result;
+    }
+    try {
+      const result = toTsx(text, path);
+      latest.set(path, { text, result });
+      return result;
+    } catch (error) {
+      // The same syntax error, reported again without reading the file again.
+      latest.set(path, { text, error });
+      throw error;
+    }
   },
 };
+
+function toTsx(text: string, path: string): Tsx {
+  // A syntax error throws a `JsxPlusError`, which is a located `CompileError`.
+  const normalized = normalize(text, { filename: path });
+  return {
+    code: normalized.code,
+    origin: copiedSpanOrigin(normalized.mappings),
+    ...(normalized.stylesheet === undefined ? {} : { stylesheet: normalized.stylesheet }),
+  };
+}
 
 /**
  * Where each offset of normalized TSX was in the `.auwla` text. Copied text maps exactly.
