@@ -91,6 +91,11 @@ value completion inside clauses such as `color:black @.loading:red`. The install
 artifact probe exercises that completion alongside ordinary CSS recovery. Class
 name discovery, grouped conditions and named breakpoints are not implemented yet.
 
+Version 0.0.6 adds reactivity inlay hints (above): `state`, `derived ← inputs` or
+`source` beside each declaration, with the `auwla.inlayHints.reactivity` setting.
+The installed artifact probe runs them in Node, with compiler-next's analysis
+bundled.
+
 The installed adapter resolves `@memoized-dom/jsx-plus` from open workspace folders,
 then falls back to the adapter directory for development hosts. The content mapper
 still launches with Bun from that shared package, which must remain installed
