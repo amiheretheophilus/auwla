@@ -17,6 +17,15 @@ See [dynamic attribute values](compiler/core.md#dynamic-attribute-values).
 
 ## Current: Phase 10 (2026-11-06)
 
+**Done (2026-11-14): native packages are found by the project, not a plugin** (`compiler/project.md`,
+"Native packages"; `decisions.md`, 2026-11-14). `fileSystemHost` resolves an import of a native
+package, installed or linked from the workspace, to its source file, with Node's lookup from the
+importing file, so Vite, Bun and the command line compile the same files. `.lib.config.ts` is read
+as a literal object and never run. The new Vite plugin only configures Vite around it; the old
+plugin's native package suites (26 tests: built apps run, a linked workspace, live edits, a real
+type check) pass through `MMD_COMPILER=next`. Next in the same direction: packaging, server pages,
+and Cloudflare as a build target.
+
 **Done (2026-11-14): each server render owns the module state it writes** (`compiler/server.md`,
 "Request isolation"; `decisions.md`, 2026-11-14). In a server build, a module whose state a
 function outside server-only code writes keeps that state, with its versions, keys and batches, in

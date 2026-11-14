@@ -374,7 +374,10 @@ array child). Remove each check when its phase is built.
   so the compiler works without Vite: [x] building from entries and rebuilding after edits;
   [x] source maps; [x] a command line and a Bun plugin. [x] `packages/vite` on applications
   (`compiler: 'next'`): builds, dev, SSR in dev and build, hot updates, errors. [ ] The old plugin's
-  remaining features there (`project.md`, "Vite").
+  remaining features, in the project or application layer, not in a plugin (`project.md`, "Vite";
+  `decisions.md`, 2026-11-14): [x] native packages, found and resolved by the project (2026-11-14);
+  [ ] packaging one (`memoized-dom package`); [ ] server pages; [ ] Cloudflare as a build target;
+  devtools on hold.
 - [ ] SSR from the project too (`server.md`), asked for by the user (2026-11-12), so Vite and the
   Bun plugin share it: [x] server function analysis and facades; [ ] the application (client and
   server builds), the registry and the server entry's integration; [ ] the Bun plugin and command

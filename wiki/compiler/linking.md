@@ -235,8 +235,11 @@ Generated `paths` need every app to change its tsconfig. So the plugin writes `i
 only and can be committed. A file the author wrote at such a path is left alone, and
 `.memoized/linked-types.json` in the package records what to remove when a subpath goes.
 
-In an app this is compiled by the old compiler for now, since `packages/vite` moves to
-compiler-next in Phase 10. Nothing here depends on which compiler it is.
+With compiler-next, finding and resolving native packages is the project's job, not a plugin's
+(`project.md`, "Native packages"): `fileSystemHost` resolves an import of one to its source file,
+for Vite, Bun and the command line alike, and reads `.lib.config.ts` as a literal object without
+running it. The paragraphs above describe the old plugin, which still does it itself. Packaging
+(`memoized-dom package`) still runs in `packages/vite` and moves to the project next.
 `packages/vite/tests/native-package.test.ts` and `native-package-workspace.test.ts` cover the
 whole path, including built apps run in happy-dom, and a real type check. Not covered: a dev
 server in a real browser, since this machine has no Chrome, so live edits are checked by

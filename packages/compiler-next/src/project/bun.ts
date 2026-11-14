@@ -98,12 +98,17 @@ export function memoizedDom(options: BunPluginOptions): BunPlugin {
         return page === null ? undefined : { contents: page, loader: 'html' };
       });
 
+      // Whatever the build compiled, wherever it lives: a native package's files are under
+      // `node_modules`, or outside the root when linked (`packages/native.ts`). Anything else is Bun's.
       build.onLoad({ filter: source }, async (args) => {
-        if (args.path.includes('node_modules')) return undefined;
         const program = await compiled();
-        if (!program.ok) throw program.error;
-
         const path = projectPath(root, args.path);
+        // A failed build stops at a module it reached (the entry always is), not at a package's file.
+        if (!program.ok) {
+          if (program.modules.includes(path)) throw program.error;
+          return undefined;
+        }
+
         const code = program.output[path];
         if (code === undefined) return undefined;
         const map = program.maps?.[path];
@@ -111,10 +116,13 @@ export function memoizedDom(options: BunPluginOptions): BunPlugin {
       });
 
       build.onLoad({ filter: /\.css$/ }, async (args) => {
-        if (args.path.includes('node_modules')) return undefined;
         const program = await compiled();
-        if (!program.ok) throw program.error;
-        const css = program.css?.[projectPath(root, args.path)];
+        const path = projectPath(root, args.path);
+        if (!program.ok) {
+          if (program.modules.includes(path)) throw program.error;
+          return undefined;
+        }
+        const css = program.css?.[path];
         return css === undefined ? undefined : { contents: css, loader: 'css' };
       });
     },

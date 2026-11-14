@@ -22,10 +22,11 @@
  */
 import { mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
 import { dirname, join, relative, resolve } from 'node:path';
-import { normalizePath } from 'vite';
+import { normalizePath, searchForWorkspaceRoot } from 'vite';
 import type { DevEnvironment, EnvironmentModuleNode, Plugin, ResolvedConfig, ViteDevServer } from 'vite';
 import {
-  createApplication, GENERATED, importCandidates, initialPage, isSourcePath, languageExtensions, normalizeProjectPath, projectPath,
+  createApplication, GENERATED, importCandidates, initialPage, isSourcePath, languageExtensions, nativePackages, normalizeProjectPath,
+  projectPath, writeLinkedTypes,
   type Application, type ApplicationBuild, type ApplicationUpdate, type CompileError, type ProjectBuild,
   type SourceLanguage,
 } from '@memoized-dom/compiler-next';
@@ -47,8 +48,13 @@ type Side = 'client' | 'server';
 
 export function memoizedDomNext(options: MemoizedDomViteOptions): Plugin {
   if (options.clientEntry.trim() === '') throw new Error('memoized-dom: clientEntry must not be empty');
+  // Compiling arbitrary installed packages was dropped (`wiki/decisions.md`, 2026-11-05): an ordinary
+  // package runs opaque, and a native package is found and compiled with no option at all.
   if (options.compilePackages?.length) {
-    throw new Error("memoized-dom: compilePackages is not supported with compiler: 'next' yet");
+    throw new Error(
+      "memoized-dom: compilePackages does not exist with compiler: 'next'. An ordinary package runs as it is; " +
+      'a package published with `memoized-dom package` ships its source and compiles in the app by itself.',
+    );
   }
   const { clientEntry, serverEntry, server: serverFolder, runtime = 'bun', languages } = options;
   // Files a source language owns (`.auwla`) are compiled, resolved and hot-updated like `.tsx` ones.
@@ -67,6 +73,8 @@ export function memoizedDomNext(options: MemoizedDomViteOptions): Plugin {
   let productionDelivery: ProductionDelivery | undefined;
   /** The stylesheets each lazily loaded route component's client chunk brings, by its key. */
   let clientRouteStyles: Record<string, string[]> | undefined;
+  /** The native packages the app depends on, found when Vite reads the config. */
+  let nativeNames: readonly string[] = [];
 
   const api: FullstackPluginApi = {
     runtime,
@@ -159,7 +167,19 @@ export function memoizedDomNext(options: MemoizedDomViteOptions): Plugin {
 
     config(userConfig) {
       const fullstack = serverEntry !== undefined && userConfig.build?.ssr === undefined;
+      // The project compiles native packages as its own source (compiler-next, `packages/native.ts`).
+      // Prebundling one would give the app a second copy of its state, and a server external would
+      // run its uncompiled source; a linked one may live outside the root, which the dev server
+      // must be allowed to serve. TypeScript finds a linked one's imports through files written here.
+      const root = resolve(userConfig.root ?? process.cwd());
+      const native = nativePackages(root);
+      nativeNames = native.names;
+      writeLinkedTypes(native.linkedImports);
       return {
+        ...(native.linkedDirectories.length === 0 ? {} : {
+          server: { fs: { allow: [searchForWorkspaceRoot(root), ...native.linkedDirectories] } },
+        }),
+        ...(nativeNames.length === 0 ? {} : { ssr: { noExternal: [...nativeNames] } }),
         ...(serverEntry === undefined ? {} : { appType: 'custom' as const }),
         ...(!fullstack ? {} : {
           builder: { sharedPlugins: true, ...(runtime === 'cloudflare' ? { buildApp: async () => {} } : {}) },
@@ -176,14 +196,14 @@ export function memoizedDomNext(options: MemoizedDomViteOptions): Plugin {
             }),
           },
         }),
-        optimizeDeps: { exclude: STATEFUL_PACKAGES },
+        optimizeDeps: { exclude: [...STATEFUL_PACKAGES, ...nativeNames] },
       };
     },
 
     configEnvironment(name) {
       if (name !== 'client' && name !== 'ssr') return;
       // Scan authored JSX without a React runtime import: this plugin compiles it.
-      return { optimizeDeps: { exclude: STATEFUL_PACKAGES, rolldownOptions: { transform: { jsx: 'preserve' as const } } } };
+      return { optimizeDeps: { exclude: [...STATEFUL_PACKAGES, ...nativeNames], rolldownOptions: { transform: { jsx: 'preserve' as const } } } };
     },
 
     applyToEnvironment(environment) {
@@ -301,6 +321,8 @@ export function memoizedDomNext(options: MemoizedDomViteOptions): Plugin {
       }
       const code = program.output[path];
       if (code === undefined) return null;
+      // A linked package's file lives outside the root, where Vite's watcher does not look by itself.
+      if (path.startsWith('../')) this.addWatchFile(fileOf(path));
       const map = program.maps?.[path];
       // Vite's map type has mutable arrays.
       return { code, map: map === undefined ? null : { ...map, sources: [...map.sources], names: [...map.names], sourcesContent: [...(map.sourcesContent ?? [])] } };

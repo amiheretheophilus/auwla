@@ -2,10 +2,10 @@
 
 **Folders:** `project/`
 
-Status (2026-11-12): building from entries, rebuilding after edits, source maps, path aliases through the
-host, the file-system host, a Bun plugin, a command line, hot replacement, and a Vite plugin over
-applications (`compiler: 'next'`, "Vite") are built. The Vite plugin lacks some of the old one's
-features, listed there (`plan.md`, Phase 10).
+Status (2026-11-14): building from entries, rebuilding after edits, source maps, path aliases through the
+host, the file-system host, native packages ("Native packages"), a Bun plugin, a command line, hot
+replacement, and a Vite plugin over applications (`compiler: 'next'`, "Vite") are built. Some of
+the old plugin's features are not yet in the project layer, listed under "Vite" (`plan.md`, Phase 10).
 
 ## What it does
 
@@ -193,10 +193,43 @@ is server-only by its name (the old plugin assumed `server`).
 - `packages/vite`'s `dist` bundles compiler-next, which ships TypeScript source that Node cannot load
   from a package.
 
-Not yet in the new plugin, each the old plugin's: `compilePackages` (rejected with an error), native
-packages, the devtools inspector, Cloudflare (untested), library builds and server pages. (Route
-CSS is built: `routeStyles`, `routes.md`, "A lazy route's styles".) An edit that moves code without changing output (a comment) leaves that
-module's source map stale until its next real change.
+- **Native packages** are found and resolved by the project (`fileSystemHost`, "Native packages"
+  below); the plugin only keeps them out of prebundling and SSR externals, allows a linked
+  package's folder, watches its files, and writes its type files (`writeLinkedTypes`). The old
+  plugin's native package suites pass through `MMD_COMPILER=next` unchanged.
+- `compilePackages` is rejected with an error saying what replaced it: compiling arbitrary
+  installed packages was dropped (`../decisions.md`, 2026-11-05).
+
+Not yet compiler-first, each the old plugin's: `memoized-dom package` (packaging a native package),
+server pages, Cloudflare, and the devtools inspector (on hold). Each goes in the project or
+application layer, with the tools only connecting it (`../decisions.md`, 2026-11-14). (Route CSS is
+built: `routeStyles`, `routes.md`, "A lazy route's styles".) An edit that moves code without
+changing output (a comment) leaves that module's source map stale until its next real change.
+
+## Native packages
+
+A native package ships its source and compiles in the app's graph (`linking.md`, "Native
+packages"). Finding one is the project's job, so Vite, Bun and the command line compile the same
+files. `fileSystemHost` resolves a bare import through `project/packages/native.ts`:
+
+- Node's lookup from the importing file's real folder, so two installed copies at two paths are two
+  modules, and a package two packages share through one hoisted copy is one.
+- An installed package is native when its `package.json` has `"memoized-dom": { "source": true }`;
+  its `exports` map (`default` or `import`) names the source file of each public import.
+- A linked package is one outside any `node_modules` with a `.lib.config.ts` saying `source: true`;
+  its `entry` and `subpaths` name the public imports, so a stale `dist` is never what compiles.
+- An ordinary package is never followed: the project never reads its files.
+
+Package files keep their real paths. An installed one is `./node_modules/kit/src/index.ts`
+(pnpm's store included); a linked one outside the root is `../kit/src/index.ts`, which the
+compiler's relative imports already spell that way, and which `projectPath` now returns. A tool
+decides whether it owns a file by whether the build has output for it, never by `node_modules`.
+
+`.lib.config.ts` is read, never run (`project/packages/library-config.ts`): its default export is a
+literal object, optionally through `satisfies`, `as` or a `const`, and anything else is an error
+saying so. The old plugin ran a linked package's config through Vite; reading it needs no
+TypeScript loader, works the same under every tool, and cannot run a dependency's code.
+`nativePackages(root)` lists the native packages before a build, for a bundler's configuration.
 
 **Where they go** (the user's direction, `decisions.md` 2026-11-12): each is built in the project
 and application, with its tests here, so the Vite plugin, the Bun plugin and the command line get it
@@ -269,7 +302,11 @@ bun packages/compiler-next/src/project/cli.ts build src/main.ts --out dist [--mi
 | --- | --- |
 | `project/project.ts` | `createProject`: build, update, and what changed |
 | `project/collect.ts` | The modules the entries reach, and where each import points |
-| `project/host.ts` | `ProjectHost`, `fileSystemHost` and project paths |
+| `project/host.ts` | `ProjectHost`, `fileSystemHost` (native packages included) and project paths, `../` outside the root |
+| `project/packages/native.ts` | Native packages: resolving a public import to its source file, and `nativePackages` for a bundler's configuration |
+| `project/packages/library-config.ts` | `.lib.config.ts`, read as a literal object, never run; a package's public entries |
+| `project/packages/linked-types.ts` | Type files for a linked package's public imports |
+| `project/packages/native.test.ts` | Installed, linked through a junction, an ordinary package, a config inside `node_modules` never read, two copies kept apart, config forms, and a Bun build |
 | `project/index.ts` | The public API, re-exported from the package root |
 | `project/project.test.ts` | Collecting, aliases, errors, edits, new and deleted files, disk, maps |
 | `project/page.ts` | `initialPage`: the build-time page written into the page's HTML |
@@ -280,7 +317,7 @@ bun packages/compiler-next/src/project/cli.ts build src/main.ts --out dist [--mi
 | `project/cli.ts` | The command line: `check` and `build`, with or without a server |
 | `project/cli.test.ts` | Arguments, checking, a client build, and a server build serving its page, its script (which hydrates) and a server function |
 | `packages/vite/src/next/plugin.ts` | The Vite plugin over an application: loading, resolving generated modules, hot updates, errors, delivery |
-| `packages/vite/src/next/host.ts` | The project host Vite gives: files from disk, aliases resolved by Vite |
+| `packages/vite/src/next/host.ts` | The project host Vite gives: files from disk, native packages by the project's rule, aliases resolved by Vite |
 | `packages/vite/tests/next-plugin.test.ts` | A client build with an alias; a build from a Windows short name; dev: component, helper and entry edits; a compile error and its fix; dev SSR re-rendering an edit; a full-stack build serving its page, its script and a server function |
 | `features/hot/index.ts` | The hot feature's API: `hotModule`, `addHotRuntime` |
 | `features/hot/boundary.ts` | Which modules accept their own hot update |

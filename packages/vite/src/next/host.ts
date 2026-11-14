@@ -1,6 +1,7 @@
 /**
  * The project host Vite gives compiler-next (`wiki/compiler/project.md`, "Vite"): files from disk,
- * and imports the compiler's own rule does not settle (path aliases, `@/lib/x`) resolved by Vite.
+ * native packages by the project's rule, and imports the compiler's own rule does not settle (path
+ * aliases, `@/lib/x`) resolved by Vite.
  */
 import { isAbsolute, join, relative } from 'node:path';
 import { fileSystemHost, isSourcePath, projectPath, type ProjectHost, type SourceLanguage } from '@memoized-dom/compiler-next';
@@ -20,6 +21,9 @@ export function viteHost(root: string, resolver: () => ViteResolver | null, lang
     async resolve(specifier, importer) {
       // A relative import follows the compiler's rule, which also finds generated modules.
       if (specifier.startsWith('.')) return undefined;
+      // A native package resolves by the project's own rule, as under every other tool.
+      const native = await files.resolve?.(specifier, importer);
+      if (native !== undefined) return native;
       const resolve = resolver();
       if (resolve === null) return undefined;
       const id = await resolve(specifier, join(root, importer));

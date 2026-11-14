@@ -5,8 +5,9 @@
  * keys `compileModules` takes. The host turns those paths into text. A bundler plugin gives a
  * host backed by its own resolver and file cache; `fileSystemHost` reads a folder on disk.
  */
-import { readdirSync, readFileSync, statSync } from 'node:fs';
+import { readdirSync, readFileSync, realpathSync, statSync } from 'node:fs';
 import { join, relative, sep } from 'node:path';
+import { nativePackageResolver } from './packages/native';
 
 export interface ProjectHost {
   /** The text of the file at a project path, or undefined when there is none. */
@@ -25,9 +26,23 @@ export interface ProjectHost {
   list?(folder: string): readonly string[] | Promise<readonly string[]>;
 }
 
-/** A host that reads the files under `root`. Works under Node and Bun. */
+/**
+ * A host that reads the files under `root`. Works under Node and Bun. An import of a native
+ * package resolves to the source file behind it (`packages/native.ts`), which the project then
+ * compiles as its own: inside `node_modules` for an installed one, and possibly outside `root`
+ * (`../packages/kit/src/index.ts`) for one linked from the workspace.
+ */
 export function fileSystemHost(root: string): ProjectHost {
+  const packages = nativePackageResolver();
+  // Package files come back by their real paths, so they are named from the root's real path.
+  let realRoot: string | undefined;
   return {
+    resolve(specifier, importer) {
+      const file = packages.resolve(specifier, join(root, importer));
+      if (file === undefined) return undefined;
+      realRoot ??= realpathSync.native(root);
+      return projectPath(realRoot, file);
+    },
     readFile(path) {
       const file = join(root, path);
       // A missing file, or a folder, is "no such module", which the probing rule expects.
@@ -45,9 +60,13 @@ export function fileSystemHost(root: string): ProjectHost {
   };
 }
 
-/** The project path of a file on disk under `root`: `./src/App.tsx`. */
+/**
+ * The project path of a file on disk: `./src/App.tsx` under `root`, and `../packages/kit/src/x.ts`
+ * outside it (a linked package), which the compiler's relative imports already spell that way.
+ */
 export function projectPath(root: string, file: string): string {
-  return `./${relative(root, file).split(sep).join('/')}`;
+  const path = relative(root, file).split(sep).join('/');
+  return path.startsWith('../') ? path : `./${path}`;
 }
 
 /** A path as the project writes it: forward slashes and a leading `./`. */
