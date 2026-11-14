@@ -11,6 +11,11 @@
   before that `<` gets past the failure, the error is JPX1005 over its opening
   tag, with that `;` as the repair. The editor reports it too. Code that does
   not fail is never reported (`<b>x < b > y</b>`, `<b><b>x < b > y</b></b>`).
+- An opening tag that meets a closing tag's `</` before its own `>`, such as
+  `<section><Badg</section>` while typing, is an incomplete opening tag ending
+  before that `</`. Before, the closer's `>` ended it, and the enclosing element
+  was reported unclosed (JPX1002). Editor recovery closes it as ` />` for
+  checking only.
 - Add ERROR-018. Existing fixtures and codes are unchanged.
 
 ## 0.1-draft, revision 8 — 2026-11-13

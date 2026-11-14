@@ -87,7 +87,11 @@ end of input, and the open token is reported first (D-RECOVERY).
 A host error inside an opening tag is mapped to its authored cause where one is
 known. An attribute `{` that never closes, or whose content up to a later
 unrelated `}` holds no single expression, is reported at that `{` rather than
-over the rest of the file.
+over the rest of the file. An opening tag that meets a closing tag's `</` before
+its own `>` (`<section><Badg</section>`, a tag still being typed) is incomplete
+there: a closing tag is never part of an opening tag, so its `>` does not end
+this one. The error covers the opening tag up to that `</`, and recovery closes it
+as ` />` for checking only, so native tag-name completion works.
 
 ## Recovery and error precedence (D-RECOVERY)
 

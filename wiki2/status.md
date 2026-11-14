@@ -240,8 +240,14 @@ functions now compile to their authored JavaScript; the registry went from 9,377
 characters ([server](../wiki/compiler/server.md#backend-code)). Pages rendered on the server keep
 their machinery. The JSX+ server (both modes), Vite and routes tests run the result.
 
-Not yet: cross-file editor checks (rename/completion across `.auwla` imports);
-streaming/live server functions in `.auwla`.
+Cross-file editor checks (TOOL-07, [tooling](tooling.md)): rename at a declaration and
+auto-import completion across `.auwla` and `.ts` modules already worked through the content
+mapper, and are now tested against the real language server. One gap was fixed: completing a
+component's tag while it was still being typed (`<Badg` before `</section>`) found nothing,
+because the closer's `>` ended the opening tag and the enclosing element was set aside. The
+opening tag now ends before `</`, and recovery closes it for checking (spec revision 9).
+
+Not yet: streaming/live server functions in `.auwla`.
 
 Ordinary backend packages, checked next: Express is not installed in the workspace (adding it
 would change dependencies), so `server/status.auwla` uses Hono, already a root dependency, and

@@ -1,0 +1,11 @@
+import { Badge, shout } from './Badge.auwla';
+import { Page } from './Page.auwla';
+
+export function App() {
+  return (
+    <main>
+      <Badge label={shout('team')} />
+      <Page />
+    </main>
+  );
+}

@@ -1,0 +1,7 @@
+export function Badge({ label }: { label: string }) {
+  return <span class="badge">label</span>;
+}
+
+export function shout(text: string): string {
+  return text.toUpperCase();
+}

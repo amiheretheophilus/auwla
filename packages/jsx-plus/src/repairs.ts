@@ -40,6 +40,15 @@ function unique(repairs: Repair[]): Repair[] {
 }
 
 /**
+ * An opening tag still being typed when the next closing tag starts at `next`:
+ * `<Badg</section>`. Close it as self-closing after what was typed, so the
+ * editor reads a whole tag and native tag-name completion works there.
+ */
+export function closeOpeningTag(source: string, opener: number, next: number): Repair[] {
+  return [insert(trimBack(source, next, opener + 1), ' />')];
+}
+
+/**
  * A missing closer for an attribute delimiter opened at `open`, such as the `)`
  * of `title=("Remove " + task.ti`: before the tag end when the line ends the tag
  * (`/>` or `>`), then at the end of the line.

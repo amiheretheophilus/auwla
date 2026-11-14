@@ -142,6 +142,7 @@ declared ref. Include a deliberate wrong expression and an incomplete edit.
 | TOOL-04 | Partial: actual unfinished task-board quote/parenthesis edits retain unrelated diagnostics/completion; holes are unmapped, builds still fail, restoration clears errors. Multiline structural recovery remains open |
 | TOOL-05 | Hardened paired profile: 34 actual LSP targets pass, including receiving-type errors, generic helpers and deferred/immediate callbacks. Full flow acceptance remains open; see [checking flow](checking-flow.md) |
 | TOOL-06 | Partial: exact unchanged input reuses the full result; real-example reuse/eviction/isolation counts pass. Incremental edits, measured latency and heap acceptance remain open |
+| TOOL-07 | Built: across `.auwla` modules (`tests/cross-file-lsp.test.ts`, `tests/fixtures/cross-file`). Renaming a component or function at its declaration edits every importing `.auwla` and `.ts` file at the authored name, and the renamed project rechecks clean. Completion auto-imports a function into an attribute or child expression (extending an existing import, or adding `import { shout } from './Badge.auwla'` with the extension, DX-40), completes a namespace member, and completes a component's tag while it is still being typed (`<Badg` before `</section>`), importing it. Renaming from an import gives `shout as yell`, TypeScript's own behavior for any import |
 
 Start with TOOL-01 and TOOL-02 during P2/P3; expand as grammar grows. Keep failing
 edits as regression fixtures when the parser or mapping strategy changes.
@@ -275,8 +276,9 @@ with headless evidence, not a verified compatibility claim.
 
 Published packaging, editor extension registration, inferred projects,
 declaration output, incremental invalidation beyond exact input, multi-module editing and the editor
-version matrix remain open. Broader completion, formatting, cross-file
-rename and broader generated-region diagnostics need their own evidence.
+version matrix remain open. Broader completion, formatting and broader
+generated-region diagnostics need their own evidence; cross-file rename and
+auto-import are TOOL-07.
 
 TOOL-05 remains open beyond the 34-case profile: ref writes, complete replay
 proofs, contextual typing, aliases, live imports and lowering maps need more

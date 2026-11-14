@@ -120,6 +120,25 @@ export function People() {
   expect(() => compile(source)).toThrow(expect.objectContaining({ code: 'JPX1005' }));
 });
 
+it('closes an opening tag still being typed for checking only, so its name stays mapped', () => {
+  // `<Badg` before `</section>`: the closing tag's `>` used to end this tag, so `<section>`
+  // never closed (JPX1002) and the whole element was set aside, with no tag-name completion.
+  const source = 'export function Page() {\n  return <section><Badg</section>;\n}\nexport const after = 1;\n';
+  const typed = source.indexOf('<Badg');
+  const end = typed + '<Badg'.length;
+  expect(() => compile(source)).toThrow(expect.objectContaining({
+    code: 'HOST', reason: 'Incomplete opening tag', range: [typed, end], repairs: [{ kind: 'insert', at: end, text: ' />' }],
+  }));
+
+  const result = projectForChecking(source, './Page.auwla');
+  expect(result.diagnostics).toEqual([expect.objectContaining({ start: typed })]);
+  expect(result.text).toContain('<section><Badg /></section>');
+  const mapped = (offset: number) => result.mappings.some(([, , start, length]) => start <= offset && offset < start + length);
+  expect(mapped(typed + 1)).toBe(true);
+  expect(mapped(source.indexOf('after'))).toBe(true);
+  expectExactMappings(source, result);
+});
+
 it('reports a half-typed closing tag once, not the good tag after it', () => {
   const source = app.replace('      </footer>', '      </fo');
   expect(projectForChecking(source, './App.auwla').diagnostics).toHaveLength(1);

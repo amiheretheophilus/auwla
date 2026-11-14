@@ -11,7 +11,7 @@ import { childExpression, childStatements, closingDelimiter, hasError, isMarkupO
 import { blankRange, maskMarkup } from '../masks';
 import { JsxPlusError, type Repair } from '../diagnostics';
 import type { ElementView, FragmentView, Range } from '../model';
-import { blank, closeAttributeValue, closeChildString } from '../repairs';
+import { blank, closeAttributeValue, closeChildString, closeOpeningTag } from '../repairs';
 import { copied, replaceRange } from '../source';
 import { readChildren, SIBLING_SEPARATOR } from './children';
 import { interpolatedText } from './text';
@@ -114,6 +114,11 @@ function readOpeningTag(context: MarkupContext, start: number): OpeningTag {
         }
       } else if (kind === K.GreaterThan && braces.length === 0) {
         return { name, attributes, end: start + tokens.end(index), selfClosing: tokens.kind(index - 1) === K.Slash };
+      } else if (kind === K.LessThan && braces.length === 0 && tokens.kind(index + 1) === K.Slash) {
+        // `<Badg</section>` while typing: a closing tag is never part of an opening tag, so do
+        // not take its `>` as this tag's end (D-RECOVERY). The tag stops before it.
+        const next = start + tokens.start(index);
+        context.error('HOST', 'Incomplete opening tag', start, next, closeOpeningTag(context.source, start, next));
       }
     }
 
