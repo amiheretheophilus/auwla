@@ -539,11 +539,12 @@ Known open issues:
 
 Compiler-next is unfinished (branch `compiler-rewrite`) and is continued
 separately. Under DX-34 this branch may change it for `.auwla` interop. Rows up to
-`232c8f5b` were adopted (`bd237a29`, then the merge `c56e2b35` of 2026-11-13).
-**Pending adoption** on `compiler-rewrite` (checked 2026-11-14 with
-`git log c56e2b35..HEAD` over the shared packages): `0cf5a8ae`, `bd2b1eac`, the CSS-1
-checkpoint (`5af90fee`), `56fbe0d5`, `9b5428e0`, `02053794`, `1e6b6360`, `6c323ef6`
-and `0855afa3`. Retain the record and track any new changes here:
+`232c8f5b` were adopted (`bd237a29`, then the merge `c56e2b35` of 2026-11-13). The rest,
+`0cf5a8ae`, `bd2b1eac`, the CSS-1 checkpoint (`5af90fee`), `56fbe0d5`, `9b5428e0`, `02053794`,
+`1e6b6360`, `6c323ef6` and `0855afa3`, were adopted on 2026-11-14 by fast-forwarding
+`compiler-rewrite` to this branch at `6bbb6aa0`, so both branches share one history (the user's
+direction: no drift, changes sync both ways). Checked there with the full gate and the router suite.
+Retain the record and track any new changes here:
 
 | Commit | Change | Why `.auwla` needs it |
 | --- | --- | --- |

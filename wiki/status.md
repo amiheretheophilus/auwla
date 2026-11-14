@@ -181,6 +181,18 @@ runtime that had routes of its own (the cause of two `packages/router` tests tha
 whole-suite run). The harness's delivered run now renders from a server build, as a real server
 does. Still to do: a lazy route's styles on a server-rendered page.
 
+**Synced with `prototype/jsx-plus` (2026-11-14).** `compiler-rewrite` was fast-forwarded to the
+prototype branch at `6bbb6aa0`, so the two share one history and changes sync both ways without
+drift (the user's direction). It brings the prototype's compiler-next, runtime and router changes
+(`wiki2/status.md`, "Compiler-next changes to reconcile"): source languages, also for server code;
+the `serverOnly` option; effects running once per change; a lazy route loader no longer counted as
+unknown code; the router releasing window listeners on unmount; no unreachable completion after a
+shared setup's `return`; native CSS delivery; and an expected-failure test for module state leaking
+between server requests. It also brings `packages/jsx-plus`, `packages/editor-vscode` and `wiki2`.
+Checked on this branch: the full gate (806 unit, 851 cases, generators) and the router suite (134).
+Open, for the user: shared or per-request module state in server renders (`compiler/server.md`), and
+the bundle size measurements in `wiki2/status.md`.
+
 Fixed: `tests/ssr-payload-transport.test.ts` and
 `tests/transparent-source-mutations-and-routes.test.ts` failed after certain other root test files
 and passed alone, the same with the router changes above switched off. The compilers were not
