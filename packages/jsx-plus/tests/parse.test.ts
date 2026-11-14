@@ -121,7 +121,7 @@ for (const [name, source, tag] of [
   ['an expression before a section', 'function A() { return <section>count <section>"x"</section></section>; }', '<section>'],
 ] as const) {
   const at = source.lastIndexOf(tag);
-  const expected = { code: 'JPX1005', range: [at, at + tag.length], repairs: [{ kind: 'insert', at, text: ';' }] };
+  const expected = { code: 'JPX1005', range: [at, at + tag.length], repairs: [{ kind: 'insert', at, text: ';' }] } as const;
   const reported = (normalizeWith: (source: string) => unknown) => {
     try { normalizeWith(source); } catch (error) {
       const { code, range, repairs } = error as JsxPlusError;
