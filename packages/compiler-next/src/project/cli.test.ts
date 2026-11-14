@@ -1,12 +1,18 @@
 import { afterAll, describe, expect, it } from 'bun:test';
-import { existsSync, mkdtempSync, mkdirSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { convertV4MiniflareOptions, Miniflare } from 'miniflare';
 import { parseArguments, run } from './cli';
 
 // Inside the package (not `src/`), so a build finds the workspace's packages as an app finds its own.
 const root = mkdtempSync(join(import.meta.dir, '../../.cli-test-'));
-afterAll(() => rmSync(root, { recursive: true, force: true }));
+/** Workers started by a test, stopped before their files are removed (workerd holds them open). */
+const running: Miniflare[] = [];
+afterAll(async () => {
+  for (const worker of running) await worker.dispose();
+  rmSync(root, { recursive: true, force: true });
+});
 
 function write(path: string, text: string): void {
   mkdirSync(join(root, path, '..'), { recursive: true });
@@ -116,4 +122,56 @@ describe('the command line', () => {
     const answer = await app.fetch(new Request('http://localhost/_fn/time/getAnswer'));
     expect(await answer.json()).toBe(42);
   });
+
+  it('builds the server as a Cloudflare Worker that renders, serves its assets and answers in workerd', async () => {
+    write('worker/index.html', '<!doctype html><html><head><title>worker</title></head><body><div id="root"><!--ssr-outlet--></div><script type="module" src="./src/main.ts"></script></body></html>');
+    write('worker/src/main.ts', `import { mount } from '@memoized-dom/runtime';\nimport { Page } from './Page';\nmount('root', Page);\n`);
+    write('worker/src/Page.tsx', `let visits = 0;\nexport function Page() { visits++; return <main><h1>On a Worker</h1><p>{visits}</p></main>; }`);
+    write('worker/server.ts', `import { serve } from '@memoized-dom/server';\nimport { Page } from './src/Page';\nimport { define } from '#server/define';\nconst app = serve({ define });\napp.ssr(Page);\nexport default app;\n`);
+    write('worker/server/define.ts', `import { createDefine } from '@memoized-dom/server';\nexport const define = createDefine();\n`);
+    write('worker/server/functions/time.ts', `import { define } from '../define';\nexport const getAnswer = define.function({ async get() { return 42; } });\n`);
+
+    const folder = join(root, 'worker');
+    expect(parseArguments(['build', 'src/main.ts', '--runtime', 'cloudflare'], folder)).toContain('--runtime needs --server');
+    const command = parseArguments(['build', 'src/main.ts', '--server', 'server.ts', '--server-folder', 'server', '--runtime', 'cloudflare'], folder);
+    if (typeof command === 'string') throw new Error(command);
+    const lines: string[] = [];
+    expect(await run(command, (line) => lines.push(line)), lines.join('\n')).toBe(0);
+
+    const config = JSON.parse(readFileSync(join(folder, 'dist', 'wrangler.json'), 'utf8'));
+    expect(config).toMatchObject({
+      main: './worker.js',
+      compatibility_flags: ['nodejs_compat'],
+      assets: { directory: './client', binding: 'ASSETS', run_worker_first: true },
+    });
+
+    // workerd, as `wrangler dev` runs it, with the client uploaded as the Worker's assets.
+    const worker = new Miniflare(convertV4MiniflareOptions({
+      modules: true,
+      // One file: the Worker is bundled without chunks.
+      scriptPath: join(folder, 'dist', 'worker.js'),
+      compatibilityDate: config.compatibility_date,
+      compatibilityFlags: config.compatibility_flags,
+      assets: {
+        directory: join(folder, 'dist', 'client'), binding: 'ASSETS', run_worker_first: true,
+        routerConfig: { has_user_worker: true, invoke_user_worker_ahead_of_assets: true },
+      },
+    }));
+    running.push(worker);
+    // Miniflare's own fetch cannot reach workerd under Bun; Bun's fetch can, at its address.
+    const address = await worker.ready;
+    const fetchWorker = (path: string) => fetch(new URL(path, address));
+    const page = await (await fetchWorker('/')).text();
+    expect(page).toContain('<h1>On a Worker</h1>');
+    // Each render owns the module state it writes, on a Worker too.
+    expect(await (await fetchWorker('/')).text()).toContain('<p>1</p>');
+
+    const script = /<script[^>]+src="([^"]+)"/.exec(page)?.[1];
+    expect(script).toBeDefined();
+    const asset = await fetchWorker(new URL(script!, 'http://localhost/').pathname);
+    expect(asset.status).toBe(200);
+    expect(await asset.text()).toContain('hydrat');
+
+    expect(await (await fetchWorker('/_fn/time/getAnswer')).json()).toBe(42);
+  }, 60_000);
 });

@@ -26,7 +26,10 @@ plugin's native package suites (26 tests: built apps run, a linked workspace, li
 type check) pass through `MMD_COMPILER=next`. Packaging one is the project's too
 (`packageLibrary`, `cli.ts package`), with no bundler, since the package is its source; the old
 plugin's `memoized-dom package` hands `source: true` configs to it, and both native package suites
-pass on either compiler. Next in the same direction: server pages, and Cloudflare as a build target.
+pass on either compiler. Cloudflare is a build target of the application (`compiler/server.md`,
+"Delivery and runtimes"): `cli.ts build --runtime cloudflare` writes `worker.js`, `client/` and
+`wrangler.json`, and the built Worker renders, serves its assets and answers server functions in
+workerd (Miniflare) in `project/cli.test.ts`. Next: server pages, which need a design first.
 
 **Done (2026-11-14): each server render owns the module state it writes** (`compiler/server.md`,
 "Request isolation"; `decisions.md`, 2026-11-14). In a server build, a module whose state a

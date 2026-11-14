@@ -200,8 +200,11 @@ is server-only by its name (the old plugin assumed `server`).
 - `compilePackages` is rejected with an error saying what replaced it: compiling arbitrary
   installed packages was dropped (`../decisions.md`, 2026-11-05).
 
-Not yet compiler-first, each the old plugin's: server pages, Cloudflare, and the devtools
-inspector (on hold). Each goes in the project or
+- Cloudflare is a build target of the application (`server.md`, "Delivery and runtimes"):
+  `cli.ts build --runtime cloudflare` builds a Worker without Vite.
+
+Not yet compiler-first, each the old plugin's: server pages, and the devtools inspector (on
+hold). Each goes in the project or
 application layer, with the tools only connecting it (`../decisions.md`, 2026-11-14). (Route CSS is
 built: `routeStyles`, `routes.md`, "A lazy route's styles".) An edit that moves code without
 changing output (a comment) leaves that module's source map stale until its next real change.
@@ -296,7 +299,7 @@ same adapters. There is no language-specific build wrapper.
 
 ```
 bun packages/compiler-next/src/project/cli.ts check src/main.ts [--server server.ts --server-folder server]
-bun packages/compiler-next/src/project/cli.ts build src/main.ts --out dist [--minify] [--root .] [--server … --server-folder …]
+bun packages/compiler-next/src/project/cli.ts build src/main.ts --out dist [--minify] [--root .] [--server … --server-folder … [--runtime bun|cloudflare]]
 bun packages/compiler-next/src/project/cli.ts package [--root packages/kit] [--config .lib.config.ts]
 ```
 
@@ -333,7 +336,7 @@ bun packages/compiler-next/src/project/cli.ts package [--root packages/kit] [--c
 | `project/bun.ts` | The Bun plugin |
 | `project/bun.test.ts` | Client: a companion output, a stylesheet, a compile error. Server: a built server rendering its page, a route reading `#server/` code, and a server function |
 | `project/cli.ts` | The command line: `check` and `build`, with or without a server, and `package` |
-| `project/cli.test.ts` | Arguments, checking, a client build, and a server build serving its page, its script (which hydrates) and a server function |
+| `project/cli.test.ts` | Arguments, checking, a client build, a server build serving its page, its script (which hydrates) and a server function, and the same as a Cloudflare Worker run in workerd |
 | `packages/vite/src/next/plugin.ts` | The Vite plugin over an application: loading, resolving generated modules, hot updates, errors, delivery |
 | `packages/vite/src/next/host.ts` | The project host Vite gives: files from disk, native packages by the project's rule, aliases resolved by Vite |
 | `packages/vite/tests/next-plugin.test.ts` | A client build with an alias; a build from a Windows short name; dev: component, helper and entry edits; a compile error and its fix; dev SSR re-rendering an edit; a full-stack build serving its page, its script and a server function |

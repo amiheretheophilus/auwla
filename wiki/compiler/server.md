@@ -226,6 +226,28 @@ top of such a module (`sourceReadinessStorage(plan, null, …)`). The Bun plugin
 only because its page read no server function. The entry is now plain backend code (above), but
 any module whose top level waits with no module state still needs it (`shared-dom.test.ts`).
 
+## Delivery and runtimes
+
+A built server gets its page and the built client's files from a delivery module (`server.delivery`,
+read by the integration). `server/delivery.ts` generates it for the runtime the server runs on, so a
+deployment target is the compiler's, not a bundler plugin's (`../decisions.md`, 2026-11-14):
+
+- `bun`: the client sits beside the server in `./client/`, read from disk
+  (`@memoized-dom/adapters/bun`).
+- `cloudflare`: a Worker has no disk. The client is uploaded as the Worker's static assets and read
+  through its assets binding, `env.ASSETS` from `cloudflare:workers`
+  (`@memoized-dom/adapters/cloudflare`). `workerConfig` writes the `wrangler.json` that says so: the
+  Worker runs first for every request, `nodejs_compat` for request context (`AsyncLocalStorage`),
+  and `COMPATIBILITY_DATE`, a date the framework is tested with rather than the day of the build,
+  which a local workerd may not support yet (found by the test: workerd refused to start).
+
+`cli.ts build … --server server.ts --runtime cloudflare` bundles the server for workerd as
+`worker.js` (`conditions: workerd`, `cloudflare:*` and `node:*` left as imports) beside `client/`
+and `wrangler.json`; `wrangler deploy --config dist/wrangler.json` deploys it. `project/cli.test.ts`
+runs the built Worker in workerd through Miniflare: a page render, per-render module state, a client
+file through the assets binding, and a server function. The old Vite plugin's `cloudflare()` still
+wraps `@cloudflare/vite-plugin` for its own dev server; the Vite path is one way, not the only one.
+
 ## Files
 
 | File | What it owns |
@@ -235,5 +257,6 @@ any module whose top level waits with no module state still needs it (`shared-do
 | `server/functions.test.ts` | Analysis, facades, declarations and errors, compared with the old compiler |
 | `server/registry.ts` | The server function routes module, the `#server-functions` barrel, and services |
 | `server/application.ts` | `createApplication`: the client and server builds, their views of the host, the server entry's integration |
+| `server/delivery.ts` | A built server's delivery module for Bun or a Cloudflare Worker, and the Worker's `wrangler.json` |
 | `server/index.ts` | The public API, re-exported from the package root |
 | `server/application.test.ts` | Facades and no server code in the client, routes and handlers on the server, client-only apps, server-only imports, `$routed`, errors, updates |

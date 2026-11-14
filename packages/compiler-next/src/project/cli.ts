@@ -14,8 +14,9 @@
  */
 import { existsSync, rmSync } from 'node:fs';
 import { basename, relative, resolve } from 'node:path';
-import type { BuildOutput } from 'bun';
+import type { BuildOutput, BunPlugin } from 'bun';
 import { createApplication, type ServerOptions } from '../server/application';
+import { deliveryModule, workerConfig, type ServerRuntime } from '../server/delivery';
 import { memoizedDom } from './bun';
 import { fileSystemHost, normalizeProjectPath } from './host';
 import { packageLibrary } from './packages/package';
@@ -26,6 +27,8 @@ interface ApplicationCommand {
   readonly name: 'check' | 'build';
   readonly client: string;
   readonly server?: ServerOptions;
+  /** Where a built server runs (`server/delivery.ts`). Default `bun`. */
+  readonly runtime: ServerRuntime;
   readonly root: string;
   readonly out: string;
   readonly minify: boolean;
@@ -40,7 +43,7 @@ interface PackageCommand {
 
 const USAGE = `usage:
   cli.ts check <client entry> [--root <folder>] [--server <entry> [--server-folder <folder>]]
-  cli.ts build <client entry> [--root <folder>] [--out <folder>] [--minify] [--server <entry> [--server-folder <folder>]]
+  cli.ts build <client entry> [--root <folder>] [--out <folder>] [--minify] [--server <entry> [--server-folder <folder>] [--runtime bun|cloudflare]]
   cli.ts package [--root <folder>] [--config <file>]`;
 
 /** The command the arguments describe, or a message saying what is wrong with them. */
@@ -54,27 +57,34 @@ export function parseArguments(args: readonly string[], cwd: string): Command | 
   let minify = false;
   let serverEntry: string | undefined;
   let serverFolder: string | undefined;
+  let runtime: string | undefined;
   for (let index = 0; index < rest.length; index++) {
     const flag = rest[index];
     const value = rest[index + 1];
     if (flag === '--minify') {
       minify = true;
-    } else if (value !== undefined && (flag === '--root' || flag === '--out' || flag === '--server' || flag === '--server-folder')) {
+    } else if (value !== undefined && (flag === '--root' || flag === '--out' || flag === '--server' || flag === '--server-folder' || flag === '--runtime')) {
       index++;
       if (flag === '--root') root = resolve(cwd, value);
       else if (flag === '--out') out = value;
       else if (flag === '--server') serverEntry = value;
+      else if (flag === '--runtime') runtime = value;
       else serverFolder = value;
     } else {
       return `unknown or incomplete option: ${flag}\n${USAGE}`;
     }
   }
   if (serverFolder !== undefined && serverEntry === undefined) return `--server-folder needs --server\n${USAGE}`;
+  if (runtime !== undefined && serverEntry === undefined) return `--runtime needs --server\n${USAGE}`;
+  if (runtime !== undefined && runtime !== 'bun' && runtime !== 'cloudflare') return `--runtime is bun or cloudflare\n${USAGE}`;
   const server = serverEntry === undefined ? undefined : {
     entry: normalizeProjectPath(serverEntry),
     ...(serverFolder === undefined ? {} : { folder: normalizeProjectPath(serverFolder) }),
   };
-  return { name, client: normalizeProjectPath(client), ...(server === undefined ? {} : { server }), root, out: resolve(root, out), minify };
+  return {
+    name, client: normalizeProjectPath(client), ...(server === undefined ? {} : { server }),
+    runtime: (runtime ?? 'bun') as ServerRuntime, root, out: resolve(root, out), minify,
+  };
 }
 
 function parsePackage(rest: readonly string[], cwd: string): PackageCommand | string {
@@ -142,23 +152,47 @@ async function build(command: ApplicationCommand, log: (line: string) => void): 
 
   const document = await documentOf(client, clientOut);
   const files = client.outputs.map((output) => relative(clientOut, output.path).replaceAll('\\', '/'));
-  const delivery = `import { createAssetHandler } from '@memoized-dom/adapters/bun';
-const page = ${JSON.stringify(document)};
-export default {
-  document: () => page,
-  assets: createAssetHandler(new URL('./client/', import.meta.url), { files: ${JSON.stringify(files)} }),
-};
-`;
+  const delivery = deliveryModule({ runtime: command.runtime, document, files });
+  const plugins = [memoizedDom({ ...shared, target: 'server', delivery })];
+
+  if (command.runtime === 'cloudflare') return buildWorker(command, server, plugins, log);
   const backend = await Bun.build({
     entrypoints: [resolve(root, server.entry)],
     outdir: command.out,
     target: 'bun',
     sourcemap: 'linked',
     minify: command.minify,
-    plugins: [memoizedDom({ ...shared, target: 'server', delivery })],
+    plugins,
     throw: false,
   });
   return report(backend, log) ? 0 : 1;
+}
+
+/**
+ * The server as a Cloudflare Worker: `<out>/worker.js`, bundled for workerd, beside `<out>/client`
+ * and a `wrangler.json` that uploads the client as the Worker's assets (`server/delivery.ts`). The
+ * Worker's own modules (`cloudflare:workers`) and Node's built-ins, which `nodejs_compat` provides,
+ * stay imports.
+ */
+async function buildWorker(command: ApplicationCommand, server: ServerOptions, plugins: BunPlugin[], log: (line: string) => void): Promise<number> {
+  const worker = await Bun.build({
+    entrypoints: [resolve(command.root, server.entry)],
+    outdir: command.out,
+    naming: { entry: 'worker.[ext]' },
+    target: 'browser',
+    conditions: ['workerd', 'worker', 'browser'],
+    external: ['cloudflare:*', 'node:*'],
+    sourcemap: 'linked',
+    minify: command.minify,
+    plugins,
+    throw: false,
+  });
+  if (!report(worker, log)) return 1;
+  const config = workerConfig({ name: basename(command.root), main: './worker.js', assets: './client' });
+  const file = resolve(command.out, 'wrangler.json');
+  await Bun.write(file, `${JSON.stringify(config, null, 2)}\n`);
+  log(`wrote ${file}`);
+  return 0;
 }
 
 /**

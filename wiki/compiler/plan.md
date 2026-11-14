@@ -376,7 +376,7 @@ array child). Remove each check when its phase is built.
   (`compiler: 'next'`): builds, dev, SSR in dev and build, hot updates, errors. [ ] The old plugin's
   remaining features, in the project or application layer, not in a plugin (`project.md`, "Vite";
   `decisions.md`, 2026-11-14): [x] native packages, found and resolved by the project (2026-11-14);
-  [x] packaging one (`packageLibrary`, `cli.ts package`, 2026-11-14); [ ] server pages; [ ] Cloudflare as a build target;
+  [x] packaging one (`packageLibrary`, `cli.ts package`, 2026-11-14); [ ] server pages; [x] Cloudflare as a build target (`server.md`, "Delivery and runtimes", 2026-11-14);
   devtools on hold.
 - [ ] SSR from the project too (`server.md`), asked for by the user (2026-11-12), so Vite and the
   Bun plugin share it: [x] server function analysis and facades; [ ] the application (client and
