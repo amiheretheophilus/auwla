@@ -14,7 +14,7 @@ import { memoizedDom } from '../../../compiler-next/src/project/bun';
 import { fileSystemHost } from '../../../compiler-next/src/project';
 import { createApplication } from '../../../compiler-next/src/server/application';
 import { auwla } from '../../src';
-import { checkoutPackagesFor } from '../checkout';
+import { checkoutPackagesFor } from '../../tools/checkout';
 
 const root = fileURLToPath(new URL('./', import.meta.url));
 const outdir = fileURLToPath(new URL('../../../../.cache/directory-preview/', import.meta.url));

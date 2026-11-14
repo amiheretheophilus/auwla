@@ -104,7 +104,7 @@ it('retains bounded CSS assistance through every prefix of numeric headers and v
   }
 });
 
-const root = fileURLToPath(new URL('../examples/responsive/', import.meta.url));
+const root = fileURLToPath(new URL('./fixtures/apps/responsive/', import.meta.url));
 const browser = window as unknown as Window;
 const initialSize = { width: browser.innerWidth, height: browser.innerHeight };
 const applications: runtime.MountedApplication[] = [];

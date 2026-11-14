@@ -1,8 +1,9 @@
 /**
- * Example-only: bundle this checkout's runtime, data, router and server sources instead of their
- * packages' `dist`, which can be older than the compiler that emits calls into them. A subpath such
- * as `@memoized-dom/router/internal` is `src/internal.ts`. Used by `preview.ts` and the tests that
- * bundle the examples.
+ * Development tool: bundle this checkout's runtime, data, router and server sources instead of
+ * their packages' `dist`, which can be older than the compiler that emits calls into them. A
+ * subpath such as `@memoized-dom/router/internal` is `src/internal.ts`. Used by the examples'
+ * previews and by the tests that bundle their fixture apps; it lives in neither folder, since
+ * tests never depend on the examples.
  *
  * A browser build gets each package's browser entry (`src/index.ts`). A server build gets the
  * runtime's server entry (`src/server.ts`), as the package's export conditions choose outside a

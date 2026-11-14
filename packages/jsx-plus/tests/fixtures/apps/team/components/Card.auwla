@@ -1,0 +1,17 @@
+// A layout with slots. Lowercase `<slot>` is compiler syntax, not a DOM element: callers fill
+// `header` and `actions` with `slot="…"` children, and everything else goes to the default slot.
+export function Card() {
+  return (
+    <article class="card">
+      <header class="card-header">
+        <slot name="header">"Team"</slot>
+      </header>
+      <div class="card-body">
+        <slot />
+      </div>
+      <footer class="card-actions">
+        <slot name="actions" />
+      </footer>
+    </article>
+  );
+}

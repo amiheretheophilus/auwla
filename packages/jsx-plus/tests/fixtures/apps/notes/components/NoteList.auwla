@@ -1,0 +1,21 @@
+import type { Note } from '../notes';
+
+export function NoteList({ notes, onRemove }: { notes: Note[]; onRemove: (id: number) => void }) {
+  return (
+    <section>
+      if (notes.length === 0) {
+        <p class="empty">"No notes yet."</p>
+      }
+      <ul class="note-list">
+        for (const note of notes) {
+          <li key={note.id}>
+            <span>note.title</span>
+            <button type="button" aria-label=("Remove " + note.title) onClick=(() => onRemove(note.id))>
+              "Remove"
+            </button>
+          </li>
+        }
+      </ul>
+    </section>
+  );
+}

@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { compile } from '../src';
 import { projectForChecking } from '../src/checking/project';
 
-const app = readFileSync(new URL('../examples/task-board/App.auwla', import.meta.url), 'utf8');
+const app = readFileSync(new URL('./fixtures/apps/task-board/App.auwla', import.meta.url), 'utf8');
 const lineEnding = app.includes('\r\n') ? '\r\n' : '\n';
 
 for (const [name, source, code, opener] of [

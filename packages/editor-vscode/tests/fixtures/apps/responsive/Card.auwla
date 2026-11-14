@@ -1,0 +1,28 @@
+export function Card({ title }: { title: string }) {
+  <style>
+    @use("./shared.auwla", "panel");
+    .card {
+      h2 { margin: 0; font-size: 1rem @700px:1.5rem; }
+      button {
+        padding: 8px 12px;
+        font: inherit;
+        cursor: pointer;
+        color: white;
+        background: var(--button-background);
+      }
+    }
+  </style>
+
+  let expanded = false;
+
+  return (
+    <article class=(expanded ? "card expanded" : "card")>
+      <h2>title</h2>
+      <p>"This card reuses named rules in its own component scope."</p>
+      <p>"Expanded: {expanded}"</p>
+      <button type="button" aria-pressed=expanded onClick=(() => expanded = !expanded)>
+        expanded ? "Use responsive padding" : "Expand padding"
+      </button>
+    </article>
+  );
+}

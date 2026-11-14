@@ -9,7 +9,7 @@ import { auwla } from '../src';
 import { rebaseStyleUrls } from '../src/styles/urls';
 import { createCssSession } from '../src/styles/tooling';
 
-const root = resolve(import.meta.dir, '../examples/scoping');
+const root = resolve(import.meta.dir, 'fixtures/apps/scoping');
 const paths = ['main.ts', 'App.auwla', 'Cards.auwla', 'IndependentCard.auwla', 'styles/Frames.auwla', 'styles/Palette.auwla'];
 const sources = Object.fromEntries(paths.map((path) => [`./${path}`, readFileSync(join(root, path), 'utf8')]));
 const consumer = `export function App() {

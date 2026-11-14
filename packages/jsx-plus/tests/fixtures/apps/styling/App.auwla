@@ -1,0 +1,75 @@
+<style global>
+  @import './reset.css';
+
+  :root {
+    color-scheme: light dark;
+    --card-background: light-dark(#ffffff, #1b2433);
+  }
+
+  body {
+    margin: 0;
+    padding: 24px;
+    font-family: system-ui, sans-serif;
+    background: light-dark(#f1f5f9, #101722);
+  }
+
+  .css-demo {
+    max-width: 42rem;
+    margin: 0 auto;
+    padding: 16px;
+    background: var(--card-background);
+    border: 2px solid #64748b;
+    border-radius: 12px;
+  }
+
+  .css-demo.loading {
+    border-color: #d97706;
+  }
+
+  .css-demo h1::before {
+    content: "";
+    display: inline-block;
+    width: 0.7em;
+    height: 0.7em;
+    margin-inline-end: 0.5em;
+    background: url('./dot.svg') center / contain no-repeat;
+  }
+
+  .css-demo button {
+    padding: 8px 16px;
+    font: inherit;
+    cursor: pointer;
+  }
+
+  .css-demo button:hover {
+    outline: 2px solid #2563eb;
+  }
+
+  @media (min-width: 48rem) {
+    .css-demo { padding: 30px; }
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    .css-demo { transition: border-color 150ms ease; }
+  }
+</style>
+
+export function App() {
+  let loading = false;
+
+  return (
+    <main class=(loading ? "css-demo loading" : "css-demo")>
+      <h1>"Native CSS in Auwla"</h1>
+      <p>"The browser handles media queries, hover, and the loading class."</p>
+      <button type="button" aria-pressed=loading onClick=(() => loading = !loading)>
+        loading ? "Clear loading class" : "Add loading class"
+      </button>
+    </main>
+  );
+}
+
+<style global>
+  .css-demo p {
+    line-height: 1.6;
+  }
+</style>

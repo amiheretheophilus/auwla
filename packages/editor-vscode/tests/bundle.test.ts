@@ -27,7 +27,8 @@ it('loads the built extension outside the workspace and runs CSS providers in No
     expect(output).toContain('completion, hover and diagnostics passed in Node');
     expect(output).toContain('Reactivity hints passed in Node');
 
-    const example = join(root, '../jsx-plus/examples/class-conditions/App.auwla');
+    // The test's own copies of example apps (`fixtures/apps/`), never the examples themselves.
+    const example = join(import.meta.dir, 'fixtures/apps/class-conditions/App.auwla');
     const real = Bun.spawn(['node', join(import.meta.dir, 'fixtures/bundle-host.cjs'), entry, example], {
       cwd: installed, stdout: 'pipe', stderr: 'pipe',
     });
@@ -38,7 +39,7 @@ it('loads the built extension outside the workspace and runs CSS providers in No
     expect(realExit).toBe(0);
     expect(realOutput).toContain('zero CSS diagnostics and native value completion passed');
 
-    const cards = join(root, '../jsx-plus/examples/scoping/Cards.auwla');
+    const cards = join(import.meta.dir, 'fixtures/apps/scoping/Cards.auwla');
     const scoped = Bun.spawn(['node', join(import.meta.dir, 'fixtures/bundle-host.cjs'), entry, cards], {
       cwd: installed, stdout: 'pipe', stderr: 'pipe',
     });
@@ -49,7 +50,7 @@ it('loads the built extension outside the workspace and runs CSS providers in No
     expect(scopeExit).toBe(0);
     expect(scopeOutput).toContain('zero CSS diagnostics and native value completion passed');
 
-    const responsive = join(root, '../jsx-plus/examples/responsive/shared.auwla');
+    const responsive = join(import.meta.dir, 'fixtures/apps/responsive/shared.auwla');
     const numeric = Bun.spawn(['node', join(import.meta.dir, 'fixtures/bundle-host.cjs'), entry, responsive, '@700:'], {
       cwd: installed, stdout: 'pipe', stderr: 'pipe',
     });

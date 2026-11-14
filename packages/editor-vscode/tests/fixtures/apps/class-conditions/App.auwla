@@ -1,0 +1,44 @@
+<style global>
+  body {
+    margin: 0;
+    padding: 24px;
+    font-family: system-ui, sans-serif;
+    background: #f1f5f9;
+  }
+
+  main { max-width: 42rem; margin: 0 auto; }
+
+  .card {
+    padding: 16px @.expanded:32px;
+    background: white;
+    border: 3px solid;
+    border-color: #64748b @.loading:#d97706 @.error:#dc2626;
+    border-radius: 12px;
+  }
+
+  .card::before {
+    content: "Class conditions";
+    font-size: 14px;
+    color: #475569 @.error:#dc2626;
+  }
+
+  button { margin: 12px 8px 0 0; padding: 8px 12px; font: inherit; }
+</style>
+
+export function App() {
+  let loading = false;
+  let error = false;
+  let expanded = false;
+
+  return (
+    <main>
+      <section class=(`card${loading ? " loading" : ""}${error ? " error" : ""}${expanded ? " expanded" : ""}`)>
+        <h1>"Full CSS properties, ordinary classes"</h1>
+        <p>"The browser applies the generated selectors. There is no CSS condition runtime."</p>
+      </section>
+      <button type="button" aria-pressed=loading onClick=(() => loading = !loading)>"Loading"</button>
+      <button type="button" aria-pressed=error onClick=(() => error = !error)>"Error"</button>
+      <button type="button" aria-pressed=expanded onClick=(() => expanded = !expanded)>"Expand"</button>
+    </main>
+  );
+}

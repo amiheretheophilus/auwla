@@ -1,0 +1,24 @@
+// Server-only: `#server/people` resolves here (the server folder is `./server`), and client code
+// can read it only inside a server-backed `$routed` callback. In-memory, so a restart resets it.
+
+export type Person = { id: string; name: string; role: string };
+
+const people: Person[] = [
+  { id: '1', name: 'Ada', role: 'Engineer' },
+  { id: '2', name: 'Lin', role: 'Designer' },
+];
+
+export function allPeople(): Person[] {
+  return people.map((person) => ({ ...person }));
+}
+
+export function findPerson(id: string): Person | null {
+  const person = people.find((entry) => entry.id === id);
+  return person === undefined ? null : { ...person };
+}
+
+export function addPerson(name: string, role: string): Person {
+  const person = { id: String(people.length + 1), name, role };
+  people.push(person);
+  return { ...person };
+}

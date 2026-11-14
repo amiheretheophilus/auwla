@@ -10,9 +10,10 @@ import { auwla } from '../src';
 import { readStyleBlocks } from '../src/styles/blocks';
 
 const copies: string[] = [];
+/** A copy of the test's own app `fixtures/apps/<name>` in a temporary folder of this package. */
 function copyExample(name = 'styling'): string {
   const copy = mkdtempSync(join(import.meta.dir, `../.vite-test-${name}-`));
-  cpSync(join(import.meta.dir, '../examples', name), copy, { recursive: true });
+  cpSync(join(import.meta.dir, 'fixtures/apps', name), copy, { recursive: true });
   rmSync(join(copy, 'tsconfig.json'));
   copies.push(copy);
   return copy;
@@ -54,7 +55,7 @@ it('builds the real HTML entry with native CSS imports, URLs and stylesheet link
 it('builds full-property class conditions through the same compiler-owned CSS path', async () => {
   const copy = mkdtempSync(join(import.meta.dir, '../.vite-test-class-conditions-'));
   copies.push(copy);
-  cpSync(join(import.meta.dir, '../examples/class-conditions'), copy, { recursive: true });
+  cpSync(join(import.meta.dir, 'fixtures/apps/class-conditions'), copy, { recursive: true });
   rmSync(join(copy, 'tsconfig.json'));
   const result = await build({ ...config, root: copy, build: { write: false } });
   const outputs = (Array.isArray(result) ? result : [result]) as Rolldown.RolldownOutput[];

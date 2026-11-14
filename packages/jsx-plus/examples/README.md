@@ -2,6 +2,11 @@
 
 Run commands below from `packages/jsx-plus` using the installed workspace dependencies.
 
+These folders are for trying things out, and you can change them freely: no test reads them
+(`wiki/rules.md`, rule 16). A test that needs a real app has its own copy in
+`tests/fixtures/apps/`, taken when the test was written. Where a section below names a test, it
+tests that copy, not this folder.
+
 The example configs enable `@memoized-dom/jsx-plus/types` once through
 `compilerOptions.types`, reusing the existing element/event/ref declarations.
 The counter has no per-file JSX type import. `examples/tsconfig.json` includes
@@ -25,8 +30,7 @@ For member completion, open `greeting.auwla` and temporarily change
 string members such as `length`. Try `model.` in the loop iterable or `row.`
 inside its body too. An unfinished expression still has a native syntax error;
 the checking view keeps it mapped so that completing it can clear that error.
-The real-server tests apply these edits and recheck the completed file. Keep the
-saved example valid when running the whole package suite.
+The real-server tests apply these edits to their own copy and recheck the completed file.
 
 ## Run the task board
 
@@ -59,8 +63,8 @@ runtime. It compiles nothing itself. The same option works with the Vite plugin.
 Run `bun run examples/styling/preview.ts` and open `http://127.0.0.1:3033`.
 [styling/App.auwla](styling/App.auwla) authors explicit global native CSS blocks,
 custom properties, media queries, hover, relative CSS/SVG imports and an ordinary
-conditional `loading` class. Its real entry mounts with `mount('app', App)` and
-is executed in both compiler modes in the CSS tests. The preview gives the HTML
+conditional `loading` class. Its real entry mounts with `mount('app', App)`; the CSS tests
+run a copy of it (`tests/fixtures/apps/styling`) in both compiler modes. The preview gives the HTML
 entry to Bun for stylesheet delivery; the same folder also builds with Vite.
 Local scope and class conditions have their own examples below; aliases remain later. See
 [styling/README.md](styling/README.md) and the [CSS-1 spec](../../../wiki2/spec/styles.md).
@@ -70,8 +74,8 @@ Local scope and class conditions have their own examples below; aliases remain l
 Run `bun run examples/class-conditions/preview.ts` and open port 3034.
 [class-conditions/App.auwla](class-conditions/App.auwla) authors
 `padding:16px @.expanded:32px` and multiple border-color states. Buttons update
-ordinary classes; the emitted CSS decides which values apply. Tests run the real
-entry and apply its emitted stylesheet in both modes. The explicit global profile
+ordinary classes; the emitted CSS decides which values apply. Tests run a copy of the
+entry (`tests/fixtures/apps/class-conditions`) and apply its emitted stylesheet in both modes. The explicit global profile
 also covers selector lists, pseudo-elements, native grouping rules and authored
 nesting; numeric responsive thresholds have a separate example below, and aliases are later work. See the
 [CSS-2a contract](../../../wiki2/spec/style-conditions.md).
@@ -109,7 +113,7 @@ prop; the list removes through `onRemove`, with a direct `if` for the empty stat
 and a direct `for` for the rows. [notes/notes.ts](notes/notes.ts) is a TypeScript
 helper with module state. Its `index.html` loads `/main.ts`, so the folder also
 runs under Vite with `memoizedDom({ clientEntry: 'main.ts', compiler: 'next', languages: [auwla] })`.
-`tests/modules.test.ts` and `tests/vite.test.ts` build and run this folder.
+`tests/modules.test.ts` and `tests/vite.test.ts` build and run a copy of it (`tests/fixtures/apps/notes`).
 
 ## Run the team directory (routes, lazy pages, data, effects)
 
@@ -152,7 +156,7 @@ in-memory API and serves deep links such as `/people/2`. Everything is written i
 A text child followed by a tag needs `;` (`"Could not load people. "; <button>`):
 without it, `"…" <button>` reads as a comparison (spec grammar rule 5), and the
 error is JPX1005 at the tag, asking for that `;`.
-`tests/routes.test.ts` bundles this folder with chunk splitting and drives it in
+`tests/routes.test.ts` bundles a copy of it (`tests/fixtures/apps/team`) with chunk splitting and drives it in
 both compiler modes; `tests/vite.test.ts` checks Vite splits the same pages.
 
 ## Run the directory (rendered on the server)
@@ -190,7 +194,7 @@ build also finds `'../people'`, but TypeScript in the editor does not: it report
 module", because it loads a mapped file only when the import names its extension, and `paths`
 never applies to a relative import. An alias can leave it out: the tsconfig maps `#server/*` to
 `./server/*` and then `./server/*.auwla`, so `#server/people` type-checks.
-`tests/server.test.ts` builds this folder and drives it in both modes. Its `index.html` is
+`tests/server.test.ts` builds a copy of it (`tests/fixtures/apps/directory`) and drives it in both modes. Its `index.html` is
 the page for Vite: `memoizedDom({ clientEntry: 'src/main.ts', serverEntry: 'server.ts',
 server: 'server', compiler: 'next', languages: [auwla] })` builds and serves it full-stack, as
 `tests/vite.test.ts` checks.

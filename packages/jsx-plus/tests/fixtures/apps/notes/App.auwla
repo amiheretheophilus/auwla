@@ -1,0 +1,24 @@
+import { NoteForm } from './NoteForm.auwla';
+import { NoteList } from './components';
+import { createNote, type Note } from './notes';
+
+export function App() {
+  let notes: Note[] = [createNote('Write the first note')];
+
+  function add(title: string) {
+    notes = [...notes, createNote(title)];
+  }
+
+  function remove(id: number) {
+    notes = notes.filter(note => note.id !== id);
+  }
+
+  return (
+    <main class="notes">
+      <h1>"Notes"</h1>
+      <NoteForm onAdd=add />
+      <p class="count">"{notes.length} saved"</p>
+      <NoteList notes=notes onRemove=remove />
+    </main>
+  );
+}

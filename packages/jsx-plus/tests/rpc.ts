@@ -4,8 +4,9 @@ import { fileURLToPath } from 'node:url';
 import { createMessageConnection, StreamMessageReader, StreamMessageWriter } from 'vscode-jsonrpc/node';
 
 export const packageRoot = fileURLToPath(new URL('..', import.meta.url));
-export const exampleRoot = resolve(packageRoot, 'examples/checking');
-export const taskBoardRoot = resolve(packageRoot, 'examples/task-board');
+// The tests' own copies of example apps (`fixtures/apps/`), never `examples/` itself.
+export const checkingRoot = resolve(packageRoot, 'tests/fixtures/apps/checking');
+export const taskBoardRoot = resolve(packageRoot, 'tests/fixtures/apps/task-board');
 
 // The integration probe deliberately runs the installed, pinned TS7 executable,
 // independently of Bun's routine package type check and any editor installation.

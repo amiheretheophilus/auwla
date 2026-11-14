@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { normalize } from '../src';
 import { projectForChecking } from '../src/checking/project';
 
-const greeting = readFileSync(new URL('../examples/greeting.auwla', import.meta.url), 'utf8');
+const greeting = readFileSync(new URL('./fixtures/apps/greeting.auwla', import.meta.url), 'utf8');
 
 for (const [name, complete, partial] of [
   ['if member', 'if (name.length > 0)', 'if (name.)'],

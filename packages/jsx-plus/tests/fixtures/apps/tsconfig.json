@@ -1,0 +1,5 @@
+{
+  "extends": "./checking/tsconfig.json",
+  "files": [],
+  "include": ["./*.auwla"]
+}

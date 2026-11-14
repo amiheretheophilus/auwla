@@ -13,7 +13,7 @@ import { projectForChecking } from '../src/checking/project';
 import cases from '../../../wiki2/spec/style-scopes.cases.json';
 import { normalizeForLanguage } from '../src/normalize';
 
-const root = fileURLToPath(new URL('../examples/scoping/', import.meta.url));
+const root = fileURLToPath(new URL('./fixtures/apps/scoping/', import.meta.url));
 const applications: runtime.MountedApplication[] = [];
 
 for (const fixture of cases.cases) {

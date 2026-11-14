@@ -1,0 +1,9 @@
+export function App() {
+  let count = 0;
+
+  return (
+    <button onClick={() => count++}>
+      "Count: {count}"
+    </button>
+  );
+}

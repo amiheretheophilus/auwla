@@ -1,0 +1,4 @@
+{
+  "extends": "../checking/tsconfig.json",
+  "files": ["./App.auwla", "./main.ts", "./actions.ts"]
+}

@@ -11,7 +11,7 @@ import { fileURLToPath } from 'node:url';
 // Compiler-next's Bun plugin has no package export yet.
 import { memoizedDom } from '../../compiler-next/src/project/bun';
 import { auwla } from '../src';
-import { checkoutPackages } from './checkout';
+import { checkoutPackages } from '../tools/checkout';
 
 export interface PreviewOptions {
   /** Let Bun build the HTML entry and write its CSS/script links itself. */
