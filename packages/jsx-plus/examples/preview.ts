@@ -34,6 +34,10 @@ export async function preview(folder: URL, name: string, defaultPort: number, op
     outdir,
     // A page imported only for its route loads as its own chunk (`wiki/compiler/routes.md`).
     splitting: true,
+    // Shipped as a real app would be; the linked maps still show the `.auwla` source in devtools.
+    // Unminified, the team example measured 365 kB instead of 165 kB (82 and 56 kB gzipped).
+    minify: true,
+    sourcemap: 'linked',
     naming: { entry: options.html === true ? '[name].[ext]' : 'main.js', chunk: 'chunks/[name]-[hash].[ext]' },
     plugins: [memoizedDom({ client: './main.ts', root, languages: [auwla] }), checkoutPackages],
   });
@@ -47,8 +51,12 @@ export async function preview(folder: URL, name: string, defaultPort: number, op
     return [options.html !== true && path === '/main.js' ? '/main.ts' : path, output];
   }));
   if (process.argv.includes('--build')) {
-    const size = (await Promise.all(build.outputs.map((output) => output.text()))).reduce((total, text) => total + text.length, 0);
-    console.log(`${name} built: ${build.outputs.length} assets, ${size} characters`);
+    // What the browser downloads: the JavaScript, not the maps beside it.
+    const scripts = build.outputs.filter((output) => output.path.endsWith('.js'));
+    const texts = await Promise.all(scripts.map((output) => output.text()));
+    const raw = texts.reduce((total, text) => total + text.length, 0);
+    const gzipped = texts.reduce((total, text) => total + Bun.gzipSync(text).length, 0);
+    console.log(`${name} built: ${scripts.length} scripts, ${raw} bytes (${gzipped} gzipped), with source maps`);
     return;
   }
 
