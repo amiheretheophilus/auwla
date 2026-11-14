@@ -64,6 +64,8 @@ export function documentUri(root: string, name: string): string {
  */
 export async function withLanguageServer<T>(
   root: string, textDocument: Record<string, unknown>, body: (server: LanguageServer) => Promise<T>,
+  /** More editor settings, such as `inlayHints`, merged into each configuration answer. */
+  settings: Record<string, unknown> = {},
 ): Promise<T> {
   const peer = rpcProcess(typescriptExecutable, ['--lsp', '--stdio'], root);
   peer.connection.onRequest('client/registerCapability', () => null);
@@ -73,7 +75,7 @@ export async function withLanguageServer<T>(
   // tests depend on that import being present in every authored file.
   peer.connection.onRequest('workspace/configuration', (params: { items: unknown[] }) => {
     return params.items.map(() => ({
-      suggest: { autoImports: true }, preferences: { quoteStyle: 'single' },
+      suggest: { autoImports: true }, preferences: { quoteStyle: 'single' }, ...settings,
     }));
   });
   const versions = new Map<string, number>();

@@ -247,6 +247,18 @@ component's tag while it was still being typed (`<Badg` before `</section>`) fou
 because the closer's `>` ended the opening tag and the enclosing element was set aside. The
 opening tag now ends before `</`, and recovery closes it for checking (spec revision 9).
 
+Reactivity inlay hints (TOOL-08, [tooling](tooling.md)), asked for by the user (2026-11-14):
+the VS Code adapter shows `state`, `derived ← inputs` or `source` beside each declaration,
+from compiler-next's analysis. The user's rule: a value that re-runs when its inputs change is
+derived, even when it loads data (`getPeople(search)` is `derived ← search`).
+
+For the compiler-next owner, found while building them: analysis reports
+`let query = ''`, declared after `let tasks = [...]`, as `Derived` from `tasks` (the task board
+shows it). At runtime writing `tasks` leaves `query` alone, so behavior is right, but the
+compiled component carries takeover bookkeeping for `query` (`_queryTaken`, `_fromTaken`) that
+plain state should not need. The hints ignore that dependency (they use what an initializer
+reads). Not changed here.
+
 Not yet: streaming/live server functions in `.auwla`.
 
 Ordinary backend packages, checked next: Express is not installed in the workspace (adding it

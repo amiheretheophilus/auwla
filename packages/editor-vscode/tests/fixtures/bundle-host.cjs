@@ -6,18 +6,23 @@ const { readFileSync } = require('node:fs');
 
 let completionProvider;
 let hoverProvider;
+let inlayProvider;
 let problems = [];
 let source = process.argv[3] === undefined
   ? '<style global>\n.card { padding: 4px; unknown-property: red; cur }\n.card:hover { outline: 2px solid blue; }\n.card { color:black @.loading:re; }\n</style>'
   : readFileSync(process.argv[3], 'utf8');
 const document = {
-  uri: { toString: () => 'file:///example.auwla' },
+  uri: { toString: () => 'file:///example.auwla', path: '/example.auwla' },
   version: 1,
   languageId: 'auwla',
   getText: () => source,
   offsetAt(position) {
     return source.split('\n').slice(0, position.line)
       .reduce((length, line) => length + line.length + 1, 0) + position.character;
+  },
+  positionAt(offset) {
+    const lines = source.slice(0, offset).split('\n');
+    return { line: lines.length - 1, character: lines.at(-1).length };
   },
 };
 const disposable = () => ({ dispose() {} });
@@ -45,7 +50,14 @@ const vscode = {
   SnippetString: class { constructor(value) { this.value = value; } },
   TextEdit: class { constructor(range, newText) { Object.assign(this, { range, newText }); } },
   Hover: class { constructor(contents, range) { Object.assign(this, { contents, range }); } },
+  InlayHint: class { constructor(position, label) { Object.assign(this, { position, label }); } },
+  EventEmitter: class {
+    constructor() { this.event = () => disposable(); }
+    fire() {}
+    dispose() {}
+  },
   languages: {
+    registerInlayHintsProvider(_selector, provider) { inlayProvider = provider; return disposable(); },
     createDiagnosticCollection: () => ({
       set: (_uri, entries) => { problems = entries; },
       delete() {}, dispose() {},
@@ -56,6 +68,8 @@ const vscode = {
   workspace: {
     workspaceFolders: [],
     textDocuments: [document],
+    getConfiguration: () => ({ get: (_key, fallback) => fallback }),
+    onDidChangeConfiguration: disposable,
     onDidOpenTextDocument: disposable,
     onDidChangeTextDocument: disposable,
     onDidCloseTextDocument: disposable,
@@ -115,10 +129,21 @@ async function run() {
   const red = conditional.items.find((item) => item.label === 'red');
   assert.ok(red, 'the installed artifact must complete native values inside a class condition');
   assert.deepEqual(red.range.start, { line: 3, character: 30 });
+
+  // Reactivity hints run compiler-next's analysis from inside the bundle.
+  source = 'export function Counter() {\n  let count = 0;\n  const doubled = count * 2;\n  return <button onClick={() => count++}>doubled</button>;\n}\n';
+  document.version++;
+  const whole = { start: { line: 0, character: 0 }, end: document.positionAt(source.length) };
+  const hints = await inlayProvider.provideInlayHints(document, whole);
+  assert.deepEqual(hints.map((hint) => [hint.position, hint.label]), [
+    [{ line: 1, character: 11 }, 'state'],
+    [{ line: 2, character: 15 }, 'derived ← count'],
+  ]);
   for (const subscription of context.subscriptions) {
     subscription.dispose();
   }
   console.log('CSS bundle: completion, hover and diagnostics passed in Node');
+  console.log('Reactivity hints passed in Node');
 }
 
 run().catch((error) => {

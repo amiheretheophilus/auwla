@@ -9,7 +9,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { applyEdits, applyRename, documentUri, withLanguageServer, type CompletionItem, type LanguageServer, type WorkspaceEdit } from './lsp';
-import { positionAt, type TextEdit } from './rpc';
+import { offsetAt, positionAt, type TextEdit } from './rpc';
 
 const root = fileURLToPath(new URL('./fixtures/cross-file/', import.meta.url));
 const FILES = ['Badge.auwla', 'App.auwla', 'Page.auwla', 'main.ts'] as const;
@@ -129,6 +129,20 @@ for (const [where, typing, typed, imported] of [
     });
   }, 30000);
 }
+
+it('places TypeScript variable type hints on the authored names', async () => {
+  // Faint inferred types (`count: number`), as the editor shows them, mapped back to `.auwla`.
+  const counter = 'export function Counter() {\n  let count = 0;\n  const doubled = count * 2;\n'
+    + '  return <p><button onClick={() => count++}>"+"</button>; doubled</p>;\n}\n';
+  await withLanguageServer(root, { inlayHint: {} }, async (server) => {
+    await openAll(server);
+    await server.show(uri('Page.auwla'), counter);
+    const hints = await server.request<{ position: { line: number; character: number }; label: { value: string }[] }[]>(
+      'textDocument/inlayHint', { textDocument: { uri: uri('Page.auwla') }, range: { start: positionAt(counter, 0), end: positionAt(counter, counter.length) } });
+    const shown = hints.map((hint) => [counter.slice(0, offsetAt(counter, hint.position)).split(/\s/).at(-1), hint.label.map((part) => part.value).join('')]);
+    expect(shown).toEqual([['count', ': number'], ['doubled', ': number']]);
+  }, { inlayHints: { variableTypes: { enabled: true } } });
+}, 30000);
 
 it("completes a member of a .auwla module's namespace", async () => {
   const typing = authored['Page.auwla']

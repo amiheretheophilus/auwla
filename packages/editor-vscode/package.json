@@ -2,7 +2,7 @@
   "name": "memoized-dom-auwla",
   "displayName": "Auwla (Prototype)",
   "description": "A thin VS Code adapter for the shared Auwla authoring tools.",
-  "version": "0.0.5",
+  "version": "0.0.6",
   "publisher": "amiheretheophilus",
   "private": true,
   "engines": { "vscode": "^1.126.0" },
@@ -15,6 +15,16 @@
   "activationEvents": ["onLanguage:auwla"],
   "main": "./dist/extension.cjs",
   "contributes": {
+    "configuration": {
+      "title": "Auwla",
+      "properties": {
+        "auwla.inlayHints.reactivity": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show what each binding is beside its declaration, faint like an inferred type: state, derived ← its inputs, or source. Hover a hint for what it means."
+        }
+      }
+    },
     "languages": [{
       "id": "auwla",
       "aliases": ["Auwla", "auwla"],

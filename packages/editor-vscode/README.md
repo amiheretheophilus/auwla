@@ -42,6 +42,23 @@ not change editor settings or install the TypeScript extension automatically.
 Without the provider, static highlighting remains available and activation
 reports the missing dependency. Details appear in the Auwla output channel.
 
+## Reactivity hints
+
+Beside each declaration, faint like an inferred type, the adapter shows what the
+compiler decided the binding is: `state`, `derived ← count, filter` (with the
+values it follows), `state ← start` (writable, following a value until written),
+or `source`. A value that loads data and re-runs when its inputs change, such as
+`getPeople(search)`, is `derived ← search`. Hover a hint for what it means. Turn
+them off with **Auwla › Inlay Hints: Reactivity** (`auwla.inlayHints.reactivity`).
+They need no TypeScript extension. The shared core
+(`@memoized-dom/jsx-plus/editor/hints`) decides them from compiler-next's
+analysis; this adapter only shows them.
+
+TypeScript's own type hints (`count: number`) also work in `.auwla` once the
+mapper is registered (`typescript.inlayHints.variableTypes.enabled`). TypeScript
+7.1-beta repeats a function's return-type hint once per mapped segment of the
+file, so prefer variable-type hints until that is fixed upstream.
+
 For a local VSIX installation, package the build with the standard VS Code
 packager using `--no-dependencies`, then install the resulting file with
 `code --install-extension <file.vsix>`. `.vscodeignore` keeps source, tests and

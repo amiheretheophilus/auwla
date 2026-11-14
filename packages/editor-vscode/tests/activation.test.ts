@@ -16,7 +16,11 @@ let completionProvider: VSCode.CompletionItemProvider | undefined;
 let hoverProvider: VSCode.HoverProvider | undefined;
 let opened: ((document: VSCode.TextDocument) => void) | undefined;
 let changed: ((event: VSCode.TextDocumentChangeEvent) => void) | undefined;
-let closed: ((document: VSCode.TextDocument) => void) | undefined;
+const closeListeners: ((document: VSCode.TextDocument) => void)[] = [];
+const closed = (document: VSCode.TextDocument) => { for (const listener of closeListeners) listener(document); };
+let inlayProvider: VSCode.InlayHintsProvider | undefined;
+let configured: ((event: { affectsConfiguration(section: string): boolean }) => void) | undefined;
+const settings = new Map<string, unknown>();
 const cssDiagnostics = new Map<string, readonly VSCode.Diagnostic[]>();
 const disposable = () => ({ dispose() {} });
 
@@ -37,7 +41,22 @@ mock.module('vscode', () => ({
   Hover: class { constructor(public contents: unknown[], public range: unknown) {} },
   Diagnostic: class { constructor(public range: unknown, public message: string, public severity: number) {} },
   DiagnosticSeverity: { Error: 0, Warning: 1 },
+  InlayHint: class {
+    tooltip: unknown;
+    paddingLeft = false;
+    constructor(public position: unknown, public label: string) {}
+  },
+  EventEmitter: class {
+    #listeners: (() => void)[] = [];
+    event = (listener: () => void) => { this.#listeners.push(listener); return disposable(); };
+    fire() { for (const listener of this.#listeners) listener(); }
+    dispose() { this.#listeners = []; }
+  },
   languages: {
+    registerInlayHintsProvider: (_selector: unknown, value: VSCode.InlayHintsProvider) => {
+      inlayProvider = value;
+      return disposable();
+    },
     createDiagnosticCollection: () => ({
       set: (uri: VSCode.Uri, entries: readonly VSCode.Diagnostic[]) => cssDiagnostics.set(uri.toString(), entries),
       delete: (uri: VSCode.Uri) => cssDiagnostics.delete(uri.toString()),
@@ -68,9 +87,17 @@ mock.module('vscode', () => ({
   },
   workspace: {
     textDocuments: [],
+    getConfiguration: (section: string) => ({
+      get: <T>(key: string, fallback: T) => (settings.get(`${section}.${key}`) as T | undefined) ?? fallback,
+    }),
+    onDidChangeConfiguration: (listener: typeof configured) => { configured = listener; return disposable(); },
     onDidOpenTextDocument: (listener: typeof opened) => { opened = listener; return disposable(); },
     onDidChangeTextDocument: (listener: typeof changed) => { changed = listener; return disposable(); },
-    onDidCloseTextDocument: (listener: typeof closed) => { closed = listener; return disposable(); },
+    // Every provider listens for closing, as in VS Code; `closed` tells them all.
+    onDidCloseTextDocument: (listener: (document: VSCode.TextDocument) => void) => {
+      closeListeners.push(listener);
+      return disposable();
+    },
     get workspaceFolders() {
       return workspaceDirectories.map((fsPath) => ({ uri: { scheme: 'file', fsPath } }));
     },
@@ -89,6 +116,8 @@ beforeEach(() => {
   cssDiagnostics.clear();
   completionProvider = undefined;
   hoverProvider = undefined;
+  inlayProvider = undefined;
+  settings.clear();
 });
 
 function context() {
@@ -115,6 +144,43 @@ it('explains a missing TypeScript host while leaving highlighting declarative', 
   expect(session.subscriptions.length).toBeGreaterThan(1);
   expect(completionProvider).toBeDefined();
   expect(hoverProvider).toBeDefined();
+});
+
+it('shows reactivity hints beside declarations, without the TypeScript host, and follows its setting', async () => {
+  await activate(context());
+  const text = 'export function Counter() {\n  let count = 0;\n  const doubled = count * 2;\n  return <button onClick={() => count++}>doubled</button>;\n}\n';
+  const offsetAt = (position: VSCode.Position) => text.split('\n').slice(0, position.line)
+    .reduce((length, line) => length + line.length + 1, 0) + position.character;
+  const positionAt = (offset: number) => {
+    const lines = text.slice(0, offset).split('\n');
+    return { line: lines.length - 1, character: lines.at(-1)!.length };
+  };
+  const document = {
+    uri: { toString: () => 'file:///Counter.auwla', path: '/Counter.auwla' },
+    languageId: 'auwla', version: 1, getText: () => text, offsetAt, positionAt,
+  } as unknown as VSCode.TextDocument;
+  const whole = { start: { line: 0, character: 0 }, end: positionAt(text.length) } as VSCode.Range;
+  const token = {} as VSCode.CancellationToken;
+
+  const hints = (await inlayProvider!.provideInlayHints(document, whole, token)) as VSCode.InlayHint[];
+  expect(hints.map((hint): unknown[] => [hint.position, hint.label])).toEqual([
+    [{ line: 1, character: 11 }, 'state'],
+    [{ line: 2, character: 15 }, 'derived ← count'],
+  ]);
+  expect((hints[1]!.tooltip as VSCode.MarkdownString).value).toBe('**Derived** from `count`. Recomputed when it changes.');
+  expect(hints.every((hint) => hint.paddingLeft)).toBe(true);
+
+  // Only the asked range: the first line holds no declaration.
+  const firstLine = { start: { line: 0, character: 0 }, end: { line: 0, character: 26 } } as VSCode.Range;
+  expect(await inlayProvider!.provideInlayHints(document, firstLine, token)).toEqual([]);
+
+  // Turning the setting off asks the editor to refresh, and shows none.
+  let refreshed = 0;
+  inlayProvider!.onDidChangeInlayHints!(() => refreshed++);
+  settings.set('auwla.inlayHints.reactivity', false);
+  configured!({ affectsConfiguration: (section) => section === 'auwla.inlayHints.reactivity' });
+  expect(refreshed).toBe(1);
+  expect(await inlayProvider!.provideInlayHints(document, whole, token)).toEqual([]);
 });
 
 it('provides CSS edits, hover and live diagnostics independently of the TypeScript host', async () => {
