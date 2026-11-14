@@ -16,6 +16,8 @@ export type ReactivityHintKind = 'state' | 'derived' | 'writable' | 'source';
 export interface ReactivityHint {
   /** Authored UTF-16 offset the hint sits at: just after the binding's declared name (and type). */
   readonly offset: number;
+  /** Authored offset where that declaration starts: hovering from here to `offset` explains it. */
+  readonly start: number;
   readonly kind: ReactivityHintKind;
   /** Short and faint: `state`, `derived ← count`, `source`. */
   readonly label: string;
@@ -53,6 +55,7 @@ export function reactivityHints(source: string, filename = './App.auwla'): React
     const loads = binding.kind === 'Source' && kind === 'derived';
     hints.push({
       offset: declaration.authored[1],
+      start: declaration.authored[0],
       kind,
       label: label(kind, inputs),
       tooltip: tooltip(kind, binding.name, inputs, loads),

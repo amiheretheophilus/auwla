@@ -44,15 +44,21 @@ reports the missing dependency. Details appear in the Auwla output channel.
 
 ## Reactivity hints
 
-Beside each declaration, faint like an inferred type, the adapter shows what the
-compiler decided the binding is: `state`, `derived ← count, filter` (with the
-values it follows), `state ← start` (writable, following a value until written),
-or `source`. A value that loads data and re-runs when its inputs change, such as
-`getPeople(search)`, is `derived ← search`. Hover a hint for what it means. Turn
-them off with **Auwla › Inlay Hints: Reactivity** (`auwla.inlayHints.reactivity`).
+Beside each declaration, like an inferred type, the adapter shows what the
+compiler decided the binding is: `: state`, `: derived ← count, filter` (with the
+values it follows), `: state ← start` (writable, following a value until written),
+or `: source`. A value that loads data and re-runs when its inputs change, such as
+`getPeople(search)`, is `: derived ← search`. Hover the declared name for what it
+means. Turn them off with **Auwla › Reactivity Hints** (`auwla.reactivityHints`).
 They need no TypeScript extension. The shared core
 (`@memoized-dom/jsx-plus/editor/hints`) decides them from compiler-next's
 analysis; this adapter only shows them.
+
+They are editor decorations rather than inlay hints, because VS Code draws every
+inlay hint in one theme color, which reads like a comment. The hints use their own
+colors, `auwla.reactivityHint.foreground` (amber by default) and
+`auwla.reactivityHint.background`; change them under
+`workbench.colorCustomizations`.
 
 TypeScript's own type hints (`count: number`) also work in `.auwla` once the
 mapper is registered (`typescript.inlayHints.variableTypes.enabled`). TypeScript
@@ -91,10 +97,13 @@ value completion inside clauses such as `color:black @.loading:red`. The install
 artifact probe exercises that completion alongside ordinary CSS recovery. Class
 name discovery, grouped conditions and named breakpoints are not implemented yet.
 
-Version 0.0.6 adds reactivity inlay hints (above): `state`, `derived ← inputs` or
-`source` beside each declaration, with the `auwla.inlayHints.reactivity` setting.
-The installed artifact probe runs them in Node, with compiler-next's analysis
-bundled.
+Version 0.0.6 adds reactivity hints (above): `state`, `derived ← inputs` or
+`source` beside each declaration. The installed artifact probe runs them in Node,
+with compiler-next's analysis bundled.
+
+Version 0.0.7 shows them as `: label` in their own colors (decorations), after the
+user found the inlay-hint color unreadable beside comments. The setting is now
+`auwla.reactivityHints`.
 
 The installed adapter resolves `@memoized-dom/jsx-plus` from open workspace folders,
 then falls back to the adapter directory for development hosts. The content mapper

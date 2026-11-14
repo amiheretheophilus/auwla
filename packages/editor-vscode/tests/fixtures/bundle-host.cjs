@@ -6,7 +6,8 @@ const { readFileSync } = require('node:fs');
 
 let completionProvider;
 let hoverProvider;
-let inlayProvider;
+let showEditors;
+let painted = [];
 let problems = [];
 let source = process.argv[3] === undefined
   ? '<style global>\n.card { padding: 4px; unknown-property: red; cur }\n.card:hover { outline: 2px solid blue; }\n.card { color:black @.loading:re; }\n</style>'
@@ -50,14 +51,8 @@ const vscode = {
   SnippetString: class { constructor(value) { this.value = value; } },
   TextEdit: class { constructor(range, newText) { Object.assign(this, { range, newText }); } },
   Hover: class { constructor(contents, range) { Object.assign(this, { contents, range }); } },
-  InlayHint: class { constructor(position, label) { Object.assign(this, { position, label }); } },
-  EventEmitter: class {
-    constructor() { this.event = () => disposable(); }
-    fire() {}
-    dispose() {}
-  },
+  ThemeColor: class { constructor(id) { this.id = id; } },
   languages: {
-    registerInlayHintsProvider(_selector, provider) { inlayProvider = provider; return disposable(); },
     createDiagnosticCollection: () => ({
       set: (_uri, entries) => { problems = entries; },
       delete() {}, dispose() {},
@@ -75,6 +70,9 @@ const vscode = {
     onDidCloseTextDocument: disposable,
   },
   window: {
+    createTextEditorDecorationType: () => ({ dispose() {} }),
+    visibleTextEditors: [],
+    onDidChangeVisibleTextEditors(listener) { showEditors = listener; return disposable(); },
     createOutputChannel: () => ({ appendLine() {}, dispose() {} }),
     showWarningMessage: async () => undefined,
   },
@@ -133,11 +131,10 @@ async function run() {
   // Reactivity hints run compiler-next's analysis from inside the bundle.
   source = 'export function Counter() {\n  let count = 0;\n  const doubled = count * 2;\n  return <button onClick={() => count++}>doubled</button>;\n}\n';
   document.version++;
-  const whole = { start: { line: 0, character: 0 }, end: document.positionAt(source.length) };
-  const hints = await inlayProvider.provideInlayHints(document, whole);
-  assert.deepEqual(hints.map((hint) => [hint.position, hint.label]), [
-    [{ line: 1, character: 11 }, 'state'],
-    [{ line: 2, character: 15 }, 'derived ← count'],
+  showEditors([{ document, setDecorations(_style, options) { painted = options; } }]);
+  assert.deepEqual(painted.map((decoration) => [decoration.range.end, decoration.renderOptions.after.contentText]), [
+    [{ line: 1, character: 11 }, ': state'],
+    [{ line: 2, character: 15 }, ': derived ← count'],
   ]);
   for (const subscription of context.subscriptions) {
     subscription.dispose();

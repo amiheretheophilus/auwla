@@ -2,7 +2,7 @@
   "name": "memoized-dom-auwla",
   "displayName": "Auwla (Prototype)",
   "description": "A thin VS Code adapter for the shared Auwla authoring tools.",
-  "version": "0.0.6",
+  "version": "0.0.7",
   "publisher": "amiheretheophilus",
   "private": true,
   "engines": { "vscode": "^1.126.0" },
@@ -18,13 +18,25 @@
     "configuration": {
       "title": "Auwla",
       "properties": {
-        "auwla.inlayHints.reactivity": {
+        "auwla.reactivityHints": {
           "type": "boolean",
           "default": true,
-          "description": "Show what each binding is beside its declaration, faint like an inferred type: state, derived ← its inputs, or source. Hover a hint for what it means."
+          "description": "Show what each binding is beside its declaration, like an inferred type: state, derived ← its inputs, or source. Hover the name for what it means. Colors: auwla.reactivityHint.foreground and auwla.reactivityHint.background."
         }
       }
     },
+    "colors": [
+      {
+        "id": "auwla.reactivityHint.foreground",
+        "description": "Text of a reactivity hint (`: state`, `: derived ← count`) beside a declaration in an .auwla file.",
+        "defaults": { "dark": "#E2C08D", "light": "#8A5A00", "highContrast": "#FFD580", "highContrastLight": "#5C3D00" }
+      },
+      {
+        "id": "auwla.reactivityHint.background",
+        "description": "Background behind a reactivity hint in an .auwla file.",
+        "defaults": { "dark": "#E2C08D1A", "light": "#8A5A0012", "highContrast": "#00000000", "highContrastLight": "#00000000" }
+      }
+    ],
     "languages": [{
       "id": "auwla",
       "aliases": ["Auwla", "auwla"],

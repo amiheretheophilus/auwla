@@ -36,6 +36,11 @@ it('labels state, derived values, writable derived values and sources at their d
   ]);
 });
 
+it('spans each declaration, for the hover', () => {
+  const declared = reactivityHints(counter, './Counter.auwla').map((hint) => counter.slice(hint.start, hint.offset));
+  expect(declared).toEqual(['visits', 'count: number', 'doubled', 'label', 'user']);
+});
+
 it('gives props, constants and the component itself no hint', () => {
   const labelled = shown(counter).map(([name]) => name);
   expect(labelled).not.toContain('start');
