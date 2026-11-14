@@ -23,7 +23,7 @@ export function App() {
   let nextId = 4;
   let query = '';
   let filter: Filter = 'all';
-  let draft: HTMLInputElement | undefined;
+  let draft!: HTMLInputElement;
 
 
   const remaining = tasks.filter(task => !task.done).length;

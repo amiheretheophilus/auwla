@@ -6,7 +6,7 @@ import { note } from '../lifecycle';
 function Failure({ error, retry }: { error: { message: string }; retry: () => void }) {
   return (
     <p class="error">
-      "Could not load people: "; error.message; " ";
+      "Could not load people:  {error.message}  ";
       <button type="button" class="retry" onClick=(() => retry())>"Retry"</button>
     </p>
   );
@@ -18,6 +18,11 @@ export function People() {
   const people = getPeople(search);
   // The request behind the value: only to show that a newer list is on its way.
   const request = $track(people);
+
+  let count = 0
+  let message = ""
+  if(count > 10)  message = "yeah"
+  else message = "one"
 
   $effect(() => {
     note('people:shown');
@@ -31,6 +36,9 @@ export function People() {
         placeholder="Search people"
         onInput={event => search = event.currentTarget.value}
       />
+
+      <button onClick={()=>count++}></button>
+
       if (request.refreshing) {
         <p class="refreshing">"Updating…"</p>
       }
