@@ -1,5 +1,18 @@
 # Spec revisions
 
+## 0.1-draft, revision 9 — 2026-11-14
+
+- Diagnostics only; no accepted syntax or meaning changes. A `<` comparison is
+  still never turned into a tag.
+- Closes revision 8's gap. When the joined tag has the enclosing element's
+  name, `<p>"a" <p>"b"</p></p>`, the first `</p>` closes the outer element and
+  the last one failed later: a host regex error, or JPX1001 in a parent. Such a
+  comparison is now a candidate. If the file fails after it, and inserting `;`
+  before that `<` gets past the failure, the error is JPX1005 over its opening
+  tag, with that `;` as the repair. The editor reports it too. Code that does
+  not fail is never reported (`<b>x < b > y</b>`, `<b><b>x < b > y</b></b>`).
+- Add ERROR-018. Existing fixtures and codes are unchanged.
+
 ## 0.1-draft, revision 8 — 2026-11-13
 
 - Diagnostics only; no accepted syntax or meaning changes. G-BOUNDARY rule 5

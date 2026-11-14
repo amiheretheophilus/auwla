@@ -2,6 +2,7 @@ import { expect, it } from 'bun:test';
 import { parse } from 'yuku-parser';
 import fixtures from '../../../wiki2/spec/cases.json';
 import { authoredOffset, JsxPlusError, normalize } from '../src';
+import { normalizeForChecking } from '../src/normalize';
 
 for (const fixture of fixtures.cases) {
   if (fixture.level === 'parse') {
@@ -110,10 +111,40 @@ for (const [name, source, tag] of [
   });
 }
 
+// The same mistake when the joined tag has its enclosing element's name: the inner closer
+// matches, so the outer element closed early and the last closer failed elsewhere (a host
+// regex error, or JPX1001 in a parent).
+for (const [name, source, tag] of [
+  ['two paragraphs', '<p>"a" <p>"b"</p></p>', '<p>'],
+  ['two paragraphs inside a div', '<div><p>"a" <p>"b"</p></p></div>', '<p>'],
+  ['two divs', '<div>"a" <div>"b"</div></div>', '<div>'],
+  ['an expression before a section', 'function A() { return <section>count <section>"x"</section></section>; }', '<section>'],
+] as const) {
+  const at = source.lastIndexOf(tag);
+  const expected = { code: 'JPX1005', range: [at, at + tag.length], repairs: [{ kind: 'insert', at, text: ';' }] };
+  const reported = (normalizeWith: (source: string) => unknown) => {
+    try { normalizeWith(source); } catch (error) {
+      const { code, range, repairs } = error as JsxPlusError;
+      return { code, range, repairs };
+    }
+    return undefined;
+  };
+
+  it(`reports JPX1005 for a missing ";" between ${name}`, () => {
+    expect(reported(normalize)).toEqual(expected);
+    expect(() => normalize(source.slice(0, at) + ';' + source.slice(at))).not.toThrow();
+  });
+
+  it(`reports it in the editor too, for ${name}`, () => {
+    expect(reported((text) => normalizeForChecking(text, './App.auwla'))).toEqual(expected);
+  });
+}
+
 for (const [name, source, expected] of [
   ['a comparison', '<p>value < limit</p>', '<p>{value < limit}</p>'],
   ['a comparison that looks like a tag', '<b>x < b > y</b>', '<b>{x < b > y}</b>'],
   ['a comparison whose name ends at the closer', '<p>"a" <b>"x"</p>', '<p>{"a" <b>"x"}</p>'],
+  ['the same comparison inside an element of that name', '<b><b>x < b > y</b></b>', '<b><b>{x < b > y}</b></b>'],
 ] as const) {
   it(`keeps ${name} as host code`, () => {
     expect(normalize(source).code).toBe(expected);

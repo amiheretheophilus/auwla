@@ -18,6 +18,17 @@ export interface Children {
   readonly pieces: Piece[];
 }
 
+/**
+ * A child-level `<` that the host read as a comparison but that is also one whole element,
+ * ending at a closing tag of the same name (`element.ts`, `noteSameNameSibling`).
+ */
+export interface JoinedSibling {
+  /** Authored offset of its `<`, where the missing `;` goes. */
+  readonly position: number;
+  /** Authored offset just after its opening tag's `>`. */
+  readonly openingEnd: number;
+}
+
 /** State shared by every reader while one source file is normalized. */
 export class MarkupContext {
   /**
@@ -30,6 +41,9 @@ export class MarkupContext {
 
   /** Names of the elements being read, outermost first (`''` for a fragment). */
   readonly open: string[] = [];
+
+  /** Candidates for a missing `;`, reported only if the file then fails (`normalize.ts`). */
+  readonly joinedSiblings: JoinedSibling[] = [];
 
   constructor(readonly source: string, readonly filename: string, readonly checking = false) {}
 

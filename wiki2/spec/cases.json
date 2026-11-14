@@ -1,7 +1,14 @@
 {
   "specVersion": "0.1-draft",
-  "revision": 8,
+  "revision": 9,
   "cases": [
+    {
+      "id": "ERROR-018",
+      "level": "diagnostics",
+      "rules": ["G-BOUNDARY", "D-CODES", "D-RECOVERY"],
+      "source": "<p>\"a\" <p>\"b\"</p></p>",
+      "expected": { "code": "JPX1005", "severity": "error", "range": [7, 10] }
+    },
     {
       "id": "ERROR-016",
       "level": "diagnostics",

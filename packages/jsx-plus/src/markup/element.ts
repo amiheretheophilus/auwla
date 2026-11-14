@@ -15,7 +15,7 @@ import { blank, closeAttributeValue, closeChildString } from '../repairs';
 import { copied, replaceRange } from '../source';
 import { readChildren, SIBLING_SEPARATOR } from './children';
 import { interpolatedText } from './text';
-import type { ChildReplacement, Children, Markup, MarkupContext } from './context';
+import type { ChildReplacement, Children, JoinedSibling, Markup, MarkupContext } from './context';
 
 /** Read the element or fragment whose `<` is at authored offset `start`. */
 export function readElement(context: MarkupContext, start: number): Markup {
@@ -257,6 +257,7 @@ function readBody(context: MarkupContext, start: number, name: string, opener: n
           context.error('JPX1001', 'Closing tag does not match its opening tag', position, closeEnd + 1,
             mismatchRepairs(context, closing.name, [opener, start], [position, closeEnd + 1]));
         }
+        noteSameNameSibling(context, comparisons, name, closeEnd + 1);
         const children = readChildren(context, nested, shadow.slice(0, position - start), start, [position, closeEnd + 1]);
         return { children, closeStart: position, end: closeEnd + 1 };
       }
@@ -390,24 +391,51 @@ function tagName(source: string, cursor: number): { name: string; end: number } 
  * comparison is never rewritten into a tag; this only chooses the message.
  */
 function reportJoinedSibling(context: MarkupContext, comparisons: readonly number[], closingName: string, end: number): void {
+  const [sibling] = joinedSiblings(context, comparisons, closingName, end);
+  if (sibling !== undefined) {
+    context.error('JPX1005', SIBLING_SEPARATOR, sibling.position, sibling.openingEnd,
+      [{ kind: 'insert', at: sibling.position, text: ';' }]);
+  }
+}
+
+/**
+ * The same mistake when the joined tag has this element's own name:
+ * `<p>"a" <p>"b"</p></p>`. The inner `</p>` matches, so this element closes there and the
+ * last `</p>` fails later, somewhere else. `<b>x < b > y</b>` is a real comparison with the same
+ * shape, so nothing is reported here: the candidate is only remembered, and
+ * `normalize.ts` reports it if the file then fails and a `;` before it gets further.
+ */
+function noteSameNameSibling(context: MarkupContext, comparisons: readonly number[], name: string, end: number): void {
+  context.joinedSiblings.push(...joinedSiblings(context, comparisons, name, end));
+}
+
+/**
+ * The `<` read as comparisons, latest first, that are also one whole element named
+ * `closingName` ending exactly at `end`. Reading one is speculative, so the conditional
+ * blocks it cached are dropped again.
+ */
+function joinedSiblings(context: MarkupContext, comparisons: readonly number[], closingName: string, end: number): JoinedSibling[] {
+  const found: JoinedSibling[] = [];
   for (let index = comparisons.length - 1; index >= 0; index--) {
     const position = comparisons[index]!;
     if (tagName(context.source, position + 1).name !== closingName) {
       continue;
     }
-    let opening: OpeningTag;
-    let element: Markup;
+    const cached = new Set(context.blocks.keys());
     try {
-      opening = readOpeningTag(context, position);
-      element = readElement(context, position);
+      const opening = readOpeningTag(context, position);
+      if (readElement(context, position).end === end) {
+        found.push({ position, openingEnd: opening.end });
+      }
     } catch (error) {
-      if (error instanceof JsxPlusError) continue;
-      throw error;
-    }
-    if (element.end === end) {
-      context.error('JPX1005', SIBLING_SEPARATOR, position, opening.end, [{ kind: 'insert', at: position, text: ';' }]);
+      if (!(error instanceof JsxPlusError)) throw error;
+    } finally {
+      for (const key of [...context.blocks.keys()]) {
+        if (!cached.has(key)) context.blocks.delete(key);
+      }
     }
   }
+  return found;
 }
 
 /**

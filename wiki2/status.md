@@ -174,13 +174,14 @@ Found while writing it:
   JPX1005 over `<button>`, "needs `;` before it", with an inserted `;` as the
   editor repair, so the rest of the file stays checked. A fragment `<>` there gets
   the same message. The comparison is still never rewritten into a tag; valid
-  comparisons such as `x < b > y</b>` are unchanged. Not covered: a joined tag with
-  the enclosing element's own name (`<p>"a" <p>"b"</p></p>`) is valid host code
-  up to its first `</p>`, so the later stray closer is reported.
-- The router's window listeners stay after its app unmounts (a runtime connection is
-  not released), so a second bundle in the same window loses link clicks to the old
-  router. Browsers load one bundle per page; the test gives each app a fresh window.
-  Not changed; reported for the router owner.
+  comparisons such as `x < b > y</b>` are unchanged. A joined tag with the
+  enclosing element's own name (`<p>"a" <p>"b"</p></p>`) is valid host code up to
+  its first `</p>`. Since spec revision 9 it is a candidate: if the file then fails
+  and a `;` before it gets past the failure, the error is JPX1005 there, in the
+  compiler and the editor alike.
+- The router's window listeners stayed after its app unmounted, so a second bundle
+  in the same window lost link clicks to the old router. Fixed since (`1e6b6360`,
+  reconcile table): the runtime's `whileApplicationMounted` releases them.
 
 ### Server side: SSR, server functions and server-backed `$routed` in `.auwla`
 

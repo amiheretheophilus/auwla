@@ -62,8 +62,12 @@ the scan meets `</button>` as if it closed the enclosing element. JPX1005 takes
 precedence over that JPX1001 only when the closer's name follows a `<` read as
 a comparison and the text from that `<` through the closer reads as one whole
 element. A fragment `<>` there is JPX1005 over `<>`. When the joined tag has the
-enclosing element's name, the comparison is valid host code and the later stray
-closer is reported instead.
+enclosing element's name (`<p>"a" <p>"b"</p></p>`), its closer matches, so the
+outer element closes there and the comparison is valid host code. Such a
+comparison is only a candidate. If the file then fails anywhere after it, and the
+same file with `;` before that `<` gets past the failure, the error is JPX1005
+over that opening tag instead. Code that does not fail (`<b>x < b > y</b>`) is
+never reported.
 A top-level comma operator used as a child (`<p>a, b</p>`) is also JPX1005, with
 the first top-level comma as its range: the author may have meant a `;`, quoted
 text or a parenthesized comma expression, and the message names those repairs.

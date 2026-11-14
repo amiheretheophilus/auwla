@@ -88,8 +88,25 @@ for (const [name, from, to, code, anchor] of [
 }
 
 it('keeps a tag after text checked when the ";" between them is missing', () => {
-  // The team example's error component, with the separator before its button removed.
-  const people = readFileSync(new URL('../examples/team/pages/People.auwla', import.meta.url), 'utf8');
+  // The team example's error component as it was written then, with the separator before its
+  // button removed. A copy, so editing the example cannot turn the replace into a no-op.
+  const people = `import { note } from '../lifecycle';
+
+function Failure({ error, retry }: { error: { message: string }; retry: () => void }) {
+  return (
+    <p class="error">
+      "Could not load people: "; error.message; " ";
+      <button type="button" class="retry" onClick=(() => retry())>"Retry"</button>
+    </p>
+  );
+}
+
+export function People() {
+  const people = $fetch('/api/people');
+  const request = $track(people);
+  return <p class="count">people.length; request.refreshing</p>;
+}
+`;
   const source = people.replace('" ";', '" "');
   expect(source).not.toBe(people);
   const button = source.indexOf('<button type="button" class="retry"');

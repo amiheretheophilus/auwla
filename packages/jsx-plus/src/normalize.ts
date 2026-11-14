@@ -17,7 +17,9 @@ import { firstError, isMarkupOpening, parseModule } from './host';
 import { maskMarkup } from './masks';
 import type { NormalizedSource } from './model';
 import { assemble, generated, nearestAuthoredOffset, replaceRange } from './source';
+import { JsxPlusError } from './diagnostics';
 import { MarkupContext, type Markup } from './markup/context';
+import { SIBLING_SEPARATOR } from './markup/children';
 import { readElement } from './markup/element';
 import { readStyleBlocks } from './styles/blocks';
 import { lowerConditions } from './styles/conditions/lower';
@@ -48,6 +50,54 @@ function readRoots(context: MarkupContext, host: string): Markup[] {
 
 function normalizeFile(source: string, filename: string, validateHost: boolean): NormalizedSource {
   const context = new MarkupContext(source, filename, !validateHost);
+  try {
+    const result = normalizeIn(context, validateHost);
+    if (!validateHost && context.joinedSiblings.length > 0) {
+      // The editor leaves host errors to TypeScript, except one a missing `;` explains.
+      const problem = firstError(parseModule(result.code).diagnostics);
+      if (problem !== undefined) {
+        reportJoinedSibling(context, nearestAuthoredOffset(result.mappings, problem.start));
+      }
+    }
+    return result;
+  } catch (error) {
+    if (error instanceof JsxPlusError && error.code !== 'JPX1005') {
+      reportJoinedSibling(context, error.range[0]);
+    }
+    throw error;
+  }
+}
+
+/**
+ * A tag joined to the text before it, when it has its enclosing element's name
+ * (`<p>"a" <p>"b"</p></p>`; `element.ts`, `noteSameNameSibling`): the file failed at
+ * `failedAt`. Report JPX1005 for the first candidate before it whose `;` gets the file past
+ * that point. Valid code never fails, so a real comparison is never reported.
+ */
+function reportJoinedSibling(context: MarkupContext, failedAt: number): void {
+  const { source, filename } = context;
+  for (const sibling of context.joinedSiblings) {
+    if (sibling.position >= failedAt) {
+      continue;
+    }
+    const separated = source.slice(0, sibling.position) + ';' + source.slice(sibling.position);
+    let reached = Number.POSITIVE_INFINITY;
+    try {
+      normalizeIn(new MarkupContext(separated, filename, context.checking), true);
+    } catch (error) {
+      if (!(error instanceof JsxPlusError)) throw error;
+      // Back in this file's offsets: the inserted `;` precedes the failure.
+      reached = error.range[0] - 1;
+    }
+    if (reached > failedAt) {
+      context.error('JPX1005', SIBLING_SEPARATOR, sibling.position, sibling.openingEnd,
+        [{ kind: 'insert', at: sibling.position, text: ';' }]);
+    }
+  }
+}
+
+function normalizeIn(context: MarkupContext, validateHost: boolean): NormalizedSource {
+  const { source, filename } = context;
   const styles = readStyleBlocks(source, filename, !validateHost);
   const roots = readRoots(context, styles.host);
   const removedStyles = styles.blocks.map((block) => ({
