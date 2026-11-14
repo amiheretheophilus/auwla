@@ -101,6 +101,18 @@ Found while building it, and fixed: every module-level object got a reader and a
 nothing reactive reading it; a server entry with `serve()` and `app.ssr(App)` emitted 2,757 bytes of
 machinery, now 280 (`state-and-derived.md`, "Module state nothing reactive reads").
 
+### Relative `$fetch` targets
+
+A server render never resolves against a process-wide `location`: that belongs to no request (a
+DOM shim registered on `globalThis`, Deno's `--location`). The render session creates its data
+runtime with `baseURL: null` (`packages/server/src/session.ts`; the option in
+`packages/data/src/types.ts`), so `$fetch('/api/user')` reaches the request's fetch as written.
+serve() passes a fetch that resolves it against the request URL and dispatches same-origin routes in
+memory; `render(App, { fetch })` hands the caller's fetch the relative target. Before 2026-11-14 an
+omitted base fell back to `location.href`, and under a global `location` serve()'s routes went to
+the network. Checked by `server/tests/initial-request.test.ts`, "server rendering ignores a
+process-wide location".
+
 ### Request isolation (open)
 
 One server process renders every request with the same module instances. Module state that a

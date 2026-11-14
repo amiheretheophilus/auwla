@@ -4,7 +4,7 @@ import { waitFor, type FetchStub } from '../../../test-support/helpers';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { describe, expect, it } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import { compileModulesDetailed } from '@memoized-dom/compiler';
 import { initialBootstrapDescriptor } from '@memoized-dom/runtime/server';
 import { createDefine, render, renderToString, renderToReadableStream, serve } from '../src/index';
@@ -224,4 +224,49 @@ describe('request-only server delivery', () => {
     expect(await failed.text()).not.toContain('<main>');
   });
 
+});
+
+// A process-wide `location` (a DOM shim registered on globalThis, Deno's
+// `--location`) belongs to no request. Server rendering once resolved relative
+// `$fetch` targets against it, sending serve()'s in-memory routes to that origin.
+describe('server rendering ignores a process-wide location', () => {
+  const foreign = 'http://localhost:3000/elsewhere';
+
+  beforeEach(() => {
+    Object.defineProperty(globalThis, 'location', { value: new URL(foreign), configurable: true, writable: true });
+  });
+
+  afterEach(() => {
+    delete (globalThis as { location?: unknown }).location;
+  });
+
+  it('dispatches relative $fetch targets to serve() routes in memory', async () => {
+    const value = await fixture('foreign-location-serve', `export function App(){const user=$fetch('/api/user');return <main><h1>{user?.name}</h1></main>;}`);
+    const contract = value.server.initialDelivery!;
+    const application = serve({ define: createDefine() });
+    application.get('/api/user', () => ({ name: 'Ada' }));
+    application.ssr(value.serverModule.App, { mode: 'resolve', delivery: 'stream', timeout: 20 });
+    (application as unknown as { installDocumentTemplate(template: string): void }).installDocumentTemplate(
+      `<html><head></head><body><div id="root"><!--ssr-outlet--></div></body></html>` +
+      initialBootstrapDescriptor({ key: contract.key, target: 'root', browser: 'none' }));
+
+    const response = await application.fetch(new Request('https://app.test/'));
+
+    expect(response.status).toBe(200);
+    expect(await response.text()).toContain('<main><h1>Ada</h1></main>');
+  });
+
+  it('hands render() fetch the relative target as written', async () => {
+    const value = await fixture('foreign-location-render', `export function App(){const user=$fetch('/api/user');return <h1>{user?.name}</h1>;}`);
+    const requested: string[] = [];
+    const fetch = (async (input: RequestInfo | URL) => {
+      requested.push(String(input));
+      return Response.json({ name: 'Grace' });
+    }) as FetchStub;
+
+    const result = await render(value.serverModule.App, { mode: 'resolve', fetch });
+
+    expect(requested).toEqual(['/api/user']);
+    expect(result.html).toBe('<h1>Grace</h1>');
+  });
 });

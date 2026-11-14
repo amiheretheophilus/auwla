@@ -305,6 +305,10 @@ const requestRuntime = createDataRuntime({
   baseURL: 'https://api.internal.service',
 });
 
+// Omitting baseURL resolves relative targets against the page's `location`
+// when one exists. On a server pass `null` (relative targets reach `fetch`
+// unchanged) or the request's own URL, never rely on a process-wide location.
+
 // Run request within isolated cache boundary:
 const result = await runWithDataRuntime(requestRuntime, async () => {
   await requestRuntime.settle();

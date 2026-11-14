@@ -216,7 +216,13 @@ export interface TransparentFetchFunction {
 
 export interface DataRuntimeOptions {
   readonly fetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
-  readonly baseURL?: string | URL;
+  /**
+   * Base for relative targets. Omitted, it is the page's `location` when one
+   * exists. `null` resolves nothing: relative targets reach `fetch` as written.
+   * Server rendering uses `null`, since a process-wide `location` (a DOM shim,
+   * Deno's `--location`) is not the request being rendered.
+   */
+  readonly baseURL?: string | URL | null;
 }
 
 export interface DataRuntime {

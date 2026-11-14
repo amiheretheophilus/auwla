@@ -234,6 +234,22 @@ the network), and they pass when their files run alone, so an earlier test leave
 `packages/runtime`, `effect-scope.test.ts` "clears an assigned ref owned before later setup fails"
 fails on `document is not defined`.
 
+Fixed (2026-11-14), and it was a server bug the leak exposed, not only a test leak: six server test
+files register happy-dom on `globalThis` (`test-support/dom.ts`, at `http://localhost:3000`), and a
+render session created its data runtime with no `baseURL`, so the data package fell back to the
+process-wide `location.href`. Relative `$fetch` targets then resolved to that origin instead of the
+request's, and serve()'s in-memory dispatch, which matches only the request's origin, sent them to
+the network. A real server has the same exposure through any DOM shim on `globalThis` or Deno's
+`--location`. The session now passes `baseURL: null`, a new data option meaning "resolve nothing",
+so relative targets reach the request's fetch as written, as they did in a clean process
+(`compiler/server.md`, "Relative `$fetch` targets"). `initial-request.test.ts` checks it under a
+foreign `location`; both new tests fail without the fix. `packages/server`: 244 pass in one process
+and with `--isolate`; data 171 with its package script. The `effect-scope` failure came only from
+running the runtime tests from their own folder, which skips the root DOM preload; from the root, as
+the gate runs them, runtime passes 191. Under the parallel gate `component-bundle.test.ts` timed out
+at bun's 5 s default while starting esbuild, and the stopped service failed its second case; it now
+has a 30 s timeout like the retention control test.
+
 ## Closing documented issues before Phase 10 (2026-11-06)
 
 The user: fix every bug or issue that is documented or that we meet, rather than carrying

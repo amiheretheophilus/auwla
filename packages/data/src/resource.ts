@@ -950,13 +950,28 @@ export function fetchResourceOperationId<T>(
   return resourceController(resource).operationId;
 }
 
+/**
+ * An explicit base wins. `null` means "no base", so a server render never picks
+ * up a process-wide `location` that belongs to no request. Only an omitted base
+ * falls back to the page's location.
+ */
+function resolveBaseURL(baseURL: string | URL | null | undefined): string | URL | undefined {
+  if (baseURL === null) {
+    return undefined;
+  }
+
+  if (baseURL !== undefined) {
+    return baseURL;
+  }
+
+  return typeof location === 'undefined' ? undefined : location.href;
+}
+
 export function createFetchEnvironment(
   fetcher: import('./types').DataRuntimeOptions['fetch'],
-  baseURL: string | URL | undefined,
+  baseURL: string | URL | null | undefined,
 ): FetchEnvironment {
-  const resolvedBaseURL = baseURL ?? (
-    typeof location === 'undefined' ? undefined : location.href
-  );
+  const resolvedBaseURL = resolveBaseURL(baseURL);
   return {
     baseURL: resolvedBaseURL,
     fetch() {

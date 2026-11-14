@@ -115,9 +115,14 @@ export class RenderSession {
         initialEntries: [options.url ?? '/'],
       }),
     });
-    this.dataRuntime = createDataRuntime(
-      options.fetch === undefined ? {} : { fetch: options.fetch },
-    );
+    // Relative targets stay relative: the request's own fetch (serve()'s
+    // in-memory dispatch, or the caller's) resolves them against the request.
+    // Without `baseURL: null` a process-wide `location`, from a DOM shim or
+    // Deno's `--location`, would silently send them to another origin.
+    this.dataRuntime = createDataRuntime({
+      baseURL: null,
+      ...(options.fetch === undefined ? {} : { fetch: options.fetch }),
+    });
     const delivery = rootFactoryStore().get(component)?.initialDelivery;
     if (options.initialKey !== undefined && delivery?.key !== options.initialKey) {
       this.dispose();
