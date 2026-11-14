@@ -1,5 +1,55 @@
 # Spec revisions
 
+## Document subjects in local styles — 2026-11-14
+
+- Fix unreachable explicit `html`, `body` and `:root` subjects inside local
+  blocks. They retain native document meaning; ordinary descendant/list/pseudo
+  alternatives remain scoped. Carry proven document targets through nested `&`.
+- The user's stress-test theme exposed the bug. Preserve their file and fix
+  compilation. The existing nested-body output assertion changes intentionally
+  because it previously pinned unreachable document declarations; DOM tests now
+  verify root variables, body typography, visible button backgrounds and isolation.
+
+## CSS-2b compact numeric conditions — 2026-11-14
+
+- Record the user's `@700` / `@700px` equivalence. Both emit inclusive minimum
+  viewport-width media queries, without breakpoint names or configuration.
+- Accept finite nonnegative CSS numbers, with implicit pixels or explicit
+  `px`, `em`, `rem` (relative-unit support is provisional). Preserve authored
+  order, specificity and existing class clauses; a chain does not imply AND.
+- Add RESP-001 through RESP-018, native value assistance, shared highlighting
+  and a real scoped multi-file responsive example. Grouped blocks remain later.
+
+## CSS-3b — 2026-11-14
+
+- Cross-file `@use(path, id)` uses compiler-owned source resolution, caching and
+  watching. Style-only modules introduce no JS import or output. Definitions
+  retain authored error positions, and relative URL/native import targets are
+  rebased into the consuming stylesheet. Detailed builds accept `assetSources`.
+- Accept implicit native nesting through a shared CSS Tree block-dispatch fork.
+  The explicit-`&` limit is superseded. SCOPE-009 now accepts type/pseudo nesting;
+  SCOPE-011 adds class nesting. Structural completeness remains required locally.
+- Expand the actual gallery with source-only `styles/Frames.auwla` and
+  `Palette.auwla`, nested selectors, an SVG and native CSS reset import. Add
+  cross-file/cycle/URL/project/side-effect and Vite fan-out/recovery evidence.
+
+## CSS-3a — 2026-11-14
+
+- Extend CSS-1 with local-by-default module styles, direct component-body
+  declarations, explicit globals and named definitions. CSS-004 now checks the
+  unsupported `scoped` attribute; plain `<style>` is intentionally accepted.
+- Record the user's `@use(path, id)` syntax, without fragments. First slice
+  resolves same-file definitions and applies them in the consumer's scope;
+  cross-file resolution remains the next compiler-owned integration slice.
+- Add `style-scopes.md` and SCOPE-001 through SCOPE-010. Definition-only named
+  blocks, static declaration placement, zero-specificity subject markers and
+  explicit globals for named CSS resources are provisional profile choices.
+- The pinned CSS Tree block grammar supports nested rules starting with `&`.
+  Local implicit nesting and incomplete structural braces are rejected before
+  rewriting, including type/pseudo selectors that otherwise look like declaration
+  fallbacks. Globals preserve native implicit nesting. Explicit native nesting
+  retains external ancestor qualifiers and declaration order.
+
 ## 0.1-draft, revision 9 — 2026-11-14
 
 - Diagnostics only; no accepted syntax or meaning changes. A `<` comparison is

@@ -1,0 +1,15 @@
+import type {} from '@memoized-dom/compiler/jsx';
+
+export function App({ title }: { title: string }) {
+  let input: HTMLInputElement | undefined;
+
+  
+  return (
+    <section>
+      <input ref={input} />
+      <button onClick={() => input?.focus()}>"Focus"</button>
+      <p>"😀  "; title.toUpperCase()</p>
+      <p>input ? "Mounted" : "Waiting"</p>
+    </section>
+  );
+}

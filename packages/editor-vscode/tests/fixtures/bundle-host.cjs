@@ -3,6 +3,7 @@ const assert = require('node:assert/strict');
 const Module = require('node:module');
 const path = require('node:path');
 const { readFileSync } = require('node:fs');
+const { pathToFileURL } = require('node:url');
 
 let completionProvider;
 let hoverProvider;
@@ -12,8 +13,9 @@ let problems = [];
 let source = process.argv[3] === undefined
   ? '<style global>\n.card { padding: 4px; unknown-property: red; cur }\n.card:hover { outline: 2px solid blue; }\n.card { color:black @.loading:re; }\n</style>'
   : readFileSync(process.argv[3], 'utf8');
+const documentUrl = process.argv[3] === undefined ? new URL('file:///example.auwla') : pathToFileURL(process.argv[3]);
 const document = {
-  uri: { toString: () => 'file:///example.auwla', path: '/example.auwla' },
+  uri: { toString: () => documentUrl.href, path: documentUrl.pathname },
   version: 1,
   languageId: 'auwla',
   getText: () => source,
@@ -92,15 +94,15 @@ async function run() {
   const context = { subscriptions: [], extensionPath: path.dirname(entry) };
   await require(entry).activate(context);
   if (process.argv[3] !== undefined) {
-    assert.deepEqual(problems, [], 'the real class-condition example must have no CSS diagnostics');
-    const marker = '@.loading:';
+    assert.deepEqual(problems, [], 'the real CSS example must have no CSS diagnostics');
+    const marker = process.argv[4] ?? (source.includes('@.loading:') ? '@.loading:' : 'border-color: ');
     const offset = source.indexOf(marker) + marker.length;
     assert.ok(offset >= marker.length);
     // Native CSS completion does not offer keywords inside an existing hex
     // token. Reproduce authoring a named value in the unsaved document instead.
-    const hex = /^#[\da-f]+/i.exec(source.slice(offset));
-    assert.ok(hex);
-    source = source.slice(0, offset) + 're' + source.slice(offset + hex[0].length);
+    const value = /^(?:#[\da-f]+|[a-z-]+)/i.exec(source.slice(offset));
+    assert.ok(value);
+    source = source.slice(0, offset) + 're' + source.slice(offset + value[0].length);
     document.version++;
     const lines = source.slice(0, offset + 2).split('\n');
     const position = { line: lines.length - 1, character: lines.at(-1).length };
@@ -109,7 +111,7 @@ async function run() {
     for (const subscription of context.subscriptions) {
       subscription.dispose();
     }
-    console.log('Real example: zero CSS diagnostics and conditional value completion passed');
+    console.log('Real example: zero CSS diagnostics and native value completion passed');
     return;
   }
   const position = { line: 1, character: 12 };

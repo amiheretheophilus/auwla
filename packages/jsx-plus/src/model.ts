@@ -1,3 +1,5 @@
+import type { SourceStylesheetRecipe } from '@memoized-dom/compiler-next';
+
 /** Syntax-only views. Ref and semantic binding nodes stay in compiler-next. */
 export type Range = readonly [number, number];
 
@@ -55,6 +57,8 @@ export interface NormalizedSource {
   readonly code: string;
   readonly roots: readonly (ElementView | FragmentView)[];
   readonly mappings: readonly VerbatimMapping[];
-  /** Static native CSS, when module-level style blocks were authored. */
+  /** Static CSS, with local selectors scoped when static styles were authored. */
   readonly stylesheet?: string;
+  /** Deferred source linking, consumed only by the compiler's source-language hook. */
+  readonly styleRecipe?: SourceStylesheetRecipe;
 }

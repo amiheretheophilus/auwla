@@ -1,0 +1,39 @@
+import { Card } from './Card.auwla';
+
+<style>
+  :root {
+    --page-background: #f1f5f9;
+    --card-background: white;
+    --button-background: #2563eb;
+  }
+  body { margin: 0; font-family: system-ui, sans-serif; background: var(--page-background); }
+  main { max-width: 1100px; margin: 0 auto; padding: 8px @300:12px @700px:24px; }
+  .grid {
+    display: grid;
+    grid-template-columns: 1fr @700:repeat(2, minmax(0, 1fr)) @1000px:repeat(3, minmax(0, 1fr));
+    gap: 12px @40rem:20px;
+  }
+  .viewport::after {
+    content: "Below 300px" @300:"300px and above" @700px:"700px and above" @1000:"1000px and above";
+  }
+  .order { padding: 4px @700:24px @300:12px; background: #e2e8f0; }
+  .card { border: 10px solid red; }
+</style>
+
+export function App() {
+  const titles = ["Numeric thresholds", "Explicit pixels", "Shared scoped rules"];
+
+  return (
+    <main>
+      <h1>"Responsive native CSS"</h1>
+      <p>"Resize across 300px, 700px and 1000px. The browser applies the media queries."</p>
+      <p class="viewport" aria-live="off">"Viewport: "</p>
+      <section class="grid">
+        for (const title of titles) {
+          <Card title=title />
+        }
+      </section>
+      <p class="order">"Order check: at 700px and above, the later @300 clause keeps this padding at 12px."</p>
+    </main>
+  );
+}

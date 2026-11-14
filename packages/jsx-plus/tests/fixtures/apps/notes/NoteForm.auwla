@@ -1,0 +1,23 @@
+export function NoteForm({ onAdd }: { onAdd: (title: string) => void }) {
+  let draft: HTMLInputElement | undefined;
+
+  function submit(event: SubmitEvent) {
+    event.preventDefault();
+    const title = draft?.value.trim();
+    if (!title) {
+      return;
+    }
+
+    onAdd(title);
+    if (draft) {
+      draft.value = '';
+    }
+  }
+
+  return (
+    <form onSubmit=submit>
+      <input ref=draft placeholder="Write a note" />
+      <button type="submit">"Add"</button>
+    </form>
+  );
+}

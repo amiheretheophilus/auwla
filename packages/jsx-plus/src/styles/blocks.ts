@@ -1,25 +1,21 @@
-/** Static module-level CSS. No filesystem, build system or JavaScript evaluator. */
+/** Static CSS declarations. No filesystem, build system or JavaScript evaluator. */
 import { parse } from 'yuku-parser';
 import { isMarkupOpening } from '../host';
 import { blankRange, maskMarkup } from '../masks';
 import { JsxPlusError } from '../diagnostics';
 import { MarkupContext } from '../markup/context';
 import { readElement } from '../markup/element';
+import { stylePlacement } from './placement';
 
 export interface StyleBlock {
   readonly start: number;
   readonly end: number;
   readonly bodyStart: number;
   readonly bodyEnd: number;
-}
-
-/** A neutral statement must stay a module item, rather than becoming an initializer or return. */
-function isModuleItem(prefix: string): boolean {
-  const { program } = parse(`${prefix}0;`, { lang: 'tsx', sourceType: 'module' });
-  const last = program.body.at(-1);
-  return last?.type === 'ExpressionStatement'
-    && last.start === prefix.length
-    && last.expression.type === 'Literal';
+  readonly global: boolean;
+  /** Authored function start; undefined means module-level. */
+  readonly owner?: number;
+  readonly id?: string;
 }
 
 /** CSS strings and comments may contain the authoring delimiter literally. */
@@ -74,7 +70,7 @@ export interface StyleBlocks {
   readonly blocks: readonly StyleBlock[];
 }
 
-/** Find only standalone module blocks; nested DOM `<style>` elements stay markup. */
+/** Find standalone declarations; nested DOM `<style>` elements stay markup. */
 export function readStyleBlocks(source: string, filename: string, checking = false): StyleBlocks {
   if (!source.includes('<style')) {
     return { host: source, blocks: [] };
@@ -105,8 +101,10 @@ export function readStyleBlocks(source: string, filename: string, checking = fal
       return { host, blocks };
     }
 
-    const moduleStyle = /^<style(?=[\s>])/.test(shadow.slice(start)) && isModuleItem(shadow.slice(0, start));
-    if (!moduleStyle) {
+    const placement = /^<style(?=[\s>])/.test(shadow.slice(start))
+      ? stylePlacement(shadow.slice(0, start))
+      : { kind: 'expression' as const };
+    if (placement.kind === 'expression') {
       // The host parser cannot read all JSX+ attributes/control bodies. Mask a complete
       // template before asking whether a later style block is a standalone module item.
       const markup = readElement(context, start);
@@ -114,10 +112,21 @@ export function readStyleBlocks(source: string, filename: string, checking = fal
       continue;
     }
 
-    const opening = /^<style\s+global\s*>/.exec(source.slice(start));
-    if (opening === null) {
-      throw new JsxPlusError('CSS1001', 'This CSS profile requires a module-level <style global> block',
+    if (placement.kind === 'nested') {
+      throw new JsxPlusError('CSS1003', 'Declare static styles at module level or directly in a component body',
         filename, [start, start + 6], source);
+    }
+
+    const opening = /^<style(?:\s+(global)|\s+id\s*=\s*(?:"([^"]*)"|'([^']*)'))?\s*>/.exec(source.slice(start));
+    if (opening === null) {
+      throw new JsxPlusError('CSS1001', 'Use <style>, <style global> or a module-level <style id="name">',
+        filename, [start, start + 6], source);
+    }
+
+    const id = opening[2] ?? opening[3];
+    if (id !== undefined && (id.trim() === '' || placement.kind !== 'module')) {
+      throw new JsxPlusError('CSS1001', 'A named style requires a nonempty id and a module-level declaration',
+        filename, [start, start + opening[0].length], source);
     }
 
     const bodyStart = start + opening[0].length;
@@ -129,7 +138,12 @@ export function readStyleBlocks(source: string, filename: string, checking = fal
 
     const bodyEnd = closing?.[0] ?? source.length;
     const end = closing?.[1] ?? source.length;
-    blocks.push({ start, end, bodyStart, bodyEnd });
+    blocks.push({
+      start, end, bodyStart, bodyEnd,
+      global: opening[1] !== undefined,
+      ...(placement.kind === 'function' ? { owner: placement.owner } : {}),
+      ...(id === undefined ? {} : { id }),
+    });
     host = blankRange(host, start, end);
     shadow = blankRange(shadow, start, end);
   }

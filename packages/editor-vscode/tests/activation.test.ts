@@ -260,7 +260,7 @@ it('registers the installed shared package and gives disposal to the editor', as
   // Simulate an installed extension outside the checkout. A mapper can only be
   // found through the open task-board project, not through the extension path.
   Object.assign(session, { extensionPath: resolve(process.env.TEMP ?? '/', 'auwla-installed-adapter') });
-  workspaceDirectories = [resolve(import.meta.dirname, '../../jsx-plus/examples/task-board')];
+  workspaceDirectories = [resolve(import.meta.dirname, 'fixtures/apps/task-board')];
   await activate(session);
   expect(messages).toEqual([]);
   expect(registrations).toHaveLength(1);

@@ -1,0 +1,11 @@
+<style id="palette">
+  .card {
+    background-image: url("./assets/dot.svg");
+    background-repeat: no-repeat;
+    background-position: right 12px top 12px;
+  }
+</style>
+
+<style id="page-reset">
+  @import "./assets/reset.css";
+</style>

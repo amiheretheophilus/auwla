@@ -1,5 +1,5 @@
 /**
- * The team example (`examples/team`): routes, lazy route chunks, the data layer and effects, all
+ * The team app (the test's copy, `fixtures/apps/team`): routes, lazy route chunks, the data layer and effects, all
  * written in `.auwla`, built by compiler-next's own Bun plugin with `auwla` as a source language.
  *
  * Each build is written with chunk splitting to a temporary folder in this package and loaded with
@@ -13,10 +13,10 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { waitFor } from '../../../test-support/helpers';
 // Compiler-next's Bun plugin has no package export yet; the tests read it as the CLI does.
 import { memoizedDom } from '../../compiler-next/src/project/bun';
-import { checkoutPackages } from '../examples/checkout';
+import { checkoutPackages } from '../tools/checkout';
 import { auwla } from '../src';
 
-const root = fileURLToPath(new URL('../examples/team/', import.meta.url));
+const root = fileURLToPath(new URL('./fixtures/apps/team/', import.meta.url));
 const builds = mkdtempSync(join(import.meta.dir, '../.routes-test-'));
 afterAll(() => rmSync(builds, { recursive: true, force: true }));
 

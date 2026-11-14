@@ -1,5 +1,5 @@
 /**
- * The directory example (`examples/directory`): an app rendered on the server, written in `.auwla`
+ * The directory app (the test's copy, `fixtures/apps/directory`): an app rendered on the server, written in `.auwla`
  * down to its server functions and server-only module, built by compiler-next's own Bun plugin with
  * `auwla` as a source language.
  *
@@ -18,10 +18,10 @@ import { waitFor } from '../../../test-support/helpers';
 import { memoizedDom } from '../../compiler-next/src/project/bun';
 import { fileSystemHost } from '../../compiler-next/src/project';
 import { createApplication } from '../../compiler-next/src/server/application';
-import { checkoutPackagesFor } from '../examples/checkout';
+import { checkoutPackagesFor } from '../tools/checkout';
 import { auwla } from '../src';
 
-const root = fileURLToPath(new URL('../examples/directory/', import.meta.url));
+const root = fileURLToPath(new URL('./fixtures/apps/directory/', import.meta.url));
 const builds = mkdtempSync(join(import.meta.dir, '../.server-test-'));
 afterAll(() => rmSync(builds, { recursive: true, force: true }));
 

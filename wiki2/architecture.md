@@ -24,6 +24,13 @@ it names no particular language. Extended syntax and checking stay in
 `packages/jsx-plus`. Compiler-next's `src/analysis/` folder exposes a read-only
 snapshot of the same frontend for checking.
 
+CSS uses this same language hook: a module returns stylesheet text or a pure
+recipe. Compiler-next's project reads/caches source-only dependencies and passes
+resolved text to that recipe; those sources never enter the JS import graph.
+JSX+ owns CSS syntax, named-ID expansion, scoping and resource rebasing. The
+existing compiler/Bun/Vite delivery owns CSS assets and updates. The extra
+metadata does not introduce a JSX+ project or any filesystem APIs in `src/`.
+
 The synchronized compiler baseline is `compiler-rewrite` at `07e996c9`. `.auwla`
 server functions are not yet recognized (compiler-next's `server/` still accepts
 only JS/TS files). Client features are checked in `.auwla`: routes, lazy route
@@ -102,7 +109,8 @@ All paths are relative to the repository root and exist now.
 | `packages/jsx-plus/tests/vite.test.ts` | The notes example through compiler-next's Vite plugin: build, dev transform and map, hot update, authored dev error |
 | `packages/jsx-plus/examples/notes/` | Multi-file app: three `.auwla` components, explicit and extensionless imports, a `.ts` re-export and helper |
 | `packages/jsx-plus/examples/preview.ts` | Example preview: compiler-next's Bun plugin with `auwla` and chunk splitting, serving the folder, an optional API and deep links |
-| `packages/jsx-plus/examples/checkout.ts` | Example/test-only Bun resolver: this checkout's runtime, data and router sources instead of their `dist` |
+| `packages/jsx-plus/tools/checkout.ts` | Development Bun resolver for the examples' previews and the tests: this checkout's runtime, data and router sources instead of their `dist`. In neither folder, since tests never depend on examples |
+| `packages/jsx-plus/tests/fixtures/apps/` | The tests' own copies of the example apps (2026-11-14), so editing an example breaks no test ([rule 16](../wiki/rules.md)); the editor extension has its own under `packages/editor-vscode/tests/fixtures/apps/` |
 | `packages/jsx-plus/examples/team/` | Routes, lazy route pages, `Group` policies across files, a `<slot>` layout (`components/Card.auwla`), `$fetch`/`$track` through a helper, `$routed`, `$effect`, `$cleanup` |
 | `packages/jsx-plus/tests/routes.test.ts` | The team example bundled with splitting and loaded with `import()`: chunks, both-mode navigation/data/effects, deep link; a fresh window per app |
 | `packages/jsx-plus/src/index.ts` | Public package exports |

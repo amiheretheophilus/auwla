@@ -5,12 +5,12 @@ import { applyEdits, applyRename, documentUri, singleFileEdits, withLanguageServ
   type CompletionItem, type WorkspaceEdit } from './lsp';
 import { packageRoot, positionAt } from './rpc';
 
-const exampleRoot = resolve(packageRoot, 'examples');
-const greeting = readFileSync(resolve(exampleRoot, 'greeting.auwla'), 'utf8');
+const appsRoot = resolve(packageRoot, 'tests/fixtures/apps');
+const greeting = readFileSync(resolve(appsRoot, 'greeting.auwla'), 'utf8');
 
 it('applies native completion edits inside unfinished template expressions and headers', async () => {
-  const uri = documentUri(exampleRoot, 'greeting.auwla');
-  await withLanguageServer(exampleRoot, {
+  const uri = documentUri(appsRoot, 'greeting.auwla');
+  await withLanguageServer(appsRoot, {
     completion: { completionItem: { insertReplaceSupport: true } },
     rename: { prepareSupport: true },
   }, async (server) => {
@@ -106,7 +106,7 @@ it('applies native completion edits inside unfinished template expressions and h
     const rename = await server.request<WorkspaceEdit>('textDocument/rename', {
       textDocument: { uri }, position: positionAt(partial, reference), newName: 'displayName',
     });
-    const renamed = applyRename(partial, singleFileEdits(rename, resolve(exampleRoot, 'greeting.auwla')), 'name', 'displayName');
+    const renamed = applyRename(partial, singleFileEdits(rename, resolve(appsRoot, 'greeting.auwla')), 'name', 'displayName');
     expect(renamed).toContain('if (displayName.)');
     expect(renamed).toContain('let displayName');
     expect(renamed).toContain('Enter a name.');

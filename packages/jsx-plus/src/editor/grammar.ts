@@ -33,7 +33,7 @@ export function createAuwlaGrammar(tsx: IRawGrammar): IRawGrammar {
   const attributes = repository['jsx-tag-attributes'];
   // Use the editor's native CSS grammar. CSS braces never enter the TSX child grammar.
   repository['auwla-style-block'] = {
-    begin: '(<)(style)(\\s+global\\s*)(>)',
+    begin: '[ \\t]*(<)(style)((?:\\s+(?:global|id\\s*=\\s*(?:"[^"]*"|\'[^\']*\')))?\\s*)(>)',
     beginCaptures: {
       1: { name: 'punctuation.definition.tag.begin.tsx' },
       2: { name: 'entity.name.tag.tsx' },
@@ -50,6 +50,14 @@ export function createAuwlaGrammar(tsx: IRawGrammar): IRawGrammar {
     patterns: [{ include: 'source.css' }],
   };
   grammar.patterns.unshift({ include: '#auwla-style-block' });
+  // Block rules can begin a zero-width JSX expression on indentation before the
+  // tag. Start at that indentation too, but only at a statement boundary. Keep
+  // this out of the shared child statements: returned DOM styles remain JSX.
+  repository['auwla-style-statement'] = {
+    ...repository['auwla-style-block'],
+    begin: `(?:^|(?<=[;{}]))${repository['auwla-style-block'].begin}`,
+  };
+  repository['decl-block']?.patterns?.unshift({ include: '#auwla-style-statement' });
   repository['auwla-css-function'] = {
     name: 'meta.function.auwla-css',
     begin: `(${cssIdentifierPart}+)?(\\()`,
@@ -65,6 +73,15 @@ export function createAuwlaGrammar(tsx: IRawGrammar): IRawGrammar {
     ...grammar.injections,
     'L:meta.embedded.block.css meta.property-value.css -string -comment -meta.function': {
       patterns: [{
+        name: 'meta.auwla.css-condition',
+        match: '(@)([+-]?(?:[0-9]*\\.[0-9]+|[0-9]+)(?:[eE][+-]?[0-9]+)?)(?i:(px|em|rem))?(\\s*:)?',
+        captures: {
+          1: { name: 'keyword.control.css' },
+          2: { name: 'constant.numeric.css' },
+          3: { name: 'keyword.other.unit.css' },
+          4: { name: 'punctuation.separator.key-value.css' },
+        },
+      }, {
         name: 'meta.auwla.css-condition',
         match: `(@)(\\.)(${cssIdentifierPart}*)(\\s*:)?`,
         captures: {

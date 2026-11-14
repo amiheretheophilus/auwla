@@ -1,0 +1,2 @@
+:root { --scope-reset: ready; }
+*, *::before, *::after { box-sizing: border-box; }

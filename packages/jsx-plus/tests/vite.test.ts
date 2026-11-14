@@ -21,11 +21,11 @@ afterAll(() => {
   for (const copy of copies) rmSync(copy, { recursive: true, force: true });
 });
 
-/** A copy of `examples/<name>` in a temporary folder of this package. */
+/** A copy of the test's own app `fixtures/apps/<name>` in a temporary folder of this package. */
 function copyExample(name: string): string {
   const copy = mkdtempSync(join(import.meta.dir, `../.vite-test-${name}-`));
   copies.push(copy);
-  cpSync(fileURLToPath(new URL(`../examples/${name}/`, import.meta.url)), copy, { recursive: true });
+  cpSync(fileURLToPath(new URL(`./fixtures/apps/${name}/`, import.meta.url)), copy, { recursive: true });
   // Its editor config extends a sibling folder the copy does not have; Vite would read it.
   rmSync(join(copy, 'tsconfig.json'));
   return copy;

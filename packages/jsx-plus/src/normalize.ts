@@ -22,7 +22,8 @@ import { MarkupContext, type Markup } from './markup/context';
 import { SIBLING_SEPARATOR } from './markup/children';
 import { readElement } from './markup/element';
 import { readStyleBlocks } from './styles/blocks';
-import { lowerConditions } from './styles/conditions/lower';
+import { markStyles } from './styles/scopes/markers';
+import { stylesheetRecipe } from './styles/stylesheet';
 
 /** Find each top-level element in host code, read it, mask it and look again. */
 function readRoots(context: MarkupContext, host: string): Markup[] {
@@ -48,10 +49,10 @@ function readRoots(context: MarkupContext, host: string): Markup[] {
   }
 }
 
-function normalizeFile(source: string, filename: string, validateHost: boolean): NormalizedSource {
+function normalizeFile(source: string, filename: string, validateHost: boolean, deferStyles = false): NormalizedSource {
   const context = new MarkupContext(source, filename, !validateHost);
   try {
-    const result = normalizeIn(context, validateHost);
+    const result = normalizeIn(context, validateHost, deferStyles);
     if (!validateHost && context.joinedSiblings.length > 0) {
       // The editor leaves host errors to TypeScript, except one a missing `;` explains.
       const problem = firstError(parseModule(result.code).diagnostics);
@@ -83,7 +84,9 @@ function reportJoinedSibling(context: MarkupContext, failedAt: number): void {
     const separated = source.slice(0, sibling.position) + ';' + source.slice(sibling.position);
     let reached = Number.POSITIVE_INFINITY;
     try {
-      normalizeIn(new MarkupContext(separated, filename, context.checking), true);
+      // A grammar repair probe has no project resolver. Cross-file CSS linking
+      // must not hide the host position the inserted separator fixes.
+      normalizeIn(new MarkupContext(separated, filename, context.checking), true, true);
     } catch (error) {
       if (!(error instanceof JsxPlusError)) throw error;
       // Back in this file's offsets: the inserted `;` precedes the failure.
@@ -96,7 +99,7 @@ function reportJoinedSibling(context: MarkupContext, failedAt: number): void {
   }
 }
 
-function normalizeIn(context: MarkupContext, validateHost: boolean): NormalizedSource {
+function normalizeIn(context: MarkupContext, validateHost: boolean, deferStyles = false): NormalizedSource {
   const { source, filename } = context;
   const styles = readStyleBlocks(source, filename, !validateHost);
   const roots = readRoots(context, styles.host);
@@ -106,7 +109,8 @@ function normalizeIn(context: MarkupContext, validateHost: boolean): NormalizedS
     pieces: [generated(styles.host.slice(block.start, block.end))],
   }));
   const replacements = [...roots, ...removedStyles].sort((left, right) => left.start - right.start);
-  const output = assemble(replaceRange(source, 0, source.length, replacements));
+  const pieces = replaceRange(source, 0, source.length, replacements);
+  let output = assemble(pieces);
 
   // Validate ordinary host context after normalization. No custom evaluator or
   // second set of binding rules is introduced by this adapter.
@@ -117,18 +121,25 @@ function normalizeIn(context: MarkupContext, validateHost: boolean): NormalizedS
     }
   }
 
-  const stylesheet = styles.blocks.map((block) => {
-    const css = source.slice(block.bodyStart, block.bodyEnd);
-    if (!validateHost) {
-      return css;
+  let stylesheet: string | undefined;
+  let styleRecipe: NormalizedSource['styleRecipe'];
+  if (!validateHost) {
+    stylesheet = styles.blocks.map((block) => source.slice(block.bodyStart, block.bodyEnd)).join('\n');
+  } else {
+    const marked = markStyles(pieces, styles.blocks, filename, (message, offset) => context.error('HOST', message, offset));
+    output = assemble(marked.pieces);
+    const recipe = stylesheetRecipe(source, filename, styles.blocks, marked.attributes);
+    if (deferStyles && recipe.dependencies.length > 0) {
+      styleRecipe = recipe;
+    } else {
+      stylesheet = recipe.render(() => undefined);
     }
-    return lowerConditions(css, (message, start, end) =>
-      context.error('CSS2001', message, block.bodyStart + start, block.bodyStart + end));
-  }).join('\n');
+  }
   return {
     ...output,
     roots: roots.map((entry) => entry.view),
-    ...(styles.blocks.length === 0 ? {} : { stylesheet }),
+    ...(styles.blocks.length === 0 || stylesheet === undefined ? {} : { stylesheet }),
+    ...(styleRecipe === undefined ? {} : { styleRecipe }),
   };
 }
 
@@ -140,4 +151,9 @@ export function normalize(source: string, options: { readonly filename?: string 
 /** Internal editor entry: native TypeScript owns recovery of ordinary host errors. */
 export function normalizeForChecking(source: string, filename: string): NormalizedSource {
   return normalizeFile(source, filename, false);
+}
+
+/** Production language entry: sources outside this file are linked by the compiler. */
+export function normalizeForLanguage(source: string, filename: string): NormalizedSource {
+  return normalizeFile(source, filename, true, true);
 }

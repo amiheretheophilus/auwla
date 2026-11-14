@@ -1,0 +1,44 @@
+import { createPerson, listPeople } from '#server-functions';
+import { Person } from './Person.auwla';
+
+function Everyone() {
+  // A server function's GET is a source: rendered on the server, then adopted by the browser.
+  const people = listPeople();
+  let name = '';
+
+  async function add(event: SubmitEvent) {
+    event.preventDefault();
+    if (name.trim() === '') return;
+    await createPerson(name.trim(), 'New');
+    name = '';
+    $track(people).refresh();
+  }
+
+  return (
+    <section class="everyone">
+      <ul>
+        for (const person of people) {
+          <li key={person.id}>
+            <a route-to={{ path: '/people/:id', params: { id: person.id } }}>person.name</a>
+          </li>
+        }
+      </ul>
+      <form onSubmit=add>
+        <label>
+          "Name"; <input value={name} onInput={(event) => name = event.currentTarget.value} />
+        </label>
+        <button type="submit">"Add"</button>
+      </form>
+    </section>
+  );
+}
+
+export function App() {
+  return (
+    <main class="directory">
+      <h1>"Directory"</h1>
+      <Everyone route="/" />
+      <Person route="/people/:id" />
+    </main>
+  );
+}

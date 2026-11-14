@@ -15,11 +15,22 @@ editor mapping remain in the separate JSX+ package.
 | `frontend.ts` | Shared parse → resolve → graph ordering |
 | `serialize.ts` | Copy existing graph facts into detached records |
 | `analysis.test.ts` | Classification, scope, coordinates and provenance tests |
+| `markup.ts`, `markup.test.ts` | `inspectMarkup(normalizedTsx)`: native-element insertion positions, enclosing functions and existing component boundaries, mapped through type/slot lowering to input offsets |
 
 The production pipeline calls `analysis/frontend.ts` for its unchanged frontend
 sequence, then continues with the existing remaining stages. Inspection imports
 the frontend directly. Frontend utilities may share helpers with optimization;
 inspection never runs an optimizer or DOM emitter. There is no persistent cache.
+
+`inspectMarkup()` is a smaller read-only entry for syntax frontends that need
+markup ownership. It parses and resolves a single normalized TSX input and asks
+the production `programComponents`/`intrinsicTag` helpers for their existing
+facts, without building a reactive computation graph. It returns detached ranges,
+function indices and component flags. Function indices identify this snapshot;
+they are not stable IDs across arbitrary code edits. Errors name the normalized
+input (`./Markup.tsx`); the authoring frontend maps them to its source. JSX+ uses
+these facts to add static scope attributes, while CSS syntax and selector
+rewriting remain in JSX+. No DOM emitter, runtime or reactive rule changes.
 
 The dedicated entry also exports the existing `CompileError` class, allowing
 checking consumers to distinguish expected frontend failures without importing

@@ -6,7 +6,7 @@ import * as runtime from '../../runtime/src/index';
 import { toModuleFunction } from '../../compiler-next/src/core/parse/module-function';
 import { CompileError } from '@memoized-dom/compiler-next';
 import { compile, JsxPlusError, normalize } from '../src';
-import * as taskBoardActions from '../examples/task-board/actions';
+import * as taskBoardActions from './fixtures/apps/task-board/actions';
 
 const applications: runtime.MountedApplication[] = [];
 afterEach(() => {
@@ -130,7 +130,7 @@ it('keeps standard TSX child text on the existing compiler path', () => {
 });
 
 it('runs the package counter example through compiler-next', () => {
-  const source = readFileSync(new URL('../examples/counter.auwla', import.meta.url), 'utf8');
+  const source = readFileSync(new URL('./fixtures/apps/counter.auwla', import.meta.url), 'utf8');
   const { container } = start(source, true);
   expect(container.textContent).toBe('Count: 0');
   container.querySelector('button')!.click();
@@ -139,7 +139,7 @@ it('runs the package counter example through compiler-next', () => {
 
 for (const optimize of [true, false]) {
   it(`runs the greeting authoring example through conditional and loop updates with optimize=${optimize}`, () => {
-    const source = readFileSync(new URL('../examples/greeting.auwla', import.meta.url), 'utf8');
+    const source = readFileSync(new URL('./fixtures/apps/greeting.auwla', import.meta.url), 'utf8');
     const { container } = start(source, optimize);
     const input = container.querySelector('input')!;
     expect(container.querySelector('h1')!.textContent).toBe('Hello AUWLA');
@@ -212,7 +212,7 @@ for (const optimize of [true, false]) {
   });
 
   it(`runs the authored task board through its main editing flow with optimize=${optimize}`, () => {
-    const source = readFileSync(new URL('../examples/task-board/App.auwla', import.meta.url), 'utf8');
+    const source = readFileSync(new URL('./fixtures/apps/task-board/App.auwla', import.meta.url), 'utf8');
     // The filter buttons and the task rows are direct loops in the markup; both
     // become compiled row lists when optimizing (P4-FOR-FAST).
     if (optimize) expect(compile(source, { optimize }).match(/_rowList\d*\.from\(/g)?.length).toBeGreaterThanOrEqual(2);

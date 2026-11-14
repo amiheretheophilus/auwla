@@ -1,0 +1,4 @@
+{
+  "extends": "../checking/tsconfig.json",
+  "files": ["./App.auwla", "./NoteForm.auwla", "./components/NoteList.auwla", "./components/index.ts", "./notes.ts", "./main.ts"]
+}

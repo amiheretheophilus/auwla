@@ -71,3 +71,9 @@ Stated by the user on 2026-10-18. They apply to every design and every fix.
     i read it leave spaces and comments". Separate logical steps with blank
     lines, expand control flow, and use named helpers. Comments explain why a
     decision is needed, especially around readiness, ownership and ordering.
+16. **Tests are self-contained; they never depend on the examples** (2026-11-14).
+    The user: "the tests shouldnt depend on any of the examples they should be
+    contained like how the other tests has been". A test keeps its inputs in its
+    own `tests/fixtures/` (an app-sized program is fine there, as a copy), so
+    editing or deleting an example never breaks a test. Examples are for trying
+    things out. Shared build helpers live outside both (`packages/jsx-plus/tools/`).

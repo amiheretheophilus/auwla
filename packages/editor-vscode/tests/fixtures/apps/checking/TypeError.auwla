@@ -1,0 +1,5 @@
+import type {} from '@memoized-dom/compiler/jsx';
+
+export function Broken({ title }: { title: string }) {
+  return <p>"😀 "; title.toFixed(2)</p>;
+}

@@ -16,6 +16,21 @@ import { langFromPath, type SourceLang } from 'yuku-parser';
 import { CompileError, locate } from '../diagnostics';
 import { UNEDITED, type TextOrigin } from './text-edits';
 
+/** A source-only dependency: reading it must not add it to the JavaScript graph. */
+export interface SourceAssetText {
+  /** A compiler/project module path, like `./styles/Theme.view`. */
+  readonly path: string;
+  readonly text: string;
+}
+
+export type SourceAssetResolver = (specifier: string, importer: string) => SourceAssetText | undefined;
+
+/** Pure stylesheet linking, after the project has read/resolved source dependencies. */
+export interface SourceStylesheetRecipe {
+  readonly dependencies: readonly string[];
+  render(resolve: SourceAssetResolver): string;
+}
+
 export interface SourceLanguage {
   /** The extensions the language owns, with their dot: `['.auwla']`. */
   readonly extensions: readonly string[];
@@ -26,14 +41,14 @@ export interface SourceLanguage {
   toTsx(text: string, path: string): {
     readonly code: string;
     readonly origin: TextOrigin;
-    /** Optional static CSS. The compiler owns its asset name, import and delivery. */
-    readonly stylesheet?: string;
+    /** Static CSS or a pure source-linking recipe. The compiler owns reading and delivery. */
+    readonly stylesheet?: string | SourceStylesheetRecipe;
   };
 }
 
 export interface SourceStylesheet {
   readonly path: string;
-  readonly code: string;
+  readonly code: string | SourceStylesheetRecipe;
 }
 
 /** The language owning `path`, if one does. */

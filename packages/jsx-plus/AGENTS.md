@@ -33,5 +33,9 @@ and `wiki2/syntax.md`.
   tooling, module-graph integration and delivery coverage rather than implying
   a complete language implementation.
 - The user wants actual authoring code in `examples/`, not only small inline test
-  programs. Extend the real examples as features grow and check those same files
-  through the applicable mapper/compiler paths. See `examples/README.md`.
+  programs: extend the real examples as features grow. But tests never read
+  `examples/` (2026-11-14, `wiki/rules.md` rule 16): a test that needs a real app
+  uses its own copy in `tests/fixtures/apps/`, so the user can edit or replace an
+  example without breaking anything. To test an example's new feature, copy what
+  the test needs into its fixture. Build helpers shared by previews and tests live
+  in `tools/`. See `examples/README.md`.

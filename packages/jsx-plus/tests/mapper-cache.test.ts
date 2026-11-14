@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { projectForChecking } from '../src/checking/project';
 import { CheckingProject } from '../src/mapper/project';
 
-const source = readFileSync(new URL('../examples/task-board/App.auwla', import.meta.url), 'utf8');
+const source = readFileSync(new URL('./fixtures/apps/task-board/App.auwla', import.meta.url), 'utf8');
 
 function measuredProject() {
   let computations = 0;

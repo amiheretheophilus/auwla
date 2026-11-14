@@ -6,12 +6,12 @@ import { applyEdits, applyRename, documentUri, singleFileEdits, withLanguageServ
 import { packageRoot, positionAt } from './rpc';
 
 it('completes, hovers and renames authored references inside quoted interpolation', async () => {
-  const exampleRoot = resolve(packageRoot, 'examples');
-  const source = readFileSync(resolve(exampleRoot, 'counter.auwla'), 'utf8');
+  const appsRoot = resolve(packageRoot, 'tests/fixtures/apps');
+  const source = readFileSync(resolve(appsRoot, 'counter.auwla'), 'utf8');
   expect(source).toContain('"Count: {count}"');
-  const uri = documentUri(exampleRoot, 'counter.auwla');
+  const uri = documentUri(appsRoot, 'counter.auwla');
 
-  await withLanguageServer(exampleRoot, {
+  await withLanguageServer(appsRoot, {
     completion: { completionItem: { insertReplaceSupport: true } },
     rename: { prepareSupport: true },
   }, async (server) => {
@@ -66,7 +66,7 @@ it('completes, hovers and renames authored references inside quoted interpolatio
     const rename = await server.request<WorkspaceEdit>('textDocument/rename', {
       textDocument: { uri }, position: positionAt(edited, expression), newName: 'total',
     });
-    const edits = singleFileEdits(rename, resolve(exampleRoot, 'counter.auwla'));
+    const edits = singleFileEdits(rename, resolve(appsRoot, 'counter.auwla'));
     expect(edits).toHaveLength(3);
     const renamed = applyRename(edited, edits, 'count', 'total');
     expect(renamed).toContain('"Count: {total}"');

@@ -1,4 +1,4 @@
 {
-  "extends": "../../../examples/checking/tsconfig.json",
+  "extends": "../apps/checking/tsconfig.json",
   "files": ["./Badge.auwla", "./App.auwla", "./Page.auwla", "./main.ts"]
 }

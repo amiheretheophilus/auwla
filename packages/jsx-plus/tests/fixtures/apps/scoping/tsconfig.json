@@ -1,0 +1,4 @@
+{
+  "extends": "../checking/tsconfig.json",
+  "files": ["./App.auwla", "./Cards.auwla", "./IndependentCard.auwla", "./styles/Frames.auwla", "./styles/Palette.auwla", "./main.ts"]
+}

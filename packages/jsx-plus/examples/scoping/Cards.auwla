@@ -1,0 +1,60 @@
+<style>
+  .file-note { font-weight: 700; }
+  .title { letter-spacing: 1px; }
+</style>
+
+<style id="card-look">
+  @use("./styles/Frames.auwla", "card-frame");
+  .status { font-size: 14px; }
+</style>
+
+export function TealCard() {
+  <style>
+    @use("./Cards.auwla", "card-look");
+    .card {
+      border-color: teal;
+      .title { color: teal; }
+      .tag { color: teal; }
+    }
+  </style>
+
+  let expanded = false;
+  const tags = ["Local rules", "Shared definition"];
+
+  return (
+    <article class=(expanded ? "card expanded" : "card") data-card="teal">
+      <h2 class="title">"Teal card"</h2>
+      <p class="file-note">"This note uses a style shared by this file."</p>
+      <ul class="tags">
+        for (const tag of tags) {
+          <li class="tag">tag</li>
+        }
+      </ul>
+      <p class="status">"Expanded: {expanded}"</p>
+      <button type="button" aria-pressed=expanded onClick=(() => expanded = !expanded)>
+        expanded ? "Use compact padding" : "Expand padding"
+      </button>
+    </article>
+  );
+}
+
+export function GoldCard() {
+  <style>
+    @use("./Cards.auwla", "card-look");
+    .card { border-color: goldenrod; }
+    .title { color: goldenrod; }
+  </style>
+
+  let expanded = false;
+
+  return (
+    <article class=(expanded ? "card expanded" : "card") data-card="gold">
+      <h2 class="title">"Gold card"</h2>
+      <p class="file-note">"Same CSS definition, a different private scope."</p>
+      <p class="status">"Expanded: {expanded}"</p>
+      <button type="button" aria-pressed=expanded onClick=(() => expanded = !expanded)>
+        expanded ? "Use compact padding" : "Expand padding"
+      </button>
+    </article>
+  );
+}

@@ -8,6 +8,11 @@ extensions can reuse them without installing this adapter. See
 
 From this package:
 
+Version 0.0.11 includes numeric viewport-condition highlighting and native value
+assistance (`@700` equals `@700px`). The built artifact is probed with the real
+responsive named-style source under Node outside the checkout. Reload VS Code
+after installing the updated VSIX.
+
 ```text
 bun run build
 bun check
@@ -64,6 +69,17 @@ TypeScript's own type hints (`count: number`) also work in `.auwla` once the
 mapper is registered (`typescript.inlayHints.variableTypes.enabled`). TypeScript
 7.1-beta repeats a function's return-type hint once per mapped segment of the
 file, so prefer variable-type hints until that is fixed upstream.
+
+Version 0.0.10 extends the shared CSS parser for implicit nesting in local/named
+blocks. Valid cross-file `@use` syntax remains usable without false missing-file
+errors; external ID/path discovery and dependency diagnostics require a source
+host and remain separate work. The installed bundle is probed on the real gallery.
+
+Version 0.0.9 adds CSS-3a assistance/highlighting for local module, component and
+named style blocks, including same-file `@use(path, id)` syntax/ID diagnostics.
+The bundled artifact is tested on `examples/scoping/Cards.auwla` outside the
+workspace under Node. After reinstalling, reload the VS Code window to use it.
+That version predates cross-file source linking; desktop acceptance remains separate.
 
 For a local VSIX installation, package the build with the standard VS Code
 packager using `--no-dependencies`, then install the resulting file with

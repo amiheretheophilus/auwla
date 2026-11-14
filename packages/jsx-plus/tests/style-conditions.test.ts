@@ -101,7 +101,7 @@ it('reports malformed condition syntax at the original module location', () => {
     .toThrow('./Card.auwla:3:16');
 });
 
-const root = fileURLToPath(new URL('../examples/class-conditions/', import.meta.url));
+const root = fileURLToPath(new URL('./fixtures/apps/class-conditions/', import.meta.url));
 const applications: runtime.MountedApplication[] = [];
 afterEach(() => {
   for (const app of applications.splice(0)) {

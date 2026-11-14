@@ -1,75 +1,180 @@
-<style global>
-  @import './reset.css';
+//import { state } from './state.auwla';
 
+export function state<T>(initial: T): [() => T, (next: T | ((prev: T) => T)) => void] {
+  let value = initial;
+  const get = () => value;
+  const set = (next: T | ((prev: T) => T)) => {
+    value = typeof next === 'function' ? (next as (prev: T) => T)(value) : next;
+  };
+  return [get, set];
+}
+
+// 4. A helper that receives a setter
+function bump(set: (next: (prev: number) => number) => void, by: number) {
+  set(prev => prev + by);
+}
+
+
+<style>
   :root {
     color-scheme: light dark;
-    --card-background: light-dark(#ffffff, #1b2433);
+    --bg: light-dark(#f1f5f9, #0f1520);
+    --card: light-dark(#ffffff, #1a2332);
+    --border: light-dark(#e2e8f0, #2a3548);
+    --muted: light-dark(#64748b, #8b9bb4);
+    --accent: #2563eb;
   }
 
   body {
     margin: 0;
     padding: 24px;
     font-family: system-ui, sans-serif;
-    background: light-dark(#f1f5f9, #101722);
+    background: var(--bg);
   }
 
-  .css-demo {
-    max-width: 42rem;
+  main {
+    max-width: 44rem;
     margin: 0 auto;
+    display: grid;
+    gap: 12px;
+  }
+
+  h1 {
+    margin: 0 0 8px;
+    font-size: 1.6rem;
+  }
+
+  section {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
     padding: 16px;
-    background: var(--card-background);
-    border: 2px solid #64748b;
+    background: var(--card);
+    border: 1px solid var(--border);
     border-radius: 12px;
   }
 
-  .css-demo.loading {
-    border-color: #d97706;
+  h2 {
+    flex-basis: 100%;
+    margin: 0;
+    font-size: 0.95rem;
+    font-weight: 600;
   }
 
-  .css-demo h1::before {
-    content: "";
-    display: inline-block;
-    width: 0.7em;
-    height: 0.7em;
-    margin-inline-end: 0.5em;
-    background: url('./dot.svg') center / contain no-repeat;
+  section p {
+    margin: 0;
+    font-variant-numeric: tabular-nums;
   }
 
-  .css-demo button {
-    padding: 8px 16px;
+  section p:last-of-type {
+    flex-basis: 100%;
+    font-size: 0.8rem;
+    color: var(--muted);
+  }
+
+  button {
+    padding: 6px 14px;
     font: inherit;
+    font-variant-numeric: tabular-nums;
+    color: white;
+    background: var(--accent);
+    border: none;
+    border-radius: 8px;
     cursor: pointer;
   }
 
-  .css-demo button:hover {
-    outline: 2px solid #2563eb;
-  }
-
-  @media (min-width: 48rem) {
-    .css-demo { padding: 30px; }
-  }
-
-  @media (prefers-reduced-motion: no-preference) {
-    .css-demo { transition: border-color 150ms ease; }
-  }
+  button:hover { filter: brightness(1.1); }
+  button:active { transform: translateY(1px); }
 </style>
 
 export function App() {
-  let loading = false;
+  // 1. Two independent instances
+  const [a, setA] = state(1);
+  const [b, setB] = state(100);
+
+  // 2. Getter stored in an object
+  const store = { read: a };
+
+  // 3. Derived chain
+  const double = a() * 2;
+  const quad = double * 2;
+
+  // 5. Conditional derived
+  let label = 'small';
+  if (a() > 3) label = 'big';
+
+  // 6. Instances in a list
+  const counters = [state(0), state(0), state(0)];
+
+  // 7. Object state: replace vs mutate
+  const [user, setUser] = state({ name: 'Ama', age: 20 });
+
+  // 8. Write from a timer
+  const [ticks, setTicks] = state(0);
+  function later() {
+    setTimeout(() => setTicks(t => t + 1), 500);
+  }
 
   return (
-    <main class=(loading ? "css-demo loading" : "css-demo")>
-      <h1>"Native CSS in Auwla"</h1>
-      <p>"The browser handles media queries, hover, and the loading class."</p>
-      <button type="button" aria-pressed=loading onClick=(() => loading = !loading)>
-        loading ? "Clear loading class" : "Add loading class"
-      </button>
+    <main>
+      <h1>"state() stress test"</h1>
+
+      <section>
+        <h2>"1. Two instances"</h2>
+        <button onClick=(() => setA(x => x + 1))>"a = {a()}"</button>
+        <button onClick=(() => setB(x => x + 1))>"b = {b()}"</button>
+        <p>"expect: each button changes only its own number"</p>
+      </section>
+
+      <section>
+        <h2>"2. Getter stored in an object"</h2>
+        <p>"store.read() = {store.read()}"</p>
+        <p>"expect: follows a"</p>
+      </section>
+
+      <section>
+        <h2>"3. Derived chain"</h2>
+        <p>"double = {double}, quad = {quad}"</p>
+        <p>"expect: a=2 gives double=4, quad=8"</p>
+      </section>
+
+      <section>
+        <h2>"4. Setter passed to a helper"</h2>
+        <button onClick=(() => bump(setB, 10))>"b + 10"</button>
+        <p>"expect: b jumps by 10"</p>
+      </section>
+
+      <section>
+        <h2>"5. Conditional derived"</h2>
+        <p>"label = {label}"</p>
+        <p>"expect: small up to a=3, big from a=4"</p>
+      </section>
+
+      <section>
+        <h2>"6. Instances in a list"</h2>
+        for (const [i, [get, set]] of counters.entries()) {
+          <button key={i} onClick=(() => set(n => n + 1))>"#{i}: {get()}"</button>
+        }
+        <p>"expect: each button counts on its own"</p>
+      </section>
+
+      <section>
+        <h2>"7. Object state"</h2>
+        <p>"{user().name} is {user().age}"</p>
+        <button onClick=(() => setUser(u => ({ ...u, age: u.age + 1 })))>"replace: age + 1"</button>
+        <button onClick=(() => user().age++)>"mutate: age + 1"</button>
+        <p>"expect: replace updates; mutate is the interesting one"</p>
+      </section>
+
+      <section>
+        <h2>"8. Write from a timer"</h2>
+        <button onClick=later>"tick in 500ms"</button>
+        <p>"ticks = {ticks()}"</p>
+        <p>"expect: updates half a second after the click"</p>
+      </section>
     </main>
   );
 }
 
-<style global>
-  .css-demo p {
-    line-height: 1.6;
-  }
-</style>
+

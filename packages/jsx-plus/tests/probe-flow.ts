@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import catalog from './fixtures/checking-flow.json';
 import { documentUri, withLanguageServer } from './lsp';
-import { exampleRoot, offsetAt } from './rpc';
+import { checkingRoot, offsetAt } from './rpc';
 
 interface Expectation { code: number; text: string; occurrence?: number }
 interface FlowCase {
@@ -25,13 +25,13 @@ function expectedSpan(source: string, expected: Expectation): DiagnosticSpan {
 
 /** A probe reports unmet contracts; it never turns current bugs into expectations. */
 export async function probeCheckingFlow(cases: readonly FlowCase[] = catalog.cases) {
-  const uri = documentUri(exampleRoot, 'App.auwla');
+  const uri = documentUri(checkingRoot, 'App.auwla');
   const results: {
     id: string; topic: string; coverage: string; matches: boolean;
     expected: DiagnosticSpan[]; observed: DiagnosticSpan[]; messages: string[];
   }[] = [];
 
-  return withLanguageServer(exampleRoot, {}, async (server) => {
+  return withLanguageServer(checkingRoot, {}, async (server) => {
     for (const fixture of cases) {
       await server.show(uri, fixture.source);
       const errors = (await server.diagnostics(uri)).filter((entry) => entry.severity === 1);
@@ -53,7 +53,7 @@ export async function probeCheckingFlow(cases: readonly FlowCase[] = catalog.cas
 
 if (import.meta.main) {
   // Fail fast if invoked from an unexpected checkout without its mapper config.
-  readFileSync(resolve(exampleRoot, 'tsconfig.json'), 'utf8');
+  readFileSync(resolve(checkingRoot, 'tsconfig.json'), 'utf8');
   const report = await probeCheckingFlow();
   for (const result of report.results) {
     console.log(`${result.id}: ${result.matches ? 'MATCH' : 'GAP'} — ${result.topic}`);

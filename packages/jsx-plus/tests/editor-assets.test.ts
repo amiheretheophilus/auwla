@@ -48,6 +48,56 @@ function tokenize(source: string) {
   return tokens;
 }
 
+it('highlights the real cross-file definition with implicit class and type/pseudo nesting', () => {
+  const source = readFileSync(resolve(packageRoot, 'tests/fixtures/apps/scoping/styles/Frames.auwla'), 'utf8');
+  const tokens = tokenize(source);
+  for (const text of ['padding:', '.title', 'h2:hover']) {
+    const offset = source.indexOf(text);
+    expect(tokens.find((token) => token.startIndex <= offset && offset < token.endIndex)!.scopes)
+      .toContain('meta.embedded.block.css');
+  }
+});
+
+it('highlights numeric viewport thresholds and keeps numeric literals inside functions and strings native', () => {
+  const source = '<style>\n.card { padding:4px @700:8px @700px:12px @40rem:16px; content:"@300:literal"; --x:future(@900:literal); }\n</style>';
+  const tokens = tokenize(source);
+  const scopesAt = (text: string) => {
+    const offset = source.indexOf(text);
+    return tokens.find((token) => token.startIndex <= offset && offset < token.endIndex)!.scopes;
+  };
+  for (const threshold of ['700:', '700px:', '40rem:']) {
+    expect(scopesAt(threshold)).toContain('meta.auwla.css-condition');
+    expect(scopesAt(threshold)).toContain('constant.numeric.css');
+  }
+  expect(scopesAt('px:12')).toContain('keyword.other.unit.css');
+  expect(scopesAt('300:literal')).not.toContain('meta.auwla.css-condition');
+  expect(scopesAt('900:literal')).not.toContain('meta.auwla.css-condition');
+
+  const real = readFileSync(resolve(packageRoot, 'tests/fixtures/apps/responsive/App.auwla'), 'utf8');
+  expect(tokenize(real).some((token) => token.text === '700' && token.scopes.includes('meta.auwla.css-condition'))).toBe(true);
+});
+
+it('embeds CSS in module, named and component style declarations while leaving returned styles as JSX', () => {
+  const source = `<style>\n.shared { padding: 4px; }\n</style>
+<style id="look">\n.card { border-color: teal; }\n</style>
+export function Card() {
+  <style>\n@use("./Card.auwla", "look");\n.title { color: navy; }\n</style>
+  let count = 0;
+  return <style>count</style>;
+}`;
+  const tokens = tokenize(source);
+  for (const property of ['padding', 'border-color', 'color: navy']) {
+    const offset = source.indexOf(property);
+    expect(tokens.find((token) => token.startIndex <= offset && offset < token.endIndex)!.scopes)
+      .toContain('meta.embedded.block.css');
+  }
+  for (const text of ['count = 0', 'count</style>']) {
+    const offset = source.indexOf(text);
+    expect(tokens.find((token) => token.startIndex <= offset && offset < token.endIndex)!.scopes)
+      .not.toContain('meta.embedded.block.css');
+  }
+});
+
 it('embeds native CSS highlighting and resumes TypeScript after the closing block', () => {
   const source = '<style global>\n.card { padding: 4px; content: "</style>"; }\n/* </style> */\n</style>\nexport const title = "ready";';
   const tokens = tokenize(source);
@@ -77,7 +127,7 @@ it('highlights compact class-condition headers while preserving literal CSS stri
 });
 
 it('highlights the real task board with the shared TSX-derived grammar', () => {
-  const source = readFileSync(resolve(packageRoot, 'examples/task-board/App.auwla'), 'utf8');
+  const source = readFileSync(resolve(packageRoot, 'tests/fixtures/apps/task-board/App.auwla'), 'utf8');
   const tokens = tokenize(source);
   function scopesAt(text: string, within = 0) {
     const offset = source.indexOf(text) + within;
@@ -148,10 +198,10 @@ it('launches the shared mapper from its editor contribution without any editor S
     expect(contribution.extensions).toEqual(['.auwla']);
     await mapper.connection.sendRequest('initialize', { positionEncodings: ['utf-16'] });
     await mapper.connection.sendRequest('openProject', { projectHandle: 'editor' });
-    const source = readFileSync(resolve(packageRoot, 'examples/task-board/App.auwla'), 'utf8');
+    const source = readFileSync(resolve(packageRoot, 'tests/fixtures/apps/task-board/App.auwla'), 'utf8');
     const result = await mapper.connection.sendRequest<{ text: string }>('transform', {
       projectHandle: 'editor',
-      fileName: resolve(packageRoot, 'examples/task-board/App.auwla'), content: source,
+      fileName: resolve(packageRoot, 'tests/fixtures/apps/task-board/App.auwla'), content: source,
     });
     expect(result.text).toContain('function removeTask');
     expect(result.text).toContain('Array.from(visible');

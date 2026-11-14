@@ -6,16 +6,16 @@ import { documentUri, withLanguageServer } from './lsp';
 import { packageRoot, positionAt } from './rpc';
 
 it('provides clean counter diagnostics, hover and authored errors after editor registration', async () => {
-  const exampleRoot = resolve(packageRoot, 'examples');
-  const source = readFileSync(resolve(exampleRoot, 'counter.auwla'), 'utf8');
+  const appsRoot = resolve(packageRoot, 'tests/fixtures/apps');
+  const source = readFileSync(resolve(appsRoot, 'counter.auwla'), 'utf8');
   expect(source).not.toContain('@memoized-dom/compiler/jsx');
   const damaged = source.replace('{count}', '{count.toUpperCase()}');
   expect(damaged).toContain('count.toUpperCase()');
-  const uri = documentUri(exampleRoot, 'counter.auwla');
+  const uri = documentUri(appsRoot, 'counter.auwla');
   const contribution = createMapperContribution(packageRoot);
   const manifest = contribution.inferredProjectContribution.manifest;
 
-  await withLanguageServer(exampleRoot, {}, async (server) => {
+  await withLanguageServer(appsRoot, {}, async (server) => {
     // This is the real request sent by the TypeScript editor extension. Its
     // wire format serializes the URI's fsPath rather than sending a URI object.
     await server.request('custom/setContentMapperContributions', {

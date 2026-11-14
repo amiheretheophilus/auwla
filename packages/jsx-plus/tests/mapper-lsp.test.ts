@@ -4,7 +4,7 @@ import { resolve } from 'node:path';
 import { normalize } from '../src/normalize';
 import flow from './fixtures/checking-flow.json';
 import { applyRename, documentUri, singleFileEdits, withLanguageServer, type CompletionItem, type WorkspaceEdit } from './lsp';
-import { exampleRoot, offsetAt, positionAt, taskBoardRoot } from './rpc';
+import { checkingRoot, offsetAt, positionAt, taskBoardRoot } from './rpc';
 
 const taskBoard = readFileSync(resolve(taskBoardRoot, 'App.auwla'), 'utf8');
 
@@ -63,11 +63,11 @@ it('applies a native member-completion edit inside the real task-board parenthes
 }, 25000);
 
 it('gets authored diagnostics and safe ref rename edits from the real TypeScript language server', async () => {
-  const file = resolve(exampleRoot, 'App.auwla');
-  const uri = documentUri(exampleRoot, 'App.auwla');
+  const file = resolve(checkingRoot, 'App.auwla');
+  const uri = documentUri(checkingRoot, 'App.auwla');
   const source = readFileSync(file, 'utf8');
 
-  await withLanguageServer(exampleRoot, { rename: { prepareSupport: true } }, async (server) => {
+  await withLanguageServer(checkingRoot, { rename: { prepareSupport: true } }, async (server) => {
     expect(server.initialization.capabilities['renameProvider']).toBeTruthy();
     await server.show(uri, source);
 
@@ -138,10 +138,10 @@ it('renames a direct loop binding only within its loop', async () => {
 
 it('renames changing state through the primary view without supplemental edits', async () => {
   const source = flow.cases.find((fixture) => fixture.id === 'FLOW-TYPE-002')!.source;
-  const file = resolve(exampleRoot, 'App.auwla');
-  const uri = documentUri(exampleRoot, 'App.auwla');
+  const file = resolve(checkingRoot, 'App.auwla');
+  const uri = documentUri(checkingRoot, 'App.auwla');
 
-  await withLanguageServer(exampleRoot, {}, async (server) => {
+  await withLanguageServer(checkingRoot, {}, async (server) => {
     await server.show(uri, source);
     const rename = await server.request<WorkspaceEdit>('textDocument/rename', {
       textDocument: { uri }, position: positionAt(source, source.indexOf('value:')), newName: 'current',

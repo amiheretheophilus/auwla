@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { SpanMap, SpanMapFeature } from 'typescript/ast';
 import { projectForChecking, type CheckingSource } from '../src/checking/project';
-import { exampleRoot, packageRoot, positionAt, rpcProcess, typescriptExecutable } from './rpc';
+import { checkingRoot, packageRoot, positionAt, rpcProcess, typescriptExecutable } from './rpc';
 
 it('projects exact copied spans and excludes generated syntax from editable mappings', () => {
   const source = '<p>"😀 "; title.toFixed(2)</p>';
@@ -92,7 +92,7 @@ it('serves independent mapper projects and rejects closed handles', async () => 
 it('runs the real TypeScript CLI with an authored Unicode error location', async () => {
   const check = async (config: string, allowMapper = true) => {
     const permission = allowMapper ? ['--runExternalCode'] : [];
-    const child = Bun.spawn([typescriptExecutable, '--project', resolve(exampleRoot, config), ...permission, '--pretty', 'false'], {
+    const child = Bun.spawn([typescriptExecutable, '--project', resolve(checkingRoot, config), ...permission, '--pretty', 'false'], {
       cwd: packageRoot, stdout: 'pipe', stderr: 'pipe',
     });
     const [stdout, stderr, exitCode] = await Promise.all([
@@ -102,7 +102,7 @@ it('runs the real TypeScript CLI with an authored Unicode error location', async
   };
   expect(await check('tsconfig.json')).toEqual({ output: '', exitCode: 0 });
   expect(await check('../task-board/tsconfig.json')).toEqual({ output: '', exitCode: 0 });
-  const source = readFileSync(resolve(exampleRoot, 'TypeError.auwla'), 'utf8');
+  const source = readFileSync(resolve(checkingRoot, 'TypeError.auwla'), 'utf8');
   const position = positionAt(source, source.indexOf('toFixed'));
   const result = await check('tsconfig.error.json');
   expect(result.exitCode).toBe(2);

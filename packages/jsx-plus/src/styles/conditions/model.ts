@@ -1,5 +1,6 @@
-import { ident, parse, walk, type CssNode, type Declaration } from 'css-tree';
-import { classClauses, hasValue, type ClassClause } from './values';
+import { ident, walk, type CssNode, type Declaration } from 'css-tree';
+import { parseStylesheet } from '../syntax';
+import { conditionClauses, hasValue, type ConditionClause } from './values';
 
 export interface ConditionProblem {
   readonly message: string;
@@ -10,7 +11,7 @@ export interface ConditionProblem {
 export interface ConditionalDeclaration {
   readonly declaration: Declaration;
   readonly base: string;
-  readonly clauses: readonly ClassClause[];
+  readonly clauses: readonly ConditionClause[];
   readonly valueStart: number;
 }
 
@@ -18,7 +19,7 @@ export interface ConditionalDeclaration {
 export function readConditions(source: string) {
   const problems: ConditionProblem[] = [];
   const report = (message: string, start: number, end: number) => problems.push({ message, start, end });
-  const markers = source.includes('@.') ? classClauses(source, () => {}, false) : [];
+  const markers = source.includes('@') ? conditionClauses(source, () => {}, false) : [];
   const declarations = new Map<Declaration, ConditionalDeclaration>();
   const affected = new Set<CssNode>();
   const headers: { start: number; end: number }[] = [];
@@ -26,7 +27,7 @@ export function readConditions(source: string) {
     return { tree: undefined, declarations, affected, headers, problems };
   }
 
-  const tree = parse(source, { positions: true, parseValue: false, parseCustomProperty: false });
+  const tree = parseStylesheet(source, { positions: true, parseValue: false, parseCustomProperty: false });
   const parents: CssNode[] = [];
   const accounted = new Set<number>();
   walk(tree, {
@@ -36,7 +37,7 @@ export function readConditions(source: string) {
         const valueEnd = node.value.loc.end.offset;
         const value = source.slice(valueStart, valueEnd);
         const localReport = (message: string, start: number, end: number) => report(message, valueStart + start, valueStart + end);
-        const clauses = classClauses(value, localReport);
+        const clauses = conditionClauses(value, localReport);
 
         // Anything nested in a function, string, URL or custom-property token
         // block stays literal native CSS, even if it contains an @. spelling.
@@ -52,7 +53,8 @@ export function readConditions(source: string) {
           for (const clause of clauses) {
             headers.push({ start: valueStart + clause.start, end: valueStart + clause.headerEnd });
             if (clause.complete && !hasValue(value.slice(clause.valueStart, clause.valueEnd))) {
-              localReport('A class condition requires a CSS value', clause.start, clause.headerEnd);
+              const label = clause.kind === 'class' ? 'class' : 'viewport';
+              localReport(`A ${label} condition requires a CSS value`, clause.start, clause.headerEnd);
             }
           }
           const base = value.slice(0, clauses[0]!.start);
@@ -64,7 +66,7 @@ export function readConditions(source: string) {
           const keyframes = parents.some((parent) => parent.type === 'Atrule'
             && /^(?:-\w+-)?keyframes$/i.test(ident.decode(parent.name)));
           if (owner?.type !== 'Rule' || keyframes || owner.prelude.type !== 'SelectorList') {
-            localReport('Class conditions require a qualified style rule, outside keyframes and descriptors', clauses[0]!.start, clauses[0]!.headerEnd);
+            localReport('CSS conditions require a qualified style rule, outside keyframes and descriptors', clauses[0]!.start, clauses[0]!.headerEnd);
           }
           declarations.set(node, { declaration: node, base: base.trim(), clauses, valueStart });
           for (const parent of parents) {
@@ -81,7 +83,7 @@ export function readConditions(source: string) {
 
   for (const marker of markers) {
     if (!accounted.has(marker.start)) {
-      report('A class condition requires a complete native property declaration in a style rule', marker.start, marker.headerEnd);
+      report('A CSS condition requires a complete native property declaration in a style rule', marker.start, marker.headerEnd);
       headers.push({ start: marker.start, end: marker.headerEnd });
     }
   }

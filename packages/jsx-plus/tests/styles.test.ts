@@ -11,7 +11,7 @@ import { authoredOffset } from '../src/source';
 import { createCssSession } from '../src/styles/tooling';
 import cases from '../../../wiki2/spec/styles.cases.json';
 
-const root = fileURLToPath(new URL('../examples/styling/', import.meta.url));
+const root = fileURLToPath(new URL('./fixtures/apps/styling/', import.meta.url));
 const source = readFileSync(`${root}/App.auwla`, 'utf8');
 
 const applications: runtime.MountedApplication[] = [];
@@ -63,15 +63,15 @@ export function App() { return <style>css</style>; }`;
   expect(result.code).toContain('<style>{css}</style>');
 });
 
-it('reports unsupported scope and missing closing tags at authored positions', () => {
-  expect(() => normalize('\n<style>.a { color: red; }</style>')).toThrow('CSS1001');
+it('reports unsupported attributes and missing closing tags at authored positions', () => {
+  expect(() => normalize('\n<style scoped>.a { color: red; }</style>')).toThrow('CSS1001');
   expect(() => normalize('\n<style global>.a { color: red; }')).toThrow('CSS1002');
   expect(() => normalize('<style global scoped>.a {}</style>')).toThrow('CSS1001');
 });
 
 it('finds trailing styles after real extended templates, and keeps CSS assistance before incomplete markup', () => {
   for (const name of ['task-board/App.auwla', 'team/pages/People.auwla']) {
-    const authored = readFileSync(new URL(`../examples/${name}`, import.meta.url), 'utf8');
+    const authored = readFileSync(new URL(`./fixtures/apps/${name}`, import.meta.url), 'utf8');
     const text = `${authored}\n<style global>.probe { color: red; }</style>`;
     expect(normalize(text).stylesheet).toBe('.probe { color: red; }');
     const offset = text.indexOf('color: red') + 3;

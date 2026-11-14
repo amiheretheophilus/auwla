@@ -287,6 +287,13 @@ export function memoizedDomNext(options: MemoizedDomViteOptions): Plugin {
       }
       if (cssAsset) {
         const css = program.css?.[path];
+        if (css !== undefined) {
+          for (const dependency of program.modules) {
+            if (program.output[dependency] === undefined) {
+              this.addWatchFile(fileOf(dependency));
+            }
+          }
+        }
         return css === undefined ? null : { code: css, map: { mappings: '' } };
       }
       const code = program.output[path];
@@ -341,7 +348,18 @@ export function memoizedDomNext(options: MemoizedDomViteOptions): Plugin {
       const changed = new Set((sideOf(environment) === 'server' ? result.server?.changed : result.client.changed) ?? []);
       // The fix can compile to the output before the error, which still must clear Vite's overlay.
       if (failedEnvironments.delete(environment)) {
-        for (const module of program.output[path] === undefined ? Object.keys(program.output) : [path]) changed.add(module);
+        const styleOnly = program.modules.includes(path) && program.output[path] === undefined;
+        let recovered: readonly string[];
+        if (styleOnly) {
+          recovered = Object.keys(program.css ?? {});
+        } else if (program.output[path] !== undefined) {
+          recovered = [path];
+        } else {
+          recovered = Object.keys(program.output);
+        }
+        for (const module of recovered) {
+          changed.add(module);
+        }
       }
       return invalidate(this.environment, changed, update.timestamp);
     },

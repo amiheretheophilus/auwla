@@ -1,0 +1,168 @@
+# Local styles and named reuse
+
+Profile CSS-3a, draft dated 2026-11-14. DX-45 supplies the accepted ownership
+direction. The user chose **`@use(path, id)`**, with no `#` fragment. The rules
+below make a first implementation slice reviewable; choices labelled provisional
+can change as we exercise real examples.
+CSS-3b ([cross-file reuse and native nesting](style-reuse.md)) extends this
+contract; its source linking and implicit nesting support supersede the initial limits.
+
+## Authoring and ownership
+
+```auwla
+<style>
+  .file-label { font-weight: bold; }
+</style>
+
+<style id="card-look">
+  .card { padding: 16px @.expanded:32px; }
+</style>
+
+export function Card() {
+  <style>
+    @use("./Cards.auwla", "card-look");
+    .title { color: navy; }
+  </style>
+
+  return <article class="card"><h2 class="title">"Card"</h2></article>;
+}
+```
+
+* A standalone module `<style>` applies to native elements authored in that
+  module, including its several components. It does not select DOM authored by
+  an imported component, even if that component uses the same class names.
+* A standalone `<style>` directly in a function body belongs to that function's
+  component. Inline callbacks, direct loops and fragments inherit this scope.
+  A nested component is an ownership boundary, even without its own style block.
+  An explicitly styled function is also a boundary; imported callers need not be
+  present for its styles to compile correctly.
+* A style declaration is static. It does not execute when a function runs. A
+  declaration inside a conditional or loop is an error in this first profile.
+  Use normal classes and native CSS conditions to select appearance at runtime.
+* `<style global>` leaves selectors global, whether declared at file level or
+  directly in a function body. It is emitted once with the module's stylesheet.
+* A `<style>` **inside returned markup**, an initializer or another element is
+  still an ordinary DOM style element. It is not a static style declaration.
+  The distinction is statement placement, not the text `style` alone.
+
+Provisional declaration grammar: only the boolean `global` attribute or a
+nonempty quoted `id` is accepted. They cannot be combined. Named blocks are
+module declarations, so sharing is explicit rather than exporting a component's
+private block.
+
+## Named styles and `@use`
+
+Provisional: a named block is a **definition**, not an automatically applied
+stylesheet. An unnamed style opts into it with:
+
+```css
+@use("./Cards.auwla", "card-look");
+```
+
+Both arguments are CSS strings. The path identifies a source module, including
+the current module for same-file reuse. The second argument is its exact style
+ID; it is not a URL fragment, JS export or class selector. Ordinary CSS `@import`
+retains its native role and is not an alias for `@use`.
+
+Rules are inserted at each `@use` in source order and acquire the **consumer's
+scope**, not the definition's scope. A file-level consumer shares those rules
+within its file; a component consumer keeps them private; an explicit global
+consumer makes them global. A definition can use another definition. Duplicate
+IDs, missing IDs and cycles are authored errors. Repeated noncyclic uses are
+allowed and preserve cascade order. `@use` is a top-level stylesheet directive,
+not a conditional/nested rule or runtime expression.
+
+Same-file and cross-file uses resolve through the existing compiler/project.
+Source-only dependencies are read and watched independently from JS imports;
+their JS code is not executed. Rules acquire the consumer's scope and relative
+asset URLs are rebased from the defining file. No JSX+ project wrapper is involved.
+Detailed builds can supply `assetSources`; projects collect those files themselves.
+
+## Static CSS transformation
+
+Each eligible native element receives a deterministic static attribute. A local
+declaration selector gains `:where([data-mmd-s-…])` on its subject (the last
+compound), before any pseudo-element. `:where` contributes zero specificity. Ancestor qualifiers
+such as `body.dark .title`, selector lists, `:is`/`:not`/`:has`, grouping rules
+and native nesting keep their CSS meaning. A rule with nested selectors retains
+its original ancestor context; its own declaration groups are scoped through
+nested `&:where(...)` rules, preserving order around child rules and grouping
+conditions. Thus `body.dark { & .title {...} }` does not suddenly require a marker
+on `body`. Nested declaration subjects are scoped too, so an unmarked child
+component cannot accidentally match a descendant rule. Local selectors and
+structural braces must be complete for safe rewriting; globals keep native
+CSS recovery. Editor assistance still accepts unfinished local CSS while typing.
+
+Document selectors are intentional targets, not component subjects. An explicit
+`html`, `body` or `:root` in the subject compound keeps its document meaning
+inside a local block: do not require a component marker on the document shell.
+This also applies to qualified document targets (`body.dark`, `html[lang]`),
+their pseudo-elements and document alternatives of `:is`/`:where`. Other
+alternatives remain scoped. Negative/relational pseudos (`:not`/`:has`) alone do
+not establish a document target. `body .card` still scopes `.card`.
+
+Nested `&` keeps a proven document subject, while descendants remain scoped.
+For mixed document/local parent lists, inherited declaration groups allow only
+the explicitly selected document subjects or marked component elements. This
+preserves authored conditions, order and specificity. These document rules have
+native document-wide effects; ordinary inherited properties/custom properties
+then flow through CSS normally. `<style global>` still makes all selectors global.
+
+This corrects the initial blanket subject-marker rule after the user's root/body
+example exposed unreachable theme variables, body typography and button colors.
+
+Implicit nesting such as `.child {...}` and `h2:hover {...}` is now accepted.
+The shared CSS Tree syntax fork extends block dispatch while retaining its
+selector/declaration/at-rule parsers and source positions. Custom-property token
+blocks and quoted/function/bracket contents keep their CSS meaning. Explicit
+`&` remains valid. CSS-3a's temporary explicit-`&` restriction is superseded.
+
+The module path and function ordinal determine the attribute, not CSS contents
+or source byte offsets. A CSS-only edit keeps existing DOM valid. Server and
+client compilation use the same rule. A scope belongs to a definition, not an
+instance; two instances still select the same rules. Compiler-next remains
+responsible for ordinary state, events, refs, DOM creation and SSR.
+
+Provisional first-profile limits: native `@import`, named resources such as
+`@keyframes`, descriptor rules such as `@font-face`, and other at-rules whose
+scoping is not defined here require an explicit global consumer. The compiler
+must not silently emit an unscoped resource from a local block. Native selector
+grouping (`@media`, `@supports`, `@container`, `@layer`, `@starting-style` and
+`@scope`) is supported. No keyframe-name rewriting or global escape syntax is
+invented. Native properties, custom properties and values remain native CSS.
+
+Projected children keep their author's scope. Ordinary inherited properties can
+cross component boundaries, as they do in CSS. These attributes are selector
+boundaries, not Shadow DOM, security isolation or a way to block inheritance.
+Dynamic HTML inserted as a string has no authored-element marker.
+
+## Evidence required
+
+Diagnostics use authored UTF-16 spans, including errors in reused definitions:
+
+| Code | Meaning |
+| --- | --- |
+| CSS1001 | Unsupported style attributes, empty ID or component-private named definition |
+| CSS1002 | Missing authoring `</style>` (existing CSS-1 rule) |
+| CSS1003 | Static declaration in a conditional/loop/nested statement block |
+| CSS2001 | Invalid class or numeric viewport condition (CSS-2a/CSS-2b) |
+| CSS3001 | Malformed `@use`, duplicate/missing ID, cycle or unresolved source dependency |
+| CSS3002 | Unsupported local resource or incomplete structure/selector |
+
+The shared CSS editor service reports same-file use syntax/ID errors alongside
+native CSS assistance. Scope transformation restrictions (CSS3002) are currently
+build diagnostics; editor checking deliberately retains incomplete native CSS.
+
+Exercise actual example files with same-name sibling/nested/imported components,
+module sharing, private overrides, named/transitive uses and ordinary conditional
+classes. Apply the emitted CSS to the executed DOM in both compiler modes; check
+computed properties and user interactions. Check slot fallback/projected content,
+SVG, selector specificity, pseudo-elements, grouping/nesting, stable attributes
+on CSS edits, SSR parity, source mappings and authored errors. CSS completion,
+hover and highlighting must work inside component and named blocks as well as
+global blocks. Cross-file delivery and editor resolution are separate claims.
+
+[SCOPE-001 through SCOPE-011](style-scopes.cases.json) fix the declaration,
+sharing, explicit-use, unused-definition and early-error examples. Runtime,
+selector, slot, SSR and editor evidence lives in `tests/style-scopes.test.ts`;
+real TextMate tokenization is checked in `tests/editor-assets.test.ts`.

@@ -5,6 +5,7 @@ import type { CompileModulesOptions } from '../options';
 import type { CompilerAnalysis } from './model';
 
 export { CompileError } from '../core/diagnostics';
+export { inspectMarkup, type MarkupOwnership, type MarkupFunction, type NativeMarkup } from './markup';
 
 export type {
   AnalysisBinding,

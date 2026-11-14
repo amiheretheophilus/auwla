@@ -1,0 +1,15 @@
+<style id="card-frame">
+  @use("./Palette.auwla", "palette");
+
+  .card {
+    padding: 16px @.expanded:32px;
+    border: 2px solid;
+    border-radius: 12px;
+    margin: 12px 0;
+
+    .title { margin: 0 0 8px; }
+    .tags { display: flex; gap: 8px; padding: 0; list-style: none; }
+    button { padding: 6px 12px; font: inherit; cursor: pointer; }
+    h2:hover { text-decoration: underline; }
+  }
+</style>

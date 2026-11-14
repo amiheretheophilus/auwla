@@ -62,8 +62,13 @@ clears it. See [tooling](tooling.md) for verified launch/permission settings and
 the limitations of this first TSX projection. This explicit mapper-host probe is
 separate from ordinary package type checking with `bun check`.
 
+Tests never read `examples/` (2026-11-14, [rule 16](../wiki/rules.md)): each test
+that needs a real app uses its own copy under `packages/jsx-plus/tests/fixtures/apps/`
+(the editor extension's under `packages/editor-vscode/tests/fixtures/apps/`), so the
+examples can change freely. The copies were taken from the examples on that date.
+
 The native CLI also checks the complete task-board `.auwla` file and `main.ts`
-under its example configuration. `compile.test.ts` loads that actual source and
+under its configuration (the test's copy). `compile.test.ts` loads that source and
 exercises filtering, search, submission, ref focus, toggle/removal and the empty
 state in both compiler modes. The footer's native template interpolation updates
 with the list. [Example commands](../packages/jsx-plus/examples/README.md) build

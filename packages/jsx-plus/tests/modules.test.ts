@@ -1,8 +1,9 @@
 /**
  * A multi-file `.auwla` app through compiler-next's own tools, with JSX+ only as a source language
  * (`src/language.ts`): compiler-next's project collects it, and its Bun plugin bundles it. Nothing
- * here is a JSX+ build path. `examples/notes` has three `.auwla` components, one imported by its
- * full name and one through a `.ts` re-export with no extension, and a `.ts` helper with module state.
+ * here is a JSX+ build path. The test's copy of the notes app (`fixtures/apps/notes`) has three
+ * `.auwla` components, one imported by its full name and one through a `.ts` re-export with no
+ * extension, and a `.ts` helper with module state.
  */
 import { afterEach, expect, it } from 'bun:test';
 import { fileURLToPath } from 'node:url';
@@ -13,8 +14,8 @@ import { toModuleFunction } from '../../compiler-next/src/core/parse/module-func
 import * as runtime from '../../runtime/src/index';
 import { auwla } from '../src';
 
-const root = fileURLToPath(new URL('../examples/notes/', import.meta.url));
-const entry = fileURLToPath(new URL('../examples/notes/main.ts', import.meta.url));
+const root = fileURLToPath(new URL('./fixtures/apps/notes/', import.meta.url));
+const entry = fileURLToPath(new URL('./fixtures/apps/notes/main.ts', import.meta.url));
 
 const applications: runtime.MountedApplication[] = [];
 afterEach(() => {

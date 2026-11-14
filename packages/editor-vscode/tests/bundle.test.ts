@@ -27,7 +27,8 @@ it('loads the built extension outside the workspace and runs CSS providers in No
     expect(output).toContain('completion, hover and diagnostics passed in Node');
     expect(output).toContain('Reactivity hints passed in Node');
 
-    const example = join(root, '../jsx-plus/examples/class-conditions/App.auwla');
+    // The test's own copies of example apps (`fixtures/apps/`), never the examples themselves.
+    const example = join(import.meta.dir, 'fixtures/apps/class-conditions/App.auwla');
     const real = Bun.spawn(['node', join(import.meta.dir, 'fixtures/bundle-host.cjs'), entry, example], {
       cwd: installed, stdout: 'pipe', stderr: 'pipe',
     });
@@ -36,7 +37,29 @@ it('loads the built extension outside the workspace and runs CSS providers in No
     ]);
     expect(realErrors).toBe('');
     expect(realExit).toBe(0);
-    expect(realOutput).toContain('zero CSS diagnostics and conditional value completion passed');
+    expect(realOutput).toContain('zero CSS diagnostics and native value completion passed');
+
+    const cards = join(import.meta.dir, 'fixtures/apps/scoping/Cards.auwla');
+    const scoped = Bun.spawn(['node', join(import.meta.dir, 'fixtures/bundle-host.cjs'), entry, cards], {
+      cwd: installed, stdout: 'pipe', stderr: 'pipe',
+    });
+    const [scopeExit, scopeOutput, scopeErrors] = await Promise.all([
+      scoped.exited, new Response(scoped.stdout).text(), new Response(scoped.stderr).text(),
+    ]);
+    expect(scopeErrors).toBe('');
+    expect(scopeExit).toBe(0);
+    expect(scopeOutput).toContain('zero CSS diagnostics and native value completion passed');
+
+    const responsive = join(import.meta.dir, 'fixtures/apps/responsive/shared.auwla');
+    const numeric = Bun.spawn(['node', join(import.meta.dir, 'fixtures/bundle-host.cjs'), entry, responsive, '@700:'], {
+      cwd: installed, stdout: 'pipe', stderr: 'pipe',
+    });
+    const [numericExit, numericOutput, numericErrors] = await Promise.all([
+      numeric.exited, new Response(numeric.stdout).text(), new Response(numeric.stderr).text(),
+    ]);
+    expect(numericErrors).toBe('');
+    expect(numericExit).toBe(0);
+    expect(numericOutput).toContain('zero CSS diagnostics and native value completion passed');
   } finally {
     rmSync(installed, { recursive: true, force: true });
   }

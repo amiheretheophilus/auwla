@@ -27,11 +27,11 @@ export function Card() {
 }
 ```
 
-`global` is required in this implemented first profile. The user's subsequent
-direction (DX-45) chooses local-by-default `<style>` and named reusable
-`<style id="...">` blocks; those additions still need their implementation contract.
-A module-level `<style>` without `global`, or with additional attributes,
-is an authored syntax error. A `<style>` inside returned markup remains an
+CSS-1 required `global`. The user's subsequent direction (DX-45) adds
+local-by-default `<style>` and named reusable `<style id="...">` blocks.
+A module-level `<style>` without `global` was an authored syntax error in CSS-1;
+[CSS-3a](style-scopes.md) now extends this with local defaults and named reuse.
+Unsupported attributes remain errors. A `<style>` inside returned markup remains an
 ordinary DOM element and is not extracted.
 
 Blocks must be complete standalone module items, outside functions, declarations,
@@ -82,7 +82,7 @@ is unchanged.
 
 This native foundation is extended by [CSS-2a](style-conditions.md), which accepts
 compact same-element class conditions such as `padding:4px @.loading:40px`.
-Local scope and its selector/keyframe rules remain a separate decision. Named
+Local scope and same-file reuse are defined in [CSS-3a](style-scopes.md). Named
 breakpoint conditions (`@md:30px`), grouped conditions, breakpoint configuration,
 future element `.class` syntax and optional property aliases remain planned under
 `dxcss.md`.
