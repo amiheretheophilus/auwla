@@ -49,6 +49,69 @@ async function compile(body: string, handlers: string) {
   return { root, module };
 }
 
+it('does not make an effect depend on state it only edits', async () => {
+  // The effect pushes to `log` through a helper; a click elsewhere pushes again. Reading `log` to
+  // run `log.push` is not a read of it, so the click must not run the effect again.
+  const code = compileModules({ './App.tsx': `export const log = [];
+    function note(event) { log.push(event); }
+    function Watcher() {
+      $effect(() => { countRun(); note('watched'); });
+      return <p>watching</p>;
+    }
+    export function App() { return <main><Watcher /><button onClick={() => note('clicked')}>add</button></main>; }` },
+  { runtimePath: '@memoized-dom/runtime/testing' })['./App.tsx']!;
+  // The edit's receiver is read untracked; nothing else changes.
+  expect(code).toContain('editArray(_MD.untracked(_read_log), "push"');
+  const directory = join(import.meta.dirname, '../../../tests/out/mutation-unit');
+  mkdirSync(directory, { recursive: true });
+  const path = join(directory, `case-${sequence++}.js`);
+  writeFileSync(path, code);
+  const module = await import(pathToFileURL(path).href);
+  setScheduler((run) => run());
+  // Counted outside the compiled code: a global it wrote would be state the effect reads.
+  let runs = 0;
+  (globalThis as { countRun?: () => void }).countRun = () => { runs++; };
+  const root = module.App('edits-not-reads', null) as HTMLElement;
+  document.body.append(root);
+  await Bun.sleep(20);
+  expect(runs).toBe(1);
+
+  root.querySelector('button')!.click();
+  await Bun.sleep(20);
+  expect(module.log).toEqual(['watched', 'clicked']);
+  expect(runs).toBe(1);
+  root.remove();
+});
+
+it('keeps an effect following state it reads after it also writes it', async () => {
+  // Its own push must not run it again, but a later push by anything else must.
+  const code = compileModules({ './App.tsx': `export const log = [];
+    function Watcher() {
+      $effect(() => { seen(log.length); if (log.length === 1) log.push('auto'); });
+      return <p>watching</p>;
+    }
+    export function App() { return <main><Watcher /><button onClick={() => log.push('clicked')}>add</button></main>; }` },
+  { runtimePath: '@memoized-dom/runtime/testing' })['./App.tsx']!;
+  const directory = join(import.meta.dirname, '../../../tests/out/mutation-unit');
+  mkdirSync(directory, { recursive: true });
+  const path = join(directory, `case-${sequence++}.js`);
+  writeFileSync(path, code);
+  const module = await import(pathToFileURL(path).href);
+  setScheduler((run) => run());
+  const lengths: number[] = [];
+  (globalThis as { seen?: (length: number) => void }).seen = (length) => { lengths.push(length); };
+  const root = module.App('reads-and-writes', null) as HTMLElement;
+  document.body.append(root);
+  await Bun.sleep(20);
+  for (let click = 0; click < 2; click++) {
+    root.querySelector('button')!.click();
+    await Bun.sleep(20);
+  }
+  expect(module.log).toEqual(['clicked', 'auto', 'clicked']);
+  expect(lengths).toEqual([0, 1, 3]);
+  root.remove();
+});
+
 it('evaluates a computed key once, before the RHS, retaining postfix results', async () => {
   const { root, module } = await compile(`const item = { count: 1 };
     const key = { [Symbol.toPrimitive]() { log.push('key'); return 'count'; } };`,

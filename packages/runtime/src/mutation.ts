@@ -10,6 +10,7 @@ import { advanceWriteEpoch } from './write-epoch';
 import { recoveryHooks } from './recovery-hooks';
 import { isRefNode } from './refs';
 import { isBuilding, isEffectInvocation } from './build-scope';
+import { untracked } from './computation';
 
 const arrayIsArray = Array.isArray;
 
@@ -18,6 +19,16 @@ interface Root {
   readonly notify: () => void;
   /** The notifier compiled edits through this binding call; such an edit has already notified it. */
   readonly direct?: () => void;
+}
+
+/**
+ * A root's current value, for the index: which root holds an edited object. The index is the
+ * runtime's bookkeeping, not a read by the code that edits, so whatever computation is running
+ * records nothing. Otherwise an effect that pushes to one array came to depend on every root the
+ * walk read, such as a page's loading data source, and ran again when that data arrived.
+ */
+function readRoot(root: Root): unknown {
+  return untracked(root.read);
 }
 const sharedRoots = new Set<WeakRef<object>>();
 const rootsOfShared = new WeakMap<object, readonly Root[]>();
@@ -96,7 +107,7 @@ export function checkMutationRoots(entity: Entity): void {
       }
       continue;
     }
-    const changed = known.stale || !Object.is(known.value, root.read());
+    const changed = known.stale || !Object.is(known.value, readRoot(root));
     if (slot.root !== root) {
       continue;
     }
@@ -232,7 +243,7 @@ const reaches = new WeakMap<Root, Reach>();
 export function checkSharedMutationRoots(bindings: readonly Root[]): void {
   for (const root of bindings) {
     const known = reaches.get(root);
-    if (known !== undefined && !Object.is(known.value, root.read())) {
+    if (known !== undefined && !Object.is(known.value, readRoot(root))) {
       // A reassignment can be the final action in a turn, such as clearing a
       // list. Do not retain its previous graph until some later mutation.
       reaches.delete(root);
@@ -248,7 +259,7 @@ function walk(root: Root, slot?: Slot): Reach {
     detach(slot);
   }
   reaches.delete(root);
-  const value = root.read();
+  const value = readRoot(root);
   const reach: Reach = { value, objects: new WeakSet(), stale: false, untracked: false };
   interrupted = false;
   extendReach(reach, value, slot);
@@ -426,7 +437,7 @@ function notifyAliases(changed: Changed, edit: Edit, direct: Direct = null): voi
         // only build an index this edit does not need; the next edit made
         // through another binding walks it then, as for any unwalked root.
         const known = reaches.get(root);
-        if (known === undefined || !Object.is(known.value, root.read())) {
+        if (known === undefined || !Object.is(known.value, readRoot(root))) {
           reaches.delete(root);
           continue;
         }
@@ -444,7 +455,7 @@ function notifies(root: Root, changed: Changed, edit: Edit, slot?: Slot): boolea
   const known = reaches.get(root);
   // A root that now holds another value is walked again; that walk already
   // sees the edit.
-  let reach = known !== undefined && Object.is(known.value, root.read()) ? known : walk(root, slot);
+  let reach = known !== undefined && Object.is(known.value, readRoot(root)) ? known : walk(root, slot);
   if (!reachesChanged(reach.objects, changed)) return false;
   // An edit of the root's own value is a hit however stale the rest of the set
   // is; only a hit on an object it may have dropped needs a new walk.

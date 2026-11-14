@@ -407,6 +407,27 @@ without `await`, an async expression body, `for await`, and a callback that thro
   (`_mutated_todos`) now comes from the shared owner (`moduleNotifiers` in `core/emit/shared.ts`).
   Other edits still report through the runtime helper. Found by replaying the old tests' programs.
 
+### Edits are not reads
+
+Reading `lifecycle` to run `lifecycle.push(x)`, or `state` to run `state.count = 1`, finds the
+object to edit; it is not a read of what that object holds. `emitMutations` (`mutations.ts`,
+`untrackRoot`) reads the edited root binding through `untracked(reader)` for a store, a `delete` or
+a known editing call (`editArray(_MD.untracked(_read_lifecycle), "push", …)`). Every other read in
+the target stays tracked (the `index` in `rows[index].done = true`), and so do a call that passes
+state to unknown code and a known reading call (`items.map(row)`). Vue 3 does the same for array
+mutators. Without it, an effect that only writes some state, as the `.auwla` team example's pages
+do through `note()`, depends on it and runs again when anything else writes it (now that effects
+keep the keys they write, `effects.md`). `mutations.test.ts` checks the output and that a click
+elsewhere does not run such an effect; it fails without the change.
+
+The runtime's alias index (which root holds an edited object, `runtime/src/mutation.ts`) reads
+every registered root's value on an edit. Those reads ran inside whatever computation was running,
+so an effect pushing to one array came to depend on unrelated roots, such as a page's loading data
+source, and ran again when that data arrived: the team example's People page logged
+`people:shown, people:left, people:shown` on one visit (found by the user, 2026-11-13). The index
+now reads roots untracked (`readRoot`). The JSX+ routes test checks every visit's exact lifecycle;
+it fails without the change.
+
 ## Inputs and outputs
 
 - In: `Resolved` (reassignment and mutation sites, captures).

@@ -135,6 +135,24 @@ export function tracking(): boolean {
   return store().current !== null;
 }
 
+/**
+ * `read()`, recording nothing in the running computation. The compiler reads the state an edit
+ * changes this way (`lifecycle` in `lifecycle.push(x)`): finding the object to edit is not a read
+ * of what it holds, and an effect that only writes some state must not depend on it and re-run
+ * itself (`wiki/compiler/handlers.md`, "Edits are not reads").
+ */
+export function untracked<T>(read: () => T): T {
+  const state = store();
+  const current = state.current;
+  if (current === null) return read();
+  state.current = null;
+  try {
+    return read();
+  } finally {
+    state.current = current;
+  }
+}
+
 export function trackRead<T>(version: Version, value: T, key: object = version): T {
   const current = store().current;
   if (current === null) return value;
@@ -260,7 +278,11 @@ class Computation implements Frame {
   private readonly owners: WeakRef<OwnedComputations> | undefined;
   private readonly entityId: string | undefined;
 
-  constructor(readonly notify: (() => void) | undefined, entity: Entity | undefined) {
+  constructor(
+    readonly notify: (() => void) | undefined,
+    entity: Entity | undefined,
+    private readonly keepsOwnWrites = false,
+  ) {
     // Capture the creating application's registry, but do not register an
     // empty collector. Prop-guarded row sites often discover no hidden reads.
     this.owners = entity === undefined ? undefined : ownershipReference();
@@ -289,7 +311,8 @@ class Computation implements Frame {
     if (dependencies !== null) {
       // A computation's own outputs must not become inputs that replay it.
       // Other reads of the same owner remain dependencies through their keys.
-      if (this.writes !== null) {
+      // An effect keeps them (`createComputation`): only the write it just made is settled below.
+      if (this.writes !== null && !this.keepsOwnWrites) {
         for (const key of this.writes) dependencies.delete(key);
       }
       for (const dependency of dependencies.values()) dependency.seen = dependency.read();
@@ -395,6 +418,13 @@ class Computation implements Frame {
   }
 }
 
-export function createComputation(notify?: () => void, entity?: Entity) {
-  return new Computation(notify, entity);
+/**
+ * `keepsOwnWrites`: an effect keeps depending on what it reads even when it also writes it. Its own
+ * write cannot run it again (its dependencies record the values it leaves, and it ignores
+ * notifications while it runs), but a later write by anything else must: `seen(log.length); if
+ * (log.length === 1) log.push('auto')` still sees the next push. A derivation drops what it writes
+ * (`end`), so `s = s || {}` never replays when `s` changes.
+ */
+export function createComputation(notify?: () => void, entity?: Entity, keepsOwnWrites = false) {
+  return new Computation(notify, entity, keepsOwnWrites);
 }

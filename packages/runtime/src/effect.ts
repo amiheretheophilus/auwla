@@ -132,7 +132,8 @@ export function registerEffect(
       }
     },
   };
-  const computation = createComputation(notify, entity);
+  // It keeps depending on state it also writes (`createComputation`, `keepsOwnWrites`).
+  const computation = createComputation(notify, entity, true);
   const batch = createWriteBatch(entity);
   registerEntity(entity);
 

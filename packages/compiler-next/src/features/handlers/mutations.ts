@@ -136,6 +136,9 @@ export function emitMutations(
   };
 
   for (const plan of [...plans].sort((a, b) => (a.operation.end - a.operation.start) - (b.operation.end - b.operation.start))) {
+    if (editsTargets(plan)) {
+      for (const target of plan.targets) untrackRoot(target.member, target.binding, replacements, runtime);
+    }
     if (plan.closed !== undefined && plan.kind !== 'call') {
       const notify = closedNotifierOf(plan.closed);
       const operation = copy(plan.operation, replacements);
@@ -235,6 +238,37 @@ export function emitMutations(
     }
   }
   return { replacements, declarations, notifiers: notifiers as ReadonlyMap<BindingNode, string> };
+}
+
+/**
+ * Whether the plan only edits what its targets hold: a store, a `delete`, or a call the compiler
+ * knows edits its receiver (`items.push(x)`). A call passing state to unknown code also reads it,
+ * and a known reading call (`items.map(row)`) is a read, so both stay tracked.
+ */
+function editsTargets(plan: MutationPlan): boolean {
+  return plan.kind === 'store' || plan.kind === 'delete' || (plan.kind === 'call' && plan.method?.kind === 'edit');
+}
+
+/**
+ * Edits are not reads (`wiki/compiler/handlers.md`). Reading `lifecycle` to run
+ * `lifecycle.push(x)`, or `state` to run `state.count = 1`, finds the object to edit; it is not a
+ * read of what it holds. Through the binding's tracked reader it would make a running effect or
+ * derivation depend on what it only writes, so the edit would re-run it later. The root binding's
+ * reader runs untracked (`untracked` in `runtime/src/computation.ts`); every other read in the
+ * target, such as the `index` in `rows[index].done = true`, stays tracked.
+ */
+function untrackRoot(member: Node, binding: BindingNode, replacements: Map<Node, Node>, runtime: string): void {
+  let root: Node = member;
+  for (;;) {
+    if (is.MemberExpression(root)) root = root.object;
+    else if (is.CallExpression(root)) root = root.callee;
+    else if (is.ChainExpression(root) || is.ParenthesizedExpression(root) || is.TSNonNullExpression(root)) root = root.expression;
+    else break;
+  }
+  if (!is.Identifier(root) || !binding.binding.references.some((reference) => reference.node === root)) return;
+  const read = replacements.get(root);
+  if (!is.CallExpression(read) || read.arguments.length > 0 || !is.Identifier(read.callee)) return;
+  replacements.set(root, expression('$$runtime.untracked($$reader)', { runtime, reader: read.callee }));
 }
 
 /** How many edits of a closed list's items have run, for its row lists to compare. */

@@ -54,7 +54,17 @@ and runs their cleanup.
 - A resolved async cleanup belongs to its original execution. If that execution
   was replaced or removed, run the late cleanup immediately; never replace the
   current execution's cleanup with it.
-- Writes inside an effect are writes like any handler's (`handlers.md`).
+- Writes inside an effect are writes like any handler's (`handlers.md`). Editing state is not
+  reading it either: `log.push(x)` or `state.count = 1` reads its root untracked (`handlers.md`,
+  "Edits are not reads"), so an effect that only edits `log` does not follow it.
+- An effect's own synchronous writes do not re-run it (`../decisions.md`, 2026-10-19), but it keeps
+  following what it genuinely reads, even state it also writes: in `seen(log.length); if
+  (log.length === 1) log.push('auto')` its own push is settled when the run ends, and the next push
+  by anything else runs it again. The runtime used to drop every key the effect wrote from its
+  dependencies, so that effect saw `[0, 1]` and never ran again; effect computations now keep them
+  (`createComputation(…, keepsOwnWrites)`, `runtime/src/computation.ts`). A derivation still drops
+  what it writes (`s = s || {}` never replays when `s` changes). `mutations.test.ts` checks
+  `[0, 1, 3]`.
 - An effect with a non-empty `pending(n)` first runs when its sources commit
   (`sources.md`).
 

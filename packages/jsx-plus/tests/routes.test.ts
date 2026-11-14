@@ -176,6 +176,9 @@ for (const optimize of [true, false]) {
     await waitFor(() => expect(names(container)).toEqual(['Ada Lovelace', 'Grace Hopper', 'Alan Turing']));
     expect(container.querySelector('.error')).toBeNull();
     expect(requests).toEqual(['/api/people?search=', '/api/people?search=']);
+    // Its effect ran once. It writes `lifecycle` through `note()`, which it never reads: the list
+    // arriving updated the page, and an effect depending on what it only wrote re-ran then.
+    expect(lifecycle).toEqual(['people:shown']);
 
     // Typing changes the helper's argument, so the same binding requests again. The old list
     // stays while `$track` reports the refresh.
@@ -223,6 +226,11 @@ for (const optimize of [true, false]) {
     click(container, 'nav a', 'Home');
     await waitFor(() => expect(container.querySelector('.home')).not.toBeNull());
     expect(lifecycle).toContain('about:cleanup');
+    // Every visit ran its setup or effect exactly once, and its cleanup once on leaving.
+    expect(lifecycle).toEqual([
+      'people:shown', 'people:left', 'person:3', 'person:3:left',
+      'people:shown', 'people:left', 'about:setup', 'about:cleanup',
+    ]);
 
     // An address no route declares shows the catch-all page, whose card falls back to the
     // header slot's own content.
