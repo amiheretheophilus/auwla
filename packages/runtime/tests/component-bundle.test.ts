@@ -3,6 +3,11 @@ import { expect, it } from 'bun:test';
 import { build } from 'esbuild';
 import { resolve } from 'node:path';
 
+// The first case also starts esbuild's service. Alone that takes well under a
+// second, but beside the other suites of a parallel gate it has exceeded bun's
+// 5 s default; the timed-out test then stopped the service under the second case.
+const BUNDLE_TIMEOUT = 30_000;
+
 it.each([
   {
     name: 'a root-only callable adapter',
@@ -39,4 +44,4 @@ it.each([
   // needed to create an adapted value. Keep that capability out of root graphs.
   expect(code.includes('mmd:value')).toBe(opaque);
   expect(code.includes('mmd:list')).toBe(opaque);
-});
+}, BUNDLE_TIMEOUT);
