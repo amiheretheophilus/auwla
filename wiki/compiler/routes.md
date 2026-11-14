@@ -5,9 +5,8 @@
 Status (2026-11-12): `route="…"` regions, `route-to` links, the route table, reads of `route` and
 `$routed` preparations are built, and a `suspend` route page whose param changes waits behind its
 pending policy (the router scrolls once it commits). A client build loads a component imported only
-for its routes with its route ("Lazy route chunks"). Server-backed preparations work end to end
-(2026-11-14, "Server-backed preparations end to end"). A lazy route's styles on a server-rendered
-page are still to do.
+for its routes with its route ("Lazy route chunks"). Server-backed preparations work end to end,
+and a page the server renders links its lazy routes' styles (both 2026-11-14, below).
 
 ## What it does
 
@@ -131,6 +130,31 @@ Checked on 2026-11-14 with real builds and the real server, no new code needed:
   renders the page with its prepared value and answers `/_memoized/routed`. The client's chunks
   hold the endpoint and not the server-only module's data.
 
+## A lazy route's styles
+
+A route component's chunk brings its stylesheets when it runs. On a page the server rendered,
+that is after the page shows, so the route's markup would show unstyled first. Built on
+2026-11-14, split by the project's table (`project.md`, "Where they go"):
+
+- **Compiler.** A server build plans the same splits as the browser's, and only names each split
+  component in its table (`componentKey`, no loader; `split.ts`, `lower.ts`). The router skips a
+  key with no loader. `compileModulesDetailed` reports `routeComponents` (key → module), and the
+  project's build carries it.
+- **Server.** `RenderSession.routeComponents()` reads the keys off the matched routes once they
+  are prepared, before any HTML is sent (`render()` returns them, a stream's `prepared` resolves
+  with them). `ServerIntegration.routeStyles` maps keys to stylesheet URLs, and
+  `withRouteStyles` (`packages/server/src/route-styles.ts`) links the missing ones before
+  `</head>`, or before the outlet when the template's prefix has no head.
+- **Tool.** Vite's client build finds each key's chunk and its CSS, with the CSS of the chunks it
+  imports (`generateBundle` in `packages/vite/src/next/plugin.ts`), and the production delivery
+  module carries `routeStyles`. compiler-next's generated `serve()` passes the delivery module's
+  `routeStyles` on (`server/application.ts`). The command line needs none: Bun's HTML bundling
+  links a lazy chunk's CSS in the page already.
+
+Checked by `packages/vite/tests/next-plugin.test.ts`: the built server's page for `/profile` links
+the route's own stylesheet in its head, and the home page does not. Also `split.test.ts` (the
+server table and `routeComponents`) and `packages/server/tests/route-styles.test.ts`.
+
 ## Lazy route chunks
 
 In a client build (`routedEnvironment: 'client'`), a component imported only to be shown by routes
@@ -210,8 +234,7 @@ element rather than as a prop.
 
 ## Still to do
 
-- A lazy route's styles on a page the server renders: the first route's chunk loads its CSS only
-  when its script runs, after the page shows (`project.md`, "Where they go"). A project's
-  `stylesheets` also still follows split imports, which matters only once it does.
+- A project's `stylesheets` still follows split imports, so a build-time page (no server) links a
+  lazy route's stylesheet with the page's own.
 - The reference settles no sources inside a preparation (its `$fetch` is its own), so cases with
   `$fetch` in `$routed` are compiled-only (`routed.dom.test.ts`).

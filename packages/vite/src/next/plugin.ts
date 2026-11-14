@@ -65,6 +65,8 @@ export function memoizedDomNext(options: MemoizedDomViteOptions): Plugin {
   /** Environments whose last update failed: their next one must send an update. */
   const failedEnvironments = new Set<string>();
   let productionDelivery: ProductionDelivery | undefined;
+  /** The stylesheets each lazily loaded route component's client chunk brings, by its key. */
+  let clientRouteStyles: Record<string, string[]> | undefined;
 
   const api: FullstackPluginApi = {
     runtime,
@@ -227,6 +229,7 @@ export function memoizedDomNext(options: MemoizedDomViteOptions): Plugin {
         assetsDir: client.config.build.assetsDir,
         clientRoot: relative(serverDirectory, clientDirectory).replaceAll('\\', '/'),
         runtime,
+        ...(clientRouteStyles === undefined ? {} : { routeStyles: clientRouteStyles }),
       };
       await builder.build(ssr);
     },
@@ -316,6 +319,30 @@ export function memoizedDomNext(options: MemoizedDomViteOptions): Plugin {
       },
     },
 
+    /**
+     * A route component that loads with its route has a chunk of its own, which brings its
+     * stylesheets only when it runs. The server links them on a page it renders
+     * (`@memoized-dom/server`, `route-styles.ts`): here each chunk's CSS is found, with the CSS
+     * of the chunks it imports, under the key the compiler gave the component.
+     */
+    async generateBundle(_options, bundle) {
+      if (this.environment.name !== 'client' || serverEntry === undefined) return;
+      const build = await built();
+      const components = build.client.ok ? build.client.routeComponents : undefined;
+      if (components === undefined) return;
+
+      const chunks = Object.values(bundle).filter((output) => output.type === 'chunk');
+      const styles: Record<string, string[]> = {};
+      for (const [key, module] of Object.entries(components)) {
+        const file = fileOf(module);
+        const chunk = chunks.find((candidate) => candidate.facadeModuleId !== null && normalizePath(candidate.facadeModuleId) === file);
+        if (chunk === undefined) continue;
+        const hrefs = chunkStyles(chunk, chunks).map((fileName) => `${config!.base}${fileName}`);
+        if (hrefs.length > 0) styles[key] = hrefs;
+      }
+      clientRouteStyles = styles;
+    },
+
     renderChunk(code, chunk) {
       if (productionDelivery === undefined || this.environment.name !== 'ssr') return null;
       return relocateClientRoot(code, chunk.fileName, productionDelivery.clientRoot) ?? null;
@@ -365,6 +392,27 @@ export function memoizedDomNext(options: MemoizedDomViteOptions): Plugin {
     },
   };
   return plugin;
+}
+
+type BundleChunk = { readonly fileName: string; readonly imports: readonly string[]; readonly viteMetadata?: { readonly importedCss: ReadonlySet<string> } };
+
+/** The CSS files a chunk brings, and those of the chunks it imports statically, once each. */
+function chunkStyles(chunk: BundleChunk, chunks: readonly BundleChunk[]): string[] {
+  const styles: string[] = [];
+  const seen = new Set<string>();
+  const visit = (current: BundleChunk): void => {
+    if (seen.has(current.fileName)) return;
+    seen.add(current.fileName);
+    for (const css of current.viteMetadata?.importedCss ?? []) {
+      if (!styles.includes(css)) styles.push(css);
+    }
+    for (const imported of current.imports) {
+      const next = chunks.find((candidate) => candidate.fileName === imported);
+      if (next !== undefined) visit(next);
+    }
+  };
+  visit(chunk);
+  return styles;
 }
 
 function sideOf(environment: string): Side {

@@ -4,7 +4,7 @@
  * `tests/cases/routes.test.ts`.
  */
 import { describe, expect, it } from 'bun:test';
-import { compileModules } from '../../pipeline';
+import { compileModules, compileModulesDetailed } from '../../pipeline';
 import type { CompileModulesOptions } from '../../options';
 
 const CLIENT: CompileModulesOptions = { routedEnvironment: 'client' };
@@ -43,6 +43,14 @@ describe('a component imported only for its routes loads with them', () => {
     expect(importsStatically(code)).toBe(true);
     expect(code).not.toContain('moduleLoader');
     expect(code).not.toContain('prepareInitialRouteModules');
+    expect(code).not.toContain('readRouteComponent');
+    // Named only, so the page the server renders can link the styles the browser's chunk loads.
+    expect(code).toContain('componentKey: "./Profile.tsx#Profile"');
+  });
+
+  it('reports each split component and its module, for a tool to find its chunk\'s styles', () => {
+    const { routeComponents } = compileModulesDetailed({ ...PAGE, './App.tsx': app }, CLIENT);
+    expect(routeComponents).toEqual({ './Profile.tsx#Profile': './Profile.tsx' });
   });
 
   it('keeps it when no environment is given', () => {

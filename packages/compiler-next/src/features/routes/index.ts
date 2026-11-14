@@ -23,6 +23,12 @@ export interface RoutedProgram {
   readonly parsed: ParsedModule[];
   /** By the importer's path. */
   readonly splits: ReadonlyMap<string, readonly PrintedRouteSplit[]>;
+  /**
+   * Each split component's key (`./Profile.tsx#Profile`) and the module that holds it. A tool maps
+   * the module to the styles its chunk loads, for the server to link (`wiki/compiler/routes.md`,
+   * "A lazy route's styles").
+   */
+  readonly components: ReadonlyMap<string, string>;
 }
 
 /** The modules with their routes lowered, or null when the program has none. */
@@ -49,5 +55,6 @@ export function lowerRoutes(parsed: readonly ParsedModule[], resolved: Resolved,
     // leads back to the authored text through that analysis.
     return { ...input, source: text.text, origin: composeOrigins(text.origin, entry.origin), requireImports: [] };
   });
-  return { parsed: modules, splits: lowered.splits };
+  const splitComponents = new Map(splits.map((split) => [split.key, split.target.path]));
+  return { parsed: modules, splits: lowered.splits, components: splitComponents };
 }

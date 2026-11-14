@@ -42,6 +42,12 @@ export interface CompiledModules {
   readonly initialRender: InitialRender;
   /** Present when the page needs no browser program: its HTML is the whole page. */
   readonly initialDelivery?: InitialDelivery;
+  /**
+   * Route components that load with their route (`features/routes/split.ts`), by key, with the
+   * module that holds each. A tool maps the module to its chunk's styles, which the server links
+   * on a page it renders (`wiki/compiler/routes.md`, "A lazy route's styles").
+   */
+  readonly routeComponents?: Readonly<Record<string, string>>;
 }
 
 /** Compiles one module on its own. Returns its JavaScript. */
@@ -65,7 +71,7 @@ export function compileModulesDetailed(
   modules: Readonly<Record<string, string>>,
   options: CompileModulesOptions = {},
 ): CompiledModules {
-  const { output, maps, resolved } = compileProgram(modules, options);
+  const { output, maps, resolved, routeComponents } = compileProgram(modules, options);
   const initialRender = planInitialRender(resolved, output, options);
   const initialDelivery = planInitialDelivery(initialRender, { ...options.assetSources, ...modules });
   const css: Record<string, string> = {};
@@ -82,16 +88,17 @@ export function compileModulesDetailed(
     ...(maps === undefined ? {} : { maps }),
     initialRender,
     ...(initialDelivery === undefined ? {} : { initialDelivery }),
+    ...(routeComponents.size === 0 ? {} : { routeComponents: Object.fromEntries(routeComponents) }),
   };
 }
 
 function compileProgram(
   modules: Readonly<Record<string, string>>,
   options: CompileModulesOptions,
-): { output: Record<string, string>; maps?: Record<string, SourceMap>; resolved: Resolved } {
+): { output: Record<string, string>; maps?: Record<string, SourceMap>; resolved: Resolved; routeComponents: ReadonlyMap<string, string> } {
   const frontend = analyzeFrontend(modules, options);
   try {
-    return compileAnalyzed(frontend, options);
+    return { ...compileAnalyzed(frontend, options), routeComponents: frontend.routeComponents };
   } catch (error) {
     // Planning and emission locate errors in the analyzed text; a language module's author wrote other text.
     const texts = frontend.resolved.modules.map((module) => ({

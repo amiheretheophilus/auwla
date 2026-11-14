@@ -28,7 +28,10 @@ total 2`. The delivered cases found one mistake on the way, a module source desc
 every render, which replaced the browser copy's description in the same process; descriptions now
 stay process-wide like templates. **Server-backed `$routed` end to end** was checked through the
 Bun plugin and `packages/vite`, and needed no code (`compiler/routes.md`): a client starting on a
-server-rendered page reuses the prepared value without a request.
+server-rendered page reuses the prepared value without a request. **A lazy route's styles on a
+page the server renders** are linked in its head (`compiler/routes.md`, "A lazy route's styles"):
+the server build's table names split components, the build reports `routeComponents`, Vite maps
+them to their chunks' CSS (`routeStyles`), and the server links those of the routes it rendered.
 
 Gate: types, 825 unit, 191 runtime, 171 data, 851 cases, 10 generators. Also jsx-plus 490 of 491;
 the one failure, an editor LSP test, passes alone. Vite `compiler: 'next'` 8, editor extension 10.

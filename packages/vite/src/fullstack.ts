@@ -33,6 +33,8 @@ export interface ProductionDelivery {
   readonly clientRoot: string;
   readonly runtime: 'bun' | 'node' | 'cloudflare';
   readonly assetsBinding?: string;
+  /** The stylesheets each lazily loaded route component's chunk brings (`ServerIntegration.routeStyles`). */
+  readonly routeStyles?: Readonly<Record<string, readonly string[]>>;
 }
 
 /** Bind serve() at its import site, so nesting it inside Hono needs no discovery or globals. */
@@ -133,12 +135,14 @@ export default {
 }
 
 export function productionIntegrationModule(delivery: ProductionDelivery): string {
+  // The page links the styles of the lazily loaded routes it renders (`route-styles.ts`).
+  const routeStyles = delivery.routeStyles === undefined ? '' : `\n  routeStyles: ${JSON.stringify(delivery.routeStyles)},`;
   if (delivery.runtime === 'cloudflare') {
     return `import { serverFunctionRoutes } from ${JSON.stringify(serverFunctionsVirtualId)};
 import { env } from 'cloudflare:workers';
 import { createAssetHandler } from '@memoized-dom/adapters/cloudflare';
 export default {
-  get routes() { return serverFunctionRoutes; },
+  get routes() { return serverFunctionRoutes; },${routeStyles}
   document: () => ${JSON.stringify(delivery.document)},
   assets: createAssetHandler(() => env[${JSON.stringify(delivery.assetsBinding ?? 'ASSETS')}], {
     files: ${JSON.stringify(delivery.files)}, base: ${JSON.stringify(delivery.base)}, assetsDir: ${JSON.stringify(delivery.assetsDir)}
@@ -148,7 +152,7 @@ export default {
   return `import { serverFunctionRoutes } from ${JSON.stringify(serverFunctionsVirtualId)};
 import { createAssetHandler } from ${JSON.stringify(`@memoized-dom/adapters/${delivery.runtime}`)};
 export default {
-  get routes() { return serverFunctionRoutes; },
+  get routes() { return serverFunctionRoutes; },${routeStyles}
   document: () => ${JSON.stringify(delivery.document)},
   assets: createAssetHandler(new URL(${JSON.stringify(clientRootPlaceholder)}, import.meta.url), {
     files: ${JSON.stringify(delivery.files)}, base: ${JSON.stringify(delivery.base)}, assetsDir: ${JSON.stringify(delivery.assetsDir)}

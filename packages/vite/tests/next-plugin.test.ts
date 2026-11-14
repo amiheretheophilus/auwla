@@ -225,6 +225,50 @@ describe("compiler: 'next'", () => {
     expect(await answer.json()).toBe(42);
   }, 60_000);
 
+  it('links a lazy route\'s styles in the head of a page the server renders', async () => {
+    write('styled/index.html', '<!doctype html><html><head><title>styled</title></head><body><div id="root"><!--ssr-outlet--></div><script type="module" src="/src/main.ts"></script></body></html>');
+    write('styled/src/main.ts', `import { mount } from '@memoized-dom/runtime';\nimport { App } from './App';\nmount('root', App);\n`);
+    write('styled/src/App.tsx', `import { Profile } from './Profile';
+export function App() {
+  return <main><p route="/">Home</p><Profile route="/profile" /></main>;
+}
+`);
+    // Imported only for its route, so the browser loads it, and its stylesheet, with the route.
+    write('styled/src/Profile.tsx', `import './profile.css';\nexport function Profile() { return <h2 class="profile">Profile</h2>; }\n`);
+    write('styled/src/profile.css', '.profile { color: rebeccapurple; }\n');
+    write('styled/server.ts', `import { serve } from '@memoized-dom/server';\nimport { App } from './src/App';\nimport { define } from '#server/define';\nconst app = serve({ define });\napp.ssr(App);\nexport default app;\n`);
+    write('styled/server/define.ts', `import { createDefine } from '@memoized-dom/server';\nexport const define = createDefine();\n`);
+    const app = join(root, 'styled');
+
+    const builder = await createBuilder({
+      root: app,
+      configFile: false,
+      logLevel: 'silent',
+      plugins: [memoizedDom({ clientEntry: 'src/main.ts', serverEntry: 'server.ts', server: 'server', compiler: 'next' })],
+    });
+    await builder.buildApp();
+    const { default: host } = await import(pathToFileURL(join(app, 'dist', 'server.js')).href);
+
+    // The route's chunk has its own stylesheet, which the entry's page does not link.
+    const assets = join(app, 'dist', 'client', 'assets');
+    const css = readdirSync(assets).filter((file) => file.endsWith('.css'));
+    // Minified, so found by its selector (the color becomes `#639`).
+    const own = css.find((file) => readFileSync(join(assets, file), 'utf8').includes('.profile'));
+    expect(own).toBeDefined();
+    expect(readFileSync(join(app, 'dist', 'client', 'index.html'), 'utf8')).not.toContain(own!);
+
+    // The page for its route links it before the head closes, so it shows styled at once.
+    const profile = await (await host.fetch(new Request('http://localhost/profile'))).text();
+    expect(profile).toContain('<h2 class="profile">Profile</h2>');
+    const head = profile.slice(0, profile.indexOf('</head>'));
+    expect(head).toContain(`<link rel="stylesheet" href="/assets/${own!}">`);
+
+    // Another route's page does not.
+    const home = await (await host.fetch(new Request('http://localhost/'))).text();
+    expect(home).toContain('Home');
+    expect(home).not.toContain(own!);
+  }, 60_000);
+
   it('builds a server-backed $routed page: rendered with its value, prepared on request, kept out of the client', async () => {
     write('routed/index.html', '<!doctype html><html><head></head><body><div id="root"><!--ssr-outlet--></div><script type="module" src="/src/main.ts"></script></body></html>');
     write('routed/src/main.ts', `import { mount } from '@memoized-dom/runtime';\nimport { App } from './App';\nmount('root', App);\n`);

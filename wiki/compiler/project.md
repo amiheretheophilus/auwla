@@ -206,7 +206,7 @@ the same way and none drifts. A plugin keeps only what is its tool's:
 | --- | --- | --- |
 | Styles | Imported stylesheets and optional static CSS companions returned by source languages; generated assets/imports and project updates. Syntax extraction belongs to the source language. Scoped TSRX parsing and route-specific SSR CSS discovery remain separate work | Native CSS processing, asset URLs and stylesheet links |
 | Build-time page | Built: `initialRender`, and `initialPage` writing it into the page's HTML ("Build-time page") | Built: which HTML file, and when (`transformIndexHtml`, the Bun plugin's HTML loader) |
-| Lazy route chunks | Built: a client build loads a component imported only for its routes by `import()` in the route table (`routes.md`, "Lazy route chunks"). Still to do: the route's styles on a page the server renders | Splitting at `import()`: Vite does by default; the command line turns on Bun's `splitting` (tested in `cli.test.ts`) |
+| Lazy route chunks | Built: a client build loads a component imported only for its routes by `import()` in the route table (`routes.md`, "Lazy route chunks"). Built: `routeComponents` in the build, and the server linking the styles of the routes it rendered (`routes.md`, "A lazy route's styles") | Splitting at `import()`: Vite does by default; the command line turns on Bun's `splitting` (tested in `cli.test.ts`). Which stylesheets a chunk brings (`routeStyles`): Vite from its bundle; Bun's HTML bundling links them in the page already |
 | Installed packages | Which ship source, compiling them into the program, their artifacts | Its resolver (the host), cache folder, watching `node_modules` |
 | Devtools | The diagnostics compiled code reports | Serving the inspector |
 

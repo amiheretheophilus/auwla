@@ -53,7 +53,9 @@ type Import = Module['imports'][number];
  * The imports to split. An import is split when all of these hold:
  *
  * - the build is the browser's (`routedEnvironment: 'client'`). A server keeps every import:
- *   it renders whichever route a request asks for at once;
+ *   it renders whichever route a request asks for at once. A server build still plans the same
+ *   splits, only to name each split component in its route table (`componentKey`), so it can link
+ *   the styles of the route it rendered (`lower.ts`, `#metadata`);
  * - it imports one name (not a namespace) from a module of the program;
  * - every use of that name in the importer is the tag of a route element. Any other use (a call,
  *   an element without `route`, an export) needs the component before its route is chosen;
@@ -67,7 +69,7 @@ export function planRouteSplits(
   modules: readonly ResolvedModule[],
   options: CompileModulesOptions,
 ): RouteSplit[] {
-  if (options.routedEnvironment !== 'client') return [];
+  if (options.routedEnvironment === undefined) return [];
 
   const candidates = new Map<Import, RouteSplit>();
   for (const template of graph.templates) {

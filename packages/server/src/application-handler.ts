@@ -35,6 +35,7 @@ import {
 import type { RenderSettlement } from './session';
 import { prepareRenderToReadableStream } from './stream';
 import type { ServerIntegration } from './integration';
+import { withRouteStyles } from './route-styles';
 
 /**
  * How one SSR root renders and is delivered. Application defaults merge
@@ -106,6 +107,8 @@ export interface ApplicationHandlerOptions<
   readonly documentTemplate?: string;
   readonly resolveDocumentTemplate?: (request: Request) => string | undefined | Promise<string | undefined>;
   readonly resolveAsset?: ServerIntegration['assets'];
+  /** The stylesheets each lazily loaded route component's chunk brings (`route-styles.ts`). */
+  readonly routeStyles?: ServerIntegration['routeStyles'];
   readonly middleware?: readonly ServerMiddleware<TLocals, TPlatform, TServices>[];
   readonly routes?: readonly ServerRoute<TLocals, TPlatform, TServices>[];
   readonly groups?: readonly ServerMiddlewareGroup<TLocals, TPlatform, TServices>[];
@@ -369,7 +372,7 @@ async function renderPage<
       const headers = new Headers(options.init?.headers);
       headers.append('server-timing', serverTiming(result.settlement, performance.now() - started));
       return htmlResponse(
-        template.prefix +
+        withRouteStyles(template.prefix, result.routeComponents, options.routeStyles) +
           (markers ? result.html + result.scriptTag : result.html) +
           template.suffix,
         { ...options.init, headers },
@@ -379,13 +382,14 @@ async function renderPage<
     const application = prepareRenderToReadableStream(target.component, renderOptions);
     // Commit only once preparation has decided the response: redirects and
     // gate failures still produce their own status through the error path.
-    await application.prepared;
+    // The matched routes are known by now, before any HTML is sent: their styles go in the head.
+    const routeComponents = await application.prepared;
     application.ready.then(settled, (error: unknown) => {
       report(failureOutcome(error, context.request), { error });
     });
     return htmlResponse(
       composeDocumentStream({
-        prefix: template.prefix,
+        prefix: withRouteStyles(template.prefix, routeComponents, options.routeStyles),
         body: application.stream,
         suffix: template.suffix,
         // Post-commit failure: leave the outlet empty so the client mounts

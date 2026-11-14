@@ -43,6 +43,8 @@ export interface RenderResult {
   scriptTag: string;
   /** Whether request data settled completely or the settle budget elapsed. */
   settlement: RenderSettlement;
+  /** Route components the page shows that a browser loads with their route (`RenderSession.routeComponents`). */
+  routeComponents: readonly string[];
 }
 
 export interface RenderOptions {

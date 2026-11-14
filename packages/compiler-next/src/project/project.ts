@@ -36,6 +36,8 @@ export interface CompiledProject {
   readonly initialRender: InitialRender;
   /** Present when the page needs no browser program (`wiki/compiler/delivery.md`). */
   readonly initialDelivery?: InitialDelivery;
+  /** Route components that load with their route, by key, with their module (`CompiledModules`). */
+  readonly routeComponents?: Readonly<Record<string, string>>;
   /** Reached JS modules and source-only stylesheet dependencies (for watching). */
   readonly modules: readonly string[];
   /** The stylesheets the program imports, in the order a browser applies them (`stylesheets.ts`). */

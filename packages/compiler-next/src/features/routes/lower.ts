@@ -117,7 +117,7 @@ class ModuleLowering {
     for (const link of links) this.#link(link);
     // The router's reader, which the printed module calls where it used a split import.
     for (const split of this.routeSplits) {
-      if (split.importer !== this.module) continue;
+      if (split.importer !== this.module || this.options.routedEnvironment !== 'client') continue;
       this.splits.push({ local: split.local, key: split.key, reader: this.#import('readRouteComponent') });
     }
 
@@ -400,7 +400,7 @@ class ModuleLowering {
     // delivers the values it prepared.
     if (this.options.routedEnvironment === 'client' && this.graph.prepares.size > 0) {
       text += `await ${this.#import('prepareInitialRoute')}();\n`;
-    } else if (this.routeSplits.length > 0) {
+    } else if (this.options.routedEnvironment === 'client' && this.routeSplits.length > 0) {
       text += `await ${this.#import('prepareInitialRouteModules')}();\n`;
     }
     this.#edits.push({ start: 0, end: 0, text });
@@ -417,7 +417,11 @@ class ModuleLowering {
     if (prepares !== undefined) fields.push(`preparations: ${JSON.stringify(prepares)}`);
 
     const split = this.routeSplits.find((candidate) => candidate.templates.includes(instance.template));
-    if (split !== undefined) {
+    if (split !== undefined && this.options.routedEnvironment === 'server') {
+      // The server imports it as written; the key only names it, so the page it renders can link
+      // the styles the browser's chunk for it would load late (`server/src/route-styles.ts`).
+      fields.push(`componentKey: ${JSON.stringify(split.key)}`);
+    } else if (split !== undefined) {
       const key = JSON.stringify(split.key);
       // From this module, which holds the table, with the extension, so it names one module.
       const specifier = JSON.stringify(relativeModule(this.module.path, split.target.path, true));

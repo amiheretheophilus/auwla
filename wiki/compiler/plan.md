@@ -367,7 +367,7 @@ array child). Remove each check when its phase is built.
 - [x] Lower a runtime TypeScript `namespace` and `export =` (`core.md`, parse).
 - [x] Routes, `route-to` and `$routed` (`routes.md`). [x] Lazy route chunks (2026-11-12).
   [x] Server-backed preparations end to end, through the Bun plugin and `packages/vite`
-  (2026-11-14).
+  (2026-11-14). [x] A lazy route's styles on a page the server renders (2026-11-14).
 - [x] Each server render owns the module state it writes (`server.md`, "Request isolation";
   `decisions.md`, 2026-11-14).
 - [ ] One way to compile an app for any tool (`project.md`), asked for by the user (2026-11-12)

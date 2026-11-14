@@ -189,6 +189,21 @@ export class RenderSession {
     }
   }
 
+  /**
+   * The keys of the route components the matched routes show that a browser loads with their
+   * route (`componentKey` in the table, compiler-next's `features/routes/split.ts`). The page links
+   * their styles, which the browser's chunk would otherwise load after the page shows
+   * (`route-styles.ts`).
+   */
+  routeComponents(): readonly string[] {
+    const keys: string[] = [];
+    for (const match of this.routeRuntime.route.matches) {
+      const key = (match.metadata as { readonly componentKey?: unknown } | undefined)?.componentKey;
+      if (typeof key === 'string' && !keys.includes(key)) keys.push(key);
+    }
+    return keys;
+  }
+
   mount(): Node {
     this.signal.throwIfAborted();
     if (this.initialDelivery?.html !== undefined) {

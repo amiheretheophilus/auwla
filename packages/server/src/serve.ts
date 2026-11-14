@@ -259,6 +259,7 @@ export function serve<
         ...(documentTemplate === undefined ? {} : { documentTemplate }),
         resolveDocumentTemplate: integration?.document,
         resolveAsset: integration?.assets,
+        ...(integration?.routeStyles === undefined ? {} : { routeStyles: integration.routeStyles }),
         ...(fallback === undefined && ssr.length === 0 ? {} : { resolveApp }),
         middleware,
         groups,

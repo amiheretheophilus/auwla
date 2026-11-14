@@ -17,8 +17,10 @@ export interface PreparedRenderStream {
   /**
    * Settles once route preparation (authentication gates, redirects, routed
    * data) has decided the response. Rejects with the redirect or failure.
+   * Resolves with the route components the page shows that a browser loads
+   * with their route (`RenderSession.routeComponents`), before any HTML is sent.
    */
-  readonly prepared: Promise<void>;
+  readonly prepared: Promise<readonly string[]>;
   /** Settles after the complete server render succeeds or rejects. */
   readonly ready: Promise<RenderSettlement>;
 }
@@ -90,7 +92,7 @@ export function prepareRenderToReadableStream(
   options: RenderOptions = {},
 ): PreparedRenderStream {
   const encoder = new TextEncoder();
-  const prepared = Promise.withResolvers<void>();
+  const prepared = Promise.withResolvers<readonly string[]>();
   const queue: string[] = [];
   let cancelled = false;
   const drained = new Set<() => void>();
@@ -127,7 +129,7 @@ export function prepareRenderToReadableStream(
     async current => {
       session = current;
       await current.prepare();
-      prepared.resolve();
+      prepared.resolve(current.routeComponents());
       const root = current.mount() as unknown as StringRenderableNode;
       if (current.streamsRegions) return streamRegions(current, root, pushRegion);
       await current.settle();

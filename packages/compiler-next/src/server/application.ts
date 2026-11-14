@@ -59,8 +59,10 @@ export interface ServerOptions {
   readonly functions?: string;
   /**
    * The module the server build imports for the page's document and its assets: a default export
-   * with `document(request)` and `assets(request)` (`@memoized-dom/server`, `ServerIntegration`).
-   * The tool supplies it. Default `virtual:memoized-dom/delivery`.
+   * with `document(request)` and `assets(request)` (`@memoized-dom/server`, `ServerIntegration`),
+   * and optionally `routeStyles`, the stylesheets each lazily loaded route component's chunk
+   * brings, by the client build's `routeComponents` keys. The tool supplies it. Default
+   * `virtual:memoized-dom/delivery`.
    */
   readonly delivery?: string;
 }
@@ -301,6 +303,7 @@ const __mmd_integration = {
   routes: __mmd_routes,
   document: (request) => __mmd_delivery.document?.(request),
   assets: (request, platform) => __mmd_delivery.assets?.(request, platform),
+  routeStyles: __mmd_delivery.routeStyles,
 };
 export function serve(options) {
   return __mmd_integrate(__mmd_serve(options), __mmd_integration);
