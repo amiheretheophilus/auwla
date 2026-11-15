@@ -26,8 +26,9 @@ table of pages is a generated module every tool resolves. compiler-next's value 
 content, and the browser renders a bound page's component into its region (it does not adopt the
 server's nodes yet, which the containing app's numbering prevents). A built application passes in
 `server/pages.app.test.ts`, browser included (on Edge). The old plugin's remaining features are now
-all in the project, devtools aside. Not yet: `page()` in an `.auwla` module, and the Vite suite's
-server pages test, which is written in `.tsrx`.
+all in the project, devtools aside. `page()` works in `.auwla` server function modules too
+(`packages/jsx-plus/tests/server-pages.test.ts`). The Vite suite's server pages test is written in
+`.tsrx`, which compiler-next does not support, so it stays on the old compiler.
 
 Also on 2026-11-15: rule A (body statements that build nothing run again when their reads change)
 came over from `prototype/jsx-plus` with its merge (`compiler/state-and-derived.md`).

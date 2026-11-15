@@ -62,15 +62,17 @@ export interface PageBuildContext {
  * path inside the functions folder, without its extension (`boards`).
  */
 export async function modulePages(context: PageBuildContext, path: string, text: string, base: string, hasMarkup: boolean): Promise<ModulePages | null> {
-  const ownLanguage = languageExtensions(context.languages).some((extension) => path.endsWith(extension));
   const modulePath = `${PAGES.folder}${base}.tsx`;
   const pageImports = await frameworkPageImports(context, path, text);
-  const extraction = ownLanguage ? null : extractPages(path, text, modulePath, (source, imported) => pageImports.has(`${source}\0${imported}`));
+  // A source language's module (`.auwla`) is read as its TSX; the handler is still written back
+  // in the language (`extractPages`, `authored`).
+  const ownLanguage = languageExtensions(context.languages).some((extension) => path.endsWith(extension));
+  const tsx = moduleText(path, text, context.languages);
+  const extraction = extractPages(path, tsx.text, modulePath, (source, imported) => pageImports.has(`${source}\0${imported}`),
+    ownLanguage ? { text, origin: tsx.origin } : undefined);
   if (extraction === null) {
     if (!hasMarkup) return null;
-    throw new CompileError(ownLanguage
-      ? 'page() in a source language module is not supported yet: return it from a .tsx server function module'
-      : 'JSX in a server function must be returned through the imported page() helper', path);
+    throw new CompileError('JSX in a server function must be returned through the imported page() helper', path);
   }
 
   const contracts = new Map<string, PageContract>();

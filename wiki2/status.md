@@ -2,6 +2,17 @@
 
 Updated: 2026-11-15. Branch: `prototype/jsx-plus`.
 
+## Server pages in `.auwla` (2026-11-15, made on `compiler-rewrite`)
+
+A server function module written in `.auwla` can return markup with `page(<Board … />)`, as a
+`.tsx` one can: the user asked for it when `.tsrx` was ruled out ("server pages needs to work in
+.auwla automatically"). compiler-next extracts the page from the language's TSX and writes the
+server's copy of the handler back in `.auwla` (`wiki/compiler/server.md`, "Server pages").
+`tests/server-pages.test.ts` builds `fixtures/apps/server-pages` (all `.auwla`) with compiler-next's
+Bun plugin: the page in the document, its endpoint sending only the fields the board reads, the
+passive page shipping no code, and the browser binding the board and keeping its local state. JSX+
+itself needed no change; this branch picks it up when it syncs with `compiler-rewrite`.
+
 ## Compiler change made on this branch (DX-34): body statements run again
 
 An `if (count > 10) { console.log(count); navigate('/') }` in an `.auwla` body ran once and never

@@ -1,0 +1,24 @@
+// A component a server page renders. Its handlers make the page interactive: the browser gets this
+// component, and only the fields of `user` it reads.
+export function Board({ count, user, subtitle = 'No subtitle' }) {
+  let expanded = false;
+  let hint = '';
+
+  function reveal() {
+    hint = user.hint;
+  }
+
+  return (
+    <section class="board">
+      <h1>user.name</h1>
+      <small class="subtitle">subtitle</small>
+      <p class="count">count</p>
+      <button class="reveal" onClick=reveal>"Reveal"</button>
+      <p class="hint">hint</p>
+      <button class="toggle" onClick={() => { expanded = !expanded; }}>"Toggle"</button>
+      if (expanded) {
+        <p class="expanded">"Expanded"</p>
+      }
+    </section>
+  );
+}

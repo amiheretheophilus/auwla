@@ -1,0 +1,27 @@
+// Server functions that return markup with `page(...)`, written in `.auwla`. The server renders it;
+// the browser binds the board, and gets the denial page as HTML only.
+import { define, page } from '../define';
+import { Board } from '../../src/Board.auwla';
+
+let count = 0;
+
+export const getBoard = define.function({
+  async get() {
+    const user = { name: 'Ada', hint: 'Event-only', password: 'SERVER_SECRET' };
+    return page(<Board count={count} user={user} />);
+  },
+});
+
+export const saveBoard = define.function({
+  async post() {
+    count++;
+    const user = { name: 'Saved', hint: 'Event-only', password: 'SERVER_SECRET' };
+    return page(<Board count={count} user={user} />);
+  },
+});
+
+export const getDenied = define.function({
+  async get() {
+    return page(<p class="denied">"Denied"</p>);
+  },
+});

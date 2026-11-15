@@ -26,6 +26,7 @@ import type { Node } from 'yuku-parser';
 import { CompileError } from '../core/diagnostics';
 import { identifierUses, type IdentifierUse } from '../core/resolve/identifier-uses';
 import { directoryOf, joinPath, relativeModule } from '../core/resolve/imports';
+import type { TextOrigin } from '../core/parse/text-edits';
 
 /** One `page(...)` call. */
 export interface ExtractedPage {
@@ -68,10 +69,25 @@ export interface PageExtraction {
 export type PageImport = (source: string, imported: string) => boolean;
 
 /**
+ * The authored text of a source language's module (`.auwla`), which `text` is the TSX of, and
+ * where each TSX offset was in it (`core/parse/languages.ts`).
+ */
+export interface AuthoredText {
+  readonly text: string;
+  readonly origin: TextOrigin;
+}
+
+/**
  * The calls to `page` in a server function module, or null when it has none. `path` is the
  * module's project path (`./server/functions/boards.tsx`), `modulePath` where its page module goes.
+ *
+ * `text` is TSX. For a source language's module it is the language's TSX, and `authored` the
+ * module as written: the page module is built from the TSX (it is a `.tsx` module), while the
+ * server's copy of the handler edits the authored text, so the language reads it as usual and
+ * the rest of the module keeps its authored positions. Each call is replaced whole, and the
+ * replacement and the appended imports are plain TypeScript, which the language keeps as written.
  */
-export function extractPages(path: string, text: string, modulePath: string, isPageImport: PageImport): PageExtraction | null {
+export function extractPages(path: string, text: string, modulePath: string, isPageImport: PageImport, authored?: AuthoredText): PageExtraction | null {
   // A `.ts` module holds no JSX, but may hold `<T>value` casts, which TSX reads as a tag.
   const lang = /\.[cm]?ts$/.test(path) ? 'ts' : 'tsx';
   const { program } = parse(text, { lang, sourceType: 'module' });
@@ -184,13 +200,19 @@ export function extractPages(path: string, text: string, modulePath: string, isP
   }
 
   const module = pageModule(path, modulePath, text, componentImports, pages);
+  // Where each call is in the text the handler is written in: the TSX, or the authored module.
+  const span = (page: { start: number; end: number }) => authored === undefined
+    ? page
+    // The call's first and last characters (`page`, `)`) are copied verbatim, so they map exactly.
+    : { start: authored.origin.original(page.start), end: authored.origin.original(page.end - 1) + 1 };
   const handler = (contracts: ReadonlyMap<string, PageContract>): string => {
-    let result = text;
+    let result = authored?.text ?? text;
     // From the end, so earlier offsets stay valid.
     for (const page of [...pages].sort((a, b) => b.start - a.start)) {
       const contract = contracts.get(page.id) ?? null;
       const call = `${helper}(${JSON.stringify(page.id)}, ${page.local}, [${page.captures.join(', ')}], ${JSON.stringify(contract)})`;
-      result = result.slice(0, page.start) + call + result.slice(page.end);
+      const { start, end } = span(page);
+      result = result.slice(0, start) + call + result.slice(end);
     }
     // Appended, so the authored offsets before it stay where they were; imports are hoisted.
     const specifier = relativeModule(path, modulePath);

@@ -83,6 +83,23 @@ describe('server page extraction', () => {
     expect(handler).toContain('Page0 as __mmd_Page0_');
   });
 
+  it("writes a source language's handler in its authored text, at the call's authored place", () => {
+    // A toy language: the authored module starts with a line of its own, which its TSX drops.
+    const tsx = `import { page } from '@memoized-dom/server';
+      export async function make(name) { return page(<h1>{name}</h1>); }`;
+    const authored = `@language toy\n${tsx}`;
+    const shift = '@language toy\n'.length;
+    const result = extractPages('./server/functions/board.auwla', tsx, MODULE, framework, {
+      text: authored,
+      origin: { original: (offset) => offset + shift },
+    })!;
+    const handler = result.handler(new Map());
+    expect(handler.startsWith('@language toy\n')).toBe(true);
+    expect(handler).toContain('return __mmd_page("server/functions/board.auwla#Page0", __mmd_Page0, [name], null); }');
+    // The page module is TSX.
+    expect(result.module).toContain('return (<h1>{name}</h1>);');
+  });
+
   it('rejects other arguments, an escaping page and nested or local component tags', () => {
     for (const body of [`page('html')`, 'page(<p/>, {})', 'page()']) {
       expect(() => extract(`import {page} from '@memoized-dom/server';export async function make(){return ${body};}`))

@@ -1,0 +1,21 @@
+import { getBoard, saveBoard, getDenied } from '#server-functions';
+import { Group } from '@memoized-dom/data';
+
+function Loading() {
+  return <p class="loading">"Waiting for the server"</p>;
+}
+
+export function App() {
+  // A page from the server is a value like any other: shown where it is read, replaced by assignment.
+  let board = getBoard();
+
+  return (
+    <main class="pages">
+      <Group pending={Loading}>
+        <div class="slot" suspend>board</div>
+      </Group>
+      <button class="save" onClick={() => { board = saveBoard(); }}>"Save"</button>
+      <button class="deny" onClick={() => { board = getDenied(); }}>"Denied"</button>
+    </main>
+  );
+}

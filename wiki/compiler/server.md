@@ -277,8 +277,15 @@ here (`../decisions.md`, 2026-11-14), so Vite, the Bun plugin and the command li
    page module imports from its own folder. The handler stays plain backend code; the page module
    is UI, compiled like any component in both builds. The old compiler's errors stay: one JSX
    argument, no nested `page()`, no escaping `page`, no local component tag. A handler holding JSX
-   without `page()` is an error, as is `page()` in a source language's module (`.auwla`), not
-   supported yet: the server's copy of the handler would have to be written in that language.
+   without `page()` is an error.
+   - **In a source language's module** (`.auwla`, the user's direction 2026-11-15: server pages
+     work there as in `.tsx`), extraction reads the language's TSX, and the page module is built
+     from it. The server's copy of the handler is the authored module with each call replaced, at
+     the place the language's origin gives for the call's first and last characters, which are
+     copied verbatim; the replacement and the appended imports are plain TypeScript, so the
+     language reads the module as usual and the rest keeps its authored positions. Checked by
+     `packages/jsx-plus/tests/server-pages.test.ts` (`fixtures/apps/server-pages`, all `.auwla`):
+     the server's answers, the client's file, and binding in happy-dom.
 2. **Decide what the browser gets**, per page (`page-build.ts`), from what that page alone reaches
    (the page module with only its component, then every project module through imports, native
    packages included): a page with no `on*` handler, `ref`, spread attribute, `$effect` or
@@ -313,10 +320,11 @@ here (`../decisions.md`, 2026-11-14), so Vite, the Bun plugin and the command li
    `collectCreations` gathers from everywhere inside its root. The browser gets the same code either
    way; only the region's nodes are made again, once, when it is bound.
 
-Not yet: the Vite suite's `packages/vite/tests/server-pages.test.ts` authors its board in `.tsrx`,
-which compiler-next has no frontend for, so it runs on the old compiler only; and progressive
-delivery of an interactive page (its server renders it in one go, as the old one does for a page
-with bindings).
+The Vite suite's `packages/vite/tests/server-pages.test.ts` authors its board in `.tsrx`, which
+compiler-next does not support (the user, 2026-11-15: `.auwla` is the authoring language), so it
+runs on the old compiler only; `server/pages.app.test.ts` and the jsx-plus test cover the same flows.
+Not yet: progressive delivery of an interactive page (its server renders it in one go, as the old
+one does for a page with bindings).
 
 **What an interactive page ships** (decided: (a)). compiler-next's adoption is a client render that reuses
 the server's nodes (`delivery.md`, "Adopting existing nodes"), so a page's browser program is its
