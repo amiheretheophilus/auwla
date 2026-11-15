@@ -1,0 +1,29 @@
+// Named styles the app and its pages share with `@use("../styles/shared.auwla", "panel")`.
+// A named block applies nowhere by itself: each `@use` copies its rules into the using style,
+// in that style's scope, so a page's panel and the shell's panel never select each other's markup.
+
+<style id="panel">
+  .panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 16px @700:24px;
+    box-shadow: 0 1px 2px rgb(15 23 42 / 0.06);
+  }
+</style>
+
+<style id="pill">
+  .pill {
+    font: inherit;
+    font-size: 0.9rem;
+    padding: 6px 14px;
+    border-radius: 999px;
+    border: 1px solid var(--border) @.active:var(--accent);
+    background: transparent @.active:var(--accent);
+    color: var(--text) @.active:white;
+    cursor: pointer;
+    transition: background 120ms, border-color 120ms;
+
+    &:hover { border-color: var(--accent); }
+  }
+</style>

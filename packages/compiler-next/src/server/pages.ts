@@ -44,6 +44,8 @@ export interface PageContract {
   /** `none`: plain HTML. `bindings`: the page's component, and `paths` of its inputs. */
   readonly browser: 'none' | 'bindings';
   readonly paths: readonly (readonly (string | number)[])[];
+  /** The CSS of the `<style>` blocks the page reaches, sent with its HTML (`page-build.ts`). */
+  readonly styles?: readonly string[];
 }
 
 export interface PageExtraction {

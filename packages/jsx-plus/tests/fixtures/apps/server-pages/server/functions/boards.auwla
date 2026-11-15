@@ -3,6 +3,10 @@
 import { define, page } from '../define';
 import { Board } from '../../src/Board.auwla';
 
+<style>
+  .denied { color: crimson; }
+</style>
+
 let count = 0;
 
 export const getBoard = define.function({

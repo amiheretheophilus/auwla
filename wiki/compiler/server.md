@@ -295,21 +295,31 @@ here (`../decisions.md`, 2026-11-14), so Vite, the Bun plugin and the command li
    before it builds.
 3. **Choose the inputs** (`page-inputs.ts`): every path the page's components read from each
    capture, followed through bindings, destructuring, props, defaults, member reads, array
-   callbacks (rows as `*`), local helpers and imported components. Reading `user.name` and
+   callbacks (rows as `*`), `Array.from(rows, mapper)` (what an `.auwla` loop in markup becomes),
+   what `filter` and `find` return (still the input's rows), local helpers and imported
+   components. The old projection lost rows read after a `filter` (`visible = tasks.filter(…)`,
+   then a loop over `visible`), so their fields were not sent; found by the example
+   (`packages/jsx-plus/examples/server-pages`). Reading `user.name` and
    `user.hint` sends those, not `user.password`. A value reaching code it cannot follow (an unknown
    call, a spread into an unknown component, a recursive component, `a ? user : other`) is sent
    whole, and the server's `projectPageInputs` refuses what cannot be sent, such as a function. This
    is the old `page-projection.ts` ported to compiler-next's parser, a second walk of the syntax
    rather than the graph's read paths the design first named: the graph knows reads per module, not
    values followed into another component's props.
-4. **The browser's table** (`./.memoized/page-bindings.ts`): `virtual:memoized-dom/page-bindings`,
+4. **Styles travel with the page** (`page-build.ts`). The contract's `styles` hold the CSS of the
+   `<style>` blocks of every language module the page reaches, `@use` across files resolved as the
+   project resolves it (`project/style-sources.ts`), and of the handler module itself, whose JSX
+   moved into the page. The server sends them with the page's HTML (`<style data-mmd-page-style>`,
+   in the document too), so a page that ships no code still arrives styled: its component's
+   stylesheet never reaches the client build. A plain `.css` file a page imports is not carried yet.
+5. **The browser's table** (`./.memoized/page-bindings.ts`): `virtual:memoized-dom/page-bindings`,
    which the facades import, resolves to it in both builds. It holds each page's id and contract
    key, and for a page with bindings a lazy import of `./.memoized/pages/<module>.bindings.ts`,
    which calls `registerPageComponent(key, Page<n>)`. The server's copy loads nothing. With a page
    that has bindings, the browser's entry also imports `page-hydration.ts`, whose top-level
    `await preparePageHydration()` loads the bindings of the pages in the document's source
    snapshots before the entry mounts.
-5. **The runtime.** `createComponentPage` (`packages/server/src/page-definition.ts`) calls the page
+6. **The runtime.** `createComponentPage` (`packages/server/src/page-definition.ts`) calls the page
    component with a props cell (compiler-next's components take one, not the old props array), and
    a page with bindings is rendered inside one `display: contents` element. compiler-next's value
    slot shows page content through `mountPage` (`runtime/src/content-region.ts`, shared with the old

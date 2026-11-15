@@ -21,7 +21,8 @@ import { is, walk } from 'yuku-ast';
 import { parse } from 'yuku-parser';
 import type { Node } from 'yuku-parser';
 import { CompileError } from '../core/diagnostics';
-import { languageExtensions, moduleText, type SourceLanguage } from '../core/parse/languages';
+import { stylesheetResolver } from '../core/assets/stylesheets';
+import { languageExtensions, languageOf, moduleText, type SourceLanguage, type SourceStylesheet } from '../core/parse/languages';
 import { importCandidates, isStylesheet, relativeModule } from '../core/resolve/imports';
 import { isSourcePath } from '../project/collect';
 import type { ProjectHost } from '../project/host';
@@ -75,6 +76,9 @@ export async function modulePages(context: PageBuildContext, path: string, text:
     throw new CompileError('JSX in a server function must be returned through the imported page() helper', path);
   }
 
+  // The handler module's own `<style>` blocks style the JSX it wrote, which moved into the page.
+  const handlerStyles = tsx.stylesheet === undefined ? [] : [await stylesheetText(context, path, tsx.stylesheet.code, new Map([[path, text]]))];
+
   const contracts = new Map<string, PageContract>();
   const entries: { id: string; key: string; interactive: boolean }[] = [];
   for (const page of extraction.pages) {
@@ -87,7 +91,9 @@ export async function modulePages(context: PageBuildContext, path: string, text:
       ? pageInputPaths({ program: (file) => sources.programs.get(file), resolve: (specifier, importer) => sources.resolutions.get(`${importer}\0${specifier}`) },
         modulePath, page.component, page.captures.length)
       : [];
-    contracts.set(page.id, { key, browser: interactive ? 'bindings' : 'none', paths });
+    // The page's CSS travels with its HTML, so a page that ships no code still arrives styled.
+    const styles = [...handlerStyles, ...sources.styles].filter((css) => css.trim() !== '');
+    contracts.set(page.id, { key, browser: interactive ? 'bindings' : 'none', paths, ...(styles.length > 0 ? { styles } : {}) });
     entries.push({ id: page.id, key, interactive });
   }
 
@@ -174,8 +180,8 @@ export const PAGE_HYDRATION = "import { preparePageHydration } from './page-bind
  */
 async function frameworkPageImports(context: PageBuildContext, path: string, text: string): Promise<Set<string>> {
   const found = new Set<string>();
-  const program = parseModule(context, path, text);
-  if (program === null) return found;
+  const program = parseModule(context, path, text)?.body;
+  if (program === undefined) return found;
   for (const statement of program) {
     if (!is.ImportDeclaration(statement) || statement.importKind === 'type') continue;
     for (const specifier of statement.specifiers) {
@@ -195,8 +201,8 @@ async function namesPage(context: PageBuildContext, source: string, imported: st
   if (file === null || seen.has(`${file}\0${imported}`)) return false;
   seen.add(`${file}\0${imported}`);
   const text = await context.host.readFile(file);
-  const program = text === undefined ? null : parseModule(context, file, text);
-  if (program === null) return false;
+  const program = text === undefined ? undefined : parseModule(context, file, text)?.body;
+  if (program === undefined) return false;
   for (const statement of program) {
     if (!is.ExportNamedDeclaration(statement)) continue;
     for (const specifier of statement.specifiers) {
@@ -221,19 +227,24 @@ interface PageSourceSet {
   readonly programs: Map<string, readonly Node[]>;
   readonly texts: Map<string, string>;
   readonly resolutions: Map<string, string>;
+  /** The CSS of the reached modules' `<style>` blocks, in the order they were reached. */
+  readonly styles: string[];
   /** A package outside the project is reached: what it does is unknown. */
   external: boolean;
 }
 
-/** The project modules a page module reaches through its imports, parsed. */
+/** The project modules a page module reaches through its imports, parsed, with their CSS. */
 async function reachableSources(context: PageBuildContext, start: string, startText: string): Promise<PageSourceSet> {
-  const set: PageSourceSet = { programs: new Map(), texts: new Map(), resolutions: new Map(), external: false };
+  const set: PageSourceSet = { programs: new Map(), texts: new Map(), resolutions: new Map(), styles: [], external: false };
+  const stylesheets: [string, SourceStylesheet['code']][] = [];
   const work: [string, string][] = [[start, startText]];
   while (work.length > 0) {
     const [path, text] = work.pop()!;
     if (set.programs.has(path)) continue;
-    const program = parseModule(context, path, text);
-    if (program === null) continue;
+    const parsed = parseModule(context, path, text);
+    if (parsed === null) continue;
+    const program = parsed.body;
+    if (parsed.stylesheet !== undefined) stylesheets.push([path, parsed.stylesheet.code]);
     set.programs.set(path, program);
     set.texts.set(path, text);
     for (const statement of program) {
@@ -253,7 +264,33 @@ async function reachableSources(context: PageBuildContext, start: string, startT
       if (dependency !== undefined) work.push([file, dependency]);
     }
   }
+  for (const [path, code] of stylesheets) set.styles.push(await stylesheetText(context, path, code, set.texts));
   return set;
+}
+
+/**
+ * A language module's CSS (`core/parse/languages.ts`): static text, or a recipe whose
+ * `@use("./shared.auwla", "id")` reads other modules' named blocks. Those are read as sources
+ * only, as the project reads them (`project/style-sources.ts`), and never followed as code.
+ */
+async function stylesheetText(context: PageBuildContext, path: string, code: SourceStylesheet['code'], known: ReadonlyMap<string, string>): Promise<string> {
+  if (typeof code === 'string') return code;
+  const texts = new Map(known);
+  const pending: [string, SourceStylesheet['code']][] = [[path, code]];
+  while (pending.length > 0) {
+    const [importer, recipe] = pending.pop()!;
+    if (typeof recipe === 'string') continue;
+    for (const specifier of recipe.dependencies) {
+      const file = await projectModule(context, specifier, importer);
+      if (file === null || texts.has(file)) continue;
+      const text = await context.host.readFile(file);
+      if (text === undefined) continue;
+      texts.set(file, text);
+      const nested = languageOf(file, context.languages)?.toTsx(text, file).stylesheet;
+      if (nested !== undefined) pending.push([file, nested]);
+    }
+  }
+  return code.render(stylesheetResolver(Object.fromEntries(texts), { languages: context.languages }));
 }
 
 /** The project path of a project module `specifier` names from `importer`, or null. */
@@ -273,11 +310,11 @@ async function projectModule(context: PageBuildContext, specifier: string, impor
   return typeof resolved === 'string' && isSourcePath(resolved, context.languages) ? resolved : null;
 }
 
-function parseModule(context: PageBuildContext, path: string, authored: string): readonly Node[] | null {
-  const { text, lang } = moduleText(path, authored, context.languages);
+function parseModule(context: PageBuildContext, path: string, authored: string): { body: readonly Node[]; stylesheet?: SourceStylesheet } | null {
+  const { text, lang, stylesheet } = moduleText(path, authored, context.languages);
   const { program, diagnostics } = parse(text, { lang, sourceType: 'module' });
   if (diagnostics.some((diagnostic) => diagnostic.severity === 'error')) return null;
-  return program.body as Node[];
+  return { body: program.body as Node[], ...(stylesheet === undefined ? {} : { stylesheet }) };
 }
 
 /** Whether a module installs something that runs after the page is shown. */

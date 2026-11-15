@@ -21,6 +21,7 @@ React JSX runtime. Other projects need this one-time configuration too.
 | [task-board/App.auwla](task-board/App.auwla) | A complete task board: derived lists/counts, search, status filters, form submission, existing refs, direct `if`, direct `for` loops in the markup, quoted text and row events |
 | [team/](team/) | Routes (nested, parameters, catch-all), lazy route chunks, `Group` pending/error policies, `<slot>` layouts, `$fetch`/`$track` with a reactive helper, `$routed`, `$effect` and `$cleanup` |
 | [directory/](directory/) | Rendered on the server: `.auwla` server functions and a `.auwla` server-only module, a server-backed `$routed`, hydration, and a form posting to a server function |
+| [server-pages/](server-pages/) | Server functions returning `page(...)`: an interactive board that keeps its local state across live server updates, a passive page that ships no JavaScript, only the read fields crossing, and the built-in CSS (global tokens, scoped and named styles, class conditions, responsive groups) |
 | [notes/](notes/) | Several `.auwla` components importing each other (with and without the extension, through a `.ts` re-export), built by compiler-next's project, Bun plugin and Vite plugin |
 | [checking/App.auwla](checking/App.auwla) | Small typed-prop/ref example used by the mapper checks |
 | [checking/TypeError.auwla](checking/TypeError.auwla) | Deliberately invalid method call for inspecting authored diagnostics |
@@ -211,6 +212,18 @@ never applies to a relative import. An alias can leave it out: the tsconfig maps
 the page for Vite: `memoizedDom({ clientEntry: 'src/main.ts', serverEntry: 'server.ts',
 server: 'server', compiler: 'next', languages: [auwla] })` builds and serves it full-stack, as
 `tests/vite.test.ts` checks.
+
+## Run the server pages example
+
+```text
+bun run examples/server-pages/preview.ts
+```
+
+Open `http://127.0.0.1:3038`. A project tracker whose panels are server pages: the board is
+interactive and stays bound across live updates, the facts page ships no JavaScript, and each page
+brings its own styles. See [server-pages/README.md](server-pages/README.md).
+`tests/server-pages.test.ts` builds its own small app (`tests/fixtures/apps/server-pages`), not
+this folder.
 
 ## Walk through the authoring
 

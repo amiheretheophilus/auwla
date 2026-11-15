@@ -55,7 +55,8 @@ beforeAll(async () => {
     target: 'browser',
     format: 'esm',
     outdir: clientOut,
-    naming: { entry: 'main.js' },
+    // `main.js`, and `main.css` for the styles the client's components bring.
+    naming: { entry: '[name].[ext]' },
     plugins: [memoizedDom({ client: './src/main.ts', server: SERVER, root, languages: [auwla] }), checkoutPackagesFor('browser')],
   });
   if (!browser.success) throw new AggregateError(browser.logs, 'the client did not build');
@@ -87,8 +88,10 @@ async function ask(path: string, init?: RequestInit): Promise<Response> {
 
 it('renders the .auwla page into the document, keeping unread fields off the wire', async () => {
   const html = await (await ask('/')).text();
-  expect(html).toContain('<h1>Ada</h1>');
+  expect(html).toMatch(/<h1[^>]*>Ada<\/h1>/);
   expect(html).not.toContain('SERVER_SECRET');
+  // The page's styles are in the document with it, for the first paint.
+  expect(html).toMatch(/<style data-mmd-page-style>[^<]*border: 1px solid teal/);
   expect(html).not.toContain('Waiting for the server');
 });
 
@@ -97,12 +100,16 @@ it('answers the page endpoints: the board with the inputs it reads, the denial p
   const text = await board.text();
   expect(board.headers.get('x-mmd-page')).toBe('1');
   expect(text).not.toContain('SERVER_SECRET');
-  const content = decodePageHtml(text) as { binding?: { inputs: unknown[] } };
+  const content = decodePageHtml(text) as { binding?: { inputs: unknown[] }; styles?: string[] };
   expect(content.binding?.inputs).toEqual([0, { name: 'Ada', hint: 'Event-only' }]);
+  // Each page's CSS travels with its HTML: the board's component style.
+  expect(content.styles?.join('\n')).toContain('border: 1px solid teal');
 
-  const denied = decodePageHtml(await (await ask('/_fn/boards/getDenied', { headers: { 'x-mmd-stream': 'snapshot' } })).text()) as { html: string; binding?: unknown };
-  expect(denied.html).toContain('class="denied"');
+  const denied = decodePageHtml(await (await ask('/_fn/boards/getDenied', { headers: { 'x-mmd-stream': 'snapshot' } })).text()) as { html: string; binding?: unknown; styles?: string[] };
+  expect(denied.html).toContain('denied');
   expect(denied.binding).toBeUndefined();
+  // The server function module's own style, though the browser never gets its code.
+  expect(denied.styles?.join('\n')).toContain('color: crimson');
   // The browser never gets the denial page's component (the app's own button says "Denied" too).
   expect(readFileSync(client, 'utf8')).not.toContain('"denied"');
 });

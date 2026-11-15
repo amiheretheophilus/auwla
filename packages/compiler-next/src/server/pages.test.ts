@@ -137,6 +137,27 @@ describe('page input projection', () => {
     expect(paths.sort()).toEqual(['0', '1.hint', '1.name', '2']);
   });
 
+  it('follows rows through filter and find, so a later loop over them still gets its fields', () => {
+    const sources = programs({
+      './page.tsx': `export function Page0(inputs) { const [project] = inputs;
+        const visible = project.tasks.filter((task) => !task.done);
+        const first = project.tasks.find((task) => task.id === 1);
+        return (<section><h1>{first.title}</h1><ul>{visible.map((task) => <li>{task.title}</li>)}</ul><p>{visible.length}</p></section>); }`,
+    });
+    const paths = pageInputPaths(sources, './page.tsx', 'Page0', 1).map((path) => path.join('.'));
+    expect(paths.sort()).toEqual(['0.tasks.*.done', '0.tasks.*.id', '0.tasks.*.title', '0.tasks.length']);
+  });
+
+  it("follows rows through Array.from's mapper, which an .auwla loop in markup becomes", () => {
+    const sources = programs({
+      './page.tsx': `export function Page0(inputs) { const [project] = inputs;
+        const visible = project.tasks.filter((task) => !task.done);
+        return (<ul>{Array.from(visible, (task) => <li key={task.id}>{task.title}</li>)}</ul>); }`,
+    });
+    const paths = pageInputPaths(sources, './page.tsx', 'Page0', 1).map((path) => path.join('.'));
+    expect(paths.sort()).toEqual(['0.tasks.*.done', '0.tasks.*.id', '0.tasks.*.title']);
+  });
+
   it('follows rows with a wildcard and sends a value whole where it reaches an unknown call', () => {
     const sources = programs({
       './page.tsx': `export function Page0(inputs) { const [notes, user] = inputs;

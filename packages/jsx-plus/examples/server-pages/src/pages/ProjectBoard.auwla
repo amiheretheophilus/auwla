@@ -1,0 +1,125 @@
+// The board a server function returns with `page(<ProjectBoard project={project} />)`.
+//
+// It has handlers, so the page can change by itself: the browser gets this component and binds the
+// server's HTML. It gets only the fields of `project` read here (name, owner's name, notes, each
+// task's id, title and done), never `owner.email` or `budget`. When the server renders the board
+// again (after a task changes), the bound board takes the new project and keeps `filter`.
+import { completeTask } from '#server-functions';
+import type { Project } from '../model';
+
+export function ProjectBoard({ project }: { project: Project }) {
+  <style>
+    @use("../styles/shared.auwla", "panel");
+    @use("../styles/shared.auwla", "pill");
+
+    .board {
+      display: grid;
+      gap: 16px;
+
+      header {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: 8px;
+      }
+      h2 { margin: 0; font-size: 1.25rem @700:1.5rem; }
+    }
+    .owner { margin: 0; color: var(--muted); }
+    .filters { display: flex; gap: 6px; }
+
+    .tasks {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+      display: grid;
+      gap: 6px;
+
+      @900 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    }
+    .task {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      width: 100%;
+      font: inherit;
+      text-align: left;
+      padding: 10px 12px;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: var(--surface);
+      color: var(--text) @.done:var(--muted);
+      text-decoration: none @.done:line-through;
+      cursor: pointer;
+
+      &:hover { border-color: var(--accent); }
+    }
+    .mark {
+      inline-size: 18px;
+      block-size: 18px;
+      border-radius: 50%;
+      border: 2px solid var(--accent);
+      background: transparent;
+      flex: none;
+    }
+    .task.done .mark { background: var(--accent); }
+
+    .empty { margin: 0; color: var(--muted); }
+    .notes {
+      margin: 0;
+      padding: 12px;
+      border-left: 3px solid var(--accent);
+      background: var(--tint);
+      border-radius: 0 8px 8px 0;
+    }
+  </style>
+
+  // Local state: it lives in the browser and survives the server rendering the board again.
+  let filter = 'all';
+  let showNotes = false;
+  const filters = ['all', 'open', 'done'];
+
+  const visible = project.tasks.filter((task) => filter === 'all' || (filter === 'done') === task.done);
+  const open = project.tasks.filter((task) => !task.done).length;
+
+  // A task's button asks the server to change it (`completeTask`); the live board then arrives
+  // with the change, and this component takes it without losing `filter` or `showNotes`.
+  return (
+    <article class="panel board">
+      <header>
+        <h2>project.name</h2>
+        <p class="owner">"Led by {project.owner.name} · {open} open"</p>
+      </header>
+
+      <nav class="filters" aria-label="Filter tasks">
+        for (const option of filters) {
+          <button type="button" class=(filter === option ? "pill active" : "pill") aria-pressed=(filter === option) onClick=(() => filter = option)>
+            option
+          </button>
+        }
+      </nav>
+
+      if (visible.length === 0) {
+        <p class="empty">"Nothing to show here."</p>
+      } else {
+        <ul class="tasks">
+          for (const task of visible) {
+            <li key={task.id}>
+              <button type="button" class=(task.done ? "task done" : "task") onClick=(() => completeTask(project.id, task.id))>
+                <span class="mark"></span>
+                task.title
+              </button>
+            </li>
+          }
+        </ul>
+      }
+
+      <button type="button" class=(showNotes ? "pill active" : "pill") onClick=(() => showNotes = !showNotes)>
+        showNotes ? "Hide notes" : "Show notes"
+      </button>
+      if (showNotes) {
+        <p class="notes">project.notes</p>
+      }
+    </article>
+  );
+}

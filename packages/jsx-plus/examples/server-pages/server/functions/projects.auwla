@@ -1,0 +1,66 @@
+// Server functions, written in `.auwla`. Client code imports the same names from
+// `#server-functions`, where they call these endpoints (`/_fn/projects/...`).
+//
+// `getBoard` and `getFacts` return markup with `page(...)`: the server renders it, and the browser
+// gets HTML. Only a page that can change by itself (the board, with its filter buttons) also gets
+// its component, and only the fields of `project` that component reads.
+import { define, page } from '../define';
+import { findProject, addTask, projectList, toggleTask } from '../store.auwla';
+import { ProjectBoard } from '../../src/pages/ProjectBoard.auwla';
+import { ProjectFacts } from '../../src/pages/ProjectFacts.auwla';
+
+// This module's own styles style the markup it writes below, which travels with each page.
+<style>
+  .missing {
+    padding: 24px;
+    border: 1px dashed var(--border);
+    border-radius: var(--radius);
+    color: var(--muted);
+    text-align: center;
+  }
+</style>
+
+/** The sidebar's list: ordinary data, sent as JSON. */
+export const listProjects = define.function({
+  async get() {
+    return projectList();
+  },
+});
+
+/**
+ * The project's board. `live` keeps it current: after a change to the project (`updates` below),
+ * the server renders it again, and the browser updates the board it has in place, keeping the
+ * filter the visitor chose.
+ */
+export const getBoard = define.function({
+  live: (_context, id: string) => ['project', id],
+  async get(_context, id: string) {
+    const project = findProject(id);
+    if (project === undefined) return page(<p class="missing">"No such project."</p>);
+    return page(<ProjectBoard project={project} />);
+  },
+});
+
+/** The project's facts: a page that cannot change by itself, so the browser gets only its HTML. */
+export const getFacts = define.function({
+  live: (_context, id: string) => ['project', id],
+  async get(_context, id: string) {
+    const project = findProject(id);
+    if (project === undefined) return page(<p class="missing">"No such project."</p>);
+    return page(<ProjectFacts project={project} />);
+  },
+});
+
+export const createTask = define.function({
+  updates: (_context, id: string) => ['project', id],
+  async post(_context, id: string, title: string) {
+    return addTask(id, title);
+  },
+});
+
+export const completeTask = define.function({
+  updates: (_context, id: string) => ['project', id],
+  async post(_context, id: string, taskId: number) {
+    return toggleTask(id, taskId);
+  },
+});

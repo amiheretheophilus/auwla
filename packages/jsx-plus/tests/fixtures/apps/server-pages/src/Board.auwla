@@ -1,6 +1,10 @@
 // A component a server page renders. Its handlers make the page interactive: the browser gets this
 // component, and only the fields of `user` it reads.
 export function Board({ count, user, subtitle = 'No subtitle' }) {
+  <style>
+    .board { border: 1px solid teal; padding: 8px @.wide:16px; }
+  </style>
+
   let expanded = false;
   let hint = '';
 

@@ -1,0 +1,68 @@
+// The projects, kept in memory for the example. This is server-only code (the server folder): it
+// compiles exactly as written, and the browser's bundle never contains it.
+import type { Project, ProjectSummary, Task } from '../src/model';
+
+let nextTask = 100;
+
+const projects: Project[] = [
+  {
+    id: 'launch',
+    name: 'Spring launch',
+    owner: { name: 'Ada Lovelace', email: 'ada@example.com' },
+    budget: 42000,
+    started: '2026-09-01',
+    notes: 'Ship the landing page before the press embargo lifts on Friday.',
+    tasks: [
+      { id: 1, title: 'Write the announcement', done: true },
+      { id: 2, title: 'Record the demo video', done: false },
+      { id: 3, title: 'Book the launch venue', done: false },
+    ],
+  },
+  {
+    id: 'atlas',
+    name: 'Atlas redesign',
+    owner: { name: 'Lin Chen', email: 'lin@example.com' },
+    budget: 18500,
+    started: '2026-10-12',
+    notes: 'New navigation first; the colour refresh can follow in a second pass.',
+    tasks: [
+      { id: 4, title: 'Audit the current navigation', done: true },
+      { id: 5, title: 'Sketch three layouts', done: true },
+      { id: 6, title: 'Usability test with five people', done: false },
+    ],
+  },
+  {
+    id: 'harbor',
+    name: 'Harbor API',
+    owner: { name: 'Sam Okafor', email: 'sam@example.com' },
+    budget: 9000,
+    started: '2026-11-02',
+    notes: 'Rate limits and pagination before the partner preview.',
+    tasks: [
+      { id: 7, title: 'Design the pagination cursor', done: false },
+    ],
+  },
+];
+
+/** The project list for the sidebar: names only. */
+export function projectList(): ProjectSummary[] {
+  return projects.map(({ id, name }) => ({ id, name }));
+}
+
+export function findProject(id: string): Project | undefined {
+  return projects.find((project) => project.id === id);
+}
+
+export function addTask(id: string, title: string): Task {
+  const project = findProject(id);
+  if (project === undefined) throw new Error(`No project '${id}'`);
+  const task = { id: nextTask++, title, done: false };
+  project.tasks.push(task);
+  return task;
+}
+
+export function toggleTask(id: string, taskId: number): Task | undefined {
+  const task = findProject(id)?.tasks.find((candidate) => candidate.id === taskId);
+  if (task !== undefined) task.done = !task.done;
+  return task;
+}

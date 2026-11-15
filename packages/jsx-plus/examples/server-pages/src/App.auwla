@@ -1,0 +1,156 @@
+// The app's shell: the project list, the view switch and a form. The selected page itself comes
+// from the server (`server/functions/projects.auwla`): `getBoard(id)` and `getFacts(id)` return
+// rendered pages, shown where they are read, like any value.
+import { createTask, getBoard, getFacts, listProjects } from '#server-functions';
+import { Group } from '@memoized-dom/data';
+
+// Global: the design tokens and the page's base, for the shell and every server page.
+<style global>
+  :root {
+    color-scheme: light dark;
+    --bg: light-dark(#f4f5fb, #0d111a);
+    --surface: light-dark(#ffffff, #161c29);
+    --tint: light-dark(#eef0fb, #1d2436);
+    --border: light-dark(#dfe3ef, #2a3346);
+    --text: light-dark(#141826, #e8ebf4);
+    --muted: light-dark(#5f6880, #95a0b8);
+    --accent: #5b5bd6;
+    --radius: 14px;
+  }
+
+  body {
+    margin: 0;
+    font-family: system-ui, sans-serif;
+    line-height: 1.5;
+    background: var(--bg);
+    color: var(--text);
+  }
+</style>
+
+// This file's own styles: they select only the markup written in this file.
+<style>
+  @use("./styles/shared.auwla", "panel");
+  @use("./styles/shared.auwla", "pill");
+
+  .shell {
+    max-width: 72rem;
+    margin: 0 auto;
+    padding: 16px @700:32px;
+    display: grid;
+    gap: 20px;
+
+    > header {
+      h1 { margin: 0; font-size: 1.5rem @700:2rem; }
+      p { margin: 4px 0 0; color: var(--muted); }
+    }
+  }
+
+  .layout {
+    display: grid;
+    gap: 20px;
+
+    @900 {
+      grid-template-columns: 15rem minmax(0, 1fr);
+      align-items: start;
+    }
+  }
+
+  .projects {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+
+    @900 { flex-direction: column; }
+  }
+  .project {
+    font: inherit;
+    text-align: left;
+    padding: 10px 12px;
+    border: 0;
+    border-radius: 10px;
+    background: transparent @.active:var(--tint);
+    color: var(--muted) @.active:var(--text);
+    font-weight: 400 @.active:600;
+    cursor: pointer;
+
+    &:hover { color: var(--text); }
+  }
+
+  .main { display: grid; gap: 16px; }
+  .views { display: flex; gap: 6px; }
+
+  .add {
+    display: flex;
+    gap: 8px;
+
+    input {
+      flex: 1;
+      font: inherit;
+      padding: 8px 12px;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: var(--surface);
+      color: var(--text);
+    }
+  }
+
+  .loading { margin: 0; color: var(--muted); }
+</style>
+
+function Loading() {
+  return <p class="loading">"Asking the server…"</p>;
+}
+
+export function App() {
+  const projects = listProjects();
+  let selected = 'launch';
+  let view = 'board';
+  let title = '';
+
+  // A server page, chosen like any value: a new project or view asks the server again, and the
+  // page on screen stays until the new one arrives.
+  const shown = view === 'board' ? getBoard(selected) : getFacts(selected);
+
+  async function add(event: SubmitEvent) {
+    event.preventDefault();
+    if (title.trim() === '') return;
+    // Plain data comes back; the live board renders the new task on its own.
+    await createTask(selected, title.trim());
+    title = '';
+  }
+
+  return (
+    <main class="shell">
+      <header>
+        <h1>"Projects"</h1>
+        <p>"Each panel is rendered on the server. The board is interactive; the facts page ships no JavaScript."</p>
+      </header>
+
+      <div class="layout">
+        <nav class="panel projects" aria-label="Projects">
+          for (const project of projects) {
+            <button type="button" class=(selected === project.id ? "project active" : "project") onClick=(() => selected = project.id)>
+              project.name
+            </button>
+          }
+        </nav>
+
+        <section class="main">
+          <div class="views" role="tablist">
+            <button type="button" role="tab" class=(view === 'board' ? "pill active" : "pill") aria-selected=(view === 'board') onClick=(() => view = 'board')>"Board"</button>
+            <button type="button" role="tab" class=(view === 'facts' ? "pill active" : "pill") aria-selected=(view === 'facts') onClick=(() => view = 'facts')>"Facts"</button>
+          </div>
+
+          <Group pending=Loading>
+            <div suspend>shown</div>
+          </Group>
+
+          <form class="add" onSubmit=add>
+            <input placeholder="Add a task to this project" aria-label="New task" value={title} onInput={(event) => title = event.currentTarget.value} />
+            <button type="submit" class="pill active">"Add"</button>
+          </form>
+        </section>
+      </div>
+    </main>
+  );
+}

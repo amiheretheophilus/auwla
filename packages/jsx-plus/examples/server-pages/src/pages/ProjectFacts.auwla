@@ -1,0 +1,62 @@
+// The facts a server function returns with `page(<ProjectFacts project={project} />)`.
+//
+// Nothing here can change by itself (no handler, ref or effect), so the browser gets this page as
+// HTML and its styles, and none of this code: the client bundle does not contain it. It can show
+// `budget`, which then travels only as rendered text.
+import type { Project } from '../model';
+
+export function ProjectFacts({ project }: { project: Project }) {
+  <style>
+    @use("../styles/shared.auwla", "panel");
+
+    .facts {
+      display: grid;
+      gap: 16px;
+      h2 { margin: 0; font-size: 1.25rem @700:1.5rem; }
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 12px;
+      margin: 0;
+
+      @600 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      @1000 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+
+      div {
+        padding: 12px;
+        border-radius: 10px;
+        background: var(--tint);
+      }
+      dt { font-size: 0.8rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
+      dd { margin: 4px 0 0; font-size: 1.1rem; font-weight: 600; font-variant-numeric: tabular-nums; }
+    }
+    .progress {
+      block-size: 10px;
+      border-radius: 999px;
+      background: var(--tint);
+      overflow: hidden;
+
+      span { display: block; block-size: 100%; background: var(--accent); }
+    }
+  </style>
+
+  const done = project.tasks.filter((task) => task.done).length;
+  const share = project.tasks.length === 0 ? 0 : Math.round((done / project.tasks.length) * 100);
+  const budget = new Intl.NumberFormat('en', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(project.budget);
+
+  return (
+    <article class="panel facts">
+      <h2>"{project.name} at a glance"</h2>
+      <dl class="grid">
+        <div><dt>"Lead"</dt><dd>project.owner.name</dd></div>
+        <div><dt>"Started"</dt><dd>project.started</dd></div>
+        <div><dt>"Budget"</dt><dd>budget</dd></div>
+        <div><dt>"Done"</dt><dd>"{done} of {project.tasks.length}"</dd></div>
+      </dl>
+      <div class="progress" role="progressbar" aria-valuenow=share aria-valuemin="0" aria-valuemax="100">
+        <span style=("width: " + share + "%")></span>
+      </div>
+    </article>
+  );
+}

@@ -202,7 +202,22 @@ export function pageInputPaths(sources: PageSources, root: string, component: st
       } else {
         consume(source);
         for (const arg of args) consume(expression(arg, environment, module));
+        return undefined;
       }
+      // What comes out is still the input's rows: `visible = tasks.filter(…)`, then
+      // `visible.map(task => task.title)` reads `tasks.*.title`. A `map` makes new values, whose
+      // reads its callback already made.
+      const name = callee.property.name;
+      if (name === 'filter') return source;
+      if (name === 'find' || name === 'findLast') return member(source, '*');
+      return undefined;
+    }
+    // `Array.from(rows, (row) => …)` maps each row, as `rows.map` does. It is what `.auwla`'s
+    // `for (const row of rows) { … }` in markup becomes.
+    const mapper = args[1];
+    if (is.MemberExpression(callee) && !callee.computed && is.Identifier(callee.object, 'Array') && is.Identifier(callee.property, 'from')
+      && !environment.has('Array') && mapper !== undefined && (is.ArrowFunctionExpression(mapper) || is.FunctionExpression(mapper))) {
+      invoke(module, mapper, [member(expression(args[0], environment, module), '*')], environment);
       return undefined;
     }
     const values = args.map((arg) => expression(arg, environment, module));
