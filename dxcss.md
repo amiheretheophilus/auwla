@@ -2,8 +2,7 @@
 
 Status: native CSS, full-property class/numeric viewport conditions, grouped
 numeric rules, local scopes, cross-file named reuse and implicit native nesting
-are implemented. Authored CSS shorthands are documented as a design draft;
-implementation and unresolved grammar choices remain later.
+are implemented. Optional aliases and further condition conveniences remain later.
 
 Created: 2026-11-11. Updated: 2026-11-15.
 
@@ -15,14 +14,14 @@ this document retains the wider direction and unresolved questions.
 ## 1. Current direction and sequence
 
 Start with **native CSS property names and native CSS values**. Tailwind is
-removed from the target design. Extensible CSS shorthand definitions such as
-`p`, `px` and compound `a:center` come next as authored style code.
+removed from the target design. Optional property aliases such as `p`, `px`
+and `bg` come later.
 
 The agreed sequence is:
 
 1. Ordinary CSS in style blocks.
 2. Compact and grouped conditions on ordinary CSS properties.
-3. Authored shorthand definitions after the native CSS foundation.
+3. Optional property aliases after the native CSS foundation.
 
 Editor support accompanies each usable slice. CSS-1 extracts explicit module-level
 `<style global>` blocks and provides native CSS assistance. Compiler-next delivers
@@ -52,7 +51,7 @@ Its source implementation uses no Bun/Node APIs.
 | --- | --- | --- |
 | Native CSS first | User: "we will start wit the normal css then later we add the short hands like p and co" | Required sequence |
 | Tailwind | User plans to drop Tailwind and use native CSS | Removed from this layer; supersedes the earlier provider proposal |
-| Full-property conditions | Conditions apply to `padding` and other native properties, as well as planned shorthands | Required design direction |
+| Full-property conditions | Conditions apply to `padding` and other native properties, not only future aliases | Required design direction |
 | Numeric responsiveness | `@700` and `@700px` mean the same viewport threshold | Accepted 2026-11-14; inclusive minimum width; no breakpoint configuration |
 | Compact spelling | `@condition:value` follows its property, without quotes | Required candidate spelling |
 | Class conditions | User proposed `p:4 @.loading:30`; the element carries the class | Required direction; first examples use full CSS properties |
@@ -64,9 +63,9 @@ Its source implementation uses no Bun/Node APIs.
 | Separators | Native CSS declaration termination for compact chains | Semicolons, except the final declaration before `}`; newline-only convenience remains unimplemented |
 | Editor support | Completion, highlighting, hover and diagnostics | Native value assistance and class/numeric header highlighting built; desktop acceptance remains separate |
 
-These directions do not choose named breakpoint defaults or implicit shorthand
-value conversions. Future `p:4` has no agreed unit meaning. Dropping Tailwind
-does not silently turn it into `4px`.
+These directions do not choose named breakpoint defaults, alias
+values or a selector-rewriting algorithm. In particular, future `p:4` has no
+agreed unit/scale meaning. Dropping Tailwind does not silently turn it into `4px`.
 
 ## 3. First foundation: ordinary CSS
 
@@ -133,7 +132,7 @@ the same thing. Values remain CSS, including functions and lists:
 ```
 
 Full-property conditions are required in the condition slice. They do not wait
-for shorthands. An `@` inside strings, comments, URLs or balanced functions is not
+for aliases. An `@` inside strings, comments, URLs or balanced functions is not
 automatically a condition. Custom properties can contain arbitrary tokens and
 need explicit fixtures so their values are not accidentally split.
 
@@ -384,49 +383,16 @@ wins. Review overlap examples instead of inventing runtime precedence.
 Check repeated/reversed conditions, native shorthand/longhand interactions and
 nested conditions. Any restriction or warning needs a documented reason.
 
-## 10. CSS shorthands: authored definitions and compound styles
+## 10. Property aliases later; Tailwind removed
 
-Accepted direction (2026-11-15, DX-52): teams write reusable shorthand
-definitions in the styling language, with accepted values and one or several
-native CSS declarations. They can share and override the definitions. The
-JavaScript alias tables and named value scales discussed earlier are superseded
-as the proposed authoring model. The compiler consumes real style definitions.
+Aliases come after ordinary CSS, conditions and tooling have a stable contract.
+Illustrative future mappings include `p` to `padding`, `px` to explicitly chosen
+horizontal properties, and `bg` to an explicitly chosen background property.
+The table, collisions and value grammar remain open.
 
-Candidate syntax, **not implemented**:
-
-```css
-@define a(value: start | center | end) {
-  display: flex;
-  align-items: value;
-  justify-content: value;
-}
-
-.item {
-  a:center @700:start;
-
-  @900px {
-    a:end @.loading:center;
-  }
-}
-```
-
-Each use expands the entire body at its authored position. Each responsive or
-class branch validates its supplied value and expands all declarations, including
-fixed ones. `@700` equals `@700px`; numeric groups, native nested selectors and
-compact class clauses keep their existing meaning. Ordinary declarations and
-shorthands share the CSS cascade, with no styling JavaScript runtime.
-
-Definitions can restrict values, for example
-`@define p(value: 4px | 8px | 16px) { padding: value; }`. A team can redefine the
-output properties and accepted values. Values remain CSS values; no implicit
-numeric unit or token lookup is selected. The `a` example aligns children;
-item alignment can be authored with `align-self`/`justify-self` instead.
-
-[The shorthand design draft](wiki2/spec/style-shorthands.md) records complete
-responsive output, grouped/class combinations, proposed value constraints,
-tooling and acceptance cases. `@define`/constraint grammar, definition visibility,
-sharing/import spelling, override precedence, native-name collisions and dynamic
-CSS value handling remain explicit decisions before implementation.
+`bg` must not silently alternate between `background` and `background-color`.
+Unitless `p:4` has no agreed interpretation. Alias units/scales must be reviewed
+later; native custom properties can already name project values.
 
 The earlier Tailwind provider, utility candidate expansion, `@apply`/`@reference`
 integration, Tailwind theme resolution and source-scanning plans are superseded.
@@ -449,7 +415,6 @@ CSS engine. Compilation and tooling should share the style syntax model.
 | `@.load…` | Discoverable author classes; arbitrary class names remain usable |
 | `class="ca…"` | Local class candidates where safely identifiable |
 | `@use("./…", "…")` | Relative source/directory and selected-file style-ID completion; implemented in CSS-4 |
-| `a:… @700:…` | Planned shorthand accepted-value suggestions in each branch and hover explaining the complete native expansion |
 
 A reusable CSS language service can handle native CSS; our extension must
 explicitly handle compact conditions. Hover can explain a property's value,
@@ -475,9 +440,9 @@ limits belong in the formal spec when a slice is selected.
 | CSS-1: ordinary CSS | Full native declarations in explicit global style blocks | Implemented and verified: real example, CSS output, authored ranges and baseline editor support; local scope deferred |
 | CSS-2: conditions | Compact class/numeric clauses and grouped numeric rules on native properties | `@700` equals `@700px`; nested groups, inherited compact clauses, cascade order, scoped named reuse and native assistance. Automated inputs live in their own fixtures; editable galleries are independent |
 | CSS-3: integration | Static CSS through compiler-next delivery | Builds/HMR, URLs, lazy assets, SSR/adoption, deduplication, maps and desktop checks as applicable |
-| CSS-SHORTHAND: design draft | Authored definitions, restricted values, compound declarations and existing responsive/class conditions | [Draft](wiki2/spec/style-shorthands.md); sharing/overrides and grammar remain to settle; no implementation claimed |
+| CSS-LATER: aliases | Optional `p`, `px`, `bg` conveniences | Separately reviewed mappings, units, collisions and completion; no Tailwind dependency |
 
-Split condition categories when their contracts need separate review. Shorthands
+Split condition categories when their contracts need separate review. Aliases
 are not a prerequisite for full-property conditions. Editor work accompanies
 each usable syntax slice; production readiness also needs delivery acceptance.
 
