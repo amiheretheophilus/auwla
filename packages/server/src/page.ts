@@ -10,7 +10,7 @@ import { RenderSession } from './session';
 import { stringTier, type StringRenderableNode } from './string-document';
 import { RegionTracker } from './stream-regions';
 import { reportStreamError } from './live';
-export { createServerPage, isServerPage } from './page-definition';
+export { createComponentPage, createServerPage, isServerPage } from './page-definition';
 export type { ServerPageDefinition } from './page-definition';
 
 export type ServerPageRender = PageContent;
@@ -128,6 +128,9 @@ export async function renderServerPage(
   if (page.wrapped) {
     if (!html.startsWith('<div>') || !html.endsWith('</div>')) throw new Error('memo-dom: invalid compiled page root');
     html = page.binding ? '<div style="display:contents">' + html.slice(5) : html.slice(5, -6);
+  } else if (page.contained && page.binding) {
+    // The browser renders the page's component into this element (`registerPageComponent`).
+    html = '<div style="display:contents">' + html + '</div>';
   }
   return { $mmd: 'page', version: 1, id: page.id, html,
     ...(page.styles?.length ? {styles:page.styles} : {}),

@@ -6,6 +6,8 @@ import { reconcileList, type RowOperations } from './list-values';
 import { createRetainedListIndex, type RetainedListIndex } from './list-index';
 import { takeVerified } from './list-map';
 import { buildInScope, reserveCreationScope, type CreationScope } from './adoption';
+import { mountPage, type MountedPage } from './content-region';
+import { isRenderablePage } from './page-content';
 
 export interface RenderOwner {
   readonly id: string;
@@ -226,6 +228,8 @@ function createSlot(text: Text, owner: RenderOwner, indexed: boolean, scope = re
   let rowIndex: RetainedListIndex<Row> | null = null;
   let rowOperations: RowOperations<Row> | null = null;
   let openingAnchor: Comment | null = null;
+  /** Server page content shown here (`content-region.ts`, `mountPage`). */
+  let page: MountedPage | null = null;
   let disposed = false;
   let hasReadyValue = false;
   let lastReadyValue: unknown;
@@ -236,6 +240,8 @@ function createSlot(text: Text, owner: RenderOwner, indexed: boolean, scope = re
     rowOperations = null;
     entry?.dispose();
     entry = null;
+    page?.dispose();
+    page = null;
     currentProgram = null;
     currentKey = undefined;
     currentValue = undefined;
@@ -330,9 +336,33 @@ function createSlot(text: Text, owner: RenderOwner, indexed: boolean, scope = re
     rows.forEach((row, index) => row.slot.write(next.values[index]));
   }
 
+  /**
+   * A server page (`page(...)` returned by a server function): its HTML, bound by its program.
+   * The same bound page, or its next generation, updates in place; a replacement still streaming
+   * its first generation waits behind the current one.
+   */
+  function writePage(value: Parameters<MountedPage['update']>[0]): void {
+    if (page !== null && page.accepts(value)) {
+      page.update(value);
+      return;
+    }
+    if (page !== null && page.holds(value)) return;
+    clear();
+    open('mmd:page');
+    page = buildInScope(scope, 'v', () => mountPage(value));
+    const parent = text.parentNode!;
+    for (const node of page.nodes) parent.insertBefore(node, text);
+  }
+
   const show = (value: unknown): void => {
     if (Array.isArray(value)) {
       writeList(value);
+      return;
+    }
+
+    if (isRenderablePage(value)) {
+      writePage(value);
+      currentValue = undefined;
       return;
     }
 

@@ -115,13 +115,13 @@ export function importCandidates(specifier: string, importer: string, extensions
   return candidates;
 }
 
-function directoryOf(path: string): string {
+export function directoryOf(path: string): string {
   const slash = path.lastIndexOf('/');
   return slash < 0 ? '.' : path.slice(0, slash);
 }
 
 /** Joins and normalizes, keeping the leading `./` or `/` the directory had. */
-function joinPath(directory: string, specifier: string): string {
+export function joinPath(directory: string, specifier: string): string {
   const parts: string[] = [];
   for (const part of `${directory}/${specifier}`.split('/')) {
     if (part === '' || part === '.') continue;

@@ -30,6 +30,7 @@ import { normalizeProjectPath, type ProjectHost } from '../project/host';
 import { createProject, type ProjectBuild } from '../project/project';
 import { analyzeServerFunctions, type ServerFunctionModule } from './functions';
 import { serverFunctionClient, serverFunctionDeclarations } from './generate';
+import { modulePages, PAGE_HYDRATION, PAGES, pageTable, type ModulePages } from './page-build';
 import {
   checkServices, isMiddlewareFile, serverFunctionBarrel, serverFunctionRegistry, serverServices,
   type DiscoveredFunctions, type ServerService,
@@ -110,12 +111,14 @@ export function createApplication(options: ApplicationOptions): Application {
   const functionsFolder = server?.functions !== undefined ? folderPath(server.functions) : root === null ? null : `${root}/functions`;
 
   /** The server folder's functions and services, found again by each build. */
-  let generated: Generated = { modules: [], services: [], facades: new Map() };
+  let generated: Generated = { modules: [], services: [], facades: new Map(), pages: [], texts: { client: new Map(), server: new Map() } };
 
   async function discover(): Promise<Generated> {
     const modules: DiscoveredFunctions[] = [];
     const services: ServerService[] = [];
     const facades = new Map<string, string>();
+    const pages: ModulePages[] = [];
+    const pageContext = { host, languages, serverModule: (rest: string) => root === null ? Promise.resolve(false as const) : serverModule(root, rest, host, languages) };
     const folders = [...new Set([root, functionsFolder].filter((folder) => folder !== null))];
     const paths = new Set<string>();
     for (const folder of folders) for (const path of (await host.list?.(folder)) ?? []) paths.add(path);
@@ -130,9 +133,15 @@ export function createApplication(options: ApplicationOptions): Application {
       if (!isMiddlewareFile(path) && module.functions.length > 0) {
         facades.set(facadePath(functionsFolder, path, languages), serverFunctionClient(module));
       }
+      // Server pages (`page-build.ts`): only a module that returns markup or names `page`.
+      const hasMarkup = module.functions.some((fn) => fn.page === true);
+      if (!isMiddlewareFile(path) && (hasMarkup || /\bpage\b/.test(text))) {
+        const found = await modulePages(pageContext, path, text, functionBase(functionsFolder, path, languages), hasMarkup);
+        if (found !== null) pages.push(found);
+      }
     }
     checkServices(services);
-    return { modules, services, facades };
+    return { modules, services, facades, pages, texts: pageTexts(pages) };
   }
 
   /** `#server-functions`: each module's functions, re-exported from its facade. */
@@ -149,6 +158,9 @@ export function createApplication(options: ApplicationOptions): Application {
       readFile(path) {
         const facade = generated.facades.get(path);
         if (facade !== undefined) return facade;
+        // Server pages: the page modules, the browser's table, and the server's copy of a handler.
+        const page = generated.texts[side].get(path);
+        if (page !== undefined) return page;
         if (path === GENERATED.barrel) return barrel();
         if (side === 'server' && path === GENERATED.registry) {
           return serverFunctionRegistry(GENERATED.registry, functionsFolder ?? '', generated.modules, generated.services);
@@ -161,12 +173,17 @@ export function createApplication(options: ApplicationOptions): Application {
         const text = host.readFile(path);
         // Appended, so the entry's authored offsets stay in place for its source map.
         if (side === 'client' && path === clientEntry && serverEntry !== undefined) {
-          return Promise.resolve(text).then((value) => (value === undefined ? undefined : value + HYDRATE));
+          // Pages the server rendered into the document are bound before the entry mounts.
+          const pages = generated.texts.client.has(PAGES.hydration)
+            ? `import ${JSON.stringify(relativeModule(clientEntry, PAGES.hydration))};\n`
+            : '';
+          return Promise.resolve(text).then((value) => (value === undefined ? undefined : value + HYDRATE + pages));
         }
         return text;
       },
       async resolve(specifier, importer) {
         if (specifier === '#server-functions') return GENERATED.barrel;
+        if (specifier === 'virtual:memoized-dom/page-bindings') return PAGES.table;
         if (specifier.startsWith('#server/')) {
           // Left unresolved, it stays in the output, where `checkServerOnly` reports it.
           if (side === 'client' || root === null) return false;
@@ -223,6 +240,9 @@ export function createApplication(options: ApplicationOptions): Application {
     const folders = [root, functionsFolder].filter((folder) => folder !== null);
     const touchesServer = paths.some((path) => folders.some((folder) => normalizeProjectPath(path).startsWith(`${folder}/`)));
     const generatedPaths = touchesServer ? [GENERATED.barrel, GENERATED.registry, ...generated.facades.keys(), ...discovered.facades.keys()] : [];
+    // A page's generated modules change with any module it reaches, inside the server folder or not.
+    generatedPaths.push(...changedTexts(generated.texts, discovered.texts));
+    if (generated.texts.client.has(PAGES.hydration) !== discovered.texts.client.has(PAGES.hydration)) generatedPaths.push(clientEntry);
     generated = discovered;
 
     const clientUpdate = await clientProject.update([...paths, ...generatedPaths]);
@@ -267,17 +287,53 @@ interface Generated {
   readonly services: readonly ServerService[];
   /** Facade text by its project path. */
   readonly facades: ReadonlyMap<string, string>;
+  readonly pages: readonly ModulePages[];
+  /** The server pages' generated texts each build reads, by project path (`page-build.ts`). */
+  readonly texts: { readonly client: ReadonlyMap<string, string>; readonly server: ReadonlyMap<string, string> };
 }
 
 /**
- * `./server/functions/users.tsx` → `./.memoized/functions/users.ts`: a facade has no markup.
- * A language's module (`users.auwla`) gets a `.ts` facade too.
+ * What each build reads for the server pages: both read the page modules and a table (the
+ * server's loads nothing); the browser reads the bindings modules, the server the rewritten
+ * handlers.
  */
-function facadePath(functionsFolder: string, path: string, languages: readonly SourceLanguage[] | undefined): string {
+function pageTexts(pages: readonly ModulePages[]): Generated['texts'] {
+  const client = new Map<string, string>([[PAGES.table, pageTable(pages, 'client')]]);
+  const server = new Map<string, string>([[PAGES.table, pageTable(pages, 'server')]]);
+  for (const page of pages) {
+    client.set(page.modulePath, page.clientModule);
+    server.set(page.modulePath, page.module);
+    server.set(page.handlerPath, page.handler);
+    if (page.bindingsPath !== undefined && page.bindings !== undefined) client.set(page.bindingsPath, page.bindings);
+  }
+  if (pages.some((page) => page.bindingsPath !== undefined)) client.set(PAGES.hydration, PAGE_HYDRATION);
+  return { client, server };
+}
+
+/** The generated paths whose text differs between two discoveries, on either side. */
+function changedTexts(before: Generated['texts'], after: Generated['texts']): string[] {
+  const changed = new Set<string>();
+  for (const side of ['client', 'server'] as const) {
+    for (const path of new Set([...before[side].keys(), ...after[side].keys()])) {
+      if (before[side].get(path) !== after[side].get(path)) changed.add(path);
+    }
+  }
+  return [...changed];
+}
+
+/**
+ * A module's path inside the functions folder, without its extension:
+ * `./server/functions/users.tsx` → `users`. A language's extension (`.auwla`) goes too.
+ */
+function functionBase(functionsFolder: string, path: string, languages: readonly SourceLanguage[] | undefined): string {
   const inside = path.slice(functionsFolder.length + 1);
   const language = languageExtensions(languages).find((extension) => inside.endsWith(extension));
-  const base = language !== undefined ? inside.slice(0, -language.length) : inside.replace(/\.[cm]?[jt]sx?$/, '');
-  return `${GENERATED.facades}${base}.ts`;
+  return language !== undefined ? inside.slice(0, -language.length) : inside.replace(/\.[cm]?[jt]sx?$/, '');
+}
+
+/** `./server/functions/users.tsx` → `./.memoized/functions/users.ts`: a facade has no markup. */
+function facadePath(functionsFolder: string, path: string, languages: readonly SourceLanguage[] | undefined): string {
+  return `${GENERATED.facades}${functionBase(functionsFolder, path, languages)}.ts`;
 }
 
 /** The project path `#server/<rest>` names, probing extensions as a relative import does. */

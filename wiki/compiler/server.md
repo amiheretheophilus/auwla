@@ -248,6 +248,89 @@ runs the built Worker in workerd through Miniflare: a page render, per-render mo
 file through the assets binding, and a server function. The old Vite plugin's `cloudflare()` still
 wraps `@cloudflare/vite-plugin` for its own dev server; the Vite path is one way, not the only one.
 
+## Server pages
+
+Status (2026-11-15): built, on (a) below (`../decisions.md`, 2026-11-15). `server/pages.app.test.ts`
+builds an application with the command line and checks the built server and, where a Chromium is
+installed (`MMD_CHROME_PATH`; this machine has Edge, not Chrome), the browser: the page in the
+document, an endpoint's versioned HTML carrying only the fields the browser reads, a passive page
+with no binding and no code in the client, the interactive page bound, a later page of the same call
+site updating it in place with its local state and nodes, and another page replacing it.
+
+A server function can return markup: `return page(<ExpeditionBoard notes={notes} />)`
+(`docs/server-components-design.md`). The server renders it; the browser gets HTML, plus a program
+only if the markup can change by itself (a click handler, a ref, an effect). Authoring is the old
+compiler's. The runtime pieces it uses were already there (`createPageSource` in `packages/data`, the
+page transports, `registerPageBinder`), and the facade already called `createPageSource`
+(`server/generate.ts`). The compiler's side, which the old compiler split between
+`packages/compiler/src/server-pages.ts`, `page-compiler.ts`, `page-projection.ts` and
+`packages/vite/src/server-pages.ts` (the browser's table, in the plugin), belongs to the application
+here (`../decisions.md`, 2026-11-14), so Vite, the Bun plugin and the command line all get it:
+
+1. **Extract** (`server/pages.ts`). In a server function module, each `page(<JSX/>)` call becomes
+   `createComponentPage(id, Page<n>, [captures], contract)` in the server build's copy of the
+   handler (appended imports, so the authored offsets stay). `page` is recognized by where it comes
+   from, never its name: `@memoized-dom/server`, or a project module re-exporting it, which
+   `page-build.ts` follows through the host (`export { page } from …`, or import then export). Its
+   JSX moves into `./.memoized/pages/<module>.tsx` as `Page<n>(inputs)`, whose inputs are the values
+   the JSX captures (`identifierUses`, `core/resolve`); component tags must be imports, which the
+   page module imports from its own folder. The handler stays plain backend code; the page module
+   is UI, compiled like any component in both builds. The old compiler's errors stay: one JSX
+   argument, no nested `page()`, no escaping `page`, no local component tag. A handler holding JSX
+   without `page()` is an error, as is `page()` in a source language's module (`.auwla`), not
+   supported yet: the server's copy of the handler would have to be written in that language.
+2. **Decide what the browser gets**, per page (`page-build.ts`), from what that page alone reaches
+   (the page module with only its component, then every project module through imports, native
+   packages included): a page with no `on*` handler, `ref`, spread attribute, `$effect` or
+   `$cleanup` among them, and no package outside the project, is `browser: 'none'`. It ships no
+   code and no inputs; the browser's copy of the page module leaves it out. This is a scan of the
+   syntax, as the old compiler's was, not the plan's facts, which the application does not have
+   before it builds.
+3. **Choose the inputs** (`page-inputs.ts`): every path the page's components read from each
+   capture, followed through bindings, destructuring, props, defaults, member reads, array
+   callbacks (rows as `*`), local helpers and imported components. Reading `user.name` and
+   `user.hint` sends those, not `user.password`. A value reaching code it cannot follow (an unknown
+   call, a spread into an unknown component, a recursive component, `a ? user : other`) is sent
+   whole, and the server's `projectPageInputs` refuses what cannot be sent, such as a function. This
+   is the old `page-projection.ts` ported to compiler-next's parser, a second walk of the syntax
+   rather than the graph's read paths the design first named: the graph knows reads per module, not
+   values followed into another component's props.
+4. **The browser's table** (`./.memoized/page-bindings.ts`): `virtual:memoized-dom/page-bindings`,
+   which the facades import, resolves to it in both builds. It holds each page's id and contract
+   key, and for a page with bindings a lazy import of `./.memoized/pages/<module>.bindings.ts`,
+   which calls `registerPageComponent(key, Page<n>)`. The server's copy loads nothing. With a page
+   that has bindings, the browser's entry also imports `page-hydration.ts`, whose top-level
+   `await preparePageHydration()` loads the bindings of the pages in the document's source
+   snapshots before the entry mounts.
+5. **The runtime.** `createComponentPage` (`packages/server/src/page-definition.ts`) calls the page
+   component with a props cell (compiler-next's components take one, not the old props array), and
+   a page with bindings is rendered inside one `display: contents` element. compiler-next's value
+   slot shows page content through `mountPage` (`runtime/src/content-region.ts`, shared with the old
+   compiler's `createContentRegion`). In the browser, `registerPageComponent`
+   (`runtime/src/page-bindings.ts`) renders the component again into that element, in its own
+   runtime on the real document, and gives later inputs to its props cell. It does not adopt the
+   server's nodes: numbers of the page's own would collide with the containing app's, which
+   `collectCreations` gathers from everywhere inside its root. The browser gets the same code either
+   way; only the region's nodes are made again, once, when it is bound.
+
+Not yet: the Vite suite's `packages/vite/tests/server-pages.test.ts` authors its board in `.tsrx`,
+which compiler-next has no frontend for, so it runs on the old compiler only; and progressive
+delivery of an interactive page (its server renders it in one go, as the old one does for a page
+with bindings).
+
+**What an interactive page ships** (decided: (a)). compiler-next's adoption is a client render that reuses
+the server's nodes (`delivery.md`, "Adopting existing nodes"), so a page's browser program is its
+whole compiled component, and its inputs are every path that component reads, text included:
+
+- **(a) Adopt now.** Build server pages on adoption as it is. Passive pages ship nothing; an
+  interactive page ships its component and the data it renders. When delivery's step 3 (update code
+  with no creation code, for content the server already sent) is built, pages get it with every
+  other page, since they share the path.
+- **(b) Bindings first.** Build delivery's step 3 first, then server pages on it, so an interactive
+  page ships only the code and inputs of its live parts. This is the old compiler's answer
+  (`browser: 'bindings'` refused anything it would have to create), and it is a general delivery
+  change, more work before the merge.
+
 ## Files
 
 | File | What it owns |
@@ -258,5 +341,10 @@ wraps `@cloudflare/vite-plugin` for its own dev server; the Vite path is one way
 | `server/registry.ts` | The server function routes module, the `#server-functions` barrel, and services |
 | `server/application.ts` | `createApplication`: the client and server builds, their views of the host, the server entry's integration |
 | `server/delivery.ts` | A built server's delivery module for Bun or a Cloudflare Worker, and the Worker's `wrangler.json` |
+| `server/pages.ts` | Server pages: `page(<JSX/>)` extracted into a page module, the handler's replacement, its errors |
+| `server/page-inputs.ts` | Which paths of a page's inputs its components read, so only those cross to the browser |
+| `server/page-build.ts` | A module's pages in the application: what `page` names, what each page reaches, its contract, the browser's table |
+| `server/pages.test.ts` | Extraction (the old compiler's cases) and input projection |
+| `server/pages.app.test.ts` | A built application with pages: the server's answers, the client's files, and the browser |
 | `server/index.ts` | The public API, re-exported from the package root |
 | `server/application.test.ts` | Facades and no server code in the client, routes and handlers on the server, client-only apps, server-only imports, `$routed`, errors, updates |

@@ -62,7 +62,7 @@ export { createPreparedRegion } from './prepared-region';
 export { createContentRegion } from './content-region';
 export { isPageContent, acceptPageContent, registerPageBinder } from './page-content';
 export type { PageContent, PageBinder, PageBindingHandle } from './page-content';
-export { bindRuntimeCallback, bindRuntimeNamespace, registerCompiledPage } from './page-bindings';
+export { bindRuntimeCallback, bindRuntimeNamespace, registerCompiledPage, registerPageComponent } from './page-bindings';
 export { encodePageHtml, decodePageHtml, encodePageFrame, encodePageFailure, decodePageFrames } from './page-html';
 export { collectRenderReadiness } from './render-readiness';
 export { toPresentationError, type PresentationError, type PresentationErrorKind } from './presentation-error';

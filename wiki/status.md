@@ -1,6 +1,6 @@
 # Status
 
-Last updated: 2026-11-11.
+Last updated: 2026-11-15.
 
 Prototype branch integration: the compiler-owned [read-only analysis API](compiler/analysis.md)
 is built under `src/analysis/` and shares the existing frontend with production.
@@ -17,6 +17,21 @@ See [dynamic attribute values](compiler/core.md#dynamic-attribute-values).
 
 ## Current: Phase 10 (2026-11-06)
 
+**Done (2026-11-15): server pages, in the application** (`compiler/server.md`, "Server pages";
+`decisions.md`, 2026-11-15). A server function's `page(<Board … />)` is extracted into a generated
+page module, compiled as UI in both builds, while the handler stays backend code. Each page gets a
+contract from what it alone reaches: a page that cannot change ships HTML and no code; an
+interactive one ships its component and only the input paths its components read. The browser's
+table of pages is a generated module every tool resolves. compiler-next's value slot now shows page
+content, and the browser renders a bound page's component into its region (it does not adopt the
+server's nodes yet, which the containing app's numbering prevents). A built application passes in
+`server/pages.app.test.ts`, browser included (on Edge). The old plugin's remaining features are now
+all in the project, devtools aside. Not yet: `page()` in an `.auwla` module, and the Vite suite's
+server pages test, which is written in `.tsrx`.
+
+Also on 2026-11-15: rule A (body statements that build nothing run again when their reads change)
+came over from `prototype/jsx-plus` with its merge (`compiler/state-and-derived.md`).
+
 **Done (2026-11-14): native packages are found by the project, not a plugin** (`compiler/project.md`,
 "Native packages"; `decisions.md`, 2026-11-14). `fileSystemHost` resolves an import of a native
 package, installed or linked from the workspace, to its source file, with Node's lookup from the
@@ -29,7 +44,7 @@ plugin's `memoized-dom package` hands `source: true` configs to it, and both nat
 pass on either compiler. Cloudflare is a build target of the application (`compiler/server.md`,
 "Delivery and runtimes"): `cli.ts build --runtime cloudflare` writes `worker.js`, `client/` and
 `wrangler.json`, and the built Worker renders, serves its assets and answers server functions in
-workerd (Miniflare) in `project/cli.test.ts`. Next: server pages, which need a design first.
+workerd (Miniflare) in `project/cli.test.ts`. Server pages followed on 2026-11-15 (above).
 
 **Done (2026-11-14): each server render owns the module state it writes** (`compiler/server.md`,
 "Request isolation"; `decisions.md`, 2026-11-14). In a server build, a module whose state a
