@@ -117,9 +117,23 @@ interface Computation {
   reads: Set<ReadValue>;
   writes: Set<MemoSlot>;
   pending?: Waiting;
+  /**
+   * For a body statement: each read's value when the statement first read it, so a value the
+   * statement itself changed is known to be its output, not its input (`Instance.statement`).
+   */
+  values?: Map<ReadValue, unknown>;
 }
 
 let computation: Computation | undefined;
+
+/** Record a read in the running computation, with its first value when that is wanted. */
+function traceRead(read: ReadValue): void {
+  if (computation === undefined) return;
+  computation.reads.add(read);
+  if (computation.values !== undefined && !computation.values.has(read)) {
+    computation.values.set(read, deepCopy(read.peek()));
+  }
+}
 const externalReads = new Map<string, ReadValue>();
 const privateVersions = new WeakMap<object, number>();
 
@@ -185,7 +199,7 @@ export function $captureRead(key: string, read: () => unknown): unknown {
     dependency = { peek: read };
     externalReads.set(key, dependency);
   }
-  computation?.reads.add(dependency);
+  traceRead(dependency);
   return read();
 }
 
@@ -230,7 +244,7 @@ export function $closureCell(read: () => unknown): ReadValue {
 
 /** Record the cell in the running computation. A hoisted `var` cell can still be undefined. */
 export function $closureRead(cell: ReadValue | undefined, read: () => unknown): unknown {
-  if (cell !== undefined) computation?.reads.add(cell);
+  if (cell !== undefined) traceRead(cell);
   return read();
 }
 
@@ -242,7 +256,7 @@ class MemoSlot {
   constructor(readonly owner: Instance) { this.created = owner.render; }
 
   get v(): unknown {
-    computation?.reads.add(this);
+    traceRead(this);
     return this.value;
   }
 
@@ -684,6 +698,51 @@ export class Instance {
     return this.statementsRun.has(index) && !this.blocked.has(`statement:${index}`);
   }
 
+  /**
+   * What each body statement read when it last ran: its own inputs and the reads traced through
+   * helpers it called, copied after it ran, so its own writes do not count (`changed`).
+   */
+  private readonly statementReads = new Map<number, {
+    readInputs: () => unknown[];
+    /** The positions of `readInputs` it did not change itself. */
+    kept: readonly number[];
+    reads: readonly ReadValue[];
+    snapshot: unknown;
+  }>();
+
+  /**
+   * What statement `index` read in the run that just finished, leaving out what it changed itself:
+   * a value it wrote is its output, not its input, so its own writes never run it again, nor do
+   * two statements that both write one list (`record(…)`) run each other forever. The compiled
+   * code gets the same from its computation, which drops its own writes (`runtime`, `end`).
+   */
+  private recordReads(index: number, readInputs: () => unknown[], before: readonly unknown[], trace: Computation): void {
+    const after = deepCopy(readInputs()) as unknown[];
+    const kept = after.flatMap((value, position) => deepEqual(before[position], value) ? [position] : []);
+    const reads = [...trace.reads].filter((read) => {
+      if (trace.writes.has(read as MemoSlot)) return false;
+      return !trace.values!.has(read) || deepEqual(trace.values!.get(read), deepCopy(read.peek()));
+    });
+    this.statementReads.set(index, { readInputs, kept, reads, snapshot: this.statementInputs(readInputs, kept, reads) });
+  }
+
+  private statementInputs(readInputs: () => unknown[], kept: readonly number[], reads: readonly ReadValue[]): unknown {
+    const inputs = readInputs();
+    return deepCopy([...kept.map((position) => inputs[position]), ...readValues(reads)]);
+  }
+
+  /**
+   * Whether what statement `index` read changed since it last ran (`wiki/decisions.md`,
+   * 2026-11-15): a body statement that builds no value runs again then, side effects included,
+   * as a statement inside a returning block does (`returning`). Reads in a callback it only
+   * created (`setInterval(() => seconds--)`) are not its reads, so it does not run again for them.
+   */
+  changed(index: number): boolean {
+    const last = this.statementReads.get(index);
+    if (last === undefined) return false;
+    return !deepEqual(last.snapshot, this.statementInputs(last.readInputs, last.kept, last.reads));
+  }
+
   /** Immediate callbacks can build a value even when no static call summary exists. */
   due(index: number): boolean {
     const writes = this.computations.get(index)?.writes;
@@ -723,11 +782,13 @@ export class Instance {
     }
     this.blocked.delete(key);
     const outer = computation;
-    const trace: Computation = { reads: new Set(), writes: new Set() };
+    const trace: Computation = { reads: new Set(), writes: new Set(), values: new Map() };
+    const inputsBefore = deepCopy(readInputs()) as unknown[];
     computation = trace;
     run();
     computation = outer;
     this.computations.set(index, trace);
+    this.recordReads(index, readInputs, inputsBefore, trace);
     if (trace.writes.size > 1) {
       for (const target of trace.writes) {
         if (target.readInputs === undefined || target.writtenLater) continue;

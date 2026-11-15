@@ -114,9 +114,11 @@ export class InputQueries {
   }
 
   /**
-   * Running a visible, synchronous function adds what its body reads and writes,
-   * and what the helpers it calls do. Anything else (an unknown callee, `new`,
-   * an async or generator function) is opaque: its reads are found at runtime.
+   * Running a visible function adds what its body reads and writes, and what the
+   * helpers it calls do. An async function adds what it does before its first
+   * `await`, which runs as part of the call; the rest runs later and is no input
+   * of the caller (`#synchronousPart`). Anything else (an unknown callee, `new`,
+   * a generator function) is opaque: its reads are found at runtime.
    */
   callFacts(module: Module, call: CallNode): CallFacts {
     let facts = this.#calls.get(call);
@@ -131,10 +133,35 @@ export class InputQueries {
   #calleeSummary(module: Module, call: CallNode): FunctionSummary | undefined {
     if (is.NewExpression(call)) return undefined;
     const fn = functionValue(module, call.callee);
-    if (fn === null || fn.async || fn.generator) return undefined;
+    if (fn === null || fn.generator) return undefined;
     const summary = this.#summaries.get(fn);
     if (summary === undefined || summary.fn.body === null) return undefined;
-    return summary;
+    return fn.async ? this.#synchronousPart(summary) : summary;
+  }
+
+  readonly #synchronousParts = new Map<FunctionSummary, FunctionSummary>();
+
+  /**
+   * What an async function does as part of its call: its body up to the first `await` (or
+   * `for await`), which JavaScript runs before the call returns its promise. In
+   * `async function load() { return n * 10; }`, `load()` reads `n`, so a value computed from
+   * `load()` follows `n`, as the reference finds by running it.
+   */
+  #synchronousPart(summary: FunctionSummary): FunctionSummary {
+    let part = this.#synchronousParts.get(summary);
+    if (part === undefined) {
+      const end = firstAwait(summary.fn);
+      const before = (node: Node) => node.start < end;
+      part = {
+        ...summary,
+        reads: summary.reads.filter((reference) => before(reference.node)),
+        writes: summary.writes.filter((write) => before(write.node)),
+        calls: summary.calls.filter(before),
+        receiverWrites: summary.receiverWrites.filter(before),
+      };
+      this.#synchronousParts.set(summary, part);
+    }
+    return part;
   }
 
   /** Everything a function's run reaches through the helpers it calls. Cycles end at visited functions. */
@@ -251,6 +278,22 @@ export function variableDeclaration(binding: Binding): Extract<Node, { type: 'Va
     if (is.Function(ancestor) || is.Program(ancestor)) return null;
   }
   return null;
+}
+
+/** Where an async function first suspends: its first `await` or `for await`, not one in a nested function. */
+function firstAwait(fn: FunctionNode): number {
+  let first = Number.POSITIVE_INFINITY;
+  if (fn.body === null) return first;
+  walk(fn.body, {
+    enter(node, context) {
+      if (is.Function(node)) {
+        context.skip();
+      } else if (is.AwaitExpression(node) || (is.ForOfStatement(node) && node.await)) {
+        first = Math.min(first, node.start);
+      }
+    },
+  });
+  return first;
 }
 
 export function parameterPattern(binding: Binding): Node | null {

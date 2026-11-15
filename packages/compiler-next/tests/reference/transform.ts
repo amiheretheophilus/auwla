@@ -23,8 +23,9 @@
  *   the statement runs inside `$ctx.observe(...)`, which compares the value before
  *   and after. Once it is seen to change the value, it builds it.
  *
- * Every other body statement is setup: it runs once, on the first render where
- * the sources it reads are ready.
+ * Every other body statement runs on the first render where the sources it reads
+ * are ready, and again whenever what it read changed since it last ran, side
+ * effects included (`wiki/decisions.md`, 2026-11-15; `$ctx.changed`).
  * Destructured aliases follow the same memo rules. JavaScript evaluates the
  * native pattern once per input change, after its source is ready.
  */
@@ -723,6 +724,10 @@ class ComponentRewrite {
         argument: ctxCall('ran', [numberLiteral(index)]),
       }) as Expression;
       const conditions = [notRanYet, ctxCall('due', [numberLiteral(index)])];
+      // A statement that builds no value runs again when what it read changed, side effects
+      // included (`wiki/decisions.md`, 2026-11-15). One that builds a value runs again when that
+      // value is computed again, which starts from its initializer.
+      if (plan.builds.size === 0) conditions.push(ctxCall('changed', [numberLiteral(index)]));
       for (const binding of plan.builds) {
         const slot = this.slots.get(binding)!;
         if (slot.treatment === 'memo') conditions.push(member(slot.name, 'fresh'));
@@ -1389,7 +1394,7 @@ function rewriteModuleEffects(module: Module): void {
 // ---------------------------------------------------------------------------
 // Component runtime calls
 
-type CtxMethod = Treatment | 'effect' | 'cleanup' | 'observe' | 'confirmed' | 'mayChange' | 'ran' | 'due' | 'statement' | 'callback'
+type CtxMethod = Treatment | 'effect' | 'cleanup' | 'observe' | 'confirmed' | 'mayChange' | 'ran' | 'due' | 'changed' | 'statement' | 'callback'
   | 'returning' | 'retainFunction' | 'literalFields';
 
 /** `$ctx.memo(...)`, `$ctx.prop(...)`, `$ctx.observe(...)`, … */

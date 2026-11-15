@@ -145,7 +145,10 @@ behaves('a helper preserves a setter edit before the setter throws', {
 
 behaves('an unlisted array method works directly and through a helper', {
   source: `
+    // \`install(rows)\` runs again when \`rows\` changes (wiki/decisions.md, 2026-11-15), so it
+    // defines the method once: defining it again would throw.
     function install(rows) {
+      if ('renameFirst' in rows) return;
       Object.defineProperty(rows, 'renameFirst', {
         value() { this[0].label += '!'; return this; }
       });

@@ -1191,3 +1191,88 @@ behaves('derived: a var declared in a loop header derives with its loop, as let 
   steps: [{ click: 'button' }, { click: 'button' }],
   check(container, observation) { expect(container.textContent).toBe(['1 2', '3 3', '6 4'][observation]!); },
 });
+
+// A body statement that builds no value runs again when what it reads changes, side effects
+// included (`wiki/decisions.md`, 2026-11-15). `record` keeps what it was given in a module list,
+// which the page shows, so each run is visible.
+const RECORD = {
+  './log.ts': `
+    export const seen = [];
+    export function record(value) { seen.push(value); }`,
+};
+
+behaves('body statements: an if with side effects runs again when its test reads a change', {
+  modules: RECORD,
+  source: `
+    import { record, seen } from './log';
+    export function App() {
+      let count = 0;
+      if (count > 1) {
+        record('big ' + count);
+      }
+      return <main><button onClick={() => count++}>{count}</button><p>{seen.join(',')}</p></main>;
+    }`,
+  steps: [{ click: 'button' }, { click: 'button' }, { click: 'button' }],
+  check(container, observation) {
+    expect(container.querySelector('p')?.textContent).toBe(['', '', 'big 2', 'big 2,big 3'][observation]);
+  },
+});
+
+behaves('body statements: a bare call runs again for the values it reads, not for others', {
+  modules: RECORD,
+  source: `
+    import { record, seen } from './log';
+    export function App() {
+      let count = 0;
+      let other = 0;
+      record(count);
+      return <main>
+        <button id="count" onClick={() => count++}>{count}</button>
+        <button id="other" onClick={() => other++}>{other}</button>
+        <p>{seen.join(',')}</p>
+      </main>;
+    }`,
+  steps: [{ click: '#count' }, { click: '#other' }, { click: '#count' }],
+  check(container, observation) {
+    expect(container.querySelector('p')?.textContent).toBe(['0', '0,1', '0,1', '0,1,2'][observation]);
+  },
+});
+
+behaves('body statements: a loop and a switch run again when what they read changes', {
+  modules: RECORD,
+  source: `
+    import { record, seen } from './log';
+    export function App() {
+      let mode = 'a';
+      let items = [1];
+      for (const item of items) record(mode + item);
+      switch (mode) {
+        case 'b': record('switched'); break;
+        default: break;
+      }
+      return <main>
+        <button id="mode" onClick={() => { mode = 'b'; }}>mode</button>
+        <button id="add" onClick={() => { items = [...items, 2]; }}>add</button>
+        <p>{seen.join(',')}</p>
+      </main>;
+    }`,
+  steps: [{ click: '#mode' }, { click: '#add' }],
+  check(container, observation) {
+    expect(container.querySelector('p')?.textContent).toBe(['a1', 'a1,b1,switched', 'a1,b1,switched,b1,b2'][observation]);
+  },
+});
+
+behaves('body statements: a statement whose own write changes what it read does not run again for it', {
+  modules: RECORD,
+  source: `
+    import { record, seen } from './log';
+    export function App() {
+      let count = 0;
+      if (seen.length < 5) record(seen.length);
+      return <main><button onClick={() => count++}>{count}</button><p>{seen.join(',')}</p></main>;
+    }`,
+  steps: [{ click: 'button' }],
+  check(container, observation) {
+    expect(container.querySelector('p')?.textContent).toBe(['0', '0'][observation]);
+  },
+});

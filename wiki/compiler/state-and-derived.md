@@ -332,11 +332,12 @@ parent value.
 
 ### Timers and other setup side effects
 
-A body statement that only *possibly* builds a value runs once, as the console
-runs it. It joins the value's derivation only if that first run changed the value:
-a callback it was given wrote the value during the call, or the deep-copy check
-(below, "Which body statements build a value") saw a change. Otherwise it is never
-replayed, not when its inputs change and not when the owner updates.
+A body statement that only *possibly* builds a value joins the value's derivation
+only if a run changed the value: a callback it was given wrote the value during
+the call, or the deep-copy check (below, "Which body statements build a value")
+saw a change. Until then it is not replayed with the value, and never because the
+owner updated; it runs again only when what it read changed ("Body statements that
+build nothing", below).
 
 ```js
 let seconds = 3;
@@ -352,8 +353,61 @@ $cleanup(() => clearInterval(id));
 4. Unmount: `$cleanup` clears the interval.
 
 No `$effect` is needed, and nothing names `setInterval`: the same holds for any
-function given a callback. `console.log(doubled)` and `recorder.record(doubled)`
-run once for the same reason; they read `doubled` and do not change it.
+function given a callback. The statement reads `seconds` only in a callback it
+creates, so a change of `seconds` does not run it again either ("Body statements
+that build nothing", below).
+
+### Body statements that build nothing
+
+A top-level body statement that builds no value runs again whenever a value it
+read changed since it last ran, side effects included (`../decisions.md`,
+2026-11-15). Before, it ran once, as setup.
+
+```js
+let count = 0;
+console.log('count is', count);        // runs again when count changes
+if (count > 10) { log(count); navigate('/'); }  // so does this, log and call included
+recorder.record(doubled);              // runs again when doubled changes
+const id = setInterval(() => seconds--, 1000);  // reads seconds only later: once
+```
+
+- **What counts as read:** what the statement itself reads, and what a call it makes
+  reads while it runs (another module's state, a helper's closure). Not what a
+  callback it only creates reads later.
+- **Only its inputs:** a change of a value it does not read does not run it.
+- **Its own writes do not count.** A value it changes is its output, not its input,
+  so `if (seen.length < 5) record(seen.length)` runs once, and two statements that
+  both write one list (`record(a); record(b)`) cannot run each other forever.
+- **A statement that builds a value** keeps its rule: it runs again when that value is
+  computed again, which starts from its initializer. One that only *may* build
+  (`record(count)`) runs again for its inputs until it is seen to build; from then
+  on, its value's derivation replays it.
+- **Repeating must be safe.** A setup call that cannot run twice checks first:
+  `install(rows)` defining a property on `rows`, which handlers edit, now runs again
+  and must skip a property it already defined (`tests/cases/handlers.test.ts`).
+- Not covered yet: a statement after the component's first return still runs once
+  when control first reaches it (`conditionals-and-lists.md`, "Early returns");
+  inside a block that returns, the 2026-10-24 rule already runs it again.
+- A statement registering a lifecycle callback (`$effect`, `$cleanup`) is the
+  component's setup and runs once.
+
+The compiler plans these in `features/derived/watched.ts` (`WatchedStatement` on the
+component's plan). Each records the versions of its inputs after it runs, and a
+computation collects reads the compiler cannot see; `Computation.end()` drops what
+it wrote (`runtime/src/computation.ts`). The update function runs it again in its
+authored place among the derivation steps. The reference implements the same with
+`$ctx.changed` (`tests/reference/runtime.ts`), comparing what the statement read,
+recorded after it ran, leaving out values it changed itself.
+
+Found by the rule and fixed: a value computed by calling one of the component's own
+async functions did not follow what that function reads (`const made = load()`, with
+`async function load() { return n * 10; }`). The analysis treated every async call as
+opaque, and the function's reads are plain variables, so nothing found `n` at runtime
+either. Until now nothing showed it: `made.then(…)` ran once in both the reference and
+the output. An async function's body runs synchronously up to its first `await`, so
+that part is now part of the call (`#synchronousPart` in `core/graph/inputs.ts`); what
+it does after the first `await` runs later and is no input
+(`tests/cases/coverage.test.ts`, "r23").
 
 The compiler records these statements as `possible` builders (`BodyBuilder`
 in `core/graph/model.ts`; `invocation: 'runtime'` when a callback decides). A
@@ -463,6 +517,7 @@ The graph classification is built (`core/graph/classify.ts`, described in
 | `features/state/classify.ts` | the initial kind: `Prop`, `Constant`, `State` or `Opaque`; imports start as placeholders |
 | `features/derived/classify.ts` | spreads reactivity through reads (a worklist, so cycles end); gives imports their definition's kind |
 | `features/derived/plan.ts` | native declarations, definite builders, shared-statement groups and their version inputs |
+| `features/derived/watched.ts` | body statements that build nothing, run again when what they read changes |
 | `features/derived/dom.ts` | source-ordered, version-guarded replay and writable memo storage |
 | `features/derived/literal-fields.ts` | which object literals update field by field, used by the plan and the reference |
 | `features/derived/takeover.ts` | local takeover flags and native store targets, checked against runtime execution ownership |

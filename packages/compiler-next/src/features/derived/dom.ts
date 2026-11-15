@@ -20,7 +20,7 @@ export interface DeferredSetup {
 }
 
 export function emitMemos(
-  plan: Pick<ComponentPlan, 'setup' | 'memos'>, versions: ReadonlyMap<BindingNode, string>, names: Names,
+  plan: Pick<ComponentPlan, 'setup' | 'memos' | 'watched'>, versions: ReadonlyMap<BindingNode, string>, names: Names,
   mountReplacements: ReadonlyMap<Node, Node>, replayReplacements: ReadonlyMap<Node, Node>,
   takeovers: TakeoverEmit,
   runtime: string,
@@ -364,14 +364,75 @@ export function emitMemos(
       computation, runtime, ...notify,
     }));
   }
+  // Body statements that build nothing run again when what they read changes (`watched.ts`).
+  // Each records the versions of its inputs once it has run, so its own writes are not changes,
+  // and a computation collects what it reads out of sight (another module's state, a call the
+  // compiler cannot see into), dropping what it wrote itself when it ends.
+  const watches = new Map<Node, { computation?: string; snapshots: { version: string; seen: string }[]; possible: boolean }>();
+  for (const entry of plan.watched ?? []) {
+    const snapshots = entry.inputs.flatMap((input) => {
+      const version = versions.get(input);
+      if (version === undefined) return [];
+      const seen = names.fresh('_ranWith');
+      setup.push(statement('let $$seen = -1;', { seen }));
+      return [{ version, seen }];
+    });
+    let computation: string | undefined;
+    // A statement that may build a value runs inside its group's collector, whose observation of
+    // what it builds must stay the innermost frame: it is checked by its inputs' versions alone.
+    if (!entry.possible && (entry.opaque || entry.inputs.some((input) => !versions.has(input)))) {
+      computation = names.fresh('_statementReads');
+      setup.push(statement(notify === undefined
+        ? 'const $$computation = $$runtime.createComputation();'
+        : `const $$computation = $$runtime.createComputation($$batch.mark${notify.entity === undefined ? '' : ', $$entity'});`, {
+        computation, runtime, ...notify,
+      }));
+    }
+    if (snapshots.length > 0 || computation !== undefined) {
+      watches.set(entry.statement, { ...(computation === undefined ? {} : { computation }), snapshots, possible: entry.possible });
+    }
+  }
+  const watchBefore = (root: Node): Statement[] => {
+    const computation = watches.get(root)?.computation;
+    return computation === undefined ? [] : [statement('$$computation.begin();', { computation })];
+  };
+  /** `shares`: inside a group's collector, which also needs what the statement read. */
+  const watchAfter = (root: Node, shares: boolean): Statement[] => {
+    const watch = watches.get(root);
+    if (watch === undefined) return [];
+    const result: Statement[] = [];
+    if (watch.computation !== undefined) {
+      if (shares) {
+        // The collector around it gets every read, its own writes included, as it did before the
+        // statement had a computation: leave the frame, share, and only then settle, which drops
+        // what the statement wrote from its own inputs.
+        result.push(statement('$$computation.end(false);', { computation: watch.computation }));
+        result.push(statement('$$computation.share();', { computation: watch.computation }));
+      }
+      result.push(statement('$$computation.end();', { computation: watch.computation }));
+    }
+    for (const { seen, version } of watch.snapshots) result.push(statement('$$seen = $$version;', { seen, version }));
+    return result;
+  };
+  /** Whether a value the watched statement read changed since it last ran. */
+  const watchChanged = (root: Node): Expression | undefined => {
+    const watch = watches.get(root);
+    if (watch === undefined) return undefined;
+    const conditions = watch.snapshots.map(({ seen, version }) => expression('$$seen !== $$version', { seen, version }));
+    if (watch.computation !== undefined) conditions.push(expression('$$computation.changed()', { computation: watch.computation }));
+    return conditions.reduce((left, right) => b.LogicalExpression({ operator: '||', left, right }));
+  };
+
   const before = (root: Node) => {
     const result = (collectors.get(root) ?? []).map(({ computation, first }) => statement(`$$computation.begin(${first});`, { computation }));
     const initializer = initialTracking.get(root);
     if (initializer !== undefined) result.push(statement('$$computation.begin();', { computation: initializer.computation }));
+    // Innermost: what the statement reads is its own, and is shared with the collectors above.
+    result.push(...watchBefore(root));
     return result;
   };
   const after = (root: Node) => {
-    const result: Statement[] = [];
+    const result: Statement[] = [...watchAfter(root, collectors.has(root) || initialTracking.has(root))];
     const initializer = initialTracking.get(root);
     if (initializer !== undefined) result.push(statement('$$computation.end();', { computation: initializer.computation }));
     result.push(...(collectors.get(root) ?? []).map(({ computation, last }) => statement(`$$computation.end(${last});`, { computation })));
@@ -480,7 +541,22 @@ export function emitMemos(
     if (around !== undefined) {
       test = expression('$$reached && $$test', { reached: deferred.flags[deferred.statements.get(around)!]!, test });
     }
-    return b.IfStatement({
+    // A statement that may build a value, not yet seen to, also runs again when what it read
+    // changed (`watched.ts`), observed as on its first run, since this run may build it.
+    const watched = watches.get(original)?.possible === true ? watchChanged(original) : undefined;
+    const used = possibleFlags.get(original);
+    const alternate = watched === undefined ? null : b.IfStatement({
+      test: used === undefined ? watched : expression('!$$used && ($$watched)', { used, watched }),
+      consequent: b.BlockStatement({ body: [
+        ...watchBefore(original),
+        ...(observationBefore.get(original) ?? []),
+        ...step.body,
+        ...(observationAfter.get(original) ?? []),
+        ...watchAfter(original, false),
+      ] }),
+      alternate: null,
+    });
+    return [original.start, b.IfStatement({
       test,
       consequent: b.BlockStatement({ body: [
         ...before(original),
@@ -489,10 +565,25 @@ export function emitMemos(
         ...(pendingSteps.has(original) ? observationAfter.get(original) ?? [] : []),
         ...after(original),
       ] }),
-      alternate: null,
-    });
+      alternate,
+    })] as const;
   });
-  return { setup, snapshots, deferred: deferredCode, update: [...checks, ...replay, ...finish] };
+
+  // A statement that builds nothing runs again on its own, in its authored place among the steps.
+  for (const watched of plan.watched ?? []) {
+    const changed = watchChanged(watched.statement);
+    if (changed === undefined || watched.possible) continue;
+    const body = copy(watched.statement, mountReplacements);
+    // Replay runs in `_update`; a `var` here is the component's, declared by setup.
+    liftVarDeclarations(body);
+    replay.push([watched.statement.start, b.IfStatement({
+      test: changed,
+      consequent: b.BlockStatement({ body: [...watchBefore(watched.statement), body, ...watchAfter(watched.statement, false)] }),
+      alternate: null,
+    })]);
+  }
+  replay.sort(([left], [right]) => left - right);
+  return { setup, snapshots, deferred: deferredCode, update: [...checks, ...replay.map(([, replayed]) => replayed), ...finish] };
 }
 
 /**

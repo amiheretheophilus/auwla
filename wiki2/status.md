@@ -2,6 +2,17 @@
 
 Updated: 2026-11-15. Branch: `prototype/jsx-plus`.
 
+## Compiler change made on this branch (DX-34): body statements run again
+
+An `if (count > 10) { console.log(count); navigate('/') }` in an `.auwla` body ran once and never
+again. compiler-next now runs any top-level body statement that builds no value again whenever
+what it read changed, side effects included (`wiki/decisions.md`, 2026-11-15;
+`wiki/compiler/state-and-derived.md`, "Body statements that build nothing"). This is a compiler
+semantics change, not `.auwla` interop, made here because the user hit it here; it goes to
+`compiler-rewrite` with the next sync. `tests/body-statements.test.ts` runs the user's shape through
+the `.auwla` compiler. Note for authors: `<p>message</p>` is an expression child, while
+`<p>{message}</p>` is an object literal by G-TEXT and renders `[object Object]`.
+
 ## Current focus: unfinished tag diagnostics, completion and auto-closing
 
 Unclosed/mismatched messages now name the tag and expected closer. Checking

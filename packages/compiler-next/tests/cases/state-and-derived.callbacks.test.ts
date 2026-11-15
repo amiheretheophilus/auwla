@@ -375,7 +375,9 @@ behaves('callbacks: a setTimeout write takes over a derived value when it fires'
   check: show(['20', '30', '0', '0']),
 });
 
-behaves('callbacks: passing a value to an unknown call that only reads it runs once', {
+// A body statement runs again when what it reads changes, side effects included
+// (`wiki/decisions.md`, 2026-11-15). Before, this call ran once and `seen` kept one value.
+behaves('callbacks: passing a value to an unknown call runs it again when that value changes', {
   source: `
     const seen = [];
     const recorder = { record(value) { seen.push(value); } };
@@ -386,7 +388,7 @@ behaves('callbacks: passing a value to an unknown call that only reads it runs o
       return <main><p>{doubled}:{seen.length}</p><button onClick={() => count++}>inc</button></main>;
     }`,
   steps: [{ click: 'button' }, { click: 'button' }],
-  check: show(['2:1', '4:1', '6:1']),
+  check: show(['2:1', '4:2', '6:3']),
 });
 
 // Unknown callers (2026-10-21). An unknown call is never re-run just because the

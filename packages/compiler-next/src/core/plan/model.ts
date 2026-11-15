@@ -283,6 +283,8 @@ export interface ComponentPlan {
   /** Directly visible inputs, keyed by the original expression's identity. */
   readonly siteInputs: ReadonlyMap<Expression, readonly BindingNode[]>;
   readonly memos: readonly MemoGroupPlan[];
+  /** Body statements that build nothing, run again when what they read changes (`features/derived/watched.ts`). */
+  readonly watched?: readonly WatchedStatement[];
   readonly trackedReads: readonly { readonly node: Node; readonly binding: BindingNode }[];
   /**
    * Optional (`optimize/keyed-comparisons.ts`): `x === e` / `x !== e` whose left
@@ -316,6 +318,17 @@ export interface MemoGroupPlan {
    * are not observed. Everything else about them, including their flags, stays planned.
    */
   readonly idleBuilders?: ReadonlySet<Node>;
+}
+
+/** A body statement that builds no value, run again when what it read changes (`features/derived/watched.ts`). */
+export interface WatchedStatement {
+  readonly statement: Statement;
+  /** The values it reads that can change, checked by their versions. */
+  readonly inputs: readonly BindingNode[];
+  /** It reads through calls the compiler cannot see: its computation collects those reads. */
+  readonly opaque: boolean;
+  /** It may build a value, so it is also a step of that value's group, replayed there once seen to build. */
+  readonly possible: boolean;
 }
 
 /** One native declaration/pattern and the statements that build its values. */

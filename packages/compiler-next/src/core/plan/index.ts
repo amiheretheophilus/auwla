@@ -23,6 +23,7 @@ import { planLocalState } from '../../features/state/plan';
 import { mergeMutations, planImportedMutations, planMutations, planReadonlyBindings, planWrites } from '../../features/handlers/plan';
 import { plainFunctionValues } from './plain-functions';
 import { groupsOfModule, planMemos } from '../../features/derived/plan';
+import { planWatched } from '../../features/derived/watched';
 import { planSharedReads, sharedSetup } from '../../features/state/shared-plan';
 import { planRequestOwned } from '../../features/state/request-owned';
 import { primitiveConstants } from '../../features/state/primitive-constants';
@@ -191,6 +192,15 @@ function planModule(
       takeovers,
       siteInputs,
       memos: sourceFlow === undefined ? computations : computations.map((group) => ({ ...group, dynamic: true })),
+      watched: planWatched({
+        fn,
+        setup: component.setup,
+        deferred: component.deferred,
+        memos: computations,
+        registersLifecycle: (statement) => effects.groups.some((group) => {
+          return group.owner === fn && group.root.start >= statement.start && group.root.end <= statement.end;
+        }),
+      }, module, graph, queries),
       trackedReads,
       dynamicSites: sourceFlow === undefined ? dynamicSites : new Set(allSites(component.sites).map((site) => site.expression)),
       mutationRoots,
