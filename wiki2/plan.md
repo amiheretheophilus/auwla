@@ -1,6 +1,6 @@
 # Prototype backlog
 
-Updated: 2026-11-11. Working order, revisable after every slice.
+Updated: 2026-11-15. Working order, revisable after every slice.
 
 The goal is additional authoring features in the separate `packages/jsx-plus`
 package, with correct JavaScript behavior and credible tooling. Normalized TSX
@@ -44,6 +44,7 @@ depends on integration, acceptance and measurements.
 | CSS-2c | Grouped numeric slice built | `@700 { ... }`, nested groups/selectors, inherited compact clauses, ordered native CSS output and shared editor support. Tests own fixture apps; authoring gallery stays independent | [group contract](spec/style-groups.md), [styling](styling.md) |
 | CSS-3a | First slice built | Component/file scopes, explicit globals, same-file named/transitive `@use(path, id)`, static native selectors, real multi-file gallery and shared CSS assistance | [scope contract](spec/style-scopes.md), [styling](styling.md) |
 | CSS-3b | Built | Cross-file named reuse, URL rebasing, source-only cache/watch updates and implicit nesting; real transitive gallery and Vite fan-out/error recovery | [reuse contract](spec/style-reuse.md) |
+| CSS-4 | First source-aware editor slice built | Injected source host, relative path/style-ID completion, strict reused validation with related dependency ranges, unsaved files, targeted watches and stale-result disposal. Alias configuration wiring remains separate | [editor source contract](spec/style-editor-sources.md), [styling](styling.md) |
 | P6-BIND | Candidate | Settle named text/checkbox bindings, write typing and handler order; show one form | [features](features.md) |
 | P7-APP | Candidate | Run a small real app through editing, build, SSR/adoption and disposal; compare output and work with equivalent existing source | [architecture](architecture.md), [testing](testing.md) |
 

@@ -12,6 +12,7 @@
     "./editor/grammar": "./src/editor/grammar.ts",
     "./editor/hints": "./src/editor/hints.ts",
     "./styles": "./src/styles/tooling.ts",
+    "./styles/sources": "./src/styles/sources/workspace.ts",
     "./types": "./src/editor/types.d.ts",
     "./package.json": "./package.json"
   },

@@ -84,5 +84,5 @@ cross-file missing IDs/cycles, removal/recovery, resolver aliases, unchanged JS
 and stable scope attributes. Parser cases include classes, type/pseudo selectors,
 mixed declarations, custom-property braces and inherited grouping declarations.
 Editor assistance must not falsely reject valid cross-file `@use` syntax; actual
-cross-file source diagnostics require an injected host, not filesystem APIs in
+cross-file source diagnostics use CSS-4's injected host, not filesystem APIs in
 the shared syntax package.

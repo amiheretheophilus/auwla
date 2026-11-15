@@ -10,8 +10,21 @@ import { readStyleUses, styleChunks } from './uses';
 
 const service = getCSSLanguageService();
 
+export interface CssUseProblem {
+  readonly message: string;
+  readonly start: number;
+  readonly end: number;
+  readonly relatedInformation?: readonly {
+    readonly message: string;
+    readonly location: { readonly uri: string; readonly range: Range };
+  }[];
+}
+
 /** Equal-width CSS projection: positions and edits already name the authored file. */
-export function createCssSession(source: string, uri: string, version = 0) {
+export function createCssSession(
+  source: string, uri: string, version = 0,
+  options: { readonly useProblems?: readonly CssUseProblem[] } = {},
+) {
   let blocks: readonly StyleBlock[];
   try {
     blocks = readStyleBlocks(source, uri, true).blocks;
@@ -39,8 +52,10 @@ export function createCssSession(source: string, uri: string, version = 0) {
   const conditions = readConditions(projected);
   const groups = [...conditions.groups.values()];
   const uses = readStyleUses(projected);
-  const useProblems: { message: string; start: number; end: number }[] = [];
-  styleChunks(source, uri, blocks, (message, start, end) => useProblems.push({ message, start, end }), { deferExternal: true });
+  const useProblems: CssUseProblem[] = [...options.useProblems ?? []];
+  if (options.useProblems === undefined) {
+    styleChunks(source, uri, blocks, (message, start, end) => useProblems.push({ message, start, end }), { deferExternal: true });
+  }
   let checking = projected;
   for (const header of conditions.headers) {
     checking = blankRange(checking, header.start, header.end);
@@ -100,6 +115,7 @@ export function createCssSession(source: string, uri: string, version = 0) {
 
   return {
     contains,
+    hasUses: uses.uses.length > 0 || uses.problems.length > 0,
     complete(offset: number) {
       if (!contains(offset) || inHeader(offset) || inUse(offset)) {
         return undefined;
@@ -112,12 +128,14 @@ export function createCssSession(source: string, uri: string, version = 0) {
         ? service.doHover(document, document.positionAt(offset), stylesheet) : undefined;
     },
     diagnostics() {
-      const syntax = [
+      const problems: (CssUseProblem & { readonly code: string })[] = [
         ...conditions.problems.map((problem) => ({ ...problem, code: 'CSS2001' })),
         ...useProblems.map((problem) => ({ ...problem, code: 'CSS3001' })),
-      ].map((problem) => ({
+      ];
+      const syntax = problems.map((problem) => ({
         code: problem.code, source: 'auwla', message: problem.message, severity: 1 as const,
         range: { start: document.positionAt(problem.start), end: document.positionAt(problem.end) },
+        ...(problem.relatedInformation === undefined ? {} : { relatedInformation: problem.relatedInformation }),
       }));
       // Empty media groups are valid. Only the neutral checking selector makes
       // them look like empty qualified rules; keep genuine empty-rule warnings.
@@ -126,13 +144,14 @@ export function createCssSession(source: string, uri: string, version = 0) {
         return diagnostic.code !== 'emptyRules'
           || !groups.some((group) => group.start <= offset && offset < group.headerEnd);
       });
-      return [...syntax, ...native].map((diagnostic) => ({
+      const authoredNative = native.map((diagnostic) => ({
         ...diagnostic,
         range: {
           start: document.positionAt(authoredPosition(document.offsetAt(diagnostic.range.start))),
           end: document.positionAt(authoredPosition(document.offsetAt(diagnostic.range.end))),
         },
       }));
+      return [...syntax, ...authoredNative];
     },
   };
 }

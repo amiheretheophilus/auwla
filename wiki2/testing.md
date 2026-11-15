@@ -73,6 +73,13 @@ viewport boundaries in both modes. CSS-only HMR, native diagnostics/completion
 and the built editor bundle use test-owned inputs too. Authoring gallery checks
 are manual build/check commands; they are not dependencies of the test suite.
 
+CSS-4's `style-source-tooling.test.ts` uses in-memory sources to exercise applied
+completion edits, exact diagnostics, transitive origins, CSS escapes, deferred
+aliases/untitled sources, caching and stale-request disposal. Adapter tests supply
+the workspace filesystem boundary and source events, including sources outside
+workspace folders. The built Node artifact also reads its own multi-file fixture
+through that boundary, with no Bun runtime and no source JavaScript execution.
+
 The native CLI also checks the complete task-board `.auwla` file and `main.ts`
 under its configuration (the test's copy). `compile.test.ts` loads that source and
 exercises filtering, search, submission, ref focus, toggle/removal and the empty

@@ -4,7 +4,7 @@ Status: native CSS, full-property class/numeric viewport conditions, grouped
 numeric rules, local scopes, cross-file named reuse and implicit native nesting
 are implemented. Optional aliases and further condition conveniences remain later.
 
-Created: 2026-11-11. Updated: 2026-11-14.
+Created: 2026-11-11. Updated: 2026-11-15.
 
 This is the styling companion to [dx.md](dx.md). [wiki2](wiki2/README.md) maps the
 prototype; [the language spec](wiki2/spec/README.md) owns implemented grammar and
@@ -33,8 +33,11 @@ and named reuse with `@use(path, id)`. [CSS-3b](wiki2/spec/style-reuse.md) adds
 cross-file dependencies, resource rebasing and implicit nesting. CSS-2b now
 uses numeric viewport thresholds: `@700` equals `@700px`, without named-breakpoint
 configuration. [CSS-2c](wiki2/spec/style-groups.md) adds numeric groups, including
-nested selectors/groups and compact clauses in inherited declarations. Aliases,
-grouped classes and named breakpoints remain later design.
+nested selectors/groups and compact clauses in inherited declarations. Aliases
+and named breakpoints remain later design. Class groups use native `&.classname`,
+with no additional `@.classname { ... }` syntax. [CSS-4](wiki2/spec/style-editor-sources.md)
+adds injected editor source lookup, relative path/style-ID completion and live
+cross-file diagnostics while retaining native CSS assistance.
 
 Follow DX-39: JSX+ is a standalone template/source-language layer. It supplies
 syntax transformations through `auwla`; compiler-next owns projects, applications,
@@ -213,16 +216,20 @@ Conceptual output before any local-scope transformation:
 the `loading` class. It is not an implicit ancestor or descendant condition.
 Complex selector lists need their own transformation examples.
 
-Grouped class condition:
+Native grouped class equivalent (DX-50):
 
 ```css
 .button {
-  @.loading {
+  &.loading {
     padding: 30px;
     opacity: 0.5;
   }
 }
 ```
+
+Plain nested `.loading` targets a descendant; `&.loading` targets this element.
+Do not introduce a redundant `@.loading { ... }` group. Compact
+`@.loading:value` clauses retain their same-element meaning.
 
 Classes can be static or controlled using existing authoring:
 
@@ -326,8 +333,9 @@ nesting as well as explicit `&`. It preserves custom-property blocks, functions,
 comments and declaration order; there is no separate selector/value parser.
 Remaining design/integration work:
 
-- Cross-file editor source/ID discovery and diagnostics through an injected host;
-  shared native CSS assistance currently defers external lookup without false errors.
+- Cross-file editor source/ID discovery and diagnostics now use an injected host
+  (CSS-4). The VS Code adapter handles relative paths and unsaved sources; project
+  alias wiring remains later. Hosts without lookup retain the single-file profile.
 - Named resources local to a scope, global/deep escapes and explicit portal cases.
 - CSS source maps and native browser acceptance beyond the existing DOM tests.
 
@@ -406,6 +414,7 @@ CSS engine. Compilation and tooling should share the style syntax model.
 | `padding:4px @700:…` | Native CSS padding values; implemented with original completion-edit ranges |
 | `@.load…` | Discoverable author classes; arbitrary class names remain usable |
 | `class="ca…"` | Local class candidates where safely identifiable |
+| `@use("./…", "…")` | Relative source/directory and selected-file style-ID completion; implemented in CSS-4 |
 
 A reusable CSS language service can handle native CSS; our extension must
 explicitly handle compact conditions. Hover can explain a property's value,

@@ -71,6 +71,17 @@ it('loads the built extension outside the workspace and runs CSS providers in No
     expect(groupErrors).toBe('');
     expect(groupExit).toBe(0);
     expect(groupOutput).toContain('zero CSS diagnostics and native value completion passed');
+
+    const consumer = join(import.meta.dir, 'fixtures/apps/style-sources/Card.auwla');
+    const sources = Bun.spawn(['node', join(import.meta.dir, 'fixtures/bundle-host.cjs'), entry, consumer, '--sources'], {
+      cwd: installed, stdout: 'pipe', stderr: 'pipe',
+    });
+    const [sourceExit, sourceOutput, sourceErrors] = await Promise.all([
+      sources.exited, new Response(sources.stdout).text(), new Response(sources.stderr).text(),
+    ]);
+    expect(sourceErrors).toBe('');
+    expect(sourceExit).toBe(0);
+    expect(sourceOutput).toContain('Cross-file CSS: path/ID completion and diagnostic refresh passed in Node');
   } finally {
     rmSync(installed, { recursive: true, force: true });
   }

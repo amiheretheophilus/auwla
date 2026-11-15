@@ -90,6 +90,8 @@ All paths are relative to the repository root and exist now.
 | Path | Responsibility |
 | --- | --- |
 | `packages/jsx-plus/src/normalize.ts` | Public `normalize`/`normalizeForChecking`: find root markup in host code, assemble TSX, validate the host module |
+| `packages/jsx-plus/src/styles/sources/` | Shared editor-only source host, argument ranges and current consumer snapshots for CSS path/ID completion and dependency diagnostics; uses the existing style validator, not a build project |
+| `packages/editor-vscode/src/css.ts`, `src/css/sources.ts` | Thin CSS SDK boundary: unsaved/document filesystem access, targeted watchers, protocol conversion and stale request disposal; independent of TypeScript |
 | `packages/jsx-plus/src/markup/context.ts` | Per-file reader state: source, filename, cached conditional blocks and authored error reporting |
 | `packages/jsx-plus/src/markup/element.ts` | Opening tags and attribute values, then the body scan: nested markup, child-level `if`/`else` blocks and the closing tag |
 | `packages/jsx-plus/src/markup/children.ts` | Child grammar: `;` chunks, expression-first parsing, ASI statements, direct `if` and `for` lowering and chunk diagnostics |

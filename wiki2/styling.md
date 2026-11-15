@@ -1,12 +1,13 @@
 # Native CSS implementation
 
-Updated: 2026-11-14. Native CSS-1, class conditions (CSS-2a), local scopes (CSS-3a)
+Updated: 2026-11-15. Native CSS-1, class conditions (CSS-2a), local scopes (CSS-3a)
 and cross-file reuse/implicit nesting (CSS-3b) are implemented. [dxcss.md](../dxcss.md) holds the
 wider design; [spec/styles.md](spec/styles.md), [class conditions](spec/style-conditions.md)
 and [scope rules](spec/style-scopes.md) own the implementation contracts.
 [style-reuse.md](spec/style-reuse.md) extends source linking and nesting.
 [style-responsive.md](spec/style-responsive.md) defines numeric viewport clauses.
 [style-groups.md](spec/style-groups.md) extends them with numeric groups.
+[style-editor-sources.md](spec/style-editor-sources.md) defines source-aware editor assistance.
 
 ## Authoring
 
@@ -37,7 +38,8 @@ passes HTML to Bun so the bundler creates CSS/script links itself.
 | Compiler assets | Compiler-next's `core/parse/languages.ts` appends the side-effect CSS import after authored host code, preserving directives/shebang positions. Parsed/resolved modules retain the companion. `pipeline.ts` exposes `css` separately in detailed results; `project/project.ts` compares JS and CSS in updates. |
 | Existing delivery adapters | Compiler-next's `project/bun.ts` resolves and loads the virtual CSS companion with Bun's CSS loader. Vite's existing `next/plugin.ts` loads it before native CSS processing, including from static HTML whose script was removed. No JSX+ project wrapper/plugin is introduced. |
 | Shared assistance | `src/styles/tooling.ts` uses `vscode-css-languageservice` over an equal-width CSS projection. `styles/recovery.ts` keeps missing-colon errors on unfinished property names and reparses to avoid errors cascading into later selectors; its narrow scanner declarations describe the pinned dependency. Completion edits, hover and diagnostics use authored positions. `src/editor/grammar.ts` embeds the editor's `source.css` grammar. |
-| VS Code adapter | `packages/editor-vscode/src/css.ts` translates protocol objects, caches the current document version and clears sessions/diagnostics on close. It registers independently of TypeScript. Adapter 0.0.12 includes numeric clauses/groups and the shared implicit-nesting reader; window reload and desktop acceptance remain separate. |
+| Source-aware assistance | `styles/sources/host.ts` defines injected URI/file/directory access; `arguments.ts` reads tolerant CSS-token argument ranges; `workspace.ts` keeps one current snapshot per consumer, source dependencies, completion edits and related diagnostics. The public entry is `@memoized-dom/jsx-plus/styles/sources`. |
+| VS Code adapter | `packages/editor-vscode/src/css.ts` translates protocol objects and owns current-document caching, targeted source-directory watchers and stale-result guards. `src/css/sources.ts` supplies workspace file access and unsaved overlays. Adapter 0.0.13 includes source/ID completion; CSS remains independent of TypeScript. Reload/desktop acceptance stays separate. |
 
 The compiler knows no Auwla syntax. Its hook accepts optional static CSS from any
 source language, creates `<module-path>.css`, and retains ordinary CSS imports
@@ -182,16 +184,47 @@ Detailed callers can provide `assetSources`; ordinary projects collect them.
 The collector reuses root stylesheet metadata from the existing import pass,
 retaining the established two language requests/one normalization per change.
 
+## Source-aware CSS editing (CSS-4)
+
+The shared source workspace accepts an injected `CssSourceHost`, follows only
+style uses and reuses `styleChunks` for validation. The validator carries the
+originating consumer through expansion, so transitive errors are attached to the
+selected use with a related foreign URI/range. Native property/value assistance
+continues through the existing equal-width CSS session. Authored syntax errors
+retain their ranges, including style-ID headers; only recovered native errors
+need CSS boundary clamping.
+
+Path completion lists one relative directory at the cursor; ID completion reads
+the selected source, including same-file unsaved definitions. CSS escapes and
+quote style survive applied edits. Unterminated argument replacements stop at
+the cursor, preserving following host text. Snapshots cache reads for one current
+consumer version; missing targets/directories remain dependencies so creation,
+deletion and unsaved changes refresh correctly. Closing consumers releases state.
+
+VS Code prefers open text over disk and watches only needed source directories,
+including outside workspace folders. Folder selections continue suggestions.
+Changing dependencies invalidates linked sessions without requiring a consumer
+version change. Ticket/current-session checks discard stale completions and
+diagnostics after edits, close or disposal. Physical reads and event lifetimes
+remain in the thin SDK adapter; shared code imports no filesystem/editor APIs.
+
+`tests/style-source-tooling.test.ts` owns in-memory source cases. The adapter
+has independent multi-file fixtures and probes its built CJS under Node with
+real filesystem reads; source JS imports/throws never execute. The existing
+scoping gallery is a manual authoring example, not a test dependency.
+
 ## Remaining work
 
-Cross-file editor ID/path discovery and dependency diagnostics need a host for
-external source text. Shared CSS assistance defers that lookup without false
-errors, while native completion/highlighting and same-file ID checks work.
+Relative cross-file editor ID/path discovery and dependency diagnostics are now
+implemented by CSS-4. Alias resolvers are injectable, but VS Code project alias
+configuration is not connected. Untitled/opaque URIs without a source directory
+defer lookup until saved, retaining native CSS assistance without false errors.
 Local-default selectors are defined by [CSS-3a](spec/style-scopes.md), with
 [CSS-3b](spec/style-reuse.md) source/nesting extensions. Keyframe/resource renaming
 and global/deep escapes remain open; resources currently require globals.
-Named conditions and grouped class/state forms remain later design work;
-numeric groups are implemented, while `@md:30px` has no extension meaning.
+Named conditions remain later design work. Class groups use native `&.classname`
+(DX-50); do not add `@.classname { ... }`. Numeric groups are implemented, while
+`@md:30px` has no extension meaning.
 Aliases and future element dot-class syntax remain later. There is no Tailwind
 dependency, breakpoint JavaScript, style injection runtime or new reactivity.
 

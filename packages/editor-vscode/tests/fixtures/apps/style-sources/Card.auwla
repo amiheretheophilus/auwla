@@ -1,0 +1,8 @@
+export function Card() {
+  <style>
+    @use("./Theme.auwla", "card-look");
+    .card { color: navy; }
+  </style>
+
+  return <article class="card">"Source-aware CSS fixture"</article>;
+}

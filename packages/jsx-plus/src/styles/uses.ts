@@ -13,6 +13,15 @@ export interface StyleUse {
   readonly id: string;
 }
 
+export interface StyleUseProblem {
+  readonly message: string;
+  readonly filename: string;
+  readonly source: string;
+  readonly start: number;
+  readonly end: number;
+  readonly consumer?: { readonly start: number; readonly end: number };
+}
+
 /** Shared directive syntax for production and equal-width editor projections. */
 export function readStyleUses(source: string) {
   const uses: StyleUse[] = [];
@@ -103,12 +112,22 @@ interface StyleModule {
 /** Pure ID expansion; the compiler/host supplies all cross-file source text. */
 export function styleChunks(
   source: string, filename: string, blocks: readonly StyleBlock[], report: Report,
-  options: { readonly resolve?: SourceAssetResolver; readonly deferExternal?: boolean } = {},
+  options: {
+    readonly resolve?: SourceAssetResolver;
+    readonly deferExternal?: boolean | ((specifier: string, importer: string) => boolean);
+    readonly checking?: boolean;
+    readonly onProblem?: (problem: StyleUseProblem) => void;
+  } = {},
 ) {
   const modules = new Map<string, StyleModule>();
   const owners = new Map<StyleBlock, string>();
+  let consumer: { readonly start: number; readonly end: number } | undefined;
 
   function problem(module: StyleModule, message: string, start: number, end: number): void {
+    if (options.onProblem !== undefined) {
+      options.onProblem({ message, start, end, filename: module.filename, source: module.source, consumer });
+      return;
+    }
     if (module.filename === filename) {
       report(message, start, end);
     } else {
@@ -156,18 +175,43 @@ export function styleChunks(
       const start = block.bodyStart + use.start;
       const end = block.bodyStart + use.end;
       chunks.push(chunk(position, start));
+      const previousConsumer = consumer;
+      if (consumer === undefined && module.filename === filename) {
+        consumer = { start, end };
+      }
 
       let target = module;
       if (!sameFile(module.filename, use.path)) {
         const found = options.resolve?.(use.path, module.filename);
         if (found === undefined) {
-          if (!options.deferExternal) {
+          const defer = typeof options.deferExternal === 'function'
+            ? options.deferExternal(use.path, module.filename) : options.deferExternal;
+          if (!defer) {
             problem(module, `Cross-file @use cannot resolve style source "${use.path}"`, start, end);
           }
           position = end;
+          consumer = previousConsumer;
           continue;
         }
-        target = modules.get(found.path) ?? read(found.text, found.path, readStyleBlocks(found.text, found.path).blocks);
+        const known = modules.get(found.path);
+        if (known !== undefined) {
+          target = known;
+        } else {
+          try {
+            target = read(found.text, found.path, readStyleBlocks(found.text, found.path, options.checking).blocks);
+          } catch (error) {
+            if (!(error instanceof JsxPlusError) || options.onProblem === undefined) {
+              throw error;
+            }
+            options.onProblem({
+              message: error.reason, filename: found.path, source: found.text,
+              start: error.range[0], end: error.range[1], consumer,
+            });
+            position = end;
+            consumer = previousConsumer;
+            continue;
+          }
+        }
       }
       const definition = target.named.get(use.id);
       if (definition === undefined) {
@@ -182,6 +226,7 @@ export function styleChunks(
         chunks.push(...expand(target, definition, [...stack, definition]));
       }
       position = end;
+      consumer = previousConsumer;
     }
     chunks.push(chunk(position, block.bodyEnd));
     expanded.set(block, chunks);

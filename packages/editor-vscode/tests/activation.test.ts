@@ -5,6 +5,7 @@ import type * as VSCode from 'vscode';
 import type { ContentMapperContribution, TypeScriptSDK } from 'typescript/vscode';
 import { auwlaLanguage } from '@memoized-dom/jsx-plus/editor';
 import manifest from '../package.json';
+import { waitFor } from '../../../test-support/helpers';
 
 const messages: string[] = [];
 const lines: string[] = [];
@@ -26,8 +27,38 @@ let configured: ((event: { affectsConfiguration(section: string): boolean }) => 
 const settings = new Map<string, unknown>();
 const cssDiagnostics = new Map<string, readonly VSCode.Diagnostic[]>();
 const disposable = () => ({ dispose() {} });
+let filesystem = false;
+let openDocuments: VSCode.TextDocument[] = [];
+const sourceFiles = new Map<string, string>();
+let sourceReader: ((uri: string) => Promise<Uint8Array>) | undefined;
+interface WatchedDirectory {
+  readonly uri: string;
+  disposed: boolean;
+  create?: (uri: VSCode.Uri) => void;
+  change?: (uri: VSCode.Uri) => void;
+  delete?: (uri: VSCode.Uri) => void;
+}
+const watchedDirectories: WatchedDirectory[] = [];
+
+function uri(value: string): VSCode.Uri {
+  return { toString: () => value, path: new URL(value).pathname } as VSCode.Uri;
+}
+
+function fileEvent(kind: 'create' | 'change' | 'delete', value: string): void {
+  for (const watcher of watchedDirectories) {
+    if (!watcher.disposed && watcher.uri === new URL('./', value).href) {
+      watcher[kind]?.(uri(value));
+    }
+  }
+}
 
 mock.module('vscode', () => ({
+  Uri: { parse: uri },
+  FileType: { File: 1, Directory: 2 },
+  CompletionItemKind: { Folder: 18 },
+  RelativePattern: class { constructor(public baseUri: VSCode.Uri, public pattern: string) {} },
+  Location: class { constructor(public uri: VSCode.Uri, public range: VSCode.Range) {} },
+  DiagnosticRelatedInformation: class { constructor(public location: VSCode.Location, public message: string) {} },
   Range: class {
     start: { line: number; character: number };
     end: { line: number; character: number };
@@ -81,7 +112,41 @@ mock.module('vscode', () => ({
     },
   },
   workspace: {
-    textDocuments: [],
+    get textDocuments() { return openDocuments; },
+    get fs() {
+      return filesystem ? {
+        async readFile(path: VSCode.Uri) {
+          if (sourceReader !== undefined) {
+            return sourceReader(path.toString());
+          }
+          const source = sourceFiles.get(path.toString());
+          if (source === undefined) {
+            throw Object.assign(new Error('Missing source'), { code: 'FileNotFound' });
+          }
+          return new TextEncoder().encode(source);
+        },
+        async readDirectory(path: VSCode.Uri) {
+          const entries = new Map<string, number>();
+          for (const key of sourceFiles.keys()) {
+            if (key.startsWith(path.toString())) {
+              const relative = key.slice(path.toString().length);
+              entries.set(decodeURIComponent(relative.split('/')[0]!), relative.includes('/') ? 2 : 1);
+            }
+          }
+          return [...entries];
+        },
+      } : undefined;
+    },
+    createFileSystemWatcher(pattern: { baseUri: VSCode.Uri }) {
+      const watched: WatchedDirectory = { uri: pattern.baseUri.toString(), disposed: false };
+      watchedDirectories.push(watched);
+      return {
+        onDidCreate(listener: (uri: VSCode.Uri) => void) { watched.create = listener; return disposable(); },
+        onDidChange(listener: (uri: VSCode.Uri) => void) { watched.change = listener; return disposable(); },
+        onDidDelete(listener: (uri: VSCode.Uri) => void) { watched.delete = listener; return disposable(); },
+        dispose() { watched.disposed = true; },
+      };
+    },
     getConfiguration: (section: string) => ({
       get: <T>(key: string, fallback: T) => (settings.get(`${section}.${key}`) as T | undefined) ?? fallback,
     }),
@@ -118,6 +183,11 @@ beforeEach(() => {
   decorationStyle = undefined;
   visibleEditors = [];
   settings.clear();
+  filesystem = false;
+  openDocuments = [];
+  sourceFiles.clear();
+  sourceReader = undefined;
+  watchedDirectories.length = 0;
 });
 
 function context() {
@@ -229,6 +299,131 @@ it('provides CSS edits, hover and live diagnostics independently of the TypeScri
   expect(cssDiagnostics.get(document.uri.toString())).toEqual([]);
   closed!(document);
   expect(cssDiagnostics.has(document.uri.toString())).toBe(false);
+});
+
+function sourceDocument(path: string, initial: string) {
+  let text = initial;
+  const document = {
+    uri: uri(path), languageId: 'auwla', version: 1,
+    getText: () => text,
+    offsetAt(position: VSCode.Position) {
+      return text.split('\n').slice(0, position.line).reduce((total, line) => total + line.length + 1, 0) + position.character;
+    },
+    positionAt(offset: number) {
+      const lines = text.slice(0, offset).split('\n');
+      return { line: lines.length - 1, character: lines.at(-1)!.length } as VSCode.Position;
+    },
+  } as unknown as VSCode.TextDocument;
+  return { document, edit(value: string) {
+    text = value;
+    Object.assign(document, { version: document.version + 1 });
+  } };
+}
+
+it('completes style sources and refreshes imports after outside-workspace saves, unsaved edits and close', async () => {
+  filesystem = true;
+  const path = 'file:///app/Card.auwla';
+  const theme = 'file:///shared/Theme.auwla';
+  const saved = '<style id="look">.card {color:navy;}</style>';
+  sourceFiles.set(theme, saved);
+  sourceFiles.set('file:///shared/styles/Other.auwla', '<style id="other">.card {color:blue;}</style>');
+  const source = '<style>@use("../shared/Theme.auwla", "look"); .card {color:re;}</style>';
+  const { document } = sourceDocument(path, source);
+  openDocuments = [document];
+  const session = context();
+  await activate(session);
+  const token = {} as VSCode.CancellationToken;
+  const complete = async (offset: number) => await completionProvider!.provideCompletionItems(
+    document, document.positionAt(offset), token, {} as VSCode.CompletionContext,
+  ) as VSCode.CompletionList;
+
+  const ids = await complete(source.indexOf('"look"') + 1);
+  expect(ids.items.map((item) => item.label)).toEqual(['look']);
+  expect(ids.items[0]!.range).toMatchObject({ start: { line: 0, character: source.indexOf('look') } });
+  const paths = await complete(source.indexOf('../shared/') + '../shared/'.length);
+  expect(paths.items.some((item) => item.label === 'Theme.auwla')).toBe(true);
+  expect(paths.items.find((item) => item.label === 'styles/')?.command?.command).toBe('editor.action.triggerSuggest');
+  expect(watchedDirectories.some((watcher) => watcher.uri === 'file:///shared/' && !watcher.disposed)).toBe(true);
+  expect((await complete(source.indexOf(':re') + 3)).items.some((item) => item.label === 'red')).toBe(true);
+
+  sourceFiles.delete(theme);
+  fileEvent('delete', theme);
+  await waitFor(() => expect(cssDiagnostics.get(path)?.some((problem) => problem.code === 'CSS3001')).toBe(true));
+  sourceFiles.set(theme, saved);
+  fileEvent('create', theme);
+  await waitFor(() => expect(cssDiagnostics.get(path)).toEqual([]));
+  expect(document.version).toBe(1);
+
+  const foreign = sourceDocument(theme, saved);
+  openDocuments.push(foreign.document);
+  foreign.edit('<style id="live">.card {color:teal;}</style>');
+  changed({ document: foreign.document } as VSCode.TextDocumentChangeEvent);
+  await waitFor(() => expect(cssDiagnostics.get(path)?.some((problem) => problem.message.includes('No named style "look"'))).toBe(true));
+  expect((await complete(source.indexOf('"look"') + 1)).items.map((item) => item.label)).toEqual(['live']);
+  openDocuments = [document];
+  closed(foreign.document);
+  await waitFor(() => expect(cssDiagnostics.get(path)).toEqual([]));
+
+  sourceFiles.set(theme, '<style id="look">@use("./Palette.auwla", "missing");</style>');
+  sourceFiles.set('file:///shared/Palette.auwla', '<style id="palette">.card {color:navy;}</style>');
+  fileEvent('change', theme);
+  await waitFor(() => expect(cssDiagnostics.get(path)?.[0]?.relatedInformation?.[0]?.location.uri.toString()).toBe(theme));
+  openDocuments = [];
+  closed(document);
+  expect(cssDiagnostics.has(path)).toBe(false);
+  expect(watchedDirectories.every((watcher) => watcher.disposed)).toBe(true);
+  for (const subscription of session.subscriptions) {
+    subscription.dispose();
+  }
+});
+
+it('drops stale source completions and diagnostics after removing the use while a read is pending', async () => {
+  filesystem = true;
+  let notify!: () => void;
+  const started = new Promise<void>((resolve) => { notify = resolve; });
+  let release!: (value: Uint8Array) => void;
+  sourceReader = () => {
+    notify();
+    return new Promise<Uint8Array>((resolve) => { release = resolve; });
+  };
+  const path = 'file:///app/Slow.auwla';
+  const initial = '<style>@use("./Theme.auwla", "look");</style>';
+  const { document, edit } = sourceDocument(path, initial);
+  openDocuments = [document];
+  const session = context();
+  await activate(session);
+  const pending = completionProvider!.provideCompletionItems(document,
+    document.positionAt(initial.indexOf('look')), {} as VSCode.CancellationToken, {} as VSCode.CompletionContext);
+  await started;
+  edit('<style>.card {color:teal;}</style>');
+  changed({ document } as VSCode.TextDocumentChangeEvent);
+  release(new TextEncoder().encode('<style id="outdated">.card {color:red;}</style>'));
+  expect(await pending).toBeUndefined();
+  expect(cssDiagnostics.get(path)).toEqual([]);
+  expect(watchedDirectories.every((watcher) => watcher.disposed)).toBe(true);
+  for (const subscription of session.subscriptions) {
+    subscription.dispose();
+  }
+});
+
+it('keeps untitled CSS documents editable before they have a relative source directory', async () => {
+  filesystem = true;
+  const initial = '<style>@use("./Theme.auwla", "look");</style>';
+  const { document, edit } = sourceDocument('untitled:Untitled-1', initial);
+  openDocuments = [document];
+  const session = context();
+  await activate(session);
+  const result = await completionProvider!.provideCompletionItems(document,
+    document.positionAt(initial.indexOf('look')), {} as VSCode.CancellationToken, {} as VSCode.CompletionContext);
+  expect(result).toBeUndefined();
+  expect(cssDiagnostics.get(document.uri.toString())).toEqual([]);
+  edit('<style>.card {color:teal;}</style>');
+  changed({ document } as VSCode.TextDocumentChangeEvent);
+  expect(cssDiagnostics.get(document.uri.toString())).toEqual([]);
+  expect(watchedDirectories).toEqual([]);
+  for (const subscription of session.subscriptions) {
+    subscription.dispose();
+  }
 });
 
 it('rejects an incompatible extension API with a useful message', async () => {

@@ -4,6 +4,10 @@ Working draft, 2026-11-14. Extends [compact numeric clauses](style-responsive.md
 using the same thresholds: `@700` and `@700px` mean inclusive minimum viewport
 width 700px. There is no new configuration, scale or JavaScript evaluator.
 
+DX-50 keeps class groups native: use `&.expanded { ... }` for the same element,
+or `.expanded { ... }` for a descendant. No `@.expanded { ... }` group is planned.
+Compact `@.expanded:value` clauses retain their existing same-element meaning.
+
 ```css
 .card {
   padding: 12px;

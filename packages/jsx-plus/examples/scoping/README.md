@@ -27,3 +27,11 @@ their component programs. These files are source-only dependencies, so their
 JavaScript imports/code are not executed by a style use. Named resource rules
 such as keyframes still require an explicit global consumer. See the CSS-3b
 contract in `wiki2/spec/style-reuse.md`.
+
+With adapter 0.0.13, place the cursor inside either argument of an `@use` and
+invoke completion. The first argument suggests relative folders/`.auwla` sources;
+the second offers IDs from the selected file. Try the use of `card-look` inside
+`Cards.auwla`, or its use of `styles/Frames.auwla`. Unsaved ID edits and saved
+dependency changes refresh consumer diagnostics, with related locations for
+transitive errors. Project aliases are not yet connected to editor source lookup.
+Tests use their own fixture files; these gallery files remain free to edit.

@@ -1,5 +1,19 @@
 # Spec revisions
 
+## CSS-4 source-aware editor assistance — 2026-11-15
+
+- Add injected URI/file/directory access for relative `@use` path and style-ID
+  completion, including incomplete calls, CSS escapes and safe applied edits.
+- Reuse the existing named-style validator for missing sources/IDs, duplicates,
+  cycles and transitive errors. Carry the actual originating use and retain
+  authored UTF-16 ranges/related information. Keep header errors unclamped.
+- Prefer unsaved source text; invalidate affected consumers after source changes,
+  creation, deletion and close. Discard stale async results and release watchers.
+  Untitled documents defer relative lookup until they have a source directory.
+- Retain the host-free single-file profile. Optional injected resolvers support
+  aliases; VS Code project-alias configuration is not wired in this slice.
+- DX-50 keeps class groups native (`&.classname`) instead of adding `@.classname`.
+
 ## CSS-2c grouped numeric conditions — 2026-11-14
 
 - Add `@700 { ... }` / `@700px { ... }` in place as native minimum-width media

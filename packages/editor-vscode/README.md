@@ -8,11 +8,17 @@ extensions can reuse them without installing this adapter. See
 
 From this package:
 
-Version 0.0.12 adds grouped numeric rules (`@700 { ... }`) to numeric clauses
-(`@700:...`). Shared highlighting, native value completion, hover and original
-diagnostic ranges work inside groups. The built artifact is probed with its own
-grouped-style fixture under Node outside the checkout. Reload VS Code after
-installing the updated VSIX.
+Version 0.0.13 adds relative `@use` file/directory and named-style-ID completion,
+with cross-file diagnostics and related dependency locations. Unsaved sources,
+file creation/deletion and outside-workspace dependencies refresh consumers.
+Source-directory watchers are released when no open consumer needs them; stale
+async results are discarded. The built artifact is probed with its own multi-file
+fixture under Node outside the checkout. Reload VS Code after installation.
+
+Shared APIs stay in JSX+ (`./styles` and `./styles/sources`); this adapter supplies
+workspace filesystem access only. Project aliases need a resolver integration
+and are deferred here without false missing-file errors. Untitled documents
+retain single-file assistance until they have a relative source directory.
 
 ```text
 bun run build

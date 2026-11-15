@@ -2,14 +2,15 @@
 const assert = require('node:assert/strict');
 const Module = require('node:module');
 const path = require('node:path');
-const { readFileSync } = require('node:fs');
-const { pathToFileURL } = require('node:url');
+const { readFileSync, promises: filesystem } = require('node:fs');
+const { pathToFileURL, fileURLToPath } = require('node:url');
 
 let completionProvider;
 let hoverProvider;
 let showEditors;
 let painted = [];
 let problems = [];
+const changeListeners = [];
 let source = process.argv[3] === undefined
   ? '<style global>\n.card { padding: 4px; unknown-property: red; cur }\n.card:hover { outline: 2px solid blue; }\n.card { color:black @.loading:re; }\n</style>'
   : readFileSync(process.argv[3], 'utf8');
@@ -30,6 +31,11 @@ const document = {
 };
 const disposable = () => ({ dispose() {} });
 const vscode = {
+  Uri: { parse: value => ({ toString: () => value, path: new URL(value).pathname }) },
+  FileType: { File: 1, Directory: 2 },
+  CompletionItemKind: { Folder: 18 },
+  Location: class { constructor(uri, range) { Object.assign(this, { uri, range }); } },
+  DiagnosticRelatedInformation: class { constructor(location, message) { Object.assign(this, { location, message }); } },
   Range: class {
     constructor(line, character, endLine, endCharacter) {
       this.start = { line, character };
@@ -65,10 +71,24 @@ const vscode = {
   workspace: {
     workspaceFolders: [],
     textDocuments: [document],
+    fs: {
+      async readFile(uri) {
+        try {
+          return await filesystem.readFile(fileURLToPath(uri.toString()));
+        } catch (error) {
+          if (error.code === 'ENOENT') error.code = 'FileNotFound';
+          throw error;
+        }
+      },
+      async readDirectory(uri) {
+        const entries = await filesystem.readdir(fileURLToPath(uri.toString()), { withFileTypes: true });
+        return entries.map(entry => [entry.name, entry.isDirectory() ? 2 : 1]);
+      },
+    },
     getConfiguration: () => ({ get: (_key, fallback) => fallback }),
     onDidChangeConfiguration: disposable,
     onDidOpenTextDocument: disposable,
-    onDidChangeTextDocument: disposable,
+    onDidChangeTextDocument(listener) { changeListeners.push(listener); return disposable(); },
     onDidCloseTextDocument: disposable,
   },
   window: {
@@ -93,6 +113,29 @@ async function run() {
   const entry = process.argv[2];
   const context = { subscriptions: [], extensionPath: path.dirname(entry) };
   await require(entry).activate(context);
+  if (process.argv[4] === '--sources') {
+    const complete = offset => completionProvider.provideCompletionItems(document, document.positionAt(offset));
+    const ids = await complete(source.indexOf('"card-look"') + 1);
+    assert.ok(ids.items.some(item => item.label === 'card-look'));
+    assert.ok(ids.items.some(item => item.label === 'quiet-look'));
+    const paths = await complete(source.indexOf('./Theme.auwla') + 2);
+    assert.ok(paths.items.some(item => item.label === 'Theme.auwla'));
+    source = source.replace('"card-look"', '"absent"');
+    document.version++;
+    for (const listener of changeListeners) listener({ document });
+    await complete(source.indexOf('"absent"') + 1);
+    const problem = problems.find(problem => problem.code === 'CSS3001');
+    assert.ok(problem.message.includes('No named style "absent"'));
+    assert.deepEqual(problem.range.start, document.positionAt(source.indexOf('absent')));
+    source = source.replace('"absent"', '"card-look"');
+    document.version++;
+    for (const listener of changeListeners) listener({ document });
+    await complete(source.indexOf('"card-look"') + 1);
+    assert.deepEqual(problems, []);
+    for (const subscription of context.subscriptions) subscription.dispose();
+    console.log('Cross-file CSS: path/ID completion and diagnostic refresh passed in Node');
+    return;
+  }
   if (process.argv[3] !== undefined) {
     assert.deepEqual(problems, [], 'the real CSS example must have no CSS diagnostics');
     const marker = process.argv[4] ?? (source.includes('@.loading:') ? '@.loading:' : 'border-color: ');

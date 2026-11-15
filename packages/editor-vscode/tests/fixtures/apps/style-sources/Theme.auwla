@@ -1,0 +1,11 @@
+import './must-not-load.ts';
+throw new Error('STYLE_SOURCE_MUST_NOT_EXECUTE');
+
+<style id="card-look">
+  @use("./Palette.auwla", "palette");
+  .card { padding: 16px; }
+</style>
+
+<style id="quiet-look">
+  .card { opacity: 0.8; }
+</style>

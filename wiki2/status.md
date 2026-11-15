@@ -1,54 +1,55 @@
 # Prototype status
 
-Updated: 2026-11-14. Branch: `prototype/jsx-plus`.
+Updated: 2026-11-15. Branch: `prototype/jsx-plus`.
 
-## Current focus: synced compiler and grouped numeric CSS (CSS-2c)
+## Current focus: cross-file CSS editor assistance (CSS-4)
 
-Switched back to `prototype/jsx-plus` and fast-forwarded the seven newer
-`compiler-rewrite` commits through `f7e33a90`; the sync is pushed. This includes
-per-render module state, lazy route stylesheet links, native package discovery/
-packaging and the application-owned Cloudflare Workers target. The compiler,
-runtime, data, server and Vite trees remain identical to that compiler checkpoint.
-No JSX+ project wrapper or separate reactive implementation is introduced.
+[CSS-4](spec/style-editor-sources.md) adds relative file/directory and style-ID
+completion inside `@use`, with missing-source/ID, duplicate and cycle diagnostics.
+Transitive errors retain a related dependency URI/range and the actual originating
+use, without blaming an unrelated definition in the same file. Authored errors
+keep their exact ranges, including style headers outside CSS bodies.
 
-[CSS-2c](spec/style-groups.md) adds `@700 { ... }` / `@700px { ... }`: native
-minimum-width media queries with multiple declarations, nested selectors/groups
-and compact class/numeric clauses in inherited declarations. Threshold units and
-order follow CSS-2b. Explicit `&` rules preserve declarations written after
-groups when a CSS bundler would otherwise move bare declarations before them.
-Existing scope boundaries and intentional document targets remain intact.
+The new shared `./styles/sources` entry accepts an injected file/directory host.
+It reads only style dependencies and reuses `styleChunks`; no source JS executes.
+One current snapshot per consumer caches reads. Unsaved text, file changes,
+creation/deletion and close invalidate consumers even when their own versions
+stay unchanged. Stale async results cannot publish after edit/close/disposal.
 
-Shared syntax retains original UTF-16 error positions. The CSS checking view
-uses equal-width neutral selectors for group headers, retains native completion/
-hover/diagnostics in their bodies, and filters only artificial empty-group lint.
-TextMate highlights headers, properties, values and nested groups.
+VS Code supplies workspace reads and unsaved overlays. Targeted source-directory
+watchers include outside-workspace dependencies and are released when unused.
+Path edits preserve quotes/CSS escapes and argument boundaries; selecting a
+folder continues suggestions. Native CSS assistance stays independent of the
+TypeScript provider. The shared host can inject aliases, but VS Code project
+alias configuration is not wired yet. Untitled/opaque documents without a source
+directory defer lookup until saved.
 
-Rule 16 and the user's fixture migration are preserved. Tests use their own
-`tests/fixtures/apps/style-groups` app; the adapter has its own grouped-style
-fixture too. No test reads an example. `examples/style-groups` is an independent
-editable gallery: run `bun run examples/style-groups/preview.ts` from the JSX+
-package, then open port 3037 (or append `--build`).
+DX-50 records the user's syntax decision: use native `&.classname { ... }` for
+same-element class groups. Do not add `@.classname { ... }`. Plain nested
+`.classname` remains a descendant selector; compact `@.classname:value` stays.
 
-Verification: the full JSX+ suite passes **516 tests across 34 files, unfiltered**.
-All **10 editor adapter tests** pass, including the built CJS artifact under Node
-outside the checkout. JSX+ (359 files) and editor (190 files) type checks pass.
-The gallery's authored TypeScript check and HTML preview build pass. DOM tests
-cover 299/300/699/700/899/900/1000px in both compiler modes, scoped named reuse,
-independent class toggles, nested groups and descending/later-declaration order.
-Vite build/CSS-only hot updates pass for the fixture's shared numeric group.
-Adapter **0.0.12** is installed; its installed bundle also passes the grouped CSS
-completion probe. Reload the editor window to load it.
+Verification: the complete JSX+ suite passes **529 tests across 35 files,
+unfiltered**. All **13 editor adapter tests** pass. JSX+ (363 files) and editor
+(195 files) type checks pass. The built CJS runs in Node outside the checkout,
+reading independent physical fixtures for path/ID completion and error refresh.
+Tests also cover unsaved external sources, outside-workspace saves, missing-file
+creation/deletion, transitive locations, safe edits, stale requests, cleanup,
+opaque URIs and preserved native CSS assistance. Tests never read examples.
 
-The sync's focused module/server checks pass 12 tests; the full JSX+ run includes
-them too. Full-root tests, another editor and actual desktop/browser acceptance
-were not run. GROUP-001 through GROUP-016, the implementation map and remaining
-limits are in [styling.md](styling.md) and the group spec.
+Adapter **0.0.13** is installed; its installed bundle passes the Node cross-file
+completion/diagnostic refresh probe too. Reload VS Code to load it. The scoping gallery
+documents manual completion checks; its files remain freely editable.
 
-Next: review CSS authoring/tooling gaps before aliases. Cross-file `@use` ID/path
-discovery still needs an injected editor source host. Numeric-header suggestions,
-grouped class/state forms, range shortcuts, local named CSS resources and event
-composition remain separate decisions. Plain CSS and native media queries remain
-available alongside the implemented forms.
+The previous grouped CSS checkpoint is `d6ddc9d3`; the branch includes the seven
+compiler-rewrite commits through `f7e33a90`. Compiler/runtime/data/server/Vite
+trees remain unchanged by this editor slice. No full-root tests, second editor or
+actual desktop acceptance were run. [styling.md](styling.md) maps owning files,
+checks and the limits of this first source-aware profile.
+
+Next: numeric-header unit/hover assistance and project alias resolver wiring are
+separate tooling slices. Review alias/property-scale semantics before adding
+property shorthands. Local named CSS resources, range shortcuts and event
+composition remain separate decisions; ordinary native CSS stays available.
 
 ## `.auwla` across modules: JSX+ as a source language (DX-39)
 
