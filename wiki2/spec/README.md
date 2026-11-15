@@ -35,6 +35,7 @@ reconciliation, state, readiness and ownership already exist and are reused.
 | [style-scopes.cases.json](style-scopes.cases.json) | Local declarations, file sharing, named definitions, explicit uses and early errors | Scope conformance fixtures |
 | [style-reuse.md](style-reuse.md) | CSS-3b: cross-file source dependencies, resource rebasing and implicit native nesting | Cross-file/nesting profile |
 | [style-editor-sources.md](style-editor-sources.md) | CSS-4: injected editor source host, relative path/style-ID completion and dependency diagnostics | Source-aware editor contract |
+| [style-shorthands.md](style-shorthands.md) | Authored shorthand definitions, restricted values, compound styles and responsive/class expansion | Design draft only; not implemented |
 
 The user's latest instructions and [existing ground rules](../../wiki/rules.md)
 take precedence. [Decisions](../decisions.md) distinguish accepted direction from

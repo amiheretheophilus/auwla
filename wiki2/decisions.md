@@ -1,11 +1,12 @@
 # Prototype decisions
 
-Updated: 2026-11-14. Accepted direction is separate from implemented support.
+Updated: 2026-11-15. Accepted direction is separate from implemented support.
 
 ## Accepted directions
 
 | ID | Date | Decision and evidence | Contract |
 | --- | --- | --- | --- |
+| DX-52 | 2026-11-15 | User requests extensible/overridable CSS shorthands authored as real style definitions consumed by the compiler, rejects JavaScript alias/value-scale tables, asks for accepted-value restrictions and compound styles such as `a:center`, and requires existing responsive support: "document it as short had". Record design only; `@define`/constraint spelling, sharing, visibility and override resolution remain provisional. | [shorthand draft](spec/style-shorthands.md), [CSS design](../dxcss.md#10-css-shorthands-authored-definitions-and-compound-styles) |
 | DX-50 | 2026-11-14 | Use native `&.classname { ... }` for same-element class groups. Do not add a redundant `@.classname { ... }` group syntax. Compact `@.classname:value` clauses stay supported; plain nested `.classname` keeps its native descendant meaning. | [groups](spec/style-groups.md), [CSS design](../dxcss.md) |
 | DX-51 | 2026-11-14 | User authorizes continuing cross-file CSS editor assistance after the proposed path/ID completion and diagnostic slice. Keep file access injected into shared tooling, other-editor reuse possible, native CSS independent of TypeScript, and tests independent of examples. | [CSS-4](spec/style-editor-sources.md) |
 | DX-49 | 2026-11-14 | User requests switching to JSX+, syncing compiler-rewrite and continuing the proposed grouped numeric CSS slice. Fast-forward seven compiler commits through `f7e33a90`; keep their project/server features in the existing pipeline. Tests must remain self-contained, following rule 16 and the user's fixture migration. CSS-2c defines the provisional group grammar before implementation. | [group spec](spec/style-groups.md), [testing](testing.md) |

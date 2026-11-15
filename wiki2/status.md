@@ -2,7 +2,18 @@
 
 Updated: 2026-11-15. Branch: `prototype/jsx-plus`.
 
-## Current focus: unfinished tag diagnostics, completion and auto-closing
+## Current focus: CSS shorthand design documentation
+
+DX-52 records authored, extensible/overridable style definitions with value
+restrictions and compound output such as `a:center`. They must work with existing
+compact responsive/class clauses and numeric groups; the whole definition body
+expands in every branch. [The shorthand draft](spec/style-shorthands.md) and
+[dxcss.md](../dxcss.md#10-css-shorthands-authored-definitions-and-compound-styles)
+include expected CSS and open grammar/sharing/override choices. This is a
+documentation-only step; no shorthand syntax or tooling is implemented yet.
+The remaining tag edge case below is backlogged while CSS design resumes.
+
+## Previous checkpoint: unfinished tag diagnostics, completion and auto-closing
 
 Unclosed/mismatched messages now name the tag and expected closer. Checking
 retains root and nested unfinished names such as `<d` at EOF or before host

@@ -225,7 +225,10 @@ and global/deep escapes remain open; resources currently require globals.
 Named conditions remain later design work. Class groups use native `&.classname`
 (DX-50); do not add `@.classname { ... }`. Numeric groups are implemented, while
 `@md:30px` has no extension meaning.
-Aliases and future element dot-class syntax remain later. There is no Tailwind
+[Authored CSS shorthands](spec/style-shorthands.md) are documented under DX-52:
+restricted values, compound declarations and existing responsive/class conditions.
+Definition syntax, sharing/visibility and override rules remain to settle before
+implementation. Future element dot-class syntax remains later. There is no Tailwind
 dependency, breakpoint JavaScript, style injection runtime or new reactivity.
 
 CSS source maps, route-specific SSR stylesheet discovery, CSS-module-style exports,
