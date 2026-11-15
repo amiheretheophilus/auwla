@@ -27,6 +27,17 @@ it('loads the built extension outside the workspace and runs CSS providers in No
     expect(output).toContain('completion, hover and diagnostics passed in Node');
     expect(output).toContain('Reactivity hints passed in Node');
 
+    const tags = Bun.spawn(['node', join(import.meta.dir, 'fixtures/bundle-host.cjs'), entry,
+      join(import.meta.dir, 'fixtures/apps/tag-editing/App.auwla'), '--tags'], {
+      cwd: installed, stdout: 'pipe', stderr: 'pipe',
+    });
+    const [tagExit, tagOutput, tagErrors] = await Promise.all([
+      tags.exited, new Response(tags.stdout).text(), new Response(tags.stderr).text(),
+    ]);
+    expect(tagErrors).toBe('');
+    expect(tagExit).toBe(0);
+    expect(tagOutput).toContain('Tag and fragment auto-insert passed in Node');
+
     // The test's own copies of example apps (`fixtures/apps/`), never the examples themselves.
     const example = join(import.meta.dir, 'fixtures/apps/class-conditions/App.auwla');
     const real = Bun.spawn(['node', join(import.meta.dir, 'fixtures/bundle-host.cjs'), entry, example], {

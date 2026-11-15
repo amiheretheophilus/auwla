@@ -7,6 +7,7 @@ const { pathToFileURL, fileURLToPath } = require('node:url');
 
 let completionProvider;
 let hoverProvider;
+let autoInsert;
 let showEditors;
 let painted = [];
 let problems = [];
@@ -31,6 +32,7 @@ const document = {
 };
 const disposable = () => ({ dispose() {} });
 const vscode = {
+  Position: class { constructor(line, character) { Object.assign(this, { line, character }); } },
   Uri: { parse: value => ({ toString: () => value, path: new URL(value).pathname }) },
   FileType: { File: 1, Directory: 2 },
   CompletionItemKind: { Folder: 18 },
@@ -69,7 +71,9 @@ const vscode = {
     registerHoverProvider(_selector, provider) { hoverProvider = provider; return disposable(); },
   },
   workspace: {
-    workspaceFolders: [],
+    workspaceFolders: process.argv[4] === '--tags'
+      ? [{ uri: { scheme: 'file', fsPath: path.dirname(process.argv[3]) } }]
+      : [],
     textDocuments: [document],
     fs: {
       async readFile(uri) {
@@ -98,7 +102,18 @@ const vscode = {
     createOutputChannel: () => ({ appendLine() {}, dispose() {} }),
     showWarningMessage: async () => undefined,
   },
-  extensions: { getExtension: () => undefined },
+  extensions: {
+    getExtension: () => process.argv[4] === '--tags' ? {
+      activate: async () => ({
+        registerContentMappers: disposable,
+        registerLspMiddleware(method, transform) {
+          assert.equal(method, 'textDocument/_vs_onAutoInsert');
+          autoInsert = transform;
+          return disposable();
+        },
+      }),
+    } : undefined,
+  },
 };
 
 const load = Module._load;
@@ -111,8 +126,30 @@ Module._load = function(id, ...args) {
 
 async function run() {
   const entry = process.argv[2];
-  const context = { subscriptions: [], extensionPath: path.dirname(entry) };
+  const context = { subscriptions: [], extensionPath: path.dirname(entry), extension: { id: 'test.auwla' } };
   await require(entry).activate(context);
+  if (process.argv[4] === '--tags') {
+    assert.equal(typeof autoInsert, 'function');
+    const original = source;
+    for (const [tag, closer] of [['<>', '</>'], ['<div>', '</div>']]) {
+      source = original.replace('<>', tag).replace('</>', '');
+      document.version++;
+      const cursor = source.indexOf(tag) + tag.length;
+      const position = document.positionAt(cursor);
+      const params = { _vs_textDocument: { uri: document.uri.toString() }, _vs_position: position, _vs_ch: '>' };
+      const result = await autoInsert(null, { params });
+      assert.deepEqual(result, {
+        _vs_textEditFormat: 2,
+        _vs_textEdit: { range: { start: position, end: position }, newText: '$0' + closer },
+      });
+      source = source.slice(0, cursor) + closer + source.slice(cursor);
+      document.version++;
+      assert.equal(await autoInsert(null, { params }), null);
+    }
+    for (const subscription of context.subscriptions) subscription.dispose();
+    console.log('Tag and fragment auto-insert passed in Node');
+    return;
+  }
   if (process.argv[4] === '--sources') {
     const complete = offset => completionProvider.provideCompletionItems(document, document.positionAt(offset));
     const ids = await complete(source.indexOf('"card-look"') + 1);

@@ -2,7 +2,7 @@ import { beforeEach, expect, it, mock } from 'bun:test';
 import { resolve } from 'node:path';
 import type { ExtensionContext } from 'vscode';
 import type * as VSCode from 'vscode';
-import type { ContentMapperContribution, TypeScriptSDK } from 'typescript/vscode';
+import type { ContentMapperContribution, LspMiddlewareTransformer, TypeScriptSDK } from 'typescript/vscode';
 import { auwlaLanguage } from '@memoized-dom/jsx-plus/editor';
 import manifest from '../package.json';
 import { waitFor } from '../../../test-support/helpers';
@@ -53,6 +53,7 @@ function fileEvent(kind: 'create' | 'change' | 'delete', value: string): void {
 }
 
 mock.module('vscode', () => ({
+  Position: class { constructor(public line: number, public character: number) {} },
   Uri: { parse: uri },
   FileType: { File: 1, Directory: 2 },
   CompletionItemKind: { Folder: 18 },
@@ -469,6 +470,53 @@ it('registers the installed shared package and gives disposal to the editor', as
     subscription.dispose();
   }
   expect(disposable.dispose).toHaveBeenCalledTimes(1);
+});
+
+it('supplies authored tag and fragment closers through the native auto-insert handler', async () => {
+  let middleware!: LspMiddlewareTransformer<'textDocument/_vs_onAutoInsert'>;
+  const registration = { dispose: mock(() => {}) };
+  provider = {
+    activate: async () => ({
+      registerContentMappers: disposable,
+      registerLspMiddleware(method: string, transform: typeof middleware) {
+        expect(method).toBe('textDocument/_vs_onAutoInsert');
+        middleware = transform;
+        return registration;
+      },
+    }),
+  };
+  const session = context();
+  await activate(session);
+  expect(messages).toEqual([]);
+  expect(session.subscriptions).toContain(registration);
+
+  const { document, edit } = sourceDocument('file:///app/Tags.auwla', '');
+  openDocuments = [document];
+  for (const [tag, closer] of [['<div>', '</div>'], ['<>', '</>'], ['<$Card>', '</$Card>']] as const) {
+    const source = '// 😀\r\nexport function App() {\r\n  return (' + tag + '\r\n);\r\n}';
+    edit(source);
+    const cursor = source.indexOf(tag) + tag.length;
+    const position = document.positionAt(cursor);
+    const params = { _vs_textDocument: { uri: document.uri.toString() }, _vs_position: position, _vs_ch: '>' };
+    const result = await middleware(null, { params });
+    expect(result).toEqual({
+      _vs_textEditFormat: 2,
+      _vs_textEdit: { range: { start: position, end: position }, newText: '$0' + closer.replace(/[$}\\]/g, '\\$&') },
+    });
+    edit(source.slice(0, cursor) + closer + source.slice(cursor));
+    expect(await middleware(null, { params })).toBeNull();
+
+    // Keep existing native responses and leave other languages/requests alone.
+    expect(await middleware(result, { params })).toBe(result);
+    edit(source);
+    expect(await middleware(null, { params: { ...params, _vs_ch: '=' } })).toBeNull();
+    expect(await middleware(null, { params: { ...params, _vs_textDocument: { uri: 'file:///Other.tsx' } } })).toBeNull();
+    expect(await middleware(null, { params: { ...params, _vs_position: { line: 100, character: 0 } } })).toBeNull();
+  }
+  for (const subscription of session.subscriptions) {
+    subscription.dispose();
+  }
+  expect(registration.dispose).toHaveBeenCalledTimes(1);
 });
 
 for (const version of ['7.0.2', '7.1.0-beta']) {

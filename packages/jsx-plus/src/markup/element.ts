@@ -61,7 +61,7 @@ function elementName(context: MarkupContext, tokens: HostTokens, start: number):
   return context.source.slice(start + tokens.start(1), start + nameEnd);
 }
 
-function readOpeningTag(context: MarkupContext, start: number): OpeningTag {
+export function readOpeningTag(context: MarkupContext, start: number): OpeningTag {
   const attributes: AttributeValue[] = [];
   let shadow = context.source.slice(start);
 
@@ -118,7 +118,14 @@ function readOpeningTag(context: MarkupContext, start: number): OpeningTag {
         // `<Badg</section>` while typing: a closing tag is never part of an opening tag, so do
         // not take its `>` as this tag's end (D-RECOVERY). The tag stops before it.
         const next = start + tokens.start(index);
-        context.error('HOST', 'Incomplete opening tag', start, next, closeOpeningTag(context.source, start, next));
+        context.error('HOST', `Incomplete <${name}> opening tag; add \`>\` or \`/>\``, start, next,
+          closeOpeningTag(context.source, start, next));
+      } else if (braces.length === 0 && (kind === K.RightParen || kind === K.RightBrace || kind === K.Semicolon)) {
+        // A function/return delimiter cannot be part of a tag name or attribute.
+        // Keep it as host code when completing an unfinished `<div` before it.
+        const next = start + tokens.start(index);
+        context.error('HOST', `Incomplete <${name}> opening tag; add \`>\` or \`/>\``, start, next,
+          closeOpeningTag(context.source, start, next, context.open));
       }
     }
 
@@ -132,7 +139,8 @@ function readOpeningTag(context: MarkupContext, start: number): OpeningTag {
         context.error('HOST', 'Unclosed `{` in an attribute value', unclosed, unclosed + 1,
           closeAttributeValue(context.source, unclosed, '}'));
       }
-      context.error('HOST', 'Incomplete opening tag', start, context.source.length);
+      context.error('HOST', `Incomplete <${name}> opening tag; add \`>\` or \`/>\``, start, context.source.length,
+        closeOpeningTag(context.source, start, context.source.length, context.open));
     }
     attributes.push(value);
     shadow = value.mask(shadow, start);
@@ -253,13 +261,13 @@ function readBody(context: MarkupContext, start: number, name: string, opener: n
         if (closing.end === null) {
           // `</fo` while typing: no `>` follows the name. Never search past it,
           // which would take a later tag's `>` and name.
-          context.error('JPX1001', 'Incomplete closing tag', position, closing.nameEnd,
+          context.error('JPX1001', `Incomplete closing tag; write </${name}> to close <${name}>`, position, closing.nameEnd,
             mismatchRepairs(context, closing.name, [opener, start], [position, closing.nameEnd]));
         }
         const closeEnd = closing.end - 1;
         if (closing.name !== name) {
           reportJoinedSibling(context, comparisons, closing.name, closeEnd + 1);
-          context.error('JPX1001', 'Closing tag does not match its opening tag', position, closeEnd + 1,
+          context.error('JPX1001', `Unexpected </${closing.name}>; expected </${name}> to close <${name}>`, position, closeEnd + 1,
             mismatchRepairs(context, closing.name, [opener, start], [position, closeEnd + 1]));
         }
         noteSameNameSibling(context, comparisons, name, closeEnd + 1);
@@ -318,9 +326,37 @@ function readBody(context: MarkupContext, start: number, name: string, opener: n
     // A nested opener can be set aside so its children belong to the parent.
     // Dropping the outermost opener would instead turn its children into host
     // statements and claim that a wholly unfinished template was checked.
-    const repairs = context.open.length > 1 ? [blank([opener, start])] : [];
-    context.error('JPX1002', 'Unclosed element or fragment', opener, start, repairs);
+    const closers = [...context.open].reverse().map((tag) => `</${tag}>`).join('');
+    const repairs: Repair[] = [{ kind: 'insert', at: source.length, text: closers }];
+    // A completed function can surround an unfinished template. Try closing
+    // before its unmatched host delimiter as well as at the end of the file.
+    // Recovery re-reads each proposal; neither changes production parsing.
+    const boundary = unmatchedHostCloser(tokens, start);
+    if (boundary !== undefined) {
+      repairs.unshift({ kind: 'insert', at: boundary, text: closers });
+    }
+    if (context.open.length > 1) {
+      repairs.push(blank([opener, start]));
+    }
+    context.error('JPX1002', `Unclosed <${name}>; add </${name}> to close it`, opener, start, repairs);
   }
+}
+
+/** First host closer outside balanced expressions in the unfinished body. */
+function unmatchedHostCloser(tokens: HostTokens, base: number): number | undefined {
+  const stack: number[] = [];
+  for (let index = 0; index < tokens.length; index++) {
+    const kind = tokens.kind(index);
+    const close = closingDelimiter(kind);
+    if (close !== undefined) {
+      stack.push(close);
+    } else if (stack.length > 0 && kind === stack[stack.length - 1]) {
+      stack.pop();
+    } else if (stack.length === 0 && (kind === K.RightParen || kind === K.RightBrace)) {
+      return base + tokens.start(index);
+    }
+  }
+  return undefined;
 }
 
 /**

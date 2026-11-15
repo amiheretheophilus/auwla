@@ -48,8 +48,16 @@ export function projectForChecking(source: string, filename: string): CheckingSo
     if (!(error instanceof JsxPlusError)) throw error;
     const recovered = recoverMarkup(source, filename, error);
     if (recovered !== null) {
+      const view = checkingView(recovered.normalized, filename);
+      const last = recovered.normalized.mappings.at(-1);
+      if (last?.authored[1] === source.length && last.generated[1] < view.text.length) {
+        // A synthetic closing tag can move a native "expected }" at EOF past
+        // the last copied character. Map that diagnostic back to authored EOF
+        // without moving completion/edit cursors beyond the inserted closer.
+        view.mappings.push([view.text.length, 0, source.length, 0, 0, 0]);
+      }
       return {
-        ...checkingView(recovered.normalized, filename),
+        ...view,
         diagnostics: recovered.errors.map(authoredDiagnostic),
       };
     }

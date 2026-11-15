@@ -127,7 +127,8 @@ it('closes an opening tag still being typed for checking only, so its name stays
   const typed = source.indexOf('<Badg');
   const end = typed + '<Badg'.length;
   expect(() => compile(source)).toThrow(expect.objectContaining({
-    code: 'HOST', reason: 'Incomplete opening tag', range: [typed, end], repairs: [{ kind: 'insert', at: end, text: ' />' }],
+    code: 'HOST', reason: 'Incomplete <Badg> opening tag; add `>` or `/>`',
+    range: [typed, end], repairs: [{ kind: 'insert', at: end, text: ' />' }],
   }));
 
   const result = projectForChecking(source, './Page.auwla');

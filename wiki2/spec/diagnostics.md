@@ -93,6 +93,24 @@ there: a closing tag is never part of an opening tag, so its `>` does not end
 this one. The error covers the opening tag up to that `</`, and recovery closes it
 as ` />` for checking only, so native tag-name completion works.
 
+### Unfinished tags while typing (D-TAG-EDITING)
+
+An unclosed element message names its opening tag and expected closer, for
+example `Unclosed <section>; add </section> to close it`. Fragments name `<>`
+and `</>`. Mismatched closers name both the encountered and expected closer.
+Codes and authored ranges stay unchanged.
+
+Checking recovery may insert unmapped tag delimiters at EOF or before an
+unmatched host `)`/`}` or the `;` following an incomplete opening tag. It preserves the typed tag name and existing host code
+for native intrinsic/component completion, and keeps the authored syntax error.
+Production compilation still rejects the original source.
+
+Editor auto-closing is offered immediately after an actual opening tag's `>`
+or fragment's `>`, using this same frontend. It does not pair arbitrary `<`
+characters, comparisons, generics, comments, strings or CSS. Existing complete
+elements are not closed twice. The shared proposal contains only a closer;
+the editor owns settings, document versions, cancellation and applying edits.
+
 ## Recovery and error precedence (D-RECOVERY)
 
 At a token boundary a complete mismatched closing tag takes JPX1001 over a generic

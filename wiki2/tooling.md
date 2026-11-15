@@ -11,6 +11,35 @@ checking representation and authored span maps. The content mapper exposes those
 to TypeScript. This is tooling; application compilation stays in compiler-next's
 existing pipeline. The mapper does not implement refs or emit a second runtime.
 
+## Tag completion and auto-closing
+
+Unfinished tag names use native TypeScript completion, including the framework's
+intrinsic elements and in-scope components. The mapper retains those names through
+[tag recovery](recovery.md#tag-editing-2026-11-15), rather than returning an empty
+module. Generated closers are never authored completion/rename edits.
+
+`src/editor/tags.ts` exports `closingTagAt(source, offset)` through `./editor/tags`.
+It recognizes an opening `>` using the normal frontend, checks the full host
+context for generic arrows, and reads that element separately to avoid closing
+an existing balanced element twice. It proposes `</tag>` or `</>`; strings,
+comments, comparisons, styles, self-closing tags and unrelated malformed tokens
+do not qualify. This is shared pure syntax logic with no editor SDK or I/O.
+
+`packages/editor-vscode/src/tags/index.ts` registers optional native TypeScript
+LSP middleware for `textDocument/_vs_onAutoInsert`. A synthetic checking closer
+already balances the virtual TSX, so native auto-insert can return null. The
+middleware fills that result from authored source, leaving other documents and
+native responses unchanged. The native editor handler owns its settings,
+cancellation, version checks, undo handling and snippet application; the adapter
+does not add a competing document-change insertion listener. Snippet metacharacters
+in tag names are escaped, and the cursor stays before the generated closer.
+
+Verified with native LSP requests and the built/installed Node bundle probe, not
+an actual desktop typing session or another IDE. Adapter 0.0.14 requires reload;
+older TypeScript extension APIs without middleware keep their existing behavior.
+
+## Checking projections
+
 Preserve identifiers, ordinary expressions and types verbatim where possible.
 Generated nodes must not acquire fabricated authored declarations. Check both
 reads and writes for refs and bindings. A diagnostic mapped near an expression

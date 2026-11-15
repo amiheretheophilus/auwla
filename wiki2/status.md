@@ -2,7 +2,36 @@
 
 Updated: 2026-11-15. Branch: `prototype/jsx-plus`.
 
-## Current focus: cross-file CSS editor assistance (CSS-4)
+## Current focus: unfinished tag diagnostics, completion and auto-closing
+
+Unclosed/mismatched messages now name the tag and expected closer. Checking
+retains root and nested unfinished names such as `<d` at EOF or before host
+delimiters, allowing native intrinsic/component completion. Synthetic closers
+stay unmapped; a diagnostic-only EOF anchor keeps native host errors authored.
+Production parsing remains strict. See [tag recovery](recovery.md#tag-editing-2026-11-15)
+and [the editing contract](spec/diagnostics.md#unfinished-tags-while-typing-d-tag-editing).
+
+The shared `./editor/tags` API proposes matching element/fragment closers using
+the existing frontend. VS Code supplies these through native TypeScript's
+auto-insert middleware, preserving its settings, cancellation, version checks
+and cursor placement. No competing change listener or general `<` bracket pair
+was added. [Tooling](tooling.md#tag-completion-and-auto-closing) maps the code.
+
+Verification: **535 JSX+ tests across 37 files** and **14 editor tests** pass,
+unfiltered. Both package type checks pass (366/197 files). Real native LSP tests
+apply HTML/component completion edits, finish the source, recheck and retain an
+independent type error. Closing proposals cover fragments, nested/dotted/namespaced
+tags, snippet escapes, UTF-16/CRLF and rejected non-markup contexts. The installed
+**0.0.14** bundle matches the tested build and passes its Node auto-insert probe
+outside the checkout. Reload VS Code to load it. Desktop typing acceptance and
+other IDEs have not been exercised; no compiler/runtime source changes were needed.
+
+Next: a bare `<` at nested EOF still lacks recovery until its tag name begins;
+larger combinations of broken tokens remain bounded by existing recovery limits.
+The separate CSS numeric-header/unit/hover and alias-resolver work below remains
+available after authoring review.
+
+## Previous checkpoint: cross-file CSS editor assistance (CSS-4)
 
 [CSS-4](spec/style-editor-sources.md) adds relative file/directory and style-ID
 completion inside `@use`, with missing-source/ID, duplicate and cycle diagnostics.
@@ -36,8 +65,8 @@ Tests also cover unsaved external sources, outside-workspace saves, missing-file
 creation/deletion, transitive locations, safe edits, stale requests, cleanup,
 opaque URIs and preserved native CSS assistance. Tests never read examples.
 
-Adapter **0.0.13** is installed; its installed bundle passes the Node cross-file
-completion/diagnostic refresh probe too. Reload VS Code to load it. The scoping gallery
+Adapter **0.0.13** was installed at this checkpoint; its installed bundle passed
+the Node cross-file completion/diagnostic refresh probe too. The scoping gallery
 documents manual completion checks; its files remain freely editable.
 
 The previous grouped CSS checkpoint is `d6ddc9d3`; the branch includes the seven

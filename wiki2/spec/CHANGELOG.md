@@ -1,5 +1,16 @@
 # Spec revisions
 
+## Unfinished tag editing — 2026-11-15
+
+- Add D-TAG-EDITING: actionable element/fragment messages, native completion of
+  unfinished names and frontend-backed closing proposals. Existing JPX tag codes
+  and ranges are unchanged; accepted production syntax is unchanged.
+- Permit checking-only root/ancestor closers at EOF or host boundaries. Quarantined
+  children stay unmapped and their errors remain visible. Retain native host EOF
+  diagnostics without granting generated closers any authored edit span.
+- Keep editor settings and insertion lifecycle in the adapter/native handler;
+  shared syntax proposals remain usable without a VS Code dependency.
+
 ## CSS-4 source-aware editor assistance — 2026-11-15
 
 - Add injected URI/file/directory access for relative `@use` path and style-ID

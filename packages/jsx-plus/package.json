@@ -11,6 +11,7 @@
     "./editor": "./src/editor/registration.ts",
     "./editor/grammar": "./src/editor/grammar.ts",
     "./editor/hints": "./src/editor/hints.ts",
+    "./editor/tags": "./src/editor/tags.ts",
     "./styles": "./src/styles/tooling.ts",
     "./styles/sources": "./src/styles/sources/workspace.ts",
     "./types": "./src/editor/types.d.ts",

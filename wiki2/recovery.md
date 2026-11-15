@@ -55,6 +55,32 @@ not keep an older module or cached projection.
 
 ## Structural recovery
 
+### Tag editing (2026-11-15)
+
+[D-TAG-EDITING](spec/diagnostics.md#unfinished-tags-while-typing-d-tag-editing)
+keeps unfinished `<d`/component names mapped at EOF and before host `)`, `}` or
+`;` delimiters. Missing element/fragment closers have checking-only insertion
+proposals, including the still-open ancestors in one repair. Those EOF insertions
+belong to the recovered root; an unfinished surrounding host function stays
+available to native TypeScript recovery. A diagnostic-only EOF anchor locates
+native missing-host-delimiter errors without moving the completion cursor past
+the synthetic closers or reporting a virtual-code problem (18080).
+
+The messages now name the missing closer or the actual/expected mismatched tags.
+Codes and authored ranges stay stable. Recovering a root may retain only its
+opening tag when damaged children are quarantined: both authored errors remain
+visible, and those children have no checking/edit span. Strict builds still fail.
+
+`tests/tags-lsp.test.ts` uses the real TypeScript server for intrinsic/component
+completion at root/nested unfinished tags, EOF/host boundaries and independent
+type errors. It applies the completion edits, finishes the actual source and
+rechecks. `tests/tags.test.ts` checks exact mappings and frontend-backed closing
+proposals. See [tooling](tooling.md#tag-completion-and-auto-closing) for editor
+application. A bare `<` at nested EOF remains an unsupported recovery case until
+its tag name begins; this slice does not claim every incomplete token sequence.
+
+### Bounded repair search
+
 Reader errors carry checking-only repair suggestions (`Repair` in
 `src/diagnostics.ts`, helpers in `src/repairs.ts`). They identify a missing
 closer, an unclosed element's opening tag or a stray closing tag. Recovery in

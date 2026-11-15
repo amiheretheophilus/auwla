@@ -32,6 +32,14 @@ inside its body too. An unfinished expression still has a native syntax error;
 the checking view keeps it mapped so that completing it can clear that error.
 The real-server tests apply these edits to their own copy and recheck the completed file.
 
+For tag editing after reloading adapter 0.0.14, temporarily replace the counter's
+returned button with `<d` and request suggestions: `div` should be offered. An
+in-scope component name can be completed the same way. Finish `<div>` or type
+`<>`: the matching `</div>` or `</>` should appear with the cursor between the
+tags, when native TypeScript auto-closing is enabled. Delete a closing tag to
+inspect the message naming its missing closer; use a mismatched `</span>` to
+see the actual and expected tags. Undo these edits to return to the valid example.
+
 ## Run the task board
 
 ```text

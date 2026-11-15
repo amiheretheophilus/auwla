@@ -180,7 +180,11 @@ function outsideHoles(mappings: readonly VerbatimMapping[], holes: readonly Rang
 function onlyMarkupPatched(source: string, normalized: NormalizedSource, patch: Patch): boolean {
   const roots = normalized.roots.map((root): Range => [patch.authored(root.range[0]), patch.authored(root.range[1])]);
   const inRoot = (offset: number) => roots.some(([start, end]) => start <= offset && offset < end);
-  return patch.insertions.every((insertion) => inRoot(insertion.at)) && patch.holes.every(([start, end]) => {
+  // An inserted closing tag can end a root exactly at authored EOF. It still
+  // repairs only that markup, even when the surrounding host is being typed.
+  const insertionInRoot = (offset: number) => inRoot(offset)
+    || (offset === source.length && roots.some(([start, end]) => start < end && end === offset));
+  return patch.insertions.every((insertion) => insertionInRoot(insertion.at)) && patch.holes.every(([start, end]) => {
     for (let index = start; index < end; index++) {
       if (source[index]!.trim() !== '' && !inRoot(index)) {
         return false;

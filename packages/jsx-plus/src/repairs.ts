@@ -44,8 +44,9 @@ function unique(repairs: Repair[]): Repair[] {
  * `<Badg</section>`. Close it as self-closing after what was typed, so the
  * editor reads a whole tag and native tag-name completion works there.
  */
-export function closeOpeningTag(source: string, opener: number, next: number): Repair[] {
-  return [insert(trimBack(source, next, opener + 1), ' />')];
+export function closeOpeningTag(source: string, opener: number, next: number, ancestors: readonly string[] = []): Repair[] {
+  const closers = [...ancestors].reverse().map((name) => `</${name}>`).join('');
+  return [insert(trimBack(source, next, opener + 1), ' />' + closers)];
 }
 
 /**

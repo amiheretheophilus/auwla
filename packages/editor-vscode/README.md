@@ -8,7 +8,14 @@ extensions can reuse them without installing this adapter. See
 
 From this package:
 
-Version 0.0.13 adds relative `@use` file/directory and named-style-ID completion,
+Version 0.0.14 adds closing tags/fragments through TypeScript's existing
+auto-insert handler, backed by `@memoized-dom/jsx-plus/editor/tags`. It follows
+the native `js/ts.autoClosingTags.enabled` setting (falling back to
+`typescript.autoClosingTags`), cancellation and document-version checks. Unfinished tag names retain
+native HTML/component completion; unclosed/mismatched messages identify the
+expected closer. Reload VS Code after installation.
+
+Version 0.0.13 added relative `@use` file/directory and named-style-ID completion,
 with cross-file diagnostics and related dependency locations. Unsaved sources,
 file creation/deletion and outside-workspace dependencies refresh consumers.
 Source-directory watchers are released when no open consumer needs them; stale

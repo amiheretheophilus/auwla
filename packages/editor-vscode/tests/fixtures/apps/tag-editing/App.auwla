@@ -1,0 +1,8 @@
+export function App() {
+  return (
+    <>
+      <h1>"Tag editing"</h1>
+      <p>"Try typing a new tag or fragment before this paragraph."</p>
+    </>
+  );
+}

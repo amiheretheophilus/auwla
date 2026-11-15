@@ -4,12 +4,13 @@ import { createMapperContribution } from '@memoized-dom/jsx-plus/editor';
 import { findMapperPackage } from './mapper-package';
 import { registerCss } from './css';
 import { registerReactivityHints } from './hints';
+import { registerTags } from './tags';
 
 /** The provider matching the pinned TypeScript 7.1-beta extension API. */
 const TYPESCRIPT_EXTENSION = 'TypeScriptTeam.native-preview';
 
 type MapperHost = Pick<ExtensionAPI, 'registerContentMappers'>
-  & Partial<Pick<ExtensionAPI, 'onLanguageServerInitialized'>>;
+  & Partial<Pick<ExtensionAPI, 'onLanguageServerInitialized' | 'registerLspMiddleware'>>;
 
 function hasMapperRegistration(value: unknown): value is MapperHost {
   return typeof value === 'object' && value !== null
@@ -50,6 +51,10 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     const registration = api.registerContentMappers(context.extension.id, [contribution]);
     context.subscriptions.push(registration);
     output.appendLine('Registered the .auwla content-mapper contribution.');
+
+    if (typeof api.registerLspMiddleware === 'function') {
+      registerTags(context, { registerLspMiddleware: api.registerLspMiddleware.bind(api) });
+    }
 
     // The extension can expose the registration API while running an older
     // server that rejects the protocol request. Report the actual selected SDK,

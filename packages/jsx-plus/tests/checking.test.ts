@@ -49,13 +49,17 @@ it('maps the end of an expression before generated braces back exactly', () => {
   }
 });
 
-it('returns an authored parse diagnostic without claiming to check an incomplete file', () => {
+it('retains both authored errors when only an unfinished template opener can be checked', () => {
   const result = projectForChecking('<p>"missing', './App.auwla');
-  expect(result.text).toBe('export {};\n');
-  expect(result.mappings).toEqual([]);
+  // Root-tag recovery now preserves the opener instead of dropping the whole
+  // file. The damaged child must still have no mapped/editable counterpart.
+  expect(result.text).toBe('<p></p>');
+  expect(result.mappings).toEqual([[0, 3, 0, 3, 0], [3, 0, 3, 0, 0]]);
   // Editors place the message themselves, so it carries no file:line:column.
   expect(result.diagnostics).toEqual([{
     messageText: 'Unterminated child string or template [JPX1003]', start: 3, length: 1, code: 1003,
+  }, {
+    messageText: 'Unclosed <p>; add </p> to close it [JPX1002]', start: 0, length: 3, code: 1002,
   }]);
 });
 

@@ -7,6 +7,12 @@ production compiler facade. `@memoized-dom/jsx-plus/editor/grammar` exports
 `createAuwlaGrammar`, a build-time transformation returning a standalone TextMate
 grammar. `language-configuration.json` provides comment, quote and bracket pairs.
 
+`@memoized-dom/jsx-plus/editor/tags` exports `closingTagAt(source, offset)` for
+element/fragment closing proposals after a typed `>`, using the normal syntax
+frontend. It has no editor SDK or filesystem access. The VS Code adapter feeds
+these proposals into native TypeScript auto-insert middleware; other editors
+can apply the same shared proposal through their own versioned editing API.
+
 The TSX grammar in `vendor/TypeScriptReact.tmLanguage` is unmodified from
 [microsoft/TypeScript-TmLanguage](https://github.com/microsoft/TypeScript-TmLanguage/tree/eeeb0dc4daa8793b8227bb3b34ddfc267c85fd81),
 commit `eeeb0dc4daa8793b8227bb3b34ddfc267c85fd81`. Its MIT license is retained.
