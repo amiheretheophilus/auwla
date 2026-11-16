@@ -346,7 +346,7 @@ evaluation: parent attributes evaluate before child expressions.
 | `jsx.ts` | JSX whitespace, attribute aliases, namespaces and conservative template-parsing eligibility |
 | `content-rules.ts` | Refuses a host element given its content twice, `innerHTML` and JSX children (below), before any element is planned |
 | `content-rules.test.ts` | The error and its place, dynamic and custom-element forms, whitespace and comments allowed, a component's own `innerHTML` prop left alone |
-| `plan.test.ts` | Node addressing, expression order, graph reactivity, fallback creation and unchanged authored AST |
+| `plan.test.ts` | Node addressing, expression order, literal children as template text, graph reactivity, fallback creation and unchanged authored AST |
 
 - `Template`: static DOM shape, hoisted.
 - `TextSite`, `AttributeSite`, `PropertySite`, `EventSite`, `RefSite`.
@@ -365,6 +365,15 @@ Features build their own pieces. Optimizations replace pieces (`optimize.md`).
 JSX children inside is a compile error: only one can be the element's content, and nothing says
 which (the reference showed the children, compiled code the string). Layout whitespace and
 `{/* comments */}` inside are not content. A component's `innerHTML` prop is its own business.
+
+**Literal children are template text** (2026-11-16). A host element's `{"text"}`, `{3}` or
+`` {`text`} `` child cannot change, so `template.ts` (`constantText`) adds it to the static text
+around it, as it does JSX text, instead of planning a text site written at mount. The string is
+kept as written, whitespace included; numbers are written with `String()`, as the runtime's text
+setter does. `{true}`, `{null}` and every other expression keep their site. Children passed to a
+component stay values, since the component can read them. `.auwla` quoted text normalizes to string
+children, so it now ships in the template: one short paragraph went from three writes at mount
+to none.
 
 ## emit — `core/emit/`
 

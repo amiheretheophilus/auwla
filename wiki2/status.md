@@ -2,6 +2,14 @@
 
 Updated: 2026-11-16. Branch: `prototype/jsx-plus`.
 
+## Quoted text ships in the template (2026-11-16, made on `compiler-rewrite`)
+
+`<p>"Hello " <b>"world"</b> "."</p>` normalizes to string children, which compiler-next wrote at
+mount, three writes for that paragraph against none for the same JSX text. compiler-next now puts
+a host element's literal children in the template as static text (`wiki/compiler/core.md`,
+"Literal children are template text"); plain `{"text"}` in `.tsx` benefits the same. JSX+ itself
+needed no change.
+
 ## No `;` between children; `{}` in attribute strings (2026-11-16, DX-54)
 
 Spec revision 10. Children sit side by side: `<span class="star">"✳"</span> "A little ambition."`,

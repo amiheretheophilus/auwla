@@ -26,9 +26,16 @@ describe('template planning and emission', () => {
   });
 
   it('merges static text across fragments but separates expression sites', () => {
-    const { component } = inspect('export const App = () => <p>one<>two</>{1}{2}end</p>;');
+    const { component } = inspect('export const App = (props) => <p>one<>two</>{props.a}{props.b}end</p>;');
     expect(component.template.markup).toBe('<p>onetwo<!----><!---->end</p>');
     expect(component.sites.map((site) => site.node)).toEqual([1, 2]);
+  });
+
+  it('puts literal children in the template as text, joined with the static text around them', () => {
+    // `.auwla` quoted text normalizes to string children, so it ships in the template too.
+    const { component } = inspect('export const App = () => <p>one {"two "}{3}{`four`}<b>{" five "}</b>{true}</p>;');
+    expect(component.template.markup).toBe('<p>one two 3four<b> five </b><!----></p>');
+    expect(component.sites.map((site) => site.kind)).toEqual(['text']);
   });
 
   it('records parent attributes before child expressions independently of node numbering', () => {

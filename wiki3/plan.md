@@ -4,7 +4,7 @@ Ordered, not frozen: reorder or split a slice when evidence says so, and note wh
 
 | Slice | Outcome | Needs |
 | --- | --- | --- |
-| 0 | compiler-next folds constant string children into templates, so `.auwla` quoted text ships in templates ([architecture](architecture.md#the-compiler-next-change-this-needs-and-auwla-needs-now)) | nothing |
+| 0 | **Done** (2026-11-16). compiler-next folds constant string children into templates, so `.auwla` quoted text ships in templates ([architecture](architecture.md#the-compiler-next-change-this-needs-and-auwla-needs-now), [core](../wiki/compiler/core.md#plan--coreplan)) | nothing |
 | 1 | Spec settled: the open decisions answered, the provisional rules confirmed or revised, fixtures pinned | the user's answers |
 | 2 | Pre-scan, Markdown and emit for prose: headings, paragraphs, lists, links, images, tables, code, escapes; static output; exact mappings | approval of the micromark dependencies |
 | 3 | ESM blocks, block and inline elements with Markdown children, `{expr}`, comments; the `JPD` diagnostics | slice 2 |

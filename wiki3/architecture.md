@@ -144,3 +144,4 @@ Measured 2026-11-16:
 `.auwla` quoted text normalizes to string children, so every static sentence of an `.auwla`
 page is written by code at mount. Folding constant string children into the template, as
 JSX text already is, fixes `.auwla` today; documents avoid it anyway by emitting JSX text.
+Done 2026-11-16 (slice 0): all three rows now give the first row's template and no writes.

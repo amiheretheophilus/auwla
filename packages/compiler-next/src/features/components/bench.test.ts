@@ -40,9 +40,13 @@ const updates = { count: 0 };
 
 async function fixture(directory: string, files: readonly string[], component: string, counted = false, optimize = true) {
   const root = join(import.meta.dirname, '../../../../../');
+  // Each build compiles under its own path. A root component's key comes from its module path,
+  // and once a test has imported the hot runtime (`core/resolve/mounts.test.ts`), its hooks mount a
+  // key's newest definition: with one shared path, the optimized app would run the general build.
+  const variant = `${optimize ? 'optimized' : 'general'}${counted ? '-counted' : ''}`;
   const sources = Object.fromEntries(files.map((file) => {
-    const path = `./bench/${directory}/${file}`;
-    return [path, readFileSync(join(root, path), 'utf8')];
+    const source = readFileSync(join(root, 'bench', directory, file), 'utf8');
+    return [`./bench/${directory}/${variant}/${file}`, source];
   }));
   const compiled = compileModules(sources, { runtimePath: '@memoized-dom/runtime/testing', optimize });
   const output = join(import.meta.dirname, '../../../tests/out/components-bench', directory,

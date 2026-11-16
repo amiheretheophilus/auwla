@@ -19,9 +19,18 @@ Scratch tests in `tests/fixtures/out/perf/` (ignored), 2026-11-16:
   tags compiled to one template. Not checked: the exact output of a real `@mdx-js/mdx` run (it
   is not installed here), and static-page delivery (the harness did not qualify for it with
   plain tags either).
-- `text-template.test.ts`: JSX text reaches the template; `{"text"}` children and `.auwla`
-  quoted text are written at run time (slice 0).
+- `text-template.test.ts`: JSX text reached the template; `{"text"}` children and `.auwla`
+  quoted text were written at run time. After slice 0 all three give the same template and no
+  writes at mount.
+
+## Done
+
+- Slice 0 (2026-11-16): literal children are template text in compiler-next
+  (`wiki/compiler/core.md`, "Literal children are template text"), tested in
+  `core/plan/plan.test.ts`. Documents emit plain JSX text, so they did not need it; every
+  `.auwla` page benefits now.
 
 ## Next
 
-Slice 0 can start now; it needs no decision. Slice 2 waits on the dependency approval.
+Slice 1 needs the user's answers to the [open decisions](decisions.md#open); slice 2 waits on
+the dependency approval.

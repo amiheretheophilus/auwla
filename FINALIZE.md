@@ -8,10 +8,6 @@ and remove it once the owning wiki records it as done.
 
 ## compiler-next
 
-- [ ] **Static text into templates.** `.auwla` quoted text (`"Hello"`) normalizes to string
-  children, which are written at mount instead of being part of the cloned template: 3 run-time
-  writes for one short paragraph, against 0 for JSX text. Fold constant string children into the
-  template. Benefits every `.auwla` page now. [wiki3 architecture](wiki3/architecture.md#the-compiler-next-change-this-needs-and-auwla-needs-now)
 - [ ] **Incremental updates.** Every hot update recompiles the whole program: 0.65–0.9 s for
   Common Ground's 16 modules, most of it AST walks and node cloning in the emitter. Saves made
   during a compile wait for it, so typing with auto-save lags. [project.md, "Hot replacement"](wiki/compiler/project.md)

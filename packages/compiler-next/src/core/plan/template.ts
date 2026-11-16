@@ -93,6 +93,13 @@ class TemplateBuilder {
           this.collect([expression], ancestors, namespace, run);
           continue;
         }
+        // `{"Hello "}` cannot change, so it is template text like JSX text, not a value written
+        // at mount. `.auwla` quoted text normalizes to this form.
+        const text = constantText(expression);
+        if (text !== null) {
+          run.text += text;
+          continue;
+        }
         this.flushText(run);
         run.indices.push(this.textSite(child.expression, ancestors, namespace));
       } else if (is.JSXElement(child) && (isComponentCall(child) || this.isSourceAttributeSite(child) || this.isKeyedRow(child))) {
@@ -266,6 +273,30 @@ function constantAttribute(expression: Expression): string | null | undefined {
   if (value === true) return '';
   if (typeof value === 'string' || typeof value === 'number') return String(value);
   return undefined;
+}
+
+/**
+ * The text a host element's child shows when the source fixes it: a string or number literal, or
+ * a template literal with no substitution. The text is written as it is, whitespace included,
+ * because only JSX text is trimmed. Null for anything else, including `true`, `null` and regular
+ * expressions, which keep their text site.
+ */
+function constantText(expression: Expression): string | null {
+  if (is.Literal(expression)) {
+    const value = expression.value;
+    if (typeof value === 'string') {
+      return value;
+    }
+    // The runtime writes a number with String(), as this does.
+    if (typeof value === 'number' && !('regex' in expression)) {
+      return String(value);
+    }
+    return null;
+  }
+  if (is.TemplateLiteral(expression) && expression.expressions.length === 0) {
+    return expression.quasis[0]?.value.cooked ?? null;
+  }
+  return null;
 }
 
 /**
