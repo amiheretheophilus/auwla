@@ -252,6 +252,15 @@ export function $traced<T>(compute: () => T): (() => T) & { reads(): unknown[] }
   return Object.assign(traced, { reads: () => readValues(reads) });
 }
 
+/** `$snapshot(x)`, lowered (`transform.ts`, `prepareSnapshots`): `x` read once, recording no read. */
+export function $untracked<T>(read: () => T): T {
+  const outer = computation;
+  computation = undefined;
+  const value = read();
+  computation = outer;
+  return value;
+}
+
 /** A binding in a helper or factory, read by a function it created (`closures.ts`): one cell per invocation. */
 export function $closureCell(read: () => unknown): ReadValue {
   return { peek: read };

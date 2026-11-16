@@ -10,6 +10,7 @@ import { is, walk } from 'yuku-ast';
 import type { Node } from 'yuku-parser';
 import type { Binding, Module, Reference, WriteSite } from '../resolve';
 import { declaringRunner, isParameter, namespaceExport, namespaceModule } from '../resolve';
+import { snapshotCalls } from '../resolve/ambient';
 import { functionValue } from '../resolve/functions';
 import type { CallNode, FunctionNode, FunctionSummary } from '../resolve/functions';
 import type { PropertyReads } from '../resolve/members';
@@ -77,6 +78,11 @@ export class InputQueries {
           }
           const parent = ctx.parent;
           if (is.PropertyDefinition(parent) && !parent.static && ctx.key === 'value') {
+            ctx.skip();
+            return;
+          }
+          // A value taken once (`$snapshot(x)`): what `x` reads is no input.
+          if (is.CallExpression(node) && snapshotCalls(module).includes(node)) {
             ctx.skip();
             return;
           }

@@ -1276,3 +1276,126 @@ behaves('body statements: a statement whose own write changes what it read does 
     expect(container.querySelector('p')?.textContent).toBe(['0', '0'][observation]);
   },
 });
+
+// --- Snapshots (`wiki/compiler/state-and-derived.md`, "Snapshots") ---------
+// `$snapshot(x)` takes `x` once: the binding is a constant, or state once a later write takes
+// it. The old compiler's own cases (`tests/snapshot-intrinsic.test.ts`), with explicit checks.
+
+const UNDO_EDITOR = (saved: string) => `
+  export function App() {
+    const state = { user: { name: 'ann' } };
+    ${saved}
+    return <main>
+      <output>{state.user.name}</output>
+      <button id="edit" onClick={() => { state.user = { name: 'bob' }; }}>edit</button>
+      <button id="undo" onClick={() => { state.user = saved; }}>undo</button>
+    </main>;
+  }`;
+
+behaves('a snapshot keeps the object it took, so undo puts it back', {
+  source: UNDO_EDITOR('const saved = $snapshot(state.user);'),
+  steps: [{ click: '#edit' }, { click: '#undo' }],
+  check(container, observation) {
+    expect(container.querySelector('output')?.textContent).toBe(['ann', 'bob', 'ann'][observation]);
+  },
+});
+
+behaves('a plain alias follows what it reads, so undo puts back the new value', {
+  source: UNDO_EDITOR('const saved = state.user;'),
+  steps: [{ click: '#edit' }, { click: '#undo' }],
+  check(container, observation) {
+    expect(container.querySelector('output')?.textContent).toBe(['ann', 'bob', 'bob'][observation]);
+  },
+});
+
+behaves('a snapshot of a primitive stays while derived values follow', {
+  source: `
+    export function App() {
+      let count = 1;
+      const initial = $snapshot(count);
+      const doubled = count * 2;
+      return <main><output>{initial}/{count}/{doubled}</output><button onClick={() => count++}>+</button></main>;
+    }`,
+  steps: [{ click: 'button' }, { click: 'button' }],
+  check(container, observation) {
+    expect(container.querySelector('output')?.textContent).toBe(['1/1/2', '1/2/4', '1/3/6'][observation]);
+  },
+});
+
+behaves('a value computed from a snapshot is constant too', {
+  source: `
+    export function App() {
+      let n = 1;
+      const a = n + 1, b = $snapshot(n), c = b + 1;
+      return <button onClick={() => n++}>{a}/{b}/{c}</button>;
+    }`,
+  steps: [{ click: 'button' }],
+  check(container, observation) {
+    expect(container.querySelector('button')?.textContent).toBe(['2/1/2', '3/1/2'][observation]);
+  },
+});
+
+behaves('a snapshot shows whether a field changed since the form opened', {
+  source: `
+    export function App() {
+      let name = 'Ada';
+      const original = $snapshot(name);
+      const changed = name !== original;
+      return <main>
+        <input value={name} onInput={(event) => { name = event.currentTarget.value; }} />
+        <p>{changed ? 'changed' : 'unchanged'}</p>
+      </main>;
+    }`,
+  steps: [{ input: 'input', value: 'Grace' }, { input: 'input', value: 'Ada' }],
+  check(container, observation) {
+    expect(container.querySelector('p')?.textContent).toBe(['unchanged', 'changed', 'unchanged'][observation]);
+  },
+});
+
+behaves('a snapshot a handler writes holds the written value', {
+  source: `
+    export function App() {
+      let count = 1;
+      let picked = $snapshot(count);
+      return <main>
+        <output>{picked}/{count}</output>
+        <button id="inc" onClick={() => count++}>+</button>
+        <button id="pick" onClick={() => { picked = count; }}>pick</button>
+      </main>;
+    }`,
+  steps: [{ click: '#inc' }, { click: '#pick' }, { click: '#inc' }],
+  check(container, observation) {
+    expect(container.querySelector('output')?.textContent).toBe(['1/1', '1/2', '2/2', '2/3'][observation]);
+  },
+});
+
+behaves('a snapshot of module state, at module level and through a pattern', {
+  modules: {
+    './settings.ts': `export let settings = { theme: 'light' }; export function setTheme(theme) { settings = { theme }; }`,
+  },
+  source: `
+    import { settings, setTheme } from './settings';
+    export const first = $snapshot(settings.theme);
+    export function App() {
+      const { theme: initial } = $snapshot(settings);
+      return <main><output>{first}/{initial}/{settings.theme}</output><button onClick={() => setTheme('dark')}>dark</button></main>;
+    }`,
+  steps: [{ click: 'button' }],
+  check(container, observation) {
+    expect(container.querySelector('output')?.textContent).toBe(['light/light/light', 'light/light/dark'][observation]);
+  },
+});
+
+behaves('a module with its own $snapshot function calls it as written', {
+  source: `
+    function $snapshot(value) { return value; }
+    export function App() {
+      let n = 0;
+      const x = $snapshot(n);
+      return <button onClick={() => n++}>{x}</button>;
+    }`,
+  steps: [{ click: 'button' }],
+  check(container, observation) {
+    expect(container.querySelector('button')?.textContent).toBe(['0', '1'][observation]);
+  },
+});

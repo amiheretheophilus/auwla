@@ -10,6 +10,7 @@
 import type { Binding, Module, Reference } from 'yuku-analyzer';
 import { is } from 'yuku-ast';
 import type { Node } from 'yuku-parser';
+import { snapshotCalls } from './ambient';
 
 export type WriteKind =
   /** `x = 1`, `x += 1`, `[x] = pair`, `for (x of xs)` */
@@ -115,6 +116,10 @@ function writeAt(module: Module, reference: Reference, binding: Binding): WriteS
 
   const isArgument = (is.CallExpression(parent) || is.NewExpression(parent))
     && parent.arguments.some((argument) => unwrapped(argument) === chain);
+  // `$snapshot(x)` takes `x`'s value and changes nothing (`features/state/snapshot.ts`).
+  if (isArgument && is.CallExpression(parent) && snapshotCalls(module).includes(parent)) {
+    return undefined;
+  }
   if (isArgument) {
     return { kind: 'argument', binding, reference, path, node: parent!, ...timing(parent!) };
   }

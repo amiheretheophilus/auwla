@@ -4,6 +4,7 @@ import type { Node } from 'yuku-parser';
 import type { Binding, Module, Reference, Resolved, WriteSite } from '.';
 import { declaringRunner, isParameter, runnerOf } from '.';
 import type { PropertyReads } from './members';
+import { insideSnapshot } from './ambient';
 
 export type FunctionNode = Extract<Node, {
   type: 'FunctionDeclaration' | 'FunctionExpression' | 'ArrowFunctionExpression';
@@ -129,6 +130,8 @@ export function summarizeFunctions(
 
     for (const reference of module.references) {
       if (reference.inTypePosition || reference.isWrite) continue;
+      // A value taken once (`$snapshot(x)`): what `x` reads is no input of the function's callers.
+      if (insideSnapshot(module, reference.node)) continue;
       const summary = summaryOf(runnerOf(module, reference.node));
       if (summary === undefined) continue;
       const binding = reference.binding;
@@ -141,6 +144,7 @@ export function summarizeFunctions(
     }
 
     for (const node of module.findAll(BODY_TYPES)) {
+      if (insideSnapshot(module, node)) continue;
       const summary = summaryOf(runnerOf(module, node));
       if (summary !== undefined) addBodyNode(summary, module, node, properties);
     }

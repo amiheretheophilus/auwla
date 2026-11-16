@@ -34,6 +34,8 @@ import { emitEffectGroups, emitLifecycleCalls } from '../../features/effects/dom
 import { emitSources } from '../../features/sources/dom';
 import { emitSourceFlow, sourceReadinessStorage } from '../../features/sources/flow-dom';
 import { markProcessWide } from '../../features/state/request-dom';
+import { emitSnapshots } from '../../features/state/snapshot';
+import { snapshotCalls } from '../resolve/ambient';
 
 /**
  * Whether code here reads state another module owns. A file of plain helpers can have
@@ -84,7 +86,9 @@ export function emitDom(plan: ModulePlan, options: CompileModulesOptions): Node 
     && findAll(module.ast, ['TryStatement', 'AwaitExpression']).length > 0;
   // A server build gives each render its own copy of state a render writes (`request-dom.ts`).
   const serverState = options.routedEnvironment === 'server' ? plan.requestOwned : undefined;
-  const usesRuntime = hasRenderWork || guardsWrites || plan.globals.accesses.length > 0 || plan.globals.codeFromText;
+  // A value taken once reads through the runtime, untracked (`features/state/snapshot.ts`).
+  const snapshots = snapshotCalls(module).length > 0;
+  const usesRuntime = hasRenderWork || guardsWrites || snapshots || plan.globals.accesses.length > 0 || plan.globals.codeFromText;
   if (!usesRuntime && !readsImportedState(plan)) {
     return copy(module.ast);
   }
@@ -102,7 +106,9 @@ export function emitDom(plan: ModulePlan, options: CompileModulesOptions): Node 
   if (plan.sourceFlow !== undefined) {
     hoisted.push(statement('import * as $$data from "@memoized-dom/data/internal";', { data }));
   }
-  const shared = emitShared(plan, names, runtime, emitLifecycleCalls(plan, names, runtime, data), plan.sourceFlow === undefined ? undefined : data, serverState);
+  const lifecycle = emitLifecycleCalls(plan, names, runtime, data);
+  if (snapshots) emitSnapshots(module, runtime, lifecycle);
+  const shared = emitShared(plan, names, runtime, lifecycle, plan.sourceFlow === undefined ? undefined : data, serverState);
   const sourceFlow = emitSourceFlow(plan, names, runtime, data, shared.replacements);
   hoisted.push(...sourceFlow.declarations);
   const replacements = sourceFlow.replacements;

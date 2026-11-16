@@ -109,7 +109,7 @@ const RUNTIME_EXPORTS = [
   '$h', 'Fragment as $Fragment', '$enter', '$assignRef', '$moduleEffect', '$ownedEffect', '$moduleMemo',
   '$when', '$value', '$chain', '$waiting', '$sourceState', '$branch', '$switch', '$path', '$ready',
   '$captureRead', '$closureCell', '$closureRead', '$traced', '$moduleBuilder', '$reassigned', '$ownedCleanup',
-  '$privateTarget', '$setup', '$spread',
+  '$privateTarget', '$setup', '$spread', '$untracked',
   '$installRoutes', '$routeContext', '$routeJoin', '$routeCall', '$routeIdentity', '$routeHref', '$followedRoute',
   '$registerRouted', '$routedValue', '$prepareRoutes',
 ];
@@ -191,7 +191,30 @@ function prepareReferenceModule(source: string, path: string): Module {
     throw new Error(`reference: ${path} does not parse: ${messages}`);
   }
   module = prepareDiscardedCalls(module, path);
+  module = prepareSnapshots(module, path);
   return module;
+}
+
+/**
+ * `$snapshot(x)` takes `x` once (`wiki/compiler/state-and-derived.md`, "Snapshots"). It becomes
+ * `$untracked(() => x)`: what the thunk reads is not a static read of the declaration, since a
+ * nested function reads its captures only when called (`Reads`), and `$untracked` records no
+ * read while it runs. With no inputs, the binding's memo never computes again. A module that
+ * declares or assigns its own `$snapshot` keeps its function.
+ */
+function prepareSnapshots(module: Module, path: string): Module {
+  const references = module.unresolvedReferences.filter((reference) => !reference.inTypePosition && reference.name === '$snapshot');
+  if (references.length === 0 || references.some((reference) => reference.isWrite)) {
+    return module;
+  }
+  for (const reference of references) {
+    const call = module.parentOf(reference.node);
+    if (!is.CallExpression(call) || call.callee !== reference.node || call.arguments.length !== 1) continue;
+    call.callee = identifier('$untracked');
+    call.arguments = [thunk(call.arguments[0] as Expression)];
+  }
+  // Re-analyze, so dependency and closure queries see the thunk's real boundary.
+  return analyze(generate(module.ast).code, { path });
 }
 
 function transformReference(module: Module, runtimeUrl: string, rawUses: SourceUses): string {

@@ -7,6 +7,7 @@ import { collectComputations } from '../../features/derived/computations';
 import { componentFunctions, propBindings } from '../../features/props/classify';
 import { checkComponentParameters } from '../../features/props/parameters';
 import { checkLifecycleMarkers } from '../../features/effects/markers';
+import { checkSnapshots } from '../../features/state/snapshot';
 import { checkElementContent } from '../plan/content-rules';
 import type { Resolved } from '../resolve';
 import { summarizeFunctions } from '../resolve/functions';
@@ -42,6 +43,7 @@ export function classifyGraph(resolved: Resolved): ClassifiedGraph {
   // and an element given its content twice.
   checkComponentParameters(resolved, components);
   checkLifecycleMarkers(resolved);
+  checkSnapshots(resolved);
   checkElementContent(resolved);
   const props = propBindings(resolved, components);
   // Implicit ref writes supply reactive roots before derivation propagates.

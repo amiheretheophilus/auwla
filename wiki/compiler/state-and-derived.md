@@ -499,6 +499,41 @@ Generated reader names also avoid every name the module exports, including names
 `export * from` forwards; a local export would hide the forwarded one
 (`tests/cases/linking.test.ts`, "star-forwarded public names").
 
+### Snapshots
+
+`$snapshot(value)` takes a value once (`features/state/snapshot.ts`, added 2026-11-16 at the
+user's request). Without it there is no way to keep "what this was at the start": an initializer
+that reads state is derived, and so is a write in the component body, since body statements are
+part of the derivation (the rules above). An undo needs the original object; a "changed since the
+form opened" check needs the original text.
+
+```js
+const saved = $snapshot(state.user);   // keeps this object; undo can put it back
+const original = $snapshot(name);
+const changed = name !== original;     // follows `name`, compared against its first value
+```
+
+- What the argument reads is no input of anything: `InputQueries.inputsOf` skips the call, the
+  function summaries leave out its reads and calls (`core/resolve/functions.ts`), and passing a
+  value to it is no possible mutation (`core/resolve/writes.ts`). So the binding is a constant,
+  or state once a later write takes it: the table's "nothing reactive" rows. A value computed
+  from it is constant too.
+- The output reads the value once, untracked: `const saved = _MD.untracked(() => state.user)`,
+  so no computation running the setup subscribes to it. A module with nothing else to compile
+  still imports the runtime for it.
+- Only a declaration's whole initializer may call it, with one value. Anything else is a compile
+  error at the call: `$snapshot` as a value, no value, two, a spread, or a call inside an
+  expression (`<p>{$snapshot(n)}</p>`, `$snapshot(n) + 1`), where no binding keeps the value.
+- A module that declares or assigns its own `$snapshot` has an ordinary function
+  (`snapshotCalls`, `core/resolve/ambient.ts`).
+- An export may be a snapshot (`export const first = $snapshot(settings.theme)`). The old compiler
+  refused that only because it lowered the call to `let first; first = …`, which an `export const`
+  cannot be. For the same reason, its documented alternative (declare, then assign in a separate
+  statement) does not take a value once here.
+- The reference renderer lowers it to `$untracked(() => value)` (`tests/reference/transform.ts`,
+  `prepareSnapshots`). Cases: `tests/cases/state-and-derived.test.ts`, "Snapshots", from the old
+  compiler's `tests/snapshot-intrinsic.test.ts`.
+
 ## Inputs and outputs
 
 - In: `Resolved` (initializer references, write sites and where they run,
@@ -525,6 +560,8 @@ The graph classification is built (`core/graph/classify.ts`, described in
 | `features/state/shared-plan.ts` | native module/factory storage owners and live reader exports |
 | `features/state/primitive-constants.ts` | bindings that hold one primitive forever: no reader, static markup |
 | `features/state/primitive-constants.test.ts` | which constants lose their reader, and which keep it |
+| `features/state/snapshot.ts` | `$snapshot(value)`: refuses it outside a declaration's initializer, and emits its untracked read |
+| `features/state/snapshot.test.ts` | the errors with their positions, the untracked output, a module's own `$snapshot`, a module with nothing else to compile |
 | `features/state/reactive-reads.ts` | module bindings something reactive may read; the rest need no reader |
 | `features/state/reactive-reads.test.ts` | top-level-only reads, component reads, derivation chains, imported defaults |
 | `features/state/shared-dom.ts` | per-owner versions, readers, source-ordered setup completion and shared refresh |
