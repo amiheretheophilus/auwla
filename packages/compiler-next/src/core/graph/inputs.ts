@@ -11,6 +11,7 @@ import type { Node } from 'yuku-parser';
 import type { Binding, Module, Reference, WriteSite } from '../resolve';
 import { declaringRunner, isParameter, namespaceExport, namespaceModule } from '../resolve';
 import { snapshotCalls } from '../resolve/ambient';
+import { isEditRoot } from '../resolve/edit-roots';
 import { functionValue } from '../resolve/functions';
 import type { CallNode, FunctionNode, FunctionSummary } from '../resolve/functions';
 import type { PropertyReads } from '../resolve/members';
@@ -89,7 +90,8 @@ export class InputQueries {
 
           if (is.Identifier(node) || is.JSXIdentifier(node)) {
             const reference = module.referenceOf(node);
-            if (reference !== null && isValueRead(reference)) references.add(reference);
+            // `log.push(x)`: finding the object to edit is no read of it (`edit-roots.ts`).
+            if (reference !== null && isValueRead(reference) && !isEditRoot(module, node)) references.add(reference);
             // `[...arguments]` reads what the function was called with, as `arguments[0]` does.
             if (is.Identifier(node, 'arguments') && reference?.binding === null) opaque = true;
           } else if (is.CallExpression(node) || is.NewExpression(node)) {

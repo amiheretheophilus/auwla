@@ -27,8 +27,20 @@ const keyedIndexes = new WeakMap<object, KeyedIndex>();
 /** A running computation. Maps and sets are created on first use: most sites track nothing. */
 interface Frame {
   dependencies: Map<object, Dependency> | null;
+  /** Bindings this run assigned as its own output (`noteOwnOutput`). */
   writes: Set<object> | null;
+  /** State this run edited that another owner holds (`publishVersions`). */
+  edited: Set<object> | null;
+  /** Of `edited`, the keys this run had read before it first edited them: the edit was guarded. */
+  readBeforeEdit: Set<object> | null;
+  /** Of `edited`, the keys this run read again after editing them. */
+  readAfterEdit: Set<object> | null;
   previous: Frame | null;
+}
+
+/** Notes, for the running computation, a read of `key` after it edited it (`Computation.end`). */
+function noteReadAfterEdit(frame: Frame, key: object): void {
+  if (frame.edited?.has(key) === true) (frame.readAfterEdit ??= new Set()).add(key);
 }
 
 interface ComputationStore {
@@ -87,9 +99,24 @@ export function noteOwnOutput(written: object): void {
   if (current !== null) (current.writes ??= new Set()).add(written);
 }
 
+/**
+ * The running computation edited `written`, state that another owner holds (a module's Map, as
+ * `if (!seen.includes(name)) seen.push(name)` in a helper does). Unlike an output it is still an
+ * input when the computation reads it again afterwards (`Computation.end`).
+ */
+function noteOwnEdit(written: object): void {
+  const current = store().current;
+  if (current === null) return;
+  // Read before its first edit in this run: `seen.includes(name)` guarding `seen.push(name)`.
+  if (current.edited?.has(written) !== true && current.dependencies?.has(written) === true) {
+    (current.readBeforeEdit ??= new Set()).add(written);
+  }
+  (current.edited ??= new Set()).add(written);
+}
+
 export function publishVersions(keys: readonly object[], written?: object): void {
   advanceWriteEpoch();
-  if (written !== undefined) noteOwnOutput(written);
+  if (written !== undefined) noteOwnEdit(written);
   const state = store();
 
   // A shared memo can publish another version while its subscriber runs. Keep
@@ -165,6 +192,7 @@ export function trackRead<T>(version: Version, value: T, key: object = version):
   } else {
     dependencies.set(key, { read: version, seen: version() });
   }
+  noteReadAfterEdit(current, key);
   return value;
 }
 
@@ -213,6 +241,7 @@ export function trackEquals(value: unknown, other: unknown, peek: () => unknown,
  * key's version, which wakes on any change.
  */
 function depend(frame: Frame, key: object, dependency: Dependency): void {
+  noteReadAfterEdit(frame, key);
   const dependencies = frame.dependencies ??= new Map();
   const existing = dependencies.get(key);
   if (existing === undefined || dependency.keyed === undefined) {
@@ -270,7 +299,14 @@ recoveryHooks.captureComputations = captureComputationScope;
 class Computation implements Frame {
   dependencies: Map<object, Dependency> | null = null;
   writes: Set<object> | null = null;
+  edited: Set<object> | null = null;
+  readBeforeEdit: Set<object> | null = null;
+  readAfterEdit: Set<object> | null = null;
   previous: Frame | null = null;
+  /** Edited state this computation follows, because it read it again after editing it. */
+  private followedEdits: Set<object> | null = null;
+  /** Edited state a later run edited again: running it once more would repeat the edit. */
+  private repeatedEdits: Set<object> | null = null;
   private running = false;
   private subscriptions: object[] | null = null;
   private keyedSubscriptions: { readonly index: KeyedIndex; readonly equals: unknown }[] | null = null;
@@ -293,11 +329,44 @@ class Computation implements Frame {
     if (reset) {
       this.dependencies = null;
       this.writes = null;
+      this.edited = null;
+      this.readBeforeEdit = null;
+      this.readAfterEdit = null;
     }
     const state = store();
     this.previous = state.current;
     this.running = true;
     state.current = this;
+  }
+
+  /**
+   * What this run edited of state another owner holds. A derivation follows it only when the edit
+   * was guarded by a read of it and the value was read from it again afterwards, as `if
+   * (!seen.includes(name)) seen.push(name); return seen.length` does: running it again repeats
+   * no edit, and its value comes from that state. Otherwise it does not follow it, so an
+   * initializer such as `seen.push(name); return seen.length` runs once, as JavaScript runs it,
+   * and `s = s || {}` never replays.
+   *
+   * A later run that edits it again anyway (a guard that does not guard) stops following it, and
+   * no run that edits it follows it after that: running it once more would repeat the edit, and
+   * two such statements would wake each other forever. A run that only reads it follows it as any
+   * reader does. Its own edit never wakes it: its dependencies record the value it leaves (`end`).
+   */
+  private settleEdits(dependencies: Map<object, Dependency>, edited: ReadonlySet<object>): void {
+    for (const key of edited) {
+      if (this.followedEdits?.has(key) === true) {
+        // Followed after an earlier run, and edited again now.
+        this.followedEdits.delete(key);
+        (this.repeatedEdits ??= new Set()).add(key);
+      }
+      const follows = this.readBeforeEdit?.has(key) === true && this.readAfterEdit?.has(key) === true
+        && this.repeatedEdits?.has(key) !== true;
+      if (follows) {
+        (this.followedEdits ??= new Set()).add(key);
+      } else {
+        dependencies.delete(key);
+      }
+    }
   }
 
   end(settle = true): void {
@@ -315,6 +384,7 @@ class Computation implements Frame {
       if (this.writes !== null && !this.keepsOwnWrites) {
         for (const key of this.writes) dependencies.delete(key);
       }
+      if (this.edited !== null && !this.keepsOwnWrites) this.settleEdits(dependencies, this.edited);
       for (const dependency of dependencies.values()) dependency.seen = dependency.read();
     }
     if (this.notify === undefined) return;

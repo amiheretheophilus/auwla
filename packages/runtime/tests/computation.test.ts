@@ -84,6 +84,87 @@ it('excludes its own mutated output while retaining another input in the same sh
   expect(computation.changed()).toBe(true);
 });
 
+/** State another owner holds, as a module's `seen` array is to a component's statement. */
+function sharedState() {
+  const key = {};
+  const state = { version: 0 };
+  return {
+    key,
+    read: () => trackRead(() => state.version, state.version, key),
+    /** An edit by the running computation, published as compiled code publishes one. */
+    edit: () => {
+      state.version++;
+      publishVersions([key], key);
+    },
+    /** An edit by anything else, with no computation running. */
+    editElsewhere: () => {
+      state.version++;
+      publishVersions([key], key);
+    },
+  };
+}
+
+it('follows state it edited behind a guard and read again: `if (!seen.includes(x)) seen.push(x); seen.length`', () => {
+  const seen = sharedState();
+  const computation = createComputation();
+  computation.begin();
+  seen.read();
+  seen.edit();
+  seen.read();
+  computation.end();
+  // Its own edit does not wake it; an edit by anything else does.
+  expect(computation.changed()).toBe(false);
+  seen.editElsewhere();
+  expect(computation.changed()).toBe(true);
+  // Run again, the guard holds and it edits nothing: it keeps following.
+  computation.begin();
+  seen.read();
+  seen.read();
+  computation.end();
+  seen.editElsewhere();
+  expect(computation.changed()).toBe(true);
+});
+
+it('does not follow state it edited without a guard, so an initializer runs once as JavaScript runs it', () => {
+  // `seen.push(x); return seen.length`: following it would push again on every edit elsewhere.
+  const seen = sharedState();
+  const computation = createComputation();
+  computation.begin();
+  seen.edit();
+  seen.read();
+  computation.end();
+  seen.editElsewhere();
+  expect(computation.changed()).toBe(false);
+});
+
+it('stops following when a later run edits again despite its guard, so two statements cannot wake each other forever', () => {
+  // `if (seen.length < 10) seen.push(x); return seen.length`: the guard does not stop a second edit.
+  const seen = sharedState();
+  const computation = createComputation();
+  computation.begin();
+  seen.read();
+  seen.edit();
+  seen.read();
+  computation.end();
+  seen.editElsewhere();
+  expect(computation.changed()).toBe(true);
+  computation.begin();
+  seen.read();
+  seen.edit();
+  seen.read();
+  computation.end();
+  seen.editElsewhere();
+  expect(computation.changed()).toBe(false);
+  // A later run that edits behind its guard again still does not follow: it has repeated an edit.
+  computation.begin();
+  seen.read();
+  seen.edit();
+  seen.read();
+  computation.end();
+  seen.editElsewhere();
+  expect(computation.changed()).toBe(false);
+});
+
 /** `rows` computations, each reading `selected === id` for its own id. */
 function selection(rows: number) {
   const key = {};

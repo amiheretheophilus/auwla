@@ -288,8 +288,11 @@ closedCase('closed list: a builder that keeps a record for later', {
     }`,
   steps: [{ click: '#edit' }, { click: '#copy' }],
   check(container, observation) {
-    // `build` reads `pool`, so editing `pool` derives `rows` again, with a new record.
-    if (observation === 2) expect(text(container)).toBe('a');
+    // `build` only edits `pool` (`pool.push(row)`), and edits are not reads (`handlers.md`), so
+    // editing `pool` leaves `rows` as built. Its row is the record `pool[0]` holds: it shows the
+    // edit, as JavaScript does. It showed 'a' while the edit counted as a read and built `rows`
+    // again with a new record (changed 2026-11-16, the user: "it just needs to be correct").
+    if (observation === 2) expect(text(container)).toBe('b');
   },
 });
 

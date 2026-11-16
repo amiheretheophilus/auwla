@@ -20,30 +20,6 @@ and remove it once the owning wiki records it as done.
 - [ ] Follow-ups noted along the way: lazy css-tree loading; rule A for deferred statements;
   progressive interactive server pages (islands); plain `.css` imports in server pages; `miniflare`
   is only a transitive dependency; the `$routed` repro needs the user's source.
-- [ ] **Bug: state kept in a module-level Map, read through a snapshot.** A Jotai-shaped library
-  (`const values = new Map()`; `useAtom(key)` sets `values` on first use and returns
-  `[values.get(key), set]`, where `set` calls `values.set(key, …)`); two components each run
-  `const [n, setN] = useAtom(countAtom)`. Clicking `setN` in one updates the other component but
-  not itself. With the Map filled when the atom is made instead, neither updates. Found 2026-11-16
-  in an ergonomics run where 11 of 13 framework-style patterns worked (getter state, useReducer,
-  Vue ref/reactive, Svelte and Redux subscribe, Solid path setter, MobX class, Zustand selector,
-  Preact-signal accessors, async handlers, object getters). Two causes, diagnosed 2026-11-16:
-  - **A, bug: an edit counts as a static read.** `const countAtom = atom(0)` where `atom()` runs
-    `values.set(key, initial)` (or `values.push(x)`) gets `_from !== _valuesVersion` in the module's
-    refresh (`core/graph/inputs.ts`, `inputsOf`: the identifier `values` is a value read, and the
-    one version counter also moves on content edits). Every later edit of `values` re-runs
-    `atom(0)`, which makes a new key holding 0, so nothing seems to update. The runtime already
-    follows "edits are not reads" (`handlers.md`); the static inputs do not. Fix: a binding used
-    only as the root of an edit (a store, a known editing call, and `Map`/`Set` editing methods on
-    a binding provably holding one) is no static input. Needs the full case suite.
-  - **B, decision: a derivation drops what it edits.** On first use `useAtom` writes `values`, so
-    the statement of the component that ran it first loses its dependency on `values`
-    (`publishVersions` → `noteOwnOutput` for whatever computation is running, even one in
-    another module). Keeping it would make that statement follow the Map, but would also make an
-    initializer such as `const id = registry.register(name)` register again whenever anything
-    else registers. Effects already keep what they edit; derivations drop it so `s = s || {}`
-    never replays (`effects.md`). The user decides; one option is to drop only what the statement
-    assigns (its own bindings) and keep what it edits elsewhere.
 - [ ] **Recompute code for statements that cannot change.** `const [a, setA] = state(1)` becomes a
   body statement with a re-run branch in `_update` (the `_recompute`/`_propagate` loop and
   `([a, setA] = state(1))`), though `state(1)` reads nothing that changes: about 60 dead lines in

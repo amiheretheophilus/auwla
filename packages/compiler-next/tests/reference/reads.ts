@@ -95,6 +95,8 @@ export class Reads {
       if (!binding || reference.isWrite || reference.inTypePosition) return;
       if (this.isDeclaredInside(binding, scope)) return;
       if (isWithin(reference.node, skip)) return;
+      // Edits are not reads: `pool.push(row)` finds the object to edit and reads nothing in it.
+      if (onlyEdits(this.module, reference.node)) return;
       // A nested callback reads its captures when invoked, not when created.
       if (crossesFunction(this.module, reference.node, root)) return;
       if (directOnly && enclosingFunction(this.module, reference.node) !== scope) return;
@@ -177,6 +179,72 @@ export class Reads {
 
 function isWithin(node: Node, parts: Node[]): boolean {
   return parts.some((part) => node.start >= part.start && node.end <= part.end);
+}
+
+const methodNames = new WeakMap<Module, Set<string>>();
+
+/** Whether the module defines a method or function-valued property called `name`, or assigns `x.name`. */
+function definesMethod(module: Module, name: string): boolean {
+  let names = methodNames.get(module);
+  if (names === undefined) {
+    names = new Set();
+    const found = names;
+    const add = (key: Node) => {
+      if (is.Identifier(key)) found.add(key.name);
+      else if (is.Literal(key) && typeof key.value === 'string') found.add(key.value);
+    };
+    module.walk({
+      MethodDefinition: (node) => { if (!node.computed) add(node.key); },
+      Property: (node) => { if (!node.computed && (node.method || is.Function(node.value))) add(node.key); },
+      AssignmentExpression: (node) => {
+        if (is.MemberExpression(node.left) && !node.left.computed) add(node.left.property);
+      },
+    });
+    methodNames.set(module, names);
+  }
+  return names.has(name);
+}
+
+/** Array methods that change their receiver and nothing else. */
+const ARRAY_EDITS = new Set(['push', 'pop', 'shift', 'unshift', 'reverse', 'splice', 'fill', 'sort']);
+/** What changes a collection, by the global constructor that made it. */
+const COLLECTION_EDITS: Record<string, readonly string[]> = {
+  Map: ['set', 'delete', 'clear'], Set: ['add', 'delete', 'clear'], WeakMap: ['set', 'delete'], WeakSet: ['add', 'delete'],
+};
+
+/**
+ * Whether `node` (a binding's name) is only the root of an edit, which reads nothing the object
+ * holds (`wiki/compiler/handlers.md`, "Edits are not reads"): `x.a = v`, `delete x.a`,
+ * `x.items.push(v)` with no callback, or `x.set(k, v)` where `x` is declared `const x = new Map()`.
+ * The oracle's own statement of the rule, written apart from the compiler's.
+ */
+function onlyEdits(module: Module, node: Node): boolean {
+  let target: Node = node;
+  let parent = module.parentOf(target);
+  while (is.MemberExpression(parent) && parent.object === target) {
+    target = parent;
+    parent = module.parentOf(target);
+  }
+  if (target === node) return false;
+  if (is.AssignmentExpression(parent) && parent.left === target && parent.operator === '=') return true;
+  if (is.UnaryExpression(parent) && parent.operator === 'delete' && parent.argument === target) return true;
+  if (!is.CallExpression(parent) || parent.callee !== target || parent.optional) return false;
+  if (!is.MemberExpression(target) || target.computed || !is.Identifier(target.property)) return false;
+  if (parent.arguments.some((argument) => is.Function(argument) || is.SpreadElement(argument))) return false;
+  const method = target.property.name;
+  // A module that defines a method of that name (`{ push() {} }`) may mean its own.
+  if (definesMethod(module, method)) return false;
+  if (ARRAY_EDITS.has(method)) return true;
+  if (target.object !== node) return false;
+  // The collection itself, made with the global constructor and never reassigned.
+  const binding = module.referenceOf(node)?.binding;
+  const declarator = binding?.declarations.length === 1 ? module.parentOf(binding.declarations[0]!) : null;
+  if (!is.VariableDeclarator(declarator) || declarator.init === null) return false;
+  const declaration = module.parentOf(declarator);
+  const init = declarator.init;
+  if (!is.VariableDeclaration(declaration) || declaration.kind !== 'const' || !is.NewExpression(init)) return false;
+  if (!is.Identifier(init.callee) || module.referenceOf(init.callee)?.binding != null) return false;
+  return COLLECTION_EDITS[init.callee.name]?.includes(method) === true;
 }
 
 export function enclosingFunction(module: Module, node: Node): Node | undefined {

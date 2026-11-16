@@ -208,6 +208,7 @@ in `core/emit/shared.ts`).
 | `ambient.ts` | appends the import of an ambient framework data call (`$fetch`, `$read`, `$track`, `$forms`) a module uses without a binding, before analysis, so later stages resolve it by binding identity (`sources.md`); `lifecycleKind` recognizes ambient `$effect`/`$cleanup` calls by binding (`effects.md`) |
 | `members.ts` | whether a property read may run hidden code (a getter, a proxy): not on unwritten globals or constant plain data |
 | `functions.ts` | one summary per function (captured reads, writes, calls, `this` use), built in one pass per module; `functionValue` follows immutable aliases and imports to a function |
+| `edit-roots.ts` | `isEditRoot`: an identifier that is only the root of an edit (`x.a = v`, `delete x.a`, a known editing call, a `Map`/`Set` edit on a `const x = new Map()`) is no static read, in `functions.ts` and `graph/inputs.ts` (`handlers.md`, "Edits are not reads"); `edit-roots.test.ts` |
 | `escapes.ts` | escaping functions: stored, passed, returned, exported, aliased, methods and accessors; not those only ever called directly (`output.md`, "Phase 3 design", rule 5) |
 | `resolve.test.ts` | unit tests |
 

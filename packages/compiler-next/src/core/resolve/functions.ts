@@ -5,6 +5,7 @@ import type { Binding, Module, Reference, Resolved, WriteSite } from '.';
 import { declaringRunner, isParameter, runnerOf } from '.';
 import type { PropertyReads } from './members';
 import { insideSnapshot } from './ambient';
+import { isEditRoot } from './edit-roots';
 
 export type FunctionNode = Extract<Node, {
   type: 'FunctionDeclaration' | 'FunctionExpression' | 'ArrowFunctionExpression';
@@ -132,6 +133,8 @@ export function summarizeFunctions(
       if (reference.inTypePosition || reference.isWrite) continue;
       // A value taken once (`$snapshot(x)`): what `x` reads is no input of the function's callers.
       if (insideSnapshot(module, reference.node)) continue;
+      // `log.push(x)`: finding the object to edit is no read of it (`edit-roots.ts`).
+      if (isEditRoot(module, reference.node)) continue;
       const summary = summaryOf(runnerOf(module, reference.node));
       if (summary === undefined) continue;
       const binding = reference.binding;

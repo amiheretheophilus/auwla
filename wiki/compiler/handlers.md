@@ -420,6 +420,26 @@ do through `note()`, depends on it and runs again when anything else writes it (
 keep the keys they write, `effects.md`). `mutations.test.ts` checks the output and that a click
 elsewhere does not run such an effect; it fails without the change.
 
+**The static inputs follow the same rule** (2026-11-16, `core/resolve/edit-roots.ts`). They counted
+the root of an edit as a read, so `const countAtom = atom(0)`, where `atom` runs
+`values.set(key, 0)`, was built again on every later edit of `values`: a new key holding 0 each
+time, so a Jotai-shaped store never seemed to update. A store with `=`, a `delete`, a known editing
+call with no callback, and `set`/`add`/`delete`/`clear` on a binding declared `const x = new Map()`
+(or `Set`, `WeakMap`, `WeakSet`, the global constructor) are no input. `+=` and `++` were never
+inputs here; a field read, a lookup, a method on what may not be a collection and a call with a
+callback stay reads. `edit-roots.test.ts` checks both lists and the store in a page.
+
+**A derivation follows state it edited behind a guard** (2026-11-16, `runtime/src/computation.ts`,
+`settleEdits`; `features/state/edits.dom.test.ts`). An edit published while a computation runs
+(`publishVersions`) used to count as its own output and leave its dependencies, so
+`if (!seen.includes(name)) seen.push(name); return seen.length` in a helper stopped following
+`seen` in the component that ran it: neither of two components updated, and a Jotai store that
+fills its Map on first use left the component that filled it at 0. Now such an edit stays an input
+when the run read the state before editing it (the guard) and again after. An unguarded edit
+(`seen.push(name); return seen.length`) still leaves, so an initializer runs once, as JavaScript
+runs it; a later run that edits again despite its guard stops following, so two statements cannot
+wake each other forever. A binding a build assigns (`noteOwnOutput`, `s = s || {}`) always leaves.
+
 The runtime's alias index (which root holds an edited object, `runtime/src/mutation.ts`) reads
 every registered root's value on an edit. Those reads ran inside whatever computation was running,
 so an effect pushing to one array came to depend on unrelated roots, such as a page's loading data

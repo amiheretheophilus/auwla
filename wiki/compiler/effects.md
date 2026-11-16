@@ -67,7 +67,8 @@ and runs their cleanup.
   by anything else runs it again. The runtime used to drop every key the effect wrote from its
   dependencies, so that effect saw `[0, 1]` and never ran again; effect computations now keep them
   (`createComputation(…, keepsOwnWrites)`, `runtime/src/computation.ts`). A derivation still drops
-  what it writes (`s = s || {}` never replays when `s` changes). `mutations.test.ts` checks
+  what it assigns (`s = s || {}` never replays when `s` changes), and what it edits of other
+  state unless the edit was guarded and read again (`handlers.md`, "Edits are not reads"). `mutations.test.ts` checks
   `[0, 1, 3]`.
 - An effect with a non-empty `pending(n)` first runs when its sources commit
   (`sources.md`).
