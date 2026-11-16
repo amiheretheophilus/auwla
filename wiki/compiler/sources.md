@@ -534,7 +534,10 @@ the old compiler; two more `suspend` lifecycle cases (a captured value changing
 in a failed child, a removed region sharing a GET) give 1 pass and 1 failure;
 the 14 atomic cases give
 8 passes and 6 failures; eleven further atomic lifecycle cases give 6 passes and
-5 failures. These failures must pass on `compiler-next`.
+5 failures. These failures must pass on `compiler-next`. Two spread cases (2026-11-16, from the
+acceptance run) read a source inside `{...{ value: user.name }}`, on an element and on a component:
+the element waits, then shows the payload. They caught the reference leaving that read unguarded
+(`$spread`, `tests/reference/runtime.ts`), and both fail on the old compiler.
 
 Verified on the reference:
 

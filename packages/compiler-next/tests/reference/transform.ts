@@ -109,7 +109,7 @@ const RUNTIME_EXPORTS = [
   '$h', 'Fragment as $Fragment', '$enter', '$assignRef', '$moduleEffect', '$ownedEffect', '$moduleMemo',
   '$when', '$value', '$chain', '$waiting', '$sourceState', '$branch', '$switch', '$path', '$ready',
   '$captureRead', '$closureCell', '$closureRead', '$traced', '$moduleBuilder', '$reassigned', '$ownedCleanup',
-  '$privateTarget', '$setup',
+  '$privateTarget', '$setup', '$spread',
   '$installRoutes', '$routeContext', '$routeJoin', '$routeCall', '$routeIdentity', '$routeHref', '$followedRoute',
   '$registerRouted', '$routedValue', '$prepareRoutes',
 ];
@@ -902,6 +902,11 @@ class ComponentRewrite {
         this.handledSites.add(node);
         if (is.Function(node.expression)) return;
         node.expression = waitForRenderExpression(this.module, node, this.readsOf());
+      },
+      // `{...{ value: user.name }}`: the spread waits for what it reads, and its element with it.
+      JSXSpreadAttribute: (node) => {
+        this.handledSites.add(node);
+        node.argument = runtimeCall('$spread', [waitForExpression(node.argument, this.readsOf())]);
       },
     }, this.component);
   }

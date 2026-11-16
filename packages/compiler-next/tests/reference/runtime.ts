@@ -39,9 +39,24 @@ export type Component = (props: Record<string, unknown>) => unknown;
 
 export const Fragment = Symbol('Fragment');
 
-/** The JSX factory of transformed modules. */
-export function $h(tag: Element['tag'], props: Record<string, unknown> | null, ...children: unknown[]): Element {
+/** The key a spread that is still loading leaves in its element's props (`$spread`). */
+const SPREAD_WAITING = Symbol('spread waiting');
+
+/**
+ * `{...value}` in JSX, after `transform.ts` made `value` wait for the sources it reads. A spread
+ * cannot hand its element a `Waiting` as one prop value, since the object's fields are the props,
+ * so a spread still loading leaves it under a key of its own. `$h` then makes the whole element
+ * wait, as compiled code does with a source read inside a spread.
+ */
+export function $spread(value: unknown): unknown {
+  return value instanceof Waiting ? { [SPREAD_WAITING]: value } : value;
+}
+
+/** The JSX factory of transformed modules. A spread still loading makes the element wait. */
+export function $h(tag: Element['tag'], props: Record<string, unknown> | null, ...children: unknown[]): Element | Waiting {
   const { $referenceSite: site, ...values } = props ?? {};
+  const waiting = (values as Record<PropertyKey, unknown>)[SPREAD_WAITING];
+  if (waiting instanceof Waiting) return waiting;
   return { tag, props: values, children, site };
 }
 

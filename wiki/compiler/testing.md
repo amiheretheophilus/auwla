@@ -269,6 +269,50 @@ checks before retention checks as well as in isolation when changing this fixtur
    attributes, and the reference shared the mistake, so comparisons could not see it. The decisions it
    raises are in `../open-issues.md`.
 
+   Second run, 2026-11-16, same 199 files: **779 pass, 1,111 fail, 40 files clean.** The totals do not
+   compare with the first run: since 2026-11-10 the old program entry points throw, so 350 tests that
+   passed through the old compiler now fail by design. 272 call `compileModulesDetailed`, mostly the
+   old hydration plans (`initial-*.test.ts`) and Vite's metadata; 78 call `experimentalCompilePackage`,
+   the old package artifact (compiler-next packages through `packageLibrary`). The other 761 (826 in
+   the first run), sorted by failing line:
+
+   | Tests | What the failing line checks |
+   | --- | --- |
+   | 263 | the old compiler's generated text (236) or a snapshot of it (27) |
+   | 99 | an error the old compiler raises |
+   | 73 | the old internal signature (`App('App', null, [{ items }])`, `button.onclick`, `form.onsubmit`) |
+   | 326 | anything else |
+
+   Of the last group, 62 failing lines in 30 files check what the page shows or what was called. Each
+   file was run and read; none shows a compiler-next bug. They are, by cause:
+
+   - positional props (`function Row(item)`), the open decision in `../open-issues.md`: `m9`, `m10`,
+     `r21-children`, `r22-components`, `r24-jsx`, `recent-fixes-and-gated-maps`;
+   - effects running after their owner commits (`effects.md`), where the old test checked
+     synchronously: `effect-cleanup-consumption`, `r26-effect`, `recent-fixes-and-gated-maps`;
+   - a navigation outside a handler showing at the scheduled update (`r47-router-runtime`; with a
+     synchronous scheduler compiler-next shows what the test expects);
+   - a binding following its initializer until it is reassigned, per instance and per binding
+     (`writable-initializers`; `state-and-derived.md`, approved 2026-10-20);
+   - content kept while its source reloads staying as committed (`retained-content`; the reference
+     agrees), and an unmounted owner aborting unshared fetches (`sources.md`);
+   - globals, or getters on `Object.prototype` and `Array.prototype`, edited outside any compiled call
+     (`list-journal-fallback`, `lightweight-inline-rows`, `owned-fallback-batching`,
+     `owner-refresh-coalescing`, `opaque-pull-prelude`; `../open-issues.md`);
+   - module state isolated per request in a browser build (`ssr-cell-lowering`); compiler-next
+     isolates server builds (`server.md`, "Request isolation");
+   - the old hydration markers and node creation (`hydration-*`, `positional-list-hydration`,
+     `list-text-concat-cache`, `m8`), and the old `commitWrites` access paths (`m55`);
+   - a test reading the root it already appended, a fragment that is then empty
+     (`compiled-preparation`).
+
+   The rest of the group counts the old compiler's internal work through probes of its runtime helpers
+   (`createListRegion`, `markDirtySubtree`, entity ids such as `App/when0`), or renders through a probe
+   whose own side effect turns off row reuse (`list-row-calculations`). One reference gap came out of
+   it: a source read inside a JSX spread (`{...{ value: user.name }}`) was not guarded, so the reference
+   threw while loading. It now waits with its element (`$spread`, `tests/reference/runtime.ts`); two
+   cases in `tests/cases/sources.test.ts` cover it, and both fail on the old compiler.
+
    **Replaying the old tests' programs** (`tests/corpus/replay.test.ts`). Reading 277 assertions one
    by one is slow, and many check the old compiler's internal work. Their programs are what matters.
    `MEMO_DOM_CORPUS=<dir>` makes the old compiler record every program it compiles, so one run of the

@@ -994,6 +994,12 @@ export function prepareModuleReads(
       node.expression = waitForRenderExpression(module, node, readsOf);
     },
 
+    // A spread waits for what it reads, and its element with it (`$spread`, `runtime.ts`).
+    JSXSpreadAttribute(node) {
+      if (handledSites.has(node)) return;
+      node.argument = runtimeCall('$spread', [waitForExpression(node.argument, readsOf)]);
+    },
+
     Identifier(_node, ctx) {
       const reference = ctx.reference;
       if (!reference?.binding || reference.inTypePosition || reference.isWrite) return;

@@ -1,6 +1,6 @@
 # Status
 
-Last updated: 2026-11-15.
+Last updated: 2026-11-16.
 
 Prototype branch integration: the compiler-owned [read-only analysis API](compiler/analysis.md)
 is built under `src/analysis/` and shares the existing frontend with production.
@@ -16,6 +16,16 @@ existing cached/spread rules; focused DOM and compiled loop examples cover it.
 See [dynamic attribute values](compiler/core.md#dynamic-attribute-values).
 
 ## Current: Phase 10 (2026-11-06)
+
+**Measured (2026-11-16): acceptance, second run** (`compiler/testing.md`, "Acceptance"). 779 pass and
+1,111 fail on the 199 root files. 350 of the failures call the old program entry points, which throw
+since 2026-11-10 (the old hydration plans and package artifact). Of the other 761, the 62 failing
+lines that check the page or a call were each run: none is a compiler-next bug. They come from
+positional props (still open), effect and scheduling timing, approved rules, globals edited outside
+compiled code, and the old hydration and runtime APIs. The rest assert the old generated text, its
+errors, its internal signature or counts of its internal work. The run found one reference gap, a
+source read inside a JSX spread, now fixed with two cases. Next: the error messages and positional
+props with the user, then the old compiler's deletion.
 
 **Done (2026-11-15): `mount` in the root component's own file** (`compiler/project.md`, "Mount in a
 component's file"). `App.auwla` (or `.tsx`) can end with `mount('root', App)` and be the page's

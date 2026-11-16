@@ -2744,3 +2744,31 @@ behaves('refresh replays a promise made from state that changed', {
     expect(container.querySelector('span')?.textContent).toBe(['1', '2', '3'][observation]!);
   },
 });
+
+// A read inside a spread object waits with its element (from `tests/compiled-preparation.test.ts`,
+// on the acceptance switch, 2026-11-16). The reference left it unguarded and threw while loading.
+behaves('a source read spread onto an element waits, then shows its payload', {
+  source: `
+    export function App() {
+      const user = $fetch('/spread-host');
+      return <main><input id="host" {...{ value: user.name }} title="ready" /></main>;
+    }`,
+  steps: [{ respond: '/spread-host', value: { name: 'Katherine' } }],
+  check(container, observation) {
+    const input = container.querySelector<HTMLInputElement>('#host');
+    expect(observation === 0 ? input : input?.value).toBe(observation === 0 ? null : 'Katherine');
+  },
+});
+
+behaves('a source read spread into a component waits, then shows its payload', {
+  source: `
+    function Target({ name }) { return <p>{name}</p>; }
+    export function App() {
+      const user = $fetch('/spread-prop');
+      return <main><Target {...{ name: user.name }} /></main>;
+    }`,
+  steps: [{ respond: '/spread-prop', value: { name: 'Dorothy' } }],
+  check(container, observation) {
+    expect(container.querySelector('p')?.textContent ?? null).toBe(observation === 0 ? null : 'Dorothy');
+  },
+});
