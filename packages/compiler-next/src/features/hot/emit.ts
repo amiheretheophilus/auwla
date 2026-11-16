@@ -28,21 +28,22 @@ export interface HotModule {
  * - for a module that accepts its own update, the boundary, last.
  */
 export function addHotRuntime(tree: Program, module: HotModule, hotRuntimePath = DEFAULT_HOT_RUNTIME_PATH): void {
+  const statements = tree.body as Statement[];
+  const usesHot = module.definesComponents || module.accepts || statements.some((node) => moduleEffectScope(node) !== null);
+  // Decided from the top level alone, so a module that needs nothing is not walked for a name.
+  if (!usesHot) {
+    return;
+  }
   const hot = freshName(tree, '__mmd_hot');
   const body: Statement[] = [];
-  let usesHot = module.definesComponents || module.accepts;
-  for (const node of tree.body as Statement[]) {
+  for (const node of statements) {
     const owner = moduleEffectScope(node);
     if (owner !== null) {
       body.push(statement('$$hot.moduleEvaluating($$path);', {
         hot, path: stringLiteral(owner.slice(MODULE_EFFECTS.length)),
       }));
-      usesHot = true;
     }
     body.push(node);
-  }
-  if (!usesHot) {
-    return;
   }
 
   if (module.accepts) {

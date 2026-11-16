@@ -8,9 +8,10 @@ and remove it once the owning wiki records it as done.
 
 ## compiler-next
 
-- [ ] **Incremental updates.** Every hot update recompiles the whole program: 0.65–0.9 s for
-  Common Ground's 16 modules, most of it AST walks and node cloning in the emitter. Saves made
-  during a compile wait for it, so typing with auto-save lags. [project.md, "Hot replacement"](wiki/compiler/project.md)
+- [ ] **Incremental updates.** Every hot update recompiles the whole program: about 410 ms for
+  Common Ground after the 2026-11-16 speedups (was about 480 ms), and saves made during a build now
+  share one more build. Reusing unchanged modules' output needs cross-module fact dependencies
+  tracked first (imports and importers both). [project.md, "Hot replacement"](wiki/compiler/project.md)
 - [ ] **Hot replacement in a real browser**, the last unchecked part of the HMR item.
   [compiler plan](wiki/compiler/plan.md)
 - [ ] **Acceptance**: root `tests/`, package tests, the Vite suite and the Conduit flows against

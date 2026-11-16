@@ -224,7 +224,14 @@ export function createApplication(options: ApplicationOptions): Application {
   /** The modules each program read in its last build, which a failure before building keeps. */
   let lastModules: { client: readonly string[]; server: readonly string[] } = { client: [], server: [] };
 
-  async function build(): Promise<ApplicationBuild> {
+  /** A build also waits for the update or build before it: both read and replace the same modules. */
+  function build(): Promise<ApplicationBuild> {
+    const result = running.then(buildNow, buildNow);
+    running = result;
+    return result;
+  }
+
+  async function buildNow(): Promise<ApplicationBuild> {
     const discovered = await discoverSafely();
     if (discovered instanceof CompileError) return failed(discovered);
     generated = discovered;
@@ -233,7 +240,34 @@ export function createApplication(options: ApplicationOptions): Application {
     return finish(clientBuild, serverBuild === undefined ? undefined : checkServerOnly(serverBuild, 'server'));
   }
 
-  async function update(paths: readonly string[]): Promise<ApplicationUpdate> {
+  /**
+   * Updates run one at a time, and edits that arrive while one waits join it
+   * (`wiki/compiler/project.md`, "Hot replacement"). Saves made while a build runs then cost one
+   * more build together, not one each, and two updates never read and compile at the same time.
+   * Everyone who joined gets the same result, whose changes cover all their edits.
+   */
+  let running: Promise<unknown> = Promise.resolve();
+  let waiting: { readonly paths: string[]; readonly result: Promise<ApplicationUpdate> } | null = null;
+
+  function update(paths: readonly string[]): Promise<ApplicationUpdate> {
+    if (waiting !== null) {
+      waiting.paths.push(...paths);
+      return waiting.result;
+    }
+    const batch = [...paths];
+    const start = (): Promise<ApplicationUpdate> => {
+      // From here on, a new edit waits for the next update: this one has started reading.
+      waiting = null;
+      return updateNow(batch);
+    };
+    // After the one before, whether it compiled, failed or threw.
+    const result = running.then(start, start);
+    waiting = { paths: batch, result };
+    running = result;
+    return result;
+  }
+
+  async function updateNow(paths: readonly string[]): Promise<ApplicationUpdate> {
     const discovered = await discoverSafely();
     if (discovered instanceof CompileError) {
       const build = failed(discovered);

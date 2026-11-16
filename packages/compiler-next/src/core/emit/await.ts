@@ -1,7 +1,7 @@
 /** Native await keeps its value, rejection and suspension; commits precede it. */
 import { findAll } from 'yuku-ast';
 import type { Node } from 'yuku-parser';
-import { copy } from './copy';
+import { cloneTree, copy } from './copy';
 import { expression } from './quote';
 
 export function emitAwaitBoundaries(tree: Node, runtime: string): Node {
@@ -15,7 +15,8 @@ export function emitAwaitBoundaries(tree: Node, runtime: string): Node {
   // Setup and update can contain distinct copies of the same authored await.
   // This final pass addresses emitted occurrences, after source composition;
   // earlier authored origins and sealed subtrees must no longer coalesce them.
-  const emitted = structuredClone(tree);
+  // A copy that keeps shared nodes shared, as `structuredClone` does, and faster (`copy.ts`).
+  const emitted = cloneTree(tree);
   const replacements = new Map<Node, Node>();
   for (const original of findAll(emitted, 'AwaitExpression').reverse()) {
     // Some emitted closures are used by both setup and update. A repeated

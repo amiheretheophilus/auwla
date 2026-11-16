@@ -92,8 +92,29 @@ export function planEffects(graph: SemanticGraph, queries: InputQueries, entry: 
   return { calls, groups, helperCleanups: hasHelperCleanup(graph, components) };
 }
 
+/**
+ * The answer for each program and component set. Every module asks with the same two, and the
+ * answer walks every module, so asking once per module made planning grow with the square of the
+ * module count.
+ */
+const helperCleanups = new WeakMap<SemanticGraph, WeakMap<ReadonlySet<Node>, boolean>>();
+
 /** The whole graph: a helper can be in another file from the component calling it. */
 function hasHelperCleanup(graph: SemanticGraph, components: ReadonlySet<Node>): boolean {
+  let answers = helperCleanups.get(graph);
+  if (answers === undefined) {
+    answers = new WeakMap();
+    helperCleanups.set(graph, answers);
+  }
+  let answer = answers.get(components);
+  if (answer === undefined) {
+    answer = findHelperCleanup(graph, components);
+    answers.set(components, answer);
+  }
+  return answer;
+}
+
+function findHelperCleanup(graph: SemanticGraph, components: ReadonlySet<Node>): boolean {
   return graph.resolved.modules.some(({ module }) => module.findAll('CallExpression').some((call) => {
     if (lifecycleKind(module, call) !== '$cleanup') return false;
     return ![...module.ancestors(call)].some((ancestor) => components.has(ancestor));

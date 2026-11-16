@@ -208,6 +208,52 @@ export const saveUser = define.function({ async post({ services }, name) { const
     expect(update.server?.changed).toEqual(expect.arrayContaining(['./server/functions/users.ts', GENERATED.registry]));
   });
 
+  it('join edits made while an update waits, and run updates one at a time', async () => {
+    // Typing with auto-save: saves made while a build runs cost one more build together.
+    const files: Record<string, string> = {
+      './src/main.ts': FILES['./src/main.ts']!,
+      './src/App.tsx': `import { Title } from './Title';\nexport function App() { return <main><Title /><p>one</p></main>; }`,
+      './src/Title.tsx': 'export function Title() { return <h1>one</h1>; }',
+    };
+    const reads = new Map<string, number>();
+    const host: ProjectHost = {
+      readFile(path) {
+        reads.set(path, (reads.get(path) ?? 0) + 1);
+        return files[path];
+      },
+    };
+    const application = createApplication({ client: './src/main.ts', host });
+    await application.build();
+    reads.clear();
+
+    // Three saves before the first update starts: one update, which reads each file once.
+    files['./src/App.tsx'] = files['./src/App.tsx']!.replace('<p>one</p>', '<p>two</p>');
+    const first = application.update(['./src/App.tsx']);
+    files['./src/Title.tsx'] = files['./src/Title.tsx']!.replace('one', 'two');
+    const second = application.update(['./src/Title.tsx']);
+    const third = application.update(['./src/App.tsx']);
+    expect(second).toBe(first);
+    expect(third).toBe(first);
+    const joined = await first;
+    expect([...joined.client.changed].sort()).toEqual(['./src/App.tsx', './src/Title.tsx']);
+    expect(reads.get('./src/App.tsx')).toBe(1);
+    expect(reads.get('./src/Title.tsx')).toBe(1);
+
+    // An edit made while an update runs waits for it, then builds on what it compiled.
+    files['./src/Title.tsx'] = files['./src/Title.tsx']!.replace('two', 'three');
+    const running = application.update(['./src/Title.tsx']);
+    await Promise.resolve();
+    files['./src/App.tsx'] = files['./src/App.tsx']!.replace('<p>two</p>', '<p>three</p>');
+    const after = application.update(['./src/App.tsx']);
+    expect(after).not.toBe(running);
+    const order: string[] = [];
+    await Promise.all([running.then(() => order.push('running')), after.then(() => order.push('after'))]);
+    expect(order).toEqual(['running', 'after']);
+    const last = await after;
+    expect(last.client.changed).toEqual(['./src/App.tsx']);
+    expect(last.build.client.ok && last.build.client.output['./src/App.tsx']).toContain('three');
+  });
+
   it('keep the modules it uses when finding server functions fails, so the edit that fixes it counts', async () => {
     // A tool decides which edits concern the application from these modules (the Vite plugin's
     // hot updates). An empty list after this error ignored the fix, and its overlay stayed.

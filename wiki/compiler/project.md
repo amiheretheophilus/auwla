@@ -131,9 +131,25 @@ gives it to the client build only), compiler-next's output works with any dev se
 - **Clearing the overlay** is Vite's client reloading the page on the first update after an error.
   The router let that reload happen only after a fix (2026-11-16): with the Navigation API it
   intercepted every `reload` navigation, so the overlay stayed until a hard refresh.
-- **Update time.** Each update compiles the whole program again: about 0.65–0.9 s for Common
-  Ground's 16 modules under Bun (2026-11-16), most of it AST walks and node cloning in the emitter.
-  Saves made during a compile wait for it. Making updates incremental is open.
+- **Update time.** Each update compiles the whole program again. For Common Ground (15 modules,
+  hot, source maps, warm, this machine) on 2026-11-16 a compile went from 351 ms to 278 ms and an
+  `application.update` from about 480 ms to 410 ms:
+  - `hasHelperCleanup` (`features/effects/plan.ts`) walked every module once per module; it is now
+    answered once per program (planning 53 → 37 ms; it grew with the square of the module count);
+  - finished components and modules with `await` are copied by `cloneTree` (`core/emit/copy.ts`),
+    which keeps shared nodes shared as `structuredClone` did, faster (emitting 127 → 95 ms);
+  - `addHotRuntime` walks a module for a free name only when the module uses the hot runtime.
+
+  Output stayed byte for byte the same, maps included, hot or not, optimized or general. What is
+  left is spread thin: emitted trees hold about 40,000 nodes and each full walk of them costs about
+  8 ms, done by several passes after linking.
+- **Updates run one at a time** (`server/application.ts`, 2026-11-16). Edits that arrive while an
+  update waits join it, so saves made during a build cost one more build together, and a build
+  waits for the update before it. The Vite plugin could start two updates together, both reading
+  and replacing the same modules.
+- **Incremental updates are open.** A module's output depends on facts from its imports and from
+  its importers (an importer writing an imported state changes the exporter's code), so reusing a
+  module's output safely needs those dependencies tracked first.
 - The added code (`features/hot/emit.ts`) is added to the tree after linking, with no place in the
   authored text, so source maps leave it unmapped.
 

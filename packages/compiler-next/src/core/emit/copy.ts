@@ -38,7 +38,7 @@ function clone<T>(value: T, replacements: ReadonlyMap<Node, Node>, applying: Set
     ?? (inside ? undefined : replacements.get(origin as Node));
 
   if (replacement !== undefined && finished.has(replacement)) {
-    const output = structuredClone(replacement);
+    const output = cloneTree(replacement, new Map());
     finished.add(output);
     return output as T;
   }
@@ -79,6 +79,43 @@ function clone<T>(value: T, replacements: ReadonlyMap<Node, Node>, applying: Set
   }
   if (!inside) {
     origins.set(output, origin);
+  }
+  return output as T;
+}
+
+/**
+ * What `structuredClone` gives for a syntax tree, several times faster: plain objects and arrays
+ * copied, a node met twice copied once and shared again in the copy. A finished component is
+ * copied this way each time a module puts it in place, which with `structuredClone` measured as a
+ * large part of emitting (2026-11-16). Anything else (a regular expression literal's value) goes
+ * to `structuredClone`, as before.
+ */
+export function cloneTree<T>(value: T, seen: Map<object, unknown> = new Map()): T {
+  if (value === null || typeof value !== 'object') {
+    return value;
+  }
+  const known = seen.get(value);
+  if (known !== undefined) {
+    return known as T;
+  }
+  if (Array.isArray(value)) {
+    const output: unknown[] = [];
+    seen.set(value, output);
+    for (const item of value) {
+      output.push(cloneTree(item, seen));
+    }
+    return output as T;
+  }
+  if (Object.getPrototypeOf(value) !== Object.prototype) {
+    const output = structuredClone(value);
+    seen.set(value, output);
+    return output;
+  }
+  const output: Record<string, unknown> = {};
+  seen.set(value, output);
+  const node = value as Record<string, unknown>;
+  for (const key in node) {
+    output[key] = cloneTree(node[key], seen);
   }
   return output as T;
 }
