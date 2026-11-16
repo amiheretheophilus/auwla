@@ -26,6 +26,7 @@
     "test": "bun test"
   },
   "dependencies": {
+    "@memoized-dom/jsx-plus": "workspace:*",
     "@memoized-dom/runtime": "workspace:*",
     "@memoized-dom/server": "workspace:*",
     "yuku-analyzer": "0.19.0",

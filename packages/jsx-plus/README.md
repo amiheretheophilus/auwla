@@ -47,19 +47,11 @@ Single identifiers can omit delimiters entirely: `onClick=addTask` becomes
 applied LSP handler rename cover this spelling. Calls/members/other expressions
 still use parentheses or braces.
 
-For whole apps, JSX+ is a compiler-next **source language**, not a build tool:
-pass `auwla` to compiler-next and it compiles, imports, maps and hot-updates
-`.auwla` files exactly as it does `.tsx` files. JSX+ reads no files and uses no
-Bun or Node API ([architecture](../../wiki2/architecture.md), DX-39).
-
-```ts
-import { auwla } from '@memoized-dom/jsx-plus';
-
-compileModules(files, { languages: [auwla] });                        // compiler-next
-createProject({ entries: ['./main.ts'], host, languages: [auwla] });  // projects and apps
-memoizedDom({ client: './main.ts', languages: [auwla] });             // compiler-next's Bun plugin
-memoizedDom({ clientEntry: 'main.ts', compiler: 'next', languages: [auwla] }); // @memoized-dom/vite
-```
+For whole apps, JSX+ is a compiler-next **source language**, not a build tool, and it is
+built in, as JSX is: compiler-next compiles, imports, maps and hot-updates `.auwla` files
+exactly as it does `.tsx` files, with no import and no option, wherever it runs (its core,
+projects, the Bun plugin, the Vite plugin, the command line). JSX+ reads no files and uses no
+Bun or Node API ([architecture](../../wiki2/architecture.md), DX-39, DX-52).
 
 [The notes example](examples/notes/) has three `.auwla` components importing each
 other, with and without the extension. Tests run it through compiler-next's project

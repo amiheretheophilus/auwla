@@ -17,7 +17,6 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import type { BuildArtifact, BuildOutput } from 'bun';
 // Compiler-next has no package export for this yet.
 import { memoizedDomApplication } from '../../compiler-next/src/project/bun';
-import { auwla } from '../src';
 import { checkoutPackagesFor } from '../tools/checkout';
 import { liveReload, watchFolder } from './watch';
 
@@ -50,7 +49,7 @@ export async function serverPreview(folder: URL, name: string, defaultPort: numb
   rmSync(outdir, { recursive: true, force: true });
 
   // One application, compiled once per change, for the declarations, the browser and the server.
-  const app = memoizedDomApplication({ client: options.client, server: SERVER, delivery: options.delivery, root, languages: [auwla] });
+  const app = memoizedDomApplication({ client: options.client, server: SERVER, delivery: options.delivery, root });
   /**
    * Each build's server goes to a folder of its own (`server/1/`, `server/2/`, ...): Bun keeps
    * a module it has loaded by its path, also when the URL has a different query.

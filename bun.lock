@@ -68,6 +68,7 @@
       "name": "@memoized-dom/compiler-next",
       "version": "0.0.0",
       "dependencies": {
+        "@memoized-dom/jsx-plus": "workspace:*",
         "@memoized-dom/runtime": "workspace:*",
         "@memoized-dom/server": "workspace:*",
         "yuku-analyzer": "0.19.0",
@@ -97,7 +98,7 @@
     },
     "packages/editor-vscode": {
       "name": "memoized-dom-auwla",
-      "version": "0.0.14",
+      "version": "0.0.15",
       "dependencies": {
         "@memoized-dom/jsx-plus": "workspace:*",
       },

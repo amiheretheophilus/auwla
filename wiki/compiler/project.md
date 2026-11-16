@@ -228,9 +228,11 @@ is server-only by its name (the old plugin assumed `server`).
   through the same `api`.
 - `.memoized/server-functions.d.ts` is written after each build and update that has server
   functions.
-- `packages/vite`'s `dist` bundles its own copy of compiler-next (`rolldown.config.ts`), so the
+- `packages/vite`'s `dist` imports compiler-next's own built `dist` ("Package build"), so the
   `memoized-dom` command line, which always runs Vite under Node, works with `compiler: 'next'`
-  once the packages are built (`bun run build`). An old `dist` serves the old compiler's plugin.
+  once the packages are built (`bun run build`). Until 2026-11-16 it bundled a private copy, which
+  would have given JSX+ (loading compiler-next's `analysis` entry) a second `CompileError` class.
+  An old `dist` serves the old compiler's plugin.
 - **Native packages** are found and resolved by the project (`fileSystemHost`, "Native packages"
   below); the plugin only keeps them out of prebundling and SSR externals, allows a linked
   package's folder, watches its files, and writes its type files (`writeLinkedTypes`). The old
@@ -262,6 +264,10 @@ each runtime its own file:
 
 Only the public entries are built: the root and `./analysis`. The Bun plugin and the command line
 (`project/bun.ts`, `project/cli.ts`) are Bun programs, imported from `src/`.
+
+JSX+ (`packages/jsx-plus`) builds the same way, its root and `./language` entries sharing one copy
+of the language. compiler-next loads `./language` for `.auwla` (`core.md`, "Source languages"),
+so on Node one built copy of each package gives JSX+ and the compiler one `CompileError` class.
 
 ## Native packages
 

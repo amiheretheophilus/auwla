@@ -15,10 +15,12 @@ projects and applications, the CLI, the Bun plugin and the Vite plugin with hot
 updates. JSX+ has no project wrapper, build graph, bundler plugin or source-map
 composer, and no Bun or Node API in `src/`, so it runs wherever compiler-next runs.
 
-Pass it to any compiler-next entry: `compileModules(files, { languages: [auwla] })`,
-`createProject({ ..., languages: [auwla] })`, compiler-next's Bun plugin, or the
-Vite plugin (`memoizedDom({ compiler: 'next', languages: [auwla] })`). `compile()`
-is a one-module convenience over compiler-next's `compile` with that option. The
+It is built in (DX-52, 2026-11-16): compiler-next reads `.auwla` with no import and no
+option, everywhere: `compileModules`, projects, applications, the Bun plugin, the Vite
+plugin and the CLI. Its two language lookups include it (`compiler-next/src/core/parse/built-in.ts`),
+which loads this package's `./language` entry at the first `.auwla` module, so no tool
+wires it and none can drift. Both packages build `dist/` for Node; Bun and TypeScript
+read `src/` (`wiki/compiler/project.md`, "Package build"). The
 hook is compiler-next's ([source languages](../wiki/compiler/core.md#source-languages));
 it names no particular language. Extended syntax and checking stay in
 `packages/jsx-plus`. Compiler-next's `src/analysis/` folder exposes a read-only

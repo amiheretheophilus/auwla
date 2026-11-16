@@ -7,7 +7,7 @@ it does not execute the stylesheet.
 
 Run `bun run packages/jsx-plus/examples/styling/preview.ts` from the repository
 root, then open the printed URL. Add `--build` for a build-only check. The shared
-preview uses compiler-next's Bun plugin with `languages: [auwla]`.
+preview uses compiler-next's Bun plugin, which reads `.auwla` with no option.
 
 The preview gives Bun the HTML entry, so Bun writes the stylesheet and script
 links itself. Vite supplies stylesheet delivery from the same generated import.

@@ -12,7 +12,6 @@ import { fileURLToPath } from 'node:url';
 import type { BuildArtifact, BuildOutput } from 'bun';
 // Compiler-next's Bun plugin has no package export yet.
 import { memoizedDomApplication } from '../../compiler-next/src/project/bun';
-import { auwla } from '../src';
 import { checkoutPackages } from '../tools/checkout';
 import { liveReload, watchFolder } from './watch';
 
@@ -32,7 +31,7 @@ export async function preview(folder: URL, name: string, defaultPort: number, op
   const root = fileURLToPath(folder);
   const outdir = fileURLToPath(new URL(`../../../.cache/${name.toLowerCase().replaceAll(' ', '-')}-preview/`, import.meta.url));
   // One application for the whole session; a saved change reads only the files that changed.
-  const app = memoizedDomApplication({ client: './main.ts', root, languages: [auwla] });
+  const app = memoizedDomApplication({ client: './main.ts', root });
   const bundle = (): Promise<BuildOutput> => Bun.build({
     entrypoints: [fileURLToPath(new URL(options.html === true ? './index.html' : './main.ts', folder))],
     target: 'browser',

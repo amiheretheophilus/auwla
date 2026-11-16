@@ -69,6 +69,8 @@ inside the compiler or a new list implementation.
 | --- | --- |
 | `index.ts` | `parseModule(path, source, languages)`: language from the path (`langFromPath`), or the TSX a source language gives; syntax errors as `CompileError` with line and column in the authored text, JSX detection |
 | `languages.ts` | source languages: authoring syntaxes that become TSX first (below) |
+| `built-in.ts` | `.auwla`, read with no option: JSX+'s language, loaded at the first `.auwla` module |
+| `built-in.test.ts` | `.auwla` with no option through `compileModules` and a project, an extensionless import, an authored error, given languages |
 | `languages.test.ts` | a toy language through compiling, imports, errors, source maps and a project |
 | `lower-typescript.ts` | lowers `enum` (numbered members, reverse mapping, member names in initializers, `const enum`; `declare enum` removed) and constructor parameter properties, as `tsc` emits them, by editing the text. A member maps back unless its value is a string, which includes `B = A`, `E.A` and `A + 'x'` over a string member. Members are kept per enum, by scope and name, so two enums `E` in different namespaces or blocks stay apart, and merged declarations of one enum share names and string members |
 | `lower-namespace.ts` | lowers a runtime `namespace`, `import x = a.b`, `import x = require('m')` and `export =` as `tsc` emits them, and decides how an enum is declared when it merges or sits in a namespace |
@@ -85,8 +87,18 @@ inside the compiler or a new list implementation.
 
 ### Source languages
 
-The `languages` option names authoring syntaxes that become TSX before the compiler reads
-them. `packages/jsx-plus` gives `.auwla` this way; the compiler knows no particular language.
+Source languages are authoring syntaxes that become TSX before the compiler reads them.
+`.auwla` (`packages/jsx-plus`) is built in, as JSX is (`built-in.ts`; the user, 2026-11-16: "the
+compiler already knows auwla"). Every entry point and tool reads it with no import and no option,
+because the only two functions that find a module's language, `languageOf` and
+`languageExtensions`, include it. No tool adds it itself, so none can drift. The `languages`
+option adds other languages, ahead of the built-in one; a language given for `.auwla` replaces it.
+
+JSX+ is loaded the first time a `.auwla` module is read (`createRequire`), not when the compiler
+loads. JSX+ uses compiler-next's `analysis` entry and its errors extend `CompileError`, so a load-time
+import would be a cycle that can reach `CompileError` before it exists (in the bundled `dist`, one
+chunk holds both). An app with no `.auwla` file never loads JSX+.
+
 A `SourceLanguage` owns extensions and has `toTsx(text, path)`, which returns the TSX and a
 `TextOrigin` back to the authored text, and throws a located `CompileError` for an authored
 error. It reads no files and needs no particular runtime.

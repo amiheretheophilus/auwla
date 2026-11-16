@@ -5,8 +5,9 @@ export default defineConfig({
   input: { index: './src/index.ts', dev: './src/dev.ts', cli: './src/cli.ts', cloudflare: './src/cloudflare.ts' },
   platform: 'browser',
   transform: { target: 'node24' },
-  // compiler-next ships TypeScript source, which Node cannot load from a package: bundle it.
-  external: (id) => !id.startsWith('.') && !isAbsolute(id) && !id.startsWith('@memoized-dom/compiler-next'),
+  // Every package stays external, compiler-next included: it builds its own `dist` for Node, and one
+  // copy of it means one `CompileError` class for it and for JSX+, which reads `.auwla` files.
+  external: (id) => !id.startsWith('.') && !isAbsolute(id),
   output: {
     dir: './dist',
     entryFileNames: '[name].js',

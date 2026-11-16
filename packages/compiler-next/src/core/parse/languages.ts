@@ -9,11 +9,13 @@
  * file the author wrote. Source maps follow the origin back to the authored text, and an error
  * found after parsing is moved back to it too (`authoredError`).
  *
- * A language is plain code: it reads no files and needs no particular runtime. The compiler knows
- * nothing about any one language; `packages/jsx-plus` gives `.auwla`.
+ * A language is plain code: it reads no files and needs no particular runtime. `.auwla`
+ * (`packages/jsx-plus`) is built in, as JSX is: every entry point reads it with no option
+ * (`built-in.ts`). The `languages` option adds other languages.
  */
 import { langFromPath, type SourceLang } from 'yuku-parser';
 import { CompileError, locate } from '../diagnostics';
+import { BUILT_IN_LANGUAGES } from './built-in';
 import { UNEDITED, type TextOrigin } from './text-edits';
 
 /** A source-only dependency: reading it must not add it to the JavaScript graph. */
@@ -51,14 +53,32 @@ export interface SourceStylesheet {
   readonly code: string | SourceStylesheetRecipe;
 }
 
-/** The language owning `path`, if one does. */
-export function languageOf(path: string, languages: readonly SourceLanguage[] | undefined): SourceLanguage | undefined {
-  return languages?.find((language) => language.extensions.some((extension) => path.endsWith(extension)));
+/**
+ * The languages a compile reads: the given ones, then each built-in one (`.auwla`, `built-in.ts`)
+ * whose extensions none of them owns. A language given for `.auwla` replaces the built-in one.
+ */
+function readLanguages(given: readonly SourceLanguage[] | undefined): readonly SourceLanguage[] {
+  if (given === undefined || given.length === 0) return BUILT_IN_LANGUAGES;
+  let known = withBuiltIn.get(given);
+  if (known === undefined) {
+    const owned = new Set(given.flatMap((language) => language.extensions));
+    known = [...given, ...BUILT_IN_LANGUAGES.filter((language) => !language.extensions.some((extension) => owned.has(extension)))];
+    withBuiltIn.set(given, known);
+  }
+  return known;
 }
 
-/** Every extension the languages own, in the order they were given. */
+/** Each given list with the built-in languages added, made once per list. */
+const withBuiltIn = new WeakMap<readonly SourceLanguage[], readonly SourceLanguage[]>();
+
+/** The language owning `path`, if one does: a given one, or a built-in one. */
+export function languageOf(path: string, languages: readonly SourceLanguage[] | undefined): SourceLanguage | undefined {
+  return readLanguages(languages).find((language) => language.extensions.some((extension) => path.endsWith(extension)));
+}
+
+/** Every extension the languages own, the given ones first, then the built-in ones (`.auwla`). */
 export function languageExtensions(languages: readonly SourceLanguage[] | undefined): readonly string[] {
-  return languages?.flatMap((language) => language.extensions) ?? [];
+  return readLanguages(languages).flatMap((language) => language.extensions);
 }
 
 /** The text the parser reads for a module, the language it reads it as, and where that text came from. */

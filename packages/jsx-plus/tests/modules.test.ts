@@ -65,9 +65,11 @@ it('collects the app through compiler-next\'s project, .auwla modules under thei
   expect([...build.modules].sort()).toEqual([
     './App.auwla', './NoteForm.auwla', './components/NoteList.auwla', './components/index.ts', './main.ts', './notes.ts',
   ]);
-  // Without the language, compiler-next does not read `.auwla` at all: JSX+ adds nothing else.
+  // `.auwla` is built in (DX-52, 2026-11-16): with no option, compiler-next reads the same modules
+  // and gives the same output. Before, it read `./main.ts` alone.
   const plain = await createProject({ entries: ['./main.ts'], host: fileSystemHost(root) }).build();
-  expect(plain.modules).toEqual(['./main.ts']);
+  expect([...plain.modules].sort()).toEqual([...build.modules].sort());
+  expect(plain.ok && build.ok && plain.output).toEqual(build.ok ? build.output : {});
 });
 
 it('normalizes each .auwla module once per change, though the project asks twice', async () => {
