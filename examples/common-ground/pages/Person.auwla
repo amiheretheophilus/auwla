@@ -1,0 +1,146 @@
+import { route } from "@memoized-dom/router";
+import { people } from "../data";
+import { addToCrew, crewIds, savedIds, toggleSaved } from "../state";
+import { Icon } from "../components/ui.auwla";
+
+/** `/people/:id`: one collaborator's profile, a page of its own with a link to share. */
+export function Person() {
+  <style>
+    .page {
+      display: grid;
+      grid-template-columns: 1fr @850:minmax(0, 5fr) minmax(0, 6fr);
+      align-items: start;
+      gap: 28px @850:48px;
+      padding: 24px 0 40px @850:36px 0 64px;
+    }
+
+    .back { margin-bottom: 18px; }
+
+    .portrait {
+      position: relative;
+      height: 280px @600:360px;
+      overflow: hidden;
+      border-radius: 24px;
+      img { position: absolute; bottom: -15px; left: 50%; height: 300px @600:390px; transform: translateX(-50%); }
+    }
+    .monogram {
+      position: absolute;
+      bottom: 18px;
+      left: 22px;
+      font-size: 44px;
+      font-weight: 800;
+      letter-spacing: -2px;
+      opacity: 0.5;
+    }
+    .availability {
+      position: absolute;
+      top: 16px;
+      left: 16px;
+      padding: 7px 12px;
+      border-radius: 20px;
+      background: #ffffffe0;
+      color: var(--green) @.booked:var(--amber);
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    h1 { margin: 6px 0 8px; font-size: 38px @600:48px; line-height: 1.05; letter-spacing: -2px; }
+    .role { margin: 0; color: var(--muted); font-size: 15px; }
+    .bio { margin: 22px 0; color: #5f6670; font-size: 16px; line-height: 1.8; }
+
+    .facts {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+      margin: 22px 0;
+      div { padding: 14px 16px; border: 1px solid var(--line); border-radius: 14px; background: var(--card); }
+      span { display: block; margin-bottom: 4px; }
+      strong { font-size: 17px; letter-spacing: -0.3px; }
+    }
+
+    .project {
+      margin-top: 18px;
+      padding: 18px;
+      border-radius: 14px;
+      background: #f6f7f3;
+      h2 { margin: 9px 0; font-size: 18px; letter-spacing: -0.3px; }
+      p { margin: 0; color: var(--muted); font-size: 13px; }
+    }
+
+    .actions { display: flex; flex-direction: column @600:row; flex-wrap: wrap; gap: 10px; margin-top: 26px; }
+
+    .missing {
+      padding: 64px 22px;
+      text-align: center;
+      h1 { font-size: 34px; }
+      p { margin: 0 0 24px; color: var(--muted); }
+    }
+  </style>
+
+  // Read from the URL: a link straight to a profile shows it, and Back returns to the list.
+  const person = people.find((value) => value.id === route.params.id);
+  const inCrew = person !== undefined && crewIds.includes(person.id);
+  const saved = person !== undefined && savedIds.includes(person.id);
+
+  return (
+    <div>
+      if (person) {
+        <article class="page">
+          <div>
+            <a class="tiny-link back" route-to="/"><Icon name="back" size={14} />; "All collaborators"</a>
+            <div class=("portrait " + person.color)>
+              <span class=(person.available ? "availability" : "availability booked")>
+                person.available ? "Open to collaborate" : "Booked this month"
+              </span>
+              <img src=(person.portrait) alt="" />
+              <span class="monogram">person.initials</span>
+            </div>
+          </div>
+
+          <div>
+            <p class="eyebrow">"A LITTLE MORE ABOUT"</p>
+            <h1>person.name</h1>
+            <p class="role">"{person.role} · {person.city}"</p>
+            <p class="bio">person.bio</p>
+            <div class="skill-tags">
+              for (const skill of person.skills) {
+                <span key=skill>skill</span>
+              }
+            </div>
+            <div class="facts">
+              <div><span class="tiny-label">"DAY RATE"</span><strong>"GH₵ {person.rate}"</strong></div>
+              <div><span class="tiny-label">"DISCIPLINE"</span><strong>person.discipline</strong></div>
+            </div>
+            <div class="project">
+              <span class="tiny-label">"SOMETHING I'M PROUD OF"</span>
+              <h2>person.project</h2>
+              <p>"A little window into the kind of work I love."</p>
+            </div>
+            <div class="actions">
+              <button
+                type="button"
+                class="button primary"
+                disabled=(inCrew || !person.available)
+                onClick=(() => addToCrew(person.id))
+              >
+                inCrew ? "Already in your crew" : person.available ? "Make something together" : "Available next month";
+                <Icon name="plus" size={16} />
+              </button>
+              <button type="button" class="button secondary" aria-pressed=saved onClick=(() => toggleSaved(person.id))>
+                <Icon name="bookmark" size={16} fill=(saved ? "#dce6ff" : "none") />;
+                saved ? "Saved" : "Save profile"
+              </button>
+            </div>
+          </div>
+        </article>
+      } else {
+        <div class="missing">
+          <p class="eyebrow">"NOBODY BY THAT NAME"</p>
+          <h1>"This profile isn't here."</h1>
+          <p>"The link may be old. Everyone we know is on the Discover page."</p>
+          <a class="button primary" route-to="/">"Discover collaborators"; <Icon name="arrow" size={16} /></a>
+        </div>
+      }
+    </div>
+  );
+}

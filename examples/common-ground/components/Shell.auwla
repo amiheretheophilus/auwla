@@ -1,0 +1,172 @@
+import { route } from "@memoized-dom/router";
+import { crewIds, savedIds } from "../state";
+import { Icon } from "./ui.auwla";
+
+// The site's frame: header and footer, with styles shared by both.
+<style>
+  .bar {
+    max-width: 1500px;
+    margin: 0 auto;
+    padding-inline: 20px @600:5%;
+  }
+</style>
+
+export function Header() {
+  <style>
+    .announcement {
+      display: flex;
+      align-items: center;
+      justify-content: center @850:space-between;
+      height: 38px;
+      background: var(--ink);
+      color: #fff;
+      font-size: 11px @600:12px;
+      font-weight: 600;
+      .star { color: var(--yellow); font-size: 16px; margin-inline: 10px; }
+      .extra { display: none @850:inline; }
+    }
+
+    header {
+      display: flex;
+      flex-wrap: wrap @850:nowrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 18px 24px;
+      padding-block: 20px @850:0;
+      min-height: auto @850:104px;
+    }
+
+    .wordmark {
+      display: flex;
+      align-items: center;
+      gap: 11px;
+      color: var(--blue);
+      font-size: 21px @600:23px;
+      font-weight: 800;
+      line-height: 0.87;
+      letter-spacing: -1.4px;
+      text-decoration: none;
+      .dot { font-size: 28px; }
+    }
+
+    /* Three shapes: a head and two shoulders leaning together. */
+    .symbol {
+      position: relative;
+      display: inline-block;
+      width: 35px;
+      height: 37px;
+      i { position: absolute; background: var(--blue); border-radius: 50%; }
+      i:nth-child(1) { top: 0; left: 10px; width: 14px; height: 14px; }
+      i:nth-child(2) { top: 19px; left: 0; width: 21px; height: 16px; border-radius: 20px 20px 5px 5px; transform: rotate(-22deg); }
+      i:nth-child(3) { top: 19px; right: 0; width: 21px; height: 16px; border-radius: 20px 20px 5px 5px; transform: rotate(22deg); opacity: 0.75; }
+    }
+
+    nav {
+      order: 3 @850:0;
+      display: flex;
+      justify-content: center;
+      gap: 3px;
+      width: 100% @850:auto;
+      padding: 5px;
+      border: 1px solid var(--line);
+      border-radius: 30px;
+      background: var(--card);
+      a {
+        padding: 10px 11px @600:11px 16px;
+        border-radius: 24px;
+        background: transparent @.active:var(--ink);
+        color: var(--ink) @.active:#fff;
+        font-size: 12px @600:13px;
+        font-weight: 600;
+        text-decoration: none;
+        white-space: nowrap;
+        &:hover:not(.active) { background: #f1f2f0; }
+      }
+    }
+
+    .count {
+      display: inline-grid;
+      place-items: center;
+      min-width: 18px;
+      height: 18px;
+      margin-left: 5px;
+      border-radius: 50%;
+      background: #f0f1ee;
+      color: var(--ink);
+      font-size: 11px;
+    }
+    .active .count { background: #36383a; color: #fff; }
+
+    .actions { display: flex; align-items: center; gap: 14px; margin-left: auto @850:0; }
+    .avatar {
+      display: none @1150:grid;
+      place-items: center;
+      width: 34px;
+      height: 34px;
+      border: 2px solid #fff;
+      border-radius: 50%;
+      background: #ffe4b4;
+      font-size: 12px;
+      font-weight: 800;
+    }
+  </style>
+
+  // Which page is showing, from the URL. A profile belongs to Discover.
+  const path = route.pathname;
+  const discovering = path === "/" || path.startsWith("/people/");
+
+  return (
+    <div>
+      <div class="announcement">
+        <span><span class="star">"✳"</span>; "A little ambition. A lot of good company."</span>
+        <span class="extra">"Independent minds. Shared possibilities."; <span class="star">"↗"</span></span>
+      </div>
+      <header class="bar">
+        <a class="wordmark" route-to="/" aria-label="Common Ground home">
+          <span class="symbol"><i></i><i></i><i></i></span>
+          <span>"common"; <br />; "ground"; <span class="dot">"."</span></span>
+        </a>
+        <nav aria-label="Main navigation">
+          <a route-to="/" class=(discovering ? "active" : "") aria-current=(discovering ? "page" : undefined)>"Discover"</a>
+          <a route-to="/studio" class=(path === "/studio" ? "active" : "") aria-current=(path === "/studio" ? "page" : undefined)>
+            "My studio"; <span class="count">crewIds.length</span>
+          </a>
+          <a route-to="/saved" class=(path === "/saved" ? "active" : "") aria-current=(path === "/saved" ? "page" : undefined)>
+            "Saved"; <span class="count">savedIds.length</span>
+          </a>
+          <a route-to="/how-it-works" class=(path === "/how-it-works" ? "active" : "") aria-current=(path === "/how-it-works" ? "page" : undefined)>
+            "How it works"
+          </a>
+        </nav>
+        <div class="actions">
+          <span class="avatar" aria-hidden="true">"Y"</span>
+          <a class="button primary" route-to="/new">"New project"; <Icon name="plus" size={16} /></a>
+        </div>
+      </header>
+    </div>
+  );
+}
+
+export function Footer() {
+  <style>
+    footer {
+      display: flex;
+      flex-direction: column @850:row;
+      justify-content: space-between;
+      gap: 8px 20px;
+      padding-block: 26px;
+      border-top: 1px solid var(--line);
+      color: var(--faint);
+      font-size: 12px;
+      line-height: 1.7;
+    }
+    strong { color: #555c61; }
+  </style>
+
+  return (
+    <footer class="bar">
+      <strong>"Good things happen on common ground."</strong>
+      <span>"A little studio for big possibilities. Made with Auwla."</span>
+    </footer>
+  );
+}

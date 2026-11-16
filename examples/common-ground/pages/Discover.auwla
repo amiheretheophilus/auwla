@@ -1,0 +1,202 @@
+import { people } from "../data";
+import { savedIds } from "../state";
+import { CrewPanel } from "../components/CrewPanel.auwla";
+import { Hero } from "../components/Hero.auwla";
+import { TalentCard } from "../components/TalentCard.auwla";
+import { Icon, Section } from "../components/ui.auwla";
+
+const DISCIPLINES = ["All minds", "Design", "Engineering", "Strategy"];
+
+/** `/` and `/saved`: search and filter the collaborators, with the crew alongside. */
+export function Discover({ saved = false }: { saved?: boolean }) {
+  <style>
+    .layout {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) @850:minmax(0, 1fr) 290px @1150:minmax(0, 1fr) 310px;
+      gap: 26px @850:20px @1150:26px;
+      padding-top: 0 @.saved:28px;
+    }
+
+    .count { color: var(--muted); font-size: 12px; white-space: nowrap; }
+
+    .controls { display: flex; align-items: center; gap: 10px; margin-bottom: 15px; }
+    .search {
+      display: flex;
+      flex: 1;
+      align-items: center;
+      gap: 10px;
+      min-width: 0;
+      height: 48px;
+      padding: 0 12px @600:0 14px;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: var(--card);
+      color: var(--faint);
+      &:focus-within { border-color: var(--blue); }
+      input { width: 100%; min-width: 0; border: 0; outline: 0; background: none; color: var(--ink); font-size: 14px; }
+    }
+    select {
+      height: 48px;
+      max-width: 140px @600:180px;
+      padding: 0 12px;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: var(--card);
+      font-size: 13px;
+    }
+
+    .filters {
+      display: flex;
+      flex-direction: column @600:row;
+      align-items: flex-start @600:center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 22px;
+    }
+    .tabs { display: flex; flex-wrap: wrap; gap: 5px; }
+    .tab {
+      padding: 8px 12px;
+      border: 1px solid transparent;
+      border-radius: 20px;
+      background: none @.selected:var(--ink);
+      color: #6b7177 @.selected:#fff;
+      font-size: 13px;
+      font-weight: 600;
+      &:not(.selected):hover { background: #eceee9; }
+    }
+    .available { display: flex; align-items: center; gap: 6px; color: #5e656d; font-size: 13px; white-space: nowrap; input { accent-color: var(--blue); } }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr)) @850:repeat(3, minmax(0, 1fr)) @1150:repeat(2, minmax(0, 1fr)) @1400:repeat(3, minmax(0, 1fr));
+      gap: 12px @600:17px;
+    }
+
+    .empty {
+      padding: 50px 22px;
+      border: 1px dashed #dce0e4;
+      border-radius: var(--radius);
+      background: var(--card);
+      color: var(--blue);
+      text-align: center;
+      h3 { margin: 16px 0 10px; color: var(--ink); font-size: 23px; letter-spacing: -0.7px; }
+      p { margin: 0 0 20px; color: var(--muted); font-size: 14px; }
+    }
+
+    .note {
+      display: flex;
+      align-items: center;
+      justify-content: center @850:flex-start;
+      gap: 12px;
+      padding: 24px 14px;
+      span { color: var(--blue); font-size: 32px; }
+      p { margin: 0; color: var(--faint); font-size: 13px; line-height: 1.8; }
+      strong { color: #53595e; font-weight: 600; }
+    }
+  </style>
+
+  // The search is this page's own: it starts over each visit.
+  let query = "";
+  let discipline = "All minds";
+  let availableOnly = false;
+  let sort = "recommended";
+
+  const matching = people.filter((person) =>
+    (discipline === "All minds" || person.discipline === discipline)
+    && (!availableOnly || person.available)
+    && (!saved || savedIds.includes(person.id))
+    && `${person.name} ${person.role} ${person.city} ${person.skills.join(" ")}`.toLowerCase().includes(query.trim().toLowerCase()));
+  const visible = sort === "budget" ? [...matching].sort((a, b) => a.rate - b.rate) : matching;
+
+  function showEveryone() {
+    query = "";
+    discipline = "All minds";
+    availableOnly = false;
+  }
+
+  return (
+    <div>
+      if (!saved) {
+        <Hero />
+      }
+      <div class=(saved ? "layout saved" : "layout")>
+        <div>
+          <Section
+            eyebrow=(saved ? "KEEP THE GOOD ONES CLOSE" : "INDEPENDENT MINDS. SHARED AMBITION.")
+            title=(saved ? "Your kind of good company." : "Good company, found.")
+          >
+            <span slot="action" class="count">"{visible.length} creative mind{visible.length === 1 ? "" : "s"}"</span>
+
+            <div class="controls">
+              <label class="search">
+                <Icon name="search" size={17} />
+                <input
+                  aria-label="Search collaborators"
+                  placeholder="A name, a skill, a little curiosity…"
+                  value=query
+                  onInput=((event) => query = event.currentTarget.value)
+                />
+                if (query !== "") {
+                  <button type="button" class="icon-button" aria-label="Clear search" onClick=(() => query = "")>
+                    <Icon name="close" size={15} />
+                  </button>
+                }
+              </label>
+              <select aria-label="Sort collaborators" value=sort onChange=((event) => sort = event.currentTarget.value)>
+                <option value="recommended">"Recommended"</option>
+                <option value="budget">"Day rate: low to high"</option>
+              </select>
+            </div>
+
+            <div class="filters">
+              <div class="tabs" role="group" aria-label="Filter by discipline">
+                for (const name of DISCIPLINES) {
+                  <button
+                    type="button"
+                    key=name
+                    class=(discipline === name ? "tab selected" : "tab")
+                    aria-pressed=(discipline === name)
+                    onClick=(() => discipline = name)
+                  >
+                    name
+                  </button>
+                }
+              </div>
+              <label class="available">
+                <input type="checkbox" checked=availableOnly onChange=((event) => availableOnly = event.currentTarget.checked) />;
+                "Available now"
+              </label>
+            </div>
+
+            <div class="grid">
+              for (const person of visible) {
+                <TalentCard key=(person.id) person=person />
+              }
+            </div>
+
+            if (visible.length === 0) {
+              <div class="empty">
+                <Icon name="search" size={30} />
+                <h3>"A little too specific?"</h3>
+                <p>saved ? "Save a few profiles, or try a different search." : "Try another skill or open up your filters. Good company is here."</p>
+                if (saved) {
+                  <a class="button secondary" route-to="/">"Explore all minds"; <Icon name="arrow" size={16} /></a>
+                } else {
+                  <button type="button" class="button secondary" onClick=showEveryone>"Show everyone"; <Icon name="arrow" size={16} /></button>
+                }
+              </div>
+            }
+          </Section>
+        </div>
+
+        <div>
+          <CrewPanel />
+          <div class="note">
+            <span>"✳"</span>
+            <p>"The best teams don't think alike."; <br />; <strong>"They think together."</strong></p>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}

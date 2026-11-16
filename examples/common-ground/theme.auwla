@@ -1,0 +1,156 @@
+// The design system: tokens, resets and the few primitives every page shares (buttons, labels,
+// tags). Global on purpose; everything else is styled by the component that owns it. Imported once,
+// by `App.auwla`.
+
+<style global>
+  :root {
+    --blue: #0956ff;
+    --blue-deep: #0044dd;
+    --blue-soft: #eef3ff;
+    --ink: #121418;
+    --muted: #646b74;
+    --faint: #8b9196;
+    --line: #e5e6e3;
+    --paper: #fafaf7;
+    --card: #ffffff;
+    --chip: #f3f4f1;
+    --yellow: #ffdc52;
+    --green: #278954;
+    --amber: #bc8750;
+    --focus: #ffbf31;
+    --radius: 18px;
+
+    font-family: Inter, "Segoe UI", Arial, sans-serif;
+    font-synthesis: none;
+    color: var(--ink);
+    background: var(--paper);
+  }
+
+  * { box-sizing: border-box; }
+  body { margin: 0; }
+  img { display: block; }
+  a { color: inherit; }
+
+  button, input, select, textarea { font: inherit; color: inherit; }
+  button {
+    cursor: pointer;
+    transition: background 0.16s, color 0.16s, transform 0.16s, border-color 0.16s;
+    &:disabled { cursor: default; }
+    &:hover:not(:disabled) { transform: translateY(-1px); }
+  }
+  :is(button, a, input, select, textarea):focus-visible {
+    outline: 3px solid var(--focus);
+    outline-offset: 4px;
+  }
+
+  /* One button, three looks: the look is a class on the same element. */
+  .button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    padding: 13px 18px @600:14px 22px;
+    border: 1px solid #dcdedc @.primary:transparent;
+    border-radius: 28px;
+    background: var(--card) @.primary:var(--blue);
+    color: var(--ink) @.primary:#fff;
+    font-size: 13px;
+    font-weight: 700;
+    line-height: 1.3;
+    text-decoration: none;
+    white-space: nowrap;
+    &.primary:hover:not(:disabled) { background: var(--blue-deep); }
+    &.secondary:hover { background: #f2f3f0; }
+    &:disabled { opacity: 0.45; transform: none; }
+  }
+
+  .text-button {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 0;
+    border: 0;
+    background: none;
+    font-size: 13px;
+    font-weight: 700;
+    text-decoration: none;
+  }
+
+  .icon-button {
+    display: inline-grid;
+    place-items: center;
+    width: 30px;
+    height: 30px;
+    padding: 0;
+    border: 0;
+    border-radius: 50%;
+    background: none;
+    color: var(--faint);
+    &:hover { background: #eff1ee; }
+  }
+
+  .tiny-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 0;
+    border: 0;
+    background: none;
+    color: var(--muted);
+    font-size: 12px;
+    text-decoration: none;
+  }
+
+  .eyebrow {
+    margin: 0 0 8px;
+    color: var(--muted);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 1.4px;
+  }
+
+  .tiny-label {
+    color: #7b8186;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 1.3px;
+  }
+
+  .accent { color: var(--blue); }
+
+  .badge {
+    padding: 6px 10px;
+    border-radius: 20px;
+    background: var(--chip);
+    color: #737c83;
+    font-size: 11px;
+  }
+
+  .skill-tags {
+    display: flex;
+    flex-wrap: wrap;
+    align-content: flex-start;
+    gap: 6px;
+    span {
+      padding: 5px 8px;
+      border: 1px solid #eeeeeb;
+      border-radius: 6px;
+      background: var(--chip);
+      color: #555c61;
+      font-size: 11px;
+      white-space: nowrap;
+    }
+  }
+
+  /* Portrait backgrounds, one per person (`data.ts`, `color`). */
+  .peach { background: #f1ded3; }
+  .blue { background: #dce8f5; }
+  .yellow { background: #f8edc4; }
+  .pink { background: #efdae4; }
+  .mint { background: #dce9e0; }
+  .lilac { background: #e1ddf0; }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { transition: none !important; scroll-behavior: auto !important; }
+  }
+</style>

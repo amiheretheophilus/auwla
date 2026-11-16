@@ -1,0 +1,111 @@
+import "./theme.auwla";
+import { clearNotice, notice } from "./state";
+import { Footer, Header } from "./components/Shell.auwla";
+import { Icon } from "./components/ui.auwla";
+// Imported only for their routes: each page loads as its own chunk the first time it is shown.
+import { Discover } from "./pages/Discover.auwla";
+import { Person } from "./pages/Person.auwla";
+import { Studio } from "./pages/Studio.auwla";
+import { NewProject } from "./pages/NewProject.auwla";
+import { HowItWorks } from "./pages/HowItWorks.auwla";
+
+/** A message after an action. It goes by itself after a few seconds, or when dismissed. */
+function Toast() {
+  <style>
+    div {
+      position: fixed;
+      bottom: 16px @600:24px;
+      left: 50%;
+      z-index: 50;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      width: max-content;
+      max-width: calc(100% - 28px);
+      padding: 12px 14px;
+      border: 1px solid #2b3037;
+      border-radius: 14px;
+      background: #121820;
+      color: #fff;
+      box-shadow: 0 10px 40px #0003;
+      font-size: 13px;
+      transform: translateX(-50%);
+    }
+    .check {
+      display: grid;
+      place-items: center;
+      flex-shrink: 0;
+      width: 26px;
+      height: 26px;
+      border-radius: 50%;
+      background: var(--yellow);
+      color: var(--ink);
+    }
+    button { color: #b3b8be; &:hover { background: #333942; } }
+  </style>
+
+  // Runs again for each new message; the cleanup cancels the previous message's timer.
+  $effect(() => {
+    if (notice === "") return;
+    const timer = setTimeout(clearNotice, 4500);
+    return () => clearTimeout(timer);
+  });
+
+  return (
+    <div role="status">
+      <span class="check"><Icon name="check" size={14} /></span>
+      <span>notice</span>
+      <button type="button" class="icon-button" aria-label="Dismiss notification" onClick=clearNotice>
+        <Icon name="close" size={15} />
+      </button>
+    </div>
+  );
+}
+
+/** Any other URL. Declared here, so it stays in the main bundle. */
+function NotFound() {
+  <style>
+    section { padding: 72px 0; text-align: center; }
+    h1 { margin: 10px 0 12px; font-size: 40px; letter-spacing: -1.6px; }
+    p { margin: 0 0 26px; color: var(--muted); font-size: 15px; }
+  </style>
+
+  return (
+    <section>
+      <p class="eyebrow">"404 · OFF THE MAP"</p>
+      <h1>"Nothing on this ground."</h1>
+      <p>"The page you were looking for isn't here, but good company is."</p>
+      <a class="button primary" route-to="/">"Back to Discover"; <Icon name="arrow" size={16} /></a>
+    </section>
+  );
+}
+
+export function App() {
+  <style>
+    main {
+      max-width: 1500px;
+      min-height: 70vh;
+      margin: 0 auto;
+      padding: 0 20px 64px @600:0 5% 64px;
+    }
+  </style>
+
+  return (
+    <div>
+      <Header />
+      <main>
+        <Discover route="/" />
+        <Discover route="/saved" saved />
+        <Person route="/people/:id" />
+        <Studio route="/studio" />
+        <NewProject route="/new" />
+        <HowItWorks route="/how-it-works" />
+        <NotFound route="/*" />
+      </main>
+      <Footer />
+      if (notice !== "") {
+        <Toast />
+      }
+    </div>
+  );
+}

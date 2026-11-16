@@ -1,0 +1,190 @@
+import { navigate } from "@memoized-dom/router";
+import { people } from "../data";
+import { MAX_CREW, brief, crewIds, launchCrew, launched, removeFromCrew } from "../state";
+import { Icon } from "./ui.auwla";
+
+/** The crew being assembled: its brief, members, skill coverage, cost and the launch button. */
+export function CrewPanel() {
+  <style>
+    aside {
+      position: static @850:sticky;
+      top: 22px;
+      padding: 22px 20px;
+      border: 1px solid var(--line);
+      border-radius: 19px;
+      background: var(--card);
+    }
+
+    .heading {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 20px;
+      h2 { margin: 0 0 4px; font-size: 15px; letter-spacing: -0.3px; }
+      p { margin: 0; color: var(--muted); font-size: 12px; }
+    }
+    .heading-icon {
+      display: grid;
+      place-items: center;
+      flex-shrink: 0;
+      width: 34px;
+      height: 34px;
+      border-radius: 10px;
+      background: var(--blue-soft);
+      color: var(--blue);
+    }
+    .seats { margin-left: auto; color: #959c9f; font-size: 12px; white-space: nowrap; }
+
+    .project {
+      position: relative;
+      padding: 15px;
+      border: 1px solid #ece9dc;
+      border-radius: 12px;
+      background: #fbf9f0;
+      h3 { max-width: 220px; margin: 10px 0 8px; font-size: 17px; line-height: 1.3; letter-spacing: -0.45px; }
+      p { margin: 0; color: #808077; font-size: 12px; line-height: 1.6; }
+      .icon-button { position: absolute; top: 8px; right: 8px; }
+    }
+
+    .members { margin: 14px 0; }
+    .member {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 0;
+      border-bottom: 1px solid #f0f0ed;
+      img { width: 38px; height: 38px; border-radius: 50%; background: #e9eef6; object-fit: cover; }
+      div { flex: 1; }
+      strong, span { display: block; }
+      strong { margin-bottom: 3px; font-size: 13px; }
+      span { color: var(--muted); font-size: 12px; }
+    }
+
+    .empty-seat {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 20px;
+      padding: 11px;
+      border: 1px dashed #d7dce2;
+      border-radius: 12px;
+      color: #8b9298;
+      font-size: 12px;
+      line-height: 1.5;
+      .plus {
+        display: grid;
+        place-items: center;
+        width: 32px;
+        height: 32px;
+        border: 1px dashed #ced3da;
+        border-radius: 50%;
+        font-size: 20px;
+        font-weight: 300;
+      }
+      strong { color: #666e75; font-weight: 500; }
+    }
+
+    .coverage-head { display: flex; justify-content: space-between; margin-bottom: 10px; font-size: 13px; strong { color: var(--blue); } }
+    .bars { display: flex; gap: 4px; }
+    /* A bar per skill the brief asks for: blue once someone in the crew has it. */
+    .bar { flex: 1; height: 6px; border-radius: 3px; background: #eceef0 @.covered:var(--blue); }
+    .skills {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 11px;
+      span { display: flex; align-items: center; gap: 3px; color: #7e858d; font-size: 12px; }
+    }
+
+    .total {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-top: 20px;
+      padding-top: 18px;
+      border-top: 1px solid var(--line);
+      font-size: 13px;
+      strong { font-size: 17px; letter-spacing: -0.4px; }
+    }
+    .budget { margin: 6px 0 18px; color: #959b9e @.over:#bb683f; font-size: 12px; text-align: right; }
+    .launch { width: 100%; }
+    .footnote { margin: 10px 0 0; color: #969b9e; font-size: 12px; text-align: center; }
+    .help { display: flex; justify-content: center; margin-top: 8px; }
+  </style>
+
+  const crew = people.filter((person) => crewIds.includes(person.id));
+  const covered = brief.skills.filter((skill) => crew.some((person) => person.skills.includes(skill)));
+  const rate = crew.reduce((sum, person) => sum + person.rate, 0);
+  const over = rate > brief.budget;
+
+  function launch() {
+    if (launchCrew()) navigate("/studio");
+  }
+
+  return (
+    <aside aria-label="Your project crew">
+      <div class="heading">
+        <div class="heading-icon"><Icon name="people" /></div>
+        <div>
+          <h2>"Your little dream team"</h2>
+          <p>"Good ideas need good company."</p>
+        </div>
+        <span class="seats">"{crewIds.length}/{MAX_CREW}"</span>
+      </div>
+
+      <div class="project">
+        <span class="tiny-label">"THE PROJECT"</span>
+        <a class="icon-button" route-to="/new" aria-label="Change project brief"><Icon name="plus" size={15} /></a>
+        <h3>brief.name</h3>
+        <p>brief.description</p>
+      </div>
+
+      <div class="members">
+        for (const person of crew) {
+          <div class="member" key=(person.id)>
+            <img src=(person.portrait) alt="" />
+            <div><strong>person.name</strong><span>person.role</span></div>
+            <button
+              type="button"
+              class="icon-button"
+              aria-label=(`Remove ${person.name} from crew`)
+              onClick=(() => removeFromCrew(person.id))
+            >
+              <Icon name="close" size={15} />
+            </button>
+          </div>
+        }
+      </div>
+      if (crewIds.length < MAX_CREW) {
+        <div class="empty-seat">
+          <span class="plus">"+"</span>
+          <p>"A seat for your next"; <br />; <strong>"great collaborator."</strong></p>
+        </div>
+      }
+
+      <div class="coverage-head"><span>"Skill coverage"</span><strong>"{covered.length}/{brief.skills.length}"</strong></div>
+      <div class="bars">
+        for (const skill of brief.skills) {
+          <span key=skill class=(covered.includes(skill) ? "bar covered" : "bar") title=skill></span>
+        }
+      </div>
+      <div class="skills">
+        for (const skill of brief.skills) {
+          <span key=skill><Icon name=(covered.includes(skill) ? "check" : "plus") size={12} />; skill</span>
+        }
+      </div>
+
+      <div class="total"><span>"Your team's day rate"</span><strong>"GH₵ {rate}"</strong></div>
+      <p class=(over ? "budget over" : "budget")>
+        over ? `GH₵ ${rate - brief.budget} over your daily budget` : `Within your GH₵ ${brief.budget} daily budget`
+      </p>
+      <button type="button" class="button primary launch" disabled=(crewIds.length < 2) onClick=launch>
+        launched ? "Back to your workspace" : "Bring this idea to life"; <Icon name="arrow" size={16} />
+      </button>
+      <p class="footnote">
+        crewIds.length < 2 ? "Add one more person to get started." : "Your shared workspace is one click away."
+      </p>
+      <div class="help"><a class="tiny-link" route-to="/how-it-works">"A little help getting started"; <Icon name="arrow" size={12} /></a></div>
+    </aside>
+  );
+}

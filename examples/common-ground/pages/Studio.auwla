@@ -1,0 +1,212 @@
+import { people, starterTasks } from "../data";
+import { brief, completedIds, crewIds, launchCrew, launched, toggleTask } from "../state";
+import { CrewPanel } from "../components/CrewPanel.auwla";
+import { Icon, Section } from "../components/ui.auwla";
+
+/** `/studio`: the crew's shared workspace, its milestones unlocked once the crew launches. */
+export function Studio() {
+  <style>
+    .page { padding-top: 22px @600:35px; }
+
+    .heading {
+      display: flex;
+      flex-direction: column @600:row;
+      align-items: flex-start @600:center;
+      justify-content: space-between;
+      gap: 18px;
+      margin-bottom: 32px;
+      h1 { margin: 16px 0 0; font-size: 36px @600:42px @850:48px; line-height: 1.12; letter-spacing: -1.6px @600:-2.3px; }
+    }
+
+    /* Waiting or live: the dot's color follows the class. */
+    .status {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 14px;
+      border: 1px solid var(--line);
+      border-radius: 20px;
+      background: var(--card);
+      color: var(--muted);
+      font-size: 13px;
+      i { width: 8px; height: 8px; border-radius: 50%; background: #d9a44d; }
+      &.live i { background: #2b9c60; }
+    }
+
+    .layout {
+      display: grid;
+      grid-template-columns: 1fr @850:minmax(0, 1fr) 290px @1150:minmax(0, 1fr) 310px;
+      align-items: start;
+      gap: 30px;
+    }
+
+    .project {
+      display: flex;
+      align-items: center;
+      gap: 15px @600:30px;
+      margin-bottom: 36px;
+      padding: 23px @600:30px;
+      border-radius: 21px;
+      background: var(--blue);
+      color: #fff;
+      .tiny-label { color: #b2ccff; }
+      h2 { margin: 16px 0 12px; font-size: 25px @600:32px; letter-spacing: -1px; }
+      p { max-width: 500px; margin: 0; color: #d3e1ff; font-size: 14px; line-height: 1.7; }
+    }
+    .emblem {
+      display: grid;
+      place-items: center;
+      flex-shrink: 0;
+      width: 56px @600:95px;
+      height: 56px @600:95px;
+      border-radius: 50%;
+      background: var(--yellow);
+      color: var(--ink);
+      transform: rotate(15deg);
+    }
+
+    .progress {
+      padding: 8px 12px;
+      border-radius: 20px;
+      background: var(--blue-soft);
+      color: var(--blue);
+      font-size: 13px;
+      font-weight: 700;
+      white-space: nowrap;
+    }
+
+    .list { overflow: hidden; border: 1px solid var(--line); border-radius: 16px; background: var(--card); }
+    .task {
+      display: flex;
+      align-items: center;
+      gap: 12px @600:17px;
+      padding: 18px 14px @600:22px;
+      border-bottom: 1px solid var(--line);
+      cursor: pointer;
+      &:last-child { border-bottom: 0; }
+      input { width: 20px; height: 20px; accent-color: var(--blue); }
+      strong, div > span { display: block; }
+      strong { margin-bottom: 5px; font-size: 15px; }
+      div > span { color: var(--muted); font-size: 13px; }
+      &.done strong { color: #7b8790; text-decoration: line-through; }
+    }
+    .mark { margin-left: auto; color: var(--blue); }
+    .hint { color: var(--muted); font-size: 13px; }
+
+    .success {
+      display: flex;
+      align-items: center;
+      gap: 13px;
+      margin-top: 18px;
+      padding: 18px;
+      border-radius: 14px;
+      background: #f0f5d9;
+      strong, span { display: block; }
+      span { margin-top: 5px; color: #718052; font-size: 13px; }
+    }
+
+    .people { overflow: hidden; border: 1px solid var(--line); border-radius: 16px; background: var(--card); }
+    .person {
+      display: flex;
+      align-items: center;
+      gap: 13px;
+      padding: 14px @600:17px;
+      border-bottom: 1px solid var(--line);
+      &:last-child { border-bottom: 0; }
+      img { width: 44px; height: 44px; border-radius: 50%; background: #e7ecf5; }
+      strong, div > span { display: block; }
+      a { text-decoration: none; &:hover { color: var(--blue); } }
+      div > span { margin-top: 5px; color: var(--muted); font-size: 13px; }
+      .badge { margin-left: auto; }
+    }
+    .empty { color: var(--muted); font-size: 14px; }
+
+    .bottom { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 15px; }
+  </style>
+
+  const crew = people.filter((person) => crewIds.includes(person.id));
+  const progress = Math.round((completedIds.length / starterTasks.length) * 100);
+
+  return (
+    <div class="page">
+      <div class="heading">
+        <div>
+          <p class="eyebrow">"YOUR SHARED SPACE"</p>
+          <h1>"A good idea."; <br />; <span class="accent">"Even better company."</span></h1>
+        </div>
+        <span class=(launched ? "status live" : "status")><i></i>; launched ? "Project is live" : "A work in possibility"</span>
+      </div>
+
+      <div class="layout">
+        <div>
+          <div class="project">
+            <div>
+              <span class="tiny-label">"YOUR NEXT BIG THING"</span>
+              <h2>brief.name</h2>
+              <p>brief.description</p>
+            </div>
+            <div class="emblem"><Icon name="spark" size={36} /></div>
+          </div>
+
+          <Section eyebrow="ONE SMALL STEP AT A TIME" title="From possibility to progress">
+            <span slot="action" class="progress">"{progress}% there"</span>
+            <div class="list">
+              for (const task of starterTasks) {
+                <label key=(task.id) class=(completedIds.includes(task.id) ? "task done" : "task")>
+                  <input
+                    type="checkbox"
+                    checked=(completedIds.includes(task.id))
+                    disabled=(!launched)
+                    onChange=(() => toggleTask(task.id))
+                  />
+                  <div><strong>task.title</strong><span>task.note</span></div>
+                  <span class="mark">completedIds.includes(task.id) ? "✓" : "↗"</span>
+                </label>
+              }
+            </div>
+            if (!launched) {
+              <p class="hint">"Launch your crew to unlock your shared project checklist."</p>
+            }
+            if (progress === 100) {
+              <div class="success">
+                <Icon name="spark" size={27} />
+                <div>
+                  <strong>"Look what you made possible."</strong>
+                  <span>"Your first chapter is complete. Here's to the next one."</span>
+                </div>
+              </div>
+            }
+          </Section>
+
+          <Section eyebrow="DIFFERENT MINDS, ONE DIRECTION" title="The people behind the possibility">
+            if (crew.length === 0) {
+              <p class="empty">"Your story needs its first collaborator."</p>
+            } else {
+              <div class="people">
+                for (const person of crew) {
+                  <div key=(person.id) class="person">
+                    <img src=(person.portrait) alt="" />
+                    <div>
+                      <strong><a route-to={{ path: "/people/:id", params: { id: person.id } }}>person.name</a></strong>
+                      <span>person.role</span>
+                    </div>
+                    <span class="badge">person.discipline</span>
+                  </div>
+                }
+              </div>
+            }
+          </Section>
+
+          <div class="bottom">
+            <a class="button secondary" route-to="/">"Find more good company"; <Icon name="arrow" size={16} /></a>
+            if (!launched && crew.length >= 2) {
+              <button type="button" class="button primary" onClick=(() => launchCrew())>"Launch this crew"; <Icon name="spark" size={16} /></button>
+            }
+          </div>
+        </div>
+
+        <CrewPanel />
+      </div>
+    </div>
+  );
+}

@@ -1,0 +1,79 @@
+import { navigate } from "@memoized-dom/router";
+import { resetSession } from "../state";
+import { Icon } from "../components/ui.auwla";
+
+const STEPS = [
+  { title: "Start with a spark.", text: "Give your project a name, a direction, and a daily team budget." },
+  { title: "Find your kind of different.", text: "Explore six fictional collaborators. Mix skills, save profiles, and build a crew of up to four." },
+  { title: "Make a little progress.", text: "Launch your shared workspace and work through your first three milestones." },
+];
+
+/** `/how-it-works`: the three steps, what is kept in this browser, and a reset. */
+export function HowItWorks() {
+  <style>
+    .page { max-width: 720px; padding: 28px 0 56px @850:44px 0 72px; }
+    h1 { margin: 10px 0 8px; font-size: 38px @600:52px; line-height: 1.05; letter-spacing: -2px; }
+
+    ol { margin: 28px 0; padding: 0; list-style: none; counter-reset: step; }
+    li {
+      position: relative;
+      padding: 18px 0 18px 52px;
+      border-bottom: 1px solid var(--line);
+      counter-increment: step;
+      &::before {
+        content: "0" counter(step);
+        position: absolute;
+        top: 22px;
+        left: 0;
+        color: var(--blue);
+        font-size: 14px;
+        font-weight: 700;
+      }
+      h2 { margin: 0 0 6px; font-size: 18px; }
+      p { margin: 0; color: var(--muted); font-size: 14px; line-height: 1.7; }
+    }
+
+    .local {
+      display: flex;
+      gap: 12px;
+      margin: 24px 0;
+      padding: 18px;
+      border-radius: 14px;
+      background: #f3f4f0;
+      color: var(--blue);
+      p { margin: 0; color: var(--muted); font-size: 14px; line-height: 1.7; }
+    }
+
+    .actions { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 24px; }
+  </style>
+
+  function startOver() {
+    resetSession();
+    navigate("/");
+  }
+
+  return (
+    <div class="page">
+      <p class="eyebrow">"THE COMMON GROUND WAY"</p>
+      <h1>"Good alone."; <br />; <span class="accent">"Great together."</span></h1>
+      <ol>
+        for (const step of STEPS) {
+          <li key=(step.title)>
+            <h2>step.title</h2>
+            <p>step.text</p>
+          </li>
+        }
+      </ol>
+      <div class="local">
+        <Icon name="globe" size={20} />
+        <p>
+          "This is a playground, not a hiring service. Your crew and project are saved only in this browser. No sign-up. No messages sent."
+        </p>
+      </div>
+      <div class="actions">
+        <a class="button primary" route-to="/new">"Start a project"; <Icon name="arrow" size={16} /></a>
+        <button type="button" class="text-button" onClick=startOver>"Reset this playground"; <Icon name="arrow" size={15} /></button>
+      </div>
+    </div>
+  );
+}

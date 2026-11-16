@@ -19,11 +19,12 @@ at its own URL (e.g. `/hacker-news/`); the root `/` is a link list. Pick the
 graph for tooling with `MMD_EXAMPLE=<file>` (default `workspace/main.ts`).
 The Hacker News client is backed by the live Algolia Hacker News API.
 
-The [Common Ground](common-ground/README.md) example is a complete client-side
-collaboration studio with a distinctive blue/yellow UI inspired by Talent Connect
-Ghana. It showcases content slots, caller-owned row composition, module and
-component state, derived crew metrics, native dialogs and local browser storage.
-Run `bun run example:common-ground`, or visit `/common-ground/` on the shared server.
+The [Common Ground](common-ground/README.md) example is a complete collaboration
+studio written in `.auwla`, with a distinctive blue/yellow UI inspired by Talent
+Connect Ghana. It showcases real routes (a URL per page, lazy page chunks),
+component-scoped styles with class conditions and responsive values, slots, module
+and component state, derived crew metrics and local browser storage. It routes from
+`/`, so it runs on its own server: `bun run example:common-ground`.
 
 It demonstrates:
 

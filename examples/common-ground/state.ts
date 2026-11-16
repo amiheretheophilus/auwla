@@ -1,191 +1,141 @@
+/**
+ * The studio's shared state: ordinary module variables and the functions that change them. Every
+ * page reads them directly; the compiler updates whatever shows them.
+ *
+ * Navigation is not state here: the URL is (`App.auwla`), so pages decide where to go after an
+ * action (`launchCrew` reports whether it launched; the caller navigates).
+ */
 import { people, briefs, starterTasks, type Brief } from "./data";
 
-interface SavedSession {
-  crew: string[];
-  saved: string[];
-  brief: Brief;
-  launched: boolean;
-  completed: string[];
-}
-function restore(): SavedSession {
-  try {
-    const value = JSON.parse(
-      localStorage.getItem("common-ground-v1") ?? "null",
-    );
-    if (
-      value &&
-      Array.isArray(value.crew) &&
-      Array.isArray(value.saved) &&
-      value.brief &&
-      typeof value.brief.name === "string" &&
-      typeof value.brief.description === "string" &&
-      Array.isArray(value.brief.skills) &&
-      value.brief.skills.every((skill: unknown) => typeof skill === "string") &&
-      Number.isFinite(value.brief.budget)
-    ) {
-      return {
-        crew: value.crew
-          .filter((id: string) => people.some((p) => p.id === id))
-          .slice(0, 4),
-        saved: value.saved.filter((id: string) =>
-          people.some((p) => p.id === id),
-        ),
-        brief: value.brief,
-        launched: value.launched === true,
-        completed: Array.isArray(value.completed)
-          ? value.completed.filter((id: string) =>
-              starterTasks.some((task) => task.id === id),
-            )
-          : [],
-      };
-    }
-  } catch {
-    /* Storage may be unavailable; the app still works in memory. */
+/** The browser's saved session, when this browser has storage. */
+const STORAGE_KEY = "common-ground-v2";
+const storage = "localStorage" in globalThis ? globalThis.localStorage : undefined;
+
+const isPerson = (id: string) => people.some((person) => person.id === id);
+const isTask = (id: string) => starterTasks.some((task) => task.id === id);
+const list = (text: string | null) => (text ?? "").split(",").filter((item) => item !== "");
+
+/**
+ * The session saved by an earlier visit, or the starter one. It is stored as URL search
+ * parameters, which parse without throwing whatever the stored text is; anything unknown is
+ * dropped, so an edited or stale entry cannot break the app.
+ */
+function restore() {
+  const saved = new URLSearchParams(storage?.getItem(STORAGE_KEY) ?? "");
+  const budget = Number(saved.get("budget"));
+  const name = saved.get("name");
+  const description = saved.get("description");
+  const skills = list(saved.get("skills"));
+  if (name === null || description === null || skills.length === 0 || !Number.isFinite(budget)) {
+    return { crew: ["kwame"], saved: ["ama"], brief: briefs[0]!, launched: false, completed: [] as string[] };
   }
   return {
-    crew: ["kwame"],
-    saved: ["ama"],
-    brief: briefs[0]!,
-    launched: false,
-    completed: [],
+    crew: list(saved.get("crew")).filter(isPerson).slice(0, 4),
+    saved: list(saved.get("saved")).filter(isPerson),
+    brief: { name, description, skills, budget },
+    launched: saved.get("launched") === "1",
+    completed: list(saved.get("completed")).filter(isTask),
   };
 }
-export let crewIds: string[] = [];
-export let savedIds: string[] = [];
-export let brief: Brief = {
-  name: "",
-  description: "",
-  skills: [],
-  budget: 1200,
-};
-export let launched = false;
-export let completedIds: string[] = [];
-export function restoreSession() {
-  const initial = restore();
-  crewIds = initial.crew;
-  savedIds = initial.saved;
-  brief = initial.brief;
-  launched = initial.launched;
-  completedIds = initial.completed;
-}
+
+const initial = restore();
+export let crewIds: string[] = initial.crew;
+export let savedIds: string[] = initial.saved;
+export let brief: Brief = initial.brief;
+export let launched = initial.launched;
+export let completedIds: string[] = initial.completed;
+/** A short message for the toast; empty when there is none. */
 export let notice = "";
-export let view = "discover";
-export let profileId = "";
-function persist() {
-  try {
-    localStorage.setItem(
-      "common-ground-v1",
-      JSON.stringify({
-        crew: crewIds,
-        saved: savedIds,
-        brief,
-        launched,
-        completed: completedIds,
-      }),
-    );
-  } catch {
-    /* Browser storage is optional. */
-  }
-}
-export function selectView(next: string) {
-  view = next;
-}
+
+// Saved whenever any of these changes: the effect reads them all, so it runs again after each
+// change, with no save call in the functions below.
+$effect(() => {
+  const session = new URLSearchParams({
+    crew: crewIds.join(","),
+    saved: savedIds.join(","),
+    name: brief.name,
+    description: brief.description,
+    skills: brief.skills.join(","),
+    budget: String(brief.budget),
+    launched: launched ? "1" : "0",
+    completed: completedIds.join(","),
+  });
+  storage?.setItem(STORAGE_KEY, session.toString());
+});
+
+export const MAX_CREW = 4;
+
 export function toggleSaved(id: string) {
-  savedIds = savedIds.includes(id)
-    ? savedIds.filter((value) => value !== id)
-    : [...savedIds, id];
-  persist();
+  savedIds = savedIds.includes(id) ? savedIds.filter((value) => value !== id) : [...savedIds, id];
 }
+
 export function addToCrew(id: string) {
+  const person = people.find((value) => value.id === id);
   if (crewIds.includes(id)) {
     notice = "Already in your crew. Good taste!";
-    return;
-  }
-  if (crewIds.length >= 4) {
+  } else if (crewIds.length >= MAX_CREW) {
     notice = "Keep it focused: your crew has room for four people.";
-    return;
+  } else if (person === undefined || !person.available) {
+    notice = "This collaborator is booked right now. Save their profile for later.";
+  } else {
+    crewIds = [...crewIds, id];
+    launched = false;
+    notice = `${person.name.split(" ")[0]} joined your crew.`;
   }
-  const person = people.find((value) => value.id === id);
-  if (!person?.available) {
-    notice =
-      "This collaborator is booked right now. Save their profile for later.";
-    return;
-  }
-  crewIds = [...crewIds, id];
-  launched = false;
-  notice = `${person.name.split(" ")[0]} joined your crew.`;
-  persist();
 }
+
 export function removeFromCrew(id: string) {
   crewIds = crewIds.filter((value) => value !== id);
   launched = false;
-  persist();
 }
+
 export function useBrief(index: number) {
   brief = briefs[index]!;
   launched = false;
   completedIds = [];
-  persist();
+  notice = "A fresh brief. Time to find the right people.";
 }
-export function createBrief(
-  name: string,
-  description: string,
-  discipline: string,
-  budget: number,
-) {
-  brief = {
-    name,
-    description,
-    skills:
-      discipline === "Community"
-        ? ["Community", "Research", "Frontend"]
-        : discipline === "Brand"
-          ? ["Art direction", "Brand strategy", "Storytelling"]
-          : ["Product design", "Frontend", "Brand strategy"],
-    budget,
-  };
+
+/** The skills a direction asks for. */
+const DIRECTION_SKILLS: Record<string, string[]> = {
+  Community: ["Community", "Research", "Frontend"],
+  Brand: ["Art direction", "Brand strategy", "Storytelling"],
+  Product: ["Product design", "Frontend", "Brand strategy"],
+};
+
+export function createBrief(name: string, description: string, direction: string, budget: number) {
+  brief = { name, description, skills: DIRECTION_SKILLS[direction] ?? DIRECTION_SKILLS.Product!, budget };
   launched = false;
   completedIds = [];
   notice = "Your new project is ready for a little good company.";
-  persist();
 }
-export function launchCrew() {
+
+/** Launches the crew when it has at least two people; returns whether it did. */
+export function launchCrew(): boolean {
   if (crewIds.length < 2) {
     notice = "Add at least two collaborators to start your project.";
-    return;
+    return false;
   }
   launched = true;
-  view = "studio";
   notice = "Your project is live. Make something good together.";
-  persist();
+  return true;
 }
+
 export function toggleTask(id: string) {
   completedIds = completedIds.includes(id)
     ? completedIds.filter((value) => value !== id)
     : [...completedIds, id];
-  persist();
 }
-export function openProfile(id: string) {
-  profileId = id;
-  openDialog("person-dialog");
-}
-export function openDialog(id: string) {
-  const dialog = document.getElementById(id) as HTMLDialogElement | null;
-  if (dialog && !dialog.open) dialog.showModal();
-}
-export function closeDialog(id: string) {
-  (document.getElementById(id) as HTMLDialogElement | null)?.close();
-}
+
 export function clearNotice() {
   notice = "";
 }
+
 export function resetSession() {
   crewIds = ["kwame"];
   savedIds = ["ama"];
   brief = briefs[0]!;
   completedIds = [];
   launched = false;
-  view = "discover";
   notice = "A fresh start. Your next good idea is waiting.";
-  persist();
 }

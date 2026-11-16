@@ -1,0 +1,188 @@
+import type { Person } from "../data";
+import { addToCrew, crewIds, savedIds, toggleSaved } from "../state";
+import { Icon } from "./ui.auwla";
+
+/** One collaborator: portrait, skills, a bio that opens in place, and the crew action. */
+export function TalentCard({ person }: { person: Person }) {
+  <style>
+    article {
+      overflow: hidden;
+      border: 1px solid var(--line);
+      border-radius: 15px @600:var(--radius);
+      background: var(--card);
+      transition: box-shadow 0.2s, border-color 0.2s;
+      &:hover { border-color: #c9d5ed; box-shadow: 0 8px 24px #11192210; }
+    }
+
+    .portrait {
+      position: relative;
+      height: 150px @1150:165px @1600:180px;
+      overflow: hidden;
+      img {
+        position: absolute;
+        bottom: -10px;
+        left: 50%;
+        width: 160px @1150:175px;
+        height: 160px @1150:175px;
+        object-fit: contain;
+        transform: translateX(-50%);
+      }
+    }
+
+    /* "Open to collaborate" or "Booked": the dot's color follows the class. */
+    .availability {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      z-index: 1;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      padding: 5px 8px;
+      border: 1px solid #ffffffb0;
+      border-radius: 20px;
+      background: #ffffffda;
+      font-size: 10px @600:11px;
+      font-weight: 600;
+      white-space: nowrap;
+      i { width: 6px; height: 6px; border-radius: 50%; background: var(--green); }
+      &.booked i { background: var(--amber); }
+    }
+
+    .save {
+      position: absolute;
+      top: 9px;
+      right: 9px;
+      z-index: 1;
+      display: grid;
+      place-items: center;
+      width: 30px;
+      height: 30px;
+      border: 0;
+      border-radius: 50%;
+      background: #ffffffd9 @.saved:#fff;
+      color: #5c6167 @.saved:var(--blue);
+    }
+
+    .mark {
+      position: absolute;
+      right: 10px;
+      bottom: 9px;
+      left: 10px;
+      display: flex;
+      justify-content: space-between;
+      color: #40403b;
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: 1px;
+    }
+
+    .content { padding: 14px 12px @600:18px 16px @1600:20px; }
+    .title { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
+    h3 { margin: 0; font-size: 15px @600:16px; letter-spacing: -0.35px; }
+    h3 a { text-decoration: none; &:hover { color: var(--blue); } }
+    .verified {
+      display: grid;
+      place-items: center;
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      background: var(--blue-soft);
+      color: var(--blue);
+    }
+    .role { margin: 6px 0 10px; color: #59636c; font-size: 13px; }
+    .city { display: flex; align-items: center; gap: 5px; margin: 0 0 14px; color: var(--faint); font-size: 12px; }
+    .bio { margin: 10px 0 0; color: #71777d; font-size: 13px; line-height: 1.65; }
+
+    .footer {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      margin-top: 6px;
+      padding-top: 13px;
+      border-top: 1px solid #f0f0ec;
+      font-size: 13px;
+      span { color: var(--faint); font-size: 11px; }
+    }
+
+    /* Add, already added, or booked. */
+    .add {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      padding: 8px 10px;
+      border: 0;
+      border-radius: 8px;
+      background: var(--blue-soft) @.added:#edf4ec;
+      color: var(--blue) @.added:#477849;
+      font-size: 12px;
+      font-weight: 700;
+      white-space: nowrap;
+      &:disabled:not(.added) { background: #f3f2ed; color: #999b97; }
+    }
+  </style>
+
+  // Opened in place, per card: each card keeps its own.
+  let expanded = false;
+  const saved = savedIds.includes(person.id);
+  const inCrew = crewIds.includes(person.id);
+  const first = person.name.split(" ")[0];
+
+  return (
+    <article data-person=(person.id)>
+      <div class=("portrait " + person.color)>
+        <span class=(person.available ? "availability" : "availability booked")>
+          <i></i>;
+          person.available ? "Open to collaborate" : "Booked this month"
+        </span>
+        <button
+          type="button"
+          class=(saved ? "save saved" : "save")
+          aria-label=(saved ? `Unsave ${person.name}` : `Save ${person.name}`)
+          aria-pressed=saved
+          onClick=(() => toggleSaved(person.id))
+        >
+          <Icon name="bookmark" size={14} fill=(saved ? "#dce6ff" : "none") />
+        </button>
+        <img src=(person.portrait) alt="" />
+        <span class="mark">person.initials; <span>"↗"</span></span>
+      </div>
+
+      <div class="content">
+        <div class="title">
+          <h3><a route-to={{ path: "/people/:id", params: { id: person.id } }}>person.name</a></h3>
+          <span class="verified" title="Fictional demo profile"><Icon name="check" size={11} /></span>
+        </div>
+        <p class="role">person.role</p>
+        <p class="city"><Icon name="globe" size={13} />; person.city</p>
+        <div class="skill-tags">
+          for (const skill of person.skills) {
+            <span key=skill>skill</span>
+          }
+        </div>
+        if (expanded) {
+          <p class="bio">person.bio</p>
+        }
+        <button type="button" class="tiny-link" aria-expanded=expanded onClick=(() => expanded = !expanded)>
+          expanded ? "A little less" : `Get to know ${first}`; <span>expanded ? "−" : "+"</span>
+        </button>
+
+        <div class="footer">
+          <div><strong>"GH₵ {person.rate}"</strong><span>" / day"</span></div>
+          <button
+            type="button"
+            class=(inCrew ? "add added" : "add")
+            disabled=(inCrew || !person.available)
+            aria-label=(inCrew ? `${person.name} is in your crew` : `Add ${person.name} to your crew`)
+            onClick=(() => addToCrew(person.id))
+          >
+            <Icon name=(inCrew ? "check" : "plus") size={13} />;
+            inCrew ? "In crew" : "Add to crew"
+          </button>
+        </div>
+      </div>
+    </article>
+  );
+}

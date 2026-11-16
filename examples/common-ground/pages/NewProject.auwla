@@ -1,0 +1,150 @@
+import { navigate } from "@memoized-dom/router";
+import { briefs } from "../data";
+import { createBrief, useBrief } from "../state";
+import { Icon } from "../components/ui.auwla";
+
+/** `/new`: write a brief, or borrow one of the starter briefs. Either way, back to Discover. */
+export function NewProject() {
+  <style>
+    .page {
+      display: grid;
+      grid-template-columns: 1fr @850:minmax(0, 6fr) minmax(0, 4fr);
+      align-items: start;
+      gap: 32px @850:56px;
+      padding: 24px 0 48px @850:40px 0 72px;
+    }
+
+    h1 { margin: 10px 0 16px; font-size: 36px @600:48px; line-height: 1.06; letter-spacing: -1.8px; }
+    .lead { max-width: 460px; margin: 0 0 28px; color: var(--muted); font-size: 15px; line-height: 1.7; }
+
+    form { display: flex; flex-direction: column; gap: 16px; }
+    label { display: flex; flex-direction: column; gap: 8px; font-size: 13px; font-weight: 600; }
+    input, textarea, select {
+      width: 100%;
+      padding: 13px;
+      border: 1px solid #dfe3e5;
+      border-radius: 10px;
+      background: #fbfcfa;
+      font-size: 14px;
+      outline-color: var(--blue);
+    }
+    textarea { resize: vertical; }
+    .two { display: grid; grid-template-columns: 1fr 1fr; gap: 12px @600:16px; }
+    .error { margin: 0; color: #bc4535; font-size: 13px; }
+    .submit { align-self: flex-start; margin-top: 4px; }
+
+    .starters {
+      padding: 22px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: var(--card);
+      .tiny-label { display: block; margin-bottom: 10px; }
+      button {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        width: 100%;
+        padding: 14px 0;
+        border: 0;
+        border-bottom: 1px solid #f0f1ed;
+        background: none;
+        color: #4f5962;
+        font-size: 14px;
+        text-align: left;
+        &:last-child { border-bottom: 0; }
+        &:hover { color: var(--blue); }
+      }
+    }
+  </style>
+
+  let name = "";
+  let description = "";
+  let direction = "Product";
+  let budget = 1200;
+  let error = "";
+
+  function submit(event: SubmitEvent) {
+    event.preventDefault();
+    if (name.trim().length < 3) {
+      error = "Give your project a name of at least three characters.";
+    } else if (description.trim().length < 12) {
+      error = "Tell your crew a little more: at least twelve characters.";
+    } else {
+      createBrief(name.trim(), description.trim(), direction, budget);
+      navigate("/");
+    }
+  }
+
+  function borrow(index: number) {
+    useBrief(index);
+    navigate("/");
+  }
+
+  return (
+    <div class="page">
+      <div>
+        <p class="eyebrow">"BIG IDEAS START SMALL"</p>
+        <h1>"What do you want"; <br />; "to make "; <span class="accent">"possible?"</span></h1>
+        <p class="lead">"A few words. A little direction. The right people will bring the rest."</p>
+
+        <form onSubmit=submit novalidate>
+          <label>
+            "Give your idea a name";
+            <input
+              value=name
+              onInput=((event) => { name = event.currentTarget.value; error = ""; })
+              placeholder="A brilliant little idea…"
+              maxlength="80"
+            />
+          </label>
+          <label>
+            "Tell us the story";
+            <textarea
+              value=description
+              onInput=((event) => { description = event.currentTarget.value; error = ""; })
+              placeholder="What are you building, and who is it for?"
+              rows="4"
+              maxlength="300"
+            ></textarea>
+          </label>
+          <div class="two">
+            <label>
+              "Your direction";
+              <select value=direction onChange=((event) => direction = event.currentTarget.value)>
+                <option>"Product"</option>
+                <option>"Brand"</option>
+                <option>"Community"</option>
+              </select>
+            </label>
+            <label>
+              "Daily team budget (GH₵)";
+              <input
+                type="number"
+                min="300"
+                max="10000"
+                step="50"
+                value=budget
+                onInput=((event) => budget = Number(event.currentTarget.value))
+              />
+            </label>
+          </div>
+          if (error !== "") {
+            <p class="error" role="alert">error</p>
+          }
+          <button class="button primary submit" type="submit">"Create your project"; <Icon name="arrow" size={16} /></button>
+        </form>
+      </div>
+
+      <aside class="starters">
+        <span class="tiny-label">"OR BORROW A LITTLE INSPIRATION"</span>
+        for (const [index, idea] of briefs.entries()) {
+          <button type="button" key=(idea.name) onClick=(() => borrow(index))>
+            <span>idea.name</span>
+            <Icon name="arrow" size={14} />
+          </button>
+        }
+      </aside>
+    </div>
+  );
+}

@@ -1,0 +1,68 @@
+// Small shared pieces. A component's styles stop at its own elements, so an icon's size comes from
+// its caller as a prop rather than from the caller's CSS.
+
+const PATHS: Record<string, string> = {
+  arrow: "M5 12h14m-5-5 5 5-5 5",
+  plus: "M12 5v14M5 12h14",
+  check: "m5 12 4 4 10-10",
+  close: "m6 6 12 12M6 18 18 6",
+  search: "M21 21l-5-5M18 10a8 8 0 1 1-16 0 8 8 0 0 1 16 0",
+  bookmark: "M6 3h12v18l-6-4-6 4z",
+  spark: "m12 2 2.8 7.2L22 12l-7.2 2.8L12 22l-2.8-7.2L2 12l7.2-2.8z",
+  people: "M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M16 3a4 4 0 0 1 0 8M22 21v-2a4 4 0 0 0-3-3.87M13 7a4 4 0 1 1-8 0 4 4 0 0 1 8 0",
+  globe: "M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0M3 12h18M12 3c5 5 5 13 0 18-5-5-5-13 0-18",
+  chevron: "m9 5 7 7-7 7",
+  back: "M19 12H5m5-5-5 5 5 5",
+};
+
+export function Icon({ name, size = 18, fill = "none" }: { name: string; size?: number; fill?: string }) {
+  return (
+    <svg
+      width=size
+      height=size
+      viewBox="0 0 24 24"
+      fill=fill
+      stroke="currentColor"
+      stroke-width="1.8"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+      aria-hidden="true"
+      style="flex-shrink: 0"
+    >
+      <path d=(PATHS[name] ?? PATHS.spark) />
+    </svg>
+  );
+}
+
+/** A page section: a heading on the left, an optional `action` slot on the right, then its content. */
+export function Section({ eyebrow, title }: { eyebrow: string; title: string }) {
+  <style>
+    section { margin-bottom: 36px; }
+    .heading {
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 20px;
+    }
+    h2 {
+      margin: 0;
+      font-size: 24px @600:28px;
+      line-height: 1.15;
+      letter-spacing: -1px;
+    }
+  </style>
+
+  return (
+    <section>
+      <div class="heading">
+        <div>
+          <p class="eyebrow">eyebrow</p>
+          <h2>title</h2>
+        </div>
+        <slot name="action" />
+      </div>
+      <slot />
+    </section>
+  );
+}
