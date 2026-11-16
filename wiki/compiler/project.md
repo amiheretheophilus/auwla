@@ -143,6 +143,14 @@ gives it to the client build only), compiler-next's output works with any dev se
   Output stayed byte for byte the same, maps included, hot or not, optimized or general. What is
   left is spread thin: emitted trees hold about 40,000 nodes and each full walk of them costs about
   8 ms, done by several passes after linking.
+- **In a browser** (`packages/vite/tests/next-hmr-browser.test.ts`, 2026-11-16, in Chrome or
+  Edge, `test-support/browser.ts`): an edited component, `.tsx` or `.auwla`, is replaced in place
+  while a sibling keeps its count, with no reload and one `<main>`; the edited component's own
+  state starts again; an error shows Vite's overlay over the last good page, and the fix clears it
+  with an ordinary update, state kept (Vite's client reloads only when the first update after a
+  load is a fix); an entry edit reloads. An edit that changes only a comment prints the same
+  output, so nothing is sent. Two saves of one file a few milliseconds apart can reach Vite's
+  watcher as one, so the test spaces them as a person would.
 - **Updates run one at a time** (`server/application.ts`, 2026-11-16). Edits that arrive while an
   update waits join it, so saves made during a build cost one more build together, and a build
   waits for the update before it. The Vite plugin could start two updates together, both reading

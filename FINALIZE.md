@@ -12,8 +12,6 @@ and remove it once the owning wiki records it as done.
   Common Ground after the 2026-11-16 speedups (was about 480 ms), and saves made during a build now
   share one more build. Reusing unchanged modules' output needs cross-module fact dependencies
   tracked first (imports and importers both). [project.md, "Hot replacement"](wiki/compiler/project.md)
-- [ ] **Hot replacement in a real browser**, the last unchecked part of the HMR item.
-  [compiler plan](wiki/compiler/plan.md)
 - [ ] **Acceptance**: root `tests/`, package tests, the Vite suite and the Conduit flows against
   compiler-next through a switch. [compiler plan](wiki/compiler/plan.md)
 - [ ] **Benchmarks** on the user's VM; every number at least matches `d6e678b`.
