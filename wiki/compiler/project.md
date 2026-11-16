@@ -358,6 +358,43 @@ bun packages/compiler-next/src/project/cli.ts package [--root packages/kit] [--c
   `<!--ssr-outlet-->` marker when there is no `index.html`) and the client's files through
   `@memoized-dom/adapters/bun`. `bun dist/server.js` runs it, as in `docs/09-ssr.md`.
 
+## Start-up time
+
+Measured 2026-11-16 on the user's machine, after they found the JSX+ example previews slow to
+start. A preview is a fresh process that loads the compiler, compiles the app once and bundles it.
+For the team example (about 1.3 s in all):
+
+| Part | Time |
+| --- | --- |
+| Bun itself | ~150 ms |
+| Loading compiler-next and JSX+ (several hundred source files, transpiled on each start) | ~160–290 ms; ~4 s once, with a cold disk |
+| The first compile in a process | ~300–520 ms (a second compile in the same process: ~120 ms) |
+| Bundling, minifying and maps (`Bun.build`) | ~110–160 ms |
+| Leaving the process | ~250 ms |
+
+The first compile costs three to four times a later one because its code runs before the
+runtime has optimized it. So what the compiler does on each compile still counts, and these went:
+
+- **Emitting copied every snippet twice.** `quote.ts` copied a parsed snippet with
+  `structuredClone`, then walked the copy to fill its holes; one pass now copies and fills.
+  `copy.ts` built an entries array and an empty map per node; it iterates keys and shares one map.
+- **The last two emit passes copied every module whole, needed or not.** `recovery.ts` with no
+  `try` hands the tree on as it is; `await.ts` with no `await` makes one plain copy, the same
+  output the full pass gave (fresh nodes, none shared, no origins).
+- **JSX+ forked CSS Tree's grammar when it loaded** (~50 ms), for apps with no `<style>` too. The
+  fork is made on the first stylesheet parsed (`jsx-plus/src/styles/syntax.ts`).
+- **The server pages preview compiled its app three times** (`memoizedDomApplication`, "Bun").
+
+Median of seven fresh processes, first compile and later compile: team 414 → 308 ms and
+223 → 119 ms; notes 173 → 147 ms and 48 → 36 ms; task board 279 → 207 ms and 94 → 58 ms. Every
+example's output, maps included, is byte for byte the same before and after, with and without hot
+replacement.
+
+Left: importing CSS Tree builds its default grammar (~45 ms) even with no `<style>`; loading it
+only when a file has one needs its ten importers to take it lazily, which the editor extension's
+CommonJS bundle must also allow. Past the compiler, a preview that stays running and rebuilds on
+an edit (a second compile is ~120 ms) would remove the fresh process's cost from every edit.
+
 ## Files
 
 | File | What it owns |

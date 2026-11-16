@@ -4,7 +4,7 @@
  * where `$$name` identifiers stand. This keeps emitters readable; the nodes are
  * still new AST, printed by yuku-codegen (`print.ts`).
  */
-import { b, is, walk } from 'yuku-ast';
+import { b, is } from 'yuku-ast';
 import { parse } from 'yuku-parser';
 import type { Expression, Node, Statement } from 'yuku-parser';
 
@@ -26,9 +26,10 @@ export function statements(code: string, holes: Readonly<Record<string, Hole>> =
     for (const statement of template) clearOffsets(statement);
     parsed.set(code, template);
   }
-  const copy = structuredClone(template) as Statement[];
-  fill(copy, holes);
-  return copy;
+  // One pass copies the template and fills its holes. Emitting calls this for nearly every
+  // generated statement, and a `structuredClone` followed by a walk of the copy measured as a
+  // large part of emitting (`wiki/compiler/project.md`, "Start-up time").
+  return template.map((statement) => fillCopy(statement, holes, code) as Statement);
 }
 
 export function statement(code: string, holes: Readonly<Record<string, Hole>> = {}): Statement {
@@ -74,19 +75,39 @@ function clearOffsets(value: unknown): void {
   }
 }
 
-function fill(nodes: Statement[], holes: Readonly<Record<string, Hole>>): void {
-  const root = b.Program({ body: nodes, sourceType: 'module', hashbang: null });
-  walk(root, {
-    Identifier(node, ctx) {
-      if (!node.name.startsWith('$$')) return;
-      const name = node.name.slice(2);
-      const hole = holes[name];
-      if (hole === undefined) throw new Error(`memo-dom: emitter snippet has no value for $$${name}`);
-      const replacement = typeof hole === 'string' ? identifier(hole) : hole;
-      // `{ $$value }` must become `{ value: … }`, not a shorthand of the replacement.
-      if (is.Property(ctx.parent) && ctx.parent.shorthand) ctx.parent.shorthand = false;
-      ctx.replace(replacement as Node);
-      ctx.skip();
-    },
-  });
+/**
+ * A copy of a parsed snippet with each `$$name` identifier replaced by its hole. The template's
+ * nodes are plain data (the parser's output with cleared offsets), so a structural copy is exact.
+ * A hole is put in as given, not copied, as the walk this replaces did.
+ */
+function fillCopy(value: unknown, holes: Readonly<Record<string, Hole>>, code: string): unknown {
+  if (value === null || typeof value !== 'object') {
+    return value;
+  }
+  if (Array.isArray(value)) {
+    return value.map((item) => fillCopy(item, holes, code));
+  }
+  const node = value as Record<string, unknown>;
+  if (node.type === 'Identifier' && typeof node.name === 'string' && node.name.startsWith('$$')) {
+    const name = node.name.slice(2);
+    const hole = holes[name];
+    if (hole === undefined) throw new Error(`memo-dom: emitter snippet has no value for $$${name}\n${code}`);
+    return typeof hole === 'string' ? identifier(hole) : hole;
+  }
+  const output: Record<string, unknown> = {};
+  for (const key in node) {
+    output[key] = fillCopy(node[key], holes, code);
+  }
+  // `{ $$value }` must become `{ value: … }`, not a shorthand of the replacement.
+  if (output.type === 'Property' && output.shorthand === true && isHole(node.value)) {
+    output.shorthand = false;
+  }
+  return output;
+}
+
+/** Whether a template node is a `$$name` placeholder. */
+function isHole(value: unknown): boolean {
+  const node = value as { type?: unknown; name?: unknown } | null;
+  return node !== null && typeof node === 'object' && node.type === 'Identifier'
+    && typeof node.name === 'string' && node.name.startsWith('$$');
 }

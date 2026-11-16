@@ -169,20 +169,32 @@ function numericGroup(parser: BlockParser): Atrule | undefined {
   return node;
 }
 
-/** Shared by uses, conditions and local scope; native rules still use CSS Tree. */
-export const { parse: parseStylesheet } = fork((config) => {
-  const nativeRule = config.node!.Rule as { parse(this: BlockParser): Rule };
-  return {
-    ...config,
-    node: {
-      ...config.node,
-      Block: { ...config.node!.Block as object, parse: block },
-      Rule: {
-        ...nativeRule,
-        parse(this: BlockParser) {
-          return numericGroup(this) ?? nativeRule.parse.call(this);
+type StylesheetParser = ReturnType<typeof fork>['parse'];
+
+/** The forked parser, made on first use (`parseStylesheet`). */
+let forkedParser: StylesheetParser | undefined;
+
+/**
+ * Shared by uses, conditions and local scope; native rules still use CSS Tree. The fork is made
+ * when the first stylesheet is parsed: forking builds CSS Tree's grammar, which measured about
+ * 50 ms of every compile's start, also for an app with no `<style>` (2026-11-16).
+ */
+export function parseStylesheet(...args: Parameters<StylesheetParser>): ReturnType<StylesheetParser> {
+  forkedParser ??= fork((config) => {
+    const nativeRule = config.node!.Rule as { parse(this: BlockParser): Rule };
+    return {
+      ...config,
+      node: {
+        ...config.node,
+        Block: { ...config.node!.Block as object, parse: block },
+        Rule: {
+          ...nativeRule,
+          parse(this: BlockParser) {
+            return numericGroup(this) ?? nativeRule.parse.call(this);
+          },
         },
       },
-    },
-  };
-});
+    };
+  }).parse;
+  return forkedParser(...args);
+}

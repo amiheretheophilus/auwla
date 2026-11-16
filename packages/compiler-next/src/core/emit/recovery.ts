@@ -9,6 +9,11 @@ export function emitRecovery(tree: Node, names: Names, runtime: string): Node {
   const replacements = new Map<Node, Node>();
   // Children first so an outer replacement includes every nested boundary.
   const tries = findAll(tree, 'TryStatement').reverse();
+  // Nothing to restore: the tree goes on as it is. The await pass after this one
+  // (`emitAwaitBoundaries`) copies it whole either way, dropping origins and sharing.
+  if (tries.length === 0) {
+    return tree;
+  }
   for (const original of tries) {
     const node = copy(original, replacements);
     const restore = names.fresh('_restoreBuild');

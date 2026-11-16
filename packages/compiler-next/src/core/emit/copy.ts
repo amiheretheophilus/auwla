@@ -5,6 +5,8 @@ import type { Node } from 'yuku-parser';
 // replacements can then reach a callback already copied into another wrapper.
 const origins = new WeakMap<object, object>();
 const finished = new WeakSet<object>();
+/** Replacements for syntax that names nothing, such as a non-computed key: none. */
+const NO_REPLACEMENTS: ReadonlyMap<Node, Node> = new Map();
 
 /** Distinguish authored syntax from generated nodes after copying a module. */
 export function originOf(node: Node): Node {
@@ -56,12 +58,13 @@ function clone<T>(value: T, replacements: ReadonlyMap<Node, Node>, applying: Set
   }
 
   const output: Record<string, unknown> = {};
-  const node = value as { type?: string; computed?: boolean };
-  for (const [key, child] of Object.entries(value)) {
+  const node = value as Record<string, unknown> & { type?: string; computed?: boolean };
+  // Every generated module is copied through here, so no per-node arrays or maps.
+  for (const key in node) {
     // A shorthand's key is syntax, even when its value is a binding reference.
     const literalKey = node.computed === false
       && (key === 'key' || (node.type === 'MemberExpression' && key === 'property'));
-    output[key] = clone(child, literalKey ? new Map() : replacements, applying, inside);
+    output[key] = clone(node[key], literalKey ? NO_REPLACEMENTS : replacements, applying, inside);
   }
   if (finished.has(value)) {
     finished.add(output);
