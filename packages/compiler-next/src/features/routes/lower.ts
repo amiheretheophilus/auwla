@@ -40,6 +40,7 @@ import type { RoutedPreparation } from './routed';
 import type { PrintedRouteSplit, RouteSplit } from './split';
 import { relativeModule } from '../../core/resolve/imports';
 import type { CompileModulesOptions } from '../../options';
+import { mountedPath, routeBase } from './base';
 
 const INTERNAL = '@memoized-dom/router/internal';
 const DATA_INTERNAL = '@memoized-dom/data/internal';
@@ -309,8 +310,10 @@ class ModuleLowering {
       throw fail(`route-to '${target.path}' requires params { ${required.join(', ')} }; use the object form`);
     }
 
+    // Below a base, the link carries it (`base.ts`).
+    const base = routeBase(this.options.base, this.module.path);
     if (target.options === null) {
-      this.#edits.push({ start: attribute.start, end: attribute.end, text: `href=${JSON.stringify(target.path)}` });
+      this.#edits.push({ start: attribute.start, end: attribute.end, text: `href=${JSON.stringify(mountedPath(base, target.path))}` });
       return;
     }
     const value = (key: string) => {
@@ -318,7 +321,10 @@ class ModuleLowering {
       return node === undefined ? 'void 0' : this.module.source.slice(node.start, node.end);
     };
     const build = `${this.#import('buildRoutePath')}(${JSON.stringify(target.path)}, ${value('params')}, ${value('query')}, ${value('hash')})`;
-    this.#edits.push({ start: attribute.start, end: attribute.end, text: `href={${build}}` });
+    // The built path starts with `/`; the root with a query comes out as `/app/?…`, which the
+    // router reads as `/`.
+    const href = base === null ? build : `${JSON.stringify(base)} + ${build}`;
+    this.#edits.push({ start: attribute.start, end: attribute.end, text: `href={${href}}` });
   }
 
   /** A link's destination: a static path, and for the object form its `params`, `query` and `hash`. */
@@ -394,7 +400,10 @@ class ModuleLowering {
     });
 
     // One statement and no binding: a module-scope table would be state the compiler follows.
-    let text = `${this.#import('installRouteTable')}([${entries.join(', ')}]);\n`;
+    // Below a base, the table mounts the router there before it matches anything (`base.ts`).
+    const base = routeBase(this.options.base, this.module.path);
+    const mounted = base === null ? '' : `, ${JSON.stringify(base)}`;
+    let text = `${this.#import('installRouteTable')}([${entries.join(', ')}]${mounted});\n`;
     // A client build prepares the first route before anything mounts, loading its split
     // components with it; a server prepares each request's route itself, and a page it rendered
     // delivers the values it prepared.

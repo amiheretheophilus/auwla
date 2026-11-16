@@ -52,8 +52,9 @@ and remove it once the owning wiki records it as done.
 - [ ] **Scroll restoration** not reproduced: back restores in Edge with and without the Navigation
   API, after hot updates and typing. Needs the user's browser and how they go back (button, mouse
   side button, touchpad swipe, Alt+←). A sideways wheel no longer cancels a restore (`00d80372`).
-- [ ] **Base path**: the router has none, so an app must be served from `/` (Common Ground runs on
-  its own server for this reason).
+- [ ] **Base path on the server**: client routing, links and server-rendered routes work below
+  Vite's `base` (2026-11-16); server function endpoints (`/_fn/…`) and the server's own mounting
+  below a base do not yet. [routes.md, "Base path"](wiki/compiler/routes.md)
 
 ## Tooling, editor, CI
 

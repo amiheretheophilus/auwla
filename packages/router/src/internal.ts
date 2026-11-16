@@ -18,6 +18,7 @@ import {
   navigateRelative as activeNavigateRelative,
   noteManifestResolver,
   notePreparedManifestResolver,
+  setApplicationBasePath,
   subscribe as activeSubscribe,
   subscribeNavigation as activeSubscribeNavigation,
   subscribeSelected as activeSubscribeSelected,
@@ -116,9 +117,11 @@ function connectActive(): void {
 /**
  * Install a compiled route table (compiler-next, `wiki/compiler/routes.md`): match locations with
  * it, on this runtime and every one activated later, and make clicks on route links navigate.
- * One call keeps the table out of the module's own bindings.
+ * One call keeps the table out of the module's own bindings. `basePath`: the prefix the
+ * application is mounted at (`/app`, the compiler's `base` option), set before the table matches.
  */
-export function installRouteTable(entries: readonly PreparedRouteEntry[]): void {
+export function installRouteTable(entries: readonly PreparedRouteEntry[], basePath?: string): void {
+  if (basePath !== undefined) setApplicationBasePath(basePath);
   const match = createPreparedRouteMatcher(entries);
   notePreparedManifestResolver((location) => match(location.pathname));
   ensureRouterConnected();

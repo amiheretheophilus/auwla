@@ -316,6 +316,16 @@ const state = route.state as { draftOrderId?: number; step?: number } | null;
 
 A reload is never intercepted, with or without the Navigation API: `location.reload()` loads the document again. Vite relies on that to clear its error overlay after a fix; an intercepted reload left the overlay up until a reload from the browser itself.
 
+### Serving below a base path
+
+An app served below a prefix sets Vite's `base` (or compiler-next's `base` option):
+
+```ts
+export default defineConfig({ base: '/app/', plugins: [memoizedDom({ compiler: 'next' })] });
+```
+
+Routes stay written from `/`. `route.pathname` is read below the base (`/app/about` is `/about`), `<a route-to="/about">` compiles to `href="/app/about"`, and `navigate('/about')` goes to `/app/about`. A link outside the base loads as an ordinary document navigation. A runtime made by hand takes `createRouteRuntime({ basePath: '/app' })`.
+
 ---
 
 ## 7. Server-Side Rendering (SSR) & Request Isolation

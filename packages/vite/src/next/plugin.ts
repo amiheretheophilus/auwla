@@ -214,6 +214,9 @@ export function memoizedDomNext(options: MemoizedDomViteOptions): Plugin {
       config = resolved;
       application = createApplication({
         ...compileOptions(options),
+        // Vite's `base`, when it is a path: the router reads routes below it and links carry it.
+        // A full URL (a CDN) or `./` only places assets.
+        ...(resolved.base.startsWith('/') && resolved.base !== '/' ? { base: resolved.base } : {}),
         sourceMaps: true,
         hot: resolved.command === 'serve',
         client: normalizeProjectPath(clientEntry),

@@ -36,6 +36,36 @@ describe('what a program with routes compiles to', () => {
     expect(output).toContain('fullPattern: "/b/x"');
   });
 
+  it('below a base, writes it in front of links and mounts the table there', () => {
+    // Behaviour is the router's (`packages/router/tests/base-path.test.ts`): a base set in one
+    // test would stay for every later one in this process.
+    const source = `export function App(props) {
+      return <main route="/">
+        <p route="/about">A</p><p route="/item/:id">I</p>
+        <a route-to="/">Home</a><a route-to="/about">About</a>
+        <a route-to={{ path: '/item/:id', params: { id: props.id } }}>Item</a>
+      </main>;
+    }`;
+    for (const base of ['/app/', '/app']) {
+      const output = compileModules({ './App.tsx': source }, { base })['./App.tsx']!;
+      expect(output).toContain('["href", "/app"]');
+      expect(output).toContain('["href", "/app/about"]');
+      expect(output).toMatch(/"\/app" \+ [\w$]*buildRoutePath[\w$]*\("\/item\/:id"/);
+      expect(output).toMatch(/installRouteTable[\w$]*\(\[.*\], "\/app"\);/s);
+    }
+    // No base, or `/`: the output is what it always was.
+    const plain = compileModules({ './App.tsx': source }, {})['./App.tsx']!;
+    expect(compileModules({ './App.tsx': source }, { base: '/' })['./App.tsx']).toBe(plain);
+    expect(plain).not.toContain('/app');
+  });
+
+  it('refuses a base a route cannot be read below', () => {
+    const source = 'export function App() { return <main route="/"><a route-to="/">Home</a></main>; }';
+    for (const base of ['./', 'https://cdn.example/app/', '/:tenant/', '/app?x']) {
+      expect(() => compileModules({ './App.tsx': source }, { base })).toThrow(/must be a path such as '\/app\/'/);
+    }
+  });
+
   it('turns route-to into an href, and leaves no route attributes', () => {
     const output = compile(`export function App() { return <main><p route="/about">A</p><a route-to="/about">About</a></main>; }`)['./App.tsx']!;
     expect(output).toContain('"/about"');

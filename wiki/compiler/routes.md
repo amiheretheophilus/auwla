@@ -40,6 +40,7 @@ route region gets the same tracking, adoption and delivery as any conditional:
 | `features/routes/collect.ts` | Per module: route elements (templates), calls of components, `route-to` links |
 | `features/routes/graph.ts` | Route contexts, instances, full patterns and the checks across modules |
 | `features/routes/lower.ts` | The text edits, the table and the `route:context` prop |
+| `features/routes/base.ts` | The `base` option: checked, `/app/` read as `/app`, and written in front of a link (below, "Base path") |
 | `features/routes/patterns.ts` | Pattern rules: leading `/`, no query/hash/empty segment, terminal `*`, unique params |
 | `features/routes/routed.ts` | `$routed` calls: their checks, server classification and the sources they make |
 | `features/routes/routes.test.ts` | Output shape and every compile error, routes and `$routed` |
@@ -207,6 +208,32 @@ The harness's delivered run now renders from a server build (`routedEnvironment:
 application's server does, and prepares the request's route before rendering
 (`tests/harness/run.ts`). It had loaded the browser's build twice, which shared one router, so its
 "server" render read the browser copy's lazy component.
+
+## Base path
+
+An application served below a prefix (`/app/`) declares it with the compiler's `base` option, which
+the Vite plugin takes from Vite's own `base` when that is a path (2026-11-16). Route patterns stay
+written from `/`; the prefix belongs to where the app is served, not to its routes.
+
+- **Links** carry it: `<a route-to="/about">` compiles to `href="/app/about"`, and the root to
+  `href="/app"`, so the `href` is right in server HTML, in a new tab and before any script runs.
+  The object form writes `"/app" + buildRoutePath(…)`.
+- **The router** reads route pathnames below it. The table gets it as a second argument,
+  `installRouteTable([…], "/app")`, which calls the router's `setApplicationBasePath`
+  (`packages/router/src/active-runtime.ts`): the runtime made before any application code ran
+  (the browser's default one) reads its pathname again under the base (`replaceBasePath`,
+  `runtime.ts`), and every runtime activated later gets it before the table, as a server request's
+  does. A runtime with routes of its own keeps its own base, as it keeps its own routes.
+  `navigate('/about')` writes the base in front; a link outside the base is a document navigation.
+- **No base, or `/`**, adds nothing: the output is byte for byte what it was.
+- A base must be a path (`./` and full URLs only place assets) with no parameter, wildcard, query
+  or hash; anything else is a compile error.
+- Checked in a browser: Common Ground served by Vite at `/cg/` loads, its links carry `/cg`, a
+  click navigates in place, back returns and a deep link loads its page. Tests:
+  `features/routes/routes.test.ts` (output) and `packages/router/tests/base-path.test.ts`
+  (behaviour, in its own file: a base belongs to the process once declared).
+- Not covered yet: server function endpoints (`/_fn/…`) and the server's own mounting below a
+  base.
 
 ## Rules
 

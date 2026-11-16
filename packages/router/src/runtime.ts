@@ -101,6 +101,8 @@ export interface RouteRuntime {
   connect(): () => void;
   installResolver(resolver: RouteResolver): () => void;
   replaceResolver(resolver: RouteResolver): () => void;
+  /** Mounts the application at a static prefix (`/app`), read again from the current URL. */
+  replaceBasePath(basePath: string): void;
   navigate<Path extends string>(
     pattern: Path,
     ...arguments_: NavigateArguments<Path>
@@ -259,6 +261,15 @@ function generateHistoryKey(): string {
   return `k_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 }
 
+/** `/app/` → `/app`; `/` stays. A base is a fixed prefix: no parameters, no wildcard. */
+function staticBasePath(value: string): string {
+  const basePath = validateRoutePattern(value);
+  if (basePath.includes(':') || basePath.includes('*')) {
+    throw new TypeError('Route runtime basePath must be static');
+  }
+  return basePath;
+}
+
 export function createRouteRuntime(
   options: RouteRuntimeOptions = {},
   resolveDefinitions?: (definitions: readonly (RoutePatternDefinition | string)[]) => RouteResolver,
@@ -267,10 +278,8 @@ export function createRouteRuntime(
   let prepareMatches = normalizeMatches;
   const environment: RouteEnvironment = options.environment ?? (typeof window === 'undefined' ? {} : (window as unknown as RouteEnvironment));
   const routeHistory = options.routeHistory;
-  const basePath = validateRoutePattern(options.basePath ?? '/');
-  if (basePath.includes(':') || basePath.includes('*')) {
-    throw new TypeError('Route runtime basePath must be static');
-  }
+  /** Replaced once by a compiled application that declares its base (`replaceBasePath`). */
+  let basePath = staticBasePath(options.basePath ?? '/');
 
   function applicationPathname(pathname: string): string | null {
     const normalized = normalizeRoutePath(pathname);
@@ -1092,6 +1101,36 @@ export function createRouteRuntime(
   }
 
 
+  /**
+   * Mounts the application at `nextBasePath` (`/app`), the base a compiled application declares
+   * (`active-runtime.ts`, `setApplicationBasePath`). The default runtime is made before any
+   * application code runs, so it learns its base here: the route pathname is read again from the
+   * current URL under the new base, and matches follow it.
+   */
+  function replaceBasePath(nextBasePath: string): void {
+    if (disposed) throw new Error('Cannot replace the base path of a disposed route runtime');
+    if (resolving || blocking) {
+      throw new Error('Route resolvers and blockers must not mutate router state');
+    }
+    const next = staticBasePath(nextBasePath);
+    if (next === basePath) return;
+    const previous = basePath;
+    basePath = next;
+    const nextPathname = applicationPathname(url.pathname);
+    if (nextPathname === null) {
+      basePath = previous;
+      throw new TypeError(`URL pathname '${url.pathname}' is outside router basePath '${next}'`);
+    }
+    pathname = nextPathname;
+    if (resolver !== null) {
+      // Publishes and emits when the matches changed; otherwise the pathname change is emitted.
+      const before = matches;
+      publishMatches(runResolver(resolver));
+      if (before !== matches) return;
+    }
+    emit();
+  }
+
   function replaceResolver(nextResolver: RouteResolver): () => void {
     if (disposed) throw new Error('Cannot replace a resolver on a disposed route runtime');
     if (resolving || blocking) {
@@ -1332,6 +1371,7 @@ export function createRouteRuntime(
     subscribeSelected,
     connect,
     replaceResolver,
+    replaceBasePath,
     setLocation,
     dispose,
   };

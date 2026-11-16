@@ -26,6 +26,12 @@ export interface CompileModulesOptions {
    */
   readonly routedEnvironment?: 'client' | 'server';
   /**
+   * The path prefix the application is served below (`/app` or `/app/`), as Vite's `base`. Route
+   * links are written with it in front, and the route table mounts the router there
+   * (`wiki/compiler/routes.md`, "Base path"). Default `/`: nothing is added.
+   */
+  readonly base?: string;
+  /**
    * Server-only code, as folders (`./server`) and modules (`./server.ts`): what the application
    * declares and generates for its server (`server/application.ts`). It runs once per request or
    * once at start, never inside a render: the browser reaches it only over HTTP or through a

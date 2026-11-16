@@ -60,10 +60,37 @@ export function getActiveRouteRuntime(): RouteRuntime {
  * the runtime again while the resolver is replaced does not replay it twice.
  */
 function replayManifest(runtime: RouteRuntime): void {
+  replayBasePath(runtime);
   if (manifestResolver === null || manifestApplied.has(runtime) || hasOwnRoutes(runtime)) return;
   manifestApplied.add(runtime);
   if (manifestRequiresValidation) enableMatchValidation(runtime);
   runtime.replaceResolver(manifestResolver);
+}
+
+/**
+ * The prefix the application is mounted at (`/app`), which a compiled application declares at
+ * module evaluation (`setApplicationBasePath`), before its route table. Null: mounted at `/`.
+ */
+let applicationBasePath: string | null = null;
+/** The base each runtime was given, so one is applied once and a changed one again. */
+const basePathApplied = new WeakMap<RouteRuntime, string>();
+
+/** Gives `runtime` the application's base, like the table: a runtime with routes of its own keeps its own. */
+function replayBasePath(runtime: RouteRuntime): void {
+  if (applicationBasePath === null || hasOwnRoutes(runtime)) return;
+  if (basePathApplied.get(runtime) === applicationBasePath) return;
+  basePathApplied.set(runtime, applicationBasePath);
+  runtime.replaceBasePath(applicationBasePath);
+}
+
+/**
+ * Mounts the application at `basePath` (`/app`): the active runtime now, and every runtime
+ * activated later (a server request's). Route pathnames are then read below the base, `navigate`
+ * and `route-to` write it in front, and a link outside it is a document navigation.
+ */
+export function setApplicationBasePath(basePath: string): void {
+  applicationBasePath = basePath;
+  replayBasePath(getActiveRouteRuntime());
 }
 
 export function runWithRouteRuntime<T>(runtime: RouteRuntime, fn: () => T): T {
