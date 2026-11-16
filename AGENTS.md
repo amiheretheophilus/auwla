@@ -2,8 +2,9 @@
 
 Read this file first. For JSX+ prototyping on `prototype/jsx-plus`, continue at
 `wiki2/README.md` and its short reading order. For the compiler rewrite, continue
-at `wiki/README.md`. Both tracks follow `wiki/rules.md` and the user's latest
-instructions.
+at `wiki/README.md`. For `.auwla.md` documents (Markdown with Auwla components), continue
+at `wiki3/README.md`. All tracks follow `wiki/rules.md` and the user's latest
+instructions. Work not yet done across the tracks is listed in `FINALIZE.md`.
 
 ## Repository: push only to `amiheretheophilus/auwla`
 

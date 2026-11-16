@@ -1,0 +1,152 @@
+{
+  "specVersion": "0.1-draft",
+  "revision": 1,
+  "note": "Draft fixtures; no checker or implementation yet. 'body' is the default export's returned JSX, whitespace aside.",
+  "cases": [
+    {
+      "id": "DOC-001",
+      "level": "emit",
+      "rules": ["D-MD", "S-NODES", "S-HEADINGS"],
+      "source": "# Hello world\n",
+      "expected": {
+        "body": "<><h1 id=\"hello-world\">Hello world</h1></>",
+        "headings": [{ "depth": 1, "id": "hello-world", "text": "Hello world" }]
+      }
+    },
+    {
+      "id": "DOC-002",
+      "level": "emit",
+      "rules": ["D-EXPR", "S-EXPR"],
+      "source": "Count: {count}\n",
+      "expected": { "body": "<><p>Count: {count}</p></>" }
+    },
+    {
+      "id": "DOC-003",
+      "level": "emit",
+      "rules": ["D-CODE", "S-TEXT"],
+      "source": "Write `{count}` inside quotes.\n",
+      "expected": { "body": "<><p>Write <code>&#123;count&#125;</code> inside quotes.</p></>" }
+    },
+    {
+      "id": "DOC-004",
+      "level": "emit",
+      "rules": ["D-ESC", "S-TEXT"],
+      "source": "A literal \\{brace\\}.\n",
+      "expected": { "body": "<><p>A literal &#123;brace&#125;.</p></>" }
+    },
+    {
+      "id": "DOC-005",
+      "level": "emit",
+      "rules": ["D-ELEM", "S-ELEM"],
+      "source": "<Callout kind=\"tip\">\n\nKeep **one** idea per page.\n\n</Callout>\n",
+      "expected": { "body": "<><Callout kind=\"tip\"><p>Keep <strong>one</strong> idea per page.</p></Callout></>" }
+    },
+    {
+      "id": "DOC-006",
+      "level": "emit",
+      "rules": ["D-ELEM", "S-ELEM"],
+      "source": "<Callout>Short *tip*</Callout>\n",
+      "expected": { "body": "<><Callout>Short <em>tip</em></Callout></>" }
+    },
+    {
+      "id": "DOC-007",
+      "level": "emit",
+      "rules": ["D-ELEM", "S-ELEM"],
+      "source": "Status: <Badge tone=(level)>new</Badge> today\n",
+      "expected": { "body": "<><p>Status: <Badge tone={(level)}>new</Badge> today</p></>" }
+    },
+    {
+      "id": "DOC-008",
+      "level": "emit",
+      "rules": ["D-EXPR", "S-EXPR"],
+      "source": "{summary}\n",
+      "expected": { "body": "<>{summary}</>" }
+    },
+    {
+      "id": "DOC-009",
+      "level": "emit",
+      "rules": ["D-EXPR"],
+      "source": "Text {/* note */} here\n",
+      "expected": { "body": "<><p>Text  here</p></>" }
+    },
+    {
+      "id": "DOC-010",
+      "level": "emit",
+      "rules": ["D-ESM", "S-MODULE"],
+      "source": "import { Counter } from \"./Counter.auwla\"\n\n<Counter label=\"Clicks\" />\n",
+      "expected": {
+        "moduleCode": ["import { Counter } from \"./Counter.auwla\""],
+        "body": "<><Counter label=\"Clicks\" /></>"
+      }
+    },
+    {
+      "id": "DOC-011",
+      "level": "emit",
+      "rules": ["S-HEADINGS"],
+      "source": "## Setup\n\n## Setup\n",
+      "expected": {
+        "body": "<><h2 id=\"setup\">Setup</h2><h2 id=\"setup-1\">Setup</h2></>",
+        "headings": [
+          { "depth": 2, "id": "setup", "text": "Setup" },
+          { "depth": 2, "id": "setup-1", "text": "Setup" }
+        ]
+      }
+    },
+    {
+      "id": "DOC-ERR-001",
+      "level": "diagnostics",
+      "rules": ["D-ELEM"],
+      "source": "<Callout>\n\nText\n",
+      "expected": { "code": "JPD1001", "severity": "error", "range": [0, 9] }
+    },
+    {
+      "id": "DOC-ERR-002",
+      "level": "diagnostics",
+      "rules": ["D-ESM"],
+      "source": "import { a } from './a'\nconst b = 1\n",
+      "expected": { "code": "JPD1003", "severity": "error", "range": [24, 35] }
+    },
+    {
+      "id": "DOC-ERR-003",
+      "level": "diagnostics",
+      "rules": ["D-MD"],
+      "source": "<!-- note -->\n",
+      "expected": { "code": "JPD1006", "severity": "error", "range": [0, 4] }
+    },
+    {
+      "id": "DOC-ERR-004",
+      "level": "diagnostics",
+      "rules": ["D-EXPR"],
+      "source": "Text {count\n",
+      "expected": { "code": "JPX1012", "severity": "error", "range": [5, 6] }
+    },
+    {
+      "id": "DOC-ERR-005",
+      "level": "diagnostics",
+      "rules": ["D-ELEM"],
+      "source": "<Callout>\n\nText\n\n</Note>\n",
+      "expected": { "code": "JPD1002", "severity": "error", "range": [17, 24] }
+    },
+    {
+      "id": "DOC-ERR-006",
+      "level": "diagnostics",
+      "rules": ["D-ELEM"],
+      "source": "<>Text</>\n",
+      "expected": { "code": "JPD1007", "severity": "error", "range": [0, 2] }
+    },
+    {
+      "id": "DOC-ERR-007",
+      "level": "diagnostics",
+      "rules": ["S-MODULE"],
+      "source": "export const headings = []\n",
+      "expected": { "code": "JPD1008", "severity": "error", "range": [13, 21] }
+    },
+    {
+      "id": "DOC-ERR-008",
+      "level": "diagnostics",
+      "rules": ["D-ELEM"],
+      "source": "Hello\n\n</Note>\n",
+      "expected": { "code": "JPD1005", "severity": "error", "range": [7, 14] }
+    }
+  ]
+}
