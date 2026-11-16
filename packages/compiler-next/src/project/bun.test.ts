@@ -68,6 +68,41 @@ describe('client builds', () => {
   });
 });
 
+describe('builds after an edit', () => {
+  // A project keeps the modules it has read (`project.ts`); a build after an edit must read the
+  // edited file again, or it serves the old source. A watching `Bun.build` reuses its plugin.
+  write('edits/main.tsx', `import { mount } from '@memoized-dom/runtime';\nimport { Note } from './Note';\nmount(Note, document.body);\n`);
+  const note = (text: string) => write('edits/Note.tsx', `export function Note() { return <p>${text}</p>; }`);
+  const bundle = async (plugin: Parameters<typeof Bun.build>[0]['plugins']) => {
+    const result = await Bun.build({ entrypoints: [join(root, 'edits/main.tsx')], plugins: plugin, external: ['@memoized-dom/*'], throw: false });
+    expect(result.logs.map((log) => String(log.message))).toEqual([]);
+    return result.outputs[0]!.text();
+  };
+
+  it('a reused plugin reads the app again for each Bun.build', async () => {
+    note('first draft');
+    const plugin = memoizedDom({ client: './edits/main.tsx', root });
+    expect(await bundle([plugin])).toContain('first draft');
+    note('second draft');
+    expect(await bundle([plugin])).toContain('second draft');
+  });
+
+  it('rebuild reads again the files it is given', async () => {
+    note('first draft');
+    const app = memoizedDomApplication({ client: './edits/main.tsx', root });
+    expect(await bundle([app.plugin('client')])).toContain('first draft');
+    note('second draft');
+    // Without a rebuild, the plugin serves the build it has.
+    expect(await bundle([app.plugin('client')])).toContain('first draft');
+    await app.rebuild(['edits/Note.tsx']);
+    expect(await bundle([app.plugin('client')])).toContain('second draft');
+    // With no files named, every file is read again.
+    note('third draft');
+    await app.rebuild();
+    expect(await bundle([app.plugin('client')])).toContain('third draft');
+  });
+});
+
 describe('server builds', () => {
   write('app/src/main.ts', `import { mount } from '@memoized-dom/runtime';\nimport { Page } from './Page';\nmount('root', Page);\n`);
   write('app/src/Page.tsx', `

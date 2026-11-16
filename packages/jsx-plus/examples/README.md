@@ -48,8 +48,15 @@ bun run examples/task-board/preview.ts
 ```
 
 Open `http://127.0.0.1:3030`. Use `AUWLA_EXAMPLE_PORT` to choose another port.
-Stop the process with Ctrl+C. The example builds once on startup; restart it after
-editing source. It serves the application, CSS and HTML locally, with no persistence.
+Stop the process with Ctrl+C. It serves the application, CSS and HTML locally, with no
+persistence.
+
+Every preview stays running. When you save a file in the example's folder, it builds the app again
+and reloads the open pages; only the changed files are read again. If the build fails, the terminal
+shows the error and the preview keeps serving the last build. To reload, the preview adds a small
+inline script to each HTML page it serves; `--build` output doesn't have it. The server examples
+(`directory/`, `server-pages/`) load the new server after a change, so their in-memory data starts
+over.
 
 For a build-only check:
 

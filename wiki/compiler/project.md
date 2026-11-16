@@ -311,12 +311,17 @@ await Bun.build({
 
 - `target` picks the program: the client's or the server's.
 - The first module Bun loads builds the application; every other module comes from that build.
-  Each `Bun.build` starts a new one (`onStart`).
+  Each `Bun.build` starts a new one (`onStart`), with a fresh application that reads every file
+  again. An application keeps the modules it has read and reads one again only when an update
+  names it (`createProject`), so before 2026-11-16 a reused plugin built the old sources on every
+  `Bun.build` after the first: a watching build never saw an edit (test: `bun.test.ts`, "builds
+  after an edit").
 - Each `memoizedDom` plugin has an application of its own, and its build compiles both programs.
   `memoizedDomApplication(options)` makes one application for several builds of the same app,
   compiled once: `app.build()` (whose `declarations` a caller can write), `app.plugin('client')`
   and `app.plugin('server')`. Its plugins never compile again by themselves; `app.rebuild()` does.
-  The delivery module is the server program's alone, so one application with it serves both. The
+  `app.rebuild(changed)` is given the files that changed, relative to `root`, and reads only those
+  again (the application's `update`); `app.rebuild()` reads every file again. The delivery module is the server program's alone, so one application with it serves both. The
   server pages example's preview compiled the app three times per start before (2026-11-16).
 - A compiled module's code goes to Bun as JavaScript with its source map inline.
 - Modules that exist only in the build (companion outputs such as `./App.mmd.tsx`, the generated
@@ -392,8 +397,14 @@ replacement.
 
 Left: importing CSS Tree builds its default grammar (~45 ms) even with no `<style>`; loading it
 only when a file has one needs its ten importers to take it lazily, which the editor extension's
-CommonJS bundle must also allow. Past the compiler, a preview that stays running and rebuilds on
-an edit (a second compile is ~120 ms) would remove the fresh process's cost from every edit.
+CommonJS bundle must also allow.
+
+Past the compiler, the JSX+ example previews now stay running (2026-11-16,
+`jsx-plus/examples/watch.ts`): a saved change calls `app.rebuild(changed)`, bundles again and
+reloads the open pages, so the fresh process's cost is paid once per session. Measured on copies
+of the examples: notes rebuilds in 66–99 ms; the server pages example, which bundles two programs
+and loads the new server, in about 0.7 s. A failed build prints its error and keeps serving the
+last good one.
 
 ## Files
 

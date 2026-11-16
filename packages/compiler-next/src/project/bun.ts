@@ -21,8 +21,8 @@ import { languageExtensions } from '../core/parse/languages';
 import { importCandidates } from '../core/resolve/imports';
 import type { CompileModulesOptions } from '../options';
 import type { SourceMap } from '../core/emit/source-map';
-import { createApplication, type ApplicationBuild, type ServerOptions } from '../server/application';
-import { fileSystemHost, projectPath, type ProjectHost } from './host';
+import { createApplication, type Application, type ApplicationBuild, type ServerOptions } from '../server/application';
+import { fileSystemHost, normalizeProjectPath, projectPath, type ProjectHost } from './host';
 import type { ProjectBuild } from './project';
 import { initialPage } from './page';
 
@@ -56,8 +56,11 @@ export function memoizedDom(options: BunPluginOptions): BunPlugin {
 export interface BunApplication {
   /** The application's build: made once, then shared by every plugin of this application. */
   build(): Promise<ApplicationBuild>;
-  /** Compiles the app again, for the builds that follow. */
-  rebuild(): Promise<ApplicationBuild>;
+  /**
+   * Compiles the app again, for the builds that follow. Given the files that changed (paths
+   * relative to `root`), it reads only those again; without them, it reads every file again.
+   */
+  rebuild(changed?: readonly string[]): Promise<ApplicationBuild>;
   /** A plugin serving one of the application's programs from its shared build. */
   plugin(target?: 'client' | 'server', options?: { readonly rebuildOnStart?: boolean }): BunPlugin;
 }
@@ -76,14 +79,15 @@ export interface BunApplication {
  * ```
  *
  * The delivery module is the server program's alone, so one application with it serves both.
- * Its plugins never compile again by themselves; `rebuild()` does.
+ * Its plugins never compile again by themselves; `rebuild()` does. A watching tool passes the
+ * files that changed (`rebuild(['./src/App.tsx'])`), so only those are read again.
  */
 export function memoizedDomApplication(options: Omit<BunPluginOptions, 'target'>): BunApplication {
   const { client, server, delivery, root = process.cwd(), ...compile } = options;
   // Modules a source language owns (`.auwla`) load from the build like `.tsx` ones (`core/parse/languages.ts`).
   const extensions = languageExtensions(compile.languages);
   const source = extensions.length === 0 ? SOURCE : new RegExp(`${SOURCE.source}|(?:${extensions.map(escapeRegExp).join('|')})$`);
-  const application = createApplication({
+  const create = (): Application => createApplication({
     ...compile,
     sourceMaps: true,
     client,
@@ -91,18 +95,32 @@ export function memoizedDomApplication(options: Omit<BunPluginOptions, 'target'>
     host: withDelivery(fileSystemHost(root), delivery),
   });
 
+  // An application keeps the modules it has read and reads one again only when an update names
+  // it (`project.ts`), so building it again alone would serve the old sources.
+  let application = create();
   // The build, made on first use and kept until reset.
   let current: Promise<ApplicationBuild> | null = null;
   const build = (): Promise<ApplicationBuild> => (current ??= application.build());
+  /** Drops the build and every module read: the next build reads the whole app again. */
   const reset = (): void => {
+    application = create();
     current = null;
   };
 
   return {
     build,
-    rebuild: () => {
-      reset();
-      return build();
+    rebuild: (changed) => {
+      if (changed === undefined) {
+        reset();
+        return build();
+      }
+      // After the build in progress, if any, so the two never read modules at the same time.
+      // A failed build is reported to whoever waited on it; this one goes ahead either way.
+      const previous = current ?? Promise.resolve();
+      const update = (): Promise<ApplicationBuild> => application.update(changed.map(normalizeProjectPath)).then((result) => result.build);
+      const next = previous.then(update, update);
+      current = next;
+      return next;
     },
     plugin: (target = 'client', pluginOptions = {}) => programPlugin({
       target, server, root, extensions, source, build, reset, rebuildOnStart: pluginOptions.rebuildOnStart === true,
@@ -119,7 +137,7 @@ interface ProgramPluginContext {
   /** The modules this plugin loads: scripts, and the source languages' files. */
   readonly source: RegExp;
   readonly build: () => Promise<ApplicationBuild>;
-  /** Drops the build, so the next module loaded compiles the app again. */
+  /** Drops the build and the modules read, so the next module loaded compiles the app again from disk. */
   readonly reset: () => void;
   /** Compile again when a `Bun.build` starts (`memoizedDom`), rather than share one build. */
   readonly rebuildOnStart: boolean;

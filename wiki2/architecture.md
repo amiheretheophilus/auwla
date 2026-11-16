@@ -111,6 +111,8 @@ All paths are relative to the repository root and exist now.
 | `packages/jsx-plus/tests/vite.test.ts` | The notes example through compiler-next's Vite plugin: build, dev transform and map, hot update, authored dev error |
 | `packages/jsx-plus/examples/notes/` | Multi-file app: three `.auwla` components, explicit and extensionless imports, a `.ts` re-export and helper |
 | `packages/jsx-plus/examples/preview.ts` | Example preview: compiler-next's Bun plugin with `auwla` and chunk splitting, serving the folder, an optional API and deep links |
+| `packages/jsx-plus/examples/server-preview.ts` | Preview of an example rendered on the server (`directory/`, `server-pages/`): one compiler-next application for the declarations, the browser bundle and the server |
+| `packages/jsx-plus/examples/watch.ts` | The previews' watching: on a saved change, `rebuild(changed)` and a reload of the open pages over a server-sent event stream |
 | `packages/jsx-plus/tools/checkout.ts` | Development Bun resolver for the examples' previews and the tests: this checkout's runtime, data and router sources instead of their `dist`. In neither folder, since tests never depend on examples |
 | `packages/jsx-plus/tests/fixtures/apps/` | The tests' own copies of the example apps (2026-11-14), so editing an example breaks no test ([rule 16](../wiki/rules.md)); the editor extension has its own under `packages/editor-vscode/tests/fixtures/apps/` |
 | `packages/jsx-plus/examples/team/` | Routes, lazy route pages, `Group` policies across files, a `<slot>` layout (`components/Card.auwla`), `$fetch`/`$track` through a helper, `$routed`, `$effect`, `$cleanup` |
