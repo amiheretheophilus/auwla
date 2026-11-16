@@ -2,7 +2,7 @@ import { afterAll, describe, expect, it } from 'bun:test';
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { memoizedDom } from './bun';
+import { memoizedDom, memoizedDomApplication } from './bun';
 import { createProject, fileSystemHost } from '.';
 
 // Inside the package (not `src/`), so a build finds the workspace's packages as an app finds its own.
@@ -124,5 +124,30 @@ export const getUser = define.function({ async get(_context, id: string) { retur
     const user = await app.fetch(new Request('http://localhost/_fn/users/getUser?id=7'));
     expect(user.status).toBe(200);
     expect(await user.json()).toEqual({ id: '7', name: 'hi 7' });
+  });
+
+  it('share one compiled application between a client and a server build', async () => {
+    const appRoot = join(root, 'app');
+    const app = memoizedDomApplication({ client: './src/main.ts', server: { entry: './server.ts', folder: './server' }, delivery, root: appRoot });
+    const first = app.build();
+    const client = await Bun.build({
+      entrypoints: [join(appRoot, 'src/main.ts')], outdir: join(appRoot, 'shared-client'),
+      plugins: [app.plugin('client')], external: ['@memoized-dom/*'], throw: false,
+    });
+    const server = await Bun.build({
+      entrypoints: [join(appRoot, 'server.ts')], outdir: join(appRoot, 'shared-server'), target: 'bun',
+      plugins: [app.plugin('server')], throw: false,
+    });
+    expect([client.success, server.success]).toEqual([true, true]);
+    // Both builds read the one build the application made: it compiled once.
+    expect(app.build()).toBe(first);
+
+    const { default: served } = await import(pathToFileURL(join(appRoot, 'shared-server', 'server.js')).href);
+    expect(await (await served.fetch(new Request('http://localhost/'))).text()).toContain('<h1>Hello from the server</h1>');
+    // `rebuild()` compiles again, for the builds that follow.
+    const again = app.rebuild();
+    expect(again).not.toBe(first);
+    expect(app.build()).toBe(again);
+    await again;
   });
 });

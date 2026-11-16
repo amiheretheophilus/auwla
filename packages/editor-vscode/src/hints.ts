@@ -38,7 +38,10 @@ export function registerReactivityHints(context: vscode.ExtensionContext, output
     if (cached?.version === document.version) return cached.hints;
     let hints: readonly ReactivityHint[] = [];
     try {
-      hints = reactivityHints(document.getText(), `./${document.uri.path.split('/').pop() ?? 'App.auwla'}`);
+      // The full path tells backend code (a `server` folder) apart: it gets no hints.
+      hints = reactivityHints(document.getText(), `./${document.uri.path.split('/').pop() ?? 'App.auwla'}`, {
+        path: document.uri.path,
+      });
     } catch (error) {
       // A file that does not compile gives no hints and no error; anything else is a bug to see.
       output.appendLine(`Reactivity hints failed for ${key}: ${error instanceof Error ? error.message : String(error)}`);

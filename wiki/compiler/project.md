@@ -312,6 +312,12 @@ await Bun.build({
 - `target` picks the program: the client's or the server's.
 - The first module Bun loads builds the application; every other module comes from that build.
   Each `Bun.build` starts a new one (`onStart`).
+- Each `memoizedDom` plugin has an application of its own, and its build compiles both programs.
+  `memoizedDomApplication(options)` makes one application for several builds of the same app,
+  compiled once: `app.build()` (whose `declarations` a caller can write), `app.plugin('client')`
+  and `app.plugin('server')`. Its plugins never compile again by themselves; `app.rebuild()` does.
+  The delivery module is the server program's alone, so one application with it serves both. The
+  server pages example's preview compiled the app three times per start before (2026-11-16).
 - A compiled module's code goes to Bun as JavaScript with its source map inline.
 - Modules that exist only in the build (companion outputs such as `./App.mmd.tsx`, the generated
   `.memoized/` modules) are resolved by the plugin, probing a relative import as the compiler does,

@@ -47,34 +47,100 @@ const DELIVERY = './.memoized/delivery.ts';
 const SOURCE = /\.[cm]?[jt]sx?$/;
 
 export function memoizedDom(options: BunPluginOptions): BunPlugin {
-  const { client, server, target = 'client', delivery, root = process.cwd(), ...compile } = options;
+  const { target = 'client', ...shared } = options;
+  // Each `Bun.build` this plugin serves compiles the app again, so a watching build sees edits.
+  return memoizedDomApplication(shared).plugin(target, { rebuildOnStart: true });
+}
+
+/** One application for several Bun builds (`memoizedDomApplication`). */
+export interface BunApplication {
+  /** The application's build: made once, then shared by every plugin of this application. */
+  build(): Promise<ApplicationBuild>;
+  /** Compiles the app again, for the builds that follow. */
+  rebuild(): Promise<ApplicationBuild>;
+  /** A plugin serving one of the application's programs from its shared build. */
+  plugin(target?: 'client' | 'server', options?: { readonly rebuildOnStart?: boolean }): BunPlugin;
+}
+
+/**
+ * One application for several `Bun.build`s of the same app, compiled once: its client and its
+ * server, and whatever the caller reads from the build itself (`declarations`). Each `memoizedDom`
+ * plugin builds an application of its own, both programs included, so a client build, a server
+ * build and the declarations made separately compile the app three times.
+ *
+ * ```ts
+ * const app = memoizedDomApplication({ client: './src/App.auwla', server, delivery, languages });
+ * const { declarations } = await app.build();
+ * await Bun.build({ entrypoints: ['./src/App.auwla'], plugins: [app.plugin('client')] });
+ * await Bun.build({ entrypoints: ['./server.ts'], target: 'bun', plugins: [app.plugin('server')] });
+ * ```
+ *
+ * The delivery module is the server program's alone, so one application with it serves both.
+ * Its plugins never compile again by themselves; `rebuild()` does.
+ */
+export function memoizedDomApplication(options: Omit<BunPluginOptions, 'target'>): BunApplication {
+  const { client, server, delivery, root = process.cwd(), ...compile } = options;
   // Modules a source language owns (`.auwla`) load from the build like `.tsx` ones (`core/parse/languages.ts`).
   const extensions = languageExtensions(compile.languages);
   const source = extensions.length === 0 ? SOURCE : new RegExp(`${SOURCE.source}|(?:${extensions.map(escapeRegExp).join('|')})$`);
+  const application = createApplication({
+    ...compile,
+    sourceMaps: true,
+    client,
+    ...(server === undefined ? {} : { server: delivery === undefined ? server : { ...server, delivery: DELIVERY } }),
+    host: withDelivery(fileSystemHost(root), delivery),
+  });
 
+  // The build, made on first use and kept until reset.
+  let current: Promise<ApplicationBuild> | null = null;
+  const build = (): Promise<ApplicationBuild> => (current ??= application.build());
+  const reset = (): void => {
+    current = null;
+  };
+
+  return {
+    build,
+    rebuild: () => {
+      reset();
+      return build();
+    },
+    plugin: (target = 'client', pluginOptions = {}) => programPlugin({
+      target, server, root, extensions, source, build, reset, rebuildOnStart: pluginOptions.rebuildOnStart === true,
+    }),
+  };
+}
+
+/** What a plugin over one program of an application needs. */
+interface ProgramPluginContext {
+  readonly target: 'client' | 'server';
+  readonly server: ServerOptions | undefined;
+  readonly root: string;
+  readonly extensions: readonly string[];
+  /** The modules this plugin loads: scripts, and the source languages' files. */
+  readonly source: RegExp;
+  readonly build: () => Promise<ApplicationBuild>;
+  /** Drops the build, so the next module loaded compiles the app again. */
+  readonly reset: () => void;
+  /** Compile again when a `Bun.build` starts (`memoizedDom`), rather than share one build. */
+  readonly rebuildOnStart: boolean;
+}
+
+function programPlugin(context: ProgramPluginContext): BunPlugin {
+  const { target, server, root, extensions, source } = context;
   return {
     name: 'memoized-dom',
     setup(build) {
-      const host = withDelivery(fileSystemHost(root), delivery);
-      const application = createApplication({
-        ...compile,
-        sourceMaps: true,
-        client,
-        ...(server === undefined ? {} : { server: delivery === undefined ? server : { ...server, delivery: DELIVERY } }),
-        host,
-      });
-      let current: Promise<ApplicationBuild> | null = null;
       const compiled = async (): Promise<ProjectBuild> => {
-        const result = await (current ??= application.build());
+        const result = await context.build();
         const program = target === 'server' ? result.server : result.client;
         if (program === undefined) throw new Error('memoized-dom: a server build needs the server option');
         return program;
       };
 
       // Runtime plugins (`Bun.plugin`) have no build to start; they build once.
-      build.onStart?.(() => {
-        current = null;
-      });
+      if (context.rebuildOnStart) {
+        build.onStart?.(context.reset);
+      }
 
       // A relative import of a module that exists only in the build.
       // Probed as the compiler probes, since generated imports leave out the extension.

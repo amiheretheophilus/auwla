@@ -1,6 +1,6 @@
 /** Reactivity hints (`src/editor/hints.ts`): what the compiler decided, beside each declaration. */
 import { describe, expect, it } from 'bun:test';
-import { reactivityHints } from '../src/editor/hints';
+import { isServerCode, reactivityHints } from '../src/editor/hints';
 
 const counter = `import { $fetch } from '@memoized-dom/data';
 let visits = 0;
@@ -187,4 +187,31 @@ it('shows nothing while the file does not compile, rather than hints in the wron
 
 it('shows nothing for a module with no reactive bindings', () => {
   expect(reactivityHints('export function add(a: number, b: number) { return a + b; }\n')).toEqual([]);
+});
+
+describe('backend code', () => {
+  // A store a server function writes: module state to the analysis of one file, but it runs per
+  // request on the server, where nothing is state or derived.
+  const store = `let tasks = [{ id: 1, done: false }];
+export function toggle(id: number) { const task = tasks.find((entry) => entry.id === id); if (task) task.done = !task.done; tasks = [...tasks]; }
+export function Summary() { return <p>tasks.length</p>; }
+`;
+
+  it('gets no hints inside a server folder, at any depth and with either separator', () => {
+    expect(reactivityHints(store, './store.auwla').length).toBeGreaterThan(0);
+    for (const path of [
+      '/c:/app/server/store.auwla',
+      '/c:/app/server/functions/projects.auwla',
+      'C:\\app\\server\\store.auwla',
+    ]) {
+      expect(reactivityHints(store, './store.auwla', { path })).toEqual([]);
+    }
+  });
+
+  it('keeps hints for client code, including a file merely named server', () => {
+    expect(isServerCode('/c:/app/src/server.auwla')).toBe(false);
+    expect(isServerCode('/c:/app/src/pages/Board.auwla')).toBe(false);
+    expect(isServerCode('/c:/app/servers/Board.auwla')).toBe(false);
+    expect(reactivityHints(store, './store.auwla', { path: '/c:/app/src/store.auwla' }).length).toBeGreaterThan(0);
+  });
 });

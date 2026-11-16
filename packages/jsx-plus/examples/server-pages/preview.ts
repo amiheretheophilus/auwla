@@ -9,10 +9,8 @@
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-// Compiler-next has no package export for these yet.
-import { memoizedDom } from '../../../compiler-next/src/project/bun';
-import { fileSystemHost } from '../../../compiler-next/src/project';
-import { createApplication } from '../../../compiler-next/src/server/application';
+// Compiler-next has no package export for this yet.
+import { memoizedDomApplication } from '../../../compiler-next/src/project/bun';
 import { auwla } from '../../src';
 import { checkoutPackagesFor } from '../../tools/checkout';
 
@@ -32,7 +30,9 @@ const CLIENT = './src/App.auwla';
 
 rmSync(outdir, { recursive: true, force: true });
 
-const application = await createApplication({ client: CLIENT, server: SERVER, host: fileSystemHost(root), languages: [auwla] }).build();
+// One application, compiled once, for the declarations below, the browser's bundle and the server.
+const app = memoizedDomApplication({ client: CLIENT, server: SERVER, delivery: DELIVERY, root, languages: [auwla] });
+const application = await app.build();
 if (application.declarations !== null) {
   mkdirSync(join(root, '.memoized'), { recursive: true });
   writeFileSync(join(root, '.memoized', 'server-functions.d.ts'), application.declarations);
@@ -45,16 +45,13 @@ const client = await Bun.build({
   minify: true,
   // `app.js`, and `app.css` with the shell's styles.
   naming: { entry: 'app.[ext]' },
-  plugins: [memoizedDom({ client: CLIENT, server: SERVER, root, languages: [auwla] }), checkoutPackagesFor('browser')],
+  plugins: [app.plugin('client'), checkoutPackagesFor('browser')],
 });
 const server = await Bun.build({
   entrypoints: [join(root, 'server.ts')],
   target: 'bun',
   outdir: join(outdir, 'server'),
-  plugins: [
-    memoizedDom({ client: CLIENT, server: SERVER, target: 'server', delivery: DELIVERY, root, languages: [auwla] }),
-    checkoutPackagesFor('server'),
-  ],
+  plugins: [app.plugin('server'), checkoutPackagesFor('server')],
 });
 for (const [name, result] of [['client', client], ['server', server]] as const) {
   if (!result.success) throw new AggregateError(result.logs, `The server pages ${name} did not build`);

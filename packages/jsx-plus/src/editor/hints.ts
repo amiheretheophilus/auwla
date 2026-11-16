@@ -52,11 +52,31 @@ interface Entry {
   readonly end: number;
 }
 
+export interface ReactivityHintOptions {
+  /** The file's full path, which tells backend code apart (`isServerCode`). */
+  readonly path?: string;
+}
+
+/**
+ * Whether a file is backend code: inside a folder named `server`, the folder an application's
+ * server functions, stores and server pages live in (`wiki/compiler/server.md`, "Backend code").
+ * It runs per request or at start, never in a render, so the compiler gives its bindings no
+ * readers or versions, and nothing in it is state or derived. The editor sees one file at a time
+ * and goes by this convention; an application that names its server folder otherwise
+ * (`server.folder`) still gets hints there.
+ */
+export function isServerCode(path: string): boolean {
+  const folders = path.replaceAll('\\', '/').split('/').slice(0, -1);
+  return folders.includes('server');
+}
+
 /**
  * The hints for one `.auwla` module, in source order. A file that does not compile right now
- * (while typing) has none, rather than hints at positions that no longer hold.
+ * (while typing) has none, rather than hints at positions that no longer hold. Backend code has
+ * none either (`isServerCode`).
  */
-export function reactivityHints(source: string, filename = './App.auwla'): ReactivityHint[] {
+export function reactivityHints(source: string, filename = './App.auwla', options: ReactivityHintOptions = {}): ReactivityHint[] {
+  if (options.path !== undefined && isServerCode(options.path)) return [];
   const facts = analyze(source, filename);
   if (facts === undefined || facts.status !== 'mapped') return [];
 

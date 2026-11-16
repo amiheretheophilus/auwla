@@ -8,6 +8,10 @@ extensions can reuse them without installing this adapter. See
 
 From this package:
 
+Version 0.0.15 shows no reactivity hints in backend code: a `.auwla` file inside a folder named
+`server` (server functions, stores) runs per request on the server, where nothing is state or
+derived. Reload VS Code after installation.
+
 Version 0.0.14 adds closing tags/fragments through TypeScript's existing
 auto-insert handler, backed by `@memoized-dom/jsx-plus/editor/tags`. It follows
 the native `js/ts.autoClosingTags.enabled` setting (falling back to
