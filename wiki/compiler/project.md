@@ -228,9 +228,9 @@ is server-only by its name (the old plugin assumed `server`).
   through the same `api`.
 - `.memoized/server-functions.d.ts` is written after each build and update that has server
   functions.
-- `packages/vite`'s `dist` bundles compiler-next, which ships TypeScript source that Node cannot load
-  from a package.
-
+- `packages/vite`'s `dist` bundles its own copy of compiler-next (`rolldown.config.ts`), so the
+  `memoized-dom` command line, which always runs Vite under Node, works with `compiler: 'next'`
+  once the packages are built (`bun run build`). An old `dist` serves the old compiler's plugin.
 - **Native packages** are found and resolved by the project (`fileSystemHost`, "Native packages"
   below); the plugin only keeps them out of prebundling and SSR externals, allows a linked
   package's folder, watches its files, and writes its type files (`writeLinkedTypes`). The old
@@ -246,6 +246,22 @@ hold). Each goes in the project or
 application layer, with the tools only connecting it (`../decisions.md`, 2026-11-14). (Route CSS is
 built: `routeStyles`, `routes.md`, "A lazy route's styles".) An edit that moves code without
 changing output (a comment) leaves that module's source map stale until its next real change.
+
+## Package build
+
+compiler-next builds to `dist/` like the other packages (`bun run --cwd packages/compiler-next
+build`, also part of the root `bun run build`; 2026-11-16). Node cannot load its TypeScript sources,
+whose imports leave out the extension (`ERR_MODULE_NOT_FOUND` on `./pipeline`). Its `exports` give
+each runtime its own file:
+
+- `bun`: `src/`, so Bun (the tests, the previews, the Bun plugin) needs no build and never reads a
+  stale one;
+- `types`: `src/`, so type checks in the workspace need no build either. Declaration files for a
+  published package come with the rename;
+- `import` / `default`: `dist/`, for Node.
+
+Only the public entries are built: the root and `./analysis`. The Bun plugin and the command line
+(`project/bun.ts`, `project/cli.ts`) are Bun programs, imported from `src/`.
 
 ## Native packages
 
