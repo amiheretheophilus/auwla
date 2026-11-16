@@ -77,6 +77,18 @@ for (const fixture of fixtures.cases) {
   }
 }
 
+for (const optimize of [true, false]) {
+  it(`updates an interpolated class attribute with optimize=${optimize}`, () => {
+    const source = 'export function App() { let on = false; '
+      + 'return <button class="tab {on ? "active" : "idle"}" onClick={() => on = !on}>"Tab"</button>; }';
+    const { container } = start(source, optimize);
+    const button = container.querySelector('button')!;
+    expect(button.className).toBe('tab idle');
+    button.click();
+    expect(button.className).toBe('tab active');
+  });
+}
+
 it('reports a compiler error found after parsing at its authored .auwla position', () => {
   // Compiler-next rejects a POST `$fetch` during setup while planning, long after parsing. On the
   // same line, the quoted text and bare child before it gain braces in the TSX, so its column there

@@ -132,9 +132,9 @@ export function Studio() {
       <div class="heading">
         <div>
           <p class="eyebrow">"YOUR SHARED SPACE"</p>
-          <h1>"A good idea."; <br />; <span class="accent">"Even better company."</span></h1>
+          <h1>"A good idea." <br /> <span class="accent">"Even better company."</span></h1>
         </div>
-        <span class=(launched ? "status live" : "status")><i></i>; launched ? "Project is live" : "A work in possibility"</span>
+        <span class="status {launched ? "live" : ""}"><i></i> launched ? "Project is live" : "A work in possibility"</span>
       </div>
 
       <div class="layout">
@@ -152,7 +152,7 @@ export function Studio() {
             <span slot="action" class="progress">"{progress}% there"</span>
             <div class="list">
               for (const task of starterTasks) {
-                <label key=(task.id) class=(completedIds.includes(task.id) ? "task done" : "task")>
+                <label key=(task.id) class="task {completedIds.includes(task.id) ? "done" : ""}">
                   <input
                     type="checkbox"
                     checked=(completedIds.includes(task.id))
@@ -198,9 +198,9 @@ export function Studio() {
           </Section>
 
           <div class="bottom">
-            <a class="button secondary" route-to="/">"Find more good company"; <Icon name="arrow" size={16} /></a>
+            <a class="button secondary" route-to="/">"Find more good company" <Icon name="arrow" size={16} /></a>
             if (!launched && crew.length >= 2) {
-              <button type="button" class="button primary" onClick=(() => launchCrew())>"Launch this crew"; <Icon name="spark" size={16} /></button>
+              <button type="button" class="button primary" onClick=(() => launchCrew())>"Launch this crew" <Icon name="spark" size={16} /></button>
             }
           </div>
         </div>

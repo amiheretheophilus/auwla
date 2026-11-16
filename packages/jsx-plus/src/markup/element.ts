@@ -6,6 +6,7 @@
 import { TokenKind as K } from 'yuku-parser';
 import { parenthesizedAttribute } from '../attributes/parenthesized';
 import { identifierAttribute } from '../attributes/identifier';
+import { interpolatedAttribute } from '../attributes/interpolated';
 import type { AttributeValue } from '../attributes/value';
 import { childExpression, childStatements, closingDelimiter, hasError, isMarkupOpening, unterminatedLiteral, type HostTokens } from '../host';
 import { blankRange, maskMarkup } from '../masks';
@@ -13,7 +14,7 @@ import { JsxPlusError, type Repair } from '../diagnostics';
 import type { ElementView, FragmentView, Range } from '../model';
 import { blank, closeAttributeValue, closeChildString, closeOpeningTag } from '../repairs';
 import { copied, replaceRange } from '../source';
-import { readChildren, SIBLING_SEPARATOR } from './children';
+import { readChildren, separateSibling, SIBLING_SEPARATOR } from './children';
 import { interpolatedText } from './text';
 import type { ChildReplacement, Children, JoinedSibling, Markup, MarkupContext } from './context';
 
@@ -67,8 +68,9 @@ export function readOpeningTag(context: MarkupContext, start: number): OpeningTa
 
   // Each pass scans the opening tag until it either reaches the closing `>`
   // or finds one value needing a rewrite (a bare identifier, a `(...)` value,
-  // or markup nested in `{...}`). That value is read, masked in the shadow,
-  // and the tag is scanned again, so the host lexer never sees extended syntax.
+  // a quoted value with `{...}` inside, or markup nested in `{...}`). That
+  // value is read, masked in the shadow, and the tag is scanned again, so the
+  // host lexer never sees extended syntax.
   for (;;) {
     const tokens = childStatements(shadow, context.checking).tokens;
     if (tokens.kind(0) !== K.LessThan) context.error('HOST', 'Expected an element', start);
@@ -92,8 +94,9 @@ export function readOpeningTag(context: MarkupContext, start: number): OpeningTa
         context.error('JPX1009', 'Attribute value is missing after `=`; write a value such as `name={value}`', greater, greater + 1);
       }
       if (braces.length === 0 && kind === K.Assign) {
-        value = identifierAttribute(context.source, start + tokens.start(index),
-          (code, message, from, to) => context.error(code, message, from, to));
+        const equals = start + tokens.start(index);
+        value = identifierAttribute(context.source, equals, (code, message, from, to) => context.error(code, message, from, to))
+          ?? interpolatedAttribute(context, equals, (position) => readElement(context, position));
       } else if (braces.length === 0 && kind === K.LeftParen && tokens.kind(index - 1) === K.Assign) {
         value = parenthesizedAttribute({
           source: context.source,
@@ -242,7 +245,11 @@ function readBody(context: MarkupContext, start: number, name: string, opener: n
         if (afterMarkup === 'statement') continue rescan;
       }
 
-      if (isMarkupOpening(tokens, index) || afterMarkup === 'tag') {
+      // G-BOUNDARY rule 5: `"Label" <input />`, `count <b>"x"</b>`. The host
+      // read that `<` as a comparison; it starts a sibling tag instead, and the
+      // child grammar later splits the text from the tag's mask.
+      const afterValue = childLevel && opensTagAfterValue(source, tokens, index, start);
+      if (isMarkupOpening(tokens, index) || afterMarkup === 'tag' || afterValue) {
         const markup = readElement(context, position);
         nested.push(markup);
         shadow = maskMarkup(shadow, markup.start - start, markup.end - start);
@@ -423,28 +430,51 @@ function tagName(source: string, cursor: number): { name: string; end: number } 
 }
 
 /**
- * G-BOUNDARY rule 5: `"Retry?" <button>"Retry"</button>` has no `;` before the
- * tag, so the host reads `"Retry?" < button > ...` as a comparison and the
- * scan later meets `</button>` as if it closed the enclosing element. Before
+ * G-BOUNDARY rule 5: whether the child-level `<` token at `index` (in a scan
+ * of the body starting at authored offset `base`) starts a tag although the
+ * host read it as a comparison after a value. A name must follow the `<`
+ * directly, and the `<` must follow a space or line break, or quoted text:
+ *
+ * - `"Label" <input />`, `count <b>"x"</b>`, `"Price:"<b>price</b>` start tags;
+ * - `value < limit` keeps a comparison (a space after `<`);
+ * - `format<string>(x)` keeps a generic call (no space before `<`).
+ */
+function opensTagAfterValue(source: string, tokens: HostTokens, index: number, base: number): boolean {
+  if (index === 0 || tokens.kind(index) !== K.LessThan) {
+    return false;
+  }
+  const position = base + tokens.start(index);
+  const next = source.codePointAt(position + 1);
+  if (next === undefined || !/[\p{ID_Start}$_]/u.test(String.fromCodePoint(next))) {
+    return false;
+  }
+  // The authored character, not the previous token: interpolated text is
+  // already masked to `_` and blanks, so no token ends at its closing quote.
+  return /[\s"'`]/.test(source[position - 1]!);
+}
+
+/**
+ * A tag written directly after a value, `<p>count<b>"x"</b></p>`: the host reads
+ * `count < b > ...` as a comparison (rule 5 needs a space before the tag), and the
+ * scan later meets `</b>` as if it closed the enclosing element. Before
  * reporting that, find a `<` read as a comparison whose name is the closer's
  * and confirm it really is one whole element ending at that closer (`end`).
- * Then report JPX1005 over its opening tag, with a `;` as the repair. The
+ * Then report JPX1005 over its opening tag, with a space as the repair. The
  * comparison is never rewritten into a tag; this only chooses the message.
  */
 function reportJoinedSibling(context: MarkupContext, comparisons: readonly number[], closingName: string, end: number): void {
   const [sibling] = joinedSiblings(context, comparisons, closingName, end);
   if (sibling !== undefined) {
-    context.error('JPX1005', SIBLING_SEPARATOR, sibling.position, sibling.openingEnd,
-      [{ kind: 'insert', at: sibling.position, text: ';' }]);
+    context.error('JPX1005', SIBLING_SEPARATOR, sibling.position, sibling.openingEnd, separateSibling(sibling.position));
   }
 }
 
 /**
  * The same mistake when the joined tag has this element's own name:
- * `<p>"a" <p>"b"</p></p>`. The inner `</p>` matches, so this element closes there and the
- * last `</p>` fails later, somewhere else. `<b>x < b > y</b>` is a real comparison with the same
+ * `<p>count<p>"b"</p></p>`. The inner `</p>` matches, so this element closes there and the
+ * last `</p>` fails later, somewhere else. `<b>x<b>y</b>` can be a real comparison with the same
  * shape, so nothing is reported here: the candidate is only remembered, and
- * `normalize.ts` reports it if the file then fails and a `;` before it gets further.
+ * `normalize.ts` reports it if the file then fails and a space before it gets further.
  */
 function noteSameNameSibling(context: MarkupContext, comparisons: readonly number[], name: string, end: number): void {
   context.joinedSiblings.push(...joinedSiblings(context, comparisons, name, end));

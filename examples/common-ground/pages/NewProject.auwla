@@ -85,12 +85,12 @@ export function NewProject() {
     <div class="page">
       <div>
         <p class="eyebrow">"BIG IDEAS START SMALL"</p>
-        <h1>"What do you want"; <br />; "to make "; <span class="accent">"possible?"</span></h1>
+        <h1>"What do you want" <br /> "to make " <span class="accent">"possible?"</span></h1>
         <p class="lead">"A few words. A little direction. The right people will bring the rest."</p>
 
         <form onSubmit=submit novalidate>
           <label>
-            "Give your idea a name";
+            "Give your idea a name"
             <input
               value=name
               onInput=((event) => { name = event.currentTarget.value; error = ""; })
@@ -99,7 +99,7 @@ export function NewProject() {
             />
           </label>
           <label>
-            "Tell us the story";
+            "Tell us the story"
             <textarea
               value=description
               onInput=((event) => { description = event.currentTarget.value; error = ""; })
@@ -110,7 +110,7 @@ export function NewProject() {
           </label>
           <div class="two">
             <label>
-              "Your direction";
+              "Your direction"
               <select value=direction onChange=((event) => direction = event.currentTarget.value)>
                 <option>"Product"</option>
                 <option>"Brand"</option>
@@ -118,7 +118,7 @@ export function NewProject() {
               </select>
             </label>
             <label>
-              "Daily team budget (GH₵)";
+              "Daily team budget (GH₵)"
               <input
                 type="number"
                 min="300"
@@ -132,7 +132,7 @@ export function NewProject() {
           if (error !== "") {
             <p class="error" role="alert">error</p>
           }
-          <button class="button primary submit" type="submit">"Create your project"; <Icon name="arrow" size={16} /></button>
+          <button class="button primary submit" type="submit">"Create your project" <Icon name="arrow" size={16} /></button>
         </form>
       </div>
 

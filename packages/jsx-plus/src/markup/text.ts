@@ -5,14 +5,18 @@ import { closeChildString, closeTextInterpolation } from '../repairs';
 import { assemble, copied, generated, replaceRange, type Piece } from '../source';
 import type { ChildReplacement, Markup, MarkupContext } from './context';
 
-interface Substitution {
+export interface Substitution {
   /** The authored offset of the matching `}`. */
   readonly close: number;
   readonly pieces: Piece[];
 }
 
-/** Read one substitution with host tokens, including nested markup expressions. */
-function readSubstitution(
+/**
+ * Read one `{...}` substitution of quoted text or an attribute string, whose `{`
+ * is at authored offset `open`, with host tokens, including nested markup
+ * expressions. `quote` is the enclosing string's quote, for the repair.
+ */
+export function readSubstitution(
   context: MarkupContext, open: number, quote: string, element: (start: number) => Markup,
 ): Substitution {
   const start = open + 1;
@@ -35,7 +39,7 @@ function readSubstitution(
         // Preserve `${}` in the checking view so TypeScript can offer scope
         // completion at its empty expression. Production parsing stays strict.
         if (index === 0 && !context.checking) {
-          context.error('JPX1013', 'Quoted text interpolation requires an expression', open, open + 1);
+          context.error('JPX1013', '`{}` inserts nothing: put a value inside, or write `\\{` for a literal brace', open, open + 1);
         }
         const pieces = replaceRange(context.source, start, position, nested);
         // A missing closer can make host recovery borrow the component's `}`
@@ -44,6 +48,7 @@ function readSubstitution(
         if (passedClosingTag && hasError(childExpression(assemble(pieces).code).diagnostics)) {
           break;
         }
+        expectOneExpression(context, open, position, pieces);
         return { close: position, pieces };
       }
 
@@ -65,9 +70,25 @@ function readSubstitution(
         closes.pop();
       }
     }
-    context.error('JPX1012', 'Quoted text interpolation requires a matching `}`', open, open + 1,
-      closeTextInterpolation(context.source, open, quote));
+    context.error('JPX1012', 'This `{` starts an inserted value but has no matching `}`; close it, or write `\\{` for a literal brace',
+      open, open + 1, closeTextInterpolation(context.source, open, quote));
   }
+}
+
+/**
+ * JPX1014: a substitution whose braces hold something other than one host
+ * expression, `"{a b}"` or `title='{"a": 1}'`. Without this check the host
+ * reports a bare syntax error inside the generated template. The editor keeps
+ * that native error instead, with its recovery and completion.
+ */
+function expectOneExpression(context: MarkupContext, open: number, close: number, pieces: readonly Piece[]): void {
+  const code = assemble(pieces).code;
+  if (context.checking || code.trim() === '' || !hasError(childExpression(code).diagnostics)) {
+    return;
+  }
+  context.error('JPX1014',
+    '`{...}` in a quoted string inserts one value, and this is not one expression; write `\\{` for a literal brace',
+    open, close + 1);
 }
 
 /** Copy host string escapes verbatim; escape only raw backticks for the template. */

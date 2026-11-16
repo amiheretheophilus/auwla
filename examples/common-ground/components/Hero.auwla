@@ -196,14 +196,14 @@ export function Hero() {
   return (
     <section class="hero" aria-labelledby="hero-title">
       <div>
-        <div class="pill"><span>"NEW"</span>; "YOUR NEXT GOOD IDEA STARTS HERE"</div>
-        <h1 id="hero-title">"Find your people."; <br />; "Build something "; <span class="accent">"great."</span></h1>
+        <div class="pill"><span>"NEW"</span> "YOUR NEXT GOOD IDEA STARTS HERE"</div>
+        <h1 id="hero-title">"Find your people." <br /> "Build something " <span class="accent">"great."</span></h1>
         <p class="lead">
           "Different skills. Shared ambition. Meet independent minds and put your next big idea in good company."
         </p>
         <div class="actions">
-          <a class="button primary" route-to="/new">"Start with an idea"; <Icon name="arrow" /></a>
-          <a class="text-button" route-to="/studio">"Meet your crew"; <Icon name="chevron" size={15} /></a>
+          <a class="button primary" route-to="/new">"Start with an idea" <Icon name="arrow" /></a>
+          <a class="text-button" route-to="/studio">"Meet your crew" <Icon name="chevron" size={15} /></a>
         </div>
         <div class="proof">
           <div class="avatars">
@@ -211,14 +211,14 @@ export function Hero() {
             <img src=(kwame!.portrait) alt="" />
             <img src=(esi!.portrait) alt="" />
           </div>
-          <span>"Small teams."; <br />; <strong>"Extraordinary possibilities."</strong></span>
+          <span>"Small teams." <br /> <strong>"Extraordinary possibilities."</strong></span>
         </div>
       </div>
 
       <div class="art" aria-label="A shared idea brings different people together">
         <div class="sun"></div>
         <div class="panel">
-          <span class="caption">"THE NEXT BIG THING"; <br />; "IS A TEAM THING."</span>
+          <span class="caption">"THE NEXT BIG THING" <br /> "IS A TEAM THING."</span>
           <svg viewBox="0 0 520 320" fill="none" aria-hidden="true">
             <path
               d="M30 100Q160 20 270 160T500 230M20 270Q160 290 260 160T460 60"
@@ -236,7 +236,7 @@ export function Hero() {
           <div class="brief-top"><span class="tiny-label">"YOUR NEXT CHAPTER"</span><Icon name="spark" /></div>
           <h3>brief.name</h3>
           <div class="brief-footer">
-            <span><i></i>; "{crewIds.length} collaborator{crewIds.length === 1 ? "" : "s"} on board"</span>
+            <span><i></i> "{crewIds.length} collaborator{crewIds.length === 1 ? "" : "s"} on board"</span>
             <a route-to="/studio" aria-label="Open your studio"><Icon name="arrow" size={16} /></a>
           </div>
         </div>
@@ -247,7 +247,7 @@ export function Hero() {
         </div>
         <div class="sticker">
           <Icon name="spark" size={18} />
-          <span>"Better"; <br />; <strong>"together."</strong></span>
+          <span>"Better" <br /> <strong>"together."</strong></span>
         </div>
       </div>
     </section>

@@ -75,7 +75,7 @@ function NotFound() {
       <p class="eyebrow">"404 · OFF THE MAP"</p>
       <h1>"Nothing on this ground."</h1>
       <p>"The page you were looking for isn't here, but good company is."</p>
-      <a class="button primary" route-to="/">"Back to Discover"; <Icon name="arrow" size={16} /></a>
+      <a class="button primary" route-to="/">"Back to Discover" <Icon name="arrow" size={16} /></a>
     </section>
   );
 }

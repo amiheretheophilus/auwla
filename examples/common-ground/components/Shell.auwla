@@ -118,21 +118,21 @@ export function Header() {
   return (
     <div>
       <div class="announcement">
-        <span><span class="star">"✳"</span>; "A little ambition. A lot of good company."</span>
-        <span class="extra">"Independent minds. Shared possibilities."; <span class="star">"↗"</span></span>
+        <span><span class="star">"✳"</span> "A little ambition. A lot of good company."</span>
+        <span class="extra">"Independent minds. Shared possibilities." <span class="star">"↗"</span></span>
       </div>
       <header class="bar">
         <a class="wordmark" route-to="/" aria-label="Common Ground home">
           <span class="symbol"><i></i><i></i><i></i></span>
-          <span>"common"; <br />; "ground"; <span class="dot">"."</span></span>
+          <span>"common" <br /> "ground" <span class="dot">"."</span></span>
         </a>
         <nav aria-label="Main navigation">
           <a route-to="/" class=(discovering ? "active" : "") aria-current=(discovering ? "page" : undefined)>"Discover"</a>
           <a route-to="/studio" class=(path === "/studio" ? "active" : "") aria-current=(path === "/studio" ? "page" : undefined)>
-            "My studio"; <span class="count">crewIds.length</span>
+            "My studio" <span class="count">crewIds.length</span>
           </a>
           <a route-to="/saved" class=(path === "/saved" ? "active" : "") aria-current=(path === "/saved" ? "page" : undefined)>
-            "Saved"; <span class="count">savedIds.length</span>
+            "Saved" <span class="count">savedIds.length</span>
           </a>
           <a route-to="/how-it-works" class=(path === "/how-it-works" ? "active" : "") aria-current=(path === "/how-it-works" ? "page" : undefined)>
             "How it works"
@@ -140,7 +140,7 @@ export function Header() {
         </nav>
         <div class="actions">
           <span class="avatar" aria-hidden="true">"Y"</span>
-          <a class="button primary" route-to="/new">"New project"; <Icon name="plus" size={16} /></a>
+          <a class="button primary" route-to="/new">"New project" <Icon name="plus" size={16} /></a>
         </div>
       </header>
     </div>

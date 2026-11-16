@@ -188,6 +188,25 @@ it('highlights quoted substitutions in direct child blocks while keeping ordinar
   expect(tokens.at(-1)!.scopes.some((scope) => scope.startsWith('string.'))).toBe(false);
 });
 
+it('highlights substitutions in attribute strings, with the attribute quote inside them', () => {
+  const source = String.raw`<div class="card {on ? "x" : "y"} \{z}" title='plain &amp; {name}' id="k">"t"</div>`;
+  const tokens = tokenize(source);
+  function scopesAt(text: string) {
+    const offset = source.indexOf(text);
+    return tokens.find((token) => token.startIndex <= offset && offset < token.endIndex)!.scopes;
+  }
+  expect(scopesAt('on ?')).toContain('meta.embedded.expression.auwla');
+  expect(scopesAt('"x"')).toContain('string.quoted.double.tsx');
+  expect(scopesAt('card')).toContain('string.quoted.double.tsx');
+  expect(scopesAt('card')).not.toContain('meta.embedded.expression.auwla');
+  expect(scopesAt(String.raw`\{z`)).toContain('constant.character.escape.tsx');
+  expect(scopesAt('name}')).toContain('meta.embedded.expression.auwla');
+  expect(scopesAt('&amp;').some((scope) => scope.startsWith('constant.character.entity'))).toBe(true);
+  expect(scopesAt('k"')).toContain('string.quoted.double.tsx');
+  expect(scopesAt('"t"')).toContain('string.quoted.double.tsx');
+  expect(tokens.some((token) => token.scopes.some((scope) => scope.startsWith('invalid.')))).toBe(false);
+});
+
 it('classifies an interpolated identifier as code so string completion settings do not suppress it', () => {
   function attributesAt(source: string, text: string): number {
     const offset = source.indexOf(text);

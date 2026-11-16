@@ -19,7 +19,7 @@ import type { NormalizedSource } from './model';
 import { assemble, generated, nearestAuthoredOffset, replaceRange } from './source';
 import { JsxPlusError } from './diagnostics';
 import { MarkupContext, type Markup } from './markup/context';
-import { SIBLING_SEPARATOR } from './markup/children';
+import { separateSibling, SIBLING_SEPARATOR, SIBLING_SPACE } from './markup/children';
 import { readElement } from './markup/element';
 import { readStyleBlocks } from './styles/blocks';
 import { markStyles } from './styles/scopes/markers';
@@ -70,10 +70,10 @@ function normalizeFile(source: string, filename: string, validateHost: boolean, 
 }
 
 /**
- * A tag joined to the text before it, when it has its enclosing element's name
- * (`<p>"a" <p>"b"</p></p>`; `element.ts`, `noteSameNameSibling`): the file failed at
- * `failedAt`. Report JPX1005 for the first candidate before it whose `;` gets the file past
- * that point. Valid code never fails, so a real comparison is never reported.
+ * A tag joined to the value before it, when it has its enclosing element's name
+ * (`<p>count<p>"b"</p></p>`; `element.ts`, `noteSameNameSibling`): the file failed at
+ * `failedAt`. Report JPX1005 for the first candidate before it whose space gets the file
+ * past that point. Valid code never fails, so a real comparison is never reported.
  */
 function reportJoinedSibling(context: MarkupContext, failedAt: number): void {
   const { source, filename } = context;
@@ -81,7 +81,8 @@ function reportJoinedSibling(context: MarkupContext, failedAt: number): void {
     if (sibling.position >= failedAt) {
       continue;
     }
-    const separated = source.slice(0, sibling.position) + ';' + source.slice(sibling.position);
+    // The repair inserts one character, as the offset arithmetic below assumes.
+    const separated = source.slice(0, sibling.position) + SIBLING_SPACE + source.slice(sibling.position);
     let reached = Number.POSITIVE_INFINITY;
     try {
       // A grammar repair probe has no project resolver. Cross-file CSS linking
@@ -89,12 +90,11 @@ function reportJoinedSibling(context: MarkupContext, failedAt: number): void {
       normalizeIn(new MarkupContext(separated, filename, context.checking), true, true);
     } catch (error) {
       if (!(error instanceof JsxPlusError)) throw error;
-      // Back in this file's offsets: the inserted `;` precedes the failure.
+      // Back in this file's offsets: the inserted space precedes the failure.
       reached = error.range[0] - 1;
     }
     if (reached > failedAt) {
-      context.error('JPX1005', SIBLING_SEPARATOR, sibling.position, sibling.openingEnd,
-        [{ kind: 'insert', at: sibling.position, text: ';' }]);
+      context.error('JPX1005', SIBLING_SEPARATOR, sibling.position, sibling.openingEnd, separateSibling(sibling.position));
     }
   }
 }

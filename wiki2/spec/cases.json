@@ -1,27 +1,121 @@
 {
   "specVersion": "0.1-draft",
-  "revision": 9,
+  "revision": 10,
   "cases": [
     {
-      "id": "ERROR-018",
-      "level": "diagnostics",
-      "rules": ["G-BOUNDARY", "D-CODES", "D-RECOVERY"],
-      "source": "<p>\"a\" <p>\"b\"</p></p>",
-      "expected": { "code": "JPX1005", "severity": "error", "range": [7, 10] }
-    },
-    {
-      "id": "ERROR-016",
-      "level": "diagnostics",
-      "rules": ["G-BOUNDARY", "D-CODES", "D-RECOVERY"],
+      "id": "PARSE-011",
+      "level": "parse",
+      "rules": ["G-BOUNDARY", "A-NODES", "A-RANGE"],
       "source": "<p>\"Retry?\" <button>\"Retry\"</button></p>",
-      "expected": { "code": "JPX1005", "severity": "error", "range": [12, 20] }
+      "expected": {
+        "specVersion": "0.1-draft",
+        "root": {
+          "kind": "element", "range": [0, 40], "name": "p",
+          "children": [
+            { "kind": "expression", "range": [3, 11], "source": "\"Retry?\"" },
+            {
+              "kind": "element", "range": [12, 36], "name": "button",
+              "children": [{ "kind": "expression", "range": [20, 27], "source": "\"Retry\"" }]
+            }
+          ]
+        }
+      }
     },
     {
-      "id": "ERROR-017",
-      "level": "diagnostics",
-      "rules": ["G-BOUNDARY", "D-CODES"],
+      "id": "PARSE-012",
+      "level": "parse",
+      "rules": ["G-BOUNDARY", "A-NODES", "A-RANGE"],
       "source": "<div>\"a\" <>\"x\"</></div>",
-      "expected": { "code": "JPX1005", "severity": "error", "range": [9, 11] }
+      "expected": {
+        "specVersion": "0.1-draft",
+        "root": {
+          "kind": "element", "range": [0, 23], "name": "div",
+          "children": [
+            { "kind": "expression", "range": [5, 8], "source": "\"a\"" },
+            {
+              "kind": "fragment", "range": [9, 17],
+              "children": [{ "kind": "expression", "range": [11, 14], "source": "\"x\"" }]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "PARSE-013",
+      "level": "parse",
+      "rules": ["G-BOUNDARY", "A-NODES", "A-RANGE"],
+      "source": "<p>\"a\" <p>\"b\"</p></p>",
+      "expected": {
+        "specVersion": "0.1-draft",
+        "root": {
+          "kind": "element", "range": [0, 21], "name": "p",
+          "children": [
+            { "kind": "expression", "range": [3, 6], "source": "\"a\"" },
+            {
+              "kind": "element", "range": [7, 17], "name": "p",
+              "children": [{ "kind": "expression", "range": [10, 13], "source": "\"b\"" }]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "PARSE-014",
+      "level": "parse",
+      "rules": ["G-BOUNDARY", "A-NODES", "A-RANGE"],
+      "source": "<p>first second</p>",
+      "expected": {
+        "specVersion": "0.1-draft",
+        "root": {
+          "kind": "element", "range": [0, 19], "name": "p",
+          "children": [
+            { "kind": "expression", "range": [3, 8], "source": "first" },
+            { "kind": "expression", "range": [9, 15], "source": "second" }
+          ]
+        }
+      }
+    },
+    {
+      "id": "PARSE-015",
+      "level": "parse",
+      "rules": ["G-INTERP", "G-ATTR", "A-RANGE"],
+      "source": "<a href=\"/people/{id}\">\"x\"</a>",
+      "expected": {
+        "specVersion": "0.1-draft",
+        "root": {
+          "kind": "element", "range": [0, 30], "name": "a",
+          "children": [{ "kind": "expression", "range": [23, 26], "source": "\"x\"" }]
+        }
+      }
+    },
+    {
+      "id": "TEXT-005",
+      "level": "behavior",
+      "rules": ["G-BOUNDARY", "G-TEXT"],
+      "source": "export function App() { let count = 0; return <button onClick={() => count++}>\"Count:\" count <b>\"!\"</b> \"done\"</button>; }",
+      "jsxEquivalent": "export function App() { let count = 0; return <button onClick={() => count++}>Count:{count}<b>!</b>done</button>; }",
+      "expected": { "clicks": ["button"], "text": ["Count:0!done", "Count:1!done"] }
+    },
+    {
+      "id": "ERROR-019",
+      "level": "diagnostics",
+      "rules": ["G-BOUNDARY", "D-CODES", "D-RECOVERY"],
+      "source": "<p>count<span>\"x\"</span></p>",
+      "expected": { "code": "JPX1005", "severity": "error", "range": [8, 14] }
+    },
+    {
+      "id": "ERROR-020",
+      "level": "diagnostics",
+      "rules": ["G-INTERP", "D-CODES"],
+      "source": "<input pattern=\"\\d{3}\" />",
+      "expected": { "code": "JPX1014", "severity": "error", "range": [18, 21] }
+    },
+    {
+      "id": "ERROR-021",
+      "level": "diagnostics",
+      "rules": ["G-INTERP", "D-CODES"],
+      "source": "<p>\"x {a b}\"</p>",
+      "expected": { "code": "JPX1014", "severity": "error", "range": [6, 11] }
     },
     {
       "id": "PARSE-010",
@@ -282,13 +376,6 @@
       "rules": ["G-IF", "D-CODES"],
       "source": "<p>if (ok) \"yes\"</p>",
       "expected": { "code": "JPX1006", "severity": "error", "range": [11, 16] }
-    },
-    {
-      "id": "ERROR-005",
-      "level": "diagnostics",
-      "rules": ["G-BOUNDARY", "D-CODES"],
-      "source": "<p>first second</p>",
-      "expected": { "code": "JPX1005", "severity": "error", "range": [9, 15] }
     },
     {
       "id": "HOST-001",

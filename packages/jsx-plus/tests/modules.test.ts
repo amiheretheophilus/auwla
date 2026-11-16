@@ -107,7 +107,7 @@ it('normalizes each .auwla module once per change, though the project asks twice
   expect((app[0] as { code: string }).code).toContain('// edited');
 
   // A syntax error is reported again, the same error, without normalizing again.
-  const broken = '<p>"a" <b>"x"</b></p>;\n';
+  const broken = '<p>"a" <b>"x"</p>;\n';
   const first = (() => { try { auwla.toTsx(broken, './Broken.auwla'); } catch (error) { return error; } })();
   const second = (() => { try { auwla.toTsx(broken, './Broken.auwla'); } catch (error) { return error; } })();
   expect(first).toBeInstanceOf(Error);

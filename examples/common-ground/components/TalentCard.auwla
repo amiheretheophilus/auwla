@@ -132,14 +132,14 @@ export function TalentCard({ person }: { person: Person }) {
 
   return (
     <article data-person=(person.id)>
-      <div class=("portrait " + person.color)>
-        <span class=(person.available ? "availability" : "availability booked")>
-          <i></i>;
+      <div class="portrait {person.color}">
+        <span class="availability {person.available ? "" : "booked"}">
+          <i></i>
           person.available ? "Open to collaborate" : "Booked this month"
         </span>
         <button
           type="button"
-          class=(saved ? "save saved" : "save")
+          class="save {saved ? "saved" : ""}"
           aria-label=(saved ? `Unsave ${person.name}` : `Save ${person.name}`)
           aria-pressed=saved
           onClick=(() => toggleSaved(person.id))
@@ -147,7 +147,7 @@ export function TalentCard({ person }: { person: Person }) {
           <Icon name="bookmark" size={14} fill=(saved ? "#dce6ff" : "none") />
         </button>
         <img src=(person.portrait) alt="" />
-        <span class="mark">person.initials; <span>"↗"</span></span>
+        <span class="mark">person.initials <span>"↗"</span></span>
       </div>
 
       <div class="content">
@@ -156,7 +156,7 @@ export function TalentCard({ person }: { person: Person }) {
           <span class="verified" title="Fictional demo profile"><Icon name="check" size={11} /></span>
         </div>
         <p class="role">person.role</p>
-        <p class="city"><Icon name="globe" size={13} />; person.city</p>
+        <p class="city"><Icon name="globe" size={13} /> person.city</p>
         <div class="skill-tags">
           for (const skill of person.skills) {
             <span key=skill>skill</span>
@@ -166,19 +166,19 @@ export function TalentCard({ person }: { person: Person }) {
           <p class="bio">person.bio</p>
         }
         <button type="button" class="tiny-link" aria-expanded=expanded onClick=(() => expanded = !expanded)>
-          expanded ? "A little less" : `Get to know ${first}`; <span>expanded ? "−" : "+"</span>
+          expanded ? "A little less" : `Get to know ${first}` <span>expanded ? "−" : "+"</span>
         </button>
 
         <div class="footer">
           <div><strong>"GH₵ {person.rate}"</strong><span>" / day"</span></div>
           <button
             type="button"
-            class=(inCrew ? "add added" : "add")
+            class="add {inCrew ? "added" : ""}"
             disabled=(inCrew || !person.available)
             aria-label=(inCrew ? `${person.name} is in your crew` : `Add ${person.name} to your crew`)
             onClick=(() => addToCrew(person.id))
           >
-            <Icon name=(inCrew ? "check" : "plus") size={13} />;
+            <Icon name=(inCrew ? "check" : "plus") size={13} />
             inCrew ? "In crew" : "Add to crew"
           </button>
         </div>

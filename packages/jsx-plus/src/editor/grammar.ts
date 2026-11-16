@@ -18,6 +18,28 @@ function quotedChild(quote: '"' | "'", name: string): IRawGrammar['patterns'][nu
 }
 
 /**
+ * A quoted attribute value with `{...}` substitutions and `\{` (G-INTERP). It
+ * also covers values without braces, which keep their JSX entities.
+ */
+function quotedAttribute(quote: '"' | "'", name: string): IRawGrammar['patterns'][number] {
+  return {
+    begin: `(=)\\s*(${quote})`,
+    end: quote,
+    beginCaptures: {
+      1: { name: 'keyword.operator.assignment.tsx' },
+      2: { name: `${name} punctuation.definition.string.begin.tsx` },
+    },
+    endCaptures: { 0: { name: `${name} punctuation.definition.string.end.tsx` } },
+    contentName: name,
+    patterns: [
+      { match: '\\\\\\{', name: 'constant.character.escape.tsx' },
+      { include: '#auwla-text-interpolation' },
+      { include: '#jsx-entities' },
+    ],
+  };
+}
+
+/**
  * Derive a standalone TextMate grammar from the pinned TSX grammar. Replacing
  * the child rule lets the existing lexer own strings, comments and nested tags;
  * injecting expression rules inside those lexical states would break closers.
@@ -133,6 +155,8 @@ export function createAuwlaGrammar(tsx: IRawGrammar): IRawGrammar {
         2: { name: 'variable.other.readwrite.tsx' },
       },
     },
+    quotedAttribute('"', 'string.quoted.double.tsx'),
+    quotedAttribute("'", 'string.quoted.single.tsx'),
     ...(attributes.patterns ?? []),
   ];
   repository['auwla-text-interpolation'] = {

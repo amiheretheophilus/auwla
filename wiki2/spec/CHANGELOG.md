@@ -1,5 +1,27 @@
 # Spec revisions
 
+## 0.1-draft, revision 10 — 2026-11-16
+
+The user's direction: children need no `;`, and quoted attribute values take `{}`.
+
+- G-BOUNDARY rule 2: where the host would need a `;` between two pieces at the
+  child level, the second starts a new child. `<b>"x"</b> "text"`,
+  `"Total: " count " people"` and `first second` now parse. Continuation still
+  wins (`"a" + b`, `label (x)`), errors inside delimiters stay host errors, and
+  a comma stays JPX1005.
+- G-BOUNDARY rule 5: `<` followed directly by a name starts a sibling tag after
+  whitespace or quoted text: `"Label" <input />`, `count <b>"x"</b>`,
+  `"Price:"<b>price</b>`. `value < limit` and `format<string>(x)` keep their
+  host meaning. `count<span>` stays a comparison, and JPX1005 now asks for a
+  space there (the repair inserts one) instead of a `;`. `;` remains valid.
+- G-INTERP: quoted attribute values take `{expression}` substitutions and `\{`,
+  lowered to a template value. Values without a brace keep their JSX meaning.
+- New JPX1014: a substitution that is not one expression (strict builds), or an
+  attribute substitution that is only a count (`pattern="\d{3}"`).
+- Clearer messages for JPX1005 (comma, missing space), JPX1012 and JPX1013.
+- ERROR-016, ERROR-017, ERROR-018 and ERROR-005 expected JPX1005; their sources
+  are now PARSE-011 to PARSE-014. Add PARSE-015 and ERROR-019 to ERROR-021.
+
 ## Unfinished tag editing — 2026-11-15
 
 - Add D-TAG-EDITING: actionable element/fragment messages, native completion of

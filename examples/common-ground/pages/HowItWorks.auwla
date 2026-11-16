@@ -55,7 +55,7 @@ export function HowItWorks() {
   return (
     <div class="page">
       <p class="eyebrow">"THE COMMON GROUND WAY"</p>
-      <h1>"Good alone."; <br />; <span class="accent">"Great together."</span></h1>
+      <h1>"Good alone." <br /> <span class="accent">"Great together."</span></h1>
       <ol>
         for (const step of STEPS) {
           <li key=(step.title)>
@@ -71,8 +71,8 @@ export function HowItWorks() {
         </p>
       </div>
       <div class="actions">
-        <a class="button primary" route-to="/new">"Start a project"; <Icon name="arrow" size={16} /></a>
-        <button type="button" class="text-button" onClick=startOver>"Reset this playground"; <Icon name="arrow" size={15} /></button>
+        <a class="button primary" route-to="/new">"Start a project" <Icon name="arrow" size={16} /></a>
+        <button type="button" class="text-button" onClick=startOver>"Reset this playground" <Icon name="arrow" size={15} /></button>
       </div>
     </div>
   );

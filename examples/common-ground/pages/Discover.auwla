@@ -119,7 +119,7 @@ export function Discover({ saved = false }: { saved?: boolean }) {
       if (!saved) {
         <Hero />
       }
-      <div class=(saved ? "layout saved" : "layout")>
+      <div class="layout {saved ? "saved" : ""}">
         <div>
           <Section
             eyebrow=(saved ? "KEEP THE GOOD ONES CLOSE" : "INDEPENDENT MINDS. SHARED AMBITION.")
@@ -154,7 +154,7 @@ export function Discover({ saved = false }: { saved?: boolean }) {
                   <button
                     type="button"
                     key=name
-                    class=(discipline === name ? "tab selected" : "tab")
+                    class="tab {discipline === name ? "selected" : ""}"
                     aria-pressed=(discipline === name)
                     onClick=(() => discipline = name)
                   >
@@ -163,7 +163,7 @@ export function Discover({ saved = false }: { saved?: boolean }) {
                 }
               </div>
               <label class="available">
-                <input type="checkbox" checked=availableOnly onChange=((event) => availableOnly = event.currentTarget.checked) />;
+                <input type="checkbox" checked=availableOnly onChange=((event) => availableOnly = event.currentTarget.checked) />
                 "Available now"
               </label>
             </div>
@@ -180,9 +180,9 @@ export function Discover({ saved = false }: { saved?: boolean }) {
                 <h3>"A little too specific?"</h3>
                 <p>saved ? "Save a few profiles, or try a different search." : "Try another skill or open up your filters. Good company is here."</p>
                 if (saved) {
-                  <a class="button secondary" route-to="/">"Explore all minds"; <Icon name="arrow" size={16} /></a>
+                  <a class="button secondary" route-to="/">"Explore all minds" <Icon name="arrow" size={16} /></a>
                 } else {
-                  <button type="button" class="button secondary" onClick=showEveryone>"Show everyone"; <Icon name="arrow" size={16} /></button>
+                  <button type="button" class="button secondary" onClick=showEveryone>"Show everyone" <Icon name="arrow" size={16} /></button>
                 }
               </div>
             }
@@ -193,7 +193,7 @@ export function Discover({ saved = false }: { saved?: boolean }) {
           <CrewPanel />
           <div class="note">
             <span>"✳"</span>
-            <p>"The best teams don't think alike."; <br />; <strong>"They think together."</strong></p>
+            <p>"The best teams don't think alike." <br /> <strong>"They think together."</strong></p>
           </div>
         </div>
       </div>

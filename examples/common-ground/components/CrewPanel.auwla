@@ -158,33 +158,33 @@ export function CrewPanel() {
       if (crewIds.length < MAX_CREW) {
         <div class="empty-seat">
           <span class="plus">"+"</span>
-          <p>"A seat for your next"; <br />; <strong>"great collaborator."</strong></p>
+          <p>"A seat for your next" <br /> <strong>"great collaborator."</strong></p>
         </div>
       }
 
       <div class="coverage-head"><span>"Skill coverage"</span><strong>"{covered.length}/{brief.skills.length}"</strong></div>
       <div class="bars">
         for (const skill of brief.skills) {
-          <span key=skill class=(covered.includes(skill) ? "bar covered" : "bar") title=skill></span>
+          <span key=skill class="bar {covered.includes(skill) ? "covered" : ""}" title=skill></span>
         }
       </div>
       <div class="skills">
         for (const skill of brief.skills) {
-          <span key=skill><Icon name=(covered.includes(skill) ? "check" : "plus") size={12} />; skill</span>
+          <span key=skill><Icon name=(covered.includes(skill) ? "check" : "plus") size={12} /> skill</span>
         }
       </div>
 
       <div class="total"><span>"Your team's day rate"</span><strong>"GH₵ {rate}"</strong></div>
-      <p class=(over ? "budget over" : "budget")>
+      <p class="budget {over ? "over" : ""}">
         over ? `GH₵ ${rate - brief.budget} over your daily budget` : `Within your GH₵ ${brief.budget} daily budget`
       </p>
       <button type="button" class="button primary launch" disabled=(crewIds.length < 2) onClick=launch>
-        launched ? "Back to your workspace" : "Bring this idea to life"; <Icon name="arrow" size={16} />
+        launched ? "Back to your workspace" : "Bring this idea to life" <Icon name="arrow" size={16} />
       </button>
       <p class="footnote">
         crewIds.length < 2 ? "Add one more person to get started." : "Your shared workspace is one click away."
       </p>
-      <div class="help"><a class="tiny-link" route-to="/how-it-works">"A little help getting started"; <Icon name="arrow" size={12} /></a></div>
+      <div class="help"><a class="tiny-link" route-to="/how-it-works">"A little help getting started" <Icon name="arrow" size={12} /></a></div>
     </aside>
   );
 }

@@ -87,9 +87,9 @@ export function Person() {
       if (person) {
         <article class="page">
           <div>
-            <a class="tiny-link back" route-to="/"><Icon name="back" size={14} />; "All collaborators"</a>
-            <div class=("portrait " + person.color)>
-              <span class=(person.available ? "availability" : "availability booked")>
+            <a class="tiny-link back" route-to="/"><Icon name="back" size={14} /> "All collaborators"</a>
+            <div class="portrait {person.color}">
+              <span class="availability {person.available ? "" : "booked"}">
                 person.available ? "Open to collaborate" : "Booked this month"
               </span>
               <img src=(person.portrait) alt="" />
@@ -123,11 +123,11 @@ export function Person() {
                 disabled=(inCrew || !person.available)
                 onClick=(() => addToCrew(person.id))
               >
-                inCrew ? "Already in your crew" : person.available ? "Make something together" : "Available next month";
+                inCrew ? "Already in your crew" : person.available ? "Make something together" : "Available next month"
                 <Icon name="plus" size={16} />
               </button>
               <button type="button" class="button secondary" aria-pressed=saved onClick=(() => toggleSaved(person.id))>
-                <Icon name="bookmark" size={16} fill=(saved ? "#dce6ff" : "none") />;
+                <Icon name="bookmark" size={16} fill=(saved ? "#dce6ff" : "none") />
                 saved ? "Saved" : "Save profile"
               </button>
             </div>
@@ -138,7 +138,7 @@ export function Person() {
           <p class="eyebrow">"NOBODY BY THAT NAME"</p>
           <h1>"This profile isn't here."</h1>
           <p>"The link may be old. Everyone we know is on the Discover page."</p>
-          <a class="button primary" route-to="/">"Discover collaborators"; <Icon name="arrow" size={16} /></a>
+          <a class="button primary" route-to="/">"Discover collaborators" <Icon name="arrow" size={16} /></a>
         </div>
       }
     </div>

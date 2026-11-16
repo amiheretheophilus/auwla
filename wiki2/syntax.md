@@ -19,6 +19,11 @@ See [architecture.md](architecture.md).
 - Spec revision 7 adds `<p>"Count: {count}"</p>` quoted interpolation (DX-37).
 - Direct child expressions need no outer `{}`: `<p>user.name</p>` and
   `<p>"Total: " + total</p>`.
+- Children need no `;` between them (spec revision 10, DX-54):
+  `<p><b>"x"</b> "text" count <i></i></p>`. Where JavaScript would need a `;`,
+  a new child starts. A tag after a value needs a space before its `<`
+  (`count <span>`); `value < limit` stays a comparison. `;` still works.
+- Quoted attribute values interpolate too: `class="card {size}"` (revision 10).
 - Direct `if` and ordinary expressions such as `.map()` belong in markup bodies.
   JavaScript blocks and object literals still use braces.
 - Normal JavaScript outside markup retains its behavior. Rendering expressions
@@ -33,11 +38,18 @@ See [architecture.md](architecture.md).
 ## Quoted text interpolation
 
 `src/markup/text.ts` reads child-level quoted substitutions with host tokens and
-normalizes them into native templates. Ordinary strings in calls, parentheses,
-attributes and other host contexts retain their rules. Literal opening braces
+normalizes them into native templates. Ordinary strings in calls, parentheses
+and other host contexts retain their rules. Literal opening braces
 use `\{`; backticks in text receive generated escapes. Precise rules are
 [G-INTERP](spec/grammar.md#quoted-text-interpolation-g-interp) and
 [S-INTERP](spec/semantics.md#interpolated-text-s-interp).
+
+`src/attributes/interpolated.ts` applies the same substitution reader to a quoted
+attribute value containing `{` or `\{`: `class="a {x}"` becomes
+``class={`a ${x}`}``, and the opening-tag mask blanks `="..."` like a bare
+identifier value. Attribute text is raw in JSX, so its backslashes are doubled
+for the template, except `\{`. A count-only substitution (`pattern="\d{3}"`) is
+JPX1014, since it would silently drop the braces of a regex.
 
 The body reader masks complete text expressions before rescanning. A shared
 `ChildReplacement` holds either markup or an expression, so child emission adds

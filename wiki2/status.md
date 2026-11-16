@@ -1,6 +1,18 @@
 # Prototype status
 
-Updated: 2026-11-15. Branch: `prototype/jsx-plus`.
+Updated: 2026-11-16. Branch: `prototype/jsx-plus`.
+
+## No `;` between children; `{}` in attribute strings (2026-11-16, DX-54)
+
+Spec revision 10. Children sit side by side: `<span class="star">"✳"</span> "A little ambition."`,
+`"Total: " count " people"`, `"Label" <input />`. `src/markup/children.ts` starts a new child
+where the host asks for a `;` at the chunk's own level; `src/markup/element.ts` reads `<` plus a
+name after whitespace or quoted text as a tag (`opensTagAfterValue`). `value < limit` and
+`format<string>(x)` keep their meaning; `count<span>` asks for a space (JPX1005, with the space
+as the editor repair). `src/attributes/interpolated.ts` turns `class="card {size}"` into a
+template value, with the text reader's substitution rules; JPX1014 reports a substitution that
+is not one expression, and a count such as `pattern="\d{3}"`. The editor grammar highlights
+attribute substitutions. Common Ground dropped every separator and uses interpolated classes.
 
 ## Server pages in `.auwla` (2026-11-15, made on `compiler-rewrite`)
 

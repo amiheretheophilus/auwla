@@ -8,13 +8,28 @@ import type { IfStatement, Node, SequenceExpression } from 'yuku-parser';
 import {
   childExpression, childStatements, closingDelimiter, firstError, hasError, isMarkupOpening, type HostFragment,
 } from '../host';
+import type { Repair } from '../diagnostics';
 import type { BlockView, ChildView, ExpressionView, ForView, IfView, Range } from '../model';
 import { anchored, assemble, generated, replaceRange, type Piece } from '../source';
 import type { ChildReplacement, Children, MarkupContext } from './context';
 
-/** JPX1005 for a tag written after a text or expression child without `;` (G-BOUNDARY rule 5). */
+/**
+ * JPX1005 for a tag written directly after a value, `count<span>` (G-BOUNDARY
+ * rule 5). With no space before it, `<` stays a less-than comparison.
+ */
 export const SIBLING_SEPARATOR =
-  'A tag after a text or expression child needs ";" before it; without it, "<" reads as a comparison';
+  'Put a space before this tag: written directly after a value, "<" reads as a less-than comparison';
+
+/** What the repair for SIBLING_SEPARATOR inserts: the space that makes `<` start a tag. */
+export const SIBLING_SPACE = ' ';
+
+/** The repair for SIBLING_SEPARATOR, before the tag at `at`. */
+export function separateSibling(at: number): Repair[] {
+  return [{ kind: 'insert', at, text: SIBLING_SPACE }];
+}
+
+/** The host's message when two statements share a line with no `;` between them. */
+const JOINED_STATEMENTS = 'Expected a semicolon or an implicit semicolon after a statement';
 
 interface Child<View> {
   readonly view: View;
@@ -47,7 +62,8 @@ class ChildReader {
     // A top-level semicolon is an explicit child boundary in G-BOUNDARY. Parse
     // each chunk in expression context before trying host statements, so an
     // object/function/class after another child keeps its expression grammar.
-    // ASI and expression continuation within each chunk still belong to yuku.
+    // ASI and expression continuation within each chunk still belong to yuku;
+    // where neither applies, `chunk` starts a new child (rule 2).
     const tokens = childStatements(code, this.context.checking).tokens;
     const closes: number[] = [];
     const chunks: Range[] = [];
@@ -93,14 +109,52 @@ class ChildReader {
     const parsed = childStatements(code, this.context.checking);
     const problem = firstError(parsed.diagnostics);
     if (problem !== undefined) {
+      // `"Total:" count`, `<b>"x"</b> "text"`: where the host would need a `;`
+      // between two pieces, the second one starts the next child (G-BOUNDARY
+      // rule 2). Read each side again; the second may split further.
+      const split = this.childBoundary(parsed, problem);
+      if (split !== undefined) {
+        const first = this.chunk(code.slice(0, split), start, [start + split, start + split + 1]);
+        const rest = this.chunk(code.slice(split), start + split, chunkEnd);
+        return { views: [...first.views, ...rest.views], pieces: [...first.pieces, ...rest.pieces] };
+      }
       this.reportChunkError(code, start, chunkEnd, parsed, problem);
     }
     return this.statements(parsed, start);
   }
 
   /**
+   * Where a new child starts, when `problem` is the host asking for a `;`
+   * before a token at the chunk's own level. A token inside parentheses, a
+   * function body or any other delimiter is a real syntax error there:
+   * `(() => { a b })` is not two children.
+   */
+  private childBoundary(
+    parsed: HostFragment, problem: { readonly start: number; readonly message: string },
+  ): number | undefined {
+    if (!problem.message.startsWith(JOINED_STATEMENTS) || problem.start <= 0) {
+      return undefined;
+    }
+    const tokens = parsed.tokens;
+    const closes: number[] = [];
+    for (let index = 0; index < tokens.length && tokens.start(index) <= problem.start; index++) {
+      const kind = tokens.kind(index);
+      if (tokens.start(index) === problem.start) {
+        return closes.length === 0 ? problem.start : undefined;
+      }
+      const close = closingDelimiter(kind);
+      if (close !== undefined) {
+        closes.push(close);
+      } else if (closes.length > 0 && kind === closes[closes.length - 1]) {
+        closes.pop();
+      }
+    }
+    return undefined;
+  }
+
+  /**
    * G-CORE: a comma operator used as one child must be parenthesized. The
-   * author may have meant a `;`, quoted text or a grouped comma expression.
+   * author may have meant two children, quoted text or a grouped comma expression.
    */
   private rejectComma(sequence: SequenceExpression, fragment: HostFragment, start: number): never {
     const afterFirst = sequence.expressions[0]!.end - fragment.origin;
@@ -113,7 +167,8 @@ class ChildReader {
     }
     this.context.error(
       'JPX1005',
-      'A comma does not separate children: use ";" between children, quote text, or parenthesize a comma expression',
+      'A comma does not separate children. Remove it (a space or a new line is enough), '
+        + 'put it inside quoted text ("a, b"), or wrap a comma expression in (...)',
       start + comma,
     );
   }
@@ -129,17 +184,9 @@ class ChildReader {
     const tokens = parsed.tokens;
     const token = tokens.at(problem.start);
 
-    // `"a" <>"x"</>`: a fragment's `<>` is read as markup even after a text or
-    // expression child, so its mask follows the text with no `;` (G-BOUNDARY
-    // rule 5). Name the separator rather than the host's "found '_'".
-    const fragment = this.nested.find((entry) => entry.start === offset && entry.view.kind === 'fragment');
-    if (fragment !== undefined) {
-      this.context.error('JPX1005', SIBLING_SEPARATOR, offset, this.source.indexOf('>', offset) + 1,
-        [{ kind: 'insert', at: offset, text: ';' }]);
-    }
-
-    // Host parsing may read a sibling as a broken `< ... / >` comparison.
-    // Confirm the complete tag independently before suggesting a separator.
+    // `count<input />`: with no space before it, the host reads the tag as a
+    // broken `< ... / >` comparison. Confirm the complete tag independently
+    // before suggesting the space that makes it a tag (G-BOUNDARY rule 5).
     if (token >= 1 && tokens.kind(token) === K.GreaterThan && tokens.kind(token - 1) === K.Slash) {
       for (let candidate = token - 2; candidate >= 0; candidate--) {
         if (tokens.kind(candidate) !== K.LessThan) continue;
@@ -147,8 +194,7 @@ class ChildReader {
         const to = tokens.end(token);
         const tag = parse(code.slice(from, to), { lang: 'tsx', sourceType: 'module', tokens: true });
         if (!hasError(tag.diagnostics) && isMarkupOpening(tag.tokens!, 0)) {
-          this.context.error('JPX1005', SIBLING_SEPARATOR, start + from, start + to,
-            [{ kind: 'insert', at: start + from, text: ';' }]);
+          this.context.error('JPX1005', SIBLING_SEPARATOR, start + from, start + to, separateSibling(start + from));
         }
         break;
       }

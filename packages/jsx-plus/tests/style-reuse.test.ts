@@ -70,7 +70,7 @@ it('resolves aliases and retains identical IDs in separate source modules', () =
 });
 
 it('reports missing sources, IDs, duplicate definitions and cycles in the authored file', () => {
-  const joined = '<style>@use("./Theme.auwla", "look");</style>\nexport function App(){return <p>"a" <p>"b"</p></p>;}';
+  const joined = '<style>@use("./Theme.auwla", "look");</style>\nexport function App(){return <p>count<p>"b"</p></p>;}';
   expect(() => compileModulesDetailed({ './Panel.auwla': joined }, { languages: [auwla] })).toThrow('JPX1005');
   expect(() => compileModulesDetailed({ './Panel.auwla': consumer }, { languages: [auwla] }))
     .toThrow('./Panel.auwla:2:');

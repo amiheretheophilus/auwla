@@ -175,9 +175,9 @@ in-memory API and serves deep links such as `/people/2`. Everything is written i
   a `$cleanup` when the route leaves. Both pages record into
   [team/lifecycle.ts](team/lifecycle.ts).
 
-A text child followed by a tag needs `;` (`"Could not load people. "; <button>`):
-without it, `"…" <button>` reads as a comparison (spec grammar rule 5), and the
-error is JPX1005 at the tag, asking for that `;`.
+Children need no `;` between them (spec revision 10): `"Could not load people. " <button>`
+is text and then a tag. A tag written directly after a value, `count<button>`, stays a
+comparison, and the error is JPX1005 at the tag, asking for a space before it.
 `tests/routes.test.ts` bundles a copy of it (`tests/fixtures/apps/team`) with chunk splitting and drives it in
 both compiler modes; `tests/vite.test.ts` checks Vite splits the same pages.
 

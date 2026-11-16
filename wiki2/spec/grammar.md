@@ -86,10 +86,10 @@ comments, regexes, templates and strings. The expression may use the same quote
 character as the enclosing text. Empty substitutions are errors.
 
 `<p>"Count: {count}"</p>` is interpolated text. Ordinary host strings inside
-parentheses, calls, arrays, objects, conditions, functions or attribute values
-retain their host/JSX meaning. For example, `format("Count: {count}")` passes a
-literal string; use a native template argument when interpolation is wanted there.
-Interpolated child text may participate in ordinary continuation, such as
+parentheses, calls, arrays, objects, conditions or functions retain their host
+meaning. For example, `format("Count: {count}")` passes a literal string; use a
+native template argument when interpolation is wanted there. Interpolated child
+text may participate in ordinary continuation, such as
 `"Name: {name}".toUpperCase()`.
 
 Write `\{` for a literal opening brace in quoted child text. A `}` without an
@@ -97,6 +97,21 @@ opening substitution is literal text. Existing string escapes retain their host
 values, including Unicode escapes that cook to a brace. This revision reserves
 an unescaped opening brace in child-level quoted text; earlier static text with
 that spelling must escape it. Backtick templates continue to use native `${...}`.
+
+A substitution holds exactly one host expression; anything else, such as
+`"{a b}"`, is JPX1014 at its braces (revision 10).
+
+**Attribute strings** (revision 10). A quoted attribute value MAY contain the same
+substitutions: `class="card {size} {active ? "on" : ""}"` becomes the template
+value ``class={`card ${size} ${active ? "on" : ""}`}``. Matching, nesting, empty
+substitutions (JPX1013) and `\{` follow the child-text rules above. A value
+without `{` or `\{` keeps its JSX meaning, including entity decoding. An
+interpolated value is template text: a backslash and an HTML entity are literal
+characters there, as JSX attribute strings have no escapes.
+
+A substitution that is only a count, `{3}` or `{2,4}`, is JPX1014: in
+`pattern="\d{3}"` it would silently insert the number. Write `\{3}` for literal
+braces, or pass the value in braces, `pattern={"\\d{3}"}`.
 
 ## Expression boundaries (G-BOUNDARY)
 
@@ -106,8 +121,14 @@ that spelling must escape it. Backtick templates continue to use native `${...}`
 2. Host expression continuation and automatic semicolon insertion apply. A line
    break does not invariably mean a new child. `getValue()` followed by `[index]`
    on the next line is one indexing expression; `value` followed by `+offset` is
-   one addition. `first` followed by `second` on a new line is two expressions
-   where host ASI would separate them.
+   one addition. Where the host would need a `;` between two pieces at the
+   child level, the second piece starts a new child, on the same line or the
+   next (revision 10): `"Total: " count " people"` is three children,
+   `<b>"x"</b> "text"` two, `first second` two. A piece that can continue the
+   one before it still does: an operator, `(`, `[` or a template after a value
+   makes one expression (`"a" + b`, `label (x)` is a call). Inside parentheses,
+   a function body or another delimiter the host's own error stands. A comma is
+   never a child separator (JPX1005).
 3. The enclosing closing tag/fragment or conditional block's `}` supplies a body
    end after a complete expression. Thus `<p>count + 1</p>` needs no semicolon.
    Body-end recognition applies only at the current nesting level and outside
@@ -119,9 +140,15 @@ that spelling must escape it. Backtick templates continue to use native `${...}`
    continuation belongs to its expression: `<A />.value` is one member expression.
    If an expression starting with markup could be confused with sibling tags,
    parentheses explicitly select the host expression, e.g. `(<A /> < limit)`.
-5. A non-markup expression followed by an opening tag MUST have a separator if
-   host parsing could join them. Write `"Label"; <input />`, not an assumed
-   newline-only break. New tag detection does not rewrite `<` comparisons.
+5. After a non-markup expression at the child level, `<` followed directly by
+   a name starts a sibling tag when the `<` follows whitespace (a space or line
+   break) or touches quoted text (revision 10): `"Label" <input />`,
+   `count <span>"items"</span>`, `"Price:"<b>price</b>`. A comparison keeps a
+   space after `<` (`value < limit`); a generic call has no space before it
+   (`format<string>(x)`). Written directly after another value, `count<span>`,
+   the `<` stays a comparison; when that comparison then fails as a tag would
+   not, JPX1005 asks for the space. Inside parentheses `<` keeps its host
+   meaning, so `(a <b)` is a comparison. A `;` separator remains valid.
 6. A closing-tag token at body depth wins as a delimiter. Parenthesize a host
    expression if its operator/regex spelling would otherwise form that exact
    delimiter. Within parentheses, host tokenization determines the expression.
@@ -129,17 +156,18 @@ that spelling must escape it. Backtick templates continue to use native `${...}`
 Examples of the draft rule:
 
 ```tsx
-<p>"Hello"; " "; user.name</p>
+<p>"Hello " user.name "!"</p>
 <div>
-  "Label";
+  "Label"
   <input ref={input} />
 </div>
+<p><span class="star">"✳"</span> "A little ambition."</p>
 <p>value < limit ? "small" : "large"</p>
 <p>(value < /p>/.test(text))</p>
 ```
 
-This is the first boundary candidate to implement and challenge, not an assertion
-that semicolons are required after every child. The fixture catalog includes host
+Revision 10 removed the separators that rules 2 and 5 used to require between
+same-line children and before a tag after text. The fixture catalog includes host
 continuation probes and separated equivalents.
 
 ## Conditional children (G-IF)
@@ -193,6 +221,7 @@ declarations in the body are outside this profile.
 
 ```ebnf
 ExtendedAttributeValue ::= JSXAttributeValue | "(" HostExpression ")" | HostIdentifier
+                         | InterpolatedString   (* a quoted value with "{", G-INTERP *)
 ```
 
 Names, spreads, string attributes, boolean attributes and `prop={expression}`

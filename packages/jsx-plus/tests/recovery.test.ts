@@ -87,9 +87,10 @@ for (const [name, from, to, code, anchor] of [
   });
 }
 
-it('keeps a tag after text checked when the ";" between them is missing', () => {
-  // The team example's error component as it was written then, with the separator before its
-  // button removed. A copy, so editing the example cannot turn the replace into a no-op.
+it('keeps a tag written directly after a value checked, through the space it needs', () => {
+  // The team example's error component as it was written then, with its button moved right
+  // after `error.message`, so `<` reads as a comparison (G-BOUNDARY rule 5). A copy, so
+  // editing the example cannot turn the replace into a no-op.
   const people = `import { note } from '../lifecycle';
 
 function Failure({ error, retry }: { error: { message: string }; retry: () => void }) {
@@ -107,12 +108,12 @@ export function People() {
   return <p class="count">people.length; request.refreshing</p>;
 }
 `;
-  const source = people.replace('" ";', '" "');
+  const source = people.replace('error.message; " ";\n      <button', 'error.message<button');
   expect(source).not.toBe(people);
   const button = source.indexOf('<button type="button" class="retry"');
   const result = projectForChecking(source, './People.auwla');
   expect(result.diagnostics).toEqual([expect.objectContaining({ code: 1005, start: button })]);
-  // The inserted `;` keeps the button and the rest of the file checked.
+  // The inserted space keeps the button and the rest of the file checked.
   const mapped = (offset: number) => result.mappings.some(([, , start, length]) => start <= offset && offset < start + length);
   expect(mapped(source.indexOf('retry()'))).toBe(true);
   expect(mapped(source.indexOf('$track(people)'))).toBe(true);
