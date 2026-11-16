@@ -224,6 +224,32 @@ describe('scroll restoration coordinator', () => {
     coordinator.dispose();
   });
 
+  it('keeps restoring through sideways wheel events, such as a touchpad swipe back', async () => {
+    // The swipe that goes back sends horizontal wheel events, and some arrive after the entry
+    // changes. They are not the person scrolling the page, so the saved offset still applies.
+    const frames = deferredFrames();
+    sessionStorage.setItem('__mmd_scroll_swiped', JSON.stringify({ x: 0, y: 900 }));
+    const coordinator = createScrollCoordinator();
+    coordinator.connect();
+    let ready!: () => void;
+    coordinator.restore(new URL('http://localhost/list'), 'pop', 'swiped',
+      new Promise<void>(resolve => { ready = resolve; }));
+    window.dispatchEvent(new WheelEvent('wheel', { deltaX: -120, deltaY: 4 }));
+    ready();
+    await Promise.resolve();
+    frames.flush();
+    expect(frames.scrollTo).toHaveBeenCalledWith(0, 900);
+
+    // Scrolling the page itself still wins over a restore that has not happened yet.
+    coordinator.restore(new URL('http://localhost/list'), 'pop', 'swiped', new Promise<void>(resolve => { ready = resolve; }));
+    window.dispatchEvent(new WheelEvent('wheel', { deltaY: 120 }));
+    ready();
+    await Promise.resolve();
+    frames.flush();
+    expect(frames.scrollTo).toHaveBeenCalledTimes(1);
+    coordinator.dispose();
+  });
+
   it('handles malformed percent escapes and named anchors without CSS.escape', () => {
     const frames = deferredFrames();
     const target = document.createElement('a');

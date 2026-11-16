@@ -124,7 +124,16 @@ gives it to the client build only), compiler-next's output works with any dev se
   evaluation's effects. It goes there, not first: a companion output can make the scope of the
   module importing it, and evaluates before it.
 - **A failing edit** keeps the last good DOM and rethrows, so the dev server shows its error; the
-  next edit that compiles replaces it.
+  next edit that compiles replaces it. A failure found before either program builds (finding
+  server functions) keeps the last build's `modules` (`server/application.ts`, `failed`): the Vite
+  plugin counts an edit only when it touches one of them, so an empty list ignored the fix and its
+  overlay stayed (2026-11-16).
+- **Clearing the overlay** is Vite's client reloading the page on the first update after an error.
+  The router let that reload happen only after a fix (2026-11-16): with the Navigation API it
+  intercepted every `reload` navigation, so the overlay stayed until a hard refresh.
+- **Update time.** Each update compiles the whole program again: about 0.65–0.9 s for Common
+  Ground's 16 modules under Bun (2026-11-16), most of it AST walks and node cloning in the emitter.
+  Saves made during a compile wait for it. Making updates incremental is open.
 - The added code (`features/hot/emit.ts`) is added to the tree after linking, with no place in the
   authored text, so source maps leave it unmapped.
 

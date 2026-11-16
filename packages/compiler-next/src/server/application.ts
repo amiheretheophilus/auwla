@@ -221,6 +221,9 @@ export function createApplication(options: ApplicationOptions): Application {
     hot: false,
   });
 
+  /** The modules each program read in its last build, which a failure before building keeps. */
+  let lastModules: { client: readonly string[]; server: readonly string[] } = { client: [], server: [] };
+
   async function build(): Promise<ApplicationBuild> {
     const discovered = await discoverSafely();
     if (discovered instanceof CompileError) return failed(discovered);
@@ -265,12 +268,19 @@ export function createApplication(options: ApplicationOptions): Application {
     }
   }
 
+  /**
+   * A failure found before either program builds (finding server functions). Its modules are
+   * the last build's: a tool decides from them which edits concern the application, and the
+   * edit that fixes this error must count.
+   */
   function failed(error: CompileError): ApplicationBuild {
-    const failure: ProjectBuild = { ok: false, error, modules: [] };
-    return { client: failure, ...(serverProject === null ? {} : { server: failure }), functions: [], declarations: null };
+    const client: ProjectBuild = { ok: false, error, modules: lastModules.client };
+    const server: ProjectBuild = { ok: false, error, modules: lastModules.server };
+    return { client, ...(serverProject === null ? {} : { server }), functions: [], declarations: null };
   }
 
   function finish(clientBuild: ProjectBuild, serverBuild: ProjectBuild | undefined): ApplicationBuild {
+    lastModules = { client: clientBuild.modules, server: serverBuild?.modules ?? [] };
     const functions = generated.modules.filter((entry) => !isMiddlewareFile(entry.path)).map((entry) => entry.module);
     let declarations: string | null = null;
     if (functions.some((module) => module.functions.length > 0)) {

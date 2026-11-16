@@ -207,4 +207,17 @@ export const saveUser = define.function({ async post({ services }, name) { const
     expect(update.client.changed).toContain('./.memoized/functions/users.ts');
     expect(update.server?.changed).toEqual(expect.arrayContaining(['./server/functions/users.ts', GENERATED.registry]));
   });
+
+  it('keep the modules it uses when finding server functions fails, so the edit that fixes it counts', async () => {
+    // A tool decides which edits concern the application from these modules (the Vite plugin's
+    // hot updates). An empty list after this error ignored the fix, and its overlay stayed.
+    const files = { ...FILES };
+    const application = createApplication({ client: './src/main.ts', server: SERVER, host: memoryHost(files) });
+    const good = await application.build();
+    files['./server/functions/users.ts'] = 'export const helper = 1;';
+    const broken = await application.update(['./server/functions/users.ts']);
+    expect(broken.build.client.ok).toBe(false);
+    expect(broken.build.client.modules).toEqual(good.client.modules);
+    expect(broken.build.server?.modules).toEqual(good.server?.modules);
+  });
 });

@@ -780,6 +780,36 @@ describe('route runtime', () => {
     runtime.dispose();
   });
 
+  it('lets a reload load the document again instead of intercepting it', () => {
+    // `location.reload()` fires a reload navigate event that can be intercepted. Taking it turned
+    // the reload into a same-document navigation, so Vite's reload that clears its error overlay
+    // never happened, and the overlay stayed until a reload from the browser itself.
+    let listener: EventListener | null = null;
+    const intercept = vi.fn();
+    const navigation: NavigationController = {
+      addEventListener: (_type, next) => { listener = next; },
+      removeEventListener: () => { listener = null; },
+      navigate: vi.fn(),
+      back: vi.fn(),
+      forward: vi.fn(),
+    };
+    const runtime = createRouteRuntime({ location: window.location, history: window.history, navigation });
+    runtime.connect();
+    const event = Object.assign(new Event('navigate', { cancelable: true }), {
+      canIntercept: true,
+      destination: { url: window.location.href },
+      downloadRequest: null,
+      hashChange: false,
+      navigationType: 'reload',
+      intercept,
+    }) as NavigationEventLike;
+
+    (listener as EventListener | null)?.(event);
+    expect(intercept).not.toHaveBeenCalled();
+    expect(event.defaultPrevented).toBe(false);
+    runtime.dispose();
+  });
+
   it('does not apply the pre-connection fallback after an ineligible navigate event', () => {
     let listener: EventListener | null = null;
     const navigation: NavigationController = {

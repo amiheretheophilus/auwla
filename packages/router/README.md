@@ -312,6 +312,9 @@ const state = route.state as { draftOrderId?: number; step?: number } | null;
 3. **Pop Navigation (Back/Forward)**: Automatically restores exact previous scroll coordinates after the target route's microtask and render phase settle.
 4. **Push Navigation (New Link)**: Resets viewport scroll to top `(0, 0)`.
 5. **Hash Navigation (`#target`)**: Queries `#target` elements by `id` or `name` and scrolls them into view, retrying on the next animation frame if asynchronous data is loading.
+6. **The person scrolling wins**: a vertical wheel, a touch or a scrolling key cancels a restore that has not happened yet. A mostly sideways wheel does not: a touchpad swipe back sends those, some after the entry changes.
+
+A reload is never intercepted, with or without the Navigation API: `location.reload()` loads the document again. Vite relies on that to clear its error overlay after a fix; an intercepted reload left the overlay up until a reload from the browser itself.
 
 ---
 

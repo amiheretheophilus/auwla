@@ -890,8 +890,11 @@ export function createRouteRuntime(
   const onNavigate: EventListener = event => {
     navigationEventRevision++;
     const navigationEvent = event as NavigationEventLike;
+    // A reload loads the document again, as the person (or `location.reload()`, such as
+    // Vite clearing its error overlay) asked. Intercepting it would only re-render this one.
     if (
       !navigationEvent.canIntercept ||
+      navigationEvent.navigationType === 'reload' ||
       navigationEvent.downloadRequest !== null &&
       navigationEvent.downloadRequest !== undefined
     ) return;

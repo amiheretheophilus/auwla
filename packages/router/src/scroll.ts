@@ -203,6 +203,17 @@ export function createScrollCoordinator(
     if (doc?.visibilityState === 'hidden') onPageHide();
   }
 
+  /**
+   * A wheel that moves the page up or down is the person scrolling, which wins over a pending
+   * restore. A mostly sideways one is not: a touchpad swipe back sends those, and some arrive
+   * after the entry has changed, when they would cancel the very restore the swipe asked for.
+   */
+  function onWheel(event: Event): void {
+    const wheel = event as WheelEvent;
+    if (Math.abs(wheel.deltaX ?? 0) > Math.abs(wheel.deltaY ?? 0)) return;
+    cancelRestore();
+  }
+
   function onScrollIntent(event: Event): void {
     const key = (event as KeyboardEvent).key;
     if (['ArrowUp', 'ArrowDown', 'PageUp', 'PageDown', 'Home', 'End', ' '].includes(key)) {
@@ -304,7 +315,7 @@ export function createScrollCoordinator(
         win.addEventListener('scroll', onScroll, { passive: true });
         win.addEventListener('pagehide', onPageHide);
         // User intent takes precedence over a target appearing much later.
-        win.addEventListener('wheel', cancelRestore, { passive: true });
+        win.addEventListener('wheel', onWheel, { passive: true });
         win.addEventListener('touchstart', cancelRestore, { passive: true });
         win.addEventListener('keydown', onScrollIntent);
       }
@@ -336,7 +347,7 @@ export function createScrollCoordinator(
         if (win !== undefined) {
           win.removeEventListener('scroll', onScroll);
           win.removeEventListener('pagehide', onPageHide);
-          win.removeEventListener('wheel', cancelRestore);
+          win.removeEventListener('wheel', onWheel);
           win.removeEventListener('touchstart', cancelRestore);
           win.removeEventListener('keydown', onScrollIntent);
         }
