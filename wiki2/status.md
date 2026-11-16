@@ -2,6 +2,16 @@
 
 Updated: 2026-11-16. Branch: `prototype/jsx-plus`.
 
+## Markdown documents: architecture proposed (2026-11-16)
+
+[documents.md](documents.md) proposes Markdown pages with Auwla components, replacing the root
+`mdx-research.md` draft. MDX's own output was compiled with compiler-next and defeats static
+templates (`_components.h1` lookups), so the design emits plain tags itself: a pre-scan reads
+Auwla regions with JSX+'s readers, micromark parses the masked Markdown, and an emitter writes TSX
+with exact mappings. Waiting on the user: extension, dependencies, brace rule, metadata. Found on
+the way: `.auwla` quoted text reaches the page as run-time text writes, not template text; slice 0
+fixes that in compiler-next.
+
 ## No `;` between children; `{}` in attribute strings (2026-11-16, DX-54)
 
 Spec revision 10. Children sit side by side: `<span class="star">"✳"</span> "A little ambition."`,
