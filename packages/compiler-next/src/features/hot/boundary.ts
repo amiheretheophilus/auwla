@@ -5,14 +5,18 @@
  * A module accepts its own update when it defines components under keys and exports nothing
  * else: the hot runtime mounts each live instance again with the new definitions, and every other
  * module keeps its state. Any other module lets the update reach the modules importing it, as a
- * dev server does by default, until one accepts it; the entry, which calls `mount()`, never does,
- * so an edit reaching it reloads the page.
+ * dev server does by default, until one accepts it. A separate entry (`main.ts`, which calls
+ * `mount()` and defines no component) never does, so an edit reaching it reloads the page. A
+ * component's file holding its own top-level `mount(...)` does, since that call runs once
+ * (`core/resolve/mounts.ts`); exporting what `mount` returns (`export const app = mount(…)`) is
+ * an export that is not a component, so that file reloads the page instead.
  */
 import { findAll, is } from 'yuku-ast';
 import type { Binding, Module } from 'yuku-analyzer';
 import type { Node } from 'yuku-parser';
 import type { ModulePlan } from '../../core/plan';
 import { explicitValueExportNames, isFrameworkMount } from '../../core/resolve/exports';
+import { topLevelMounts } from '../../core/resolve/mounts';
 import { componentNameNode } from '../../core/emit/component-key';
 import type { HotModule } from './emit';
 
@@ -36,8 +40,12 @@ function acceptsHotUpdate(plan: ModulePlan, components: readonly KeyedComponent[
     return false;
   }
 
-  // Evaluating the entry again would mount the app a second time.
-  if (findAll(module.ast, ['CallExpression']).some((call) => isFrameworkMount(module, call))) {
+  // Evaluating a module again must not mount the app a second time. A top-level `mount(...)` runs
+  // once under hot replacement (`core/resolve/mounts.ts`), so `mount` in the component's own file
+  // keeps its hot updates; one anywhere else (inside a function) could run again.
+  const mounts = findAll(module.ast, ['CallExpression']).filter((call) => isFrameworkMount(module, call));
+  const once = new Set<Node>(topLevelMounts(module));
+  if (mounts.some((call) => !once.has(call))) {
     return false;
   }
 

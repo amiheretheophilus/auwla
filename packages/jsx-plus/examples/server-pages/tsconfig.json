@@ -9,7 +9,7 @@
     }
   },
   "files": [
-    "./src/App.auwla", "./src/main.ts", "./src/model.ts", "./src/pages/ProjectBoard.auwla", "./src/pages/ProjectFacts.auwla",
+    "./src/App.auwla", "./src/model.ts", "./src/pages/ProjectBoard.auwla", "./src/pages/ProjectFacts.auwla",
     "./server/store.auwla", "./server/functions/projects.auwla", "./server/define.ts", "./server.ts"
   ]
 }

@@ -28,6 +28,7 @@ import { emitProps } from '../../features/props/dom';
 import { declaredWithFunction, functionValue } from '../resolve/functions';
 import { importedDefinition, namespaceModule } from '../resolve';
 import { isFrameworkMount } from '../resolve/exports';
+import { topLevelMounts } from '../resolve/mounts';
 import { emitRefs } from '../../features/refs/dom';
 import { emitEffectGroups, emitLifecycleCalls } from '../../features/effects/dom';
 import { emitSources } from '../../features/sources/dom';
@@ -145,6 +146,16 @@ export function emitDom(plan: ModulePlan, options: CompileModulesOptions): Node 
       runtime, component: reference.node,
     }));
   }
+  // A top-level `mount(...)` is the module's entry (`core/resolve/mounts.ts`): a server never
+  // mounts, and under hot replacement evaluating the module again must not mount a second app.
+  topLevelMounts(module).forEach((call, index) => {
+    if (options.routedEnvironment === 'server') {
+      replacements.set(call, expression('void 0', {}));
+    } else if (options.hot === true) {
+      const key = stringLiteral(`${plan.module.path}#mount${index}`);
+      replacements.set(call, expression('$$runtime.mountOnce($$key, () => $$call)', { runtime, key, call }));
+    }
+  });
   for (const call of plan.calls) {
     if (plan.sourceFlow?.groups.includes(call)) {
       continue;

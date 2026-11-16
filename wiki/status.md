@@ -17,6 +17,16 @@ See [dynamic attribute values](compiler/core.md#dynamic-attribute-values).
 
 ## Current: Phase 10 (2026-11-06)
 
+**Done (2026-11-15): `mount` in the root component's own file** (`compiler/project.md`, "Mount in a
+component's file"). `App.auwla` (or `.tsx`) can end with `mount('root', App)` and be the page's
+entry, with no `main.ts`: the server build leaves the call out, hot replacement runs it once so the
+file accepts its own edits, and a page that cannot change is still rendered at build time from it,
+exported or not. The server pages example now works this way.
+
+**Decided (2026-11-15): deleting the old compiler deletes everything only it uses** (`decisions.md`):
+its tests and every piece of runtime, data, server or tool code only its output reaches. Programs
+worth keeping stay as replay cases. Next: acceptance, measured again, then that cleanup.
+
 **Done (2026-11-15): server pages, in the application** (`compiler/server.md`, "Server pages";
 `decisions.md`, 2026-11-15). A server function's `page(<Board … />)` is extracted into a generated
 page module, compiled as UI in both builds, while the handler stays backend code. Each page gets a

@@ -21,36 +21,38 @@ const outdir = fileURLToPath(new URL('../../../../.cache/server-pages-preview/',
 const SERVER = { entry: './server.ts', folder: './server' };
 /**
  * The page around the app; the server renders the app into its outlet. The shell's styles come
- * from `main.css`; each server page brings its own with its HTML.
+ * from `app.css`; each server page brings its own with its HTML.
  */
 const DELIVERY = `export default {
-  document: () => '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Projects</title><link rel="stylesheet" href="/main.css"></head><body><div id="root"><!--ssr-outlet--></div><script type="module" src="/main.js"></script></body></html>',
+  document: () => '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Projects</title><link rel="stylesheet" href="/app.css"></head><body><div id="root"><!--ssr-outlet--></div><script type="module" src="/app.js"></script></body></html>',
   assets: () => undefined,
 };`;
+/** The browser's entry: the root component's own file, which mounts it. */
+const CLIENT = './src/App.auwla';
 
 rmSync(outdir, { recursive: true, force: true });
 
-const application = await createApplication({ client: './src/main.ts', server: SERVER, host: fileSystemHost(root), languages: [auwla] }).build();
+const application = await createApplication({ client: CLIENT, server: SERVER, host: fileSystemHost(root), languages: [auwla] }).build();
 if (application.declarations !== null) {
   mkdirSync(join(root, '.memoized'), { recursive: true });
   writeFileSync(join(root, '.memoized', 'server-functions.d.ts'), application.declarations);
 }
 
 const client = await Bun.build({
-  entrypoints: [join(root, 'src/main.ts')],
+  entrypoints: [join(root, CLIENT)],
   target: 'browser',
   outdir: join(outdir, 'client'),
   minify: true,
-  // `main.js`, and `main.css` with the shell's styles.
-  naming: { entry: '[name].[ext]' },
-  plugins: [memoizedDom({ client: './src/main.ts', server: SERVER, root, languages: [auwla] }), checkoutPackagesFor('browser')],
+  // `app.js`, and `app.css` with the shell's styles.
+  naming: { entry: 'app.[ext]' },
+  plugins: [memoizedDom({ client: CLIENT, server: SERVER, root, languages: [auwla] }), checkoutPackagesFor('browser')],
 });
 const server = await Bun.build({
   entrypoints: [join(root, 'server.ts')],
   target: 'bun',
   outdir: join(outdir, 'server'),
   plugins: [
-    memoizedDom({ client: './src/main.ts', server: SERVER, target: 'server', delivery: DELIVERY, root, languages: [auwla] }),
+    memoizedDom({ client: CLIENT, server: SERVER, target: 'server', delivery: DELIVERY, root, languages: [auwla] }),
     checkoutPackagesFor('server'),
   ],
 });
@@ -59,13 +61,13 @@ for (const [name, result] of [['client', client], ['server', server]] as const) 
 }
 
 if (process.argv.includes('--build')) {
-  const script = await Bun.file(join(outdir, 'client', 'main.js')).text();
-  console.log(`Server pages built: main.js ${script.length} bytes (${Bun.gzipSync(script).length} gzipped); .memoized/server-functions.d.ts written`);
+  const script = await Bun.file(join(outdir, 'client', 'app.js')).text();
+  console.log(`Server pages built: app.js ${script.length} bytes (${Bun.gzipSync(script).length} gzipped); .memoized/server-functions.d.ts written`);
 } else {
   const app = (await import(pathToFileURL(join(outdir, 'server', 'server.js')).href)).default as { fetch(request: Request): Promise<Response> };
   const files: Record<string, { file: string; type: string }> = {
-    '/main.js': { file: join(outdir, 'client', 'main.js'), type: 'text/javascript' },
-    '/main.css': { file: join(outdir, 'client', 'main.css'), type: 'text/css' },
+    '/app.js': { file: join(outdir, 'client', 'app.js'), type: 'text/javascript' },
+    '/app.css': { file: join(outdir, 'client', 'app.css'), type: 'text/css' },
   };
   const listening = Bun.serve({
     hostname: '127.0.0.1',

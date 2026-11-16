@@ -1,6 +1,10 @@
 // The app's shell: the project list, the view switch and a form. The selected page itself comes
 // from the server (`server/functions/projects.auwla`): `getBoard(id)` and `getFacts(id)` return
 // rendered pages, shown where they are read, like any value.
+//
+// This file is also the browser's entry: `index.html` loads it, and its last line mounts the app.
+// There is no separate `main.ts`.
+import { mount } from '@memoized-dom/runtime';
 import { createTask, getBoard, getFacts, listProjects } from '#server-functions';
 import { Group } from '@memoized-dom/data';
 
@@ -154,3 +158,8 @@ export function App() {
     </main>
   );
 }
+
+// The entry, in the component's own file. The browser runs it once (an edit in the dev server
+// replaces `App` in place instead of mounting again), and adopts the page the server rendered.
+// The server imports `App` from this file to render it, and its build leaves this line out.
+mount('root', App);

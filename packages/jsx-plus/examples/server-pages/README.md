@@ -25,11 +25,11 @@ bun ../../node_modules/typescript/lib/tsc.js --project examples/server-pages/tsc
 | [server/store.auwla](server/store.auwla) | The in-memory projects: server-only code, compiled as written, never in the browser |
 | [server/define.ts](server/define.ts) | `createDefine()`, and the re-export of `page` the functions import |
 | [src/model.ts](src/model.ts) | The `Project` and `Task` types the store and the pages share |
-| [src/App.auwla](src/App.auwla) | The shell: project list, view switch, the add form, and the page itself, shown like any value |
+| [src/App.auwla](src/App.auwla) | The shell: project list, view switch, the add form, and the page itself, shown like any value. Also the browser's entry: its last line is `mount('root', App)`, and `index.html` loads it directly |
 | [src/pages/ProjectBoard.auwla](src/pages/ProjectBoard.auwla) | The interactive page: filters and notes are local state; a task's button calls the server |
 | [src/pages/ProjectFacts.auwla](src/pages/ProjectFacts.auwla) | The passive page: no handlers, so the browser gets its HTML and styles, none of its code |
 | [src/styles/shared.auwla](src/styles/shared.auwla) | Named styles (`panel`, `pill`) that the shell and the pages `@use` |
-| [server.ts](server.ts), [src/main.ts](src/main.ts) | The server's entry (`serve`, `app.ssr(App)`) and the browser's (`mount`) |
+| [server.ts](server.ts) | The server's entry (`serve`, `app.ssr(App)`). It imports `App` from `App.auwla`, whose `mount` line the server build leaves out |
 
 ## What to try
 
@@ -40,7 +40,7 @@ bun ../../node_modules/typescript/lib/tsc.js --project examples/server-pages/tsc
   board's inputs: names, task ids, titles and states. The store's `owner.email` and `budget` are
   not there, since the board never reads them.
 - **A page that cannot change ships no code.** Switch to "Facts": the budget appears as rendered
-  HTML, and `main.js` contains nothing of `ProjectFacts`.
+  HTML, and `app.js` contains nothing of `ProjectFacts`.
 - **A page brings its own styles.** Each page's `<style>` blocks travel with its HTML, so the facts
   page is styled though its component never reaches the browser.
 

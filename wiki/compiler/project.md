@@ -114,8 +114,10 @@ gives it to the client build only), compiler-next's output works with any dev se
   replaced instance's own state starts again, as with the old compiler.
 - **Boundaries** (`features/hot/boundary.ts`): a module accepts its own update when it defines
   components under keys and exports nothing else (type exports are erased). Any other module lets
-  the update reach its importers, as a dev server does, until one accepts it. The entry, which
-  calls `mount()`, never does, so an edit reaching it reloads the page.
+  the update reach its importers, as a dev server does, until one accepts it. A separate entry
+  (`main.ts`, which calls `mount()` and defines no component) never does, so an edit reaching it
+  reloads the page. A component file holding its own top-level `mount(...)` does accept its edits
+  ("Mount in a component's file", below).
 - **Module effects:** a dev server calls `dispose` only on the accepting module, so a module evaluated
   again on the way would start its module-scope effects twice. Before the top-level statement that
   makes its effect scope, the module calls `moduleEvaluating(path)`, which stops the previous
@@ -128,6 +130,42 @@ gives it to the client build only), compiler-next's output works with any dev se
 
 The old compiler's mechanism (`registerHotComponent` inside every factory) stays in
 `runtime/src/hot.ts` until that compiler is deleted.
+
+## Mount in a component's file
+
+The user asked (2026-11-14) to stop needing a separate `main.ts`: `mount` may be written in the root
+component's own file, which the page loads directly (`<script type="module" src="/src/App.auwla">`,
+or `client: './src/App.auwla'` to the application). Built 2026-11-15 (`core/resolve/mounts.ts`, a fact the emitter, `features/hot` and
+`features/delivery` all read, so it sits in core):
+
+```ts
+// App.auwla (or App.tsx)
+export function App() { … }   // exported or not
+mount('root', App);
+```
+
+A top-level `mount(...)` (an expression statement, or a top-level variable's initializer) is the
+module's entry, wherever it is:
+
+- **Server build:** it becomes `void 0`. The server imports `App` from the same file to render it,
+  and a server never mounts into a document.
+- **Hot replacement:** it becomes `mountOnce(key, () => mount(…))` (`runtime/src/mount.ts`).
+  Evaluating the module again after an edit returns the application already on the page, so the
+  file accepts its own update (`features/hot/boundary.ts`) and `App` is replaced in place, not
+  mounted a second time. Its own state starts again, as any edited component's does. Exporting what
+  `mount` returns (`export const app = mount(…)`) is an export that is not a component, so that file
+  reloads the page instead; a `mount` inside a function stays as written, and reloads too.
+- **Build-time page** (below): the root may be defined in the mounting file, exported or not. The
+  run evaluates that module, everything in it, and renders the component its `mount` is given: the
+  build's runtime stands in for `mount` and `mountOnce` and never mounts.
+- **The application** treats it as any entry: with a server it appends the hydration import, and
+  the page hydration import when a server page has bindings.
+
+`packages/jsx-plus/examples/server-pages` is written this way: `App.auwla` ends with
+`mount('root', App)`, `index.html` loads it, and there is no `main.ts`. Checked by
+`core/resolve/mounts.test.ts` (each build's output, the build-time page, the application, and an
+edit to the mounting file replacing its component without a second app) and by driving that
+example in a browser.
 
 ## Build-time page
 
@@ -344,6 +382,8 @@ bun packages/compiler-next/src/project/cli.ts package [--root packages/kit] [--c
 | `features/hot/boundary.ts` | Which modules accept their own hot update |
 | `features/hot/emit.ts` | The hot runtime's import, `moduleEvaluating` and the boundary in a module's tree |
 | `features/hot/hot.test.ts` | Boundaries, module effects, no change without the option, and an edit replacing a component while its parent keeps its state |
+| `core/resolve/mounts.ts` | A module's top-level `mount(...)`: left out of a server build, run once under hot replacement, the root of a build-time page |
+| `core/resolve/mounts.test.ts` | Each build's output, the build-time page from the mounting file, the application, and an edit to the mounting file |
 
 ## Still to do
 

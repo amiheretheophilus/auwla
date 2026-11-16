@@ -394,7 +394,9 @@ array child). Remove each check when its phase is built.
 - [ ] The user runs the full benchmark on the VM; every number at least matches
   `d6e678b`.
 - **Exit:** all suites pass, then `packages/compiler` is deleted and compiler-next
-  takes its name.
+  takes its name. With it go its tests (generated text, snapshots, its internal signature, its
+  internals) and every piece of runtime, data, server or tool code only its output reaches
+  (`../decisions.md`, 2026-11-15); programs worth keeping stay as replay cases.
 
 ## Later
 

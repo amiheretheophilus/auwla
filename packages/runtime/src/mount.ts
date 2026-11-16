@@ -66,6 +66,22 @@ function hydrationRootId(host: Element): string | null {
   return null;
 }
 
+/** Applications a module's top-level `mount` started, by that call's key (`mountOnce`). */
+const mountedOnce = new Map<string, unknown>();
+
+/**
+ * A module-level `mount(...)` under hot replacement (`compiler-next/src/core/resolve/mounts.ts`):
+ * the first evaluation mounts; evaluating the module again after an edit returns the application
+ * already on the page, whose components the hot runtime replaces in place. So `mount` can sit in
+ * the component's own file (`App.auwla`) and that file still accepts its hot updates.
+ */
+export function mountOnce<T>(key: string, start: () => T): T {
+  if (mountedOnce.has(key)) return mountedOnce.get(key) as T;
+  const application = start();
+  mountedOnce.set(key, application);
+  return application;
+}
+
 /**
  * Mount one compiled application root. A matching SSR root is adopted
  * automatically; a structural mismatch is discarded and mounted once.

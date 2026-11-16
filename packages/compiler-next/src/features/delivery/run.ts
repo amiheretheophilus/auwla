@@ -50,7 +50,8 @@ class NotClosed extends Error {}
 export function runAtBuild(
   output: Readonly<Record<string, string>>,
   rootModule: string,
-  exportName: string,
+  /** The root among `rootModule`'s exports; null: the component that module's `mount` is given. */
+  exportName: string | null,
   runtimePath: string,
   resolve: (specifier: string, importer: string) => string | false | null,
 ): BuildRun | null {
@@ -72,9 +73,19 @@ export function runAtBuild(
   const math = new Proxy(Math, {
     get: (target, key) => (key === 'random' ? closedOff('Math.random') : Reflect.get(target, key)),
   });
+  // A build never mounts into a document. The page's `mount(target, App)` hands the run its root
+  // instead, which is how a root mounted from its own file is found (`core/resolve/mounts.ts`).
+  let mounted: unknown;
+  const standIns: Record<string, unknown> = {
+    mount: (_target: unknown, component: unknown) => {
+      mounted = component;
+    },
+    mountOnce: (_key: unknown, start: () => unknown) => start(),
+  };
   const watchedRuntime = new Proxy(runtime as Record<string, unknown>, {
     get(target, key) {
       if (typeof key === 'string' && LIVE_HELPERS.has(key)) live = true;
+      if (typeof key === 'string' && Object.hasOwn(standIns, key)) return standIns[key];
       return target[key as string];
     },
   });
@@ -129,7 +140,9 @@ export function runAtBuild(
 
   // Whatever stops the run, the browser can still run the page, and shows any error of its own.
   try {
-    const component = (load(rootModule) as Record<string, unknown>)[exportName] as ServerComponent;
+    const rootExports = load(rootModule) as Record<string, unknown>;
+    const component = (exportName === null ? mounted : rootExports[exportName]) as ServerComponent;
+    if (typeof component !== 'function') return null;
     const html = renderToString(component);
     if (noteEventListeners() !== listenersBefore) live = true;
     return escaped ? null : { html, live };

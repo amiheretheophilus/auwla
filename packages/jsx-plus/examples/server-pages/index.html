@@ -8,6 +8,7 @@
   <body>
     <!-- The server renders the app here. Vite serves this page; the Bun preview has its own. -->
     <div id="root"><!--ssr-outlet--></div>
-    <script type="module" src="/src/main.ts"></script>
+    <!-- The root component's own file is the entry: it mounts the app itself. -->
+    <script type="module" src="/src/App.auwla"></script>
   </body>
 </html>

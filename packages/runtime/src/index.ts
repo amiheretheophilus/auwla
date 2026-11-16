@@ -146,7 +146,7 @@ export { isStructuralListUpdate, listItemIndices, createListProvenance, evaluate
 export { rootNodes } from './jsx-dom';
 export { decodeListKey, encodeListKey } from './list-keys';
 export { HydrationMismatchError } from './hydration-error';
-export { mount } from './mount';
+export { mount, mountOnce } from './mount';
 export { mountInitial, registerRootFactory, rootFactoryStore, whileApplicationMounted } from './mount-core';
 export type { ApplicationLifetime } from './mount-core';
 export { initializePayload } from './payload';

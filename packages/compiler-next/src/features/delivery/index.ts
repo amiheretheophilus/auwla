@@ -9,6 +9,7 @@ import { importedDefinition } from '../../core/resolve';
 import { frameworkPackage, importOf, isFrameworkMount } from '../../core/resolve/exports';
 import { importResolver, isPlainStylesheet } from '../../core/resolve/imports';
 import { DEFAULT_RUNTIME_PATH, type CompileModulesOptions } from '../../options';
+import { topLevelMounts } from '../../core/resolve/mounts';
 import { htmlKeepsItsShape } from './html-shape';
 import { runAtBuild } from './run';
 
@@ -26,7 +27,11 @@ export interface InitialDelivery {
 interface ApplicationRoot {
   readonly mountModule: string;
   readonly rootModule: string;
-  readonly exportName: string;
+  /**
+   * The root's name among `rootModule`'s exports, or null when the module mounts a component of
+   * its own (`core/resolve/mounts.ts`): the run renders what that `mount` is given.
+   */
+  readonly exportName: string | null;
   readonly target: string;
 }
 
@@ -82,10 +87,16 @@ function findApplicationRoot(resolved: Resolved): ApplicationRoot | null {
     if (rest.length > 0 || !is.Literal(target) || typeof target.value !== 'string' || !is.Identifier(component)) {
       return null;
     }
+    const rootBinding = module.referenceOf(component)?.binding ?? null;
+    // `mount('root', App)` in App's own file (`core/resolve/mounts.ts`): the run evaluates this
+    // module, everything in it, as the browser would, and renders what its `mount` is given.
+    if (rootBinding !== null && importOf(rootBinding) === undefined && topLevelMounts(module).includes(call)) {
+      found = { mountModule: path, target: target.value, rootModule: path, exportName: null };
+      continue;
+    }
     // The build runs the root's module only. Any other import, `import './initialize'` too, runs
     // code before the page that the build would not, so such an entry is the browser's. A plain
     // stylesheet (`import './app.css'`) runs no code; the page links it (`project/page.ts`).
-    const rootBinding = module.referenceOf(component)?.binding ?? null;
     const onlyMounts = module.ast.body.every((statement) => {
       if (is.ExpressionStatement(statement)) return statement.expression === call;
       if (!is.ImportDeclaration(statement)) return false;
