@@ -15,6 +15,10 @@ and runs their cleanup.
 - `dom.ts` emits lifecycle calls and activation watches. All arguments, including
   extra arguments and spreads, evaluate in authored order. No exception wrapper
   is emitted.
+- `markers.ts` refuses `$effect` or `$cleanup` used other than as a direct call
+  (`const run = $effect`, `fn($cleanup)`, `typeof $effect`), which would stay in the output
+  and fail with "$effect is not defined" (`../decisions.md`, 2026-11-16). A module's own
+  function of that name is left alone. `markers.test.ts` covers each form.
 - `runtime/src/effect.ts` shares registration with old output. Compiler-next opts
   into the existing computation collector and write batches. Effects run after DOM
   work and deferred refs, replace their subscriptions after execution, and settle

@@ -332,6 +332,8 @@ evaluation: parent attributes evaluate before child expressions.
 | `storage.ts` | Selects the lexical activation retaining a binding: module, function or nested block; var retains its function owner |
 | `template.ts` | Builds the node sequence, static markup and expression sites; keeps repeated attributes in authored order; shares the primitive-result query with the optional binding proof |
 | `jsx.ts` | JSX whitespace, attribute aliases, namespaces and conservative template-parsing eligibility |
+| `content-rules.ts` | Refuses a host element given its content twice, `innerHTML` and JSX children (below), before any element is planned |
+| `content-rules.test.ts` | The error and its place, dynamic and custom-element forms, whitespace and comments allowed, a component's own `innerHTML` prop left alone |
 | `plan.test.ts` | Node addressing, expression order, graph reactivity, fallback creation and unchanged authored AST |
 
 - `Template`: static DOM shape, hoisted.
@@ -346,6 +348,11 @@ evaluation: parent attributes evaluate before child expressions.
 - `Boundary { sources, pending, error }` _(planned)_, for loading and error UI.
 
 Features build their own pieces. Optimizations replace pieces (`optimize.md`).
+
+**One source of content per element** (`../decisions.md`, 2026-11-16). `<div innerHTML="…">` with
+JSX children inside is a compile error: only one can be the element's content, and nothing says
+which (the reference showed the children, compiled code the string). Layout whitespace and
+`{/* comments */}` inside are not content. A component's `innerHTML` prop is its own business.
 
 ## emit — `core/emit/`
 

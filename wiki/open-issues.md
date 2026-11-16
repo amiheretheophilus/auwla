@@ -13,11 +13,6 @@ Compiler bugs and cases live on their `compiler/` page, under "Cases to test".
 
 ## Decisions needed from the user (2026-11-06)
 
-- **What to do with root tests tied to the old compiler** (`compiler/testing.md`, "Acceptance"). 514 of
-  825 failures can never pass on any rewrite: 329 assert the old compiler's generated text, 94 its error
-  messages, and 91 call compiled components with its internal signature. Rule 7 forbids editing them
-  to pass. Recommended: delete the text assertions along with `packages/compiler` at exit, and go through
-  the error messages with you, since each one is a program the old compiler refused.
 
 - **Running authored code at build time to find static pages** (`compiler/delivery.md`). The old
   compiler's rule is "planning never executes an authored function": it models JavaScript in a

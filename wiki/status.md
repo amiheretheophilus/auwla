@@ -24,8 +24,12 @@ lines that check the page or a call were each run: none is a compiler-next bug. 
 positional props, effect and scheduling timing, approved rules, globals edited outside
 compiled code, and the old hydration and runtime APIs. The rest assert the old generated text, its
 errors, its internal signature or counts of its internal work. The run found one reference gap, a
-source read inside a JSX spread, now fixed with two cases. Next: the old error messages with the user,
-then the old compiler's deletion.
+source read inside a JSX spread, now fixed with two cases. Next: the old compiler's deletion.
+
+**Decided and done (2026-11-16): which old error messages stay** (`decisions.md`). Only those for
+programs that would show wrong output or fail: `innerHTML` with JSX children (`compiler/core.md`,
+"plan") and `$effect` or `$cleanup` used other than as a direct call (`compiler/effects.md`). The
+rest were the old compiler's limits and go with its tests.
 
 **Decided and done (2026-11-16): one props object** (`decisions.md`; `compiler/components.md`,
 "Rules"). Components take one props object, as in plain JavaScript; positional props are not kept.

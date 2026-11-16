@@ -6,6 +6,8 @@ import { classifySources, SourceQueries } from '../../features/sources/classify'
 import { collectComputations } from '../../features/derived/computations';
 import { componentFunctions, propBindings } from '../../features/props/classify';
 import { checkComponentParameters } from '../../features/props/parameters';
+import { checkLifecycleMarkers } from '../../features/effects/markers';
+import { checkElementContent } from '../plan/content-rules';
 import type { Resolved } from '../resolve';
 import { summarizeFunctions } from '../resolve/functions';
 import { propertyReads } from '../resolve/members';
@@ -35,8 +37,12 @@ export function classifyGraph(resolved: Resolved): ClassifiedGraph {
   const queries = new InputQueries(summaries, properties);
   const computations = collectComputations(resolved, queries);
   const components = componentFunctions(resolved);
-  // Before anything reads props: code written for the old positional props reads wrong here.
+  // Authoring mistakes that would otherwise show wrong output or fail at run time, refused
+  // before anything is classified: the old positional props, a lifecycle marker used as a value,
+  // and an element given its content twice.
   checkComponentParameters(resolved, components);
+  checkLifecycleMarkers(resolved);
+  checkElementContent(resolved);
   const props = propBindings(resolved, components);
   // Implicit ref writes supply reactive roots before derivation propagates.
   const state = classifyState(resolved, computations, props);
