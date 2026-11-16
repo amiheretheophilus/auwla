@@ -17,6 +17,8 @@ Finds components, and compiles calls to them: props, children and slots.
 | `features/components/bench.test.ts` | Unchanged Octane inline rows and DOM component rows, mounted through the real application API with 1,000-row correctness and disposal checks |
 | `features/props/classify.ts` | Component identities and native parameter bindings |
 | `features/props/dom.ts` | Native parameter patterns, defaults/rest, per-binding parent snapshots and prop reception |
+| `features/props/parameters.ts` | Compile errors for code written for the old positional props: a second parameter on a component used as a tag, and the whole props object shown as text ("Rules") |
+| `features/props/parameters.test.ts` | Both errors, their messages and places, and the plain functions, direct calls, reassigned parameters and exported components they leave alone |
 | `packages/runtime/src/components.ts` | Props cells, callable adapters, compiled/native tag mounting, generic host props and subtree disposal. A tag the compiler knows is a compiled component uses `createCompiledValue`, which retains no host-props or native renderer. `mount('root', App)` passes the function itself and needs no adapter; a root factory registered through either reference serves both (`aliasRoot`) |
 | `packages/runtime/tests/components.test.ts` | Adapter identity/metadata, native argument lists, shared program caches, consumer isolation and setup disposal |
 | `packages/runtime/tests/component-bundle.test.ts` | Production tree shaking excludes opaque value/list mounting from root-only adapters and retains it for dynamic tags |
@@ -138,6 +140,19 @@ before dependency queries. This is test-only and uses no production helpers.
   `createComponentValue`, which unwraps the adapter.
 - **Props are one object.** An extra prop the component does not declare is valid
   and simply unused; the old compiler rejected it. Spread props work.
+- **One props object, as in plain JavaScript** (`../decisions.md`, 2026-11-16). A component used as
+  a tag receives exactly one argument: `function Count(props)` reads `props.value`, and
+  `function Count({ value })` destructures it. The old compiler's positional props gave each
+  parameter the prop of its name (`function Row(item, sfx)`), which JavaScript and TypeScript do
+  not do. Code written that way reads wrong here without failing, so `features/props/parameters.ts`
+  makes two forms compile errors:
+  - a parameter after the first, on a function used as a tag: it is always `undefined`;
+  - the whole props object shown as text (`function Count(value)` with `{value}`), which shows
+    "[object Object]". Only when the function is never called directly, its parameter is never
+    reassigned, and nothing outside the program can call it, since a direct call may pass a string.
+
+  A capitalized function that is only called (`items.map(Row)`, `Label('x', 2)`) is a plain
+  function and may take any parameters.
 - Each prop is a `Prop` node in the child (`state-and-derived.md`). It is reactive
   when the parent's expression is.
 - Children and named slots are plans passed to the child. Render callbacks

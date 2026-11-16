@@ -286,7 +286,8 @@ checks before retention checks as well as in isolation when changing this fixtur
    Of the last group, 62 failing lines in 30 files check what the page shows or what was called. Each
    file was run and read; none shows a compiler-next bug. They are, by cause:
 
-   - positional props (`function Row(item)`), the open decision in `../open-issues.md`: `m9`, `m10`,
+   - positional props (`function Row(item)`), not kept (`../decisions.md`, 2026-11-16; now a compile
+     error, `components.md`, "Rules"): `m9`, `m10`,
      `r21-children`, `r22-components`, `r24-jsx`, `recent-fixes-and-gated-maps`;
    - effects running after their owner commits (`effects.md`), where the old test checked
      synchronously: `effect-cleanup-consumption`, `r26-effect`, `recent-fixes-and-gated-maps`;

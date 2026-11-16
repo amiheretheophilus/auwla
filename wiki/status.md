@@ -21,11 +21,16 @@ See [dynamic attribute values](compiler/core.md#dynamic-attribute-values).
 1,111 fail on the 199 root files. 350 of the failures call the old program entry points, which throw
 since 2026-11-10 (the old hydration plans and package artifact). Of the other 761, the 62 failing
 lines that check the page or a call were each run: none is a compiler-next bug. They come from
-positional props (still open), effect and scheduling timing, approved rules, globals edited outside
+positional props, effect and scheduling timing, approved rules, globals edited outside
 compiled code, and the old hydration and runtime APIs. The rest assert the old generated text, its
 errors, its internal signature or counts of its internal work. The run found one reference gap, a
-source read inside a JSX spread, now fixed with two cases. Next: the error messages and positional
-props with the user, then the old compiler's deletion.
+source read inside a JSX spread, now fixed with two cases. Next: the old error messages with the user,
+then the old compiler's deletion.
+
+**Decided and done (2026-11-16): one props object** (`decisions.md`; `compiler/components.md`,
+"Rules"). Components take one props object, as in plain JavaScript; positional props are not kept.
+A second parameter on a component used as a tag, and the whole props object shown as text, are
+compile errors that say how to destructure instead.
 
 **Done (2026-11-15): `mount` in the root component's own file** (`compiler/project.md`, "Mount in a
 component's file"). `App.auwla` (or `.tsx`) can end with `mount('root', App)` and be the page's

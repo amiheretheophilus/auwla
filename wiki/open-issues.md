@@ -13,15 +13,6 @@ Compiler bugs and cases live on their `compiler/` page, under "Cases to test".
 
 ## Decisions needed from the user (2026-11-06)
 
-- **Positional props: `function Count(value) { … }`.** On the old compiler, a parameter that is not
-  destructured is the prop of that name, so `<Count value={1} />` gives `value` the number, and
-  `function Row(props)` with `<Row a={1} />` is an error ("unknown prop 'a' … declared props: props").
-  On compiler-next it is plain JavaScript: the first parameter is the props object, so that `value`
-  prints `[object Object]`. Nothing warns about it. The README and every example destructure or take no
-  parameters, but 38 root test files use the old form. The two cannot both hold, since a compiler cannot
-  tell `Count(value)` from `Row(props)` by looking. Recommended: keep plain JavaScript, because it is what
-  TypeScript types and readers expect, and have the compiler report a prop read that can only be the
-  whole object in text. If you want positional props, it is a small change in `features/props`.
 - **What to do with root tests tied to the old compiler** (`compiler/testing.md`, "Acceptance"). 514 of
   825 failures can never pass on any rewrite: 329 assert the old compiler's generated text, 94 its error
   messages, and 91 call compiled components with its internal signature. Rule 7 forbids editing them
