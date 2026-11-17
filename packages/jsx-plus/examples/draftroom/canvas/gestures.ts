@@ -8,6 +8,11 @@ type Gesture =
   | TransformDraft
   | DrawingDraft;
 
+interface ActivePointer {
+  id: number;
+  last: Point;
+}
+
 interface BoardInput {
   camera(): Camera;
   setCamera(camera: Camera): void;
@@ -40,16 +45,35 @@ function overResizeHandle(shape: Shape | undefined, point: Point, zoom: number):
 
 /** Pointer previews stay out of the project until a completed gesture reaches finish(). */
 export function bindGestures(canvas: HTMLCanvasElement, input: BoardInput): () => void {
-  let pointer: number | undefined;
+  let pointer: ActivePointer | undefined;
   let drag: Gesture | undefined;
   let changed: Shape | undefined;
   const listeners = new AbortController();
   const options = { signal: listeners.signal };
-  const panShortcut = bindPanShortcut(canvas, listeners.signal);
+  const panShortcut = bindPanShortcut(canvas, listeners.signal, switchToPan);
 
   function world(point: Point, allowSnap = true): Point {
     const position = toWorld(point, input.camera());
     return allowSnap && input.snap() ? snapPoint(position) : position;
+  }
+
+  function beginPan(screen: Point): void {
+    if (drag?.kind !== 'pan') {
+      drag = { kind: 'pan', start: screen, camera: input.camera() };
+
+      // Space takes over from an unfinished edit. The camera moves from the last pointer position.
+      if (changed !== undefined) {
+        changed = undefined;
+        input.preview();
+      }
+    }
+    panShortcut.begin();
+  }
+
+  function switchToPan(): void {
+    if (pointer !== undefined) {
+      beginPan(pointer.last);
+    }
   }
 
   function down(event: PointerEvent): void {
@@ -57,15 +81,16 @@ export function bindGestures(canvas: HTMLCanvasElement, input: BoardInput): () =
       return;
     }
 
+    const spaceHeld = panShortcut.held();
+
     // Give shortcuts to the board and let an active inspector field commit first.
     canvas.focus({ preventScroll: true });
     const screen = screenPoint(canvas, event);
     const camera = input.camera();
     const tool = input.tool();
 
-    if (tool === 'hand' || panShortcut.held() || event.button === 1) {
-      drag = { kind: 'pan', start: screen, camera };
-      panShortcut.begin();
+    if (tool === 'hand' || spaceHeld || event.button === 1) {
+      beginPan(screen);
     } else if (tool === 'select') {
       const point = world(screen, false);
       const selected = input.selected();
@@ -75,26 +100,31 @@ export function bindGestures(canvas: HTMLCanvasElement, input: BoardInput): () =
       } else {
         const shape = hitShape(input.shapes(), point, camera.zoom);
         input.select(shape?.id);
-        if (shape === undefined || shape.locked) {
-          return;
+        if (shape !== undefined && !shape.locked) {
+          drag = { kind: 'move', shape, start: point };
         }
-        drag = { kind: 'move', shape, start: point };
       }
     } else {
       drag = startDrawing(tool, world(screen, tool !== 'pen'), screen);
     }
 
     event.preventDefault();
-    pointer = event.pointerId;
-    canvas.setPointerCapture(pointer);
+    // Track presses on empty or locked areas too. Space can turn a held press into a pan.
+    pointer = { id: event.pointerId, last: screen };
+    canvas.setPointerCapture(event.pointerId);
   }
 
   function move(event: PointerEvent): void {
-    if (event.pointerId !== pointer || drag === undefined) {
+    if (event.pointerId !== pointer?.id) {
       return;
     }
 
     const screen = screenPoint(canvas, event);
+    pointer.last = screen;
+    if (drag === undefined) {
+      return;
+    }
+
     if (drag.kind === 'pan') {
       input.setCamera({
         ...drag.camera,
@@ -119,7 +149,7 @@ export function bindGestures(canvas: HTMLCanvasElement, input: BoardInput): () =
   }
 
   function end(event: PointerEvent, commit: boolean): void {
-    if (event.pointerId !== pointer) {
+    if (event.pointerId !== pointer?.id) {
       return;
     }
 

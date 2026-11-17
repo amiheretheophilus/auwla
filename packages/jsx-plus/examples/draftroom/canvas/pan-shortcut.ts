@@ -2,7 +2,7 @@ function isSpace(event: KeyboardEvent): boolean {
   return event.code === 'Space' || event.key === ' ';
 }
 
-export function bindPanShortcut(canvas: HTMLCanvasElement, signal: AbortSignal) {
+export function bindPanShortcut(canvas: HTMLCanvasElement, signal: AbortSignal, onHold: () => void) {
   let held = false;
   let dragging = false;
   let usedForDrag = false;
@@ -21,8 +21,11 @@ export function bindPanShortcut(canvas: HTMLCanvasElement, signal: AbortSignal) 
       return;
     }
 
-    held = true;
-    updateCursor();
+    if (!held) {
+      held = true;
+      onHold();
+      updateCursor();
+    }
 
     // Record Space on a focused toolbar button, but preserve its keyboard activation for a tap.
     if (!target?.closest('button, summary, [role="button"]') || usedForDrag) {
