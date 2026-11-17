@@ -1,0 +1,77 @@
+import type { Editor } from '../editor';
+import type { Shape, ShapeKind } from '../model/types';
+import { Icon } from './Icon.auwla';
+import { bindLayerDrag } from './layer-drag';
+
+const icons: Record<ShapeKind, string> = {
+  rectangle: 'rectangle',
+  ellipse: 'ellipse',
+  diamond: 'diamond',
+  arrow: 'arrow',
+  pen: 'pen',
+  text: 'text',
+  note: 'note',
+};
+
+export function Layers({ shapes, selectedId, editor }: { shapes: Shape[]; selectedId?: string; editor: Editor }) {
+  const topFirst = shapes.toReversed();
+
+  function attach(list: HTMLDivElement): () => void {
+    return bindLayerDrag(list, editor.project.moveLayer);
+  }
+
+  function reorderWithKeys(event: KeyboardEvent, shape: Shape): void {
+    if (!event.altKey || shape.locked || (event.key !== 'ArrowUp' && event.key !== 'ArrowDown')) {
+      return;
+    }
+
+    event.preventDefault();
+    const up = event.key === 'ArrowUp';
+    const index = topFirst.indexOf(shape);
+    const target = topFirst[index + (up ? -1 : 1)];
+    if (target === undefined) {
+      return;
+    }
+
+    const button = event.currentTarget as HTMLButtonElement;
+    editor.project.moveLayer(shape.id, target.id, up ? 'above' : 'below');
+    button.focus({ preventScroll: true });
+  }
+
+  return (
+    <section class="layers-section">
+      <div class="section-heading">
+        <h2>"Layers"</h2>
+        <span class="section-count">shapes.length</span>
+      </div>
+      if (topFirst.length === 0) {
+        <p class="empty-list">"Objects you draw appear here."</p>
+      } else {
+        <div class="layer-list" ref=attach>
+          for (const shape of topFirst) {
+            <div key={shape.id} class="layer-item" data-layer-id={shape.id} data-locked={shape.locked ? 'yes' : 'no'}>
+              <button
+                type="button"
+                class="layer-row"
+                aria-pressed={shape.id === selectedId}
+                aria-keyshortcuts={shape.locked ? undefined : 'Alt+ArrowUp Alt+ArrowDown'}
+                data-hidden={shape.hidden ? 'yes' : 'no'}
+                onClick={() => editor.project.select(shape.id)}
+                onKeyDown={event => reorderWithKeys(event, shape)}
+              >
+                <Icon name={icons[shape.kind]} />
+                <span class="truncate">shape.title</span>
+                if (shape.hidden) { <span class="layer-state">"Hidden"</span> }
+                if (shape.locked) {
+                  <span class="layer-state">"Locked"</span>
+                } else {
+                  <span class="layer-grip" aria-hidden="true" title="Drag to reorder">"⋮⋮"</span>
+                }
+              </button>
+            </div>
+          }
+        </div>
+      }
+    </section>
+  );
+}

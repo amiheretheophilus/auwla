@@ -19,6 +19,7 @@ interface Commands {
   redo(): void;
   duplicate(): void;
   remove(): void;
+  editText(): boolean;
   nudge(x: number, y: number): void;
   zoom(factor: number): void;
   fit(): void;
@@ -64,6 +65,11 @@ export function bindShortcuts(commands: Commands): () => void {
 
     const step = event.shiftKey ? 10 : 1;
     switch (key) {
+      case 'enter':
+        if (event.target instanceof HTMLCanvasElement && commands.editText()) {
+          event.preventDefault();
+        }
+        break;
       case 'escape':
         commands.choose('select');
         commands.select();

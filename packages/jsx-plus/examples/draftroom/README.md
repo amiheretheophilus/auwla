@@ -20,10 +20,11 @@ bun run ../../node_modules/typescript/lib/tsc.js --project examples/draftroom/ts
 
 ## Use the workspace
 
-- Choose a tool to draw a rectangle, ellipse, diamond, arrow, freehand stroke, text box, or sticky note. Drag with Select to move an object and use its corner handle to resize a box. Use the inspector to edit text, color, line style, width, and opacity.
-- Use Layers to select overlapping objects, including hidden ones. The inspector can hide, lock, reorder, duplicate, or delete the selection.
+- Choose a tool to draw a rectangle, ellipse, diamond, arrow, freehand stroke, text box, or sticky note. Click to place a default-size box or drag to set its size. Drag with Select to move an object and use its corner handle to resize a box.
+- Double-click an object on the canvas to edit its text, or select it and press `Enter` with the canvas focused. New text boxes and sticky notes open their editor automatically. The canvas updates as you type here or in the inspector. Click away or press `Ctrl`/`⌘` + `Enter` in the canvas editor to save the text as one undo step. `Esc` cancels the canvas edit.
+- Drag a row in Layers to a new position. The insertion line shows where it will land. On touch screens, drag the grip. With a row focused, use `Alt` + `↑` or `↓` to move it one position. The inspector also offers color, line style, opacity, hide, lock, duplicate, and delete controls.
 - Use Pages to switch boards, start a blank board, or add a template. Rename the current page in Board settings. Undo and redo apply to edits across the project.
-- Hold `Space` and drag to pan. `Ctrl` or `⌘` plus the wheel zooms around the pointer. The zoom controls can fit the drawing, and clicking the minimap recenters the viewport.
+- Hold `Space` and drag to pan, including right after choosing a tool. `Ctrl` or `⌘` plus the wheel zooms around the pointer. The zoom controls can fit the drawing, and clicking the minimap recenters the viewport.
 - **Export** saves the current page as PNG or all pages as a JSON project. **Open** loads that project format. The current workspace autosaves in this browser's local storage. Undo history and camera position are session state.
 
 The example works in one browser and supports one selected object at a time. It has no backend or shared editing session.
@@ -34,6 +35,8 @@ The example works in one browser and supports one selected object at a time. It 
 | --- | --- |
 | `App.auwla`, `ui/` | Compose the workspace and display editor snapshots. The canvas ref attaches input listeners and returns their cleanup. |
 | `editor.ts`, `shortcuts.ts` | Connect UI commands to the document and viewport, and bind keyboard commands. |
+| `text-editing.ts`, `ui/InlineText.auwla` | Preview text as it changes and commit one document edit when the field closes. |
+| `ui/Layers.auwla`, `ui/layer-drag.ts` | Render the layer stack and track a drop position without changing the drawing until release. |
 | `project-files.ts` | Coordinate autosave, imports, and downloads with the current workspace. |
 | `model/document.ts`, `model/history.ts` | Manage pages, object stacking, selection, and undo. Edits replace the affected page and share the unchanged objects between snapshots. |
 | `model/types.ts`, `model/templates.ts`, `model/files.ts` | Define the project format, create sample pages, and validate imported projects and autosaves. |

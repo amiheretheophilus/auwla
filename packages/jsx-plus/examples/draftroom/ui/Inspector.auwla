@@ -14,7 +14,7 @@ export function Inspector({ view, editor }: { view: EditorView; editor: Editor }
           <div class="empty-properties">
             <span class="empty-icon"><Icon name="cursor" /></span>
             <p>"No object selected"</p>
-            <span>"Select something on the canvas or in Layers to edit it."</span>
+            <span>"Select an object to see its properties. Double-click it to edit text."</span>
           </div>
         }
       </section>
@@ -37,6 +37,7 @@ export function Inspector({ view, editor }: { view: EditorView; editor: Editor }
         <summary>"Keyboard shortcuts" <Icon name="chevron" /></summary>
         <div><span>"Select / hand"</span><kbd>"V / H"</kbd></div>
         <div><span>"Pan temporarily"</span><kbd>"Space"</kbd></div>
+        <div><span>"Edit text on canvas"</span><kbd>"Enter"</kbd></div>
         <div><span>"Fit drawing"</span><kbd>"0"</kbd></div>
         <div><span>"Nudge selection"</span><kbd>"Arrow keys"</kbd></div>
         <div><span>"Delete selection"</span><kbd>"Delete"</kbd></div>

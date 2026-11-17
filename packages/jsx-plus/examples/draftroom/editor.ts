@@ -4,6 +4,7 @@ import { initialProject } from './model/templates';
 import type { EditorView, Tool } from './model/types';
 import { createProjectFiles } from './project-files';
 import { bindShortcuts } from './shortcuts';
+import { createTextEditing } from './text-editing';
 
 /** Connects the document, canvas, and JSX+ controls. Canvas previews never publish a UI snapshot. */
 export function createEditor(update: (view: EditorView) => void) {
@@ -19,19 +20,33 @@ export function createEditor(update: (view: EditorView) => void) {
     tool: () => tool,
     snap: () => snap,
     select: project.select,
+    editText(id) {
+      textEditing.open(id);
+    },
     finish(shape) {
+      const added = project.shapeById(shape.id) === undefined;
       tool = 'select';
       project.put(shape);
+
+      if (added && (shape.kind === 'text' || shape.kind === 'note')) {
+        textEditing.open(shape.id);
+      }
     },
-    changed: publish,
+    changed(zoomChanged) {
+      if (zoomChanged || textEditing.isOpen()) {
+        publish();
+      }
+    },
   });
   const files = createProjectFiles(project, say);
+  const textEditing = createTextEditing(project, viewport, publish);
 
   function view(): EditorView {
     return {
       pages: project.project().pages,
       page: project.page(),
       selected: project.selected(),
+      inlineText: textEditing.view(),
       tool,
       grid,
       snap,
@@ -52,6 +67,8 @@ export function createEditor(update: (view: EditorView) => void) {
   }
 
   function changed(persist: boolean, refit: boolean): void {
+    textEditing.syncSelection();
+
     if (refit) {
       viewport.fit();
     }
@@ -93,6 +110,7 @@ export function createEditor(update: (view: EditorView) => void) {
       duplicate: project.duplicate,
       remove: project.remove,
       nudge,
+      editText: textEditing.open,
       zoom: viewport.zoom,
       fit: viewport.fit,
     });
@@ -127,6 +145,8 @@ export function createEditor(update: (view: EditorView) => void) {
     exportProject: files.exportProject,
     exportPng: files.exportPng,
     project,
+    text: textEditing,
+    focusBoard: viewport.focusBoard,
     fit: viewport.fit,
     zoom: viewport.zoom,
     attachMap: viewport.attachMap,

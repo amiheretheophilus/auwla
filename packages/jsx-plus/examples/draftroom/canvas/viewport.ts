@@ -1,7 +1,7 @@
 import { drawingBounds, fitCamera, GRID, zoomCamera } from './geometry';
 import { bindGestures, screenPoint } from './gestures';
 import { canvasSize, createBoardPainter, mapPosition, paintMap } from './paint';
-import type { Camera, Shape, Tool } from '../model/types';
+import type { Camera, InlineTextView, Shape, Tool } from '../model/types';
 
 interface Scene {
   shapes(): Shape[];
@@ -9,8 +9,9 @@ interface Scene {
   tool(): Tool;
   snap(): boolean;
   select(id?: string): void;
+  editText(id: string): void;
   finish(shape: Shape): void;
-  changed(): void;
+  changed(zoomChanged: boolean): void;
 }
 
 /** The CSS grid sits behind the canvas bitmap and only moves with the camera. */
@@ -29,6 +30,7 @@ export function createViewport(scene: Scene) {
   let map: HTMLCanvasElement | undefined;
   let camera: Camera = { x: 0, y: 0, zoom: 1 };
   let draft: Shape | undefined;
+  let textDraft: Shape | undefined;
   let frame = 0;
   let fitted = false;
   let mappedShapes: Shape[] | undefined;
@@ -57,7 +59,7 @@ export function createViewport(scene: Scene) {
       }
 
       const shapes = scene.shapes();
-      painter.paint(board, shapes, camera, scene.selected(), draft);
+      painter.paint(board, shapes, camera, scene.selected(), draft ?? textDraft);
       // A drag's draft is only for the main board. The map catches up when the edit commits.
       paintOverview(board, shapes);
     });
@@ -69,9 +71,7 @@ export function createViewport(scene: Scene) {
     if (board !== undefined) {
       positionGrid(board, camera);
     }
-    if (zoomChanged) {
-      scene.changed();
-    }
+    scene.changed(zoomChanged);
     render();
   }
 
@@ -100,6 +100,7 @@ export function createViewport(scene: Scene) {
       shapes: scene.shapes,
       selected: scene.selected,
       select: scene.select,
+      editText: scene.editText,
       finish: scene.finish,
       preview(shape) {
         draft = shape;
@@ -112,6 +113,8 @@ export function createViewport(scene: Scene) {
       mappedCamera = undefined;
       if (!fitted) {
         fit();
+      } else {
+        scene.changed(false);
       }
       render();
     });
@@ -125,6 +128,7 @@ export function createViewport(scene: Scene) {
       frame = 0;
       board = undefined;
       draft = undefined;
+      textDraft = undefined;
     };
   }
 
@@ -175,12 +179,48 @@ export function createViewport(scene: Scene) {
     setCamera(zoomCamera(camera, factor, { x: width / 2, y: height / 2 }));
   }
 
+  function previewText(shape?: Shape): void {
+    textDraft = shape;
+    render();
+  }
+
+  function positionText(shape: Shape): InlineTextView | undefined {
+    if (board === undefined) {
+      return undefined;
+    }
+
+    const visible = canvasSize(board);
+    const margin = 10;
+    const width = Math.min(250, Math.max(0, visible.width - margin * 2));
+    const panelHeight = 124;
+    const shapeCenter = camera.x + (shape.x + shape.width / 2) * camera.zoom;
+    const shapeTop = camera.y + shape.y * camera.zoom;
+    const shapeBottom = shapeTop + shape.height * camera.zoom;
+
+    // Place the field near the object and keep the text and keyboard help inside the board.
+    const below = shapeBottom + margin;
+    const top = below + panelHeight <= visible.height ? below : shapeTop - panelHeight - margin;
+    return {
+      shape,
+      width,
+      x: Math.max(margin, Math.min(shapeCenter - width / 2, visible.width - width - margin)),
+      y: Math.max(margin, Math.min(top, visible.height - panelHeight - margin)),
+    };
+  }
+
+  function focusBoard(): void {
+    board?.focus({ preventScroll: true });
+  }
+
   return {
     attachBoard,
     attachMap,
     fit,
     render,
     zoom,
+    previewText,
+    positionText,
+    focusBoard,
     scale: () => camera.zoom,
   };
 }

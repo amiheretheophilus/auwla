@@ -1,6 +1,6 @@
 import { createHistory } from './history';
 import { brainstorm, workflow } from './templates';
-import { makePage, type Page, type Project, type Shape } from './types';
+import { canEditText, makePage, type Page, type Project, type Shape } from './types';
 
 export function createDocument(initial: Project, change: (persist: boolean, refit: boolean) => void) {
   const history = createHistory(initial);
@@ -12,7 +12,11 @@ export function createDocument(initial: Project, change: (persist: boolean, refi
   }
 
   function selected(): Shape | undefined {
-    return page().shapes.find(shape => shape.id === selectedId);
+    return shapeById(selectedId);
+  }
+
+  function shapeById(id: string | undefined): Shape | undefined {
+    return page().shapes.find(shape => shape.id === id);
   }
 
   function select(id?: string): void {
@@ -97,6 +101,18 @@ export function createDocument(initial: Project, change: (persist: boolean, refi
     put({ ...shape, ...values });
   }
 
+  function setText(id: string, text: string): boolean {
+    const shape = shapeById(id);
+    if (!canEditText(shape) || shape.text === text) {
+      return false;
+    }
+
+    const current = page();
+    const shapes = current.shapes.map(item => item === shape ? { ...shape, text } : item);
+    setPage({ ...current, shapes });
+    return true;
+  }
+
   function duplicate(): void {
     const shape = selected();
     if (shape === undefined || shape.locked) {
@@ -142,6 +158,28 @@ export function createDocument(initial: Project, change: (persist: boolean, refi
     setPage({ ...current, shapes });
   }
 
+  function moveLayer(sourceId: string, targetId: string, side: 'above' | 'below'): void {
+    const current = page();
+    const from = current.shapes.findIndex(shape => shape.id === sourceId);
+    const target = current.shapes.findIndex(shape => shape.id === targetId);
+    const moving = current.shapes[from];
+    if (moving === undefined || moving.locked || target < 0 || from === target) {
+      return;
+    }
+
+    // Drawing order is back to front. The Layers list displays that order in reverse.
+    const targetAfterRemoval = from < target ? target - 1 : target;
+    const destination = targetAfterRemoval + (side === 'above' ? 1 : 0);
+    if (destination === from) {
+      return;
+    }
+
+    const shapes = current.shapes.slice();
+    shapes.splice(from, 1);
+    shapes.splice(destination, 0, moving);
+    setPage({ ...current, shapes });
+  }
+
   function travel(direction: 'undo' | 'redo'): void {
     const before = history.current();
     history[direction]();
@@ -168,6 +206,7 @@ export function createDocument(initial: Project, change: (persist: boolean, refi
     canRedo: history.canRedo,
     page,
     selected,
+    shapeById,
     select,
     open,
     add,
@@ -175,9 +214,11 @@ export function createDocument(initial: Project, change: (persist: boolean, refi
     removePage,
     put,
     patch,
+    setText,
     duplicate,
     remove,
     reorder,
+    moveLayer,
     travel,
     replace,
   };

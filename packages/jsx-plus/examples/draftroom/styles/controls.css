@@ -108,6 +108,40 @@ summary::-webkit-details-marker { display: none; }
 
 .page-row[aria-pressed="true"] { font-weight: 650; }
 .layer-row[data-hidden="yes"] { color: var(--faint); }
+.layer-row { user-select: none; }
+
+.layer-item {
+  position: relative;
+  min-width: 0;
+}
+.layer-item[data-dragging="yes"] { opacity: 0.55; }
+
+.layer-item[data-drop-side]::after {
+  position: absolute;
+  z-index: 1;
+  right: 3px;
+  left: 3px;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--violet);
+  pointer-events: none;
+  content: "";
+}
+
+.layer-item[data-drop-side="above"]::after { top: -2px; }
+.layer-item[data-drop-side="below"]::after { bottom: -2px; }
+
+.layer-grip {
+  padding: 5px 0 5px 4px;
+  color: var(--faint);
+  font-size: 14px;
+  line-height: 1;
+  cursor: grab;
+  touch-action: none;
+}
+
+.layer-item[data-dragging="yes"] .layer-grip { cursor: grabbing; }
+
 .layer-state {
   color: var(--faint);
   font-size: 9px;

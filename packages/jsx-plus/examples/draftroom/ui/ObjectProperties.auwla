@@ -42,7 +42,8 @@ export function ObjectProperties({ shape, editor }: { shape: Shape; editor: Edit
               value={shape.text}
               rows={2}
               maxLength={1000}
-              onChange={event => editor.project.patch({ text: event.currentTarget.value })}
+              onInput={event => editor.text.preview(shape.id, event.currentTarget.value)}
+              onBlur={event => editor.text.finish(shape.id, event.currentTarget.value)}
             ></textarea>
           </label>
         }

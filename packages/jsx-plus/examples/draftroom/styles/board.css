@@ -34,6 +34,41 @@
 .drawing-board[data-tool="hand"]:active { cursor: grabbing; }
 .drawing-board:not([data-tool="select"], [data-tool="hand"]) { cursor: crosshair; }
 .drawing-board[data-tool="text"] { cursor: text; }
+.drawing-board[data-space-pan="ready"] { cursor: grab; }
+.drawing-board[data-space-pan="dragging"] { cursor: grabbing; }
+
+.inline-text-editor {
+  position: absolute;
+  z-index: 2;
+  display: grid;
+  gap: 6px;
+  padding: 10px;
+  border: 1px solid #c6b5f4;
+  border-radius: 10px;
+  background: var(--panel);
+  box-shadow: 0 5px 18px #49367526;
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.inline-text-editor textarea {
+  width: 100%;
+  min-height: 48px;
+  padding: 6px 8px;
+  resize: none;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #fcfbfe;
+  color: var(--ink);
+  font-weight: 400;
+}
+
+.inline-text-editor small {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 400;
+}
 
 .floating-tools {
   position: absolute;

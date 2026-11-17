@@ -1,0 +1,60 @@
+import type { Editor } from '../editor';
+import type { InlineTextView } from '../model/types';
+
+export function InlineText({ entry, editor }: { entry: InlineTextView; editor: Editor }) {
+  let finished = false;
+
+  function focus(input: HTMLTextAreaElement): void {
+    input.value = entry.shape.text;
+    input.focus({ preventScroll: true });
+    input.select();
+  }
+
+  function close(commit: boolean, value: string): void {
+    if (finished) {
+      return;
+    }
+
+    finished = true;
+    editor.text.finish(entry.shape.id, commit ? value : undefined);
+  }
+
+  function handleKey(event: KeyboardEvent): void {
+    if (event.isComposing) {
+      return;
+    }
+
+    const cancel = event.key === 'Escape';
+    const apply = event.key === 'Enter' && (event.ctrlKey || event.metaKey);
+    if (!cancel && !apply) {
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+    const input = event.currentTarget as HTMLTextAreaElement;
+    close(apply, input.value);
+    editor.focusBoard();
+  }
+
+  const position = {
+    left: `${entry.x}px`,
+    top: `${entry.y}px`,
+    width: `${entry.width}px`,
+  };
+
+  return (
+    <label class="inline-text-editor" style={position}>
+      <span>"Edit object text"</span>
+      <textarea
+        ref=focus
+        rows={2}
+        maxLength={1000}
+        onInput={event => editor.text.preview(entry.shape.id, event.currentTarget.value)}
+        onBlur={event => close(true, event.currentTarget.value)}
+        onKeyDown=handleKey
+      ></textarea>
+      <small>"Ctrl/⌘+Enter to apply · Esc to cancel"</small>
+    </label>
+  );
+}

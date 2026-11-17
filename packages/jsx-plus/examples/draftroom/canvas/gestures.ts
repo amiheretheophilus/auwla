@@ -1,5 +1,6 @@
 import { startDrawing, updateDrawing, updateTransform, type DrawingDraft, type TransformDraft } from './drafts';
 import { hitShape, snapPoint, toWorld, zoomCamera } from './geometry';
+import { bindPanShortcut } from './pan-shortcut';
 import type { Camera, Point, Shape, Tool } from '../model/types';
 
 type Gesture =
@@ -15,6 +16,7 @@ interface BoardInput {
   shapes(): Shape[];
   selected(): Shape | undefined;
   select(id?: string): void;
+  editText(id: string): void;
   preview(shape?: Shape): void;
   finish(shape: Shape): void;
 }
@@ -41,7 +43,9 @@ export function bindGestures(canvas: HTMLCanvasElement, input: BoardInput): () =
   let pointer: number | undefined;
   let drag: Gesture | undefined;
   let changed: Shape | undefined;
-  let space = false;
+  const listeners = new AbortController();
+  const options = { signal: listeners.signal };
+  const panShortcut = bindPanShortcut(canvas, listeners.signal);
 
   function world(point: Point, allowSnap = true): Point {
     const position = toWorld(point, input.camera());
@@ -59,8 +63,9 @@ export function bindGestures(canvas: HTMLCanvasElement, input: BoardInput): () =
     const camera = input.camera();
     const tool = input.tool();
 
-    if (tool === 'hand' || space || event.button === 1) {
+    if (tool === 'hand' || panShortcut.held() || event.button === 1) {
       drag = { kind: 'pan', start: screen, camera };
+      panShortcut.begin();
     } else if (tool === 'select') {
       const point = world(screen, false);
       const selected = input.selected();
@@ -76,9 +81,7 @@ export function bindGestures(canvas: HTMLCanvasElement, input: BoardInput): () =
         drag = { kind: 'move', shape, start: point };
       }
     } else {
-      drag = startDrawing(tool, world(screen, tool !== 'pen'));
-      changed = drag.shape;
-      input.preview(changed);
+      drag = startDrawing(tool, world(screen, tool !== 'pen'), screen);
     }
 
     event.preventDefault();
@@ -102,6 +105,12 @@ export function bindGestures(canvas: HTMLCanvasElement, input: BoardInput): () =
     }
 
     if (drag.kind === 'draw') {
+      // Until the pointer moves, the gesture might be a click that places a default-size shape.
+      const distance = Math.hypot(screen.x - drag.screenStart.x, screen.y - drag.screenStart.y);
+      if (!drag.started && distance < 3) {
+        return;
+      }
+      drag.started = true;
       changed = updateDrawing(drag, world(screen, drag.shape.kind !== 'pen'));
     } else {
       changed = updateTransform(drag, world(screen, false), input.camera().zoom, input.snap());
@@ -114,10 +123,18 @@ export function bindGestures(canvas: HTMLCanvasElement, input: BoardInput): () =
       return;
     }
 
-    const final = changed;
+    if (commit && drag?.kind === 'draw' && !drag.started) {
+      move(event);
+    }
+    let final = changed;
+    if (drag?.kind === 'draw' && !drag.started && drag.shape.points === undefined) {
+      final = drag.shape;
+    }
+
     pointer = undefined;
     drag = undefined;
     changed = undefined;
+    panShortcut.end();
     input.preview();
     if (commit && final !== undefined && (final.points === undefined || final.width + final.height > 2)) {
       input.finish(final);
@@ -141,32 +158,24 @@ export function bindGestures(canvas: HTMLCanvasElement, input: BoardInput): () =
     }
   }
 
-  function keyDown(event: KeyboardEvent): void {
-    const usingControl = event.target instanceof HTMLElement
-      && event.target.closest('input, textarea, select, button, [contenteditable]');
-    if (event.code !== 'Space' || usingControl) {
+  function editText(event: MouseEvent): void {
+    if (input.tool() !== 'select' || panShortcut.held()) {
       return;
     }
-    space = true;
-    event.preventDefault();
-  }
-  function keyUp(event: KeyboardEvent): void {
-    if (event.code === 'Space') {
-      space = false;
+
+    const point = world(screenPoint(canvas, event), false);
+    const shape = hitShape(input.shapes(), point, input.camera().zoom);
+    if (shape !== undefined) {
+      input.editText(shape.id);
     }
   }
-  const blur = () => { space = false; };
 
-  const listeners = new AbortController();
-  const options = { signal: listeners.signal };
   canvas.addEventListener('pointerdown', down, options);
   canvas.addEventListener('pointermove', move, options);
   canvas.addEventListener('pointerup', up, options);
   canvas.addEventListener('pointercancel', cancel, options);
   canvas.addEventListener('lostpointercapture', cancel, options);
+  canvas.addEventListener('dblclick', editText, options);
   canvas.addEventListener('wheel', wheel, { ...options, passive: false });
-  window.addEventListener('keydown', keyDown, options);
-  window.addEventListener('keyup', keyUp, options);
-  window.addEventListener('blur', blur, options);
   return () => listeners.abort();
 }

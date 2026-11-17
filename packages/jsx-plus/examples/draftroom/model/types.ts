@@ -44,10 +44,16 @@ export interface Camera extends Point {
   zoom: number;
 }
 
+export interface InlineTextView extends Point {
+  shape: Shape;
+  width: number;
+}
+
 export interface EditorView {
   pages: Page[];
   page: Page;
   selected: Shape | undefined;
+  inlineText: InlineTextView | undefined;
   tool: Tool;
   zoom: number;
   grid: boolean;
@@ -55,6 +61,10 @@ export interface EditorView {
   canUndo: boolean;
   canRedo: boolean;
   notice: string;
+}
+
+export function canEditText(shape: Shape | undefined): shape is Shape {
+  return shape !== undefined && !shape.locked && shape.points === undefined;
 }
 
 export const SHAPE_NAMES: Record<ShapeKind, string> = {

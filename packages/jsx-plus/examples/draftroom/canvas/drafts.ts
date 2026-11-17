@@ -4,6 +4,8 @@ import { makeShape, type Point, type Shape, type ShapeKind } from '../model/type
 export interface DrawingDraft {
   kind: 'draw';
   start: Point;
+  screenStart: Point;
+  started: boolean;
   shape: Shape;
   samples: Point[];
 }
@@ -14,7 +16,7 @@ export interface TransformDraft {
   shape: Shape;
 }
 
-export function startDrawing(kind: ShapeKind, position: Point): DrawingDraft {
+export function startDrawing(kind: ShapeKind, position: Point, screenStart: Point): DrawingDraft {
   const size = kind === 'text' ? { width: 166, height: 36 } : { width: 140, height: 90 };
   const shape = makeShape(kind, { ...position, ...size });
 
@@ -34,7 +36,7 @@ export function startDrawing(kind: ShapeKind, position: Point): DrawingDraft {
     shape.fill = '#eee8ff';
   }
 
-  return { kind: 'draw', start: position, shape, samples: [position] };
+  return { kind: 'draw', start: position, screenStart, started: false, shape, samples: [position] };
 }
 
 export function updateDrawing(draft: DrawingDraft, point: Point): Shape {
@@ -54,10 +56,6 @@ export function updateDrawing(draft: DrawingDraft, point: Point): Shape {
       y: sample.y - bounds.y,
     }));
     return { ...shape, ...bounds, points: relativePoints };
-  }
-
-  if (Math.hypot(point.x - start.x, point.y - start.y) < 5) {
-    return shape;
   }
 
   const bounds = boundsFrom(start, point);

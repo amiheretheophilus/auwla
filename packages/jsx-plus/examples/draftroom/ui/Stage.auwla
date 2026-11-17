@@ -2,6 +2,7 @@ import type { Editor } from '../editor';
 import type { EditorView } from '../model/types';
 import { TOOLS } from '../shortcuts';
 import { Icon } from './Icon.auwla';
+import { InlineText } from './InlineText.auwla';
 
 export function Stage({ view, editor }: { view: EditorView; editor: Editor }) {
   const active = TOOLS.find(tool => tool.id === view.tool);
@@ -15,8 +16,11 @@ export function Stage({ view, editor }: { view: EditorView; editor: Editor }) {
           data-tool={view.tool}
           ref={editor.connect}
           tabIndex={0}
-          aria-label="Drawing canvas. Use the tool buttons to draw, or select an object from Layers."
+          aria-label="Drawing canvas. Double-click a box or press Enter on a selected box to edit its text."
         ></canvas>
+        if (view.inlineText !== undefined) {
+          <InlineText entry={view.inlineText} editor={editor} />
+        }
         <div class="floating-tools" role="toolbar" aria-label="Drawing tools">
           for (const tool of TOOLS) {
             <button
