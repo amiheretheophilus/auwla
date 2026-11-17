@@ -25,6 +25,43 @@ export function boundsFrom(start: Point, end: Point): Bounds {
   };
 }
 
+export function unionBounds(first: Bounds | undefined, second: Bounds | undefined): Bounds | undefined {
+  if (first === undefined || second === undefined) {
+    return first ?? second;
+  }
+
+  const start = { x: Math.min(first.x, second.x), y: Math.min(first.y, second.y) };
+  const end = {
+    x: Math.max(first.x + first.width, second.x + second.width),
+    y: Math.max(first.y + first.height, second.y + second.height),
+  };
+  return boundsFrom(start, end);
+}
+
+export function expandBounds(bounds: Bounds, margin: number): Bounds {
+  return {
+    x: bounds.x - margin,
+    y: bounds.y - margin,
+    width: bounds.width + margin * 2,
+    height: bounds.height + margin * 2,
+  };
+}
+
+export function boundsIntersect(first: Bounds, second: Bounds): boolean {
+  return first.x <= second.x + second.width && second.x <= first.x + first.width
+    && first.y <= second.y + second.height && second.y <= first.y + first.height;
+}
+
+export function arrowHead(end: Point, previous: Point, weight: number): [Point, Point] {
+  const angle = Math.atan2(end.y - previous.y, end.x - previous.x);
+  const length = 9 + weight * 1.2;
+
+  return [
+    { x: end.x - length * Math.cos(angle - 0.52), y: end.y - length * Math.sin(angle - 0.52) },
+    { x: end.x - length * Math.cos(angle + 0.52), y: end.y - length * Math.sin(angle + 0.52) },
+  ];
+}
+
 export function pointBounds(points: readonly Point[]): Bounds {
   let left = points[0]!.x;
   let right = left;

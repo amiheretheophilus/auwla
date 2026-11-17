@@ -41,12 +41,14 @@ The example works in one browser and supports one selected object at a time. It 
 | `model/document.ts`, `model/history.ts` | Manage pages, object stacking, selection, and undo. Edits replace the affected page and share the unchanged objects between snapshots. |
 | `model/types.ts`, `model/templates.ts`, `model/files.ts` | Define the project format, create sample pages, and validate imported projects and autosaves. |
 | `canvas/gestures.ts`, `canvas/drafts.ts`, `canvas/geometry.ts` | Translate pointer input into world coordinates, calculate temporary drafts, and hit-test shapes. |
-| `canvas/viewport.ts`, `canvas/paint.ts`, `canvas/shapes.ts` | Own the camera, schedule paints, and render the board, minimap, and exported image. |
-| `canvas/draft-layers.ts` | Cache unchanged shapes during a drag, preserving the moving object's place in the layer order. |
+| `canvas/viewport.ts`, `canvas/surface.ts` | Own the camera, schedule paints, and size the canvases. |
+| `canvas/board-painter.ts`, `canvas/dirty-region.ts` | Repaint only the part of the board affected by a drag or text preview, in the original layer order. |
+| `canvas/shapes.ts`, `canvas/shape-text.ts`, `canvas/shape-bounds.ts` | Draw geometry and text, and calculate where each object can leave visible pixels. |
+| `canvas/paint.ts` | Draw the minimap and export the board as an image. |
 | `styles/` | Keep workspace layout, controls, inspector, and canvas overlays in separate stylesheets. |
 
 A drag updates a temporary canvas draft. Releasing the pointer commits one document edit, adds one undo step, and saves the resulting project. This keeps pointer moves out of both history and local storage.
 
-The dotted grid is a repeating CSS background aligned with the camera. The minimap redraws when the committed shapes, camera, or viewport size changes. On the main board, the painter reuses the shapes below and above a moving object so only the object itself needs to be drawn again.
+The dotted grid is a repeating CSS background aligned with the camera. The minimap redraws when the committed shapes, camera, or viewport size changes. During a preview, the board painter clears the rectangle containing the old and new positions and redraws the layers that intersect it. This keeps the surrounding pixels in the same canvas. Camera changes, resizing, and document commits redraw the whole board.
 
-The onscreen board limits high-DPI oversampling to about 1.6 million backing pixels while keeping at least CSS resolution when the display supports it. The canvas buffers for drag previews are released when the preview ends or those layers need to be rebuilt. The editor requests a frame only in response to a change in the board or viewport.
+The onscreen board limits high-DPI oversampling to about 1.6 million backing pixels while keeping at least CSS resolution when the display supports it. The editor requests a frame only in response to a change in the board or viewport.

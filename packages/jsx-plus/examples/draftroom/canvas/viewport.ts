@@ -1,6 +1,8 @@
+import { createBoardPainter } from './board-painter';
 import { drawingBounds, fitCamera, GRID, zoomCamera } from './geometry';
 import { bindGestures, screenPoint } from './gestures';
-import { canvasSize, createBoardPainter, mapPosition, paintMap } from './paint';
+import { mapPosition, paintMap } from './paint';
+import { canvasSize } from './surface';
 import type { Camera, InlineTextView, Shape, Tool } from '../model/types';
 
 interface Scene {
@@ -120,9 +122,16 @@ export function createViewport(scene: Scene) {
     });
     observer.observe(canvas);
 
+    function restoreContext(): void {
+      painter.clear();
+      render();
+    }
+    canvas.addEventListener('contextrestored', restoreContext);
+
     return () => {
       detach();
       observer.disconnect();
+      canvas.removeEventListener('contextrestored', restoreContext);
       cancelAnimationFrame(frame);
       painter.clear();
       frame = 0;
@@ -135,11 +144,14 @@ export function createViewport(scene: Scene) {
   function attachMap(canvas: HTMLCanvasElement): () => void {
     map = canvas;
     mappedShapes = undefined;
-    const observer = new ResizeObserver(() => {
+    function refreshMap(): void {
       mappedShapes = undefined;
       render();
-    });
+    }
+
+    const observer = new ResizeObserver(refreshMap);
     observer.observe(canvas);
+    canvas.addEventListener('contextrestored', refreshMap);
 
     function recenter(event: PointerEvent): void {
       if (board === undefined) {
@@ -163,6 +175,7 @@ export function createViewport(scene: Scene) {
     render();
     return () => {
       canvas.removeEventListener('pointerdown', recenter);
+      canvas.removeEventListener('contextrestored', refreshMap);
       observer.disconnect();
       map = undefined;
       mappedShapes = undefined;
