@@ -226,15 +226,19 @@ class TemplateBuilder {
       return;
     }
 
-    const constant = constantAttribute(expression, attributeName(name), namespace);
+    // An HTML element's attribute names are case-insensitive and serialize in lower case
+    // (`tabIndex` is `tabindex`), as a browser's `setAttribute` makes them; a server's DOM keeps
+    // them as given, so they are written that way. SVG names keep their case (`viewBox`).
+    const written = namespace === 'html' ? attributeName(name).toLowerCase() : attributeName(name);
+    const constant = constantAttribute(expression, written, namespace);
     // An element writing one attribute twice takes the ordered path (`isComponentCall`).
     if (constant !== undefined) {
-      const isClass = attributeName(name) === 'class';
+      const isClass = written === 'class';
       // A class written by a site is trimmed (`classValue`), so a literal one is too.
-      if (constant !== null) attributes.push({ name: attributeName(name), value: isClass ? constant.trim() : constant });
+      if (constant !== null) attributes.push({ name: written, value: isClass ? constant.trim() : constant });
       return;
     }
-    sites.push({ kind: 'attribute', name: attributeName(name), expression, reactive: this.context.reactive(expression) });
+    sites.push({ kind: 'attribute', name: written, expression, reactive: this.context.reactive(expression) });
   }
 
   private add(node: TemplateNode): number {

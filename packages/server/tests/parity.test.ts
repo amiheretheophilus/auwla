@@ -195,10 +195,8 @@ describe('CSR-equivalence corpus', () => {
         let mode = 1;
         return (
           <div>
-            <div if={mode === 0}>zero</div>
-            <div else-if={mode === 1}>one</div>
-            <div else>{'other'}</div>
-            <span if={mode > 100}>never</span>
+            {mode === 0 ? <div>zero</div> : mode === 1 ? <div>one</div> : <div>{'other'}</div>}
+            {mode > 100 && <span>never</span>}
           </div>
         );
       }
@@ -386,12 +384,13 @@ describe('CSR-equivalence corpus', () => {
         const state = $track(todos);
         return (
           <section>
-            <p if={state.pending}>Loading</p>
-            <ul else>
-              {todos.map((todo) => (
-                <li key={todo.id}>{todo.title}</li>
-              ))}
-            </ul>
+            {state.pending ? <p>Loading</p> : (
+              <ul>
+                {todos.map((todo) => (
+                  <li key={todo.id}>{todo.title}</li>
+                ))}
+              </ul>
+            )}
           </section>
         );
       }
@@ -466,13 +465,13 @@ describe('CSR-equivalence corpus', () => {
       expect(tiers.serverModule.refRuns).toBe(0);
       expect(tiers.serverModule.cleanups).toBe(0);
 
-      // Effects run on creation; callback refs wait until their nodes are
-      // connected to a settled document.
-      expect(tiers.clientModule.effectRuns).toBe(1);
+      // Callback refs wait until their nodes are connected to a settled document, and an effect
+      // runs after its owner's refs have mounted (compiler-next, `wiki/compiler/effects.md`).
       expect(tiers.clientModule.refRuns).toBe(0);
       result.clientRoot.ownerDocument.body.appendChild(result.clientRoot);
       await waitFor(() => {
         expect(tiers.clientModule.refRuns).toBeGreaterThanOrEqual(1);
+        expect(tiers.clientModule.effectRuns).toBe(1);
       });
 
       // Cleanup disposers drain at unmount, not at creation - tear down the

@@ -89,7 +89,8 @@ describe('SSR delivery', () => {
 
     harness.release();
     const rest = await readAll(reader);
-    expect(rest.startsWith('<!--mmd:r:App--><main><h1>')).toBe(true);
+    // The root by its component's key, then the numbered elements of the render (compiler-next).
+    expect(rest).toMatch(/^<!--mmd:r:\.\/delivery-app\.tsx#App-->(?:<!--[^>]*-->)*<main>(?:<!--[^>]*-->)*<h1>/);
     expect(rest).toContain('Ada');
     expect(rest).not.toContain('class="pending"');
     expect(rest).toContain('<script type="application/mmd+json"');

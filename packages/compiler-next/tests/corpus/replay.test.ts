@@ -3,8 +3,12 @@
  * (`wiki/compiler/testing.md`, "Acceptance"). Those tests assert many things specific to the old
  * compiler. Their programs are still useful: each one is checked here by what a user would see.
  *
- *     MEMO_DOM_CORPUS=<dir> bun test ./tests/some-root-test.test.ts     # records programs
- *     CORPUS=<dir> CORPUS_REPORT=<file> bun test tests/corpus           # replays them
+ *     CORPUS=tests/corpus/old-programs.json CORPUS_REPORT=<file> bun test tests/corpus
+ *
+ * `old-programs.json` holds the 1,634 programs the old compiler's root tests compiled, recorded once
+ * before it was deleted (2026-11-17), by their key: only what each test gave the compiler, never its
+ * output. `CORPUS` may also name a folder of recorded programs, one JSON file each, as the old
+ * compiler's `MEMO_DOM_CORPUS=<dir>` wrote them.
  *
  * Each program's outcome goes to the report, one line each, so one run shows everything.
  */
@@ -147,6 +151,20 @@ function record(line: string): void {
   if (report !== undefined) appendFileSync(report, `${line}\n`);
 }
 
+/** The recorded programs by key: from one JSON file of them, or from a folder of one file each. */
+function recordedPrograms(source: string): Map<string, () => Recorded> {
+  const programs = new Map<string, () => Recorded>();
+  if (source.endsWith('.json')) {
+    const all = JSON.parse(readFileSync(source, 'utf8')) as Record<string, Recorded>;
+    for (const key of Object.keys(all).sort()) programs.set(key, () => all[key]!);
+    return programs;
+  }
+  for (const file of readdirSync(source).filter((name) => name.endsWith('.json')).sort()) {
+    programs.set(file.slice(0, -'.json'.length), () => JSON.parse(readFileSync(join(source, file), 'utf8')) as Recorded);
+  }
+  return programs;
+}
+
 if (directory === undefined) {
   it.skip('needs CORPUS', () => {});
 } else {
@@ -156,17 +174,17 @@ if (directory === undefined) {
   const late = (error: unknown) => record(`late-error\t\t\t${String((error as Error)?.message ?? error).slice(0, 200)}`);
   process.on('uncaughtException', late);
   process.on('unhandledRejection', late);
-  let files = readdirSync(directory).filter((file) => file.endsWith('.json')).sort();
-  if (slice !== undefined) files = files.filter((_, index) => index % slice[1]! === slice[0]);
+  let programs = [...recordedPrograms(directory)];
+  if (slice !== undefined) programs = programs.filter((_, index) => index % slice[1]! === slice[0]);
 
-  for (const file of files) {
-    const key = file.slice(0, 12);
+  for (const [name, load] of programs) {
+    const key = name.slice(0, 12);
     it(key, async () => {
       if (ENDS_THE_PROCESS.has(key)) {
         record(`skip\t${key}\tends the test process`);
         return;
       }
-      const recorded = JSON.parse(readFileSync(join(directory, file), 'utf8')) as Recorded;
+      const recorded = load();
       const testCase = caseOf(recorded);
       if (typeof testCase === 'string') {
         record(`skip\t${key}\t${testCase}`);

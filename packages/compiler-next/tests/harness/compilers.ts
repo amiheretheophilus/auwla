@@ -1,17 +1,13 @@
 /**
- * The compilers a case can run against: `COMPILER=next` (the default) uses
- * `packages/compiler-next/src`; `COMPILER=old` uses `packages/compiler`. Both
- * emit code for the same runtime, so they mount the same way. Each writes its
- * output to its own folder, `tests/out/<case>/<output>/`.
+ * The ways a case runs compiler-next (`packages/compiler-next/src`): with its optimizations, without
+ * them, and as a page the server rendered and the browser adopted. Each writes its output to its
+ * own folder, `tests/out/<case>/<output>/`. The old compiler's way went with it (2026-11-17).
  */
-import { compileModules } from '@memoized-dom/compiler';
 import { compileModules as compileModulesNext } from '../../src';
 import { createApplicationRuntime, registeredIds, resetScheduler, setActiveApplicationRuntime, setScheduler, unregisterSubtree } from '@memoized-dom/runtime/testing';
 import { adoptRoot } from '@memoized-dom/runtime/hydrate-program';
 import { renderToString } from '@memoized-dom/server';
 import { createDataRuntime, setActiveDataRuntime } from '@memoized-dom/data';
-import { spawnSync } from 'node:child_process';
-import { join } from 'node:path';
 import { installedResolver } from './installed';
 import { fetchForCase } from './requests';
 import { asServer, asServerAsync } from './case';
@@ -27,7 +23,7 @@ export interface Compiler {
   output: string;
   prepare(): () => void;
   /** Compile `App.tsx`. Returns the output files by name. */
-  compile(source: string, modules?: Record<string, string>, timeoutMs?: number): Record<string, string>;
+  compile(source: string, modules?: Record<string, string>): Record<string, string>;
   /**
    * Mount the compiled `App` into `container`; `served` is a second copy a server renders from,
    * for a request to `url`.
@@ -50,55 +46,6 @@ export interface Compiler {
 function useCaseScheduler(): void {
   setScheduler(process.env.SCHEDULER === 'deferred' ? (run) => queueMicrotask(run) : (run) => run());
 }
-
-const oldCompiler: Compiler = {
-  name: 'packages/compiler',
-  output: 'old',
-
-  prepare() {
-    const runtime = createDataRuntime({ fetch: fetchForCase });
-    const previous = setActiveDataRuntime(runtime);
-    return () => {
-      runtime.clear();
-      setActiveDataRuntime(previous);
-    };
-  },
-
-  compile(source, modules, timeoutMs) {
-    const timeout = Number(process.env.COMPILER_TIMEOUT_MS ?? timeoutMs ?? 0);
-    if (!Number.isFinite(timeout) || timeout < 0) throw new Error('COMPILER_TIMEOUT_MS must be a non-negative number');
-    if (timeout > 0) {
-      // A synchronous compiler loop prevents Bun's test timer from firing.
-      // Isolate suspect cases so the OS can enforce the diagnostic deadline.
-      const result = spawnSync(process.execPath, [join(import.meta.dirname, 'compile-worker.ts')], {
-        input: JSON.stringify({ ...modules, './App.tsx': source }),
-        encoding: 'utf8', timeout, windowsHide: true, maxBuffer: 8 * 1024 * 1024,
-      });
-      if ((result.error as NodeJS.ErrnoException | undefined)?.code === 'ETIMEDOUT') {
-        throw new Error(`old compiler: compilation exceeded ${timeout}ms in an isolated process`);
-      }
-      if (result.error) throw result.error;
-      if (result.status !== 0) {
-        const diagnostic = result.stderr.split('\n').filter(line => line.length < 1000).join('\n').trim();
-        throw new Error(diagnostic || `old compiler: isolated process exited with ${result.status ?? result.signal}`);
-      }
-      return JSON.parse(result.stdout) as Record<string, string>;
-    }
-    return compileModules({ ...modules, './App.tsx': source }, { runtimePath: '@memoized-dom/runtime/testing' });
-  },
-
-  mount(module, container) {
-    const App = module.App as (id: string, parent: null) => Node;
-    useCaseScheduler();
-    container.append(App('App', null));
-    return {
-      unmount() {
-        clearCompiledApps();
-        container.replaceChildren();
-      },
-    };
-  },
-};
 
 /** `DATA_DELIVERY=client` runs the cases as a client-only build compiles them. */
 const delivery = process.env.DATA_DELIVERY === 'client' ? { dataDelivery: 'client' as const } : {};
@@ -130,12 +77,32 @@ function compileNext(
 }
 
 const nextCompiler: Compiler = {
-  ...oldCompiler,
   name: 'packages/compiler-next',
   output: 'next',
 
+  prepare() {
+    const runtime = createDataRuntime({ fetch: fetchForCase });
+    const previous = setActiveDataRuntime(runtime);
+    return () => {
+      runtime.clear();
+      setActiveDataRuntime(previous);
+    };
+  },
+
   compile(source, modules) {
     return compileNext(source, modules, true);
+  },
+
+  mount(module, container) {
+    const App = module.App as (id: string, parent: null) => Node;
+    useCaseScheduler();
+    container.append(App('App', null));
+    return {
+      unmount() {
+        clearCompiledApps();
+        container.replaceChildren();
+      },
+    };
   },
 };
 
@@ -217,8 +184,6 @@ const deliveredCompiler: Compiler = {
  * delivered (`DELIVERED=0` leaves that out).
  */
 export function comparisonCompilers(): readonly Compiler[] {
-  const compiler = selectedCompiler();
-  if (compiler !== nextCompiler) return [compiler];
   return process.env.DELIVERED === '0' ? [nextCompiler, generalCompiler] : [nextCompiler, generalCompiler, deliveredCompiler];
 }
 
@@ -228,9 +193,7 @@ export function clearCompiledApps(): void {
   resetScheduler();
 }
 
+/** compiler-next with its optimizations, the way every case runs first. */
 export function selectedCompiler(): Compiler {
-  const choice = process.env.COMPILER ?? 'next';
-  if (choice === 'old') return oldCompiler;
-  if (choice === 'next') return nextCompiler;
-  throw new Error(`COMPILER=${choice}: use 'old' or 'next'`);
+  return nextCompiler;
 }

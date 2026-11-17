@@ -406,8 +406,10 @@ array child). Remove each check when its phase is built.
      'next'` and `MMD_COMPILER`; delivery and build logic still in the package moves into
      compiler-next (`../rules.md`, rule 17); its tests stay where they test behaviour. What the
      suite still finds is listed in `testing.md` ("Read again on the single plugin").
-  4. [ ] The old compiler's tests go: root `tests/` files that import it, the acceptance switch,
+  4. [x] The old compiler's tests go: root `tests/` files that import it, the acceptance switch,
      and the comparisons in `packages/server`, `packages/jsx-plus` and compiler-next's harness.
+     The programs they compiled stay as replay inputs (`tests/corpus/old-programs.json`,
+     `testing.md`); the server's own behaviours they covered were ported.
   5. [ ] Bench defaults to compiler-next (`--compiler=<snapshot>` stays for `d6e678b`); examples
      follow, octopulse's conditional attributes rewritten as JavaScript.
   6. [ ] `packages/compiler` is deleted, with the runtime, server and data code only its output

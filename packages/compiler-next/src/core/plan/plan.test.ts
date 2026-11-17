@@ -64,6 +64,17 @@ describe('template planning and emission', () => {
     expect(component.template.markup).toBe('<div id="last"></div>');
   });
 
+  // A server's DOM keeps a name as given, so `tabIndex` would serialize differently from the
+  // browser's `tabindex`. SVG names are case-sensitive and keep their case.
+  it("writes an HTML element's attribute names in lower case, and an SVG element's as written", () => {
+    const html = inspect('export const App = (props) => <button tabIndex={props.n} readOnly />;').component;
+    expect(html.template.markup).toBe('<button readonly></button>');
+    expect(html.sites.map((site) => site.kind === 'attribute' && site.name)).toEqual(['tabindex']);
+
+    const svg = inspect('export const App = () => <svg viewBox="0 0 1 1" />;').component;
+    expect(svg.template.nodes[0]).toMatchObject({ tag: 'svg', attributes: [{ name: 'viewBox', value: '0 0 1 1' }] });
+  });
+
   it('uses graph dependencies for site reactivity, without treating callback creation as invocation', () => {
     const { component } = inspect(`export function App() {
       let count = 0;

@@ -62,6 +62,13 @@ so `data-x` and `data-x={flag}` gave different HTML for the same value (found by
 run). The reference states the same rule on its own; the case is in
 `tests/cases/core.static-markup.test.ts`.
 
+An HTML element's attribute names are written in lower case (`core/plan/template.ts`, 2026-11-17):
+`tabIndex`, `readOnly` and `contentEditable` become `tabindex`, `readonly` and `contenteditable`.
+HTML names are case-insensitive and serialize lower case, and a browser's `setAttribute` lowers
+them, but a server's DOM (LinkeDOM) keeps them as given, so a server render showed `tabIndex="2"`
+where the browser had `tabindex="2"` (found by `packages/server/tests/parity.test.ts`, moved to
+compiler-next). SVG names keep their case (`viewBox`).
+
 An ordinary loop building JSX row values exposed an older mismatch in the
 uncached setter: it omitted ARIA false and wrote true as an empty attribute.
 That setter now follows the existing cached/spread rules. Focused assertions

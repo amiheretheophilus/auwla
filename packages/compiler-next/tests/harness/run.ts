@@ -167,7 +167,7 @@ async function runOnCompiler(name: string, testCase: Case, compiler: Compiler): 
   rmSync(join(OUT, slug(name), 'compiled'), { recursive: true, force: true });
   let files: Record<string, string>;
   try {
-    files = compiler.compile(testCase.source, testCase.modules, testCase.compileTimeoutMs);
+    files = compiler.compile(testCase.source, testCase.modules);
   } catch (error) {
     // A case that does not compile still shows why, in place of its output.
     writeFiles(name, compiler.output, { 'ERROR.txt': `${compiler.name}\n\n${(error as Error).message}\n` });

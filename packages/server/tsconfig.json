@@ -4,5 +4,6 @@
     "types": ["node"],
     "noEmit": true
   },
-  "include": ["src", "tests", "rolldown.config.ts", "scripts"]
+  "include": ["src", "tests", "rolldown.config.ts", "scripts"],
+  "exclude": ["tests/fixtures/out"]
 }

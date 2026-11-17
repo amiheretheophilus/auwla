@@ -68,7 +68,8 @@ describe('Phase 1 exit criteria', () => {
         );
       }
     `,
-      { moduleStateCells: true },
+      // A server build keeps module state per request (compiler-next, `features/state/request-dom.ts`).
+      { routedEnvironment: 'server' },
     );
 
     // Interleave: render request A, mutate ITS runtime's module cells,

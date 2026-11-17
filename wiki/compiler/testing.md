@@ -353,10 +353,28 @@ checks before retention checks as well as in isolation when changing this fixtur
      (`dev-recovery-browser`); hydrated facade sources (`fullstack-browser`); lazy route navigation
      with `Group`, refs and effects (`lazy-route-browser`).
 
+   **The old compiler's tests deleted** (2026-11-17, step 4). First, its programs were recorded
+   once more from the root suite (`MEMO_DOM_CORPUS`, 2,967 tests passing on it): 1,679 programs,
+   of which the 1,634 with markup and no TSRX are kept, inputs only (about 1 MB), in
+   `packages/compiler-next/tests/corpus/old-programs.json` for the replay below. Then went: the 241
+   root files importing the old compiler, their snapshots and fixtures, the acceptance switch
+   (`test-support/compiler-next.ts`), `test-support/package-artifacts.ts`, the harness's
+   `COMPILER=old` and its isolated compile worker. In `packages/server`, the tests of the old
+   compiler's SSR writer tier and initial-delivery contracts went (`writer`, `initial-request`,
+   `initial-delivery`); two behaviours of the server itself moved to `relative-fetch.test.ts`; the
+   rest (`parity`, `markers`, `render`, `delivery`, `exit-review`, `pages`, and those using the
+   parity harness) now compile with compiler-next, and found two bugs: HTML attribute names kept
+   their case in a server's DOM (`core.md`, "Dynamic attribute values"), and a passive server page's
+   progress tracked only the old marker ranges (`server.md`, "Server pages"). Changed by decision
+   there: `if` attributes became conditionals, roots are named by component key, adoption markers
+   replace `mmd:l:`/`mmd:w:`, and an effect runs after its refs mount (`effects.md`).
+   `server/functions.test.ts` states the contract it used to compare with the old compiler.
+
    **Replaying the old tests' programs** (`tests/corpus/replay.test.ts`). Reading 277 assertions one
    by one is slow, and many check the old compiler's internal work. Their programs are what matters.
    `MEMO_DOM_CORPUS=<dir>` makes the old compiler record every program it compiles, so one run of the
-   root suite on it gives 1,679 programs. The replay runs each on compiler-next and the reference,
+   root suite on it gave 1,679 programs, now kept in `old-programs.json`
+   (`CORPUS=tests/corpus/old-programs.json bun test tests/corpus`). The replay runs each on compiler-next and the reference,
    clicking and typing into whatever the source shows listening, twice, and comparing every step.
    Programs that need their original test's props or globals, or use the clock, compare nothing.
 

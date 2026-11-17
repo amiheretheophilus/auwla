@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'bun:test';
 import * as runtime from '@memoized-dom/runtime/server';
 import * as data from '@memoized-dom/data/internal';
-import { compileModules } from '../../compiler/src/linker';
-import { extractServerPages } from '../../compiler/src/server-pages';
-import { createServerPage, isServerPage, renderServerPage, type ServerPageDefinition } from '../src/page';
+import { compileModules } from '../../compiler-next/src';
+import { extractPages } from '../../compiler-next/src/server/pages';
+import { createComponentPage, createServerPage, isServerPage, renderServerPage, type ServerPageDefinition } from '../src/page';
 import { createServerFunctionRoutes, createServerRouter, installServerPageFetch } from '../src/http-router';
 import { liveHub, liveResponse } from '../src/live';
 import { pageUpdates } from '../src/page-definition';
@@ -12,18 +12,22 @@ import { decodePageHtml } from '../../runtime/src/page-html';
 import { decodePageFrames } from '../../runtime/src/page-html';
 import { waitFor } from '../../../test-support/helpers';
 
-/** Execute compiler output without temporary files or application-side imports. */
+/**
+ * Execute compiler output without temporary files or application-side imports: compiler-next
+ * extracts the handler's pages (`compiler-next/src/server/pages.ts`) into `./page.tsx`, compiles it
+ * as a server build, and the handler calls `createComponentPage` for each.
+ */
 function fixture(source: string, modules: Record<string, string> = {}): (...args: unknown[]) => Promise<ServerPageDefinition> {
-  const extracted = extractServerPages(source, { moduleId: './server/functions/test.tsx' });
-  const compiled = compileModules({ './page.tsx': extracted.componentSource, ...modules }, {
-    routedEnvironment: 'server', moduleStateCells: true,
-    resolveImport: specifier => specifier === '../components/Board' ? './components/Board.tsx' : undefined,
-  });
+  const isPage = (from: string, imported: string) => from === '@memoized-dom/server' && imported === 'page';
+  const extracted = extractPages('./server/functions/test.tsx', source, './page.tsx', isPage)!;
+  // The page module imports the handler's `../components/Board` from its own place.
+  const resolveImport = (specifier: string) => specifier.endsWith('/components/Board') ? './components/Board.tsx' : undefined;
+  const compiled = compileModules({ './page.tsx': extracted.module, ...modules }, { routedEnvironment: 'server', resolveImport });
   const loaded = new Map<string, Record<string, unknown>>();
   const load = (id: string): Record<string, unknown> => {
     if (id === '@memoized-dom/runtime') return runtime;
     if (id === '@memoized-dom/data/internal' || id === '@memoized-dom/data') return data;
-    if (id === '../components/Board') id = './components/Board.tsx';
+    id = resolveImport(id) ?? id;
     if (loaded.has(id)) return loaded.get(id)!;
     const code = compiled[id]!;
     const exports = [...code.matchAll(/export function (\w+)/g)].map(match => match[1]);
@@ -40,14 +44,16 @@ function fixture(source: string, modules: Record<string, string> = {}): (...args
     return result;
   };
   const components = load('./page.tsx');
-  const handler = new Bun.Transpiler({ loader: 'ts' }).transformSync(extracted.source)
-    .replace(/^import \{ ([^}]+) \} from [^;]+;/gm, (_line, items: string) => {
+  // Rendered on the server only, so each page's contract sends the browser plain HTML.
+  const contracts = new Map(extracted.pages.map(page => [page.id, { key: page.id, browser: 'none' as const, paths: [] }]));
+  const handler = new Bun.Transpiler({ loader: 'tsx' }).transformSync(extracted.handler(contracts))
+    .replace(/^import \{([^}]+)\} from [^;]+;/gm, (_line, items: string) => {
       return items.split(',').map(item => {
         const [imported, local] = item.trim().split(/\s+as\s+/);
-        return `const ${local ?? imported}=${imported === 'createServerPage' ? 'createServerPage' : `components[${JSON.stringify(imported)}]`};`;
+        return `const ${local ?? imported}=${imported === 'createComponentPage' ? 'createComponentPage' : `components[${JSON.stringify(imported)}]`};`;
       }).join('\n');
     }).replace(/export async function /g, 'async function ');
-  return new Function('createServerPage', 'components', handler + '\nreturn make;')(createServerPage, components);
+  return new Function('createComponentPage', 'components', handler + '\nreturn make;')(createComponentPage, components);
 }
 
 describe('request-owned server page rendering foundation', () => {

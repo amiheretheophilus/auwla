@@ -39,9 +39,11 @@ call each endpoint over HTTP, while the server build routes each endpoint to its
 - `serverFunctionDeclarations(modules, resolve)` types the flat `#server-functions` barrel through
   type-only imports of the real handlers. Names must be unique across modules.
 
-The old compiler (`packages/compiler/src/server-functions.ts`) is the oracle: the server package
-routes by the same metadata, so `server/functions.test.ts` compares the analysis, the facades and
-the declarations with its output, and every error with its error.
+The old compiler (`packages/compiler/src/server-functions.ts`) was the oracle while it existed: the
+server package routes by the same metadata, so `server/functions.test.ts` compared the analysis,
+the facades and the declarations with its output. Since its deletion (2026-11-17) the test states
+what both agreed on: each function's method, endpoint and parameters, the facade's calls and the
+barrel's types, and every error.
 
 ## Application
 
@@ -359,11 +361,17 @@ here (`../decisions.md`, 2026-11-14), so Vite, the Bun plugin and the command li
    `collectCreations` gathers from everywhere inside its root. The browser gets the same code either
    way; only the region's nodes are made again, once, when it is bound.
 
-The Vite suite's `packages/vite/tests/server-pages.test.ts` authors its board in `.tsrx`, which
-compiler-next does not support (the user, 2026-11-15: `.auwla` is the authoring language), so it
-runs on the old compiler only; `server/pages.app.test.ts` and the jsx-plus test cover the same flows.
-Not yet: progressive delivery of an interactive page (its server renders it in one go, as the old
-one does for a page with bindings).
+The Vite suite's `packages/vite/tests/server-pages.test.ts` authored its board in `.tsrx`; since
+2026-11-17 it is `.tsx` and runs on compiler-next (open items: `testing.md`). Not yet: progressive
+delivery of an interactive page (its server renders it in one go, as the old one does for a page
+with bindings).
+
+**A passive page's progress.** A page with no bindings streams as its sources settle
+(`serverPageUpdates`, `packages/server/src/page.ts`): each frame carries the regions that changed.
+It tracked only the old compiler's marker ranges, so a compiler-next page sent no regions and the
+browser never filled in what settled. It now chooses as the document stream does (`stream.ts`):
+numbered elements for compiler-next output (2026-11-17). Checked by `packages/server/tests/pages.test.ts`,
+which compiles its pages with compiler-next's `extractPages` since the old compiler's deletion.
 
 **What an interactive page ships** (decided: (a)). compiler-next's adoption is a client render that reuses
 the server's nodes (`delivery.md`, "Adopting existing nodes"), so a page's browser program is its

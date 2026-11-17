@@ -1,14 +1,9 @@
 /**
- * Server function analysis and generation, checked against the old compiler's
- * (`@memoized-dom/compiler`), which is the oracle for this contract: the server package routes by
- * the same metadata, and clients call the same endpoints.
+ * Server function analysis and generation: the contract the server package routes by and clients
+ * call (`wiki/compiler/server.md`). Until the old compiler was deleted (2026-11-17) each module was
+ * compared with its analysis; these expectations are what both agreed on then.
  */
 import { describe, expect, it } from 'bun:test';
-import {
-  analyzeServerFunctionModule,
-  generateServerFunctionClient,
-  generateServerFunctionDeclarations,
-} from '@memoized-dom/compiler';
 import { analyzeServerFunctions, serverFunctionModuleName } from './functions';
 import { serverFunctionClient, serverFunctionDeclarations } from './generate';
 
@@ -44,22 +39,65 @@ const MODULES: Record<string, string> = {
   'server/functions/_middleware.ts': 'export const middleware = [logRequests];',
 };
 
-describe('server functions', () => {
-  for (const [moduleId, source] of Object.entries(MODULES)) {
-    it(`analyze ${moduleId} as the old compiler does, and generate the same client facade`, () => {
-      const expected = analyzeServerFunctionModule(source, { moduleId, functionsRoot: 'server/functions' });
-      const actual = analyzeServerFunctions(moduleId, source);
-      expect(actual).toEqual(expected);
-      expect(serverFunctionClient(actual)).toBe(generateServerFunctionClient(expected));
-    });
-  }
+const analyzed = (moduleId: string) => analyzeServerFunctions(moduleId, MODULES[moduleId]!);
 
-  it('declare the barrel as the old compiler does', () => {
-    const modules = Object.entries(MODULES).map(([moduleId, source]) => analyzeServerFunctions(moduleId, source));
-    const resolve = (moduleId: string) => `../${moduleId.replace(/\.tsx?$/, '.js')}`;
-    expect(serverFunctionDeclarations(modules, resolve)).toBe(
-      generateServerFunctionDeclarations(modules, { resolveImplementation: resolve }),
-    );
+describe('server functions', () => {
+  it('give each function its method, endpoint and parameters, with query types for a GET', () => {
+    const users = analyzed('server/functions/users.ts');
+    expect(users.moduleName).toBe('users');
+    expect(users.middlewareExport).toBe(true);
+    expect(users.functions).toEqual([
+      { exported: 'createUser', local: 'createUser', method: 'POST', path: '/_fn/users/createUser', schemaInput: false,
+        parameters: [{ name: 'name', optional: false }, { name: 'email', optional: false }] },
+      { exported: 'getUser', local: 'getUser', method: 'GET', path: '/_fn/users/getUser', schemaInput: false,
+        parameters: [
+          { name: 'id', optional: false, queryKind: 'string' },
+          { name: 'page', optional: true, queryKind: 'number' },
+          { name: 'active', optional: true, queryKind: 'boolean' },
+          { name: 'tags', optional: true, queryKind: 'string[]' },
+          { name: 'role', optional: true, queryKind: 'string' },
+        ] },
+      { exported: 'removeUser', local: 'removeUser', method: 'DELETE', path: '/_fn/users/removeUser', schemaInput: true,
+        parameters: [{ name: 'input', optional: false }] },
+    ]);
+  });
+
+  it('mark live, generator and schema functions, below a nested folder\'s endpoint', () => {
+    const feed = analyzed('server/functions/stories/feed.ts');
+    expect(feed.moduleName).toBe('stories/feed');
+    const byName = Object.fromEntries(feed.functions.map((fn) => [fn.exported, fn]));
+    expect(byName.getStories).toMatchObject({ method: 'GET', path: '/_fn/stories/feed/getStories', parameters: [] });
+    expect(byName.watchStories).toMatchObject({ live: true, parameters: [{ name: 'topic', optional: true, queryKind: 'string' }] });
+    expect(byName.streamLog).toMatchObject({ generator: true, parameters: [{ name: 'since', optional: false, queryKind: 'number' }] });
+    expect(byName.putStory).toMatchObject({ method: 'PUT', parameters: [{ name: 'story', optional: false }] });
+    expect(byName.searchSchema).toMatchObject({ method: 'GET', schemaInput: true });
+  });
+
+  it('mark a function returning markup as a page, and a middleware module as having none', () => {
+    expect(analyzed('server/functions/panel.tsx').functions.map((fn) => [fn.exported, fn.page])).toEqual([['panel', true], ['savePanel', true]]);
+    expect(analyzed('server/functions/_middleware.ts')).toMatchObject({ moduleName: '_middleware', middlewareExport: true, functions: [] });
+  });
+
+  it('generate facades that call each endpoint: a GET by its query, a body otherwise, a stream for live and generators', () => {
+    expect(serverFunctionClient(analyzed('server/functions/users.ts'))).toBe([
+      'import { $fetch as __mmd_fetch } from "@memoized-dom/data";',
+      'export function createUser(name, email) { return __mmd_fetch("/_fn/users/createUser", { method: "POST", body: { name, email } }); }',
+      'export function getUser(id, page, active, tags, role) { return __mmd_fetch("/_fn/users/getUser", { query: { id, page, active, tags, role } }); }',
+      'export function removeUser(input) { return __mmd_fetch("/_fn/users/removeUser", { method: "DELETE", body: JSON.stringify(input), headers: { \'content-type\': \'application/json\' } }); }',
+      '',
+    ].join('\n'));
+    const feed = serverFunctionClient(analyzed('server/functions/stories/feed.ts'));
+    expect(feed).toContain('import { createStreamingSource as __mmd_stream } from "@memoized-dom/data/internal";');
+    expect(feed).toContain('export function searchSchema(input) { return __mmd_fetch("/_fn/stories/feed/searchSchema", { query: { input: JSON.stringify(input) } }); }');
+    expect(feed).toContain('export function streamLog(since) { return __mmd_stream("/_fn/stories/feed/streamLog", { query: { since } }, "generator"); }');
+    expect(feed).toContain('export function watchStories(topic) { return __mmd_stream("/_fn/stories/feed/watchStories", { query: { topic } }, "live"); }');
+  });
+
+  it('declare the barrel: a GET returns a resolved value, any other method a promise', () => {
+    const declarations = serverFunctionDeclarations([analyzed('server/functions/users.ts')], (moduleId) => `../${moduleId.replace(/\.tsx?$/, '.js')}`);
+    expect(declarations).toContain('import type * as __mmd_impl_0 from "../server/functions/users.js";');
+    expect(declarations).toContain('export declare function getUser(...args: ServerFunctionArguments<typeof __mmd_impl_0.getUser>): ResolvedValue<__mmdClientValue<Awaited<ServerFunctionResult<typeof __mmd_impl_0.getUser>>>>;');
+    expect(declarations).toContain('export declare function createUser(...args: ServerFunctionArguments<typeof __mmd_impl_0.createUser>): Promise<__mmdClientValue<Awaited<ServerFunctionResult<typeof __mmd_impl_0.createUser>>>>;');
   });
 
   it('name modules by their path in the functions folder', () => {
@@ -86,9 +124,7 @@ describe('server functions', () => {
   ];
   for (const [source, message] of ERRORS) {
     it(`report ${message}`, () => {
-      const moduleId = 'server/functions/bad.ts';
-      expect(() => analyzeServerFunctionModule(source, { moduleId, functionsRoot: 'server/functions' })).toThrow(message);
-      expect(() => analyzeServerFunctions(moduleId, source)).toThrow(message);
+      expect(() => analyzeServerFunctions('server/functions/bad.ts', source)).toThrow(message);
     });
   }
 

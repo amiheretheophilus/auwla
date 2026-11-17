@@ -34,8 +34,11 @@ export function serverPageUpdates(page: ServerPageDefinition,
     try {
       await session.run(() => session.prepare());
       const root = session.run(() => session.mount()) as unknown as StringRenderableNode;
-      const serialize = (node: StringRenderableNode) => node.toString(true, false);
-      const tracker = new RegionTracker(root, serialize);
+      const serialize = (node: StringRenderableNode) => session.serialize(node, true, false);
+      // As the document stream does (`stream.ts`): a numbered page (compiler-next output) sends its
+      // numbered elements as regions; the old compiler's, its marker ranges.
+      const numbered = session.creations?.cloned === true;
+      const tracker = new RegionTracker(root, serialize, numbered ? (node) => session.creationIds.get(node) : undefined);
       const snapshot = (complete: boolean): PageContent => session.run(() => {
         sequence++;
         for (const region of tracker.changes()) changes.set(region.id, { ...region, sequence });

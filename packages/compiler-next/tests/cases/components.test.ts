@@ -561,7 +561,6 @@ behaves('recursive patterns: recursive components keep per-node state and remoun
 });
 
 behaves('recursive patterns: recursive JSX helpers update nested arrays and replacement branches', {
-  compileTimeoutMs: 15000,
   source: `
     function draw(nodes) { return nodes.map(node => <li key={node.id}><span>{node.name}</span>
       {node.children.length > 0 ? <ul>{draw(node.children)}</ul> : null}</li>); }
