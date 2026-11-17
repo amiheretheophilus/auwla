@@ -57,7 +57,7 @@ async function project(runtime: 'bun' | 'node' | 'cloudflare' | 'browser'): Prom
     export default {
       root: import.meta.dirname, logLevel: 'error',
       plugins: [memoizedDom({ clientEntry: 'src/main.ts',
-        ${runtime === 'browser' ? '' : `serverEntry: 'server.ts', runtime: '${runtime}',`}
+        ${runtime === 'browser' ? '' : `serverEntry: 'server.ts', server: 'server', runtime: '${runtime}',`}
       }), ${runtime === 'cloudflare' ? `cloudflare({ config: { name: 'cli-fixture', compatibility_date: '2026-09-01' },
         inspectorPort: false, persistState: false, remoteBindings: false })` : ''}],
       server: { host: '127.0.0.1', port: 0 },
@@ -89,7 +89,9 @@ async function origin(log: ReturnType<typeof launch>, runtime: string): Promise<
 }
 
 describe('consistent CLI launcher', () => {
-  it.skipIf(!chrome)('supports opt-in filtered runtime diagnostics in browser development', async () => {
+  // compiler-next does not yet emit the runtime's trace calls in development: devtools diagnostics
+  // belong to the project (`wiki/decisions.md`, 2026-11-12) and are on hold with devtools (FINALIZE).
+  it.skip('supports opt-in filtered runtime diagnostics in browser development', async () => {
     const root = await project('browser');
     await writeFile(join(root, 'src/App.tsx'), `export function App(){let count=0;return <button onClick={()=>count++}>{count}</button>;}`);
     const log = launch('bun', root, ['dev']);
@@ -186,7 +188,7 @@ describe('consistent CLI launcher', () => {
         root: import.meta.dirname, logLevel: 'error',
         resolve: { alias: { '@views': import.meta.dirname + '/src' } },
         optimizeDeps: { include: ['not-installed-optimizer-dependency'] },
-        plugins: [memoizedDom({ clientEntry: 'src/main.ts', serverEntry: 'server.ts' }), {
+        plugins: [memoizedDom({ clientEntry: 'src/main.ts', serverEntry: 'server.ts', server: 'server' }), {
           name: 'assert-types-only',
           resolveId(id) { if (id === 'custom:view') return import.meta.dirname + '/src/Custom.tsx'; },
           configureServer() { throw new Error('Types must not configure a dev server'); },

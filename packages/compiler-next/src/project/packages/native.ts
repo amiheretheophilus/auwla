@@ -42,10 +42,10 @@ export interface NativePackageResolver {
 export function nativePackageResolver(): NativePackageResolver {
   const packages = new Map<string, FoundPackage>();
 
-  function packageAt(directory: string): FoundPackage {
+  function packageAt(directory: string, name: string): FoundPackage {
     let found = packages.get(directory);
     if (found === undefined) {
-      found = describePackage(directory);
+      found = describePackage(directory, name);
       packages.set(directory, found);
     }
     return found;
@@ -59,7 +59,7 @@ export function nativePackageResolver(): NativePackageResolver {
       const installed = installedDirectory(name, dirname(importer));
       if (installed === null) return undefined;
       // Through a symlink, as Node does: what it imports is then found from where it really is.
-      const found = packageAt(realpathSync.native(installed));
+      const found = packageAt(realpathSync.native(installed), name);
       if (found.kind === 'ordinary') return undefined;
       return found.entries.get(`.${specifier.slice(name.length)}`);
     },
@@ -106,7 +106,7 @@ export function nativePackages(root: string): NativePackages {
       if (visited.has(real)) continue;
       visited.add(real);
 
-      const found = describePackage(real);
+      const found = describePackage(real, name);
       if (found.kind === 'ordinary') continue;
       names.add(name);
       if (found.kind === 'linked') {
@@ -136,15 +136,18 @@ interface PackageManifest {
   readonly 'memoized-dom'?: { readonly source?: boolean };
 }
 
-/** Which kind of package is at a real directory, and, for a native one, its public imports. */
-function describePackage(directory: string): FoundPackage {
+/**
+ * Which kind of package is at a real directory, and, for a native one, its public imports. `name`
+ * is what the app imports it as, which an error in a linked one's config names.
+ */
+function describePackage(directory: string, name: string): FoundPackage {
   const config = join(directory, '.lib.config.ts');
   // A config inside `node_modules`, pnpm's store included, is never read: a published package has
   // none, and one that ships it anyway is an installed package like any other.
   if (!insideNodeModules(directory) && existsSync(config)) {
     const read = readLibraryConfig(readFileSync(config, 'utf8'), config);
     if (read.source === true) {
-      const entries = publicEntries(directory, read);
+      const entries = publicEntries(directory, read, name);
       return { directory, kind: 'linked', entries: new Map(entries.map((entry) => [entry.path, entry.file])) };
     }
   }

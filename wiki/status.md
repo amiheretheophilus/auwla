@@ -225,9 +225,10 @@ modules with hot boundaries, where a component edit is accepted by itself, a hel
 component, and an entry edit reloads; a compile error in the overlay and its fix; SSR in development
 (the native launcher) showing an edit on the next request; a full-stack build serving its page, its
 script and a server function. Found while building it: the dependency scan deadlocked waiting for the
-build, fixed by leaving scan resolutions alone. Next: the old plugin's remaining features there
-(styles, the build-time page, lazy route chunks, packages, devtools), then the Vite suite through the
-switch.
+build, fixed by leaving scan resolutions alone. Since 2026-11-17 this is the only plugin: the old
+one, the `compiler` option and `MMD_COMPILER` are gone (`compiler/plan.md`, Phase 10 "Exit", step
+3), and what the Vite suite still finds is in `compiler/testing.md` ("Read again on the single
+plugin").
 
 Fixed: 7 `packages/vite/tests/vite-adapter.test.ts` failures, each "Failed to load /src/main.ts"
 from a temp copy of the fixture. Windows gives the temp folder by its short name (`THEOPH~1`).

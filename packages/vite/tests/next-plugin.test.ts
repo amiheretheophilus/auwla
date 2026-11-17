@@ -1,5 +1,5 @@
 /**
- * The Vite plugin over compiler-next's applications (`src/next/plugin.ts`): builds, dev transforms,
+ * The Vite plugin over compiler-next's applications (`src/plugin.ts`): builds, dev transforms,
  * hot updates and errors, and a full-stack build serving its page and a server function.
  */
 import { afterAll, afterEach, describe, expect, it, vi } from 'bun:test';
@@ -56,11 +56,11 @@ function viteConfig(app: string) {
     configFile: false as const,
     logLevel: 'silent' as const,
     resolve: { alias: { '@': join(app, 'src') } },
-    plugins: [memoizedDom({ clientEntry: 'src/main.ts', compiler: 'next' })],
+    plugins: [memoizedDom({ clientEntry: 'src/main.ts' })],
   };
 }
 
-describe("compiler: 'next'", () => {
+describe('the Vite plugin', () => {
   it('builds a client app, resolving aliases through Vite', async () => {
     const app = clientApp('client');
     await build(viteConfig(app));
@@ -175,7 +175,7 @@ describe("compiler: 'next'", () => {
       root: app,
       configFile: false,
       logLevel: 'silent',
-      plugins: [memoizedDom({ clientEntry: 'src/main.ts', serverEntry: 'server.ts', server: 'server', compiler: 'next' })],
+      plugins: [memoizedDom({ clientEntry: 'src/main.ts', serverEntry: 'server.ts', server: 'server' })],
       server: { host: '127.0.0.1', port: 0 },
     });
     const origin = nativeServer.origin;
@@ -205,7 +205,7 @@ describe("compiler: 'next'", () => {
       root: app,
       configFile: false,
       logLevel: 'silent',
-      plugins: [memoizedDom({ clientEntry: 'src/main.ts', serverEntry: 'server.ts', server: 'server', compiler: 'next' })],
+      plugins: [memoizedDom({ clientEntry: 'src/main.ts', serverEntry: 'server.ts', server: 'server' })],
     });
     await builder.buildApp();
     expect(existsSync(join(app, 'dist', 'client', 'index.html'))).toBe(true);
@@ -244,7 +244,7 @@ export function App() {
       root: app,
       configFile: false,
       logLevel: 'silent',
-      plugins: [memoizedDom({ clientEntry: 'src/main.ts', serverEntry: 'server.ts', server: 'server', compiler: 'next' })],
+      plugins: [memoizedDom({ clientEntry: 'src/main.ts', serverEntry: 'server.ts', server: 'server' })],
     });
     await builder.buildApp();
     const { default: host } = await import(pathToFileURL(join(app, 'dist', 'server.js')).href);
@@ -267,6 +267,46 @@ export function App() {
     const home = await (await host.fetch(new Request('http://localhost/'))).text();
     expect(home).toContain('Home');
     expect(home).not.toContain(own!);
+  }, 60_000);
+
+  it('links only the matched route\'s styles in a page rendered in development, as after a build', async () => {
+    write('dev-styled/index.html', '<!doctype html><html><head></head><body><div id="root"><!--ssr-outlet--></div><script type="module" src="/src/main.ts"></script></body></html>');
+    write('dev-styled/src/main.ts', `import './base.css';\nimport { mount } from '@memoized-dom/runtime';\nimport { App } from './App';\nmount('root', App);\n`);
+    write('dev-styled/src/App.tsx', `import { Home } from './Home';
+import { Detail } from './Detail';
+export function App() {
+  return <main><Home route="/" /><Detail route="/detail" /></main>;
+}
+`);
+    write('dev-styled/src/Home.tsx', `import './home.css';\nexport function Home() { return <p>Home</p>; }\n`);
+    write('dev-styled/src/Detail.tsx', `import './detail.css';\nexport function Detail() { return <p>Detail</p>; }\n`);
+    write('dev-styled/src/base.css', 'main { color: black; }\n');
+    // Both color the same element: a page showing the other route's stylesheet would show it wrong.
+    write('dev-styled/src/home.css', 'p { color: blue; }\n');
+    write('dev-styled/src/detail.css', 'p { color: red; }\n');
+    write('dev-styled/server.ts', `import { serve } from '@memoized-dom/server';\nimport { App } from './src/App';\nimport { define } from '#server/define';\nconst app = serve({ define });\napp.ssr(App);\nexport default app;\n`);
+    write('dev-styled/server/define.ts', `import { createDefine } from '@memoized-dom/server';\nexport const define = createDefine();\n`);
+
+    nativeServer = await createDevServer({
+      root: join(root, 'dev-styled'),
+      configFile: false,
+      logLevel: 'silent',
+      plugins: [memoizedDom({ clientEntry: 'src/main.ts', serverEntry: 'server.ts', server: 'server' })],
+      server: { host: '127.0.0.1', port: 0 },
+    });
+    const head = async (path: string) => {
+      const page = await (await fetch(`${nativeServer!.origin}${path}`)).text();
+      return page.slice(0, page.indexOf('</head>'));
+    };
+
+    const home = await head('/');
+    expect(home).toContain('/src/base.css');
+    expect(home).toContain('/src/home.css');
+    expect(home).not.toContain('/src/detail.css');
+    const detail = await head('/detail');
+    expect(detail).toContain('/src/base.css');
+    expect(detail).toContain('/src/detail.css');
+    expect(detail).not.toContain('/src/home.css');
   }, 60_000);
 
   it('builds a server-backed $routed page: rendered with its value, prepared on request, kept out of the client', async () => {
@@ -295,7 +335,7 @@ export function findPerson(id: string) { return people.find((person) => person.i
       root: app,
       configFile: false,
       logLevel: 'silent',
-      plugins: [memoizedDom({ clientEntry: 'src/main.ts', serverEntry: 'server.ts', server: 'server', compiler: 'next' })],
+      plugins: [memoizedDom({ clientEntry: 'src/main.ts', serverEntry: 'server.ts', server: 'server' })],
     });
     await builder.buildApp();
     const { default: host } = await import(pathToFileURL(join(app, 'dist', 'server.js')).href);

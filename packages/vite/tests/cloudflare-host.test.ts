@@ -76,7 +76,7 @@ const { cloudflare } = await import('@memoized-dom/vite/cloudflare');
 const { createBuilder, preview } = await import('vite');
 const config = { root: import.meta.dirname, configFile: false, logLevel: 'error', cacheDir: '.vite',
   base: ${JSON.stringify(kind === 'worker' ? '/demo/' : '/')},
-  plugins: [memoizedDom({ clientEntry: 'src/main.ts', serverEntry: 'server.ts', runtime: 'cloudflare' }),
+  plugins: [memoizedDom({ clientEntry: 'src/main.ts', serverEntry: 'server.ts', server: 'server', runtime: 'cloudflare' }),
     cloudflare({ config: { name: 'memoized-worker', compatibility_date: '2026-09-01', vars: { MESSAGE: 'binding' }, assets: { binding: ${JSON.stringify(kind === 'worker' ? 'STATIC' : 'ASSETS')} },
       kv_namespaces: [{ binding: 'STORE', id: '00000000000000000000000000000000' }] },
       inspectorPort: false, persistState: false, remoteBindings: false })],

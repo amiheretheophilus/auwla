@@ -68,7 +68,7 @@ describe('route-only component chunks', () => {
       resolve: { alias: Object.entries(entries).map(([name, path]) => ({
         find: new RegExp(`^${name}$`), replacement: resolve(repository, 'packages', path),
       })) },
-      plugins: [memoizedDom({ clientEntry: 'src/main.ts', serverEntry: 'server.ts' })],
+      plugins: [memoizedDom({ clientEntry: 'src/main.ts', serverEntry: 'server.ts', server: 'server' })],
       server: { host: '127.0.0.1', port: 0 },
     });
     const origin = vite.origin;

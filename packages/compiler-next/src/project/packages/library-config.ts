@@ -56,27 +56,30 @@ export function readLibraryConfig(text: string, file: string): LibraryConfig {
 /**
  * The public imports a package's config declares: its entry as `.`, and each source file under a
  * `subpaths` directory by its path there, without the extension and with `index` as the folder.
+ * For a package an app links (`linked`, its name), an error names it: the app's build is where it
+ * shows, far from the package.
  */
-export function publicEntries(directory: string, config: LibraryConfig): PublicEntry[] {
+export function publicEntries(directory: string, config: LibraryConfig, linked?: string): PublicEntry[] {
   const entries = new Map<string, PublicEntry>();
+  const fail = (message: string): never => libraryError(linked === undefined ? message : `linked package '${linked}': ${message}`);
 
   function add(path: string, file: string): void {
     const real = realpathSync.native(file);
     const previous = entries.get(path.toLowerCase());
     if (previous !== undefined && previous.file !== real) {
-      libraryError(`public path conflict '${path}': '${previous.file}' and '${real}'`);
+      fail(`public path conflict '${path}': '${previous.file}' and '${real}'`);
     }
     entries.set(path.toLowerCase(), { path, file: real });
   }
 
   const entry = resolve(directory, config.entry);
-  if (!isSourceFile(entry)) libraryError(`entry '${config.entry}' must be a source file of the package`);
+  if (!isSourceFile(entry)) fail(`entry '${config.entry}' must be a source file of the package`);
   add('.', entry);
 
   for (const folder of config.subpaths ?? []) {
     const base = resolve(directory, folder);
     if (statSync(base, { throwIfNoEntry: false })?.isDirectory() !== true) {
-      libraryError(`subpaths directory '${folder}' does not exist`);
+      fail(`subpaths directory '${folder}' does not exist`);
     }
     for (const file of sourceFilesUnder(base)) {
       const name = relative(base, file).split(sep).join('/').replace(SOURCE_EXTENSION, '').replace(/(?:^|\/)index$/, '');

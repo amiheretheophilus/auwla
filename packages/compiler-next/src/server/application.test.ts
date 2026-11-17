@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'bun:test';
 import type { SourceLanguage } from '../core/parse/languages';
 import type { ProjectHost } from '../project/host';
-import { createApplication, GENERATED } from './application';
+import { createApplication, declarationFiles, GENERATED } from './application';
 
 /** A host over an editable set of files, which lists folders too. */
 function memoryHost(files: Record<string, string>): ProjectHost {
@@ -126,6 +126,39 @@ describe('applications', () => {
     const files = { ...FILES, './src/App.tsx': `import { database } from '#server/database';\nexport function App() { return <p>{database.users.size}</p>; }` };
     const build = await createApplication({ client: './src/main.ts', server: SERVER, host: memoryHost(files) }).build();
     expect(!build.client.ok && build.client.error.message).toContain("'#server/database' is server-only");
+  });
+
+  it('give the types of each request from the folder\'s define module and its services', async () => {
+    const without = await createApplication({ client: './src/main.ts', server: SERVER, host: memoryHost(FILES) }).build();
+    // Nothing to register without a `define` module.
+    expect(without.serverConfigDeclarations).toBeNull();
+
+    const files = { ...FILES, './server/define.ts': `import { createDefine } from '@memoized-dom/server';\nexport const define = createDefine<{ user: string }>();\n` };
+    const build = await createApplication({ client: './src/main.ts', server: SERVER, host: memoryHost(files) }).build();
+    const types = build.serverConfigDeclarations!;
+    expect(types).toContain('import type { define as __MemoizedDomDefinition } from "../server/define";');
+    expect(types).toContain('import type { mailer as __MemoizedDomService0 } from "../server/services";');
+    expect(types).toContain(`"mailer": import('@memoized-dom/server').ServiceValue<typeof __MemoizedDomService0>;`);
+    expect(types).toContain("state: import('@memoized-dom/server').DefinitionState<typeof __MemoizedDomDefinition>;");
+    expect(types).toContain("declare module '@memoized-dom/server/router'");
+    expect(types).toContain("declare module '@memoized-dom/router'");
+    expect(declarationFiles(build)['./.memoized/server-config.d.ts']).toBe(types);
+  });
+
+  it('report client code importing the server folder by its path, at the import', async () => {
+    const direct = { ...FILES, './src/App.tsx': `import { getUser } from '../server/functions/users';\nexport function App() { return <p>{getUser('1').name}</p>; }` };
+    const build = await createApplication({ client: './src/main.ts', server: SERVER, host: memoryHost(direct) }).build();
+    expect(build.client.ok).toBe(false);
+    if (build.client.ok) return;
+    expect(build.client.error.message).toContain("'../server/functions/users' is in './server', which is server-only");
+    expect(build.client.error.path).toBe('./src/App.tsx');
+
+    // A functions folder outside the server folder is server-only too.
+    const elsewhere = Object.fromEntries(Object.entries(direct).map(([path, text]) => [path.replace('./server/functions/', './api/'), text.replace('../server/functions/users', '../api/users')]));
+    const outside = await createApplication({
+      client: './src/main.ts', server: { ...SERVER, functions: './api' }, host: memoryHost(elsewhere),
+    }).build();
+    expect(!outside.client.ok && outside.client.error.message).toContain("is in './api', which is server-only");
   });
 
   it('let a server-backed $routed callback read server-only code, dropped from the client', async () => {

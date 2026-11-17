@@ -14,13 +14,20 @@ export function isStylesheetPath(path: string): boolean {
   return isStylesheet(path);
 }
 
-/** Project paths of the stylesheets `entries` import, directly or through modules, in order. */
-export function stylesheetsOf(entries: readonly string[], modules: ReadonlyMap<string, CollectedModule>): string[] {
+/**
+ * Project paths of the stylesheets `entries` import, directly or through modules, in order. A
+ * module in `skip` is not entered.
+ */
+export function stylesheetsOf(
+  entries: readonly string[],
+  modules: ReadonlyMap<string, CollectedModule>,
+  skip: ReadonlySet<string> = new Set(),
+): string[] {
   const stylesheets: string[] = [];
   const seen = new Set<string>();
 
   const visit = (path: string): void => {
-    if (seen.has(path)) return;
+    if (seen.has(path) || skip.has(path)) return;
     seen.add(path);
     const module = modules.get(path);
     if (module === undefined) return;
@@ -40,4 +47,30 @@ export function stylesheetsOf(entries: readonly string[], modules: ReadonlyMap<s
 
   for (const entry of entries) visit(entry);
   return stylesheets;
+}
+
+/**
+ * The stylesheets each route component that loads with its route brings, by its key
+ * (`CompiledProject.routeComponents`): those its module reaches that the rest of the program does
+ * not. A browser gets them with the route's chunk; a page the server renders for that route links
+ * them in its head, in development as in a build (`@memoized-dom/server`, `route-styles.ts`), so
+ * another route's styles never apply to it. Undefined when no route component brings one.
+ */
+export function routeStylesheetsOf(
+  entries: readonly string[],
+  modules: ReadonlyMap<string, CollectedModule>,
+  routeComponents: Readonly<Record<string, string>> | undefined,
+): Record<string, string[]> | undefined {
+  if (routeComponents === undefined) return undefined;
+  const lazy = new Set(Object.values(routeComponents));
+  const eager = new Set(stylesheetsOf(entries, modules, lazy));
+
+  const byComponent: Record<string, string[]> = {};
+  for (const [key, module] of Object.entries(routeComponents)) {
+    // Another route component this one imports loads with its own route.
+    const others = new Set([...lazy].filter((path) => path !== module));
+    const own = stylesheetsOf([module], modules, others).filter((stylesheet) => !eager.has(stylesheet));
+    if (own.length > 0) byComponent[key] = own;
+  }
+  return Object.keys(byComponent).length === 0 ? undefined : byComponent;
 }

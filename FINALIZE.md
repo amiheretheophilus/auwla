@@ -76,4 +76,7 @@ and remove it once the owning wiki records it as done.
 - [ ] **CI without `gh`**: the work machine cannot install `gh`. Trigger runs with `curl` and a
   token (the user chooses which), or put the workflow file on `main` (only if the user asks).
 - [ ] CI on GitHub Actions once the suite reaches thousands of cases; devtools are on hold.
+- [ ] **Runtime trace diagnostics** (on hold with devtools): compiler-next's development output does
+  not call the runtime's trace hooks (`runtime/src/diagnostics.ts`), which the old compiler did.
+  `packages/vite/tests/cli.test.ts` skips its trace test until the project emits them.
 - [ ] **The auwla rename** across all packages, at once (`memo-dom:`, `mmd_*`, `memoized-dom/*`).

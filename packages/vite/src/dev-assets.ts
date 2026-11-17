@@ -1,97 +1,48 @@
+/**
+ * The stylesheets a page the server renders in development links in its head, so it is styled
+ * before any script runs. compiler-next says which they are (`CompiledProject.stylesheets` and
+ * `routeStylesheets`); here they become the URLs Vite serves them at.
+ *
+ * The eager ones go in every page's document (`configureDevelopmentDelivery`). Those a route
+ * component brings go, by its key, to the server, which links them only on a page that renders
+ * that route (`@memoized-dom/server`, `route-styles.ts`), as it does after a build.
+ */
 import { isAbsolute, relative, sep } from 'node:path';
 import type { ViteDevServer } from 'vite';
 
-interface DevRoute {
-  readonly id: string;
-  readonly pattern: string;
-  readonly parentId?: string;
+export interface DevelopmentStyles {
+  /** URLs of the stylesheets every page links, in the order a browser applies them. */
+  readonly eager: readonly string[];
+  /** URLs of the stylesheets each route component brings with its route, by its key. */
+  readonly routes: Readonly<Record<string, readonly string[]>>;
 }
 
-interface StyleRegistration {
-  readonly eager: ReadonlySet<string>;
-  readonly routes: readonly {
-    readonly id: string;
-    readonly styles: ReadonlySet<string>;
-  }[];
-  readonly routeTree: readonly DevRoute[];
-}
+const registered = new WeakMap<ViteDevServer, DevelopmentStyles>();
 
-const clientStyles = new WeakMap<
-  ViteDevServer,
-  Map<object, StyleRegistration>
->();
-
-/** Replace the styles owned by one connected compiler graph. */
+/**
+ * Records the stylesheets of the last client build that compiled. `stylesheets` and
+ * `routeStylesheets` are compiler-next's files, as project paths resolved to Vite's file ids.
+ */
 export function registerClientStyles(
   server: ViteDevServer,
-  owner: object,
-  eagerStyles: ReadonlySet<string>,
-  routeStyles: readonly {
-    readonly id: string;
-    readonly pattern: string;
-    readonly styles: ReadonlySet<string>;
-  }[],
-  routeTree: readonly DevRoute[],
+  stylesheets: readonly string[],
+  routeStylesheets: Readonly<Record<string, readonly string[]>>,
 ): void {
-  let graphs = clientStyles.get(server);
-  if (graphs === undefined) {
-    graphs = new Map();
-    clientStyles.set(server, graphs);
-  }
-  graphs.set(owner, {
-    eager: new Set(eagerStyles),
-    routes: routeStyles.map(route => ({
-      id: route.id,
-      styles: new Set(route.styles),
-    })),
-    routeTree: [...routeTree],
+  const root = server.config.root;
+  const urls = (files: readonly string[]) => files.flatMap((file) => styleUrl(root, file) ?? []);
+  const lazy = new Set(Object.values(routeStylesheets).flat());
+  registered.set(server, {
+    eager: urls(stylesheets.filter((file) => !lazy.has(file))),
+    routes: Object.fromEntries(Object.entries(routeStylesheets).map(([key, files]) => [key, urls(files)])),
   });
 }
 
-function routeScore(pattern: string, pathname: string): number[] | null {
-  const route = pattern.split('/').filter(Boolean);
-  const path = pathname.split('/').filter(Boolean);
-  const score: number[] = [];
-  for (let index = 0; index < route.length; index++) {
-    const segment = route[index]!;
-    if (segment === '*') {
-      score.push(-1);
-      return score;
-    }
-    if (path[index] === undefined) return null;
-    if (segment.startsWith(':')) score.push(1);
-    else if (segment === path[index]) score.push(2);
-    else return null;
-  }
-  return route.length === path.length ? score : null;
+/** The stylesheets registered for the dev server, or none before its first build. */
+export function clientStyles(server: ViteDevServer): DevelopmentStyles {
+  return registered.get(server) ?? { eager: [], routes: {} };
 }
 
-function moreSpecific(left: readonly number[], right: readonly number[]): boolean {
-  for (let index = 0; index < Math.max(left.length, right.length); index++) {
-    const difference = (left[index] ?? 0) - (right[index] ?? 0);
-    if (difference !== 0) return difference > 0;
-  }
-  return true; // same-path child definitions replace their parent as the leaf
-}
-
-function matchedRouteIds(routes: readonly DevRoute[], pathname: string): Set<string> {
-  let leaf: DevRoute | undefined;
-  let leafScore: number[] = [];
-  for (const route of routes) {
-    const score = routeScore(route.pattern, pathname);
-    if (score === null || (leaf !== undefined && !moreSpecific(score, leafScore))) continue;
-    leaf = route;
-    leafScore = score;
-  }
-  const byId = new Map(routes.map(route => [route.id, route]));
-  const active = new Set<string>();
-  while (leaf !== undefined && !active.has(leaf.id)) {
-    active.add(leaf.id);
-    leaf = leaf.parentId === undefined ? undefined : byId.get(leaf.parentId);
-  }
-  return active;
-}
-
+/** The URL Vite serves a file at: below the root, or through `/@fs/` outside it. */
 function styleUrl(root: string, id: string): string | null {
   const marker = id.search(/[?#]/);
   const file = marker === -1 ? id : id.slice(0, marker);
@@ -102,28 +53,4 @@ function styleUrl(root: string, id: string): string | null {
     return `/${path.split(sep).join('/')}${suffix}`;
   }
   return `/@fs/${file.replaceAll('\\', '/')}${suffix}`;
-}
-
-/** CSS imports discovered by the compiler graph before document streaming. */
-export async function clientStyleUrls(
-  server: ViteDevServer,
-  href = '/',
-): Promise<readonly string[]> {
-  const graphs = clientStyles.get(server);
-  if (graphs === undefined) return [];
-  const pathname = new URL(href, 'http://localhost').pathname;
-  const urls = new Set<string>();
-  for (const registration of graphs.values()) {
-    const styles = new Set(registration.eager);
-    const active = matchedRouteIds(registration.routeTree, pathname);
-    for (const route of registration.routes) {
-      if (!active.has(route.id)) continue;
-      for (const style of route.styles) styles.add(style);
-    }
-    for (const style of styles) {
-      const url = styleUrl(server.config.root, style);
-      if (url !== null) urls.add(url);
-    }
-  }
-  return [...urls].sort();
 }

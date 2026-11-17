@@ -9,9 +9,11 @@ import { existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { build, createServer } from 'vite';
+import { nativePackages, packageLibrary } from '@memoized-dom/compiler-next';
 import memoizedDom from '../src';
-import { buildLibrary } from '../src/library-build';
-import { nativePackages } from '../src/graph/native-packages';
+
+/** `memoized-dom package`, which compiler-next's packaging does for every tool. */
+const buildLibrary = (options: { root: string }) => packageLibrary({ ...options, log: () => {} });
 
 let repo: string;
 let app: string;
@@ -194,7 +196,7 @@ it('leaves a linked package alone unless it publishes source', async () => {
 
 it('names the package when a linked config is wrong', async () => {
   await write(kit, { '.lib.config.ts': `export default { entry: './src/missing.ts', source: true };` });
-  await expect(nativePackages(app)).rejects.toThrow(/linked package 'kit'/);
+  expect(() => nativePackages(app)).toThrow(/linked package 'kit'/);
 }, 60_000);
 
 it('gives TypeScript the public imports, so an editor sees the real types', async () => {

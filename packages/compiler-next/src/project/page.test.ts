@@ -8,8 +8,8 @@ function memoryHost(files: Record<string, string>): ProjectHost {
   return { readFile: (path) => files[path] };
 }
 
-async function built(files: Record<string, string>): Promise<CompiledProject> {
-  const build = await createProject({ entries: ['./src/main.ts'], host: memoryHost(files) }).build();
+async function built(files: Record<string, string>, routedEnvironment?: 'client'): Promise<CompiledProject> {
+  const build = await createProject({ entries: ['./src/main.ts'], host: memoryHost(files), ...(routedEnvironment === undefined ? {} : { routedEnvironment }) }).build();
   if (!build.ok) throw build.error;
   return build;
 }
@@ -27,6 +27,23 @@ describe('the build-time page', () => {
   it('lists the stylesheets the program imports, in the order a browser applies them', async () => {
     const build = await built(STATIC_APP);
     expect(build.stylesheets).toEqual(['./src/base.css', './src/card.css', './src/app.css']);
+  });
+
+  it('lists the stylesheets each route component brings with its route, apart from the eager ones', async () => {
+    const build = await built({
+      './src/main.ts': `import './base.css';\nimport { mount } from '@memoized-dom/runtime';\nimport { App } from './App';\nmount('root', App);\n`,
+      './src/App.tsx': `import { Home } from './Home';\nimport { Detail } from './Detail';\nexport function App() { return <main><Home route="/" /><Detail route="/detail" /></main>; }\n`,
+      './src/Home.tsx': `import './home.css';\nimport './base.css';\nexport function Home() { return <p>Home</p>; }\n`,
+      './src/Detail.tsx': `import './detail.css';\nexport function Detail() { return <p>Detail</p>; }\n`,
+    }, 'client');
+    const keys = Object.entries(build.routeComponents ?? {});
+    const keyOf = (module: string) => keys.find(([, path]) => path === module)?.[0];
+    // `base.css` loads with the entry, so neither route brings it.
+    expect(build.routeStylesheets).toEqual({
+      [keyOf('./src/Home.tsx')!]: ['./src/home.css'],
+      [keyOf('./src/Detail.tsx')!]: ['./src/detail.css'],
+    });
+    expect(build.stylesheets).toEqual(['./src/base.css', './src/home.css', './src/detail.css']);
   });
 
   it('writes a page that cannot change into its HTML, with no script and its stylesheets linked', async () => {

@@ -161,6 +161,19 @@ describe('a package linked from the workspace', () => {
     expect(found.linkedDirectories).toEqual([join(workspace, 'kit')]);
     expect(found.linkedImports.map((linked) => linked.specifier).sort()).toEqual(['kit', 'kit/tabs']);
   });
+
+  it('names the package when its config is wrong, since the app is where the error shows', () => {
+    const workspace = folder({
+      'kit/package.json': manifest({ name: 'kit', version: '1.0.0', type: 'module' }),
+      'kit/.lib.config.ts': `export default { entry: './src/missing.ts', source: true };\n`,
+      'app/package.json': manifest({ name: 'app', dependencies: { kit: 'workspace:*' } }),
+    });
+    const app = join(workspace, 'app');
+    mkdirSync(join(app, 'node_modules'), { recursive: true });
+    symlinkSync(join(workspace, 'kit'), join(app, 'node_modules', 'kit'), 'junction');
+
+    expect(() => nativePackages(app)).toThrow("linked package 'kit': entry './src/missing.ts' must be a source file of the package");
+  });
 });
 
 describe('reading .lib.config.ts', () => {

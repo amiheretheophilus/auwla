@@ -35,7 +35,7 @@ it.skipIf(!chrome).each(['development','production'] as const)('fills nested ser
   };
   for(const [name,source] of Object.entries(files)){const file=resolve(fixture,name);await mkdir(resolve(file,'..'),{recursive:true});await writeFile(file,source);}
   const aliases=['runtime/server','runtime/hot','runtime/hydrate-program','runtime/hydrate','runtime','data/internal','data','router/internal','router','server/internal','server/router','server','adapters/bun'].map(name=>({find:'@memoized-dom/'+name,replacement:resolve(repository,'packages',name.split('/')[0]!,'src',name.includes('/')?(name.endsWith('/router')?'http-router':name.split('/')[1]!)+'.ts':'index.ts')}));
-  const config={root:fixture,configFile:false as const,logLevel:'silent' as const,resolve:{alias:aliases},plugins:[memoizedDom({clientEntry:'main.ts',serverEntry:'server.ts'})],server:{host:'127.0.0.1',port:0}};
+  const config={root:fixture,configFile:false as const,logLevel:'silent' as const,resolve:{alias:aliases},plugins:[memoizedDom({clientEntry:'main.ts',serverEntry:'server.ts',server:'server'})],server:{host:'127.0.0.1',port:0}};
   let origin:string;
   if(mode==='development'){vite=await createDevServer(config);origin=vite.origin;}
   else{const builder=await createBuilder(config);await builder.buildApp();const backend=await import(/* @vite-ignore */pathToFileURL(resolve(fixture,'dist/server.js')).href);host=Bun.serve({hostname:'127.0.0.1',port:0,fetch:backend.default.fetch});origin=host.url.origin;}

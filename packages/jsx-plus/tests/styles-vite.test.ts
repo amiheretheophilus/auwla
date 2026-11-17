@@ -35,7 +35,7 @@ const config = {
   root,
   configFile: false as const,
   logLevel: 'silent' as const,
-  plugins: [memoizedDom({ compiler: 'next', clientEntry: 'main.ts', languages: [auwla] })],
+  plugins: [memoizedDom({ clientEntry: 'main.ts', languages: [auwla] })],
 };
 
 it('builds the real HTML entry with native CSS imports, URLs and stylesheet links', async () => {

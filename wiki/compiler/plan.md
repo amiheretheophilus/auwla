@@ -402,9 +402,10 @@ array child). Remove each check when its phase is built.
   1. [x] The JSX types move into compiler-next (`src/jsx-types.ts`, `jsx-runtime.ts`,
      `jsx/dom-types.ts`), without the conditional attributes.
   2. [x] The language service reports compiler-next's errors (`project/diagnose.ts`).
-  3. [ ] `packages/vite` is the compiler-next plugin only: the old plugin goes, with `compiler:
+  3. [x] `packages/vite` is the compiler-next plugin only: the old plugin goes, with `compiler:
      'next'` and `MMD_COMPILER`; delivery and build logic still in the package moves into
-     compiler-next (`../rules.md`, rule 17); its tests stay where they test behaviour.
+     compiler-next (`../rules.md`, rule 17); its tests stay where they test behaviour. What the
+     suite still finds is listed in `testing.md` ("Read again on the single plugin").
   4. [ ] The old compiler's tests go: root `tests/` files that import it, the acceptance switch,
      and the comparisons in `packages/server`, `packages/jsx-plus` and compiler-next's harness.
   5. [ ] Bench defaults to compiler-next (`--compiler=<snapshot>` stays for `d6e678b`); examples

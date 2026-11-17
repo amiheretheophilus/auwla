@@ -64,7 +64,10 @@ for, and a `#server/` import is an error asking for the folder. Server functions
 
 - **Client build:** `routedEnvironment: 'client'` (server-backed `$routed` bodies dropped),
   `dataDelivery` `universal` with a server and `client` without. `#server/*` is never followed; a
-  `#server/` import left in client output is an error, so server-only code cannot ship. With a
+  `#server/` import left in client output is an error, so server-only code cannot ship. Neither can
+  the server folder (or a functions folder outside it) reached by a relative path
+  (`../server/functions/users`): it is reported at the importing module, naming the import, and
+  pointing to `#server-functions` (`serverFolderImport`; found by the Vite tests, 2026-11-17). With a
   server, the entry gets `import '@memoized-dom/runtime/hydrate'` appended, so it adopts the
   server's markup (appended, so the entry's offsets and map stay in place).
 - **Server build:** `routedEnvironment: 'server'`, `dataDelivery: 'universal'`. `#server/*`
@@ -88,6 +91,15 @@ for, and a `#server/` import is an error asking for the folder. Server functions
   to the project.
 - `declarations` is the text of `.memoized/server-functions.d.ts`, which a tool writes for
   TypeScript; null without functions.
+- **Server types:** `serverConfigDeclarations` is the text of `.memoized/server-config.d.ts`
+  (`server/config-declarations.ts`): the folder's `define` module (`createDefine<State,
+  Platform>()`) gives each request's `state` and `platform`, and each `define.service('name')` a
+  field of `services`, registered in `@memoized-dom/server/router`'s `ServerTypeRegistry` and
+  `@memoized-dom/router`'s `RoutedTypeRegistry`. Null without a `define` module. Ported from the old
+  Vite plugin's `server-config.ts`.
+- `declarationFiles(build)` lists the declaration files by project path (null removes one; route
+  types are left out while the client fails), so every tool writes the same set. A failed discovery
+  keeps the last good one's declarations, so the editor's types stay while the folder is fixed.
 - `update(paths)` rebuilds both programs and names what changed in each. An edit in the server
   folder regenerates the barrel, the facades and the registry.
 - **Source languages** (`languages`, [core](core.md#source-languages)) apply to server code too: a
@@ -255,8 +267,15 @@ deployment target is the compiler's, not a bundler plugin's (`../decisions.md`, 
 `worker.js` (`conditions: workerd`, `cloudflare:*` and `node:*` left as imports) beside `client/`
 and `wrangler.json`; `wrangler deploy --config dist/wrangler.json` deploys it. `project/cli.test.ts`
 runs the built Worker in workerd through Miniflare: a page render, per-render module state, a client
-file through the assets binding, a server function, and one reading a binding through `platform.env`. The old Vite plugin's `cloudflare()` still
-wraps `@cloudflare/vite-plugin` for its own dev server; the Vite path is one way, not the only one.
+file through the assets binding, a server function, and one reading a binding through `platform.env`. The Vite plugin's `cloudflare()` wraps
+`@cloudflare/vite-plugin` for Vite's dev server; the Vite path is one way, not the only one.
+
+The Vite plugin writes its production delivery with the same `deliveryModule` (2026-11-17), which
+also takes `node`, the client's `base`, its assets folder, route styles (`routes.md`, "A lazy
+route's styles") and a client folder the bundler places (`clientRoot`). `hostEntryModule('bun' |
+'node', entry)` is the module a built server starts from: on Bun the entry's own host options and
+`fetch`, on Node a listener when run directly, whose failed request answers 500 through the
+promise's rejection handler (no `try`, `../rules.md`, rule 5).
 
 ## Server pages
 
@@ -367,6 +386,7 @@ whole compiled component, and its inputs are every path that component reads, te
 | `server/generate.ts` | The client facade of a module, and the barrel's declarations |
 | `server/functions.test.ts` | Analysis, facades, declarations and errors, compared with the old compiler |
 | `server/registry.ts` | The server function routes module, the `#server-functions` barrel, and services |
+| `server/config-declarations.ts` | `.memoized/server-config.d.ts`: request state, platform and service types from `define.ts` and the services |
 | `server/application.ts` | `createApplication`: the client and server builds, their views of the host, the server entry's integration |
 | `server/delivery.ts` | A built server's delivery module for Bun or a Cloudflare Worker, or for a server built on its own, and the Worker's `wrangler.json` |
 | `server/pages.ts` | Server pages: `page(<JSX/>)` extracted into a page module, the handler's replacement, its errors |
@@ -375,4 +395,4 @@ whole compiled component, and its inputs are every path that component reads, te
 | `server/pages.test.ts` | Extraction (the old compiler's cases) and input projection |
 | `server/pages.app.test.ts` | A built application with pages: the server's answers, the client's files, and the browser |
 | `server/index.ts` | The public API, re-exported from the package root |
-| `server/application.test.ts` | Facades and no server code in the client, routes and handlers on the server, client-only apps, server-only imports, `$routed`, errors, updates |
+| `server/application.test.ts` | Facades and no server code in the client, routes and handlers on the server, client-only apps, server-only imports (by `#server/` and by path), server types, `$routed`, errors, updates |

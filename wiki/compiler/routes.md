@@ -128,7 +128,7 @@ Checked on 2026-11-14 with real builds and the real server, no new code needed:
   server-rendered `/people/1` adopts the page with the value the server prepared: no request,
   and its nodes stay. Coming back to it later is a navigation, which asks again. Both optimization
   modes.
-- **`packages/vite` with `compiler: 'next'`** (`tests/next-plugin.test.ts`): the built server
+- **`packages/vite`** (`tests/next-plugin.test.ts`): the built server
   renders the page with its prepared value and answers `/_memoized/routed`. The client's chunks
   hold the endpoint and not the server-only module's data.
 
@@ -148,7 +148,7 @@ that is after the page shows, so the route's markup would show unstyled first. B
   `withRouteStyles` (`packages/server/src/route-styles.ts`) links the missing ones before
   `</head>`, or before the outlet when the template's prefix has no head.
 - **Tool.** Vite's client build finds each key's chunk and its CSS, with the CSS of the chunks it
-  imports (`generateBundle` in `packages/vite/src/next/plugin.ts`), and the production delivery
+  imports (`generateBundle` in `packages/vite/src/plugin.ts`), and the production delivery
   module carries `routeStyles`. compiler-next's generated `serve()` passes the delivery module's
   `routeStyles` on (`server/application.ts`). The command line needs none: Bun's HTML bundling
   links a lazy chunk's CSS in the page already.

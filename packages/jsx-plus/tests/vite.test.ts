@@ -46,7 +46,7 @@ const config = {
   root,
   configFile: false as const,
   logLevel: 'silent' as const,
-  plugins: [memoizedDom({ clientEntry: 'main.ts', compiler: 'next', languages: [auwla] })],
+  plugins: [memoizedDom({ clientEntry: 'main.ts', languages: [auwla] })],
 };
 
 it('builds the app with Vite, every .auwla module compiled', async () => {
@@ -123,7 +123,7 @@ async function withoutWindow<T>(run: () => Promise<T>): Promise<T> {
 }
 
 const directoryPlugins = () => [memoizedDom({
-  clientEntry: 'src/main.ts', serverEntry: 'server.ts', server: 'server', compiler: 'next', languages: [auwla],
+  clientEntry: 'src/main.ts', serverEntry: 'server.ts', server: 'server', languages: [auwla],
 })];
 
 it('builds the .auwla directory as a full-stack Vite app: rendered pages, prepared routes, server functions', async () => {

@@ -6,5 +6,5 @@ import memoizedDom from "@memoized-dom/vite";
 export default defineConfig({
   root: import.meta.dirname,
   base: "/",
-  plugins: [memoizedDom({ clientEntry: "main.ts", compiler: "next" })],
+  plugins: [memoizedDom({ clientEntry: "main.ts" })],
 });

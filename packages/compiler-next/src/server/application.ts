@@ -31,6 +31,7 @@ import { createProject, type ProjectBuild } from '../project/project';
 import { analyzeServerFunctions, type ServerFunctionModule } from './functions';
 import { serverFunctionClient, serverFunctionDeclarations } from './generate';
 import { routeDeclarations } from '../features/routes/declarations';
+import { SERVER_CONFIG_DECLARATIONS, serverConfigDeclarations } from './config-declarations';
 import { modulePages, PAGE_HYDRATION, PAGES, pageTable, type ModulePages } from './page-build';
 import {
   checkServices, isMiddlewareFile, serverFunctionBarrel, serverFunctionRegistry, serverServices,
@@ -88,6 +89,25 @@ export interface ApplicationBuild {
    * failed to build, so a tool keeps the file it has.
    */
   readonly routeDeclarations?: string | null;
+  /**
+   * `.memoized/server-config.d.ts`, which types each request's `state`, `platform` and `services`
+   * from the server folder's `define` module and services (`config-declarations.ts`). Null
+   * without a `define` module.
+   */
+  readonly serverConfigDeclarations: string | null;
+}
+
+/**
+ * The declaration files an application build makes for TypeScript, by project path: each tool
+ * writes them the same way (`wiki/rules.md`, rule 17). Null removes a file; a file not listed is
+ * left as it is (route types, while the client fails to build).
+ */
+export function declarationFiles(build: ApplicationBuild): Record<string, string | null> {
+  return {
+    './.memoized/server-functions.d.ts': build.declarations,
+    [SERVER_CONFIG_DECLARATIONS]: build.serverConfigDeclarations,
+    ...(build.routeDeclarations === undefined ? {} : { './.memoized/routes.d.ts': build.routeDeclarations }),
+  };
 }
 
 export interface ApplicationUpdate {
@@ -122,9 +142,11 @@ export function createApplication(options: ApplicationOptions): Application {
   /** The declared server-only folder, or null: then nothing is server-only. */
   const root = server?.folder === undefined ? null : folderPath(server.folder);
   const functionsFolder = server?.functions !== undefined ? folderPath(server.functions) : root === null ? null : `${root}/functions`;
+  /** The folders client code never reaches: the server folder, and the functions folder outside it. */
+  const serverOnlyFolders = [...new Set([root, functionsFolder].filter((folder) => folder !== null))];
 
   /** The server folder's functions and services, found again by each build. */
-  let generated: Generated = { modules: [], services: [], facades: new Map(), pages: [], texts: { client: new Map(), server: new Map() } };
+  let generated: Generated = { modules: [], services: [], define: null, facades: new Map(), pages: [], texts: { client: new Map(), server: new Map() } };
 
   async function discover(): Promise<Generated> {
     const modules: DiscoveredFunctions[] = [];
@@ -154,7 +176,9 @@ export function createApplication(options: ApplicationOptions): Application {
       }
     }
     checkServices(services);
-    return { modules, services, facades, pages, texts: pageTexts(pages) };
+    // The module whose `define` types every request (`config-declarations.ts`).
+    const define = root === null ? false : await serverModule(root, 'define', host, languages);
+    return { modules, services, define: define === false ? null : define, facades, pages, texts: pageTexts(pages) };
   }
 
   /** `#server-functions`: each module's functions, re-exported from its facade. */
@@ -248,9 +272,9 @@ export function createApplication(options: ApplicationOptions): Application {
     const discovered = await discoverSafely();
     if (discovered instanceof CompileError) return failed(discovered);
     generated = discovered;
-    const clientBuild = checkServerOnly(await clientProject.build(), 'client');
+    const clientBuild = checkServerOnly(await clientProject.build(), 'client', serverOnlyFolders, languages);
     const serverBuild = await serverProject?.build();
-    return finish(clientBuild, serverBuild === undefined ? undefined : checkServerOnly(serverBuild, 'server'));
+    return finish(clientBuild, serverBuild === undefined ? undefined : checkServerOnly(serverBuild, 'server', serverOnlyFolders, languages));
   }
 
   /**
@@ -296,9 +320,9 @@ export function createApplication(options: ApplicationOptions): Application {
     generated = discovered;
 
     const clientUpdate = await clientProject.update([...paths, ...generatedPaths]);
-    const clientBuild = checkServerOnly(clientUpdate.build, 'client');
+    const clientBuild = checkServerOnly(clientUpdate.build, 'client', serverOnlyFolders, languages);
     const serverUpdate = await serverProject?.update([...paths, ...generatedPaths]);
-    const serverBuild = serverUpdate === undefined ? undefined : checkServerOnly(serverUpdate.build, 'server');
+    const serverBuild = serverUpdate === undefined ? undefined : checkServerOnly(serverUpdate.build, 'server', serverOnlyFolders, languages);
     return {
       build: finish(clientBuild, serverBuild),
       client: clientBuild.ok ? { changed: clientUpdate.changed, removed: clientUpdate.removed } : { changed: [], removed: [] },
@@ -323,26 +347,50 @@ export function createApplication(options: ApplicationOptions): Application {
   function failed(error: CompileError): ApplicationBuild {
     const client: ProjectBuild = { ok: false, error, modules: lastModules.client };
     const server: ProjectBuild = { ok: false, error, modules: lastModules.server };
-    return { client, ...(serverProject === null ? {} : { server }), functions: [], declarations: null };
+    // The declarations of the last discovery that worked, so the editor's types stay while the
+    // folder is fixed: a tool would remove a file whose text is null.
+    return {
+      client,
+      ...(serverProject === null ? {} : { server }),
+      functions: [],
+      ...folderDeclarations(serverFunctionsOf(generated)),
+    };
   }
 
   function finish(clientBuild: ProjectBuild, serverBuild: ProjectBuild | undefined): ApplicationBuild {
     lastModules = { client: clientBuild.modules, server: serverBuild?.modules ?? [] };
-    const functions = generated.modules.filter((entry) => !isMiddlewareFile(entry.path)).map((entry) => entry.module);
-    let declarations: string | null = null;
-    if (functions.some((module) => module.functions.length > 0)) {
-      declarations = serverFunctionDeclarations(functions, (moduleId) => implementationSpecifier(moduleId));
-    }
+    const functions = serverFunctionsOf(generated);
     const routeTypes = clientBuild.ok ? { routeDeclarations: routeDeclarations(clientBuild.routes ?? []) } : {};
-    return { client: clientBuild, ...(serverBuild === undefined ? {} : { server: serverBuild }), functions, declarations, ...routeTypes };
+    return {
+      client: clientBuild,
+      ...(serverBuild === undefined ? {} : { server: serverBuild }),
+      functions,
+      ...folderDeclarations(functions),
+      ...routeTypes,
+    };
+  }
+
+  /** The types of `#server-functions` and of each request, from the server folder's discovery. */
+  function folderDeclarations(functions: readonly ServerFunctionModule[]): Pick<ApplicationBuild, 'declarations' | 'serverConfigDeclarations'> {
+    const declarations = functions.some((module) => module.functions.length > 0)
+      ? serverFunctionDeclarations(functions, (moduleId) => implementationSpecifier(moduleId))
+      : null;
+    return { declarations, serverConfigDeclarations: serverConfigDeclarations(generated.define, generated.services) };
   }
 
   return { build, update };
 }
 
+/** The server function modules a discovery found, without the middleware files. */
+function serverFunctionsOf(generated: Generated): ServerFunctionModule[] {
+  return generated.modules.filter((entry) => !isMiddlewareFile(entry.path)).map((entry) => entry.module);
+}
+
 interface Generated {
   readonly modules: readonly DiscoveredFunctions[];
   readonly services: readonly ServerService[];
+  /** The server folder's `define` module, or null without one. */
+  readonly define: string | null;
   /** Facade text by its project path. */
   readonly facades: ReadonlyMap<string, string>;
   readonly pages: readonly ModulePages[];
@@ -445,10 +493,24 @@ function implementationSpecifier(moduleId: string): string {
 
 /**
  * A `#server/` import left in output: in a client build it would ship server-only code; in a
- * server build it names a folder no one declared.
+ * server build it names a folder no one declared. A client build also may not reach a server-only
+ * folder by a relative path (`serverFolderImport`).
  */
-function checkServerOnly(build: ProjectBuild, side: 'client' | 'server'): ProjectBuild {
+function checkServerOnly(
+  build: ProjectBuild,
+  side: 'client' | 'server',
+  serverOnlyFolders: readonly string[],
+  languages: readonly SourceLanguage[] | undefined,
+): ProjectBuild {
   if (!build.ok) return build;
+  for (const folder of side === 'client' ? serverOnlyFolders : []) {
+    const reached = serverFolderImport(build.output, folder, languages);
+    if (reached !== null) {
+      const message = `'${reached.specifier}' is in '${folder}', which is server-only: `
+        + `client code calls server functions through '#server-functions'`;
+      return { ok: false, error: new CompileError(message, reached.importer), modules: build.modules };
+    }
+  }
   for (const [path, code] of Object.entries(build.output)) {
     const match = /from\s+["'](#server\/[^"']+)["']|import\s+["'](#server\/[^"']+)["']/.exec(code);
     if (match === null) continue;
@@ -459,6 +521,32 @@ function checkServerOnly(build: ProjectBuild, side: 'client' | 'server'): Projec
     return { ok: false, error: new CompileError(message, path), modules: build.modules };
   }
   return build;
+}
+
+/**
+ * A client module that imports a module of the server folder by its path (`../server/db`), which
+ * `#server/` would have refused: the import and the module making it. When only the folder's
+ * module itself is found (an import the scan does not read), it is reported on its own.
+ */
+function serverFolderImport(
+  output: Readonly<Record<string, string>>,
+  folder: string,
+  languages: readonly SourceLanguage[] | undefined,
+): { importer: string; specifier: string } | null {
+  const inFolder = new Set(Object.keys(output).filter((path) => path.startsWith(`${folder}/`)));
+  if (inFolder.size === 0) return null;
+
+  const extensions = languageExtensions(languages);
+  for (const [path, code] of Object.entries(output)) {
+    if (inFolder.has(path)) continue;
+    for (const match of code.matchAll(/(?:\bfrom|\bimport)\s*\(?\s*["']([^"']+)["']/g)) {
+      const specifier = match[1]!;
+      const candidates = importCandidates(specifier, path, extensions) ?? [];
+      if (candidates.some((candidate) => inFolder.has(candidate))) return { importer: path, specifier };
+    }
+  }
+  const first = [...inFolder][0]!;
+  return { importer: first, specifier: first };
 }
 
 /**

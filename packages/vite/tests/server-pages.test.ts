@@ -42,13 +42,14 @@ it.each(['development','production','development-stream'] as const)('delivers fi
     'index.html':`<!doctype html><html><body><div id="root"><!--ssr-outlet--></div><script type="module" src="/main.ts"></script></body></html>`,
     'main.ts':`import {mount} from '@memoized-dom/runtime';import {App} from './App';mount('root',App);`,
     'server/define.ts':`import {createDefine} from '@memoized-dom/server';export const define=createDefine();export {page} from '@memoized-dom/server';`,
-    'server/functions/boards.tsx':`import {define,page} from '../define';import {Board} from '../../Board.tsrx';
+    'server/functions/boards.tsx':`import {define,page} from '../define';import {Board} from '../../Board';
       let count=0;
       export const getBoard=define.function({live:()=>['board'],async get(){const user={name:'Ada',hint:'Event-only',password:'SERVER_SECRET'},subtitle=undefined;return page(<Board count={count} user={user} subtitle={subtitle}/>);}});
       export const saveBoard=define.function({updates:()=>['board'],async post(){count++;const user={name:'Saved',hint:'Event-only',password:'SERVER_SECRET'},subtitle=undefined;return page(<Board count={count} user={user} subtitle={subtitle}/>);}});
       export const getDenied=define.function({async get(){return page(<p data-denied>Denied</p>);}});`,
-    'Board.tsrx':`import './board.css';export function Board({count,user,subtitle='No subtitle'}) @{let expanded=false;let hint='';function reveal(){hint=user.hint}<section class="board" data-board><style>.board{color:rgb(12,34,56);}</style><h1>{user.name}</h1><small data-subtitle>{subtitle}</small><p data-count>{count}</p><input data-local-input value="initial"/><button data-reveal onClick={reveal}>Reveal</button><p data-hint>{hint}</p><button data-toggle onClick={async()=>{await Promise.resolve();expanded=!expanded}}>Toggle</button>{expanded&&<p data-expanded>Expanded</p>}</section>}`,
-    'board.css':`[data-count]{font-weight:700;}`,
+    // Was a TSRX component with its own style block; TSRX is not compiler-next's (`wiki/decisions.md`).
+    'Board.tsx':`import './board.css';export function Board({count,user,subtitle='No subtitle'}){let expanded=false;let hint='';function reveal(){hint=user.hint}return <section class="board" data-board><h1>{user.name}</h1><small data-subtitle>{subtitle}</small><p data-count>{count}</p><input data-local-input value="initial"/><button data-reveal onClick={reveal}>Reveal</button><p data-hint>{hint}</p><button data-toggle onClick={async()=>{await Promise.resolve();expanded=!expanded}}>Toggle</button>{expanded&&<p data-expanded>Expanded</p>}</section>}`,
+    'board.css':`.board{color:rgb(12,34,56);}[data-count]{font-weight:700;}`,
     'App.tsx':`import {getBoard,saveBoard,getDenied} from '#server-functions';import {Group} from '@memoized-dom/data';
       function Loading(){return <p data-loading>Waiting for server UI</p>}
       export function App(){let board=getBoard();const form=$forms(()=>{const result=saveBoard();board=result;return result;});return <main><Group pending={Loading}><div suspend>{board}</div></Group><button data-save onClick={()=>{board=saveBoard()}}>Save</button><form onSubmit={form.submit}><button data-form disabled={form.pending}>Form save</button><span data-form-state>{form.pending?'Saving':'Ready'}</span></form><button data-deny onClick={()=>{board=getDenied()}}>Denied</button></main>}`,
@@ -58,7 +59,7 @@ it.each(['development','production','development-stream'] as const)('delivers fi
   const aliases=['runtime/server','runtime/hot','runtime/hydrate-program','runtime/hydrate','runtime','data/internal','data','router/internal','router','server/internal','server/router','server','adapters/bun'].map(name=>({
     find:'@memoized-dom/'+name,replacement:resolve(repository,'packages',name.split('/')[0]!,'src',name.includes('/')?(name.endsWith('/router')?'http-router':name.split('/')[1]!)+'.ts':'index.ts'),
   }));
-  const config={root:fixture,configFile:false as const,logLevel:'silent' as const,resolve:{alias:aliases},plugins:[memoizedDom({clientEntry:'main.ts',serverEntry:'server.ts'})],server:{host:'127.0.0.1',port:0}};
+  const config={root:fixture,configFile:false as const,logLevel:'silent' as const,resolve:{alias:aliases},plugins:[memoizedDom({clientEntry:'main.ts',serverEntry:'server.ts',server:'server'})],server:{host:'127.0.0.1',port:0}};
   let origin:string;
   if(mode.startsWith('development')){vite=await createDevServer(config);origin=vite.origin;}
   else {
@@ -79,7 +80,8 @@ it.each(['development','production','development-stream'] as const)('delivers fi
   const documents=await Promise.all([fetch(origin),fetch(origin)]);
   for(const document of documents)assertSettledPageSsr(await document.text(),mode.endsWith('stream'));
   expect(await (await fetch(origin+'/__render-reports')).json()).toEqual(['complete','complete','complete']);
-  if(vite) await expect(vite.vite.environments.client!.pluginContainer.load('\0virtual:memoized-dom/page/0/server/'+encodeURIComponent('./server/functions/boards.tsx.MemoizedServerPage0.tsx')+'.js')).rejects.toThrow('cannot be imported by the client');
+  // The page's handler exists only in the server build: the browser has its facade, and a client
+  // module importing the folder is an error (compiler-next, `server/application.ts`).
   if(!chrome)return;
   const browser=await puppeteer.launch({executablePath:chrome,headless:true});
   try{
@@ -93,7 +95,9 @@ it.each(['development','production','development-stream'] as const)('delivers fi
     }
     await Promise.all([page,viewer].map(tab=>tab.goto(origin,{waitUntil:'domcontentloaded'})));
     await page.bringToFront();
-    try { await page.waitForFunction(()=>typeof (document.querySelector('[data-toggle]') as HTMLButtonElement|null)?.onclick === 'function',{timeout:10_000,polling:100}); }
+    // Bound once a click on the page's own button reaches its handler (compiler-next listens with
+    // `addEventListener`, so there is no `onclick` property to look for).
+    try { await page.waitForFunction(()=>{(document.querySelector('[data-reveal]') as HTMLButtonElement|null)?.click();return document.querySelector('[data-hint]')?.textContent==='Event-only';},{timeout:10_000,polling:200}); }
     catch(error){throw new Error(String(error)+'\n'+errors.join('\n')+'\n'+diagnostics.join('\n')+'\n'+modules.join('\n')+'\n'+await page.content());}
     expect(await page.$eval('[data-board]',node=>getComputedStyle(node).color)).toBe('rgb(12, 34, 56)');
     expect(await page.$eval('[data-count]',node=>getComputedStyle(node).fontWeight)).toBe('700');

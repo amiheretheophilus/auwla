@@ -38,7 +38,7 @@ async function project(): Promise<string> {
 
 function start(root: string): Promise<NativeDevServer> {
   return createDevServer({ root, configFile: false, logLevel: 'silent',
-    plugins: [memoizedDom({ clientEntry: 'src/main.ts', serverEntry: 'server.ts' })],
+    plugins: [memoizedDom({ clientEntry: 'src/main.ts', serverEntry: 'server.ts', server: 'server' })],
     server: { host: '127.0.0.1', port: 0 } });
 }
 
@@ -46,7 +46,7 @@ async function startNode(root: string): Promise<Pick<NativeDevServer, 'origin' |
   await writeFile(resolve(root, 'launch.mjs'), `import {createDevServer} from '@memoized-dom/vite/dev';
     import memoizedDom from '@memoized-dom/vite';
     const dev=await createDevServer({root:import.meta.dirname,configFile:false,logLevel:'silent',
-      plugins:[memoizedDom({clientEntry:'src/main.ts',serverEntry:'server.ts',runtime:'node'})],server:{host:'127.0.0.1',port:0}});
+      plugins:[memoizedDom({clientEntry:'src/main.ts',serverEntry:'server.ts',server:'server',runtime:'node'})],server:{host:'127.0.0.1',port:0}});
     console.log(JSON.stringify({origin:dev.origin}));
     process.on('SIGTERM',async()=>{await dev.close();process.exit(0)});`);
   const child = spawn('node', [resolve(root, 'launch.mjs')], { windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] });

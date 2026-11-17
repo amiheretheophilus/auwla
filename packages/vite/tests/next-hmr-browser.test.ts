@@ -87,7 +87,7 @@ it.skipIf(executablePath === null)('replaces edited components in place in a bro
     root,
     configFile: false,
     logLevel: 'silent',
-    plugins: [memoizedDom({ clientEntry: 'src/main.ts', compiler: 'next' })],
+    plugins: [memoizedDom({ clientEntry: 'src/main.ts' })],
     server: { host: '127.0.0.1', port: 0 },
   });
   await server.listen();

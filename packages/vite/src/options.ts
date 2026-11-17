@@ -1,66 +1,28 @@
 /**
- * Public configuration for the Vite connected-graph adapter.
+ * The Vite plugin's options. Everything else an app needs is compiler-next's, the same under
+ * every tool (`wiki/rules.md`, rule 17).
  */
-import type { CompileModulesOptions } from '@memoized-dom/compiler';
 import type { SourceLanguage } from '@memoized-dom/compiler-next';
 
-export interface MemoizedDomViteOptions
-  extends Omit<CompileModulesOptions, 'aliases' | 'resolveImport' | 'hot'> {
-  /** Browser bootstrap and connected compiler-graph entry. */
+export interface MemoizedDomViteOptions {
+  /** The browser's entry: the module that mounts the app (`src/main.ts`, or an `.auwla` with `mount`). */
   clientEntry: string;
-  /**
-   * `next` compiles with compiler-next (`src/next/plugin.ts`), as `MMD_COMPILER=next` does. With
-   * it, `server` is the server-only folder and must be given: no folder is server-only by its name.
-   */
-  compiler?: 'old' | 'next';
-  /**
-   * With `compiler: 'next'`: authoring syntaxes that become TSX before compiling, such as `.auwla`
-   * from `@memoized-dom/jsx-plus` (`compiler-next/src/core/parse/languages.ts`). Their files are
-   * compiled, imported, hot-updated and mapped like `.tsx` files.
-   */
-  languages?: readonly SourceLanguage[];
-  /** Server composition root. Omit for browser-only applications. */
+  /** The server's entry (`server.ts`). Omit for a browser-only application. */
   serverEntry?: string;
-  /** Production host and CLI dev target. Direct createDevServer() calls use their launching runtime. */
-  runtime?: 'bun' | 'node' | 'cloudflare';
-  /** Opt installed ESM packages into compiler analysis and a generated dependency cache. */
-  compilePackages?: readonly string[];
-  /** Development inspector launcher. Closed by default; false omits its dev integration. */
-  devtools?: boolean;
   /**
-   * Additional source paths allowed outside the Vite project root.
-   */
-  include?: RegExp | readonly RegExp[];
-  /**
-   * Source paths excluded from connected-graph compilation.
-   */
-  exclude?: RegExp | readonly RegExp[];
-  /**
-   * Server-only convention root. Its define.ts registers application
-   * server types and its functions directory contains server functions.
+   * The server-only folder (`server`): `#server/*` resolves into it, its `define.ts` registers the
+   * server's types and its `functions` folder holds server functions. No folder is server-only by
+   * its name, so without it there are no server functions (`wiki/compiler/server.md`).
    */
   server?: string;
-}
-
-export interface ResolvedAdapterOptions
-  extends Omit<MemoizedDomViteOptions, 'clientEntry'> {
-  entries: readonly string[];
-}
-
-export function resolveAdapterOptions(
-  options: MemoizedDomViteOptions,
-): ResolvedAdapterOptions {
-  if (options.clientEntry.trim() === '') {
-    throw new Error('memoized-dom: clientEntry must not be empty');
-  }
-  if (options.devtools !== undefined && typeof options.devtools !== 'boolean') throw new Error('memoized-dom: devtools must be a boolean');
-  if (options.compilePackages !== undefined && (!Array.isArray(options.compilePackages) ||
-      !options.compilePackages.every(name => typeof name === 'string' &&
-        /^(?:@[a-z0-9][a-z0-9._-]*\/)?[a-z0-9][a-z0-9._-]*$/i.test(name)))) {
-    throw new Error('memoized-dom: compilePackages must be an array of package names, not paths or subpath entries');
-  }
-  if (options.compilePackages?.length && options.frontend) {
-    throw new Error('memoized-dom: compilePackages currently requires the default frontend for reproducible cache identity');
-  }
-  return { ...options, ...(options.compilePackages ? { compilePackages: [...new Set(options.compilePackages)] } : {}), entries: [options.clientEntry] };
+  /** Where the built server runs, and the CLI's dev target. Default `bun`. */
+  runtime?: 'bun' | 'node' | 'cloudflare';
+  /**
+   * Authoring syntaxes beyond the built-in `.auwla` that become TSX before compiling
+   * (`compiler-next/src/core/parse/languages.ts`). Their files are compiled, imported,
+   * hot-updated and mapped like `.tsx` files.
+   */
+  languages?: readonly SourceLanguage[];
+  /** Where compiled modules import the runtime from. Default `@memoized-dom/runtime`. */
+  runtimePath?: string;
 }

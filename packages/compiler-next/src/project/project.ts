@@ -13,7 +13,7 @@ import type { CompileModulesOptions } from '../options';
 import { compileModulesDetailed } from '../pipeline';
 import { collectModules, type CollectedModule } from './collect';
 import { normalizeProjectPath, type ProjectHost } from './host';
-import { stylesheetsOf } from './stylesheets';
+import { routeStylesheetsOf, stylesheetsOf } from './stylesheets';
 import { collectStyleSources } from './style-sources';
 
 export interface ProjectOptions extends CompileModulesOptions {
@@ -44,6 +44,11 @@ export interface CompiledProject {
   readonly modules: readonly string[];
   /** The stylesheets the program imports, in the order a browser applies them (`stylesheets.ts`). */
   readonly stylesheets: readonly string[];
+  /**
+   * Of those, the ones each route component in `routeComponents` brings with its route, by its key
+   * (`routeStylesheetsOf`). Present when one brings any.
+   */
+  readonly routeStylesheets?: Readonly<Record<string, readonly string[]>>;
 }
 
 export interface FailedProject {
@@ -108,7 +113,14 @@ export function createProject(options: ProjectOptions): Project {
     }
 
     previous = { ...compiled.output, ...compiled.css };
-    return { ok: true, ...compiled, modules: [...modules], stylesheets: stylesheetsOf(entries, known) };
+    const routeStylesheets = routeStylesheetsOf(entries, known, compiled.routeComponents);
+    return {
+      ok: true,
+      ...compiled,
+      modules: [...modules],
+      stylesheets: stylesheetsOf(entries, known),
+      ...(routeStylesheets === undefined ? {} : { routeStylesheets }),
+    };
   }
 
   async function update(paths: readonly string[]): Promise<ProjectUpdate> {

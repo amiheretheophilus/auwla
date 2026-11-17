@@ -5,7 +5,7 @@
  */
 import { isAbsolute, join, relative } from 'node:path';
 import { fileSystemHost, isSourcePath, projectPath, type ProjectHost, type SourceLanguage } from '@memoized-dom/compiler-next';
-import { longPath } from '../paths';
+import { longPath } from './paths';
 
 /** Vite's resolution of `specifier` from the file `importer`: an id, or null when it finds none. */
 export type ViteResolver = (specifier: string, importer: string) => Promise<string | null>;

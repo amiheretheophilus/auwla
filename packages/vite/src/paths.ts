@@ -1,25 +1,10 @@
 /**
- * Normalizes Vite ids and bounds which local files enter compiler analysis.
+ * File paths as Vite gives them, compared as text with the project's.
  */
 import { existsSync, realpathSync } from 'node:fs';
-import {
-  dirname,
-  extname,
-  isAbsolute,
-  relative,
-  resolve,
-  sep,
-} from 'node:path';
-import { isNativePackageFile } from './graph/native-packages';
-import type { ResolvedAdapterOptions } from './options';
+import { dirname, resolve } from 'node:path';
 
-const sourceExtensions = new Set(['.ts', '.tsx', '.tsrx', '.js', '.jsx']);
-
-export function cleanViteId(id: string): string {
-  const query = id.search(/[?#]/);
-  return normalizeFile(query === -1 ? id : id.slice(0, query));
-}
-
+/** An absolute path with forward slashes and Windows short names spelled out. */
 export function normalizeFile(file: string): string {
   return longPath(resolve(file)).replaceAll('\\', '/');
 }
@@ -42,58 +27,4 @@ export function longPath(file: string): string {
     existing = parent;
   }
   return realpathSync.native(existing) + rest;
-}
-
-export function entryFiles(
-  root: string,
-  entries: readonly string[],
-): readonly string[] {
-  return entries.map((entry) => {
-    if (isAbsolute(entry)) return normalizeFile(entry);
-    const rootRelative = entry.startsWith('/') ? entry.slice(1) : entry;
-    return normalizeFile(resolve(root, rootRelative));
-  });
-}
-
-export function moduleId(root: string, file: string): string {
-  // Both spelled out, so a root or a file given by a short name still compares.
-  const projectRelative = relative(normalizeFile(root), normalizeFile(file)).split(sep).join('/');
-  if (
-    projectRelative !== '..' &&
-    !projectRelative.startsWith('../') &&
-    !isAbsolute(projectRelative)
-  ) {
-    return `./${projectRelative}`;
-  }
-  return normalizeFile(file);
-}
-
-function matches(patterns: RegExp | readonly RegExp[] | undefined, id: string) {
-  if (patterns === undefined) return false;
-  const list = patterns instanceof RegExp ? [patterns] : patterns;
-  return list.some((pattern) => {
-    pattern.lastIndex = 0;
-    return pattern.test(id);
-  });
-}
-
-export function acceptsSource(
-  root: string,
-  file: string,
-  options: ResolvedAdapterOptions,
-): boolean {
-  const id = normalizeFile(file);
-  if (!sourceExtensions.has(extname(id))) return false;
-  if (matches(options.exclude, id)) return false;
-  // A native package ships source for this build, wherever it is installed.
-  if (isNativePackageFile(id)) return true;
-  if (id.includes('/node_modules/')) return false;
-  if (matches(options.include, id)) return true;
-
-  const projectRelative = relative(normalizeFile(root), id);
-  return (
-    projectRelative !== '..' &&
-    !projectRelative.startsWith(`..${sep}`) &&
-    !isAbsolute(projectRelative)
-  );
 }

@@ -326,6 +326,33 @@ checks before retention checks as well as in isolation when changing this fixtur
    compiler's deletion first (2026-11-17), since the old plugin's architecture (delivery modules for
    each runtime in `packages/vite`) was shaping the fixes; the Vite suite is read again after it.
 
+   **Read again on the single plugin** (2026-11-17, step 3 of the deletion). Fixed in compiler-next,
+   each with a test there: a client module importing the server folder by its path
+   (`server.md`), `.memoized/server-config.d.ts` (`server.md`, "Server types"), a lazy route's
+   stylesheets in development (`project.md`, "Lazy route stylesheets"), and a linked package's
+   config error naming it (`project.md`, "Native packages"). In the plugin: source maps naming
+   files, and a missing entry reported. Tests changed by decision: fixtures declare their server
+   folder (2026-11-12); `if` attributes became conditionals (2026-11-17); TSRX components became
+   TSX; old-compiler output checks in `vite-adapter.test.ts` became behavior checks or were dropped
+   where `next-plugin.test.ts` covers them; module-state cells are automatic in a server build
+   (`server.md`, "Request isolation"); `server-pages-example.test.ts` was removed (it ran an
+   example, rule 16). A write to a `const` compiles and throws at run time as JavaScript does, so
+   the old compile error for it is gone. The runtime trace test is skipped with devtools (FINALIZE).
+   Passing on the single plugin: `vite-adapter`, `next-plugin`, `cli`, `native-host`,
+   `native-package*`, `next-hmr-browser`, `hmr-browser`, `dev-recovery`, `fullstack-ssr-isolation`
+   and JSX+'s Vite tests. Open, each a behavior to fix next:
+   - `optimistic({ source })` gets the payload, not the live source (`live-streaming`,
+     `live-notes-effects`, which also still run `examples/fieldnotes`, against rule 16);
+   - `$forms`: `form.pending` stays false while the action's request waits (`server-pages`, the
+     browser half; its server half passes in development and production);
+   - a server page streamed in the document never shows its markup (`server-pages` stream mode,
+     `progressive-server-pages`: "Server page failed");
+   - after a component edit, a Worker's Hono backend meets a second copy of `hono` (`cloudflare-host`,
+     the dev case; the three built Workers pass);
+   - the dev error overlay after a broken server import, and recovery after a server-only throw
+     (`dev-recovery-browser`); hydrated facade sources (`fullstack-browser`); lazy route navigation
+     with `Group`, refs and effects (`lazy-route-browser`).
+
    **Replaying the old tests' programs** (`tests/corpus/replay.test.ts`). Reading 277 assertions one
    by one is slow, and many check the old compiler's internal work. Their programs are what matters.
    `MEMO_DOM_CORPUS=<dir>` makes the old compiler record every program it compiles, so one run of the

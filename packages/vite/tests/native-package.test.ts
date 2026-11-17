@@ -9,9 +9,11 @@ import { existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { build, createServer } from 'vite';
+import { nativePackages, packageLibrary } from '@memoized-dom/compiler-next';
 import memoizedDom from '../src';
-import { buildLibrary } from '../src/library-build';
-import { isNativePackageFile, nativePackages } from '../src/graph/native-packages';
+
+/** `memoized-dom package`, which compiler-next's packaging does for every tool. */
+const buildLibrary = (options: { root: string }) => packageLibrary({ ...options, log: () => {} });
 
 let fixture: string;
 let author: string;
@@ -171,11 +173,8 @@ it('tells a native package from an ordinary one by reading its manifest', async 
     'node_modules/@acme/kit/src/nested/package.json': `{ "type": "module" }`,
   });
 
-  expect([...(await nativePackages(app)).names].sort()).toEqual(['@acme/kit', 'tool']);
-  expect(isNativePackageFile(join(app, 'node_modules/@acme/kit/src/store.ts'))).toBe(true);
-  expect(isNativePackageFile(join(app, 'node_modules/@acme/kit/src/nested/a.ts'))).toBe(true);
-  expect(isNativePackageFile(join(app, 'node_modules/ordinary/esm/index.js'))).toBe(false);
-  expect(isNativePackageFile(join(app, 'src/App.tsx'))).toBe(false);
+  // Which file is compiled is then the project's resolution (compiler-next's `native.test.ts`).
+  expect([...nativePackages(app).names].sort()).toEqual(['@acme/kit', 'tool']);
 }, 60_000);
 
 it('follows a native package through another, but not through an ordinary one', async () => {
@@ -187,7 +186,7 @@ it('follows a native package through another, but not through an ordinary one', 
     'node_modules/hidden/package.json': JSON.stringify({ name: 'hidden', 'memoized-dom': { source: true } }),
   });
 
-  expect([...(await nativePackages(app)).names].sort()).toEqual(['inner', 'outer']);
+  expect([...nativePackages(app).names].sort()).toEqual(['inner', 'outer']);
 });
 
 const consumer = {

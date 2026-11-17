@@ -3,20 +3,17 @@ import { waitFor } from '../../../test-support/helpers';
  * Exercises the Vite 8 adapter through Rolldown build and dev transforms.
  */
 import { join, resolve } from 'node:path';
-import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { pathToFileURL } from 'node:url';
+import { cp, mkdir, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { afterEach, describe, expect, it, vi } from 'bun:test';
 import {
   build,
+  createBuilder,
   createServer,
   type ViteDevServer,
 } from 'vite';
-import { experimentalCompilePackage, experimentalFinalizePackage } from '@memoized-dom/compiler';
 import memoizedDom from '../src';
 import { createDevServer, type NativeDevServer } from '../src/dev';
-import { clientStyleUrls } from '../src/dev-assets';
-import { normalizeFile } from '../src/paths';
-import { createServerRouter } from '../../server/src/http-router';
 
 const fixture = resolve(import.meta.dirname, 'fixtures/vite-app');
 const source = resolve(fixture, 'src');
@@ -51,10 +48,22 @@ afterEach(async () => {
   }
 });
 
+/** A copy of the fixture inside the package, so a built server finds the workspace's packages. */
 async function copyFixture(): Promise<string> {
-  temporaryFixture = await mkdtemp(join(tmpdir(), 'memoized-dom-vite-'));
+  temporaryFixture = await mkdtemp(join(import.meta.dirname, '../.vite-adapter-test-'));
   await cp(fixture, temporaryFixture, { recursive: true });
   return temporaryFixture;
+}
+
+/** The server folder of a copy: `define.ts`, and a `functions` folder with `stories.ts`. */
+async function writeStoryFunctions(root: string, stories: string): Promise<void> {
+  const functions = resolve(root, 'server/functions');
+  await mkdir(functions, { recursive: true });
+  await writeFile(resolve(root, 'server/define.ts'), `
+    import { createDefine } from '@memoized-dom/server';
+    export const define = createDefine();
+  `);
+  await writeFile(resolve(functions, 'stories.ts'), stories);
 }
 
 describe('Vite 8 adapter', () => {
@@ -92,120 +101,9 @@ describe('Vite 8 adapter', () => {
     ]));
   });
 
-  it('builds an aliased connected graph through Rolldown', async () => {
-    const result = await build({
-      root: fixture,
-      configFile: false,
-      logLevel: 'silent',
-      resolve: { alias: { '@': source } },
-      plugins: plugins(),
-      build: {
-        write: false,
-        minify: false,
-        rolldownOptions: {
-          input: resolve(source, 'main.ts'),
-        },
-      },
-    });
-    const builds = Array.isArray(result) ? result : [result];
-    const code = builds
-      .flatMap((item) => item.output)
-      .flatMap((output) =>
-        output.type === 'chunk' ? [output.code] : [],
-      )
-      .join('\n');
-
-    expect(code).toContain('Increment');
-    expect(code).toContain('./src/state.ts#count');
-    expect(code).toContain('document.createElement("button")');
-    expect(code).not.toMatch(/<[A-Za-z][^>]*>/);
-    expect(code).not.toContain('registerHotComponent');
-    expect(code).not.toContain('import.meta.hot.accept(');
-  });
-
-  it('builds a mixed graph containing an experimental TSRX component', async () => {
+  it('keeps server function implementations out of the client, and runs their middleware and input checks in the built server', async () => {
     const root = await copyFixture();
-    const temporarySource = resolve(root, 'src');
-    await rm(resolve(temporarySource, 'App.tsx'));
-    await writeFile(
-      resolve(temporarySource, 'main.ts'),
-      `
-        import { mount } from '@memoized-dom/runtime';
-        import { App } from './App.tsrx';
-        mount('root', App);
-      `,
-    );
-    await writeFile(
-      resolve(temporarySource, 'App.tsrx'),
-      `
-        import { items } from './state';
-        export function App() @{
-          <main class="list">
-            <style>.list { color: red; }</style>
-            @for (const item of items; key item) {
-              <span>{item}</span>
-            } @empty {
-              <em>Empty</em>
-            }
-          </main>
-        }
-      `,
-    );
-
-    const result = await build({
-      root,
-      configFile: false,
-      logLevel: 'silent',
-      resolve: {
-        alias: {
-          '@': temporarySource,
-          '@memoized-dom/runtime/hot': runtimeHot,
-          '@memoized-dom/runtime': runtime,
-        },
-      },
-      plugins: [memoizedDom({ clientEntry: 'src/main.ts' })],
-      build: {
-        write: false,
-        minify: false,
-        rolldownOptions: { input: resolve(temporarySource, 'main.ts') },
-      },
-    });
-    const builds = Array.isArray(result) ? result : [result];
-    const code = builds
-      .flatMap((item) => item.output)
-      .flatMap((output) => output.type === 'chunk' ? [output.code] : [])
-      .join('\n');
-    const css = builds
-      .flatMap((item) => item.output)
-      .flatMap((output) => output.type === 'asset' && output.fileName.endsWith('.css')
-        ? [String(output.source)]
-        : [])
-      .join('\n');
-
-    expect(code).toContain('createListRegion');
-    expect(code).toContain('createCondRegion');
-    expect(code).not.toContain('@for');
-    expect(css).toContain('color: red');
-    expect(code).not.toContain('color: red');
-  });
-
-  it('isolates server implementations, lowers client facades, and mounts real middleware routes', async () => {
-    const root = await copyFixture();
-    const temporarySource = resolve(root, 'src');
-    const functions = resolve(root, 'server/functions');
-    await mkdir(functions, { recursive: true });
-    await writeFile(resolve(root, 'server/define.ts'), `
-      import { createDefine } from '@memoized-dom/server';
-      export const define = createDefine();
-    `);
-    await writeFile(resolve(functions, '_middleware.ts'), `
-      export const middleware = [async (_context, next) => {
-        const response = await next();
-        response.headers.set('x-directory', 'yes');
-        return response;
-      }];
-    `);
-    await writeFile(resolve(functions, 'stories.ts'), `
+    await writeStoryFunctions(root, `
       import { readFile } from 'node:fs/promises';
       import { define } from '../define';
       const SERVER_SECRET = 'must-not-enter-client';
@@ -238,119 +136,75 @@ describe('Vite 8 adapter', () => {
       });
       export const vote = define.function({ post: async (_context, id: number) => ({ id, votes: 1 }) });
     `);
-    await writeFile(resolve(temporarySource, 'App.tsx'), `
-      import { story as loadStory, vote } from '#server-functions';
+    await writeFile(resolve(root, 'server/functions/_middleware.ts'), `
+      export const middleware = [async (_context, next) => {
+        const response = await next();
+        response.headers.set('x-directory', 'yes');
+        return response;
+      }];
+    `);
+    await writeFile(resolve(root, 'src/App.tsx'), `
+      import { vote } from '#server-functions';
       export function App() {
-        const story = loadStory({ id: 7 });
-        return <main>
-          <h1>{story.title}</h1>
-          <button onClick={() => vote(story.id)}>Vote</button>
-        </main>;
+        return <main><button onClick={() => vote(7)}>Vote</button></main>;
       }
     `);
+    await writeFile(resolve(root, 'src/server.ts'), `
+      import { serve } from '@memoized-dom/server';
+      import { define } from '#server/define';
+      export default serve({ define });
+    `);
+    await writeFile(resolve(root, 'index.html'), '<!doctype html><html><body><script type="module" src="/src/main.ts"></script></body></html>');
 
-    const aliases = {
-      '@': temporarySource,
-      '@memoized-dom/runtime/hot': runtimeHot,
-      '@memoized-dom/runtime': runtime,
-      '@memoized-dom/data/internal': dataInternal,
-      '@memoized-dom/data': data,
-      '@memoized-dom/server/router': serverRouter,
-      '@memoized-dom/server': serverIndex,
+    const builder = await createBuilder({
+      root,
+      configFile: false,
+      logLevel: 'silent',
+      plugins: [memoizedDom({ clientEntry: 'src/main.ts', serverEntry: 'src/server.ts', server: 'server' })],
+    });
+    await builder.buildApp();
+
+    // The client calls the function by its route, and has none of its implementation.
+    const assets = resolve(root, 'dist/client/assets');
+    const scripts = (await readdir(assets)).filter((file) => file.endsWith('.js'));
+    const client = (await Promise.all(scripts.map((file) => readFile(resolve(assets, file), 'utf8')))).join('\n');
+    expect(client).toContain('/_fn/stories/vote');
+    expect(client).not.toContain('must-not-enter-client');
+    expect(client).not.toContain('Positive ID required');
+    expect(client).not.toContain('functionGuard');
+    expect(client).not.toContain('node:fs/promises');
+
+    // TypeScript's types for `#server-functions`, from the implementations.
+    const declarations = await readFile(resolve(root, '.memoized', 'server-functions.d.ts'), 'utf8');
+    expect(declarations).toContain('story');
+    expect(declarations).toContain('vote');
+
+    // The folder's, the module's and the function's middleware run around the function.
+    const { default: host } = await import(pathToFileURL(resolve(root, 'dist', 'server.js')).href) as {
+      default: { fetch(request: Request): Promise<Response> };
     };
-    const result = await build({
-      root,
-      configFile: false,
-      logLevel: 'silent',
-      resolve: { alias: aliases },
-      plugins: [memoizedDom({ clientEntry: 'src/main.ts' })],
-      build: {
-        write: false,
-        minify: false,
-        rolldownOptions: { input: resolve(temporarySource, 'main.ts') },
-      },
-    });
-    const builds = Array.isArray(result) ? result : [result];
-    const code = builds
-      .flatMap(item => item.output)
-      .flatMap(output => output.type === 'chunk' ? [output.code] : [])
-      .join('\n');
-
-    expect(code).toContain('/_fn/stories/story');
-    expect(code).toContain('/_fn/stories/vote');
-    expect(code).toContain('resolvedValuesPending');
-    expect(code).toContain('readResolvedValue(story');
-    expect(code).not.toContain('must-not-enter-client');
-    expect(code).not.toContain('Positive ID required');
-    expect(code).not.toContain('functionGuard');
-    expect(code).not.toContain('node:fs/promises');
-
-    const declarations = resolve(root, '.memoized', 'server-functions.d.ts');
-    const declarationSource = await readFile(declarations, 'utf8');
-    expect(declarationSource).toContain(
-      'import type { ResolvedValue } from "@memoized-dom/data"',
-    );
-    expect(declarationSource).toContain(
-      'import type * as __mmd_impl_0 from "../server/functions/stories.js"',
-    );
-    expect(declarationSource).toContain(
-      'export declare function story(...args: ServerFunctionArguments<typeof __mmd_impl_0.story>): ResolvedValue<__mmdClientValue<Awaited<ServerFunctionResult<typeof __mmd_impl_0.story>>>>;',
-    );
-
-    server = await createServer({
-      root,
-      configFile: false,
-      logLevel: 'silent',
-      resolve: { alias: aliases },
-      plugins: [memoizedDom({ clientEntry: 'src/main.ts' })],
-      server: { middlewareMode: true },
-    });
-    const generated = await server.ssrLoadModule(
-      'virtual:memoized-dom/server-functions',
-    ) as { serverFunctionRoutes: Parameters<typeof createServerRouter>[0]['routes'] };
-    const router = createServerRouter({ routes: generated.serverFunctionRoutes });
-    const response = await router.fetch(new Request(
+    const response = await host.fetch(new Request(
       'https://app.test/_fn/stories/story?input=' + encodeURIComponent(JSON.stringify({ id: 9 })),
     ));
-
     expect(response.status).toBe(200);
     expect(response.headers.get('x-directory')).toBe('yes');
     expect(response.headers.get('x-function')).toBe('yes');
     expect(response.headers.get('x-module')).toBe('must-not-enter-client');
     await expect(response.json()).resolves.toEqual({ id: 9, title: 'Story 9' });
 
-    const invalidInput = await router.fetch(new Request('https://app.test/_fn/stories/story?input=' + encodeURIComponent(JSON.stringify({ id: -1 }))));
+    // Input the function's schema rejects never reaches it.
+    const invalidInput = await host.fetch(new Request('https://app.test/_fn/stories/story?input=' + encodeURIComponent(JSON.stringify({ id: -1 }))));
     expect(invalidInput.status).toBe(400);
     expect(await invalidInput.json()).toMatchObject({ issues: [{ message: 'Positive ID required' }] });
-
-    const invalidPreparation = await router.fetch(new Request(
-      'https://app.test/_memoized/routed',
-      {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: '{}',
-      },
-    ));
-    expect(invalidPreparation.status).toBe(400);
-    await expect(invalidPreparation.json()).resolves.toEqual({
-      error: 'invalid_routed_preparation_input',
-    });
-  }, 30_000);
+  }, 60_000);
 
   it('rejects direct UI imports from server-function implementation files', async () => {
     const root = await copyFixture();
-    const temporarySource = resolve(root, 'src');
-    const functions = resolve(root, 'server/functions');
-    await mkdir(functions, { recursive: true });
-    await writeFile(resolve(root, 'server/define.ts'), `
-      import { createDefine } from '@memoized-dom/server';
-      export const define = createDefine();
-    `);
-    await writeFile(resolve(functions, 'stories.ts'), `
+    await writeStoryFunctions(root, `
       import { define } from '../define';
       export const getStories = define.function({ get: async (_context) => [] });
     `);
-    await writeFile(resolve(temporarySource, 'App.tsx'), `
+    await writeFile(resolve(root, 'src/App.tsx'), `
       import { getStories } from '../server/functions/stories';
       export function App() {
         const stories = getStories();
@@ -362,21 +216,9 @@ describe('Vite 8 adapter', () => {
       root,
       configFile: false,
       logLevel: 'silent',
-      resolve: {
-        alias: {
-          '@': temporarySource,
-          '@memoized-dom/runtime': runtime,
-          '@memoized-dom/data/internal': dataInternal,
-          '@memoized-dom/data': data,
-        },
-      },
-      plugins: [memoizedDom({ clientEntry: 'src/main.ts' })],
-      build: {
-        write: false,
-        minify: false,
-        rolldownOptions: { input: resolve(temporarySource, 'main.ts') },
-      },
-    })).rejects.toThrow(/\[MMD-S003\].*#server-functions/s);
+      plugins: [memoizedDom({ clientEntry: 'src/main.ts', serverEntry: 'src/server.ts', server: 'server' })],
+      build: { write: false, minify: false, rolldownOptions: { input: resolve(root, 'src/main.ts') } },
+    })).rejects.toThrow(/server-only/);
   }, 30_000);
 
   it('rejects runtime #server imports from the client graph', async () => {
@@ -415,45 +257,10 @@ describe('Vite 8 adapter', () => {
         minify: false,
         rolldownOptions: { input: resolve(temporarySource, 'main.ts') },
       },
-    })).rejects.toThrow(
-      /server-only module '#server\/database' cannot be imported by the client graph/,
-    );
+    })).rejects.toThrow(/'#server\/database' is server-only/);
   }, 30_000);
 
-  it('lowers module state into request-owned cells when opted in', async () => {
-    const result = await build({
-      root: fixture,
-      configFile: false,
-      logLevel: 'silent',
-      resolve: { alias: { '@': source } },
-      plugins: [
-        memoizedDom({ clientEntry: 'src/main.ts', moduleStateCells: true }),
-      ],
-      build: {
-        write: false,
-        minify: false,
-        rolldownOptions: {
-          input: resolve(source, 'main.ts'),
-        },
-      },
-    });
-    const builds = Array.isArray(result) ? result : [result];
-    const code = builds
-      .flatMap((item) => item.output)
-      .flatMap((output) => (output.type === 'chunk' ? [output.code] : []))
-      .join('\n');
-
-    // Owner records its authored default; importer references the same
-    // identity without one; compound writes lower to functional updates.
-    // (Rolldown renames bundled runtime identifiers, so anchor on the
-    // canonical keys and value shapes, not _MD member names.)
-    expect(code).toMatch(/\.\/src\/state\.ts#count",[\s\S]*?\n\s*0\s*\n\)/);
-    expect(code).toContain('./src/state.ts#count")');
-    expect(code).toContain('(c) => (++c, c)');
-    expect(code).not.toMatch(/_value = count\b/);
-  });
-
-  it('serves generated modules from the on-demand dev pipeline', async () => {
+  it('maps a dev module back to its authored file, which the browser finds beside it', async () => {
     server = await createServer({
       root: fixture,
       configFile: false,
@@ -463,43 +270,13 @@ describe('Vite 8 adapter', () => {
       server: { middlewareMode: true },
     });
 
-    const main =
-      await server.environments.client.transformRequest('/src/main.ts');
-    const app =
-      await server.environments.client.transformRequest('/src/App.tsx');
-    const label =
-      await server.environments.client.transformRequest('/src/Label.tsx');
-    const state =
-      await server.environments.client.transformRequest('/src/state.ts');
-    const row =
-      await server.environments.client.transformRequest('/src/Row.tsx');
-    const panel =
-      await server.environments.client.transformRequest('/src/Panel.tsx');
-
-    expect(main?.code).toMatch(/mount\(["']root["'], App\)/);
-    expect(main?.code).not.toContain('import.meta.hot.accept(');
-    expect(app?.code).toContain('function App(_id');
+    await server.environments.client.transformRequest('/src/main.ts');
+    const app = await server.environments.client.transformRequest('/src/App.tsx');
     expect(app?.map).not.toBeNull();
-    // Vite normalizes the absolute compiler source against map.file. The
-    // resulting basename resolves once against the transformed module path;
-    // project-relative `./src/App.tsx` would duplicate the directory.
+    // A source resolves against the module's own URL (`/src/App.tsx`): `./src/App.tsx` would name
+    // `/src/src/App.tsx`.
     expect(app?.map?.sources).toEqual(['App.tsx']);
-    expect(app?.map?.sourcesContent?.some((content) => content?.includes('function App()'))).toBe(true);
-    expect(app?.code).toContain('Label(_id');
-    expect(label?.code).toContain('function Label(_id');
-    expect(state?.code).toContain('commitWrites');
-    expect(row?.code).toContain('./src/state.ts#selected');
-    expect(row?.code).toContain('commitWrites');
-    expect(row?.code).not.toContain('markDirtySubtree');
-    expect(panel?.code).toContain('./src/state.ts#selected');
-    expect(panel?.code).toContain('invalidateEntity');
-    expect(panel?.code).toContain('commitWrites');
-    expect(panel?.code).not.toContain('markDirtySubtree');
-    expect(app?.code).toContain('registerHotComponent');
-    expect(app?.code).toContain('import.meta.hot.acceptExports(["App"]');
-    expect(state?.code).toContain('import.meta.hot.accept(');
-    expect(state?.code).toContain('import.meta.hot.invalidate(');
-    expect(state?.code).not.toContain('__memoized_dom_apply_hot_update__([]');
+    expect(app?.map?.sourcesContent?.some((content) => content?.includes('export function App()'))).toBe(true);
   });
 
   it('keeps a route-only component out of the entry chunk', async () => {
@@ -600,7 +377,9 @@ describe('Vite 8 adapter', () => {
     expect(entry?.dynamicImports).toEqual([]);
   });
 
-  it('keeps compiler-extracted route CSS with a lazy TSRX chunk', async () => {
+  // Was a TSRX component's own style block; TSRX is not compiler-next's (`wiki/decisions.md`), so
+  // the route's component imports its stylesheet.
+  it('keeps a lazy route\'s CSS with its chunk', async () => {
     const root = await copyFixture();
     const temporarySource = resolve(root, 'src');
     await writeFile(resolve(temporarySource, 'main.ts'), `
@@ -609,16 +388,13 @@ describe('Vite 8 adapter', () => {
       mount('root', App);
     `);
     await writeFile(resolve(temporarySource, 'App.tsx'), `
-      import { Detail } from './Detail.tsrx';
+      import { Detail } from './Detail';
       export function App() { return <main route="/"><Detail route="/detail" /></main>; }
     `);
-    await writeFile(resolve(temporarySource, 'Detail.tsrx'), `
-      export function Detail() @{
-        <section class="detail-route">
-          <style>.detail-route { color: rgb(7, 8, 9); }</style>
-          Lazy detail
-        </section>
-      }
+    await writeFile(resolve(temporarySource, 'detail.css'), '.detail-route { color: rgb(7, 8, 9); }');
+    await writeFile(resolve(temporarySource, 'Detail.tsx'), `
+      import './detail.css';
+      export function Detail() { return <section class="detail-route">Lazy detail</section>; }
     `);
     const result = await build({
       root,
@@ -648,59 +424,10 @@ describe('Vite 8 adapter', () => {
     expect(entry?.viteMetadata?.importedCss).not.toContain(css[0]?.fileName);
   });
 
-  it('injects only eager and matched-route CSS into dev HTML', async () => {
-    const root = await copyFixture();
-    const temporarySource = resolve(root, 'src');
-    let configuredServer: ViteDevServer | undefined;
-    await writeFile(resolve(temporarySource, 'main.ts'), `
-      import { mount } from '@memoized-dom/runtime';
-      import { App } from './App';
-      mount('root', App);
-    `);
-    await writeFile(resolve(temporarySource, 'App.tsx'), `
-      import './base.css';
-      import { Home } from './Home';
-      import { Detail } from './Detail';
-      export function App() { return <main><Home route="/" /><Detail route="/detail" /></main>; }
-    `);
-    await writeFile(resolve(temporarySource, 'Home.tsx'), `
-      import './Home.css';
-      export function Home() { return <p>Home</p>; }
-    `);
-    await writeFile(resolve(temporarySource, 'Detail.tsx'), `
-      import './Detail.css';
-      export function Detail() { return <p>Detail</p>; }
-    `);
-    await writeFile(resolve(temporarySource, 'base.css'), `main { color: black; }`);
-    await writeFile(resolve(temporarySource, 'Home.css'), `p { color: blue; }`);
-    await writeFile(resolve(temporarySource, 'Detail.css'), `p { color: red; }`);
-    server = await createServer({
-      root,
-      configFile: false,
-      logLevel: 'silent',
-      resolve: { alias: {
-        '@memoized-dom/runtime': runtime,
-        '@memoized-dom/router/internal': routerInternal,
-      } },
-      plugins: [
-        memoizedDom({ clientEntry: 'src/main.ts' }),
-        { name: 'capture-style-server', configureServer(vite) { configuredServer = vite; } },
-      ],
-      server: { host: '127.0.0.1', port: 0 },
-    });
-    await server.listen();
-    await server.environments.client.transformRequest('/src/main.ts');
-    if (configuredServer === undefined) throw new Error('Missing configured Vite server');
-    const home = await clientStyleUrls(configuredServer, '/');
-    const detail = await clientStyleUrls(configuredServer, '/detail');
-    expect(home).toEqual(expect.arrayContaining(['/src/base.css']));
-    expect(home).toContain('/src/Home.css');
-    expect(home).not.toContain('/src/Detail.css');
-    expect(detail).toEqual(expect.arrayContaining(['/src/base.css', '/src/Detail.css']));
-    expect(detail).not.toContain('/src/Home.css');
-  });
-
-  it('serves one coherent lazy graph when the configured seed is missing', async () => {
+  // compiler-next builds the program from its entries (`wiki/compiler/project.md`), so with none
+  // there is nothing to serve. A module must not reach the browser uncompiled, where Vite's own
+  // JSX transform would ask for React.
+  it('reports a client entry with no file instead of serving uncompiled modules', async () => {
     server = await createServer({
       root: fixture,
       configFile: false,
@@ -710,19 +437,8 @@ describe('Vite 8 adapter', () => {
       server: { middlewareMode: true },
     });
 
-    // Request order matches a browser: the mount module is transformed
-    // first, then its imported component modules. Imported modules must
-    // reuse the mount module's linked graph rather than compiling as
-    // independent application roots.
-    const main =
-      await server.environments.client.transformRequest('/src/main.ts');
-    const app =
-      await server.environments.client.transformRequest('/src/App.tsx');
-
-    expect(main?.code).toMatch(/mount\(["']root["'], App\)/);
-    expect(app?.code).toContain('function App(_id');
-    expect(app?.code).toContain('registerHotComponent');
-    expect(app?.code).toContain('import.meta.hot.acceptExports(["App"]');
+    await expect(server.environments.client.transformRequest('/src/App.tsx'))
+      .rejects.toThrow(/no file at this entry/);
   });
 
   it('recompiles edits and emits an HMR update without a page reload', async () => {
@@ -762,156 +478,6 @@ describe('Vite 8 adapter', () => {
       .toBe(true);
   }, 30_000);
 
-  it.each([false, true])('recompiles package artifact edits and recovers the HMR boundary (integrity=%s)', async sealed => {
-    const root = await copyFixture();
-    const temporarySource = resolve(root, 'src');
-    const packageRoot = resolve(root, 'ui-package');
-    const artifactFile = resolve(packageRoot, 'memoized-dom.package.json');
-    const packaged = experimentalCompilePackage({
-      './index.tsx': `
-        export function Badge({ value }: { value: number }) {
-          return <strong data-badge>{value}</strong>;
-        }
-      `,
-    }, {
-      packageEntries: { 'ui-package': './index.tsx' },
-    });
-    await mkdir(packageRoot, { recursive: true });
-    await writeFile(resolve(temporarySource, 'App.tsx'), `
-      import { Badge } from 'ui-package';
-      export function App() { return <main><Badge value={1} /></main>; }
-    `);
-    await writeFile(resolve(packageRoot, 'index.js'), packaged.output['./index.tsx']!);
-    await writeFile(resolve(packageRoot, 'package.json'), JSON.stringify({
-      name: 'ui-package',
-      type: 'module',
-      exports: './index.js',
-      'memoized-dom': { artifact: './memoized-dom.package.json', ...(sealed ? { integrity: true } : {}) },
-    }));
-    const publication = sealed ? await experimentalFinalizePackage(packaged.artifact, { packageRoot, outputDirectory: '.' }) : packaged.artifact;
-    await writeFile(artifactFile, JSON.stringify(publication));
-
-    server = await createServer({
-      root,
-      configFile: false,
-      logLevel: 'silent',
-      resolve: { alias: {
-        '@': temporarySource,
-        'ui-package': resolve(packageRoot, 'index.js'),
-        '@memoized-dom/runtime/hot': runtimeHot,
-        '@memoized-dom/runtime': runtime,
-      } },
-      optimizeDeps: { noDiscovery: true },
-      plugins: plugins(),
-      server: { middlewareMode: true },
-    });
-    const app = await server.environments.client.transformRequest('/src/App.tsx');
-    expect(app?.code).toContain('Badge(_id + "/Badge"');
-    // Watched by its real name, however the temp folder was spelled (`paths.ts`, `longPath`).
-    expect(server.environments.client.pluginContainer.watchFiles.has(
-      normalizeFile(artifactFile),
-    )).toBe(true);
-
-    const hot = server.environments.client.hot;
-    const send = vi.spyOn(hot, 'send').mockImplementation(() => {});
-    const invalid = structuredClone(publication);
-    const badge = invalid.entries['ui-package']!.components!.Badge!;
-    (badge as { key: string }).key = './forged.tsx#Badge';
-    await writeFile(artifactFile, JSON.stringify(invalid));
-
-    await waitFor(() => {
-      expect(send.mock.calls.some(
-        ([payload]) =>
-          payload.type === 'error' &&
-          payload.err.message.includes(
-            sealed ? 'semantic metadata changed' : "component 'ui-package' export 'Badge' has invalid key",
-          ),
-      )).toBe(true);
-    }, { timeout: 15_000 });
-
-    send.mockClear();
-    await writeFile(artifactFile, JSON.stringify(publication));
-    await waitFor(() => {
-      expect(send.mock.calls.some(([payload]) => payload.type === 'update'))
-        .toBe(true);
-    }, { timeout: 15_000 });
-    expect(send.mock.calls.some(([payload]) => payload.type === 'full-reload'))
-      .toBe(false);
-    if (sealed) {
-      expect(server.environments.client.pluginContainer.watchFiles.has(normalizeFile(resolve(packageRoot, 'index.js')))).toBe(true);
-      send.mockClear();
-      await writeFile(resolve(packageRoot, 'index.js'), packaged.output['./index.tsx']! + '\n// rebuilt JavaScript');
-      await waitFor(() => expect(send.mock.calls.some(([payload]) =>
-        payload.type === 'error' && payload.err.message.includes("JavaScript file 'index.js' changed"),
-      )).toBe(true), { timeout: 15_000 });
-      send.mockClear();
-      await writeFile(artifactFile, JSON.stringify(await experimentalFinalizePackage(packaged.artifact, { packageRoot, outputDirectory: '.' })));
-      await waitFor(() => expect(send.mock.calls.some(([payload]) => payload.type === 'update')).toBe(true), { timeout: 15_000 });
-      expect(send.mock.calls.some(([payload]) => payload.type === 'full-reload')).toBe(false);
-    }
-  }, 40_000);
-
-  it('sends compiler failures from an edit to Vite error feedback', async () => {
-    const root = await copyFixture();
-    const temporarySource = resolve(root, 'src');
-    server = await createServer({
-      root,
-      configFile: false,
-      logLevel: 'silent',
-      resolve: {
-        alias: {
-          '@': temporarySource,
-          '@memoized-dom/runtime/hot': runtimeHot,
-          '@memoized-dom/runtime': runtime,
-        },
-      },
-      plugins: plugins(),
-      server: { middlewareMode: true },
-    });
-    await server.environments.client.transformRequest('/src/App.tsx');
-
-    const hot = server.environments.client.hot;
-    const send = vi.spyOn(hot, 'send').mockImplementation(() => {});
-    const appFile = resolve(temporarySource, 'App.tsx');
-    const app = await readFile(appFile, 'utf8');
-    const invalid = app
-      .replace(
-        "import { Row } from './Row';",
-        "import { Row } from './Row';\nlet local = 0;\nconst double = local * 2;",
-      )
-      .replace(
-        '<button onClick={increment}>',
-        '<button onClick={() => { local++; double++; }}>',
-      );
-    await writeFile(appFile, invalid);
-
-    await waitFor(
-      () => {
-        expect(
-          send.mock.calls.some(
-            ([payload]) =>
-              payload.type === 'error' &&
-              payload.err.message.includes("cannot update computed 'double'") &&
-              payload.err.loc?.line !== undefined,
-          ),
-        ).toBe(true);
-      },
-      { timeout: 15_000 },
-    );
-
-    send.mockClear();
-    await writeFile(appFile, app);
-    await waitFor(
-      () => {
-        expect(
-          send.mock.calls.some(([payload]) => payload.type === 'update'),
-        ).toBe(true);
-      },
-      { timeout: 15_000 },
-    );
-    expect(send.mock.calls.some(([payload]) => payload.type === 'full-reload'))
-      .toBe(false);
-  }, 30_000);
   it('serves Web handlers through the native fullstack launcher', async () => {
     nativeServer = await createDevServer({
       root: fixture,
@@ -943,13 +509,7 @@ describe('Vite 8 adapter', () => {
 
   it('auto-installs generated server functions into serve during development', async () => {
     const root = await copyFixture();
-    const functions = resolve(root, 'server/functions');
-    await mkdir(functions, { recursive: true });
-    await writeFile(resolve(root, 'server/define.ts'), `
-      import { createDefine } from '@memoized-dom/server';
-      export const define = createDefine();
-    `);
-    await writeFile(resolve(functions, 'stories.ts'), `
+    await writeStoryFunctions(root, `
       import { define } from '../define';
       export const getStory = define.function({ get: async (_context, id: number) => {
         return { id, title: 'Story ' + id };
@@ -981,6 +541,7 @@ describe('Vite 8 adapter', () => {
       plugins: [memoizedDom({
         clientEntry: 'src/main.ts',
         serverEntry: 'src/server.ts',
+        server: 'server',
       })],
       server: { host: '127.0.0.1', port: 0 },
     });
@@ -1035,6 +596,7 @@ describe('Vite 8 adapter', () => {
       plugins: [memoizedDom({
         clientEntry: 'src/main.ts',
         serverEntry: 'src/server.ts',
+        server: 'server',
       })],
       server: { host: '127.0.0.1', port: 0 },
     });

@@ -69,7 +69,9 @@ async function main(): Promise<void> {
   }
   if (command === 'package') {
     if (values.port !== undefined) throw new Error('memoized-dom: --port is not a package-build option');
-    await (await import('./library-build')).buildLibrary({ root: values.root, config: values.config });
+    // A package ships its source; compiler-next packages it, as its own command line does.
+    const { packageLibrary } = await import('@memoized-dom/compiler-next');
+    await packageLibrary({ ...(values.root === undefined ? {} : { root: values.root }), ...(values.config === undefined ? {} : { config: values.config }) });
     return;
   }
   const config: InlineConfig = {

@@ -133,7 +133,7 @@ re-export of `./NoteList` with no extension. The form reports through an `onAdd`
 prop; the list removes through `onRemove`, with a direct `if` for the empty state
 and a direct `for` for the rows. [notes/notes.ts](notes/notes.ts) is a TypeScript
 helper with module state. Its `index.html` loads `/main.ts`, so the folder also
-runs under Vite with `memoizedDom({ clientEntry: 'main.ts', compiler: 'next' })`: `.auwla` needs
+runs under Vite with `memoizedDom({ clientEntry: 'main.ts' })`: `.auwla` needs
 no import or option.
 `tests/modules.test.ts` and `tests/vite.test.ts` build and run a copy of it (`tests/fixtures/apps/notes`).
 
@@ -218,7 +218,7 @@ never applies to a relative import. An alias can leave it out: the tsconfig maps
 `./server/*` and then `./server/*.auwla`, so `#server/people` type-checks.
 `tests/server.test.ts` builds a copy of it (`tests/fixtures/apps/directory`) and drives it in both modes. Its `index.html` is
 the page for Vite: `memoizedDom({ clientEntry: 'src/main.ts', serverEntry: 'server.ts',
-server: 'server', compiler: 'next' })` builds and serves it full-stack, as
+server: 'server' })` builds and serves it full-stack, as
 `tests/vite.test.ts` checks.
 
 ## Run the server pages example

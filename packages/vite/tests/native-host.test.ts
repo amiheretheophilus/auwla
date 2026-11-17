@@ -64,7 +64,7 @@ describe('backend-owned fullstack integration', () => {
     const occupied = Bun.serve({ hostname: '127.0.0.1', port: 0, fetch: () => new Response('Occupied') });
     try {
       await expect(createDevServer({ root, configFile: false, logLevel: 'silent',
-        plugins: [memoizedDom({ clientEntry: 'src/main.ts', serverEntry: 'server.ts' })],
+        plugins: [memoizedDom({ clientEntry: 'src/main.ts', serverEntry: 'server.ts', server: 'server' })],
         server: { port: occupied.port } })).rejects.toThrow();
       expect(await readFile(marker, 'utf8')).toBe('closed');
     } finally { await occupied.stop(true); }
@@ -73,7 +73,7 @@ describe('backend-owned fullstack integration', () => {
   it('runs Hono on native Bun, installs nested SSR/functions/assets, and reloads server modules', async () => {
     const root = await project();
     development = await createDevServer({ root, configFile: false, logLevel: 'silent',
-      plugins: [memoizedDom({ clientEntry: 'src/main.ts', serverEntry: 'server.ts' })], server: { port: 0 } });
+      plugins: [memoizedDom({ clientEntry: 'src/main.ts', serverEntry: 'server.ts', server: 'server' })], server: { port: 0 } });
     expect(development.runtime).toBe('bun');
     const origin = development.origin;
     const native = await (await fetch(origin + '/api/native')).json();
@@ -110,7 +110,7 @@ export const greeting = define.function({ get: async (_context, name: string) =>
   it.skipIf(!chrome)('hydrates and updates components and CSS without a browser reload on native Bun', async () => {
     const root = await project();
     development = await createDevServer({ root, configFile: false, logLevel: 'silent',
-      plugins: [memoizedDom({ clientEntry: 'src/main.ts', serverEntry: 'server.ts' })], server: { port: 0 } });
+      plugins: [memoizedDom({ clientEntry: 'src/main.ts', serverEntry: 'server.ts', server: 'server' })], server: { port: 0 } });
     const browser = await puppeteer.launch({ executablePath: chrome, headless: true });
     try {
       const page = await browser.newPage();
@@ -145,7 +145,7 @@ export const greeting = define.function({ get: async (_context, name: string) =>
     export function dispose() { (globalThis[${JSON.stringify(key)}] ??= []).push('${version}'); }`;
     await writeFile(join(root, 'server.ts'), streamBackend('old'));
     development = await createDevServer({ root, configFile: false, logLevel: 'silent',
-      plugins: [memoizedDom({ clientEntry: 'src/main.ts', serverEntry: 'server.ts' })], server: { port: 0 } });
+      plugins: [memoizedDom({ clientEntry: 'src/main.ts', serverEntry: 'server.ts', server: 'server' })], server: { port: 0 } });
     const stream = await fetch(development.origin + '/stream');
     const reader = stream.body!.getReader();
     expect(new TextDecoder().decode((await reader.read()).value)).toBe('old:start');
@@ -167,7 +167,7 @@ export const greeting = define.function({ get: async (_context, name: string) =>
       export const observe=define.function({get:async()=>({label:'${label}'}),live:()=>['demo']});`;
     await writeFile(filename, source('before'));
     development = await createDevServer({ root, configFile: false, logLevel: 'silent',
-      plugins: [memoizedDom({ clientEntry: 'src/main.ts', serverEntry: 'server.ts' })], server: { port: 0 } });
+      plugins: [memoizedDom({ clientEntry: 'src/main.ts', serverEntry: 'server.ts', server: 'server' })], server: { port: 0 } });
     const origin = development.origin;
     const url = origin + '/_fn/greeting/observe';
     const connect = () => transport === 'direct'
@@ -210,7 +210,7 @@ export const greeting = define.function({ get: async (_context, name: string) =>
       websocket: { message(socket, message) { socket.send(socket.data.label + ':' + message); } }
     };`);
     development = await createDevServer({ root, configFile: false, logLevel: 'silent',
-      plugins: [memoizedDom({ clientEntry: 'src/main.ts', serverEntry: 'server.ts' })], server: { port: 0 } });
+      plugins: [memoizedDom({ clientEntry: 'src/main.ts', serverEntry: 'server.ts', server: 'server' })], server: { port: 0 } });
     const socket = new WebSocket(development.origin.replace('http:', 'ws:'));
     try {
       const message = new Promise<string>((done, reject) => {
@@ -235,7 +235,7 @@ export const greeting = define.function({ get: async (_context, name: string) =>
     await writeFile(join(root, 'launch.mjs'), `import { createDevServer } from '@memoized-dom/vite/dev';
       import memoizedDom from '@memoized-dom/vite';
       const server = await createDevServer({ root: import.meta.dirname, configFile: false, logLevel: 'silent',
-        plugins: [memoizedDom({ clientEntry: 'src/main.ts', serverEntry: 'server.ts', runtime: 'node' })], server: { port: 0 } });
+        plugins: [memoizedDom({ clientEntry: 'src/main.ts', serverEntry: 'server.ts', server: 'server', runtime: 'node' })], server: { port: 0 } });
       console.log(JSON.stringify({ origin: server.origin, runtime: server.runtime }));
       process.on('SIGTERM', async () => { await server.close(); process.exit(0); });`);
     const child = spawn('node', [join(root, 'launch.mjs')], { stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true });
@@ -259,7 +259,7 @@ export const greeting = define.function({ get: async (_context, name: string) =>
       "export default { port: 0, hostname: '127.0.0.1', fetch: backend.fetch };"));
     await (await createBuilder({ root, configFile: false, logLevel: 'silent',
       resolve: { preserveSymlinks: true },
-      plugins: [memoizedDom({ clientEntry: 'src/main.ts', serverEntry: 'server.ts', runtime: 'node' })] })).buildApp();
+      plugins: [memoizedDom({ clientEntry: 'src/main.ts', serverEntry: 'server.ts', server: 'server', runtime: 'node' })] })).buildApp();
     expect(await readFile(join(root, 'dist/server.js'), 'utf8')).not.toMatch(/['"]@memoized-dom\/adapters(?:\/|['"])/);
     const production = spawn('node', [join(root, 'dist/server.js')], { stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true });
     output = ''; errors = '';
@@ -293,7 +293,7 @@ export const greeting = define.function({ get: async (_context, name: string) =>
       // Installed packages are externalized by default. Keep their paths in
       // node_modules so this covers that case instead of workspace linking.
       resolve: { preserveSymlinks: true },
-      plugins: [memoizedDom({ clientEntry: 'src/main.ts', serverEntry: 'server.ts', runtime: 'bun' })] });
+      plugins: [memoizedDom({ clientEntry: 'src/main.ts', serverEntry: 'server.ts', server: 'server', runtime: 'bun' })] });
     await builder.buildApp();
     const moved = join(root, 'relocated');
     await cp(join(root, 'dist'), moved, { recursive: true });

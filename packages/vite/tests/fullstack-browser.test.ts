@@ -131,8 +131,8 @@ describe('fullstack browser integration', () => {
               <a data-tab="board" route-to={{ path: '/', query: { tab: 'board' } }}>Board</a>
               <a data-tab="activity" route-to={{ path: '/', query: { tab: 'activity' } }}>Activity</a>
             </nav>
-            <section data-panel="board" if={tab === 'board'}>Board panel</section>
-            <section data-panel="activity" if={tab === 'activity'}>Activity panel</section>
+            {tab === 'board' && <section data-panel="board">Board panel</section>}
+            {tab === 'activity' && <section data-panel="activity">Activity panel</section>}
             <ul>{stories.map(story => <li key={story.id}>
               <span>{story.title}: {story.votes}</span>
               <button data-detail={story.id} onClick={() => { selectedId = story.id; }}>Details</button>
