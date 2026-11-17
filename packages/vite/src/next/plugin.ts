@@ -20,13 +20,13 @@
  *   build (`fullstack.ts`). The production server entry and the native dev launcher (`dev.ts`) are
  *   the old plugin's, through the same `api`.
  */
-import { mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { dirname, join, relative, resolve } from 'node:path';
 import { normalizePath, searchForWorkspaceRoot } from 'vite';
 import type { DevEnvironment, EnvironmentModuleNode, Plugin, ResolvedConfig, ViteDevServer } from 'vite';
 import {
   createApplication, GENERATED, importCandidates, initialPage, isSourcePath, languageExtensions, nativePackages, normalizeProjectPath,
-  projectPath, writeLinkedTypes,
+  projectPath, standaloneDeliveryModule, writeLinkedTypes,
   type Application, type ApplicationBuild, type ApplicationUpdate, type CompileError, type ProjectBuild,
   type SourceLanguage,
 } from '@memoized-dom/compiler-next';
@@ -38,6 +38,7 @@ import {
   type FullstackPluginApi, type ProductionDelivery,
 } from '../fullstack';
 import { serverFunctionsVirtualId } from '../server-functions';
+import { registerClientStyles } from '../dev-assets';
 import { longPath } from '../paths';
 import { viteHost, type ViteResolver } from './host';
 
@@ -82,6 +83,11 @@ export function memoizedDomNext(options: MemoizedDomViteOptions): Plugin {
       return serverEntry === undefined || config === undefined ? serverEntry : resolve(config.root, serverEntry);
     },
     nativeDevelopment: false,
+    // compiler-next builds on the first request; `types` asks for the build, whose declarations
+    // `withDeclarations` writes.
+    writeDeclarations: async () => {
+      await built();
+    },
   };
 
   function rootOf(): string {
@@ -101,21 +107,55 @@ export function memoizedDomNext(options: MemoizedDomViteOptions): Plugin {
 
   function built(): Promise<ApplicationBuild> {
     if (application === undefined) throw new Error('memoized-dom: used before Vite resolved its config');
-    building ??= application.build().then(withDeclarations);
+    building ??= application.build().then(afterBuild);
     return building;
   }
 
-  /** Writes `.memoized/server-functions.d.ts`, which types `#server-functions` for TypeScript. */
+  /** What follows each build or update: its declarations, and the dev server's page styles. */
+  async function afterBuild(build: ApplicationBuild): Promise<ApplicationBuild> {
+    registerDevelopmentStyles(build);
+    return withDeclarations(build);
+  }
+
+  /**
+   * In development, a page the server renders links the client's stylesheets in its head, so it is
+   * styled before any script runs (`configureDevelopmentDelivery`). compiler-next lists them, in the
+   * order a browser applies them; a failed build keeps the last list.
+   */
+  function registerDevelopmentStyles(build: ApplicationBuild): void {
+    if (devServer === undefined || !build.client.ok) return;
+    const styles = new Set(build.client.stylesheets.map((path) => fileOf(path)));
+    registerClientStyles(devServer, plugin, styles, [], []);
+  }
+
+  /**
+   * Writes the declarations compiler-next made: `.memoized/server-functions.d.ts`, which types
+   * `#server-functions`, and `.memoized/routes.d.ts`, which types the app's route patterns (left as
+   * it is when the client failed to build, removed when the app has no routes).
+   */
   async function withDeclarations(build: ApplicationBuild): Promise<ApplicationBuild> {
+    if (build.routeDeclarations !== undefined) {
+      await writeGenerated(join(rootOf(), '.memoized', 'routes.d.ts'), build.routeDeclarations);
+    }
     if (build.declarations !== null) {
-      const file = join(rootOf(), '.memoized', 'server-functions.d.ts');
-      const previous = await readFile(file, 'utf8').catch(() => null);
-      if (previous !== build.declarations) {
-        await mkdir(dirname(file), { recursive: true });
-        await writeFile(file, build.declarations);
-      }
+      await writeGenerated(join(rootOf(), '.memoized', 'server-functions.d.ts'), build.declarations);
     }
     return build;
+  }
+
+  /**
+   * Writes a file compiler-next generated, only when its text changed so watchers are not woken
+   * for nothing; null removes it.
+   */
+  async function writeGenerated(file: string, text: string | null): Promise<void> {
+    const previous = await readFile(file, 'utf8').catch(() => null);
+    if (previous === text) return;
+    if (text === null) {
+      await rm(file, { force: true });
+      return;
+    }
+    await mkdir(dirname(file), { recursive: true });
+    await writeFile(file, text);
   }
 
   function programOf(build: ApplicationBuild, environment: string): ProjectBuild | undefined {
@@ -225,6 +265,7 @@ export function memoizedDomNext(options: MemoizedDomViteOptions): Plugin {
             entry: normalizeProjectPath(serverEntry),
             ...(serverFolder === undefined ? {} : { folder: normalizeProjectPath(serverFolder) }),
             delivery: integrationVirtualId,
+            runtime,
           },
         }),
         host: viteHost(resolved.root, () => resolver, languages),
@@ -291,9 +332,11 @@ export function memoizedDomNext(options: MemoizedDomViteOptions): Plugin {
 
     async load(id) {
       if (id === resolvedIntegrationVirtualId) {
-        const code = productionDelivery !== undefined
-          ? productionIntegrationModule(productionDelivery)
-          : developmentIntegrationModule(devServer!, runtime);
+        let code: string;
+        if (productionDelivery !== undefined) code = productionIntegrationModule(productionDelivery);
+        else if (devServer !== undefined) code = developmentIntegrationModule(devServer, runtime);
+        // A server built on its own: compiler-next's delivery with no page and no files.
+        else code = standaloneDeliveryModule();
         return { code, map: { mappings: '' } };
       }
       if (id === resolvedProductionEntryVirtualId) {
@@ -384,7 +427,7 @@ export function memoizedDomNext(options: MemoizedDomViteOptions): Plugin {
       const key = `${update.timestamp}\0${path}`;
       if (lastUpdate?.key !== key) {
         resolver = environmentResolver(this.environment);
-        const result = application.update([path]).then(async (done) => ({ ...done, build: await withDeclarations(done.build) }));
+        const result = application.update([path]).then(async (done) => ({ ...done, build: await afterBuild(done.build) }));
         lastUpdate = { key, result };
         building = result.then((done) => done.build);
       }

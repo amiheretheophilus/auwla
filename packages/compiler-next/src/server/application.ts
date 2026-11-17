@@ -30,6 +30,7 @@ import { normalizeProjectPath, type ProjectHost } from '../project/host';
 import { createProject, type ProjectBuild } from '../project/project';
 import { analyzeServerFunctions, type ServerFunctionModule } from './functions';
 import { serverFunctionClient, serverFunctionDeclarations } from './generate';
+import { routeDeclarations } from '../features/routes/declarations';
 import { modulePages, PAGE_HYDRATION, PAGES, pageTable, type ModulePages } from './page-build';
 import {
   checkServices, isMiddlewareFile, serverFunctionBarrel, serverFunctionRegistry, serverServices,
@@ -66,6 +67,12 @@ export interface ServerOptions {
    * `virtual:memoized-dom/delivery`.
    */
   readonly delivery?: string;
+  /**
+   * Where the built server runs. On `cloudflare`, a Worker calls the exported application as
+   * `fetch(request, env, ctx)`; the application reads its bindings as `platform.env` and
+   * `platform.executionCtx`, as on every runtime, so the wrapper passes them on. Default `bun`.
+   */
+  readonly runtime?: 'bun' | 'node' | 'cloudflare';
 }
 
 export interface ApplicationBuild {
@@ -75,6 +82,12 @@ export interface ApplicationBuild {
   readonly functions: readonly ServerFunctionModule[];
   /** The `#server-functions` declarations a tool writes for TypeScript; null without functions. */
   readonly declarations: string | null;
+  /**
+   * `.memoized/routes.d.ts`, which types the app's route patterns for `route-to` and `navigate`
+   * (`features/routes/declarations.ts`). Null when the app has no routes; undefined when the client
+   * failed to build, so a tool keeps the file it has.
+   */
+  readonly routeDeclarations?: string | null;
 }
 
 export interface ApplicationUpdate {
@@ -168,7 +181,7 @@ export function createApplication(options: ApplicationOptions): Application {
         if (side === 'server' && path === GENERATED.server) {
           // A relative delivery module is relative to the project, and the wrapper is in `.memoized/`.
           const specifier = delivery.startsWith('.') ? relativeModule(GENERATED.server, normalizeProjectPath(delivery), true) : delivery;
-          return serverApplication(specifier);
+          return serverApplication(specifier, server?.runtime ?? 'bun');
         }
         const text = host.readFile(path);
         // Appended, so the entry's authored offsets stay in place for its source map.
@@ -320,7 +333,8 @@ export function createApplication(options: ApplicationOptions): Application {
     if (functions.some((module) => module.functions.length > 0)) {
       declarations = serverFunctionDeclarations(functions, (moduleId) => implementationSpecifier(moduleId));
     }
-    return { client: clientBuild, ...(serverBuild === undefined ? {} : { server: serverBuild }), functions, declarations };
+    const routeTypes = clientBuild.ok ? { routeDeclarations: routeDeclarations(clientBuild.routes ?? []) } : {};
+    return { client: clientBuild, ...(serverBuild === undefined ? {} : { server: serverBuild }), functions, declarations, ...routeTypes };
   }
 
   return { build, update };
@@ -393,8 +407,23 @@ async function serverModule(
 /**
  * The module the server entry's `@memoized-dom/server` import becomes: everything the package
  * exports, with `serve()` installing the application's routes and the tool's delivery.
+ *
+ * On Cloudflare, the exported application may be the Worker itself, which the runtime calls as
+ * `fetch(request, env, ctx)`. That call becomes `{ platform: { env, executionCtx } }`. A call with
+ * two arguments (`app.fetch(request, { platform })`, from a Hono backend) passes through as it is.
  */
-function serverApplication(delivery: string): string {
+function serverApplication(delivery: string, runtime: 'bun' | 'node' | 'cloudflare'): string {
+  const serve = runtime === 'cloudflare'
+    ? `export function serve(options) {
+  const application = __mmd_integrate(__mmd_serve(options), __mmd_integration);
+  const dispatch = application.fetch;
+  application.fetch = (request, options, executionCtx) => dispatch(request,
+    executionCtx === undefined ? options : { platform: { env: options, executionCtx } });
+  return application;
+}`
+    : `export function serve(options) {
+  return __mmd_integrate(__mmd_serve(options), __mmd_integration);
+}`;
   return `export * from '@memoized-dom/server';
 import { serve as __mmd_serve, integrateApplication as __mmd_integrate } from '@memoized-dom/server';
 import { serverFunctionRoutes as __mmd_routes } from ${JSON.stringify(`./${GENERATED.registry.slice('./.memoized/'.length)}`)};
@@ -405,9 +434,7 @@ const __mmd_integration = {
   assets: (request, platform) => __mmd_delivery.assets?.(request, platform),
   routeStyles: __mmd_delivery.routeStyles,
 };
-export function serve(options) {
-  return __mmd_integrate(__mmd_serve(options), __mmd_integration);
-}
+${serve}
 `;
 }
 

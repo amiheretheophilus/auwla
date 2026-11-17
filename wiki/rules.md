@@ -77,3 +77,13 @@ Stated by the user on 2026-10-18. They apply to every design and every fix.
     own `tests/fixtures/` (an app-sized program is fine there, as a copy), so
     editing or deleting an example never breaks a test. Examples are for trying
     things out. Shared build helpers live outside both (`packages/jsx-plus/tools/`).
+17. **Compiler first: build features live in compiler-next, never in a tool's plugin**
+    (2026-11-12, 2026-11-14, restated 2026-11-16). The user: "we place things inside the compiler
+    and not vite or bun plugin to prevent drift"; "vite will just be one option". Anything Vite,
+    the Bun plugin and the command line would each need (generated declarations such as route and
+    server-function types, delivery modules, server pages, packaging, deploy targets, framework
+    defaults) is written once in `packages/compiler-next/src/project` or `src/server`, with its
+    tests there. A tool's plugin only connects that result to the tool: it writes the text the
+    compiler produced, resolves through the tool, serves, watches, and sets the tool's own options
+    (`optimizeDeps`, `fs.allow`). If a fix needs new logic in `packages/vite/src`, stop and put the
+    logic in compiler-next first.

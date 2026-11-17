@@ -42,6 +42,7 @@ route region gets the same tracking, adoption and delivery as any conditional:
 | `features/routes/lower.ts` | The text edits, the table and the `route:context` prop |
 | `features/routes/base.ts` | The `base` option: checked, `/app/` read as `/app`, and written in front of a link (below, "Base path") |
 | `features/routes/patterns.ts` | Pattern rules: leading `/`, no query/hash/empty segment, terminal `*`, unique params |
+| `features/routes/declarations.ts` | `.memoized/routes.d.ts` from the full patterns (below, "Route types"); tested in `declarations.test.ts` |
 | `features/routes/routed.ts` | `$routed` calls: their checks, server classification and the sources they make |
 | `features/routes/routes.test.ts` | Output shape and every compile error, routes and `$routed` |
 | `features/routes/routed.dom.test.ts` | Sources made inside a preparation are settled before it caches or returns them |
@@ -232,8 +233,22 @@ written from `/`; the prefix belongs to where the app is served, not to its rout
   click navigates in place, back returns and a deep link loads its page. Tests:
   `features/routes/routes.test.ts` (output) and `packages/router/tests/base-path.test.ts`
   (behaviour, in its own file: a base belongs to the process once declared).
+- A runtime with no location yet (no page and no history: a server bundle installing its table as
+  it loads, before any request) has only the fallback `/`, so a base moves it to the base's root
+  instead of refusing it. Once a location is set, one outside the base is refused again (found by
+  the Vite acceptance run, 2026-11-16).
 - Not covered yet: server function endpoints (`/_fn/…`) and the server's own mounting below a
   base.
+
+## Route types
+
+`.memoized/routes.d.ts` gives the router's `RouteTable` the app's full patterns, so TypeScript checks
+`route-to` and `navigate` against routes the app has: each pattern's `input` (what building a link
+takes) and `params` (what the router reads back, always text). The route lowering reports every full
+pattern, sorted and once each (`CompiledModules.routes`); `routeDeclarations` makes the file's text
+and the application gives it as `ApplicationBuild.routeDeclarations`: null when the app has no
+routes, undefined when the client failed to build, so a tool keeps the file it has. A tool only
+writes the text (`../rules.md`, rule 17); `memoized-dom types` asks the Vite plugin to build for it.
 
 ## Rules
 

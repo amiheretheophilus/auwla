@@ -1,7 +1,10 @@
 // Smoke check: load a page in headless Chrome and print what renders.
 import puppeteer from 'puppeteer-core';
+import { browserExecutable } from '../../test-support/browser';
 const url = process.argv[2] ?? 'http://127.0.0.1:5400/';
-const browser = await puppeteer.launch({ executablePath: 'C:/Program Files/Google/Chrome/Application/chrome.exe', headless: true });
+const executablePath = browserExecutable();
+if (executablePath === null) throw new Error('no Chromium browser found; set MMD_CHROME_PATH');
+const browser = await puppeteer.launch({ executablePath, headless: true });
 try {
   const page = await browser.newPage();
   page.on('pageerror', error => console.log('pageerror:', String((error as Error).stack ?? error).slice(0, 1500)));

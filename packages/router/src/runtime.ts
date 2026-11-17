@@ -306,6 +306,8 @@ export function createRouteRuntime(
   let url = routeHistory === undefined
     ? initialURL(environment)
     : new URL(routeHistory.location.href, FALLBACK_ORIGIN);
+  /** True until a location is set: no history and no page location, so `url` is only the fallback. */
+  let placeholderLocation = routeHistory === undefined && environment.location?.href === undefined;
   const initialPathname = applicationPathname(url.pathname);
   if (initialPathname === null) {
     throw new TypeError(
@@ -522,6 +524,7 @@ export function createRouteRuntime(
         `URL pathname '${next.pathname}' is outside router basePath '${basePath}'`,
       );
     }
+    placeholderLocation = false;
     const changed = next.href !== url.href || !Object.is(nextState, state);
     if (!changed) return;
 
@@ -1116,7 +1119,13 @@ export function createRouteRuntime(
     if (next === basePath) return;
     const previous = basePath;
     basePath = next;
-    const nextPathname = applicationPathname(url.pathname);
+    let nextPathname = applicationPathname(url.pathname);
+    if (nextPathname === null && placeholderLocation) {
+      // No page is open here (a server bundle loading, before any request has a runtime of its
+      // own): the fallback `/` is no location at all, so it moves to the base's root.
+      url = new URL(`${next}${url.search}${url.hash}`, url);
+      nextPathname = '/';
+    }
     if (nextPathname === null) {
       basePath = previous;
       throw new TypeError(`URL pathname '${url.pathname}' is outside router basePath '${next}'`);

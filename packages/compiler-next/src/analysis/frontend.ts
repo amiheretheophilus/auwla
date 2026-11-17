@@ -28,7 +28,8 @@ export function analyzeFrontend(
     // The imports that load with their routes, which printing removes (`features/routes/split.ts`).
     const routeSplits = routed?.splits ?? NO_SPLITS;
     const routeComponents: ReadonlyMap<string, string> = routed?.components ?? new Map();
-    return { resolved, graph, routeSplits, routeComponents };
+    const routePatterns: readonly string[] = routed?.patterns ?? [];
+    return { resolved, graph, routeSplits, routeComponents, routePatterns };
   } catch (error) {
     // A module a source language wrote reports its errors where the author wrote them.
     const texts = parsed.map((module) => ({ path: module.path, analyzed: module.source, authored: module.authored, origin: module.origin }));

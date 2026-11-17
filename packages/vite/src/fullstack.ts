@@ -23,6 +23,11 @@ export interface FullstackPluginApi {
   /** Retire native server modules before a compiler-owned full reload. */
   invalidateBackend?: () => void;
   cloudflareAssetsBinding?: string;
+  /**
+   * Build now and write the declarations the build made (`memoized-dom types`). A plugin that
+   * writes them in `buildStart` leaves this out.
+   */
+  writeDeclarations?: () => Promise<void>;
 }
 
 export interface ProductionDelivery {

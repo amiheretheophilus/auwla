@@ -7,5 +7,5 @@ export type { Application, ApplicationBuild, ApplicationOptions, ApplicationUpda
 export { analyzeServerFunctions, serverFunctionModuleName } from './functions';
 export type { ServerFunctionDefinition, ServerFunctionMethod, ServerFunctionModule, ServerFunctionParameter } from './functions';
 export { serverFunctionClient, serverFunctionDeclarations } from './generate';
-export { COMPATIBILITY_DATE, deliveryModule, workerConfig } from './delivery';
+export { COMPATIBILITY_DATE, deliveryModule, standaloneDeliveryModule, workerConfig } from './delivery';
 export type { DeliveryOptions, ServerRuntime, WorkerConfigOptions } from './delivery';

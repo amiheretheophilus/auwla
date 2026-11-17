@@ -133,7 +133,8 @@ async function build(command: ApplicationCommand, log: (line: string) => void): 
   const page = resolve(root, 'index.html');
   // The page, when there is one, so Bun writes it with the bundled script and styles in it.
   const entry = existsSync(page) ? page : resolve(root, command.client);
-  const shared = { client: command.client, ...(server === undefined ? {} : { server }), root };
+  // The runtime shapes the server's wrapper: a Worker calls it as `fetch(request, env, ctx)`.
+  const shared = { client: command.client, ...(server === undefined ? {} : { server: { ...server, runtime: command.runtime } }), root };
 
   const client = await Bun.build({
     entrypoints: [entry],

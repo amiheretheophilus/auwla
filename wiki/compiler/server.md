@@ -241,11 +241,21 @@ deployment target is the compiler's, not a bundler plugin's (`../decisions.md`, 
   and `COMPATIBILITY_DATE`, a date the framework is tested with rather than the day of the build,
   which a local workerd may not support yet (found by the test: workerd refused to start).
 
+- **A Worker's bindings** (2026-11-16, found by the Vite acceptance run): workerd calls the exported
+  application as `fetch(request, env, ctx)`, while the application reads bindings as
+  `platform.env` and `platform.executionCtx` on every runtime. With `server.runtime: 'cloudflare'`
+  the generated server wrapper (`serverApplication`, `server/application.ts`) turns that call into
+  `{ platform: { env, executionCtx } }`; a two-argument call from a Hono backend passes through. The
+  CLI and the Vite plugin pass the runtime.
+- **A server built on its own** (`vite build --ssr server.ts`, no client build beside it):
+  `standaloneDeliveryModule()` gives no page and no files, so the application renders into the
+  template it is given (`installDocumentTemplate`).
+
 `cli.ts build … --server server.ts --runtime cloudflare` bundles the server for workerd as
 `worker.js` (`conditions: workerd`, `cloudflare:*` and `node:*` left as imports) beside `client/`
 and `wrangler.json`; `wrangler deploy --config dist/wrangler.json` deploys it. `project/cli.test.ts`
 runs the built Worker in workerd through Miniflare: a page render, per-render module state, a client
-file through the assets binding, and a server function. The old Vite plugin's `cloudflare()` still
+file through the assets binding, a server function, and one reading a binding through `platform.env`. The old Vite plugin's `cloudflare()` still
 wraps `@cloudflare/vite-plugin` for its own dev server; the Vite path is one way, not the only one.
 
 ## Server pages
@@ -358,7 +368,7 @@ whole compiled component, and its inputs are every path that component reads, te
 | `server/functions.test.ts` | Analysis, facades, declarations and errors, compared with the old compiler |
 | `server/registry.ts` | The server function routes module, the `#server-functions` barrel, and services |
 | `server/application.ts` | `createApplication`: the client and server builds, their views of the host, the server entry's integration |
-| `server/delivery.ts` | A built server's delivery module for Bun or a Cloudflare Worker, and the Worker's `wrangler.json` |
+| `server/delivery.ts` | A built server's delivery module for Bun or a Cloudflare Worker, or for a server built on its own, and the Worker's `wrangler.json` |
 | `server/pages.ts` | Server pages: `page(<JSX/>)` extracted into a page module, the handler's replacement, its errors |
 | `server/page-inputs.ts` | Which paths of a page's inputs its components read, so only those cross to the browser |
 | `server/page-build.ts` | A module's pages in the application: what `page` names, what each page reaches, its contract, the browser's table |

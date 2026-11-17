@@ -44,6 +44,19 @@ export default {
 `;
 }
 
+/**
+ * The delivery of a server built on its own, with no client build beside it and no development
+ * server (`vite build --ssr server.ts`): it gives no page and no files, so the application renders
+ * into the template it is given (`installDocumentTemplate`) and serves no assets.
+ */
+export function standaloneDeliveryModule(): string {
+  return `export default {
+  document: () => undefined,
+  assets: () => undefined,
+};
+`;
+}
+
 export interface WorkerConfigOptions {
   /** The Worker's name. */
   readonly name: string;

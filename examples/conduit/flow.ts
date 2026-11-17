@@ -1,8 +1,12 @@
 // Scripted walk through the main Conduit flows: bun examples/conduit/flow.ts [origin]
 import puppeteer, { type Page } from 'puppeteer-core';
+import { browserExecutable } from '../../test-support/browser';
 
 const origin = process.argv[2] ?? 'http://127.0.0.1:5400';
-const browser = await puppeteer.launch({ executablePath: 'C:/Program Files/Google/Chrome/Application/chrome.exe', headless: true });
+// Chrome, or Edge where Chrome is not installed (`MMD_CHROME_PATH` picks another).
+const executablePath = browserExecutable();
+if (executablePath === null) throw new Error('no Chromium browser found; set MMD_CHROME_PATH');
+const browser = await puppeteer.launch({ executablePath, headless: true });
 const problems: string[] = [];
 let currentPage: Page | undefined;
 const step = async (name: string, run: () => Promise<unknown>) => {

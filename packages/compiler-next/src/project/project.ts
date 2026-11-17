@@ -38,6 +38,8 @@ export interface CompiledProject {
   readonly initialDelivery?: InitialDelivery;
   /** Route components that load with their route, by key, with their module (`CompiledModules`). */
   readonly routeComponents?: Readonly<Record<string, string>>;
+  /** Every full route pattern the program renders, for `.memoized/routes.d.ts` (`CompiledModules`). */
+  readonly routes?: readonly string[];
   /** Reached JS modules and source-only stylesheet dependencies (for watching). */
   readonly modules: readonly string[];
   /** The stylesheets the program imports, in the order a browser applies them (`stylesheets.ts`). */

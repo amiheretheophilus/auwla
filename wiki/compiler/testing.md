@@ -314,6 +314,18 @@ checks before retention checks as well as in isolation when changing this fixtur
    threw while loading. It now waits with its element (`$spread`, `tests/reference/runtime.ts`); two
    cases in `tests/cases/sources.test.ts` cover it, and both fail on the old compiler.
 
+   **The Vite suite on compiler-next** (`MMD_COMPILER=next`, 2026-11-16), each file alone: 142 pass,
+   46 fail, 91 skipped; the skipped ones look only for Chrome, and `MMD_CHROME_PATH` set to Edge runs
+   them. Fixed from it, each with a test: literal boolean attributes (`core.md`, "Dynamic attribute
+   values"), route types (`routes.md`, "Route types"), a base on a runtime with no location yet
+   (`routes.md`, "Base path"), a Worker's bindings and a server built on its own (`server.md`,
+   "Delivery and runtimes"), and a dev server page linking the client's stylesheets. By decision:
+   fixtures declaring no server folder find no server functions (2026-11-12), the removed
+   `compilePackages` option, TSRX, and the old hydration payload and generated text. Still missing:
+   `.memoized/server-config.d.ts` (service and request-state types). The user then put the old
+   compiler's deletion first (2026-11-17), since the old plugin's architecture (delivery modules for
+   each runtime in `packages/vite`) was shaping the fixes; the Vite suite is read again after it.
+
    **Replaying the old tests' programs** (`tests/corpus/replay.test.ts`). Reading 277 assertions one
    by one is slow, and many check the old compiler's internal work. Their programs are what matters.
    `MEMO_DOM_CORPUS=<dir>` makes the old compiler record every program it compiles, so one run of the

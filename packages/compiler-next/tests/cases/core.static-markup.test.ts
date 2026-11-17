@@ -261,6 +261,37 @@ behaves('attributes: one written twice, in different case', {
   },
 });
 
+// A boolean writes the same text whether it is written in the markup or comes from a value
+// (`wiki/compiler/core.md`, "Dynamic attribute values"): `true` is presence only on an HTML boolean
+// attribute, `"true"` elsewhere and in SVG; `false` is `"false"` on ARIA and left out elsewhere.
+// Found by the Vite acceptance run: `<main data-ssr-probe>` was written `data-ssr-probe=""`.
+behaves('attributes: booleans written in the markup and from values', {
+  source: `export function App() {
+    let on = true;
+    return <div>
+      <main data-probe aria-hidden={false} hidden={false} title={true}><input disabled /></main>
+      <p data-on={on} aria-busy={!on} hidden={!on}><button onClick={() => on = !on}>toggle</button></p>
+      <svg><rect data-flag focusable={true} /></svg>
+    </div>;
+  }`,
+  steps: [{ click: 'button' }],
+  check(container, observation) {
+    const main = container.querySelector('main')!;
+    expect(main.getAttribute('data-probe')).toBe('true');
+    expect(main.getAttribute('aria-hidden')).toBe('false');
+    expect(main.hasAttribute('hidden')).toBe(false);
+    expect(main.getAttribute('title')).toBe('true');
+    expect(container.querySelector('input')!.getAttribute('disabled')).toBe('');
+    const rect = container.querySelector('rect')!;
+    expect(rect.getAttribute('data-flag')).toBe('true');
+    expect(rect.getAttribute('focusable')).toBe('true');
+    const p = container.querySelector('p')!;
+    expect(p.getAttribute('data-on')).toBe(observation === 0 ? 'true' : null);
+    expect(p.getAttribute('aria-busy')).toBe(observation === 0 ? 'false' : 'true');
+    expect(p.getAttribute('hidden')).toBe(observation === 0 ? null : '');
+  },
+});
+
 behaves('attributes: class and className together, with the later one changing', {
   source: `export function App() {
     let n = 0;

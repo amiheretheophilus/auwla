@@ -1438,6 +1438,12 @@ function deepEqual(left: unknown, right: unknown, visited = new Set<unknown>()):
 const SVG_NAMESPACE = 'http://www.w3.org/2000/svg';
 /** Written as DOM properties, as a user's input would set them. */
 const PROPERTIES = new Set(['value', 'checked', 'selected', 'muted', 'innerHTML']);
+/** HTML's boolean attributes, from the HTML standard's attribute index: present means true. */
+const PRESENCE_ATTRIBUTES = new Set([
+  'allowfullscreen', 'async', 'autofocus', 'autoplay', 'checked', 'controls', 'default', 'defer',
+  'disabled', 'formnovalidate', 'hidden', 'inert', 'ismap', 'itemscope', 'loop', 'multiple', 'muted',
+  'nomodule', 'novalidate', 'open', 'playsinline', 'readonly', 'required', 'reversed', 'selected',
+]);
 
 /** A host element the renderer created, and what it last set on it. */
 interface HostRecord {
@@ -1865,11 +1871,17 @@ function updateProps(record: HostRecord, props: Record<string, unknown>): void {
     const attribute = name === 'className' ? 'class' : name === 'htmlFor' ? 'for' : name;
     // HTML attribute names ignore case, so `data-a` and `DATA-A` are one, and the later one wins.
     const key = element.namespaceURI === SVG_NAMESPACE ? attribute : attribute.toLowerCase();
-    if (value === null || value === undefined || value === false) {
+    // ARIA states are text, so `aria-hidden={false}` says "false" rather than nothing.
+    const aria = key.toLowerCase().startsWith('aria-');
+    if (value === null || value === undefined || (value === false && !aria)) {
       attributes.delete(key);
       continue;
     }
-    attributes.set(key, attribute === 'class' ? classValue(value) : value === true ? '' : String(value));
+    // `true` is presence only on an HTML boolean attribute (`<input disabled>`); anywhere else,
+    // SVG included, it is the text "true", as React writes `data-x` and `aria-x`.
+    const presenceOnly = element.namespaceURI !== SVG_NAMESPACE && PRESENCE_ATTRIBUTES.has(key);
+    const text = value === true ? (presenceOnly ? '' : 'true') : String(value);
+    attributes.set(key, attribute === 'class' ? classValue(value) : text);
   }
 
   for (const name of record.attributes.keys()) {

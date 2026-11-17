@@ -58,6 +58,20 @@ describe('a base path', () => {
     expect(() => runtime.replaceBasePath('/:tenant')).toThrow('basePath must be static');
   });
 
+  // A server bundle installs its table when it loads, before any request: its default runtime has
+  // no page and no history, so its `/` is only a fallback. Found by the Vite acceptance run.
+  it('moves a runtime with no location yet to its root, until a location is set', () => {
+    const runtime = createRouteRuntime({ environment: {} });
+    runtimes.push(runtime);
+    runtime.replaceBasePath('/app');
+    expect(runtime.route.pathname).toBe('/');
+
+    // Once a location is set it is a real one, and one outside the base is refused again.
+    runtime.setLocation('/app/projects/one');
+    expect(runtime.route.pathname).toBe('/projects/one');
+    expect(() => runtime.replaceBasePath('/other')).toThrow("URL pathname '/app/projects/one' is outside router basePath '/other'");
+  });
+
   it('given with a compiled table mounts the active runtime and every one activated later', () => {
     const browser = activate(createRouteRuntime(at('http://localhost/app/projects/one')));
     installRouteTable(TABLE, '/app');

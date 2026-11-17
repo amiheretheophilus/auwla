@@ -10,7 +10,7 @@ import { findAll, is } from 'yuku-ast';
 import type { Expression, Node } from 'yuku-parser';
 import { CompileError } from '../diagnostics';
 import {
-  PROPERTIES, RESERVED_ATTRIBUTES, VOID_ELEMENTS, attributeName, cleanJsxText, escapeAttribute,
+  PROPERTIES, RESERVED_ATTRIBUTES, VOID_ELEMENTS, attributeName, booleanAttributeText, cleanJsxText, escapeAttribute,
   escapeText, eventName, intrinsicTag, jsxAttributeName, parsesAsWritten, unwrap,
 } from './jsx';
 import type { Site, StaticAttribute, Template, TemplateNode, UnplacedSite } from './model';
@@ -180,7 +180,7 @@ class TemplateBuilder {
     const attributes: StaticAttribute[] = [];
     const sites: UnplacedSite[] = [];
     for (const attribute of element.openingElement.attributes) {
-      this.attribute(attribute, attributes, sites);
+      this.attribute(attribute, attributes, sites, namespace);
     }
 
     // Attribute expressions run before child expressions, even though template
@@ -195,7 +195,7 @@ class TemplateBuilder {
     return node;
   }
 
-  private attribute(attribute: Node, attributes: StaticAttribute[], sites: UnplacedSite[]): void {
+  private attribute(attribute: Node, attributes: StaticAttribute[], sites: UnplacedSite[], namespace: Namespace): void {
     if (is.JSXSpreadAttribute(attribute)) unsupported(this.context, attribute, 'spread attributes', 6);
     if (!is.JSXAttribute(attribute)) return;
 
@@ -226,7 +226,7 @@ class TemplateBuilder {
       return;
     }
 
-    const constant = constantAttribute(expression);
+    const constant = constantAttribute(expression, attributeName(name), namespace);
     // An element writing one attribute twice takes the ordered path (`isComponentCall`).
     if (constant !== undefined) {
       const isClass = attributeName(name) === 'class';
@@ -262,15 +262,16 @@ function attributeExpression(value: Node | null): Expression {
 }
 
 /**
- * A literal attribute value as the reference writes it: the string, `''` for
- * `true`, and null (left out) for `false`, `null` and `undefined`. Undefined when
- * the value is not a literal.
+ * A literal attribute value as the runtime would write it: the string, null (left out) for `null`,
+ * and a boolean by the setters' rule (`booleanAttributeText`): `<main data-probe>` is
+ * `data-probe="true"`, `<input disabled>` is `disabled=""`, `aria-hidden={false}` is `"false"`.
+ * Undefined when the value is not a literal.
  */
-function constantAttribute(expression: Expression): string | null | undefined {
+function constantAttribute(expression: Expression, name = '', namespace: Namespace = 'html'): string | null | undefined {
   if (!is.Literal(expression)) return undefined;
   const value = expression.value;
-  if (value === null || value === false) return null;
-  if (value === true) return '';
+  if (value === null) return null;
+  if (typeof value === 'boolean') return booleanAttributeText(name, value, namespace);
   if (typeof value === 'string' || typeof value === 'number') return String(value);
   return undefined;
 }

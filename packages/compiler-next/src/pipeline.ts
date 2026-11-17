@@ -48,6 +48,11 @@ export interface CompiledModules {
    * on a page it renders (`wiki/compiler/routes.md`, "A lazy route's styles").
    */
   readonly routeComponents?: Readonly<Record<string, string>>;
+  /**
+   * Every full route pattern the program renders, sorted (`features/routes/index.ts`). A tool
+   * writes them as `.memoized/routes.d.ts` (`wiki/compiler/routes.md`, "Route types").
+   */
+  readonly routes?: readonly string[];
 }
 
 /** Compiles one module on its own. Returns its JavaScript. */
@@ -71,7 +76,7 @@ export function compileModulesDetailed(
   modules: Readonly<Record<string, string>>,
   options: CompileModulesOptions = {},
 ): CompiledModules {
-  const { output, maps, resolved, routeComponents } = compileProgram(modules, options);
+  const { output, maps, resolved, routeComponents, routePatterns } = compileProgram(modules, options);
   const initialRender = planInitialRender(resolved, output, options);
   const initialDelivery = planInitialDelivery(initialRender, { ...options.assetSources, ...modules });
   const css: Record<string, string> = {};
@@ -89,16 +94,21 @@ export function compileModulesDetailed(
     initialRender,
     ...(initialDelivery === undefined ? {} : { initialDelivery }),
     ...(routeComponents.size === 0 ? {} : { routeComponents: Object.fromEntries(routeComponents) }),
+    ...(routePatterns.length === 0 ? {} : { routes: routePatterns }),
   };
 }
 
 function compileProgram(
   modules: Readonly<Record<string, string>>,
   options: CompileModulesOptions,
-): { output: Record<string, string>; maps?: Record<string, SourceMap>; resolved: Resolved; routeComponents: ReadonlyMap<string, string> } {
+): {
+  output: Record<string, string>; maps?: Record<string, SourceMap>; resolved: Resolved;
+  routeComponents: ReadonlyMap<string, string>; routePatterns: readonly string[];
+} {
   const frontend = analyzeFrontend(modules, options);
   try {
-    return { ...compileAnalyzed(frontend, options), routeComponents: frontend.routeComponents };
+    const { routeComponents, routePatterns } = frontend;
+    return { ...compileAnalyzed(frontend, options), routeComponents, routePatterns };
   } catch (error) {
     // Planning and emission locate errors in the analyzed text; a language module's author wrote other text.
     const texts = frontend.resolved.modules.map((module) => ({

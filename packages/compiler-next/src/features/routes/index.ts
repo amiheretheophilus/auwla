@@ -29,6 +29,12 @@ export interface RoutedProgram {
    * "A lazy route's styles").
    */
   readonly components: ReadonlyMap<string, string>;
+  /**
+   * Every full pattern the program routes (`/profile/:name`), sorted and once each. A tool writes
+   * them as `.memoized/routes.d.ts`, which types `route-to` and `navigate` (`wiki/compiler/routes.md`,
+   * "Route types").
+   */
+  readonly patterns: readonly string[];
 }
 
 /** The modules with their routes lowered, or null when the program has none. */
@@ -56,5 +62,6 @@ export function lowerRoutes(parsed: readonly ParsedModule[], resolved: Resolved,
     return { ...input, source: text.text, origin: composeOrigins(text.origin, entry.origin), requireImports: [] };
   });
   const splitComponents = new Map(splits.map((split) => [split.key, split.target.path]));
-  return { parsed: modules, splits: lowered.splits, components: splitComponents };
+  const patterns = [...new Set(graph.instances.map((instance) => instance.fullPattern))].sort();
+  return { parsed: modules, splits: lowered.splits, components: splitComponents, patterns };
 }

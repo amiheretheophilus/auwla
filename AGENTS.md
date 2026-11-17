@@ -76,3 +76,8 @@ instructions. Work not yet done across the tracks is listed in `FINALIZE.md`.
   this supersedes their earlier request for another-agent reviews.
 - Keep new compiler-next work in a concept folder, including its tests. Use
   readable helpers, expanded blocks and explanatory comments, as requested.
+- **Compiler first** (`wiki/rules.md`, rule 17). Build logic goes in compiler-next
+  (`src/project`, `src/server`), never in `packages/vite`, the Bun plugin or the CLI, so the
+  tools cannot drift apart. A plugin only connects compiler-next's result to its tool: it writes
+  the files compiler-next generated, resolves, serves and watches. When a fix seems to need new
+  logic in a plugin, put that logic in compiler-next and call it from the plugin.

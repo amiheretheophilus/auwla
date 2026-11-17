@@ -129,7 +129,9 @@ describe('the command line', () => {
     write('worker/src/Page.tsx', `let visits = 0;\nexport function Page() { visits++; return <main><h1>On a Worker</h1><p>{visits}</p></main>; }`);
     write('worker/server.ts', `import { serve } from '@memoized-dom/server';\nimport { Page } from './src/Page';\nimport { define } from '#server/define';\nconst app = serve({ define });\napp.ssr(Page);\nexport default app;\n`);
     write('worker/server/define.ts', `import { createDefine } from '@memoized-dom/server';\nexport const define = createDefine();\n`);
-    write('worker/server/functions/time.ts', `import { define } from '../define';\nexport const getAnswer = define.function({ async get() { return 42; } });\n`);
+    write('worker/server/functions/time.ts', `import { define } from '../define';\nexport const getAnswer = define.function({ async get() { return 42; } });\n`
+      // A Worker's bindings reach the application as `platform.env` (`server/application.ts`).
+      + `export const getMessage = define.function({ async get(context) { return context.platform.env.MESSAGE; } });\n`);
 
     const folder = join(root, 'worker');
     expect(parseArguments(['build', 'src/main.ts', '--runtime', 'cloudflare'], folder)).toContain('--runtime needs --server');
@@ -152,6 +154,7 @@ describe('the command line', () => {
       scriptPath: join(folder, 'dist', 'worker.js'),
       compatibilityDate: config.compatibility_date,
       compatibilityFlags: config.compatibility_flags,
+      bindings: { MESSAGE: 'from a binding' },
       assets: {
         directory: join(folder, 'dist', 'client'), binding: 'ASSETS', run_worker_first: true,
         routerConfig: { has_user_worker: true, invoke_user_worker_ahead_of_assets: true },
@@ -173,5 +176,7 @@ describe('the command line', () => {
     expect(await asset.text()).toContain('hydrat');
 
     expect(await (await fetchWorker('/_fn/time/getAnswer')).json()).toBe(42);
+    // workerd calls the Worker as `fetch(request, env, ctx)`; found by the Vite acceptance run.
+    expect(await (await fetchWorker('/_fn/time/getMessage')).text()).toContain('from a binding');
   }, 60_000);
 });

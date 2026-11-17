@@ -103,6 +103,23 @@ describe('applications', () => {
     expect(build.server).toBeUndefined();
     expect(build.client.ok && build.client.output['./src/main.ts']).not.toContain('hydrate');
     expect(build.declarations).toBeNull();
+    expect(build.routeDeclarations).toBeNull();
+  });
+
+  // Every tool writes this text as it is (`wiki/rules.md`, rule 17), so the build makes it.
+  it('give the route types of a routed client, and none from a failed one', async () => {
+    const routed = {
+      './src/main.ts': FILES['./src/main.ts']!,
+      './src/App.tsx': 'export function App() { return <main><p route="/">Home</p><p route="/people/:name">Person</p></main>; }',
+    };
+    const build = await createApplication({ client: './src/main.ts', host: memoryHost(routed) }).build();
+    expect(build.routeDeclarations).toContain('"/people/:name": { input: { "name": string | number | boolean | bigint }; params: { "name": string }; };');
+
+    const broken = { ...routed, './src/App.tsx': 'export function App() { return <main>; }' };
+    const failed = await createApplication({ client: './src/main.ts', host: memoryHost(broken) }).build();
+    expect(failed.client.ok).toBe(false);
+    // Undefined, not null: a tool keeps the route types it wrote rather than deleting them.
+    expect(failed.routeDeclarations).toBeUndefined();
   });
 
   it('report a server-only import in client code', async () => {

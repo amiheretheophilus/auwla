@@ -28,6 +28,28 @@ export const PROPERTIES = new Set(['value', 'checked', 'selected', 'muted', 'inn
 /** Attributes the renderer handles itself, never written to the DOM. */
 export const RESERVED_ATTRIBUTES = new Set(['key', 'children', 'suspend']);
 
+/**
+ * HTML attributes whose presence alone means true, the runtime's list
+ * (`runtime/src/html-attributes.ts`). `true` writes them empty; on any other attribute, or in SVG,
+ * `true` is the text `"true"` (`wiki/compiler/core.md`, "Dynamic attribute values").
+ */
+const HTML_BOOLEAN_ATTRIBUTES = new Set([
+  'allowfullscreen', 'async', 'autofocus', 'autoplay', 'checked', 'controls', 'default', 'defer',
+  'disabled', 'formnovalidate', 'hidden', 'inert', 'ismap', 'itemscope', 'loop', 'multiple', 'muted',
+  'nomodule', 'novalidate', 'open', 'playsinline', 'readonly', 'required', 'reversed', 'selected',
+]);
+
+/**
+ * The text an attribute shows for a boolean, as the runtime's setters write it: `true` is empty on
+ * an HTML boolean attribute and `"true"` elsewhere; `false` is `"false"` on `aria-*` and left out
+ * (null) elsewhere.
+ */
+export function booleanAttributeText(name: string, value: boolean, namespace: 'html' | 'svg'): string | null {
+  const lower = name.toLowerCase();
+  if (value) return namespace === 'html' && HTML_BOOLEAN_ATTRIBUTES.has(lower) ? '' : 'true';
+  return lower.startsWith('aria-') ? 'false' : null;
+}
+
 /** A JSX attribute's name as written, with a namespace when it has one: `xlink:href`. */
 export function jsxAttributeName(attribute: Extract<Node, { type: 'JSXAttribute' }>): string {
   return is.JSXNamespacedName(attribute.name)

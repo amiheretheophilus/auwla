@@ -55,6 +55,13 @@ for actual HTML boolean attributes, while SVG/other true values are textual.
 Non-ARIA false values remain omitted. The uncached path preserves its existing
 nonboolean `textValue` conversion.
 
+A literal boolean in the markup writes the same text (`booleanAttributeText`, `core/plan/jsx.ts`,
+2026-11-16): `<main data-probe>` is `data-probe="true"`, `<input disabled>` is `disabled=""`, and
+`aria-hidden={false}` is `"false"`. It used to write every `true` empty and leave out every `false`,
+so `data-x` and `data-x={flag}` gave different HTML for the same value (found by the Vite acceptance
+run). The reference states the same rule on its own; the case is in
+`tests/cases/core.static-markup.test.ts`.
+
 An ordinary loop building JSX row values exposed an older mismatch in the
 uncached setter: it omitted ARIA false and wrote true as an empty attribute.
 That setter now follows the existing cached/spread rules. Focused assertions
