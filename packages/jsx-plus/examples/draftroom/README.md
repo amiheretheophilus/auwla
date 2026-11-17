@@ -48,3 +48,5 @@ The example works in one browser and supports one selected object at a time. It 
 A drag updates a temporary canvas draft. Releasing the pointer commits one document edit, adds one undo step, and saves the resulting project. This keeps pointer moves out of both history and local storage.
 
 The dotted grid is a repeating CSS background aligned with the camera. The minimap redraws when the committed shapes, camera, or viewport size changes. On the main board, the painter reuses the shapes below and above a moving object so only the object itself needs to be drawn again.
+
+The onscreen board limits high-DPI oversampling to about 1.6 million backing pixels while keeping at least CSS resolution when the display supports it. The canvas buffers for drag previews are released when the preview ends or those layers need to be rebuilt. The editor requests a frame only in response to a change in the board or viewport.

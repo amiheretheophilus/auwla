@@ -16,6 +16,14 @@ interface CachedLayers {
   layers: DraftLayers;
 }
 
+function releaseLayer(layer?: HTMLCanvasElement): void {
+  if (layer !== undefined) {
+    // Empty the backing store immediately, even if the browser has yet to collect the element.
+    layer.width = 0;
+    layer.height = 0;
+  }
+}
+
 function captureLayer(
   board: HTMLCanvasElement,
   shapes: Shape[],
@@ -56,6 +64,8 @@ export function createDraftLayerCache() {
       return cached.layers;
     }
 
+    clear();
+
     // A new object goes on top. An existing one divides the scene at its original index.
     const index = shapes.findIndex(shape => shape.id === draftId);
     const layers = index < 0
@@ -70,7 +80,12 @@ export function createDraftLayerCache() {
   }
 
   function clear(): void {
+    const layers = cached?.layers;
     cached = undefined;
+    if (layers !== undefined) {
+      releaseLayer(layers.below);
+      releaseLayer(layers.above);
+    }
   }
 
   return { get, clear };

@@ -3,13 +3,19 @@ import { drawingBounds, toWorld } from './geometry';
 import { drawShape } from './shapes';
 import type { Camera, Point, Shape } from '../model/types';
 
+// Each board pixel is also copied into up to two temporary layers during a drag.
+const BOARD_PIXEL_BUDGET = 1_600_000;
+
 export function canvasSize(canvas: HTMLCanvasElement): { width: number; height: number } {
   return { width: canvas.clientWidth, height: canvas.clientHeight };
 }
 
-function surface(canvas: HTMLCanvasElement): CanvasRenderingContext2D | null {
+function surface(canvas: HTMLCanvasElement, pixelBudget = Infinity): CanvasRenderingContext2D | null {
   const { width, height } = canvasSize(canvas);
-  const density = Math.min(2, window.devicePixelRatio || 1);
+  const deviceDensity = Math.min(2, window.devicePixelRatio || 1);
+  // Limit high-DPI oversampling and keep at least one backing pixel per CSS pixel where available.
+  const budgetDensity = Math.max(1, Math.sqrt(pixelBudget / Math.max(1, width * height)));
+  const density = Math.min(deviceDensity, budgetDensity);
   const pixelsWide = Math.round(width * density);
   const pixelsHigh = Math.round(height * density);
 
@@ -59,7 +65,7 @@ export function createBoardPainter() {
     selected: Shape | undefined,
     draft: Shape | undefined,
   ): void {
-    const ctx = surface(canvas);
+    const ctx = surface(canvas, BOARD_PIXEL_BUDGET);
     if (ctx === null) {
       return;
     }
