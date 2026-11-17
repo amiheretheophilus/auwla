@@ -11,6 +11,7 @@ export function Stage({ view, editor }: { view: EditorView; editor: Editor }) {
       <div class="board-area">
         <canvas
           class="drawing-board"
+          data-grid={view.grid ? 'on' : 'off'}
           data-tool={view.tool}
           ref={editor.connect}
           tabIndex={0}

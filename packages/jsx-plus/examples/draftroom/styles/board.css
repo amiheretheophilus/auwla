@@ -23,6 +23,12 @@
   touch-action: none;
 }
 
+.drawing-board[data-grid="on"] {
+  background-image: radial-gradient(circle at 1.25px 1.25px, #cec8db 0.55px, transparent 1px);
+  background-position: var(--grid-origin, -1.25px -1.25px);
+  background-size: var(--grid-spacing, 24px) var(--grid-spacing, 24px);
+}
+
 .drawing-board:focus-visible { outline-offset: -3px; }
 .drawing-board[data-tool="hand"] { cursor: grab; }
 .drawing-board[data-tool="hand"]:active { cursor: grabbing; }

@@ -1,4 +1,5 @@
-import { drawingBounds, GRID, toWorld } from './geometry';
+import { createDraftLayerCache } from './draft-layers';
+import { drawingBounds, toWorld } from './geometry';
 import { drawShape } from './shapes';
 import type { Camera, Point, Shape } from '../model/types';
 
@@ -24,21 +25,6 @@ function surface(canvas: HTMLCanvasElement): CanvasRenderingContext2D | null {
   return ctx;
 }
 
-function drawGrid(ctx: CanvasRenderingContext2D, width: number, height: number, camera: Camera): void {
-  const step = GRID * camera.zoom * (camera.zoom < 0.35 ? 4 : 1);
-  const startX = (camera.x % step + step) % step;
-  const startY = (camera.y % step + step) % step;
-  ctx.fillStyle = '#cec8db';
-  ctx.beginPath();
-  for (let x = startX; x < width; x += step) {
-    for (let y = startY; y < height; y += step) {
-      ctx.moveTo(x + 1, y);
-      ctx.arc(x, y, 0.83, 0, Math.PI * 2);
-    }
-  }
-  ctx.fill();
-}
-
 function drawSelection(ctx: CanvasRenderingContext2D, shape: Shape, zoom: number): void {
   const gap = 6 / zoom;
   const width = shape.width + gap * 2;
@@ -58,36 +44,65 @@ function drawSelection(ctx: CanvasRenderingContext2D, shape: Shape, zoom: number
   ctx.restore();
 }
 
-export function paintBoard(
-  canvas: HTMLCanvasElement,
-  shapes: Shape[],
-  camera: Camera,
-  grid: boolean,
-  selectedId?: string,
-): void {
-  const ctx = surface(canvas);
-  if (ctx === null) {
-    return;
-  }
-
-  const { width, height } = canvasSize(canvas);
-  ctx.clearRect(0, 0, width, height);
-  if (grid) {
-    drawGrid(ctx, width, height, camera);
-  }
-
-  ctx.save();
+function applyCamera(ctx: CanvasRenderingContext2D, camera: Camera): void {
   ctx.translate(camera.x, camera.y);
   ctx.scale(camera.zoom, camera.zoom);
-  for (const shape of shapes) {
-    drawShape(ctx, shape);
+}
+
+export function createBoardPainter() {
+  const draftLayers = createDraftLayerCache();
+
+  function paint(
+    canvas: HTMLCanvasElement,
+    shapes: Shape[],
+    camera: Camera,
+    selected: Shape | undefined,
+    draft: Shape | undefined,
+  ): void {
+    const ctx = surface(canvas);
+    if (ctx === null) {
+      return;
+    }
+
+    const { width, height } = canvasSize(canvas);
+    ctx.clearRect(0, 0, width, height);
+
+    if (draft === undefined) {
+      draftLayers.clear();
+      ctx.save();
+      applyCamera(ctx, camera);
+      for (const shape of shapes) {
+        drawShape(ctx, shape);
+      }
+      ctx.restore();
+    } else {
+      const density = ctx.getTransform().a;
+      const { below, above } = draftLayers.get(canvas, shapes, camera, draft.id, density);
+      const logicalWidth = canvas.width / density;
+      const logicalHeight = canvas.height / density;
+
+      if (below !== undefined) {
+        ctx.drawImage(below, 0, 0, logicalWidth, logicalHeight);
+      }
+      ctx.save();
+      applyCamera(ctx, camera);
+      drawShape(ctx, draft);
+      ctx.restore();
+      if (above !== undefined) {
+        ctx.drawImage(above, 0, 0, logicalWidth, logicalHeight);
+      }
+    }
+
+    const outline = draft ?? selected;
+    if (outline !== undefined && !outline.hidden) {
+      ctx.save();
+      applyCamera(ctx, camera);
+      drawSelection(ctx, outline, camera.zoom);
+      ctx.restore();
+    }
   }
 
-  const selected = shapes.find(shape => shape.id === selectedId && !shape.hidden);
-  if (selected !== undefined) {
-    drawSelection(ctx, selected, camera.zoom);
-  }
-  ctx.restore();
+  return { paint, clear: draftLayers.clear };
 }
 
 function mapCamera(map: HTMLCanvasElement, shapes: Shape[]): Camera | undefined {

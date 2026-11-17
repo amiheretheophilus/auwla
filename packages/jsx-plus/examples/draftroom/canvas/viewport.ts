@@ -1,26 +1,48 @@
-import { drawingBounds, fitCamera, zoomCamera } from './geometry';
+import { drawingBounds, fitCamera, GRID, zoomCamera } from './geometry';
 import { bindGestures, screenPoint } from './gestures';
-import { canvasSize, mapPosition, paintBoard, paintMap } from './paint';
+import { canvasSize, createBoardPainter, mapPosition, paintMap } from './paint';
 import type { Camera, Shape, Tool } from '../model/types';
 
 interface Scene {
   shapes(): Shape[];
   selected(): Shape | undefined;
   tool(): Tool;
-  grid(): boolean;
   snap(): boolean;
   select(id?: string): void;
   finish(shape: Shape): void;
   changed(): void;
 }
 
+/** The CSS grid sits behind the canvas bitmap and only moves with the camera. */
+function positionGrid(canvas: HTMLCanvasElement, camera: Camera): void {
+  const spacing = GRID * camera.zoom * (camera.zoom < 0.35 ? 4 : 1);
+  // The center of each CSS dot is 1.25px inside its tile.
+  const left = camera.x % spacing - 1.25;
+  const top = camera.y % spacing - 1.25;
+  canvas.style.setProperty('--grid-spacing', `${spacing}px`);
+  canvas.style.setProperty('--grid-origin', `${left}px ${top}px`);
+}
+
 export function createViewport(scene: Scene) {
+  const painter = createBoardPainter();
   let board: HTMLCanvasElement | undefined;
   let map: HTMLCanvasElement | undefined;
   let camera: Camera = { x: 0, y: 0, zoom: 1 };
   let draft: Shape | undefined;
   let frame = 0;
   let fitted = false;
+  let mappedShapes: Shape[] | undefined;
+  let mappedCamera: Camera | undefined;
+
+  function paintOverview(canvas: HTMLCanvasElement, shapes: Shape[]): void {
+    if (map === undefined || (mappedShapes === shapes && mappedCamera === camera)) {
+      return;
+    }
+
+    paintMap(map, canvas, shapes, camera);
+    mappedShapes = shapes;
+    mappedCamera = camera;
+  }
 
   function render(): void {
     if (frame !== 0 || board === undefined) {
@@ -35,24 +57,18 @@ export function createViewport(scene: Scene) {
       }
 
       const shapes = scene.shapes();
-      const preview = draft;
-      let painting = shapes;
-      if (preview !== undefined) {
-        const exists = shapes.some(shape => shape.id === preview.id);
-        // Preserve the original stacking order while moving or resizing a layer.
-        painting = exists ? shapes.map(shape => shape.id === preview.id ? preview : shape) : [...shapes, preview];
-      }
-
-      paintBoard(board, painting, camera, scene.grid(), preview?.id ?? scene.selected()?.id);
-      if (map !== undefined) {
-        paintMap(map, board, painting, camera);
-      }
+      painter.paint(board, shapes, camera, scene.selected(), draft);
+      // A drag's draft is only for the main board. The map catches up when the edit commits.
+      paintOverview(board, shapes);
     });
   }
 
   function setCamera(next: Camera): void {
     const zoomChanged = Math.round(camera.zoom * 100) !== Math.round(next.zoom * 100);
     camera = next;
+    if (board !== undefined) {
+      positionGrid(board, camera);
+    }
     if (zoomChanged) {
       scene.changed();
     }
@@ -75,6 +91,7 @@ export function createViewport(scene: Scene) {
   function attachBoard(canvas: HTMLCanvasElement): () => void {
     board = canvas;
     fitted = false;
+    positionGrid(canvas, camera);
     const detach = bindGestures(canvas, {
       camera: () => camera,
       setCamera,
@@ -91,6 +108,8 @@ export function createViewport(scene: Scene) {
     });
 
     const observer = new ResizeObserver(() => {
+      // The viewport outline in the minimap also depends on the visible canvas size.
+      mappedCamera = undefined;
       if (!fitted) {
         fit();
       }
@@ -102,6 +121,7 @@ export function createViewport(scene: Scene) {
       detach();
       observer.disconnect();
       cancelAnimationFrame(frame);
+      painter.clear();
       frame = 0;
       board = undefined;
       draft = undefined;
@@ -110,6 +130,13 @@ export function createViewport(scene: Scene) {
 
   function attachMap(canvas: HTMLCanvasElement): () => void {
     map = canvas;
+    mappedShapes = undefined;
+    const observer = new ResizeObserver(() => {
+      mappedShapes = undefined;
+      render();
+    });
+    observer.observe(canvas);
+
     function recenter(event: PointerEvent): void {
       if (board === undefined) {
         return;
@@ -132,7 +159,10 @@ export function createViewport(scene: Scene) {
     render();
     return () => {
       canvas.removeEventListener('pointerdown', recenter);
+      observer.disconnect();
       map = undefined;
+      mappedShapes = undefined;
+      mappedCamera = undefined;
     };
   }
 

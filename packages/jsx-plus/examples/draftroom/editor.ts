@@ -17,7 +17,6 @@ export function createEditor(update: (view: EditorView) => void) {
     shapes: () => project.page().shapes,
     selected: project.selected,
     tool: () => tool,
-    grid: () => grid,
     snap: () => snap,
     select: project.select,
     finish(shape) {
@@ -110,7 +109,6 @@ export function createEditor(update: (view: EditorView) => void) {
 
   function toggleGrid(): void {
     grid = !grid;
-    viewport.render();
     publish();
   }
 
