@@ -1,0 +1,51 @@
+import type { Editor } from '../editor';
+import type { EditorView } from '../model/types';
+import { Icon } from './Icon.auwla';
+
+export function Header({ view, editor }: { view: EditorView; editor: Editor }) {
+  let picker!: HTMLInputElement;
+  let exportMenu!: HTMLDetailsElement;
+
+  function openFile(event: Event) {
+    const input = event.currentTarget as HTMLInputElement;
+    const file = input.files?.[0];
+    if (file !== undefined) editor.importFile(file);
+    input.value = '';
+  }
+
+  function exportFile(kind: 'png' | 'project') {
+    exportMenu.open = false;
+    if (kind === 'png') editor.exportPng();
+    else editor.exportProject();
+  }
+
+  return (
+    <header class="topbar">
+      <div class="brand">
+        <span class="brand-mark" aria-hidden="true"><i></i><i></i></span>
+        <span>"Draftroom"</span>
+      </div>
+      <div class="topbar-document">
+        <span class="topbar-page">view.page.name</span>
+        <span class="save-status" role="status"><i></i> view.notice</span>
+      </div>
+      <div class="topbar-actions">
+        <div class="history-actions" aria-label="History">
+          <button type="button" class="icon-button" title="Undo (Ctrl/⌘ Z)" aria-label="Undo"
+            disabled={!view.canUndo} onClick={editor.undo}><Icon name="undo" /></button>
+          <button type="button" class="icon-button" title="Redo (Ctrl/⌘ Shift Z)" aria-label="Redo"
+            disabled={!view.canRedo} onClick={editor.redo}><Icon name="redo" /></button>
+        </div>
+        <input type="file" ref=picker accept=".json,application/json" hidden onChange=openFile />
+        <button type="button" class="button secondary" onClick={() => picker.click()}>"Open"</button>
+        <details class="export-menu" ref=exportMenu>
+          <summary class="button primary"><Icon name="download" /> "Export" <Icon name="chevron" /></summary>
+          <div class="menu-popover">
+            <button type="button" onClick={() => exportFile('png')}>"Current page as PNG"</button>
+            <button type="button" onClick={() => exportFile('project')}>"All pages as project file"</button>
+          </div>
+        </details>
+      </div>
+    </header>
+  );
+}

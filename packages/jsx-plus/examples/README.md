@@ -19,6 +19,7 @@ React JSX runtime. Other projects need this one-time configuration too.
 | [counter.auwla](counter.auwla) | The smallest state/event/direct-expression example |
 | [greeting.auwla](greeting.auwla) | Editable greeting, conditional branches, native event input and looped names; real completion and runtime checks use this file |
 | [task-board/App.auwla](task-board/App.auwla) | A complete task board: derived lists/counts, search, status filters, form submission, existing refs, direct `if`, direct `for` loops in the markup, quoted text and row events |
+| [draftroom/](draftroom/) | A browser-local drawing SPA with pages, editable layers, templates, a minimap, undo, and PNG/project export |
 | [team/](team/) | Routes (nested, parameters, catch-all), lazy route chunks, `Group` pending/error policies, `<slot>` layouts, `$fetch`/`$track` with a reactive helper, `$routed`, `$effect` and `$cleanup` |
 | [directory/](directory/) | Rendered on the server: `.auwla` server functions and a `.auwla` server-only module, a server-backed `$routed`, hydration, and a form posting to a server function |
 | [server-pages/](server-pages/) | Server functions returning `page(...)`: an interactive board that keeps its local state across live server updates, a passive page that ships no JavaScript, only the read fields crossing, and the built-in CSS (global tokens, scoped and named styles, class conditions, responsive groups) |

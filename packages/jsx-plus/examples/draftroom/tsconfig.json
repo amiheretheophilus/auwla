@@ -1,0 +1,5 @@
+{
+  "extends": "../checking/tsconfig.json",
+  "files": ["./main.ts", "./App.auwla"],
+  "include": ["./canvas/*.ts", "./model/*.ts", "./ui/*.auwla"]
+}

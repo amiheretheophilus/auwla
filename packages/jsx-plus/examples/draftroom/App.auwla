@@ -1,0 +1,24 @@
+import { createEditor } from './editor';
+import type { EditorView } from './model/types';
+import { Header } from './ui/Header.auwla';
+import { Navigator } from './ui/Navigator.auwla';
+import { Stage } from './ui/Stage.auwla';
+import { Inspector } from './ui/Inspector.auwla';
+
+export function App() {
+  // The view snapshot drives the controls. The board owns high-frequency pointer previews.
+  let view: EditorView;
+  const editor = createEditor(next => { view = next; });
+  view = editor.view();
+
+  return (
+    <main class="workspace">
+      <Header view={view} editor={editor} />
+      <div class="workspace-body">
+        <Navigator view={view} editor={editor} />
+        <Stage view={view} editor={editor} />
+        <Inspector view={view} editor={editor} />
+      </div>
+    </main>
+  );
+}

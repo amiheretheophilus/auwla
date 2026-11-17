@@ -1,0 +1,58 @@
+import type { Editor } from '../editor';
+import { type EditorView, type ShapeKind } from '../model/types';
+import { Icon } from './Icon.auwla';
+
+const icons: Record<ShapeKind, string> = {
+  rectangle: 'rectangle', ellipse: 'ellipse', diamond: 'diamond', arrow: 'arrow',
+  pen: 'pen', text: 'text', note: 'note',
+};
+
+export function Navigator({ view, editor }: { view: EditorView; editor: Editor }) {
+  const newestFirst = view.page.shapes.toReversed();
+
+  return (
+    <aside class="navigator" aria-label="Pages and layers">
+      <section class="pages-section">
+        <div class="section-heading">
+          <h2>"Pages"</h2>
+          <button type="button" class="icon-button small" title="New blank page" aria-label="New blank page"
+            onClick={() => editor.project.add()}><Icon name="plus" /></button>
+        </div>
+        <nav class="page-list" aria-label="Pages">
+          for (const page of view.pages) {
+            <button key={page.id} type="button" class="page-row" aria-pressed={page.id === view.page.id}
+              onClick={() => editor.project.open(page.id)}>
+              <Icon name="file" /> <span class="truncate">page.name</span>
+            </button>
+          }
+        </nav>
+        <details class="templates">
+          <summary><Icon name="layers" /> "New from template" <Icon name="chevron" /></summary>
+          <button type="button" onClick={() => editor.project.add('workflow')}>"Product workflow"</button>
+          <button type="button" onClick={() => editor.project.add('brainstorm')}>"Brainstorm"</button>
+        </details>
+      </section>
+      <section class="layers-section">
+        <div class="section-heading">
+          <h2>"Layers"</h2>
+          <span class="section-count">view.page.shapes.length</span>
+        </div>
+        if (newestFirst.length === 0) {
+          <p class="empty-list">"Objects you draw appear here."</p>
+        } else {
+          <div class="layer-list">
+            for (const shape of newestFirst) {
+              <button key={shape.id} type="button" class="layer-row" aria-pressed={shape.id === view.selected?.id}
+                data-hidden={shape.hidden ? 'yes' : 'no'} onClick={() => editor.project.select(shape.id)}>
+                <Icon name={icons[shape.kind]} /> <span class="truncate">shape.title</span>
+                if (shape.hidden) { <span class="layer-state">"Hidden"</span> }
+                if (shape.locked) { <span class="layer-state">"Locked"</span> }
+              </button>
+            }
+          </div>
+        }
+      </section>
+      <div class="navigator-footer"><span class="local-dot"></span> "Browser storage"</div>
+    </aside>
+  );
+}

@@ -1,0 +1,29 @@
+const glyphs: Record<string, string> = {
+  cursor: '↖',
+  hand: '☞',
+  rectangle: '□',
+  ellipse: '○',
+  diamond: '◇',
+  arrow: '↗',
+  pen: '╱',
+  text: 'T',
+  note: '◩',
+  plus: '+',
+  minus: '−',
+  undo: '↶',
+  redo: '↷',
+  file: '▤',
+  layers: '▱',
+  download: '↓',
+  chevron: '⌄',
+  fit: '⌗',
+  up: '↑',
+  down: '↓',
+  copy: '⧉',
+  grid: '⠿',
+  snap: '⌁',
+};
+
+export function Icon({ name }: { name: string }) {
+  return <span class="icon" aria-hidden="true">glyphs[name]</span>;
+}

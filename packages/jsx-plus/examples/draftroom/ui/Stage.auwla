@@ -1,0 +1,61 @@
+import type { Editor } from '../editor';
+import type { EditorView } from '../model/types';
+import { TOOLS } from '../shortcuts';
+import { Icon } from './Icon.auwla';
+
+export function Stage({ view, editor }: { view: EditorView; editor: Editor }) {
+  const active = TOOLS.find(tool => tool.id === view.tool);
+
+  return (
+    <section class="stage" aria-label="Drawing workspace">
+      <div class="board-area">
+        <canvas
+          class="drawing-board"
+          data-tool={view.tool}
+          ref={editor.connect}
+          tabIndex={0}
+          aria-label="Drawing canvas. Use the tool buttons to draw, or select an object from Layers."
+        ></canvas>
+        <div class="floating-tools" role="toolbar" aria-label="Drawing tools">
+          for (const tool of TOOLS) {
+            <button
+              key={tool.id}
+              type="button"
+              class="tool-button"
+              title="{tool.label} ({tool.shortcut})"
+              aria-label={tool.label}
+              aria-pressed={tool.id === view.tool}
+              onClick={() => editor.choose(tool.id)}
+            >
+              <Icon name={tool.icon} />
+            </button>
+          }
+        </div>
+        if (view.page.shapes.length === 0) {
+          <div class="empty-board">
+            <p>"Blank canvas"</p>
+            <span>"Pick a drawing tool to add your first object."</span>
+          </div>
+        }
+        <div class="minimap">
+          <span>"Map"</span>
+          <canvas ref={editor.attachMap} aria-label="Board overview. Click to recenter."></canvas>
+        </div>
+        <div class="zoom-controls" aria-label="Zoom controls">
+          <button type="button" class="icon-button" title="Zoom out (−)" aria-label="Zoom out"
+            onClick={() => editor.zoom(0.8)}><Icon name="minus" /></button>
+          <output aria-label="Zoom level">"{view.zoom}%"</output>
+          <button type="button" class="icon-button" title="Zoom in (+)" aria-label="Zoom in"
+            onClick={() => editor.zoom(1.25)}><Icon name="plus" /></button>
+          <button type="button" class="icon-button zoom-fit" title="Fit drawing (0)" aria-label="Fit drawing"
+            onClick={editor.fit}><Icon name="fit" /></button>
+        </div>
+      </div>
+      <footer class="board-footer">
+        <span class="active-tool"><Icon name={active?.icon ?? 'cursor'} /> active?.label</span>
+        <span class="pan-hint"><kbd>"Space"</kbd> " + drag to pan"</span>
+        <span class="object-count">view.page.shapes.length " objects"</span>
+      </footer>
+    </section>
+  );
+}

@@ -1,0 +1,140 @@
+import type { Editor } from '../editor';
+import { FILLS, PALETTE, SHAPE_NAMES, type LineStyle, type Shape } from '../model/types';
+import { Icon } from './Icon.auwla';
+
+const shades = ['Ink', 'Violet', 'Blue', 'Mint', 'Coral', 'Amber'];
+const fills = ['Transparent', 'Lavender', 'Sky', 'Mint', 'Peach', 'Sand'];
+
+export function ObjectProperties({ shape, editor }: { shape: Shape; editor: Editor }) {
+  const isText = shape.kind === 'text';
+  const canLabel = shape.points === undefined;
+  const canFill = canLabel && !isText;
+  const kind = SHAPE_NAMES[shape.kind];
+  const minimumWeight = isText ? 10 : 1;
+  const maximumWeight = isText ? 100 : 24;
+
+  function changeWeight(event: Event) {
+    const input = event.currentTarget as HTMLInputElement;
+    const value = input.valueAsNumber;
+    if (Number.isFinite(value)) {
+      const weight = Math.min(maximumWeight, Math.max(minimumWeight, value));
+      editor.project.patch({ weight });
+    } else {
+      input.value = String(shape.weight);
+    }
+  }
+
+  return (
+    <>
+      <div class="selected-kind">
+        <Icon name="layers" /> kind
+      </div>
+      <fieldset class="object-fields" disabled={shape.locked}>
+        <label class="field">
+          "Layer name"
+          <input value={shape.title} maxLength={80}
+            onChange={event => editor.project.patch({ title: event.currentTarget.value.trim() || kind })} />
+        </label>
+        if (canLabel) {
+          <label class="field">
+            "Text"
+            <textarea
+              value={shape.text}
+              rows={2}
+              maxLength={1000}
+              onChange={event => editor.project.patch({ text: event.currentTarget.value })}
+            ></textarea>
+          </label>
+        }
+        <div class="value-row">isText ? 'Text color' : 'Stroke'</div>
+        <div class="swatches" aria-label="Stroke colors">
+          for (const [index, color] of PALETTE.entries()) {
+            <button
+              key={color}
+              type="button"
+              class="swatch"
+              style={{ backgroundColor: color }}
+              title={shades[index]}
+              aria-label={shades[index]}
+              aria-pressed={shape.stroke === color}
+              onClick={() => editor.project.patch({ stroke: color })}
+            ></button>
+          }
+        </div>
+        if (canFill) {
+          <div class="value-row">"Fill"</div>
+          <div class="swatches" aria-label="Fill colors">
+            for (const [index, color] of FILLS.entries()) {
+              <button
+                key={color}
+                type="button"
+                class="swatch"
+                style={{ backgroundColor: color }}
+                data-clear={color === 'transparent' ? 'yes' : 'no'}
+                title={fills[index]}
+                aria-label={fills[index]}
+                aria-pressed={shape.fill === color}
+                onClick={() => editor.project.patch({ fill: color })}
+              ></button>
+            }
+          </div>
+        }
+        <div class="field-pair">
+          <label class="field">
+            isText ? 'Size' : 'Width'
+            <input type="number" min={minimumWeight} max={maximumWeight} value={shape.weight} onChange=changeWeight />
+          </label>
+          if (!isText) {
+            <label class="field">
+              "Line"
+              <select
+                value={shape.line}
+                onChange={event => editor.project.patch({ line: event.currentTarget.value as LineStyle })}
+              >
+                <option value="solid">"Solid"</option>
+                <option value="dashed">"Dashed"</option>
+                <option value="dotted">"Dotted"</option>
+              </select>
+            </label>
+          }
+        </div>
+        <label class="field">
+          <span class="value-row">
+            <span>"Opacity"</span>
+            <span>"{Math.round(shape.opacity * 100)}%"</span>
+          </span>
+          <input
+            type="range"
+            min={0}
+            max={100}
+            step={5}
+            value={Math.round(shape.opacity * 100)}
+            onChange={event => editor.project.patch({ opacity: event.currentTarget.valueAsNumber / 100 })}
+          />
+        </label>
+      </fieldset>
+      <section class="object-actions" aria-label="Layer actions">
+        <div class="action-grid">
+          <button type="button" class="button secondary" onClick={() => editor.project.patch({ hidden: !shape.hidden })}>
+            shape.hidden ? 'Show' : 'Hide'
+          </button>
+          <button type="button" class="button secondary" onClick={() => editor.project.patch({ locked: !shape.locked })}>
+            shape.locked ? 'Unlock' : 'Lock'
+          </button>
+          <button type="button" class="button secondary" disabled={shape.locked} title="Bring forward"
+            onClick={() => editor.project.reorder(1)}><Icon name="up" /> "Raise"</button>
+          <button type="button" class="button secondary" disabled={shape.locked} title="Send backward"
+            onClick={() => editor.project.reorder(-1)}><Icon name="down" /> "Lower"</button>
+        </div>
+        <div class="action-grid">
+          <button type="button" class="button secondary" disabled={shape.locked} onClick={editor.project.duplicate}>
+            <Icon name="copy" /> "Duplicate"
+          </button>
+          <button type="button" class="button danger" disabled={shape.locked} onClick={editor.project.remove}>
+            "Delete object"
+          </button>
+        </div>
+      </section>
+    </>
+  );
+}

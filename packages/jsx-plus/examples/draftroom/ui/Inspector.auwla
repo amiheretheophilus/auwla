@@ -1,0 +1,46 @@
+import type { Editor } from '../editor';
+import type { EditorView } from '../model/types';
+import { Icon } from './Icon.auwla';
+import { ObjectProperties } from './ObjectProperties.auwla';
+
+export function Inspector({ view, editor }: { view: EditorView; editor: Editor }) {
+  return (
+    <aside class="inspector" aria-label="Properties">
+      <section>
+        <div class="section-heading inspector-heading"><h2>"Properties"</h2></div>
+        if (view.selected) {
+          <ObjectProperties shape={view.selected} editor={editor} />
+        } else {
+          <div class="empty-properties">
+            <span class="empty-icon"><Icon name="cursor" /></span>
+            <p>"No object selected"</p>
+            <span>"Select something on the canvas or in Layers to edit it."</span>
+          </div>
+        }
+      </section>
+      <section class="board-settings">
+        <div class="section-heading"><h2>"Board settings"</h2></div>
+        <label class="field">"Page name"
+          <input value={view.page.name} maxLength={70} onChange={event => editor.project.rename(event.currentTarget.value)} />
+        </label>
+        <button type="button" role="switch" class="setting-row" aria-checked={view.grid} onClick={editor.toggleGrid}>
+          <Icon name="grid" /> <span>"Show grid"</span> <i aria-hidden="true"></i>
+        </button>
+        <button type="button" role="switch" class="setting-row" aria-checked={view.snap} onClick={editor.toggleSnap}>
+          <Icon name="snap" /> <span>"Snap to grid"</span> <i aria-hidden="true"></i>
+        </button>
+        if (view.pages.length > 1) {
+          <button type="button" class="remove-page" onClick={editor.project.removePage}>"Delete page"</button>
+        }
+      </section>
+      <details class="shortcut-help">
+        <summary>"Keyboard shortcuts" <Icon name="chevron" /></summary>
+        <div><span>"Select / hand"</span><kbd>"V / H"</kbd></div>
+        <div><span>"Pan temporarily"</span><kbd>"Space"</kbd></div>
+        <div><span>"Fit drawing"</span><kbd>"0"</kbd></div>
+        <div><span>"Nudge selection"</span><kbd>"Arrow keys"</kbd></div>
+        <div><span>"Delete selection"</span><kbd>"Delete"</kbd></div>
+      </details>
+    </aside>
+  );
+}
