@@ -19,6 +19,12 @@
       "types": "./src/analysis/index.ts",
       "import": "./dist/analysis.js",
       "default": "./dist/analysis.js"
+    },
+    "./jsx": {
+      "types": "./src/jsx-types.ts"
+    },
+    "./jsx-runtime": {
+      "types": "./src/jsx-runtime.ts"
     }
   },
   "scripts": {
@@ -26,7 +32,9 @@
     "test": "bun test"
   },
   "dependencies": {
+    "@memoized-dom/data": "workspace:*",
     "@memoized-dom/jsx-plus": "workspace:*",
+    "@memoized-dom/router": "workspace:*",
     "@memoized-dom/runtime": "workspace:*",
     "@memoized-dom/server": "workspace:*",
     "yuku-analyzer": "0.19.0",

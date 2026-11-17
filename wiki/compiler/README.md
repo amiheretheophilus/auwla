@@ -94,6 +94,8 @@ Rules for the whole pipeline:
 packages/compiler-next/src/
   index.ts          public API, the same as packages/compiler
   pipeline.ts       orders the stages
+  jsx-types.ts      the JSX and ambient calls apps type against (`@memoized-dom/compiler-next/jsx`)
+  jsx-runtime.ts    the same through `jsxImportSource` (`…/jsx-runtime`); with jsx/dom-types.ts, types only
   core/
     parse/  resolve/  graph/  plan/  emit/
   features/

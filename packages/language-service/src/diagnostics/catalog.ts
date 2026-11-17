@@ -1,11 +1,11 @@
 import {
-  compilerDiagnosticCode,
-  compilerDiagnosticSource as diagnosticSource,
-} from '@memoized-dom/compiler';
-export { compilerDiagnosticCode, diagnosticSource };
+  COMPILER_DIAGNOSTIC_CODE,
+  COMPILER_DIAGNOSTIC_SOURCE as diagnosticSource,
+} from '@memoized-dom/compiler-next';
+export { diagnosticSource };
 
 export const diagnosticCodes = {
-  compiler: compilerDiagnosticCode,
+  compiler: COMPILER_DIAGNOSTIC_CODE,
   preferConst: 98001,
 } as const;
 

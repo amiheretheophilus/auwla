@@ -397,6 +397,21 @@ array child). Remove each check when its phase is built.
   takes its name. With it go its tests (generated text, snapshots, its internal signature, its
   internals) and every piece of runtime, data, server or tool code only its output reaches
   (`../decisions.md`, 2026-11-15); programs worth keeping stay as replay cases.
+  The user moved the deletion ahead of the rest of acceptance (`../decisions.md`, 2026-11-17), in
+  steps, each committed:
+  1. [x] The JSX types move into compiler-next (`src/jsx-types.ts`, `jsx-runtime.ts`,
+     `jsx/dom-types.ts`), without the conditional attributes.
+  2. [x] The language service reports compiler-next's errors (`project/diagnose.ts`).
+  3. [ ] `packages/vite` is the compiler-next plugin only: the old plugin goes, with `compiler:
+     'next'` and `MMD_COMPILER`; delivery and build logic still in the package moves into
+     compiler-next (`../rules.md`, rule 17); its tests stay where they test behaviour.
+  4. [ ] The old compiler's tests go: root `tests/` files that import it, the acceptance switch,
+     and the comparisons in `packages/server`, `packages/jsx-plus` and compiler-next's harness.
+  5. [ ] Bench defaults to compiler-next (`--compiler=<snapshot>` stays for `d6e678b`); examples
+     follow, octopulse's conditional attributes rewritten as JavaScript.
+  6. [ ] `packages/compiler` is deleted, with the runtime, server and data code only its output
+     reached.
+  7. [ ] compiler-next is renamed `packages/compiler` (`@memoized-dom/compiler`); `docs/` follows.
 
 ## Later
 

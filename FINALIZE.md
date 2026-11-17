@@ -12,11 +12,15 @@ and remove it once the owning wiki records it as done.
   Common Ground after the 2026-11-16 speedups (was about 480 ms), and saves made during a build now
   share one more build. Reusing unchanged modules' output needs cross-module fact dependencies
   tracked first (imports and importers both). [project.md, "Hot replacement"](wiki/compiler/project.md)
-- [ ] **Acceptance**: root `tests/`, package tests, the Vite suite and the Conduit flows against
-  compiler-next through a switch. [compiler plan](wiki/compiler/plan.md)
+- [ ] **Exit first** (the user, 2026-11-17): delete `packages/compiler` and the old Vite plugin,
+  rename compiler-next, drop the old-only runtime and tool code, update `docs/` (props, `$snapshot`,
+  the old error messages, no conditional attributes). Seven steps, 1–2 done.
+  [compiler plan](wiki/compiler/plan.md), Phase 10 "Exit"
+- [ ] **Acceptance**, after the exit: the Vite suite read again on the one plugin (first run
+  2026-11-16 in [testing.md](wiki/compiler/testing.md), "Acceptance"), the package tests and the
+  Conduit flows (dependencies installed; the flow now finds Edge). Still missing from it:
+  `.memoized/server-config.d.ts` (service and request-state types) in compiler-next.
 - [ ] **Benchmarks** on the user's VM; every number at least matches `d6e678b`.
-- [ ] **Exit**: delete `packages/compiler`, rename compiler-next, drop the old-only runtime and tool
-  code, update `docs/` (props, `$snapshot`, the old error messages). [compiler plan](wiki/compiler/plan.md)
 - [ ] Follow-ups noted along the way: lazy css-tree loading; rule A for deferred statements;
   progressive interactive server pages (islands); plain `.css` imports in server pages; `miniflare`
   is only a transitive dependency; the `$routed` repro needs the user's source.

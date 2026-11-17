@@ -25,7 +25,7 @@
     "test": "bun test --isolate ./tests"
   },
   "dependencies": {
-    "@memoized-dom/compiler": "workspace:*"
+    "@memoized-dom/compiler-next": "workspace:*"
   },
   "devDependencies": {
     "typescript": "npm:@typescript/typescript6@^6.0.2"

@@ -418,6 +418,16 @@ bun packages/compiler-next/src/project/cli.ts package [--root packages/kit] [--c
   `<!--ssr-outlet-->` marker when there is no `index.html`) and the client's files through
   `@memoized-dom/adapters/bun`. `bun dist/server.js` runs it, as in `docs/09-ssr.md`.
 
+## Diagnostics
+
+`diagnoseModules(modules, options)` (`project/diagnose.ts`, 2026-11-17) compiles the modules and
+returns the error that stops them: its message without the `memo-dom:` prefix, the module it names
+and a one-based line and column, under the code `COMPILER_DIAGNOSTIC_CODE` (98000) and the source
+`memoized-dom`. A failure inside the compiler comes back without a place, so an editor still shows
+something. The TypeScript language service (`packages/language-service`) shows it in the editor and
+only maps the place onto its own positions: the smallest node there, a whole JSX attribute for its
+name, a whole element for its opening tag.
+
 ## Start-up time
 
 Measured 2026-11-16 on the user's machine, after they found the JSX+ example previews slow to
@@ -478,6 +488,8 @@ last good one.
 | `project/index.ts` | The public API, re-exported from the package root |
 | `project/project.test.ts` | Collecting, aliases, errors, edits, new and deleted files, disk, maps |
 | `project/page.ts` | `initialPage`: the build-time page written into the page's HTML |
+| `project/diagnose.ts` | `diagnoseModules`: the error that stops a program, with its module and one-based place, for an editor (the language service) to show; a failure inside the compiler is reported without a place |
+| `project/diagnose.test.ts` | Nothing for a program that compiles; an error's module, place and message; a syntax error |
 | `project/stylesheets.ts` | The stylesheets a program imports, in the order a browser applies them |
 | `project/page.test.ts` | Stylesheet order, a static page written with its links, relative `src`, an interactive page and a CSS module left alone, shells it refuses |
 | `project/bun.ts` | The Bun plugin |

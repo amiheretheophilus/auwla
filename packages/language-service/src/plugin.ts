@@ -2,7 +2,7 @@ import type * as ts from 'typescript';
 import {
   diagnoseModules,
   type CompilerDiagnostic,
-} from '@memoized-dom/compiler';
+} from '@memoized-dom/compiler-next';
 import {
   diagnosticCodes,
   diagnosticSource,
@@ -112,8 +112,7 @@ function collectCompilerDiagnostics(
     (sourceFile) =>
       !sourceFile.isDeclarationFile &&
       !normalizePath(sourceFile.fileName).includes('/node_modules/') &&
-      (/\.[jt]sx?$/.test(sourceFile.fileName) ||
-        sourceFile.fileName.endsWith('.tsrx')),
+      /\.[jt]sx?$/.test(sourceFile.fileName),
   );
   const modules = Object.fromEntries(
     sourceFiles.map((sourceFile) => [
@@ -122,7 +121,6 @@ function collectCompilerDiagnostics(
     ]),
   );
   const diagnostics = diagnoseModules(modules, {
-    enforceSingleApplicationRoot: false,
     resolveImport(specifier, importer) {
       const resolution = typescript.resolveModuleName(
         specifier,
@@ -137,12 +135,12 @@ function collectCompilerDiagnostics(
   });
   const byFile = new Map<string, ts.DiagnosticWithLocation[]>();
   for (const diagnostic of diagnostics) {
-    const moduleId = diagnostic.moduleId;
+    const path = diagnostic.path;
     const sourceFile =
-      moduleId === undefined
+      path === undefined
         ? sourceFiles[0]
         : sourceFiles.find(
-            (candidate) => normalizePath(candidate.fileName) === moduleId,
+            (candidate) => normalizePath(candidate.fileName) === path,
           );
     if (sourceFile === undefined) continue;
     const converted = compilerDiagnostic(
@@ -164,7 +162,7 @@ function compilerDiagnostic(
   diagnostic: CompilerDiagnostic,
 ): ts.DiagnosticWithLocation {
   const start = diagnosticStart(sourceFile, diagnostic);
-  const end = diagnosticEnd(typescript, sourceFile, diagnostic, start);
+  const end = diagnosticEnd(typescript, sourceFile, start);
   return {
     file: sourceFile,
     start,
@@ -176,24 +174,24 @@ function compilerDiagnostic(
   };
 }
 
+/**
+ * The compiler gives a start only; the diagnostic covers the smallest node there, or the whole
+ * attribute when that node is a JSX attribute's name (`route-to="/missing"`, not `route-to`), or
+ * the whole element when it is an opening tag.
+ */
 function diagnosticEnd(
   typescript: TypeScript,
   sourceFile: ts.SourceFile,
-  diagnostic: CompilerDiagnostic,
   start: number,
 ): number {
-  if (
-    diagnostic.endLine !== undefined &&
-    diagnostic.endColumn !== undefined
-  ) {
-    const end = sourcePosition(
-      sourceFile,
-      diagnostic.endLine,
-      diagnostic.endColumn,
-    );
-    if (end !== null && end > start) return end;
+  let node = smallestNodeContaining(typescript, sourceFile, start);
+  if (node !== null && typescript.isJsxAttribute(node.parent) && node.parent.name === node) {
+    node = node.parent;
   }
-  const node = smallestNodeContaining(typescript, sourceFile, start);
+  // An element's opening tag: the error is about the element (`<p>child</p>`).
+  if (node !== null && typescript.isJsxOpeningElement(node)) {
+    node = node.parent;
+  }
   return node === null ? start + 1 : Math.max(start + 1, node.end);
 }
 
@@ -232,14 +230,15 @@ function diagnosticStart(
   return 0;
 }
 
+/** A position from the compiler's one-based line and column. */
 function sourcePosition(
   sourceFile: ts.SourceFile,
   oneBasedLine: number,
-  column: number,
+  oneBasedColumn: number,
 ): number | null {
   const line = Math.max(0, oneBasedLine - 1);
   if (line >= sourceFile.getLineStarts().length) return null;
-  return sourceFile.getPositionOfLineAndCharacter(line, Math.max(0, column));
+  return sourceFile.getPositionOfLineAndCharacter(line, Math.max(0, oneBasedColumn - 1));
 }
 
 function normalizePath(fileName: string): string {

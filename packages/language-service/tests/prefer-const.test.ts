@@ -36,13 +36,14 @@ describe('prefer const guidance', () => {
     );
   });
 
+  // Was an update of a derivation (`double++`), which the old compiler refused; a write now takes
+  // control of a derived value (`wiki/rules.md`, rule 11). `innerHTML` with children is an error
+  // compiler-next keeps (`wiki/decisions.md`, 2026-11-16).
   it('surfaces the compiler diagnostic verbatim in the owning file', () => {
     const { service, fileName } = languageService(
       `
         export function App() {
-          let count = 0;
-          const double = count * 2;
-          return <button onClick={() => { count++; double++; }}>{double}</button>;
+          return <div innerHTML="<b>raw</b>"><p>child</p></div>;
         }
       `,
       { compilerDiagnostics: true },
@@ -52,8 +53,9 @@ describe('prefer const guidance', () => {
       (candidate) => candidate.code === diagnosticCodes.compiler,
     )!;
     expect(String(diagnostic.messageText)).toContain(
-      "cannot update per-instance derivation 'double'",
+      '<div> sets innerHTML and also has JSX children',
     );
+    expect(sourceTextAtDiagnostic(diagnostic)).toBe('<p>child</p>');
   });
 
   it('teaches that const collections can remain reactive mutation targets', () => {

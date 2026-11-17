@@ -8,6 +8,8 @@ export { fileSystemHost, normalizeProjectPath, projectPath } from './host';
 export type { ProjectHost } from './host';
 export { isSourcePath } from './collect';
 export { initialPage } from './page';
+export { COMPILER_DIAGNOSTIC_CODE, COMPILER_DIAGNOSTIC_SOURCE, diagnoseModules } from './diagnose';
+export type { CompilerDiagnostic } from './diagnose';
 export { isStylesheetPath } from './stylesheets';
 /** Native packages, which the project compiles as its own source (`wiki/compiler/linking.md`). */
 export { nativePackageResolver, nativePackages } from './packages/native';

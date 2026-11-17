@@ -2,12 +2,13 @@ import { expect, it } from 'bun:test';
 import { dirname, resolve } from 'node:path';
 import * as ts from 'typescript';
 
+/** compiler-next's JSX types (`packages/compiler-next/src/jsx-types.ts`), as an editor checks them. */
 it('uses the framework JSX types in the editor', () => {
-  const configPath = resolve(import.meta.dirname, '../../compiler/tsconfig.test.json');
+  const configPath = resolve(import.meta.dirname, 'fixtures/jsx/tsconfig.json');
   const config = ts.readConfigFile(configPath, ts.sys.readFile);
   const parsed = ts.parseJsonConfigFileContent(config.config, ts.sys, dirname(configPath));
-  const fixture = resolve(import.meta.dirname, '../../compiler/tests/jsx-editor.tsx');
-  const support = resolve(import.meta.dirname, '../../compiler/tests/framework-shim.d.ts');
+  const fixture = resolve(import.meta.dirname, 'fixtures/jsx/editor.tsx');
+  const support = resolve(import.meta.dirname, 'fixtures/jsx/framework-shim.d.ts');
   const program = ts.createProgram([fixture, support], { ...parsed.options, incremental: false });
   const diagnostics = ts
     .getPreEmitDiagnostics(program)
