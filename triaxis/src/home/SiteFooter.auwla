@@ -1,0 +1,142 @@
+<style>
+  .site-footer {
+    overflow: hidden;
+    padding: clamp(2.5rem, 5vw, 4.5rem) var(--gutter) 1.5rem;
+    background: var(--night);
+    color: #f1ebe1b3;
+    font-size: .875rem;
+  }
+
+  .site-footer__top {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    align-items: flex-end;
+    gap: 2rem;
+    padding-bottom: 2rem;
+    border-bottom: 1px solid #f1ebe126;
+  }
+
+  .site-footer__cta {
+    display: grid;
+    gap: 1.25rem;
+    max-width: 32rem;
+  }
+
+  .site-footer__cta p {
+    margin: 0;
+    color: var(--paper);
+    font-size: clamp(1.5rem, 3vw, 2.5rem);
+    line-height: 1.05;
+    letter-spacing: -.045em;
+  }
+
+  .site-footer__button {
+    display: inline-flex;
+    align-items: center;
+    justify-self: start;
+    gap: .6rem;
+    padding: .8rem 1.25rem;
+    border-radius: 999px;
+    background: var(--accent);
+    color: #fff9f0;
+    text-decoration: none;
+    transition: background-color .25s ease;
+  }
+
+  .site-footer__button:hover {
+    background: var(--accent-deep);
+  }
+
+  .site-footer__button span {
+    transition: translate .35s var(--ease-out);
+  }
+
+  .site-footer__button:hover span {
+    translate: .25rem 0;
+  }
+
+  .site-footer nav {
+    display: flex;
+    gap: 1.75rem;
+  }
+
+  .site-footer a {
+    color: inherit;
+  }
+
+  .site-footer nav a {
+    text-decoration: none;
+    transition: color .2s ease;
+  }
+
+  .site-footer nav a:hover {
+    color: var(--paper);
+  }
+
+  .site-footer a:focus-visible {
+    outline: 2px solid var(--paper);
+    outline-offset: 4px;
+  }
+
+  /* An oversized wordmark that slides in as the footer arrives. */
+  .site-footer__mark {
+    margin: 1.5rem 0 0;
+    color: transparent;
+    font-size: min(25.5vw, 27rem);
+    font-weight: 700;
+    line-height: .8;
+    letter-spacing: -.06em;
+    text-transform: uppercase;
+    -webkit-text-stroke: 1px #f1ebe140;
+    white-space: nowrap;
+  }
+
+  .site-footer__legal {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    gap: .75rem 2rem;
+    margin-top: 1.5rem;
+    font-size: .78rem;
+  }
+
+  .site-footer__legal p {
+    margin: 0;
+  }
+
+  @supports (animation-timeline: view()) {
+    @media (prefers-reduced-motion: no-preference) {
+      .site-footer__mark {
+        animation: tx-rise linear both;
+        animation-timeline: view();
+        animation-range: entry 0% entry 90%;
+      }
+    }
+  }
+</style>
+
+export function SiteFooter() {
+  return (
+    <footer class="site-footer">
+      <div class="site-footer__top">
+        <div class="site-footer__cta">
+          <p>"Signals that earned their place on the desk."</p>
+          <a class="site-footer__button" href="#markets">"See the three axes" <span aria-hidden="true">"→"</span></a>
+        </div>
+        <nav aria-label="Footer navigation">
+          <a href="#markets">"Markets"</a>
+          <a href="#approach">"Approach"</a>
+          <a href="/desk">"Analyst desk"</a>
+        </nav>
+      </div>
+
+      <p class="site-footer__mark" aria-hidden="true">"Triaxis"</p>
+
+      <div class="site-footer__legal">
+        <p>"Trading involves risk. Signals are for informational purposes only and are not financial advice."</p>
+        <p>"© Triaxis"</p>
+      </div>
+    </footer>
+  );
+}

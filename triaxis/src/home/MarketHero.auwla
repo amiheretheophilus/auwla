@@ -3,15 +3,21 @@
     position: relative;
     isolation: isolate;
     display: grid;
-    min-height: clamp(30rem, 44vw, 46rem);
+    min-height: clamp(32rem, calc(100svh - 3.65rem), 52rem);
     overflow: hidden;
     background: #e8d9c6;
   }
 
-  .market-hero__image {
+  /* The wrapper drifts with the scroll; the image inside settles in on load. Separate
+     elements keep the two animations from fighting over the same properties. */
+  .market-hero__media {
     position: absolute;
     inset: 0;
     z-index: -2;
+  }
+
+  .market-hero__image {
+    display: block;
     width: 100%;
     height: 100%;
     object-fit: cover;
@@ -27,9 +33,11 @@
       linear-gradient(0deg, #eae0d2 0%, #eae0d200 36%),
       linear-gradient(90deg, #eee5d7d9 0%, #eee5d74d 36%, #eee5d700 60%);
     content: "";
+    pointer-events: none;
   }
 
   .market-hero__content {
+    position: relative;
     display: grid;
     justify-items: start;
     align-content: space-between;
@@ -39,6 +47,9 @@
 
   .market-hero h1 {
     grid-row: 3;
+    display: flex;
+    flex-wrap: wrap;
+    column-gap: .2em;
     margin: 0;
     font-size: clamp(4rem, 11vw, 12.5rem);
     font-weight: 400;
@@ -46,7 +57,19 @@
     letter-spacing: -.07em;
   }
 
-  .market-hero p {
+  /* Each word rises out of its own clipped line box. */
+  .market-hero__word {
+    display: block;
+    overflow: hidden;
+    padding-bottom: .12em;
+    margin-bottom: -.12em;
+  }
+
+  .market-hero__word span {
+    display: block;
+  }
+
+  .market-hero__lede {
     grid-row: 1;
     margin: 0;
     font-size: clamp(1.55rem, 2.7vw, 2.65rem);
@@ -54,33 +77,33 @@
     letter-spacing: -.05em;
   }
 
-  .market-hero p span {
+  .market-hero__lede span {
     display: block;
   }
 
+  .market-hero__lede em {
+    color: var(--accent);
+    font-style: normal;
+  }
+
   .market-hero__link {
-    box-sizing: border-box;
+    position: relative;
     grid-row: 2;
     display: grid;
-    place-content: center;
-    justify-items: center;
-    gap: .4rem;
-    width: clamp(6rem, 9vw, 8rem);
+    place-items: center;
+    width: clamp(7rem, 10vw, 9rem);
     aspect-ratio: 1;
-    padding: .75rem;
-    border: 1px solid #fff9f0aa;
     border-radius: 50%;
     background: var(--accent);
     color: #fff9f0;
-    text-align: center;
     text-decoration: none;
-    font-size: clamp(.8rem, 1.12vw, 1rem);
-    line-height: 1.08;
-    transition: background-color .15s ease;
+    box-shadow: 0 1.25rem 2.5rem -1.25rem #8a211999;
+    transition: background-color .25s ease, scale .5s var(--ease-out);
   }
 
   .market-hero__link:hover {
-    background: #8a2119;
+    background: var(--accent-deep);
+    scale: 1.06;
   }
 
   .market-hero__link:focus-visible {
@@ -88,8 +111,118 @@
     outline-offset: 4px;
   }
 
-  .market-hero__link span {
-    font-size: 1.1em;
+  .market-hero__ring {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    overflow: visible;
+  }
+
+  .market-hero__ring text {
+    fill: currentColor;
+    font-size: 9.5px;
+    font-weight: 500;
+    letter-spacing: .02em;
+    text-transform: uppercase;
+  }
+
+  .market-hero__arrow {
+    font-size: clamp(1.4rem, 2vw, 1.9rem);
+    line-height: 1;
+  }
+
+  .market-hero__note {
+    position: absolute;
+    right: var(--gutter);
+    bottom: clamp(1.5rem, 4.4vw, 4rem);
+    display: grid;
+    gap: .35rem;
+    max-width: 16rem;
+    padding-top: .8rem;
+    border-top: 1px solid var(--ink);
+    font-size: .875rem;
+    line-height: 1.45;
+  }
+
+  .market-hero__note strong {
+    display: flex;
+    align-items: center;
+    gap: .5rem;
+    font-weight: 500;
+  }
+
+  .market-hero__note strong::before {
+    width: .5rem;
+    height: .5rem;
+    border-radius: 50%;
+    background: var(--accent);
+    content: "";
+    animation: tx-pulse 2.2s ease-out infinite;
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    .market-hero__image {
+      animation: tx-settle 1.8s var(--ease-out) both;
+    }
+
+    .market-hero__lede span {
+      animation: tx-rise 1s var(--ease-out) both;
+    }
+
+    .market-hero__lede span:nth-child(1) {
+      animation-delay: .15s;
+    }
+
+    .market-hero__lede span:nth-child(2) {
+      animation-delay: .3s;
+    }
+
+    .market-hero__word span {
+      animation: tx-word 1.2s var(--ease-out) both;
+    }
+
+    .market-hero__word:nth-child(1) span {
+      animation-delay: .35s;
+    }
+
+    .market-hero__word:nth-child(2) span {
+      animation-delay: .5s;
+    }
+
+    .market-hero__link {
+      animation: tx-pop .9s var(--ease-out) .6s both;
+    }
+
+    .market-hero__ring {
+      animation: tx-spin 18s linear infinite;
+    }
+
+    .market-hero__link:hover .market-hero__arrow {
+      animation: tx-bob 1s ease-in-out infinite;
+    }
+
+    .market-hero__note {
+      animation: tx-rise 1s var(--ease-out) .95s both;
+    }
+  }
+
+  /* As the visitor scrolls away, the photograph sinks and the words lift off. */
+  @supports (animation-timeline: scroll()) {
+    @media (prefers-reduced-motion: no-preference) {
+      .market-hero__media {
+        animation: tx-drift linear both;
+        animation-timeline: scroll(root);
+        animation-range: 0 100svh;
+      }
+
+      /* The note sits inside the content, so it lifts off with it. */
+      .market-hero__content {
+        animation: tx-lift-out linear both;
+        animation-timeline: scroll(root);
+        animation-range: 20svh 85svh;
+      }
+    }
   }
 
   @media (max-width: 42rem) {
@@ -110,30 +243,52 @@
     .market-hero h1 {
       font-size: clamp(3.15rem, 13.5vw, 5.5rem);
     }
+
+    .market-hero__note {
+      display: none;
+    }
   }
 </style>
 
 export function MarketHero() {
   return (
     <section class="market-hero" aria-labelledby="hero-heading">
-      <img
-        class="market-hero__image"
-        src="/images/market-axes.webp"
-        alt=""
-        width={1536}
-        height={1024}
-        fetchpriority="high"
-      />
+      <div class="market-hero__media">
+        <img
+          class="market-hero__image"
+          src="/images/market-axes.webp"
+          alt=""
+          width={1536}
+          height={1024}
+          fetchpriority="high"
+        />
+      </div>
+
       <div class="market-hero__content">
-        <h1 id="hero-heading">"Market signals"</h1>
-        <p>
+        <h1 id="hero-heading">
+          <span class="market-hero__word"><span>"Market"</span></span>
+          <span class="market-hero__word"><span>"signals"</span></span>
+        </h1>
+        <p class="market-hero__lede">
           <span>"Three markets."</span>
-          <span>"One signal desk."</span>
+          <span>"One " <em>"signal desk."</em></span>
         </p>
-        <a class="market-hero__link" href="#markets">
-          "Explore markets"
-          <span aria-hidden="true">"↓"</span>
+        <a class="market-hero__link" href="#markets" aria-label="Explore markets">
+          <svg class="market-hero__ring" viewBox="0 0 120 120" aria-hidden="true">
+            <defs>
+              <path id="hero-ring-path" d="M60,60 m-47,0 a47,47 0 1,1 94,0 a47,47 0 1,1 -94,0" />
+            </defs>
+            <text>
+              <textPath href="#hero-ring-path" textLength="292" lengthAdjust="spacing">"Explore markets • Three axes • "</textPath>
+            </text>
+          </svg>
+          <span class="market-hero__arrow" aria-hidden="true">"↓"</span>
         </a>
+
+        <aside class="market-hero__note" aria-label="Review standard">
+          <strong>"Desk review"</strong>
+          "No signal reaches members until its levels and its AI review pass every check."
+        </aside>
       </div>
     </section>
   );

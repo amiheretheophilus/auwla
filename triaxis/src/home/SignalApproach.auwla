@@ -1,31 +1,427 @@
 <style>
   .approach {
+    --on-night: #f1ebe1;
+    --on-night-muted: #f1ebe199;
+    --night-rule: #f1ebe122;
+    --pass: #4fbf7f;
+
+    padding: clamp(3.5rem, 8vw, 8rem) var(--gutter);
+    background: var(--night);
+    color: var(--on-night);
+  }
+
+  .approach__intro {
     display: grid;
-    grid-template-columns: 1fr 1fr;
-    align-items: start;
+    grid-template-columns: 1fr 2fr;
+    align-items: end;
     gap: 1.25rem 3rem;
-    padding: clamp(2rem, 5vw, 5rem) var(--gutter);
-    border-top: 1px solid var(--rule);
-    background: #f8f4ec;
+    margin-bottom: clamp(2.5rem, 5vw, 4.5rem);
+  }
+
+  .approach__kicker {
+    margin: 0;
+    padding-top: .6rem;
+    color: #e4614f;
+    font-size: 1rem;
+    font-weight: 500;
   }
 
   .approach h2 {
+    max-width: 16ch;
     margin: 0;
-    font-size: clamp(1.6rem, 3.5vw, 3.5rem);
+    font-size: clamp(2rem, 4.6vw, 4.5rem);
     font-weight: 400;
-    line-height: 1;
-    letter-spacing: -.05em;
+    line-height: .98;
+    letter-spacing: -.055em;
   }
 
-  .approach p {
-    max-width: 42ch;
+  .approach__body {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    align-items: center;
+    gap: clamp(2.5rem, 6vw, 6rem);
+  }
+
+  /* Steps, joined by a line that draws itself as the list scrolls past. */
+  .steps {
+    position: relative;
+    display: grid;
+    gap: clamp(1.75rem, 3vw, 2.5rem);
     margin: 0;
-    color: var(--muted-ink);
-    line-height: 1.5;
+    padding: 0;
+    list-style: none;
+    counter-reset: step;
+    view-timeline: --steps block;
   }
 
-  @media (max-width: 36rem) {
-    .approach {
+  .steps::before {
+    position: absolute;
+    top: 1.2rem;
+    bottom: 1.2rem;
+    left: 1.2rem;
+    width: 1px;
+    background: linear-gradient(var(--accent), #e4614f 60%, var(--night-rule));
+    content: "";
+    transform-origin: top;
+    translate: -.5px 0;
+  }
+
+  .step {
+    position: relative;
+    display: grid;
+    grid-template-columns: 2.4rem 1fr;
+    gap: 1.25rem;
+    counter-increment: step;
+  }
+
+  .step::before {
+    position: relative;
+    display: grid;
+    place-items: center;
+    width: 2.4rem;
+    height: 2.4rem;
+    border: 1px solid #f1ebe140;
+    border-radius: 50%;
+    background: var(--night);
+    color: var(--on-night);
+    font-family: var(--mono);
+    font-size: .75rem;
+    content: "0" counter(step);
+    transition: background-color .3s ease, border-color .3s ease;
+  }
+
+  .step:hover::before {
+    border-color: var(--accent);
+    background: var(--accent);
+  }
+
+  .step h3 {
+    margin: .45rem 0 .45rem;
+    font-size: clamp(1.15rem, 1.8vw, 1.5rem);
+    font-weight: 500;
+    letter-spacing: -.03em;
+  }
+
+  .step p {
+    max-width: 44ch;
+    margin: 0;
+    color: var(--on-night-muted);
+    line-height: 1.55;
+  }
+
+  /* The example card follows the layout of the real 1080 x 1080 score card. */
+  .score-card {
+    --card-accent: var(--crypto);
+
+    position: relative;
+    isolation: isolate;
+    display: grid;
+    gap: 1.4rem;
+    max-width: 34rem;
+    padding: clamp(1.25rem, 3vw, 2.25rem);
+    overflow: hidden;
+    border: 1px solid #f1ebe11f;
+    border-radius: .35rem;
+    background: #0f0d0c;
+    view-timeline: --card block;
+  }
+
+  .score-card::before {
+    position: absolute;
+    inset: -20% -40%;
+    z-index: -1;
+    color: #f1ebe1;
+    font-size: 2.25rem;
+    font-weight: 700;
+    line-height: 2.1;
+    letter-spacing: .3em;
+    white-space: pre;
+    content: "TRIAXIS TRIAXIS TRIAXIS TRIAXIS\A   TRIAXIS TRIAXIS TRIAXIS TRIAXIS\A TRIAXIS TRIAXIS TRIAXIS TRIAXIS\A   TRIAXIS TRIAXIS TRIAXIS TRIAXIS\A TRIAXIS TRIAXIS TRIAXIS TRIAXIS\A   TRIAXIS TRIAXIS TRIAXIS TRIAXIS\A TRIAXIS TRIAXIS TRIAXIS TRIAXIS";
+    opacity: .035;
+    rotate: -18deg;
+    pointer-events: none;
+  }
+
+  .score-card__top {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 1rem;
+    font-size: .8rem;
+    font-weight: 700;
+    letter-spacing: .14em;
+    text-transform: uppercase;
+  }
+
+  .score-card__tag {
+    padding: .3rem .6rem;
+    border: 1px solid var(--card-accent);
+    border-radius: 999px;
+    color: var(--card-accent);
+    font-family: var(--mono);
+    font-size: .68rem;
+    font-weight: 500;
+    letter-spacing: .08em;
+  }
+
+  .score-card__asset {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    gap: 1rem;
+  }
+
+  .score-card__asset h3 {
+    margin: 0;
+    font-family: Unbounded, "Helvetica Neue", Arial, sans-serif;
+    font-size: clamp(2rem, 4.4vw, 3.1rem);
+    font-weight: 600;
+    line-height: 1;
+    letter-spacing: -.04em;
+  }
+
+  .score-card__asset p {
+    margin: .45rem 0 0;
+    color: var(--on-night-muted);
+    font-size: .85rem;
+  }
+
+  .score-card__side {
+    padding: .45rem .85rem;
+    border-radius: .5rem;
+    background: var(--pass);
+    color: #0f0d0c;
+    font-family: var(--mono);
+    font-size: .8rem;
+    font-weight: 600;
+    letter-spacing: .1em;
+  }
+
+  /* Stop on the left, targets on the right, placed by their real distances. */
+  .ladder {
+    position: relative;
+    height: 2.4rem;
+    margin-inline: .25rem;
+  }
+
+  .ladder__bar {
+    position: absolute;
+    top: .4rem;
+    right: 0;
+    left: 0;
+    height: 4px;
+    border-radius: 2px;
+    background: linear-gradient(90deg, #e4614f 0 28.6%, var(--pass) 28.6% 100%);
+    transform-origin: 28.6% 50%;
+  }
+
+  .ladder__mark {
+    position: absolute;
+    top: 0;
+    left: var(--at);
+    display: grid;
+    justify-items: center;
+    gap: .35rem;
+    translate: -50% 0;
+    font-family: var(--mono);
+    font-size: .62rem;
+    color: var(--on-night-muted);
+  }
+
+  .ladder__mark::before {
+    width: .7rem;
+    height: .7rem;
+    margin-top: .05rem;
+    border: 2px solid #0f0d0c;
+    border-radius: 50%;
+    background: var(--pass);
+    content: "";
+  }
+
+  .ladder__mark[data-kind="stop"]::before {
+    background: #e4614f;
+  }
+
+  .ladder__mark[data-kind="entry"]::before {
+    background: var(--on-night);
+  }
+
+  .levels {
+    display: grid;
+    grid-template-columns: repeat(5, auto);
+    gap: .2rem 1rem;
+    margin: 0;
+    font-family: var(--mono);
+  }
+
+  .levels div {
+    display: grid;
+    gap: .25rem;
+  }
+
+  .levels dt {
+    color: var(--on-night-muted);
+    font-size: .62rem;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+  }
+
+  .levels dd {
+    margin: 0;
+    font-size: clamp(.8rem, 1.3vw, .95rem);
+  }
+
+  .levels dd small {
+    display: block;
+    color: var(--pass);
+    font-size: .68rem;
+  }
+
+  .levels div:first-child dd small {
+    color: #e4614f;
+  }
+
+  .checks {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: .5rem 1rem;
+    margin: 0;
+    padding: 1rem 0 0;
+    border-top: 1px solid var(--night-rule);
+    list-style: none;
+    font-size: .8rem;
+  }
+
+  .check {
+    display: flex;
+    align-items: center;
+    gap: .55rem;
+  }
+
+  .check::before {
+    display: grid;
+    place-items: center;
+    flex: none;
+    width: 1.05rem;
+    height: 1.05rem;
+    border-radius: 50%;
+    background: var(--pass);
+    color: #0f0d0c;
+    font-size: .65rem;
+    font-weight: 700;
+    content: "✓";
+  }
+
+  .check small {
+    margin-left: auto;
+    color: var(--on-night-muted);
+    font-family: var(--mono);
+    font-size: .68rem;
+  }
+
+  .score-card__foot {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    align-items: center;
+    gap: .75rem;
+    color: var(--on-night-muted);
+    font-family: var(--mono);
+    font-size: .66rem;
+    letter-spacing: .06em;
+    text-transform: uppercase;
+  }
+
+  .score-card__seal {
+    padding: .35rem .6rem;
+    border: 1px dashed #f1ebe166;
+    border-radius: .35rem;
+    color: var(--on-night);
+  }
+
+  .approach__rule {
+    max-width: 30ch;
+    margin: clamp(3rem, 6vw, 5.5rem) 0 0;
+    font-size: clamp(1.5rem, 3.2vw, 2.9rem);
+    line-height: 1.05;
+    letter-spacing: -.045em;
+  }
+
+  .approach__rule span {
+    color: #e4614f;
+  }
+
+  @supports (animation-timeline: view()) {
+    @media (prefers-reduced-motion: no-preference) {
+      .steps::before {
+        animation: tx-grow-y linear both;
+        animation-timeline: --steps;
+        animation-range: cover 15% cover 60%;
+      }
+
+      .ladder__bar {
+        animation: tx-draw linear both;
+        animation-timeline: --card;
+        animation-range: entry 40% cover 40%;
+      }
+
+      .ladder__mark {
+        animation: tx-pop linear both;
+        animation-timeline: --card;
+        animation-range: entry 70% cover 42%;
+      }
+
+      .check {
+        animation: tx-check linear both;
+        animation-timeline: --card;
+      }
+
+      .check::before {
+        animation: tx-tick linear both;
+        animation-timeline: --card;
+      }
+
+      .check:nth-child(1),
+      .check:nth-child(1)::before {
+        animation-range: cover 22% cover 30%;
+      }
+
+      .check:nth-child(2),
+      .check:nth-child(2)::before {
+        animation-range: cover 26% cover 34%;
+      }
+
+      .check:nth-child(3),
+      .check:nth-child(3)::before {
+        animation-range: cover 30% cover 38%;
+      }
+
+      .check:nth-child(4),
+      .check:nth-child(4)::before {
+        animation-range: cover 34% cover 42%;
+      }
+
+      .check:nth-child(5),
+      .check:nth-child(5)::before {
+        animation-range: cover 38% cover 46%;
+      }
+    }
+  }
+
+  @media (max-width: 55rem) {
+    .approach__intro,
+    .approach__body {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  @media (max-width: 30rem) {
+    .levels {
+      grid-template-columns: repeat(3, auto);
+      row-gap: .75rem;
+    }
+
+    .checks {
       grid-template-columns: 1fr;
     }
   }
@@ -34,8 +430,101 @@
 export function SignalApproach() {
   return (
     <section class="approach" id="approach" aria-labelledby="approach-heading">
-      <h2 id="approach-heading">"How signals are reviewed"</h2>
-      <p>"Analysts review each trade idea. Entry, stop and target levels have to pass a set of checks before a signal can be published."</p>
+      <div class="approach__intro">
+        <p class="approach__kicker reveal">"How a signal travels"</p>
+        <h2 id="approach-heading" class="reveal">"Every idea is checked before anyone sees it."</h2>
+      </div>
+
+      <div class="approach__body">
+        <ol class="steps">
+          <li class="step reveal">
+            <div>
+              <h3>"The analyst enters the idea"</h3>
+              <p>"Axis, asset, direction, entry, stop and take-profit targets, along with the AI review they ran and the platform they ran it on."</p>
+            </div>
+          </li>
+          <li class="step reveal">
+            <div>
+              <h3>"The desk checks the numbers"</h3>
+              <p>"Levels must be in the right order, and the target must sit at least 1.5 times as far from entry as the stop. Any failed check rejects the idea, and any “not sure” blocks posting."</p>
+            </div>
+          </li>
+          <li class="step reveal">
+            <div>
+              <h3>"A score card is drawn"</h3>
+              <p>"The app draws a branded card with the levels, the checks and a signal ID. It uses the same layout on every axis, so members recognise it at a glance."</p>
+            </div>
+          </li>
+          <li class="step reveal">
+            <div>
+              <h3>"Members on that axis see it"</h3>
+              <p>"The card is published only to members who hold that axis."</p>
+            </div>
+          </li>
+        </ol>
+
+        <article class="score-card reveal" aria-label="Example score card">
+          <header class="score-card__top">
+            <span>"Triaxis"</span>
+            <span class="score-card__tag">"Axis 2 · Crypto"</span>
+          </header>
+
+          <div class="score-card__asset">
+            <div>
+              <h3>"BTCUSDT"</h3>
+              <p>"Bitcoin, USDT perpetual futures"</p>
+            </div>
+            <span class="score-card__side">"Long"</span>
+          </div>
+
+          <div class="ladder" aria-hidden="true">
+            <span class="ladder__bar"></span>
+            <span class="ladder__mark" data-kind="stop" style="--at: 0%">"SL"</span>
+            <span class="ladder__mark" data-kind="entry" style="--at: 28.6%">"Entry"</span>
+            <span class="ladder__mark" style="--at: 71.4%">"TP1"</span>
+            <span class="ladder__mark" style="--at: 85.7%">"TP2"</span>
+            <span class="ladder__mark" style="--at: 100%">"TP3"</span>
+          </div>
+
+          <dl class="levels">
+            <div>
+              <dt>"Stop"</dt>
+              <dd>"68,058" <small>"−342"</small></dd>
+            </div>
+            <div>
+              <dt>"Entry"</dt>
+              <dd>"68,400" <small>"Market"</small></dd>
+            </div>
+            <div>
+              <dt>"TP1"</dt>
+              <dd>"68,913" <small>"1.5×"</small></dd>
+            </div>
+            <div>
+              <dt>"TP2"</dt>
+              <dd>"69,084" <small>"2.0×"</small></dd>
+            </div>
+            <div>
+              <dt>"TP3"</dt>
+              <dd>"69,255" <small>"2.5×"</small></dd>
+            </div>
+          </dl>
+
+          <ul class="checks" aria-label="Checks">
+            <li class="check">"Price order" <small>"Pass"</small></li>
+            <li class="check">"Target distance" <small>"2.0×"</small></li>
+            <li class="check">"Stop placement" <small>"Pass"</small></li>
+            <li class="check">"Trend alignment" <small>"Pass"</small></li>
+            <li class="check">"News window" <small>"Pass"</small></li>
+          </ul>
+
+          <footer class="score-card__foot">
+            <span>"TRX-0000 · Example"</span>
+            <span class="score-card__seal">"Example card · Not financial advice"</span>
+          </footer>
+        </article>
+      </div>
+
+      <p class="approach__rule reveal">"Nothing reaches members unless it has passed the checks. " <span>"There is no override button."</span></p>
     </section>
   );
 }

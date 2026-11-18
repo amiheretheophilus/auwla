@@ -2,76 +2,176 @@ import { getMarketAxes } from '#server-functions';
 
 <style>
   .market-coverage {
+    padding-top: clamp(3rem, 7vw, 7rem);
+  }
+
+  .market-coverage__intro {
     display: grid;
     grid-template-columns: 1fr 3fr;
-    border-top: 1px solid var(--rule);
+    align-items: start;
+    gap: 1.25rem 0;
+    padding: 0 var(--gutter) clamp(2rem, 4vw, 3.5rem);
+  }
+
+  .kicker {
+    margin: 0;
+    padding-top: .6rem;
+    color: var(--accent);
+    font-size: 1rem;
+    font-weight: 500;
   }
 
   .market-coverage h2 {
+    max-width: 18ch;
     margin: 0;
-    padding: 1.85rem var(--gutter);
-    font-size: 1rem;
-    font-weight: 500;
-    color: var(--accent);
+    padding-left: clamp(1rem, 3vw, 3rem);
+    font-size: clamp(2rem, 4.6vw, 4.5rem);
+    font-weight: 400;
+    line-height: .98;
+    letter-spacing: -.055em;
   }
 
+  /* Editorial columns: one rule across the top, hairlines between the axes. */
   .market-axes {
     display: grid;
-    grid-template-columns: repeat(3, 1fr);
+    grid-template-columns: 1fr repeat(3, 1fr);
     margin: 0;
     padding: 0;
+    border-block: 1px solid var(--rule);
     list-style: none;
+    counter-reset: axis;
   }
 
-  .market-axis {
-    padding: 1.75rem clamp(1rem, 3vw, 3rem);
-    border-left: 1px solid var(--rule);
-  }
-
-  .market-axis h3 {
-    margin: 0;
-    font-size: clamp(1.2rem, 2.3vw, 2rem);
-    font-weight: 400;
-    letter-spacing: -.04em;
-  }
-
-  .market-axis h3::before {
-    display: block;
-    width: .5rem;
-    height: .5rem;
-    margin-bottom: .85rem;
-    background: var(--axis-color);
-    border-radius: 50%;
+  /* The first column stays empty so the axes line up under the heading. */
+  .market-axes::before {
     content: "";
   }
 
+  .market-axis {
+    position: relative;
+    isolation: isolate;
+    display: flex;
+    flex-direction: column;
+    gap: .75rem;
+    min-height: clamp(15rem, 22vw, 19rem);
+    padding: 1.75rem clamp(1rem, 3vw, 3rem);
+    overflow: hidden;
+    border-left: 1px solid var(--rule);
+    counter-increment: axis;
+  }
+
+  /* A faint wash of the axis colour rises from the bottom on hover. */
+  .market-axis::before {
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    background: linear-gradient(0deg, var(--axis-wash), #0000 70%);
+    content: "";
+    opacity: 0;
+    translate: 0 30%;
+    transition: opacity .5s ease, translate .7s var(--ease-out);
+  }
+
+  .market-axis:hover::before {
+    opacity: 1;
+    translate: 0 0;
+  }
+
   .market-axis[data-axis="forex"] {
-    --axis-color: #3987e5;
+    --axis-color: var(--forex);
+    --axis-wash: #3987e51f;
   }
 
   .market-axis[data-axis="crypto"] {
-    --axis-color: #9085e9;
+    --axis-color: var(--crypto);
+    --axis-wash: #9085e924;
   }
 
   .market-axis[data-axis="synthetics"] {
-    --axis-color: #eda100;
+    --axis-color: var(--synthetics);
+    --axis-wash: #eda10024;
   }
 
-  .market-axis p {
-    margin: .5rem 0 0;
+  .market-axis__tag {
+    display: flex;
+    align-items: center;
+    gap: .55rem;
+    margin: 0;
     color: var(--muted-ink);
-    font-size: .875rem;
+    font-size: .8rem;
+  }
+
+  .market-axis__tag::before {
+    width: .5rem;
+    height: .5rem;
+    border-radius: 50%;
+    background: var(--axis-color);
+    content: "";
+  }
+
+  /* The axis number in small type, after the tag. */
+  .market-axis__tag::after {
+    margin-left: auto;
+    font-variant-numeric: tabular-nums;
+    content: "0" counter(axis);
+  }
+
+  .market-axis h3 {
+    margin: .4rem 0 0;
+    font-size: clamp(1.6rem, 2.8vw, 2.6rem);
+    font-weight: 400;
+    line-height: 1;
+    letter-spacing: -.05em;
+    transition: translate .6s var(--ease-out);
+  }
+
+  .market-axis:hover h3 {
+    translate: .35rem 0;
+  }
+
+  .market-axis__groups {
+    max-width: 26ch;
+    margin: 0;
+    color: var(--muted-ink);
+    font-size: .9rem;
     line-height: 1.5;
   }
 
+  .market-axis__instruments {
+    margin: auto 0 0;
+    padding-top: 1rem;
+    font-size: .8rem;
+    letter-spacing: .04em;
+  }
+
+  /* Columns in one row arrive one after another. */
+  @supports (animation-timeline: view()) {
+    @media (prefers-reduced-motion: no-preference) {
+      .market-axis:nth-child(2) {
+        animation-range: entry 15% cover 38%;
+      }
+
+      .market-axis:nth-child(3) {
+        animation-range: entry 25% cover 46%;
+      }
+    }
+  }
+
   @media (max-width: 55rem) {
-    .market-coverage {
+    .market-coverage__intro {
       grid-template-columns: 1fr;
     }
 
     .market-coverage h2 {
-      padding-block: 1.25rem;
-      border-bottom: 1px solid var(--rule);
+      padding-left: 0;
+    }
+
+    .market-axes {
+      grid-template-columns: repeat(3, 1fr);
+    }
+
+    .market-axes::before {
+      display: none;
     }
 
     .market-axis:first-child {
@@ -85,7 +185,8 @@ import { getMarketAxes } from '#server-functions';
     }
 
     .market-axis {
-      padding: 1rem var(--gutter);
+      min-height: 0;
+      padding: 1.25rem var(--gutter);
       border-left: 0;
     }
 
@@ -93,9 +194,8 @@ import { getMarketAxes } from '#server-functions';
       border-top: 1px solid var(--rule);
     }
 
-    .market-axis h3::before {
-      display: inline-block;
-      margin: 0 .6rem .12em 0;
+    .market-axis:nth-child(n) {
+      animation-range: entry 5% cover 30%;
     }
   }
 </style>
@@ -105,12 +205,17 @@ export function MarketCoverage() {
 
   return (
     <section class="market-coverage" id="markets" aria-labelledby="market-heading">
-      <h2 id="market-heading">"Market coverage"</h2>
+      <div class="market-coverage__intro">
+        <p class="kicker reveal">"Market coverage"</p>
+        <h2 id="market-heading" class="reveal">"Choose one axis, or hold all three."</h2>
+      </div>
       <ul class="market-axes">
         for (const axis of axes) {
-          <li key={axis.id} class="market-axis" data-axis={axis.id}>
+          <li key={axis.id} class="market-axis reveal" data-axis={axis.id}>
+            <p class="market-axis__tag">axis.tag</p>
             <h3>axis.name</h3>
-            <p>axis.instruments</p>
+            <p class="market-axis__groups">axis.groups</p>
+            <p class="market-axis__instruments">axis.instruments</p>
           </li>
         }
       </ul>

@@ -1,0 +1,133 @@
+<style>
+  .ticker {
+    position: relative;
+    overflow: hidden;
+    border-block: 1px solid var(--rule);
+    background: var(--ink);
+    color: var(--paper);
+  }
+
+  /* Fade the strip out at both edges. */
+  .ticker::before,
+  .ticker::after {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    z-index: 1;
+    width: clamp(2rem, 8vw, 7rem);
+    content: "";
+    pointer-events: none;
+  }
+
+  .ticker::before {
+    left: 0;
+    background: linear-gradient(90deg, var(--ink), #27211d00);
+  }
+
+  .ticker::after {
+    right: 0;
+    background: linear-gradient(270deg, var(--ink), #27211d00);
+  }
+
+  /* Two identical lists side by side; moving the track by half its width loops cleanly. */
+  .ticker__track {
+    display: flex;
+    width: max-content;
+  }
+
+  .ticker__list {
+    display: flex;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .ticker__item {
+    display: flex;
+    align-items: center;
+    gap: .6rem;
+    padding: .95rem clamp(1.25rem, 2.6vw, 2.25rem);
+    font-family: var(--mono);
+    font-size: .8rem;
+    letter-spacing: .06em;
+    white-space: nowrap;
+  }
+
+  .ticker__item::before {
+    width: .45rem;
+    height: .45rem;
+    border-radius: 50%;
+    background: var(--axis-color);
+    content: "";
+  }
+
+  .ticker__item small {
+    color: #f1ebe180;
+    font-size: .68rem;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+  }
+
+  .ticker__item[data-axis="forex"] {
+    --axis-color: var(--forex);
+  }
+
+  .ticker__item[data-axis="crypto"] {
+    --axis-color: var(--crypto);
+  }
+
+  .ticker__item[data-axis="synthetics"] {
+    --axis-color: var(--synthetics);
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    .ticker__track {
+      animation: tx-ticker 48s linear infinite;
+    }
+
+    .ticker:hover .ticker__track {
+      animation-play-state: paused;
+    }
+  }
+</style>
+
+const instruments = [
+  { id: 'xauusd', axis: 'forex', name: 'XAUUSD', group: 'Metals' },
+  { id: 'btcusdt', axis: 'crypto', name: 'BTCUSDT', group: 'Perpetual' },
+  { id: 'vol75', axis: 'synthetics', name: 'VOL 75', group: 'Volatility' },
+  { id: 'eurusd', axis: 'forex', name: 'EURUSD', group: 'Major' },
+  { id: 'ethusdt', axis: 'crypto', name: 'ETHUSDT', group: 'Perpetual' },
+  { id: 'boom1000', axis: 'synthetics', name: 'BOOM 1000', group: 'Boom' },
+  { id: 'xagusd', axis: 'forex', name: 'XAGUSD', group: 'Metals' },
+  { id: 'solusdt', axis: 'crypto', name: 'SOLUSDT', group: 'Perpetual' },
+  { id: 'crash500', axis: 'synthetics', name: 'CRASH 500', group: 'Crash' },
+  { id: 'gbpusd', axis: 'forex', name: 'GBPUSD', group: 'Major' },
+  { id: 'vol100', axis: 'synthetics', name: 'VOL 100 (1s)', group: 'Volatility' },
+  { id: 'eurgbp', axis: 'forex', name: 'EURGBP', group: 'Minor' },
+  { id: 'step', axis: 'synthetics', name: 'STEP INDEX', group: 'Step' },
+];
+
+export function InstrumentTicker() {
+  return (
+    <section class="ticker" aria-label="Instruments covered">
+      <div class="ticker__track">
+        <ul class="ticker__list">
+          for (const instrument of instruments) {
+            <li key={instrument.id} class="ticker__item" data-axis={instrument.axis}>
+              instrument.name
+              <small>instrument.group</small>
+            </li>
+          }
+        </ul>
+        <ul class="ticker__list" aria-hidden="true">
+          for (const instrument of instruments) {
+            <li key={instrument.id} class="ticker__item" data-axis={instrument.axis}>
+              instrument.name
+              <small>instrument.group</small>
+            </li>
+          }
+        </ul>
+      </div>
+    </section>
+  );
+}

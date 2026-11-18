@@ -1,0 +1,177 @@
+// Motion for the public pages. Keyframes are named resources, which local style blocks
+// cannot define yet, so they live here as globals. Imported once, by `App.auwla`.
+//
+// Everything is CSS. Load animations run once when the page paints. Scroll reveals use
+// scroll-driven timelines where the browser supports them; elsewhere the content is
+// simply shown. Visitors who ask for reduced motion get no motion at all.
+
+<style global>
+  @keyframes tx-rise {
+    from {
+      opacity: 0;
+      transform: translateY(1.5rem);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+
+  @keyframes tx-word {
+    from {
+      transform: translateY(105%);
+    }
+    to {
+      transform: none;
+    }
+  }
+
+  @keyframes tx-fade {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+
+  @keyframes tx-pop {
+    from {
+      opacity: 0;
+      scale: .6;
+    }
+    to {
+      opacity: 1;
+      scale: 1;
+    }
+  }
+
+  @keyframes tx-settle {
+    from {
+      scale: 1.14;
+      filter: saturate(.6) blur(6px);
+    }
+    to {
+      scale: 1;
+      filter: none;
+    }
+  }
+
+  @keyframes tx-drift {
+    to {
+      translate: 0 18%;
+      opacity: .55;
+    }
+  }
+
+  @keyframes tx-lift-out {
+    to {
+      translate: 0 -3rem;
+      opacity: 0;
+    }
+  }
+
+  @keyframes tx-spin {
+    to {
+      rotate: 1turn;
+    }
+  }
+
+  @keyframes tx-bob {
+    0%, 100% {
+      translate: 0 0;
+    }
+    50% {
+      translate: 0 .3rem;
+    }
+  }
+
+  @keyframes tx-ticker {
+    to {
+      transform: translateX(-50%);
+    }
+  }
+
+  @keyframes tx-shade {
+    to {
+      background-color: #f1ebe1d9;
+      border-bottom-color: #c9bfb2;
+      box-shadow: 0 .75rem 2rem -1.5rem #27211d55;
+    }
+  }
+
+  @keyframes tx-draw {
+    from {
+      transform: scaleX(0);
+    }
+    to {
+      transform: scaleX(1);
+    }
+  }
+
+  @keyframes tx-grow-y {
+    from {
+      transform: scaleY(0);
+    }
+    to {
+      transform: scaleY(1);
+    }
+  }
+
+  @keyframes tx-check {
+    from {
+      opacity: 0;
+      translate: -.75rem 0;
+    }
+    to {
+      opacity: 1;
+      translate: 0 0;
+    }
+  }
+
+  @keyframes tx-tick {
+    from {
+      scale: 0;
+      rotate: -45deg;
+    }
+    to {
+      scale: 1;
+      rotate: 0deg;
+    }
+  }
+
+  @keyframes tx-pulse {
+    0% {
+      box-shadow: 0 0 0 0 var(--pulse, #a8271c66);
+    }
+    70%, 100% {
+      box-shadow: 0 0 0 .55rem #0000;
+    }
+  }
+
+  /* Add `reveal` to anything that should rise into place as it scrolls into view. */
+  @supports (animation-timeline: view()) {
+    @media (prefers-reduced-motion: no-preference) {
+      .reveal {
+        animation: tx-rise linear both;
+        animation-timeline: view();
+        animation-range: entry 5% cover 30%;
+      }
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: .01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: .01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+
+  html {
+    scroll-behavior: smooth;
+  }
+</style>

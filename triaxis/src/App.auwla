@@ -1,6 +1,9 @@
+import './home/motion.auwla';
+import { InstrumentTicker } from './home/InstrumentTicker.auwla';
 import { MarketCoverage } from './home/MarketCoverage.auwla';
 import { MarketHero } from './home/MarketHero.auwla';
 import { SignalApproach } from './home/SignalApproach.auwla';
+import { SiteFooter } from './home/SiteFooter.auwla';
 import { AnalystDesk, DeskSignIn } from './desk/DeskRoutes.auwla';
 
 <style>
@@ -12,8 +15,16 @@ import { AnalystDesk, DeskSignIn } from './desk/DeskRoutes.auwla';
     --ink: #27211d;
     --muted-ink: #564e46;
     --paper: #f1ebe1;
+    --paper-soft: #f8f4ec;
     --rule: #c9bfb2;
     --accent: #a8271c;
+    --accent-deep: #8a2119;
+    --night: #1b1714;
+    --forex: #3987e5;
+    --crypto: #9085e9;
+    --synthetics: #eda100;
+    --mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    --ease-out: cubic-bezier(.16, 1, .3, 1);
     --gutter: clamp(1.2rem, 4.2vw, 4.25rem);
 
     min-height: 100vh;
@@ -21,9 +32,18 @@ import { AnalystDesk, DeskSignIn } from './desk/DeskRoutes.auwla';
     color: var(--ink);
     font-family: "Helvetica Neue", Arial, sans-serif;
     font-synthesis: none;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .site-page ::selection {
+    background: var(--accent);
+    color: #fff9f0;
   }
 
   .site-header {
+    position: sticky;
+    top: 0;
+    z-index: 20;
     display: flex;
     justify-content: space-between;
     align-items: center;
@@ -31,16 +51,14 @@ import { AnalystDesk, DeskSignIn } from './desk/DeskRoutes.auwla';
     gap: 1.25rem;
     padding-inline: var(--gutter);
     border-bottom: 1px solid var(--rule);
+    background-color: var(--paper);
+    -webkit-backdrop-filter: blur(14px) saturate(1.4);
+    backdrop-filter: blur(14px) saturate(1.4);
   }
 
   .site-header a {
     color: inherit;
     text-decoration: none;
-  }
-
-  .site-header a:hover {
-    text-decoration: underline;
-    text-underline-offset: .3em;
   }
 
   .site-header a:focus-visible {
@@ -49,16 +67,126 @@ import { AnalystDesk, DeskSignIn } from './desk/DeskRoutes.auwla';
   }
 
   .wordmark {
+    display: inline-flex;
+    align-items: center;
+    gap: .6rem;
     font-size: 1.125rem;
     font-weight: 700;
     letter-spacing: .09em;
     text-transform: uppercase;
   }
 
+  /* Three bars crossing, one per axis. */
+  .wordmark__mark {
+    position: relative;
+    width: 1.1rem;
+    height: 1.1rem;
+  }
+
+  .wordmark__mark span {
+    position: absolute;
+    top: 50%;
+    left: 0;
+    width: 100%;
+    height: 2px;
+    border-radius: 1px;
+    background: var(--ink);
+    transition: rotate .5s var(--ease-out);
+  }
+
+  .wordmark__mark span:nth-child(1) {
+    background: var(--accent);
+    rotate: 60deg;
+  }
+
+  .wordmark__mark span:nth-child(2) {
+    rotate: -60deg;
+  }
+
+  .wordmark:hover .wordmark__mark span:nth-child(1) {
+    rotate: 120deg;
+  }
+
+  .wordmark:hover .wordmark__mark span:nth-child(2) {
+    rotate: 0deg;
+  }
+
+  .wordmark:hover .wordmark__mark span:nth-child(3) {
+    rotate: 60deg;
+  }
+
   .site-header nav {
     display: flex;
+    align-items: center;
     gap: clamp(1rem, 3vw, 2.75rem);
     font-size: .875rem;
+  }
+
+  .nav-link {
+    position: relative;
+    padding-block: .35rem;
+  }
+
+  .nav-link::after {
+    position: absolute;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    height: 1px;
+    background: currentColor;
+    content: "";
+    transform: scaleX(0);
+    transform-origin: right;
+    transition: transform .45s var(--ease-out);
+  }
+
+  .nav-link:hover::after {
+    transform: scaleX(1);
+    transform-origin: left;
+  }
+
+  .nav-desk {
+    display: inline-flex;
+    align-items: center;
+    gap: .45rem;
+    padding: .45rem .9rem;
+    border: 1px solid var(--ink);
+    border-radius: 999px;
+    transition: background-color .25s ease, color .25s ease;
+  }
+
+  .nav-desk:hover {
+    background: var(--ink);
+    color: var(--paper);
+  }
+
+  .nav-desk span {
+    transition: translate .3s var(--ease-out);
+  }
+
+  .nav-desk:hover span {
+    translate: .2rem 0;
+  }
+
+  @supports (animation-timeline: scroll()) {
+    @media (prefers-reduced-motion: no-preference) {
+      .site-header {
+        border-bottom-color: transparent;
+        animation: tx-shade linear both;
+        animation-timeline: scroll(root);
+        animation-range: 0 8rem;
+      }
+    }
+  }
+
+  @media (max-width: 30rem) {
+    .site-header nav {
+      gap: .9rem;
+    }
+
+    .nav-desk {
+      padding: .35rem .7rem;
+    }
   }
 </style>
 
@@ -66,19 +194,29 @@ function MarketHome() {
   return (
     <div class="site-page" id="top">
       <header class="site-header">
-        <a class="wordmark" href="#top">"Triaxis"</a>
+        <a class="wordmark" href="#top" aria-label="Triaxis, back to top">
+          <span class="wordmark__mark" aria-hidden="true">
+            <span></span>
+            <span></span>
+            <span></span>
+          </span>
+          "Triaxis"
+        </a>
         <nav aria-label="Main navigation">
-          <a href="#markets">"Markets"</a>
-          <a href="#approach">"Approach"</a>
-          <a href="/desk">"Desk"</a>
+          <a class="nav-link" href="#markets">"Markets"</a>
+          <a class="nav-link" href="#approach">"Approach"</a>
+          <a class="nav-desk" href="/desk">"Desk" <span aria-hidden="true">"→"</span></a>
         </nav>
       </header>
 
       <main>
         <MarketHero />
+        <InstrumentTicker />
         <MarketCoverage />
         <SignalApproach />
       </main>
+
+      <SiteFooter />
     </div>
   );
 }
