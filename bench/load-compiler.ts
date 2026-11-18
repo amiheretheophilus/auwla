@@ -4,7 +4,7 @@
  * - `--compiler=<path>`: an isolated compiler snapshot's entry, for one build;
  * - `BENCH_COMPILER=<path>`: the same for every step of a chained script such as
  *   `bun run bench`, since an environment variable reaches each step and a flag only the last;
- * - otherwise the compiler, `packages/compiler-next`.
+ * - otherwise the compiler, `packages/compiler`.
  *
  * The old compiler was deleted with Phase 10's exit (`wiki/compiler/plan.md`). A baseline commit
  * that still has it is compared through `bench/dom/compare.ts --before-ref=<commit>` or a
@@ -13,7 +13,7 @@
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
-export const COMPILER = resolve(import.meta.dirname, '../packages/compiler-next/src/index.ts');
+export const COMPILER = resolve(import.meta.dirname, '../packages/compiler/src/index.ts');
 
 /** A snapshot compiler's entry path, or null for the compiler in this checkout. */
 export function selectedCompilerPath(): string | null {
@@ -36,7 +36,7 @@ export function compiledSuffix(): string {
   return selectedCompilerPath() === null ? '' : '.custom';
 }
 
-export async function loadBenchmarkCompiler(): Promise<typeof import('@memoized-dom/compiler-next')> {
+export async function loadBenchmarkCompiler(): Promise<typeof import('@memoized-dom/compiler')> {
   const path = selectedCompilerPath() ?? COMPILER;
   return import(pathToFileURL(path).href);
 }

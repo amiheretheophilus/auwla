@@ -28,11 +28,11 @@ The original TSX-only projection missed the first error and incorrectly reported
 outside markup and a changing prop read after `await`. These four original
 targets now pass without changing their source or expected diagnostic spans.
 Execution tests separately demonstrate the guarded child and derivation updating
-through compiler-next in both optimization modes.
+through the compiler in both optimization modes.
 
 The contract preserves ordinary synchronous narrowing, guards within an
 evaluation, assignment-local callback facts, row scope and shadowing. `let` and
-`const` retain compiler-next's existing semantics. Optional refs already pass
+`const` retain the compiler's existing semantics. Optional refs already pass
 the observed cases; this slice does not rebuild refs or add fake ref writes.
 
 ## Two checking views

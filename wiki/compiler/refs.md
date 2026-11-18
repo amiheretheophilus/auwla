@@ -53,7 +53,7 @@ Makes element refs reactive, so a user never needs a ref plus an effect
 
 ## Cases to test
 
-In `packages/compiler-next/tests/cases/refs.test.ts`: 19 reference comparisons,
+In `packages/compiler/tests/cases/refs.test.ts`: 19 reference comparisons,
 also run with optimizations disabled. They cover:
 
 - a ref used in a handler;

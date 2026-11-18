@@ -47,7 +47,7 @@ it.each(['development','production','development-stream'] as const)('delivers fi
       export const getBoard=define.function({live:()=>['board'],async get(){const user={name:'Ada',hint:'Event-only',password:'SERVER_SECRET'},subtitle=undefined;return page(<Board count={count} user={user} subtitle={subtitle}/>);}});
       export const saveBoard=define.function({updates:()=>['board'],async post(){count++;const user={name:'Saved',hint:'Event-only',password:'SERVER_SECRET'},subtitle=undefined;return page(<Board count={count} user={user} subtitle={subtitle}/>);}});
       export const getDenied=define.function({async get(){return page(<p data-denied>Denied</p>);}});`,
-    // Was a TSRX component with its own style block; TSRX is not compiler-next's (`wiki/decisions.md`).
+    // Was a TSRX component with its own style block; TSRX is not the compiler's (`wiki/decisions.md`).
     'Board.tsx':`import './board.css';export function Board({count,user,subtitle='No subtitle'}){let expanded=false;let hint='';function reveal(){hint=user.hint}return <section class="board" data-board><h1>{user.name}</h1><small data-subtitle>{subtitle}</small><p data-count>{count}</p><input data-local-input value="initial"/><button data-reveal onClick={reveal}>Reveal</button><p data-hint>{hint}</p><button data-toggle onClick={async()=>{await Promise.resolve();expanded=!expanded}}>Toggle</button>{expanded&&<p data-expanded>Expanded</p>}</section>}`,
     'board.css':`.board{color:rgb(12,34,56);}[data-count]{font-weight:700;}`,
     'App.tsx':`import {getBoard,saveBoard,getDenied} from '#server-functions';import {Group} from '@memoized-dom/data';
@@ -81,7 +81,7 @@ it.each(['development','production','development-stream'] as const)('delivers fi
   for(const document of documents)assertSettledPageSsr(await document.text(),mode.endsWith('stream'));
   expect(await (await fetch(origin+'/__render-reports')).json()).toEqual(['complete','complete','complete']);
   // The page's handler exists only in the server build: the browser has its facade, and a client
-  // module importing the folder is an error (compiler-next, `server/application.ts`).
+  // module importing the folder is an error (the compiler, `server/application.ts`).
   if(!chrome)return;
   const browser=await puppeteer.launch({executablePath:chrome,headless:true});
   try{
@@ -95,7 +95,7 @@ it.each(['development','production','development-stream'] as const)('delivers fi
     }
     await Promise.all([page,viewer].map(tab=>tab.goto(origin,{waitUntil:'domcontentloaded'})));
     await page.bringToFront();
-    // Bound once a click on the page's own button reaches its handler (compiler-next listens with
+    // Bound once a click on the page's own button reaches its handler (the compiler listens with
     // `addEventListener`, so there is no `onclick` property to look for).
     try { await page.waitForFunction(()=>{(document.querySelector('[data-reveal]') as HTMLButtonElement|null)?.click();return document.querySelector('[data-hint]')?.textContent==='Event-only';},{timeout:10_000,polling:200}); }
     catch(error){throw new Error(String(error)+'\n'+errors.join('\n')+'\n'+diagnostics.join('\n')+'\n'+modules.join('\n')+'\n'+await page.content());}

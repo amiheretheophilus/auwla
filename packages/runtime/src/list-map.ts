@@ -1,7 +1,7 @@
 /**
  * `items.map(callback)` that reuses each item's previous result while nothing
  * it depends on changed. Used only for callbacks the compiler proved
- * (`compiler-next/src/optimize/row-reuse.ts`). Such a callback:
+ * (`compiler/src/optimize/row-reuse.ts`). Such a callback:
  *
  * - makes no explicit call, store, deletion or suspension (`effects.ts`);
  * - returns JSX, a compiler-owned value no authored code mutates;
@@ -73,7 +73,7 @@ export function iteratedItems(items: unknown): readonly unknown[] {
 
 /**
  * `Array.from(items, callback)`, through the cache. The compiler emits it only
- * for the intrinsic `Array.from` (`compiler-next/src/optimize/mapping-calls.ts`),
+ * for the intrinsic `Array.from` (`compiler/src/optimize/mapping-calls.ts`),
  * and only with a callback of at most `(item, index)`, so passing the array as
  * the third argument shows nothing.
  */

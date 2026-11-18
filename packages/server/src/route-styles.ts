@@ -1,5 +1,5 @@
 /**
- * A lazy route's styles on a page the server renders (compiler-next's
+ * A lazy route's styles on a page the server renders (the compiler's
  * `wiki/compiler/routes.md`, "A lazy route's styles").
  *
  * A browser build loads a component that only a route shows with its route, in a chunk of its

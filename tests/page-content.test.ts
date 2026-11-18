@@ -1,6 +1,6 @@
 /**
  * Server page content in a compiled child site (`render-value.ts`, `mountPage`). These ran on the
- * old compiler's content region until it went (2026-11-18); compiler-next's value slot shows the
+ * old compiler's content region until it went (2026-11-18); the compiler's value slot shows the
  * same content through `mountPage`.
  */
 import { afterEach, expect, it } from 'bun:test';

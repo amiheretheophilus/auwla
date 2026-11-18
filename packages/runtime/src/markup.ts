@@ -1,5 +1,5 @@
 /**
- * markup.ts - compiler-next's templates: a static subtree described as data
+ * markup.ts - the compiler's templates: a static subtree described as data
  * (`TemplateNode`), built once per document and namespace and cloned per
  * instance. The old compiler's markup strings (`materializeMarkup`, with the
  * server's markup parser) went with it on 2026-11-18.
@@ -10,7 +10,7 @@ import type { DocumentLike } from './environment';
 import { adoptTemplate, noteTemplate, unnumbered } from './adoption';
 
 /**
- * compiler-next's description of a template's nodes:
+ * The compiler's description of a template's nodes:
  * - a string is a text node; a text slot is an empty one;
  * - null is a comment placeholder, for a region;
  * - `[tag, attributes, ...children]` is an element, with `attributes` a flat

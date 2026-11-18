@@ -89,7 +89,7 @@ async function origin(log: ReturnType<typeof launch>, runtime: string): Promise<
 }
 
 describe('consistent CLI launcher', () => {
-  // compiler-next does not yet emit the runtime's trace calls in development: devtools diagnostics
+  // The compiler does not yet emit the runtime's trace calls in development: devtools diagnostics
   // belong to the project (`wiki/decisions.md`, 2026-11-12) and are on hold with devtools (FINALIZE).
   it.skip('supports opt-in filtered runtime diagnostics in browser development', async () => {
     const root = await project('browser');

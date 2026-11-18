@@ -49,7 +49,7 @@ on:
         type: string
         default: create,clear
       compiler_ref:
-        description: Optional baseline with its own compiler-next and runtime, in ABBA order
+        description: Optional baseline with its own compiler and runtime, in ABBA order
         type: string
         default: ''
       size_fixtures:
@@ -133,7 +133,7 @@ jobs:
           bun run bench/dom/compare.ts --before-ref="$BEFORE_REF" --isolate=runtime --operations="$OPERATIONS" --samples="$SAMPLES"
           cp bench/dom/dist/compare/*-runtime/results.md runtime-comparison.md
           cat runtime-comparison.md >> "$GITHUB_STEP_SUMMARY"
-      - name: Compare compiler-next snapshots with their matching runtimes
+      - name: Compare compiler snapshots with their matching runtimes
         if: inputs.compiler_ref != ''
         env:
           BEFORE_REF: ${{ inputs.compiler_ref }}

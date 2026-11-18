@@ -5,7 +5,7 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { cpus, totalmem } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { compileModules } from '@memoized-dom/compiler-next';
+import { compileModules } from '@memoized-dom/compiler';
 import { resetScheduler, setScheduler } from '@memoized-dom/runtime';
 import { createDefine, serve, type RenderPolicy, type RenderReport, type ServerComponent } from '../../packages/server/src/index';
 import { TABLE_SOURCE, DASHBOARD_SOURCE } from './scenarios';

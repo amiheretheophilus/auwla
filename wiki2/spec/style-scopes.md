@@ -120,7 +120,7 @@ blocks and quoted/function/bracket contents keep their CSS meaning. Explicit
 The module path and function ordinal determine the attribute, not CSS contents
 or source byte offsets. A CSS-only edit keeps existing DOM valid. Server and
 client compilation use the same rule. A scope belongs to a definition, not an
-instance; two instances still select the same rules. Compiler-next remains
+instance; two instances still select the same rules. The compiler remains
 responsible for ordinary state, events, refs, DOM creation and SSR.
 
 Provisional first-profile limits: native `@import`, named resources such as

@@ -1,9 +1,9 @@
-import { inspectModules, CompileError } from '@memoized-dom/compiler-next/analysis';
+import { inspectModules, CompileError } from '@memoized-dom/compiler/analysis';
 import type {
   AnalysisBinding,
   AnalysisModule,
   AnalysisRange,
-} from '@memoized-dom/compiler-next/analysis';
+} from '@memoized-dom/compiler/analysis';
 import { parseModule } from '../../host';
 import type { NormalizedSource, Range } from '../../model';
 import { authoredCover } from '../../source';

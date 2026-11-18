@@ -5,7 +5,7 @@
  * supplies host tokens and statement/expression structure. Temporary,
  * equal-width masks (masks.ts) let it scan past each extended element without
  * changing authored offsets. Only the emitted TSX leaves this package's
- * frontend; compiler-next owns everything after it.
+ * frontend; the compiler owns everything after it.
  *
  * Readers:
  * - markup/element.ts  opening tags, attribute values and body scanning

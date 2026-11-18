@@ -2,7 +2,7 @@
   "name": "@memoized-dom/jsx-plus",
   "version": "0.0.0",
   "private": true,
-  "description": "JSX+ source normalization for compiler-next. See wiki2/.",
+  "description": "JSX+ source normalization for the compiler. See wiki2/.",
   "type": "module",
   "exports": {
     ".": {
@@ -40,7 +40,7 @@
     "check": "bun check"
   },
   "dependencies": {
-    "@memoized-dom/compiler-next": "workspace:*",
+    "@memoized-dom/compiler": "workspace:*",
     "css-tree": "3.2.1",
     "vscode-jsonrpc": "9.0.2",
     "vscode-css-languageservice": "6.3.10",

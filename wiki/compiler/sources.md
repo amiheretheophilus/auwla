@@ -1,7 +1,7 @@
 # Sources and readiness
 
 **Folders:** `features/sources/`; the test reference is built in
-`packages/compiler-next/tests/reference/`.
+`packages/compiler/tests/reference/`.
 
 ## What it does
 
@@ -9,7 +9,7 @@ Finds values that load over time and makes everything computed from them wait.
 
 ## Compiler files and current boundary
 
-All compiler paths below are under `packages/compiler-next/src/`.
+All compiler paths below are under `packages/compiler/src/`.
 
 | File | Owns |
 | --- | --- |
@@ -123,7 +123,7 @@ earlier as unexplained.
 
 ## Reference files
 
-All paths below are under `packages/compiler-next/`. This is test code only.
+All paths below are under `packages/compiler/`. This is test code only.
 
 | File | Owns |
 | --- | --- |
@@ -142,7 +142,7 @@ All paths below are under `packages/compiler-next/`. This is test code only.
   (`packages/compiler/src/jsx-types.ts`). `core/resolve/ambient.ts` appends the
   import to a module that uses one without a binding; a local declaration of the
   same name shadows it, and a module that assigns the global keeps the global.
-  Before 2026-10-27 compiler-next only recognized imported calls, so examples
+  Before 2026-10-27 the compiler only recognized imported calls, so examples
   using the ambient form (fieldnotes, octopulse, stress-lab) compiled to calls of
   an undefined global.
 - A **source** is a `$fetch` call, a `$read` call, a GET server function call, or a
@@ -399,7 +399,7 @@ component refreshes by calling it again`.
 `createDataRuntime().$fetch(url)` hands back the resource itself, whose `.status`, `.pending` and
 `.data` the author reads directly (`examples/data-reactivity`). An ambient `$fetch` returns the same
 kind of object, which compiled code reads through, so `.status` there is a field of the data. A value
-can reach any site by any route, so the runtime cannot tell the two apart by looking, and compiler-next
+can reach any site by any route, so the runtime cannot tell the two apart by looking, and the compiler
 read `users.status` of an explicit resource as a field of its data: blank while loading, then
 `undefined`. Found by replaying the old tests' programs (`testing.md`). Now each `x.$fetch(…)` call on
 an object is wrapped in `markExplicitResource` (`markExplicitFetches`, `features/sources/delivery.ts`),
@@ -561,7 +561,7 @@ the old compiler; two more `suspend` lifecycle cases (a captured value changing
 in a failed child, a removed region sharing a GET) give 1 pass and 1 failure;
 the 14 atomic cases give
 8 passes and 6 failures; eleven further atomic lifecycle cases give 6 passes and
-5 failures. These failures must pass on `compiler-next`. Two spread cases (2026-11-16, from the
+5 failures. These failures must pass on the compiler. Two spread cases (2026-11-16, from the
 acceptance run) read a source inside `{...{ value: user.name }}`, on an element and on a component:
 the element waits, then shows the payload. They caught the reference leaving that read unguarded
 (`$spread`, `tests/reference/runtime.ts`), and both fail on the old compiler.
@@ -653,7 +653,7 @@ behaviour. Each gets a case when a compiler slice touches it:
   read now waits through `$when`'s catch ("Reads the compiler cannot name"), but `$path` still does
   not name the source as an input.
 - `const promise = Promise.resolve({ id }); const user = $read(promise)`, then
-  `id++; $track(user).refresh()`. compiler-next shows the new `id`, as the old compiler's test
+  `id++; $track(user).refresh()`. The compiler shows the new `id`, as the old compiler's test
   asserts (`data-forms-read-compile.test.ts`). The reference refreshes the first promise and keeps
   the old one. Found by replaying the old tests' programs (`testing.md`).
 - Imported helpers whose sources are already warm on their first call, plus more

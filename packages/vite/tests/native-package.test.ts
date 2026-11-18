@@ -9,10 +9,10 @@ import { existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { build, createServer } from 'vite';
-import { nativePackages, packageLibrary } from '@memoized-dom/compiler-next';
+import { nativePackages, packageLibrary } from '@memoized-dom/compiler';
 import memoizedDom from '../src';
 
-/** `memoized-dom package`, which compiler-next's packaging does for every tool. */
+/** `memoized-dom package`, which the compiler's packaging does for every tool. */
 const buildLibrary = (options: { root: string }) => packageLibrary({ ...options, log: () => {} });
 
 let fixture: string;
@@ -173,7 +173,7 @@ it('tells a native package from an ordinary one by reading its manifest', async 
     'node_modules/@acme/kit/src/nested/package.json': `{ "type": "module" }`,
   });
 
-  // Which file is compiled is then the project's resolution (compiler-next's `native.test.ts`).
+  // Which file is compiled is then the project's resolution (the compiler's `native.test.ts`).
   expect([...nativePackages(app).names].sort()).toEqual(['@acme/kit', 'tool']);
 }, 60_000);
 

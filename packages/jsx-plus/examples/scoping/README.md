@@ -15,7 +15,7 @@ while the teal, gold and independent purple headings keep their own colors.
 The unstyled nested component also excludes App's private marker. File styles
 from `Cards.auwla` do not reach `IndependentCard.auwla` or App's note.
 
-This example uses existing compiler-next projects and bundler delivery. CSS
+This example uses existing the compiler projects and bundler delivery. CSS
 contains static selectors; no styling runtime, Tailwind or per-instance style
 elements are involved. `IndependentCard.auwla` also uses the shared frame under
 its own scope. The shared rules include ordinary implicit nesting, including

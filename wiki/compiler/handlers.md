@@ -521,7 +521,7 @@ not only imported values: a route link's `buildRoutePath(path, { id: props.id })
 
 ## Cases to test
 
-In `packages/compiler-next/tests/cases/handlers.test.ts`.
+In `packages/compiler/tests/cases/handlers.test.ts`.
 The local assignment slice also has nine `tests/cases/handlers.counters.test.ts` comparison
 cases, all passing: independent counters, helper batching, expression results,
 logical assignments, patterns, loop targets, timers, live properties/attributes/
@@ -529,7 +529,7 @@ handler selection, and repeated attributes. Seven direct execution tests cover
 unrelated/no-op writes, typed text, instance isolation, shadows, partial throwing
 patterns, defaults/rest and block scope. Eight runtime batching tests pass.
 Existing `typing into an input` and `an async helper preserves return await` pass
-on compiler-next; the full handlers file is not yet a Phase 3 exit pass.
+on the compiler; the full handlers file is not yet a Phase 3 exit pass.
 Callback takeover cases are in `tests/cases/state-and-derived.callbacks.test.ts`; their expected and
 old-compiler results are on `state-and-derived.md`, "Callback verification".
 

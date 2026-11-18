@@ -1,6 +1,6 @@
 /**
  * The team app (the test's copy, `fixtures/apps/team`): routes, lazy route chunks, the data layer and effects, all
- * written in `.auwla`, built by compiler-next's own Bun plugin with `auwla` as a source language.
+ * written in `.auwla`, built by the compiler's own Bun plugin with `auwla` as a source language.
  *
  * Each build is written with chunk splitting to a temporary folder in this package and loaded with
  * `import()`, so a lazy page really is a separate module loaded on navigation, as in a browser.
@@ -11,8 +11,8 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { waitFor } from '../../../test-support/helpers';
-// Compiler-next's Bun plugin has no package export yet; the tests read it as the CLI does.
-import { memoizedDom } from '../../compiler-next/src/project/bun';
+// The compiler's Bun plugin has no package export yet; the tests read it as the CLI does.
+import { memoizedDom } from '../../compiler/src/project/bun';
 import { checkoutPackages } from '../tools/checkout';
 import { auwla } from '../src';
 

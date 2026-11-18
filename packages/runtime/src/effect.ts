@@ -1,9 +1,9 @@
 /**
  * Component-owned reactive effects.
  *
- * Old output supplies static subscriptions. Compiler-next also supplies a
- * capture reader and uses the shared computation collector. Both paths share
- * post-DOM scheduling, teardown ownership and async cleanup generations.
+ * The compiler supplies a capture reader and uses the shared computation
+ * collector. Effects share post-DOM scheduling, teardown ownership and async
+ * cleanup generations.
  */
 
 import { cleanup, type CleanupDisposer } from './cleanup';

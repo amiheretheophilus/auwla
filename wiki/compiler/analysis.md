@@ -1,9 +1,9 @@
 # Read-only compiler analysis
 
 State: initial public snapshot API, 2026-11-11.
-**Folder:** `analysis/` (`packages/compiler-next/src/analysis/`).
+**Folder:** `analysis/` (`packages/compiler/src/analysis/`).
 
-`@memoized-dom/compiler-next/analysis` exports `inspectModules()` for ordinary
+`@memoized-dom/compiler/analysis` exports `inspectModules()` for ordinary
 JS/TS/JSX/TSX inputs. It uses the same parse, resolve and graph stages as production,
 stopping before render planning, optimization and emission. Extended syntax and
 editor mapping remain in the separate JSX+ package.

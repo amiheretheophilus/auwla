@@ -1,7 +1,7 @@
 import { ident, walk, type CssNode } from 'css-tree';
 import type { StyleBlock } from './blocks';
 import type { Report } from './conditions/values';
-import type { SourceAssetResolver } from '@memoized-dom/compiler-next';
+import type { SourceAssetResolver } from '@memoized-dom/compiler';
 import { JsxPlusError } from '../diagnostics';
 import { readStyleBlocks } from './blocks';
 import { parseStylesheet } from './syntax';

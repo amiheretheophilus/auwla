@@ -3,7 +3,7 @@
  *
  * A browser evaluates every module once per user. A server evaluates it once for every user,
  * so state a page writes while rendering one request would be what the next request reads. In a
- * server build, compiler-next keeps such a module's state in a record: the module's own top-level
+ * server build, the compiler keeps such a module's state in a record: the module's own top-level
  * variables serve code that runs outside any render, and each server render gets a record of its
  * own, built by re-running the module's state setup the first time that render touches it.
  *
@@ -37,7 +37,7 @@ function waitingRegistry(): WaitingRegistry {
   return realm[WAITING_KEY] ??= { setups: new Map(), initializers: new WeakSet() };
 }
 
-/** Called by a module whose state setup waits, when it loads (`request-dom.ts` in compiler-next). */
+/** Called by a module whose state setup waits, when it loads (`request-dom.ts` in the compiler). */
 export function registerWaitingModuleState(module: string, initialize: WaitingSetup): void {
   const { setups, initializers } = waitingRegistry();
   // Deleted first, so a module evaluated again takes its place in evaluation order.

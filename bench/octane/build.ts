@@ -1,6 +1,6 @@
 import { readFileSync, mkdirSync, writeFileSync } from 'node:fs';
 import { basename, resolve } from 'node:path';
-import type { compileModules } from '@memoized-dom/compiler-next';
+import type { compileModules } from '@memoized-dom/compiler';
 import { build } from 'esbuild';
 import { assertPin, directory, fixtureDirectory } from './pin';
 import { pnpm } from './process';

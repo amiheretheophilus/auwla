@@ -1,0 +1,104 @@
+/**
+ * The JSX an application writes, as TypeScript sees it (`@memoized-dom/compiler/jsx`), and the
+ * framework's ambient calls. Types only: the compiler reads JSX and emits no factory. Every app's
+ * `tsconfig` and the `.auwla` editor types point here.
+ */
+import type { RouteTable } from '@memoized-dom/router';
+import type { DOMIntrinsicElements } from './jsx/dom-types';
+
+declare global {
+  /** Compiler-owned calls; the compiler supplies runtime imports when needed (`core/resolve/ambient.ts`). */
+  const $fetch: typeof import('@memoized-dom/data').$fetch;
+  const $read: typeof import('@memoized-dom/data').$read;
+  const $track: typeof import('@memoized-dom/data').$track;
+  const $forms: typeof import('@memoized-dom/data').$forms;
+  const $routed: typeof import('@memoized-dom/router').$routed;
+  function $cleanup(disposer: () => void): () => void;
+  function $effect(callback: () => void | (() => void)): void;
+  /** Capture `value` once. The binding does not follow later changes to its sources. */
+  function $snapshot<T>(value: T): T;
+
+  /** Platform DOM elements plus compiler-authored attributes. */
+  namespace JSX {
+    /** Compiled browser JSX produces DOM nodes, including fragment nodes. */
+    interface Element extends globalThis.Node {}
+
+    /** Structural wire result; JSX typing does not depend on the runtime implementation. */
+    interface ServerContent { readonly $mmd: 'page'; readonly version: 1; readonly id: string; readonly html: string }
+    type Child = Element | ServerContent | string | number | bigint | boolean | null | undefined | readonly Child[];
+    type ElementType = keyof IntrinsicElements | ((props: never) => Child);
+
+    /** Application route patterns from the generated `.memoized/routes.d.ts`. */
+    type RoutePaths = Extract<keyof RouteTable, string>;
+
+    /**
+     * A route destination path. Registered application routes appear in
+     * autocomplete; any `/`-prefixed string still compiles for dynamic
+     * destinations. Collapses to plain `/${string}` when the generated
+     * registry is absent.
+     */
+    type RouteToPath = RoutePaths | `/${string}`;
+
+    /** A `route` pattern declaration site — intentionally not autocompleted. */
+    type RouteValue = `/${string}`;
+
+    type RouteParamInput = string | number | boolean | bigint;
+
+    type RouteQueryInput = Record<
+      string,
+      | RouteParamInput
+      | null
+      | undefined
+      | readonly (RouteParamInput | null | undefined)[]
+    >;
+
+    interface RouteToDestinationBase {
+      query?: RouteQueryInput;
+      hash?: string;
+    }
+
+    interface RouteToDestination extends RouteToDestinationBase {
+      path: RouteToPath;
+      params?: Record<string, RouteParamInput>;
+    }
+
+    /**
+     * Object destinations keyed by a registered route: `params` takes that
+     * route's exact `input` shape, and is required when the pattern has
+     * parameters. The permissive `RouteToDestination` member keeps dynamic
+     * paths working, so wrong params are enforced by the compiler rather
+     * than by this union.
+     */
+    type KnownRouteToDestination = {
+      [Path in RoutePaths]: RouteToDestinationBase & {
+        path: Path;
+      } & ([keyof RouteTable[Path]['input']] extends [never]
+          ? { params?: RouteTable[Path]['input'] }
+          : { params: RouteTable[Path]['input'] });
+    }[RoutePaths];
+
+    interface ElementChildrenAttribute {
+      children: Child;
+    }
+
+    interface IntrinsicAttributes {
+      key?: unknown;
+      /** Compiler-owned component content and named-slot assignment marker. */
+      children?: Child;
+      slot?: string;
+      suspend?: true;
+      route?: RouteValue;
+      'route-to'?: RouteToPath | KnownRouteToDestination | RouteToDestination;
+    }
+
+    interface IntrinsicElements extends DOMIntrinsicElements {
+      /** Compiler placeholder; no HTMLSlotElement is emitted. */
+      slot: IntrinsicAttributes & {
+        name?: string;
+        children?: Child;
+      };
+      /** Custom elements remain open-ended while standard tags stay strict. */
+      [name: `${string}-${string}`]: unknown;
+    }
+  }
+}

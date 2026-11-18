@@ -1,5 +1,5 @@
 /**
- * The Vite plugin over compiler-next (`plugin.ts`).
+ * The Vite plugin over the compiler (`plugin.ts`).
  */
 export { memoizedDom } from './plugin';
 export { memoizedDom as default } from './plugin';

@@ -157,7 +157,7 @@ export function applyHotUpdate(
 }
 
 /*
- * compiler-next's components (`wiki/compiler/project.md`, "Hot replacement").
+ * The compiler's components (`wiki/compiler/project.md`, "Hot replacement").
  *
  * Each module-level component is defined under a key that stays the same across edits
  * (`./App.tsx#App`). Importing this module installs hooks that remember every instance a value

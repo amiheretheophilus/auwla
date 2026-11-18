@@ -318,7 +318,7 @@ A reload is never intercepted, with or without the Navigation API: `location.rel
 
 ### Serving below a base path
 
-An app served below a prefix sets Vite's `base` (or compiler-next's `base` option):
+An app served below a prefix sets Vite's `base` (or the compiler's `base` option):
 
 ```ts
 export default defineConfig({ base: '/app/', plugins: [memoizedDom({ clientEntry: 'main.ts' })] });

@@ -8,7 +8,8 @@ be read in the repository) and `state-placement-results.md` for timings; a snaps
 `bundle.ts` builds the browser page from the selected set. `bun run bench:vm` (`../README.md`)
 runs the whole suite; `bun run bench:dom:compare --before-ref=COMMIT` times it against a
 baseline commit, whose own compiler builds the baseline (`--before-compiler=old` for its
-`packages/compiler`, as at `d6e678b`; `next` for its `packages/compiler-next`).
+`packages/compiler`, as at `d6e678b`; `next` for its `packages/compiler-next`, or for its
+`packages/compiler` once that was renamed on 2026-11-18).
 
 ## Quick checks
 
@@ -29,15 +30,15 @@ the same on a GitHub runner and writes the tables, and optional profiles
 
 To isolate a runtime change, add `-f runtime_ref=COMMIT`. This also runs the
 existing create/clear comparison in before/after/after/before order, compiling
-both columns with current compiler-next and bundling each runtime from source.
+both columns with the current compiler and bundling each runtime from source.
 The baseline must support the current compiler's runtime API. The report and
 raw samples are uploaded with the quick results. Compare these columns to
 attribute the runtime change; timings from separate workflow runs cannot do so.
 Use `-f runtime_operations=create,update,clear` to include updates, or select
 other operations supported by the comparison CLI.
 
-For a compiler-next change that also changes its runtime API, use
-`-f compiler_ref=COMMIT` instead. It compares both compiler-next revisions with
+For a compiler change that also changes its runtime API, use
+`-f compiler_ref=COMMIT` instead. It compares both compiler revisions with
 their matching runtimes in the same ABBA order and uploads `compiler-comparison.md`
 and its raw samples. `runtime_operations` selects operations for either comparison.
 
@@ -64,8 +65,9 @@ comparison requires compatible generated/runtime APIs. The default timing
 selection covers the eleven 10k scenarios; `--full` also times the 1k scenarios.
 The current side includes uncommitted source changes, recorded in the metadata.
 
-The baseline compiler defaults to the old compiler. `--before-compiler=next`
-selects compiler-next from that snapshot for `both` or `compiler` isolation.
+The baseline compiler defaults to the snapshot's `packages/compiler`: the old compiler before
+2026-11-18, this one after. `--before-compiler=next` selects the rewrite from a snapshot of either
+age for `both` or `compiler` isolation.
 `--validate-only` runs all correctness gates once on each snapshot, with no timed
 samples or timing report writes. Its generated files use a separate directory.
 

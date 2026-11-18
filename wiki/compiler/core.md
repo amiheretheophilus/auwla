@@ -67,7 +67,7 @@ An HTML element's attribute names are written in lower case (`core/plan/template
 HTML names are case-insensitive and serialize lower case, and a browser's `setAttribute` lowers
 them, but a server's DOM (LinkeDOM) keeps them as given, so a server render showed `tabIndex="2"`
 where the browser had `tabindex="2"` (found by `packages/server/tests/parity.test.ts`, moved to
-compiler-next). SVG names keep their case (`viewBox`).
+the compiler). SVG names keep their case (`viewBox`).
 
 An ordinary loop building JSX row values exposed an older mismatch in the
 uncached setter: it omitted ARIA false and wrote true as an empty attribute.
@@ -97,7 +97,7 @@ inside the compiler or a new list implementation.
 - yuku positions (`start`, `end`, diagnostics) are UTF-16 offsets, like JavaScript
   string indexes, so text edits slice by them directly. Tested with non-ASCII text.
 - Case to test: `enum Mode { A, B }`, which the old compiler rejects
-  (`packages/compiler-next/tests/cases/core.test.ts`).
+  (`packages/compiler/tests/cases/core.test.ts`).
 
 ### Source languages
 
@@ -109,7 +109,7 @@ because the only two functions that find a module's language, `languageOf` and
 option adds other languages, ahead of the built-in one; a language given for `.auwla` replaces it.
 
 JSX+ is loaded the first time a `.auwla` module is read (`createRequire`), not when the compiler
-loads. JSX+ uses compiler-next's `analysis` entry and its errors extend `CompileError`, so a load-time
+loads. JSX+ uses the compiler's `analysis` entry and its errors extend `CompileError`, so a load-time
 import would be a cycle that can reach `CompileError` before it exists (in the bundled `dist`, one
 chunk holds both). An app with no `.auwla` file never loads JSX+.
 
@@ -445,7 +445,7 @@ tables, raw-text elements, parser-sensitive nesting and SVG need no special
 case. Several roots arrive in a `DocumentFragment`. A root that is itself a
 text or region site is moved into its own fragment after navigation: its value
 can expand beyond its anchor, and the caller inserts that whole range. A server
-document builds and clones the same way. compiler-next emits no hydration yet
+document builds and clones the same way. The compiler emits no hydration yet
 (Phase 10), so `cloneTemplate` refuses a hydrating environment instead of
 creating new nodes.
 

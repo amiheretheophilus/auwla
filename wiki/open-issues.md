@@ -7,7 +7,7 @@ Compiler bugs and cases live on their `compiler/` page, under "Cases to test".
 - **R23 on the old compiler** (`tests/r23-local-state.test.ts`, one failure):
   `new WeakMap([[token, …]])` reads a local, so since `6230c271` it is rebuilt and loses
   `.set`. Left unpatched by the 2026-10-19 decision to stop patching those passes.
-  compiler-next passes the same program (`tests/cases/state-and-derived.test.ts`), after
+  The compiler passes the same program (`tests/cases/state-and-derived.test.ts`), after
   this test exposed two bugs there: weak collection edits were never seen, and a group
   re-run created its other members again and lost their edits.
 
@@ -17,7 +17,7 @@ Compiler bugs and cases live on their `compiler/` page, under "Cases to test".
 - **Running authored code at build time to find static pages** (`compiler/delivery.md`). The old
   compiler's rule is "planning never executes an authored function": it models JavaScript in a
   1,095-line evaluator, and every builtin it does not model sends the whole page to the browser
-  (a pure helper, `.filter().map()`, `Math.max`, a `for` loop, `if (x) return`). compiler-next
+  (a pure helper, `.filter().map()`, `Math.max`, a `for` loop, `if (x) return`). The compiler
   instead runs the program in a closed world, with only modules in the graph and allowed globals, so
   it has JavaScript's exact semantics and no list of builtins to keep up to date. The cost is that a
   component with an endless loop would hang the build, as it would hang the browser. Recommended:
@@ -29,7 +29,7 @@ Compiler bugs and cases live on their `compiler/` page, under "Cases to test".
   unknown code on every unknown call, which is about 70 ms a call at 10k rows. `rows = rows` is the
   way to report it by hand. Recommended: leave it, and document `rows = rows`. An animation library
   (`animate(box, { value: 100 })`) is the plainest case: the old compiler re-read such a value every
-  frame, compiler-next shows only the value at the call (found by the replay, `compiler/testing.md`).
+  frame, the compiler shows only the value at the call (found by the replay, `compiler/testing.md`).
 - **Adopting server HTML detaches the nodes inside regions, components and rows for a moment**
   (`compiler/delivery.md`, "Adopting existing nodes"). They go back within the same task, before any
   paint. Focus, the window's scroll, each element's scroll and a playing medium's time and state are
@@ -40,8 +40,8 @@ Compiler bugs and cases live on their `compiler/` page, under "Cases to test".
 ## To discuss with the user first (2026-11-05)
 
 - **A plain function differs from the reference in one case.** A value only an unknown
-  call might change runs once in compiler-next, and is recomputed in the reference
-  (`decisions.md`, 2026-11-05). JavaScript agrees with compiler-next here. Reversible.
+  call might change runs once in the compiler, and is recomputed in the reference
+  (`decisions.md`, 2026-11-05). JavaScript agrees with the compiler here. Reversible.
 - **An opaque call snapshots everything the argument's root can reach.**
   `dset(models[index], …)` walks all of `models`: about 0.5 ms per click at 128 items.
   Narrowing to `models[index]` would miss a package that was given the whole list earlier

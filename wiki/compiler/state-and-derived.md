@@ -664,7 +664,7 @@ that belong to the remaining slices.
 **Verified memo slice:** six `tests/cases/state-and-derived.memos.test.ts` comparisons cover chains,
 loops with break/continue, switch, pattern defaults/rest and shared builders.
 The existing const-derived, body-write, if/else and destructuring cases also pass
-on compiler-next. Ten direct execution tests and three plan tests cover the
+on the compiler. Ten direct execution tests and three plan tests cover the
 ordering and call-count details above without relying on the reference renderer.
 
 The two shared-builder comparisons exposed a reference feedback loop. Its
@@ -672,7 +672,7 @@ The two shared-builder comparisons exposed a reference feedback loop. Its
 `runtime.ts` excludes their internal reads and captures the settled inputs after
 the shared statement. Their expected outputs were not changed.
 
-In `packages/compiler-next/tests/cases/state-and-derived.test.ts`. Each must compile
+In `packages/compiler/tests/cases/state-and-derived.test.ts`. Each must compile
 and show on the UI what the console shows.
 
 The old compiler fails these:

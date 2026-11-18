@@ -21,7 +21,7 @@ route region gets the same tracking, adoption and delivery as any conditional:
 ```
 
 - `routeRegion(id)` is the region's identity while its route matches (the path its match
-  consumed), and null otherwise. compiler-next runs a call it cannot see into inside a tracked
+  consumed), and null otherwise. The compiler runs a call it cannot see into inside a tracked
   computation, and the router reports the read there (`route-reads.ts`), so the region follows
   navigation with no special case in the compiler.
 - Keying the content by that identity remounts it on a new path: `/story/1` → `/story/2` starts
@@ -125,7 +125,7 @@ top of its body, which it then used undeclared (`features/handlers/callbacks.tes
 
 Checked on 2026-11-14 with real builds and the real server, no new code needed:
 
-- **compiler-next's Bun plugin** (`packages/jsx-plus/tests/server.test.ts`, the directory app):
+- **the compiler's Bun plugin** (`packages/jsx-plus/tests/server.test.ts`, the directory app):
   the server renders `/people/2` with the value its preparation read from `#server/people`. A
   link click in the client sends `POST /_memoized/routed`. A client that starts on a
   server-rendered `/people/1` adopts the page with the value the server prepared: no request,
@@ -152,7 +152,7 @@ that is after the page shows, so the route's markup would show unstyled first. B
   `</head>`, or before the outlet when the template's prefix has no head.
 - **Tool.** Vite's client build finds each key's chunk and its CSS, with the CSS of the chunks it
   imports (`generateBundle` in `packages/vite/src/plugin.ts`), and the production delivery
-  module carries `routeStyles`. compiler-next's generated `serve()` passes the delivery module's
+  module carries `routeStyles`. The compiler's generated `serve()` passes the delivery module's
   `routeStyles` on (`server/application.ts`). The command line needs none: Bun's HTML bundling
   links a lazy chunk's CSS in the page already.
 

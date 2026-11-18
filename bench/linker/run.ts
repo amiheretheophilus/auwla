@@ -2,7 +2,7 @@
  * What linking a graph costs as it grows: the same source graph, compiled whole by the compiler.
  * See `README.md`, which keeps the last comparison with the old compiler.
  */
-import { compileModules } from '@memoized-dom/compiler-next';
+import { compileModules } from '@memoized-dom/compiler';
 
 interface Row {
   modules: number;

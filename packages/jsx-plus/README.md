@@ -5,7 +5,7 @@ in [wiki2](../../wiki2/README.md).
 
 This package owns the additional authoring syntax. `normalize()` returns standard
 TSX, syntax views and exact copied-span mappings. `compile()` passes that TSX to
-the existing `@memoized-dom/compiler-next` API, which owns reactivity, refs, lists,
+the existing `@memoized-dom/compiler` API, which owns reactivity, refs, lists,
 optimization and runtime output. Checking also uses its public read-only analysis
 entry; extended syntax and checking transformations stay in this package.
 
@@ -34,7 +34,7 @@ build-only/type-check commands and the source walkthrough. Checks read the actua
 `.auwla` file and exercise the main authoring flow in both compiler modes.
 Its rows are written as `for (const task of visible) { <li key={task.id}>...</li> }`
 directly in the markup. Direct loops accept any iterable and lower to
-`Array.from(iterable, (binding) => row)`. With optimization on, compiler-next
+`Array.from(iterable, (binding) => row)`. With optimization on, the compiler
 shows a keyed single-element loop body through compiled rows, as it does for
 `.map()`. See [direct loops](../../wiki2/syntax.md#direct-loops).
 
@@ -47,14 +47,14 @@ Single identifiers can omit delimiters entirely: `onClick=addTask` becomes
 applied LSP handler rename cover this spelling. Calls/members/other expressions
 still use parentheses or braces.
 
-For whole apps, JSX+ is a compiler-next **source language**, not a build tool, and it is
-built in, as JSX is: compiler-next compiles, imports, maps and hot-updates `.auwla` files
+For whole apps, JSX+ is a compiler **source language**, not a build tool, and it is
+built in, as JSX is: the compiler compiles, imports, maps and hot-updates `.auwla` files
 exactly as it does `.tsx` files, with no import and no option, wherever it runs (its core,
 projects, the Bun plugin, the Vite plugin, the command line). JSX+ reads no files and uses no
 Bun or Node API ([architecture](../../wiki2/architecture.md), DX-39, DX-52).
 
 [The notes example](examples/notes/) has three `.auwla` components importing each
-other, with and without the extension. Tests run it through compiler-next's project
+other, with and without the extension. Tests run it through the compiler's project
 and Bun plugin in both modes, and through the Vite plugin's build, dev server and
 hot updates. [The team example](examples/team/) writes routes, lazy route pages,
 `$fetch`/`$track`, `$routed` and effects in `.auwla`, checked in both modes and
@@ -109,7 +109,7 @@ authored argument diagnostics. Body-assignment and generic-helper examples also
 execute correctly in both compiler modes.
 
 The opt-in `@memoized-dom/jsx-plus/checking/facts` entry now obtains snapshots
-through compiler-next's public `./analysis` entry. It maps identities and ranges
+through the compiler's public `./analysis` entry. It maps identities and ranges
 without DOM emission, distinguishes exact/enclosing/unmapped locations and refuses
 shifted lowering offsets. The active flow planner consumes the same public
 compiler facts directly in normalized coordinates.
@@ -121,7 +121,7 @@ bun check
 bun test
 ```
 
-The host tokenizer/parser remains yuku, pinned to the same version as compiler-next.
+The host tokenizer/parser remains yuku, pinned to the same version as the compiler.
 Equal-width masks are internal scanning aids; emitted code is built from copied
 authored spans and generated syntax. Generated braces have no editable authored
 mapping. These frontend mappings are not final-JavaScript source maps.

@@ -106,7 +106,7 @@ export function disposeSlot(slot: ValueSlot | null): ValueSlot {
 }
 
 /**
- * Adjacent children sharing one text node (`compiler-next/src/optimize/text-fusion.ts`).
+ * Adjacent children sharing one text node (`compiler/src/optimize/text-fusion.ts`).
  * While every part is text they are one string. The first part that is an object
  * expands the node into one value slot per part, for good: returned as `fused`.
  */
@@ -190,7 +190,7 @@ export function createIndexedValueSlot(text: Text, owner: RenderOwner): ValueSlo
 }
 
 /**
- * compiler-next's child site that the syntax does not prove primitive. Until a
+ * The compiler's child site that the syntax does not prove primitive. Until a
  * value is an object (stored JSX, an array) it is text, written here exactly as
  * a new slot writes such a value, and the result is null. Otherwise the result
  * is the site's slot, created by the first object and kept, for the caller to

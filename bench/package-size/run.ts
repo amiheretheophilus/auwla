@@ -61,7 +61,7 @@ const client = measure('runtime client', 'packages/runtime/dist/index.js');
 measure('runtime hydrate', 'packages/runtime/dist/hydrate.js');
 measure('runtime hot', 'packages/runtime/dist/hot.js');
 measure('runtime server', 'packages/runtime/dist/server.js');
-measure('compiler', 'packages/compiler-next/dist/index.js');
+measure('compiler', 'packages/compiler/dist/index.js');
 measure('Vite adapter', 'packages/vite/dist/index.js');
 const browser = measure(
   'todo browser',

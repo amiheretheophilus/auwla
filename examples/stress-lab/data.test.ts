@@ -16,7 +16,7 @@ import { afterEach, expect, it } from 'bun:test';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { compileModules } from '@memoized-dom/compiler-next';
+import { compileModules } from '@memoized-dom/compiler';
 import { createDataRuntime, setActiveDataRuntime, type DataRuntime } from '@memoized-dom/data';
 import { _internals, resetScheduler, setScheduler, unregister } from '@memoized-dom/runtime/testing';
 

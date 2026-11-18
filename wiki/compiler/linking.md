@@ -235,7 +235,7 @@ Generated `paths` need every app to change its tsconfig. So the plugin writes `i
 only and can be committed. A file the author wrote at such a path is left alone, and
 `.memoized/linked-types.json` in the package records what to remove when a subpath goes.
 
-With compiler-next, finding and resolving native packages is the project's job, not a plugin's
+With the compiler, finding and resolving native packages is the project's job, not a plugin's
 (`project.md`, "Native packages"): `fileSystemHost` resolves an import of one to its source file,
 for Vite, Bun and the command line alike, and reads `.lib.config.ts` as a literal object without
 running it. The paragraphs above describe the old plugin, which still does it itself. Packaging
@@ -275,7 +275,7 @@ modelled, since the compiler never sees them.
 A package's output should be in proportion to its source. A sample of ordinary package code
 (a barrel, components with children and a list, a store, two factories, pure helpers, and
 an app using them) measures this: 4.7 KB of source, 15.8 KB minified from the old compiler
-without runtime, and from compiler-next 42.1 KB, now 34.2 KB:
+without runtime, and from the compiler 42.1 KB, now 34.2 KB:
 
 - A prop nothing assigns needs no separate copy of its parent's value (`props/dom.ts`), about
   100 B a prop on its own and less inside a bundle. A leaf component fell to 2,041 B.
@@ -323,7 +323,7 @@ An ordinary npm package is not compiled (`../decisions.md`, 2026-11-05). This pa
 is linking for native packages.
 
 The old compiler's opaque path is why third-party compilation existed: a reader of an
-opaque value was re-checked every frame. compiler-next checks only at the call.
+opaque value was re-checked every frame. The compiler checks only at the call.
 `bench/third-party-runtime` compares them on real Chromium, with correct results in every
 mode. One local run at 128 instances, 3 samples, so only a guide (microseconds; the VM is
 still to repeat it):

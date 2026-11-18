@@ -31,7 +31,7 @@ export interface Creations {
   take?(id: string): Node | undefined;
   /** Browser: the node `take` gave for `id` was built differently, so a new one is made. */
   misfit?(id: string, node: Node): void;
-  /** Set once a template is cloned: compiler-next output, whose HTML carries the numbers. */
+  /** Set once a template is cloned: compiler output, whose HTML carries the numbers. */
   cloned: boolean;
 }
 

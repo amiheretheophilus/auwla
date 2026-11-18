@@ -44,7 +44,7 @@ const metadata: Record<string, unknown> = {
   memoizedDirty: Boolean(git(['status', '--porcelain', '--untracked-files=no'])), pnpmVersion,
   upstreamLockSha256: createHash('sha256').update(readFileSync(resolve(upstream, 'pnpm-lock.yaml'))).digest('hex'),
   platform: process.platform, cpu: cpus()[0]?.model, logicalCpus: cpus().length,
-  compiler: selectedCompilerPath() ?? 'packages/compiler-next',
+  compiler: selectedCompilerPath() ?? 'packages/compiler',
   memoryBytes: totalmem(), bunVersion: Bun.version, targets: names, samples,
   canonicalCpuThrottle: Number(process.env.CPU_THROTTLE || 1),
   memoizedState: 'component-owned; inline keyed rows; immutable array operations; synchronous scheduler',

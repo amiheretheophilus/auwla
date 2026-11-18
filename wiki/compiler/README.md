@@ -1,9 +1,10 @@
 # The compiler (rewrite)
 
-**Status: general state, conditionals, lists, components and props are built.** The new compiler lives in
-`packages/compiler-next/` on branch `compiler-rewrite`; its tests are in
-`packages/compiler-next/tests/`. `packages/compiler/` stays until every suite passes
-on the new one; then it is deleted.
+**Status: general state, conditionals, lists, components and props are built.** The compiler lives in
+`packages/compiler/` on branch `compiler-rewrite`; its tests are in `packages/compiler/tests/`.
+It was written beside the old compiler as `packages/compiler-next/`. Phase 10's exit deleted the
+old one and gave the new one its folder and package name (2026-11-18). Older pages and logs still
+say compiler-next.
 
 Phases 1–4 and the Phase 5 general list rule are implemented. Phase 6 adds ordered
 component props, children, native/member/dynamic tags, factories, recursion,
@@ -17,7 +18,7 @@ results and commits are in `../status.md`.
 Phase 7 effects, cleanup and reactive refs pass their reference comparisons and
 the full CI gate at `4e15dc31`. Phase 8 (sources, readiness, `Group`, `suspend`,
 the action contract) is built and reviewed (2026-10-27): every source case
-passes on the reference and compiler-next in both modes, and the generated
+passes on the reference and the compiler in both modes, and the generated
 source programs now compare compiled output with the reference
 (`sources.md`). Validation counts and CI results are in `../status.md`.
 The supplied VM report at `874c826` fails the performance floor: the old compiler
@@ -91,10 +92,10 @@ Rules for the whole pipeline:
 ## Folders
 
 ```
-packages/compiler-next/src/
+packages/compiler/src/
   index.ts          public API, the same as packages/compiler
   pipeline.ts       orders the stages
-  jsx-types.ts      the JSX and ambient calls apps type against (`@memoized-dom/compiler-next/jsx`)
+  jsx-types.ts      the JSX and ambient calls apps type against (`@memoized-dom/compiler/jsx`)
   jsx-runtime.ts    the same through `jsxImportSource` (`…/jsx-runtime`); with jsx/dom-types.ts, types only
   core/
     parse/  resolve/  graph/  plan/  emit/
@@ -105,7 +106,7 @@ packages/compiler-next/src/
   link/             several modules compiled together
   diagnostics/
 
-packages/compiler-next/tests/
+packages/compiler/tests/
   reference/        the plain-JavaScript reference renderer (test-only)
   harness/          runs a case on the reference and on a compiler, and compares
   cases/            one <page>.test.ts per wiki page, with that page's cases

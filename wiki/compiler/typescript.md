@@ -11,10 +11,10 @@ Facts below were read from the package's `.d.ts` files and measured with a probe
 | Where | What | Why |
 | --- | --- | --- |
 | `bun check` | type-checking the repository | under a second, same errors as `tsc` |
-| `tests/reference/typescript.ts` | `api.transpileModule` | the reference's TypeScript is lowered by TypeScript, so it shares no lowering with compiler-next (`testing.md`) |
+| `tests/reference/typescript.ts` | `api.transpileModule` | the reference's TypeScript is lowered by TypeScript, so it shares no lowering with the compiler (`testing.md`) |
 | `packages/language-service` | TypeScript 6, through the alias `npm:@typescript/typescript6` | it is a `tsserver` plugin, which native TypeScript cannot load (below) |
 
-compiler-next itself does not depend on TypeScript. It parses, strips and prints with the yuku
+The compiler itself does not depend on TypeScript. It parses, strips and prints with the yuku
 packages (`toolchain.md`), and lowers enums and namespaces itself (`core.md`).
 
 ## The API surface
@@ -79,7 +79,7 @@ and code fixes for a custom rule are not part of it.
 The probe gave `string` for a template string, `number`, and `string | undefined` for the three
 queries it made, which is what the editor shows.
 
-## Where compiler-next could use it
+## Where the compiler could use it
 
 Each of these is a candidate, not a plan. None is needed for correctness: the compiler must
 stay right for plain JavaScript, which has no types, so a type can only make output smaller or
@@ -112,5 +112,5 @@ add a warning.
 5. **Plugins.** The language service cannot move to TypeScript 7 as a plugin. It stays on 6 until it
    is rebuilt on one of the ways above, or TypeScript adds plugins back.
 6. **Reference independence.** The reference may use TypeScript (`tests/reference/typescript.ts`).
-   If compiler-next starts using TypeScript too, the reference must not then use the same calls for
+   If the compiler starts using TypeScript too, the reference must not then use the same calls for
    the same decision, or a bug in either is in both (`testing.md`).

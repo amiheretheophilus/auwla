@@ -168,7 +168,7 @@ const summary = [
   '# Benchmark run',
   '',
   `- Commit: \`${commit}\`${git('status', '--porcelain', '--untracked-files=no') === '' ? '' : ' (with uncommitted changes)'}`,
-  `- Compiler: ${compiler === undefined ? "this checkout's (`packages/compiler-next`)" : `snapshot \`${compiler}\``}`,
+  `- Compiler: ${compiler === undefined ? "this checkout's (`packages/compiler`)" : `snapshot \`${compiler}\``}`,
   `- Mode: ${quick ? 'quick (correctness gates, one Octane sample)' : 'full'}${beforeRef === undefined ? '' : `, baseline ${beforeRef}`}`,
   `- Machine: ${cpus()[0]?.model ?? 'unknown CPU'}, ${cpus().length} logical CPUs, ${(totalmem() / 2 ** 30).toFixed(0)} GiB, ${process.platform}`,
   `- Bun ${Bun.version}; started ${stamp}`,

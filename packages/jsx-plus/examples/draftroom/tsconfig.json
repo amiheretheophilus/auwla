@@ -5,7 +5,7 @@
     "paths": {
       "#server/*": ["./server/*"],
       "#server-functions": ["./.memoized/server-functions.d.ts"],
-      "@memoized-dom/compiler/jsx": ["../../../compiler-next/src/jsx-types.ts"],
+      "@memoized-dom/compiler/jsx": ["../../../compiler/src/jsx-types.ts"],
       "@memoized-dom/server": ["../../../server/src/index.ts"]
     }
   },

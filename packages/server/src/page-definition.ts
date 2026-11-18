@@ -19,7 +19,7 @@ export interface ServerPageDefinition {
   readonly create: ServerComponent;
   readonly binding?: { readonly key: string; readonly inputs: () => readonly unknown[] };
   readonly wrapped?: boolean;
-  /** compiler-next's page: its HTML, when it has bindings, goes inside one root element. */
+  /** the compiler's page: its HTML, when it has bindings, goes inside one root element. */
   readonly contained?: true;
   readonly styles?: readonly string[];
   readonly delivery?: {readonly key:string; readonly browser:'none'|'bindings'; readonly target:string};
@@ -49,7 +49,7 @@ export function createServerPage(
 }
 
 /**
- * compiler-next's page (`packages/compiler-next/src/server/pages.ts`): `component` is the page
+ * The compiler's page (`packages/compiler/src/server/pages.ts`): `component` is the page
  * module's compiled `Page<n>(inputs)`, which takes a props cell rather than the old compiler's
  * props array. The browser renders the same component into the page's root element, so a page
  * with bindings is rendered inside one `display: contents` element (`renderServerPage`).

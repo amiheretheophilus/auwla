@@ -13,7 +13,7 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { expect } from 'bun:test';
-import { compileModules } from '../../compiler-next/src';
+import { compileModules } from '../../compiler/src';
 import type { ApplicationRuntime } from '@memoized-dom/runtime';
 import {
   createDataRuntime,

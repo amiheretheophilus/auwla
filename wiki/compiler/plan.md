@@ -19,17 +19,17 @@ The order of work for the new compiler, from an empty `src/` to replacing
   before expanding authored-code proofs, measure unchanged production fixtures,
   preserve every existing expectation, and commit/push each verified batch.
 - **Semantics are decided.** `../rules.md`, `../decisions.md` and the concept pages
-  say what correct is; the tests in `packages/compiler-next/tests/` are the spec.
+  say what correct is; the tests in `packages/compiler/tests/` are the spec.
   Do not change a rule or a test expectation without the user. If a case seems
   wrong, record why in `../open-issues.md` and ask.
 - **A failing case is never accepted as expected.** Old-compiler failures must pass
-  on compiler-next.
+  on the new compiler.
 - **Structure first** (`README.md`): one graph decides what each binding is;
   features depend only on `core/`; `pipeline.ts` alone orders stages; the authored
   AST is never edited; no `try`/`catch`/`finally` in output; anything not proven is
   `Opaque`, never an error (except framework API contracts, `sources.md`).
 - **Readable code**: one step per line, named helpers, comments that say why.
-- **After each step:** `bun check` in `packages/compiler-next`, run the affected
+- **After each step:** `bun check` in `packages/compiler`, run the affected
   cases, tick the box here, update the concept page and `../status.md`, commit and
   push to `origin` (`../../AGENTS.md`).
 - **Performance:** `bench/` locally only checks correctness gates; the user times
@@ -37,7 +37,7 @@ The order of work for the new compiler, from an empty `src/` to replacing
 
 ## How progress is measured
 
-`COMPILER=next bun test cases` runs every case on compiler-next (Phase 1 adds the
+`COMPILER=next bun test cases` runs every case on the new compiler (Phase 1 adds the
 switch). Record the pass count in `../status.md` after each step. Generated programs
 run with `COMPILER=next FC_RUNS=200 bun test generator`. Each phase lists the case
 files that must pass in full at its exit.
@@ -414,7 +414,7 @@ array child). Remove each check when its phase is built.
      follow, octopulse's conditional attributes rewritten as JavaScript. Benchmarks of the old
      compiler's own features went (`ssr/writer.ts`, `installed-packages`); hacker-news, octopulse
      and server-pages use JavaScript conditionals; stress-lab's tests run on compiler-next
-     (`testing.md`, "The examples on compiler-next").
+     (`testing.md`, "The examples on the compiler").
   6. [x] `packages/compiler` is deleted, with the runtime, server and data code only its output
      reached. First (2026-11-18): the package and `evaluation/` (a study of the old linker,
      whose `vendor/` copy was never in the repository) are gone; its JSX type tests moved to

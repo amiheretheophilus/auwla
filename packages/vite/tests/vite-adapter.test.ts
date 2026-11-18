@@ -377,7 +377,7 @@ describe('Vite 8 adapter', () => {
     expect(entry?.dynamicImports).toEqual([]);
   });
 
-  // Was a TSRX component's own style block; TSRX is not compiler-next's (`wiki/decisions.md`), so
+  // Was a TSRX component's own style block; TSRX is not the compiler's (`wiki/decisions.md`), so
   // the route's component imports its stylesheet.
   it('keeps a lazy route\'s CSS with its chunk', async () => {
     const root = await copyFixture();
@@ -424,7 +424,7 @@ describe('Vite 8 adapter', () => {
     expect(entry?.viteMetadata?.importedCss).not.toContain(css[0]?.fileName);
   });
 
-  // compiler-next builds the program from its entries (`wiki/compiler/project.md`), so with none
+  // The compiler builds the program from its entries (`wiki/compiler/project.md`), so with none
   // there is nothing to serve. A module must not reach the browser uncompiled, where Vite's own
   // JSX transform would ask for React.
   it('reports a client entry with no file instead of serving uncompiled modules', async () => {

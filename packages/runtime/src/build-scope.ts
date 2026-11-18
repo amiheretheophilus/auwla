@@ -1,4 +1,4 @@
-/** Runtime invocation ownership for compiler-next setup and memo replay. */
+/** Runtime invocation ownership for compiled setup and memo replay. */
 import {
   getActiveApplicationRuntime,
   getExtensionStore,

@@ -6,7 +6,7 @@ import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { gzipSync } from 'node:zlib';
 import puppeteer, { type Page } from 'puppeteer-core';
-import { compileModules } from '@memoized-dom/compiler-next';
+import { compileModules } from '@memoized-dom/compiler';
 import { closeBrowser } from '../../test-support/browser';
 import { fixture } from './fixtures';
 import { benchmarkOptions, summary } from './options';

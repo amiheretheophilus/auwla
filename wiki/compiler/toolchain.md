@@ -27,7 +27,7 @@ Other libraries:
 Development uses Bun's native `bun check`, with the root engine floor
 `>=1.4.3-0`. The root now requests `@types/bun` `^1.4.4`, rather than `latest`;
 `bun.lock` resolves both `@types/bun` and `bun-types` to 1.4.4. A frozen install
-and the compiler-next/runtime package checks validate this development-only
+and the compiler/runtime package checks validate this development-only
 update; it does not change the browser runtime or emitted programs.
 
 ## Rules
@@ -42,7 +42,7 @@ update; it does not change the browser runtime or emitted programs.
 - **The analyzer takes source text, not an AST** (`setFile(path, source)`), and its
   model is a snapshot of that text. So the authored source is analyzed once and its
   AST is never edited (`README.md`, rule 1).
-- **TSRX is not supported** by `compiler-next` (`../decisions.md`, 2026-10-19). Only
+- **TSRX is not supported** by the compiler (`../decisions.md`, 2026-10-19). Only
   `.js`, `.jsx`, `.ts` and `.tsx` files are compiled.
 - **`isWrite` and `capturesOf` see reassignment** (`x = 1`, `x++`, `for (x of …)`),
   **not mutation** (`x.push(1)`, `x.a = 1`). Mutation sites are found by

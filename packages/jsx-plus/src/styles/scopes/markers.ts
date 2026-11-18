@@ -1,4 +1,4 @@
-import { CompileError, inspectMarkup, type MarkupOwnership } from '@memoized-dom/compiler-next/analysis';
+import { CompileError, inspectMarkup, type MarkupOwnership } from '@memoized-dom/compiler/analysis';
 import type { StyleBlock } from '../blocks';
 import { assemble, insertGenerated, nearestAuthoredOffset, type Piece } from '../../source';
 

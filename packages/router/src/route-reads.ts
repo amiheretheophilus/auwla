@@ -1,7 +1,7 @@
 /**
  * Reads of the active route that compiled code follows (`wiki/compiler/routes.md`).
  *
- * compiler-next runs a read it cannot see into, such as `route.pathname` or a route region's
+ * The compiler runs a read it cannot see into, such as `route.pathname` or a route region's
  * `routeRegion(id)`, inside a computation of the runtime, which records what the read reports
  * through `trackRead`. A navigation then publishes only the keys whose value changed:
  *

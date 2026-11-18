@@ -1,7 +1,7 @@
 # Syntax diagnostics
 
 0.1-draft, revision 10. Codes below are **proposed for the extension**; they have
-not been added to compiler-next's current `CompileError` API.
+not been added to the compiler's current `CompileError` API.
 
 ## Format and locations (D-FORMAT)
 

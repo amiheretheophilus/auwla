@@ -2,11 +2,11 @@
 
 Version: **0.1-draft**, revision **10**. Initial core profile. Created: 2026-11-11.
 Implementation: **first slice built** in the separate `packages/jsx-plus` package.
-It normalizes the tested subset to standard TSX and calls compiler-next's public
-API. Compiler-next continues to receive ordinary TSX; its grammar stays unchanged.
+It normalizes the tested subset to standard TSX and calls the compiler's public
+API. The compiler continues to receive ordinary TSX; its grammar stays unchanged.
 
 JSX+ extends Auwla's markup authoring while retaining JavaScript/TypeScript and
-compiler-next's existing semantics. It adds quoted text, direct expression
+the compiler's existing semantics. It adds quoted text, direct expression
 children and direct conditional children. Refs, ordinary event props, list
 reconciliation, state, readiness and ownership already exist and are reused.
 
@@ -51,7 +51,7 @@ the broader design discussion. A plan or an example does not override a rule.
 Accepted: quoted text, direct expression/control-flow children, normal declared
 refs through the existing ref prop, parenthesized attribute expressions alongside
 existing JSX attribute braces, bare identifier attribute values and the existing
-compiler-next pipeline.
+the compiler pipeline.
 
 Revision 1 provisionally chooses JavaScript expression continuation/ASI, explicit
 separators where expressions could join, JS string escapes without JSX text
@@ -68,7 +68,7 @@ database clients and other ordinary backend packages. Project configuration will
 identify the backend files and/or folders. Such code is nonreactive and preserves
 ordinary backend execution; the file extension does not make it UI code.
 
-This extends authoring within the same compiler-next toolchain. The config
+This extends authoring within the same the compiler toolchain. The config
 surface and `.auwla` backend loading are not implemented or specified in detail
 yet. Isomorphic support is future work. The core markup profile below does not
 impose reactive UI semantics on configured backend code.
@@ -96,7 +96,7 @@ working; an ordinary expression is not rejected for calling unknown code.
 ```text
 extended syntax -> separate packages/jsx-plus normalizer -> standard TSX
 standard TSX / existing syntax
-  -> compiler-next public API and existing parse stage
+  -> the compiler public API and existing parse stage
   -> resolve -> graph -> plan -> optimize -> emit
   -> existing runtime / DOM / SSR
 ```
@@ -106,7 +106,7 @@ That is TypeScript tooling, not another production compiler. Normalization MUST
 preserve binding scopes, evaluation order, native operations and authored ranges.
 It MUST NOT create a new state model or rebuild the ref implementation.
 DX-31 places that normalization in its own package rather than inside existing
-compiler-next source folders.
+the compiler source folders.
 
 ## How the draft evolves
 

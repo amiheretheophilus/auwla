@@ -564,9 +564,10 @@ Known open issues:
   plugin and Vite plugin with maps to the authored text (DX-39, above), and its server
   build renders, prepares `$routed` and answers server functions (directory example).
 
-## Compiler-next changes to reconcile
+## Compiler changes to reconcile
 
-Compiler-next is unfinished (branch `compiler-rewrite`) and is continued
+The compiler (`packages/compiler`, called compiler-next until 2026-11-18) is unfinished
+(branch `compiler-rewrite`) and is continued
 separately. Under DX-34 this branch may change it for `.auwla` interop. Rows up to
 `232c8f5b` were adopted (`bd237a29`, then the merge `c56e2b35` of 2026-11-13).
 The later rows through `0855afa3`, including the CSS-1 checkpoint, were adopted on

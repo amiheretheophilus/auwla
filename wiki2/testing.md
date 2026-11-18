@@ -42,14 +42,14 @@ bun run --cwd packages/jsx-plus test
 ```
 
 It checks authored views/errors and compiles extended source through the package's
-public-API facade into compiler-next, executing both optimization modes. Code
+public-API facade into the compiler, executing both optimization modes. Code
 stays in that package. The compiler-owned public inspection API shares the
 existing frontend; runtime/data sources remain unchanged.
 
 `tests/host.test.ts` also evaluates normalized source using Bun's ordinary TSX
 transpiler and a plain JSX value factory. This verifies native generator
 suspension/resumption and async values independently of reactive compilation.
-It does not establish compiler-next's full async/generator runtime acceptance.
+It does not establish the compiler's full async/generator runtime acceptance.
 Compiled UI tests separately exercise object-valued branch children and ternaries
 ending in markup in both compiler modes.
 
@@ -137,7 +137,7 @@ no editable mapping; strict compilation still rejects the same malformed input.
 See [recovery](recovery.md) for the bounded line profile and structural fallback.
 
 `checking-facts.test.ts` additionally validates the new opt-in inspection adapter.
-The shared frontend extraction is checked against compiler-next's analysis,
+The shared frontend extraction is checked against the compiler's analysis,
 graph, parse, core and ref cases; exact commands/results are in [status.md](status.md).
 
 Acceptance IDs are owned by [syntax.md](syntax.md), [refs.md](refs.md) and
@@ -146,7 +146,7 @@ Actual and planned prototype files are mapped in [architecture.md](architecture.
 No nonexistent test command is presented here as a working gate.
 
 Existing compiler compatibility cases are under
-`packages/compiler-next/tests/cases/`. Ref behavior is in `refs.test.ts` and the
+`packages/compiler/tests/cases/`. Ref behavior is in `refs.test.ts` and the
 branch/list contracts are on their [compiler concept pages](../wiki/compiler/README.md).
 Use the affected files and rebuild packages first when a suite imports `dist`.
 

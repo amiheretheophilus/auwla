@@ -6,7 +6,7 @@ Status: **proposed**, 2026-11-16. Nothing is implemented. The user accepted the
 ## What documents are for
 
 An interactive docs site: pages written as Markdown, with Auwla components and values
-inside, compiled by compiler-next like any other module.
+inside, compiled by the compiler like any other module.
 
 1. **Prose first.** Headings, paragraphs, lists, links, tables and code blocks are
    written as Markdown, without quoting every sentence as `.auwla` requires.
@@ -38,10 +38,10 @@ unchanged, and documents read like MDX.
 
 ## Why not compile with MDX
 
-Checked 2026-11-16 against compiler-next (scratch tests, not kept):
+Checked 2026-11-16 against the compiler (scratch tests, not kept):
 
 - **MDX's output defeats static templates.** `@mdx-js/mdx` writes every Markdown element
-  as `<_components.h1>`, looked up in `{h1: "h1", ...props.components}`. compiler-next
+  as `<_components.h1>`, looked up in `{h1: "h1", ...props.components}`. The compiler
   cannot know those are tags: a heading and a paragraph compiled to 200+ lines of
   component machinery. The same page as plain `<h1>`/`<p>` compiled to one template.
 - **Its grammar is not ours.** MDX's parsers reject TypeScript (`export const name: string`),
@@ -64,7 +64,7 @@ shadow text: same length, Auwla regions masked
 mdast with exact offsets  +  the regions read in step 1
   │  3. emit (ours): mdast → plain JSX tags; regions spliced back as TSX pieces
   ▼
-TSX module with exact mappings  ──►  compiler-next (unchanged pipeline)
+TSX module with exact mappings  ──►  the compiler (unchanged pipeline)
 ```
 
 This is the technique `.auwla` already uses (`masks.ts`, `source.ts`): read the extended
@@ -107,7 +107,7 @@ where they go wrong, and authors expect GitHub's behaviour.
 ### 3. Emit
 
 - **Markdown nodes become plain tags**: `<h2 id="install">`, `<p>`, `<ul>`, `<a href>`,
-  `<table>`, `<pre><code class="language-ts">`, so compiler-next clones them from templates.
+  `<table>`, `<pre><code class="language-ts">`, so the compiler clones them from templates.
 - **Text becomes JSX text**, not `{"…"}` strings, with `{ } < > &` as entities. JSX text is
   folded into the template; string children are written at run time (below).
 - **Regions are spliced back**: an element as JSX+ normalizes it, an interpolation as
@@ -123,7 +123,7 @@ back exactly.
 - **`packages/jsx-plus/src/documents/`**: pre-scan, emitter, language. It reuses JSX+'s
   readers, masks, pieces, diagnostics and checking projection; a separate package would
   duplicate them (DX-31 keeps syntax in this package).
-- **compiler-next**: one more built-in language beside `.auwla` (`core/parse/built-in.ts`,
+- **the compiler**: one more built-in language beside `.auwla` (`core/parse/built-in.ts`,
   DX-52), so no tool needs an option. Collection, imports, routing, bundling, hot
   replacement and delivery are unchanged.
 - **Editor**: the content mapper already serves `normalizeForChecking`'s TSX for `.auwla`;
@@ -131,7 +131,7 @@ back exactly.
   `{expr}` and on attributes. VS Code associates `*.auwla.md`; highlighting injects Auwla's
   grammar into the Markdown grammar.
 
-## The compiler-next change this needs (and `.auwla` needs now)
+## The compiler change this needs (and `.auwla` needs now)
 
 Measured 2026-11-16:
 

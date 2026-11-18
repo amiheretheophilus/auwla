@@ -1,0 +1,1467 @@
+/**
+ * Turns an authored module into a reference module (wiki/compiler/testing.md).
+ *
+ * The reference calls every component again on every render, but the component
+ * body is setup code: it runs once. Only derivations are computed again, and only
+ * when what they read changes. So each binding declared at the top of a component
+ * gets one of these treatments:
+ *
+ * | Binding                                      | Treatment | Behaviour                              |
+ * | -------------------------------------------- | --------- | -------------------------------------- |
+ * | any `let x` / `const x`                     | `memo`    | derives until an actual later write    |
+ * | a prop reassigned by code that runs later    | `prop`    | overridden until the parent changes it |
+ * | a function or unmodified parameter          | plain     | recomputed on every render             |
+ *
+ * A memo with no inputs is computed once. Invocation context, not callback names,
+ * distinguishes body computation from later writes.
+ *
+ * A binding's derivation is its initializer plus the body statements that build it.
+ * A statement builds a binding when it changes it:
+ *
+ * - definitely: `x = …`, `x.a = …`, `x.n++`, `delete x.a`;
+ * - possibly: `x.anything(…)` or `f(x)`. The reference never guesses from names:
+ *   the statement runs inside `$ctx.observe(...)`, which compares the value before
+ *   and after. Once it is seen to change the value, it builds it.
+ *
+ * Every other body statement runs on the first render where the sources it reads
+ * are ready, and again whenever what it read changed since it last ran, side
+ * effects included (`wiki/decisions.md`, 2026-11-15; `$ctx.changed`).
+ * Destructured aliases follow the same memo rules. JavaScript evaluates the
+ * native pattern once per input change, after its source is ready.
+ */
+import { analyze, Analyzer, BindingFlags, type Binding, type Module, type Reference } from 'yuku-analyzer';
+import { posix } from 'node:path';
+import { b, findAll, is, walk } from 'yuku-ast';
+import { generate } from 'yuku-codegen';
+import { parse } from 'yuku-parser';
+import type { BlockStatement, Expression, Node, Statement, VariableDeclarator } from 'yuku-parser';
+import { installedResolver, sourcesOfOutput } from '../harness/installed';
+import { lowerWithTypeScript } from './typescript';
+import { callOnlyReads, literalFields } from './syntax-rules';
+import { lowerReferenceSlots } from './slots';
+import { lowerReferenceRoutes } from './routes';
+import { blockThunk, constDeclaration, identifier, member, numberLiteral, runtimeCall, thunk } from './ast';
+import { ClosureCells } from './closures';
+import { enclosingFunction, Reads } from './reads';
+import {
+  buildModuleMemos,
+  generatedReadBinding,
+  captureModuleRead,
+  inputsOf,
+  isDataCall,
+  prepareModuleReads,
+  readsWithPaths,
+  rewriteDataImports,
+  shouldWaitAtAttribute,
+  statusInput,
+  sourceUses,
+  inputsOf as visibleInputs,
+  waitForExpression,
+  waitForRenderExpression,
+  type ReadsOf,
+  type SourceUses,
+} from './readiness';
+
+type FunctionNode = Extract<Node, { type: 'FunctionDeclaration' | 'FunctionExpression' | 'ArrowFunctionExpression' }>;
+
+type Treatment = 'memo' | 'prop';
+
+interface Slot {
+  treatment: Treatment;
+  /** Position of the slot in its component instance. */
+  index: number;
+  /** Local name that holds the slot, `$s0`, `$s1`, … */
+  name: string;
+}
+
+/** The two memos behind `const { a, b } = init`, before each alias's own slot. */
+interface PatternSlots {
+  /** The value of `init`: the payload, or a source when `init` is a `$fetch(…)` call. */
+  value: Slot;
+  /** `{ a, b }`: the authored pattern run on that value, once it is ready. */
+  names: Slot;
+}
+
+/** What one body statement does to the component's bindings. */
+interface StatementPlan {
+  /** Bindings it changes for sure. */
+  builds: Set<Binding>;
+  /** Memo bindings it may change through a call. Their order is their `observe` position. */
+  mayBuild: Binding[];
+  /** Index for `$ctx.observe`, when `mayBuild` is not empty. */
+  observeIndex: number | undefined;
+}
+
+/** Statement types that can be wrapped in an `if` without changing scoping. */
+const GUARDABLE_STATEMENTS = new Set<string>([
+  'ExpressionStatement',
+  'IfStatement',
+  'SwitchStatement',
+  'BlockStatement',
+  'ForStatement',
+  'ForInStatement',
+  'ForOfStatement',
+  'WhileStatement',
+  'DoWhileStatement',
+]);
+
+const RUNTIME_EXPORTS = [
+  '$h', 'Fragment as $Fragment', '$enter', '$assignRef', '$moduleEffect', '$ownedEffect', '$moduleMemo',
+  '$when', '$value', '$chain', '$waiting', '$sourceState', '$branch', '$switch', '$path', '$ready',
+  '$captureRead', '$closureCell', '$closureRead', '$traced', '$moduleBuilder', '$reassigned', '$ownedCleanup',
+  '$privateTarget', '$setup', '$spread', '$untracked',
+  '$installRoutes', '$routeContext', '$routeJoin', '$routeCall', '$routeIdentity', '$routeHref', '$followedRoute',
+  '$registerRouted', '$routedValue', '$prepareRoutes',
+];
+
+// ---------------------------------------------------------------------------
+// Entry point
+
+/**
+ * `$fetch`, `$read`, `$track` and `$forms` are ambient framework globals whose
+ * imports the compiler supplies (`src/jsx-types.ts`). A module
+ * reading one without a binding behaves as if it imported it.
+ */
+function withAmbientDataImports(source: string, path: string): string {
+  const module = analyze(source, { path });
+  const names = new Set<string>();
+  const written = new Set<string>();
+  for (const reference of module.unresolvedReferences) {
+    if (!['$fetch', '$read', '$track', '$forms'].includes(reference.name) || reference.inTypePosition) continue;
+    (reference.isWrite ? written : names).add(reference.name);
+  }
+  // A module that assigns the global itself keeps it.
+  for (const name of written) names.delete(name);
+  if (names.size === 0) return source;
+  return `${source}\nimport { ${[...names].sort().join(', ')} } from '@memoized-dom/data';\n`;
+}
+
+export function toReference(source: string, path: string, runtimeUrl: string): string {
+  const module = prepareReferenceModule(source, path);
+  return transformReference(module, runtimeUrl, sourceUses(module));
+}
+
+/** Link untouched reference inputs before proving parameter flow across files. */
+export function toReferenceModules(sources: Readonly<Record<string, string>>, runtimeUrl: string): Record<string, string> {
+  const paths = new Map(Object.keys(sources).map((path) => [posix.normalize(path), path]));
+  const installed = installedResolver(Object.keys(sources));
+  const resolve = (specifier: string, importer: string): string | false | null => {
+    if (!specifier.startsWith('.')) {
+      return installed(specifier, importer) ?? false;
+    }
+    const base = posix.join(posix.dirname(importer), specifier);
+    for (const suffix of ['', '.ts', '.tsx', '.js', '.jsx', '/index.ts', '/index.tsx', '/index.js', '/index.jsx']) {
+      const path = paths.get(base + suffix);
+      if (path !== undefined) {
+        return path;
+      }
+    }
+    for (const source of sourcesOfOutput(base)) {
+      const path = paths.get(source);
+      if (path !== undefined) {
+        return path;
+      }
+    }
+    return null;
+  };
+  const analyzer = new Analyzer({ resolve });
+  // A namespace, an enum and `export =` have no JavaScript form. TypeScript itself lowers them
+  // here (`typescript.ts`), so a mistake in the compiler's own lowering shows as a difference.
+  // Routes join across modules, so they are lowered for the whole program at once (`routes.ts`).
+  const lowered = lowerReferenceRoutes(lowerWithTypeScript(sources, resolve), resolve);
+  const modules = Object.entries(lowered).map(([path, source]) => {
+    const prepared = prepareReferenceModule(source, path);
+    return analyzer.setFile(path, prepared.source, { lang: 'tsx', sourceType: 'module' });
+  });
+  analyzer.link();
+
+  // Every proof finishes before transforming any module. Readiness must never
+  // inspect another file after the oracle has rewritten its authored syntax.
+  const uses = modules.map((module) => sourceUses(module));
+  return Object.fromEntries(modules.map((module, index) => {
+    return [module.path, transformReference(module, runtimeUrl, uses[index]!)];
+  }));
+}
+
+function prepareReferenceModule(source: string, path: string): Module {
+  // Slots become plain props first, so every later pass sees ordinary JSX and bindings.
+  let module = analyze(withAmbientDataImports(prepareJsx(lowerReferenceSlots(source)), path), { path });
+  if (module.diagnostics.length > 0) {
+    const messages = module.diagnostics.map((diagnostic) => diagnostic.message).join('; ');
+    throw new Error(`reference: ${path} does not parse: ${messages}`);
+  }
+  module = prepareDiscardedCalls(module, path);
+  module = prepareSnapshots(module, path);
+  return module;
+}
+
+/**
+ * `$snapshot(x)` takes `x` once (`wiki/compiler/state-and-derived.md`, "Snapshots"). It becomes
+ * `$untracked(() => x)`: what the thunk reads is not a static read of the declaration, since a
+ * nested function reads its captures only when called (`Reads`), and `$untracked` records no
+ * read while it runs. With no inputs, the binding's memo never computes again. A module that
+ * declares or assigns its own `$snapshot` keeps its function.
+ */
+function prepareSnapshots(module: Module, path: string): Module {
+  const references = module.unresolvedReferences.filter((reference) => !reference.inTypePosition && reference.name === '$snapshot');
+  if (references.length === 0 || references.some((reference) => reference.isWrite)) {
+    return module;
+  }
+  for (const reference of references) {
+    const call = module.parentOf(reference.node);
+    if (!is.CallExpression(call) || call.callee !== reference.node || call.arguments.length !== 1) continue;
+    call.callee = identifier('$untracked');
+    call.arguments = [thunk(call.arguments[0] as Expression)];
+  }
+  // Re-analyze, so dependency and closure queries see the thunk's real boundary.
+  return analyze(generate(module.ast).code, { path });
+}
+
+function transformReference(module: Module, runtimeUrl: string, rawUses: SourceUses): string {
+  const readCalls = module.findAll('CallExpression').filter((call) => isDataCall(module, call, '$read'));
+  const boundPromises = new Map(readCalls.flatMap((call) => {
+    const declarator = boundPromise(module, call);
+    return declarator === null ? [] : [[call, declarator] as const];
+  }));
+  buildModuleMemos(module, rawUses);
+  const handledSites = new Set<Node>();
+  const components = findComponents(module);
+  const closures = new ClosureCells(module, new Set(components));
+  for (const component of components) {
+    new ComponentRewrite(module, component, rawUses, handledSites).run();
+  }
+  rewriteModuleEffects(module);
+  prepareModuleReads(module, rawUses, handledSites, new Set(components), closures);
+  closures.declare();
+  // Clone only after uses were lowered, so replay closes over live slots. A promise named by a
+  // `const` in the same function is made again from its initializer, as `refresh()` asks.
+  for (const call of readCalls) {
+    if (call.arguments.length !== 1) continue;
+    const init = boundPromises.get(call)?.init ?? null;
+    // A lowered initializer is the memo `$ctx.memo(n, inputs, compute)`; its compute makes the promise.
+    const compute = init !== null && is.CallExpression(init) && is.MemberExpression(init.callee)
+      && is.Identifier(init.callee.property) && init.callee.property.name === 'memo' ? init.arguments[2] : undefined;
+    call.arguments.push(thunk(compute !== undefined
+      ? b.CallExpression({ callee: structuredClone(compute) as Expression, arguments: [], optional: false })
+      : structuredClone(init ?? call.arguments[0]) as Expression));
+  }
+  rewriteDataImports(module, runtimeUrl);
+
+  const header = `import { ${RUNTIME_EXPORTS.join(', ')} } from ${JSON.stringify(runtimeUrl)};\n`;
+  return lowerJsxAndTypes(header + generate(module.ast).code);
+}
+
+/**
+ * `const promise = load(id); $read(promise)`, in one function and never written: the declarator
+ * whose initializer makes the promise. Null for any other argument.
+ */
+function boundPromise(module: Module, call: Extract<Node, { type: 'CallExpression' }>): Extract<Node, { type: 'VariableDeclarator' }> | null {
+  const argument = call.arguments[0];
+  if (argument === undefined || !is.Identifier(argument)) return null;
+  const binding = module.referenceOf(argument)?.binding ?? null;
+  const name = binding?.declarations[0];
+  if (binding === null || name === undefined || binding.references.some((reference) => reference.isWrite)) return null;
+  const declarator = module.parentOf(name);
+  if (!is.VariableDeclarator(declarator) || declarator.id !== name || declarator.init === null) return null;
+  const declaration = module.parentOf(declarator);
+  if (!is.VariableDeclaration(declaration) || declaration.kind !== 'const') return null;
+  const functionOf = (node: Node) => [...module.ancestors(node)].find((ancestor) => is.Function(ancestor)) ?? null;
+  return functionOf(declarator) === functionOf(call) ? declarator : null;
+}
+
+/** Discarded component calls need their own setup slots, including in handlers. */
+function prepareDiscardedCalls(module: Module, path: string): Module {
+  const components = new Set(findComponents(module));
+  const reads = new Reads(module);
+
+  const isComponent = (binding: Binding | null | undefined, visited = new Set<Binding>()): boolean => {
+    if (!binding || visited.has(binding) || binding.references.some((use) => use.isWrite)) {
+      return false;
+    }
+    visited.add(binding);
+
+    const fn = reads.functionOf(binding);
+    if (fn !== undefined) {
+      return components.has(fn);
+    }
+
+    const name = binding.declarations[0];
+    const declaration = name && module.parentOf(name);
+    if (is.VariableDeclarator(declaration) && declaration.id === name && is.Identifier(declaration.init)) {
+      return isComponent(module.referenceOf(declaration.init)?.binding, visited);
+    }
+    return false;
+  };
+
+  let changed = false;
+  module.walk({
+    ExpressionStatement: (node) => {
+      const call = node.expression;
+      if (!is.CallExpression(call) || !is.Identifier(call.callee)) {
+        return;
+      }
+      if (!isComponent(module.referenceOf(call.callee)?.binding)) {
+        return;
+      }
+
+      // Re-analyze after introducing the thunk, so dependency and closure
+      // queries see its real invocation boundary rather than a stale snapshot.
+      node.expression = runtimeCall('$setup', [thunk(call)]);
+      changed = true;
+    },
+  });
+  return changed ? analyze(generate(module.ast).code, { path }) : module;
+}
+
+/**
+ * JSX becomes `$h(...)` calls and TypeScript is removed by Bun's transpiler.
+ * `yuku-codegen` can strip types too, but it drops `enum` instead of converting
+ * it, and JSX text whitespace must follow the standard rules exactly.
+ */
+function lowerJsxAndTypes(code: string): string {
+  const transpiler = new Bun.Transpiler({
+    loader: 'tsx',
+    tsconfig: {
+      compilerOptions: { jsx: 'react', jsxFactory: '$h', jsxFragmentFactory: '$Fragment' },
+    },
+  });
+  return transpiler.transformSync(code);
+}
+
+// ---------------------------------------------------------------------------
+// JSX sites and refs, before analysis
+
+/**
+ * Preserve the authored JSX site's identity, so separate branches own separate
+ * nodes even when their tags match. `$h` consumes the private site prop.
+ *
+ * `ref={x}` and `ref={nodes.panel}` become
+ * `ref={$assignRef(() => x, ($node) => { x = $node; })}`, so the runtime can fill
+ * and clear the variable. The write is inside a function, so `x` is a binding
+ * reassigned later, which the analysis below sees like any other.
+ */
+function prepareJsx(source: string): string {
+  const { program } = parse(source, { lang: 'tsx', sourceType: 'module' });
+  let site = 0;
+  let privateTarget = 0;
+  walk(program, {
+    MemberExpression(node, ctx) {
+      if (!is.PrivateIdentifier(node.property)) return;
+      const parent = ctx.parent;
+      const writes = (is.AssignmentExpression(parent) && parent.left === node)
+        || (is.UpdateExpression(parent) && parent.argument === node);
+      if (!writes) return;
+      const object = b.Identifier({ name: `$privateObject${privateTarget++}` });
+      const value = b.Identifier({ name: `$privateValue${privateTarget++}` });
+      const target = { ...node, object };
+      const write = b.ArrowFunctionExpression({
+        id: null, params: [value], async: false, generator: false, expression: true,
+        body: b.AssignmentExpression({ operator: '=', left: structuredClone(target), right: value }),
+      });
+      const factory = b.ArrowFunctionExpression({
+        id: null, params: [object], async: false, generator: false, expression: true,
+        body: runtimeCall('$privateTarget', [thunk(target), write, object]),
+      });
+      ctx.replace(b.MemberExpression({
+        object: b.CallExpression({ callee: factory, arguments: [node.object], optional: false }),
+        property: b.Identifier({ name: 'v' }), computed: false, optional: false,
+      }));
+      ctx.skip();
+    },
+    JSXOpeningElement(node) {
+      // Separate branches can return the same tag at the same position. They
+      // still own different nodes (and refs), so preserve the authored site.
+      node.attributes.push(b.JSXAttribute({
+        name: b.JSXIdentifier({ name: '$referenceSite' }),
+        value: b.JSXExpressionContainer({ expression: numberLiteral(site++) }),
+      }));
+    },
+    JSXAttribute(node) {
+      const isRef = is.JSXIdentifier(node.name) && node.name.name === 'ref';
+      if (!isRef || !is.JSXExpressionContainer(node.value)) return;
+      if (is.JSXEmptyExpression(node.value.expression)) return;
+      node.value.expression = toRefValue(node.value.expression);
+    },
+  });
+  return generate(program).code;
+}
+
+function toRefValue(value: Expression): Expression {
+  if (is.ArrayExpression(value)) {
+    return b.ArrayExpression({
+      elements: value.elements.map((element) => (is.Expression(element) ? toRefValue(element) : element)),
+    });
+  }
+  if (!is.Identifier(value) && !is.MemberExpression(value)) return value;
+
+  const read = thunk(structuredClone(value));
+  const write = b.ArrowFunctionExpression({
+    id: null,
+    params: [b.Identifier({ name: '$node' })],
+    body: b.BlockStatement({
+      body: [b.ExpressionStatement({
+        expression: b.AssignmentExpression({ operator: '=', left: structuredClone(value) as never, right: identifier('$node') }),
+      })],
+    }),
+    expression: false,
+    async: false,
+    generator: false,
+  });
+  return b.CallExpression({ callee: identifier('$assignRef'), arguments: [read, write], optional: false });
+}
+
+// ---------------------------------------------------------------------------
+// Finding components
+
+/** A component is a capitalized function, with a block body, that contains JSX. */
+function findComponents(module: Module): FunctionNode[] {
+  const functions = module.findAll(['FunctionDeclaration', 'FunctionExpression', 'ArrowFunctionExpression']);
+  return functions.filter((fn) => {
+    const name = functionName(module, fn);
+    if (name === undefined || !/^[A-Z]/.test(name)) return false;
+    if (!is.BlockStatement(fn.body)) return false;
+    return findAll(fn.body, ['JSXElement', 'JSXFragment']).length > 0;
+  });
+}
+
+/** The statement lists directly inside a statement: block bodies, case bodies, try parts. */
+function statementLists(node: Node): Node[][] {
+  if (is.BlockStatement(node)) return [node.body];
+  if (is.SwitchStatement(node)) return node.cases.map((entry) => entry.consequent);
+  if (is.SwitchCase(node)) return [node.consequent];
+  if (is.TryStatement(node)) {
+    return [node.block.body, ...(node.handler === null ? [] : [node.handler.body.body]), ...(node.finalizer === null ? [] : [node.finalizer.body])];
+  }
+  if (is.IfStatement(node)) {
+    return [node.consequent, node.alternate].filter((branch) => branch !== null && is.BlockStatement(branch))
+      .map((branch) => (branch as BlockStatement).body);
+  }
+  if (is.LabeledStatement(node) && is.BlockStatement(node.body)) return [node.body.body];
+  return [];
+}
+
+function functionName(module: Module, fn: FunctionNode): string | undefined {
+  if (fn.id) return fn.id.name;
+  const parent = module.parentOf(fn);
+  if (is.VariableDeclarator(parent) && is.Identifier(parent.id)) return parent.id.name;
+  if (is.Property(parent) && parent.value === fn && !parent.computed) {
+    if (is.Identifier(parent.key)) return parent.key.name;
+    if (is.Literal(parent.key) && typeof parent.key.value === 'string') return parent.key.value;
+  }
+  return undefined;
+}
+
+// ---------------------------------------------------------------------------
+// Rewriting one component
+
+class ComponentRewrite {
+  private readonly body: BlockStatement;
+  private readonly reads: Reads;
+
+  /** Bindings that need a slot. Bindings not in here are plain. */
+  private readonly slots = new Map<Binding, Slot>();
+  /** `const { x, y } = point`: the value being destructured, and the names it gives. */
+  private readonly patternSlots = new Map<VariableDeclarator, PatternSlots>();
+  private readonly patternOrigins = new Map<Binding, Node>();
+  /** Body statements that may build a binding. */
+  private readonly plans = new Map<Statement, StatementPlan>();
+  /** A declared binding → the values its initializer may change. */
+  private readonly initializerBuilds = new Map<Binding, Binding[]>();
+  /** `$effect(...)` and `$cleanup(...)` calls → their runtime calls. */
+  private readonly lifecycleCalls = new Map<Node, Expression>();
+
+  private nextSlot = 0;
+  private nextObserve = 0;
+  private nextStatement = 0;
+
+  constructor(
+    private readonly module: Module,
+    private readonly component: FunctionNode,
+    private readonly rawUses: SourceUses,
+    private readonly handledSites: Set<Node>,
+  ) {
+    this.body = component.body as BlockStatement;
+    this.reads = new Reads(module);
+  }
+
+  run(): void {
+    this.chooseSlots();
+    this.planStatements();
+
+    // Every new node is built before references are rewritten in place.
+    const declarations = this.buildSlotDeclarations();
+    const statements = this.buildStatements();
+    this.buildLifecycleCalls();
+    this.buildRenderSites();
+    this.guardCallbackInvocations();
+
+    // Declarations first: an initializer then sits inside its thunk, where the walk
+    // below rewrites it, even when the whole initializer is one name (`= point`).
+    for (const { declarator, slot, created } of declarations) {
+      declarator.id = b.Identifier({ name: slot.name });
+      declarator.init = created;
+    }
+    this.body.body = statements;
+    this.rewriteUses();
+    this.insertPrelude();
+  }
+
+  // --- Choosing a treatment for each binding -------------------------------
+
+  private chooseSlots(): void {
+    for (const binding of this.ownBindings()) {
+      const treatment = this.treatmentOf(binding);
+      if (treatment !== undefined) this.slots.set(binding, this.newSlot(treatment));
+    }
+    for (const declarator of this.patternDeclarators()) {
+      const value = this.newSlot('memo');
+      const names = this.newSlot('memo');
+      this.patternSlots.set(declarator, { value, names });
+      for (const binding of this.bindingsInPattern(declarator.id)) {
+        this.patternOrigins.set(binding, declarator.id);
+        this.slots.set(binding, this.newSlot('memo'));
+      }
+    }
+  }
+
+  private newSlot(treatment: Treatment): Slot {
+    const index = this.nextSlot++;
+    return { treatment, index, name: `$s${index}` };
+  }
+
+  /** Parameters and bindings declared directly in the component body. */
+  /** Parameters, top-level declarations, and `var`s anywhere in the body (they are function-scoped). */
+  private ownBindings(): Binding[] {
+    return this.module.bindings.filter((binding) => {
+      const scopeNode = binding.scope.node;
+      const inFunctionScope = scopeNode === this.component && binding.scope.kind === 'function';
+      return inFunctionScope || scopeNode === this.body;
+    });
+  }
+
+  private treatmentOf(binding: Binding): Treatment | undefined {
+    if (this.isParameter(binding)) {
+      // A callback can capture a prop even when it never writes it. Give that
+      // capture a live slot so runtime dependency reads follow parent changes.
+      const captured = this.usesOf(binding).some((use) => this.runsLater(use));
+      return captured && this.isSimpleParameter(binding) ? 'prop' : undefined;
+    }
+    if (this.declaratorOf(binding) === undefined || this.reads.functionOf(binding) !== undefined) {
+      return undefined;
+    }
+    // A `var` inside a statement that returns belongs to each render, as in
+    // plain JavaScript: the statement runs again and declares it again.
+    const top = this.topStatementOf(binding.declarations[0]!);
+    if (top !== undefined && this.containsReturn(top)) return undefined;
+    return 'memo';
+  }
+
+  private isParameter(binding: Binding): boolean {
+    return binding.scope.node === this.component && binding.has(BindingFlags.Parameter);
+  }
+
+  /** `function C(count)` or `function C({ count })`, not a nested pattern. */
+  private isSimpleParameter(binding: Binding): boolean {
+    const parent = this.module.parentOf(binding.declarations[0]!);
+    if (parent === this.component) return true;
+    if (!is.Property(parent)) return false;
+    const pattern = this.module.parentOf(parent);
+    return this.component.params.some((param) => param === pattern);
+  }
+
+  /** `const { x, y } = value` and `const [a, b] = value` at the top of the body. */
+  private patternDeclarators(): VariableDeclarator[] {
+    return this.body.body
+      .filter((statement) => is.VariableDeclaration(statement))
+      .flatMap((statement) => statement.declarations)
+      .filter((declarator) => !is.Identifier(declarator.id) && declarator.init !== null);
+  }
+
+  private bindingsInPattern(pattern: Node): Binding[] {
+    return this.ownBindings().filter((binding) => binding.declarations.some((name) =>
+      name.start >= pattern.start && name.end <= pattern.end));
+  }
+
+  // --- What each body statement builds -------------------------------------
+
+  private planStatements(): void {
+    for (const binding of this.ownBindings()) {
+      // One function for the instance's life (`retainFunction`), so `run.calls = 0` is setup,
+      // not a value built again each render.
+      if (this.reads.functionOf(binding) !== undefined) continue;
+
+      const declaration = this.topStatementOf(binding.declarations[0]!);
+
+      for (const use of this.usesOf(binding)) {
+        if (this.runsLater(use)) continue;
+        const statement = this.topStatementOf(use.node);
+        if (statement !== undefined && statement !== declaration && is.VariableDeclaration(statement)) {
+          this.noteInitializerBuild(statement, use, binding);
+          continue;
+        }
+        if (statement === undefined || statement === declaration || !this.canBuild(statement)) continue;
+
+        const plan = this.planOf(statement);
+        const change = changeOf(this.module, use);
+        if (change === 'definite') {
+          plan.builds.add(binding);
+        } else if (change === 'possible') {
+          // Only a memo needs to know; a plain binding runs on every render.
+          if (this.slots.get(binding)?.treatment === 'memo') {
+            if (!plan.mayBuild.includes(binding)) plan.mayBuild.push(binding);
+          } else {
+            plan.builds.add(binding);
+          }
+        }
+      }
+    }
+
+    for (const plan of this.plans.values()) {
+      plan.mayBuild = plan.mayBuild.filter((binding) => !plan.builds.has(binding));
+      if (plan.mayBuild.length > 0) plan.observeIndex = this.nextObserve++;
+    }
+  }
+
+  /**
+   * Another binding's initializer that may change `target` (`let total =
+   * items.reduce(…)`) is a body statement that may build it: `target` waits
+   * while that initializer waits (`memo`'s `mayBuild`). Patterns are not
+   * modeled here.
+   */
+  private noteInitializerBuild(statement: Statement, use: Reference, target: Binding): void {
+    if (changeOf(this.module, use) === 'none' || this.slots.get(target)?.treatment !== 'memo') return;
+    const declarator = (statement as Extract<Node, { type: 'VariableDeclaration' }>).declarations.find((entry) => {
+      return entry.init !== null && use.node.start >= entry.init.start && use.node.end <= entry.init.end;
+    });
+    if (declarator === undefined || !is.Identifier(declarator.id)) return;
+    const declared = this.module.bindingOf(declarator.id);
+    if (declared === null || declared === target) return;
+    const targets = this.initializerBuilds.get(declared) ?? [];
+    if (!targets.includes(target)) targets.push(target);
+    this.initializerBuilds.set(declared, targets);
+  }
+
+  private planOf(statement: Statement): StatementPlan {
+    let plan = this.plans.get(statement);
+    if (plan === undefined) {
+      plan = { builds: new Set(), mayBuild: [], observeIndex: undefined };
+      this.plans.set(statement, plan);
+    }
+    return plan;
+  }
+
+  /**
+   * Whether a body statement can build a value, and so be wrapped in a guard.
+   * Declarations keep their own scope; a statement with the component's `return`
+   * or an `$effect` must run on every render.
+   */
+  private canBuild(statement: Node): boolean {
+    if (!GUARDABLE_STATEMENTS.has(statement.type)) return false;
+    return !this.containsReturn(statement) && !this.containsLifecycleCall(statement, '$effect');
+  }
+
+  private containsReturn(statement: Node): boolean {
+    return findAll(statement, 'ReturnStatement').some((ret) => this.enclosingFunction(ret) === this.component);
+  }
+
+  private containsLifecycleCall(statement: Node, name: '$effect' | '$cleanup', visited = new Set<Node>()): boolean {
+    return findAll(statement, 'CallExpression').some((call) => {
+      if (is.Identifier(call.callee, name) && !this.module.referenceOf(call.callee)?.binding) return true;
+      if (!is.Identifier(call.callee)) return false;
+      const binding = this.module.referenceOf(call.callee)?.binding;
+      const fn = binding === null || binding === undefined ? undefined : this.reads.functionOf(binding);
+      if (fn === undefined || visited.has(fn) || fn.body === null) return false;
+      visited.add(fn);
+      return this.containsLifecycleCall(fn.body, name, visited);
+    });
+  }
+
+  /** A call of the ambient `$effect` / `$cleanup`, directly in this component's body. */
+  private isLifecycleCall(call: Node, name: '$effect' | '$cleanup'): boolean {
+    if (!is.CallExpression(call) || !is.Identifier(call.callee, name)) return false;
+    if (this.module.referenceOf(call.callee)?.binding) return false;
+    return this.enclosingFunction(call) === this.component;
+  }
+
+  // --- When each body statement runs ---------------------------------------
+
+  /**
+   * Setup statements run once, on the first render where their inputs are ready
+   * (`$ctx.statement` skips a statement while a source it reads is loading, and
+   * `$ctx.ran` remembers that it ran). A statement that builds a memo runs again
+   * when that memo is computed again; one that may build a memo also runs inside
+   * `$ctx.observe`. A statement that builds a plain binding or a prop runs on every
+   * render. One that cannot be guarded is left as written.
+   *
+   *   stmt   →   if (!$ctx.ran(4) || $s2.fresh || ($ctx.confirmed(0, 0) && $s3.fresh)) {
+   *                $ctx.statement(4, () => [inputs], () => {
+   *                  $ctx.observe(0, () => [$s3.v], () => { stmt });
+   *                });
+   *              }
+   *
+   * An `if` that returns early waits for its test (`earlyReturn`).
+   */
+  private buildStatements(): Statement[] {
+    return this.body.body.flatMap((original): Statement[] => {
+      const statement = original as Statement;
+      if (this.containsReturn(statement)) this.guardReturningBlock(statement, statement);
+      if (is.IfStatement(statement) && this.containsReturn(statement)) return this.earlyReturn(statement);
+      if (!this.canBuild(statement)) return [statement];
+      const hoisted = this.hoistVars(statement);
+
+      const index = this.nextStatement++;
+      const plan = this.plans.get(statement) ?? {
+        builds: new Set<Binding>(),
+        mayBuild: [],
+        observeIndex: undefined,
+      };
+      const wrapped = plan.observeIndex === undefined ? statement : this.observed(statement, plan);
+      const inputs = this.guardInputs(statement);
+      const run = blockThunk([wrapped]);
+      const builtSlots = [...plan.builds]
+        .map((binding) => this.slots.get(binding))
+        .filter((slot) => slot !== undefined && slot.treatment !== 'prop')
+        .map((slot) => identifier(slot!.name));
+      // `[slot, observe index, position]` for each value it only may change.
+      const mayBuild = plan.mayBuild.flatMap((binding, position) => {
+        const slot = this.slots.get(binding);
+        if (slot === undefined || slot.treatment === 'prop') return [];
+        return [b.ArrayExpression({ elements: [
+          identifier(slot.name), numberLiteral(plan.observeIndex!), numberLiteral(position),
+        ] })];
+      });
+      const args = [numberLiteral(index), inputs, run];
+      if (builtSlots.length > 0 || mayBuild.length > 0) args.push(b.ArrayExpression({ elements: builtSlots }));
+      if (mayBuild.length > 0) args.push(b.ArrayExpression({ elements: mayBuild }));
+      const guarded = b.ExpressionStatement({ expression: ctxCall('statement', args) }) as Statement;
+
+      const everyRender = [...plan.builds].some((binding) => {
+        const slot = this.slots.get(binding);
+        return slot === undefined || slot.treatment === 'prop';
+      });
+      if (everyRender) return [...hoisted, guarded];
+
+      const notRanYet = b.UnaryExpression({
+        operator: '!',
+        prefix: true,
+        argument: ctxCall('ran', [numberLiteral(index)]),
+      }) as Expression;
+      const conditions = [notRanYet, ctxCall('due', [numberLiteral(index)])];
+      // A statement that builds no value runs again when what it read changed, side effects
+      // included (`wiki/decisions.md`, 2026-11-15). One that builds a value runs again when that
+      // value is computed again, which starts from its initializer.
+      if (plan.builds.size === 0) conditions.push(ctxCall('changed', [numberLiteral(index)]));
+      for (const binding of plan.builds) {
+        const slot = this.slots.get(binding)!;
+        if (slot.treatment === 'memo') conditions.push(member(slot.name, 'fresh'));
+      }
+      plan.mayBuild.forEach((binding, position) => {
+        const confirmed = ctxCall('confirmed', [numberLiteral(plan.observeIndex!), numberLiteral(position)]);
+        const fresh = member(this.slots.get(binding)!.name, 'fresh');
+        conditions.push(b.LogicalExpression({ operator: '&&', left: confirmed, right: fresh }));
+      });
+
+      const test = conditions.reduce((left, right) => b.LogicalExpression({ operator: '||', left, right }));
+      return [...hoisted, b.IfStatement({ test, consequent: b.BlockStatement({ body: [guarded] }), alternate: null })];
+    });
+  }
+
+  /**
+   * A guarded statement runs inside a thunk, where a `var` would belong to the
+   * thunk. JavaScript scopes it to the component: declare it here, and leave an
+   * assignment where it was written. The declarators themselves move, so a
+   * `var` that has a slot is still declared through it (`buildSlotDeclarations`
+   * fills them in later) and persists across renders. Rewrites `statement` in place.
+   */
+  private hoistVars(statement: Statement): Statement[] {
+    const declarators: VariableDeclarator[] = [];
+    const replace = (declaration: Extract<Node, { type: 'VariableDeclaration' }>, position: 'statement' | 'init' | 'left'): Node => {
+      const assignments: Expression[] = [];
+      for (const declarator of declaration.declarations) {
+        if (declarator.init !== null) {
+          // A declared name is not a use, so the later rewrite would not reach
+          // it: write a slot's value directly.
+          const target = this.slotValue(declarator.id) ?? declarator.id;
+          assignments.push(b.AssignmentExpression({ operator: '=', left: target as never, right: declarator.init }) as Expression);
+        }
+        // The declarator moves; its initializer stays where it was written.
+        declarator.init = null;
+        declarators.push(declarator);
+      }
+      if (position === 'left') {
+        const id = declaration.declarations[0]!.id;
+        return this.slotValue(id) ?? id;
+      }
+      const value = assignments.length === 0 ? null
+        : assignments.length === 1 ? assignments[0]! : b.SequenceExpression({ expressions: assignments });
+      if (position === 'init') return value ?? identifier('undefined');
+      return value === null ? b.EmptyStatement({}) : b.ExpressionStatement({ expression: value });
+    };
+    const isVar = (node: Node | null): node is Extract<Node, { type: 'VariableDeclaration' }> => {
+      return node !== null && is.VariableDeclaration(node) && node.kind === 'var';
+    };
+    walk(statement, {
+      enter(node, context) {
+        if (is.Function(node)) {
+          context.skip();
+          return;
+        }
+        if (is.ForStatement(node) && isVar(node.init)) node.init = replace(node.init, 'init') as never;
+        if ((is.ForInStatement(node) || is.ForOfStatement(node)) && isVar(node.left)) node.left = replace(node.left, 'left') as never;
+        for (const list of statementLists(node)) {
+          list.forEach((entry, index) => {
+            if (isVar(entry)) list[index] = replace(entry, 'statement') as Statement;
+          });
+        }
+      },
+    });
+    if (declarators.length === 0) return [];
+    return [b.VariableDeclaration({ kind: 'var', declare: false, declarations: declarators }) as Statement];
+  }
+
+  /** `$sN.v` for a declared name that has a memo slot. */
+  private slotValue(id: Node): Expression | undefined {
+    if (!is.Identifier(id)) return undefined;
+    const binding = this.module.bindingOf(id);
+    const slot = binding === null ? undefined : this.slots.get(binding);
+    return slot?.treatment === 'memo' ? member(slot.name, 'v') : undefined;
+  }
+
+  /**
+   * The decision of 2026-10-24 (`wiki/decisions.md`): inside a block that
+   * returns, a plain statement runs again only when what it reads changed, or
+   * when it was not reached the time before. Wraps each eligible statement of
+   * `node` in `$ctx.returning`. A statement that uses the block's own local
+   * variables runs every time, since the return needs it; so does anything in
+   * a loop, whose statements run many times per render.
+   */
+  private guardReturningBlock(node: Node, root: Statement): void {
+    if (is.Function(node) || is.ForStatement(node) || is.ForInStatement(node) || is.ForOfStatement(node)
+      || is.WhileStatement(node) || is.DoWhileStatement(node)) {
+      return;
+    }
+    for (const list of statementLists(node)) {
+      list.forEach((entry, index) => {
+        const statement = entry as Statement;
+        if (this.containsReturn(statement)) {
+          this.guardReturningBlock(statement, root);
+        } else if (this.canGuardInReturningBlock(statement, root)) {
+          list[index] = this.returningGuard(statement);
+        }
+      });
+    }
+    // A single statement in a branch position, such as `if (a) b(); else return`.
+    if (is.IfStatement(node)) {
+      if (!is.BlockStatement(node.consequent)) node.consequent = this.guardSingle(node.consequent as Statement, root) as never;
+      if (node.alternate !== null && !is.BlockStatement(node.alternate)) {
+        node.alternate = this.guardSingle(node.alternate as Statement, root) as never;
+      }
+    }
+    if (is.LabeledStatement(node)) node.body = this.guardSingle(node.body as Statement, root) as never;
+  }
+
+  private guardSingle(statement: Statement, root: Statement): Statement {
+    if (this.containsReturn(statement)) {
+      this.guardReturningBlock(statement, root);
+      return statement;
+    }
+    return this.canGuardInReturningBlock(statement, root) ? this.returningGuard(statement) : statement;
+  }
+
+  private returningGuard(statement: Statement): Statement {
+    const index = this.nextStatement++;
+    const call = ctxCall('returning', [numberLiteral(index), this.guardInputs(statement), blockThunk([statement])]);
+    return b.ExpressionStatement({ expression: call }) as Statement;
+  }
+
+  private canGuardInReturningBlock(statement: Statement, root: Statement): boolean {
+    if (!GUARDABLE_STATEMENTS.has(statement.type)) return false;
+    if (this.containsLifecycleCall(statement, '$effect')) return false;
+    let movable = true;
+    walk(statement, {
+      enter(node, context) {
+        if (is.Function(node)) {
+          context.skip();
+          return;
+        }
+        // A thunk changes what these mean.
+        if (is.BreakStatement(node) || is.ContinueStatement(node) || is.AwaitExpression(node) || is.YieldExpression(node)
+          || (is.VariableDeclaration(node) && node.kind === 'var')) {
+          movable = false;
+          context.stop();
+        }
+      },
+    });
+    if (!movable) return false;
+    // Uses of a variable declared in the returning statement, outside this one.
+    return !findAll(statement, ['Identifier']).some((name) => {
+      const declared = this.module.referenceOf(name)?.binding?.declarations[0];
+      if (declared === undefined) return false;
+      const inRoot = declared.start >= root.start && declared.end <= root.end;
+      const inStatement = declared.start >= statement.start && declared.end <= statement.end;
+      return inRoot && !inStatement;
+    });
+  }
+
+  /** A pending early-return condition must wait, rather than act truthy or false. */
+  private earlyReturn(statement: Extract<Statement, { type: 'IfStatement' }>): Statement[] {
+    const name = `$return${this.nextStatement++}`;
+    const test = statement.test;
+    const inputs = this.guardInputs(test);
+    const waiting = runtimeCall('$waiting', [b.ArrayExpression({ elements: [identifier(name)] })]);
+    const pause = b.IfStatement({
+      test: waiting,
+      consequent: b.ReturnStatement({ argument: identifier(name) }),
+      alternate: null,
+    });
+    statement.test = runtimeCall('$value', [identifier(name)]);
+    return [constDeclaration(name, runtimeCall('$when', [inputs, thunk(test)])), pause, statement];
+  }
+
+  private buildRenderSites(): void {
+    this.module.walk({
+      JSXExpressionContainer: (node, ctx) => {
+        if (is.JSXEmptyExpression(node.expression) || !shouldWaitAtAttribute(ctx.parent)) return;
+        this.handledSites.add(node);
+        if (is.Function(node.expression)) return;
+        node.expression = waitForRenderExpression(this.module, node, this.readsOf());
+      },
+      // `{...{ value: user.name }}`: the spread waits for what it reads, and its element with it.
+      JSXSpreadAttribute: (node) => {
+        this.handledSites.add(node);
+        node.argument = runtimeCall('$spread', [waitForExpression(node.argument, this.readsOf())]);
+      },
+    }, this.component);
+  }
+
+  /**
+   * A synchronous callback can be invoked now or retained and invoked later.
+   * Guard its reads at invocation, so a stored callback does not make setup wait.
+   * The arrow thunk preserves the original function's `this` and `arguments`.
+   */
+  private guardCallbackInvocations(): void {
+    const functions = this.module.findAll(['FunctionDeclaration', 'FunctionExpression', 'ArrowFunctionExpression']);
+    for (const fn of functions) {
+      if (fn === this.component || fn.async || fn.generator || fn.body === null) continue;
+      // Generated code has no position: it reads as 0, which is inside a component that opens the file.
+      if (fn.start === fn.end) continue;
+      if (fn.start < this.component.start || fn.end > this.component.end) continue;
+
+      const targets = [...this.slots].filter(([binding, slot]) => {
+        if (slot.treatment !== 'memo') return false;
+        return this.usesOf(binding).some((use) => use.isWrite && this.enclosingFunction(use.node) === fn);
+      });
+      const inputs = this.guardInputs(fn.body);
+      const body = is.BlockStatement(fn.body)
+        ? fn.body
+        : b.BlockStatement({ body: [b.ReturnStatement({ argument: fn.body })] });
+      const run = blockThunk(body.body as Statement[]);
+      // A thunk, since a slot can still be in its dead zone here, and only the authored code
+      // inside `run` may report that, where its own `try` can catch it.
+      const slots = thunk(b.ArrayExpression({
+        elements: targets.map(([, slot]) => identifier(slot.name)),
+      }));
+      fn.body = b.BlockStatement({
+        body: [b.ReturnStatement({ argument: ctxCall('callback', [inputs, run, slots]) })],
+      });
+      if (is.ArrowFunctionExpression(fn)) fn.expression = false;
+    }
+  }
+
+  /** `$ctx.observe(N, () => [$s3.v, …], () => { stmt });` */
+  private observed(statement: Statement, plan: StatementPlan): Statement {
+    const values = b.ArrayExpression({ elements: plan.mayBuild.map((binding) => this.readOf(binding)) });
+    const run = b.ArrowFunctionExpression({
+      id: null,
+      params: [],
+      body: b.BlockStatement({ body: [statement] }),
+      expression: false,
+      async: false,
+      generator: false,
+    });
+    const call = ctxCall('observe', [numberLiteral(plan.observeIndex!), thunk(values), run]);
+    // The builder's type also covers directives (`'use strict'`); this is a plain statement.
+    return b.ExpressionStatement({ expression: call }) as Statement;
+  }
+
+  // --- Building slot declarations and lifecycle calls ----------------------
+
+  /**
+   * A plain object literal nothing else builds updates field by field
+   * (`wiki/decisions.md`, 2026-11-05):
+   *   `$ctx.literalFields(0, [["value", () => counter], ["input", () => ""]])`
+   */
+  private fieldsOf(binding: Binding, slot: Slot): Expression | undefined {
+    const declarator = this.declaratorOf(binding)!;
+    if (!is.Identifier(declarator.id)) return undefined;
+
+    const built = [...this.plans.values()].some((plan) => plan.builds.has(binding) || plan.mayBuild.includes(binding))
+      || [...this.initializerBuilds.values()].some((targets) => targets.includes(binding));
+    const fields = built ? null : literalFields(declarator.init);
+    if (fields === null) return undefined;
+
+    // A function's reads run when it is called, so they do not rebuild the field.
+    const entries = fields.map(({ key, value }) => b.ArrayExpression({
+      elements: [
+        b.Literal({ value: key, raw: JSON.stringify(key) }),
+        thunk(is.Function(value) ? b.ArrayExpression({ elements: [] }) : visibleInputs(value, this.readsOf())),
+        thunk(value as Expression),
+      ],
+    }));
+    return ctxCall('literalFields', [numberLiteral(slot.index), b.ArrayExpression({ elements: entries })]);
+  }
+
+  /**
+   * `let x = init` becomes:
+   *   `let $s0 = $ctx.memo(0, () => [inputs…], () => init)`
+   * and `const { a } = init` becomes memos for the value, the pattern and each
+   * name (`patternValue`).
+   */
+  private buildSlotDeclarations(): Array<{ declarator: VariableDeclarator; slot: Slot; created: Expression }> {
+    const declarations = [];
+
+    for (const [binding, slot] of this.slots) {
+      if (slot.treatment === 'prop' || this.patternOrigins.has(binding)) continue;
+      const declarator = this.declaratorOf(binding)!;
+      const initialValue = declarator.init ?? identifier('undefined');
+      const initial = thunk(waitForExpression(initialValue, this.readsOf(), this.fieldsOf(binding, slot) ?? initialValue));
+      // The slot holds the initializer's value at once. While a statement that
+      // builds it is blocked on a source, rendering waits too (`$ready`); the
+      // runtime tracks that as statements run (`Instance.blockedFor`).
+      const index = numberLiteral(slot.index);
+      const args = [index, this.inputsOf(binding, declarator.init), initial];
+      const changes = (this.initializerBuilds.get(binding) ?? []).map((target) => identifier(this.slots.get(target)!.name));
+      if (changes.length > 0) args.push(thunk(b.ArrayExpression({ elements: changes })));
+      const created = ctxCall('memo', args);
+      declarations.push({ declarator, slot, created });
+    }
+
+    for (const [declarator, slots] of this.patternSlots) {
+      const valueDeclarator = this.patternValue(declarator, slots.value);
+      const created = this.patternNames(declarator, slots);
+      declarations.push({ declarator, slot: slots.names, created });
+
+      const aliases = this.bindingsInPattern(declarator.id).map((binding) => {
+        return this.patternAlias(binding, slots.names);
+      });
+
+      const declaration = this.module.parentOf(declarator);
+      if (is.VariableDeclaration(declaration)) {
+        const at = declaration.declarations.indexOf(declarator);
+        declaration.declarations.splice(at, 1, valueDeclarator, declarator, ...aliases);
+      }
+    }
+
+    return declarations;
+  }
+
+  /**
+   * `const { name } = init` is three steps, each a memo:
+   *
+   *   $s0 = $ctx.memo(0, () => [reads of init], () => init)
+   *   $s1 = $ctx.memo(1, () => [$s0.v, reads of defaults], () => {
+   *     const { name } = $value($s0.v);
+   *     return { name };
+   *   })
+   *   $s2 = $ctx.memo(2, () => [$s1.v], () => $s1.v.name)
+   *
+   * The value gets its own memo so that a source made by `init` itself
+   * (`= $fetch(url)`) is an input of the pattern: its payload is destructured once it
+   * arrives, and again after a refresh, a new request or a mutation.
+   */
+  private patternValue(declarator: VariableDeclarator, slot: Slot): VariableDeclarator {
+    const init = declarator.init!;
+    const inputs = this.inputList(this.reads.inside([init], undefined), [init]);
+    const prepared = waitForExpression(init, this.readsOf());
+    return b.VariableDeclarator({
+      id: b.Identifier({ name: slot.name }),
+      init: ctxCall('memo', [numberLiteral(slot.index), inputs, thunk(prepared)]),
+    });
+  }
+
+  private patternNames(declarator: VariableDeclarator, slots: PatternSlots): Expression {
+    const pattern = declarator.id;
+    const value = member(slots.value.name, 'v');
+
+    // The pattern can read too: `{ name = fallback }`.
+    const readInputs = () => {
+      const reads = this.readsOf()(pattern, []);
+      return thunk(b.ArrayExpression({ elements: [structuredClone(value), ...reads] }));
+    };
+
+    // The authored pattern runs natively; its names are returned as one object.
+    const destructure = b.VariableDeclaration({
+      kind: 'const',
+      declarations: [b.VariableDeclarator({ id: pattern, init: runtimeCall('$value', [value]) })],
+    });
+    const names = b.ObjectExpression({
+      properties: this.bindingsInPattern(pattern).map((binding) => b.Property({
+        key: b.Identifier({ name: binding.name }),
+        value: identifier(binding.name),
+        kind: 'init',
+        method: false,
+        shorthand: false,
+        computed: false,
+      }) as Extract<Node, { type: 'ObjectExpression' }>['properties'][number]),
+    });
+    const compute = blockThunk([destructure, b.ReturnStatement({ argument: names })]);
+
+    const prepared = runtimeCall('$when', [readInputs(), compute]);
+    return ctxCall('memo', [numberLiteral(slots.names.index), readInputs(), thunk(prepared)]);
+  }
+
+  /** Each alias derives independently until its own later reassignment. */
+  private patternAlias(binding: Binding, names: Slot): VariableDeclarator {
+    const alias = this.slots.get(binding)!;
+    const readNames = () => thunk(b.ArrayExpression({ elements: [member(names.name, 'v')] }));
+    const field = b.MemberExpression({
+      object: runtimeCall('$value', [member(names.name, 'v')]),
+      property: b.Identifier({ name: binding.name }),
+      computed: false,
+      optional: false,
+    });
+    const initial = thunk(runtimeCall('$when', [readNames(), thunk(field)]));
+    const index = numberLiteral(alias.index);
+    return b.VariableDeclarator({
+      id: b.Identifier({ name: alias.name }),
+      init: ctxCall('memo', [index, readNames(), initial]),
+    });
+  }
+
+  /**
+   * `() => [inputs…]` of a memo: what its initializer and the statements that build
+   * it read. A statement that may build it adds its reads once it is confirmed:
+   * `...($ctx.confirmed(0, 1) ? [reads] : [])`.
+   */
+  private inputsOf(binding: Binding, init: Expression | null): Expression {
+    // One statement cannot rebuild only half of its accumulators. Its targets
+    // share the external inputs of their initializers and body builders; reads
+    // between those targets are internal to the computation, not feedback.
+    const group = new Set([binding]);
+    let expanded = true;
+    while (expanded) {
+      expanded = false;
+      for (const plan of this.plans.values()) {
+        if (![...plan.builds].some((target) => group.has(target))) continue;
+        for (const target of plan.builds) {
+          if (group.has(target)) continue;
+          group.add(target);
+          expanded = true;
+        }
+      }
+    }
+    const roots: Node[] = init ? [init] : [];
+    for (const target of group) {
+      if (target === binding) continue;
+      const initial = this.declaratorOf(target)?.init;
+      if (initial != null) roots.push(initial);
+    }
+    const maybe: Array<{ statement: Statement; plan: StatementPlan }> = [];
+    for (const [statement, plan] of this.plans) {
+      if ([...plan.builds].some((target) => group.has(target))) roots.push(statement);
+      if (plan.mayBuild.includes(binding)) maybe.push({ statement, plan });
+    }
+
+    const dependencies = this.reads.inside(roots, binding);
+    for (const target of group) dependencies.delete(target);
+    const elements: Expression[] = this.readable(binding, dependencies, roots);
+    for (const { statement, plan } of maybe) {
+      const position = plan.mayBuild.indexOf(binding);
+      const reads = this.readable(binding, this.reads.inside([statement], binding), [statement]);
+      const test = ctxCall('confirmed', [numberLiteral(plan.observeIndex!), numberLiteral(position)]);
+      const choice = b.ConditionalExpression({
+        test,
+        consequent: b.ArrayExpression({ elements: reads }),
+        alternate: b.ArrayExpression({ elements: [] }),
+      });
+      elements.push(b.SpreadElement({ argument: choice }) as never);
+    }
+    return thunk(b.ArrayExpression({ elements }));
+  }
+
+  /**
+   * `$effect(fn)` becomes `$ctx.effect(N, () => [what fn reads], fn)`.
+   * `$cleanup(fn)` becomes `$ctx.cleanup(fn)`.
+   */
+  private buildLifecycleCalls(): void {
+    for (const call of this.module.findAll('CallExpression')) {
+      if (this.isLifecycleCall(call, '$cleanup')) {
+        this.lifecycleCalls.set(call, ctxCall('cleanup', call.arguments as Expression[]));
+        continue;
+      }
+      if (!this.isLifecycleCall(call, '$effect')) continue;
+
+      const callback = call.arguments[0] as Expression;
+      const index = numberLiteral(this.nextSlot++);
+      const elements = [...this.reads.ofCallback(callback)].map((binding) => {
+        return statusInput(binding, this.guardRead(binding), [callback], this.rawUses);
+      });
+      const inputs = thunk(b.ArrayExpression({ elements }));
+      let args = call.arguments as Expression[];
+      const argumentRoots = call.arguments as Node[];
+      const evaluatesCode = argumentRoots.some((root) => findAll(root, [
+        'CallExpression', 'NewExpression', 'AssignmentExpression', 'UpdateExpression',
+      ]).some((node) => this.enclosingFunction(node) === this.component));
+      if (evaluatesCode) {
+        // Registering the effect is reactive; setup expressions that produce its
+        // arguments still follow ordinary memo rules and must not run each pass.
+        const argInputs = this.inputList(this.reads.inside(argumentRoots, undefined), argumentRoots);
+        const value = ctxCall('memo', [numberLiteral(this.nextSlot++), argInputs,
+          thunk(b.ArrayExpression({ elements: call.arguments }))]);
+        args = [b.SpreadElement({ argument: b.MemberExpression({
+          object: value, property: b.Identifier({ name: 'v' }), computed: false, optional: false,
+        }) }) as unknown as Expression];
+      }
+      this.lifecycleCalls.set(call, ctxCall('effect', [index, inputs, ...args]));
+    }
+  }
+
+  /**
+   * The inputs a memo can read where it is declared. An input declared later in the
+   * body cannot be read there (it is in its temporal dead zone), so it is replaced by
+   * `$ctx.render`, the render count: the memo is then computed on every render, which
+   * is always correct.
+   */
+  private readable(binding: Binding, inputs: Set<Binding>, roots: Node[]): Expression[] {
+    const declaredAt = binding.declarations[0]!.start;
+    const elements: Expression[] = [];
+    let declaredLater = false;
+
+    for (const input of inputs) {
+      const isOwn = this.slots.has(input) || this.ownBindings().includes(input);
+      if (isOwn && !this.isParameter(input) && input.declarations[0]!.start > declaredAt) {
+        declaredLater = true;
+        continue;
+      }
+      elements.push(statusInput(input, this.readOf(input), roots, this.rawUses));
+    }
+    if (declaredLater) elements.push(member('$ctx', 'render'));
+    return elements;
+  }
+
+  /** Reads for `$when` guards: each binding through its slot, and each `a.b.c` path from one. */
+  private readsOf(keep: (binding: Binding) => boolean = () => true): ReadsOf {
+    return readsWithPaths(this.reads, (binding) => this.guardRead(binding), this.rawUses, keep);
+  }
+
+  /**
+   * A binding as a guard or effect input: `$ready($s2)` when body statements build
+   * it (it waits while they wait for a source), otherwise its value.
+   */
+  private guardRead(binding: Binding): Expression {
+    const slot = this.slots.get(binding);
+    if (slot === undefined || slot.treatment === 'prop') return this.readOf(binding);
+    return runtimeCall('$ready', [identifier(slot.name)]);
+  }
+
+  /** `() => [inputs]` of a guard on `root`, branch by branch (`inputsOf`). */
+  private guardInputs(root: Node): Expression {
+    return thunk(inputsOf(root, this.readsOf()));
+  }
+
+  /** `() => [a, $s1.v, …]`: reads the current value of each input. */
+  private inputList(inputs: Set<Binding>, roots: Node[] = []): Expression {
+    const elements = [...inputs].map((binding) => statusInput(binding, this.readOf(binding), roots, this.rawUses));
+    return thunk(b.ArrayExpression({ elements }));
+  }
+
+  /** An expression that reads a binding's current value. */
+  private readOf(binding: Binding): Expression {
+    const slot = this.slots.get(binding);
+    if (slot === undefined) return identifier(binding.name);
+    return member(slot.name, 'v');
+  }
+
+  // --- Rewriting the component ---------------------------------------------
+
+  /** Uses of slot bindings become `$sN.v`; lifecycle calls become runtime calls. */
+  private rewriteUses(): void {
+    this.module.walk({
+      CallExpression: (node, ctx) => {
+        const replacement = this.lifecycleCalls.get(node);
+        if (replacement !== undefined) ctx.replace(replacement);
+      },
+      Identifier: (node, ctx) => {
+        const reference = ctx.reference;
+        const generated = generatedReadBinding(node);
+        if (generated !== undefined) {
+          const slot = this.slots.get(generated);
+          if (slot !== undefined) ctx.replace(member(slot.name, 'v'));
+          return;
+        }
+        if (!reference?.binding || reference.inTypePosition) return;
+        const nativePattern = this.patternOrigins.get(reference.binding);
+        if (nativePattern && reference.node.start >= nativePattern.start && reference.node.end <= nativePattern.end) return;
+        const slot = this.slotAt(reference);
+        // `{ x }` must become `{ x: $s0.v }`, not `{ $s0.v }`.
+        if (is.Property(ctx.parent) && ctx.parent.shorthand && ctx.key === 'value') {
+          ctx.parent.shorthand = false;
+        }
+        const value = slot ? member(slot.name, 'v') : identifier(reference.binding.name);
+        if (reference.isWrite || this.rawUses.raw.has(reference.node)) {
+          ctx.replace(value);
+        } else {
+          const read = captureModuleRead(this.module, reference.binding, value);
+          ctx.replace(runtimeCall('$value', [read]));
+        }
+      },
+      JSXIdentifier: (_node, ctx) => {
+        const slot = this.slotAt(ctx.reference);
+        if (slot === undefined) return;
+        ctx.replace(b.JSXMemberExpression({
+          object: b.JSXIdentifier({ name: slot.name }),
+          property: b.JSXIdentifier({ name: 'v' }),
+        }));
+      },
+    }, this.component);
+  }
+
+  private slotAt(reference: Reference | null | undefined): Slot | undefined {
+    if (!reference?.binding || reference.inTypePosition) return undefined;
+    return this.slots.get(reference.binding);
+  }
+
+  /**
+   * At the top of the component body:
+   *   `const $ctx = $enter();`
+   *   `const $s1 = $ctx.prop(1, count);`   one per overridden prop
+   */
+  private insertPrelude(): void {
+    const enter = b.CallExpression({ callee: identifier('$enter'), arguments: [], optional: false });
+    const prelude: Statement[] = [constDeclaration('$ctx', enter)];
+
+    // Re-running the oracle's body must not manufacture a new component type
+    // on every settling pass. The retained closure reads this instance's slots.
+    for (const entry of this.body.body) {
+      if (!is.FunctionDeclaration(entry) || entry.id === null) {
+        continue;
+      }
+      prelude.push(b.ExpressionStatement({
+        expression: b.AssignmentExpression({
+          operator: '=',
+          left: identifier(entry.id.name) as never,
+          right: ctxCall('retainFunction', [numberLiteral(this.nextSlot++), identifier(entry.id.name)]),
+        }),
+      }) as Statement);
+    }
+
+    for (const [binding, slot] of this.slots) {
+      if (slot.treatment !== 'prop') continue;
+      const fromParent = identifier(binding.name);
+      prelude.push(constDeclaration(slot.name, ctxCall('prop', [numberLiteral(slot.index), fromParent])));
+    }
+    this.body.body.unshift(...prelude);
+  }
+
+  // --- Queries ---------------------------------------------------------------
+
+  private usesOf(binding: Binding): Reference[] {
+    return binding.references.filter((reference) => !reference.inTypePosition);
+  }
+
+  /** The use sits in a function inside the component, so it runs after the body. */
+  private runsLater(use: Reference): boolean {
+    return this.enclosingFunction(use.node) !== this.component;
+  }
+
+  private enclosingFunction(node: Node): Node | undefined {
+    return enclosingFunction(this.module, node);
+  }
+
+  /** The statement of the component body that contains `node`. */
+  private topStatementOf(node: Node): Statement | undefined {
+    let current: Node | null = node;
+    while (current !== null) {
+      const parent = this.module.parentOf(current);
+      if (parent === this.body) return current as Statement;
+      current = parent;
+    }
+    return undefined;
+  }
+
+  /** The `x = …` declarator of a plain `let x` / `const x`, if it is one. */
+  private declaratorOf(binding: Binding): VariableDeclarator | undefined {
+    const name = binding.declarations[0];
+    const parent = name && this.module.parentOf(name);
+    return is.VariableDeclarator(parent) && parent.id === name ? parent : undefined;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Module effects
+
+/** `$effect(fn)` at the top of the module becomes `$moduleEffect(() => [what fn reads], fn)`. */
+function rewriteModuleEffects(module: Module): void {
+  const reads = new Reads(module);
+  const replacements = new Map<Node, Expression>();
+
+  for (const call of module.findAll('CallExpression')) {
+    if (is.Identifier(call.callee, '$cleanup') && !module.referenceOf(call.callee)?.binding) {
+      replacements.set(call, b.CallExpression({ callee: identifier('$ownedCleanup'), arguments: call.arguments, optional: false }));
+      continue;
+    }
+    if (!is.Identifier(call.callee, '$effect') || module.referenceOf(call.callee)?.binding) continue;
+    const callback = call.arguments[0] as Expression;
+    const inputs = [...reads.ofCallback(callback)].map((binding) => identifier(binding.name));
+    replacements.set(call, b.CallExpression({
+      callee: identifier('$ownedEffect'),
+      arguments: [b.Literal({ value: `${module.path}:${call.start}`, raw: JSON.stringify(`${module.path}:${call.start}`) }), thunk(b.ArrayExpression({ elements: inputs })), ...call.arguments],
+      optional: false,
+    }));
+  }
+
+  if (replacements.size === 0) return;
+  module.walk({
+    CallExpression: (node, ctx) => {
+      const replacement = replacements.get(node);
+      if (replacement !== undefined) ctx.replace(replacement);
+    },
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Component runtime calls
+
+type CtxMethod = Treatment | 'effect' | 'cleanup' | 'observe' | 'confirmed' | 'mayChange' | 'ran' | 'due' | 'changed' | 'statement' | 'callback'
+  | 'returning' | 'retainFunction' | 'literalFields';
+
+/** `$ctx.memo(...)`, `$ctx.prop(...)`, `$ctx.observe(...)`, … */
+function ctxCall(method: CtxMethod, args: Expression[]): Expression {
+  return b.CallExpression({ callee: member('$ctx', method), arguments: args, optional: false });
+}
+
+// ---------------------------------------------------------------------------
+// Uses
+
+/**
+ * How a use may change the value a binding holds:
+ *
+ * - `definite`: `x = 1`, `x += 1`, `x.a = 1`, `x.n++`, `delete x.a`;
+ * - `possible`: `x.push(1)`, `x.anything()`, `f(x)`, `new F(x)`. Whether it really
+ *   changes the value is seen at runtime;
+ * - `none`: a plain read, or a method known to only read (`x.includes(1)`).
+ */
+function changeOf(module: Module, use: Reference): 'definite' | 'possible' | 'none' {
+  if (use.isWrite) return 'definite';
+
+  const parent = module.parentOf(use.node);
+  if ((is.CallExpression(parent) || is.NewExpression(parent)) && parent.arguments.includes(use.node as never)) {
+    return 'possible';
+  }
+
+  // Walk up `x.a.b` to the outermost member expression.
+  let target: Node = use.node;
+  let above = parent;
+  while (is.MemberExpression(above) && above.object === target) {
+    target = above;
+    above = module.parentOf(target);
+  }
+  if (target === use.node) return 'none';
+
+  if (is.AssignmentExpression(above) && above.left === target) return 'definite';
+  if (is.UpdateExpression(above)) return 'definite';
+  if (is.UnaryExpression(above) && above.operator === 'delete') return 'definite';
+  // The user, 2026-11-05: a method known to only read does not build what it reads.
+  if (is.CallExpression(above) && above.callee === target) return callOnlyReads(module, above) ? 'none' : 'possible';
+  return 'none';
+}

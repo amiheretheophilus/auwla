@@ -210,7 +210,7 @@ async function run() {
   assert.ok(red, 'the installed artifact must complete native values inside a class condition');
   assert.deepEqual(red.range.start, { line: 3, character: 30 });
 
-  // Reactivity hints run compiler-next's analysis from inside the bundle.
+  // Reactivity hints run the compiler's analysis from inside the bundle.
   source = 'export function Counter() {\n  let count = 0;\n  const doubled = count * 2;\n  return <button onClick={() => count++}>doubled</button>;\n}\n';
   document.version++;
   showEditors([{ document, setDecorations(_style, options) { painted = options; } }]);

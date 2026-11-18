@@ -7,34 +7,34 @@ Owns DX-28/DX-31 and the integration side of DX-03.
 ## One production compilation path
 
 JSX+ is a standalone template layer (DX-39). For builds it is one pure value,
-`auwla` (`src/language.ts`): a compiler-next **source language** that owns `.auwla`
+`auwla` (`src/language.ts`): a compiler **source language** that owns `.auwla`
 and turns a module's text into TSX with an origin back to the authored text.
-Compiler-next does everything else, as for any `.tsx` module: collecting imports
+The compiler does everything else, as for any `.tsx` module: collecting imports
 across files, routes, planning, emission, source maps, error positions,
 projects and applications, the CLI, the Bun plugin and the Vite plugin with hot
 updates. JSX+ has no project wrapper, build graph, bundler plugin or source-map
-composer, and no Bun or Node API in `src/`, so it runs wherever compiler-next runs.
+composer, and no Bun or Node API in `src/`, so it runs wherever the compiler runs.
 
-It is built in (DX-52, 2026-11-16): compiler-next reads `.auwla` with no import and no
+It is built in (DX-52, 2026-11-16): the compiler reads `.auwla` with no import and no
 option, everywhere: `compileModules`, projects, applications, the Bun plugin, the Vite
-plugin and the CLI. Its two language lookups include it (`compiler-next/src/core/parse/built-in.ts`),
+plugin and the CLI. Its two language lookups include it (`compiler/src/core/parse/built-in.ts`),
 which loads this package's `./language` entry at the first `.auwla` module, so no tool
 wires it and none can drift. Both packages build `dist/` for Node; Bun and TypeScript
 read `src/` (`wiki/compiler/project.md`, "Package build"). The
-hook is compiler-next's ([source languages](../wiki/compiler/core.md#source-languages));
+hook is the compiler's ([source languages](../wiki/compiler/core.md#source-languages));
 it names no particular language. Extended syntax and checking stay in
-`packages/jsx-plus`. Compiler-next's `src/analysis/` folder exposes a read-only
+`packages/jsx-plus`. The compiler's `src/analysis/` folder exposes a read-only
 snapshot of the same frontend for checking.
 
 CSS uses this same language hook: a module returns stylesheet text or a pure
-recipe. Compiler-next's project reads/caches source-only dependencies and passes
+recipe. The compiler's project reads/caches source-only dependencies and passes
 resolved text to that recipe; those sources never enter the JS import graph.
 JSX+ owns CSS syntax, named-ID expansion, scoping and resource rebasing. The
 existing compiler/Bun/Vite delivery owns CSS assets and updates. The extra
 metadata does not introduce a JSX+ project or any filesystem APIs in `src/`.
 
 The synchronized compiler baseline is `compiler-rewrite` at `07e996c9`. `.auwla`
-server functions are not yet recognized (compiler-next's `server/` still accepts
+server functions are not yet recognized (the compiler's `server/` still accepts
 only JS/TS files). Client features are checked in `.auwla`: routes, lazy route
 chunks, the data layer, `$routed` and effects (`examples/team`).
 
@@ -43,12 +43,12 @@ chunks, the data layer, `$routed` and effects (`examples/team`).
                                           |
 existing JS/TS/JSX/TSX --------------------+
                                           |
-      compiler-next: project/collect, compile, Bun plugin, Vite plugin
+      the compiler: project/collect, compile, Bun plugin, Vite plugin
                                           |
                                       parse
                                           |
          resolve -> graph -> plan -> optimize -> emit
-               existing compiler-next pipeline
+               existing the compiler pipeline
                      |
        application DOM/SSR output, source maps to .auwla
 
@@ -65,7 +65,7 @@ replacement as the general parser for nested code and markup.
 Normalizing extended syntax is this package's task. Yuku's real host tokens and
 AST delimit code; equal-width temporary masks preserve authored offsets while
 scanning nested markup. Emitted TSX is assembled from copied spans and generated
-syntax, never from those masks. Existing compiler-next parses that TSX normally.
+syntax, never from those masks. Existing the compiler parses that TSX normally.
 Host fragments use a permissive async/generator parser context to retain `yield`
 and `await` expression grammar. That context is parser input only, never emitted
 or evaluated; the completed module is validated in its actual enclosing context.
@@ -106,14 +106,14 @@ All paths are relative to the repository root and exist now.
 | `packages/jsx-plus/tests/attributes.test.ts` | Attribute host forms, copied spans, malformed literals and explicit source-format boundary |
 | `packages/jsx-plus/src/model.ts` | Syntax views, authored ranges and copied-span mapping types |
 | `packages/jsx-plus/src/source.ts` | Copied/generated pieces, assembly, exact authored-offset lookup (edits) and nearest/covering lookups (diagnostics, syntax ranges) |
-| `packages/jsx-plus/src/diagnostics.ts` | Authored syntax diagnostic ranges and line/column reporting; `JsxPlusError` is a compiler-next `CompileError` |
-| `packages/jsx-plus/src/language.ts` | `auwla`, the compiler-next source language: `normalize` plus a binary-search origin over copied spans. JSX+'s whole build integration |
-| `packages/jsx-plus/src/compile.ts` | One-module convenience: compiler-next's `compile` with `languages: [auwla]` |
-| `packages/jsx-plus/tests/modules.test.ts` | The notes example through compiler-next's project and Bun plugin: both modes executed, source maps, authored errors |
-| `packages/jsx-plus/tests/vite.test.ts` | The notes example through compiler-next's Vite plugin: build, dev transform and map, hot update, authored dev error |
+| `packages/jsx-plus/src/diagnostics.ts` | Authored syntax diagnostic ranges and line/column reporting; `JsxPlusError` is a compiler `CompileError` |
+| `packages/jsx-plus/src/language.ts` | `auwla`, the compiler source language: `normalize` plus a binary-search origin over copied spans. JSX+'s whole build integration |
+| `packages/jsx-plus/src/compile.ts` | One-module convenience: the compiler's `compile` with `languages: [auwla]` |
+| `packages/jsx-plus/tests/modules.test.ts` | The notes example through the compiler's project and Bun plugin: both modes executed, source maps, authored errors |
+| `packages/jsx-plus/tests/vite.test.ts` | The notes example through the compiler's Vite plugin: build, dev transform and map, hot update, authored dev error |
 | `packages/jsx-plus/examples/notes/` | Multi-file app: three `.auwla` components, explicit and extensionless imports, a `.ts` re-export and helper |
-| `packages/jsx-plus/examples/preview.ts` | Example preview: compiler-next's Bun plugin with `auwla` and chunk splitting, serving the folder, an optional API and deep links |
-| `packages/jsx-plus/examples/server-preview.ts` | Preview of an example rendered on the server (`directory/`, `server-pages/`): one compiler-next application for the declarations, the browser bundle and the server |
+| `packages/jsx-plus/examples/preview.ts` | Example preview: the compiler's Bun plugin with `auwla` and chunk splitting, serving the folder, an optional API and deep links |
+| `packages/jsx-plus/examples/server-preview.ts` | Preview of an example rendered on the server (`directory/`, `server-pages/`): one the compiler application for the declarations, the browser bundle and the server |
 | `packages/jsx-plus/examples/watch.ts` | The previews' watching: on a saved change, `rebuild(changed)` and a reload of the open pages over a server-sent event stream |
 | `packages/jsx-plus/tools/checkout.ts` | Development Bun resolver for the examples' previews and the tests: this checkout's runtime, data and router sources instead of their `dist`. In neither folder, since tests never depend on examples |
 | `packages/jsx-plus/tests/fixtures/apps/` | The tests' own copies of the example apps (2026-11-14), so editing an example breaks no test ([rule 16](../wiki/rules.md)); the editor extension has its own under `packages/editor-vscode/tests/fixtures/apps/` |
@@ -175,19 +175,19 @@ All paths below are relative to the repository root and currently exist.
 
 | Path | Role and boundary |
 | --- | --- |
-| `packages/compiler-next/src/core/parse/index.ts` | Parse entry; reads a language module as the TSX `auwla` gives (DX-34 change, `languages.ts`) |
-| `packages/compiler-next/src/core/parse/languages.ts` | The source-language hook, its error relocation and probing extensions |
-| `packages/compiler-next/src/core/parse/lower-typescript.ts` | Existing runtime TypeScript lowering; do not invent a second TS semantics implementation |
-| `packages/compiler-next/src/pipeline.ts` | Existing production pipeline, now sharing the frontend with inspection |
-| `packages/compiler-next/src/analysis/` | Public inspection and serialized facts; owned by [compiler analysis](../wiki/compiler/analysis.md) |
-| `packages/compiler-next/src/options.ts` | Existing compile options forwarded by the UI facade |
-| `packages/compiler-next/src/features/refs/` | Current ref classification, planning and emission; see [refs](refs.md) |
-| `packages/compiler-next/src/features/conditionals/` | Existing reactive branch machinery |
-| `packages/compiler-next/src/core/emit/row-list.ts` | Emits compiled keyed row factories |
+| `packages/compiler/src/core/parse/index.ts` | Parse entry; reads a language module as the TSX `auwla` gives (DX-34 change, `languages.ts`) |
+| `packages/compiler/src/core/parse/languages.ts` | The source-language hook, its error relocation and probing extensions |
+| `packages/compiler/src/core/parse/lower-typescript.ts` | Existing runtime TypeScript lowering; do not invent a second TS semantics implementation |
+| `packages/compiler/src/pipeline.ts` | Existing production pipeline, now sharing the frontend with inspection |
+| `packages/compiler/src/analysis/` | Public inspection and serialized facts; owned by [compiler analysis](../wiki/compiler/analysis.md) |
+| `packages/compiler/src/options.ts` | Existing compile options forwarded by the UI facade |
+| `packages/compiler/src/features/refs/` | Current ref classification, planning and emission; see [refs](refs.md) |
+| `packages/compiler/src/features/conditionals/` | Existing reactive branch machinery |
+| `packages/compiler/src/core/emit/row-list.ts` | Emits compiled keyed row factories |
 | `packages/runtime/src/row-list.ts` | Existing compiled-row reconciliation and identity machinery |
 | `packages/runtime/src/list-values.ts` | Existing general array-child traversal and row matching |
-| `packages/compiler-next/tests/cases/` | Existing behavioral comparison cases for compatibility |
-| `packages/compiler-next/tests/reference/typescript.ts` | Independent TypeScript lowering in the test reference |
+| `packages/compiler/tests/cases/` | Existing behavioral comparison cases for compatibility |
+| `packages/compiler/tests/reference/typescript.ts` | Independent TypeScript lowering in the test reference |
 | `packages/language-service/src/plugin.ts` | Existing TS6 plugin; a content mapper is a separate integration, not a drop-in plugin replacement |
 | `packages/vite/src/graph/collector.ts` | Production graph collection and compilation; integration is later work |
 
@@ -204,7 +204,7 @@ separately parse/compile extended source. Neither adds a second reactive compile
 `.auwla` can also be used for pure backend JavaScript/TypeScript, with ordinary
 imports such as Express and database packages. Project configuration will point
 to backend files and/or folders. Those files use ordinary nonreactive backend
-execution within the same compiler-next toolchain; the extension does not opt
+execution within the same the compiler toolchain; the extension does not opt
 them into UI reactivity. Exact config keys and loading integration remain open.
 
 Isomorphic support will be added later. This note records the direction without
@@ -224,7 +224,7 @@ Split [features.md](features.md) when a feature group needs its own files and ca
 ## Boundaries
 
 - New syntax reuses existing writes, reactivity, readiness, refs and ownership.
-- Prototype production code uses compiler-next's public exports. Keep implementation
+- Prototype production code uses the compiler's public exports. Keep implementation
   out of its source folders; changes there are separate work, not package setup.
 - Ref compatibility checks confirm those features survive the new syntax; they
   are not tasks to implement refs again.

@@ -1,8 +1,8 @@
 /**
- * What only Vite can do for a server rendered with compiler-next: in development, the page comes
+ * What only Vite can do for a server rendered with the compiler: in development, the page comes
  * from Vite's dev server and the client's files from its transform pipeline; in a build, the
  * client folder is placed relative to each server chunk Vite emits. The production delivery and
- * host entry modules themselves are compiler-next's (`server/delivery.ts`, `wiki/rules.md`, rule 17).
+ * host entry modules themselves are the compiler's (`server/delivery.ts`, `wiki/rules.md`, rule 17).
  */
 import type { ViteDevServer } from 'vite';
 import MagicString from 'magic-string';
@@ -62,7 +62,7 @@ export function configureDevelopmentDelivery(server: ViteDevServer): void {
 /**
  * The delivery a development server gives the running backend: the page from Vite's dev server
  * (`configureDevelopmentDelivery`), and the client's files through Vite, or on Cloudflare through
- * the Worker's assets binding. Server functions are the application's own (compiler-next's wrapper).
+ * the Worker's assets binding. Server functions are the application's own (the compiler's wrapper).
  */
 export function developmentIntegrationModule(server: ViteDevServer, runtime: FullstackPluginApi['runtime'] = 'bun', assetsBinding = 'ASSETS'): string {
   const address = server.httpServer?.address();

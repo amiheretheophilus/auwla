@@ -1,7 +1,7 @@
 # Numeric responsive styles
 
 From `packages/jsx-plus`, run `bun run examples/responsive/preview.ts` and open
-`http://127.0.0.1:3036`. Add `--build` for a build-only check. Compiler-next and
+`http://127.0.0.1:3036`. Add `--build` for a build-only check. The compiler and
 its existing Bun adapter own the HTML, CSS and JavaScript delivery.
 
 Resize the viewport around 300px, 700px and 1000px. `@700` and `@700px` mean the

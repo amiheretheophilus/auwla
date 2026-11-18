@@ -10,7 +10,7 @@
     "lib": ["ESNext", "DOM", "DOM.Iterable"],
     "skipLibCheck": true,
     "paths": {
-      "@memoized-dom/compiler/jsx": ["../../../compiler-next/src/jsx-types.ts"]
+      "@memoized-dom/compiler/jsx": ["../../../compiler/src/jsx-types.ts"]
     }
   },
   "contentMappers": [

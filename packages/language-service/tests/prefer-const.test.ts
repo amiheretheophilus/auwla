@@ -38,7 +38,7 @@ describe('prefer const guidance', () => {
 
   // Was an update of a derivation (`double++`), which the old compiler refused; a write now takes
   // control of a derived value (`wiki/rules.md`, rule 11). `innerHTML` with children is an error
-  // compiler-next keeps (`wiki/decisions.md`, 2026-11-16).
+  // the compiler keeps (`wiki/decisions.md`, 2026-11-16).
   it('surfaces the compiler diagnostic verbatim in the owning file', () => {
     const { service, fileName } = languageService(
       `

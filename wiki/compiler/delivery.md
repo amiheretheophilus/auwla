@@ -3,7 +3,7 @@
 A page that cannot change ships as plain HTML, with no JavaScript at all, as if it had been
 written by hand. This holds for a client-only build as well as a server, and it is a headline
 property of the framework. The old compiler does this ("not perfect but it was cool"). The user
-wants compiler-next to improve on it, not match it.
+wants the compiler to improve on it, not match it.
 
 Status: a page that cannot change is built, and written into the page's HTML by every tool
 (`project.md`, "Build-time page"); a plain stylesheet import no longer stops it. The rest is
@@ -83,7 +83,7 @@ What works: static content costs nothing, since 60 cards ship the same JS as one
 
 ### Run the program, rather than model it
 
-Instead of a symbolic evaluator, compiler-next runs the program at build time, in a closed world,
+Instead of a symbolic evaluator, the compiler runs the program at build time, in a closed world,
 and reads what it renders. It runs the **compiled** program, the same one the browser would run, on
 the server's string document (`packages/server/src/string-document.ts`). So there is no second
 implementation of lists, slots or attributes that could differ from the browser's, and a static page
@@ -144,7 +144,7 @@ compiler's first failure sent the whole page to `browser`.
 | It can be created again later, such as a branch or a row | Creation code for that part only |
 | It could not be run at build time | Everything, for that part only |
 
-compiler-next already has these facts, per binding and per site (`plan.md`, phases 3 to 9), which is
+The compiler already has these facts, per binding and per site (`plan.md`, phases 3 to 9), which is
 why this can go further than the old compiler's whole-page answer.
 
 ### Adopting existing nodes
@@ -226,14 +226,14 @@ Every server serialization of a page goes through `RenderSession.serialize`, so 
 numbered too, and a region the server streams after its data settles is reused like the rest.
 
 **What a stream sends** (`packages/server/src/stream-regions.ts`). The old compiler's regions are
-marker ranges (`mmd:g`, `mmd:c`, `mmd:l`); compiler-next's output has none, so its regions are its
+marker ranges (`mmd:g`, `mmd:c`, `mmd:l`); the compiler's output has none, so its regions are its
 numbered elements. After each settlement the tracker compares every numbered element's HTML with what
 it sent. One whose own HTML changed (with the numbered elements inside it left out) is sent whole, as
 `<template data-mmd-region="[N">`; one whose change is all inside its numbered elements sends those
 instead. Before the program runs, the inline script replaces the marker `<!--[N-->` and the element
 after it with the template's copy, which carries the same numbers, so adoption then reuses it. A
 change outside any numbered element is not streamed: its data arrives, and the client render shows it.
-Before this, the tracker looked only for marker ranges, and a compiler-next page streamed data but no
+Before this, the tracker looked only for marker ranges, and a page from this compiler streamed data but no
 HTML (`tests/ssr-region-streaming.test.ts`).
 
 ### How it is tested

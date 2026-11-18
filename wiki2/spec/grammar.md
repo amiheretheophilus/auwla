@@ -5,7 +5,7 @@
 ## Host language and lexical contexts (G-HOST)
 
 The host grammar is the JavaScript/TypeScript/JSX grammar accepted by
-compiler-next's existing parser. The separate syntax package uses the same pinned
+the compiler's existing parser. The separate syntax package uses the same pinned
 host parser and adds productions only in the selected
 extended format. An implementation MUST tokenize host code with a real host
 lexer/parser, preserving comments, escapes, template substitutions, regex goals,

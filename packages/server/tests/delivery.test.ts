@@ -89,7 +89,7 @@ describe('SSR delivery', () => {
 
     harness.release();
     const rest = await readAll(reader);
-    // The root by its component's key, then the numbered elements of the render (compiler-next).
+    // The root by its component's key, then the numbered elements of the render (the compiler).
     expect(rest).toMatch(/^<!--mmd:r:\.\/delivery-app\.tsx#App-->(?:<!--[^>]*-->)*<main>(?:<!--[^>]*-->)*<h1>/);
     expect(rest).toContain('Ada');
     expect(rest).not.toContain('class="pending"');

@@ -22,7 +22,7 @@ export function App() {
 }
 ```
 
-compiles to (from `packages/compiler-next/tests/out/a-counter/compiled/App.tsx`):
+compiles to (from `packages/compiler/tests/out/a-counter/compiled/App.tsx`):
 
 ```js
 export function App(_id, _parent) {
@@ -51,7 +51,7 @@ The model:
 
 - **No virtual DOM.** A component is a function that builds its DOM once and
   returns it. Static HTML is a hoisted template (`materializeMarkup`, `cloneNode`;
-  compiler-next hoists a node description instead, `core.md`).
+  the compiler hoists a node description instead, `core.md`).
 - **State and derived values are plain JavaScript variables** in that function,
   or module `let`s.
 - **One `_update` per component** (an "entity") sets each dynamic spot. Spots skip

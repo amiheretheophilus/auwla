@@ -15,7 +15,7 @@ Updated: 2026-11-16. Branch: `compiler-rewrite`.
 Scratch tests in `tests/fixtures/out/perf/` (ignored), 2026-11-16:
 
 - `mdx-shape.test.ts`: MDX 3's `jsx: true` output shape, written by hand, compiled with
-  compiler-next: Markdown elements became dynamic component values. The same page as plain
+  the compiler: Markdown elements became dynamic component values. The same page as plain
   tags compiled to one template. Not checked: the exact output of a real `@mdx-js/mdx` run (it
   is not installed here), and static-page delivery (the harness did not qualify for it with
   plain tags either).
@@ -25,7 +25,7 @@ Scratch tests in `tests/fixtures/out/perf/` (ignored), 2026-11-16:
 
 ## Done
 
-- Slice 0 (2026-11-16): literal children are template text in compiler-next
+- Slice 0 (2026-11-16): literal children are template text in the compiler
   (`wiki/compiler/core.md`, "Literal children are template text"), tested in
   `core/plan/plan.test.ts`. Documents emit plain JSX text, so they did not need it; every
   `.auwla` page benefits now.

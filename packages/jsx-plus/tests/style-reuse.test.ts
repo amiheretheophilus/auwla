@@ -1,9 +1,9 @@
 import { afterAll, afterEach, expect, it } from 'bun:test';
 import { cpSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join, resolve, sep } from 'node:path';
-import { compileModulesDetailed, createProject } from '@memoized-dom/compiler-next';
-import { memoizedDom } from '../../compiler-next/src/project/bun';
-import { toModuleFunction } from '../../compiler-next/src/core/parse/module-function';
+import { compileModulesDetailed, createProject } from '@memoized-dom/compiler';
+import { memoizedDom } from '../../compiler/src/project/bun';
+import { toModuleFunction } from '../../compiler/src/core/parse/module-function';
 import * as runtime from '../../runtime/src/index';
 import { auwla } from '../src';
 import { rebaseStyleUrls } from '../src/styles/urls';

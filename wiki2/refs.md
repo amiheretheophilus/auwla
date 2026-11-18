@@ -1,6 +1,6 @@
 # Normally declared refs
 
-State: **already implemented in compiler-next**; preserve existing syntax and
+State: **already implemented in the compiler**; preserve existing syntax and
 behavior when extending markup. There is no new ref implementation task.
 Owns DX-19 and the ref-related part of DX-23.
 
@@ -39,12 +39,12 @@ is [wiki/compiler/refs.md](../wiki/compiler/refs.md).
 
 | Path relative to repository root | Role |
 | --- | --- |
-| `packages/compiler-next/src/features/refs/classify.ts` | Binding identity and assignable targets |
-| `packages/compiler-next/src/features/refs/plan.ts` | Ref writes use existing mutation planning |
-| `packages/compiler-next/src/features/refs/dom.ts` | Assignment and forwarding adapters |
+| `packages/compiler/src/features/refs/classify.ts` | Binding identity and assignable targets |
+| `packages/compiler/src/features/refs/plan.ts` | Ref writes use existing mutation planning |
+| `packages/compiler/src/features/refs/dom.ts` | Assignment and forwarding adapters |
 | `packages/runtime/src/refs.ts` | Mount, forwarding and teardown |
 | `packages/runtime/src/cleanup.ts` | Owner cleanup and failed-setup disposal |
-| `packages/compiler-next/tests/cases/refs.test.ts` | Existing comparison cases |
+| `packages/compiler/tests/cases/refs.test.ts` | Existing comparison cases |
 
 The separate adapter's current ref fixture runs in
 `packages/jsx-plus/tests/compile.test.ts`, using the existing implementation.

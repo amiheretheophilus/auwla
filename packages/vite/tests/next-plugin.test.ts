@@ -1,5 +1,5 @@
 /**
- * The Vite plugin over compiler-next's applications (`src/plugin.ts`): builds, dev transforms,
+ * The Vite plugin over the compiler's applications (`src/plugin.ts`): builds, dev transforms,
  * hot updates and errors, and a full-stack build serving its page and a server function.
  */
 import { afterAll, afterEach, describe, expect, it, vi } from 'bun:test';

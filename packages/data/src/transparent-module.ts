@@ -229,7 +229,7 @@ export function rebindModuleSourceFromFactory<T>(
 const declaredSources = new Set<string>();
 
 /**
- * A module source's declaration, as compiler-next emits it: `users = followModuleSource(ref)`.
+ * A module source's declaration, as the compiler emits it: `users = followModuleSource(ref)`.
  * It runs again when an input the call reads changes (`search` in `$fetch('/api/users',
  * { query: { search } })`); the request made from it then follows the new inputs through the
  * registered factory, and the module keeps the same ref. An unchanged request stays as it is

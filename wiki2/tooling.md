@@ -8,7 +8,7 @@ DX-24 and tooling DX-26.
 
 The separate syntax package supplies source understanding for a
 checking representation and authored span maps. The content mapper exposes those
-to TypeScript. This is tooling; application compilation stays in compiler-next's
+to TypeScript. This is tooling; application compilation stays in the compiler's
 existing pipeline. The mapper does not implement refs or emit a second runtime.
 
 ## Tag completion and auto-closing
@@ -90,7 +90,7 @@ TypeScript/editor versions and permissions used by the probe.
 | Path relative to repository root | State and role |
 | --- | --- |
 | `package.json` | Existing TypeScript version pin; repository checks stay on `bun check` |
-| `packages/compiler-next/tests/reference/typescript.ts` | Existing independent reference lowering; do not reuse the new production lowering as its oracle |
+| `packages/compiler/tests/reference/typescript.ts` | Existing independent reference lowering; do not reuse the new production lowering as its oracle |
 | `packages/language-service/src/plugin.ts` | Existing TS6 plugin; the mapper needs its own integration plan |
 | `wiki/compiler/typescript.md` | Existing API notes and compatibility limits |
 | `packages/jsx-plus/src/source.ts` | Existing exact copied-span mappings for normalized TSX; generated syntax has no authored edit span |

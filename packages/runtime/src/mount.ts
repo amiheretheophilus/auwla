@@ -59,7 +59,7 @@ function hydrationRootId(host: Element): string | null {
 const mountedOnce = new Map<string, unknown>();
 
 /**
- * A module-level `mount(...)` under hot replacement (`compiler-next/src/core/resolve/mounts.ts`):
+ * A module-level `mount(...)` under hot replacement (`compiler/src/core/resolve/mounts.ts`):
  * the first evaluation mounts; evaluating the module again after an edit returns the application
  * already on the page, whose components the hot runtime replaces in place. So `mount` can sit in
  * the component's own file (`App.auwla`) and that file still accepts its hot updates.

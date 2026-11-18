@@ -1,6 +1,6 @@
 # Further authoring features
 
-State: proposals and later slices extending compiler-next. Quoted text/direct
+State: proposals and later slices extending the compiler. Quoted text/direct
 children are the new authoring direction in [syntax](syntax.md). Normal refs
 already exist and are preserved as mapped in [refs](refs.md).
 

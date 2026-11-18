@@ -1,12 +1,12 @@
 # Auwla documents wiki
 
 The working map for **Auwla documents**: Markdown files (`.auwla.md`) that use Auwla
-components and values, compiled by compiler-next like any other module. It is a new
+components and values, compiled by the compiler like any other module. It is a new
 authoring language, so it has its own wiki and spec, apart from `.auwla` itself.
 
 | Track | Wiki |
 | --- | --- |
-| The compiler (compiler-next) | [wiki/](../wiki/README.md) |
+| The compiler (the compiler) | [wiki/](../wiki/README.md) |
 | `.auwla` (JSX+) | [wiki2/](../wiki2/README.md) |
 | `.auwla.md` documents | this folder |
 
@@ -27,7 +27,7 @@ not yet done across all three tracks is listed in [FINALIZE.md](../FINALIZE.md).
 
 | Page | Owns |
 | --- | --- |
-| [architecture.md](architecture.md) | Why not MDX's compiler, the pre-scan/mask/emit pipeline, where code lives, the compiler-next change it needs |
+| [architecture.md](architecture.md) | Why not MDX's compiler, the pre-scan/mask/emit pipeline, where code lives, the compiler change it needs |
 | [spec/](spec/README.md) | Grammar, semantics, diagnostics and fixtures |
 | [decisions.md](decisions.md) | Dated user decisions and open questions |
 | [plan.md](plan.md) | Ordered slices and their acceptance |

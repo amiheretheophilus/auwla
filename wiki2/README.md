@@ -7,11 +7,11 @@ discussion and feature index. This folder connects each experiment to its rules,
 files, acceptance examples and evidence. Existing compiler/runtime contracts stay
 in [wiki/compiler](../wiki/compiler/README.md).
 
-**This is an extension of compiler-next.** JSX+ adds syntax and authoring features
+**This is an extension of the compiler.** JSX+ adds syntax and authoring features
 beyond ordinary JSX in the **separate `packages/jsx-plus` package**. It normalizes
-source and calls compiler-next's public API, retaining the existing production
+source and calls the compiler's public API, retaining the existing production
 pipeline. Refs, reactivity, lists and ownership already exist. Prototype code stays
-outside compiler-next/runtime sources; the package boundary is DX-31.
+outside compiler/runtime sources; the package boundary is DX-31.
 
 ## Start a session
 

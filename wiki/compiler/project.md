@@ -5,17 +5,17 @@
 Status (2026-11-14): building from entries, rebuilding after edits, source maps, path aliases through the
 host, the file-system host, native packages ("Native packages"), a Bun plugin, a command line, hot
 replacement, and the Vite plugin over applications ("Vite") are built. What is not yet built for
-compiler-next is listed under "Vite" (`plan.md`, Phase 10).
+the compiler is listed under "Vite" (`plan.md`, Phase 10).
 
 ## What it does
 
-compiler-next reads a whole program at once: sources are followed across modules, and routes
+The compiler reads a whole program at once: sources are followed across modules, and routes
 join across components. So something has to collect every module before the compiler runs. The
 old Vite plugin did that itself (`packages/vite/src/graph/collector.ts`), so every other tool
 would have had to do it again. A project does it once, for any tool:
 
 ```ts
-import { createProject, fileSystemHost } from '@memoized-dom/compiler-next';
+import { createProject, fileSystemHost } from '@memoized-dom/compiler';
 
 const project = createProject({ entries: ['./src/main.tsx'], host: fileSystemHost(root) });
 const build = await project.build();          // { ok, output, initialRender, modules } or { ok: false, error }
@@ -96,7 +96,7 @@ output has a map back to the text the caller gave, with that text as its `source
 
 The user asked (2026-11-12) for HMR in the Vite dev server: an edited module replaces its components
 in place, keeping the state that can be kept. With `hot: true` (a compiler option; an application
-gives it to the client build only), compiler-next's output works with any dev server that has
+gives it to the client build only), the compiler's output works with any dev server that has
 `import.meta.hot` (Vite, and Bun's):
 
 - **The runtime watches instances.** Importing `@memoized-dom/runtime/hot` installs hooks
@@ -233,7 +233,7 @@ route's chunk; a page the server renders links them only for the routes it rende
 ("Vite") as after a build (`routes.md`, "A lazy route's styles"). Tested in `page.test.ts` and in
 Vite's `next-plugin.test.ts`.
 
-Only the first level of `delivery.md` exists in compiler-next: a page is wholly HTML or wholly the
+Only the first level of `delivery.md` exists in the compiler: a page is wholly HTML or wholly the
 browser's. The old compiler's middle levels (a static shell with interactive parts, adopting
 pre-rendered nodes) will write their pages through the same function.
 
@@ -243,7 +243,7 @@ pre-rendered nodes) will write their pages through the same function.
 Vite plugin over an application (`packages/vite/src/plugin.ts`), the only one since the old
 compiler's plugin was deleted (2026-11-17, `../decisions.md`). `server` is the server-only folder,
 and must be given: no folder is server-only by its name (the old plugin assumed `server`). The
-plugin only connects compiler-next's results to Vite (`../rules.md`, rule 17).
+plugin only connects the compiler's results to Vite (`../rules.md`, rule 17).
 
 - **Loading:** every module the program compiled is loaded from its output with its source map:
   the client program for the `client` environment, the server's for `ssr`. A relative import from a
@@ -267,15 +267,15 @@ plugin only connects compiler-next's results to Vite (`../rules.md`, rule 17).
   output is the one before the error.
 - **Delivery and the server:** the server's delivery module is `virtual:memoized-dom/integration`.
   In development it is the Vite half (`fullstack.ts`): the page from Vite's transformed
-  `index.html`, the client's files through Vite. After a build it is compiler-next's
+  `index.html`, the client's files through Vite. After a build it is the compiler's
   `deliveryModule` (`server.md`, "Delivery and runtimes") with the client's `base`, assets folder,
   route styles and files; the plugin only points each server chunk at the client folder once it
-  renders (`relocateClientRoot`). The production server entry (`dist/server.js`) is compiler-next's
+  renders (`relocateClientRoot`). The production server entry (`dist/server.js`) is the compiler's
   `hostEntryModule`; a server built on its own (`vite build --ssr`) gets `standaloneDeliveryModule`.
   `buildApp` and the native dev launcher (`dev.ts`, which re-imports the server after an edit) are
   Vite's, through the plugin's `api`.
 - The declaration files (`server-functions.d.ts`, `routes.d.ts`, `server-config.d.ts` in
-  `.memoized/`) are written after each build and update from compiler-next's `declarationFiles`
+  `.memoized/`) are written after each build and update from the compiler's `declarationFiles`
   (`server.md`); `memoized-dom types` asks the plugin to build for it.
 - **Styles in development:** a page the server renders links the stylesheets every page needs in its
   head, through the document (`dev-assets.ts`), and a lazy route's own (`routeStylesheets`, "Lazy
@@ -286,16 +286,16 @@ plugin only connects compiler-next's results to Vite (`../rules.md`, rule 17).
   The Vite adapter resolves direct requests for compiler-generated CSS from the compiled asset
   list, even before a JavaScript importer loads. The browser can apply scoped styles on first paint.
 - **Source maps** name each source as a file, which Vite makes relative to the module, so the
-  browser finds `App.tsx` beside `/src/App.tsx` (compiler-next's project paths would have named
+  browser finds `App.tsx` beside `/src/App.tsx` (the compiler's project paths would have named
   `/src/src/App.tsx`).
 - **A missing client entry** is reported for any module asked for, not left to Vite's own JSX
   transform, which would ask for React. The old plugin served what it could reach from the module
-  asked for; compiler-next builds from the configured entry.
-- `packages/vite`'s `dist` imports compiler-next's own built `dist` ("Package build"), so the
+  asked for; the compiler builds from the configured entry.
+- `packages/vite`'s `dist` imports the compiler's own built `dist` ("Package build"), so the
   `memoized-dom` command line, which always runs Vite under Node, works once the packages are built
   (`bun run build`). Until 2026-11-16 it bundled a private copy, which would have given JSX+
-  (loading compiler-next's `analysis` entry) a second `CompileError` class. `memoized-dom package`
-  is compiler-next's `packageLibrary`.
+  (loading the compiler's `analysis` entry) a second `CompileError` class. `memoized-dom package`
+  is the compiler's `packageLibrary`.
 - **Native packages** are found and resolved by the project (`fileSystemHost`, "Native packages"
   below); the plugin only keeps them out of prebundling and SSR externals, allows a linked
   package's folder, watches its files, and writes its type files (`writeLinkedTypes`).
@@ -304,14 +304,14 @@ plugin only connects compiler-next's results to Vite (`../rules.md`, rule 17).
   `cli.ts build --runtime cloudflare` builds a Worker without Vite; with Vite, `cloudflare()`
   (`packages/vite/src/cloudflare.ts`) wraps `@cloudflare/vite-plugin`.
 
-Not yet built for compiler-next: the devtools inspector and the runtime's trace calls in
+Not yet built for the compiler: the devtools inspector and the runtime's trace calls in
 development (both on hold; FINALIZE). They go in the project or application layer, with the tools
 only connecting them. An edit that moves code without changing output (a comment) leaves that
 module's source map stale until its next real change.
 
 ## Package build
 
-compiler-next builds to `dist/` like the other packages (`bun run --cwd packages/compiler-next
+The compiler builds to `dist/` like the other packages (`bun run --cwd packages/compiler
 build`, also part of the root `bun run build`; 2026-11-16). Node cannot load its TypeScript sources,
 whose imports leave out the extension (`ERR_MODULE_NOT_FOUND` on `./pipeline`). Its `exports` give
 each runtime its own file:
@@ -326,7 +326,7 @@ Only the public entries are built: the root and `./analysis`. The Bun plugin and
 (`project/bun.ts`, `project/cli.ts`) are Bun programs, imported from `src/`.
 
 JSX+ (`packages/jsx-plus`) builds the same way, its root and `./language` entries sharing one copy
-of the language. compiler-next loads `./language` for `.auwla` (`core.md`, "Source languages"),
+of the language. The compiler loads `./language` for `.auwla` (`core.md`, "Source languages"),
 so on Node one built copy of each package gives JSX+ and the compiler one `CompileError` class.
 
 ## Native packages
@@ -360,14 +360,18 @@ shows in the app's build, far from the package.
 Packaging one is the project's too (`packageLibrary`, `project/packages/package.ts`): a native
 package ships source, so no bundler is involved. It copies the files the public entries reach,
 exactly as written, checks each import (a dependency not listed, a missing file, a file outside
-the package, a project-only `#x`), compiles the package once with compiler-next so one that cannot
+the package, a project-only `#x`), compiles the package once with the compiler so one that cannot
 compile is never published, adds the framework packages the compiled output imports as peers, and
 generates the `package.json` with `exports` pointing at the source and the marker. Declarations
-come from the package's own `tsc` (`project/packages/declarations.ts`). The result is written to a
+come from the package's own `tsc` (`project/packages/declarations.ts`). The framework's JSX types
+are `src/jsx-types.ts` (`@memoized-dom/compiler/jsx`), TypeScript source: a declaration file in the
+staging folder imports them by their `node_modules` path, so `tsc` reads them as a library's
+instead of emitting them outside `rootDir`. Until 2026-11-18 it looked for the old compiler's
+`dist/jsx-types.d.ts`, which went with it, and `native-package.test.ts` caught it. The result is written to a
 staging folder under `.memoized/` and moved into `outDir` once complete. It publishes source only:
 a config without `source: true`, or with an option describing compiled output, is refused.
-`cli.ts package` runs it, and the old plugin's `memoized-dom package` hands every `source: true`
-config to it; compiled output stays the old compiler's.
+`cli.ts package` runs it, and `memoized-dom package` (`packages/vite/src/cli.ts`) hands every
+`source: true` config to it.
 
 **Where they go** (the user's direction, `decisions.md` 2026-11-12): each is built in the project
 and application, with its tests here, so the Vite plugin, the Bun plugin and the command line get it
@@ -432,9 +436,9 @@ same adapters. There is no language-specific build wrapper.
 `project/cli.ts`, run with Bun:
 
 ```
-bun packages/compiler-next/src/project/cli.ts check src/main.ts [--server server.ts --server-folder server]
-bun packages/compiler-next/src/project/cli.ts build src/main.ts --out dist [--minify] [--root .] [--server … --server-folder … [--runtime bun|cloudflare]]
-bun packages/compiler-next/src/project/cli.ts package [--root packages/kit] [--config .lib.config.ts]
+bun packages/compiler/src/project/cli.ts check src/main.ts [--server server.ts --server-folder server]
+bun packages/compiler/src/project/cli.ts build src/main.ts --out dist [--minify] [--root .] [--server … --server-folder … [--runtime bun|cloudflare]]
+bun packages/compiler/src/project/cli.ts package [--root packages/kit] [--config .lib.config.ts]
 ```
 
 `package` publishes a native package's source (`project/packages/package.ts`, "Native packages").
@@ -467,7 +471,7 @@ For the team example (about 1.3 s in all):
 | Part | Time |
 | --- | --- |
 | Bun itself | ~150 ms |
-| Loading compiler-next and JSX+ (several hundred source files, transpiled on each start) | ~160–290 ms; ~4 s once, with a cold disk |
+| Loading the compiler and JSX+ (several hundred source files, transpiled on each start) | ~160–290 ms; ~4 s once, with a cold disk |
 | The first compile in a process | ~300–520 ms (a second compile in the same process: ~120 ms) |
 | Bundling, minifying and maps (`Bun.build`) | ~110–160 ms |
 | Leaving the process | ~250 ms |

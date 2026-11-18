@@ -1,6 +1,6 @@
 /**
  * The directory app (the test's copy, `fixtures/apps/directory`): an app rendered on the server, written in `.auwla`
- * down to its server functions and server-only module, built by compiler-next's own Bun plugin with
+ * down to its server functions and server-only module, built by the compiler's own Bun plugin with
  * `auwla` as a source language.
  *
  * The server build is loaded with `import()` and asked for pages as a host would ask it. The client
@@ -14,10 +14,10 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { waitFor } from '../../../test-support/helpers';
-// Compiler-next's Bun plugin has no package export yet; the tests read it as the CLI does.
-import { memoizedDom } from '../../compiler-next/src/project/bun';
-import { fileSystemHost } from '../../compiler-next/src/project';
-import { createApplication } from '../../compiler-next/src/server/application';
+// The compiler's Bun plugin has no package export yet; the tests read it as the CLI does.
+import { memoizedDom } from '../../compiler/src/project/bun';
+import { fileSystemHost } from '../../compiler/src/project';
+import { createApplication } from '../../compiler/src/server/application';
 import { checkoutPackagesFor } from '../tools/checkout';
 import { auwla } from '../src';
 
@@ -107,7 +107,7 @@ it('runs ordinary backend code written in .auwla (Hono, a Node built-in), compil
   expect(body.people).toBeGreaterThanOrEqual(2);
   expect(body.instance).toMatch(/^[0-9a-f-]{36}$/);
 
-  // What compiler-next made of it: the authored code, with nothing of the runtime.
+  // What the compiler made of it: the authored code, with nothing of the runtime.
   const build = await createApplication({ client: './src/main.ts', server: SERVER, host: fileSystemHost(root), languages: [auwla] }).build();
   const code = build.server?.ok === true ? build.server.output['./server/status.auwla']! : '';
   expect(code).toContain("import { Hono } from 'hono';");

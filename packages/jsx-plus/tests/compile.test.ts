@@ -3,8 +3,8 @@ import { readFileSync } from 'node:fs';
 import fixtures from '../../../wiki2/spec/cases.json';
 import flowFixtures from './fixtures/checking-flow.json';
 import * as runtime from '../../runtime/src/index';
-import { toModuleFunction } from '../../compiler-next/src/core/parse/module-function';
-import { CompileError } from '@memoized-dom/compiler-next';
+import { toModuleFunction } from '../../compiler/src/core/parse/module-function';
+import { CompileError } from '@memoized-dom/compiler';
 import { compile, JsxPlusError, normalize } from '../src';
 import * as taskBoardActions from './fixtures/apps/task-board/actions';
 
@@ -90,7 +90,7 @@ for (const optimize of [true, false]) {
 }
 
 it('reports a compiler error found after parsing at its authored .auwla position', () => {
-  // Compiler-next rejects a POST `$fetch` during setup while planning, long after parsing. On the
+  // The compiler rejects a POST `$fetch` during setup while planning, long after parsing. On the
   // same line, the quoted text and bare child before it gain braces in the TSX, so its column there
   // differs; only a mapped position lands on `$fetch` in the authored line.
   const line = "export function Badge() { return <b>\"New\"; \" badge\"</b>; } export function App() { const saved = $fetch('/save', { method: 'POST' }); return <p>saved</p>; }";
@@ -107,7 +107,7 @@ it('reports a compiler error found after parsing at its authored .auwla position
   expect(error.message).toContain('POST action');
   expect(error.message).not.toContain('.tsx');
 
-  // The same program as its normalized TSX: compiler-next reports the error at `$fetch` there.
+  // The same program as its normalized TSX: the compiler reports the error at `$fetch` there.
   const normalized = normalize(source).code;
   let tsx: CompileError | undefined;
   try {
@@ -129,7 +129,7 @@ it('reports a JSX+ syntax error from compile as a located compiler error', () =>
   } catch (error) {
     caught = error;
   }
-  // Still a JsxPlusError for editors, and a CompileError for compiler-next's projects and plugins.
+  // Still a JsxPlusError for editors, and a CompileError for the compiler's projects and plugins.
   expect(caught).toBeInstanceOf(JsxPlusError);
   expect(caught).toBeInstanceOf(CompileError);
   expect((caught as JsxPlusError).path).toBe('./App.auwla');
@@ -141,7 +141,7 @@ it('keeps standard TSX child text on the existing compiler path', () => {
   expect(container.textContent).toBe('"hello"');
 });
 
-it('runs the package counter example through compiler-next', () => {
+it('runs the package counter example through the compiler', () => {
   const source = readFileSync(new URL('./fixtures/apps/counter.auwla', import.meta.url), 'utf8');
   const { container } = start(source, true);
   expect(container.textContent).toBe('Count: 0');
@@ -169,7 +169,7 @@ for (const optimize of [true, false]) {
   });
 
   it(`shows a row edit made through an entries() loop binding with optimize=${optimize}`, () => {
-    // `[index, task]` is destructured from each pair; compiler-next reports an edit
+    // `[index, task]` is destructured from each pair; the compiler reports an edit
     // through a destructured name (`features/handlers/plan.ts`, `patternRoot`).
     const { container } = start(`export function App() {
       let tasks = [{ id: 1, done: false }, { id: 2, done: false }];
@@ -188,7 +188,7 @@ for (const optimize of [true, false]) {
   });
 
   it(`skips unchanged rows of a loop over a plain state list with optimize=${optimize}`, () => {
-    // A loop is `Array.from(rows, row)`; compiler-next's closed-list proof treats it
+    // A loop is `Array.from(rows, row)`; the compiler's closed-list proof treats it
     // as it treats `rows.map(row)` (`optimize/closed-lists.ts`, `#rowsOver`). The
     // one-line handlers return the list and a label to the event dispatch, which
     // keeps nothing (`returnsToEventDispatch`), so the list still skips.

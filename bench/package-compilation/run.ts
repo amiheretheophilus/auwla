@@ -4,7 +4,7 @@
  * and semantic artifact, which that choice replaced, went with the old compiler; git history up
  * to Phase 10's exit has the runs that compared them.
  */
-import { compileModules } from '@memoized-dom/compiler-next';
+import { compileModules } from '@memoized-dom/compiler';
 
 interface Measurement {
   readonly helpers: number;

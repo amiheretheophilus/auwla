@@ -2,7 +2,7 @@
 
 From `packages/jsx-plus`, run `bun run examples/style-groups/preview.ts` and open
 `http://127.0.0.1:3037`. Add `--build` to build without serving. The existing
-compiler-next Bun adapter owns compilation and CSS delivery.
+the compiler Bun adapter owns compilation and CSS delivery.
 
 Read `App.auwla` for a group that changes several grid properties, a top-level
 `@1000px` group, descending thresholds and a declaration after a group. Read

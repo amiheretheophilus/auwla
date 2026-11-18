@@ -1,6 +1,6 @@
 /**
  * A local preview of an example rendered on the server (`directory/`, `server-pages/`).
- * Compiler-next's own Bun plugin builds the browser's bundle and the server from one application,
+ * The compiler's own Bun plugin builds the browser's bundle and the server from one application,
  * with `.auwla` as a source language; nothing here compiles anything. The built server answers
  * every request except the browser's files.
  *
@@ -15,8 +15,8 @@ import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import type { BuildArtifact, BuildOutput } from 'bun';
-// Compiler-next has no package export for this yet.
-import { memoizedDomApplication } from '../../compiler-next/src/project/bun';
+// The compiler has no package export for this yet.
+import { memoizedDomApplication } from '../../compiler/src/project/bun';
 import { checkoutPackagesFor } from '../tools/checkout';
 import { liveReload, watchFolder } from './watch';
 

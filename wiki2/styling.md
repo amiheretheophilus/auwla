@@ -35,8 +35,8 @@ passes HTML to Bun so the bundler creates CSS/script links itself.
 | Local scope/reuse | `src/styles/uses.ts` parses `@use`, checks module-local IDs and cross-file cycles, and retains authored offsets while expanding definitions. `scopes/markers.ts` consumes compiler-owned `inspectMarkup()` facts and inserts static attributes with `source.ts`; `scopes/selectors.ts` adds zero-specificity subject selectors. Syntax/selector rules remain here; compiler/runtime reactivity does not change. |
 | Document subjects | `scopes/subjects.ts` keeps explicitly selected `html`, `body` and `:root` reachable, scopes ordinary alternatives/descendants, and carries proven document targets through nested `&`. `selectors.ts` preserves order around nested declaration groups. |
 | Cross-file linking/nesting | `styles/stylesheet.ts` supplies pure compiler-owned recipes; `uses.ts` expands selected IDs from resolver-provided text and retains foreign authored spans; `urls.ts` rebases resource tokens. `styles/syntax.ts` extends CSS Tree block dispatch for implicit nesting and is shared by uses, conditions and scope. It reuses CSS Tree's selectors, declarations, at-rules and tokens. |
-| Compiler assets | Compiler-next's `core/parse/languages.ts` appends the side-effect CSS import after authored host code, preserving directives/shebang positions. Parsed/resolved modules retain the companion. `pipeline.ts` exposes `css` separately in detailed results; `project/project.ts` compares JS and CSS in updates. |
-| Existing delivery adapters | Compiler-next's `project/bun.ts` resolves and loads the virtual CSS companion with Bun's CSS loader. Vite's existing `next/plugin.ts` loads it before native CSS processing, including from static HTML whose script was removed. No JSX+ project wrapper/plugin is introduced. |
+| Compiler assets | The compiler's `core/parse/languages.ts` appends the side-effect CSS import after authored host code, preserving directives/shebang positions. Parsed/resolved modules retain the companion. `pipeline.ts` exposes `css` separately in detailed results; `project/project.ts` compares JS and CSS in updates. |
+| Existing delivery adapters | The compiler's `project/bun.ts` resolves and loads the virtual CSS companion with Bun's CSS loader. Vite's existing `next/plugin.ts` loads it before native CSS processing, including from static HTML whose script was removed. No JSX+ project wrapper/plugin is introduced. |
 | Shared assistance | `src/styles/tooling.ts` uses `vscode-css-languageservice` over an equal-width CSS projection. `styles/recovery.ts` keeps missing-colon errors on unfinished property names and reparses to avoid errors cascading into later selectors; its narrow scanner declarations describe the pinned dependency. Completion edits, hover and diagnostics use authored positions. `src/editor/grammar.ts` embeds the editor's `source.css` grammar. |
 | Source-aware assistance | `styles/sources/host.ts` defines injected URI/file/directory access; `arguments.ts` reads tolerant CSS-token argument ranges; `workspace.ts` keeps one current snapshot per consumer, source dependencies, completion edits and related diagnostics. The public entry is `@memoized-dom/jsx-plus/styles/sources`. |
 | VS Code adapter | `packages/editor-vscode/src/css.ts` translates protocol objects and owns current-document caching, targeted source-directory watchers and stale-result guards. `src/css/sources.ts` supplies workspace file access and unsaved overlays. Adapter 0.0.13 includes source/ID completion; CSS remains independent of TypeScript. Reload/desktop acceptance stays separate. |
@@ -63,7 +63,7 @@ use a project/bundler, or consume `compileModulesDetailed().css` yourself.
   removed, and checks that a fully static page retains CSS without a script.
 - `tests/editor-assets.test.ts` uses the real TextMate engine and pinned native
   CSS grammar, including delimiter-like text inside CSS strings/comments.
-- Compiler-next's `core/parse/styles.test.ts` uses an unrelated toy language to
+- The compiler's `core/parse/styles.test.ts` uses an unrelated toy language to
   check the generic asset contract, directives, CSS-only updates and removal.
 - VS Code activation tests invoke the providers, check edit/diagnostic positions,
   verify live diagnostic clearing and confirm CSS works without a TS provider.
@@ -173,7 +173,7 @@ engine checks component blocks without capturing returned DOM `<style>` tags.
 
 `styles/Frames.auwla` reuses `styles/Palette.auwla`; both Cards and IndependentCard
 consume the shared frame in their private scopes. Palette's SVG and global native
-CSS reset import keep their source directories. Compiler-next's generic recipe
+CSS reset import keep their source directories. The compiler's generic recipe
 hook owns dependency collection, cached source text, aliases and asset updates.
 Style-only source JS is not traversed/emitted/executed; the gallery build test
 adds an unresolved JS import and throw to prove they never enter the bundle.

@@ -51,7 +51,7 @@ not turn unknown future CSS properties into compiler errors.
 ## Delivery and tooling
 
 JSX+ removes the blocks from host code while retaining host mappings. Its pure
-source-language adapter returns the stylesheet text. Compiler-next owns the
+source-language adapter returns the stylesheet text. The compiler owns the
 generated CSS asset, its import, project updates and Bun/Vite delivery. There is
 no JSX+ build wrapper, Tailwind dependency, generated style element or reactive
 CSS runtime. The single-module JavaScript convenience API alone cannot deliver

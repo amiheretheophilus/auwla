@@ -148,7 +148,7 @@ export function batchlessListener<T extends (...args: any[]) => any>(callback: T
 /**
  * The start of a function that writes state and is handed to code the compiler cannot see: a
  * subscription, a timer, a listener added with `addEventListener`
- * (`compiler-next/src/features/handlers/callbacks.ts`). Its body is instrumented rather than
+ * (`compiler/src/features/handlers/callbacks.ts`). Its body is instrumented rather than
  * wrapped, so the function keeps its identity, name, length and hoisting.
  */
 export function enterCallback(): void {

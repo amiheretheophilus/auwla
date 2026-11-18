@@ -4,7 +4,7 @@
  */
 import { readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { compileModules } from '@memoized-dom/compiler-next';
+import { compileModules } from '@memoized-dom/compiler';
 
 export function compileMemoized(root: string): string {
   const sourceId = './bench/frameworks/dist/memoized.generated.tsx';

@@ -64,7 +64,7 @@ element of its own, except the paragraphs Markdown itself makes in block childre
 
 ## Values (S-EXPR)
 
-`{expr}` is an expression child at that place, with compiler-next's ordinary meaning: it
+`{expr}` is an expression child at that place, with the compiler's ordinary meaning: it
 updates when what it reads changes (module state, a store). A block value (D-EXPR) is a child
 of the document's fragment or of its element. A comment produces nothing.
 
@@ -82,5 +82,5 @@ static text the slug was made from.
 
 A document holds no state and takes no props, so its own markup is static: Markdown compiles
 to cloned templates with no update code. Only embedded components and values that read
-changing state produce update code. A document with neither ships as HTML where compiler-next
+changing state produce update code. A document with neither ships as HTML where the compiler
 delivers static pages.

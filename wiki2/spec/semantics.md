@@ -1,6 +1,6 @@
 # Core semantics
 
-0.1-draft, revision 7. Compiler-next's existing rules remain authoritative for
+0.1-draft, revision 7. The compiler's existing rules remain authoritative for
 host execution, reactivity, readiness, ownership and delivery.
 
 ## Expression children (S-EXPR)
@@ -8,7 +8,7 @@ host execution, reactivity, readiness, ownership and delivery.
 On initial evaluation, child expressions are evaluated in source order with
 normal JavaScript values, receivers, short-circuiting, side effects and thrown
 errors. Each expression contributes its value at its authored position. Later
-re-evaluation follows compiler-next's existing dependencies and scheduling;
+re-evaluation follows the compiler's existing dependencies and scheduling;
 "one evaluation" does not mean that a reactive expression is permanently frozen.
 
 ```tsx
@@ -54,7 +54,7 @@ text `null`/`true`/`false`, unlike standalone null/boolean child values.
 Normalization generates the template delimiters and `$` markers, preserving
 copied expression spans. Literal backticks in quoted text are escaped in the
 generated template. A substitution's value is string content, not markup or an
-implicit HTML insertion. Existing compiler-next template reactivity is reused.
+implicit HTML insertion. Existing the compiler template reactivity is reused.
 
 ## Conditional children (S-IF)
 
@@ -153,7 +153,7 @@ rules; `.map()` stays an ordinary expression and is not implemented again.
 ## Existing refs and attributes (S-REF)
 
 `let input: HTMLInputElement | undefined;` plus `ref={input}` already works in
-compiler-next. Normalization MUST preserve that binding and reach the existing
+the compiler. Normalization MUST preserve that binding and reach the existing
 ref feature. It does not declare a binding, require a prefix, change assignment
 semantics, or install a second ref runtime.
 
@@ -183,9 +183,9 @@ is outside this profile.
 
 ## Shared compiler/runtime obligations (S-PIPELINE)
 
-For UI/markup compilation, both source formats MUST use compiler-next's existing
+For UI/markup compilation, both source formats MUST use the compiler's existing
 resolution, semantic graph, planning, optimization and emission. The syntax
-package normalizes source and supplies authored mappings before compiler-next's
+package normalizes source and supplies authored mappings before the compiler's
 existing parse stage, using its public API without mixing source files.
 It MUST NOT add an alternative
 dependency engine, interpreter, state container, scheduler or ownership model.

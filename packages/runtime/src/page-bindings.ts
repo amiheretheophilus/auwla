@@ -11,7 +11,7 @@ import { createPropsCell, valueComponent } from './components';
 let pageInstances = 0;
 
 /**
- * compiler-next's page binding (`packages/compiler-next/src/server/pages.ts`): `component` is the
+ * The compiler's page binding (`packages/compiler/src/server/pages.ts`): `component` is the
  * page module's compiled `Page<n>(inputs)`. It renders, in its own runtime, into the page's root
  * element in place of the server's HTML, and later inputs reach it through its props cell, so
  * its local state, focus and an input's typed value survive a compatible update.

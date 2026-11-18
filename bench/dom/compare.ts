@@ -49,7 +49,10 @@ const directory = resolve(import.meta.dirname, 'dist/compare',
 const snapshot = resolve(directory, 'baseline');
 mkdirSync(snapshot, { recursive: true });
 const archive = resolve(snapshot, 'source.tar');
-const compilerPackage = beforeCompiler === 'next' ? 'compiler-next' : 'compiler';
+// `next` is the rewrite: `packages/compiler-next` until it was renamed `packages/compiler`
+// (2026-11-18), so a baseline from after the rename has it under the new name.
+const nextFolder = await git('ls-tree', '--name-only', beforeCommit, 'packages/compiler-next');
+const compilerPackage = beforeCompiler === 'next' && nextFolder !== '' ? 'compiler-next' : 'compiler';
 await git('archive', `--output=${archive}`, beforeCommit, `packages/${compilerPackage}`, 'packages/runtime');
 const extract = Bun.spawn(['tar', '-xf', archive, '-C', snapshot], { cwd: root, stdout: 'inherit', stderr: 'inherit' });
 if (await extract.exited !== 0) throw new Error('Cannot extract baseline');

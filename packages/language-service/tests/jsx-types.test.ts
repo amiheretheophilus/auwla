@@ -2,7 +2,7 @@ import { expect, it } from 'bun:test';
 import { dirname, resolve } from 'node:path';
 import * as ts from 'typescript';
 
-/** compiler-next's JSX types (`packages/compiler-next/src/jsx-types.ts`), as an editor checks them. */
+/** the compiler's JSX types (`packages/compiler/src/jsx-types.ts`), as an editor checks them. */
 it('uses the framework JSX types in the editor', () => {
   const configPath = resolve(import.meta.dirname, 'fixtures/jsx/tsconfig.json');
   const config = ts.readConfigFile(configPath, ts.sys.readFile);

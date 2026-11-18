@@ -8,7 +8,7 @@ Precise rules now live in [spec/grammar.md](spec/grammar.md),
 maps the work and remaining investigations; it does not define a competing grammar.
 
 Implementation lives in its own package and passes normalized standard TSX to
-compiler-next's public API. Ordinary expression rendering, `.map()`, list identity
+the compiler's public API. Ordinary expression rendering, `.map()`, list identity
 and refs already exist. New code changes their source spelling and direct child
 control flow without mixing implementation into those existing package sources.
 See [architecture.md](architecture.md).
@@ -176,7 +176,7 @@ CLI. The LSP completion, auto-import and editor-recovery tests edit inside its
 loop body. A real LSP rename of the row loop's binding edits only uses inside
 that loop.
 
-**Compiled rows (P4-FOR-FAST).** With optimization on, compiler-next treats
+**Compiled rows (P4-FOR-FAST).** With optimization on, the compiler treats
 `Array.from(items, row)` like `items.map(row)`
 ([optimize](../wiki/compiler/optimize.md#row-lists),
 `optimize/mapping-calls.ts`). A loop whose body is one keyed element becomes a
@@ -187,20 +187,20 @@ exactly what `Array.from` iterates. Both of the task board's loops compile to
 
 A loop over a plain state list (`let rows = [...]`, changed only by the
 component's own code) also skips rows whose item is unchanged, exactly as `.map`
-does: compiler-next's closed-list proof and emitter treat both spellings as one
+does: the compiler's closed-list proof and emitter treat both spellings as one
 ([closed lists](../wiki/compiler/optimize.md#closed-lists)). A derived list such
 as the task board's `visible` gets compiled rows but no skip, in either spelling.
 One-line handlers that return the list, such as `onClick=(() => rows.reverse())`,
 keep the skip: an element's event dispatch keeps nothing it returns. A function
 passed to a component as a prop does not, since the component may keep its result.
 
-Known limits (compiler-next, same as plain JSX `Array.from`):
+Known limits (the compiler, same as plain JSX `Array.from`):
 
 - Only the intrinsic global `Array.from` is recognized. A module that declares or
   assigns `Array`, or defines its own `from`, keeps the general path.
 - Fixed: writes through a destructured binding, such as
   `for (const [index, task] of tasks.entries())`, were not shown, in plain JSX
-  too. Compiler-next now reports an edit through a destructured name
+  too. The compiler now reports an edit through a destructured name
   ([handlers](../wiki/compiler/handlers.md)). `tests/compile.test.ts` runs such a
   loop in both modes.
 

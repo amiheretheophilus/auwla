@@ -1,7 +1,7 @@
 /**
  * Server pages written in `.auwla` (`fixtures/apps/server-pages`): a server function module returns
- * markup with `page(...)`, built by compiler-next's Bun plugin with `auwla` as a source language
- * (`compiler-next/src/server/pages.ts`; `wiki/compiler/server.md`, "Server pages").
+ * markup with `page(...)`, built by the compiler's Bun plugin with `auwla` as a source language
+ * (`compiler/src/server/pages.ts`; `wiki/compiler/server.md`, "Server pages").
  *
  * The server build answers as a host would ask it. The client build then starts on the page the
  * server rendered, with `fetch` sent to that server: it binds the interactive board, keeps its
@@ -13,8 +13,8 @@ import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { waitFor } from '../../../test-support/helpers';
-// Compiler-next's Bun plugin has no package export yet; the tests read it as the CLI does.
-import { memoizedDom } from '../../compiler-next/src/project/bun';
+// The compiler's Bun plugin has no package export yet; the tests read it as the CLI does.
+import { memoizedDom } from '../../compiler/src/project/bun';
 import { decodePageHtml } from '../../runtime/src/page-html';
 import { checkoutPackagesFor } from '../tools/checkout';
 import { auwla } from '../src';

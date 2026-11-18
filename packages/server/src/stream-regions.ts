@@ -66,7 +66,7 @@ function rangesIn(
 }
 
 /**
- * Outermost numbered elements in `node`'s children, descending through other nodes. compiler-next
+ * Outermost numbered elements in `node`'s children, descending through other nodes. The compiler
  * output has no marker ranges: each node a program creates carries its number (`<!--[N-->`,
  * `runtime/src/adoption.ts`), and an element among them is a region the browser can replace.
  */
@@ -85,7 +85,7 @@ export class RegionTracker {
   readonly #sentOwn = new Map<string, string>();
 
   /**
-   * `creationOf` gives a node's number when the page is numbered (compiler-next output), whose
+   * `creationOf` gives a node's number when the page is numbered (compiler output), whose
    * regions are its numbered elements rather than marker ranges.
    */
   constructor(
@@ -250,7 +250,7 @@ const CLIENT_STREAM = `(function(){var K=Symbol.for("memoized-dom:stream");` +
   `function find(selector,attribute,value,use){var list=document.querySelectorAll(selector);` +
   `for(var i=0;i<list.length;i++)if(list[i].getAttribute(attribute)===value)return use(list[i])}` +
   `function swap(id,template){var walker=document.createTreeWalker(document,128),open,node,depth=0;` +
-  // A numbered region (`[N`, compiler-next) is the element after its marker: the template holds
+  // A numbered region (`[N`, the compiler) is the element after its marker: the template holds
   // the marker and the element again.
   `if(id.charAt(0)==="["){while(node=walker.nextNode())if(node.data===id){open=node.nextSibling;` +
   `if(open&&open.nodeType===1){open.parentNode.removeChild(open);node.parentNode.replaceChild(template.content,node)}return}return}` +

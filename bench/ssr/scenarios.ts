@@ -1,4 +1,4 @@
-import { compile } from '@memoized-dom/compiler-next';
+import { compile } from '@memoized-dom/compiler';
 
 export const TABLE_SOURCE = `
 let rows = Array.from({ length: 1000 }, (_, i) => ({

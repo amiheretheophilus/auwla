@@ -5,7 +5,7 @@
 ## Purpose (A-NODES)
 
 The added child forms need source-aware syntax before they can normalize into
-compiler-next's existing JSX/host AST. This document defines a small serialized
+the compiler's existing JSX/host AST. This document defines a small serialized
 view for comparing that syntax. It does not introduce a new semantic graph or
 replace yuku's JavaScript AST. Production internal classes may differ if their
 view and normalization satisfy this contract.
@@ -103,7 +103,7 @@ resolver bindings, runtime IDs and optimization decisions do not appear in it.
 
 ## Normalization obligations (A-NORMALIZE)
 
-- Normalize before compiler-next resolves bindings. Every authored reference
+- Normalize before the compiler resolves bindings. Every authored reference
   reaches its normal resolver scope and subsequent graph/plan stages.
 - Direct expression children become normal expression sites. Static quoted text
   stays a host string; quoted interpolation becomes a native template (S-INTERP).

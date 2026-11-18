@@ -19,7 +19,7 @@ and runs their cleanup.
   (`const run = $effect`, `fn($cleanup)`, `typeof $effect`), which would stay in the output
   and fail with "$effect is not defined" (`../decisions.md`, 2026-11-16). A module's own
   function of that name is left alone. `markers.test.ts` covers each form.
-- `runtime/src/effect.ts` shares registration with old output. Compiler-next opts
+- `runtime/src/effect.ts` shares registration with old output. The compiler opts
   into the existing computation collector and write batches. Effects run after DOM
   work and deferred refs, replace their subscriptions after execution, and settle
   their own writes. Existing build-frame recovery keeps throwing callbacks retryable.
@@ -81,7 +81,7 @@ and runs their cleanup.
 
 ## Cases to test
 
-In `packages/compiler-next/tests/cases/effects.test.ts`: 18 reference comparisons,
+In `packages/compiler/tests/cases/effects.test.ts`: 18 reference comparisons,
 each also run with compiler optimizations enabled and disabled. Added cases pin
 named callbacks/helper reads, unexecuted callback captures, truthy activation
 retention, DOM/cleanup order, per-run captures, loop occurrence removal, both

@@ -23,7 +23,7 @@ React JSX runtime. Other projects need this one-time configuration too.
 | [team/](team/) | Routes (nested, parameters, catch-all), lazy route chunks, `Group` pending/error policies, `<slot>` layouts, `$fetch`/`$track` with a reactive helper, `$routed`, `$effect` and `$cleanup` |
 | [directory/](directory/) | Rendered on the server: `.auwla` server functions and a `.auwla` server-only module, a server-backed `$routed`, hydration, and a form posting to a server function |
 | [server-pages/](server-pages/) | Server functions returning `page(...)`: an interactive board that keeps its local state across live server updates, a passive page that ships no JavaScript, only the read fields crossing, and the built-in CSS (global tokens, scoped and named styles, class conditions, responsive groups) |
-| [notes/](notes/) | Several `.auwla` components importing each other (with and without the extension, through a `.ts` re-export), built by compiler-next's project, Bun plugin and Vite plugin |
+| [notes/](notes/) | Several `.auwla` components importing each other (with and without the extension, through a `.ts` re-export), built by the compiler's project, Bun plugin and Vite plugin |
 | [checking/App.auwla](checking/App.auwla) | Small typed-prop/ref example used by the mapper checks |
 | [checking/TypeError.auwla](checking/TypeError.auwla) | Deliberately invalid method call for inspecting authored diagnostics |
 
@@ -71,7 +71,7 @@ For authored TypeScript checking, including its entrypoint:
 bun ../../node_modules/typescript/lib/tsc.js --project examples/task-board/tsconfig.json --runExternalCode --pretty false
 ```
 
-The preview ([preview.ts](preview.ts)) builds with compiler-next's own Bun plugin,
+The preview ([preview.ts](preview.ts)) builds with the compiler's own Bun plugin,
 passing `auwla` as a source language, and bundles the current checkout's browser
 runtime. It compiles nothing itself. The same option works with the Vite plugin.
 
@@ -146,7 +146,7 @@ bun run examples/team/preview.ts
 
 Open `http://127.0.0.1:3032`. The preview answers the pages' requests from a small
 in-memory API and serves deep links such as `/people/2`. Everything is written in
-`.auwla`; compiler-next does the work:
+`.auwla`; the compiler does the work:
 
 - [team/App.auwla](team/App.auwla) declares the routes: `route="/"`, a `/people`
   section whose heading stays while its child routes `/` and `/:id` swap, `/about`,
@@ -188,7 +188,7 @@ both compiler modes; `tests/vite.test.ts` checks Vite splits the same pages.
 bun run examples/directory/preview.ts
 ```
 
-Open `http://127.0.0.1:3033`. Compiler-next's Bun plugin builds the browser bundle and the
+Open `http://127.0.0.1:3033`. The compiler's Bun plugin builds the browser bundle and the
 server; the built server renders every page, answers the server functions and prepares
 server-backed `$routed` pages. `--build` builds and exits.
 

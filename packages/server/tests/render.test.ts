@@ -11,7 +11,7 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { afterEach, beforeAll, beforeEach, describe, expect, it } from 'bun:test';
-import { compileModules } from '../../compiler-next/src';
+import { compileModules } from '../../compiler/src';
 import { resetScheduler, unregister } from '@memoized-dom/runtime';
 import { _internals } from '@memoized-dom/runtime/testing';
 import { render, renderToString, renderToReadableStream } from '../src/index';
@@ -111,7 +111,7 @@ describe('LinkeDOM reference renderer', () => {
     const { serverModule } = await import('./parity-harness').then(({ compileFixture }) =>
       compileFixture('named-server-root', 'export function Dashboard() { return <main>Ready</main>; }', {}, 'Dashboard'));
     const result = await render(serverModule.Dashboard, { markers: true });
-    // compiler-next names a root by its component's key (`wiki/compiler/components.md`, "Keys").
+    // The compiler names a root by its component's key (`wiki/compiler/components.md`, "Keys").
     expect(result.html).toContain('<!--mmd:r:./named-server-root.tsx#Dashboard-->');
     expect(result.scriptTag).toContain('data-mmd-root="./named-server-root.tsx#Dashboard"');
     expect(result.html).not.toContain('<!--mmd:r:App-->');

@@ -74,7 +74,7 @@ or `: source`. A value that loads data and re-runs when its inputs change, such 
 `getPeople(search)`, is `: derived ← search`. Hover the declared name for what it
 means. Turn them off with **Auwla › Reactivity Hints** (`auwla.reactivityHints`).
 They need no TypeScript extension. The shared core
-(`@memoized-dom/jsx-plus/editor/hints`) decides them from compiler-next's
+(`@memoized-dom/jsx-plus/editor/hints`) decides them from the compiler's
 analysis; this adapter only shows them.
 
 They are editor decorations rather than inlay hints, because VS Code draws every
@@ -133,7 +133,7 @@ name discovery, grouped conditions and named breakpoints are not implemented yet
 
 Version 0.0.6 adds reactivity hints (above): `state`, `derived ← inputs` or
 `source` beside each declaration. The installed artifact probe runs them in Node,
-with compiler-next's analysis bundled.
+with the compiler's analysis bundled.
 
 Version 0.0.7 shows them as `: label` in their own colors (decorations), after the
 user found the inlay-hint color unreadable beside comments. The setting is now

@@ -1,6 +1,6 @@
-import type { SourceStylesheetRecipe } from '@memoized-dom/compiler-next';
+import type { SourceStylesheetRecipe } from '@memoized-dom/compiler';
 
-/** Syntax-only views. Ref and semantic binding nodes stay in compiler-next. */
+/** Syntax-only views. Ref and semantic binding nodes stay in compiler. */
 export type Range = readonly [number, number];
 
 export interface ExpressionView {

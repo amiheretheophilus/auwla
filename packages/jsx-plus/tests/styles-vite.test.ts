@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { build, createServer, type Rolldown, type ViteDevServer } from 'vite';
 import { waitFor } from '../../../test-support/helpers';
 import memoizedDom from '../../vite/src';
-import { memoizedDom as compilerBun } from '../../compiler-next/src/project/bun';
+import { memoizedDom as compilerBun } from '../../compiler/src/project/bun';
 import { auwla } from '../src';
 import { readStyleBlocks } from '../src/styles/blocks';
 

@@ -1,16 +1,16 @@
 /**
- * A multi-file `.auwla` app through compiler-next's own tools, with JSX+ only as a source language
- * (`src/language.ts`): compiler-next's project collects it, and its Bun plugin bundles it. Nothing
+ * A multi-file `.auwla` app through the compiler's own tools, with JSX+ only as a source language
+ * (`src/language.ts`): the compiler's project collects it, and its Bun plugin bundles it. Nothing
  * here is a JSX+ build path. The test's copy of the notes app (`fixtures/apps/notes`) has three
  * `.auwla` components, one imported by its full name and one through a `.ts` re-export with no
  * extension, and a `.ts` helper with module state.
  */
 import { afterEach, expect, it } from 'bun:test';
 import { fileURLToPath } from 'node:url';
-import { createProject, fileSystemHost, type ProjectHost, type SourceLanguage } from '@memoized-dom/compiler-next';
-// Compiler-next's Bun plugin has no package export yet; the test reads it as the CLI does.
-import { memoizedDom } from '../../compiler-next/src/project/bun';
-import { toModuleFunction } from '../../compiler-next/src/core/parse/module-function';
+import { createProject, fileSystemHost, type ProjectHost, type SourceLanguage } from '@memoized-dom/compiler';
+// The compiler's Bun plugin has no package export yet; the test reads it as the CLI does.
+import { memoizedDom } from '../../compiler/src/project/bun';
+import { toModuleFunction } from '../../compiler/src/core/parse/module-function';
 import * as runtime from '../../runtime/src/index';
 import { auwla } from '../src';
 
@@ -24,7 +24,7 @@ afterEach(() => {
   document.body.replaceChildren();
 });
 
-/** Bundles the example with compiler-next's Bun plugin, keeping the runtime outside the bundle. */
+/** Bundles the example with the compiler's Bun plugin, keeping the runtime outside the bundle. */
 async function bundle(optimize: boolean, sourcemap: 'none' | 'external' = 'none') {
   return Bun.build({
     entrypoints: [entry],
@@ -59,13 +59,13 @@ async function start(optimize: boolean) {
   return container;
 }
 
-it('collects the app through compiler-next\'s project, .auwla modules under their own paths', async () => {
+it('collects the app through the compiler\'s project, .auwla modules under their own paths', async () => {
   const build = await createProject({ entries: ['./main.ts'], host: fileSystemHost(root), languages: [auwla] }).build();
   expect(build.ok).toBe(true);
   expect([...build.modules].sort()).toEqual([
     './App.auwla', './NoteForm.auwla', './components/NoteList.auwla', './components/index.ts', './main.ts', './notes.ts',
   ]);
-  // `.auwla` is built in (DX-52, 2026-11-16): with no option, compiler-next reads the same modules
+  // `.auwla` is built in (DX-52, 2026-11-16): with no option, the compiler reads the same modules
   // and gives the same output. Before, it read `./main.ts` alone.
   const plain = await createProject({ entries: ['./main.ts'], host: fileSystemHost(root) }).build();
   expect([...plain.modules].sort()).toEqual([...build.modules].sort());

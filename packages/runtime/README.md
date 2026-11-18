@@ -4,7 +4,7 @@ This project does not support legacy APIs. All packages and consumers must use t
 
 Dependency-free registry, scheduling, optional dirty-reason batching, keyed row
 lists, conditional and value regions, cleanup/ref ownership, mutation
-observation and DOM value helpers for compiler-next's output. The old compiler's
+observation and DOM value helpers for the compiler's output. The old compiler's
 operations (its access table, event commits, state cells, value-cached setters,
 props boxes, list regions, initial-HTML bindings and claim-plan hydration) went
 with it on 2026-11-18.

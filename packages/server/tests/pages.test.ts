@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'bun:test';
 import * as runtime from '@memoized-dom/runtime/server';
 import * as data from '@memoized-dom/data/internal';
-import { compileModules } from '../../compiler-next/src';
-import { extractPages } from '../../compiler-next/src/server/pages';
+import { compileModules } from '../../compiler/src';
+import { extractPages } from '../../compiler/src/server/pages';
 import { createComponentPage, createServerPage, isServerPage, renderServerPage, type ServerPageDefinition } from '../src/page';
 import { createServerFunctionRoutes, createServerRouter, installServerPageFetch } from '../src/http-router';
 import { liveHub, liveResponse } from '../src/live';
@@ -13,8 +13,8 @@ import { decodePageFrames } from '../../runtime/src/page-html';
 import { waitFor } from '../../../test-support/helpers';
 
 /**
- * Execute compiler output without temporary files or application-side imports: compiler-next
- * extracts the handler's pages (`compiler-next/src/server/pages.ts`) into `./page.tsx`, compiles it
+ * Execute compiler output without temporary files or application-side imports: the compiler
+ * extracts the handler's pages (`compiler/src/server/pages.ts`) into `./page.tsx`, compiles it
  * as a server build, and the handler calls `createComponentPage` for each.
  */
 function fixture(source: string, modules: Record<string, string> = {}): (...args: unknown[]) => Promise<ServerPageDefinition> {

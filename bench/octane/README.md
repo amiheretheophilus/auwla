@@ -68,7 +68,7 @@ the baseline keeps that commit's own `packages/compiler` and runtime (the old co
 
 For a local correctness check that needs neither upstream dependencies nor a
 browser installation, run `bun test src/features/components/bench.test.ts` in
-`packages/compiler-next`. It compiles the unchanged Octane inline-row and DOM
+`packages/compiler`. It compiles the unchanged Octane inline-row and DOM
 component-row fixtures, mounts them through the real runtime entry, and checks
 1,000-row creation, updates, identity through moves, selection, removal and
 disposal. It uses the test DOM and has no timing assertions; the pinned browser

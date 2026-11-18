@@ -2,6 +2,10 @@
 
 Last updated: 2026-11-18.
 
+The old compiler is gone (Phase 10's exit, `compiler/plan.md`). compiler-next is now
+`packages/compiler`, published as `@memoized-dom/compiler`; its CI workflow is `compiler.yml`.
+Entries below this one keep the name they were written with.
+
 WebSocket server functions use `define.function({ live, websocket })` and a typed
 `#server-functions` connection. Draftroom uses one board connection for its
 initial read, persisted edits, collaborator presence, cursors, and drag previews.
@@ -280,7 +284,7 @@ does. Still to do: a lazy route's styles on a server-rendered page.
 **Synced with `prototype/jsx-plus` (2026-11-14).** `compiler-rewrite` was fast-forwarded to the
 prototype branch at `6bbb6aa0`, so the two share one history and changes sync both ways without
 drift (the user's direction). It brings the prototype's compiler-next, runtime and router changes
-(`wiki2/status.md`, "Compiler-next changes to reconcile"): source languages, also for server code;
+(`wiki2/status.md`, "Compiler changes to reconcile"): source languages, also for server code;
 the `serverOnly` option; effects running once per change; a lazy route loader no longer counted as
 unknown code; the router releasing window listeners on unmount; no unreachable completion after a
 shared setup's `return`; native CSS delivery; and an expected-failure test for module state leaking

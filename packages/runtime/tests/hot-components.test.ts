@@ -1,5 +1,5 @@
 /**
- * Hot replacement of compiler-next components (`hot.ts`, `acceptComponents`): a module evaluated
+ * Hot replacement of compiled components (`hot.ts`, `acceptComponents`): a module evaluated
  * again defines new functions under the same keys, and each live instance mounts again in place.
  */
 import { afterEach, expect, it } from 'bun:test';

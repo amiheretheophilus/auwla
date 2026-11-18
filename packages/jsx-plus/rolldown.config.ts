@@ -4,8 +4,8 @@
  * export condition (`package.json`), so tests, previews and the editor need no build.
  *
  * Two entries share one copy of the language: the root (`index.ts`) and `./language`, which
- * compiler-next's project layer imports to read `.auwla` by default
- * (`compiler-next/src/project/languages.ts`). The editor and checking entries are bundled by the
+ * the compiler's project layer imports to read `.auwla` by default
+ * (`compiler/src/project/languages.ts`). The editor and checking entries are bundled by the
  * editor extension itself.
  */
 import { isAbsolute } from 'node:path';

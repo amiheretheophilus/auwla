@@ -9,13 +9,13 @@ import { createRequire } from 'node:module';
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { GlobalRegistrator } from '@happy-dom/global-registrator';
-import { compile } from '../../packages/compiler-next/src/index';
-import { toModuleFunction } from '../../packages/compiler-next/src/core/parse/module-function';
+import { compile } from '../../packages/compiler/src/index';
+import { toModuleFunction } from '../../packages/compiler/src/core/parse/module-function';
 import * as runtime from '../../packages/runtime/src/index';
 
-// Use compiler-next's parser version, rather than the different root dependency.
+// Use compiler's parser version, rather than the different root dependency.
 const root = resolve(import.meta.dirname, '../..');
-const requireCompiler = createRequire(resolve(root, 'packages/compiler-next/package.json'));
+const requireCompiler = createRequire(resolve(root, 'packages/compiler/package.json'));
 const { parse } = await import(pathToFileURL(requireCompiler.resolve('yuku-parser')).href);
 const catalog = JSON.parse(readFileSync(resolve(import.meta.dirname, 'cases.json'), 'utf8'));
 const schema = JSON.parse(readFileSync(resolve(import.meta.dirname, 'ast.schema.json'), 'utf8'));

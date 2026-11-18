@@ -1,7 +1,7 @@
 import {
   COMPILER_DIAGNOSTIC_CODE,
   COMPILER_DIAGNOSTIC_SOURCE as diagnosticSource,
-} from '@memoized-dom/compiler-next';
+} from '@memoized-dom/compiler';
 export { diagnosticSource };
 
 export const diagnosticCodes = {

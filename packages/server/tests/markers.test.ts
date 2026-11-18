@@ -13,7 +13,7 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { beforeAll, describe, expect, it } from 'bun:test';
-import { compileModules } from '../../compiler-next/src';
+import { compileModules } from '../../compiler/src';
 import { renderToString } from '../src/index';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -77,7 +77,7 @@ describe('SSR marker serialization', () => {
     const html = renderToString(App, { markers: true });
 
     const bodies = comments(html);
-    // compiler-next's adoption markers (`wiki/compiler/delivery.md`): the application root opens
+    // The compiler's adoption markers (`wiki/compiler/delivery.md`): the application root opens
     // with `mmd:r:`, a conditional region with `mmd:g:`, each closing with `/mmd`; every element a
     // render created is numbered (`[n`), a list's rows by row (`[4r0:0`).
     expect(bodies.some((body) => body.startsWith('mmd:r:'))).toBe(true);

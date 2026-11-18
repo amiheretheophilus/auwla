@@ -1,4 +1,4 @@
-import type { SourceStylesheetRecipe } from '@memoized-dom/compiler-next';
+import type { SourceStylesheetRecipe } from '@memoized-dom/compiler';
 import type { StyleBlock } from './blocks';
 import { styleChunks, styleDependencies } from './uses';
 import { lowerConditions } from './conditions/lower';

@@ -9,7 +9,7 @@
     "noEmit": true,
     "skipLibCheck": true,
     "allowImportingTsExtensions": true,
-    "types": ["bun", "@memoized-dom/compiler-next/jsx"],
+    "types": ["bun", "@memoized-dom/compiler/jsx"],
     "paths": {
       "#server-functions": ["./.memoized/server-functions.d.ts"]
     }

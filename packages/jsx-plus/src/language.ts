@@ -1,7 +1,7 @@
 /**
- * `.auwla` as a compiler-next source language (`compiler-next/src/core/parse/languages.ts`).
+ * `.auwla` as a compiler source language (`compiler/src/core/parse/languages.ts`).
  *
- * This is all JSX+ gives a build. Compiler-next reads each `.auwla` module as the TSX `normalize`
+ * This is all JSX+ gives a build. The compiler reads each `.auwla` module as the TSX `normalize`
  * returns, and does everything else itself, as for a `.tsx` module: imports between files,
  * routes, planning, emission, source maps, projects, and the Bun and Vite plugins. Pass it to any
  * of them:
@@ -12,9 +12,9 @@
  * memoizedDom({ client: './src/main.ts', languages: [auwla] }); // Bun, or Vite's plugin
  * ```
  *
- * It reads no files and uses no runtime's APIs, so it runs wherever compiler-next runs.
+ * It reads no files and uses no runtime's APIs, so it runs wherever the compiler runs.
  */
-import type { SourceLanguage, TextOrigin } from '@memoized-dom/compiler-next';
+import type { SourceLanguage, TextOrigin } from '@memoized-dom/compiler';
 import type { VerbatimMapping } from './model';
 import { normalizeForLanguage } from './normalize';
 

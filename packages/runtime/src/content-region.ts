@@ -37,7 +37,7 @@ function bindPage(value: PageContent, nodes: readonly Node[]): PageBindingHandle
   return bind(roots[0] as Element, pageBindingInputs(value.binding!));
 }
 
-/** A page mounted by compiler-next's value slot (`render-value.ts`). */
+/** A page mounted by the compiler's value slot (`render-value.ts`). */
 export interface MountedPage {
   readonly nodes: readonly Node[];
   /** Whether `next` updates this page in place: the same bound page, or its next generation. */

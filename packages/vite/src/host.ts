@@ -1,10 +1,10 @@
 /**
- * The project host Vite gives compiler-next (`wiki/compiler/project.md`, "Vite"): files from disk,
+ * The project host Vite gives the compiler (`wiki/compiler/project.md`, "Vite"): files from disk,
  * native packages by the project's rule, and imports the compiler's own rule does not settle (path
  * aliases, `@/lib/x`) resolved by Vite.
  */
 import { isAbsolute, join, relative } from 'node:path';
-import { fileSystemHost, isSourcePath, projectPath, type ProjectHost, type SourceLanguage } from '@memoized-dom/compiler-next';
+import { fileSystemHost, isSourcePath, projectPath, type ProjectHost, type SourceLanguage } from '@memoized-dom/compiler';
 import { longPath } from './paths';
 
 /** Vite's resolution of `specifier` from the file `importer`: an id, or null when it finds none. */

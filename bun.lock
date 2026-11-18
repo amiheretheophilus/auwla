@@ -12,7 +12,7 @@
         "@cloudflare/vite-plugin": "^1.63.1",
         "@happy-dom/global-registrator": "20.11.0",
         "@jridgewell/trace-mapping": "^0.3.31",
-        "@memoized-dom/compiler-next": "workspace:*",
+        "@memoized-dom/compiler": "workspace:*",
         "@memoized-dom/data": "workspace:*",
         "@memoized-dom/router": "workspace:*",
         "@memoized-dom/runtime": "workspace:*",
@@ -40,7 +40,7 @@
         "@memoized-dom/runtime": "workspace:*",
       },
       "devDependencies": {
-        "@memoized-dom/compiler-next": "workspace:*",
+        "@memoized-dom/compiler": "workspace:*",
         "@memoized-dom/vite": "workspace:*",
         "@tailwindcss/vite": "^4.3.3",
         "tailwindcss": "^4.3.3",
@@ -52,8 +52,8 @@
       "name": "@memoized-dom/adapters",
       "version": "0.0.1",
     },
-    "packages/compiler-next": {
-      "name": "@memoized-dom/compiler-next",
+    "packages/compiler": {
+      "name": "@memoized-dom/compiler",
       "version": "0.0.0",
       "dependencies": {
         "@memoized-dom/data": "workspace:*",
@@ -103,7 +103,7 @@
       "name": "@memoized-dom/jsx-plus",
       "version": "0.0.0",
       "dependencies": {
-        "@memoized-dom/compiler-next": "workspace:*",
+        "@memoized-dom/compiler": "workspace:*",
         "css-tree": "3.2.1",
         "vscode-css-languageservice": "6.3.10",
         "vscode-jsonrpc": "9.0.2",
@@ -122,7 +122,7 @@
       "name": "@memoized-dom/language-service",
       "version": "0.0.5",
       "dependencies": {
-        "@memoized-dom/compiler-next": "workspace:*",
+        "@memoized-dom/compiler": "workspace:*",
       },
       "devDependencies": {
         "typescript": "npm:@typescript/typescript6@^6.0.2",
@@ -171,7 +171,7 @@
       },
       "dependencies": {
         "@memoized-dom/adapters": "workspace:*",
-        "@memoized-dom/compiler-next": "workspace:*",
+        "@memoized-dom/compiler": "workspace:*",
         "@memoized-dom/devtools": "workspace:*",
         "@memoized-dom/server": "workspace:*",
         "magic-string": "0.30.21",
@@ -337,7 +337,7 @@
 
     "@memoized-dom/adapters": ["@memoized-dom/adapters@workspace:packages/adapters"],
 
-    "@memoized-dom/compiler-next": ["@memoized-dom/compiler-next@workspace:packages/compiler-next"],
+    "@memoized-dom/compiler": ["@memoized-dom/compiler@workspace:packages/compiler"],
 
     "@memoized-dom/data": ["@memoized-dom/data@workspace:packages/data"],
 
@@ -813,7 +813,7 @@
 
     "@img/sharp-wasm32/@emnapi/runtime": ["@emnapi/runtime@1.11.3", "", { "dependencies": { "tslib": "^2.4.0" } }, "sha512-Xz4Tpyki7XyrpbUK1jR1AhdAdaXyhhY4lZ3neLodmhpuWfy2PAQN5B46sAiU4liOXGLkHypn/qU+jvfWSCYYLA=="],
 
-    "@memoized-dom/compiler-next/yuku-parser": ["yuku-parser@0.19.0", "", { "dependencies": { "@yuku-toolchain/types": "^0.19.0", "yuku-core": "0.19.0" } }, "sha512-XrBh9ZiQK5mJVRxZBAvD6LwRyAYrK3MFtH3+onyuxFL5hFD44EC3QOmIC1FjTj6H2MMwq46/NAI+NZxLZPZgxg=="],
+    "@memoized-dom/compiler/yuku-parser": ["yuku-parser@0.19.0", "", { "dependencies": { "@yuku-toolchain/types": "^0.19.0", "yuku-core": "0.19.0" } }, "sha512-XrBh9ZiQK5mJVRxZBAvD6LwRyAYrK3MFtH3+onyuxFL5hFD44EC3QOmIC1FjTj6H2MMwq46/NAI+NZxLZPZgxg=="],
 
     "@memoized-dom/example-octopulse/typescript": ["typescript@7.0.2", "", { "optionalDependencies": { "@typescript/typescript-aix-ppc64": "7.0.2", "@typescript/typescript-darwin-arm64": "7.0.2", "@typescript/typescript-darwin-x64": "7.0.2", "@typescript/typescript-freebsd-arm64": "7.0.2", "@typescript/typescript-freebsd-x64": "7.0.2", "@typescript/typescript-linux-arm": "7.0.2", "@typescript/typescript-linux-arm64": "7.0.2", "@typescript/typescript-linux-loong64": "7.0.2", "@typescript/typescript-linux-mips64el": "7.0.2", "@typescript/typescript-linux-ppc64": "7.0.2", "@typescript/typescript-linux-riscv64": "7.0.2", "@typescript/typescript-linux-s390x": "7.0.2", "@typescript/typescript-linux-x64": "7.0.2", "@typescript/typescript-netbsd-arm64": "7.0.2", "@typescript/typescript-netbsd-x64": "7.0.2", "@typescript/typescript-openbsd-arm64": "7.0.2", "@typescript/typescript-openbsd-x64": "7.0.2", "@typescript/typescript-sunos-x64": "7.0.2", "@typescript/typescript-win32-arm64": "7.0.2", "@typescript/typescript-win32-x64": "7.0.2" }, "bin": { "tsc": "bin/tsc" } }, "sha512-8FYau96o3NKOhbjKi/qNvG/W5jhzxkbdm5sj9AbZ/5T5sWqn3hJgLfGx27sRKZWTvyzCP8dLRBTf5tBTSRVUNA=="],
 
@@ -873,7 +873,7 @@
 
     "yuku-parser/yuku-ast": ["yuku-ast@0.9.3", "", { "dependencies": { "@yuku-toolchain/types": "^0.9.3" } }, "sha512-Kt0PXlPCXdKF1fWFTl7N3DaxsVk6DHF8VAXHJMkwPtJnWYgbx20pYgGSweuC/86mIM7k1NUITQ4JffgOLUWTCw=="],
 
-    "@memoized-dom/compiler-next/yuku-parser/@yuku-toolchain/types": ["@yuku-toolchain/types@0.19.0", "", {}, "sha512-tFkNbsP4WXX9UMUC5syJGdK9dPMLK0PPaIuXCcCYH75sZ8MrebfBZ2XvCILRTw8AgLivSSCfDa4R67iYBDa4Kg=="],
+    "@memoized-dom/compiler/yuku-parser/@yuku-toolchain/types": ["@yuku-toolchain/types@0.19.0", "", {}, "sha512-tFkNbsP4WXX9UMUC5syJGdK9dPMLK0PPaIuXCcCYH75sZ8MrebfBZ2XvCILRTw8AgLivSSCfDa4R67iYBDa4Kg=="],
 
     "@memoized-dom/example-octopulse/typescript/@typescript/typescript-aix-ppc64": ["@typescript/typescript-aix-ppc64@7.0.2", "", { "os": "aix", "cpu": "ppc64" }, "sha512-MTKKkWB7p/0E9xi1d1tHtZ5PiLkGEMIq88pK2CubZjOsLtYTLqhgIgi6zepFa+9GHZ6h05NMCkQxGKiPXMxXtQ=="],
 

@@ -157,7 +157,7 @@ before dependency queries. This is test-only and uses no production helpers.
   when the parent's expression is.
 - Children and named slots are plans passed to the child. Render callbacks
   (`render={item => <Row/>}`) are functions that return a plan. Slots are lowered to props
-  ("Slots", below); until 2026-11-11 compiler-next had none, and `<slot>` was emitted as an
+  ("Slots", below); until 2026-11-11 the compiler had none, and `<slot>` was emitted as an
   element while the caller's content went unread.
 - A component that returns different JSX on different paths gets a `Conditional`
   at its root (`conditionals-and-lists.md`).
@@ -217,14 +217,14 @@ passes through the acceptance switch.
 
 ## Cases to test
 
-In `packages/compiler-next/tests/cases/components.test.ts`.
+In `packages/compiler/tests/cases/components.test.ts`.
 
 The old compiler rejects both:
 
 - `<UI.Box>`, a member tag;
 - `<Child a={1} b={2} />` where `Child` does not declare `b`.
 
-The current component comparisons pass on compiler-next, including five
+The current component comparisons pass on the compiler, including five
 new direct-call/import, nested-owner, parameter-pattern and independent-slot
 cases. All 64 state/derived comparisons also pass, including deferred prop and
 keyed-override cases. Native regressions and unchanged benchmark-fixture checks
@@ -246,7 +246,7 @@ Three pass on the old compiler and three fail:
 
 The reference passes all six. Five have both generated versions in `tests/out/`;
 the render-callback rejection has its reference output and the diagnostic above,
-with no old compiled module. All three failures must pass on `compiler-next`.
+with no old compiled module. All three failures must pass on the compiler.
 Class/accessor rules, cases and reference snapshot details are on
 `state-and-derived.md`.
 

@@ -466,7 +466,7 @@ describe('CSR-equivalence corpus', () => {
       expect(tiers.serverModule.cleanups).toBe(0);
 
       // Callback refs wait until their nodes are connected to a settled document, and an effect
-      // runs after its owner's refs have mounted (compiler-next, `wiki/compiler/effects.md`).
+      // runs after its owner's refs have mounted (the compiler, `wiki/compiler/effects.md`).
       expect(tiers.clientModule.refRuns).toBe(0);
       result.clientRoot.ownerDocument.body.appendChild(result.clientRoot);
       await waitFor(() => {

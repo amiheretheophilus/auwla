@@ -27,7 +27,7 @@ Stated by the user on 2026-10-18. They apply to every design and every fix.
    check `bench/` when touching list code.
 7. **Do not edit failing test cases to make them pass.** Fix the compiler or
    report the failure. The old compiler's tests are the exception (`decisions.md`, 2026-11-06):
-   they are evidence, and one changes when compiler-next is genuinely better, or when it only pins
+   they are evidence, and one changes when the compiler is genuinely better, or when it only pins
    the old compiler's text, signature or limit.
 8. **Readiness:** every resolved value (server function, `$fetch`, `$read`)
    is waited on by everything that depends on it while it is loading.
@@ -62,7 +62,7 @@ Stated by the user on 2026-10-18. They apply to every design and every fix.
 12. **The UI updates when the console would show a change**: at the end of each
     synchronous stretch, including before every `await` (2026-10-19). The user:
     "it needs to follow how it will appear in the console".
-13. **compiler-next beats the old compiler in correctness and in speed**
+13. **The new compiler beats the old compiler in correctness and in speed**
     (2026-10-19). The user: "we have to be better than the old compiler both
     correctness and performance". The `d6e678b` benchmark is the floor.
 14. **The compiler wiki is the map of the code.** Each group of related files has
@@ -77,13 +77,13 @@ Stated by the user on 2026-10-18. They apply to every design and every fix.
     own `tests/fixtures/` (an app-sized program is fine there, as a copy), so
     editing or deleting an example never breaks a test. Examples are for trying
     things out. Shared build helpers live outside both (`packages/jsx-plus/tools/`).
-17. **Compiler first: build features live in compiler-next, never in a tool's plugin**
+17. **Compiler first: build features live in the compiler, never in a tool's plugin**
     (2026-11-12, 2026-11-14, restated 2026-11-16). The user: "we place things inside the compiler
     and not vite or bun plugin to prevent drift"; "vite will just be one option". Anything Vite,
     the Bun plugin and the command line would each need (generated declarations such as route and
     server-function types, delivery modules, server pages, packaging, deploy targets, framework
-    defaults) is written once in `packages/compiler-next/src/project` or `src/server`, with its
+    defaults) is written once in `packages/compiler/src/project` or `src/server`, with its
     tests there. A tool's plugin only connects that result to the tool: it writes the text the
     compiler produced, resolves through the tool, serves, watches, and sets the tool's own options
     (`optimizeDeps`, `fs.allow`). If a fix needs new logic in `packages/vite/src`, stop and put the
-    logic in compiler-next first.
+    logic in the compiler first.

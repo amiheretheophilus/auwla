@@ -1,6 +1,6 @@
 /**
  * The stylesheets a page the server renders in development links in its head, so it is styled
- * before any script runs. compiler-next says which they are (`CompiledProject.stylesheets` and
+ * before any script runs. The compiler says which they are (`CompiledProject.stylesheets` and
  * `routeStylesheets`); here they become the URLs Vite serves them at.
  *
  * The eager ones go in every page's document (`configureDevelopmentDelivery`). Those a route
@@ -21,7 +21,7 @@ const registered = new WeakMap<ViteDevServer, DevelopmentStyles>();
 
 /**
  * Records the stylesheets of the last client build that compiled. `stylesheets` and
- * `routeStylesheets` are compiler-next's files, as project paths resolved to Vite's file ids.
+ * `routeStylesheets` are the compiler's files, as project paths resolved to Vite's file ids.
  */
 export function registerClientStyles(
   server: ViteDevServer,

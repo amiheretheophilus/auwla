@@ -54,8 +54,8 @@ bun check -p wiki2/spec/tsconfig.json
 ```
 
 The checker validates the catalog and its source/range invariants, probes host
-continuation with the parser resolved from compiler-next, and runs the current
-JSX equivalents through compiler-next and the runtime in memory. It writes no
+continuation with the parser resolved from the compiler, and runs the current
+JSX equivalents through the compiler and the runtime in memory. It writes no
 compiled fixture files and adds no production parser. It checks the limited view
 shape directly; it is not a general-purpose JSON Schema validator.
 

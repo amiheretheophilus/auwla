@@ -2,7 +2,7 @@ import type * as ts from 'typescript';
 import {
   diagnoseModules,
   type CompilerDiagnostic,
-} from '@memoized-dom/compiler-next';
+} from '@memoized-dom/compiler';
 import {
   diagnosticCodes,
   diagnosticSource,

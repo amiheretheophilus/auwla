@@ -2,7 +2,7 @@ import {
   inspectModules,
   type AnalysisRange,
   type AnalysisUnresolvedInput,
-} from '@memoized-dom/compiler-next/analysis';
+} from '@memoized-dom/compiler/analysis';
 import { normalize } from '../normalize';
 import type { Range, VerbatimMapping } from '../model';
 import { authoredCover } from '../source';

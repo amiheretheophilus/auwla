@@ -27,7 +27,7 @@ export async function generateProjectTypes(config: InlineConfig): Promise<void> 
   try {
     await environment.init();
     await environment.pluginContainer.buildStart();
-    // compiler-next's plugin builds on demand, so it is asked to build and write them.
+    // The compiler's plugin builds on demand, so it is asked to build and write them.
     await (plugin.api as FullstackPluginApi | undefined)?.writeDeclarations?.();
   } finally {
     await environment.close();

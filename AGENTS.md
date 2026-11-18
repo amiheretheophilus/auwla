@@ -31,11 +31,11 @@ instructions. Work not yet done across the tracks is listed in `FINALIZE.md`.
 - JSX+ authoring is being explored on `prototype/jsx-plus`. `dx.md` holds the
   design discussion; `wiki2/` maps the prototype, decisions, checks and next slice.
   Keep new syntax work in the separate `packages/jsx-plus` package. It normalizes
-  extended syntax and calls compiler-next's public API. Do not mix prototype
-  implementation into compiler-next or runtime sources, create a second reactive
+  extended syntax and calls the compiler's public API. Do not mix prototype
+  implementation into the compiler or runtime sources, create a second reactive
   compiler, or rebuild existing refs. DX-31 clarifies package placement while
   retaining DX-28's existing-pipeline behavior. DX-34 lets this branch change
-  compiler-next where `.auwla` interop needs it, recorded in `wiki2/status.md`
+  the compiler where `.auwla` interop needs it, recorded in `wiki2/status.md`
   for later reconciliation with `compiler-rewrite`.
   Read `wiki2/spec/README.md` before changing syntax: its grammar, syntax model,
   semantics, diagnostics and conformance fixtures define the working draft.
@@ -59,11 +59,11 @@ instructions. Work not yet done across the tracks is listed in `FINALIZE.md`.
   locally as a routine check; run the files you changed. The user allowed it for the
   Phase 10 acceptance work (`wiki/decisions.md`, 2026-11-06). Root tests import `dist`, so
   rebuild the package first (`bun run --cwd packages/<name> build`).
-- `packages/compiler-next` tests import `src` directly and need no build.
+- `packages/compiler` tests import `src` directly and need no build.
 - Test locally first: `bun check`, the touched feature's unit tests, and the case
   files a change affects. Only batches that are slow here (minutes, not
   milliseconds) go to GitHub Actions, started by hand:
-  `gh workflow run compiler-next.yml --ref compiler-rewrite -f suite=<all|cases|reference|generators|unit>`.
+  `gh workflow run compiler.yml --ref compiler-rewrite -f suite=<all|cases|reference|generators|unit>`.
   Use it at a phase exit or after changing shared machinery, not after every
   edit. Details: `wiki/compiler/testing.md`, "Where tests run".
 - Type-check with `bun check` (in a package, or `bun check -p <tsconfig>`). It reports
@@ -74,10 +74,10 @@ instructions. Work not yet done across the tracks is listed in `FINALIZE.md`.
 - Review code thoroughly and run relevant checks before pushing. The user's
   latest instruction (2026-11-11) is to stop using sub-agents to conserve tokens;
   this supersedes their earlier request for another-agent reviews.
-- Keep new compiler-next work in a concept folder, including its tests. Use
+- Keep new compiler work in a concept folder, including its tests. Use
   readable helpers, expanded blocks and explanatory comments, as requested.
-- **Compiler first** (`wiki/rules.md`, rule 17). Build logic goes in compiler-next
+- **Compiler first** (`wiki/rules.md`, rule 17). Build logic goes in the compiler
   (`src/project`, `src/server`), never in `packages/vite`, the Bun plugin or the CLI, so the
-  tools cannot drift apart. A plugin only connects compiler-next's result to its tool: it writes
-  the files compiler-next generated, resolves, serves and watches. When a fix seems to need new
-  logic in a plugin, put that logic in compiler-next and call it from the plugin.
+  tools cannot drift apart. A plugin only connects the compiler's result to its tool: it writes
+  the files the compiler generated, resolves, serves and watches. When a fix seems to need new
+  logic in a plugin, put that logic in the compiler and call it from the plugin.

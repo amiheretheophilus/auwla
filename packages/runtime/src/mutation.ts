@@ -654,7 +654,7 @@ function differs(prior: readonly unknown[], after: readonly unknown[]): boolean 
  * objects other roots may share.
  *
  * `packageReads` lists the reads holding a value an uncompiled package made
- * (`compiler-next/src/features/handlers/package-values.ts`). Such a value can
+ * (`compiler/src/features/handlers/package-values.ts`). Such a value can
  * keep its state in a closure or a private field, where no snapshot sees it:
  * `store.setState(…)` on a zustand store changes nothing the store object
  * shows. Those reads are notified when the call ends whatever the snapshot
@@ -755,7 +755,7 @@ export function observeMutation(
 
 /**
  * `receiver.push(...args)` and the other methods the compiler knows edit only
- * their receiver (`compiler-next/src/optimize/method-facts.ts`). The native call
+ * their receiver (`compiler/src/optimize/method-facts.ts`). The native call
  * runs, then the receiver is reported.
  *
  * An edit that changes nothing (`[].pop()`, `push()` with no items, sorting a

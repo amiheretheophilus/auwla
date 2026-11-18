@@ -115,7 +115,7 @@ function connectActive(): void {
   if (!connections.has(runtime)) connections.set(runtime, runtime.connect());
 }
 /**
- * Install a compiled route table (compiler-next, `wiki/compiler/routes.md`): match locations with
+ * Install a compiled route table (the compiler,`wiki/compiler/routes.md`): match locations with
  * it, on this runtime and every one activated later, and make clicks on route links navigate.
  * One call keeps the table out of the module's own bindings. `basePath`: the prefix the
  * application is mounted at (`/app`, the compiler's `base` option), set before the table matches.

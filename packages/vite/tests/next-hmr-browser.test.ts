@@ -1,5 +1,5 @@
 /**
- * Hot replacement with compiler-next in a real browser (`wiki/compiler/project.md`, "Hot
+ * Hot replacement with the compiler in a real browser (`wiki/compiler/project.md`, "Hot
  * replacement"; the last part of the plan's HMR item): an edited component is replaced in place
  * and the rest of the page keeps its state, `.auwla` included; the edited component's own state
  * starts again; an error shows Vite's overlay and the fix clears it in place; an edit to the entry, which

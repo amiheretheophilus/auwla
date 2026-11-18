@@ -1,5 +1,5 @@
 /**
- * A local preview for an example folder. Compiler-next's own Bun plugin builds the app, with
+ * A local preview for an example folder. The compiler's own Bun plugin builds the app, with
  * `.auwla` as a source language: the same path a `.tsx` app takes. Nothing here compiles anything.
  *
  * The folder's `index.html` loads `/main.ts`, as Vite expects; the preview answers that path with
@@ -10,8 +10,8 @@ import { existsSync } from 'node:fs';
 import { relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { BuildArtifact, BuildOutput } from 'bun';
-// Compiler-next's Bun plugin has no package export yet.
-import { memoizedDomApplication } from '../../compiler-next/src/project/bun';
+// The compiler's Bun plugin has no package export yet.
+import { memoizedDomApplication } from '../../compiler/src/project/bun';
 import { checkoutPackages } from '../tools/checkout';
 import { liveReload, watchFolder } from './watch';
 

@@ -7,10 +7,10 @@
  *
  * Editor-neutral: offsets into the authored text, a short label and a Markdown explanation.
  * Editor adapters (`packages/editor-vscode`) show them their own way. The facts come from
- * compiler-next's public analysis entry, through `checking/facts.ts`; nothing here classifies
+ * the compiler's public analysis entry, through `checking/facts.ts`; nothing here classifies
  * bindings itself.
  */
-import { CompileError } from '@memoized-dom/compiler-next/analysis';
+import { CompileError } from '@memoized-dom/compiler/analysis';
 import { inspectCheckingFacts, type CheckingFacts } from '../checking/facts';
 
 export type ReactivityHintKind = 'state' | 'derived' | 'writable' | 'source';

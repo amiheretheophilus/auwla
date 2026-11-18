@@ -1,7 +1,7 @@
 /**
  * Rows of a `map` call that a text site shows directly, in the old compiler's
  * list shape: compiled rows reconciled from the array, with no render value,
- * capture array or nested value slot per row (`compiler-next/src/optimize/row-lists.ts`).
+ * capture array or nested value slot per row (`compiler/src/optimize/row-lists.ts`).
  *
  * The compiler proved the callback is an arrow `(item, index) => <element …>`
  * whose `key`, if any, is its first dynamic attribute. Calling the compiled row
@@ -71,7 +71,7 @@ export function whenQuiet(unedited: Unedited): Unedited {
 }
 
 /**
- * The items edited since `before` edits, for a closed list (`compiler-next/src/optimize/closed-lists.ts`).
+ * The items edited since `before` edits, for a closed list (`compiler/src/optimize/closed-lists.ts`).
  * `editedAt` maps an item to the count of the edit that last changed it; an edit whose item is not
  * known sets the map itself, and then every item counts as edited.
  */
@@ -91,7 +91,7 @@ export interface RowList {
    *
    * `unedited`: the compiler proved rows show only their item and index, and that
    * no item was edited since the last call (`true`), or which items were not (a
-   * predicate, `uneditedItems`; `compiler-next/src/optimize/closed-lists.ts`). A row
+   * predicate, `uneditedItems`; `compiler/src/optimize/closed-lists.ts`). A row
    * keeping such an item, and its index if it reads one, then has nothing to evaluate.
    */
   map(receiver: readonly unknown[] | { map(callback: (item: unknown) => void): unknown }, unedited?: Unedited): void;

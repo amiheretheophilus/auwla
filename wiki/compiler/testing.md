@@ -8,7 +8,7 @@ rules while registration remains reactive. Production uses entity ownership and
 version collectors instead. Explicit case expectations, including the user-chosen
 per-run cleanup captures, remain unchanged (`effects.md`, `refs.md`).
 
-**Folders:** `packages/compiler-next/tests/` (built), `features/*/*.test.ts` and
+**Folders:** `packages/compiler/tests/` (built), `features/*/*.test.ts` and
 `optimize/*.test.ts` _(planned)_.
 
 ## Files
@@ -25,13 +25,13 @@ per-run cleanup captures, remain unchanged (`effects.md`, `refs.md`).
 | `tests/reference/callbacks.ts` | Detects function boundaries so callback creation does not read its captures |
 | `tests/reference/closures.ts` | State in helper and factory closures: a dependency cell per invocation, recorded when a created function reads the binding |
 | `tests/reference/ast.ts` | Shared yuku AST builders for the test transforms |
-| `tests/reference/typescript.ts` | Lowers TypeScript with TypeScript itself (`typescript/sync`), so the reference shares no lowering with compiler-next |
+| `tests/reference/typescript.ts` | Lowers TypeScript with TypeScript itself (`typescript/sync`), so the reference shares no lowering with the compiler |
 | `tests/reference/syntax-rules.ts` | The reference's own rules for methods that only read and literals that update field by field |
-| `tests/delivery/adopt.test.ts` | A browser adopting compiler-next's server HTML through `mount` |
+| `tests/delivery/adopt.test.ts` | A browser adopting the compiler's server HTML through `mount` |
 | `tests/harness/case.ts` | The `Case` and `Step` types, optional `check(container, observation)` assertions, and `defer(name)` for async cases |
 | `tests/harness/run.ts` | `behaves(name, case)`: runs the case on the reference and on a compiler, compares after each step. An exception in an event handler fails the run (the DOM only reports it as a window `error` event). `disposeRuns()` cleans up after a failed run |
 | `tests/harness/server-functions.ts` | Server function client modules, generated from `define.function` files by the framework's own generator |
-| `tests/harness/compilers.ts` | The compilers a case can run on; `COMPILER=next` (default) is `packages/compiler-next`, `COMPILER=old` is `packages/compiler` |
+| `tests/harness/compilers.ts` | The compilers a case can run on; `COMPILER=next` (default) is `packages/compiler`, `COMPILER=old` is `packages/compiler` |
 | `tests/harness/compile-worker.ts` | Optional separate-process old compilation for cases that can synchronously loop |
 | `tests/harness/serialize.ts` | The visible DOM as a comparable string |
 | `tests/harness/requests.ts` | Queued JSON responses/rejections and normalized request history |
@@ -44,23 +44,23 @@ per-run cleanup captures, remain unchanged (`effects.md`, `refs.md`).
 | `tests/generator/components.test.ts` | Generated named/member/factory tags, keyed state, symbol/rest props, key order and HTML/SVG destinations; compares both renderers and independently asserts text, namespace and retained DOM |
 | `tests/generator/sources.test.ts` | Random programs with sources, checked without a compiler: answered late or inline from the start, they must end on the same page (`sources.md`) |
 
-Run them with `bun test` in `packages/compiler-next` (no build needed), or one file:
+Run them with `bun test` in `packages/compiler` (no build needed), or one file:
 `bun test cases/handlers`. Generated programs: `FC_RUNS=200 bun test generator`
 (default 25), `FC_SEED=<seed>` to repeat a run, `SAVE_CORPUS=1` to keep the shrunk
-failure. Cases run on compiler-next by default; `COMPILER=old` runs them on the
+failure. Cases run on the compiler by default; `COMPILER=old` runs them on the
 old compiler instead (`plan.md` tracks how many pass). Unit tests of compiler stages live next
 to the code (`src/**/*.test.ts`); `bun test src` runs only those.
 
 `REFERENCE_ONLY=1 bun test cases` runs the reference without compiling. Use it to
 develop the oracle, then run each new case in the default comparison mode before
 calling the slice finished. That writes both `tests/out/<case>/reference/App.tsx`
-and compiler-next's `tests/out/<case>/next/App.tsx` (plus any additional modules;
+and the compiler's `tests/out/<case>/next/App.tsx` (plus any additional modules;
 `COMPILER=old` writes `old/` instead). A compiler rejection is a recorded failure:
 `next/ERROR.txt` holds its message in place of the output. Runtime or assertion
 failures still leave both versions available to inspect. Each run replaces its
 case's folder, so `tests/out` only shows the last run of each case. The CI `cases`
 job uploads the whole folder as the `cases-output` artifact
-(`gh run download <id> --repo amiheretheophilus/auwla -n cases-output -D packages/compiler-next/tests/out`),
+(`gh run download <id> --repo amiheretheophilus/auwla -n cases-output -D packages/compiler/tests/out`),
 so every case's output can be read without running all cases locally. Each case's
 optional `check` runs after mount (observation 0) and after each step, on both
 renderers in the default mode. The ported regressions use it to assert known text
@@ -104,7 +104,7 @@ reactivity rules.
 
 **The old compiler does not define correctness.** It is a comparison target and a
 performance baseline. Its failures expose bugs the rewrite must fix; they are
-never expected failures for `compiler-next`. All valid-JavaScript cases, including
+never expected failures for the compiler. All valid-JavaScript cases, including
 the 19 that currently fail on the old compiler, must pass on the new compiler.
 The test reference can also contain bugs: when it disagrees with JavaScript or an
 agreed rule, fix the reference rather than copying its mistake into the compiler.
@@ -140,20 +140,20 @@ passes 200 programs with seed 20261021 after stored-value support. The unchanged
 full generator still fails on lists; its nonempty-list regression is preserved as
 `tests/corpus/generated-20261023.json` for Phase 5.
 
-**The reference shares no code with compiler-next.** It used to run compiler-next's TypeScript
+**The reference shares no code with the compiler.** It used to run the compiler's TypeScript
 lowering (`parseModule`) and import two of its rules (`callOnlyReads`, `literalFields`). A bug in
 shared code is in both, so comparisons agree and see nothing; a review found such bugs in namespace
 functions, merged type-only names and string enum aliases. Now TypeScript itself lowers the
 reference's input (`tests/reference/typescript.ts`, through the native compiler's `typescript/sync`
 API, TypeScript 7.1), and the reference writes its own rules (`tests/reference/syntax-rules.ts`).
-Only `export =` and `import x = require()` get compiler-next's meaning first, by syntax, since
+Only `export =` and `import x = require()` get the compiler's meaning first, by syntax, since
 `tsc` drops them from ES modules. Optimizations are checked against the general path, which is
 emitted separately, and against explicit expectations where both could share a mistake
 (`row-reuse.dom.test.ts` lists which callbacks may be cached).
 
 ## Layers
 
-`bench/dom/compare.ts` can compare two compiler-next revisions with their matching
+`bench/dom/compare.ts` can compare two the compiler revisions with their matching
 runtimes (`--before-compiler=next`, or `compiler_ref` in `bench-quick.yml`). This
 keeps new runtime helpers paired with the compiler that emits them. Local
 `--validate-only` runs every snapshot correctness gate without timing or replacing
@@ -225,7 +225,7 @@ checks before retention checks as well as in isolation when changing this fixtur
    runs in every later run.
 4. **Feature tests** next to each feature, for its graph and plan facts.
 5. **Optimizations on and off.** Every case and generated program that compares
-   compiler-next runs with passes enabled and with `optimize: false`; both must
+   the compiler runs with passes enabled and with `optimize: false`; both must
    match the reference and each other. Output stays in separate `next/` and
    `next-general/` folders (`optimize.md`). Old-compiler and reference-only runs,
    including the source/readiness generator for later phases, retain their
@@ -239,16 +239,16 @@ checks before retention checks as well as in isolation when changing this fixtur
    `yuku-parser` are still planned for the compiler adapter. Imported output
    currently has to parse through Bun to run.
 7. **Acceptance.** The old suites (root `tests/`, package tests, Vite, the Conduit
-   flows) run against `compiler-next` through a switch,
-   `bun test --preload ./test-support/compiler-next.ts <file>`. When they all pass, the old
+   flows) run against the compiler through a switch,
+   `bun test --preload ./test-support/compiler.ts <file>`. When they all pass, the old
    compiler is deleted.
 
-   The switch gives `compile` and `compileModules` to compiler-next. The old entry points that
-   compile a program and that compiler-next does not provide yet (`compileModulesDetailed`, which
+   The switch gives `compile` and `compileModules` to the compiler. The old entry points that
+   compile a program and that the compiler does not provide yet (`compileModulesDetailed`, which
    `packages/vite` calls, `compileDetailed`, `experimentalCompilePackage`, `compileServerPage`,
-   `emitInitialHtml`) throw "… is not on compiler-next yet". Until 2026-11-10 they ran the old
+   `emitInitialHtml`) throw "… is not on the compiler yet". Until 2026-11-10 they ran the old
    compiler, so a Vite test passing under the preload was evidence about the old compiler (found by
-   a review). They move with `packages/vite`, once compiler-next has Vite's result contract
+   a review). They move with `packages/vite`, once the compiler has Vite's result contract
    (`applicationRoot`, `maps`, `metadata`, `hydrationCapabilities`). Parsers, diagnostics and the
    server-function transforms are not program compilers and stay the old compiler's.
 
@@ -259,11 +259,11 @@ checks before retention checks as well as in isolation when changing this fixtur
    | Tests | What the failing line checks | Can it pass? |
    | --- | --- | --- |
    | 329 | the old compiler's generated text, or a snapshot of it | Never, on any rewrite |
-   | 94 | an error the old compiler raises for a program compiler-next accepts | Only if we choose to refuse that program |
+   | 94 | an error the old compiler raises for a program the compiler accepts | Only if we choose to refuse that program |
    | 91 | the old internal signature, such as `App('App', null, [{ items }])` or `button.onclick` | Never, as written |
    | 31 | hydration, not built yet | Yes |
    | 277 | anything else, which includes real bugs and counts of old internal work | Each read one by one |
-   | 3 | syntax compiler-next does not parse, of which TSRX is by decision | No |
+   | 3 | syntax the compiler does not parse, of which TSRX is by decision | No |
 
    It has already found real bugs: `style={…}`, `class={[…]}` and `innerHTML` were written as plain
    attributes, and the reference shared the mistake, so comparisons could not see it. The decisions it
@@ -273,7 +273,7 @@ checks before retention checks as well as in isolation when changing this fixtur
    compare with the first run: since 2026-11-10 the old program entry points throw, so 350 tests that
    passed through the old compiler now fail by design. 272 call `compileModulesDetailed`, mostly the
    old hydration plans (`initial-*.test.ts`) and Vite's metadata; 78 call `experimentalCompilePackage`,
-   the old package artifact (compiler-next packages through `packageLibrary`). The other 761 (826 in
+   the old package artifact (the compiler packages through `packageLibrary`). The other 761 (826 in
    the first run), sorted by failing line:
 
    | Tests | What the failing line checks |
@@ -284,7 +284,7 @@ checks before retention checks as well as in isolation when changing this fixtur
    | 326 | anything else |
 
    Of the last group, 62 failing lines in 30 files check what the page shows or what was called. Each
-   file was run and read; none shows a compiler-next bug. They are, by cause:
+   file was run and read; none shows a compiler bug. They are, by cause:
 
    - positional props (`function Row(item)`), not kept (`../decisions.md`, 2026-11-16; now a compile
      error, `components.md`, "Rules"): `m9`, `m10`,
@@ -292,7 +292,7 @@ checks before retention checks as well as in isolation when changing this fixtur
    - effects running after their owner commits (`effects.md`), where the old test checked
      synchronously: `effect-cleanup-consumption`, `r26-effect`, `recent-fixes-and-gated-maps`;
    - a navigation outside a handler showing at the scheduled update (`r47-router-runtime`; with a
-     synchronous scheduler compiler-next shows what the test expects);
+     synchronous scheduler the compiler shows what the test expects);
    - a binding following its initializer until it is reassigned, per instance and per binding
      (`writable-initializers`; `state-and-derived.md`, approved 2026-10-20);
    - content kept while its source reloads staying as committed (`retained-content`; the reference
@@ -300,7 +300,7 @@ checks before retention checks as well as in isolation when changing this fixtur
    - globals, or getters on `Object.prototype` and `Array.prototype`, edited outside any compiled call
      (`list-journal-fallback`, `lightweight-inline-rows`, `owned-fallback-batching`,
      `owner-refresh-coalescing`, `opaque-pull-prelude`; `../open-issues.md`);
-   - module state isolated per request in a browser build (`ssr-cell-lowering`); compiler-next
+   - module state isolated per request in a browser build (`ssr-cell-lowering`); the compiler
      isolates server builds (`server.md`, "Request isolation");
    - the old hydration markers and node creation (`hydration-*`, `positional-list-hydration`,
      `list-text-concat-cache`, `m8`), and the old `commitWrites` access paths (`m55`);
@@ -314,7 +314,7 @@ checks before retention checks as well as in isolation when changing this fixtur
    threw while loading. It now waits with its element (`$spread`, `tests/reference/runtime.ts`); two
    cases in `tests/cases/sources.test.ts` cover it, and both fail on the old compiler.
 
-   **The Vite suite on compiler-next** (`MMD_COMPILER=next`, 2026-11-16), each file alone: 142 pass,
+   **The Vite suite on the compiler** (`MMD_COMPILER=next`, 2026-11-16), each file alone: 142 pass,
    46 fail, 91 skipped; the skipped ones look only for Chrome, and `MMD_CHROME_PATH` set to Edge runs
    them. Fixed from it, each with a test: literal boolean attributes (`core.md`, "Dynamic attribute
    values"), route types (`routes.md`, "Route types"), a base on a runtime with no location yet
@@ -326,7 +326,7 @@ checks before retention checks as well as in isolation when changing this fixtur
    compiler's deletion first (2026-11-17), since the old plugin's architecture (delivery modules for
    each runtime in `packages/vite`) was shaping the fixes; the Vite suite is read again after it.
 
-   **Read again on the single plugin** (2026-11-17, step 3 of the deletion). Fixed in compiler-next,
+   **Read again on the single plugin** (2026-11-17, step 3 of the deletion). Fixed in the compiler,
    each with a test there: a client module importing the server folder by its path
    (`server.md`), `.memoized/server-config.d.ts` (`server.md`, "Server types"), a lazy route's
    stylesheets in development (`project.md`, "Lazy route stylesheets"), and a linked package's
@@ -353,8 +353,8 @@ checks before retention checks as well as in isolation when changing this fixtur
      (`dev-recovery-browser`); hydrated facade sources (`fullstack-browser`); lazy route navigation
      with `Group`, refs and effects (`lazy-route-browser`).
 
-   **The examples on compiler-next** (2026-11-18, step 5). `examples/stress-lab`'s own tests compile
-   with compiler-next: 164 of 175 pass. They found three bugs, fixed with cases: edits through
+   **The examples on the compiler** (2026-11-18, step 5). `examples/stress-lab`'s own tests compile
+   with the compiler: 164 of 175 pass. They found three bugs, fixed with cases: edits through
    `Object.values(…)`'s result (`handlers.md`), `refresh()` of a `$read` whose promise a `const`
    names (`sources.md`, "Refreshing a promise"), and the resource from `runtime.$fetch` (found by the
    size audit, `sources.md`). One expectation follows the 2026-10-20 rule (an untouched local copy of
@@ -369,14 +369,14 @@ checks before retention checks as well as in isolation when changing this fixtur
    **The old compiler's tests deleted** (2026-11-17, step 4). First, its programs were recorded
    once more from the root suite (`MEMO_DOM_CORPUS`, 2,967 tests passing on it): 1,679 programs,
    of which the 1,634 with markup and no TSRX are kept, inputs only (about 1 MB), in
-   `packages/compiler-next/tests/corpus/old-programs.json` for the replay below. Then went: the 241
+   `packages/compiler/tests/corpus/old-programs.json` for the replay below. Then went: the 241
    root files importing the old compiler, their snapshots and fixtures, the acceptance switch
-   (`test-support/compiler-next.ts`), `test-support/package-artifacts.ts`, the harness's
+   (`test-support/compiler.ts`), `test-support/package-artifacts.ts`, the harness's
    `COMPILER=old` and its isolated compile worker. In `packages/server`, the tests of the old
    compiler's SSR writer tier and initial-delivery contracts went (`writer`, `initial-request`,
    `initial-delivery`); two behaviours of the server itself moved to `relative-fetch.test.ts`; the
    rest (`parity`, `markers`, `render`, `delivery`, `exit-review`, `pages`, and those using the
-   parity harness) now compile with compiler-next, and found two bugs: HTML attribute names kept
+   parity harness) now compile with the compiler, and found two bugs: HTML attribute names kept
    their case in a server's DOM (`core.md`, "Dynamic attribute values"), and a passive server page's
    progress tracked only the old marker ranges (`server.md`, "Server pages"). Changed by decision
    there: `if` attributes became conditionals, roots are named by component key, adoption markers
@@ -387,7 +387,7 @@ checks before retention checks as well as in isolation when changing this fixtur
    by one is slow, and many check the old compiler's internal work. Their programs are what matters.
    `MEMO_DOM_CORPUS=<dir>` makes the old compiler record every program it compiles, so one run of the
    root suite on it gave 1,679 programs, now kept in `old-programs.json`
-   (`CORPUS=tests/corpus/old-programs.json bun test tests/corpus`). The replay runs each on compiler-next and the reference,
+   (`CORPUS=tests/corpus/old-programs.json bun test tests/corpus`). The replay runs each on the compiler and the reference,
    clicking and typing into whatever the source shows listening, twice, and comparing every step.
    Programs that need their original test's props or globals, or use the clock, compare nothing.
 
@@ -398,7 +398,7 @@ checks before retention checks as well as in isolation when changing this fixtur
    | Whole corpus, after the second round of fixes | 1,205 | 5 |
 
    Bugs it found, each now a case: the reference wrote `value` before `type` and kept `data-a` and
-   `DATA-A` apart; compiler-next let an earlier `data-x={n}` overwrite a later `DATA-X`, did not trim a
+   `DATA-A` apart; the compiler let an earlier `data-x={n}` overwrite a later `DATA-X`, did not trim a
    literal `class`, and read `.status` of a resource from `runtime.$fetch` as a field of its data
    (`sources.md`). A getter returning module state lost an edit through `store.list.push`
    (`handlers.md`). The second round: an optional link under a source read (`forms.result?.photos.map`)
@@ -407,11 +407,11 @@ checks before retention checks as well as in isolation when changing this fixtur
    `todos`) never updated the page (`sources.md`, `handlers.md`).
 
    The five left: four positional props (`../open-issues.md`), and a `refresh()` after the promise's
-   input changed, where compiler-next agrees with the old test and the reference does not
+   input changed, where the compiler agrees with the old test and the reference does not
    (`sources.md`, "Known limits of the reference"). Also not compared: an effect returning a value
-   that is not a function, which compiler-next rejects at run time; a `$fetch` POST at render, which
+   that is not a function, which the compiler rejects at run time; a `$fetch` POST at render, which
    it rejects at compile time; animation libraries, which edit their targets on animation frames
-   (the clock), and which compiler-next sees only at the call (`linking.md`); custom elements, whose
+   (the clock), and which the compiler sees only at the call (`linking.md`); custom elements, whose
    names can be defined once per process; and one program that recurses forever on a click.
 
 The first cases are the **Cases to test** section of each concept page, written in
@@ -483,7 +483,7 @@ program is `tests/corpus/conditional-state-20261021.json` and passes unchanged
 after the fix. This scoped run does not replace the Phase 5 full-generator gate.
 
 - Tests import `src` directly. No build is needed before running them.
-- Run `bun check` in `packages/compiler-next`, rather than at the repository root,
+- Run `bun check` in `packages/compiler`, rather than at the repository root,
   where unrelated generated example output is included.
 - `bun run test:changed` _(planned)_ maps `git diff` to feature folders and runs only
   their tests, plus a small generated batch. A change in `core/` runs everything,
@@ -497,14 +497,14 @@ development machine: one that takes seconds to minutes, not milliseconds.
 
 | Run locally, on every change | Time here | 
 | --- | --- |
-| `bun check` in `packages/compiler-next` | ~1 s |
+| `bun check` in `packages/compiler` | ~1 s |
 | the unit tests of the touched feature (`bun test src/features/<name>`, `src/core/<stage>`) | seconds |
 | the case files the change affects (`COMPILER=next bun test tests/cases/<file>`), and with `REFERENCE_ONLY=1` when the reference changed | seconds to ~1 min each |
 | runtime tests a runtime change affects (`bun test ./packages/runtime/tests/<file>`) | seconds |
 
 | Run on CI, by hand, when needed | Time here | On CI |
 | --- | --- | --- |
-| every case on compiler-next, through the phase gate | ~10 min | ~30 s |
+| every case on the compiler, through the phase gate | ~10 min | ~30 s |
 | every case on the reference | ~5 min | ~20 s |
 | the generators at 200 programs | ~5 min | ~45 s |
 | all unit and runtime tests at once | ~1 min | ~15 s |
@@ -518,13 +518,13 @@ machinery (the reference oracle, the graph, the derived-value planner, the
 runtime), or before reporting a step as verified across the suite. Not after
 every edit.
 
-The workflow is `.github/workflows/compiler-next.yml`. It never runs on push;
+The workflow is `.github/workflows/compiler.yml`. It never runs on push;
 start it by hand, choosing a suite (`all`, `cases`, `reference`, `generators`,
 `unit`):
 
 ```sh
-gh workflow run compiler-next.yml --ref compiler-rewrite -f suite=cases
-gh run list --repo amiheretheophilus/auwla --workflow compiler-next.yml --limit 1
+gh workflow run compiler.yml --ref compiler-rewrite -f suite=cases
+gh run list --repo amiheretheophilus/auwla --workflow compiler.yml --limit 1
 gh run watch <id> --repo amiheretheophilus/auwla --exit-status
 ```
 
@@ -534,7 +534,7 @@ GitHub-hosted runners are not billed; running by hand still keeps CI for the
 checks that need it.
 
 `scripts/phase-gate.ts` applies the rule of `plan.md`, "How progress is measured":
-a case may fail on compiler-next only with a "from Phase N" error. It prints the
+a case may fail on the compiler only with a "from Phase N" error. It prints the
 pass and fail counts, and how many cases wait for each phase.
 
 CI also catches what the local machine can hide. On 2026-10-24 a compiled case
@@ -551,16 +551,16 @@ component-row sources (`src/features/components/bench.test.ts`). They verify
 1,000-row creation, updates, retained identity, selection/removal and disposal
 through the real `mount` API. These are correctness observations, not the pinned
 browser benchmark gates. The VM can select the rewrite with
-`bun run bench:octane --compiler=packages/compiler-next/src/index.ts`; the report
+`bun run bench:octane --compiler=packages/compiler/src/index.ts`; the report
 records the selected compiler, including in a before/after comparison.
 
 ## Performance baseline
 
 The user-supplied `auwla-benchmark-report-874c826.md` (2026-10-25) compares the old
-compiler and compiler-next at the same commit `874c8261`, with identical runtime
+compiler and the compiler at the same commit `874c8261`, with identical runtime
 sources for Octane. Both passed the browser correctness/identity gates, but the
 old compiler had the lower median in all 24 operations. In that run it ranked
-3/10 and compiler-next 10/10. The new update-style matrix hit V8 OOM, so its
+3/10 and the compiler 10/10. The new update-style matrix hit V8 OOM, so its
 missing timings are failures to complete, not zeros. The report does not prove
 the cause of the OOM. Sequential DOM runs and the non-counterbalanced Octane
 order limit precise ratio claims; the rewrite has not met the performance gate.
@@ -576,7 +576,7 @@ coverage. Timing must be remeasured after the fixes; no OOM resolution or speed
 improvement follows from passing these checks alone.
 
 The agreed old-compiler floor remains `d6e678b`: 8 CPUs and 8 GiB on an AMD EPYC
-VM, Chrome Headless Shell 149. `compiler-next` must beat it on the same benchmarks
+VM, Chrome Headless Shell 149. The compiler must beat it on the same benchmarks
 (`../decisions.md`, 2026-10-19):
 
 - **Octane** (ten frameworks, canonical and keyed reorder): overall average rank

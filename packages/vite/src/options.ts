@@ -1,8 +1,8 @@
 /**
- * The Vite plugin's options. Everything else an app needs is compiler-next's, the same under
+ * The Vite plugin's options. Everything else an app needs is the compiler's, the same under
  * every tool (`wiki/rules.md`, rule 17).
  */
-import type { SourceLanguage } from '@memoized-dom/compiler-next';
+import type { SourceLanguage } from '@memoized-dom/compiler';
 
 export interface MemoizedDomViteOptions {
   /** The browser's entry: the module that mounts the app (`src/main.ts`, or an `.auwla` with `mount`). */
@@ -19,7 +19,7 @@ export interface MemoizedDomViteOptions {
   runtime?: 'bun' | 'node' | 'cloudflare';
   /**
    * Authoring syntaxes beyond the built-in `.auwla` that become TSX before compiling
-   * (`compiler-next/src/core/parse/languages.ts`). Their files are compiled, imported,
+   * (`compiler/src/core/parse/languages.ts`). Their files are compiled, imported,
    * hot-updated and mapped like `.tsx` files.
    */
   languages?: readonly SourceLanguage[];

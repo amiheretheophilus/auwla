@@ -16,7 +16,7 @@ Running it found two things, both fixed:
   functions import `define`, so that made a cycle, and a function read `define` before it was set.
   Only a module that takes `serve` (by name, as a namespace, or re-exported) gets it now, as the old
   Vite plugin decided.
-- `app.ssr(Page)` passes compiler-next's component adapter (a component used as a value,
+- `app.ssr(Page)` passes the compiler's component adapter (a component used as a value,
   `componentValue`), and the server's render session called it, getting a render value and
   printing `[object Object]`. The session now renders the component behind it
   (`valueComponent`, `packages/runtime/src/components.ts`; `packages/server/src/session.ts`); for
@@ -132,7 +132,7 @@ process-wide location".
 One server process renders every request with the same module instances. Module state that a
 render writes (`export let visits = 0` raised by a helper the page calls, an object store pushed
 to) would then be what the next request reads: with real users, one user's data on another
-user's page. Seen on 2026-11-13: three requests to a compiler-next server build showed
+user's page. Seen on 2026-11-13: three requests to a server build showed
 `visits 1`, `visits 2`, `visits 3`, and a module-level derived value followed the leaked state.
 
 Decided (2026-11-14, `decisions.md`): server rendering behaves like the browser, and the backend
@@ -375,7 +375,7 @@ here (`../decisions.md`, 2026-11-14), so Vite, the Bun plugin and the command li
    `user.hint` sends those, not `user.password`. A value reaching code it cannot follow (an unknown
    call, a spread into an unknown component, a recursive component, `a ? user : other`) is sent
    whole, and the server's `projectPageInputs` refuses what cannot be sent, such as a function. This
-   is the old `page-projection.ts` ported to compiler-next's parser, a second walk of the syntax
+   is the old `page-projection.ts` ported to the compiler's parser, a second walk of the syntax
    rather than the graph's read paths the design first named: the graph knows reads per module, not
    values followed into another component's props.
 4. **Styles travel with the page** (`page-build.ts`). The contract's `styles` hold the CSS of the
@@ -392,8 +392,8 @@ here (`../decisions.md`, 2026-11-14), so Vite, the Bun plugin and the command li
    `await preparePageHydration()` loads the bindings of the pages in the document's source
    snapshots before the entry mounts.
 6. **The runtime.** `createComponentPage` (`packages/server/src/page-definition.ts`) calls the page
-   component with a props cell (compiler-next's components take one, not the old props array), and
-   a page with bindings is rendered inside one `display: contents` element. compiler-next's value
+   component with a props cell (the compiler's components take one, not the old props array), and
+   a page with bindings is rendered inside one `display: contents` element. The compiler's value
    slot shows page content through `mountPage` (`runtime/src/content-region.ts`, shared with the old
    compiler's `createContentRegion`). In the browser, `registerPageComponent`
    (`runtime/src/page-bindings.ts`) renders the component again into that element, in its own
@@ -403,18 +403,18 @@ here (`../decisions.md`, 2026-11-14), so Vite, the Bun plugin and the command li
    way; only the region's nodes are made again, once, when it is bound.
 
 The Vite suite's `packages/vite/tests/server-pages.test.ts` authored its board in `.tsrx`; since
-2026-11-17 it is `.tsx` and runs on compiler-next (open items: `testing.md`). Not yet: progressive
+2026-11-17 it is `.tsx` and runs on the compiler (open items: `testing.md`). Not yet: progressive
 delivery of an interactive page (its server renders it in one go, as the old one does for a page
 with bindings).
 
 **A passive page's progress.** A page with no bindings streams as its sources settle
 (`serverPageUpdates`, `packages/server/src/page.ts`): each frame carries the regions that changed.
-It tracked only the old compiler's marker ranges, so a compiler-next page sent no regions and the
+It tracked only the old compiler's marker ranges, so a page from this compiler sent no regions and the
 browser never filled in what settled. It now chooses as the document stream does (`stream.ts`):
-numbered elements for compiler-next output (2026-11-17). Checked by `packages/server/tests/pages.test.ts`,
-which compiles its pages with compiler-next's `extractPages` since the old compiler's deletion.
+numbered elements for the compiler output (2026-11-17). Checked by `packages/server/tests/pages.test.ts`,
+which compiles its pages with the compiler's `extractPages` since the old compiler's deletion.
 
-**What an interactive page ships** (decided: (a)). compiler-next's adoption is a client render that reuses
+**What an interactive page ships** (decided: (a)). The compiler's adoption is a client render that reuses
 the server's nodes (`delivery.md`, "Adopting existing nodes"), so a page's browser program is its
 whole compiled component, and its inputs are every path that component reads, text included:
 

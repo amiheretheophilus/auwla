@@ -1,5 +1,5 @@
 // The analysis entry, which the editor's checking already loads; the same class as the root entry's.
-import { CompileError } from '@memoized-dom/compiler-next/analysis';
+import { CompileError } from '@memoized-dom/compiler/analysis';
 import type { Range } from './model';
 
 /**
@@ -27,7 +27,7 @@ export class JsxPlusError extends CompileError {
   // `reason` is kept by `CompileError`, which is given it alone.
   constructor(readonly code: string, reason: string, readonly filename: string,
     readonly range: Range, source: string, readonly repairs: readonly Repair[] = []) {
-    // A compiler error, so compiler-next reports it as the author's wherever it compiles `.auwla`
+    // A compiler error, so the compiler reports it as the author's wherever it compiles `.auwla`
     // (`language.ts`), at the same path, line and column.
     super(reason, filename, ...positionOf(source, range[0]));
     this.message = `${reason} (${filename}:${this.line}:${this.column}) [${code}]`;

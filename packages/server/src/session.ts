@@ -196,7 +196,7 @@ export class RenderSession {
 
   /**
    * The keys of the route components the matched routes show that a browser loads with their
-   * route (`componentKey` in the table, compiler-next's `features/routes/split.ts`). The page links
+   * route (`componentKey` in the table, the compiler's `features/routes/split.ts`). The page links
    * their styles, which the browser's chunk would otherwise load after the page shows
    * (`route-styles.ts`).
    */
@@ -217,7 +217,7 @@ export class RenderSession {
       const html = this.initialDelivery.html;
       return writer.create(() => html);
     }
-    // A component handed to the server as a value (`app.ssr(App)` compiled by compiler-next) is a
+    // A component handed to the server as a value (`app.ssr(App)` compiled by the compiler) is a
     // callable adapter returning a render value; the root is the component behind it.
     const component = valueComponent(this.component) as ServerComponent;
     return component(this.rootId, null);
@@ -279,7 +279,7 @@ export class RenderSession {
   }
 
   /**
-   * A node's HTML. compiler-next output (it clones templates) carries each created node's number,
+   * A node's HTML. Compiler output (it clones templates) carries each created node's number,
    * which a browser adopts (`runtime/src/adoption.ts`); the old compiler's output does not.
    */
   serialize(node: StringRenderableNode, markers = this.markers, initialBindings = this.initialBindings): string {

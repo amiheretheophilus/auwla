@@ -4,7 +4,7 @@
  *
  * The old compiler's value-cached setters (`setText`, `setAttr`, `setClass`, `setProp`,
  * `setStyle`, with a per-component slot cache) went with that compiler on 2026-11-18;
- * compiler-next compares values at each site before writing.
+ * the compiler compares values at each site before writing.
  */
 
 import { classValue } from './dom-values';
@@ -21,7 +21,7 @@ export function setTextData(node: Text, value: unknown): void {
 }
 
 /**
- * compiler-next's event site: replace `previous` with the authored value,
+ * The compiler's event site: replace `previous` with the authored value,
  * wrapped so its writes commit as one batch. A value that is not a function
  * installs nothing. Returns what is installed, the next call's `previous`.
  */

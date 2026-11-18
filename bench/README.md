@@ -11,7 +11,7 @@ bun install --frozen-lockfile
 bun run bench:vm
 ```
 
-`bench:vm` (`vm.ts`) builds the packages and runs, compiled by compiler-next:
+`bench:vm` (`vm.ts`) builds the packages and runs, compiled by the compiler:
 
 1. the DOM suite: memoized-dom against vanilla JS, with component and inline
    rows, every state placement, and mutable/immutable updates (`dom/`);
@@ -42,7 +42,7 @@ gh run download <id> --repo amiheretheophilus/auwla -n bench-results
 A shared runner is noisier than the VM: compare columns within one run, not
 numbers across runs. The run's summary page shows the results table.
 
-The builds use this checkout's compiler (`packages/compiler-next`). A snapshot compiler,
+The builds use this checkout's compiler (`packages/compiler`). A snapshot compiler,
 selected with `BENCH_COMPILER=<entry>` (`load-compiler.ts`), writes beside it instead of over
 it: `dom/compiled-*.custom.ts`, `dom/state-placement-results.custom.md` and
 `octane/memoized-dom/dist.custom/`. The old compiler was deleted with Phase 10's exit; a

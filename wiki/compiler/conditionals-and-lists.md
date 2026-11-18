@@ -107,7 +107,7 @@ A hoisted name is still in its dead zone before its segment runs, as JavaScript 
   not reached on the previous run. Its own writes do not count, so it cannot
   loop. Statements that declare or use the block's own variables run on every
   run of the block, since the return needs them, and so does anything in a loop.
-  compiler-next wraps each such statement in a version guard inside `_select`
+  The compiler wraps each such statement in a version guard inside `_select`
   (`ReturningGuard`); hidden reads behind an unknown call are collected while it
   runs and shared with the selector's collector (`computation.share()`). The
   reference does the same with `$ctx.returning`. Before this, the reference ran
@@ -202,10 +202,10 @@ scope, and a folded tail that never updated.
 
 ## Cases to test
 
-In `packages/compiler-next/tests/cases/conditionals-and-lists.test.ts`.
+In `packages/compiler/tests/cases/conditionals-and-lists.test.ts`.
 
 The unchanged full generator saved `tests/corpus/generated-20261021.json`:
-`{(0 > 0) ? <b>{0}</b> : <i>{0}</i>}` now passes unchanged on compiler-next.
+`{(0 > 0) ? <b>{0}</b> : <i>{0}</i>}` now passes unchanged on the compiler.
 Six `conditional:` comparisons in this file pass alongside eighteen native
 execution checks and one plan check. The full generator still requires Phase 5 list support.
 The scoped conditional generator passes 200 programs with seed 20261021. Its
@@ -247,7 +247,7 @@ checks on the reference. Both fail on the old compiler:
 | `spread/rest: JSX spread primitive children retain order and update` | `<p>{...items}</p>` shows `12`, then `123` | Rejects "spread children are not supported" |
 
 Both retain reference output. Compilation rejects them before producing an old
-module. These are valid JSX cases required to pass on `compiler-next`.
+module. These are valid JSX cases required to pass on the compiler.
 
 Old messages not yet checked against valid code: "control flow … test is not
 replayable", "conditional cannot choose between two data sources".

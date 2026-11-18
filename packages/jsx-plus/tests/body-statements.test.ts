@@ -5,7 +5,7 @@
  */
 import { afterEach, expect, it } from 'bun:test';
 import * as runtime from '../../runtime/src/index';
-import { toModuleFunction } from '../../compiler-next/src/core/parse/module-function';
+import { toModuleFunction } from '../../compiler/src/core/parse/module-function';
 import { compile } from '../src';
 
 const applications: runtime.MountedApplication[] = [];

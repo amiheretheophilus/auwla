@@ -38,6 +38,6 @@ Bun on Windows, so only a guide:
 
 Before this comparison, the benchmark measured the old compiler against `compile()` given the
 same import metadata directly, which isolated its graph discovery and summary linking. That
-`compile()` does not exist in compiler-next, whose analysis is one graph with no second
+`compile()` does not exist in the compiler, whose analysis is one graph with no second
 path to compare against. Those results, and the checkpoints they supported, are in git history
 up to `2240d1cb`, and none of them made a speedup or regression claim.

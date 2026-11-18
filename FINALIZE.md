@@ -6,20 +6,20 @@ documents feature is under way, so none of it is forgotten. Started 2026-11-16.
 Each item says where its details live. Tick an item when it is done, naming the commit,
 and remove it once the owning wiki records it as done.
 
-## compiler-next
+## Compiler
 
 - [ ] **Incremental updates.** Every hot update recompiles the whole program: about 410 ms for
   Common Ground after the 2026-11-16 speedups (was about 480 ms), and saves made during a build now
   share one more build. Reusing unchanged modules' output needs cross-module fact dependencies
   tracked first (imports and importers both). [project.md, "Hot replacement"](wiki/compiler/project.md)
 - [ ] **Exit first** (the user, 2026-11-17): delete `packages/compiler` and the old Vite plugin,
-  rename compiler-next, drop the old-only runtime and tool code, update `docs/` (props, `$snapshot`,
+  rename compiler-next to `packages/compiler`, drop the old-only runtime and tool code, update `docs/` (props, `$snapshot`,
   the old error messages, no conditional attributes). Seven steps, 1–2 done.
   [compiler plan](wiki/compiler/plan.md), Phase 10 "Exit"
 - [ ] **Acceptance**, after the exit: the Vite suite read again on the one plugin (first run
   2026-11-16 in [testing.md](wiki/compiler/testing.md), "Acceptance"), the package tests and the
   Conduit flows (dependencies installed; the flow now finds Edge). Still missing from it:
-  `.memoized/server-config.d.ts` (service and request-state types) in compiler-next.
+  `.memoized/server-config.d.ts` (service and request-state types) in the compiler.
 - [ ] **Benchmarks** on the user's VM; every number at least matches `d6e678b`.
 - [ ] **Bundle trimming the old compiler did** (`bun run bench:size:audit`, "Trimming targets"):
   client-only counters and lists still bundle the optional hydration recovery
@@ -49,7 +49,7 @@ and remove it once the owning wiki records it as done.
 - [ ] Remaining wiki2 slices: event expressions (P5-EVENT), bindings (P6-BIND), a full app through
   edit/build/SSR/adoption/disposal (P7-APP), server functions and SSR in `.auwla` (P4-MODULES),
   broader recovery and flow (P2-HARDEN, P4-FLOW). [wiki2 plan](wiki2/plan.md)
-- [ ] **Reconcile the DX-34 compiler-next changes** made on this branch with `compiler-rewrite`.
+- [ ] **Reconcile the DX-34 compiler changes** made on this branch with `compiler-rewrite`.
   [wiki2 status](wiki2/status.md)
 
 ## `.auwla.md` documents
@@ -79,7 +79,7 @@ and remove it once the owning wiki records it as done.
 - [ ] **CI without `gh`**: the work machine cannot install `gh`. Trigger runs with `curl` and a
   token (the user chooses which), or put the workflow file on `main` (only if the user asks).
 - [ ] CI on GitHub Actions once the suite reaches thousands of cases; devtools are on hold.
-- [ ] **Runtime trace diagnostics** (on hold with devtools): compiler-next's development output does
+- [ ] **Runtime trace diagnostics** (on hold with devtools): the compiler's development output does
   not call the runtime's trace hooks (`runtime/src/diagnostics.ts`), which the old compiler did.
   `packages/vite/tests/cli.test.ts` skips its trace test until the project emits them.
 - [ ] **The auwla rename** across all packages, at once (`memo-dom:`, `mmd_*`, `memoized-dom/*`).

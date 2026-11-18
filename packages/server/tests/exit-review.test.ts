@@ -68,7 +68,7 @@ describe('Phase 1 exit criteria', () => {
         );
       }
     `,
-      // A server build keeps module state per request (compiler-next, `features/state/request-dom.ts`).
+      // A server build keeps module state per request (the compiler, `features/state/request-dom.ts`).
       { routedEnvironment: 'server' },
     );
 

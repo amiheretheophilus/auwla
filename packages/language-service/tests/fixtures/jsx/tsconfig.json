@@ -3,10 +3,10 @@
   "compilerOptions": {
     "incremental": false,
     "noEmit": true,
-    "jsxImportSource": "@memoized-dom/compiler-next",
+    "jsxImportSource": "@memoized-dom/compiler",
     "paths": {
-      "@memoized-dom/compiler-next/jsx": ["../../../../compiler-next/src/jsx-types.ts"],
-      "@memoized-dom/compiler-next/jsx-runtime": ["../../../../compiler-next/src/jsx-runtime.ts"]
+      "@memoized-dom/compiler/jsx": ["../../../../compiler/src/jsx-types.ts"],
+      "@memoized-dom/compiler/jsx-runtime": ["../../../../compiler/src/jsx-runtime.ts"]
     }
   },
   "include": ["editor.tsx", "framework-shim.d.ts"]

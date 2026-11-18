@@ -1,5 +1,5 @@
 /**
- * The notes example through compiler-next's Vite plugin (`packages/vite/src/next/plugin.ts`), with
+ * The notes example through the compiler's Vite plugin (`packages/vite/src/next/plugin.ts`), with
  * JSX+ only as a source language: a production build, and a dev server that compiles a `.auwla`
  * module, maps it, and hot-updates it on an edit. The example is copied into a temporary folder in
  * this package, so edits never touch it and the build finds the workspace's packages.
@@ -54,7 +54,7 @@ it('builds the app with Vite, every .auwla module compiled', async () => {
   const outputs = (Array.isArray(result) ? result : [result]) as Rolldown.RolldownOutput[];
   const chunks = outputs.flatMap((output) => output.output).filter((item): item is Rolldown.OutputChunk => item.type === 'chunk');
   const code = chunks.map((chunk) => chunk.code).join('\n');
-  // Text from each component, and no JSX left: compiler-next compiled all three.
+  // Text from each component, and no JSX left: the compiler compiled all three.
   expect(code).toContain('No notes yet.');
   expect(code).toContain('Write a note');
   expect(code).toContain('Notes');

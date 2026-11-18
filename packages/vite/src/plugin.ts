@@ -1,6 +1,6 @@
 /**
- * The Vite plugin over compiler-next's applications (`wiki/compiler/project.md`, "Vite"). It only
- * connects compiler-next's results to Vite (`wiki/rules.md`, rule 17).
+ * The Vite plugin over the compiler's applications (`wiki/compiler/project.md`, "Vite"). It only
+ * connects the compiler's results to Vite (`wiki/rules.md`, rule 17).
  *
  * Vite only serves and bundles what the application gives: the client program to the `client`
  * environment, the server program to `ssr`. Collecting modules, `#server` boundaries, server
@@ -17,8 +17,8 @@
  *   update even when the output is the one before the error.
  * - **Delivery:** the server's document and files come from `virtual:memoized-dom/integration`:
  *   Vite's transformed `index.html` and its middleware in development (`fullstack.ts`), and
- *   compiler-next's delivery module for the built client after a build. The production server
- *   entry is compiler-next's `hostEntryModule`; the native dev launcher is `dev.ts`, through `api`.
+ *   the compiler's delivery module for the built client after a build. The production server
+ *   entry is the compiler's `hostEntryModule`; the native dev launcher is `dev.ts`, through `api`.
  */
 import { mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
@@ -29,7 +29,7 @@ import {
   nativePackages, normalizeProjectPath, projectPath, standaloneDeliveryModule, writeLinkedTypes,
   type Application, type ApplicationBuild, type ApplicationUpdate, type CompileError, type DeliveryOptions, type ProjectBuild,
   type SourceLanguage,
-} from '@memoized-dom/compiler-next';
+} from '@memoized-dom/compiler';
 import type { MemoizedDomViteOptions } from './options';
 import {
   clientRootPlaceholder, configureDevelopmentDelivery, developmentIntegrationModule,
@@ -76,7 +76,7 @@ export function memoizedDom(options: MemoizedDomViteOptions): Plugin {
       return serverEntry === undefined || config === undefined ? serverEntry : resolve(config.root, serverEntry);
     },
     nativeDevelopment: false,
-    // compiler-next builds on the first request; `types` asks for the build, whose declarations
+    // The compiler builds on the first request; `types` asks for the build, whose declarations
     // `withDeclarations` writes.
     writeDeclarations: async () => {
       await built();
@@ -113,7 +113,7 @@ export function memoizedDom(options: MemoizedDomViteOptions): Plugin {
   /**
    * In development, a page the server renders links the client's stylesheets in its head, so it is
    * styled before any script runs (`dev-assets.ts`): the eager ones on every page, a route's own on
-   * the pages of that route. compiler-next lists them; a failed build keeps the last lists.
+   * the pages of that route. The compiler lists them; a failed build keeps the last lists.
    */
   function registerDevelopmentStyles(build: ApplicationBuild): void {
     if (devServer === undefined || !build.client.ok) return;
@@ -123,7 +123,7 @@ export function memoizedDom(options: MemoizedDomViteOptions): Plugin {
   }
 
   /**
-   * Writes the declarations compiler-next made (`declarationFiles`): the types of
+   * Writes the declarations the compiler made (`declarationFiles`): the types of
    * `#server-functions`, of the app's route patterns and of each request's state and services.
    */
   async function withDeclarations(build: ApplicationBuild): Promise<ApplicationBuild> {
@@ -134,7 +134,7 @@ export function memoizedDom(options: MemoizedDomViteOptions): Plugin {
   }
 
   /**
-   * Writes a file compiler-next generated, only when its text changed so watchers are not woken
+   * Writes a file the compiler generated, only when its text changed so watchers are not woken
    * for nothing; null removes it.
    */
   async function writeGenerated(file: string, text: string | null): Promise<void> {
@@ -197,7 +197,7 @@ export function memoizedDom(options: MemoizedDomViteOptions): Plugin {
 
     config(userConfig) {
       const fullstack = serverEntry !== undefined && userConfig.build?.ssr === undefined;
-      // The project compiles native packages as its own source (compiler-next, `packages/native.ts`).
+      // The project compiles native packages as its own source (the compiler, `packages/native.ts`).
       // Prebundling one would give the app a second copy of its state, and a server external would
       // run its uncompiled source; a linked one may live outside the root, which the dev server
       // must be allowed to serve. TypeScript finds a linked one's imports through files written here.
@@ -337,7 +337,7 @@ export function memoizedDom(options: MemoizedDomViteOptions): Plugin {
         let code: string;
         if (productionDelivery !== undefined) code = deliveryModule(productionDelivery);
         else if (devServer !== undefined) code = developmentIntegrationModule(devServer, runtime, api.cloudflareAssetsBinding);
-        // A server built on its own: compiler-next's delivery with no page and no files.
+        // A server built on its own: the compiler's delivery with no page and no files.
         else code = standaloneDeliveryModule();
         return { code, map: { mappings: '' } };
       }
@@ -378,7 +378,7 @@ export function memoizedDom(options: MemoizedDomViteOptions): Plugin {
       if (path.startsWith('../')) this.addWatchFile(fileOf(path));
       const map = program.maps?.[path];
       if (map === undefined) return { code, map: null };
-      // compiler-next names sources by project path; Vite expects files, which it makes relative to
+      // The compiler names sources by project path; Vite expects files, which it makes relative to
       // the module, so the browser finds each beside the module's URL. Its map type has mutable arrays.
       return {
         code,
@@ -499,7 +499,7 @@ function sideOf(environment: string): Side {
   return environment === 'ssr' ? 'server' : 'client';
 }
 
-/** The compiler options the Vite options carry; compiler-next ignores the old compiler's others. */
+/** The compiler options the Vite options carry; the compiler ignores the old compiler's others. */
 function compileOptions(options: MemoizedDomViteOptions): { runtimePath?: string; languages?: readonly SourceLanguage[] } {
   return {
     ...(options.runtimePath === undefined ? {} : { runtimePath: options.runtimePath }),
