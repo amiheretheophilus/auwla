@@ -1,12 +1,13 @@
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import process from 'node:process';
-import { createDefine, serve } from '@memoized-dom/server';
+import { serve } from '@memoized-dom/server';
+import { define } from '#server/define';
 import { sharedDocument } from '#server/SharedFrame.auwla';
 import { loadShare, loadSharedImage, saveShare } from '#server/share-store';
 
-const app = serve({ define: createDefine() });
-const styles = new Set(['workspace.css', 'controls.css', 'inspector.css', 'board.css', 'features.css', 'shared.css']);
+const app = serve({ define });
+const styles = new Set(['workspace.css', 'controls.css', 'inspector.css', 'board.css', 'features.css', 'shared.css', 'rooms.css']);
 const fileHeaders = { 'X-Content-Type-Options': 'nosniff' };
 const htmlHeaders = { ...fileHeaders, 'Content-Type': 'text/html; charset=utf-8' };
 const root = process.env.DRAFTROOM_ROOT ?? process.cwd();

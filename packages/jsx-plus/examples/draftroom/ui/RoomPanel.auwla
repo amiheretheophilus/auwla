@@ -1,0 +1,69 @@
+import type { Editor } from '../editor';
+import type { Page } from '../model/types';
+import type { RoomView } from '../rooms/protocol';
+
+export function RoomPanel({ room, pages, editor }: { room: RoomView; pages: Page[]; editor: Editor }) {
+  const invited = room.invite !== '';
+  const active = room.identity;
+  let name!: HTMLInputElement;
+  let code!: HTMLInputElement;
+
+  function create(): void {
+    editor.collaboration.create(name.value);
+  }
+
+  function join(event: SubmitEvent): void {
+    event.preventDefault();
+    editor.collaboration.join(code.value, name.value);
+  }
+
+  return (
+    <details class="room-menu" open={invited}>
+      <summary class="button room-trigger" aria-label="Collaborate">
+        if (active !== undefined) {
+          <i class="room-dot"></i> "Room"
+        } else {
+          <span class="room-label-full">"Collaborate"</span>
+          <span class="room-label-short">"Room"</span>
+        }
+      </summary>
+      <div class="room-popover" aria-label="Live collaboration">
+        if (active === undefined) {
+          <h2>"Work together"</h2>
+          <form class="room-form" onSubmit=join>
+            <label>"Display name" <input ref=name autocomplete="on" maxlength={40} placeholder="Your name" /></label>
+            <button type="button" class="button primary" disabled={room.busy} onClick=create>"Create room from this project"</button>
+            <label>"Room ID" <input ref=code value={room.invite} autocomplete="off" maxlength={15} placeholder="12-character ID" /></label>
+            <button type="submit" class="button secondary" disabled={room.busy}>"Join room"</button>
+          </form>
+        } else {
+          <h2>"Live room"</h2>
+          <p class="room-status" role="status"><i class="room-dot"></i> room.status</p>
+          <label class="room-code">"Room ID"
+            <input aria-label="Room ID" readOnly value={active.code} onFocus={event => event.currentTarget.select()} />
+          </label>
+          <div class="room-buttons">
+            <button type="button" class="button primary" onClick={editor.collaboration.copyInvite}>"Copy invite link"</button>
+            <button type="button" class="button secondary" onClick={editor.collaboration.leave}>"Leave room"</button>
+          </div>
+          <ul class="room-people" aria-label="Collaborators">
+            <li><strong>active.name</strong><span>"You"</span></li>
+            for (const peer of room.peers) {
+              <li key={peer.id}>
+                <strong>peer.name</strong>
+                <span>peer.action</span>
+                <small>pages.find(page => page.id === peer.pageId)?.name ?? 'Board'</small>
+              </li>
+            }
+          </ul>
+          if (room.status === 'Sync paused') {
+            <button type="button" class="button secondary" onClick={editor.collaboration.retry}>"Retry sync"</button>
+          }
+        }
+        if (room.error !== undefined) {
+          <p class="room-error" role="status">room.error</p>
+        }
+      </div>
+    </details>
+  );
+}

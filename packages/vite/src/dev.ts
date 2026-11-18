@@ -1,6 +1,7 @@
 import { createServer as createViteServer, mergeConfig, createServerModuleRunner, type InlineConfig, type Plugin, type ViteDevServer } from 'vite';
-import { createServer as createHttpServer, type Server } from 'node:http';
+import { createServer as createHttpServer, type IncomingMessage, type Server } from 'node:http';
 import { createServer as createPortProbe } from 'node:net';
+import type { Duplex } from 'node:stream';
 import { toWebRequest, sendNodeResponse } from '@memoized-dom/adapters/node';
 import type { FullstackPluginApi } from './fullstack';
 import { isDocumentRequest, recoveryDocument, serverUpdateEvent } from './dev-recovery';
@@ -9,6 +10,9 @@ import { runWithDiagnosticSink } from '@memoized-dom/devtools/node';
 interface Backend {
   fetch(request: Request, platform?: unknown): Response | undefined | Promise<Response | undefined>;
   installIntegration?: unknown;
+  readonly websocket?: Bun.WebSocketHandler<unknown>;
+  handleUpgrade?(request: Request, incoming: IncomingMessage, socket: Duplex, head: Buffer): Promise<void>;
+  closeSockets?(): Promise<void>;
 }
 interface BackendModule {
   default: Backend;
@@ -111,7 +115,10 @@ export async function createDevServer(inline: InlineConfig = {}): Promise<Native
     if (!generation.retired || generation.pending !== 0 || generation.disposed) return;
     generation.disposed = true;
     generations.delete(generation);
-    try { await generation.module.dispose?.(); }
+    try {
+      await generation.module.default.closeSockets?.();
+      await generation.module.dispose?.();
+    }
     catch (error) { vite.config.logger.error(`memoized-dom: backend disposal failed: ${String(error)}`); }
   };
   const backend = async (): Promise<Generation> => {
@@ -133,6 +140,9 @@ export async function createDevServer(inline: InlineConfig = {}): Promise<Native
         }
         const previous = current;
         current = next;
+        if (module.default.websocket !== undefined) {
+          bun?.reload({ fetch: developmentFetch, websocket: module.default.websocket });
+        }
         failedBackend = false;
         generations.add(next);
         if (previous) {
@@ -240,6 +250,19 @@ export async function createDevServer(inline: InlineConfig = {}): Promise<Native
           else { response.statusCode = 500; response.end('Internal Server Error'); }
         }
       });
+      node.on('upgrade', (incoming, socket, head) => {
+        void backend().then(async (generation) => {
+          const application = generation.module.default;
+          if (application.handleUpgrade === undefined) {
+            socket.end('HTTP/1.1 404 Not Found\r\nConnection: close\r\nContent-Length: 0\r\n\r\n');
+            return;
+          }
+          await application.handleUpgrade(toWebRequest(incoming), incoming, socket, head);
+        }).catch(error => {
+          vite.config.logger.error(String(error));
+          socket.destroy();
+        });
+      });
       await new Promise<void>((done, reject) => { node!.once('error', reject); node!.listen(backendPort, hostname, done); });
       const address = node.address();
       if (!address || typeof address === 'string') throw new Error('Missing native server address');
@@ -248,6 +271,7 @@ export async function createDevServer(inline: InlineConfig = {}): Promise<Native
     return {
       vite, origin, runtime: bun ? 'bun' : 'node',
       async close() {
+        for (const generation of generations) await generation.module.default.closeSockets?.();
         if (bun) await bun.stop(true);
         if (node) { node.closeAllConnections(); await new Promise<void>(done => node!.close(() => done())); }
         await runner.close();

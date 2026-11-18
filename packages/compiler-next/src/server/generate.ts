@@ -12,7 +12,10 @@ import type { ServerFunctionDefinition, ServerFunctionModule } from './functions
  */
 export function serverFunctionClient(module: ServerFunctionModule, dataModule = '@memoized-dom/data'): string {
   const lines = [`import { $fetch as __mmd_fetch } from ${JSON.stringify(dataModule)};`];
-  if (module.functions.some((fn) => fn.live || fn.generator)) {
+  if (module.functions.some((fn) => fn.method === 'WEBSOCKET')) {
+    lines.push(`import { createSocketConnection as __mmd_socket } from ${JSON.stringify(`${dataModule}/internal`)};`);
+  }
+  if (module.functions.some((fn) => fn.method !== 'WEBSOCKET' && (fn.live || fn.generator))) {
     lines.push(`import { createStreamingSource as __mmd_stream } from ${JSON.stringify(`${dataModule}/internal`)};`);
   }
   if (module.functions.some((fn) => fn.page)) {
@@ -30,6 +33,13 @@ function clientFunction(fn: ServerFunctionDefinition): string {
   const none = fn.parameters.length === 0;
   const path = JSON.stringify(fn.path);
   const method = JSON.stringify(fn.method);
+
+  if (fn.method === 'WEBSOCKET') {
+    const query = fn.schemaInput
+      ? `{ input: JSON.stringify(${parameters}) }`
+      : `{ args: JSON.stringify({ ${parameters} }) }`;
+    return `export function ${fn.exported}(${parameters}) { return __mmd_socket(${path}, ${query}); }`;
+  }
 
   if (fn.page) {
     if (fn.generator) throw new CompileError('page() generator results are not supported', fn.path);
@@ -76,6 +86,13 @@ export function serverFunctionDeclarations(
   const statements: string[] = [];
   let aliases = 0;
 
+  if (modules.some((module) => module.functions.some((fn) => fn.method === 'WEBSOCKET'))) {
+    lines.push(
+      `import type { SocketConnection } from ${JSON.stringify(dataModule)};`,
+      `import type { ServerSocketInput, ServerSocketEvent, ServerSocketResult, ServerSocketInitial } from '@memoized-dom/server';`,
+    );
+  }
+
   for (const module of modules) {
     if (module.functions.length === 0) continue;
     const alias = `__mmd_impl_${aliases++}`;
@@ -87,6 +104,11 @@ export function serverFunctionDeclarations(
       }
       owners.set(fn.exported, module.moduleId);
       const target = `${alias}.${fn.exported}`;
+      if (fn.method === 'WEBSOCKET') {
+        const session = `ServerFunctionResult<typeof ${target}>`;
+        statements.push(`export declare function ${fn.exported}(...args: ServerFunctionArguments<typeof ${target}>): SocketConnection<ServerSocketInput<${session}>, ServerSocketEvent<${session}>, ServerSocketResult<${session}>, ServerSocketInitial<${session}>>;`);
+        continue;
+      }
       const result = `__mmdClientValue<Awaited<ServerFunctionResult<typeof ${target}>>>`;
       const returned = fn.method === 'GET' ? `ResolvedValue<${result}>` : `Promise<${result}>`;
       statements.push(`export declare function ${fn.exported}(...args: ServerFunctionArguments<typeof ${target}>): ${returned};`);

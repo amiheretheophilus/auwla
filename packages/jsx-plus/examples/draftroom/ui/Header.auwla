@@ -1,8 +1,10 @@
 import type { Editor } from '../editor';
 import type { EditorView } from '../model/types';
 import { Icon } from './Icon.auwla';
+import { RoomPanel } from './RoomPanel.auwla';
 
 export function Header({ view, editor }: { view: EditorView; editor: Editor }) {
+  const saveStatus = view.room.identity === undefined ? view.notice : view.room.status;
   let picker!: HTMLInputElement;
   let exportMenu!: HTMLDetailsElement;
 
@@ -27,7 +29,7 @@ export function Header({ view, editor }: { view: EditorView; editor: Editor }) {
       </div>
       <div class="topbar-document">
         <span class="topbar-page">view.page.name</span>
-        <span class="save-status" role="status"><i></i> view.notice</span>
+        <span class="save-status" role="status"><i></i> saveStatus</span>
       </div>
       <div class="topbar-actions">
         <div class="history-actions" aria-label="History">
@@ -38,6 +40,7 @@ export function Header({ view, editor }: { view: EditorView; editor: Editor }) {
         </div>
         <input type="file" ref=picker accept=".json,application/json" hidden onChange=openFile />
         <button type="button" class="button secondary" onClick={() => picker.click()}>"Open"</button>
+        <RoomPanel room={view.room} pages={view.pages} editor={editor} />
         <details class="export-menu" ref=exportMenu>
           <summary class="button primary"><Icon name="download" /> "Export" <Icon name="chevron" /></summary>
           <div class="menu-popover">

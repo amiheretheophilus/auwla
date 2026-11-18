@@ -14,6 +14,7 @@ import {
   trackResolvedValue,
 } from './transparent';
 import { $forms, isFormSource, trackForm } from './forms';
+import { trackSocketConnection, type SocketConnection, type SocketTracker } from './socket';
 import { enableDataReads } from './read-resource';
 import { exposeDataRuntime } from './client';
 import { enableRequestEncoding } from './request-encoding';
@@ -42,14 +43,16 @@ export const $read = <T>(
 ): ResolvedValue<Awaited<T>> =>
   enableDataReads(activeDataRuntime()).$read(promise, replay) as unknown as ResolvedValue<Awaited<T>>;
 export { $forms };
+export type { SocketConnection, SocketTracker } from './socket';
+export function $track(value: SocketConnection<never, unknown, unknown>): SocketTracker;
 export function $track<T>(value: import('./forms').FormSource<T>): import('./forms').FormTracker<T>;
 export function $track<T>(value: import('./transparent-module').ModuleSourceRef): import('./types').TrackedValue<T>;
 export function $track<T>(value: import('./types').FetchResource<T>): import('./types').TrackedValue<T>;
 export function $track<T>(value: ResolvedValue<T>): import('./types').TrackedValue<T>;
-export function $track<T>(value: ResolvedValue<T> | import('./types').FetchResource<T> | import('./transparent-module').ModuleSourceRef | import('./forms').FormSource<T>): import('./types').TrackedValue<T, import('./errors').RequestError> | import('./forms').FormTracker<T> {
+export function $track<T>(value: ResolvedValue<T> | import('./types').FetchResource<T> | import('./transparent-module').ModuleSourceRef | import('./forms').FormSource<T> | SocketConnection<never, unknown, unknown>): import('./types').TrackedValue<T, import('./errors').RequestError> | import('./forms').FormTracker<T> | SocketTracker {
   return isFormSource(value)
     ? trackForm(value)
-    : trackResolvedValue(value as ResolvedValue<T>);
+    : trackSocketConnection(value) ?? trackResolvedValue(value as ResolvedValue<T>);
 }
 export { Group };
 export function clearDataRuntime(): void {

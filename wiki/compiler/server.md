@@ -279,6 +279,47 @@ route's styles") and a client folder the bundler places (`clientRoot`). `hostEnt
 `fetch`, on Node a listener when run directly, whose failed request answers 500 through the
 promise's rejection handler (no `try`, `../rules.md`, rule 5).
 
+## WebSocket server functions
+
+`define.function({ live, websocket })` uses the server-function registry and
+request pipeline. `server/functions.ts` recognizes a WebSocket handler and
+rejects HTTP verbs, `updates`, generators, and JSX in the same definition.
+`server/generate.ts` builds a typed `#server-functions` facade backed by
+`packages/data/src/socket.ts`. The browser sends named JSON arguments or the
+existing schema `input` once during the upgrade.
+
+The adapters in `packages/server/src/websocket/` dispatch the handshake through
+the normal `fetch` and middleware chain. A capability on the request associates
+the validated session with the native connection. `room.ts` scopes membership
+to the endpoint and its `live` key. Each room orders lazy initial reads and
+message handlers. Ordinary returns are sent to the room and `replyToSocket`
+correlates a private return to the sender. The room event and its acknowledgement
+reuse the same serialized result. A connection leaves the room when its native
+socket closes. A result from its optional `close` hook reaches the remaining peers.
+
+Bun keeps one set of live sockets for application shutdown. Room membership
+lives in Bun's native topics. A room publishes its encoded frame once per
+listener, so a process can serve the same room through multiple listeners.
+The native socket keeps the session after opening and releases the upgrade
+record. Node uses Crossws and the shared runtime's peer delivery. It releases
+the temporary upgrade options when dispatch begins.
+
+Bun bounds each socket's write buffer. If a native publish reports a dropped
+frame, the adapter checks that topic's peers on the affected listener and
+disconnects those over the limit. This gives the client a reconnect and fresh
+initial snapshot. The successful publish path walks only the room's listeners.
+
+Cloudflare generates a Durable Object class and forwards upgrades to one object
+per application. That object shares the room runtime across Worker isolates and
+uses awake sockets to preserve the handler's closures. The CLI emits its binding
+and migration when the application declares a WebSocket server function.
+
+`server/websocket.app.test.ts` exercises built Bun, Node and workerd servers,
+including middleware, argument transport, room isolation, private results, and
+late joins. Bun coverage includes multi-listener delivery and a stopped reader.
+A browser uses the generated facade and verifies reconnection.
+The [authoring guide](../../docs/12-server-functions.md#websocket-rooms) shows the API.
+
 ## Server pages
 
 Status (2026-11-15): built, on (a) below (`../decisions.md`, 2026-11-15). `server/pages.app.test.ts`

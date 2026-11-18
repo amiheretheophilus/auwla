@@ -81,7 +81,8 @@ export function createBoardPainter() {
       }
     }
 
-    const added = [...drafts.values()].filter(draft => !shapes.some(shape => shape.id === draft.id));
+    const committedIds = drafts.size === 0 ? undefined : new Set(shapes.map(shape => shape.id));
+    const added = committedIds === undefined ? [] : [...drafts.values()].filter(draft => !committedIds.has(draft.id));
     // Frame paper sits behind the objects it encloses, including during its creation preview.
     for (const shape of added) {
       if (shape.kind === 'frame') draw(shape);
@@ -108,6 +109,7 @@ export function createBoardPainter() {
     selection: Shape[],
     updates: Shape[],
     marquee: Bounds | undefined,
+    localDraftId?: string,
   ): void {
     const ctx = surface(canvas, BOARD_PIXEL_BUDGET);
     if (ctx === null) {
@@ -119,8 +121,9 @@ export function createBoardPainter() {
     const { width, height } = canvas;
     const drafts = new Map(updates.map(shape => [shape.id, shape]));
     const outlines = selection.map(shape => drafts.get(shape.id) ?? shape);
-    if (outlines.length === 0 && updates.length === 1) {
-      outlines.push(updates[0]!);
+    const localDraft = localDraftId === undefined ? undefined : drafts.get(localDraftId);
+    if (outlines.length === 0 && localDraft !== undefined) {
+      outlines.push(localDraft);
     }
 
     const frame: Frame = {

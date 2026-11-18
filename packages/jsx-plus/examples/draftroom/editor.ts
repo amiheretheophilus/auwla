@@ -5,6 +5,7 @@ import { createDocument } from './model/document';
 import { initialProject } from './model/templates';
 import type { EditorView, Shape, Tool } from './model/types';
 import { createProjectFiles } from './project-files';
+import { createRoomController } from './rooms/controller';
 import { bindShortcuts } from './shortcuts';
 import { createTextEditing } from './text-editing';
 
@@ -28,13 +29,27 @@ export function createEditor(update: (view: EditorView) => void) {
     editText(id) {
       textEditing.open(id);
     },
-    finish(shapes) {
+    activity(action) {
+      collaboration.setActivity(action);
+    },
+    tracksPresence: () => collaboration.active(),
+    pointer(position) {
+      collaboration.move(position);
+    },
+    previewMove(shapes) {
+      collaboration.previewMove(shapes);
+    },
+    page: () => project.page().id,
+    revision: () => collaboration.revision(),
+    finish(shapes, moved) {
       const shape = shapes[0]!;
       const added = shapes.length === 1 && project.shapeById(shape.id) === undefined;
       tool = 'select';
+      collaboration.tool(tool);
       if (added) {
         project.put(shape);
       } else {
+        if (moved) collaboration.previewMove(shapes, true);
         project.apply(shapes);
       }
 
@@ -49,7 +64,8 @@ export function createEditor(update: (view: EditorView) => void) {
     },
   });
   const files = createProjectFiles(project, say);
-  const textEditing = createTextEditing(project, viewport, publish);
+  const collaboration = createRoomController(project, publish, viewport.showPeers);
+  const textEditing = createTextEditing(project, viewport, publish, collaboration.textActivity);
   const frames = createFrameActions(project.page, say, publish);
 
   function view(): EditorView {
@@ -67,9 +83,10 @@ export function createEditor(update: (view: EditorView) => void) {
       grid,
       snap,
       zoom: Math.round(viewport.scale() * 100),
-      canUndo: project.canUndo(),
-      canRedo: project.canRedo(),
+      canUndo: collaboration.canUndo(),
+      canRedo: collaboration.canRedo(),
       notice,
+      room: collaboration.view(),
     };
   }
 
@@ -89,7 +106,7 @@ export function createEditor(update: (view: EditorView) => void) {
       viewport.fit();
     }
 
-    if (persist) {
+    if (persist && !collaboration.record()) {
       notice = 'Saving…';
       files.save();
     }
@@ -100,6 +117,7 @@ export function createEditor(update: (view: EditorView) => void) {
 
   function choose(value: Tool): void {
     tool = value;
+    collaboration.tool(value);
     if (value !== 'select' && value !== 'hand') {
       project.select();
     }
@@ -115,8 +133,8 @@ export function createEditor(update: (view: EditorView) => void) {
     viewport.fit(frame);
   }
 
-  const undo = () => project.travel('undo');
-  const redo = () => project.travel('redo');
+  const undo = () => collaboration.travel('undo');
+  const redo = () => collaboration.travel('redo');
 
   function connect(canvas: HTMLCanvasElement): () => void {
     const disconnect = viewport.attachBoard(canvas);
@@ -137,7 +155,7 @@ export function createEditor(update: (view: EditorView) => void) {
     const unbindClipboard = bindClipboard(project.copySelection, project.paste);
 
     let connected = true;
-    files.restore(() => connected);
+    files.restore(() => connected && !collaboration.active());
 
     return () => {
       connected = false;
@@ -145,6 +163,7 @@ export function createEditor(update: (view: EditorView) => void) {
       unbind();
       unbindClipboard();
       frames.close();
+      collaboration.close();
     };
   }
 
@@ -168,6 +187,7 @@ export function createEditor(update: (view: EditorView) => void) {
     exportProject: files.exportProject,
     exportPng: files.exportPng,
     project,
+    collaboration,
     frames,
     focusFrame,
     text: textEditing,
@@ -175,6 +195,7 @@ export function createEditor(update: (view: EditorView) => void) {
     fit: () => viewport.fit(),
     zoom: viewport.zoom,
     attachMap: viewport.attachMap,
+    attachCursors: viewport.attachCursors,
     toggleGrid,
     toggleSnap,
   };

@@ -3,9 +3,11 @@ import { createHistory } from './history';
 import { alignShapes, cloneSelection, groupMembers, movableShapes, translated, type Alignment } from './selection';
 import { templatePage, type Template } from './templates';
 import { canEditText, makePage, type Page, type Point, type Project, type Shape } from './types';
+import { sameValue } from '../rooms/protocol';
 
 export function createDocument(initial: Project, change: (persist: boolean, refit: boolean) => void) {
-  const history = createHistory(initial);
+  let history = createHistory(initial);
+  let shared = false;
   let selectedIds: string[] = [];
 
   function page(): Page {
@@ -59,8 +61,17 @@ export function createDocument(initial: Project, change: (persist: boolean, refi
     const project = history.current();
     const prepared = { ...next, shapes: prepareShapes(next.shapes) };
     const pages = project.pages.map(item => item.id === next.id ? prepared : item);
-    history.commit({ ...project, pages });
+    commit({ ...project, pages });
     change(true, false);
+  }
+
+  function commit(next: Project): void {
+    if (shared) {
+      // Room undo records the author's patch, not someone else's whole-board snapshot.
+      history.reset(next);
+    } else {
+      history.commit(next);
+    }
   }
 
   function open(id: string): void {
@@ -78,7 +89,7 @@ export function createDocument(initial: Project, change: (persist: boolean, refi
     const next = template === undefined ? makePage(`Untitled board ${project.pages.length + 1}`) : templatePage(template);
 
     selectedIds = [];
-    history.commit({ ...project, activeId: next.id, pages: [...project.pages, next] });
+    commit({ ...project, activeId: next.id, pages: [...project.pages, next] });
     change(true, true);
   }
 
@@ -98,7 +109,7 @@ export function createDocument(initial: Project, change: (persist: boolean, refi
 
     const pages = project.pages.filter(item => item.id !== project.activeId);
     selectedIds = [];
-    history.commit({ ...project, activeId: pages[0]!.id, pages });
+    commit({ ...project, activeId: pages[0]!.id, pages });
     change(true, true);
   }
 
@@ -263,7 +274,16 @@ export function createDocument(initial: Project, change: (persist: boolean, refi
   function replace(project: Project, persist: boolean): void {
     selectedIds = [];
     project = { ...project, pages: project.pages.map(page => ({ ...page, shapes: prepareShapes(page.shapes) })) };
-    if (persist) {
+    if (shared && persist) {
+      // Import boards into a room without replacing the boards collaborators are editing.
+      const current = history.current();
+      const added = project.pages.map(page => ({
+        ...page,
+        id: crypto.randomUUID(),
+        shapes: prepareShapes(cloneSelection(page.shapes, { x: 0, y: 0 })),
+      }));
+      commit({ ...current, pages: [...current.pages, ...added], activeId: added[0]!.id });
+    } else if (persist) {
       history.commit(project);
     } else {
       // The restored workspace is the starting point for this session's undo history.
@@ -272,10 +292,44 @@ export function createDocument(initial: Project, change: (persist: boolean, refi
     change(persist, true);
   }
 
+  function enterRoom(project: Project): () => void {
+    // Leaving restores the private workspace from the moment this room was joined.
+    const localHistory = $snapshot(history);
+    const localSelection = $snapshot(selectedIds);
+    shared = true;
+    history = createHistory(project);
+    selectedIds = [];
+    change(false, true);
+
+    return () => {
+      shared = false;
+      history = localHistory;
+      selectedIds = localSelection;
+      change(false, true);
+    };
+  }
+
+  function showRoom(project: Project): void {
+    const current = history.current();
+    const previousPages = new Map(current.pages.map(page => [page.id, page]));
+    const pages = project.pages.map(page => {
+      const previous = previousPages.get(page.id);
+      return previous !== undefined && sameValue(previous, page) ? previous : page;
+    });
+    const activeId = pages.some(page => page.id === current.activeId) ? current.activeId : project.activeId;
+    if (activeId === current.activeId && pages.length === current.pages.length && pages.every((page, index) => page === current.pages[index])) {
+      return;
+    }
+
+    history.reset({ ...project, activeId, pages });
+    selectedIds = groupMembers(page().shapes, selectedIds);
+    change(false, activeId !== current.activeId);
+  }
+
   return {
-    project: history.current,
-    canUndo: history.canUndo,
-    canRedo: history.canRedo,
+    project: () => history.current(),
+    canUndo: () => history.canUndo(),
+    canRedo: () => history.canRedo(),
     page,
     selected,
     selection,
@@ -304,5 +358,7 @@ export function createDocument(initial: Project, change: (persist: boolean, refi
     moveLayer,
     travel,
     replace,
+    enterRoom,
+    showRoom,
   };
 }

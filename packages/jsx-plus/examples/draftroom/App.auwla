@@ -5,6 +5,7 @@ import { Navigator } from './ui/Navigator.auwla';
 import { Stage } from './ui/Stage.auwla';
 import { Inspector } from './ui/Inspector.auwla';
 import { Presentation } from './ui/Presentation.auwla';
+import { RoomFeed } from './ui/RoomFeed.auwla';
 
 export function App() {
   // The view snapshot drives the controls. The board owns high-frequency pointer previews.
@@ -22,6 +23,9 @@ export function App() {
       </div>
       if (view.presentation !== undefined) {
         <Presentation slide={view.presentation} editor={editor} />
+      }
+      if (view.room.identity !== undefined) {
+        <RoomFeed identity={view.room.identity} editor={editor} />
       }
     </main>
   );

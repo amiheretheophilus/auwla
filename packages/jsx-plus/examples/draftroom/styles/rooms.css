@@ -1,0 +1,111 @@
+.room-menu { position: relative; }
+.room-label-short { display: none; }
+
+.room-trigger {
+  white-space: nowrap;
+  color: var(--violet-strong);
+  background: var(--violet-light);
+}
+
+.room-popover {
+  position: absolute;
+  z-index: 5;
+  top: calc(100% + 8px);
+  right: 0;
+  display: grid;
+  gap: 12px;
+  width: min(330px, calc(100vw - 24px));
+  max-height: min(70dvh, 540px);
+  overflow: auto;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--panel);
+  box-shadow: 0 8px 24px #3523591c;
+}
+
+.room-popover h2 { font-size: 16px; }
+.room-form, .room-form label, .room-code { display: grid; gap: 6px; }
+.room-form { gap: 10px; }
+.room-form label, .room-code { color: var(--muted); font-size: 12px; }
+
+.room-form input, .room-code input {
+  width: 100%;
+  min-width: 0;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  color: var(--ink);
+  background: #fcfbfe;
+}
+
+.room-code input { font-family: ui-monospace, monospace; }
+.room-buttons { display: flex; flex-wrap: wrap; gap: 6px; }
+.room-status { display: flex; align-items: center; gap: 7px; color: var(--muted); font-size: 11px; }
+.room-dot { width: 6px; height: 6px; flex: none; border-radius: 50%; background: #298778; }
+
+.room-people {
+  display: grid;
+  gap: 5px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 11px;
+}
+
+.room-people li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 4px;
+  padding: 8px;
+  border-radius: 7px;
+  background: var(--hover);
+}
+
+.room-people strong { overflow-wrap: anywhere; }
+.room-people span, .room-people small { color: var(--muted); }
+.room-error { color: #9a324a; font-size: 11px; }
+
+.remote-cursors {
+  position: absolute;
+  z-index: 1;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.remote-cursor {
+  position: absolute;
+  top: 0;
+  left: 0;
+  max-width: 150px;
+  padding: 2px 5px;
+  margin: 8px 0 0 9px;
+  border-radius: 4px;
+  color: white;
+  background: var(--peer-color);
+  font-size: 10px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.remote-cursor::before {
+  position: absolute;
+  top: -9px;
+  left: -9px;
+  width: 0;
+  height: 0;
+  border-top: 10px solid var(--peer-color);
+  border-right: 7px solid transparent;
+  content: '';
+}
+
+@media (max-width: 510px) {
+  .room-popover { position: fixed; top: 54px; right: 10px; }
+  .room-label-full { display: none; }
+  .room-label-short { display: inline; }
+}
+
+@media (max-width: 365px) {
+  .brand > span:last-child { display: none; }
+}

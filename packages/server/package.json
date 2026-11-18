@@ -28,6 +28,18 @@
       "types": "./dist/http-router.d.ts",
       "import": "./dist/http-router.js",
       "default": "./dist/http-router.js"
+    },
+    "./ws-bun": {
+      "types": "./dist/websocket/ws-bun.d.ts",
+      "import": "./dist/ws-bun.js"
+    },
+    "./ws-node": {
+      "types": "./dist/websocket/ws-node.d.ts",
+      "import": "./dist/ws-node.js"
+    },
+    "./ws-cloudflare": {
+      "types": "./dist/websocket/ws-cloudflare.d.ts",
+      "import": "./dist/ws-cloudflare.js"
     }
   },
   "scripts": {
@@ -38,6 +50,7 @@
     "@memoized-dom/data": "workspace:*",
     "@memoized-dom/router": "workspace:*",
     "@memoized-dom/runtime": "workspace:*",
+    "crossws": "^0.4.17",
     "linkedom": "^0.18.0"
   },
   "devDependencies": {

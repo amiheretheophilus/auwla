@@ -17,7 +17,13 @@ const PACKAGES = new URL('../../', import.meta.url);
 /** Source files whose name is not the subpath's, by `<package>/<subpath>`. */
 const RENAMED: Record<'browser' | 'server', Record<string, string>> = {
   browser: {},
-  server: { 'runtime/index': 'runtime/src/server.ts', 'server/router': 'server/src/http-router.ts' },
+  server: {
+    'runtime/index': 'runtime/src/server.ts',
+    'server/router': 'server/src/http-router.ts',
+    'server/ws-bun': 'server/src/websocket/ws-bun.ts',
+    'server/ws-node': 'server/src/websocket/ws-node.ts',
+    'server/ws-cloudflare': 'server/src/websocket/ws-cloudflare.ts',
+  },
 };
 
 export function checkoutPackagesFor(target: 'browser' | 'server'): BunPlugin {

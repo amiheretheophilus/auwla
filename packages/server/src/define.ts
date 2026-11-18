@@ -1,5 +1,6 @@
 import type { StandardSchemaV1 } from '@memoized-dom/data';
 import { liveHub, type LiveHub, type LiveKey } from './live';
+import type { ServerSocketSession } from './websocket/definition';
 import type {
   RegisteredServerServices,
   ServerContext,
@@ -43,6 +44,28 @@ export type ServerFunctionResult<TFunction> =
     ? TResult
     : never;
 
+export interface DefinedServerSocket<
+  TArguments extends readonly unknown[],
+  TSession extends ServerSocketSession,
+  TState extends object,
+  TPlatform,
+  TServices extends object,
+  THandlerArguments extends readonly unknown[] = TArguments,
+> {
+  readonly [SERVER_FUNCTION_TYPES]?: { readonly arguments: TArguments; readonly result: TSession };
+  readonly method: 'WEBSOCKET';
+  readonly handler: (
+    context: ServerContext<TState, TPlatform, TServices>,
+    ...args: THandlerArguments
+  ) => TSession | Response | Promise<TSession | Response>;
+  readonly middleware: readonly ServerMiddleware<TState, TPlatform, TServices>[];
+  readonly input?: StandardSchemaV1;
+  readonly live: (
+    context: ServerContext<TState, TPlatform, TServices>,
+    ...args: THandlerArguments
+  ) => LiveKey;
+}
+
 type ServerFunctionHandler<
   TState extends object,
   TPlatform,
@@ -67,7 +90,7 @@ type OneFunctionMethod<THandler> = {
   [TMethod in ServerFunctionVerb]:
     { readonly [TKey in TMethod]: THandler } &
     { readonly [TKey in Exclude<ServerFunctionVerb, TMethod>]?: never };
-}[ServerFunctionVerb];
+}[ServerFunctionVerb] & { readonly websocket?: never };
 
 export type ServerFunctionDescriptor<
   TState extends object,
@@ -92,6 +115,19 @@ type SchemaInput<TSchema> =
 type SchemaOutput<TSchema> =
   TSchema extends StandardSchemaV1<unknown, infer TOutput> ? TOutput : never;
 
+type SocketDescriptor<
+  TState extends object,
+  TPlatform,
+  TServices extends object,
+  TArguments extends readonly unknown[],
+  TSession extends ServerSocketSession,
+> = {
+  readonly websocket: DefinedServerSocket<TArguments, TSession, TState, TPlatform, TServices>['handler'];
+  readonly live: NonNullable<FunctionInvalidation<TState, TPlatform, TServices, TArguments>['live']>;
+  readonly middleware?: readonly ServerMiddleware<TState, TPlatform, TServices>[];
+  readonly updates?: never;
+} & { readonly [Key in ServerFunctionVerb]?: never };
+
 export type ServerFunctionInputDescriptor<
   TState extends object,
   TPlatform,
@@ -114,6 +150,14 @@ export interface DefineServerFunction<
   TPlatform,
   TServices extends object,
 > {
+  <TSchema extends StandardSchemaV1, TSession extends ServerSocketSession>(
+    descriptor: SocketDescriptor<TState, TPlatform, TServices, readonly [SchemaOutput<TSchema>], TSession>
+      & { readonly input: TSchema },
+  ): DefinedServerSocket<readonly [SchemaInput<TSchema>], TSession, TState, TPlatform, TServices, readonly [SchemaOutput<TSchema>]>;
+  <TArguments extends readonly unknown[], TSession extends ServerSocketSession>(
+    descriptor: SocketDescriptor<TState, TPlatform, TServices, TArguments, TSession>
+      & { readonly input?: undefined },
+  ): DefinedServerSocket<TArguments, TSession, TState, TPlatform, TServices>;
   <TSchema extends StandardSchemaV1, TResult>(
     descriptor: ServerFunctionInputDescriptor<
       TState,
@@ -228,13 +272,30 @@ function createFunctionDefinition<
   return (<TArguments extends readonly unknown[], TResult>(
     descriptor:
       | ServerFunctionDescriptor<TState, TPlatform, TServices, TArguments, TResult>
-      | ServerFunctionInputDescriptor<TState, TPlatform, TServices, StandardSchemaV1, TResult>,
-  ): DefinedServerFunction<TArguments, TResult, TState, TPlatform, TServices> => {
+      | ServerFunctionInputDescriptor<TState, TPlatform, TServices, StandardSchemaV1, TResult>
+      | (SocketDescriptor<TState, TPlatform, TServices, TArguments, ServerSocketSession>
+        & { readonly input?: StandardSchemaV1 }),
+  ) => {
     if (typeof descriptor !== 'object' || descriptor === null) {
       throw new TypeError('memo-dom: define.function() requires an object definition');
     }
     const methods = (['get', 'post', 'put', 'patch', 'delete'] as const)
       .filter(method => Object.hasOwn(descriptor, method));
+    if ('websocket' in descriptor) {
+      if (methods.length > 0 || typeof descriptor.websocket !== 'function' || 'updates' in descriptor
+        || descriptor.websocket.constructor.name === 'AsyncGeneratorFunction'
+        || typeof descriptor.live !== 'function') {
+        throw new TypeError('memo-dom: websocket requires one handler and a live key callback');
+      }
+
+      return Object.freeze({
+        method: 'WEBSOCKET',
+        handler: descriptor.websocket,
+        middleware: Object.freeze([...(descriptor.middleware ?? [])]),
+        input: descriptor.input,
+        live: descriptor.live,
+      });
+    }
     if (methods.length !== 1) {
       throw new TypeError('memo-dom: define.function() requires exactly one HTTP method: get, post, put, patch, or delete');
     }

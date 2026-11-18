@@ -1,6 +1,21 @@
 # Status
 
-Last updated: 2026-11-16.
+Last updated: 2026-11-18.
+
+WebSocket server functions use `define.function({ live, websocket })` and a typed
+`#server-functions` connection. Draftroom uses one board connection for its
+initial read, persisted edits, collaborator presence, cursors, and drag previews.
+Bun uses native room topics and releases handshake data after opening. The
+adapter disconnects subscribers whose native write buffers overflow.
+See [WebSocket server functions](compiler/server.md#websocket-server-functions).
+
+Draftroom exposed a compiler crash when source readiness wrapped a member ref.
+The mutation emitter now uses the authored write target's receiver and key.
+See [refs](compiler/refs.md).
+
+Draftroom drawing also exposed missing readiness declarations in helpers with
+nested reactive blocks. Readiness storage now stays with the enclosing
+function invocation. See [sources](compiler/sources.md).
 
 Prototype branch integration: the compiler-owned [read-only analysis API](compiler/analysis.md)
 is built under `src/analysis/` and shares the existing frontend with production.

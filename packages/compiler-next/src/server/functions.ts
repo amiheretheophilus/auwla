@@ -14,7 +14,7 @@ import type { Node } from 'yuku-parser';
 import { CompileError } from '../core/diagnostics';
 import { languageExtensions, moduleText, type SourceLanguage } from '../core/parse/languages';
 
-export type ServerFunctionMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
+export type ServerFunctionMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE' | 'WEBSOCKET';
 
 export type ServerFunctionQueryKind = 'string' | 'number' | 'boolean' | 'string[]' | 'number[]' | 'boolean[]';
 
@@ -46,7 +46,8 @@ export interface ServerFunctionModule {
   readonly functions: readonly ServerFunctionDefinition[];
 }
 
-const METHODS = new Set(['get', 'post', 'put', 'patch', 'delete']);
+const METHODS = new Set(['get', 'post', 'put', 'patch', 'delete', 'websocket']);
+const HANDLER_REQUIRED = 'define.function() requires exactly one HTTP method or websocket handler';
 
 /**
  * The endpoint name of a module: its path inside the functions folder, without the extension,
@@ -101,15 +102,19 @@ export function analyzeServerFunctions(
     }
     const binding = bindings.get(exported.local);
     if (binding === undefined) {
-      fail(`[MMD-S003] Server function module export '${exported.exported}' must be created by define.function() with one get, post, put, patch, or delete handler; only defined functions and 'middleware' may cross the client boundary`, exported.at);
+      fail(`[MMD-S003] Server function module export '${exported.exported}' must be created by define.function() with one get, post, put, patch, delete, or websocket handler; only defined functions and 'middleware' may cross the client boundary`, exported.at);
     }
-    if (!binding!.handler.async) {
+    if (binding!.method !== 'WEBSOCKET' && !binding!.handler.async) {
       fail(`[MMD-S003] Server function '${exported.exported}' handler must be async before it can cross the client boundary`, exported.at);
     }
     if (moduleName === '') {
       fail('server/functions root cannot contain endpoints; place functions in a named module', exported.at);
     }
     const { handler, method, schemaInput, live } = binding!;
+    const page = containsJsx(handler);
+    if (method === 'WEBSOCKET' && page) {
+      fail('websocket handlers return a connection session, not JSX', handler);
+    }
     functions.push({
       exported: exported.exported,
       local: binding!.local,
@@ -118,7 +123,7 @@ export function analyzeServerFunctions(
       schemaInput,
       ...(live ? { live: true as const } : {}),
       ...(handler.generator ? { generator: true as const } : {}),
-      ...(containsJsx(handler) ? { page: true as const } : {}),
+      ...(page ? { page: true as const } : {}),
       parameters: parametersOf(handler, method, schemaInput, fail),
     });
   }
@@ -193,7 +198,7 @@ function definedFunction(local: string, statement: Node, init: Node, fail: Fail)
       continue;
     }
     if (name === null || !METHODS.has(name)) fail(`unsupported define.function() field '${name ?? 'unknown'}'`, field);
-    if (method !== null) fail('define.function() requires exactly one HTTP method: get, post, put, patch, or delete', field);
+    if (method !== null) fail(HANDLER_REQUIRED, field);
     method = name!.toUpperCase() as ServerFunctionMethod;
     const value = unwrapType(field.value);
     if (!is.FunctionExpression(value) && !is.ArrowFunctionExpression(value)) {
@@ -202,9 +207,13 @@ function definedFunction(local: string, statement: Node, init: Node, fail: Fail)
     handler = value as Handler;
   }
   if (method === null || handler === null) {
-    return fail('define.function() requires exactly one HTTP method: get, post, put, patch, or delete', statement);
+    return fail(HANDLER_REQUIRED, statement);
   }
-  if ((live && (method !== 'GET' || updates || handler.generator)) || (updates && method === 'GET')) {
+  if (method === 'WEBSOCKET') {
+    if (!live || updates || handler.generator) {
+      fail('websocket requires a live room key and does not accept updates or a generator', statement);
+    }
+  } else if ((live && (method !== 'GET' || updates || handler.generator)) || (updates && method === 'GET')) {
     fail('live requires an ordinary GET; updates belongs to mutations', statement);
   }
   return { local, method, schemaInput, live, handler };

@@ -43,6 +43,8 @@
     "yuku-parser": "0.19.0"
   },
   "devDependencies": {
-    "fast-check": "^4.10.2"
+    "@types/ws": "^8.18.1",
+    "fast-check": "^4.10.2",
+    "ws": "^8.22.2"
   }
 }

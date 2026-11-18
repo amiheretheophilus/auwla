@@ -1,0 +1,12 @@
+import type { Editor } from '../editor';
+import type { RoomIdentity } from '../rooms/protocol';
+
+export function RoomFeed({ identity, editor }: { identity: RoomIdentity; editor: Editor }) {
+  const board = editor.collaboration.socket();
+
+  $effect(() => {
+    editor.collaboration.connected(identity.code, board !== undefined && $track(board).status === 'open');
+  });
+
+  return <span hidden></span>;
+}

@@ -1,10 +1,13 @@
 import { createBoardPainter } from './board-painter';
-import { drawingBounds, fitCamera, GRID, zoomCamera } from './geometry';
+import { drawingBounds, fitCamera, GRID, toWorld, zoomCamera } from './geometry';
 import { bindGestures, screenPoint } from './gestures';
 import { mapPosition, paintMap } from './paint';
 import { canvasSize } from './surface';
+import { createRemoteCursors } from './remote-cursors';
+import { remoteMoves, visibleDrags } from './remote-drags';
 import { previewShapes } from '../model/edits';
-import type { Bounds, Camera, InlineTextView, Shape, Tool } from '../model/types';
+import type { Bounds, Camera, InlineTextView, Point, Shape, Tool } from '../model/types';
+import { sameValue, type Peer } from '../rooms/protocol';
 
 interface Scene {
   shapes(): Shape[];
@@ -16,7 +19,13 @@ interface Scene {
   select(id?: string, toggle?: boolean): void;
   selectMany(ids: string[], extend: boolean): void;
   editText(id: string): void;
-  finish(shapes: Shape[]): void;
+  activity(action?: string): void;
+  tracksPresence(): boolean;
+  pointer(position: Point | null): void;
+  previewMove(shapes: Shape[]): void;
+  page(): string;
+  revision(): number;
+  finish(shapes: Shape[], moved: boolean): void;
   changed(zoomChanged: boolean): void;
 }
 
@@ -32,6 +41,7 @@ function positionGrid(canvas: HTMLCanvasElement, camera: Camera): void {
 
 export function createViewport(scene: Scene) {
   const painter = createBoardPainter();
+  const cursors = createRemoteCursors();
   let board: HTMLCanvasElement | undefined;
   let map: HTMLCanvasElement | undefined;
   let camera: Camera = { x: 0, y: 0, zoom: 1 };
@@ -40,6 +50,7 @@ export function createViewport(scene: Scene) {
   let textDraft: Shape | undefined;
   let frame = 0;
   let fitted = false;
+  let peers: Peer[] = [];
   let mappedShapes: Shape[] | undefined;
   let mappedCamera: Camera | undefined;
 
@@ -66,8 +77,14 @@ export function createViewport(scene: Scene) {
       }
 
       const shapes = scene.shapes();
+      const pageId = scene.page();
       const edits = drafts.length === 0 && textDraft !== undefined ? [textDraft] : drafts;
-      painter.paint(board, shapes, camera, scene.selection(), previewShapes(shapes, edits), marquee);
+      const drags = peers.length === 0 ? [] : visibleDrags(peers, pageId, scene.revision());
+      const remote = remoteMoves(shapes, drags);
+      // If two people drag the same shape, the local pointer keeps control of its preview.
+      const updates = previewShapes(shapes, remote.length === 0 ? edits : [...remote, ...edits]);
+      painter.paint(board, shapes, camera, scene.selection(), updates, marquee, edits.length === 1 ? edits[0]?.id : undefined);
+      cursors.show(peers, camera, pageId);
       // A drag's draft is only for the main board. The map catches up when the edit commits.
       paintOverview(board, shapes);
     });
@@ -80,6 +97,7 @@ export function createViewport(scene: Scene) {
       positionGrid(board, camera);
     }
     scene.changed(zoomChanged);
+    cursors.show(peers, camera, scene.page());
     render();
   }
 
@@ -112,6 +130,8 @@ export function createViewport(scene: Scene) {
       select: scene.select,
       selectMany: scene.selectMany,
       editText: scene.editText,
+      activity: scene.activity,
+      previewMove: scene.previewMove,
       finish: scene.finish,
       preview(shapes, area) {
         drafts = shapes;
@@ -138,10 +158,21 @@ export function createViewport(scene: Scene) {
     }
     canvas.addEventListener('contextrestored', restoreContext);
 
+    function pointer(event: PointerEvent): void {
+      if (scene.tracksPresence()) scene.pointer(toWorld(screenPoint(canvas, event), camera));
+    }
+    function leave(): void {
+      if (scene.tracksPresence()) scene.pointer(null);
+    }
+    canvas.addEventListener('pointermove', pointer);
+    canvas.addEventListener('pointerleave', leave);
+
     return () => {
       detach();
       observer.disconnect();
       canvas.removeEventListener('contextrestored', restoreContext);
+      canvas.removeEventListener('pointermove', pointer);
+      canvas.removeEventListener('pointerleave', leave);
       cancelAnimationFrame(frame);
       painter.clear();
       frame = 0;
@@ -236,9 +267,28 @@ export function createViewport(scene: Scene) {
     board?.focus({ preventScroll: true });
   }
 
+  function showPeers(next: Peer[]): void {
+    const pageId = scene.page();
+    const revision = scene.revision();
+    const redraw = !sameValue(visibleDrags(peers, pageId, revision), visibleDrags(next, pageId, revision));
+    peers = next;
+    cursors.show(peers, camera, pageId);
+    if (redraw) {
+      render();
+    }
+  }
+
+  function attachCursors(host: HTMLDivElement): () => void {
+    const detach = cursors.attach(host);
+    cursors.show(peers, camera, scene.page());
+    return detach;
+  }
+
   return {
     attachBoard,
     attachMap,
+    attachCursors,
+    showPeers,
     fit,
     render,
     zoom,

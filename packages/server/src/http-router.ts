@@ -14,6 +14,8 @@ import type { StandardSchemaV1 } from '@memoized-dom/data';
 import { generatorResponse, liveHub, liveResponse, type LiveKey, type LiveStamp } from './live';
 import { isServerPage } from './page-definition';
 import { captureLiveResponse, createLiveSessions, createLiveSubscription, LIVE_SESSION_PATH } from './live-session';
+import { socketUpgrade } from './websocket/upgrade';
+import type { ServerSocketSession } from './websocket/definition';
 import { LIVE_HEARTBEAT_INTERVAL, resolveLiveHeartbeatInterval } from './live-heartbeat';
 
 const pageFetches = new WeakMap<object, typeof globalThis.fetch>();
@@ -169,6 +171,19 @@ export interface ServerFunctionRouteDefinition<
     context: ServerContext<TLocals, TPlatform, TServices>,
     ...args: unknown[]
   ) => ServerHandlerResult | Promise<ServerHandlerResult>;
+}
+
+export interface ServerSocketRouteDefinition<
+  TLocals extends object = RegisteredServerState,
+  TPlatform = RegisteredServerPlatform,
+  TServices extends object = RegisteredServerServices,
+> extends Omit<ServerFunctionRouteDefinition<TLocals, TPlatform, TServices>, 'method' | 'handler' | 'live' | 'updates'> {
+  readonly method: 'WEBSOCKET';
+  readonly live: (context: ServerContext<TLocals, TPlatform, TServices>, ...args: unknown[]) => LiveKey;
+  readonly handler: (
+    context: ServerContext<TLocals, TPlatform, TServices>,
+    ...args: unknown[]
+  ) => ServerSocketSession<unknown> | Response | Promise<ServerSocketSession<unknown> | Response>;
 }
 
 export interface ServerMiddlewareGroup<
@@ -358,6 +373,11 @@ async function bodyArguments(
   } catch {
     return serverFunctionInputError('Request body must be valid JSON');
   }
+  return namedArguments(body, parameters);
+}
+
+function namedArguments(value: unknown, parameters: readonly ServerFunctionRouteParameter[]): unknown[] {
+  const body = value;
   if (!isRecord(body)) {
     return serverFunctionInputError('Request body must be a JSON object');
   }
@@ -376,6 +396,21 @@ async function bodyArguments(
     }
     return body[parameter.name];
   });
+}
+
+function socketArguments(url: URL, parameters: readonly ServerFunctionRouteParameter[]): unknown[] {
+  const values = url.searchParams.getAll('args');
+  if (values.length !== 1 || [...url.searchParams.keys()].some(name => name !== 'args')) {
+    return serverFunctionInputError("WebSocket connection arguments must appear once as 'args'");
+  }
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(values[0]!);
+  } catch {
+    return serverFunctionInputError('WebSocket connection arguments must be valid JSON');
+  }
+  return namedArguments(parsed, parameters);
 }
 
 async function validateServerFunctionArguments(
@@ -441,7 +476,10 @@ export function createServerFunctionRoutes<
   TPlatform = RegisteredServerPlatform,
   TServices extends object = RegisteredServerServices,
 >(
-  definitions: readonly ServerFunctionRouteDefinition<TLocals, TPlatform, TServices>[],
+  definitions: readonly (
+    ServerFunctionRouteDefinition<TLocals, TPlatform, TServices>
+    | ServerSocketRouteDefinition<TLocals, TPlatform, TServices>
+  )[],
 ): readonly ServerRoute<TLocals, TPlatform, TServices>[] {
   return definitions.map((definition) => {
     if (!definition.path.startsWith('/_fn/')) {
@@ -463,6 +501,44 @@ export function createServerFunctionRoutes<
     }
     if (definition.input !== undefined && definition.schemaInput !== true) {
       throw new TypeError(`Server function '${definition.id}' input validator requires schema input transport`);
+    }
+    if (definition.method === 'WEBSOCKET') {
+      const route: InternalServerFunctionRoute<TLocals, TPlatform, TServices> = {
+        [SERVER_FUNCTION_ROUTE_KEY]: true,
+        id: definition.id,
+        path: definition.path,
+        method: 'GET',
+        middleware: definition.middleware,
+        async handler(context) {
+          const capture = socketUpgrade(context.request);
+          if (capture === undefined) {
+            return new Response('WebSocket upgrade required', { status: 426, headers: { upgrade: 'websocket' } });
+          }
+
+          let args: unknown[] | Response;
+          try {
+            args = definition.schemaInput
+              ? await validateServerFunctionArguments(definition.input!, querySchemaInput(context.url))
+              : socketArguments(context.url, definition.parameters);
+          } catch (error) {
+            if (error instanceof ServerFunctionInputError) return serverFunctionError(error);
+            throw error;
+          }
+          if (args instanceof Response) return args;
+
+          const session = await definition.handler(context, ...args);
+          if (session instanceof Response) return session;
+          if (typeof session?.message !== 'function') {
+            throw new TypeError(`WebSocket function '${definition.id}' must return a message handler`);
+          }
+
+          // Endpoints can have different message types even when using the same key.
+          const key = liveHub(context.services).key(definition.live(context, ...args));
+          capture.prepared = { room: JSON.stringify([definition.id, key]), session };
+          return new Response(null, { status: 204 });
+        },
+      };
+      return route;
     }
     const route: InternalServerFunctionRoute<TLocals, TPlatform, TServices> = {
       [SERVER_FUNCTION_ROUTE_KEY]: true,

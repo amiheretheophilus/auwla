@@ -28,6 +28,7 @@ export { captureCreatedSource, describeSourceValue, ownSourceFrame, retainSource
 export { ownedSourceEffect } from './source-effects';
 export { createSourceComponentValue, createSuspendedSourceValue } from './source-presentation';
 export { createStreamingSource } from './streaming';
+export { createSocketConnection } from './socket';
 export { createPageSource } from './page-source';
 export { applyLivePatch, LIVE_PATCH_MAX_DEPTH, LIVE_PATCH_MAX_OPERATIONS } from './live-patch';
 export type { LiveJsonValue, LivePatchOperation } from './live-patch';

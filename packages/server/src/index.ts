@@ -107,6 +107,7 @@ export { getCookie, setCookie, deleteCookie, type CookieOptions } from './cookie
 export {
   createDefine,
   type DefinedServerFunction,
+  type DefinedServerSocket,
   type DefinitionPlatform,
   type DefinitionState,
   type ServerDefinition,
@@ -119,6 +120,15 @@ export {
   type ServiceDescriptor,
   type ServiceValue,
 } from './define';
+export {
+  replyToSocket,
+  type ServerSocketEvent,
+  type ServerSocketInitial,
+  type ServerSocketInput,
+  type ServerSocketResult,
+  type ServerSocketSession,
+  type SocketReply,
+} from './websocket/definition';
 export {
   composeDocumentStream,
   loadDocumentTemplate,

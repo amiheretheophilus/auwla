@@ -111,6 +111,13 @@ if (import.meta.main) {
         outgoing.end('Internal Server Error');
       });
   });
+  if (backend.handleUpgrade) {
+    listener.on('upgrade', (incoming, socket, head) => {
+      Promise.resolve()
+        .then(() => backend.handleUpgrade(toWebRequest(incoming), incoming, socket, head))
+        .catch(() => socket.destroy());
+    });
+  }
   const hostname = backend.hostname ?? '127.0.0.1';
   listener.listen(Number(backend.port ?? process.env.PORT ?? 3000), hostname, () => {
     console.log('Memoized DOM (node): http://' + hostname + ':' + listener.address().port);
@@ -140,6 +147,7 @@ export interface WorkerConfigOptions {
   /** The built client's folder, relative to the config. */
   readonly assets: string;
   readonly assetsBinding?: string;
+  readonly webSockets?: boolean;
   /** Workers' compatibility date. Default `COMPATIBILITY_DATE`. */
   readonly compatibilityDate?: string;
 }
@@ -150,6 +158,8 @@ export interface WorkerConfigOptions {
  * build can be newer than a local workerd supports, which then refuses to start.
  */
 export const COMPATIBILITY_DATE = '2026-10-01';
+export const SOCKET_BINDING = 'MEMOIZED_WEBSOCKETS';
+export const SOCKET_HOST = 'MemoizedWebSocketHost';
 
 /**
  * `wrangler.json` for a built Worker: `wrangler deploy --config dist/wrangler.json`. The Worker runs
@@ -163,6 +173,10 @@ export function workerConfig(options: WorkerConfigOptions): Record<string, unkno
     main: options.main,
     compatibility_date: options.compatibilityDate ?? COMPATIBILITY_DATE,
     compatibility_flags: ['nodejs_compat'],
+    ...(options.webSockets ? {
+      durable_objects: { bindings: [{ name: SOCKET_BINDING, class_name: SOCKET_HOST }] },
+      migrations: [{ tag: 'memoized-websocket-v1', new_sqlite_classes: [SOCKET_HOST] }],
+    } : {}),
     assets: {
       directory: options.assets,
       binding: options.assetsBinding ?? 'ASSETS',

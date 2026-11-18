@@ -77,6 +77,7 @@ export interface EditorView {
   canUndo: boolean;
   canRedo: boolean;
   notice: string;
+  room: RoomView;
 }
 
 export function canEditText(shape: Shape | undefined): shape is Shape {
@@ -103,3 +104,5 @@ export function makeShape(kind: ShapeKind, bounds: Bounds, settings: Partial<Sha
 export function makePage(name: string, shapes: Shape[] = []): Page {
   return { id: crypto.randomUUID(), name, shapes };
 }
+import type { RoomView } from '../rooms/protocol';
+

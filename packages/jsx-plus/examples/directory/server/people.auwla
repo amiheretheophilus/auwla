@@ -13,6 +13,7 @@ export function allPeople(): Person[] {
 }
 
 export function findPerson(id: string): Person | null {
+  console.log("hello from the server wow")
   const person = people.find((entry) => entry.id === id);
   return person === undefined ? null : { ...person };
 }

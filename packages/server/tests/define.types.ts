@@ -1,11 +1,16 @@
 import type { StandardSchemaV1 } from '@memoized-dom/data';
 import {
   createDefine,
+  replyToSocket,
   serve,
   type DefinitionState,
   type DefinitionPlatform,
   type ServerFunctionArguments,
   type ServerFunctionResult,
+  type ServerSocketEvent,
+  type ServerSocketInitial,
+  type ServerSocketInput,
+  type ServerSocketResult,
   type ServiceValue,
 } from '../src';
 
@@ -113,6 +118,45 @@ const validatedLive = define.function({
   async get(_context, input) { return input; },
 });
 type ValidatedLiveCheck = Assert<Equal<ServerFunctionArguments<typeof validatedLive>, readonly [input: string]>>;
+
+const board = define.function({
+  input: schema,
+  live: (_context, input) => {
+    type RoomKeyInputCheck = Assert<Equal<typeof input, { id: number }>>;
+    return ['board', input.id];
+  },
+  async websocket({ state, platform }, input) {
+    type SocketStateCheck = Assert<Equal<typeof state, State>>;
+    type SocketPlatformCheck = Assert<Equal<typeof platform, Platform | undefined>>;
+    type SocketSetupInputCheck = Assert<Equal<typeof input, { id: number }>>;
+    if (!state.user) return new Response('Denied', { status: 403 });
+    return {
+      initial: async () => ({ id: input.id }),
+      async message(text: string) {
+        if (text.length === 0) return replyToSocket(false as const);
+        return { text };
+      },
+    };
+  },
+});
+type BoardSession = ServerFunctionResult<typeof board>;
+type ConnectInputCheck = Assert<Equal<ServerFunctionArguments<typeof board>, readonly [input: { id: string }]>>;
+type MessageInputCheck = Assert<Equal<ServerSocketInput<BoardSession>, string>>;
+type InitialCheck = Assert<Equal<ServerSocketInitial<BoardSession>, { id: number }>>;
+type EventCheck = Assert<Equal<ServerSocketEvent<BoardSession>, { id: number } | { text: string }>>;
+type ReplyCheck = Assert<Equal<ServerSocketResult<BoardSession>, false | { text: string }>>;
+
+const positionalSocket = define.function({
+  websocket(_context, room: string) {
+    return { message: (text: string) => `${room}: ${text}` };
+  },
+  live: (_context, room) => {
+    type RoomArgumentCheck = Assert<Equal<typeof room, string>>;
+    return ['board', room];
+  },
+});
+type PositionalSocketCheck = Assert<Equal<ServerFunctionArguments<typeof positionalSocket>, [room: string]>>;
+
 define.invalidate(['notes', 'one']);
 app.get('/account/:id', ({ state, platform, params }) => {
   type RouteStateCheck = Assert<Equal<typeof state, State>>;

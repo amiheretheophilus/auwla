@@ -29,6 +29,7 @@ import { isSourcePath } from '../project/collect';
 import { normalizeProjectPath, type ProjectHost } from '../project/host';
 import { createProject, type ProjectBuild } from '../project/project';
 import { analyzeServerFunctions, type ServerFunctionModule } from './functions';
+import { SOCKET_BINDING, SOCKET_HOST } from './delivery';
 import { serverFunctionClient, serverFunctionDeclarations } from './generate';
 import { routeDeclarations } from '../features/routes/declarations';
 import { SERVER_CONFIG_DECLARATIONS, serverConfigDeclarations } from './config-declarations';
@@ -126,6 +127,7 @@ export const GENERATED = {
   barrel: './.memoized/server-functions.ts',
   registry: './.memoized/server-functions.server.ts',
   server: './.memoized/server-application.ts',
+  socketHost: './.memoized/websocket-host.ts',
   facades: './.memoized/functions/',
 } as const;
 
@@ -191,6 +193,12 @@ export function createApplication(options: ApplicationOptions): Application {
 
   /** The host as a build sees it: generated modules, and the imports only that build resolves. */
   function view(side: 'client' | 'server'): ProjectHost {
+    function socketPaths(): string[] {
+      return generated.modules.flatMap(({ module }) => module.functions
+        .filter((fn) => fn.method === 'WEBSOCKET')
+        .map((fn) => fn.path));
+    }
+
     return {
       readFile(path) {
         const facade = generated.facades.get(path);
@@ -205,9 +213,17 @@ export function createApplication(options: ApplicationOptions): Application {
         if (side === 'server' && path === GENERATED.server) {
           // A relative delivery module is relative to the project, and the wrapper is in `.memoized/`.
           const specifier = delivery.startsWith('.') ? relativeModule(GENERATED.server, normalizeProjectPath(delivery), true) : delivery;
-          return serverApplication(specifier, server?.runtime ?? 'bun');
+          return serverApplication(specifier, server?.runtime ?? 'bun', socketPaths());
+        }
+        if (side === 'server' && path === GENERATED.socketHost && serverEntry !== undefined) {
+          return cloudflareSocketHostModule(serverEntry, socketPaths());
         }
         const text = host.readFile(path);
+        if (side === 'server' && path === serverEntry && server?.runtime === 'cloudflare' && socketPaths().length > 0) {
+          const source = relativeModule(serverEntry, GENERATED.socketHost, true);
+          return Promise.resolve(text).then(value => value === undefined ? undefined
+            : `${value}\nexport { ${SOCKET_HOST} } from ${JSON.stringify(source)};\n`);
+        }
         // Appended, so the entry's authored offsets stay in place for its source map.
         if (side === 'client' && path === clientEntry && serverEntry !== undefined) {
           // Pages the server rendered into the document are bound before the entry mounts.
@@ -253,7 +269,7 @@ export function createApplication(options: ApplicationOptions): Application {
     dataDelivery: 'universal',
     // Backend code, compiled as plain code (`options.ts`, `serverOnly`): the server folder, the
     // entry, and the generated routes and `serve()` wrapper. Not the facades: components call them.
-    serverOnly: [...(root === null ? [] : [root]), serverEntry, GENERATED.registry, GENERATED.server],
+    serverOnly: [...(root === null ? [] : [root]), serverEntry, GENERATED.registry, GENERATED.server, GENERATED.socketHost],
     // Hot replacement is the browser's: a server loads each module again for the next request.
     hot: false,
   });
@@ -314,6 +330,12 @@ export function createApplication(options: ApplicationOptions): Application {
     const folders = [root, functionsFolder].filter((folder) => folder !== null);
     const touchesServer = paths.some((path) => folders.some((folder) => normalizeProjectPath(path).startsWith(`${folder}/`)));
     const generatedPaths = touchesServer ? [GENERATED.barrel, GENERATED.registry, ...generated.facades.keys(), ...discovered.facades.keys()] : [];
+    if (touchesServer) {
+      generatedPaths.push(GENERATED.server);
+      if (server?.runtime === 'cloudflare' && serverEntry !== undefined) {
+        generatedPaths.push(GENERATED.socketHost, serverEntry);
+      }
+    }
     // A page's generated modules change with any module it reaches, inside the server folder or not.
     generatedPaths.push(...changedTexts(generated.texts, discovered.texts));
     if (generated.texts.client.has(PAGES.hydration) !== discovered.texts.client.has(PAGES.hydration)) generatedPaths.push(clientEntry);
@@ -460,29 +482,56 @@ async function serverModule(
  * `fetch(request, env, ctx)`. That call becomes `{ platform: { env, executionCtx } }`. A call with
  * two arguments (`app.fetch(request, { platform })`, from a Hono backend) passes through as it is.
  */
-function serverApplication(delivery: string, runtime: 'bun' | 'node' | 'cloudflare'): string {
+function serverApplication(delivery: string, runtime: 'bun' | 'node' | 'cloudflare', sockets: readonly string[]): string {
+  const socketImport = sockets.length === 0 ? '' : socketHostImport(runtime, sockets);
+  const application = '__mmd_integrate(__mmd_serve(options), __mmd_integration)';
+  const attach = sockets.length === 0 ? application : `__mmd_sockets(${application}, ${JSON.stringify(sockets)})`;
   const serve = runtime === 'cloudflare'
     ? `export function serve(options) {
   const application = __mmd_integrate(__mmd_serve(options), __mmd_integration);
   const dispatch = application.fetch;
-  application.fetch = (request, options, executionCtx) => dispatch(request,
-    executionCtx === undefined ? options : { platform: { env: options, executionCtx } });
+  application.fetch = (request, options, executionCtx) => {
+    ${sockets.length === 0 ? '' : `if (executionCtx !== undefined && __mmd_isSocket(request)) {
+      return __mmd_forwardSocket(request, options, ${JSON.stringify(SOCKET_BINDING)});
+    }`}
+    return dispatch(request, executionCtx === undefined ? options : { platform: { env: options, executionCtx } });
+  };
   return application;
 }`
     : `export function serve(options) {
-  return __mmd_integrate(__mmd_serve(options), __mmd_integration);
+  return ${attach};
 }`;
   return `export * from '@memoized-dom/server';
 import { serve as __mmd_serve, integrateApplication as __mmd_integrate } from '@memoized-dom/server';
 import { serverFunctionRoutes as __mmd_routes } from ${JSON.stringify(`./${GENERATED.registry.slice('./.memoized/'.length)}`)};
 import __mmd_delivery from ${JSON.stringify(delivery)};
-const __mmd_integration = {
+${socketImport}const __mmd_integration = {
   routes: __mmd_routes,
   document: (request) => __mmd_delivery.document?.(request),
   assets: (request, platform) => __mmd_delivery.assets?.(request, platform),
   routeStyles: __mmd_delivery.routeStyles,
 };
 ${serve}
+`;
+}
+
+function socketHostImport(runtime: 'bun' | 'node' | 'cloudflare', sockets: readonly string[]): string {
+  if (runtime === 'cloudflare') {
+    return `import { forwardCloudflareSocket as __mmd_forwardSocket, matchesCloudflareSocket as __mmd_matchesSocket } from '@memoized-dom/server/ws-cloudflare';
+const __mmd_socketPaths = new Set(${JSON.stringify(sockets)});
+const __mmd_isSocket = (request) => __mmd_matchesSocket(request, __mmd_socketPaths);
+`;
+  }
+  const attach = runtime === 'bun' ? 'attachBunSockets' : 'attachNodeSockets';
+  return `import { ${attach} as __mmd_sockets } from '@memoized-dom/server/ws-${runtime}';\n`;
+}
+
+function cloudflareSocketHostModule(entry: string, sockets: readonly string[]): string {
+  // Read the default backend only on dispatch, after the entry's exports initialize.
+  return `import backend from ${JSON.stringify(relativeModule(GENERATED.socketHost, entry, true))};
+import { cloudflareSocketHost } from '@memoized-dom/server/ws-cloudflare';
+export const ${SOCKET_HOST} = cloudflareSocketHost((request, platform) =>
+  backend.fetch(request, { platform }), ${JSON.stringify(sockets)});
 `;
 }
 

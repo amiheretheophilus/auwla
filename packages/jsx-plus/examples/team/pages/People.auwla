@@ -1,4 +1,5 @@
 import { Group } from '@memoized-dom/data';
+import {navigate} from "@memoized-dom/router"
 import { getPeople } from '../api';
 import { note } from '../lifecycle';
 
@@ -20,9 +21,12 @@ export function People() {
   const request = $track(people);
 
   let count = 0
-  let message = ""
-  if(count > 10)  message = "yeah"
-  else message = "one"
+  const nav = count > 10 && navigate("/")
+  
+  // if(count > 10){
+  //   console.log(count)
+  //   navigate("/")
+  // } error this never get replayed 
 
   $effect(() => {
     note('people:shown');
@@ -32,12 +36,12 @@ export function People() {
   return (
     <div class="people">
       <input
-        type="search"
+        type="searchc"
         placeholder="Search people"
         onInput={event => search = event.currentTarget.value}
       />
 
-      <button onClick={()=>count++}></button>
+      <button onClick={()=>count++}>"count is {count}"</button>
 
       if (request.refreshing) {
         <p class="refreshing">"Updating…"</p>

@@ -29,7 +29,7 @@ function optionalId(value: unknown): boolean {
   return value === undefined || (typeof value === 'string' && value.length > 0);
 }
 
-function isShape(value: unknown): value is Shape {
+export function isShape(value: unknown): value is Shape {
   if (!record(value)) {
     return false;
   }
@@ -57,14 +57,14 @@ function uniqueIds(items: { id: string }[]): boolean {
   return new Set(items.map(item => item.id)).size === items.length;
 }
 
-function isPage(value: unknown): value is Page {
+export function isPage(value: unknown): value is Page {
   return record(value)
     && typeof value.id === 'string' && value.id.length > 0
     && typeof value.name === 'string'
     && Array.isArray(value.shapes) && value.shapes.every(isShape) && uniqueIds(value.shapes);
 }
 
-function isProject(value: unknown): value is Project {
+export function isProject(value: unknown): value is Project {
   if (!record(value) || value.version !== 1 || typeof value.activeId !== 'string') {
     return false;
   }

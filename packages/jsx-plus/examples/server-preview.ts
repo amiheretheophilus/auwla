@@ -40,7 +40,11 @@ export interface ServerPreviewOptions {
 interface Served {
   /** The browser's files, by the URL the page asks for. */
   readonly assets: Map<string, BuildArtifact>;
-  readonly server: { fetch(request: Request): Promise<Response> };
+  readonly server: {
+    fetch(request: Request, options?: { platform: unknown }): Promise<Response | undefined>;
+    readonly websocket?: Bun.WebSocketHandler<unknown>;
+    closeSockets?(): Promise<void>;
+  };
 }
 
 export async function serverPreview(folder: URL, name: string, defaultPort: number, options: ServerPreviewOptions): Promise<void> {
@@ -104,19 +108,30 @@ export async function serverPreview(folder: URL, name: string, defaultPort: numb
 
   let served = first;
   const pages = liveReload();
-  const listening = Bun.serve({
-    hostname: '127.0.0.1',
+  async function fetch(request: Request, platform: Bun.Server<unknown>): Promise<Response | undefined> {
+    const reload = pages.answer(request);
+    if (reload !== undefined) return reload;
+
+    const asset = served.assets.get(new URL(request.url).pathname);
+    if (asset !== undefined) return new Response(asset, { headers: { 'Content-Type': asset.type } });
+
+    const response = await served.server.fetch(request, { platform });
+    return response === undefined ? undefined : pages.withScript(response);
+  }
+
+  const listenerOptions = {
+    hostname: '127.0.0.1' as const,
     port: Number(process.env.AUWLA_EXAMPLE_PORT ?? defaultPort),
     // The reload stream stays open while its page does.
     idleTimeout: 0,
-    async fetch(request) {
-      const reload = pages.answer(request);
-      if (reload !== undefined) return reload;
-      const asset = served.assets.get(new URL(request.url).pathname);
-      if (asset !== undefined) return new Response(asset, { headers: { 'Content-Type': asset.type } });
-      return pages.withScript(await served.server.fetch(request));
-    },
-  });
+  };
+  const listening = first.server.websocket === undefined
+    ? Bun.serve({ ...listenerOptions, fetch: fetchHttp })
+    : Bun.serve({ ...listenerOptions, websocket: first.server.websocket, fetch });
+
+  async function fetchHttp(request: Request, platform: Bun.Server<unknown>): Promise<Response> {
+    return await fetch(request, platform) ?? new Response('No response from preview server', { status: 500 });
+  }
   console.log(`${name} preview: ${listening.url} (rebuilds when a file in the folder changes)`);
 
   watchFolder(root, async (changed) => {
@@ -127,7 +142,12 @@ export async function serverPreview(folder: URL, name: string, defaultPort: numb
       console.error(`${name}: the preview still serves the last build.`);
       return;
     }
+    const previous = served;
     served = next;
+    if (next.server.websocket !== undefined) {
+      listening.reload({ fetch, websocket: next.server.websocket });
+    }
+    await previous.server.closeSockets?.();
     pages.reload();
     console.log(`${name} rebuilt in ${Math.round(performance.now() - started)} ms`);
   });

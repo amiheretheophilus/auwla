@@ -150,9 +150,73 @@ parameter, preserving its JSON types before validation. Schema output is passed
 directly to the handler, including transformed values and defaults. Validation
 issues return HTTP 400 with `error: 'invalid_server_function_input'` and `issues`.
 
-Names must be unique across the flat `#server-functions` barrel. Every handler
+Names must be unique across the flat `#server-functions` barrel. HTTP handlers
 must be inline and async. The injected context and schema input may be
-destructured; transported parameters without a schema must be named identifiers.
+destructured. Transported parameters without a schema must be named identifiers.
+
+## WebSocket rooms
+
+Use `websocket` as the handler when the same connection should read a room,
+send changes, and receive updates. The `live` callback chooses the room from
+the same server context and arguments that the handler receives. Declare the
+handler first so TypeScript can infer the positional arguments in `live`.
+Every connection to this function that returns the same key joins the same
+group, even when its connection arguments differ.
+
+```ts
+export const chat = define.function({
+  async websocket({ state, services }, channel: string) {
+    if (!state.user) return new Response('Sign in first', { status: 401 });
+
+    return {
+      initial: () => services.chat.history(channel),
+      message(text: string) {
+        return services.chat.add(channel, state.user.id, text);
+      },
+    };
+  },
+  live: (_context, channel) => ['chat', channel],
+});
+```
+
+```ts
+import { $track } from '@memoized-dom/data';
+import { chat } from '#server-functions';
+
+const room = chat('design');
+const stop = room.onMessage(value => showChatUpdate(value));
+const history = await room.ready;
+const receipt = await room.send('Ready for review');
+const status = $track(room).status;
+
+// When leaving the room or disposing its owner:
+stop();
+room.close();
+```
+
+- Middleware, services, and `input` validation run during the upgrade. Keep
+  confidential data out of connection arguments because browsers send them in
+  the upgrade URL. Validate each incoming message in `message` before using it.
+- `initial` can be a value or an async reader. Only the joining connection
+  receives it. A lazy reader runs in order with messages in the room.
+- A returned message reaches every connected client in the room, including
+  the sender. `send()` also resolves with the handler's result. Return
+  `replyToSocket(value)` from `@memoized-dom/server` for a sender-only result,
+  or return `undefined` to acknowledge without broadcasting.
+- `ready` resolves with the first initial value. `onMessage` receives the initial
+  value, public updates, and a fresh initial value after reconnecting. `$track`
+  exposes `status` (`connecting`, `open`, `closed`, `error`) and `error`.
+  An interrupted `send()` rejects because the server may already have handled it.
+- Open the connection in browser setup or an event handler and call `close()`
+  when the connection's owner goes away. `close` on the server session is an
+  optional hook for releasing resources. A value it returns is sent to the
+  remaining room members. SSR renders without opening a socket.
+
+Bun and Node host rooms within the server process. The Cloudflare CLI build
+generates a `MEMOIZED_WEBSOCKETS` Durable Object binding and migration. With
+custom Worker configuration, bind that name to the generated
+`MemoizedWebSocketHost` class and add it to `new_sqlite_classes`. The object keeps
+its sockets awake because sessions can hold application closures.
 
 ## Status, cookies, and errors
 

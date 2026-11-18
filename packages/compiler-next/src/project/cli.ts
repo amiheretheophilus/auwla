@@ -17,7 +17,7 @@ import { basename, relative, resolve } from 'node:path';
 import type { BuildOutput, BunPlugin } from 'bun';
 import { createApplication, type ServerOptions } from '../server/application';
 import { deliveryModule, workerConfig, type ServerRuntime } from '../server/delivery';
-import { memoizedDom } from './bun';
+import { memoizedDom, memoizedDomApplication } from './bun';
 import { fileSystemHost, normalizeProjectPath } from './host';
 import { packageLibrary } from './packages/package';
 
@@ -154,9 +154,13 @@ async function build(command: ApplicationCommand, log: (line: string) => void): 
   const document = await documentOf(client, clientOut);
   const files = client.outputs.map((output) => relative(clientOut, output.path).replaceAll('\\', '/'));
   const delivery = deliveryModule({ runtime: command.runtime, document, files });
+  if (command.runtime === 'cloudflare') {
+    const application = memoizedDomApplication({ ...shared, delivery });
+    const compiled = await application.build();
+    const webSockets = compiled.functions.some(module => module.functions.some(fn => fn.method === 'WEBSOCKET'));
+    return buildWorker(command, server, [application.plugin('server')], webSockets, log);
+  }
   const plugins = [memoizedDom({ ...shared, target: 'server', delivery })];
-
-  if (command.runtime === 'cloudflare') return buildWorker(command, server, plugins, log);
   const backend = await Bun.build({
     entrypoints: [resolve(root, server.entry)],
     outdir: command.out,
@@ -175,7 +179,13 @@ async function build(command: ApplicationCommand, log: (line: string) => void): 
  * Worker's own modules (`cloudflare:workers`) and Node's built-ins, which `nodejs_compat` provides,
  * stay imports.
  */
-async function buildWorker(command: ApplicationCommand, server: ServerOptions, plugins: BunPlugin[], log: (line: string) => void): Promise<number> {
+async function buildWorker(
+  command: ApplicationCommand,
+  server: ServerOptions,
+  plugins: BunPlugin[],
+  webSockets: boolean,
+  log: (line: string) => void,
+): Promise<number> {
   const worker = await Bun.build({
     entrypoints: [resolve(command.root, server.entry)],
     outdir: command.out,
@@ -189,7 +199,7 @@ async function buildWorker(command: ApplicationCommand, server: ServerOptions, p
     throw: false,
   });
   if (!report(worker, log)) return 1;
-  const config = workerConfig({ name: basename(command.root), main: './worker.js', assets: './client' });
+  const config = workerConfig({ name: basename(command.root), main: './worker.js', assets: './client', webSockets });
   const file = resolve(command.out, 'wrangler.json');
   await Bun.write(file, `${JSON.stringify(config, null, 2)}\n`);
   log(`wrote ${file}`);

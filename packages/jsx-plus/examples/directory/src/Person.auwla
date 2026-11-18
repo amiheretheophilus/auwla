@@ -6,6 +6,19 @@ export function Person() {
   // the server renders, it runs there; after a link click, the browser asks the server for it.
   const person = $routed(({ params }) => findPerson(params.id));
 
+  /**
+  
+  const person = $routed(({ params }) => {
+    let person: Person|null = {} as unknown as Person;
+
+    setTimeout(()=>{
+      person = findPerson(params.id)
+    },3000)
+
+    return person
+  }); get an error sometime needs invetigation
+  */
+
   return (
     <article class="person">
       if (person === null) {

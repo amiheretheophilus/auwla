@@ -29,8 +29,10 @@ interface BoardInput {
   select(id?: string, toggle?: boolean): void;
   selectMany(ids: string[], extend: boolean): void;
   editText(id: string): void;
+  activity(action?: string): void;
   preview(shapes: Shape[], marquee?: Bounds): void;
-  finish(shapes: Shape[]): void;
+  previewMove(shapes: Shape[]): void;
+  finish(shapes: Shape[], moved: boolean): void;
 }
 
 export function screenPoint(element: Element, event: MouseEvent): Point {
@@ -67,6 +69,7 @@ export function bindGestures(canvas: HTMLCanvasElement, input: BoardInput): () =
 
   function beginPan(screen: Point): void {
     if (drag?.kind !== 'pan') {
+      if (drag?.kind === 'move') input.previewMove([]);
       drag = { kind: 'pan', start: screen, camera: input.camera() };
 
       // Space takes over from an unfinished edit. The camera moves from the last pointer position.
@@ -108,6 +111,7 @@ export function bindGestures(canvas: HTMLCanvasElement, input: BoardInput): () =
   function switchToPan(): void {
     if (pointer !== undefined) {
       beginPan(pointer.last);
+      input.activity('Panning');
     }
   }
 
@@ -138,6 +142,13 @@ export function bindGestures(canvas: HTMLCanvasElement, input: BoardInput): () =
     // Track presses on empty or locked areas too. Space can turn a held press into a pan.
     pointer = { id: event.pointerId, last: screen };
     canvas.setPointerCapture(event.pointerId);
+    if (drag?.kind === 'pan') {
+      input.activity('Panning');
+    } else if (drag?.kind === 'draw') {
+      input.activity(`Drawing · ${drag.shape.kind}`);
+    } else if (drag !== undefined) {
+      input.activity(drag.kind === 'marquee' ? 'Selecting objects' : drag.kind === 'resize' ? 'Resizing an object' : 'Moving objects');
+    }
   }
 
   function moveSelection(gesture: Extract<Gesture, { kind: 'move' }>, point: Point): Shape[] {
@@ -192,6 +203,7 @@ export function bindGestures(canvas: HTMLCanvasElement, input: BoardInput): () =
       marquee = distance < 3 ? undefined : boundsFrom(drag.start, point);
     } else if (drag.kind === 'move') {
       changed = moveSelection(drag, world(screen, false));
+      input.previewMove(changed);
     } else {
       const shape = updateTransform(drag, world(screen, false), input.camera().zoom, input.snap());
       changed = shape === undefined ? [] : [shape];
@@ -216,18 +228,20 @@ export function bindGestures(canvas: HTMLCanvasElement, input: BoardInput): () =
       input.selectMany(ids, drag.extend);
     }
 
+    const moved = drag?.kind === 'move';
     pointer = undefined;
     drag = undefined;
     changed = [];
     marquee = undefined;
     panShortcut.end();
     input.preview([]);
-    if (commit) {
-      const edits = final.filter(shape => shape.points === undefined || shape.width + shape.height > 2);
-      if (edits.length > 0) {
-        input.finish(edits);
-      }
+    const edits = commit ? final.filter(shape => shape.points === undefined || shape.width + shape.height > 2) : [];
+    if (edits.length > 0) {
+      input.finish(edits, moved);
+    } else if (moved) {
+      input.previewMove([]);
     }
+    input.activity();
   }
 
   const up = (event: PointerEvent) => end(event, true);

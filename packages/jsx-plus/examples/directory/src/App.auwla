@@ -1,17 +1,30 @@
 import { createPerson, listPeople } from '#server-functions';
+import { type Person as P} from '#server/people.auwla';
 import { Person } from './Person.auwla';
 
 function Everyone() {
   // A server function's GET is a source: rendered on the server, then adopted by the browser.
-  const people = listPeople();
+ 
+  const people = $routed(({routeState})=>{
+      let people = routeState.people as unknown as P[]
+      
+      if(!people){
+        people = listPeople()
+        routeState.people = people;
+      }
+
+      return people;
+
+  })
+
   let name = '';
 
   async function add(event: SubmitEvent) {
     event.preventDefault();
     if (name.trim() === '') return;
-    await createPerson(name.trim(), 'New');
+    const result = await createPerson(name.trim(), 'New');
     name = '';
-    $track(people).refresh();
+    people.push(result)
   }
 
   return (

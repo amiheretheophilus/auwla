@@ -7,7 +7,12 @@ interface TextSurface {
 }
 
 /** Both text fields preview on input and commit one edit when the field closes. */
-export function createTextEditing(project: ReturnType<typeof createDocument>, surface: TextSurface, publish: () => void) {
+export function createTextEditing(
+  project: ReturnType<typeof createDocument>,
+  surface: TextSurface,
+  publish: () => void,
+  activity: (editing: boolean) => void,
+) {
   let inlineId: string | undefined;
   let previewId: string | undefined;
 
@@ -19,6 +24,7 @@ export function createTextEditing(project: ReturnType<typeof createDocument>, su
 
     project.selectOnly(shape.id);
     inlineId = shape.id;
+    activity(true);
     publish();
     return true;
   }
@@ -30,6 +36,7 @@ export function createTextEditing(project: ReturnType<typeof createDocument>, su
     }
 
     previewId = id;
+    activity(true);
     surface.previewText({ ...shape, text });
   }
 
@@ -50,6 +57,7 @@ export function createTextEditing(project: ReturnType<typeof createDocument>, su
     }
 
     const committed = text !== undefined && project.setText(id, text);
+    activity(false);
     if (wasInline && !committed) {
       publish();
     }
