@@ -148,7 +148,10 @@ Error recovery resets the listener depth at the next microtask without adding
 
 Direct property assignment/update/delete now bumps the root binding's version.
 Native member targets notify each successful pattern/loop store independently;
-computed keys convert once before the RHS. A mutation never takes over the root
+computed keys convert once before the RHS. The mutation emitter starts from the
+authored member's receiver and key and applies rewrites to each child. This keeps
+the target assignable when source readiness wraps the whole property access as a
+read, as with a member ref on a component prop. A mutation never takes over the root
 binding or makes a const assignment illegal. Definite property builders replay
 silently with their inputs. Three comparison cases in `cases/handlers.mutations.test.ts`
 verify derived readers, retained edits and body replay. Opaque receiver/argument

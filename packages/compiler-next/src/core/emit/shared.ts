@@ -170,7 +170,8 @@ export function emitShared(
       ? [statement('$$data.ownSourceFrame($$frame, null);', { data, frame: owner.frame })]
       : [];
     const body = finishSharedOwner(owner, memos.setup, memos.snapshots, memos.update, names, enterSource);
-    return [...owner.declarations, ...sourceReadinessStorage(plan, owner.plan.fn, names), ...effects.declarations, ...takeovers.get(owner)!.declarations,
+    const readiness = owner.plan.block === null ? sourceReadinessStorage(plan, owner.plan.fn, names) : [];
+    return [...owner.declarations, ...readiness, ...effects.declarations, ...takeovers.get(owner)!.declarations,
       ...(mutationDeclarations.get(owner) ?? []), ...replay.declarations, ...body];
   };
   for (const owner of [...state.owners].sort((a, b) => (b.plan.block?.start ?? b.plan.fn?.start ?? -1) - (a.plan.block?.start ?? a.plan.fn?.start ?? -1))) {

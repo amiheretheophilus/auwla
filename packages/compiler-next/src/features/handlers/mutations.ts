@@ -206,9 +206,8 @@ export function emitMutations(
     // Reads holding a package's value, whose state a snapshot may not see (`package-values.ts`).
     const packageReads: Expression[] = [];
     for (const { binding, member } of plan.targets) {
-      if (plan.kind !== 'call' && !is.MemberExpression(member)) continue;
-      const notify = notifierOf(binding);
       if (plan.kind === 'call') {
+        const notify = notifierOf(binding);
         const payload = options.values?.get(binding);
         const values = payload === undefined
           ? options.importedValues?.get(binding.binding) ?? [expression('$$binding', { binding: binding.binding.name })]
@@ -221,20 +220,24 @@ export function emitMutations(
         }
         continue;
       }
+
+      if (!is.MemberExpression(member) || is.PrivateIdentifier(member.property)) {
+        continue;
+      }
+
+      // A source guard can wrap a ref's whole property access as a read.
+      // A write still needs the authored receiver and key, with their own rewrites.
+      const object = copy(member.object, replacements);
+      const key = member.computed ? copy(member.property, replacements) : stringLiteral(member.property.name);
+      const notify = notifierOf(binding);
+
       if (plan.kind === 'delete') {
-        if (!is.MemberExpression(member)) continue;
-        const target = copy(member, replacements);
         replacements.set(plan.operation, expression('$$runtime.deleteMutation($$object, $$key, $$notify)', {
-          runtime, object: target.object,
-          key: target.computed ? target.property : stringLiteral((target.property as { name: string }).name), notify,
+          runtime, object, key, notify,
         }));
       } else {
-        if (!is.MemberExpression(member)) continue;
-        if (is.PrivateIdentifier(member.property)) continue;
-        const target = copy(member, replacements);
         replacements.set(member, expression('$$runtime.mutationTarget($$object, $$key, $$notify).value', {
-          runtime, object: target.object,
-          key: target.computed ? target.property : stringLiteral((target.property as { name: string }).name), notify,
+          runtime, object, key, notify,
         }));
       }
     }

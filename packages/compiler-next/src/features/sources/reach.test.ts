@@ -1,5 +1,6 @@
 /** Where readiness is emitted (`wiki/compiler/sources.md`). Behavior is pinned by `tests/cases/sources.test.ts`. */
 import { describe, expect, it } from 'bun:test';
+import { analyze } from 'yuku-analyzer';
 import { compileModules } from '../../pipeline';
 
 function compile(source: string, modules: Record<string, string> = {}): string {
@@ -41,6 +42,43 @@ describe('readiness reach', () => {
 
     expect(output).toMatch(/readSourceValue\(value\)/);
     expect(output).not.toMatch(/readSourceValue\(label\)/);
+  });
+
+  it('keeps guarded member refs assignable', () => {
+    const output = compile(`
+      import { $read } from '@memoized-dom/data';
+      export function App({ editor, key }) {
+        const label = $read(Promise.resolve('ready'));
+        return <main>
+          <canvas ref={editor.connect} />
+          <div ref={editor[key]} />
+          <p>{label}</p>
+        </main>;
+      }`);
+
+    expect(output).toMatch(/mutationTarget\([^\n]*"connect", [\w$]+\)\.value = _refNode\d+/);
+    expect(output).toMatch(/mutationTarget\([^\n]*readSourceValue\(key\), [\w$]+\)\.value = _refNode\d+/);
+  });
+
+  it('keeps readiness in the function when a nested block has shared state', () => {
+    const source = `
+      import { $read } from '@memoized-dom/data';
+      export function build(box) {
+        if (box.items) {
+          const size = measure(box);
+          return box.items.map(point => point.x - size.x);
+        }
+
+        const size = measure(box);
+        return size.x;
+      }`;
+    const output = compileModules({ './build.ts': source })['./build.ts']!;
+    const module = analyze(output, { lang: 'ts', sourceType: 'module' });
+    const references = module.references.filter((reference) => /^_source(Step|Binding)/.test(reference.name));
+    const unresolved = references.filter((reference) => reference.binding === null);
+
+    expect(references.length).toBeGreaterThan(0);
+    expect(unresolved.map((reference) => reference.name)).toEqual([]);
   });
 
   it('assumes values from unknown code can hold one once a raw source reaches it', () => {

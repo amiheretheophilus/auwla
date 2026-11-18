@@ -423,6 +423,15 @@ runtime the author holds shows its data when it arrives`.
 Every readiness helper is the identity for a value that is neither a source
 handle nor a pending marker (`WaitingSourceInputs`): `readSourceValue` returns
 it, `whenSourceInputs` ignores it as an input, `presentSourceValue` returns it.
+A readiness guard around a member ref is a read rewrite. The ref's implicit
+write still uses the authored receiver and key, including source reads inside
+them (`handlers.md`, `reach.test.ts`).
+
+Builder steps and binding readiness cells live in their function invocation or
+the module. A nested block can own reactive bindings while its builder still
+uses the function's readiness storage. `reach.test.ts` covers a helper with
+readiness-guarded code on both sides of a reactive block.
+
 Until 2026-10-28 any module of a graph importing `@memoized-dom/data` wrapped
 every read, guard and JSX child, so FlowOS emitted 439 `readSourceValue` and 243
 `whenSourceInputs` calls. `features/sources/reach.ts` proves which values can

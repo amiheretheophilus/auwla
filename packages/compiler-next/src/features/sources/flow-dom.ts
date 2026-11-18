@@ -347,7 +347,8 @@ export function emitSourceFlow(
   keepShortCircuits(module.findAll('ChainExpression'), new Set(flow.memberObjects), replacements, names, data, declarations);
 
   for (const fn of module.findAll(['FunctionDeclaration', 'FunctionExpression', 'ArrowFunctionExpression'])) {
-    if (plan.components.has(fn) || plan.sharedOwners.some((owner) => owner.fn === fn)
+    // A nested block can own reactive bindings without owning the function's readiness.
+    if (plan.components.has(fn) || plan.sharedOwners.some((owner) => owner.fn === fn && owner.block === null)
       || !is.BlockStatement(fn.body)) {
       continue;
     }

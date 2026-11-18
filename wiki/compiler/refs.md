@@ -38,7 +38,9 @@ Makes element refs reactive, so a user never needs a ref plus an effect
   `box.classList.add(…)`) are DOM work, not state writes. Only rebinding the ref is
   a write.
 - A member ref (`ref={nodes.box}`) writes through its root; `nodes` is ordinary
-  state.
+  state. Its assignment uses the member's receiver and key even when source
+  readiness wraps the ref expression as a read. `reach.test.ts` covers static
+  and computed member refs on a prop.
 - A callback ref (`ref={n => …}`) is a handler: state it writes updates its
   readers. If it reads state, it re-runs when that state changes, running its
   cleanup first (roadmap).
