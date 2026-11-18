@@ -395,6 +395,13 @@ an object is wrapped in `markExplicitResource` (`markExplicitFetches`, `features
 and `isResolvedSource` in `packages/data` leaves a marked resource alone. The case is `a resource from
 a runtime the author holds shows its own status`.
 
+Left alone, it was also never followed: a page read `user.data?.name` once and kept the blank when the
+data came (found by the bundle audit's browser check, `bench/package-size`, `request-opaque`). Now
+`readSourceValue` tracks a marked resource's status (`trackExplicitResourceRead`, `transparent.ts`),
+which every transition moves, so a site reading through it is evaluated again; the subscription is on
+the resource itself, since `observeResolvedValue` follows sources only. The case is `a resource from a
+runtime the author holds shows its data when it arrives`.
+
 ## Where to add things
 
 - A new kind of source: one recognizer in `classify.ts`. Readiness follows from

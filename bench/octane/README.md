@@ -54,20 +54,17 @@ bun run bench:octane:setup
 bun run bench:octane
 ```
 
-`bun run bench:vm` (`../README.md`) runs these steps, and the DOM suite, with
-compiler-next in one command. To run Octane alone with compiler-next:
+`bun run bench:vm` (`../README.md`) runs these steps, and the DOM suite, in one
+command. To run Octane alone:
 
 ```sh
-BENCH_COMPILER=next bun run bench:octane
+bun run bench:octane
 ```
 
-compiler-next's app is built into `memoized-dom/dist.next/`, beside the existing
-compiler's `memoized-dom/dist/`, so both outputs can be read. The report records
-the selected compiler. `BENCH_COMPILER=next` also works with
-`--before-ref=COMMIT`: the baseline keeps that commit's old compiler/runtime,
-and the after build uses compiler-next with the current runtime. Without it the
-existing compiler remains the default; `--compiler=<path>` selects any other
-compiler entry.
+The app is built into `memoized-dom/dist/`; a snapshot compiler (`--compiler=<path>`) builds
+into `memoized-dom/dist.custom/`. The report records the compiler. With `--before-ref=COMMIT`
+the baseline keeps that commit's own `packages/compiler` and runtime (the old compiler at
+`d6e678b`), and the after build uses this checkout's compiler and runtime.
 
 For a local correctness check that needs neither upstream dependencies nor a
 browser installation, run `bun test src/features/components/bench.test.ts` in

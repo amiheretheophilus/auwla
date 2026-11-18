@@ -1,20 +1,19 @@
 /** In-process HTTP SSR benchmark; compilation and per-request gates are untimed. */
 import assert from 'node:assert/strict';
-import { createHash } from 'node:crypto';
 import { performance } from 'node:perf_hooks';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { cpus, totalmem } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { compileModules } from '@memoized-dom/compiler';
+import { compileModules } from '@memoized-dom/compiler-next';
 import { resetScheduler, setScheduler } from '@memoized-dom/runtime';
-import { serve, type RenderPolicy, type RenderReport, type ServerComponent } from '../../packages/server/src/index';
+import { createDefine, serve, type RenderPolicy, type RenderReport, type ServerComponent } from '../../packages/server/src/index';
 import { TABLE_SOURCE, DASHBOARD_SOURCE } from './scenarios';
 
 const FEED_SOURCE = `
 import { $fetch, Group } from '@memoized-dom/data';
 function Pending() { return <p class="pending">Loading feed</p>; }
-function Item(entry) {
+function Item({ entry }) {
   return <li class={entry.hot ? 'hot' : 'cold'}><a href={entry.href}>{entry.title}</a> <span>{entry.score}</span></li>;
 }
 export function Feed() {
@@ -26,39 +25,30 @@ export function Feed() {
 const ROUTED_SOURCE = `
 import { $routed, redirectRoute } from '@memoized-dom/router';
 export function Report() {
-  const page = $routed(async ({ params, locals, services, signal }) => {
-    if (locals.token === 'redirect') return redirectRoute('/login');
+  const page = $routed(async ({ params, state, services, signal }) => {
+    if (state.token === 'redirect') return redirectRoute('/login');
     await services.prepare(signal);
-    return { title: 'Report ' + params.id, token: locals.token };
+    return { title: 'Report ' + params.id, token: state.token };
   });
   return <main route="/reports/:id"><h1>{page.title}</h1><p>{page.token}</p></main>;
 }`;
 const outDir = join(import.meta.dirname, 'dist');
-const ssrWriter = process.argv.includes('--writer');
-const paired = process.argv.includes('--paired');
-assert(!(paired && ssrWriter), 'use --paired or --writer');
 mkdirSync(outDir, { recursive: true });
-async function load(name: string, source: string, writer: boolean) {
+async function load(name: string, source: string) {
   const id = `./http-${name}.tsx`;
   const component = name === 'feed' ? 'Feed' : name === 'routed' ? 'Report' : 'App';
   const output = compileModules({
     [id]: source,
     './main.ts': `import { mount } from '@memoized-dom/runtime'; import { ${component} } from '${id}'; mount('root', ${component});`,
-  }, { routedEnvironment: 'server', ssrWriter: writer });
-  if (writer && (name === 'table' || name === 'dashboard')) assert(output[id]!.includes('.htmlWriter'));
-  const path = join(outDir, `${name}.${writer ? 'writer' : 'baseline'}.http.compiled.ts`);
+  }, { routedEnvironment: 'server' });
+  const path = join(outDir, `${name}.http.compiled.ts`);
   writeFileSync(path, output[id]!);
   return import(pathToFileURL(path).href);
 }
-const variants = [];
-for (const writer of paired ? [false, true] : [ssrWriter]) {
-  variants.push({ label: writer ? 'writer' : 'baseline',
-    table: await load('table', TABLE_SOURCE, writer),
-    dashboard: await load('dashboard', DASHBOARD_SOURCE, writer),
-    feed: await load('feed', FEED_SOURCE, writer),
-    routed: await load('routed', ROUTED_SOURCE, writer) });
-}
-const { table, dashboard, feed, routed } = variants[0]!;
+const table = await load('table', TABLE_SOURCE);
+const dashboard = await load('dashboard', DASHBOARD_SOURCE);
+const feed = await load('feed', FEED_SOURCE);
+const routed = await load('routed', ROUTED_SOURCE);
 const PREFIX = '<!doctype html><html><head><meta charset="utf-8"><title>bench</title><link rel="stylesheet" href="/app.css"><script type="module" src="/main.js"></script></head><body><div id="root">';
 const SUFFIX = '</div></body></html>';
 const TEMPLATE = PREFIX + '<!--ssr-outlet-->' + SUFFIX;
@@ -97,12 +87,14 @@ function createApp(scenario: Scenario) {
   const reports = new Map<string, RenderReport>();
   const waiters = new Map<string, (report: RenderReport) => void>();
   const signals: AbortSignal[] = [];
-  const app = serve<{ token: string }, unknown, { prepare(signal: AbortSignal): Promise<void> }>({
-    createLocals: request => ({ token: request.headers.get('x-request-token')! }),
-    createServices: () => ({ prepare: async signal => {
-      signals.push(signal);
-      await delay(scenario.preparation ?? 0, signal);
-    } }),
+  const define = createDefine<{ token: string }, unknown, { prepare(signal: AbortSignal): Promise<void> }>();
+  define.service('prepare', () => async (signal: AbortSignal) => {
+    signals.push(signal);
+    await delay(scenario.preparation ?? 0, signal);
+  });
+  const app = serve({
+    define,
+    state: request => ({ token: request.headers.get('x-request-token')! }),
     onRender: report => {
       const id = report.url.searchParams.get('sample')!;
       assert(!reports.has(id), `duplicate render report: ${id}`);
@@ -146,7 +138,6 @@ interface Sample {
   outcome: RenderReport['outcome'];
   renderMs: number;
   settleMs?: number;
-  outputHash?: string;
 }
 
 async function request(harness: ReturnType<typeof createApp>, scenario: Scenario, id: string): Promise<Sample> {
@@ -209,8 +200,7 @@ async function request(harness: ReturnType<typeof createApp>, scenario: Scenario
     }
   }
   return { id, ttfb, firstApplicationByte, complete, bytes, chunks: chunks.length,
-    status: response.status, outcome: report.outcome, renderMs: report.durationMs, settleMs: report.settleMs,
-    ...(paired ? { outputHash: createHash('sha256').update(html).digest('hex') } : {}) };
+    status: response.status, outcome: report.outcome, renderMs: report.durationMs, settleMs: report.settleMs };
 }
 
 function percentile(values: number[], p: number): number | null {
@@ -292,40 +282,28 @@ const scenarios: Scenario[] = [
   { name: 'routed preparation', component: routed.Report, kind: 'routed', policy: {}, preparation: 30, concurrency: 20, requests: 100, expected: 'complete' },
   { name: 'routed redirect', component: routed.Report, kind: 'routed', policy: {}, redirect: true, concurrency: 10, requests: 50, expected: 'redirect' },
 ];
-const selected = scenarios.filter(scenario => filter ? scenario.name.includes(filter)
-  : !paired || scenario.kind === 'table' || scenario.kind === 'dashboard');
+const selected = scenarios.filter(scenario => !filter || scenario.name.includes(filter));
 assert(selected.length, `no scenario matches ${filter}`);
-const results: (Awaited<ReturnType<typeof run>> & { variant: string })[] = [];
+const results: Awaited<ReturnType<typeof run>>[] = [];
 setScheduler(run => run());
 try {
   for (let round = 0; round < repeats; round++) {
     for (const scenario of round % 2 ? [...selected].reverse() : selected) {
-      const pair = [];
-      for (const variant of round % 2 ? [...variants].reverse() : variants) {
-        const component = variant[scenario.kind][scenario.kind === 'feed' ? 'Feed' : scenario.kind === 'routed' ? 'Report' : 'App'];
-        const configured = { ...scenario, component };
-        const result = { ...await run(quick ? { ...configured, requests: Math.min(scenario.requests, 12), concurrency: Math.min(scenario.concurrency, 4) } : configured, round), variant: variant.label };
-        results.push(result);
-        pair.push(result);
-        console.log(`${scenario.name} ${variant.label} round ${round + 1}: ${result.outcomes[scenario.expected]} gates passed`);
-      }
-      if (paired) {
-        const hashes = (result: typeof pair[number]) => result.samples.map(sample =>
-          [sample.id, sample.status, sample.outcome, sample.bytes, sample.outputHash]).sort((a, b) => String(a[0]).localeCompare(String(b[0])));
-        assert.deepEqual(hashes(pair[0]!), hashes(pair[1]!), `${scenario.name}: paired response parity`);
-      }
+      const result = await run(quick ? { ...scenario, requests: Math.min(scenario.requests, 12), concurrency: Math.min(scenario.concurrency, 4) } : scenario, round);
+      results.push(result);
+      console.log(`${scenario.name} round ${round + 1}: ${result.outcomes[scenario.expected]} gates passed`);
     }
   }
 } finally { resetScheduler(); }
-writeFileSync(join(outDir, paired ? 'http-paired-results.json' : ssrWriter ? 'http-writer-results.json' : 'http-results.json'), JSON.stringify({
+writeFileSync(join(outDir, 'http-results.json'), JSON.stringify({
   measuredAt: new Date().toISOString(), runtime: process.versions, platform: process.platform,
   arch: process.arch, cpu: cpus()[0]?.model, logicalCpus: cpus().length, totalMemory: totalmem(),
-  quick, repeats, ssrWriter, paired, forcedGc: typeof (globalThis as { gc?: unknown }).gc === 'function',
+  quick, repeats, forcedGc: typeof (globalThis as { gc?: unknown }).gc === 'function',
   methodology: 'In-process Request→Response→reader; excludes network and paint. Per-request clocks exclude validation; throughput/CPU include gates and memory sampling. 5ms sampled memory is a lower bound on peak live memory. Application body remains atomic.',
   results,
 }, null, 2));
 console.table(results.map(result => ({
-  scenario: result.scenario, variant: result.variant, round: result.round + 1, 'req/s': result.requestsPerSecond.toFixed(0),
+  scenario: result.scenario, round: result.round + 1, 'req/s': result.requestsPerSecond.toFixed(0),
   'ttfb p50': result.ttfbMs.p50?.toFixed(2), 'app p50': result.applicationByteMs.p50?.toFixed(2),
   'done p95': result.completionMs.p95?.toFixed(2), 'cpu ms/req': result.cpuMsPerRequest.toFixed(2),
   'heap MB': (result.sampledHeapGrowthBytes / 1048576).toFixed(1), outcomes: JSON.stringify(result.outcomes),

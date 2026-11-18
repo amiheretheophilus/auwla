@@ -1,6 +1,6 @@
 import { readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { compileModules } from '@memoized-dom/compiler';
+import { compileModules } from '@memoized-dom/compiler-next';
 
 export function compileMemoizedApplication(root: string): string {
   const sourceId =

@@ -15,7 +15,7 @@ import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { performance } from 'node:perf_hooks';
 import { Window } from 'happy-dom';
-import { compileModules } from '@memoized-dom/compiler';
+import { compileModules } from '@memoized-dom/compiler-next';
 import { registeredIds, resetScheduler, setScheduler, unregisterSubtree } from '@memoized-dom/runtime/testing';
 
 const FANOUT = Number(process.env.FANOUT ?? 4);

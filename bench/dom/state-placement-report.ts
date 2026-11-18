@@ -16,7 +16,7 @@ export interface StatePlacementResult {
 export function writeStatePlacementReport(directory: string, result: StatePlacementResult): string {
   const lines = [
     '# DOM benchmark: module state and component state', '',
-    `Compiler: ${compiledSuffix() === '.next' ? 'compiler-next' : compiledSuffix() === '' ? 'existing (packages/compiler)' : 'custom'}.`, '',
+    `Compiler: ${compiledSuffix() === '' ? "this checkout's" : 'a snapshot'}.`, '',
     `Measured ${result.measuredAt}. Milliseconds, median of ${result.samples} samples.`, '',
     'Synchronous scheduler. DOM validation runs after every operation outside timing.', '',
   ];
@@ -30,7 +30,7 @@ export function writeStatePlacementReport(directory: string, result: StatePlacem
   lines.push('The mixed placements separate data location from selection location. Component-owned selection uses a prop and owner callback for component rows. These timings include those authored paths; vanilla uses direct node references. Small timings approach timer resolution, and a single run does not establish a universal ranking.', '');
   if (result.updateStyles) lines.push(updateStyleReport(result.updateStyles));
   const report = lines.join('\n');
-  // compiler-next's timings go to `.next` files beside the existing compiler's.
+  // A snapshot's timings go to `.custom` files beside this checkout's.
   const suffix = compiledSuffix();
   writeFileSync(join(directory, `state-placement-latest${suffix}.json`), JSON.stringify(result, null, 2) + '\n');
   writeFileSync(join(directory, `state-placement-results${suffix}.md`), report);

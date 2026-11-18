@@ -18,7 +18,7 @@ bun run bench:vm
 2. the pinned Octane suite: memoized-dom against nine frameworks (`octane/`).
    Its dependencies and Chromium are installed on first use.
 
-Every report lands in one folder, `bench/results/<time>-<commit>-<compiler>/`,
+Every report lands in one folder, `bench/results/<time>-<commit>/`,
 with a summary in its `README.md`. Send that folder back. The run leaves the
 checkout clean, so the next `git pull` works.
 
@@ -27,33 +27,26 @@ checkout clean, so the next `git pull` works.
 | `bun run bench:vm` | everything, timed |
 | `bun run bench:vm --quick` | correctness gates only, and one Octane sample: a check that it all runs |
 | `bun run bench:vm --only=dom` | only the DOM suite (or `--only=octane`) |
-| `bun run bench:vm --before-ref=d6e678b` | also time the baseline commit side by side (DOM ABBA comparison and Octane before/after columns) |
-| `bun run bench:vm --compiler=old` | the same with the existing compiler, for reference |
+| `bun run bench:vm --before-ref=d6e678b` | also time the baseline commit side by side, with its own compiler (DOM ABBA comparison and Octane before/after columns) |
+| `bun run bench:vm --compiler=<entry>` | the same with a snapshot compiler's `src/index.ts`, for reference |
 | `bun run bench:vm --no-build` | skip `bun run build` |
 
 The same command runs on a GitHub runner, started by hand
 (`.github/workflows/bench.yml`; its inputs mirror the options above):
 
 ```sh
-gh workflow run bench.yml --repo amiheretheophilus/auwla --ref compiler-rewrite -f mode=full -f only=all -f compiler=next
+gh workflow run bench.yml --repo amiheretheophilus/auwla --ref compiler-rewrite -f mode=full -f only=all
 gh run download <id> --repo amiheretheophilus/auwla -n bench-results
 ```
 
 A shared runner is noisier than the VM: compare columns within one run, not
 numbers across runs. The run's summary page shows the results table.
 
-Each compiler's output stays separate, so both can be read and run:
-
-| | Existing compiler | compiler-next |
-|---|---|---|
-| DOM apps | `dom/compiled-*.ts` | `dom/compiled-*.next.ts` |
-| DOM update styles | `dom/dist/update-style/*.ts` | `dom/dist/update-style/*.next.ts` |
-| DOM timings | `dom/state-placement-results.md` | `dom/state-placement-results.next.md` |
-| Octane app | `octane/memoized-dom/dist/` | `octane/memoized-dom/dist.next/` |
-
-The individual scripts below select compiler-next with `BENCH_COMPILER=next`
-(for example `BENCH_COMPILER=next bun run bench`); without it they use the
-existing compiler, as before.
+The builds use this checkout's compiler (`packages/compiler-next`). A snapshot compiler,
+selected with `BENCH_COMPILER=<entry>` (`load-compiler.ts`), writes beside it instead of over
+it: `dom/compiled-*.custom.ts`, `dom/state-placement-results.custom.md` and
+`octane/memoized-dom/dist.custom/`. The old compiler was deleted with Phase 10's exit; a
+baseline commit that has it, such as `d6e678b`, brings it along through `--before-ref`.
 
 `bun run bench:size:html` builds stable authored fixtures through the production
 Vite HTML pipeline and reports HTML, all emitted JavaScript and separately

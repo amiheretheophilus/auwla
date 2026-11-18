@@ -1,15 +1,15 @@
-# Opaque vs compiled third-party JavaScript: runtime benchmark
+# Opaque vs native third-party JavaScript: runtime benchmark
 
-This measures the optional runtime benefit of compiling unchanged **dset 3.1.4**,
-not whether an opaque package can work. Both modes must render correct results.
-It uses real headless Chromium and the **production runtime**, not Happy DOM or
-the testing entry. No benchmark-specific compiler rules are installed.
+This measures the optional runtime benefit of compiling unchanged **dset 3.1.4**
+in the app's graph, not whether an opaque package can work. Both modes must render
+correct results. It uses real headless Chromium and the **production runtime**, not
+Happy DOM or the testing entry. No benchmark-specific compiler rules are installed.
 
 ## Run from a fresh checkout
 
 ```sh
-git clone --branch codex/package-conditional-sync https://github.com/snrraptopack/memo-exp.git
-cd memo-exp
+git clone --branch compiler-rewrite https://github.com/amiheretheophilus/auwla.git
+cd auwla
 bun install
 bun run build
 bun run bench:third-party-runtime --smoke
@@ -47,9 +47,11 @@ and overlapping interquartile ranges are not reliable speedup claims.
 ## What is measured
 
 Each case has identical authored app source, normal `import {dset} from 'dset'`,
-and an isolated runtime. Opaque mode executes the original ESM with no semantic
-artifact. Compiled mode executes the package compiler's output and links its
-inferred artifact. The upstream fixture hashes are checked before building.
+and an isolated runtime. Opaque mode executes the original ESM as an ordinary
+package. Native mode compiles dset's unchanged source as part of the app's graph,
+as a native package is (`wiki/compiler/linking.md`, "Native packages"), so the
+compiler sees its writes. The upstream fixture hashes are checked before building.
+Reports before schema v2 compared the old compiler's package artifact instead.
 Bundling is minified, HMR is off, and runtime instrumentation is not enabled.
 
 | Scenario | Data being changed |
@@ -72,7 +74,7 @@ Three independent phases:
 - `updates-frame`: dispatch one click followed by one simulated frame per unit.
 
 The frame driver snapshots pending callbacks before executing them, so a callback
-which schedules the next frame cannot loop forever in the same frame. Compiled
+which schedules the next frame cannot loop forever in the same frame. Native
 cases with no volatile work still pay the common empty-driver overhead. Tabs are
 brought to the foreground; hidden tabs, where opaque pulling is skipped, are
 rejected. Cross-origin isolation enables higher-resolution timers where supported.
@@ -83,7 +85,7 @@ latency. It measures JavaScript/DOM processing under a controlled driver. A clic
 batch without frames is a throughput microbenchmark, not a realistic user burst.
 
 Both modes are warmed up. Sample order alternates between opaque-first and
-compiled-first. Mounting, teardown, DOM readiness, output verification and
+native-first. Mounting, teardown, DOM readiness, output verification and
 diagnostic instrumentation are all outside the timed regions. Browser GC/JIT and
 machine load can still affect results; raw samples are retained rather than hidden.
 
@@ -121,16 +123,11 @@ and repeat the full command two or three times. Keep the browser version/setting
 consistent when possible. Report unusual machine load or throttling separately.
 Do not compare numbers from different commits as if they were the same experiment.
 
-Package compilation and bundling happen before runtime timing. Their one-off
-preparation timings and output sizes are recorded separately, not amortized into
-runtime results or presented as rigorous cold-build benchmarks. Bundle sizes
-include the harness and are not a production application size audit.
-This harness exercises the compiler/linker pipeline directly; it does **not**
-measure the Vite `compilePackages` option's collection or persistent cache.
-Use [the installed-package Vite benchmark](../installed-packages/README.md) for
-cold/warm/edited production builds and their raw/gzip JavaScript sizes.
-That experimental consumer option is now available; see
-[installed-package configuration and boundaries](../../docs/third-party-package-compilation.md#consumer-workflow-compile-an-installed-dependency).
-The `throttle-debounce` regressions additionally cover retained callbacks,
+Compilation and bundling happen before runtime timing. Their one-off preparation
+timings and output sizes are recorded separately, not amortized into runtime
+results or presented as rigorous cold-build benchmarks. Bundle sizes include the
+harness and are not a production application size audit. This harness calls the
+compiler directly; `bench/package-compilation` measures what compiling a native
+package in the graph costs. The `throttle-debounce` regressions additionally cover retained callbacks,
 asynchronous writes and cancellation. Neither fixture establishes universal
 npm compatibility or a speedup for every package.

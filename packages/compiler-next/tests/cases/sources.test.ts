@@ -2688,6 +2688,22 @@ behaves('a resource from a runtime the author holds shows its own status', {
   },
 });
 
+// Found by the bundle audit's browser check (`bench/package-size`, `request-opaque`).
+behaves('a resource from a runtime the author holds shows its data when it arrives', {
+  source: `import { createDataRuntime } from '@memoized-dom/data';
+  export function App() {
+    const data = createDataRuntime({ fetch: () => defer('user').then((value) => Response.json(value)) });
+    const user = data.$fetch('/user');
+    $cleanup(data.clear);
+    return <main><p>{user.data?.name}</p><output>{user.status}</output></main>;
+  }`,
+  steps: [{ resolve: 'user', value: { name: 'Ada' } }],
+  check(container, observation) {
+    expect(container.querySelector('output')!.textContent).toBe(['pending', 'success'][observation]!);
+    expect(container.querySelector('p')!.textContent).toBe(['', 'Ada'][observation]!);
+  },
+});
+
 // Wrapping `box.user?.tags` in a source read ends its chain, so the optional links are tested first.
 for (const [label, value, expected] of [
   ['a user', { name: 'Ada', tags: ['admin'] }, '3|5'],

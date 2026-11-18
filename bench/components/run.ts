@@ -9,8 +9,7 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { performance } from 'node:perf_hooks';
 import { Window } from 'happy-dom';
-import { compile } from '@memoized-dom/compiler';
-import { compileModules } from '@memoized-dom/compiler';
+import { compile, compileModules } from '@memoized-dom/compiler-next';
 import {
   resetScheduler,
   setScheduler,

@@ -1,4 +1,4 @@
-import { compile } from '@memoized-dom/compiler';
+import { compile } from '@memoized-dom/compiler-next';
 
 export const TABLE_SOURCE = `
 let rows = Array.from({ length: 1000 }, (_, i) => ({
@@ -8,7 +8,7 @@ let rows = Array.from({ length: 1000 }, (_, i) => ({
   active: i % 2 === 0,
 }));
 
-function TableRow(item) {
+function TableRow({ item }) {
   return (
     <tr class={item.active ? 'active' : 'idle'}>
       <td>{item.id}</td>
@@ -48,7 +48,7 @@ let metrics = [
   { id: 'm4', name: 'Network', value: '120 MB/s' },
 ];
 
-function Card(item) {
+function Card({ item }) {
   return (
     <div class="card">
       <h3>{item.name}</h3>

@@ -190,10 +190,17 @@ export const sizeFixtures: Record<string, Record<string, string>> = {
   },
   'request-data': { './App.tsx': `export function App(){const user=$fetch('/api/user');
     return <main><p>{user?.name}</p></main>;}` },
-  'request-encoded-body': { './App.tsx': `export function App(){const user=$fetch('/api/encoded',{method:'POST',body:{name:'Ada'}});
-    return <main><p>{user?.name}</p></main>;}` },
+  // A POST `$fetch` is an action, called from code that runs later (`wiki/decisions.md`,
+  // 2026-10-20); an effect sends it once the page mounts.
+  'request-encoded-body': { './App.tsx': `export function App(){let name='';
+    async function send(){const user=await $fetch('/api/encoded',{method:'POST',body:{name:'Ada'}});name=user.name;}
+    $effect(()=>{send();});
+    return <main><p>{name}</p></main>;}` },
   'request-opaque-options': {
-    './App.tsx': `import {options} from './options';export function App(){const user=$fetch('/api/encoded',options());return <main><p>{user?.name}</p></main>;}`,
+    './App.tsx': `import {options} from './options';export function App(){let name='';
+    async function send(){const user=await $fetch('/api/encoded',options());name=user.name;}
+    $effect(()=>{send();});
+    return <main><p>{name}</p></main>;}`,
     './options.ts': `export function options(){return {method:'POST' as const,body:{name:'Ada'}};}`,
   },
   'request-markup': { './App.tsx': `export function App(){const user=$fetch('/api/user');

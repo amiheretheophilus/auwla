@@ -1,14 +1,10 @@
 /**
- * What an app pays for a native package. compiler-next compiles the package's source in the
- * app's graph (`wiki/compiler/linking.md`, "Native packages"). The old compiler's linked
- * source and its semantic artifact are shown beside it, as what that choice replaced.
+ * What an app pays for a native package. The compiler compiles the package's source in the
+ * app's graph (`wiki/compiler/linking.md`, "Native packages"). The old compiler's linked source
+ * and semantic artifact, which that choice replaced, went with the old compiler; git history up
+ * to Phase 10's exit has the runs that compared them.
  */
-import {
-  compileModulesDetailed,
-  experimentalCompilePackage,
-  type ExperimentalPackageArtifact,
-} from '@memoized-dom/compiler';
-import { compileModules as compileNext } from '../../packages/compiler-next/src';
+import { compileModules } from '@memoized-dom/compiler-next';
 
 interface Measurement {
   readonly helpers: number;
@@ -16,8 +12,6 @@ interface Measurement {
   readonly sourceBytes: number;
   readonly appAloneMs: number;
   readonly inGraphMs: number;
-  readonly oldSourceMs: number;
-  readonly oldArtifactMs: number;
 }
 
 function median(values: readonly number[]): number {
@@ -77,7 +71,7 @@ const resolvePackage = (specifier: string): string | undefined => {
 function checkInGraph(packageModules: Record<string, string>, output: Record<string, string>): void {
   for (const path of Object.keys(packageModules)) {
     if (output[path] === undefined) {
-      throw new Error(`compiler-next produced no output for ${path}`);
+      throw new Error(`the compiler produced no output for ${path}`);
     }
   }
 
@@ -91,18 +85,13 @@ function measure(helpers: number): Measurement {
   const packageModules = packageSources(helpers);
   const application = applicationSource(helpers);
   const everything = { ...packageModules, ...application };
-  const artifact: ExperimentalPackageArtifact = experimentalCompilePackage(packageModules, {
-    packageEntries: { 'bench-package': './node_modules/bench-package/index.ts' },
-  }).artifact;
 
   const operations: readonly (() => void)[] = [
-    () => { compileNext(application, {}); },
-    () => { compileNext(everything, { resolveImport: resolvePackage, entries: ['./app.tsx'] }); },
-    () => { compileModulesDetailed(everything, { resolveImport: resolvePackage }); },
-    () => { compileModulesDetailed(application, { experimentalPackageArtifacts: [artifact] }); },
+    () => { compileModules(application, {}); },
+    () => { compileModules(everything, { resolveImport: resolvePackage, entries: ['./app.tsx'] }); },
   ];
 
-  checkInGraph(packageModules, compileNext(everything, { resolveImport: resolvePackage, entries: ['./app.tsx'] }));
+  checkInGraph(packageModules, compileModules(everything, { resolveImport: resolvePackage, entries: ['./app.tsx'] }));
 
   for (const operation of operations) {
     operation();
@@ -124,8 +113,6 @@ function measure(helpers: number): Measurement {
     sourceBytes: Object.values(packageModules).reduce((total, source) => total + Buffer.byteLength(source), 0),
     appAloneMs: median(samples[0]!),
     inGraphMs: median(samples[1]!),
-    oldSourceMs: median(samples[2]!),
-    oldArtifactMs: median(samples[3]!),
   };
 }
 
@@ -140,10 +127,8 @@ console.log(
   'in graph'.padStart(11),
   'added'.padStart(10),
   'added/mod'.padStart(11),
-  'old source'.padStart(12),
-  'old artifact'.padStart(14),
 );
-console.log('-'.repeat(104));
+console.log('-'.repeat(75));
 
 for (const row of rows) {
   const added = row.inGraphMs - row.appAloneMs;
@@ -156,8 +141,6 @@ for (const row of rows) {
     `${row.inGraphMs.toFixed(1)}ms`.padStart(11),
     `${added.toFixed(1)}ms`.padStart(10),
     `${(added / row.modules).toFixed(2)}ms`.padStart(11),
-    `${row.oldSourceMs.toFixed(1)}ms`.padStart(12),
-    `${row.oldArtifactMs.toFixed(1)}ms`.padStart(14),
   );
 }
 

@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { compiledSuffix, loadBenchmarkCompiler } from '../load-compiler';
 
 const { compileModules } = await loadBenchmarkCompiler();
-// compiler-next writes `compiled-*.next.ts` beside the existing compiler's files.
+// A snapshot compiler writes `compiled-*.custom.ts` beside the tracked files (`../load-compiler.ts`).
 const suffix = compiledSuffix();
 
 const directory = dirname(fileURLToPath(import.meta.url));

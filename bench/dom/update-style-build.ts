@@ -6,7 +6,7 @@ import { rowStyles, statePlacements, updateStyles } from './state-placement-matr
 import { updateStyleSource } from './update-style-source';
 
 const { compileModules } = await loadBenchmarkCompiler();
-// compiler-next writes `<variant>.next.ts`, so the output shows which compiler made it.
+// A snapshot compiler writes `<variant>.custom.ts`, so the output shows which compiler made it.
 const suffix = compiledSuffix();
 
 const directory = import.meta.dirname;

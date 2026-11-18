@@ -10,7 +10,7 @@ name: bench
 
 on:
   # GitHub registers a workflow only after an event runs it. A push that
-  # changes this file runs it with the defaults below (full, all, next).
+  # changes this file runs it with the defaults below (full, all).
   push:
     branches: [compiler-rewrite]
     paths: [.github/workflows/bench.yml]
@@ -26,20 +26,14 @@ on:
         type: choice
         default: all
         options: [all, dom, octane]
-      compiler:
-        description: Which compiler builds memoized-dom
-        type: choice
-        default: next
-        options: [next, old]
       before_ref:
-        description: Optional baseline commit timed side by side (e.g. d6e678b)
+        description: Optional baseline commit timed side by side, with its own compiler (e.g. d6e678b)
         type: string
         default: ''
 
-# One run per branch and compiler: a compiler-next run and an old-compiler run
-# proceed side by side; a second run of the same pair waits for the first.
+# One run per branch; a second run waits for the first.
 concurrency:
-  group: bench-${{ github.ref }}-${{ inputs.compiler || 'next' }}
+  group: bench-${{ github.ref }}
   cancel-in-progress: false
 
 defaults:
@@ -48,7 +42,7 @@ defaults:
 
 jobs:
   bench:
-    name: bench:vm (${{ inputs.mode || 'full' }}, ${{ inputs.only || 'all' }}, ${{ inputs.compiler || 'next' }})
+    name: bench:vm (${{ inputs.mode || 'full' }}, ${{ inputs.only || 'all' }})
     runs-on: ubuntu-latest
     timeout-minutes: 180
     steps:
@@ -71,10 +65,9 @@ jobs:
           # A push has no inputs; use the defaults.
           MODE: ${{ inputs.mode || 'full' }}
           ONLY: ${{ inputs.only || 'all' }}
-          COMPILER: ${{ inputs.compiler || 'next' }}
           BEFORE_REF: ${{ inputs.before_ref }}
         run: |
-          args=(--compiler="$COMPILER")
+          args=()
           if [ "$MODE" = quick ]; then args+=(--quick); fi
           if [ "$ONLY" != all ]; then args+=(--only="$ONLY"); fi
           if [ -n "$BEFORE_REF" ]; then args+=(--before-ref="$BEFORE_REF"); fi

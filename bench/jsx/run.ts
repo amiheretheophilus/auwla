@@ -9,7 +9,7 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { performance } from 'node:perf_hooks';
 import { Window } from 'happy-dom';
-import { compile } from '@memoized-dom/compiler';
+import { compile } from '@memoized-dom/compiler-next';
 import {
   resetScheduler,
   setScheduler,
@@ -95,35 +95,43 @@ function verify(button: HTMLButtonElement, count: number): void {
   }
 }
 
-function measureMount(
-  factory: (id: string, parent: string | null) => HTMLButtonElement,
-  prefix: string,
-): number {
+type Factory = (id: string, parent: string | null) => Node;
+
+/**
+ * A component returns its nodes: the explicit App its button, the spread App a fragment around
+ * a general element value (`createComponentValue`). Both mount into a host element, so they pay
+ * the same, and the button is read from the host.
+ */
+function mountRoot(factory: Factory, id: string): { host: HTMLElement; button: HTMLButtonElement } {
+  const host = document.createElement('div');
+  host.append(factory(id, null));
+  document.body.appendChild(host);
+  return { host, button: host.querySelector('button')! };
+}
+
+function measureMount(factory: Factory, prefix: string): number {
   const start = performance.now();
   for (let index = 0; index < MOUNT_ITERATIONS; index++) {
     const id = `${prefix}-${index}`;
-    const button = factory(id, null);
-    document.body.appendChild(button);
+    const { host, button } = mountRoot(factory, id);
     verify(button, 0);
     unregister(id);
-    button.remove();
+    host.remove();
   }
   return ((performance.now() - start) * 1_000_000) / MOUNT_ITERATIONS;
 }
 
-function measureUpdates(
-  factory: (id: string, parent: string | null) => HTMLButtonElement,
-  id: string,
-): number {
-  const button = factory(id, null);
-  document.body.appendChild(button);
-  for (let index = 0; index < 500; index++) button.click();
+function measureUpdates(factory: Factory, id: string): number {
+  const { host } = mountRoot(factory, id);
+  // A general element value may replace its button, so each click finds the current one.
+  const button = () => host.querySelector('button')!;
+  for (let index = 0; index < 500; index++) button().click();
   const start = performance.now();
-  for (let index = 0; index < UPDATE_ITERATIONS; index++) button.click();
+  for (let index = 0; index < UPDATE_ITERATIONS; index++) button().click();
   const elapsed = performance.now() - start;
-  verify(button, UPDATE_ITERATIONS + 500);
+  verify(button(), UPDATE_ITERATIONS + 500);
   unregister(id);
-  button.remove();
+  host.remove();
   return (elapsed * 1_000_000) / UPDATE_ITERATIONS;
 }
 

@@ -2,14 +2,13 @@
 
 ## Compilers
 
-The builds use the existing compiler unless `BENCH_COMPILER=next` selects
-compiler-next. Each writes its own files: `compiled-*.ts` for the existing
-compiler, `compiled-*.next.ts` for compiler-next (both tracked, so the output
-can be read in the repository), and `state-placement-results.md` /
-`state-placement-results.next.md` for timings. `bundle.ts` builds the browser
-page from the selected set. `bun run bench:vm` (`../README.md`) runs the whole
-suite with compiler-next; `BENCH_COMPILER=next bun run bench:dom:compare
---before-ref=COMMIT` times compiler-next against a baseline commit.
+The builds use this checkout's compiler and write `compiled-*.ts` (tracked, so the output can
+be read in the repository) and `state-placement-results.md` for timings; a snapshot compiler
+(`BENCH_COMPILER=<entry>`, `../load-compiler.ts`) writes `compiled-*.custom.ts` beside them.
+`bundle.ts` builds the browser page from the selected set. `bun run bench:vm` (`../README.md`)
+runs the whole suite; `bun run bench:dom:compare --before-ref=COMMIT` times it against a
+baseline commit, whose own compiler builds the baseline (`--before-compiler=old` for its
+`packages/compiler`, as at `d6e678b`; `next` for its `packages/compiler-next`).
 
 ## Quick checks
 
@@ -55,7 +54,7 @@ per cell are the default. Production bundles use deterministic input seeds.
 bun run bench:dom:compare --before-ref=e0cd1d5
 bun run bench:dom:compare --before-ref=e0cd1d5 --isolate=runtime --operations=swap,remove,reverse --samples=15
 bun run bench:dom:compare --before-ref=e0cd1d5 --isolate=compiler --full
-BENCH_COMPILER=next bun run bench:dom:compare --before-ref=12f687b3 --before-compiler=next --validate-only
+bun run bench:dom:compare --before-ref=12f687b3 --before-compiler=next --validate-only
 ```
 
 `--isolate=runtime` uses the current compiler with each runtime;

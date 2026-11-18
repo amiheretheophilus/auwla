@@ -1,5 +1,6 @@
 # A quick DOM timing on a GitHub runner, steadier than a desktop and much
-# cheaper than `bench.yml`: old and next side by side, chosen scenarios only.
+# cheaper than `bench.yml`: this checkout's compiler (and any snapshot listed), chosen
+# scenarios only.
 #
 #   gh workflow run bench-quick.yml --ref compiler-rewrite -f scenarios=10k
 #   gh workflow run bench-quick.yml --ref compiler-rewrite \
@@ -28,15 +29,15 @@ on:
         type: string
         default: ''
       compilers:
-        description: Compilers to compare
+        description: Compilers to time, "current" and any snapshot's src/index.ts, comma-separated
         type: string
-        default: old,next
+        default: current
       profile:
-        description: Optional CPU profiles of next, "adapter:scenario;adapter:scenario"
+        description: Optional CPU profiles of the first compiler, "adapter:scenario;adapter:scenario"
         type: string
         default: ''
       octane:
-        description: Also run Octane --quick for memoized-dom only, old (HEAD) against next
+        description: Also run Octane --quick for memoized-dom only
         type: boolean
         default: false
       runtime_ref:
@@ -48,7 +49,7 @@ on:
         type: string
         default: create,clear
       compiler_ref:
-        description: Optional compiler-next baseline with its matching runtime, in ABBA order
+        description: Optional baseline with its own compiler-next and runtime, in ABBA order
         type: string
         default: ''
       size_fixtures:
@@ -80,9 +81,9 @@ jobs:
         with:
           bun-version: canary
       - run: bun install --frozen-lockfile
-      # The old compiler and the runtime load from their built packages.
+      # The runtime loads from its built package.
       - run: bun run build
-      # Minified browser bytes, old and next, with the compiled app's own share.
+      # Minified browser bytes, with the compiled app's own share.
       # Every performance step reports it: output must not grow.
       - name: Emitted size
         if: inputs.size_fixtures != ''
@@ -93,16 +94,14 @@ jobs:
           IFS=',' read -ra names <<< "$FIXTURES"
           for name in "${names[@]}"; do args+=(--fixture="$name"); done
           bun run bench/package-size/audit.ts "${args[@]}"
-          BENCH_COMPILER=next bun run bench/package-size/audit.ts "${args[@]}"
-          cp bench/package-size/dist/audit/results.md size-old.md
-          cp bench/package-size/dist/audit-next/results.md size-next.md
-          cat size-old.md size-next.md >> "$GITHUB_STEP_SUMMARY"
-      - name: Time old and next
+          cp bench/package-size/dist/audit/results.md size.md
+          cat size.md >> "$GITHUB_STEP_SUMMARY"
+      - name: Time
         env:
           SCENARIOS: ${{ inputs.scenarios || '10k' }}
           SAMPLES: ${{ inputs.samples || '5' }}
           ADAPTERS: ${{ inputs.adapters }}
-          COMPILERS: ${{ inputs.compilers || 'old,next' }}
+          COMPILERS: ${{ inputs.compilers || 'current' }}
         run: |
           args=(--compilers="$COMPILERS" --samples="$SAMPLES" --scenarios="$SCENARIOS" --out=quick.md)
           if [ -n "$ADAPTERS" ]; then args+=(--adapters="$ADAPTERS"); fi
@@ -127,7 +126,6 @@ jobs:
       - name: Compare runtimes with the same compiler
         if: inputs.runtime_ref != ''
         env:
-          BENCH_COMPILER: next
           BEFORE_REF: ${{ inputs.runtime_ref }}
           SAMPLES: ${{ inputs.samples || '5' }}
           OPERATIONS: ${{ inputs.runtime_operations || 'create,clear' }}
@@ -138,7 +136,6 @@ jobs:
       - name: Compare compiler-next snapshots with their matching runtimes
         if: inputs.compiler_ref != ''
         env:
-          BENCH_COMPILER: next
           BEFORE_REF: ${{ inputs.compiler_ref }}
           SAMPLES: ${{ inputs.samples || '5' }}
           OPERATIONS: ${{ inputs.runtime_operations || 'create,clear' }}
@@ -153,11 +150,9 @@ jobs:
           node-version: 24
       - name: Octane (memoized-dom only, quick)
         if: inputs.octane
-        env:
-          BENCH_COMPILER: next
         run: |
           bun run bench/octane/setup.ts
-          bun run bench/octane/run.ts --quick --targets=memoized-dom --before-ref=HEAD
+          bun run bench/octane/run.ts --quick --targets=memoized-dom
           latest="$(ls -d bench/octane/results/*/ | sort | tail -1)"
           cp "$latest/results.md" octane.md
           { echo "## Octane quick at ${GITHUB_SHA::8}"; cat octane.md; } >> "$GITHUB_STEP_SUMMARY"
@@ -166,8 +161,7 @@ jobs:
         with:
           name: bench-quick
           path: |
-            size-old.md
-            size-next.md
+            size.md
             quick.md
             profiles.md
             octane.md

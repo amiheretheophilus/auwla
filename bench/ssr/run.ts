@@ -3,7 +3,7 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { renderToString } from '@memoized-dom/server';
-import { mount, registerRootFactory, resetScheduler, setScheduler } from '@memoized-dom/runtime';
+import { mount, resetScheduler, setScheduler } from '@memoized-dom/runtime';
 import '@memoized-dom/runtime/hydrate';
 import { parseHTML } from 'linkedom';
 import { TABLE_SOURCE, DASHBOARD_SOURCE, compileScenario } from './scenarios';
@@ -35,11 +35,7 @@ function benchmarkSync(
   app: { App(id: string, parent: null): Node },
   iterations = 100,
 ): BenchmarkMetric {
-  registerRootFactory(app.App, {
-    id: 'App',
-    create: () => app.App('App', null),
-  });
-
+  // The compiled module registers `App` as a root under its component key (`defineComponent`).
   // 1. Measure Server Render Time (plain HTML)
   // Warmup
   for (let i = 0; i < 10; i++) renderToString(app.App, { markers: false });
@@ -65,7 +61,10 @@ function benchmarkSync(
   clientDocument.body.appendChild(host);
   for (let i = 0; i < 5; i++) {
     host.innerHTML = markedHtml;
+    // A mismatch would discard the server's nodes and mount fresh, timing the wrong path.
+    const served = host.querySelector('main, div');
     const m = mount(host, app.App);
+    if (served === null || !host.contains(served)) throw new Error(`${name}: hydration did not adopt the server render`);
     m.unmount();
   }
 

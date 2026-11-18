@@ -10,11 +10,14 @@ bun run bench:linker
 
 The generated graph contains one state module and one importing TSX view per pair. Every
 state module exports a scalar, a module computed value and a mutator. Every view imports all
-three through a `@` alias. The same graph is compiled whole by the old compiler and by
-compiler-next, in alternating order, and the run reports the median of seven.
+three through a `@` alias. The graph is compiled whole, and the run reports the median of
+seven.
 
-It fails if compiler-next leaves a module out, or a view does not read its own state module:
+It fails if the compiler leaves a module out, or a view does not read its own state module:
 a fast compiler that links wrongly proves nothing.
+
+The old compiler was deleted with Phase 10's exit (`wiki/compiler/plan.md`); the run below is
+the last that compared the two.
 
 `bench/package-compilation` asks the question next to this one: what a native package costs
 the app that uses it.

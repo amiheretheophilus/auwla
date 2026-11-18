@@ -157,7 +157,22 @@ function trackSourceRead(value: unknown, read: SourceRead): void {
     return;
   }
 
-  const resource = source(value as ResolvedValue<unknown>);
+  trackResourceRead(source(value as ResolvedValue<unknown>), read);
+}
+
+/**
+ * A resource the author holds (`runtime.$fetch(url)`, `markExplicitResource`) is read as itself:
+ * `.data`, `.status` and `.pending` are its own getters. A computation reading through it follows
+ * its status, which every transition moves, so a later `.data` or `.status` read is current
+ * (`wiki/compiler/sources.md`, "A resource the author holds").
+ */
+export function trackExplicitResourceRead(value: unknown): void {
+  if (isExplicitResource(value) && isFetchResource(value)) {
+    trackResourceRead(value, 'status');
+  }
+}
+
+function trackResourceRead(resource: FetchResource<unknown>, read: SourceRead): void {
   const reads = getExtensionStore('mmd:source-read-dependencies', () => new WeakMap<object, SourceReadDependency>());
   let dependency = reads.get(resource);
 
@@ -176,7 +191,8 @@ function trackSourceRead(value: unknown, read: SourceRead): void {
 
     reads.set(resource, created);
 
-    created.disconnect = observeResolvedValue(value as ResolvedValue<unknown>, () => {
+    // The resource itself, so an explicit one, which is not a source, is followed too.
+    created.disconnect = observeResource(resource, () => {
       runWithApplicationRuntime(runtime, () => {
         const next = sourceView(resource as FetchResource<unknown>);
         const keys = [created.statusKey];
@@ -654,8 +670,13 @@ export function observeResolvedValue<T>(
   listener: ResourceListener<T>,
 ): () => void {
   if (!isSource(value)) return () => {};
+  return observeResource(source(value), listener);
+}
+
+/** A resource's later transitions; subscribing reports its current snapshot, which is skipped. */
+function observeResource<T>(resource: FetchResource<T>, listener: ResourceListener<T>): () => void {
   let initial = true;
-  return subscribeFetchResource(source(value), snapshot => {
+  return subscribeFetchResource(resource, snapshot => {
     if (initial) {
       initial = false;
       return;

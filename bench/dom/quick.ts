@@ -1,14 +1,15 @@
 /**
  * A quick local DOM timing, for checking a change before a full VM run.
  *
- *   bun run bench/dom/quick.ts [--compilers=old,next] [--samples=3]
+ *   bun run bench/dom/quick.ts [--compilers=current,<snapshot entry>] [--samples=3]
  *     [--scenarios=all|1k|10k|<name>,<name>] [--adapters=<id>,<id>] [--no-build] [--out=<file.md>]
  *
  * On GitHub, where timings are steadier: `gh workflow run bench-quick.yml --ref
  * compiler-rewrite` (inputs `scenarios`, `samples`, `adapters`, `profile`).
  *
- * Builds both compilers' state-placement apps, bundles each, and times the chosen
- * scenarios in local Chrome, side by side. It skips the full untimed validation
+ * Builds the state-placement apps with each listed compiler (`current` is this checkout's, any
+ * other entry a snapshot's `src/index.ts`), bundles each, and times the chosen scenarios in local
+ * Chrome, side by side. It skips the full untimed validation
  * pass; every timed sample is still checked. Few samples on a desktop machine:
  * use it for large differences, and `bench:vm` for reported numbers.
  */
@@ -20,7 +21,9 @@ import { bundleDomPage, domDirectory } from './bundle';
 import type { BenchRow } from './state-placement-browser';
 
 const flag = (name: string) => process.argv.find(value => value.startsWith(`--${name}=`))?.slice(name.length + 3);
-const compilers = (flag('compilers') ?? 'old,next').split(',');
+const compilers = (flag('compilers') ?? 'current').split(',');
+/** What `../load-compiler.ts` reads: unset for this checkout's compiler, else a snapshot's entry. */
+const choice = (compiler: string) => compiler === 'current' ? '' : compiler;
 const samples = Number(flag('samples') ?? 3);
 const scenarioFlag = flag('scenarios') ?? '10k';
 const adapters = flag('adapters')?.split(',');
@@ -34,9 +37,8 @@ const names = scenarioFlag === 'all' ? ALL
   : scenarioFlag === '1k' || scenarioFlag === '10k' ? ALL.filter(name => name.endsWith(` ${scenarioFlag}`))
     : scenarioFlag.split(',');
 
-// Building with the existing compiler regenerates its tracked `compiled-*.ts`
-// files; put back those that were clean. compiler-next's `.next.ts` files stay
-// current, so they show the output that was timed.
+// Building with this checkout's compiler regenerates the tracked `compiled-*.ts`
+// files; put back those that were clean, so a timing run leaves the checkout clean.
 const git = (...args: string[]) => spawnSync('git', args, { encoding: 'utf8' }).stdout.trim();
 const existing = readdirSync(domDirectory).filter(file => /^compiled-[a-z-]+\.ts$/.test(file))
   .map(file => join(domDirectory, file))
@@ -44,16 +46,16 @@ const existing = readdirSync(domDirectory).filter(file => /^compiled-[a-z-]+\.ts
 
 const bundles = new Map<string, string>();
 mkdirSync(join(domDirectory, 'dist'), { recursive: true });
-for (const compiler of compilers) {
-  const env = { ...process.env, BENCH_COMPILER: compiler };
+for (const [index, compiler] of compilers.entries()) {
+  const env = { ...process.env, BENCH_COMPILER: choice(compiler) };
   if (!process.argv.includes('--no-build')) {
     for (const script of ['build.ts', 'state-placement-build.ts']) {
       const result = spawnSync('bun', ['run', join(domDirectory, script)], { env, stdio: 'inherit' });
       if (result.status !== 0) throw new Error(`${script} failed for ${compiler}`);
     }
   }
-  process.env.BENCH_COMPILER = compiler;
-  const outfile = join(domDirectory, 'dist', `quick-${compiler}.js`);
+  process.env.BENCH_COMPILER = choice(compiler);
+  const outfile = join(domDirectory, 'dist', `quick-${index}.js`);
   await bundleDomPage(join(domDirectory, 'state-placement-browser.ts'), outfile);
   bundles.set(compiler, outfile);
 }

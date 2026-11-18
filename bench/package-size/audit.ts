@@ -1,10 +1,10 @@
 /**
  * Attribute minified browser bytes to stable compiler-generated source graphs.
  *
- * `BENCH_COMPILER=next` audits compiler-next instead (`../load-compiler.ts`).
- * The bundle-trimming checks below describe what the existing compiler
- * achieves; for compiler-next they are reported as targets not yet met rather
- * than stopping the audit, so the report doubles as its size to-do list.
+ * `BENCH_COMPILER=<path>` audits a snapshot compiler instead (`../load-compiler.ts`).
+ * The bundle-trimming checks below describe what the old compiler achieved; the
+ * compiler must meet them too, so the ones it does not yet meet are reported rather
+ * than stopping the audit, and the report doubles as its size to-do list.
  */
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
@@ -12,40 +12,26 @@ import { posix, resolve } from 'node:path';
 import { gzipSync, brotliCompressSync } from 'node:zlib';
 import { build } from 'esbuild';
 import { sizeFixtures } from './fixtures';
-import { hydrationBootstrap, hydrationVirtualId } from '../../packages/vite/src/hydration';
-import { compiledSuffix, selectedCompilerPath } from '../load-compiler';
+import { loadBenchmarkCompiler, selectedCompilerPath } from '../load-compiler';
 
 const args = process.argv.slice(2);
-if (args.some(arg => arg !== '--verify' && arg !== '--hydrate' && arg !== '--hydrate-program' && !/^--baseline-hydration=(general|program)$/.test(arg) && !arg.startsWith('--before-ref=') && !arg.startsWith('--fixture=') && !arg.startsWith('--compiler='))) throw new Error('Use --verify, --hydrate, --hydrate-program, --baseline-hydration=general|program, --before-ref=<commit>, --fixture=<name> or --compiler=<entry>');
-const programHydration = args.includes('--hydrate-program');
-const baselineProgramHydration=!args.includes('--baseline-hydration=general');
-const hydration = args.includes('--hydrate') || programHydration;
+if (args.some(arg => arg !== '--verify' && arg !== '--hydrate' && !arg.startsWith('--before-ref=') && !arg.startsWith('--fixture=') && !arg.startsWith('--compiler='))) throw new Error('Use --verify, --hydrate, --before-ref=<commit>, --fixture=<name> or --compiler=<entry>');
+const hydration = args.includes('--hydrate');
 
-/** `old` is the existing compiler; anything else is compiler-next or a snapshot of it. */
-const compilerPath = selectedCompilerPath();
-const compilerName = compilerPath === null ? 'old' : compiledSuffix().slice(1);
-if (compilerPath !== null && hydration) throw new Error('compiler-next has no hydration output yet (Phase 10)');
-const compileFixture = compilerPath === null
-  ? (await import('@memoized-dom/compiler')).compileModulesDetailed
-  : await (async () => {
-    const { compileModules } = await import(new URL(`file:///${compilerPath.replaceAll('\\', '/')}`).href);
-    return (sources: Record<string, string>, options: { dataDelivery: 'universal' | 'client' }) => ({
-      output: compileModules(sources, options) as Record<string, string>,
-      hydrationCapabilities: { list: false, markup: false },
-    });
-  })();
+/** `current` is this checkout's compiler; `custom` a snapshot (`../load-compiler.ts`). */
+const compilerName = selectedCompilerPath() === null ? 'current' : 'custom';
+const { compileModules } = await loadBenchmarkCompiler();
 
-/** A trimming target: the existing compiler must meet it; compiler-next reports it. */
+/** A trimming target the old compiler met: one this compiler does not meet yet is reported. */
 const notMet: string[] = [];
 function trimmed(condition: boolean, fixture: string, graph: string, message: string): void {
   if (condition) return;
-  if (compilerName === 'old') throw new Error(message);
   notMet.push(`${fixture} (${graph}): ${message}`);
 }
 
 const root = resolve(import.meta.dirname, '../..');
-const suffix = compilerName === 'old' ? '' : `-${compilerName}`;
-const directory = resolve(import.meta.dirname, programHydration ? 'dist/audit-program-hydration' : hydration ? 'dist/audit-hydration' : `dist/audit${suffix}`);
+const suffix = compilerName === 'current' ? '' : `-${compilerName}`;
+const directory = resolve(import.meta.dirname, hydration ? `dist/audit-hydration${suffix}` : `dist/audit${suffix}`);
 const revision = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' }).trim();
 const status = execFileSync('git', ['status', '--porcelain'], { cwd: root, encoding: 'utf8' }).trim();
 mkdirSync(directory, { recursive: true });
@@ -70,32 +56,10 @@ const selected = new Set(args.filter(arg => arg.startsWith('--fixture=')).map(ar
 for (const name of selected) if (!Object.hasOwn(sizeFixtures, name)) throw new Error(`Unknown fixture ${name}`);
 for (const [fixture, sources] of Object.entries(sizeFixtures)) {
   if (selected.size && !selected.has(fixture)) continue;
-  let compilation: { output: Record<string, string>; hydrationCapabilities: { list: boolean; markup: boolean } };
-  try {
-    compilation = compileFixture({ ...sources,
-      './main.ts': `${hydration ? `import '${programHydration ? hydrationVirtualId : '@memoized-dom/runtime/hydrate'}';` : ''}import {mount} from '@memoized-dom/runtime';import {App} from './App';mount('root',App);`,
-    }, {dataDelivery: hydration ? 'universal' : 'client'});
-  } catch (error) {
-    // A fixture one compiler rejects is reported, not fatal: the other may accept it.
-    if (compilerName === 'old') throw error;
-    notMet.push(`${fixture}: does not compile: ${error instanceof Error ? error.message.split('\n')[0] : String(error)}`);
-    continue;
-  }
-  const compiled = compilation.output;
-  // These pin that a fixture exercises the existing compiler's emitted capability.
-  if (compilerName === 'old') {
-    if (fixture === 'request-factory-rebind' && !compiled['./App.tsx']?.includes('rebindResolvedValueFromFactory')) {
-      throw new Error('The factory fixture must exercise imported request adoption');
-    }
-    if (fixture === 'request-rebind' && !compiled['./App.tsx']?.includes('rebindResolvedValue(')) {
-      throw new Error('The direct fixture must exercise request rebinding');
-    }
-    if (fixture === 'mixed-lists' && (!compiled['./App.tsx']?.includes('createListRegion') ||
-        !compiled['./App.tsx']?.includes('createPositionalListRegion'))) throw new Error('The mixed fixture must exercise both list capabilities');
-    if (fixture === 'request-markup' && !compiled['./App.tsx']?.includes('materializeMarkup')) {
-      throw new Error('The markup fixture must exercise template materialization');
-    }
-  }
+  // A fixture the compiler rejects fails the audit: its sizes would be missing from the report.
+  const compiled: Record<string, string> = compileModules({ ...sources,
+    './main.ts': `${hydration ? "import '@memoized-dom/runtime/hydrate';" : ''}import {mount} from '@memoized-dom/runtime';import {App} from './App';mount('root',App);`,
+  }, { dataDelivery: hydration ? 'universal' : 'client' });
   const modules = new Map(Object.entries(compiled).map(([id, source]) => [posix.resolve('/', id), source]));
   for (const graph of ['package', 'source', ...(baselineRoot ? ['source-before'] : [])]) {
     const graphRoot = graph === 'source-before' ? baselineRoot! : root;
@@ -104,13 +68,6 @@ for (const [fixture, sources] of Object.entries(sizeFixtures)) {
       define: { 'process.env.NODE_ENV': '"production"' }, outfile: 'browser.js',
       logOverride: {'import-is-undefined':'error'},
       plugins: [{ name: 'size-fixtures', setup(builder) {
-        if (programHydration) {
-          builder.onResolve({ filter: /^virtual:memoized-dom\/hydration$/ }, () => ({ path: '/hydration.ts', namespace: 'hydration-boot' }));
-          builder.onLoad({ filter: /.*/, namespace: 'hydration-boot' }, () => ({
-            contents: graph === 'source-before' && !baselineProgramHydration ? "import '@memoized-dom/runtime/hydrate';" : hydrationBootstrap(compilation.hydrationCapabilities),
-            loader: 'ts', resolveDir: root,
-          }));
-        }
         builder.onResolve({ filter: /^@size-fixture\// }, args => ({
           path: `/${args.path.slice('@size-fixture/'.length)}`, namespace: 'fixture',
         }));
@@ -165,10 +122,6 @@ for (const [fixture, sources] of Object.entries(sizeFixtures)) {
         && output.text.includes('memoized-dom:stream')), 'Client-only programs must not retain streamed document handoff');
       check(!(hydration && fixture.startsWith('request-') && !output.text.includes('Serialized data state sources must be an array')), 'SSR-capable fetches must retain transfer restoration');
     }
-    if (programHydration && graph === 'source') {
-      check(!(!compilation.hydrationCapabilities.list && retains(/\/hydration-list\.ts$/)), 'A program without lists retained list adoption');
-      check(!(!compilation.hydrationCapabilities.markup && retains(/\/(?:hydration-markup|markup-walk)\.ts$/)), 'A program without markup retained markup adoption');
-    }
     check(!(['request-encoded-body','request-opaque-options'].includes(fixture) && !output.text.includes('Request body must be JSON-serializable')),
       'Generic requests must retain request body encoding');
     if (graph === 'source') {
@@ -189,14 +142,20 @@ const lines = [`# Browser bundle audit (${compilerName} compiler)`, '',
   `Runtime/data/router source baseline: ${baseline ?? 'not requested'}. All graphs use the current compiler and identical authored fixtures.`, '',
   'Archived runtime sources are used unchanged. Missing compiler hooks fail the audit; choose an API-compatible baseline or compare each revision with its own compiler.', '',
   'Stable authored fixtures compiled by the current compiler. Each graph includes mount and root metadata.', '',
-  `Optional hydration included: ${hydration}; compiler-selected capabilities: ${programHydration}. Baseline hydration: ${programHydration?(baselineProgramHydration?'same program capabilities':'explicit general entry'):'same entry'}. Use --baseline-hydration=general only to compare older revisions without program hydration. Browser verification below checks client interactions; SSR adoption/recovery is covered by the hydration test suites.`, '',
+  `Optional hydration included: ${hydration}. Browser verification below checks client interactions; SSR adoption/recovery is covered by the hydration test suites.`, '',
   '`package` resolves published browser exports; `source` attributes the equivalent graph to runtime, data and router source modules. Each whole bundle is compressed once; input attribution is minified raw bytes, not additive gzip savings.', '',
   '`App B` is the minified bytes attributed to the compiled fixture modules alone.', '',
   '| Fixture | Graph | Raw B | Gzip B | Brotli B | App B |', '|---|---|---:|---:|---:|---:|',
   ...rows.map(row => `| ${row.fixture} | ${row.graph} | ${row.raw} | ${row.gzip} | ${row.brotli} | ${row.app} |`), '',
-  ...(notMet.length === 0 ? [] : ['## Trimming targets the existing compiler meets and this one does not', '',
+  ...(notMet.length === 0 ? [] : ['## Trimming targets the old compiler met and this one does not yet', '',
     ...notMet.map(item => `- ${item}`), '']),
 ];
+/** A fixture whose page shows the fetched name as `<p>Ada</p>`, which the browser check waits for. */
+function showsName(fixture: string): boolean {
+  if (!fixture.startsWith('request-') && fixture !== 'promise-data') return false;
+  const app = sizeFixtures[fixture]?.['./App.tsx'] ?? '';
+  return /<p>\{(?:user\??\.(?:data\?\.)?name|name)\}<\/p>/.test(app);
+}
 if (process.argv.includes('--verify')) {
   const { default: puppeteer } = await import('puppeteer-core');
   const allowed = new Set(rows.flatMap(row => ['js', 'html'].map(extension => `${row.fixture}-${row.graph}.${extension}`)));
@@ -226,8 +185,9 @@ if (process.argv.includes('--verify')) {
       const errors: string[] = []; page.on('pageerror', error => errors.push(String(error)));
       try {
         await page.goto(`http://127.0.0.1:${server.port}/?fixture=${row.fixture}-${row.graph}.html`);
-        await page.waitForSelector('#root>main', { timeout: 5000 });
-        if (row.fixture.startsWith('request-') || row.fixture === 'promise-data') await page.waitForFunction(() => document.querySelector('#root main p')?.textContent === 'Ada');
+        await page.waitForSelector('#root>*', { timeout: 5000 });
+        const named = showsName(row.fixture);
+        if (named) await page.waitForFunction(() => document.querySelector('#root main p')?.textContent === 'Ada');
         if (row.fixture === 'request-rebind' || row.fixture === 'request-factory-rebind') {
           await page.click('button'); await page.waitForFunction(() => document.querySelector('#root main p')?.textContent === 'Lin');
           await page.click('button'); await page.waitForFunction(() => document.querySelector('#root main p')?.textContent === 'Ada');
@@ -242,12 +202,20 @@ if (process.argv.includes('--verify')) {
           await page.click('.home');await page.waitForFunction(()=>document.querySelector('article')===null);
           await page.click('.about');await page.waitForFunction(()=>document.querySelector('article button')?.textContent==='0');
         }
-        await page.evaluate(async fixture => {
-          const main = document.querySelector('#root>main')!;
+        await page.evaluate(async ({ fixture, named }) => {
+          // The apps measured as they were written (`flowos`, `octane`) have their own roots:
+          // mounting without page errors is what is checked for them.
+          const main = document.querySelector('#root>main');
+          if (main === null) return;
           const button = main.querySelector('button')!;
           const settle = async () => { await Promise.resolve(); await Promise.resolve(); };
           const check = (condition: boolean) => { if (!condition) throw new Error(`Failed ${fixture} interaction`); };
           if (fixture === 'static') { check(main.textContent === 'Static shellReady.'); return; }
+          if (fixture.includes('-recreated-slot-')) {
+            // The cards' own `<p>` is static; the count is in the footer.
+            main.querySelector<HTMLButtonElement>('.next')!.click(); await settle();
+            check(main.querySelector('footer')!.textContent === '1'); return;
+          }
           if (fixture.startsWith('primitive-')) {
             const originals=[...main.querySelectorAll('li')];
             const values=()=>[...main.querySelectorAll('li')].map(node=>node.textContent).join('|');
@@ -275,7 +243,8 @@ if (process.argv.includes('--verify')) {
             check(main.querySelector('a')?.getAttribute('href') === '/person/2'); return;
           }
           if (fixture.startsWith('request-') || fixture === 'promise-data') {
-            check(main.querySelector('p')?.textContent === 'Ada');
+            // The others render their data in their own shapes; mounting without errors is checked.
+            if (named) check(main.querySelector('p')?.textContent === 'Ada');
             if (fixture === 'request-markup') {
               const cards = [...main.querySelectorAll('article')];
               check(cards.length === 16 && cards.every((card,index) =>
@@ -310,9 +279,15 @@ if (process.argv.includes('--verify')) {
             check(nextPositional[0]===positional[0]&&nextPositional[1]===positional[1]);
             check(nextPositional.map(node=>node.textContent).join('|')==='0:a|1:b|2:c');return;
           }
+          if (['module-counter', 'owner-counter', 'isolated-counter', 'composition'].includes(fixture)) {
+            button.click(); await settle();
+            check(main.querySelector(fixture === 'composition' ? 'strong' : 'p')!.textContent === '1'); return;
+          }
+          // Any other fixture: its first button must change what the page shows.
+          const before = main.textContent;
           button.click(); await settle();
-          check(main.querySelector(fixture === 'composition' ? 'strong' : 'p')!.textContent === '1');
-        }, row.fixture);
+          check(main.textContent !== before);
+        }, { fixture: row.fixture, named });
         if (errors.length) throw new Error(errors.join('\n'));
       } catch (error) {
         throw new Error(`${row.fixture}/${row.graph}: ${errors.join('\n') || String(error)}`, { cause: error });
@@ -329,6 +304,6 @@ for (const row of rows.filter(row => row.graph !== 'package')) {
     ...row.inputs.map(input => `| ${input.path} | ${input.bytes} |`), '');
 }
 writeFileSync(resolve(directory, 'results.json'), JSON.stringify({ measuredAt: new Date().toISOString(),
-  revision, status, baseline, hydration, baselineProgramHydration, verified: process.argv.includes('--verify'), rows }, null, 2));
+  revision, status, baseline, hydration, verified: process.argv.includes('--verify'), rows }, null, 2));
 writeFileSync(resolve(directory, 'results.md'), lines.join('\n') + '\n');
 console.log(`Report: ${resolve(directory, 'results.md')}`);

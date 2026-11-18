@@ -1,8 +1,8 @@
 /**
  * One command for the benchmark VM: `bun run bench:vm`.
  *
- * Builds the packages, then runs, with the selected compiler (compiler-next
- * by default):
+ * Builds the packages, then runs, with this checkout's compiler (or a snapshot's,
+ * `--compiler=<entry>`, `bench/load-compiler.ts`):
  *
  * 1. the DOM suite: memoized-dom against vanilla JS, every state placement
  *    (component rows, inline rows, module/component state) and the mutable/
@@ -10,7 +10,7 @@
  * 2. the pinned Octane suite: memoized-dom against nine frameworks
  *    (`bench/octane/`), set up on first use.
  *
- * Every report is copied into `bench/results/<time>-<commit>-<compiler>/`,
+ * Every report is copied into `bench/results/<time>-<commit>/` (`-custom` for a snapshot),
  * with a summary in its README.md. Tracked files the builds regenerate are
  * restored afterwards, so the checkout stays clean and `git pull` works.
  *
@@ -18,15 +18,18 @@
  *   bun run bench:vm --quick               correctness gates and one Octane sample (minutes)
  *   bun run bench:vm --only=dom            or --only=octane
  *   bun run bench:vm --before-ref=d6e678b  also compare with a baseline commit, side by side
- *   bun run bench:vm --compiler=old        the existing compiler, for reference
+ *   bun run bench:vm --compiler=<entry>    a snapshot compiler's src/index.ts, for reference
  *   bun run bench:vm --no-build            skip `bun run build`
+ *
+ * The old compiler was deleted with Phase 10's exit; `--before-ref=d6e678b` still compares with it,
+ * since the baseline brings its own compiler.
  */
 import { cpSync, existsSync, mkdirSync, readdirSync, writeFileSync } from 'node:fs';
 import { cpus, totalmem } from 'node:os';
 import { resolve } from 'node:path';
 
 const args = process.argv.slice(2);
-const usage = 'bun run bench:vm [--quick] [--only=dom|octane] [--before-ref=COMMIT] [--compiler=next|old] [--no-build]';
+const usage = 'bun run bench:vm [--quick] [--only=dom|octane] [--before-ref=COMMIT] [--compiler=<entry>] [--no-build]';
 if (args.includes('--help')) {
   console.log(usage);
   process.exit(0);
@@ -38,15 +41,18 @@ if (unknown.length > 0) throw new Error(`Unknown options: ${unknown.join(' ')}\n
 const quick = args.includes('--quick');
 const only = option('only');
 if (only !== undefined && only !== 'dom' && only !== 'octane') throw new Error('--only must be dom or octane');
-const compiler = option('compiler') ?? 'next';
-if (compiler !== 'next' && compiler !== 'old') throw new Error('--compiler must be next or old');
+/** A snapshot compiler's entry, or undefined for this checkout's. */
+const compiler = option('compiler');
+if (compiler === 'next' || compiler === 'old') {
+  throw new Error('--compiler takes a snapshot compiler\'s entry path; there is one compiler now');
+}
 const beforeRef = option('before-ref');
 
 const root = resolve(import.meta.dirname, '..');
 const dom = resolve(root, 'bench/dom');
 const octane = resolve(root, 'bench/octane');
 // Every child process inherits the choice (`bench/load-compiler.ts`).
-const env = { ...process.env, BENCH_COMPILER: compiler };
+const env = { ...process.env, BENCH_COMPILER: compiler === undefined ? '' : resolve(compiler) };
 
 async function run(command: string[], cwd = root): Promise<void> {
   console.log(`\n$ ${command.join(' ')}`);
@@ -63,12 +69,12 @@ function git(...gitArgs: string[]): string {
 const bun = process.execPath;
 const commit = git('rev-parse', 'HEAD');
 const stamp = new Date().toISOString().replace(/[:.]/g, '-');
-const output = resolve(root, 'bench/results', `${stamp}-${commit.slice(0, 8)}-${compiler}`);
+const output = resolve(root, 'bench/results', `${stamp}-${commit.slice(0, 8)}${compiler === undefined ? '' : '-custom'}`);
 mkdirSync(output, { recursive: true });
 
-// Generated DOM files carry the compiler: `compiled-*.ts` (existing) or
-// `compiled-*.next.ts` (compiler-next), and the same for the reports.
-const suffix = compiler === 'next' ? '.next' : '';
+// Generated DOM files carry the compiler: `compiled-*.ts` (this checkout's) or
+// `compiled-*.custom.ts` (a snapshot), and the same for the reports.
+const suffix = compiler === undefined ? '' : '.custom';
 // The DOM builds regenerate these tracked files; put back the ones that were
 // clean, so a timing run never leaves the checkout dirty.
 const tracked = [
@@ -162,7 +168,7 @@ const summary = [
   '# Benchmark run',
   '',
   `- Commit: \`${commit}\`${git('status', '--porcelain', '--untracked-files=no') === '' ? '' : ' (with uncommitted changes)'}`,
-  `- Compiler: ${compiler === 'next' ? 'compiler-next (`packages/compiler-next`)' : 'existing (`packages/compiler`)'}`,
+  `- Compiler: ${compiler === undefined ? "this checkout's (`packages/compiler-next`)" : `snapshot \`${compiler}\``}`,
   `- Mode: ${quick ? 'quick (correctness gates, one Octane sample)' : 'full'}${beforeRef === undefined ? '' : `, baseline ${beforeRef}`}`,
   `- Machine: ${cpus()[0]?.model ?? 'unknown CPU'}, ${cpus().length} logical CPUs, ${(totalmem() / 2 ** 30).toFixed(0)} GiB, ${process.platform}`,
   `- Bun ${Bun.version}; started ${stamp}`,

@@ -6,8 +6,7 @@ import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { gzipSync } from 'node:zlib';
 import puppeteer, { type Page } from 'puppeteer-core';
-import { compileModulesDetailed, experimentalCompilePackage, experimentalFinalizePackage } from '@memoized-dom/compiler';
-import { compileModules as compileNext } from '../../packages/compiler-next/src/index';
+import { compileModules } from '@memoized-dom/compiler-next';
 import { closeBrowser } from '../../test-support/browser';
 import { fixture } from './fixtures';
 import { benchmarkOptions, summary } from './options';
@@ -38,10 +37,11 @@ for (const [file, hash] of Object.entries(expected)) {
   if (createHash('sha256').update(text).digest('hex') !== hash) throw new Error(`Upstream dset fixture changed: ${file}`);
   source['./' + file] = text;
 }
+// Native mode compiles dset's unchanged source in the app's graph, where it is installed
+// (`wiki/compiler/linking.md`, "Native packages"); opaque mode leaves it an ordinary package.
+const packageModules = Object.fromEntries(Object.entries(source).map(([file, text]) => [`./node_modules/dset/${file.slice(2)}`, text]));
+const packageEntries: Record<string, string> = { dset: './node_modules/dset/dist/index.mjs', 'dset/merge': './node_modules/dset/merge/index.mjs' };
 const generated = join(import.meta.dirname, '.generated');
-const packageStart = performance.now();
-const packaged = experimentalCompilePackage(source, { packageEntries: { dset: './dist/index.mjs', 'dset/merge': './merge/index.mjs' } });
-const packageCompilationMs = performance.now() - packageStart;
 await mkdir(generated, { recursive: true });
 if (resolve(await realpath(generated)) !== resolve(generated)) throw new Error('Generated benchmark directory must not be a symlink');
 const stage = await mkdtemp(join(generated, 'run-'));
@@ -68,23 +68,19 @@ try {
   const browserErrors: string[] = [];
   const open = async (config: CaseConfig) => {
     const id = `${config.scenario}-${config.size}-${config.mode}`, folder = join(stage, id), dependency = join(folder, 'node_modules/dset');
-    for (const [file, code] of Object.entries(config.mode === 'compiled' ? packaged.output : source)) await put(join(dependency, file), code);
+    // The original package is installed in both modes; native mode's output replaces its files.
+    for (const [file, code] of Object.entries(source)) await put(join(dependency, file), code);
     await put(join(dependency, 'package.json'), JSON.stringify({ name: 'dset', version: '3.1.4', type: 'module',
-      exports: { '.': './dist/index.mjs', './merge': './merge/index.mjs' },
-      ...(config.mode === 'compiled' ? { 'memoized-dom': { artifact: './memoized-dom.package.json', integrity: true } } : {}) }));
-    if (config.mode === 'compiled') {
-      const artifact = await experimentalFinalizePackage(packaged.artifact, { packageRoot: dependency, outputDirectory: '.' });
-      await put(join(dependency, 'memoized-dom.package.json'), JSON.stringify(artifact));
-    }
+      exports: { '.': './dist/index.mjs', './merge': './merge/index.mjs' } }));
     const start = performance.now();
     const authored = fixture(config.scenario, config.size);
-    const output = config.mode === 'next-opaque'
-      ? compileNext(authored, { runtimePath: '@memoized-dom/runtime' })
-      : compileModulesDetailed(authored, {
-        experimentalPackageArtifacts: config.mode === 'compiled' ? [packaged.artifact] : [],
-        runtimePath: '@memoized-dom/runtime', hot: false, initialContent: false,
-      }).output;
+    const output = config.mode === 'native'
+      ? compileModules({ ...authored, ...packageModules }, { runtimePath: '@memoized-dom/runtime', resolveImport: specifier => packageEntries[specifier] })
+      : compileModules(authored, { runtimePath: '@memoized-dom/runtime' });
     const applicationCompilationMs = performance.now() - start;
+    if (config.mode === 'native' && output['./node_modules/dset/dist/index.mjs'] === undefined) {
+      throw new Error('dset did not compile as part of the graph');
+    }
     for (const [file, code] of Object.entries(output)) await put(join(folder, file), code);
     await put(join(folder, 'entry.ts'), `import {App} from './App.tsx';import {installBenchmark} from ${JSON.stringify(join(import.meta.dirname, 'browser.ts').replaceAll('\\', '/'))};installBenchmark(App,${JSON.stringify(config)});`);
     const bundleStart = performance.now();
@@ -111,9 +107,8 @@ try {
   console.log(`Real Chromium / production runtime. ${options.smoke ? 'SMOKE CHECK — not performance evidence.' : `${options.samples} samples; alternating order.`}`);
   for (const scenario of scenarios) for (const size of options.sizes) {
     const opaque = await open({ scenario, size, mode: 'opaque' });
-    const compiled = await open({ scenario, size, mode: 'compiled' });
-    const nextOpaque = await open({ scenario, size, mode: 'next-opaque' });
-    const items = [opaque, compiled, nextOpaque];
+    const native = await open({ scenario, size, mode: 'native' });
+    const items = [opaque, native];
     try {
       for (let round = -options.warmups; round < options.samples; round++) {
         // Each round starts one mode later, so no mode always runs first.
@@ -128,16 +123,18 @@ try {
       for (const item of items) rows.push({ config: item.config, applicationCompilationMs: item.applicationCompilationMs, bundlingMs: item.bundlingMs,
         bundleBytes: item.bundleBytes, gzipBytes: item.gzipBytes, diagnostics: item.diagnostics,
         timings: Object.fromEntries(phases.map(phase => [phase, summary(item.samples[phase])])) as Record<Phase, ReturnType<typeof summary>> });
-      console.log(`${scenario.padEnd(7)} n=${String(size).padEnd(4)} volatile ${opaque.diagnostics.volatileEntities} → ${compiled.diagnostics.volatileEntities}, new opaque ${nextOpaque.diagnostics.volatileEntities}; correctness passed`);
+      console.log(`${scenario.padEnd(7)} n=${String(size).padEnd(4)} volatile ${opaque.diagnostics.volatileEntities} → ${native.diagnostics.volatileEntities}; correctness passed`);
     } finally { for (const item of items) await item.page.close(); }
   }
   if (browserErrors.length) throw new Error(browserErrors.join('\n'));
-  const report = { schema: 'mmd-third-party-runtime-v1', timestamp: new Date().toISOString(), options,
+  // v2: the modes are opaque and native (dset's source in the app's graph), not the old
+  // compiler's package artifact.
+  const report = { schema: 'mmd-third-party-runtime-v2', timestamp: new Date().toISOString(), options,
     environment: { gitRevision: git(['rev-parse', 'HEAD']), dirty: git(['status', '--porcelain']).length > 0,
       bun: Bun.version, bunRevision: Bun.revision, nodeCompatibilityVersion: process.version, platform: process.platform, osRelease: release(), arch: process.arch,
       cpu: cpus()[0]?.model, cpuThreads: cpus().length, memoryBytes: totalmem(), browser: await browser.version(), headless: true,
       crossOriginIsolated },
-    package: { name: 'dset', version: '3.1.4', sourceHashes: expected, packageCompilationMs },
+    package: { name: 'dset', version: '3.1.4', sourceHashes: expected },
     methodology: { timing: 'Uninstrumented production-runtime execution; setup, data readiness and assertions excluded',
       idle: 'Deterministic simulated visible frames; NOT wall-clock CPU%, FPS, energy, or paint latency',
       updates: 'Synchronous DOM click + commit, no frame pump', updatesFrame: 'One click + one simulated frame per operation',

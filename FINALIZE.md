@@ -21,6 +21,9 @@ and remove it once the owning wiki records it as done.
   Conduit flows (dependencies installed; the flow now finds Edge). Still missing from it:
   `.memoized/server-config.d.ts` (service and request-state types) in compiler-next.
 - [ ] **Benchmarks** on the user's VM; every number at least matches `d6e678b`.
+- [ ] **Bundle trimming the old compiler did** (`bun run bench:size:audit`, "Trimming targets"):
+  client-only counters and lists still bundle the optional hydration recovery
+  (`hydration-error`), and fixed fetched pages the optional request replay.
 - [ ] Follow-ups noted along the way: lazy css-tree loading; rule A for deferred statements;
   progressive interactive server pages (islands); plain `.css` imports in server pages; `miniflare`
   is only a transitive dependency; the `$routed` repro needs the user's source.

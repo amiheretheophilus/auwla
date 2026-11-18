@@ -1,316 +1,184 @@
 /* oxlint-disable no-unused-expressions -- compiler-generated mutation sequences */
 import * as _MD from "@memoized-dom/runtime";
-
-const _WRITES_ = [
-	"./bench/dom/AppInline.tsx#selected",
-	"./bench/dom/data.ts#nextId"
-];
-
-const _WRITES_2 = ["./bench/dom/AppInline.tsx#data"];
-
-const _WRITES_3 = [
-	"./bench/dom/AppInline.tsx#data",
-	"./bench/dom/data.ts#nextId"
-];
-
-const _WRITES_4 = [
-	"./bench/dom/AppInline.tsx#data",
-	"./bench/dom/data.ts#adjectives",
-	"./bench/dom/data.ts#colours",
-	"./bench/dom/data.ts#nextId",
-	"./bench/dom/data.ts#nouns"
-];
-
-const _WRITES_5 = ["./bench/dom/AppInline.tsx#selected"];
-let _liTemplate, _liTemplateDocument;
-
-function _liCreateTemplate(_document2) {
-	const _text10 = _document2.createTextNode("");
-	const _li = _document2.createElement("li");
-
-	_li.appendChild(_text10);
-
-	return _li;
+_MD.defineComponent(BenchAppInline, "./bench/dom/AppInline.tsx#BenchAppInline");
+const _template = _MD.createTemplateCache([["div", 0, ["div", ["class", "toolbar"], ["button", 0, "create1k"], ["button", 0, "create10k"], ["button", 0, "append1k"], ["button", 0, "prepend1k"], ["button", 0, "pop1k"], ["button", 0, "update"], ["button", 0, "swap"], ["button", 0, "reverse"], ["button", 0, "remove"], ["button", 0, "remove100"], ["button", 0, "clear"]], ["ul", 0, ""]]]);
+const _template2 = _MD.createTemplateCache([["li", 0, ""]]);
+let _dataVersion = 0;
+const _sharedKey = {};
+function _mutated_data(_value) {
+  _dataVersion++;
+  _sharedWrites.mark(_sharedKey);
+  return _value;
 }
-
-const _HTML_ = "<div><div class=\"toolbar\"><button>create1k</button><button>create10k</button><button>append1k</button><button>prepend1k</button><button>pop1k</button><button>update</button><button>swap</button><button>reverse</button><button>remove</button><button>remove100</button><button>clear</button></div><ul></ul></div>";
-
-_MD.installAccessTable(
-	{
-		readers: {
-			"./bench/dom/AppInline.tsx#data": ["BenchAppInline"],
-			"./bench/dom/AppInline.tsx#data\u0000memo-dom:list-structure-reader": ["BenchAppInline"],
-			"./bench/dom/AppInline.tsx#selected": ["BenchAppInline/data/$selection"]
-		}
-	},
-	"BenchAppInline",
-	"./bench/dom/AppInline.tsx"
-);
-
+function _version_data() {
+  return _dataVersion;
+}
+function _read_data() {
+  return _MD.trackRead(_version_data, data, _sharedKey);
+}
+export { _read_data };
+let _selectedVersion = 0;
+const _sharedKey2 = {};
+function _mutated_selected(_value2) {
+  _selectedVersion++;
+  _sharedWrites.mark(_sharedKey2);
+  return _value2;
+}
+function _version_selected() {
+  return _selectedVersion;
+}
+function _read_selected() {
+  return _MD.trackRead(_version_selected, selected, _sharedKey2);
+}
+export { _read_selected };
+function _peek_selected() {
+  return selected;
+}
+const _sharedWrites = _MD.createSharedWrites([_sharedKey, _sharedKey2], []);
+function _assign_data(_before, _after) {
+  return _MD.unchangedWrite(_before, _after) ? _after : _mutated_data(_after);
+}
+function _assign_selected(_before2, _after2) {
+  return _MD.unchangedWrite(_before2, _after2) ? _after2 : _mutated_selected(_after2);
+}
+function _moved_data(_value3) {
+  _mutated_data();
+  return _value3;
+}
+var _edits_data = 0;
+var _editedAt_data = new WeakMap();
+function _edited_data(_item2, _value4) {
+  _editedAt_data.set(_item2, ++_edits_data);
+  _mutated_data();
+  return _value4;
+}
+var _item3;
 import { buildData } from './data';
-
 let data = [];
 let selected = null;
-
-export function BenchAppInline(_id, _parent, _dataPolicies) {
-	let _value;
-
-	const _update = (_reasons = null) => {
-		_region.reconcile(data, _MD.isStructuralListUpdate(_reasons, "./bench/dom/AppInline.tsx#data"));
-	};
-
-	_MD.registerEntity({ id: _id, parent: _parent, render: _update });
-
-	const _markup = _MD.materializeMarkup(_HTML_);
-	const _button = _markup[1];
-	const _button2 = _markup[3];
-	const _button3 = _markup[5];
-	const _button4 = _markup[7];
-	const _button5 = _markup[9];
-	const _button6 = _markup[11];
-	const _button7 = _markup[13];
-	const _button8 = _markup[15];
-	const _button9 = _markup[17];
-	const _button0 = _markup[19];
-	const _button1 = _markup[21];
-	const _ul = _markup[23];
-	const _div2 = _markup[24];
-
-	_button.onclick = () => {
-		data = buildData(1000);
-		selected = null;
-
-		{
-			_MD.commitWrites(_WRITES_);
-			_MD.commitStructuralWrites(_WRITES_2);
-		}
-	};
-
-	_button2.onclick = () => {
-		data = buildData(10000);
-		selected = null;
-
-		{
-			_MD.commitWrites(_WRITES_);
-			_MD.commitStructuralWrites(_WRITES_2);
-		}
-	};
-
-	_button3.onclick = () => {
-		data = data.concat(buildData(1000));
-		_MD.commitWrites(_WRITES_3);
-	};
-
-	_button4.onclick = () => {
-		data = buildData(1000).concat(data);
-		_MD.commitWrites(_WRITES_4);
-	};
-
-	_button5.onclick = () => {
-		data = data.slice(0, -1000);
-		_MD.commitWrites(_WRITES_2);
-	};
-
-	_button6.onclick = () => {
-		let _didWrite = false;
-
-		for (let i = 0; i < data.length; i += 10) (_didWrite = true, data[i].label += ' !!!');
-
-		{
-			if (_didWrite) _MD.markDirtySubtree("BenchAppInline", _id);
-		}
-	};
-
-	_button7.onclick = () => {
-		let _didWrite2 = false, _didWrite3 = false;
-
-		if (data.length > 998) {
-			const t = data[1];
-
-			(_didWrite2 = true, data[1] = data[998]);
-			(_didWrite3 = true, data[998] = t);
-		}
-
-		{
-			if (_didWrite2 || _didWrite3) _MD.markDirtySubtree("BenchAppInline", _id);
-		}
-	};
-
-	_button8.onclick = () => {
-		data.reverse();
-		_MD.commitWrites(_WRITES_2);
-	};
-
-	_button9.onclick = () => {
-		data.splice(500, 1);
-		_MD.commitWrites(_WRITES_2);
-	};
-
-	_button0.onclick = () => {
-		data = data.filter((_item, index) => index % 100 !== 0);
-		_MD.commitWrites(_WRITES_2);
-	};
-
-	_button1.onclick = () => {
-		data = [];
-		selected = null;
-
-		{
-			_MD.commitWrites(_WRITES_5);
-			_MD.commitStructuralWrites(_WRITES_2);
-		}
-	};
-
-	const _onClickBinding = _MD.createDelegatedEventBinding(_ul, "onClick");
-
-	const _region = _MD.createListRegion(
-		_ul,
-		_id + "/data",
-		(item, _rowId) => {
-			let _slot, _slot2, _slot3, _slot4, _slot5, _value2;
-			const _templateEnvironment = _MD.getActiveEnvironment();
-			const _document2 = _templateEnvironment.document;
-			const _canReuseTemplate = _templateEnvironment.hydration === void 0;
-			let _li;
-
-			if (_canReuseTemplate) {
-				if (_liTemplate === void 0 || _liTemplateDocument !== _document2) {
-					_liTemplateDocument = _document2;
-					_liTemplate = _liCreateTemplate(_document2);
-				}
-
-				_li = _liTemplate.cloneNode(true);
-			} else {
-				_li = _liCreateTemplate(_document2);
-			}
-
-			const _text10 = _li.firstChild;
-
-			{
-				const _textLeft = item.id;
-
-				if (typeof _textLeft === "number" || typeof _textLeft === "string") {
-					const _textRight = item.label;
-
-					if (typeof _textRight === "number" || typeof _textRight === "string") {
-						{
-							_slot2 = _textLeft;
-							_slot3 = _textRight;
-							_slot4 = true;
-							_slot = _MD.textValue(_textLeft + ": " + _textRight);
-						}
-					} else try {
-						_slot = _MD.textValue(_textLeft + ": " + _textRight);
-					} finally {
-						_slot4 = false;
-					}
-				} else try {
-					_slot = _MD.textValue(_textLeft + ": " + item.label);
-				} finally {
-					_slot4 = false;
-				}
-			}
-
-			_MD.setTextData(_text10, _slot);
-
-			if (_slot5 !== (_value2 = selected === item.id ? "danger" : "")) {
-				_slot5 = _value2;
-				_MD.setClassValue(_li, _value2);
-			}
-
-			_MD.setDelegatedEvent(_onClickBinding, _li, () => {
-				selected = item.id;
-				_MD.commitWrites(_WRITES_5);
-			});
-
-			return {
-				nodes: _li,
-				entities: [],
-				update: (_nextItem) => {
-					item = _nextItem;
-
-					{
-						const _textLeft = item.id;
-
-						if (typeof _textLeft === "number" || typeof _textLeft === "string") {
-							const _textRight = item.label;
-
-							if (typeof _textRight === "number" || typeof _textRight === "string") {
-								if (!_slot4 || (_slot2 !== _textLeft || _slot3 !== _textRight)) {
-									_slot2 = _textLeft;
-									_slot3 = _textRight;
-									_slot4 = true;
-
-									if (_slot !== (_value2 = _MD.textValue(_textLeft + ": " + _textRight))) {
-										_slot = _value2;
-										_text10.data = _value2;
-									}
-								}
-							} else try {
-								if (_slot !== (_value2 = _MD.textValue(_textLeft + ": " + _textRight))) {
-									_slot = _value2;
-									_text10.data = _value2;
-								}
-							} finally {
-								_slot4 = false;
-							}
-						} else try {
-							if (_slot !== (_value2 = _MD.textValue(_textLeft + ": " + item.label))) {
-								_slot = _value2;
-								_text10.data = _value2;
-							}
-						} finally {
-							_slot4 = false;
-						}
-					}
-
-					if (_slot5 !== (_value2 = selected === item.id ? "danger" : "")) {
-						_slot5 = _value2;
-						_MD.setClassValue(_li, _value2);
-					}
-				}
-			};
-		},
-		(item) => item.id,
-		false,
-		false,
-		true
-	);
-
-	const _listSelectionId = _id + "/data/$selection";
-	let _selectedModuleListKey = selected;
-
-	_MD.registerEntity({
-		id: _listSelectionId,
-		parent: _id,
-		render: () => {
-			if (!Object.is(_selectedModuleListKey, selected)) {
-				const _previousModuleListKey = _selectedModuleListKey;
-
-				_selectedModuleListKey = selected;
-				_region.refreshKey(_previousModuleListKey);
-				_region.refreshKey(_selectedModuleListKey);
-			}
-		}
-	});
-
-	const _disposeList = _region.dispose;
-
-	_region.dispose = () => {
-		_MD.unregister(_listSelectionId);
-		_disposeList();
-	};
-
-	_region.reconcile(data);
-	_MD.cleanup(_id, () => _region.dispose());
-
-	return _div2;
+_sharedWrites.watch([{ read: () => selected, notify: _mutated_selected }]);
+export function BenchAppInline(_id, _parent, _props, _namespace, _setupOnly) {
+  const _entity = { id: _id, parent: _parent, render: _update };
+  const _writes = _MD.createWriteBatch(_entity);
+  _MD.registerEntity(_entity);
+  const _scope = _MD.createBuildScope();
+  const _setupFrame = _scope.enter(() => {
+    if (_MD.getEntity(_id) === _entity) {
+      _MD.unregisterSubtree(_id);
+    }
+  });
+  if (_setupOnly) {
+    _scope.leave(_setupFrame);
+    return;
+  }
+  _writes.beginMount();
+  const _clone = _MD.cloneTemplate(_template, _namespace);
+  const _node = _clone.firstChild;
+  const _button = _node.firstChild;
+  const _button2 = _button.nextSibling;
+  const _button3 = _button2.nextSibling;
+  const _button4 = _button3.nextSibling;
+  const _button5 = _button4.nextSibling;
+  const _button6 = _button5.nextSibling;
+  const _button7 = _button6.nextSibling;
+  const _button8 = _button7.nextSibling;
+  const _button9 = _button8.nextSibling;
+  const _button10 = _button9.nextSibling;
+  const _button11 = _button10.nextSibling;
+  const _node2 = _node.nextSibling;
+  const _text = _node2.firstChild;
+  _MD.setListener(_button, "click", void 0, () => {
+    _assign_data(data, data = buildData(1000));
+    _assign_selected(selected, selected = null);
+  }, _writes);
+  _MD.setListener(_button2, "click", void 0, () => {
+    _assign_data(data, data = buildData(10000));
+    _assign_selected(selected, selected = null);
+  }, _writes);
+  _MD.setListener(_button3, "click", void 0, () => {
+    _assign_data(data, data = data.concat(buildData(1000)));
+  }, _writes);
+  _MD.setListener(_button4, "click", void 0, () => {
+    _assign_data(data, data = buildData(1000).concat(data));
+  }, _writes);
+  _MD.setListener(_button5, "click", void 0, () => {
+    _assign_data(data, data = data.slice(0, -1000));
+  }, _writes);
+  _MD.setListener(_button6, "click", void 0, () => {
+    for (let i = 0; i < data.length; i += 10) _item3 = data[i], _edited_data(_item3, _item3.label += ' !!!');
+  }, _writes);
+  _MD.setListener(_button7, "click", void 0, () => {
+    if (data.length > 998) {
+      const t = data[1];
+      _moved_data(data[1] = data[998]);
+      _moved_data(data[998] = t);
+    }
+  }, _writes);
+  _MD.setListener(_button8, "click", void 0, () => {
+    _MD.editArray(data, "reverse", [], _moved_data);
+  }, _writes);
+  _MD.setListener(_button9, "click", void 0, () => {
+    _MD.editArray(data, "splice", [500, 1], _moved_data);
+  }, _writes);
+  _MD.setListener(_button10, "click", void 0, () => {
+    _assign_data(data, data = data.filter((_item, index) => index % 100 !== 0));
+  }, _writes);
+  _MD.setListener(_button11, "click", void 0, () => {
+    _assign_data(data, data = []);
+    _assign_selected(selected, selected = null);
+  }, _writes);
+  const _rowNamespace = _MD.renderNamespace(_text.parentNode, _namespace);
+  let _seenEdits = 0;
+  const _rowList = _MD.createRowList(_text, { id: _id, batch: _writes, entity: _entity, namespace: _namespace }, (item) => item.id, (item) => {
+    const _clone2 = _MD.cloneTemplate(_template2, _rowNamespace);
+    const _text2 = _clone2.firstChild;
+    let _value17 = _peek_selected() === item.id ? 'danger' : '';
+    _MD.setClassAttribute(_clone2, _value17);
+    _MD.setRowListener(_clone2, "click", () => {
+      _assign_selected(selected, selected = item.id);
+    }, _writes);
+    let _part = item.id;
+    let _part2 = item.label;
+    _text2.data = _MD.textValue(_part) + ": " + _MD.textValue(_part2);
+    return { node: _clone2, update(_item4) {
+      item = _item4;
+      const _next = _peek_selected() === item.id ? 'danger' : '';
+      if (_next !== _value17) {
+        _MD.setClassAttribute(_clone2, _next);
+        _value17 = _next;
+      }
+      const _nextPart = item.id;
+      const _nextPart2 = item.label;
+      if (_nextPart !== _part || _nextPart2 !== _part2) {
+        _text2.data = _MD.textValue(_nextPart) + ": " + _MD.textValue(_nextPart2);
+        _part = _nextPart;
+        _part2 = _nextPart2;
+      }
+    } };
+  }, null);
+  _rowList.route(_peek_selected, _version_selected, _sharedKey2);
+  const _siteComputation = _MD.createComputation(_writes.mark, _entity);
+  _siteComputation.begin();
+  _rowList.map(_read_data(), _MD.uneditedItems(_editedAt_data, _seenEdits, _seenEdits = _edits_data));
+  _siteComputation.end();
+  _MD.cleanup(_id, () => {
+    _rowList.dispose();
+    _siteComputation.dispose();
+  });
+  function _update() {
+    const _updateFrame = _scope.enter();
+    if (_siteComputation.changed() || _rowList.changed()) {
+      _siteComputation.begin();
+      _rowList.map(_read_data(), _MD.uneditedItems(_editedAt_data, _seenEdits, _seenEdits = _edits_data));
+      _siteComputation.end();
+    }
+    _rowList.refresh(_siteComputation);
+    _scope.leave(_updateFrame);
+  }
+  _writes.activate();
+  _scope.leave(_setupFrame);
+  return _clone;
 }
-
-_MD.registerRootFactory(BenchAppInline, {
-	id: "BenchAppInline",
-	create: () => BenchAppInline("BenchAppInline", null, [])
-});
 
 export function createCompiledInlineApp() {
   const root = BenchAppInline('BenchAppInline', null) as HTMLElement;

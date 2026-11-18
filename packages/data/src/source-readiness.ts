@@ -18,6 +18,7 @@ import {
   resolvedValuesError,
   retryResolvedValues,
   sourcesNotReady,
+  trackExplicitResourceRead,
   UnresolvedDataReadError,
 } from './transparent';
 import type { ResolvedValue } from './types';
@@ -443,7 +444,9 @@ export function readSourceValue<T>(value: T): T {
     throw new Error('[memo-dom] a compiler readiness guard missed a pending computation');
   }
 
-  return isResolvedSource(value) ? readResolvedValue(value as ResolvedValue<unknown>) as T : value;
+  if (isResolvedSource(value)) return readResolvedValue(value as ResolvedValue<unknown>) as T;
+  trackExplicitResourceRead(value);
+  return value;
 }
 
 /** Native patterns run once after readiness, including their defaults and rest. */

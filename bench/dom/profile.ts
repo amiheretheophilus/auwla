@@ -2,9 +2,10 @@
  * CPU profile of one DOM scenario in local Chrome: where the time goes.
  *
  *   bun run bench/dom/profile.ts --adapter=module-component --scenario="update 10k"
- *     [--compiler=next|old] [--runs=3] [--top=30]
+ *     [--compiler=0] [--runs=3] [--top=30]
  *
- * Uses the bundle `quick.ts` last built (`dist/quick-<compiler>.js`). Prepares
+ * Uses a bundle `quick.ts` last built: `--compiler` is its place in that run's `--compilers`
+ * list (`dist/quick-<index>.js`), so 0 is the first, this checkout's compiler by default. Prepares
  * the scenario outside the profile, then records `--runs` runs and prints
  * functions by self time, and by inclusive time.
  */
@@ -15,7 +16,7 @@ import { domDirectory } from './bundle';
 const flag = (name: string) => process.argv.find(value => value.startsWith(`--${name}=`))?.slice(name.length + 3);
 const adapter = flag('adapter') ?? 'module-component';
 const scenario = flag('scenario') ?? 'update 10k';
-const compiler = flag('compiler') ?? 'next';
+const compiler = flag('compiler') ?? '0';
 const runs = Number(flag('runs') ?? 3);
 const top = Number(flag('top') ?? 30);
 

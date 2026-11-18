@@ -8,7 +8,7 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { performance } from 'node:perf_hooks';
 import { Window } from 'happy-dom';
-import { compile } from '@memoized-dom/compiler';
+import { compile } from '@memoized-dom/compiler-next';
 import {
   resetScheduler,
   setScheduler,
@@ -72,15 +72,25 @@ function median(values: readonly number[]): number {
   return sorted[Math.floor(sorted.length / 2)]!;
 }
 
+/**
+ * A component returns its nodes: an element, or a fragment when its root is another component
+ * (the slotted App's `<Frame>`). Both variants mount into a host element, so they pay the same.
+ */
+function mountRoot(factory: (id: string, parent: string | null) => Node, id: string): HTMLElement {
+  const host = document.createElement('div');
+  host.append(factory(id, null));
+  document.body.appendChild(host);
+  return host;
+}
+
 function measureMount(
-  factory: (id: string, parent: string | null) => HTMLElement,
+  factory: (id: string, parent: string | null) => Node,
   prefix: string,
 ): number {
   const start = performance.now();
   for (let i = 0; i < MOUNT_ITERATIONS; i++) {
     const id = `${prefix}-${i}`;
-    const root = factory(id, null);
-    document.body.appendChild(root);
+    const root = mountRoot(factory, id);
     unregister(id);
     root.remove();
   }
@@ -88,12 +98,11 @@ function measureMount(
 }
 
 function measureUpdates(
-  factory: (id: string, parent: string | null) => HTMLElement,
+  factory: (id: string, parent: string | null) => Node,
   id: string,
 ): number {
-  const root = factory(id, null);
-  document.body.appendChild(root);
-  const button = root.matches('button') ? root : root.querySelector('button')!;
+  const root = mountRoot(factory, id);
+  const button = root.querySelector('button')!;
   for (let i = 0; i < 2_000; i++) button.click();
 
   const start = performance.now();

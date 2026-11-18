@@ -1,7 +1,7 @@
 /**
  * Bundle a DOM benchmark page from the selected compiler's generated files:
- * `./compiled-tsx-app` resolves to `compiled-tsx-app.ts` (existing compiler)
- * or `compiled-tsx-app.next.ts` (`BENCH_COMPILER=next`).
+ * `./compiled-tsx-app` resolves to `compiled-tsx-app.ts` (the compiler in this checkout)
+ * or `compiled-tsx-app.custom.ts` (a snapshot, `BENCH_COMPILER=<path>`).
  *
  *   bun run bench/dom/bundle.ts <entry.ts> <outfile.js>
  */

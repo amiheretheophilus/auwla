@@ -9,7 +9,7 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { performance } from 'node:perf_hooks';
 import { Window } from 'happy-dom';
-import { compile } from '@memoized-dom/compiler';
+import { compile } from '@memoized-dom/compiler-next';
 import {
   resetScheduler,
   setScheduler,
@@ -19,8 +19,9 @@ import {
 const outDir = new URL('./dist/', import.meta.url);
 mkdirSync(outDir, { recursive: true });
 
+// One props object, as in plain JavaScript (`wiki/decisions.md`, 2026-11-16).
 const row = `
-  function Row(item) {
+  function Row({ item }) {
     return <button class="row" onClick={() => item.value++}>{item.value}</button>;
   }
 `;

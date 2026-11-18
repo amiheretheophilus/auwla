@@ -6,7 +6,7 @@ import { createHash } from 'node:crypto';
 import { memoizedSources, type MemoizedBuildOptions } from './build';
 import { git, repository } from './pin';
 import { command } from './process';
-import { loadBenchmarkCompiler, selectedCompilerPath } from '../load-compiler';
+import { loadBenchmarkCompiler } from '../load-compiler';
 
 export async function prepareComparison(ref: string, output: string): Promise<{
   beforeCommit: string; beforeRoot: string; adapterSha256: string;
@@ -26,9 +26,9 @@ export async function prepareComparison(ref: string, output: string): Promise<{
   git(['archive', `--output=${archive}`, beforeCommit, 'packages/compiler', 'packages/runtime']);
   await command('tar', ['-xf', archive, '-C', beforeRoot], repository);
   const beforeCompiler = await import(pathToFileURL(resolve(beforeRoot, 'packages/compiler/src/index.ts')).href);
-  const afterCompiler = selectedCompilerPath() !== null
-    ? await loadBenchmarkCompiler()
-    : await import(pathToFileURL(resolve(repository, 'packages/compiler/src/index.ts')).href);
+  // The baseline's `packages/compiler` is its own (the old compiler at `d6e678b`); the after side
+  // is this checkout's compiler, or a snapshot (`../load-compiler.ts`).
+  const afterCompiler = await loadBenchmarkCompiler();
   const sources = memoizedSources();
   return {
     beforeCommit, beforeRoot, adapterSha256: createHash('sha256').update(JSON.stringify(sources)).digest('hex'),

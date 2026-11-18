@@ -229,7 +229,7 @@ HTML (`tests/ssr-region-streaming.test.ts`).
 The comparison cases are the proof. Each case in `tests/cases` gains a third compiler mode beside
 optimized and general: `delivered`, which starts from the build-time HTML and adopts it. Every step
 must match the reference, so all existing programs check delivery without new cases. Shipped JS per
-fixture is compared with the table above by `bench:size:html` with `BENCH_COMPILER=next`.
+fixture is compared with the table above by `bench:size:html`.
 
 ## Order of work
 

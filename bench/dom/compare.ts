@@ -7,7 +7,7 @@ import { build } from 'esbuild';
 import puppeteer from 'puppeteer-core';
 import type { BenchRow } from './state-placement-browser';
 import { helperComparisonSources } from './helper-comparison-fixture';
-import { selectedCompilerPath } from '../load-compiler';
+import { COMPILER, selectedCompilerPath } from '../load-compiler';
 
 const args = process.argv.slice(2);
 if (args.includes('--help')) {
@@ -53,9 +53,9 @@ const compilerPackage = beforeCompiler === 'next' ? 'compiler-next' : 'compiler'
 await git('archive', `--output=${archive}`, beforeCommit, `packages/${compilerPackage}`, 'packages/runtime');
 const extract = Bun.spawn(['tar', '-xf', archive, '-C', snapshot], { cwd: root, stdout: 'inherit', stderr: 'inherit' });
 if (await extract.exited !== 0) throw new Error('Cannot extract baseline');
-// BENCH_COMPILER=next measures the rewrite as the after side; the baseline
-// keeps the snapshot's own compiler.
-const afterCompiler = selectedCompilerPath() ?? resolve(root, 'packages/compiler/src/index.ts');
+// The after side is this checkout's compiler (or a snapshot, `../load-compiler.ts`); the baseline
+// keeps the snapshot's own: `--before-compiler=old` is its `packages/compiler`, as at `d6e678b`.
+const afterCompiler = selectedCompilerPath() ?? COMPILER;
 const beforeCompilerPath = isolate === 'runtime' ? afterCompiler
   : resolve(snapshot, `packages/${compilerPackage}/src/index.ts`);
 const compilers = {
