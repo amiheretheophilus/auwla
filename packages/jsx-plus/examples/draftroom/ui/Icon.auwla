@@ -8,6 +8,7 @@ const glyphs: Record<string, string> = {
   pen: '╱',
   text: 'T',
   note: '◩',
+  frame: '▣',
   plus: '+',
   minus: '−',
   undo: '↶',

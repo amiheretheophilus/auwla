@@ -1,0 +1,42 @@
+import type { Editor } from '../editor';
+import type { Alignment } from '../model/selection';
+import type { Shape } from '../model/types';
+
+const alignments: { id: Alignment; label: string; minimum: number }[] = [
+  { id: 'left', label: 'Left', minimum: 2 },
+  { id: 'center', label: 'Center', minimum: 2 },
+  { id: 'right', label: 'Right', minimum: 2 },
+  { id: 'top', label: 'Top', minimum: 2 },
+  { id: 'middle', label: 'Middle', minimum: 2 },
+  { id: 'bottom', label: 'Bottom', minimum: 2 },
+  { id: 'horizontal', label: 'Space horizontally', minimum: 3 },
+  { id: 'vertical', label: 'Space vertically', minimum: 3 },
+];
+
+export function SelectionProperties({ shapes, editor }: { shapes: Shape[]; editor: Editor }) {
+  const count = shapes.filter(shape => shape.kind !== 'frame' && !shape.locked).length;
+  const grouped = shapes.some(shape => shape.groupId !== undefined && !shape.locked);
+
+  return (
+    <div class="selection-properties">
+      <p>"{shapes.length} objects selected"</p>
+      <div class="action-grid">
+        <button type="button" class="button secondary" disabled={count < 2} onClick={editor.project.group}>"Group"</button>
+        <button type="button" class="button secondary" disabled={!grouped} onClick={editor.project.ungroup}>"Ungroup"</button>
+      </div>
+      <fieldset>
+        <legend>"Align and distribute"</legend>
+        <div class="action-grid">
+          for (const option of alignments) {
+            <button key={option.id} type="button" class="button secondary" disabled={count < option.minimum}
+              onClick={() => editor.project.align(option.id)}>option.label</button>
+          }
+        </div>
+      </fieldset>
+      <div class="action-grid">
+        <button type="button" class="button secondary" onClick={editor.project.duplicate}>"Duplicate"</button>
+        <button type="button" class="button danger" onClick={editor.project.remove}>"Delete selection"</button>
+      </div>
+    </div>
+  );
+}

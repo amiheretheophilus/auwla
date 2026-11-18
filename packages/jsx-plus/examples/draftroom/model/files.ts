@@ -25,6 +25,10 @@ function validPoints(shape: Record<string, unknown>): boolean {
   return shape.points === undefined;
 }
 
+function optionalId(value: unknown): boolean {
+  return value === undefined || (typeof value === 'string' && value.length > 0);
+}
+
 function isShape(value: unknown): value is Shape {
   if (!record(value)) {
     return false;
@@ -43,6 +47,9 @@ function isShape(value: unknown): value is Shape {
     && typeof value.title === 'string' && typeof value.text === 'string'
     && (value.line === 'solid' || value.line === 'dashed' || value.line === 'dotted')
     && typeof value.hidden === 'boolean' && typeof value.locked === 'boolean'
+    && optionalId(value.frameId) && optionalId(value.groupId)
+    && optionalId(value.fromId) && optionalId(value.toId)
+    && (value.kind === 'arrow' || (value.fromId === undefined && value.toId === undefined))
     && validPoints(value);
 }
 
@@ -74,6 +81,14 @@ function decode(text: string): Project {
     throw new Error('This file is not a Draftroom project.');
   }
   return value;
+}
+
+export function decodeClipboard(text: string): Shape[] | undefined {
+  const value: unknown = JSON.parse(text);
+  if (Array.isArray(value) && value.length > 0 && value.length <= 2000 && value.every(isShape) && uniqueIds(value)) {
+    return value;
+  }
+  return undefined;
 }
 
 export async function readAutosave(): Promise<Project | undefined> {

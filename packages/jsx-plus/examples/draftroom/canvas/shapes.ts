@@ -1,6 +1,23 @@
 import type { Shape } from '../model/types';
+import { FRAME_HEADER } from '../model/frames';
 import { arrowHead } from './geometry';
 import { drawShapeText } from './shape-text';
+
+function drawFrame(ctx: CanvasRenderingContext2D, shape: Shape): void {
+  ctx.fillStyle = shape.fill === 'transparent' ? '#faf8fe' : shape.fill;
+  ctx.fillRect(0, 0, shape.width, shape.height);
+  ctx.strokeStyle = shape.stroke;
+  ctx.strokeRect(0, 0, shape.width, shape.height);
+
+  if (shape.width > 22 && shape.height >= FRAME_HEADER) {
+    ctx.fillStyle = '#eee7fb';
+    ctx.fillRect(0, 0, shape.width, FRAME_HEADER);
+    ctx.fillStyle = '#4d397a';
+    ctx.font = '650 14px "Segoe UI", sans-serif';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(shape.title, 10, FRAME_HEADER / 2, shape.width - 20);
+  }
+}
 
 function traceShape(ctx: CanvasRenderingContext2D, shape: Shape): void {
   const { width, height } = shape;
@@ -54,6 +71,12 @@ export function drawShape(ctx: CanvasRenderingContext2D, shape: Shape): void {
   ctx.lineWidth = shape.weight;
   ctx.lineJoin = 'round';
   ctx.lineCap = 'round';
+
+  if (shape.kind === 'frame') {
+    drawFrame(ctx, shape);
+    ctx.restore();
+    return;
+  }
   if (shape.line === 'dashed') {
     ctx.setLineDash([shape.weight * 4, shape.weight * 3]);
   } else if (shape.line === 'dotted') {

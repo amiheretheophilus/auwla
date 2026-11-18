@@ -1,10 +1,12 @@
+import { prepareShapes, replaceShapes } from './edits';
 import { createHistory } from './history';
-import { brainstorm, workflow } from './templates';
-import { canEditText, makePage, type Page, type Project, type Shape } from './types';
+import { alignShapes, cloneSelection, groupMembers, movableShapes, translated, type Alignment } from './selection';
+import { templatePage, type Template } from './templates';
+import { canEditText, makePage, type Page, type Point, type Project, type Shape } from './types';
 
 export function createDocument(initial: Project, change: (persist: boolean, refit: boolean) => void) {
   const history = createHistory(initial);
-  let selectedId: string | undefined;
+  let selectedIds: string[] = [];
 
   function page(): Page {
     const project = history.current();
@@ -12,24 +14,51 @@ export function createDocument(initial: Project, change: (persist: boolean, refi
   }
 
   function selected(): Shape | undefined {
-    return shapeById(selectedId);
+    return selectedIds.length === 1 ? shapeById(selectedIds[0]) : undefined;
+  }
+
+  function selection(): Shape[] {
+    return page().shapes.filter(shape => selectedIds.includes(shape.id));
   }
 
   function shapeById(id: string | undefined): Shape | undefined {
     return page().shapes.find(shape => shape.id === id);
   }
 
-  function select(id?: string): void {
-    if (selectedId === id) {
+  function selectMany(ids: string[], extend = false): void {
+    const combined = extend ? [...selectedIds, ...ids] : ids;
+    const next = groupMembers(page().shapes, combined);
+    if (selectedIds.length === next.length && selectedIds.every((id, index) => id === next[index])) {
       return;
     }
-    selectedId = id;
+    selectedIds = next;
     change(false, false);
+  }
+
+  function select(id?: string, toggle = false): void {
+    if (id !== undefined && toggle) {
+      const ids = groupMembers(page().shapes, [id]);
+      if (selectedIds.includes(id)) {
+        selectMany(selectedIds.filter(current => !ids.includes(current)));
+      } else {
+        selectMany(ids, true);
+      }
+    } else {
+      selectMany(id === undefined ? [] : [id]);
+    }
+  }
+
+  function selectOnly(id: string): void {
+    if (selectedIds.length !== 1 || selectedIds[0] !== id) {
+      selectedIds = [id];
+      change(false, false);
+    }
   }
 
   function setPage(next: Page): void {
     const project = history.current();
-    const pages = project.pages.map(item => item.id === next.id ? next : item);
+    const prepared = { ...next, shapes: prepareShapes(next.shapes) };
+    const pages = project.pages.map(item => item.id === next.id ? prepared : item);
     history.commit({ ...project, pages });
     change(true, false);
   }
@@ -39,23 +68,16 @@ export function createDocument(initial: Project, change: (persist: boolean, refi
     if (project.activeId === id || !project.pages.some(item => item.id === id)) {
       return;
     }
-    selectedId = undefined;
+    selectedIds = [];
     history.navigate(id);
     change(true, true);
   }
 
-  function add(template?: 'workflow' | 'brainstorm'): void {
+  function add(template?: Template): void {
     const project = history.current();
-    let next: Page;
-    if (template === 'workflow') {
-      next = makePage('Product flow', workflow());
-    } else if (template === 'brainstorm') {
-      next = makePage('Brainstorm', brainstorm());
-    } else {
-      next = makePage(`Untitled board ${project.pages.length + 1}`);
-    }
+    const next = template === undefined ? makePage(`Untitled board ${project.pages.length + 1}`) : templatePage(template);
 
-    selectedId = undefined;
+    selectedIds = [];
     history.commit({ ...project, activeId: next.id, pages: [...project.pages, next] });
     change(true, true);
   }
@@ -75,19 +97,26 @@ export function createDocument(initial: Project, change: (persist: boolean, refi
     }
 
     const pages = project.pages.filter(item => item.id !== project.activeId);
-    selectedId = undefined;
+    selectedIds = [];
     history.commit({ ...project, activeId: pages[0]!.id, pages });
     change(true, true);
   }
 
   function put(shape: Shape): void {
-    const current = page();
-    const shapes = current.shapes.some(item => item.id === shape.id)
-      ? current.shapes.map(item => item.id === shape.id ? shape : item)
-      : [...current.shapes, shape];
+    selectedIds = groupMembers(page().shapes, [shape.id]);
+    if (selectedIds.length === 0) {
+      selectedIds = [shape.id];
+    }
+    apply([shape]);
+  }
 
-    selectedId = shape.id;
-    setPage({ ...current, shapes });
+  function apply(changes: Shape[]): void {
+    if (changes.length === 0) {
+      return;
+    }
+
+    const current = page();
+    setPage({ ...current, shapes: replaceShapes(current.shapes, changes) });
   }
 
   function patch(values: Partial<Shape>): void {
@@ -114,29 +143,62 @@ export function createDocument(initial: Project, change: (persist: boolean, refi
   }
 
   function duplicate(): void {
-    const shape = selected();
-    if (shape === undefined || shape.locked) {
-      return;
+    const shapes = copySelection();
+    if (shapes.length > 0) {
+      paste(shapes);
     }
+  }
 
-    put({
-      ...shape,
-      id: crypto.randomUUID(),
-      title: `${shape.title} copy`,
-      x: shape.x + 24,
-      y: shape.y + 24,
-    });
+  function movable(): Shape[] {
+    return movableShapes(page().shapes, selectedIds);
+  }
+
+  function copySelection(): Shape[] {
+    const ids = new Set(movable().map(shape => shape.id));
+    // Preserve an internal connection when both of its endpoints are copied.
+    return page().shapes.filter(shape => ids.has(shape.id)
+      || (shape.kind === 'arrow' && ids.has(shape.fromId ?? '') && ids.has(shape.toId ?? '')));
+  }
+
+  function paste(shapes: Shape[]): void {
+    const copies = cloneSelection(shapes, { x: 24, y: 24 });
+    selectedIds = copies.map(shape => shape.id);
+    apply(copies);
+  }
+
+  function nudge(offset: Point): void {
+    apply(translated(movable(), offset));
+  }
+
+  function group(): void {
+    const targets = selection().filter(shape => shape.kind !== 'frame' && !shape.locked);
+    if (targets.length >= 2) {
+      const groupId = crypto.randomUUID();
+      apply(targets.map(shape => ({ ...shape, groupId })));
+    }
+  }
+
+  function ungroup(): void {
+    apply(selection().filter(shape => shape.groupId !== undefined && !shape.locked)
+      .map(shape => ({ ...shape, groupId: undefined })));
+  }
+
+  function align(alignment: Alignment): void {
+    const targets = selection().filter(shape => shape.kind !== 'frame' && !shape.locked);
+    const minimum = alignment === 'horizontal' || alignment === 'vertical' ? 3 : 2;
+    if (targets.length >= minimum) {
+      apply(alignShapes(targets, alignment));
+    }
   }
 
   function remove(): void {
-    const shape = selected();
-    if (shape === undefined || shape.locked) {
+    const ids = new Set(selection().filter(shape => !shape.locked).map(shape => shape.id));
+    if (ids.size === 0) {
       return;
     }
-
     const current = page();
-    selectedId = undefined;
-    setPage({ ...current, shapes: current.shapes.filter(item => item.id !== shape.id) });
+    selectedIds = [];
+    setPage({ ...current, shapes: current.shapes.filter(item => !ids.has(item.id)) });
   }
 
   function reorder(offset: number): void {
@@ -152,6 +214,10 @@ export function createDocument(initial: Project, change: (persist: boolean, refi
       return;
     }
 
+    if ((shape.kind === 'frame') !== (current.shapes[destination]?.kind === 'frame')) {
+      return;
+    }
+
     const shapes = current.shapes.slice();
     shapes[index] = shapes[destination]!;
     shapes[destination] = shape;
@@ -164,6 +230,10 @@ export function createDocument(initial: Project, change: (persist: boolean, refi
     const target = current.shapes.findIndex(shape => shape.id === targetId);
     const moving = current.shapes[from];
     if (moving === undefined || moving.locked || target < 0 || from === target) {
+      return;
+    }
+
+    if ((moving.kind === 'frame') !== (current.shapes[target]?.kind === 'frame')) {
       return;
     }
 
@@ -185,12 +255,14 @@ export function createDocument(initial: Project, change: (persist: boolean, refi
     history[direction]();
     const after = history.current();
     if (before !== after) {
+      selectedIds = groupMembers(page().shapes, selectedIds);
       change(true, before.activeId !== after.activeId);
     }
   }
 
   function replace(project: Project, persist: boolean): void {
-    selectedId = undefined;
+    selectedIds = [];
+    project = { ...project, pages: project.pages.map(page => ({ ...page, shapes: prepareShapes(page.shapes) })) };
     if (persist) {
       history.commit(project);
     } else {
@@ -206,8 +278,11 @@ export function createDocument(initial: Project, change: (persist: boolean, refi
     canRedo: history.canRedo,
     page,
     selected,
+    selection,
     shapeById,
     select,
+    selectOnly,
+    selectMany,
     open,
     add,
     rename,
@@ -215,6 +290,14 @@ export function createDocument(initial: Project, change: (persist: boolean, refi
     put,
     patch,
     setText,
+    apply,
+    movable,
+    copySelection,
+    paste,
+    nudge,
+    align,
+    group,
+    ungroup,
     duplicate,
     remove,
     reorder,

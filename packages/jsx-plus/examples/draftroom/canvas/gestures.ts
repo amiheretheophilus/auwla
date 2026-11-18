@@ -1,10 +1,14 @@
 import { startDrawing, updateDrawing, updateTransform, type DrawingDraft, type TransformDraft } from './drafts';
-import { hitShape, snapPoint, toWorld, zoomCamera } from './geometry';
+import { boundsFrom, hitShape, snapPoint, toWorld, zoomCamera } from './geometry';
 import { bindPanShortcut } from './pan-shortcut';
-import type { Camera, Point, Shape, Tool } from '../model/types';
+import { isConnectable } from '../model/connections';
+import { enclosedIds, translated } from '../model/selection';
+import type { Bounds, Camera, Point, Shape, Tool } from '../model/types';
 
 type Gesture =
   | { kind: 'pan'; start: Point; camera: Camera }
+  | { kind: 'marquee'; start: Point; extend: boolean }
+  | { kind: 'move'; start: Point; shapes: Shape[]; anchor: Point }
   | TransformDraft
   | DrawingDraft;
 
@@ -20,10 +24,13 @@ interface BoardInput {
   snap(): boolean;
   shapes(): Shape[];
   selected(): Shape | undefined;
-  select(id?: string): void;
+  selection(): Shape[];
+  movable(): Shape[];
+  select(id?: string, toggle?: boolean): void;
+  selectMany(ids: string[], extend: boolean): void;
   editText(id: string): void;
-  preview(shape?: Shape): void;
-  finish(shape: Shape): void;
+  preview(shapes: Shape[], marquee?: Bounds): void;
+  finish(shapes: Shape[]): void;
 }
 
 export function screenPoint(element: Element, event: MouseEvent): Point {
@@ -47,7 +54,8 @@ function overResizeHandle(shape: Shape | undefined, point: Point, zoom: number):
 export function bindGestures(canvas: HTMLCanvasElement, input: BoardInput): () => void {
   let pointer: ActivePointer | undefined;
   let drag: Gesture | undefined;
-  let changed: Shape | undefined;
+  let changed: Shape[] = [];
+  let marquee: Bounds | undefined;
   const listeners = new AbortController();
   const options = { signal: listeners.signal };
   const panShortcut = bindPanShortcut(canvas, listeners.signal, switchToPan);
@@ -62,12 +70,39 @@ export function bindGestures(canvas: HTMLCanvasElement, input: BoardInput): () =
       drag = { kind: 'pan', start: screen, camera: input.camera() };
 
       // Space takes over from an unfinished edit. The camera moves from the last pointer position.
-      if (changed !== undefined) {
-        changed = undefined;
-        input.preview();
-      }
+      changed = [];
+      marquee = undefined;
+      input.preview([]);
     }
     panShortcut.begin();
+  }
+
+  function connectAt(point: Point): string | undefined {
+    return hitShape(input.shapes().filter(isConnectable), point, input.camera().zoom)?.id;
+  }
+
+  function selectAt(screen: Point, shift: boolean): void {
+    const point = world(screen, false);
+    const selected = input.selected();
+    if (!shift && overResizeHandle(selected, point, input.camera().zoom)) {
+      drag = { kind: 'resize', shape: selected, start: point };
+      return;
+    }
+
+    const shape = hitShape(input.shapes(), point, input.camera().zoom);
+    if (shape === undefined) {
+      drag = { kind: 'marquee', start: point, extend: shift };
+      return;
+    }
+
+    const selection = input.selection();
+    const alreadySelected = selection.some(item => item.id === shape.id);
+    if (shift || !alreadySelected || (selection.length === 1 && shape.groupId !== undefined)) {
+      input.select(shape.id, shift);
+    }
+    if (!shift && !shape.locked) {
+      drag = { kind: 'move', shapes: input.movable(), anchor: shape, start: point };
+    }
   }
 
   function switchToPan(): void {
@@ -86,32 +121,35 @@ export function bindGestures(canvas: HTMLCanvasElement, input: BoardInput): () =
     // Give shortcuts to the board and let an active inspector field commit first.
     canvas.focus({ preventScroll: true });
     const screen = screenPoint(canvas, event);
-    const camera = input.camera();
     const tool = input.tool();
 
     if (tool === 'hand' || spaceHeld || event.button === 1) {
       beginPan(screen);
     } else if (tool === 'select') {
-      const point = world(screen, false);
-      const selected = input.selected();
-
-      if (overResizeHandle(selected, point, camera.zoom)) {
-        drag = { kind: 'resize', shape: selected, start: point };
-      } else {
-        const shape = hitShape(input.shapes(), point, camera.zoom);
-        input.select(shape?.id);
-        if (shape !== undefined && !shape.locked) {
-          drag = { kind: 'move', shape, start: point };
-        }
-      }
+      selectAt(screen, event.shiftKey);
     } else {
       drag = startDrawing(tool, world(screen, tool !== 'pen'), screen);
+      if (tool === 'arrow') {
+        drag.shape.fromId = connectAt(world(screen, false));
+      }
     }
 
     event.preventDefault();
     // Track presses on empty or locked areas too. Space can turn a held press into a pan.
     pointer = { id: event.pointerId, last: screen };
     canvas.setPointerCapture(event.pointerId);
+  }
+
+  function moveSelection(gesture: Extract<Gesture, { kind: 'move' }>, point: Point): Shape[] {
+    const dx = point.x - gesture.start.x;
+    const dy = point.y - gesture.start.y;
+    if (Math.hypot(dx, dy) * input.camera().zoom < 2) {
+      return [];
+    }
+
+    const anchor = gesture.anchor;
+    const offset = input.snap() ? snapPoint({ x: anchor.x + dx, y: anchor.y + dy }) : { x: anchor.x + dx, y: anchor.y + dy };
+    return translated(gesture.shapes, { x: offset.x - anchor.x, y: offset.y - anchor.y });
   }
 
   function move(event: PointerEvent): void {
@@ -141,11 +179,24 @@ export function bindGestures(canvas: HTMLCanvasElement, input: BoardInput): () =
         return;
       }
       drag.started = true;
-      changed = updateDrawing(drag, world(screen, drag.shape.kind !== 'pen'));
+      const shape = updateDrawing(drag, world(screen, drag.shape.kind !== 'pen'));
+      if (shape.kind === 'arrow') {
+        const target = connectAt(world(screen, false));
+        changed = [{ ...shape, toId: target === shape.fromId ? undefined : target }];
+      } else {
+        changed = [shape];
+      }
+    } else if (drag.kind === 'marquee') {
+      const point = world(screen, false);
+      const distance = Math.hypot(point.x - drag.start.x, point.y - drag.start.y) * input.camera().zoom;
+      marquee = distance < 3 ? undefined : boundsFrom(drag.start, point);
+    } else if (drag.kind === 'move') {
+      changed = moveSelection(drag, world(screen, false));
     } else {
-      changed = updateTransform(drag, world(screen, false), input.camera().zoom, input.snap());
+      const shape = updateTransform(drag, world(screen, false), input.camera().zoom, input.snap());
+      changed = shape === undefined ? [] : [shape];
     }
-    input.preview(changed);
+    input.preview(changed, marquee);
   }
 
   function end(event: PointerEvent, commit: boolean): void {
@@ -158,16 +209,24 @@ export function bindGestures(canvas: HTMLCanvasElement, input: BoardInput): () =
     }
     let final = changed;
     if (drag?.kind === 'draw' && !drag.started && drag.shape.points === undefined) {
-      final = drag.shape;
+      final = [drag.shape];
+    }
+    if (commit && drag?.kind === 'marquee') {
+      const ids = marquee === undefined ? [] : enclosedIds(input.shapes(), marquee);
+      input.selectMany(ids, drag.extend);
     }
 
     pointer = undefined;
     drag = undefined;
-    changed = undefined;
+    changed = [];
+    marquee = undefined;
     panShortcut.end();
-    input.preview();
-    if (commit && final !== undefined && (final.points === undefined || final.width + final.height > 2)) {
-      input.finish(final);
+    input.preview([]);
+    if (commit) {
+      const edits = final.filter(shape => shape.points === undefined || shape.width + shape.height > 2);
+      if (edits.length > 0) {
+        input.finish(edits);
+      }
     }
   }
 

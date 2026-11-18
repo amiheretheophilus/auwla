@@ -1,0 +1,84 @@
+.frame-actions {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 4px;
+  margin-top: 9px;
+}
+
+.frame-actions .button { padding-inline: 3px; }
+
+.share-link {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 5px;
+  margin-top: 9px;
+}
+
+.share-link input {
+  width: 100%;
+  padding: 5px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  color: var(--ink);
+  font-size: 11px;
+}
+
+.share-link a {
+  grid-column: 1 / -1;
+  color: var(--violet-strong);
+  font-size: 11px;
+}
+
+.selection-properties {
+  display: grid;
+  gap: 12px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.selection-properties fieldset {
+  min-width: 0;
+  margin: 0;
+  padding: 6px 0 0;
+  border: 0;
+}
+
+.selection-properties legend { padding: 0; }
+
+.presentation {
+  width: min(960px, calc(100vw - 32px));
+  max-height: calc(100dvh - 32px);
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 15px;
+  color: var(--ink);
+  background: #fcfbfe;
+}
+
+.presentation[open] { display: grid; gap: 13px; }
+.presentation::backdrop { background: #272039cc; }
+
+.presentation header, .presentation footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.presentation img {
+  display: block;
+  width: 100%;
+  height: min(70dvh, 620px);
+  object-fit: contain;
+}
+
+.presentation footer {
+  justify-content: center;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+@media (max-width: 350px) {
+  .floating-tools { gap: 0; }
+  .tool-button { width: 27px; }
+}

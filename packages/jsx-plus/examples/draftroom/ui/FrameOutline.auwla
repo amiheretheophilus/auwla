@@ -1,0 +1,43 @@
+import type { Editor } from '../editor';
+import type { EditorView } from '../model/types';
+import { Icon } from './Icon.auwla';
+
+export function FrameOutline({ view, editor }: { view: EditorView; editor: Editor }) {
+  const frames = view.page.shapes.filter(shape => shape.kind === 'frame' && !shape.hidden);
+  const active = frames.find(frame => frame.id === view.selected?.id || frame.id === view.selected?.frameId) ?? frames[0];
+
+  return (
+    <section class="frame-outline" aria-label="Frame outline">
+      <div class="section-heading">
+        <h2>"Frames"</h2>
+        <button type="button" class="icon-button small" title="Draw a frame (F)" aria-label="Draw a frame"
+          onClick={() => editor.choose('frame')}><Icon name="plus" /></button>
+      </div>
+      if (active === undefined) {
+        <p class="empty-list">"Draw a frame around objects to move and present them together."</p>
+      } else {
+        <nav class="page-list" aria-label="Frames">
+          for (const frame of frames) {
+            <button key={frame.id} type="button" class="page-row" aria-pressed={frame.id === active.id}
+              onClick={() => editor.focusFrame(frame)}>
+              <Icon name="frame" /> <span class="truncate">frame.title</span>
+            </button>
+          }
+        </nav>
+        <div class="frame-actions" aria-label={active.title}>
+          <button type="button" class="button secondary" onClick={() => editor.frames.present(active)}>"Present"</button>
+          <button type="button" class="button secondary" onClick={() => editor.frames.export(active)}>"PNG"</button>
+          <button type="button" class="button primary" disabled={view.sharing} onClick={() => editor.frames.share(active)}>"Share"</button>
+        </div>
+        if (view.shareUrl !== undefined && view.shareFrameId === active.id) {
+          <div class="share-link">
+            <input aria-label="Read-only frame link" type="url" readOnly value={view.shareUrl}
+              onFocus={event => event.currentTarget.select()} />
+            <button type="button" class="button secondary" onClick={editor.frames.copyLink}>"Copy"</button>
+            <a href={view.shareUrl} target="_blank" rel="noopener">"Open read-only frame"</a>
+          </div>
+        }
+      }
+    </section>
+  );
+}

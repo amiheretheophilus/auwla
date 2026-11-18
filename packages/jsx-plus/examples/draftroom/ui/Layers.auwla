@@ -11,9 +11,10 @@ const icons: Record<ShapeKind, string> = {
   pen: 'pen',
   text: 'text',
   note: 'note',
+  frame: 'frame',
 };
 
-export function Layers({ shapes, selectedId, editor }: { shapes: Shape[]; selectedId?: string; editor: Editor }) {
+export function Layers({ shapes, selection, editor }: { shapes: Shape[]; selection: Shape[]; editor: Editor }) {
   const topFirst = shapes.toReversed();
 
   function attach(list: HTMLDivElement): () => void {
@@ -53,10 +54,10 @@ export function Layers({ shapes, selectedId, editor }: { shapes: Shape[]; select
               <button
                 type="button"
                 class="layer-row"
-                aria-pressed={shape.id === selectedId}
+                aria-pressed={selection.some(item => item.id === shape.id)}
                 aria-keyshortcuts={shape.locked ? undefined : 'Alt+ArrowUp Alt+ArrowDown'}
                 data-hidden={shape.hidden ? 'yes' : 'no'}
-                onClick={() => editor.project.select(shape.id)}
+                onClick={event => editor.project.select(shape.id, event.shiftKey)}
                 onKeyDown={event => reorderWithKeys(event, shape)}
               >
                 <Icon name={icons[shape.kind]} />

@@ -31,5 +31,5 @@ export function shapeInkBounds(ctx: CanvasRenderingContext2D, shape: Shape): Bou
     body = expandBounds({ x, y, width, height }, shape.weight / 2);
   }
 
-  return unionBounds(body, textInkBounds(ctx, shape));
+  return shape.kind === 'frame' ? body : unionBounds(body, textInkBounds(ctx, shape));
 }

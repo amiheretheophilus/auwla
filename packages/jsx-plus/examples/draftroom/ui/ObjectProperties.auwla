@@ -7,8 +7,8 @@ const fills = ['Transparent', 'Lavender', 'Sky', 'Mint', 'Peach', 'Sand'];
 
 export function ObjectProperties({ shape, editor }: { shape: Shape; editor: Editor }) {
   const isText = shape.kind === 'text';
-  const canLabel = shape.points === undefined;
-  const canFill = canLabel && !isText;
+  const canLabel = shape.points === undefined && shape.kind !== 'frame';
+  const canFill = shape.points === undefined && !isText;
   const kind = SHAPE_NAMES[shape.kind];
   const minimumWeight = isText ? 10 : 1;
   const maximumWeight = isText ? 100 : 24;
@@ -31,7 +31,7 @@ export function ObjectProperties({ shape, editor }: { shape: Shape; editor: Edit
       </div>
       <fieldset class="object-fields" disabled={shape.locked}>
         <label class="field">
-          "Layer name"
+          shape.kind === 'frame' ? 'Frame name' : 'Layer name'
           <input value={shape.title} maxLength={80}
             onChange={event => editor.project.patch({ title: event.currentTarget.value.trim() || kind })} />
         </label>

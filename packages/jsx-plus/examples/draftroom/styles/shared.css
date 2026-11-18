@@ -1,0 +1,43 @@
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  color: #28223d;
+  background: #faf8fe;
+  font-family: "Segoe UI", system-ui, sans-serif;
+}
+
+.share-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 20px;
+  min-height: 66px;
+  padding: 14px max(20px, calc((100vw - 930px) / 2));
+  border-bottom: 1px solid #e9e4f0;
+  background: white;
+  color: #655876;
+}
+
+.share-header a, .share-download {
+  color: #5635c5;
+  font-weight: 650;
+}
+
+.shared-frame { width: min(920px, calc(100% - 36px)); margin: 36px auto; }
+.share-board { margin: 0 0 5px; color: #655876; font-size: 14px; }
+.shared-frame h1 { margin: 0 0 20px; font-size: clamp(26px, 4vw, 42px); }
+
+.shared-image {
+  display: block;
+  width: auto;
+  max-width: 100%;
+  max-height: 67vh;
+  margin: 0 auto 20px;
+  border: 1px solid #e9e4f0;
+  border-radius: 8px;
+}
+
+.shared-frame details { margin: 0 0 18px; color: #655876; }
+.shared-frame summary { cursor: pointer; }
+.shared-frame li { margin-block: 6px; white-space: pre-line; }

@@ -1,7 +1,7 @@
 import { drawingBounds, toWorld } from './geometry';
 import { drawShape } from './shapes';
 import { canvasSize, surface } from './surface';
-import type { Camera, Point, Shape } from '../model/types';
+import type { Bounds, Camera, Point, Shape } from '../model/types';
 
 function mapCamera(map: HTMLCanvasElement, shapes: Shape[]): Camera | undefined {
   const bounds = drawingBounds(shapes);
@@ -55,14 +55,14 @@ export function mapPosition(map: HTMLCanvasElement, shapes: Shape[], point: Poin
   return camera === undefined ? undefined : toWorld(point, camera);
 }
 
-export function imageOf(shapes: Shape[]): HTMLCanvasElement | undefined {
-  const bounds = drawingBounds(shapes);
+export function imageOf(shapes: Shape[], crop?: Bounds): HTMLCanvasElement | undefined {
+  const bounds = crop ?? drawingBounds(shapes);
   if (bounds === undefined) {
     return undefined;
   }
 
   const canvas = document.createElement('canvas');
-  const padding = 30;
+  const padding = crop === undefined ? 30 : 0;
   const width = bounds.width + padding * 2;
   const height = bounds.height + padding * 2;
   // Keep oversized boards exportable without allocating an unbounded bitmap.

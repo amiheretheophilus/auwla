@@ -17,7 +17,7 @@ export function createTextEditing(project: ReturnType<typeof createDocument>, su
       return false;
     }
 
-    project.select(shape.id);
+    project.selectOnly(shape.id);
     inlineId = shape.id;
     publish();
     return true;

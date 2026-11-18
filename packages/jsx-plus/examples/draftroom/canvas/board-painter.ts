@@ -21,7 +21,7 @@ function sameBackground(before: Frame, after: Frame): boolean {
     && before.width === after.width && before.height === after.height && before.density === after.density;
 }
 
-function drawSelection(ctx: CanvasRenderingContext2D, shape: Shape, zoom: number): void {
+function drawSelection(ctx: CanvasRenderingContext2D, shape: Shape, zoom: number, single: boolean): void {
   const gap = 6 / zoom;
   const width = shape.width + gap * 2;
   const height = shape.height + gap * 2;
@@ -31,12 +31,23 @@ function drawSelection(ctx: CanvasRenderingContext2D, shape: Shape, zoom: number
   ctx.strokeStyle = shape.locked ? '#8d849a' : '#7857ed';
   ctx.strokeRect(0, 0, width, height);
 
-  if (!shape.locked && shape.points === undefined) {
+  if (single && !shape.locked && shape.points === undefined) {
     const size = 7 / zoom;
     ctx.fillStyle = '#fff';
     ctx.fillRect(width - size / 2, height - size / 2, size, size);
     ctx.strokeRect(width - size / 2, height - size / 2, size, size);
   }
+  ctx.restore();
+}
+
+function drawMarquee(ctx: CanvasRenderingContext2D, area: Bounds, zoom: number): void {
+  ctx.save();
+  ctx.fillStyle = '#7857ed20';
+  ctx.strokeStyle = '#7857ed';
+  ctx.lineWidth = 1 / zoom;
+  ctx.setLineDash([4 / zoom, 3 / zoom]);
+  ctx.fillRect(area.x, area.y, area.width, area.height);
+  ctx.strokeRect(area.x, area.y, area.width, area.height);
   ctx.restore();
 }
 
@@ -58,13 +69,8 @@ export function createBoardPainter() {
   }
 
   function paintStack(ctx: CanvasRenderingContext2D, frame: Frame, area?: Bounds): void {
-    const { shapes, draft, outline, camera } = frame;
-    let placedDraft = false;
-
-    for (const committed of shapes) {
-      const shape = draft?.id === committed.id ? draft : committed;
-      placedDraft ||= shape === draft;
-
+    const { shapes, drafts, outlines, camera, marquee } = frame;
+    function draw(shape: Shape): void {
       if (area === undefined) {
         drawShape(ctx, shape);
       } else {
@@ -74,11 +80,24 @@ export function createBoardPainter() {
         }
       }
     }
-    if (draft !== undefined && !placedDraft) {
-      drawShape(ctx, draft);
+
+    const added = [...drafts.values()].filter(draft => !shapes.some(shape => shape.id === draft.id));
+    // Frame paper sits behind the objects it encloses, including during its creation preview.
+    for (const shape of added) {
+      if (shape.kind === 'frame') draw(shape);
     }
-    if (outline !== undefined && !outline.hidden) {
-      drawSelection(ctx, outline, camera.zoom);
+    for (const committed of shapes) {
+      draw(drafts.get(committed.id) ?? committed);
+    }
+    for (const shape of added) {
+      if (shape.kind !== 'frame') draw(shape);
+    }
+
+    for (const outline of outlines) {
+      if (!outline.hidden) drawSelection(ctx, outline, camera.zoom, outlines.length === 1);
+    }
+    if (marquee !== undefined) {
+      drawMarquee(ctx, marquee, camera.zoom);
     }
   }
 
@@ -86,8 +105,9 @@ export function createBoardPainter() {
     canvas: HTMLCanvasElement,
     shapes: Shape[],
     camera: Camera,
-    selected: Shape | undefined,
-    draft: Shape | undefined,
+    selection: Shape[],
+    updates: Shape[],
+    marquee: Bounds | undefined,
   ): void {
     const ctx = surface(canvas, BOARD_PIXEL_BUDGET);
     if (ctx === null) {
@@ -97,6 +117,12 @@ export function createBoardPainter() {
 
     const density = ctx.getTransform().a;
     const { width, height } = canvas;
+    const drafts = new Map(updates.map(shape => [shape.id, shape]));
+    const outlines = selection.map(shape => drafts.get(shape.id) ?? shape);
+    if (outlines.length === 0 && updates.length === 1) {
+      outlines.push(updates[0]!);
+    }
+
     const frame: Frame = {
       canvas,
       shapes,
@@ -104,14 +130,16 @@ export function createBoardPainter() {
       width,
       height,
       density,
-      draft,
-      outline: draft ?? selected,
+      drafts,
+      outlines,
+      marquee,
     };
     const before = previous;
     previous = frame;
 
     let region: ReturnType<typeof visibleRegion>;
-    const previewing = draft !== undefined || before?.draft !== undefined;
+    const previewing = drafts.size > 0 || marquee !== undefined
+      || (before !== undefined && (before.drafts.size > 0 || before.marquee !== undefined));
     if (before !== undefined && previewing && sameBackground(before, frame)) {
       const dirty = changedBounds(before, frame, shapes, camera.zoom, shape => inkOf(ctx, shape));
       region = dirty === undefined ? undefined : visibleRegion(dirty, canvas, camera, density);

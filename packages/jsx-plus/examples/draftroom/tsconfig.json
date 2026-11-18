@@ -1,5 +1,13 @@
 {
   "extends": "../checking/tsconfig.json",
-  "files": ["./main.ts", "./App.auwla"],
-  "include": ["./canvas/*.ts", "./model/*.ts", "./ui/*.auwla"]
+  "compilerOptions": {
+    "types": ["node", "@memoized-dom/jsx-plus/types"],
+    "paths": {
+      "#server/*": ["./server/*"],
+      "@memoized-dom/compiler/jsx": ["../../../compiler-next/src/jsx-types.ts"],
+      "@memoized-dom/server": ["../../../server/src/index.ts"]
+    }
+  },
+  "files": ["./main.ts", "./App.auwla", "./server.ts"],
+  "include": ["./canvas/*.ts", "./model/*.ts", "./ui/*.auwla", "./server/*.auwla"]
 }

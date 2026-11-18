@@ -11,13 +11,18 @@ export interface DrawingDraft {
 }
 
 export interface TransformDraft {
-  kind: 'move' | 'resize';
+  kind: 'resize';
   start: Point;
   shape: Shape;
 }
 
 export function startDrawing(kind: ShapeKind, position: Point, screenStart: Point): DrawingDraft {
-  const size = kind === 'text' ? { width: 166, height: 36 } : { width: 140, height: 90 };
+  let size = { width: 140, height: 90 };
+  if (kind === 'text') {
+    size = { width: 166, height: 36 };
+  } else if (kind === 'frame') {
+    size = { width: 320, height: 220 };
+  }
   const shape = makeShape(kind, { ...position, ...size });
 
   if (kind === 'text') {
@@ -31,6 +36,9 @@ export function startDrawing(kind: ShapeKind, position: Point, screenStart: Poin
     shape.width = 0;
     shape.height = 0;
     shape.points = [];
+  } else if (kind === 'frame') {
+    shape.stroke = '#a790e0';
+    shape.fill = '#faf8fe';
   } else {
     shape.stroke = '#6b4ee6';
     shape.fill = '#eee8ff';
@@ -77,16 +85,11 @@ export function updateTransform(draft: TransformDraft, point: Point, zoom: numbe
     return undefined;
   }
 
-  if (draft.kind === 'resize') {
-    const size = { x: shape.width + dx, y: shape.height + dy };
-    const adjusted = snap ? snapPoint(size) : size;
-    return {
-      ...shape,
-      width: Math.max(12, adjusted.x),
-      height: Math.max(12, adjusted.y),
-    };
-  }
-
-  const position = { x: shape.x + dx, y: shape.y + dy };
-  return { ...shape, ...(snap ? snapPoint(position) : position) };
+  const size = { x: shape.width + dx, y: shape.height + dy };
+  const adjusted = snap ? snapPoint(size) : size;
+  return {
+    ...shape,
+    width: Math.max(12, adjusted.x),
+    height: Math.max(12, adjusted.y),
+  };
 }

@@ -3,16 +3,20 @@ import { drawingBounds, fitCamera, GRID, zoomCamera } from './geometry';
 import { bindGestures, screenPoint } from './gestures';
 import { mapPosition, paintMap } from './paint';
 import { canvasSize } from './surface';
-import type { Camera, InlineTextView, Shape, Tool } from '../model/types';
+import { previewShapes } from '../model/edits';
+import type { Bounds, Camera, InlineTextView, Shape, Tool } from '../model/types';
 
 interface Scene {
   shapes(): Shape[];
   selected(): Shape | undefined;
+  selection(): Shape[];
+  movable(): Shape[];
   tool(): Tool;
   snap(): boolean;
-  select(id?: string): void;
+  select(id?: string, toggle?: boolean): void;
+  selectMany(ids: string[], extend: boolean): void;
   editText(id: string): void;
-  finish(shape: Shape): void;
+  finish(shapes: Shape[]): void;
   changed(zoomChanged: boolean): void;
 }
 
@@ -31,7 +35,8 @@ export function createViewport(scene: Scene) {
   let board: HTMLCanvasElement | undefined;
   let map: HTMLCanvasElement | undefined;
   let camera: Camera = { x: 0, y: 0, zoom: 1 };
-  let draft: Shape | undefined;
+  let drafts: Shape[] = [];
+  let marquee: Bounds | undefined;
   let textDraft: Shape | undefined;
   let frame = 0;
   let fitted = false;
@@ -61,7 +66,8 @@ export function createViewport(scene: Scene) {
       }
 
       const shapes = scene.shapes();
-      painter.paint(board, shapes, camera, scene.selected(), draft ?? textDraft);
+      const edits = drafts.length === 0 && textDraft !== undefined ? [textDraft] : drafts;
+      painter.paint(board, shapes, camera, scene.selection(), previewShapes(shapes, edits), marquee);
       // A drag's draft is only for the main board. The map catches up when the edit commits.
       paintOverview(board, shapes);
     });
@@ -77,7 +83,7 @@ export function createViewport(scene: Scene) {
     render();
   }
 
-  function fit(): void {
+  function fit(target?: Bounds): void {
     if (board === undefined) {
       return;
     }
@@ -87,7 +93,7 @@ export function createViewport(scene: Scene) {
       return;
     }
     fitted = true;
-    setCamera(fitCamera(drawingBounds(scene.shapes()), width, height));
+    setCamera(fitCamera(target ?? drawingBounds(scene.shapes()), width, height));
   }
 
   function attachBoard(canvas: HTMLCanvasElement): () => void {
@@ -101,11 +107,15 @@ export function createViewport(scene: Scene) {
       snap: scene.snap,
       shapes: scene.shapes,
       selected: scene.selected,
+      selection: scene.selection,
+      movable: scene.movable,
       select: scene.select,
+      selectMany: scene.selectMany,
       editText: scene.editText,
       finish: scene.finish,
-      preview(shape) {
-        draft = shape;
+      preview(shapes, area) {
+        drafts = shapes;
+        marquee = area;
         render();
       },
     });
@@ -136,7 +146,8 @@ export function createViewport(scene: Scene) {
       painter.clear();
       frame = 0;
       board = undefined;
-      draft = undefined;
+      drafts = [];
+      marquee = undefined;
       textDraft = undefined;
     };
   }

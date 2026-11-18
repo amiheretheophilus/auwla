@@ -1,4 +1,18 @@
 import { makePage, makeShape, type Project, type Shape } from './types';
+import { onboarding } from './onboarding';
+
+export type Template = 'onboarding' | 'workflow' | 'brainstorm';
+
+export function templatePage(template: Template): ReturnType<typeof makePage> {
+  switch (template) {
+    case 'onboarding':
+      return makePage('Onboarding workflow', onboarding());
+    case 'workflow':
+      return makePage('Product flow', workflow());
+    case 'brainstorm':
+      return makePage('Brainstorm', brainstorm());
+  }
+}
 
 function label(x: number, y: number, width: number, text: string, size = 16, stroke = '#645e75'): Shape {
   return makeShape('text', { x, y, width, height: size + 16 }, { text, title: text, weight: size, stroke });
@@ -49,6 +63,6 @@ export function brainstorm(): Shape[] {
 }
 
 export function initialProject(): Project {
-  const page = makePage('Product flow', workflow());
-  return { version: 1, activeId: page.id, pages: [page, makePage('Brainstorm', brainstorm())] };
+  const page = templatePage('onboarding');
+  return { version: 1, activeId: page.id, pages: [page, templatePage('workflow'), templatePage('brainstorm')] };
 }

@@ -16,7 +16,7 @@ export function Stage({ view, editor }: { view: EditorView; editor: Editor }) {
           data-tool={view.tool}
           ref={editor.connect}
           tabIndex={0}
-          aria-label="Drawing canvas. Double-click a box or press Enter on a selected box to edit its text."
+          aria-label="Drawing canvas. Drag on empty space to select multiple objects. Double-click a box to edit its text."
         ></canvas>
         if (view.inlineText !== undefined) {
           <InlineText entry={view.inlineText} editor={editor} />

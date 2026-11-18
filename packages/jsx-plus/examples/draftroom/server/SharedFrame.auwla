@@ -1,0 +1,47 @@
+import { AsyncLocalStorage } from 'node:async_hooks';
+import { renderToString } from '@memoized-dom/server';
+import type { SharedFrame } from './share-store';
+
+const requestFrame = new AsyncLocalStorage<SharedFrame>();
+
+function SharedDocument() {
+  const entry = requestFrame.getStore()!;
+
+  return (
+    <html lang="en">
+      <head>
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <meta name="robots" content="noindex" />
+        <title>"{entry.frame} · Draftroom"</title>
+        <link rel="stylesheet" href="/styles/shared.css" />
+      </head>
+      <body>
+        <header class="share-header">
+          <a href="/">"Draftroom"</a>
+          <span>"Read-only frame"</span>
+        </header>
+        <main class="shared-frame">
+          <p class="share-board">entry.board</p>
+          <h1>entry.frame</h1>
+          <img class="shared-image" src="/share/{entry.id}/image.png" alt="Diagram for {entry.frame}" />
+          if (entry.labels.length > 0) {
+            <details>
+              <summary>"Frame text"</summary>
+              <ul>
+                for (const [index, label] of entry.labels.entries()) {
+                  <li key={index}>label</li>
+                }
+              </ul>
+            </details>
+          }
+          <a class="share-download" href="/share/{entry.id}/image.png" download="frame.png">"Download PNG"</a>
+        </main>
+      </body>
+    </html>
+  );
+}
+
+export function sharedDocument(entry: SharedFrame): string {
+  // The renderer calls its registered root without props. Scope the verified snapshot to this request.
+  return requestFrame.run(entry, () => '<!doctype html>' + renderToString(SharedDocument, { markers: false }));
+}

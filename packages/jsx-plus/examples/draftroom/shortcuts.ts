@@ -10,6 +10,7 @@ export const TOOLS: { id: Tool; label: string; shortcut: string; icon: string }[
   { id: 'pen', label: 'Pencil', shortcut: 'P', icon: 'pen' },
   { id: 'text', label: 'Text', shortcut: 'T', icon: 'text' },
   { id: 'note', label: 'Sticky note', shortcut: 'N', icon: 'note' },
+  { id: 'frame', label: 'Frame', shortcut: 'F', icon: 'frame' },
 ];
 
 interface Commands {
@@ -18,6 +19,8 @@ interface Commands {
   undo(): void;
   redo(): void;
   duplicate(): void;
+  group(): void;
+  ungroup(): void;
   remove(): void;
   editText(): boolean;
   nudge(x: number, y: number): void;
@@ -42,6 +45,10 @@ export function bindShortcuts(commands: Commands): () => void {
         } else {
           commands.undo();
         }
+      } else if (key === 'g') {
+        event.preventDefault();
+        if (event.shiftKey) commands.ungroup();
+        else commands.group();
       } else if (key === 'y' || key === 'd') {
         event.preventDefault();
         if (key === 'y') {

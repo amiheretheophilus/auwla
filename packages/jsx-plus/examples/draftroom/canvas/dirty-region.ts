@@ -2,8 +2,9 @@ import type { Bounds, Camera, Shape } from '../model/types';
 import { expandBounds, unionBounds } from './geometry';
 
 export interface PreviewState {
-  draft: Shape | undefined;
-  outline: Shape | undefined;
+  drafts: Map<string, Shape>;
+  outlines: Shape[];
+  marquee: Bounds | undefined;
 }
 
 function outlineBounds(shape: Shape | undefined, zoom: number): Bounds | undefined {
@@ -23,16 +24,23 @@ export function changedBounds(
   zoom: number,
   inkOf: (shape: Shape | undefined) => Bounds | undefined,
 ): Bounds | undefined {
-  let dirty = unionBounds(inkOf(before.draft), inkOf(after.draft));
-  dirty = unionBounds(dirty, outlineBounds(before.outline, zoom));
-  dirty = unionBounds(dirty, outlineBounds(after.outline, zoom));
+  let dirty: Bounds | undefined;
+  for (const state of [before, after]) {
+    for (const shape of state.drafts.values()) {
+      dirty = unionBounds(dirty, inkOf(shape));
+    }
+    for (const shape of state.outlines) {
+      dirty = unionBounds(dirty, outlineBounds(shape, zoom));
+    }
+    if (state.marquee !== undefined) {
+      dirty = unionBounds(dirty, expandBounds(state.marquee, 2 / zoom));
+    }
+  }
 
-  if (before.draft?.id !== after.draft?.id) {
-    // Starting a draft replaces the committed object. Ending it reveals that object again.
-    for (const shape of shapes) {
-      if (shape.id === before.draft?.id || shape.id === after.draft?.id) {
-        dirty = unionBounds(dirty, inkOf(shape));
-      }
+  // A draft replacing or revealing a committed object also changes the committed object's pixels.
+  for (const shape of shapes) {
+    if (before.drafts.has(shape.id) !== after.drafts.has(shape.id)) {
+      dirty = unionBounds(dirty, inkOf(shape));
     }
   }
 

@@ -2,6 +2,7 @@ import type { Editor } from '../editor';
 import type { EditorView } from '../model/types';
 import { Icon } from './Icon.auwla';
 import { Layers } from './Layers.auwla';
+import { FrameOutline } from './FrameOutline.auwla';
 
 export function Navigator({ view, editor }: { view: EditorView; editor: Editor }) {
   return (
@@ -22,11 +23,13 @@ export function Navigator({ view, editor }: { view: EditorView; editor: Editor }
         </nav>
         <details class="templates">
           <summary><Icon name="layers" /> "New from template" <Icon name="chevron" /></summary>
+          <button type="button" onClick={() => editor.project.add('onboarding')}>"Onboarding walkthrough"</button>
           <button type="button" onClick={() => editor.project.add('workflow')}>"Product workflow"</button>
           <button type="button" onClick={() => editor.project.add('brainstorm')}>"Brainstorm"</button>
         </details>
       </section>
-      <Layers shapes={view.page.shapes} selectedId={view.selected?.id} editor={editor} />
+      <FrameOutline view={view} editor={editor} />
+      <Layers shapes={view.page.shapes} selection={view.selection} editor={editor} />
       <div class="navigator-footer"><span class="local-dot"></span> "Browser storage"</div>
     </aside>
   );

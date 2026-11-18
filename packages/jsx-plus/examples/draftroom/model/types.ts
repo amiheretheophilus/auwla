@@ -8,7 +8,7 @@ export interface Bounds extends Point {
   height: number;
 }
 
-export type ShapeKind = 'rectangle' | 'ellipse' | 'diamond' | 'arrow' | 'pen' | 'text' | 'note';
+export type ShapeKind = 'rectangle' | 'ellipse' | 'diamond' | 'arrow' | 'pen' | 'text' | 'note' | 'frame';
 export type Tool = 'select' | 'hand' | ShapeKind;
 export type LineStyle = 'solid' | 'dashed' | 'dotted';
 
@@ -26,6 +26,10 @@ export interface Shape extends Bounds {
   locked: boolean;
   /** Arrow and pen points are relative to the drawable's origin. */
   points?: Point[];
+  fromId?: string;
+  toId?: string;
+  groupId?: string;
+  frameId?: string;
 }
 
 export interface Page {
@@ -49,11 +53,23 @@ export interface InlineTextView extends Point {
   width: number;
 }
 
+export interface PresentationView {
+  title: string;
+  url: string;
+  index: number;
+  total: number;
+}
+
 export interface EditorView {
   pages: Page[];
   page: Page;
   selected: Shape | undefined;
+  selection: Shape[];
   inlineText: InlineTextView | undefined;
+  presentation: PresentationView | undefined;
+  shareUrl: string | undefined;
+  shareFrameId: string | undefined;
+  sharing: boolean;
   tool: Tool;
   zoom: number;
   grid: boolean;
@@ -64,12 +80,12 @@ export interface EditorView {
 }
 
 export function canEditText(shape: Shape | undefined): shape is Shape {
-  return shape !== undefined && !shape.locked && shape.points === undefined;
+  return shape !== undefined && !shape.locked && shape.kind !== 'frame' && shape.points === undefined;
 }
 
 export const SHAPE_NAMES: Record<ShapeKind, string> = {
   rectangle: 'Rectangle', ellipse: 'Ellipse', diamond: 'Diamond', arrow: 'Arrow',
-  pen: 'Drawing', text: 'Text', note: 'Sticky note',
+  pen: 'Drawing', text: 'Text', note: 'Sticky note', frame: 'Frame',
 };
 
 export const PALETTE = ['#292445', '#6b4ee6', '#3d74dc', '#18876d', '#d35e45', '#df9b24'];

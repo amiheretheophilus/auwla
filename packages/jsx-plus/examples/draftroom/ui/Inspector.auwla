@@ -2,19 +2,22 @@ import type { Editor } from '../editor';
 import type { EditorView } from '../model/types';
 import { Icon } from './Icon.auwla';
 import { ObjectProperties } from './ObjectProperties.auwla';
+import { SelectionProperties } from './SelectionProperties.auwla';
 
 export function Inspector({ view, editor }: { view: EditorView; editor: Editor }) {
   return (
     <aside class="inspector" aria-label="Properties">
       <section>
         <div class="section-heading inspector-heading"><h2>"Properties"</h2></div>
-        if (view.selected) {
+        if (view.selection.length > 1) {
+          <SelectionProperties shapes={view.selection} editor={editor} />
+        } else if (view.selected) {
           <ObjectProperties shape={view.selected} editor={editor} />
         } else {
           <div class="empty-properties">
             <span class="empty-icon"><Icon name="cursor" /></span>
             <p>"No object selected"</p>
-            <span>"Select an object to see its properties. Double-click it to edit text."</span>
+            <span>"Click an object or drag across several. Double-click an object to edit its text."</span>
           </div>
         }
       </section>
@@ -38,6 +41,8 @@ export function Inspector({ view, editor }: { view: EditorView; editor: Editor }
         <div><span>"Select / hand"</span><kbd>"V / H"</kbd></div>
         <div><span>"Pan temporarily"</span><kbd>"Space"</kbd></div>
         <div><span>"Edit text on canvas"</span><kbd>"Enter"</kbd></div>
+        <div><span>"Group selection"</span><kbd>"Ctrl/⌘ G"</kbd></div>
+        <div><span>"Copy / paste selection"</span><kbd>"Ctrl/⌘ C / V"</kbd></div>
         <div><span>"Fit drawing"</span><kbd>"0"</kbd></div>
         <div><span>"Nudge selection"</span><kbd>"Arrow keys"</kbd></div>
         <div><span>"Delete selection"</span><kbd>"Delete"</kbd></div>

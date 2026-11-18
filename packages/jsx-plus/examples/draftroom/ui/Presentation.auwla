@@ -1,0 +1,41 @@
+import type { Editor } from '../editor';
+import type { PresentationView } from '../model/types';
+
+export function Presentation({ slide, editor }: { slide: PresentationView; editor: Editor }) {
+  function attach(dialog: HTMLDialogElement): () => void {
+    function close(event: Event) {
+      event.preventDefault();
+      editor.frames.close();
+    }
+
+    dialog.addEventListener('cancel', close);
+    dialog.showModal();
+    return () => {
+      dialog.removeEventListener('cancel', close);
+      if (dialog.open) dialog.close();
+    };
+  }
+
+  function key(event: KeyboardEvent): void {
+    event.stopPropagation();
+    if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
+      event.preventDefault();
+      editor.frames.next(event.key === 'ArrowLeft' ? -1 : 1);
+    }
+  }
+
+  return (
+    <dialog class="presentation" aria-label="Frame presentation" ref=attach onKeyDown=key>
+      <header>
+        <h2>slide.title</h2>
+        <button type="button" class="button secondary" onClick={editor.frames.close}>"Close"</button>
+      </header>
+      <img src={slide.url} alt={slide.title} />
+      <footer>
+        <button type="button" class="button secondary" disabled={slide.index === 0} onClick={() => editor.frames.next(-1)}>"Previous"</button>
+        <span aria-live="polite">"{slide.index + 1} / {slide.total}"</span>
+        <button type="button" class="button secondary" disabled={slide.index + 1 >= slide.total} onClick={() => editor.frames.next(1)}>"Next"</button>
+      </footer>
+    </dialog>
+  );
+}

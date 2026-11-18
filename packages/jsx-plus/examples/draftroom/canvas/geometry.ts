@@ -1,4 +1,5 @@
 import type { Bounds, Camera, Point, Shape } from '../model/types';
+import { FRAME_HEADER } from '../model/frames';
 
 export const GRID = 24;
 
@@ -110,6 +111,13 @@ export function hitShape(shapes: readonly Shape[], position: Point, zoom: number
 
     const point = { x: position.x - shape.x, y: position.y - shape.y };
     const tolerance = 7 / zoom;
+    if (shape.kind === 'frame') {
+      const inside = point.x >= -tolerance && point.x <= shape.width + tolerance
+        && point.y >= -tolerance && point.y <= shape.height + tolerance;
+      return inside && (point.y <= FRAME_HEADER || point.y >= shape.height - tolerance
+        || point.x <= tolerance || point.x >= shape.width - tolerance);
+    }
+
     if (shape.points !== undefined) {
       const points = shape.points;
       return points.some((current, index) => {

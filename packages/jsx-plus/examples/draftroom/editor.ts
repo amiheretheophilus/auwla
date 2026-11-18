@@ -1,7 +1,9 @@
 import { createViewport } from './canvas/viewport';
+import { bindClipboard } from './clipboard';
+import { createFrameActions } from './frame-actions';
 import { createDocument } from './model/document';
 import { initialProject } from './model/templates';
-import type { EditorView, Tool } from './model/types';
+import type { EditorView, Shape, Tool } from './model/types';
 import { createProjectFiles } from './project-files';
 import { bindShortcuts } from './shortcuts';
 import { createTextEditing } from './text-editing';
@@ -17,16 +19,24 @@ export function createEditor(update: (view: EditorView) => void) {
   const viewport = createViewport({
     shapes: () => project.page().shapes,
     selected: project.selected,
+    selection: project.selection,
+    movable: project.movable,
     tool: () => tool,
     snap: () => snap,
     select: project.select,
+    selectMany: project.selectMany,
     editText(id) {
       textEditing.open(id);
     },
-    finish(shape) {
-      const added = project.shapeById(shape.id) === undefined;
+    finish(shapes) {
+      const shape = shapes[0]!;
+      const added = shapes.length === 1 && project.shapeById(shape.id) === undefined;
       tool = 'select';
-      project.put(shape);
+      if (added) {
+        project.put(shape);
+      } else {
+        project.apply(shapes);
+      }
 
       if (added && (shape.kind === 'text' || shape.kind === 'note')) {
         textEditing.open(shape.id);
@@ -40,13 +50,19 @@ export function createEditor(update: (view: EditorView) => void) {
   });
   const files = createProjectFiles(project, say);
   const textEditing = createTextEditing(project, viewport, publish);
+  const frames = createFrameActions(project.page, say, publish);
 
   function view(): EditorView {
     return {
       pages: project.project().pages,
       page: project.page(),
       selected: project.selected(),
+      selection: project.selection(),
       inlineText: textEditing.view(),
+      presentation: frames.presentation(),
+      shareUrl: frames.link(),
+      shareFrameId: frames.linkFrame(),
+      sharing: frames.sharing(),
       tool,
       grid,
       snap,
@@ -91,10 +107,12 @@ export function createEditor(update: (view: EditorView) => void) {
   }
 
   function nudge(x: number, y: number): void {
-    const shape = project.selected();
-    if (shape !== undefined) {
-      project.patch({ x: shape.x + x, y: shape.y + y });
-    }
+    project.nudge({ x, y });
+  }
+
+  function focusFrame(frame: Shape): void {
+    project.select(frame.id);
+    viewport.fit(frame);
   }
 
   const undo = () => project.travel('undo');
@@ -108,12 +126,15 @@ export function createEditor(update: (view: EditorView) => void) {
       undo,
       redo,
       duplicate: project.duplicate,
+      group: project.group,
+      ungroup: project.ungroup,
       remove: project.remove,
       nudge,
       editText: textEditing.open,
       zoom: viewport.zoom,
       fit: viewport.fit,
     });
+    const unbindClipboard = bindClipboard(project.copySelection, project.paste);
 
     let connected = true;
     files.restore(() => connected);
@@ -122,6 +143,8 @@ export function createEditor(update: (view: EditorView) => void) {
       connected = false;
       disconnect();
       unbind();
+      unbindClipboard();
+      frames.close();
     };
   }
 
@@ -145,9 +168,11 @@ export function createEditor(update: (view: EditorView) => void) {
     exportProject: files.exportProject,
     exportPng: files.exportPng,
     project,
+    frames,
+    focusFrame,
     text: textEditing,
     focusBoard: viewport.focusBoard,
-    fit: viewport.fit,
+    fit: () => viewport.fit(),
     zoom: viewport.zoom,
     attachMap: viewport.attachMap,
     toggleGrid,
