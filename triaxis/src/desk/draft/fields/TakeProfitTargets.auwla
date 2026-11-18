@@ -1,56 +1,86 @@
 <style>
   .targets {
-    padding: 1.35rem var(--panel-padding);
-    min-width: 0;
-  }
-
-  .targets header {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    justify-content: space-between;
-    gap: .5rem 1rem;
-    margin-bottom: 1rem;
-  }
-
-  h2 {
+    display: grid;
+    gap: .6rem;
     margin: 0;
-    font-size: 1.15rem;
-    font-weight: 600;
-    letter-spacing: -.025em;
+    padding: 0;
+    list-style: none;
   }
 
-  ol { display: grid; gap: .65rem; margin: 0; padding: 0; list-style: none; }
-  li { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: .6rem; }
-  label { display: grid; grid-template-columns: 3ch minmax(0, 1fr); align-items: center; gap: .75rem; }
-  label span { color: var(--desk-muted); font-size: .875rem; }
-
-  input {
-    box-sizing: border-box;
-    width: 100%;
-    min-height: 2.85rem;
-    padding: .65rem .75rem;
-    border: 1px solid var(--desk-rule);
-    border-radius: .45rem;
-    background: var(--desk-input);
-    color: inherit;
-    font: inherit;
-    font-variant-numeric: tabular-nums;
+  .target {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: .75rem;
   }
 
-  button {
-    padding: .45rem .65rem;
+  .target label {
+    display: grid;
+    grid-template-columns: 3rem minmax(0, 1fr);
+    align-items: center;
+  }
+
+  /* The target number sits in a tab joined to the left of its field. */
+  .target label span {
+    display: grid;
+    place-items: center;
+    align-self: stretch;
     border: 1px solid var(--desk-rule);
-    border-radius: .45rem;
-    background: var(--desk-input);
-    color: var(--desk-accent);
+    border-right: 0;
+    border-radius: 2px 0 0 2px;
+    background: var(--desk-surface);
+    color: var(--desk-muted);
+    font-family: var(--desk-mono);
+    font-size: .75rem;
+  }
+
+  .target input {
+    border-radius: 0 2px 2px 0;
+  }
+
+  .remove {
+    padding: .4rem .2rem;
+    border: 0;
+    background: none;
+    color: var(--desk-muted);
     font: inherit;
-    font-size: .85rem;
+    font-size: .82rem;
+    text-decoration: underline;
+    text-decoration-color: #0000;
+    text-underline-offset: .25em;
     cursor: pointer;
+    transition: color .2s ease, text-decoration-color .2s ease;
   }
 
-  button:disabled { opacity: .45; cursor: default; }
-  button:focus-visible, input:focus-visible { outline: 2px solid var(--desk-accent); outline-offset: 2px; }
+  .remove:hover {
+    color: var(--desk-accent);
+    text-decoration-color: currentColor;
+  }
+
+  .remove:disabled {
+    opacity: .4;
+    cursor: default;
+  }
+
+  .remove:disabled:hover {
+    color: var(--desk-muted);
+    text-decoration-color: #0000;
+  }
+
+  .remove:focus-visible {
+    outline: 2px solid var(--desk-ink);
+    outline-offset: 2px;
+  }
+
+  .add {
+    margin-top: 1rem;
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    .target {
+      animation: tx-rise .4s var(--desk-ease) both;
+    }
+  }
 </style>
 
 interface TargetRow {
@@ -68,24 +98,28 @@ interface TargetsProps {
 
 export function TakeProfitTargets({ targets, addTarget, removeTarget, setTarget }: TargetsProps) {
   return (
-    <section class="targets" aria-labelledby="targets-heading">
-      <header>
+    <section class="desk-row" aria-labelledby="targets-heading">
+      <div class="desk-row__head">
         <h2 id="targets-heading">"Take-profit targets"</h2>
-        <button type="button" onClick={addTarget}>"Add target"</button>
-      </header>
-      <ol>
-        for (const target of targets) {
-          <li key={target.id}>
-            <label>
-              <span>target.label</span>
-              <input name="target" inputmode="decimal" maxlength={64} value={target.value}
-                onInput={(event) => setTarget(target.id, event.currentTarget.value)} />
-            </label>
-            <button type="button" disabled={targets.length === 1} aria-label={'Remove ' + target.label}
-              onClick={() => removeTarget(target.id)}>"Remove"</button>
-          </li>
-        }
-      </ol>
+        <p>"In order from entry. The distance check uses TP2, or TP1 when there is one target."</p>
+      </div>
+      <div>
+        <ol class="targets">
+          for (const target of targets) {
+            <li key={target.id} class="target">
+              <label>
+                <span>target.label</span>
+                <input name="target" inputmode="decimal" maxlength={64} value={target.value}
+                  aria-label={target.label + ' price'}
+                  onInput={(event) => setTarget(target.id, event.currentTarget.value)} />
+              </label>
+              <button class="remove" type="button" disabled={targets.length === 1} aria-label={'Remove ' + target.label}
+                onClick={() => removeTarget(target.id)}>"Remove"</button>
+            </li>
+          }
+        </ol>
+        <button class="desk-button desk-button--quiet add" type="button" onClick={addTarget}>"+ Add target"</button>
+      </div>
     </section>
   );
 }

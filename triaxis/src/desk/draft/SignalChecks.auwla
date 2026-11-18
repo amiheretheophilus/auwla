@@ -2,56 +2,242 @@ import type { SignalReview } from './model/signal-review';
 
 <style>
   .checks {
-    padding: 1.35rem var(--panel-padding);
-    border: 1px solid var(--desk-rule);
-    border-radius: var(--panel-radius);
-    background: var(--desk-surface);
+    --on-night: #f1ebe1;
+    --on-night-muted: #f1ebe199;
+    --night-rule: #f1ebe11f;
+    --pass: #4fbf7f;
+    --warn: #eda100;
+    --fail: #e4614f;
+
+    display: grid;
+    gap: 1.25rem;
+    padding: clamp(1.25rem, 2.2vw, 1.75rem);
+    border-radius: .35rem;
+    background: var(--desk-night);
+    color: var(--on-night);
   }
-  .checks h2 { margin: 0; font-size: 1.15rem; font-weight: 600; letter-spacing: -.025em; }
-  .result { margin: .5rem 0 1.25rem; color: var(--desk-accent); }
-  .missing { margin: 0 0 1.25rem; color: var(--desk-muted); }
+
+  .checks header {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 1rem;
+  }
+
+  .checks h2 {
+    margin: 0;
+    font-size: .8rem;
+    font-weight: 700;
+    letter-spacing: .14em;
+    text-transform: uppercase;
+  }
+
+  .checks header span {
+    color: var(--on-night-muted);
+    font-family: var(--desk-mono);
+    font-size: .7rem;
+  }
+
+  /* The verdict, with a light that matches it. */
+  .verdict {
+    display: flex;
+    align-items: center;
+    gap: .7rem;
+    margin: 0;
+    padding-bottom: 1.25rem;
+    border-bottom: 1px solid var(--night-rule);
+    font-size: clamp(1.35rem, 2vw, 1.7rem);
+    line-height: 1.1;
+    letter-spacing: -.035em;
+  }
+
+  .verdict::before {
+    flex: none;
+    width: .65rem;
+    height: .65rem;
+    border-radius: 50%;
+    background: var(--tone);
+    content: "";
+    --pulse: var(--tone);
+  }
+
+  .verdict[data-tone="pass"] {
+    --tone: var(--pass);
+  }
+
+  .verdict[data-tone="pending"] {
+    --tone: var(--warn);
+  }
+
+  .verdict[data-tone="fail"] {
+    --tone: var(--fail);
+  }
+
+  .missing {
+    margin: -.25rem 0 0;
+    color: var(--on-night-muted);
+    font-size: .82rem;
+    line-height: 1.45;
+  }
+
+  .missing strong {
+    color: var(--on-night);
+    font-weight: 500;
+  }
+
   .checks ol {
     display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 1rem;
     margin: 0;
     padding: 0;
     list-style: none;
   }
-  .checks li { padding: .85rem 0; border-top: 1px solid var(--desk-rule); }
-  .check-row { display: flex; align-items: baseline; justify-content: space-between; gap: 1rem; }
-  .check-row strong { font-size: 1rem; font-weight: 600; }
-  .check-row span { font-size: .8rem; color: var(--desk-muted); }
-  .check-row span[data-status="pass"] { color: #256448; }
-  .check-row span[data-status="fail"] { color: var(--desk-accent); }
-  .check-row span[data-status="warning"] { color: #815107; }
-  .check-detail { margin: .35rem 0 0; color: var(--desk-muted); font-size: .88rem; line-height: 1.4; overflow-wrap: anywhere; }
-  @media (max-width: 40rem) {
-    .checks ol { grid-template-columns: minmax(0, 1fr); gap: 0; }
+
+  .check {
+    display: grid;
+    grid-template-columns: 1.15rem minmax(0, 1fr);
+    gap: .2rem .7rem;
+  }
+
+  .check::before {
+    display: grid;
+    place-items: center;
+    width: 1.15rem;
+    height: 1.15rem;
+    margin-top: .05rem;
+    border-radius: 50%;
+    background: var(--mark);
+    color: var(--desk-night);
+    font-size: .65rem;
+    font-weight: 700;
+    content: var(--glyph);
+    transition: background-color .3s ease;
+  }
+
+  .check[data-status="pass"] {
+    --mark: var(--pass);
+    --glyph: "✓";
+  }
+
+  .check[data-status="warning"] {
+    --mark: var(--warn);
+    --glyph: "!";
+  }
+
+  .check[data-status="fail"] {
+    --mark: var(--fail);
+    --glyph: "✕";
+  }
+
+  .check[data-status="pending"] {
+    --mark: #f1ebe133;
+    --glyph: "";
+  }
+
+  .check-row {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 1rem;
+  }
+
+  .check-row strong {
+    font-size: .92rem;
+    font-weight: 500;
+  }
+
+  .check-row span {
+    color: var(--mark);
+    font-family: var(--desk-mono);
+    font-size: .7rem;
+    letter-spacing: .04em;
+    text-transform: uppercase;
+  }
+
+  .check[data-status="pending"] .check-row span {
+    color: var(--on-night-muted);
+  }
+
+  .check-detail {
+    grid-column: 2;
+    margin: 0;
+    color: var(--on-night-muted);
+    font-size: .82rem;
+    line-height: 1.45;
+    overflow-wrap: anywhere;
+  }
+
+  .rule {
+    margin: 0;
+    padding-top: 1.1rem;
+    border-top: 1px solid var(--night-rule);
+    color: var(--on-night-muted);
+    font-size: .78rem;
+    line-height: 1.45;
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    .verdict::before {
+      animation: tx-pulse 2.2s ease-out infinite;
+    }
+
+    .check {
+      animation: tx-check .5s var(--desk-ease) both;
+    }
+
+    .check:nth-child(2) {
+      animation-delay: .06s;
+    }
+
+    .check:nth-child(3) {
+      animation-delay: .12s;
+    }
+
+    .check:nth-child(4) {
+      animation-delay: .18s;
+    }
+
+    .check:nth-child(5) {
+      animation-delay: .24s;
+    }
+
+    .check::before {
+      animation: tx-tick .45s var(--desk-ease) .15s both;
+    }
   }
 </style>
 
 const statusLabels = { pass: 'Pass', warning: 'Warning', fail: 'Fail', pending: 'Pending' };
 
+const verdictTones = {
+  'Rejected': 'fail',
+  'Incomplete': 'pending',
+  'Price checks complete': 'pass',
+};
+
 export function SignalChecks({ review }: { review: SignalReview }) {
   return (
     <section class="checks" aria-labelledby="checks-heading">
-      <h2 id="checks-heading">"Draft checks"</h2>
-      <p class="result" role="status">review.verdict</p>
+      <header>
+        <h2 id="checks-heading">"Draft checks"</h2>
+        <span>"Runs on save"</span>
+      </header>
+      <p class="verdict" role="status" data-tone={verdictTones[review.verdict]}>review.verdict</p>
       if (review.missing.length > 0) {
-        <p class="missing">"Missing: " review.missing.join(', ')</p>
+        <p class="missing"><strong>"Missing: "</strong> review.missing.join(', ')</p>
       }
       <ol>
         for (const check of review.checks) {
-          <li key={check.label}>
+          <li key={check.label} class="check" data-status={check.status}>
             <div class="check-row">
               <strong>check.label</strong>
-              <span data-status={check.status}>statusLabels[check.status]</span>
+              <span>statusLabels[check.status]</span>
             </div>
             <p class="check-detail">check.detail</p>
           </li>
         }
       </ol>
+      <p class="rule">"Any failed check rejects the idea. Nothing is posted until every check passes."</p>
     </section>
   );
 }

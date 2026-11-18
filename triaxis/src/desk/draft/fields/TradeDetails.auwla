@@ -1,48 +1,22 @@
 import { axes, isAxis, markets, type SignalFields } from '../model/signal-fields';
 
 <style>
-  .instrument {
-    min-width: 0;
-    margin: 0;
-    padding: 1.35rem var(--panel-padding);
-    border: 1px solid var(--desk-rule);
-    border-radius: var(--panel-radius);
-    background: var(--desk-surface);
-  }
-
-  h2 {
-    margin: 0 0 1rem;
-    font-size: 1.15rem;
-    font-weight: 600;
-    letter-spacing: -.025em;
-  }
-
   .instrument-grid {
     display: grid;
     grid-template-columns: repeat(4, minmax(0, 1fr));
     gap: 1rem;
   }
 
-  label { display: grid; gap: .4rem; color: var(--desk-muted); font-size: .875rem; }
-  select {
-    width: 100%;
-    min-width: 0;
-    min-height: 2.85rem;
-    padding: .6rem .75rem;
-    border: 1px solid var(--desk-rule);
-    border-radius: .45rem;
-    background: var(--desk-input);
-    color: var(--desk-ink);
-    font: inherit;
-  }
-  select:focus-visible { outline: 2px solid var(--desk-accent); outline-offset: 2px; }
-
   @media (max-width: 49rem) {
-    .instrument-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .instrument-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
   }
 
   @media (max-width: 25rem) {
-    .instrument-grid { grid-template-columns: minmax(0, 1fr); }
+    .instrument-grid {
+      grid-template-columns: minmax(0, 1fr);
+    }
   }
 </style>
 
@@ -57,10 +31,13 @@ export function TradeDetails({ fields }: { fields: SignalFields }) {
   }
 
   return (
-    <section class="instrument" aria-labelledby="instrument-heading">
-      <h2 id="instrument-heading">"Instrument"</h2>
+    <section class="desk-row" aria-labelledby="instrument-heading">
+      <div class="desk-row__head">
+        <h2 id="instrument-heading">"Instrument"</h2>
+        <p>"Axis, asset, direction and how the trade is entered."</p>
+      </div>
       <div class="instrument-grid">
-        <label>
+        <label class="desk-label">
           "Market"
           <select name="axis" onChange={chooseMarket}>
             for (const option of axes) {
@@ -68,7 +45,7 @@ export function TradeDetails({ fields }: { fields: SignalFields }) {
             }
           </select>
         </label>
-        <label>
+        <label class="desk-label">
           "Asset"
           <select name="symbol" onChange={(event) => symbol = event.currentTarget.value}>
             <option value="" selected={symbol === ''}>"Choose an asset"</option>
@@ -77,7 +54,7 @@ export function TradeDetails({ fields }: { fields: SignalFields }) {
             }
           </select>
         </label>
-        <label>
+        <label class="desk-label">
           "Direction"
           <select name="direction">
             <option value="" selected={fields.direction === ''}>"Choose a direction"</option>
@@ -85,7 +62,7 @@ export function TradeDetails({ fields }: { fields: SignalFields }) {
             <option value="sell" selected={fields.direction === 'sell'}>axis === 'crypto' ? "Short" : "Sell"</option>
           </select>
         </label>
-        <label>
+        <label class="desk-label">
           "Entry type"
           <select name="entryType">
             <option value="" selected={fields.entryType === ''}>"Choose a type"</option>

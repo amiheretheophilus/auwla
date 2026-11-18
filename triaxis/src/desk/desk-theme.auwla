@@ -1,0 +1,237 @@
+// Shared desk primitives: tokens, form rows, fields and buttons. Global so every desk component
+// can use the same classes, and kept under `.desk` so none of it reaches the public pages.
+// Imported once, by `layout/DeskLayout.auwla`. Keyframes come from `home/motion.auwla`.
+
+<style global>
+  .desk {
+    --desk-ink: #27211d;
+    --desk-muted: #625850;
+    --desk-rule: #d5cabe;
+    --desk-paper: #f1ebe1;
+    --desk-surface: #f8f4ec;
+    --desk-input: #fffcf6;
+    --desk-accent: #a8271c;
+    --desk-accent-deep: #8a2119;
+    --desk-night: #1b1714;
+    --desk-pass: #256448;
+    --desk-warn: #815107;
+    --desk-mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    --desk-ease: cubic-bezier(.16, 1, .3, 1);
+    --desk-gutter: clamp(1rem, 4vw, 4rem);
+  }
+
+  .desk ::selection {
+    background: var(--desk-accent);
+    color: #fff9f0;
+  }
+
+  /* One numbered section of a form: a heading column beside its fields. */
+  .desk-row {
+    display: grid;
+    grid-template-columns: minmax(9rem, 14rem) minmax(0, 1fr);
+    gap: 1rem clamp(1.5rem, 3vw, 3rem);
+    margin: 0;
+    padding: 1.75rem 0;
+    border: 0;
+    border-top: 1px solid var(--desk-rule);
+    min-width: 0;
+  }
+
+  .desk-row__head h2 {
+    margin: 0;
+    font-size: 1.05rem;
+    font-weight: 500;
+    letter-spacing: -.02em;
+    counter-increment: desk-section;
+  }
+
+  .desk-row__head h2::before {
+    display: block;
+    margin-bottom: .45rem;
+    color: var(--desk-accent);
+    font-family: var(--desk-mono);
+    font-size: .72rem;
+    font-weight: 400;
+    content: "0" counter(desk-section);
+  }
+
+  .desk-row__head p {
+    max-width: 24ch;
+    margin: .45rem 0 0;
+    color: var(--desk-muted);
+    font-size: .82rem;
+    line-height: 1.45;
+  }
+
+  .desk-label {
+    display: grid;
+    gap: .45rem;
+    min-width: 0;
+    color: var(--desk-muted);
+    font-size: .8rem;
+  }
+
+  .desk input,
+  .desk select,
+  .desk textarea {
+    box-sizing: border-box;
+    width: 100%;
+    min-width: 0;
+    padding: .7rem .8rem;
+    border: 1px solid var(--desk-rule);
+    border-radius: 2px;
+    background-color: var(--desk-input);
+    color: var(--desk-ink);
+    font: inherit;
+    font-size: .95rem;
+    transition: border-color .2s ease, box-shadow .2s ease;
+  }
+
+  .desk input,
+  .desk select {
+    min-height: 2.9rem;
+  }
+
+  .desk textarea {
+    resize: vertical;
+  }
+
+  .desk input:hover,
+  .desk select:hover,
+  .desk textarea:hover {
+    border-color: #b3a697;
+  }
+
+  .desk input:focus-visible,
+  .desk select:focus-visible,
+  .desk textarea:focus-visible {
+    border-color: var(--desk-ink);
+    outline: none;
+    box-shadow: 0 0 0 3px #a8271c24;
+  }
+
+  /* Prices line up in monospaced figures. */
+  .desk input[inputmode="decimal"] {
+    font-family: var(--desk-mono);
+    font-size: .9rem;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .desk select {
+    padding-right: 2.4rem;
+    appearance: none;
+    background-image:
+      linear-gradient(45deg, #0000 50%, currentColor 50%),
+      linear-gradient(135deg, currentColor 50%, #0000 50%);
+    background-position:
+      right 1.1rem center,
+      right .8rem center;
+    background-size: .3rem .3rem;
+    background-repeat: no-repeat;
+    cursor: pointer;
+  }
+
+  .desk-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: .55rem;
+    min-height: 2.9rem;
+    padding: .75rem 1.35rem;
+    border: 1px solid var(--desk-accent);
+    border-radius: 999px;
+    background: var(--desk-accent);
+    color: #fff9f0;
+    font: inherit;
+    font-size: .92rem;
+    cursor: pointer;
+    transition: background-color .2s ease, border-color .2s ease, color .2s ease, scale .3s var(--desk-ease);
+  }
+
+  .desk-button:hover {
+    border-color: var(--desk-accent-deep);
+    background: var(--desk-accent-deep);
+  }
+
+  .desk-button:active {
+    scale: .97;
+  }
+
+  .desk-button:disabled {
+    opacity: .6;
+    cursor: wait;
+  }
+
+  .desk-button--quiet {
+    min-height: 2.3rem;
+    padding: .45rem .95rem;
+    border-color: var(--desk-ink);
+    background: transparent;
+    color: var(--desk-ink);
+    font-size: .85rem;
+  }
+
+  .desk-button--quiet:hover {
+    border-color: var(--desk-ink);
+    background: var(--desk-ink);
+    color: var(--desk-paper);
+  }
+
+  .desk-button--quiet:disabled {
+    border-color: var(--desk-rule);
+    background: transparent;
+    color: var(--desk-muted);
+    opacity: .7;
+    cursor: default;
+  }
+
+  .desk-button:focus-visible,
+  .desk a:focus-visible,
+  .desk summary:focus-visible {
+    outline: 2px solid var(--desk-ink);
+    outline-offset: 3px;
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    .desk-row {
+      animation: tx-rise .8s var(--desk-ease) both;
+    }
+
+    .desk-row:nth-of-type(2) {
+      animation-delay: .06s;
+    }
+
+    .desk-row:nth-of-type(3) {
+      animation-delay: .12s;
+    }
+
+    .desk-row:nth-of-type(4) {
+      animation-delay: .18s;
+    }
+
+    .desk-row:nth-of-type(5) {
+      animation-delay: .24s;
+    }
+  }
+
+  @media (max-width: 48rem) {
+    .desk-row {
+      grid-template-columns: minmax(0, 1fr);
+    }
+
+    .desk-row__head {
+      display: flex;
+      align-items: baseline;
+      gap: .75rem;
+    }
+
+    .desk-row__head h2::before {
+      display: inline;
+      margin-right: .6rem;
+    }
+
+    .desk-row__head p {
+      display: none;
+    }
+  }
+</style>

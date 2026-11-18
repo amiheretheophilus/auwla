@@ -5,59 +5,95 @@ import { SignalChecks } from './SignalChecks.auwla';
 import { TradeDetails } from './fields/TradeDetails.auwla';
 
 <style>
+  /* The form on the left, its checks beside it. */
   .editor {
     display: grid;
-    gap: 1.25rem;
+    grid-template-columns: minmax(0, 1fr) minmax(17rem, 22rem);
+    align-items: start;
+    gap: clamp(1.5rem, 3.5vw, 3.5rem);
   }
 
   .draft-form {
-    display: grid;
-    gap: 1.1rem;
+    min-width: 0;
+    counter-reset: desk-section;
   }
 
+  .note-hint {
+    margin: .5rem 0 0;
+    color: var(--desk-muted);
+    font-size: .78rem;
+  }
+
+  /* The save bar stays in reach at the bottom of the window while the form scrolls. */
   .actions {
+    position: sticky;
+    bottom: 0;
+    z-index: 5;
     display: flex;
     flex-wrap: wrap;
     justify-content: space-between;
     align-items: center;
     gap: .75rem 1.25rem;
     padding: 1rem 0;
+    border-top: 1px solid var(--desk-ink);
+    background: #f1ebe1fa;
+    box-shadow: 0 -1.5rem 2rem -1.5rem #f1ebe1;
   }
 
-  .actions p { margin: 0; color: var(--desk-muted); line-height: 1.4; }
+  .actions p {
+    display: flex;
+    align-items: center;
+    gap: .55rem;
+    margin: 0;
+    color: var(--desk-muted);
+    font-size: .875rem;
+    line-height: 1.4;
+  }
 
-  .save {
-    padding: .85rem 1.2rem;
-    border: 0;
-    border-radius: .5rem;
+  .actions p::before {
+    flex: none;
+    width: .5rem;
+    height: .5rem;
+    border-radius: 50%;
+    background: var(--desk-muted);
+    content: "";
+  }
+
+  .actions p[data-tone="saved"]::before {
+    background: var(--desk-pass);
+  }
+
+  .actions p[role="alert"] {
+    color: var(--desk-accent);
+  }
+
+  .actions p[role="alert"]::before {
     background: var(--desk-accent);
-    color: white;
-    font: inherit;
-    cursor: pointer;
   }
 
-  .save:disabled { opacity: .65; cursor: wait; }
-
-  .note {
-    padding: .95rem var(--panel-padding);
-    border: 1px solid var(--desk-rule);
-    border-radius: var(--panel-radius);
-    background: var(--desk-surface);
+  .checks-column {
+    position: sticky;
+    top: 5rem;
   }
 
-  .note summary { cursor: pointer; }
+  @media (prefers-reduced-motion: no-preference) {
+    .actions p {
+      animation: tx-rise .45s var(--desk-ease) both;
+    }
 
-  .note textarea {
-    box-sizing: border-box;
-    width: 100%;
-    margin-top: .75rem;
-    padding: .75rem;
-    border: 1px solid var(--desk-rule);
-    border-radius: .45rem;
-    background: var(--desk-input);
-    color: inherit;
-    font: inherit;
-    resize: vertical;
+    .checks-column {
+      animation: tx-rise .9s var(--desk-ease) .2s both;
+    }
+  }
+
+  @media (max-width: 64rem) {
+    .editor {
+      grid-template-columns: minmax(0, 1fr);
+    }
+
+    .checks-column {
+      position: static;
+    }
   }
 </style>
 
@@ -84,17 +120,24 @@ export function DraftEditor({ initial }: { initial: SignalDraft }) {
       <form class="draft-form" onSubmit={save.submit}>
         <TradeDetails fields={initial.fields} />
         <PricePlan fields={initial.fields} />
-        <details class="note" open={Boolean(initial.fields.note)}>
-          <summary>"Analyst note"</summary>
-          <textarea name="note" aria-label="Analyst note" rows={3} maxlength={500} value={initial.fields.note} />
-        </details>
+
+        <section class="desk-row" aria-labelledby="note-heading">
+          <div class="desk-row__head">
+            <h2 id="note-heading">"Analyst note"</h2>
+            <p>"Optional context for the idea."</p>
+          </div>
+          <div>
+            <textarea name="note" aria-labelledby="note-heading" aria-describedby="note-hint" rows={3} maxlength={500} value={initial.fields.note} />
+            <p class="note-hint" id="note-hint">"Up to 500 characters."</p>
+          </div>
+        </section>
 
         <div class="actions">
-          <button class="save" type="submit" disabled={save.pending}>
+          <button class="desk-button" type="submit" disabled={save.pending}>
             save.pending ? "Saving…" : "Save draft"
           </button>
           if (save.result?.ok) {
-            <p role="status">"Draft saved. Checks updated."</p>
+            <p role="status" data-tone="saved">"Draft saved. Checks updated."</p>
           } else if (save.result) {
             <p role="alert">save.result.message</p>
           } else if (save.errors.length > 0) {
@@ -105,7 +148,9 @@ export function DraftEditor({ initial }: { initial: SignalDraft }) {
         </div>
       </form>
 
-      <SignalChecks review={review} />
+      <div class="checks-column">
+        <SignalChecks review={review} />
+      </div>
     </div>
   );
 }
