@@ -1,0 +1,411 @@
+import { postAnalysis, saveAnalysisDraft } from '#server-functions';
+import { analysisLabel, canEdit, statusLabels, type AnalysisDetail, type StaffMember } from '../analysis';
+import { StaffBadge } from '../StaffBadge.auwla';
+import { inspectSignal, readSignalFields } from './model/signal-checks';
+import type { SignalReview } from './model/signal-review';
+import { signalCardFromDraft } from '../../signals/signal-card';
+import { SignalCardPreview } from '../../signals/SignalCardPreview.auwla';
+import { PricePlan, type TargetRow } from './fields/PricePlan.auwla';
+import { SignalChecks } from './SignalChecks.auwla';
+import { TradeDetails } from './fields/TradeDetails.auwla';
+
+<style>
+  .back {
+    display: inline-flex;
+    align-items: center;
+    gap: .4rem;
+    margin-bottom: 1.25rem;
+    color: var(--desk-muted);
+    font-size: .875rem;
+    text-decoration: none;
+    transition: color .2s ease;
+  }
+
+  .back:hover {
+    color: var(--desk-ink);
+  }
+
+  .back span {
+    transition: translate .3s var(--desk-ease);
+  }
+
+  .back:hover span {
+    translate: -.2rem 0;
+  }
+
+  .title {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    align-items: end;
+    gap: 1rem 2rem;
+    margin-bottom: clamp(1.25rem, 3vw, 2rem);
+  }
+
+  .title h1 {
+    margin: 0 0 .9rem;
+    font-size: clamp(2.4rem, 5.5vw, 5rem);
+    font-weight: 400;
+    line-height: .92;
+    letter-spacing: -.07em;
+  }
+
+  .meta {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: .6rem 1.25rem;
+    margin: 0;
+    color: var(--desk-muted);
+    font-size: .82rem;
+  }
+
+  .meta code {
+    color: var(--desk-ink);
+    font-family: var(--desk-mono);
+    font-size: .78rem;
+  }
+
+  .notice {
+    margin: 0 0 1.25rem;
+    padding: .85rem 1rem;
+    border-left: 2px solid var(--desk-ink);
+    background: var(--desk-surface);
+    font-size: .875rem;
+    line-height: 1.45;
+  }
+
+  .editor {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(17rem, 23rem);
+    align-items: start;
+    gap: clamp(1.5rem, 3.5vw, 3.5rem);
+  }
+
+  .draft-form {
+    min-width: 0;
+    counter-reset: desk-section;
+  }
+
+  .fields {
+    min-width: 0;
+    margin: 0;
+    padding: 0;
+    border: 0;
+  }
+
+  .note-hint {
+    margin: .5rem 0 0;
+    color: var(--desk-muted);
+    font-size: .78rem;
+  }
+
+  /* The save bar stays in reach at the bottom of the window while the form scrolls. */
+  .actions {
+    position: sticky;
+    bottom: 0;
+    z-index: 5;
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    align-items: center;
+    gap: .75rem 1.25rem;
+    padding: 1rem 0;
+    border-top: 1px solid var(--desk-ink);
+    background: #f1ebe1fa;
+    box-shadow: 0 -1.5rem 2rem -1.5rem #f1ebe1;
+  }
+
+  .actions p {
+    display: flex;
+    align-items: center;
+    gap: .55rem;
+    margin: 0;
+    color: var(--desk-muted);
+    font-size: .875rem;
+    line-height: 1.4;
+  }
+
+  .actions p::before {
+    flex: none;
+    width: .5rem;
+    height: .5rem;
+    border-radius: 50%;
+    background: var(--tone, var(--desk-muted));
+    content: "";
+  }
+
+  .actions p[data-tone="saved"] {
+    --tone: var(--desk-pass);
+  }
+
+  .actions p[data-tone="unsaved"] {
+    --tone: #c98a00;
+  }
+
+  .actions p[role="alert"] {
+    --tone: var(--desk-accent);
+    color: var(--desk-accent);
+  }
+
+  .side {
+    position: sticky;
+    top: 4.75rem;
+    display: grid;
+    gap: 1.25rem;
+    max-height: calc(100vh - 5.75rem);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-width: thin;
+  }
+
+  .post {
+    display: grid;
+    gap: .9rem;
+    padding: 1.1rem 0 .25rem;
+    border-top: 1px solid var(--desk-ink);
+  }
+
+  .post h2 {
+    margin: 0;
+    font-size: 1rem;
+    font-weight: 500;
+    letter-spacing: -.02em;
+  }
+
+  .post p {
+    margin: 0;
+    color: var(--desk-muted);
+    font-size: .84rem;
+    line-height: 1.45;
+  }
+
+  .post p[role="alert"],
+  .post .blocked[data-tone="rejected"] {
+    color: var(--desk-accent);
+  }
+
+  .post .desk-button {
+    width: 100%;
+  }
+
+  .posted {
+    color: var(--desk-pass);
+    font-weight: 500;
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    .actions p,
+    .post p {
+      animation: tx-rise .45s var(--desk-ease) both;
+    }
+
+    .side {
+      animation: tx-rise .9s var(--desk-ease) .15s both;
+    }
+  }
+
+  @media (max-width: 64rem) {
+    .editor {
+      grid-template-columns: minmax(0, 1fr);
+    }
+
+    .side {
+      position: static;
+      max-height: none;
+      overflow: visible;
+    }
+  }
+</style>
+
+const updatedFormat = new Intl.DateTimeFormat('en-GB', {
+  dateStyle: 'medium',
+  timeStyle: 'short',
+  timeZone: 'UTC',
+});
+
+/** Shown when a field is longer than the server accepts, so no checks can run. */
+const invalidReview: SignalReview = {
+  checks: [{ label: 'Fields', status: 'fail', detail: 'A value is too long or not allowed for this market.' }],
+  missing: [],
+  verdict: 'Rejected',
+};
+
+export function AnalysisEditor({ staff, initial }: { staff: StaffMember; initial: AnalysisDetail }) {
+  // The last version the server confirmed. Saving and posting replace it.
+  let saved = initial;
+
+  let axis = initial.fields.axis;
+  let symbol = initial.fields.symbol;
+  let direction = initial.fields.direction;
+  let entryType = initial.fields.entryType;
+  let entry = initial.fields.entry;
+  let stop = initial.fields.stop;
+  let risk = initial.fields.risk;
+  let note = initial.fields.note;
+  let targets: TargetRow[] = initial.fields.targets.map((value, id) => ({ id, value }));
+  let nextTargetId = targets.length;
+
+  const editable = canEdit(staff, saved.author) && saved.published === null;
+
+  // What the analyst has typed, checked in the browser with the server's own rules.
+  const typed = { axis, symbol, direction, entryType, entry, stop, risk, note, targets: targets.map(row => row.value) };
+  const live = readSignalFields(typed);
+  const liveReview = live ? inspectSignal(live) : invalidReview;
+  const unsaved = JSON.stringify(live) !== JSON.stringify(saved.fields);
+  const card = saved.published ? saved.published.card : signalCardFromDraft(live ?? saved.fields);
+
+  function change(name: 'axis' | 'symbol' | 'direction' | 'entryType' | 'entry' | 'stop' | 'risk', value: string) {
+    if (name === 'axis') axis = value;
+    else if (name === 'symbol') symbol = value;
+    else if (name === 'direction') direction = value;
+    else if (name === 'entryType') entryType = value;
+    else if (name === 'entry') entry = value;
+    else if (name === 'stop') stop = value;
+    else risk = value;
+  }
+
+  function addTarget() {
+    targets = [...targets, { id: nextTargetId++, value: '' }];
+  }
+
+  function removeTarget(id: number) {
+    if (targets.length > 1) targets = targets.filter(row => row.id !== id);
+  }
+
+  function setTarget(id: number, value: string) {
+    targets = targets.map(row => row.id === id ? { id, value } : row);
+  }
+
+  function fillLevels(nextEntry: string, nextStop: string, nextTargets: string[]) {
+    entry = nextEntry;
+    stop = nextStop;
+    targets = nextTargets.map(value => ({ id: nextTargetId++, value }));
+  }
+
+  const save = $forms(() => {
+    const request = saveAnalysisDraft(saved.id, saved.revision, typed);
+    $track(save).onSuccess(outcome => {
+      if (outcome.ok) saved = outcome.analysis;
+    });
+    return request;
+  });
+
+  const post = $forms(() => {
+    const request = postAnalysis(saved.id, saved.revision);
+    $track(post).onSuccess(outcome => {
+      if (outcome.ok) saved = outcome.analysis;
+    });
+    return request;
+  });
+
+  // Why Post is not available yet, or '' when it is. The server decides again when it runs.
+  const firstFailure = saved.review.checks.find(check => check.status === 'fail');
+  const postBlock = saved.published
+    ? ''
+    : !canEdit(staff, saved.author)
+      ? `Only ${saved.author.name} or an admin can post this analysis.`
+      : unsaved
+        ? 'Save your changes first. Posting uses the saved version.'
+        : firstFailure
+          ? `Rejected: ${firstFailure.detail}`
+          : saved.status !== 'ready'
+            ? 'Complete every check and save before posting.'
+            : '';
+
+  return (
+    <section aria-labelledby="analysis-heading">
+      <a class="back" route-to="/desk"><span aria-hidden="true">"←"</span> "All analyses"</a>
+
+      <div class="title">
+        <div>
+          <h1 id="analysis-heading">saved.fields.symbol || "Untitled analysis"</h1>
+          <p class="meta">
+            <code>analysisLabel(saved.id)</code>
+            <StaffBadge member={saved.author} />
+            <span class="status" data-status={saved.status}>statusLabels[saved.status]</span>
+            <span>"Updated " + updatedFormat.format(new Date(saved.updatedAt)) + " UTC"</span>
+          </p>
+        </div>
+      </div>
+
+      if (saved.published) {
+        <p class="notice">"Posted as " + saved.published.id + " on " + updatedFormat.format(new Date(saved.published.publishedAt)) + " UTC. A posted analysis can no longer change."</p>
+      } else if (!editable) {
+        <p class="notice">"Read only. " + saved.author.name + " wrote this analysis; only they or an admin can change or post it."</p>
+      }
+
+      <div class="editor">
+        <form class="draft-form" onSubmit={save.submit}>
+          <fieldset class="fields" disabled={!editable}>
+            <legend class="visually-hidden">"Analysis fields"</legend>
+            <TradeDetails fields={{ axis, symbol, direction, entryType }} change={change} />
+            <PricePlan fields={{ entry, stop, risk }} targets={targets} change={change}
+              addTarget={addTarget} removeTarget={removeTarget} setTarget={setTarget} fillLevels={fillLevels} />
+
+            <section class="desk-row" aria-labelledby="note-heading">
+              <div class="desk-row__head">
+                <h2 id="note-heading">"Analyst note"</h2>
+                <p>"Optional context for the idea."</p>
+              </div>
+              <div>
+                <textarea name="note" aria-labelledby="note-heading" aria-describedby="note-hint" rows={3} maxlength={500}
+                  value={note} onInput={event => note = event.currentTarget.value} />
+                <p class="note-hint" id="note-hint">"Up to 500 characters."</p>
+              </div>
+            </section>
+          </fieldset>
+
+          if (editable) {
+            <div class="actions">
+              <button class="desk-button" type="submit" disabled={save.pending || !unsaved}>
+                save.pending ? "Saving…" : unsaved ? "Save draft" : "Saved"
+              </button>
+              if (save.result && !save.result.ok) {
+                <p role="alert">save.result.message</p>
+              } else if (save.errors.length > 0) {
+                <p role="alert">"The analysis could not be saved. Check your session and try again."</p>
+              } else if (unsaved) {
+                <p data-tone="unsaved">"Unsaved changes. The checks beside the form already include them."</p>
+              } else {
+                <p role="status" data-tone="saved">"All changes saved."</p>
+              }
+            </div>
+          }
+        </form>
+
+        <aside class="side" aria-label="Checks and posting">
+          <SignalChecks
+            review={editable ? liveReview : saved.review}
+            title={editable ? 'Live checks' : 'Saved checks'}
+            caption={editable ? 'Updates as you type' : 'Last saved version'} />
+
+          <section class="post" aria-labelledby="post-heading">
+            <h2 id="post-heading">saved.published ? "Posted card" : "Card preview"</h2>
+            <SignalCardPreview card={card} signalId={saved.published?.id ?? null} publishedAt={saved.published?.publishedAt ?? null} />
+            if (saved.published) {
+              <p class="posted" role="status">"Posted as " + saved.published.id + ". Members who hold this axis can see it."</p>
+            } else if (canEdit(staff, saved.author)) {
+              <form onSubmit={post.submit}>
+                <button class="desk-button" type="submit" disabled={postBlock !== '' || post.pending}>
+                  post.pending ? "Posting…" : "Post signal"
+                </button>
+              </form>
+              if (post.result && !post.result.ok) {
+                <p role="alert">post.result.message</p>
+              } else if (post.errors.length > 0) {
+                <p role="alert">"The signal could not be posted. Check your session and try again."</p>
+              } else if (postBlock) {
+                <p class="blocked" data-tone={firstFailure && !unsaved ? 'rejected' : 'waiting'}>postBlock</p>
+              } else {
+                <p>"Every check passes. Posting publishes this exact card and cannot be undone."</p>
+              }
+            } else {
+              <p>postBlock</p>
+            }
+          </section>
+        </aside>
+      </div>
+    </section>
+  );
+}

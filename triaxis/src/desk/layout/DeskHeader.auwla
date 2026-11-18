@@ -1,0 +1,144 @@
+import type { StaffMember } from '../analysis';
+import { StaffBadge } from '../StaffBadge.auwla';
+
+<style>
+  .desk-header {
+    position: sticky;
+    top: 0;
+    z-index: 20;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    min-height: 3.65rem;
+    padding-inline: var(--desk-gutter);
+    border-bottom: 1px solid var(--desk-rule);
+    background: #f1ebe1e6;
+    -webkit-backdrop-filter: blur(14px) saturate(1.4);
+    backdrop-filter: blur(14px) saturate(1.4);
+  }
+
+  .desk-header a {
+    color: inherit;
+    text-decoration: none;
+  }
+
+  .wordmark {
+    display: inline-flex;
+    align-items: center;
+    gap: .6rem;
+    font-size: 1.125rem;
+    font-weight: 700;
+    letter-spacing: .09em;
+    text-transform: uppercase;
+  }
+
+  .wordmark small {
+    padding-left: .65rem;
+    border-left: 1px solid var(--desk-rule);
+    color: var(--desk-muted);
+    font-size: .8rem;
+    font-weight: 400;
+    letter-spacing: 0;
+    text-transform: none;
+  }
+
+  .wordmark__mark {
+    position: relative;
+    width: 1.1rem;
+    height: 1.1rem;
+  }
+
+  .wordmark__mark span {
+    position: absolute;
+    top: 50%;
+    left: 0;
+    width: 100%;
+    height: 2px;
+    border-radius: 1px;
+    background: var(--desk-ink);
+    transition: rotate .5s var(--desk-ease);
+  }
+
+  .wordmark__mark span:nth-child(1) {
+    background: var(--desk-accent);
+    rotate: 60deg;
+  }
+
+  .wordmark__mark span:nth-child(2) {
+    rotate: -60deg;
+  }
+
+  .wordmark:hover .wordmark__mark span:nth-child(1) {
+    rotate: 120deg;
+  }
+
+  .wordmark:hover .wordmark__mark span:nth-child(2) {
+    rotate: 0deg;
+  }
+
+  .wordmark:hover .wordmark__mark span:nth-child(3) {
+    rotate: 60deg;
+  }
+
+  .desk-header nav {
+    display: flex;
+    align-items: center;
+    gap: clamp(.75rem, 2vw, 1.5rem);
+    font-size: .875rem;
+  }
+
+  .desk-header form {
+    margin: 0;
+  }
+
+  .nav-link {
+    color: var(--desk-muted);
+    transition: color .2s ease;
+  }
+
+  .nav-link:hover {
+    color: var(--desk-ink);
+  }
+
+  .identity {
+    padding-left: clamp(.75rem, 2vw, 1.5rem);
+    border-left: 1px solid var(--desk-rule);
+  }
+
+  @media (max-width: 40rem) {
+    .wordmark small,
+    .nav-link {
+      display: none;
+    }
+  }
+</style>
+
+/** The desk's header. With `staff`, it shows who is signed in and a sign-out button. */
+export function DeskHeader({ staff }: { staff: StaffMember | null }) {
+  return (
+    <header class="desk-header">
+      <a class="wordmark" href={staff ? '/desk' : '/'} aria-label={staff ? 'All analyses' : 'Triaxis home'}>
+        <span class="wordmark__mark" aria-hidden="true">
+          <span></span>
+          <span></span>
+          <span></span>
+        </span>
+        "Triaxis"
+        <small>"Desk"</small>
+      </a>
+      <nav aria-label="Desk navigation">
+        if (staff) {
+          <a class="nav-link" href="/desk">"All analyses"</a>
+        }
+        <a class="nav-link" href="/">"Public site"</a>
+        if (staff) {
+          <span class="identity"><StaffBadge member={staff} role={true} /></span>
+          <form method="post" action="/desk/sign-out">
+            <button class="desk-button desk-button--quiet" type="submit">"Sign out"</button>
+          </form>
+        }
+      </nav>
+    </header>
+  );
+}

@@ -23,13 +23,28 @@ bun run --cwd triaxis auth:setup
 bun run --cwd triaxis dev
 ```
 
-Open `/desk` and enter the staff email and password. The setup command applies Better Auth's SQLite migrations and creates the local staff account. It leaves existing accounts and drafts in place. The local desk has one analyst workspace and one active draft.
+Open `/desk` and enter the staff email and password. The setup command applies Better Auth's SQLite migrations and creates the first staff account, an admin. It leaves existing accounts and analyses in place. Add more staff with:
 
-The sign-in form uses Auwla's `$forms` helper with the typed `login` function in `server/functions/login.ts`. The same sign-in and sign-out handlers are mounted through Hono under `/api/auth`. Better Auth manages password hashing and session cookies. Local staff accounts use the `admin` role.
+```sh
+bun run --cwd triaxis auth:add-analyst "Ama Mensah" ama@example.com          # an analyst
+bun run --cwd triaxis auth:add-analyst "Kofi Boateng" kofi@example.com admin   # an admin
+```
 
-The desk route uses a server-backed `$routed` preparation to check the staff session and load the draft. The editor supports an editable list of take-profit targets. Saving checks price order and compares the distance from entry to the target with the distance from entry to the stop. It uses TP2 when present and TP1 for a single target. Only TP1 is required: empty target rows after the last price are dropped when the draft is read, while a blank row between prices still needs a price. Risk is optional draft data and the percentage has no upper limit. Auth and drafts use Bun SQLite at `.local/analyst.sqlite`. Set `TRIAXIS_DESK_DB` to use a different server-side path outside `public/`. The Neon connection backs `/readyz`.
+The command asks for the password, so it stays out of the shell history.
 
-Desk components are grouped under `src/desk/auth`, `src/desk/layout`, and `src/desk/draft`. The draft folder groups its fields and data model separately.
+The sign-in form uses Auwla's `$forms` helper with the typed `login` function in `server/functions/login.ts`. The same sign-in and sign-out handlers are mounted through Hono under `/api/auth`. Better Auth manages password hashing and session cookies. Staff have the `admin` or `analyst` role, declared in `server/auth/auth.ts`.
+
+### Analyses
+
+Each trade idea is an analysis with one author. `/desk` lists every analyst's analyses, newest first, with status tabs (ready to post, rejected, incomplete, posted) and filters for analyst, market, asset and date. Rejected analyses stay in the list with the check that stopped them. `/desk/analyses/:id` opens one. Everyone on the staff can read every analysis; only its author or an admin can change or post it.
+
+The editor runs the checks in the browser as the analyst types, using the same rules as the server (`src/desk/draft/model/signal-checks.ts`). The server runs them again on every save and inside the posting transaction, so the browser's result is only a preview. The checks look at price order and compare the distance from entry to the target with the distance from entry to the stop. They use TP2 when present and TP1 for a single target. Only TP1 is required: empty target rows after the last price are ignored, while a blank row between prices still needs a price. Risk is optional draft data and the percentage has no upper limit.
+
+Post stays disabled until the saved version passes every check and there are no unsaved changes. Posting stores the card in `published_signals` with a `TRX-0001` style ID. Its unique key makes a repeated Post return the first signal, and a posted analysis can no longer change.
+
+Auth and analyses use Bun SQLite at `.local/analyst.sqlite`. Set `TRIAXIS_DESK_DB` to use a different server-side path outside `public/`. The Neon connection backs `/readyz`.
+
+Desk components are grouped under `src/desk/auth`, `src/desk/layout`, `src/desk/board` (the list), and `src/desk/draft` (the editor, its fields and the check rules). Server code is in `server/desk/analyses.ts` and `server/functions/desk.ts`.
 
 ## Add a feature
 

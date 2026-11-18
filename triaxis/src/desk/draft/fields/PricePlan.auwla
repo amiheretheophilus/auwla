@@ -85,26 +85,29 @@ import type { SignalFields } from '../model/signal-fields';
   }
 </style>
 
-export function PricePlan({ fields }: { fields: SignalFields }) {
-  let entry = fields.entry;
-  let stop = fields.stop;
-  let targets = fields.targets.map((value, id) => ({ id, value }));
-  let nextId = targets.length;
+export interface TargetRow {
+  id: number;
+  value: string;
+}
+
+type PriceField = 'entry' | 'stop' | 'risk';
+
+interface PricePlanProps {
+  fields: Pick<SignalFields, PriceField>;
+  targets: TargetRow[];
+  change: (name: PriceField, value: string) => void;
+  addTarget: () => void;
+  removeTarget: (id: number) => void;
+  setTarget: (id: number, value: string) => void;
+  /** Replaces entry, stop and every target at once. */
+  fillLevels: (entry: string, stop: string, targets: string[]) => void;
+}
+
+/** Price levels and targets. The editor owns the values; only the pasted text is kept here. */
+export function PricePlan({ fields, targets, change, addTarget, removeTarget, setTarget, fillLevels }: PricePlanProps) {
   let pasted = '';
   let pasteMessage = '';
   const numberedTargets = targets.map((row, index) => ({ ...row, label: 'TP' + (index + 1) }));
-
-  function addTarget() {
-    targets = [...targets, { id: nextId++, value: '' }];
-  }
-
-  function removeTarget(id: number) {
-    if (targets.length > 1) targets = targets.filter(row => row.id !== id);
-  }
-
-  function setTarget(id: number, value: string) {
-    targets = targets.map(row => row.id === id ? { id, value } : row);
-  }
 
   function applyLevels() {
     const parsed = parsePastedLevels(pasted);
@@ -113,9 +116,7 @@ export function PricePlan({ fields }: { fields: SignalFields }) {
       return;
     }
 
-    entry = parsed.entry;
-    stop = parsed.stop;
-    targets = parsed.targets.map(value => ({ id: nextId++, value }));
+    fillLevels(parsed.entry, parsed.stop, parsed.targets);
     pasteMessage = 'Entry, stop, and targets filled in.';
   }
 
@@ -130,15 +131,15 @@ export function PricePlan({ fields }: { fields: SignalFields }) {
           <div class="level-grid">
             <label class="desk-label">
               "Entry price"
-              <input name="entry" inputmode="decimal" maxlength={64} value={entry} onInput={event => entry = event.currentTarget.value} />
+              <input name="entry" inputmode="decimal" maxlength={64} value={fields.entry} onInput={event => change('entry', event.currentTarget.value)} />
             </label>
             <label class="desk-label">
               "Stop loss"
-              <input name="stop" inputmode="decimal" maxlength={64} value={stop} onInput={event => stop = event.currentTarget.value} />
+              <input name="stop" inputmode="decimal" maxlength={64} value={fields.stop} onInput={event => change('stop', event.currentTarget.value)} />
             </label>
             <label class="desk-label">
               "Risk (%) · optional"
-              <input name="risk" inputmode="decimal" maxlength={64} value={fields.risk} />
+              <input name="risk" inputmode="decimal" maxlength={64} value={fields.risk} onInput={event => change('risk', event.currentTarget.value)} />
             </label>
           </div>
 

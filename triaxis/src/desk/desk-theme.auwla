@@ -20,6 +20,40 @@
     --desk-gutter: clamp(1rem, 4vw, 4rem);
   }
 
+  .desk .visually-hidden {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    padding: 0;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  /* A status: a coloured dot and its label. */
+  .desk .status {
+    display: inline-flex;
+    align-items: center;
+    gap: .45rem;
+    font-size: .8rem;
+    white-space: nowrap;
+  }
+
+  .desk .status::before {
+    flex: none;
+    width: .55rem;
+    height: .55rem;
+    border-radius: 50%;
+    background: var(--status-tone);
+    content: "";
+  }
+
+  .desk .status[data-status="ready"] { --status-tone: #2f9e64; }
+  .desk .status[data-status="rejected"] { --status-tone: var(--desk-accent); }
+  .desk .status[data-status="incomplete"] { --status-tone: #c98a00; }
+  .desk .status[data-status="posted"] { --status-tone: var(--desk-ink); }
+
   .desk ::selection {
     background: var(--desk-accent);
     color: #fff9f0;
@@ -211,6 +245,13 @@
 
     .desk-row:nth-of-type(5) {
       animation-delay: .24s;
+    }
+  }
+
+  /* On a phone the header keeps the signed-in person's initials and drops their name. */
+  @media (max-width: 40rem) {
+    .desk .identity .badge__text {
+      display: none;
     }
   }
 

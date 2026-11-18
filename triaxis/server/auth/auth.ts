@@ -1,6 +1,18 @@
 import { betterAuth } from 'better-auth';
 import { admin } from 'better-auth/plugins/admin';
+import { createAccessControl } from 'better-auth/plugins/access';
+import { adminAc, defaultStatements, userAc } from 'better-auth/plugins/admin/access';
+
+// Staff roles for Better Auth's admin plugin. Admins keep the plugin's account management;
+// analysts are staff who work on the desk and manage no accounts.
+const access = createAccessControl(defaultStatements);
+const staffRoles = {
+  admin: access.newRole(adminAc.statements),
+  user: access.newRole(userAc.statements),
+  analyst: access.newRole({ user: [], session: [] }),
+};
 import { deskDatabase } from '../desk/storage';
+import type { StaffMember, StaffRole } from '../../src/desk/analysis';
 
 function sessionSecret() {
   return process.env.BETTER_AUTH_SECRET?.trim() ?? '';
@@ -35,7 +47,7 @@ function createAuth() {
     },
     rateLimit: { enabled: true },
     telemetry: { enabled: false },
-    plugins: [admin()],
+    plugins: [admin({ ac: access, roles: staffRoles })],
   });
 }
 
@@ -45,11 +57,19 @@ export function getAuth() {
   return instance ??= createAuth();
 }
 
-export async function getAnalyst(request: Request) {
+/** Staff roles. An admin can change any analysis; an analyst changes their own. */
+export function isStaffRole(role: unknown): role is StaffRole {
+  return role === 'admin' || role === 'analyst';
+}
+
+/** The signed-in member of staff, or null for anyone else. */
+export async function getAnalyst(request: Request): Promise<StaffMember | null> {
   if (!authConfigured()) return null;
 
   const session = await getAuth().api.getSession({ headers: request.headers });
-  return session?.user.role === 'admin' ? session.user : null;
+  const user = session?.user;
+  if (!user || !isStaffRole(user.role)) return null;
+  return { id: user.id, name: user.name || user.email, role: user.role };
 }
 
 export async function isAnalyst(request: Request) {

@@ -4,7 +4,7 @@ import { MarketCoverage } from './home/MarketCoverage.auwla';
 import { MarketHero } from './home/MarketHero.auwla';
 import { SignalApproach } from './home/SignalApproach.auwla';
 import { SiteFooter } from './home/SiteFooter.auwla';
-import { AnalystDesk, DeskSignIn } from './desk/DeskRoutes.auwla';
+import { AnalysisPage, AnalystDesk, DeskSignIn } from './desk/DeskRoutes.auwla';
 
 <style>
   body {
@@ -226,6 +226,7 @@ export function App() {
     <>
       <MarketHome route="/" />
       <AnalystDesk route="/desk" />
+      <AnalysisPage route="/desk/analyses/:id" />
       <DeskSignIn route="/desk/sign-in" />
     </>
   );

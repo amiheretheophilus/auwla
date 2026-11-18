@@ -1,0 +1,69 @@
+import { badgeTone, initials, type StaffMember } from './analysis';
+
+<style>
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    gap: .55rem;
+    min-width: 0;
+  }
+
+  .badge__mark {
+    display: grid;
+    place-items: center;
+    flex: none;
+    width: var(--badge-size, 1.9rem);
+    height: var(--badge-size, 1.9rem);
+    border-radius: 50%;
+    background: var(--tone);
+    color: #fff9f0;
+    font-size: calc(var(--badge-size, 1.9rem) * .38);
+    font-weight: 600;
+    letter-spacing: .02em;
+  }
+
+  .badge[data-tone="0"] { --tone: #a8271c; }
+  .badge[data-tone="1"] { --tone: #2f6fb8; }
+  .badge[data-tone="2"] { --tone: #6f63c9; }
+  .badge[data-tone="3"] { --tone: #9a6a00; }
+  .badge[data-tone="4"] { --tone: #256448; }
+  .badge[data-tone="5"] { --tone: #6b4f3c; }
+
+  .badge__text {
+    display: grid;
+    min-width: 0;
+    line-height: 1.2;
+  }
+
+  .badge__name {
+    overflow: hidden;
+    font-size: .875rem;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .badge__role {
+    color: var(--desk-muted);
+    font-size: .72rem;
+    text-transform: capitalize;
+  }
+</style>
+
+/** A member of staff: initials in their colour, with their name unless `compact`. */
+export function StaffBadge({ member, compact = false, role = false }: { member: StaffMember; compact?: boolean; role?: boolean }) {
+  return (
+    <span class="badge" data-tone={badgeTone(member.id)} title={member.name}>
+      <span class="badge__mark" aria-hidden="true">initials(member.name)</span>
+      if (compact) {
+        <span class="visually-hidden">member.name</span>
+      } else {
+        <span class="badge__text">
+          <span class="badge__name">member.name</span>
+          if (role) {
+            <span class="badge__role">member.role</span>
+          }
+        </span>
+      }
+    </span>
+  );
+}

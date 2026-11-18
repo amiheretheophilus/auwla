@@ -1,10 +1,8 @@
-import {
-  emptyFields,
-  isAxis,
-  markets,
-  type SignalFields,
-} from '../../src/desk/draft/model/signal-fields';
-import type { SignalCheck, SignalReview } from '../../src/desk/draft/model/signal-review';
+// The signal rules, shared by the browser and the server. The editor runs them as the analyst
+// types; the server runs them again when a draft is saved and when it is posted, so the browser's
+// result is a preview and never the authority.
+import { emptyFields, isAxis, markets, type SignalFields } from './signal-fields';
+import type { SignalCheck, SignalReview } from './signal-review';
 
 const textFields = ['axis', 'symbol', 'direction', 'entryType', 'entry', 'stop', 'risk', 'note'] as const;
 

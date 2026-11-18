@@ -1,0 +1,223 @@
+import { formatSignalTime, type SignalCardData } from './signal-card';
+
+<style>
+  .card {
+    --on-night: #f1ebe1;
+    --on-night-muted: #f1ebe199;
+    --night-rule: #f1ebe11f;
+    --pass: #4fbf7f;
+    --loss: #e4614f;
+
+    position: relative;
+    isolation: isolate;
+    display: grid;
+    gap: 1rem;
+    padding: 1.25rem;
+    overflow: hidden;
+    border-radius: .35rem;
+    background: #0f0d0c;
+    color: var(--on-night);
+  }
+
+  .card[data-axis="forex"] { --card-accent: #3987e5; }
+  .card[data-axis="crypto"] { --card-accent: #9085e9; }
+  .card[data-axis="synthetics"] { --card-accent: #eda100; }
+
+  /* The faint repeating watermark of the real card. */
+  .card::before {
+    position: absolute;
+    inset: -30% -50%;
+    z-index: -1;
+    color: #f1ebe1;
+    font-size: 1.6rem;
+    font-weight: 700;
+    line-height: 2.1;
+    letter-spacing: .3em;
+    white-space: pre;
+    content: "TRIAXIS TRIAXIS TRIAXIS TRIAXIS\A   TRIAXIS TRIAXIS TRIAXIS TRIAXIS\A TRIAXIS TRIAXIS TRIAXIS TRIAXIS\A   TRIAXIS TRIAXIS TRIAXIS TRIAXIS\A TRIAXIS TRIAXIS TRIAXIS TRIAXIS\A   TRIAXIS TRIAXIS TRIAXIS TRIAXIS";
+    opacity: .035;
+    rotate: -18deg;
+    pointer-events: none;
+  }
+
+  .top {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: .75rem;
+    font-size: .7rem;
+    font-weight: 700;
+    letter-spacing: .14em;
+    text-transform: uppercase;
+  }
+
+  .tag {
+    padding: .25rem .55rem;
+    border: 1px solid var(--card-accent);
+    border-radius: 999px;
+    color: var(--card-accent);
+    font-family: var(--desk-mono);
+    font-size: .6rem;
+    font-weight: 500;
+    letter-spacing: .08em;
+  }
+
+  .asset {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    gap: .75rem;
+  }
+
+  .asset h3 {
+    margin: 0;
+    font-size: 1.9rem;
+    font-weight: 600;
+    line-height: 1;
+    letter-spacing: -.04em;
+  }
+
+  .asset p {
+    margin: .35rem 0 0;
+    color: var(--on-night-muted);
+    font-size: .75rem;
+  }
+
+  .side {
+    padding: .35rem .7rem;
+    border-radius: .4rem;
+    background: var(--side, var(--pass));
+    color: #0f0d0c;
+    font-family: var(--desk-mono);
+    font-size: .72rem;
+    font-weight: 600;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+  }
+
+  .side[data-side="sell"] {
+    --side: var(--loss);
+  }
+
+  .levels {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(4.6rem, 1fr));
+    gap: .75rem;
+    margin: 0;
+    padding-top: .9rem;
+    border-top: 1px solid var(--night-rule);
+    font-family: var(--desk-mono);
+  }
+
+  .levels div {
+    display: grid;
+    gap: .2rem;
+    min-width: 0;
+  }
+
+  .levels dt {
+    color: var(--on-night-muted);
+    font-size: .58rem;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+  }
+
+  .levels dd {
+    overflow: hidden;
+    margin: 0;
+    font-size: .82rem;
+    text-overflow: ellipsis;
+  }
+
+  .levels dd small {
+    display: block;
+    color: var(--pass);
+    font-size: .62rem;
+  }
+
+  .levels .stop dd small {
+    color: var(--loss);
+  }
+
+  .foot {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    gap: .5rem;
+    color: var(--on-night-muted);
+    font-family: var(--desk-mono);
+    font-size: .6rem;
+    letter-spacing: .06em;
+    text-transform: uppercase;
+  }
+
+  .seal {
+    padding: .25rem .5rem;
+    border: 1px dashed #f1ebe166;
+    border-radius: .3rem;
+    color: var(--on-night);
+  }
+</style>
+
+function amount(value: string): number | null {
+  const parsed = Number(value);
+  return value.trim() !== '' && Number.isFinite(parsed) ? parsed : null;
+}
+
+/** How far a target sits from entry, in stop distances: "2.0×". */
+function distance(card: SignalCardData, target: string): string {
+  const entry = amount(card.entry);
+  const stop = amount(card.stop);
+  const price = amount(target);
+  if (entry === null || stop === null || price === null || entry === stop) return '';
+  return (Math.abs(price - entry) / Math.abs(entry - stop)).toFixed(1) + '×';
+}
+
+interface PreviewProps {
+  card: SignalCardData;
+  signalId: string | null;
+  publishedAt: string | null;
+}
+
+/** The score card as members will see it. Before posting it is marked as a preview. */
+export function SignalCardPreview({ card, signalId, publishedAt }: PreviewProps) {
+  const side = card.direction === 'Buy' || card.direction === 'Long' ? 'buy' : card.direction ? 'sell' : '';
+
+  return (
+    <article class="card" data-axis={card.axis} aria-label={signalId ? 'Signal card ' + signalId : 'Card preview'}>
+      <header class="top">
+        <span>"Triaxis"</span>
+        <span class="tag">card.market</span>
+      </header>
+      <div class="asset">
+        <div>
+          <h3>card.symbol || "Asset"</h3>
+          <p>card.entryType ? card.entryType.charAt(0).toUpperCase() + card.entryType.slice(1) + " entry" : "Entry type not set"</p>
+        </div>
+        if (side) {
+          <span class="side" data-side={side}>card.direction</span>
+        }
+      </div>
+      <dl class="levels">
+        <div class="stop">
+          <dt>"Stop"</dt>
+          <dd>card.stop || "—"</dd>
+        </div>
+        <div>
+          <dt>"Entry"</dt>
+          <dd>card.entry || "—"</dd>
+        </div>
+        for (const [index, target] of card.targets.entries()) {
+          <div key={index}>
+            <dt>"TP" + (index + 1)</dt>
+            <dd>target || "—" <small>distance(card, target)</small></dd>
+          </div>
+        }
+      </dl>
+      <footer class="foot">
+        <span>signalId && publishedAt ? signalId + " · " + formatSignalTime(publishedAt) : "Preview · not posted"</span>
+        <span class="seal">signalId ? "Official Triaxis signal" : "Draft"</span>
+      </footer>
+    </article>
+  );
+}

@@ -1,22 +1,75 @@
 import { redirectRoute } from '@memoized-dom/router';
-import { authConfigured, isAnalyst } from '#server/auth/auth';
-import { loadDraft } from '#server/desk/draft';
-import { DeskLayout } from './layout/DeskLayout.auwla';
+import { authConfigured, getAnalyst } from '#server/auth/auth';
+import { listAnalyses, listAuthors, loadAnalysis } from '#server/desk/analyses';
+import { SignInPage } from './auth/SignInPage.auwla';
+import { AnalysesBoard } from './board/AnalysesBoard.auwla';
+import { AnalysisEditor } from './draft/AnalysisEditor.auwla';
+import { DeskShell } from './layout/DeskShell.auwla';
 
+<style>
+  .missing {
+    display: grid;
+    justify-items: start;
+    gap: 1rem;
+    padding: 3rem 0;
+  }
+
+  .missing h1 {
+    margin: 0;
+    font-size: clamp(2rem, 4vw, 3.5rem);
+    font-weight: 400;
+    letter-spacing: -.06em;
+  }
+
+  .missing p {
+    margin: 0;
+    color: var(--desk-muted);
+  }
+</style>
+
+/** `/desk`: every analysis, from every analyst. */
 export function AnalystDesk() {
-  const draft = $routed(async ({ request }) => {
-    if (!await isAnalyst(request)) return redirectRoute('/desk/sign-in');
-    return loadDraft();
+  const desk = $routed(async ({ request }) => {
+    const staff = await getAnalyst(request);
+    if (!staff) return redirectRoute('/desk/sign-in');
+    return { staff, analyses: listAnalyses(), authors: listAuthors(staff) };
   });
 
-  return <DeskLayout draft={draft} enabled={true} />;
+  return (
+    <DeskShell staff={desk.staff}>
+      <AnalysesBoard staff={desk.staff} analyses={desk.analyses} authors={desk.authors} />
+    </DeskShell>
+  );
+}
+
+/** `/desk/analyses/:id`: one analysis, editable by its author or an admin. */
+export function AnalysisPage() {
+  const page = $routed(async ({ request, params }) => {
+    const staff = await getAnalyst(request);
+    if (!staff) return redirectRoute('/desk/sign-in');
+    return { staff, analysis: loadAnalysis(Number(params.id)) };
+  });
+
+  return (
+    <DeskShell staff={page.staff}>
+      if (page.analysis) {
+        <AnalysisEditor staff={page.staff} initial={page.analysis} />
+      } else {
+        <div class="missing">
+          <h1>"Analysis not found"</h1>
+          <p>"It may have been removed, or the link is wrong."</p>
+          <a class="desk-button desk-button--quiet" route-to="/desk">"Back to all analyses"</a>
+        </div>
+      }
+    </DeskShell>
+  );
 }
 
 export function DeskSignIn() {
   const enabled = $routed(async ({ request }) => {
-    if (await isAnalyst(request)) return redirectRoute('/desk');
+    if (await getAnalyst(request)) return redirectRoute('/desk');
     return authConfigured();
   });
 
-  return <DeskLayout draft={null} enabled={enabled} />;
+  return <SignInPage enabled={enabled} />;
 }

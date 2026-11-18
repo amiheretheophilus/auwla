@@ -215,12 +215,18 @@ const verdictTones = {
   'Price checks complete': 'pass',
 };
 
-export function SignalChecks({ review }: { review: SignalReview }) {
+interface ChecksProps {
+  review: SignalReview;
+  title: string;
+  caption: string;
+}
+
+export function SignalChecks({ review, title, caption }: ChecksProps) {
   return (
     <section class="checks" aria-labelledby="checks-heading">
       <header>
-        <h2 id="checks-heading">"Draft checks"</h2>
-        <span>"Runs on save"</span>
+        <h2 id="checks-heading">title</h2>
+        <span>caption</span>
       </header>
       <p class="verdict" role="status" data-tone={verdictTones[review.verdict]}>review.verdict</p>
       if (review.missing.length > 0) {
@@ -237,7 +243,7 @@ export function SignalChecks({ review }: { review: SignalReview }) {
           </li>
         }
       </ol>
-      <p class="rule">"Any failed check rejects the idea. Nothing is posted until every check passes."</p>
+      <p class="rule">"Any failed check rejects the idea. Nothing is posted until every check passes, and the server checks again when you save and post."</p>
     </section>
   );
 }

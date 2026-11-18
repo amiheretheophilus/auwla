@@ -8,7 +8,8 @@
     "check": "bun run types && tsc -p tsconfig.json --runExternalCode",
     "build": "memoized-dom build",
     "start": "NODE_ENV=production bun dist/server.js",
-    "auth:setup": "bun server/auth/setup.ts"
+    "auth:setup": "bun server/auth/setup.ts",
+    "auth:add-analyst": "bun server/auth/add-analyst.ts"
   },
   "dependencies": {
     "@memoized-dom/data": "workspace:*",

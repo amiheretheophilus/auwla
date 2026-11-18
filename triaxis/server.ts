@@ -36,5 +36,6 @@ app.post('/desk/sign-out', ({ request }) => leaveDesk(request));
 app.ssr('/', App);
 app.ssr('/desk', App, { delivery: 'buffer' });
 app.ssr('/desk/sign-in', App, { delivery: 'buffer' });
+app.ssr('/desk/analyses/:id', App, { delivery: 'buffer' });
 
 export default app;

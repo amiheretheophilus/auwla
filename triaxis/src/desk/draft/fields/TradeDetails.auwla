@@ -20,14 +20,21 @@ import { axes, isAxis, markets, type SignalFields } from '../model/signal-fields
   }
 </style>
 
-export function TradeDetails({ fields }: { fields: SignalFields }) {
-  let axis = fields.axis;
-  let symbol = fields.symbol;
-  const symbols: readonly string[] = isAxis(axis) ? markets[axis].symbols : [];
+type TradeField = 'axis' | 'symbol' | 'direction' | 'entryType';
+
+interface TradeDetailsProps {
+  fields: Pick<SignalFields, TradeField>;
+  change: (name: TradeField, value: string) => void;
+}
+
+/** The instrument row. The editor owns the values; this reports each change. */
+export function TradeDetails({ fields, change }: TradeDetailsProps) {
+  const symbols: readonly string[] = isAxis(fields.axis) ? markets[fields.axis].symbols : [];
 
   function chooseMarket(event: Event & { currentTarget: HTMLSelectElement }) {
-    axis = event.currentTarget.value;
-    symbol = '';
+    change('axis', event.currentTarget.value);
+    // An asset belongs to one market, so choosing another market clears it.
+    change('symbol', '');
   }
 
   return (
@@ -41,30 +48,30 @@ export function TradeDetails({ fields }: { fields: SignalFields }) {
           "Market"
           <select name="axis" onChange={chooseMarket}>
             for (const option of axes) {
-              <option key={option} value={option} selected={axis === option}>markets[option].label</option>
+              <option key={option} value={option} selected={fields.axis === option}>markets[option].label</option>
             }
           </select>
         </label>
         <label class="desk-label">
           "Asset"
-          <select name="symbol" onChange={(event) => symbol = event.currentTarget.value}>
-            <option value="" selected={symbol === ''}>"Choose an asset"</option>
+          <select name="symbol" onChange={(event) => change('symbol', event.currentTarget.value)}>
+            <option value="" selected={fields.symbol === ''}>"Choose an asset"</option>
             for (const option of symbols) {
-              <option key={option} value={option} selected={symbol === option}>option</option>
+              <option key={option} value={option} selected={fields.symbol === option}>option</option>
             }
           </select>
         </label>
         <label class="desk-label">
           "Direction"
-          <select name="direction">
+          <select name="direction" onChange={(event) => change('direction', event.currentTarget.value)}>
             <option value="" selected={fields.direction === ''}>"Choose a direction"</option>
-            <option value="buy" selected={fields.direction === 'buy'}>axis === 'crypto' ? "Long" : "Buy"</option>
-            <option value="sell" selected={fields.direction === 'sell'}>axis === 'crypto' ? "Short" : "Sell"</option>
+            <option value="buy" selected={fields.direction === 'buy'}>fields.axis === 'crypto' ? "Long" : "Buy"</option>
+            <option value="sell" selected={fields.direction === 'sell'}>fields.axis === 'crypto' ? "Short" : "Sell"</option>
           </select>
         </label>
         <label class="desk-label">
           "Entry type"
-          <select name="entryType">
+          <select name="entryType" onChange={(event) => change('entryType', event.currentTarget.value)}>
             <option value="" selected={fields.entryType === ''}>"Choose a type"</option>
             <option value="market" selected={fields.entryType === 'market'}>"Market"</option>
             <option value="limit" selected={fields.entryType === 'limit'}>"Limit"</option>

@@ -1,19 +1,33 @@
 import { define } from '../define';
-import { writeDraft } from '../desk/draft';
-import { isAnalyst } from '../auth/auth';
+import { createAnalysis, publishAnalysis, saveAnalysis } from '../desk/analyses';
+import { getAnalyst } from '../auth/auth';
 import { isSameOrigin } from '../auth/routes';
+import type { StaffMember } from '../../src/desk/analysis';
 
-const requireAnalyst = define.middleware(async (context, next) => {
-  if (!await isAnalyst(context.request)) return new Response('Analyst sign-in required', { status: 401 });
-  return next();
+type DeskFailure = { readonly ok: false; readonly message: string };
+
+/** Runs `action` for the signed-in member of staff, from the desk's own origin only. */
+async function asStaff<T>(request: Request, action: (staff: StaffMember) => T): Promise<T | DeskFailure> {
+  if (!isSameOrigin(request)) return { ok: false, message: 'Use the Triaxis desk for this.' };
+  const staff = await getAnalyst(request);
+  if (!staff) return { ok: false, message: 'Your desk session has ended. Sign in again.' };
+  return action(staff);
+}
+
+export const startAnalysis = define.function({
+  async post({ request }) {
+    return asStaff(request, staff => createAnalysis(staff));
+  },
 });
 
-export const saveSignalDraft = define.function({
-  middleware: [requireAnalyst],
-  async post({ request }, revision: number, fields: Record<string, unknown>) {
-    if (!isSameOrigin(request)) {
-      return { ok: false, message: 'Save the draft from the Triaxis desk.' } as const;
-    }
-    return writeDraft(fields, revision);
+export const saveAnalysisDraft = define.function({
+  async post({ request }, id: number, revision: number, fields: Record<string, unknown>) {
+    return asStaff(request, staff => saveAnalysis(id, revision, fields, staff));
+  },
+});
+
+export const postAnalysis = define.function({
+  async post({ request }, id: number, revision: number) {
+    return asStaff(request, staff => publishAnalysis(id, revision, staff));
   },
 });

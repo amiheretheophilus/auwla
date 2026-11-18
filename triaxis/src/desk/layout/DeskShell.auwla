@@ -1,0 +1,44 @@
+import '../desk-theme.auwla';
+import type { StaffMember } from '../analysis';
+import { DeskHeader } from './DeskHeader.auwla';
+
+<style>
+  body {
+    margin: 0;
+  }
+
+  .desk {
+    min-height: 100vh;
+    background: var(--desk-paper);
+    color: var(--desk-ink);
+    font-family: "Helvetica Neue", Arial, sans-serif;
+    font-synthesis: none;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .desk-main {
+    max-width: 82rem;
+    margin-inline: auto;
+    padding: clamp(1.75rem, 4vw, 3rem) var(--desk-gutter) 0;
+  }
+
+  .risk-note {
+    margin: 0;
+    padding: 2rem 0;
+    color: var(--desk-muted);
+    font-size: .8rem;
+  }
+</style>
+
+/** A signed-in desk page: the header with the staff member, then the page itself. */
+export function DeskShell({ staff }: { staff: StaffMember }) {
+  return (
+    <div class="desk">
+      <DeskHeader staff={staff} />
+      <main class="desk-main">
+        <slot />
+        <p class="risk-note">"Trading involves risk. Signals are for informational purposes only."</p>
+      </main>
+    </div>
+  );
+}
