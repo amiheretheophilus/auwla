@@ -194,6 +194,155 @@ import { TradeDetails } from './fields/TradeDetails.auwla';
     font-weight: 500;
   }
 
+  .actions__buttons {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .6rem;
+  }
+
+  .post__head {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 1rem;
+  }
+
+  .post__head span {
+    color: var(--desk-muted);
+    font-family: var(--desk-mono);
+    font-size: .68rem;
+  }
+
+  /* The checks dialog: what the server found when the draft was saved. */
+  .checks-dialog {
+    width: min(32rem, calc(100vw - 2rem));
+    max-height: calc(100vh - 2rem);
+    padding: 0;
+    overflow: auto;
+    border: 0;
+    border-radius: .5rem;
+    background: var(--desk-paper);
+    color: var(--desk-ink);
+    box-shadow: 0 2rem 4rem -1.5rem #1b171499;
+  }
+
+  .checks-dialog::backdrop {
+    background: #1b171480;
+    -webkit-backdrop-filter: blur(3px);
+    backdrop-filter: blur(3px);
+  }
+
+  .dialog-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: start;
+    gap: 1rem;
+    padding: 1.4rem 1.5rem 1rem;
+  }
+
+  .dialog-kicker {
+    margin: 0 0 .4rem;
+    color: var(--desk-muted);
+    font-family: var(--desk-mono);
+    font-size: .72rem;
+  }
+
+  .dialog-head h2 {
+    margin: 0;
+    font-size: clamp(1.7rem, 4vw, 2.2rem);
+    font-weight: 400;
+    line-height: 1;
+    letter-spacing: -.05em;
+  }
+
+  .dialog-head h2[data-tone="ready"] { color: var(--desk-pass); }
+  .dialog-head h2[data-tone="rejected"] { color: var(--desk-accent); }
+
+  .dialog-close {
+    display: grid;
+    place-items: center;
+    width: 2.2rem;
+    height: 2.2rem;
+    border: 1px solid var(--desk-rule);
+    border-radius: 50%;
+    background: none;
+    color: var(--desk-ink);
+    font: inherit;
+    font-size: 1.2rem;
+    line-height: 1;
+    cursor: pointer;
+    transition: background-color .2s ease, border-color .2s ease;
+  }
+
+  .dialog-close:hover {
+    border-color: var(--desk-ink);
+    background: var(--desk-surface);
+  }
+
+  .dialog-close:focus-visible {
+    outline: 2px solid var(--desk-ink);
+    outline-offset: 2px;
+  }
+
+  .dialog-body {
+    padding: 0 1.5rem;
+  }
+
+  .dialog-wait,
+  .dialog-error {
+    display: flex;
+    align-items: center;
+    gap: .7rem;
+    margin: 0;
+    padding: 1.25rem 1.1rem;
+    border-left: 2px solid var(--desk-rule);
+    background: var(--desk-surface);
+    line-height: 1.45;
+  }
+
+  .dialog-error {
+    border-left-color: var(--desk-accent);
+    color: var(--desk-accent);
+  }
+
+  /* A small spinner while the server checks the draft. */
+  .dialog-wait::before {
+    flex: none;
+    width: 1rem;
+    height: 1rem;
+    border: 2px solid var(--desk-rule);
+    border-top-color: var(--desk-ink);
+    border-radius: 50%;
+    content: "";
+    animation: tx-spin .8s linear infinite;
+  }
+
+  .dialog-actions {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    align-items: center;
+    gap: .75rem 1rem;
+    padding: 1.25rem 1.5rem 1.5rem;
+  }
+
+  .dialog-actions p {
+    flex: 1 1 100%;
+    margin: 0;
+    color: var(--desk-muted);
+    font-size: .875rem;
+    line-height: 1.45;
+  }
+
+  .dialog-actions .dialog-error {
+    padding: .75rem .9rem;
+    font-size: .875rem;
+  }
+
+  .dialog-actions form {
+    margin: 0;
+  }
+
   @media (prefers-reduced-motion: no-preference) {
     .actions p,
     .post p {
@@ -202,6 +351,14 @@ import { TradeDetails } from './fields/TradeDetails.auwla';
 
     .side {
       animation: tx-rise .9s var(--desk-ease) .15s both;
+    }
+
+    .checks-dialog[open] {
+      animation: tx-rise .35s var(--desk-ease) both;
+    }
+
+    .checks-dialog[open]::backdrop {
+      animation: tx-fade .3s ease both;
     }
   }
 
@@ -283,7 +440,21 @@ export function AnalysisEditor({ staff, initial }: { staff: StaffMember; initial
     targets = nextTargets.map(value => ({ id: nextTargetId++, value }));
   }
 
+  // The checks dialog. Saving opens it to show what the server found; "See checks" reopens it.
+  let checksDialog: HTMLDialogElement | undefined;
+  let dialogMode = 'view' as 'save' | 'view';
+
+  function openChecks(mode: 'save' | 'view') {
+    dialogMode = mode;
+    if (checksDialog && !checksDialog.open) checksDialog.showModal();
+  }
+
+  function closeChecks() {
+    checksDialog?.close();
+  }
+
   const save = $forms(() => {
+    openChecks('save');
     const request = saveAnalysisDraft(saved.id, saved.revision, typed);
     $track(save).onSuccess(outcome => {
       if (outcome.ok) saved = outcome.analysis;
@@ -300,18 +471,46 @@ export function AnalysisEditor({ staff, initial }: { staff: StaffMember; initial
   });
 
   // Why Post is not available yet, or '' when it is. The server decides again when it runs.
+  // These `if` statements replay whenever what they read changes, like any derived value.
   const firstFailure = saved.review.checks.find(check => check.status === 'fail');
-  const postBlock = saved.published
-    ? ''
-    : !canEdit(staff, saved.author)
-      ? `Only ${saved.author.name} or an admin can post this analysis.`
-      : unsaved
-        ? 'Save your changes first. Posting uses the saved version.'
-        : firstFailure
-          ? `Rejected: ${firstFailure.detail}`
-          : saved.status !== 'ready'
-            ? 'Complete every check and save before posting.'
-            : '';
+
+  let postBlock = '';
+  if (saved.published) {
+    postBlock = '';
+  } else if (!canEdit(staff, saved.author)) {
+    postBlock = `Only ${saved.author.name} or an admin can post this analysis.`;
+  } else if (unsaved) {
+    postBlock = 'Save your changes first. Posting uses the saved version.';
+  } else if (firstFailure) {
+    postBlock = `Rejected: ${firstFailure.detail}`;
+  } else if (saved.status !== 'ready') {
+    postBlock = 'Complete every check and save before posting.';
+  }
+
+  const saving = dialogMode === 'save' && save.pending;
+  const saveFailed = dialogMode === 'save' && !save.pending && ((save.result !== undefined && !save.result.ok) || save.errors.length > 0);
+
+  let dialogTitle: 'Checking…' | 'Not saved' | 'Posted' | 'Ready to post' | 'Rejected' | 'Not ready yet' = 'Not ready yet';
+  if (saving) {
+    dialogTitle = 'Checking…';
+  } else if (saveFailed) {
+    dialogTitle = 'Not saved';
+  } else if (saved.published) {
+    dialogTitle = 'Posted';
+  } else if (saved.status === 'ready') {
+    dialogTitle = 'Ready to post';
+  } else if (saved.status === 'rejected') {
+    dialogTitle = 'Rejected';
+  } else {
+    dialogTitle = 'Not ready yet';
+  }
+
+  let saveLabel = 'Saved';
+  if (save.pending) {
+    saveLabel = 'Saving…';
+  } else if (unsaved) {
+    saveLabel = 'Save draft';
+  }
 
   return (
     <section aria-labelledby="analysis-heading">
@@ -358,15 +557,16 @@ export function AnalysisEditor({ staff, initial }: { staff: StaffMember; initial
 
           if (editable) {
             <div class="actions">
-              <button class="desk-button" type="submit" disabled={save.pending || !unsaved}>
-                save.pending ? "Saving…" : unsaved ? "Save draft" : "Saved"
-              </button>
-              if (save.result && !save.result.ok) {
-                <p role="alert">save.result.message</p>
-              } else if (save.errors.length > 0) {
-                <p role="alert">"The analysis could not be saved. Check your session and try again."</p>
-              } else if (unsaved) {
-                <p data-tone="unsaved">"Unsaved changes. The checks beside the form already include them."</p>
+              <div class="actions__buttons">
+                <button class="desk-button" type="submit" disabled={save.pending || !unsaved}>
+                  saveLabel
+                </button>
+                if (!unsaved) {
+                  <button class="desk-button desk-button--quiet" type="button" onClick={() => openChecks('view')}>"See checks"</button>
+                }
+              </div>
+              if (unsaved) {
+                <p data-tone="unsaved">"Unsaved changes. The card shows them already; saving runs the checks."</p>
               } else {
                 <p role="status" data-tone="saved">"All changes saved."</p>
               }
@@ -374,15 +574,16 @@ export function AnalysisEditor({ staff, initial }: { staff: StaffMember; initial
           }
         </form>
 
-        <aside class="side" aria-label="Checks and posting">
-          <SignalChecks
-            review={editable ? liveReview : saved.review}
-            title={editable ? 'Live checks' : 'Saved checks'}
-            caption={editable ? 'Updates as you type' : 'Last saved version'} />
-
+        <aside class="side" aria-label="Score card and posting">
           <section class="post" aria-labelledby="post-heading">
-            <h2 id="post-heading">saved.published ? "Posted card" : "Card preview"</h2>
-            <SignalCardPreview card={card} signalId={saved.published?.id ?? null} publishedAt={saved.published?.publishedAt ?? null} />
+            <div class="post__head">
+              <h2 id="post-heading">saved.published ? "Posted card" : "Score card"</h2>
+              if (editable) {
+                <span>"Updates as you type"</span>
+              }
+            </div>
+            <SignalCardPreview card={card} review={editable ? liveReview : saved.review}
+              signalId={saved.published?.id ?? null} publishedAt={saved.published?.publishedAt ?? null} />
             if (saved.published) {
               <p class="posted" role="status">"Posted as " + saved.published.id + ". Members who hold this axis can see it."</p>
             } else if (canEdit(staff, saved.author)) {
@@ -406,6 +607,51 @@ export function AnalysisEditor({ staff, initial }: { staff: StaffMember; initial
           </section>
         </aside>
       </div>
+
+      <dialog class="checks-dialog" ref={checksDialog} aria-labelledby="checks-dialog-title">
+        <header class="dialog-head">
+          <div>
+            <p class="dialog-kicker">analysisLabel(saved.id) + " · " + (saved.fields.symbol || "Untitled analysis")</p>
+            <h2 id="checks-dialog-title" data-tone={saveFailed ? 'rejected' : saved.status}>dialogTitle</h2>
+          </div>
+          <button class="dialog-close" type="button" aria-label="Close" onClick={closeChecks}>"×"</button>
+        </header>
+
+        <div class="dialog-body">
+          if (saving) {
+            <p class="dialog-wait" role="status">"Saving and running the checks…"</p>
+          } else if (saveFailed && save.result && !save.result.ok) {
+            <p class="dialog-error" role="alert">save.result.message</p>
+          } else if (saveFailed) {
+            <p class="dialog-error" role="alert">"The analysis could not be saved. Check your session and try again."</p>
+          } else {
+            <SignalChecks review={saved.review} title="Saved checks" caption="Checked by the server" />
+          }
+        </div>
+
+        <footer class="dialog-actions">
+          if (saved.published) {
+            <p class="posted" role="status">"Posted as " + saved.published.id + "."</p>
+          } else if (!saving && !saveFailed) {
+            if (postBlock === '') {
+              <form onSubmit={post.submit}>
+                <button class="desk-button" type="submit" disabled={post.pending}>
+                  post.pending ? "Posting…" : "Post signal"
+                </button>
+              </form>
+            } else if (!firstFailure) {
+              // A failed check is already listed above; other reasons are not.
+              <p>postBlock</p>
+            }
+          }
+          if (post.result && !post.result.ok) {
+            <p class="dialog-error" role="alert">post.result.message</p>
+          }
+          <button class="desk-button desk-button--quiet" type="button" onClick={closeChecks}>
+            saved.published ? "Close" : "Keep editing"
+          </button>
+        </footer>
+      </dialog>
     </section>
   );
 }

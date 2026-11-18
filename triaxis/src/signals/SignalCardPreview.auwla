@@ -1,42 +1,63 @@
+import type { SignalReview } from '../desk/draft/model/signal-review';
 import { formatSignalTime, type SignalCardData } from './signal-card';
 
 <style>
+  /* The card follows the real 1080 x 1080 score card: square, and scaled to its column
+     with container units, so the preview is the card in miniature. */
+  .frame {
+    container-type: inline-size;
+  }
+
   .card {
-    --on-night: #f1ebe1;
-    --on-night-muted: #f1ebe199;
-    --night-rule: #f1ebe11f;
+    --on-night: #f3ede4;
+    --muted: #f3ede48c;
+    --faint: #f3ede41f;
     --pass: #4fbf7f;
     --loss: #e4614f;
+    --warn: #eda100;
 
     position: relative;
     isolation: isolate;
     display: grid;
-    gap: 1rem;
-    padding: 1.25rem;
+    grid-template-rows: auto auto 1fr auto auto;
+    gap: 4.2cqi;
+    aspect-ratio: 1;
+    padding: 6.5cqi;
     overflow: hidden;
-    border-radius: .35rem;
-    background: #0f0d0c;
+    border-radius: 1.6cqi;
+    background: #0d0b0a;
     color: var(--on-night);
+    font-family: "Helvetica Neue", Arial, sans-serif;
   }
 
-  .card[data-axis="forex"] { --card-accent: #3987e5; }
-  .card[data-axis="crypto"] { --card-accent: #9085e9; }
-  .card[data-axis="synthetics"] { --card-accent: #eda100; }
+  .card[data-axis="forex"] { --accent: #3987e5; }
+  .card[data-axis="crypto"] { --accent: #9085e9; }
+  .card[data-axis="synthetics"] { --accent: #eda100; }
 
-  /* The faint repeating watermark of the real card. */
+  /* A hairline of the axis colour across the top, and the faint TRIAXIS watermark. */
   .card::before {
     position: absolute;
-    inset: -30% -50%;
+    top: 0;
+    right: 0;
+    left: 0;
+    height: .9cqi;
+    background: var(--accent);
+    content: "";
+  }
+
+  .card::after {
+    position: absolute;
+    inset: -20% -60%;
     z-index: -1;
-    color: #f1ebe1;
-    font-size: 1.6rem;
-    font-weight: 700;
-    line-height: 2.1;
-    letter-spacing: .3em;
+    color: #f3ede4;
+    font-size: 5.4cqi;
+    font-weight: 800;
+    line-height: 2.3;
+    letter-spacing: .5em;
     white-space: pre;
-    content: "TRIAXIS TRIAXIS TRIAXIS TRIAXIS\A   TRIAXIS TRIAXIS TRIAXIS TRIAXIS\A TRIAXIS TRIAXIS TRIAXIS TRIAXIS\A   TRIAXIS TRIAXIS TRIAXIS TRIAXIS\A TRIAXIS TRIAXIS TRIAXIS TRIAXIS\A   TRIAXIS TRIAXIS TRIAXIS TRIAXIS";
-    opacity: .035;
-    rotate: -18deg;
+    content: "TRIAXIS TRIAXIS TRIAXIS TRIAXIS TRIAXIS\A    TRIAXIS TRIAXIS TRIAXIS TRIAXIS TRIAXIS\A TRIAXIS TRIAXIS TRIAXIS TRIAXIS TRIAXIS\A    TRIAXIS TRIAXIS TRIAXIS TRIAXIS TRIAXIS\A TRIAXIS TRIAXIS TRIAXIS TRIAXIS TRIAXIS\A    TRIAXIS TRIAXIS TRIAXIS TRIAXIS TRIAXIS\A TRIAXIS TRIAXIS TRIAXIS TRIAXIS TRIAXIS\A    TRIAXIS TRIAXIS TRIAXIS TRIAXIS TRIAXIS";
+    opacity: .028;
+    rotate: -24deg;
     pointer-events: none;
   }
 
@@ -44,180 +65,460 @@ import { formatSignalTime, type SignalCardData } from './signal-card';
     display: flex;
     justify-content: space-between;
     align-items: center;
-    gap: .75rem;
-    font-size: .7rem;
+    gap: 3cqi;
+  }
+
+  .brand {
+    display: inline-flex;
+    align-items: center;
+    gap: 2.2cqi;
+    font-size: 3.6cqi;
     font-weight: 700;
-    letter-spacing: .14em;
+    letter-spacing: .16em;
     text-transform: uppercase;
   }
 
+  /* The three-bar mark, as in the site header. */
+  .mark {
+    position: relative;
+    width: 4.4cqi;
+    height: 4.4cqi;
+  }
+
+  .mark i {
+    position: absolute;
+    top: 50%;
+    left: 0;
+    width: 100%;
+    height: .7cqi;
+    background: var(--on-night);
+  }
+
+  .mark i:nth-child(1) { background: #c8392b; rotate: 60deg; }
+  .mark i:nth-child(2) { rotate: -60deg; }
+
   .tag {
-    padding: .25rem .55rem;
-    border: 1px solid var(--card-accent);
-    border-radius: 999px;
-    color: var(--card-accent);
+    color: var(--accent);
     font-family: var(--desk-mono);
-    font-size: .6rem;
-    font-weight: 500;
-    letter-spacing: .08em;
+    font-size: 2.7cqi;
+    letter-spacing: .14em;
+    text-transform: uppercase;
   }
 
   .asset {
     display: flex;
     justify-content: space-between;
-    align-items: flex-end;
-    gap: .75rem;
+    align-items: end;
+    gap: 3cqi;
   }
 
   .asset h3 {
     margin: 0;
-    font-size: 1.9rem;
-    font-weight: 600;
-    line-height: 1;
-    letter-spacing: -.04em;
+    font-size: 12cqi;
+    font-weight: 700;
+    line-height: .88;
+    letter-spacing: -.045em;
   }
 
   .asset p {
-    margin: .35rem 0 0;
-    color: var(--on-night-muted);
-    font-size: .75rem;
+    margin: 2cqi 0 0;
+    color: var(--muted);
+    font-size: 3.1cqi;
   }
 
   .side {
-    padding: .35rem .7rem;
-    border-radius: .4rem;
-    background: var(--side, var(--pass));
-    color: #0f0d0c;
+    padding: 1.6cqi 3.4cqi;
+    border-radius: 1cqi;
+    background: var(--pass);
+    color: #0d0b0a;
     font-family: var(--desk-mono);
-    font-size: .72rem;
-    font-weight: 600;
-    letter-spacing: .1em;
+    font-size: 3.4cqi;
+    font-weight: 700;
+    letter-spacing: .12em;
     text-transform: uppercase;
   }
 
   .side[data-side="sell"] {
-    --side: var(--loss);
+    background: var(--loss);
+  }
+
+  /* Levels beside a ladder that places each one at its real price. */
+  .body {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 7cqi;
+    gap: 4cqi;
+    min-height: 0;
+    padding-block: 3cqi;
+    border-block: 1px solid var(--faint);
   }
 
   .levels {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(4.6rem, 1fr));
-    gap: .75rem;
+    align-content: space-between;
+    gap: 1.4cqi;
     margin: 0;
-    padding-top: .9rem;
-    border-top: 1px solid var(--night-rule);
+    padding: 0;
+    list-style: none;
+  }
+
+  .level {
+    display: grid;
+    grid-template-columns: 11cqi minmax(0, 1fr) auto;
+    align-items: baseline;
+    gap: 2cqi;
     font-family: var(--desk-mono);
   }
 
-  .levels div {
-    display: grid;
-    gap: .2rem;
-    min-width: 0;
-  }
-
-  .levels dt {
-    color: var(--on-night-muted);
-    font-size: .58rem;
+  .level span:first-child {
+    color: var(--muted);
+    font-size: 2.6cqi;
     letter-spacing: .1em;
     text-transform: uppercase;
   }
 
-  .levels dd {
+  .level strong {
     overflow: hidden;
-    margin: 0;
-    font-size: .82rem;
+    font-size: 4.2cqi;
+    font-weight: 500;
     text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
-  .levels dd small {
-    display: block;
+  .level em {
     color: var(--pass);
-    font-size: .62rem;
+    font-size: 2.8cqi;
+    font-style: normal;
   }
 
-  .levels .stop dd small {
+  .level[data-kind="stop"] em {
     color: var(--loss);
   }
 
-  .foot {
+  .level[data-kind="entry"] strong {
+    color: #fff;
+  }
+
+  .ladder {
+    position: relative;
+    margin-block: 1.2cqi;
+  }
+
+  .ladder::before {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 50%;
+    width: 1px;
+    background: var(--faint);
+    content: "";
+  }
+
+  .zone {
+    position: absolute;
+    left: calc(50% - .6cqi);
+    width: 1.2cqi;
+    border-radius: .6cqi;
+  }
+
+  .zone[data-kind="risk"] { background: var(--loss); }
+  .zone[data-kind="reward"] { background: var(--pass); }
+
+  .tick {
+    position: absolute;
+    left: 50%;
+    width: 3cqi;
+    height: 3cqi;
+    border: .6cqi solid #0d0b0a;
+    border-radius: 50%;
+    background: var(--pass);
+    translate: -50% -50%;
+  }
+
+  .tick[data-kind="stop"] { background: var(--loss); }
+  .tick[data-kind="entry"] { background: #fff; }
+
+  /* The checks the card was posted with. */
+  .checks {
     display: flex;
     flex-wrap: wrap;
+    gap: 1.6cqi 4cqi;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .check {
+    display: inline-flex;
+    align-items: center;
+    gap: 1.6cqi;
+    font-size: 2.9cqi;
+  }
+
+  .check::before {
+    display: grid;
+    place-items: center;
+    width: 3.6cqi;
+    height: 3.6cqi;
+    border-radius: 50%;
+    background: var(--mark);
+    color: #0d0b0a;
+    font-size: 2.3cqi;
+    font-weight: 800;
+    content: var(--glyph);
+    transition: background-color .3s ease;
+  }
+
+  .check[data-status="pass"] { --mark: var(--pass); --glyph: "✓"; }
+  .check[data-status="warning"] { --mark: var(--warn); --glyph: "!"; }
+  .check[data-status="fail"] { --mark: var(--loss); --glyph: "✕"; }
+  .check[data-status="pending"] { --mark: #f3ede433; --glyph: ""; color: var(--muted); }
+
+  .foot {
+    display: flex;
     justify-content: space-between;
-    gap: .5rem;
-    color: var(--on-night-muted);
+    align-items: end;
+    gap: 3cqi;
+  }
+
+  .foot__id {
+    display: grid;
+    gap: .8cqi;
     font-family: var(--desk-mono);
-    font-size: .6rem;
+  }
+
+  .foot__id strong {
+    font-size: 3.6cqi;
+    font-weight: 600;
     letter-spacing: .06em;
-    text-transform: uppercase;
+  }
+
+  .foot__id span,
+  .disclaimer {
+    color: var(--muted);
+    font-size: 2.4cqi;
+    letter-spacing: .04em;
   }
 
   .seal {
-    padding: .25rem .5rem;
-    border: 1px dashed #f1ebe166;
-    border-radius: .3rem;
-    color: var(--on-night);
+    padding: 1.4cqi 2.4cqi;
+    border: 1px solid var(--on-night);
+    border-radius: .8cqi;
+    font-size: 2.3cqi;
+    font-weight: 700;
+    letter-spacing: .14em;
+    text-align: center;
+    text-transform: uppercase;
+  }
+
+  .card[data-posted="false"] .seal {
+    border-style: dashed;
+    border-color: var(--muted);
+    color: var(--muted);
+  }
+
+  .disclaimer {
+    position: absolute;
+    right: 6.5cqi;
+    bottom: 2.4cqi;
+    left: 6.5cqi;
+    margin: 0;
+    font-size: 2cqi;
+    text-align: center;
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    .tick,
+    .zone {
+      transition: top .4s cubic-bezier(.16, 1, .3, 1), height .4s cubic-bezier(.16, 1, .3, 1);
+    }
   }
 </style>
+
+const axisNumbers: Record<string, string> = { forex: '1', crypto: '2', synthetics: '3' };
 
 function amount(value: string): number | null {
   const parsed = Number(value);
   return value.trim() !== '' && Number.isFinite(parsed) ? parsed : null;
 }
 
-/** How far a target sits from entry, in stop distances: "2.0×". */
-function distance(card: SignalCardData, target: string): string {
+interface Level {
+  key: string;
+  kind: 'stop' | 'entry' | 'target';
+  label: string;
+  price: string;
+  note: string;
+  value: number | null;
+}
+
+/** The distance from entry to the stop, or 0 until both are numbers. */
+function riskOf(entry: number | null, stop: number | null): number {
+  if (entry === null || stop === null) {
+    return 0;
+  }
+  return Math.abs(entry - stop);
+}
+
+/** How far a target sits from entry, in stop distances: "2.0×", or '' until it can be worked out. */
+function targetNote(value: number | null, entry: number | null, risk: number): string {
+  if (value === null || entry === null || risk <= 0) {
+    return '';
+  }
+  return (Math.abs(value - entry) / risk).toFixed(1) + '×';
+}
+
+/** The stop's distance below or above entry: "−10". */
+function stopNote(risk: number): string {
+  if (risk <= 0) {
+    return '';
+  }
+  return '−' + Number(risk.toPrecision(6));
+}
+
+/** Stop, entry and targets, with each target's distance from entry in stop distances. */
+function levelsOf(card: SignalCardData): Level[] {
   const entry = amount(card.entry);
   const stop = amount(card.stop);
-  const price = amount(target);
-  if (entry === null || stop === null || price === null || entry === stop) return '';
-  return (Math.abs(price - entry) / Math.abs(entry - stop)).toFixed(1) + '×';
+  const risk = riskOf(entry, stop);
+
+  const targets = card.targets.map((price, index): Level => {
+    const value = amount(price);
+    return { key: 'tp' + index, kind: 'target', label: 'TP' + (index + 1), price, note: targetNote(value, entry, risk), value };
+  });
+
+  const levels: Level[] = [
+    ...targets,
+    { key: 'entry', kind: 'entry', label: 'Entry', price: card.entry, note: '', value: entry },
+    { key: 'stop', kind: 'stop', label: 'Stop', price: card.stop, note: stopNote(risk), value: stop },
+  ];
+
+  // Highest price at the top, as on a chart. Until every price is a number, keep the plan's order.
+  if (levels.some(level => level.value === null)) {
+    return levels;
+  }
+  return [...levels].sort((a, b) => b.value! - a.value!);
+}
+
+/** The target furthest from entry, where the reward zone ends. */
+function furthestTarget(targets: number[], entry: number): number {
+  let furthest = entry;
+  for (const value of targets) {
+    if (Math.abs(value - entry) > Math.abs(furthest - entry)) {
+      furthest = value;
+    }
+  }
+  return furthest;
+}
+
+/** "Buy"/"Long" is the buy side, "Sell"/"Short" the sell side, '' while no direction is chosen. */
+function sideOf(direction: string): 'buy' | 'sell' | '' {
+  if (direction === 'Buy' || direction === 'Long') {
+    return 'buy';
+  }
+  if (direction) {
+    return 'sell';
+  }
+  return '';
+}
+
+/** "Market entry", or a prompt while no entry type is chosen. */
+function entryTypeLabel(entryType: string): string {
+  if (!entryType) {
+    return 'Entry type not set';
+  }
+  return entryType.charAt(0).toUpperCase() + entryType.slice(1) + ' entry';
+}
+
+/** Where each level sits on the ladder, from the top, or null until every price is a number. */
+function ladderOf(levels: Level[]) {
+  if (levels.some(level => level.value === null)) return null;
+  const values = levels.map(level => level.value!);
+  const high = Math.max(...values);
+  const low = Math.min(...values);
+  if (high === low) return null;
+  const at = (value: number) => ((high - value) / (high - low)) * 100;
+  const entry = levels.find(level => level.kind === 'entry')!.value!;
+  const stop = levels.find(level => level.kind === 'stop')!.value!;
+  const targets = levels.filter(level => level.kind === 'target').map(level => level.value!);
+  const furthest = furthestTarget(targets, entry);
+  const span = (a: number, b: number) => ({ top: Math.min(at(a), at(b)) + '%', height: Math.abs(at(a) - at(b)) + '%' });
+  return {
+    ticks: levels.map(level => ({ key: level.key, kind: level.kind, top: at(level.value!) + '%' })),
+    risk: span(entry, stop),
+    reward: span(entry, furthest),
+  };
 }
 
 interface PreviewProps {
   card: SignalCardData;
+  review: SignalReview;
   signalId: string | null;
   publishedAt: string | null;
 }
 
-/** The score card as members will see it. Before posting it is marked as a preview. */
-export function SignalCardPreview({ card, signalId, publishedAt }: PreviewProps) {
-  const side = card.direction === 'Buy' || card.direction === 'Long' ? 'buy' : card.direction ? 'sell' : '';
+/** The score card as members will see it. Before posting it carries a draft seal. */
+export function SignalCardPreview({ card, review, signalId, publishedAt }: PreviewProps) {
+  const levels = levelsOf(card);
+  const ladder = ladderOf(levels);
+  const side = sideOf(card.direction);
+  const entryType = entryTypeLabel(card.entryType);
+  const posted = signalId !== null && publishedAt !== null;
 
   return (
-    <article class="card" data-axis={card.axis} aria-label={signalId ? 'Signal card ' + signalId : 'Card preview'}>
-      <header class="top">
-        <span>"Triaxis"</span>
-        <span class="tag">card.market</span>
-      </header>
-      <div class="asset">
-        <div>
-          <h3>card.symbol || "Asset"</h3>
-          <p>card.entryType ? card.entryType.charAt(0).toUpperCase() + card.entryType.slice(1) + " entry" : "Entry type not set"</p>
-        </div>
-        if (side) {
-          <span class="side" data-side={side}>card.direction</span>
-        }
-      </div>
-      <dl class="levels">
-        <div class="stop">
-          <dt>"Stop"</dt>
-          <dd>card.stop || "—"</dd>
-        </div>
-        <div>
-          <dt>"Entry"</dt>
-          <dd>card.entry || "—"</dd>
-        </div>
-        for (const [index, target] of card.targets.entries()) {
-          <div key={index}>
-            <dt>"TP" + (index + 1)</dt>
-            <dd>target || "—" <small>distance(card, target)</small></dd>
+    <div class="frame">
+      <article class="card" data-axis={card.axis} data-posted={String(posted)} aria-label={posted ? 'Signal card ' + signalId : 'Score card preview'}>
+        <header class="top">
+          <span class="brand"><span class="mark" aria-hidden="true"><i></i><i></i><i></i></span>"Triaxis"</span>
+          <span class="tag">"Axis " + (axisNumbers[card.axis] ?? '') + " · " + card.market</span>
+        </header>
+
+        <div class="asset">
+          <div>
+            <h3>card.symbol || "Asset"</h3>
+            <p>card.market + " · " + entryType</p>
           </div>
-        }
-      </dl>
-      <footer class="foot">
-        <span>signalId && publishedAt ? signalId + " · " + formatSignalTime(publishedAt) : "Preview · not posted"</span>
-        <span class="seal">signalId ? "Official Triaxis signal" : "Draft"</span>
-      </footer>
-    </article>
+          if (side) {
+            <span class="side" data-side={side}>card.direction</span>
+          }
+        </div>
+
+        <div class="body">
+          <ol class="levels">
+            for (const level of levels) {
+              <li key={level.key} class="level" data-kind={level.kind}>
+                <span>level.label</span>
+                <strong>level.price || "—"</strong>
+                <em>level.note</em>
+              </li>
+            }
+          </ol>
+          if (ladder) {
+            <div class="ladder" aria-hidden="true">
+              <span class="zone" data-kind="reward" style={ladder.reward}></span>
+              <span class="zone" data-kind="risk" style={ladder.risk}></span>
+              for (const tick of ladder.ticks) {
+                <span key={tick.key} class="tick" data-kind={tick.kind} style={{ top: tick.top }}></span>
+              }
+            </div>
+          } else {
+            <div class="ladder" aria-hidden="true"></div>
+          }
+        </div>
+
+        <ul class="checks" aria-label="Checks">
+          for (const check of review.checks) {
+            <li key={check.label} class="check" data-status={check.status}>check.label</li>
+          }
+        </ul>
+
+        <footer class="foot">
+          <div class="foot__id">
+            <strong>posted ? signalId : "TRX-····"</strong>
+            <span>posted ? formatSignalTime(publishedAt!) : "Not posted yet"</span>
+          </div>
+          <span class="seal">posted ? "Official Triaxis signal" : "Draft · not posted"</span>
+        </footer>
+        <p class="disclaimer">"Not financial advice. Trading involves risk."</p>
+      </article>
+    </div>
   );
 }
